@@ -15,6 +15,8 @@ export interface KitEnv {
   hidden: boolean;
   backdrop: [number, number, number];
   audio: KitAudio | null;
+  /** An audio layer's sound: a song loaded into it, or the live input. Falls back to `audio`. */
+  audioFor?: (l: PlayLayer) => KitAudio | null;
   camera: HTMLVideoElement | null;
   image(src: string): HTMLImageElement | null;
   sensor(key: string, value: number): void;

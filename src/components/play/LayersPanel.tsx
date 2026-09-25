@@ -13,6 +13,9 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { LAYER_NUMERIC_PROPS, defaultLayer, layerTarget, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { playId } from '../../play/playControls';
+import { addNullFor, duplicateLayer, layerMenuItems, moveLayer, removeLayer, renameLayer, resetLayer } from './layerOps';
+import { usePlayUi } from './playUi';
+import { NOTE_REF_TYPE, noteRef } from './noteRefs';
 import { playOverlay, type ShapeDrawing } from '../../play/overlay';
 import { Button, IconButton } from '../ui/Button';
 import { Toggle } from '../ui/Choice';
@@ -56,11 +59,13 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose }:
   const tk = useTokens();
   const addRef = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const [selected, setSelected] = useState('');
+  const selected = usePlayUi(s => s.selected), setSelected = usePlayUi(s => s.select), revealTick = usePlayUi(s => s.revealTick);
   const [drawing, setDrawing] = useState<ShapeDrawing | null>(null);
   useEffect(() => { playOverlay.setEditing(true, selected); }, [selected]);
   useEffect(() => () => { playOverlay.setEditing(false); playOverlay.cancelDrawing(); }, []);
   useEffect(() => playOverlay.onDrawing(d => setDrawing(d ? { ...d } : null)), []);
+  // A layer clicked on the picture is selected here too.
+  useEffect(() => playOverlay.onSelect(id => usePlayUi.getState().reveal(id)), []);
 
   const add = (kind: PlayLayerKind) => {
     const n = play.layers.filter(l => l.kind === kind).length + 1;
@@ -69,28 +74,18 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose }:
     setSelected(id);
   };
   const patch = (id: string, fn: (l: PlayLayer) => PlayLayer) => onChange(p => ({ ...p, layers: p.layers.map(l => l.id === id ? fn(l) : l) }));
-  const remove = (id: string) => onChange(p => {
-    const controls = p.controls.filter(c => !c.target.startsWith(`layer:${id}::`));
-    const ids = new Set(controls.map(c => c.id));
-    const out: PlayRecord = {
-      ...p,
-      layers: p.layers.filter(l => l.id !== id),
-      controls,
-      mappings: p.mappings.filter(m => ids.has(m.controlId)
-        && !((m.source.kind === 'null' || m.source.kind === 'sensor') && m.source.layerId === id)
-        && !(m.source.kind === 'trigger' && m.source.trigger.on === 'zone' && m.source.trigger.layerId === id)),
-    };
-    const actions = (p.actions ?? []).filter(a => a.layerId !== id && !(a.trigger.on === 'zone' && a.trigger.layerId === id));
-    if (actions.length) out.actions = actions; else delete out.actions;
-    return out;
-  });
-  const move = (id: string, dir: -1 | 1) => onChange(p => {
-    const i = p.layers.findIndex(l => l.id === id), j = i + dir;
-    if (i < 0 || j < 0 || j >= p.layers.length) return p;
-    const layers = [...p.layers];
-    [layers[i], layers[j]] = [layers[j], layers[i]];
-    return { ...p, layers };
-  });
+  const remove = (id: string) => onChange(p => removeLayer(p, id));
+  const move = (id: string, dir: -1 | 1) => onChange(p => moveLayer(p, id, dir));
+  const duplicate = (id: string) => { let made = ''; onChange(p => { const r = duplicateLayer(p, id); made = r.id; return r.play; }); if (made) setSelected(made); };
+  const reset = (id: string) => onChange(p => resetLayer(p, id));
+  const createNull = (id: string, key: string) => onChange(p => addNullFor(p, id, key).play);
+  // Asked to show a layer (a link in the notes, the picture's menu): scroll to it.
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!revealTick || !selected) return;
+    const el = listRef.current?.querySelector(`[data-layer-id="${CSS.escape(selected)}"]`);
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [revealTick, selected]);
   const expose = (l: PlayLayer, key: string) => {
     const def = LAYER_NUMERIC_PROPS[l.kind].find(d => d.key === key);
     if (!def) return;
@@ -108,7 +103,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose }:
         </span>
         {menu && <Menu x={menu.x} y={menu.y} minWidth={280} onClose={() => setMenu(null)} items={KINDS.map(k => ({ label: k.label, hint: k.hint, onSelect: () => add(k.kind) }))} />}
       </div>
-      <div style={{ flex: 1, minHeight: play.notes ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+      <div ref={listRef} style={{ flex: 1, minHeight: play.notes ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {play.layers.length === 0 ? (
           <div style={{ margin: '18px 4px', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, lineHeight: 1.5 }}>
             <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>No layers yet</div>
@@ -128,7 +123,12 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose }:
             exposedTargets={exposedTargets}
             onSelect={() => setSelected(l.id)}
             onPatch={fn => patch(l.id, fn)}
+            revealTick={selected === l.id ? revealTick : 0}
             onRemove={() => remove(l.id)}
+            onRename={label => onChange(p => renameLayer(p, l.id, label))}
+            onDuplicate={() => duplicate(l.id)}
+            onReset={() => reset(l.id)}
+            onCreateNull={key => createNull(l.id, key)}
             onMove={dir => move(l.id, dir)}
             onExpose={key => expose(l, key)}
           />
@@ -139,7 +139,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose }:
   );
 }
 
-function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidden, drawing, exposedTargets, onSelect, onPatch, onRemove, onMove, onExpose }: {
+function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidden, drawing, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose }: {
   layer: PlayLayer;
   layers: PlayLayer[];
   index: number;
@@ -151,7 +151,12 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
   exposedTargets: Set<string>;
   onSelect: () => void;
   onPatch: (fn: (l: PlayLayer) => PlayLayer) => void;
+  revealTick: number;
   onRemove: () => void;
+  onRename: (label: string) => void;
+  onDuplicate: () => void;
+  onReset: () => void;
+  onCreateNull: (key: string) => void;
   onMove: (dir: -1 | 1) => void;
   onExpose: (key: string) => void;
 }) {
@@ -159,7 +164,12 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(l.label);
   const [open, setOpen] = useState(true);
-  const commit = () => { setEditing(false); const t = draft.trim(); if (t && t !== l.label) onPatch(x => ({ ...x, label: t })); else setDraft(l.label); };
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const moreRef = useRef<HTMLSpanElement>(null);
+  // Shown from elsewhere (a link in the notes, the picture's menu): open it.
+  const [seenTick, setSeenTick] = useState(revealTick);
+  if (revealTick !== seenTick) { setSeenTick(revealTick); if (revealTick) setOpen(true); }
+  const commit = () => { setEditing(false); const t = draft.trim(); if (t && t !== l.label) onRename(t); else setDraft(l.label); };
   const set = (p: Record<string, unknown>) => onPatch(x => ({ ...x, ...p } as PlayLayer));
   const f = makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose });
   const ctx: EditorContext = {
@@ -168,6 +178,7 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
     drawing,
     startDrawing: mode => { onSelect(); playOverlay.startDrawing(l.id, mode); },
     cancelDrawing: () => playOverlay.cancelDrawing(),
+    createNull: onCreateNull,
   };
   let body: ReactNode = null;
   switch (l.kind) {
@@ -178,7 +189,7 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
     case 'particles': body = <ParticlesEditor f={f} ctx={ctx} />; break;
     case 'shape': body = <ShapeEditor f={f} ctx={ctx} />; break;
     case 'audio': body = <AudioEditor f={f} />; break;
-    case 'glyphs': body = <GlyphsEditor f={f} />; break;
+    case 'glyphs': body = <GlyphsEditor f={f} ctx={ctx} />; break;
     case 'contours': body = <ContoursEditor f={f} />; break;
     case 'lens': body = <LensEditor f={f} ctx={ctx} />; break;
     case 'brush': body = <BrushEditor f={f} ctx={ctx} />; break;
@@ -187,10 +198,16 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
 
   return (
     <div
+      data-layer-id={l.id}
       onPointerDownCapture={onSelect}
       style={{ padding: '8px 10px 10px', marginTop: 6, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 ${selected ? 1.5 : 1}px ${selected ? tk.accent.base : tk.border.default}`, opacity: l.visible ? 1 : 0.6 }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26 }}>
+      <div
+        draggable={!editing}
+        onDragStart={e => { e.dataTransfer.setData(NOTE_REF_TYPE, noteRef('layer', l.id)); e.dataTransfer.setData('text/plain', noteRef('layer', l.id)); e.dataTransfer.effectAllowed = 'copy'; }}
+        title="Drag onto the notes to link this layer"
+        style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26 }}
+      >
         <IconButton icon={open ? 'chevD' : 'chevR'} label={open ? 'Collapse layer' : 'Expand layer'} size="sm" tooltip={false} onClick={() => setOpen(o => !o)} style={{ marginLeft: -6 }} />
         <Tooltip label={KIND[l.kind].label} description={KIND[l.kind].hint}><Icon name={KIND[l.kind].icon} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} /></Tooltip>
         {editing ? (
@@ -201,7 +218,10 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
         <Toggle checked={l.visible} onChange={visible => set({ visible })} />
         <IconButton icon="chevU" label="Move up (drawn earlier)" size="sm" disabled={index === 0} tooltip={false} onClick={() => onMove(-1)} />
         <IconButton icon="chevD" label="Move down (drawn later, on top)" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />
-        <IconButton icon="trash" label="Remove layer" size="sm" tone="danger" tooltip={false} onClick={onRemove} />
+        <span ref={moreRef} style={{ display: 'inline-flex' }}>
+          <IconButton icon="more" label="More: duplicate, reset, delete" size="sm" tooltip={false} onClick={() => { const r = moreRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 220, y: r.bottom + 4 } : null); }} />
+        </span>
+        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={layerMenuItems({ onDuplicate, onReset, onRemove })} />}
       </div>
       {open && (
         <>
@@ -212,3 +232,4 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
     </div>
   );
 }
+

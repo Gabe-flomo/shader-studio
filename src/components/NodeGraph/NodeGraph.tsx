@@ -46,6 +46,9 @@ function groupLabel(gn: import('../../types/nodeGraph').GraphNode): string {
 
 // Memoised so a parent re-render (App) doesn't re-render the whole graph;
 // NodeGraph reads everything it needs from the store with selectors.
+/** The last focus request handled (see focusNodeRequest), across remounts. */
+let handledFocus = 0;
+
 export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false }: {
   transparent?: boolean;
   /** Desktop redesign: the top-centre CanvasToolbar (node count, zoom, fit, layout, minimap, clear) replaces the legacy corner toolbar. */
@@ -972,6 +975,24 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       y: (ch - (maxY + minY) * newZoom) / 2,
     }, newZoom, 'now');
   }, [displayNodes, applyView]);
+
+  // A focus request (a Play control's "go to source"): centre on that node. The graph may
+  // mount because of the request, so a pending one is handled on mount too.
+  useEffect(() => {
+    const centre = (id: string) => {
+      const node = useNodeGraphStore.getState().nodes.find(n => n.id === id);
+      const c = canvasRef.current;
+      if (!node || !c) return;
+      const z = Math.max(zoomRef.current, 0.8);
+      applyView({ x: c.clientWidth / 2 - (node.position.x + NODE_WIDTH / 2) * z, y: c.clientHeight / 2 - (node.position.y + 80) * z }, z, 'now');
+    };
+    const pending = useNodeGraphStore.getState().focusNodeRequest;
+    if (pending && pending.n !== handledFocus) { handledFocus = pending.n; requestAnimationFrame(() => centre(pending.id)); }
+    return useNodeGraphStore.subscribe(s => {
+      const r = s.focusNodeRequest;
+      if (r && r.n !== handledFocus) { handledFocus = r.n; requestAnimationFrame(() => centre(r.id)); }
+    });
+  }, [applyView]);
 
   // Register fitView with the store so shortcuts / App.tsx can call it.
   // handleFitView is re-created whenever displayNodes changes (every drag

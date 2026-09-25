@@ -7,7 +7,7 @@
  * with `bd`.
  */
 import { paletteCssAt } from '../particle-sim.js';
-import { KL_FONTS, klCss, KL_BLEND } from './layers.js';
+import { klFontFor, klCss, KL_BLEND } from './layers.js';
 import { geoFieldAt } from './geometry.js';
 
 /** Bodies for a layer: one per letter (spaces skipped), or `count` circles or boxes. */
@@ -132,7 +132,7 @@ export function bdDraw(ctx, st, l, v, W, H, dpr, aspect) {
   ctx.globalAlpha = v('opacity');
   ctx.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = '800 ' + size + 'px ' + KL_FONTS[l.font];
+  ctx.font = '800 ' + size + 'px ' + klFontFor(l);
   const fixed = klCss(l.color);
   for (const b of st.bodies) {
     const px = (b.x / aspect) * W, py = (1 - b.y) * H;

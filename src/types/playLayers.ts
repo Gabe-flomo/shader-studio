@@ -56,6 +56,8 @@ export interface NullLayer extends LayerBase {
   radius: number;
   /** How strong its pull, push or launch is. */
   strength: number;
+  /** Vortex: how far the swirl's disc leans away (degrees, 0 = flat circle, toward 85 = a thin ellipse with depth). */
+  tilt: number;
 }
 
 export interface TextLayer extends LayerBase {
@@ -69,6 +71,8 @@ export interface TextLayer extends LayerBase {
   opacity: number;
   color: RGB;
   font: 'sans' | 'serif' | 'mono';
+  /** A web font: a Google Fonts link (or family name) or a .woff2/.ttf URL. Overrides Font; Font is the fallback. */
+  fontUrl: string;
   weight: number;
   blend: BlendMode;
   matte: MatteMode;
@@ -136,6 +140,12 @@ export interface ParticlesLayer extends LayerBase {
   flockAlign: number;
   flockCohere: number;
   flockSeparate: number;
+  /** 0.05..1: personal space, as a fraction of the sight radius. Neighbours closer than this are pushed away. */
+  flockSpace: number;
+  /** How hard a Scatter throws them (multiplies the action's amount). */
+  scatter: number;
+  /** Draw the field and forces while the Layers tab is open. */
+  showField: boolean;
   // Attractor
   /** mouse: while the pointer is over the picture; press: only while a button is held. */
   attractor: 'none' | 'mouse' | 'press' | 'null';
@@ -148,7 +158,8 @@ export interface ParticlesLayer extends LayerBase {
   emit: 'stream' | 'burst';
   spawn: 'anywhere' | 'edges' | 'center' | 'null';
   spawnRadius: number;
-  edges: 'wrap' | 'bounce' | 'respawn';
+  /** Leaving the picture: come in the other side, bounce, be reborn (spawn setting), or reappear anywhere at random. */
+  edges: 'wrap' | 'bounce' | 'respawn' | 'random';
   /** Seconds before a particle respawns (each gets 60–140% of it); 0 = never. */
   life: number;
   /** 0..1: fade in at birth and out at death (fraction of the life). */
@@ -251,6 +262,8 @@ export interface ShapeLayer extends LayerBase {
   tint: RGB;
   /** resize: size multiplier inside. */
   scale: number;
+  /** vortex: how far the swirl's disc leans away (degrees). The shape's rotation turns the lean. */
+  tilt: number;
   /** The particles layer it acts on; '' = all of them. */
   affects: string;
 }
@@ -258,7 +271,13 @@ export interface ShapeLayer extends LayerBase {
 /** Live audio as a picture: a waveform, spectrum bars, a ring or a blob. Needs the live audio input on. */
 export interface AudioLayer extends LayerBase {
   kind: 'audio';
-  style: 'wave' | 'bars' | 'ring' | 'blob';
+  /** live: the live audio input. file: a song loaded into this layer (kept for the session, not saved). */
+  input: 'live' | 'file';
+  /** The loaded song's name, so it can be asked for again after a reload. */
+  fileName: string;
+  style: 'wave' | 'bars' | 'ring' | 'blob' | 'spectrogram';
+  /** Spectrogram: how fast it scrolls (1 ≈ the width in 4 seconds). */
+  scroll: number;
   x: number;
   y: number;
   /** Width and height in picture heights (ring and blob use the smaller as the diameter). */
@@ -286,16 +305,23 @@ export interface GlyphsLayer extends LayerBase {
   cell: number;
   /** ascii: characters from dark to bright. */
   chars: string;
-  colour: 'tint' | 'picture' | 'palette';
+  /** own keeps each glyph's own colours (emoji). */
+  colour: 'tint' | 'picture' | 'palette' | 'own';
   color: RGB;
   palette: number;
   invert: boolean;
+  /** ascii: shifts which glyph each brightness gets, cycling through the ramp (animate it to shuffle). */
+  shift: number;
+  /** ascii: 0..1, how far each cell strays from its glyph (a stable random per cell). */
+  spread: number;
   /** Brightness contrast before picking (1 = as is). */
   contrast: number;
   /** Fill the cells with the backdrop first (hides the picture under the grid). */
   cover: boolean;
   background: RGB;
-  readFrom: 'picture' | 'camera';
+  readFrom: 'picture' | 'camera' | 'layer';
+  /** readFrom layer: the layer the grid is made from. */
+  sourceId: string;
   opacity: number;
   blend: BlendMode;
 }
@@ -368,12 +394,15 @@ export interface BodiesLayer extends LayerBase {
   bounce: number;
   friction: number;
   font: 'sans' | 'serif' | 'mono';
+  fontUrl: string;
   colour: 'tint' | 'palette';
   color: RGB;
   palette: number;
   /** Bright parts of the picture are solid. */
   solidPicture: boolean;
   threshold: number;
+  /** How hard a Scatter throws them (multiplies the action's amount). */
+  scatter: number;
   opacity: number;
   blend: BlendMode;
 }
@@ -403,16 +432,16 @@ export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', '
 type Defaults<T> = Omit<T, 'id' | 'label' | 'visible' | 'kind'>;
 
 const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind: K }>> } = {
-  null: { toShader: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7', follow: 'none', followId: '', spring: 0.5, wobble: 0.3, role: 'none', radius: 0.04, strength: 1 },
+  null: { toShader: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7', follow: 'none', followId: '', spring: 0.5, wobble: 0.3, role: 'none', radius: 0.04, strength: 1, tilt: 0 },
   text: {
-    toShader: true, text: 'PLAY', x: 0.5, y: 0.5, size: 0.25, rotation: 0, opacity: 1, color: [1, 1, 1], font: 'sans', weight: 700, blend: 'normal', matte: 'over',
+    toShader: true, text: 'PLAY', x: 0.5, y: 0.5, size: 0.25, rotation: 0, opacity: 1, color: [1, 1, 1], font: 'sans', fontUrl: '', weight: 700, blend: 'normal', matte: 'over',
     sequence: false, interval: 0, transition: 'fade',
   },
   image: { toShader: true, src: '', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], blend: 'normal', matte: 'over' },
   particles: {
     toShader: true, count: 800,
     field: 'flow', speed: 1, steer: 0.5, turns: 1, angle: 0, noiseScale: 3, noiseEvolve: 0.2, flat: 'wander', readFrom: 'picture', detail: 'coarse', collide: 0,
-    flock: 0, flockRadius: 0.06, flockAlign: 1, flockCohere: 0.6, flockSeparate: 1.2,
+    flock: 0, flockRadius: 0.06, flockAlign: 1, flockCohere: 0.6, flockSeparate: 1.2, flockSpace: 0.4, scatter: 1, showField: false,
     attractor: 'none', force: 'gravitate', strength: 1, catchRadius: 0.02,
     emit: 'stream', spawn: 'anywhere', spawnRadius: 0.2, edges: 'wrap', life: 0, fade: 0, seed: 0, nullId: '',
     shape: 'dot', rotate: 'heading', sprite: '', crop: false, tintSprite: false, size: 2, sizeJitter: 0.3, opacity: 0.8,
@@ -423,14 +452,14 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
   shape: {
     toShader: true, shape: 'box', x: 0.5, y: 0.5, w: 0.3, h: 0.2, rotation: 0, round: 0, points: [], sourceId: '', threshold: 0.5, invert: false,
     show: true, fill: [1, 1, 1], fillOpacity: 0.15, stroke: [1, 1, 1], strokeWidth: 1.5, trim: 1, blend: 'normal',
-    action: 'wall', strength: 1, reach: 0.15, bounce: 0, angle: 0, targetId: '', tint: [1, 0.35, 0.3], scale: 2, affects: '',
+    action: 'wall', strength: 1, reach: 0.15, bounce: 0, angle: 0, targetId: '', tint: [1, 0.35, 0.3], scale: 2, tilt: 0, affects: '',
   },
-  audio: { toShader: true, style: 'wave', x: 0.5, y: 0.5, w: 1.2, h: 0.35, bars: 48, gain: 1.5, smooth: 0.5, thickness: 2, mirror: false, colour: 'tint', color: [1, 1, 1], palette: 1, opacity: 0.9, blend: 'screen' },
-  glyphs: { toShader: true, style: 'ascii', cell: 12, chars: ' .:-=+*#%@', colour: 'picture', color: [1, 1, 1], palette: 1, invert: false, contrast: 1.2, cover: true, background: [0, 0, 0], readFrom: 'picture', opacity: 1, blend: 'normal' },
+  audio: { toShader: true, input: 'live', fileName: '', style: 'wave', scroll: 1, x: 0.5, y: 0.5, w: 1.2, h: 0.35, bars: 48, gain: 1.5, smooth: 0.5, thickness: 2, mirror: false, colour: 'tint', color: [1, 1, 1], palette: 1, opacity: 0.9, blend: 'screen' },
+  glyphs: { toShader: true, style: 'ascii', cell: 12, chars: ' .:-=+*#%@', colour: 'picture', color: [1, 1, 1], palette: 1, invert: false, shift: 0, spread: 0, contrast: 1.2, cover: true, background: [0, 0, 0], readFrom: 'picture', sourceId: '', opacity: 1, blend: 'normal' },
   contours: { toShader: true, levels: 10, width: 1.2, flow: 0.2, detail: 'fine', colour: 'palette', color: [1, 1, 1], palette: 1, readFrom: 'picture', opacity: 0.9, blend: 'screen' },
   lens: { toShader: true, x: 0.5, y: 0.5, radius: 0.18, effect: 'magnify', amount: 2, follow: 'mouse', nullId: '', ring: 1.5, ringColor: [1, 1, 1], opacity: 1 },
   brush: { toShader: true, paint: 'drag', nullId: '', size: 14, colour: 'palette', color: [1, 1, 1], palette: 1, fade: 4, walls: false, opacity: 0.9, blend: 'screen' },
-  bodies: { toShader: true, source: 'letters', text: 'PLAY', count: 24, size: 48, gravity: 1, angle: 0, bounce: 0.35, friction: 0.3, font: 'sans', colour: 'tint', color: [1, 1, 1], palette: 1, solidPicture: false, threshold: 0.6, opacity: 1, blend: 'normal' },
+  bodies: { toShader: true, source: 'letters', text: 'PLAY', count: 24, size: 48, gravity: 1, angle: 0, bounce: 0.35, friction: 0.3, font: 'sans', fontUrl: '', colour: 'tint', color: [1, 1, 1], palette: 1, solidPicture: false, threshold: 0.6, scatter: 1, opacity: 1, blend: 'normal' },
   camera: { toShader: true, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], mirror: true, blend: 'normal', matte: 'over' },
 };
 
@@ -465,10 +494,10 @@ const unit = N(0, 1);
 const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
   null: {
     toShader: B, x: N(), y: N(), size: N(0), color: { t: 'hex' }, follow: E('none', 'mouse', 'null'), followId: S, spring: unit, wobble: unit,
-    role: E('none', 'emitter', 'absorber', 'attract', 'repel', 'vortex'), radius: N(0.001), strength: N(0),
+    role: E('none', 'emitter', 'absorber', 'attract', 'repel', 'vortex'), radius: N(0.001), strength: N(0), tilt: N(0, 85),
   },
   text: {
-    toShader: B, text: S, x: N(), y: N(), size: N(0.005), rotation: N(), opacity: unit, color: C, font: E('sans', 'serif', 'mono'), weight: N(100, 900), blend: blendF, matte: matteF,
+    toShader: B, text: S, x: N(), y: N(), size: N(0.005), rotation: N(), opacity: unit, color: C, font: E('sans', 'serif', 'mono'), fontUrl: S, weight: N(100, 900), blend: blendF, matte: matteF,
     sequence: B, interval: N(0), transition: E('cut', 'fade', 'rise', 'type'),
   },
   image: { toShader: B, src: S, x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, blend: blendF, matte: matteF },
@@ -476,9 +505,9 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     toShader: B, count: N(1, 5000, true),
     field: E('flow', 'climb', 'descend', 'noise', 'none'), speed: N(0), steer: unit, turns: N(0), angle: N(), noiseScale: N(0.1), noiseEvolve: N(0),
     flat: E('wander', 'settle'), readFrom: E('picture', 'camera'), detail: E('coarse', 'fine'), collide: unit,
-    flock: unit, flockRadius: N(0.005, 0.5), flockAlign: N(0, 2), flockCohere: N(0, 2), flockSeparate: N(0, 2),
+    flock: unit, flockRadius: N(0.005, 0.5), flockAlign: N(0, 2), flockCohere: N(0, 2), flockSeparate: N(0, 2), flockSpace: N(0.05, 1), scatter: N(0, 10), showField: B,
     attractor: E('none', 'mouse', 'press', 'null'), force: E('gravitate', 'spiral', 'repel'), strength: N(0), catchRadius: N(0),
-    emit: E('stream', 'burst'), spawn: E('anywhere', 'edges', 'center', 'null'), spawnRadius: N(0), edges: E('wrap', 'bounce', 'respawn'), life: N(0), fade: unit, seed: N(0, 1e9, true), nullId: S,
+    emit: E('stream', 'burst'), spawn: E('anywhere', 'edges', 'center', 'null'), spawnRadius: N(0), edges: E('wrap', 'bounce', 'respawn', 'random'), life: N(0), fade: unit, seed: N(0, 1e9, true), nullId: S,
     shape: E('dot', 'square', 'triangle', 'streak', 'ring', 'star', 'image'), rotate: E('heading', 'spin', 'none'), sprite: S, crop: B, tintSprite: B,
     size: N(0.1), sizeJitter: unit, opacity: unit, colour: E('tint', 'picture', 'palette'), color: C, palette: N(0, 9, true),
     paletteBy: E('heading', 'speed', 'age', 'brightness'), sizeBy: { t: 'enum', values: MODS }, sizeAmount: N(), opacityBy: { t: 'enum', values: MODS }, opacityAmount: N(),
@@ -489,15 +518,15 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     points: { t: 'points' }, sourceId: S, threshold: unit, invert: B,
     show: B, fill: C, fillOpacity: unit, stroke: C, strokeWidth: N(0), trim: unit, blend: blendF,
     action: E('none', 'wall', 'container', 'attract', 'repel', 'sink', 'portal', 'emitter', 'absorber', 'wind', 'vortex', 'drag', 'tint', 'resize', 'sensor'),
-    strength: N(0), reach: N(0.001), bounce: unit, angle: N(), targetId: S, tint: C, scale: N(0), affects: S,
+    strength: N(0), reach: N(0.001), bounce: unit, angle: N(), targetId: S, tint: C, scale: N(0), tilt: N(0, 85), affects: S,
   },
   audio: {
-    toShader: B, style: E('wave', 'bars', 'ring', 'blob'), x: N(), y: N(), w: N(0.01), h: N(0.01), bars: N(4, 256, true), gain: N(0), smooth: unit, thickness: N(0.5),
+    toShader: B, input: E('live', 'file'), fileName: S, style: E('wave', 'bars', 'ring', 'blob', 'spectrogram'), scroll: N(0), x: N(), y: N(), w: N(0.01), h: N(0.01), bars: N(4, 256, true), gain: N(0), smooth: unit, thickness: N(0.5),
     mirror: B, colour: E('tint', 'palette'), color: C, palette: N(0, 9, true), opacity: unit, blend: blendF,
   },
   glyphs: {
-    toShader: B, style: E('ascii', 'dots', 'squares', 'lines', 'cross'), cell: N(3, 200), chars: S, colour: E('tint', 'picture', 'palette'), color: C, palette: N(0, 9, true),
-    invert: B, contrast: N(0.1, 5), cover: B, background: C, readFrom: E('picture', 'camera'), opacity: unit, blend: blendF,
+    toShader: B, style: E('ascii', 'dots', 'squares', 'lines', 'cross'), cell: N(3, 200), chars: S, colour: E('tint', 'picture', 'palette', 'own'), color: C, palette: N(0, 9, true),
+    invert: B, shift: N(), spread: unit, contrast: N(0.1, 5), cover: B, background: C, readFrom: E('picture', 'camera', 'layer'), sourceId: S, opacity: unit, blend: blendF,
   },
   contours: {
     toShader: B, levels: N(1, 64, true), width: N(0.25), flow: N(), detail: E('coarse', 'fine'), colour: E('tint', 'palette'), color: C, palette: N(0, 9, true),
@@ -513,7 +542,7 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
   },
   bodies: {
     toShader: B, source: E('letters', 'circles', 'boxes'), text: S, count: N(1, 400, true), size: N(4, 400), gravity: N(), angle: N(), bounce: unit, friction: unit,
-    font: E('sans', 'serif', 'mono'), colour: E('tint', 'palette'), color: C, palette: N(0, 9, true), solidPicture: B, threshold: unit, opacity: unit, blend: blendF,
+    font: E('sans', 'serif', 'mono'), fontUrl: S, colour: E('tint', 'palette'), color: C, palette: N(0, 9, true), solidPicture: B, threshold: unit, scatter: N(0, 10), opacity: unit, blend: blendF,
   },
   camera: { toShader: B, x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, mirror: B, blend: blendF, matte: matteF },
 };
@@ -580,6 +609,7 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'wobble', label: 'Wobble', min: 0, max: 1, hint: 'Following: how much it overshoots and wobbles before settling. 0 glides straight in.' },
     { key: 'radius', label: 'Radius', min: 0.005, max: 0.4, hint: 'Particle role: how big its zone is (fraction of picture height). Emitters birth particles inside it; absorbers swallow them there.' },
     { key: 'strength', label: 'Strength', min: 0, max: 5, hint: 'Particle role: how hard it launches (emitter), pulls (absorber, attract), pushes (repel) or swirls (vortex).' },
+    { key: 'tilt', label: 'Tilt', min: 0, max: 85, step: 1, hint: 'Vortex: lean the swirl back like a disc seen from the side. Orbits become ellipses and particles grow on the near side, shrink on the far side.' },
   ],
   text: [
     X('Centre of the text'), Y('Centre of the text'),
@@ -604,8 +634,10 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'flockRadius', label: 'Sight', min: 0.01, max: 0.3, hint: 'Flocking: how far a particle sees its neighbours (fraction of picture height).' },
     { key: 'flockAlign', label: 'Alignment', min: 0, max: 2, hint: 'Flocking: how strongly particles turn to fly the same way as their neighbours.' },
     { key: 'flockCohere', label: 'Cohesion', min: 0, max: 2, hint: 'Flocking: how strongly particles steer toward the middle of their neighbours (tight flocks).' },
+    { key: 'flockSpace', label: 'Personal space', min: 0.05, max: 1, hint: 'Flocking: how close a neighbour may come before it is pushed away, as a share of Sight. Small = tight flocks; large = loose, evenly spread ones.' },
     { key: 'flockSeparate', label: 'Separation', min: 0, max: 2, hint: 'Flocking: how strongly particles keep their distance from neighbours (no pile-ups).' },
     { key: 'strength', label: 'Pull', min: 0, max: 3, hint: 'How hard the attractor pulls (or pushes, for Repel). Stronger near it.' },
+    { key: 'scatter', label: 'Scatter', min: 0, max: 5, hint: 'How hard a Scatter (the button, or an action) kicks them. Multiplies the action\'s amount.' },
     { key: 'catchRadius', label: 'Catch', min: 0, max: 0.3, hint: 'Particles this close to the attractor are caught and respawn (fraction of picture height). 0 = never caught.' },
     { key: 'spawnRadius', label: 'Spawn radius', min: 0, max: 0.8, hint: 'Spawn at centre or at a null: how wide the birth circle is (fraction of picture height).' },
     { key: 'life', label: 'Life (s)', min: 0, max: 20, hint: 'Seconds before a particle respawns (each lives 60–140% of this). 0 = they live forever and only respawn at edges or when caught.' },
@@ -634,6 +666,7 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'bounce', label: 'Bounce', min: 0, max: 1, hint: 'Walls: 0 = particles slide along, 1 = they bounce straight back.' },
     { key: 'angle', label: 'Wind angle', min: -180, max: 180, step: 1, hint: 'Wind direction in degrees: 0 right, 90 down, 180 left, −90 up.' },
     { key: 'scale', label: 'Resize ×', min: 0, max: 5, hint: 'Resize: particle size multiplier while inside.' },
+    { key: 'tilt', label: 'Tilt', min: 0, max: 85, step: 1, hint: 'Vortex: lean the swirl back like a disc seen from the side. Orbits become ellipses round the middle and particles grow on the near side, shrink on the far side. Rotation turns the lean.' },
   ],
   audio: [
     X('Centre'), Y('Centre'),
@@ -642,11 +675,14 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'gain', label: 'Gain', min: 0, max: 6, hint: 'How big the sound makes it.' },
     { key: 'smooth', label: 'Smooth', min: 0, max: 0.95, hint: 'How slowly it follows the sound. 0 is raw and jittery.' },
     { key: 'thickness', label: 'Thickness', min: 0.5, max: 12, step: 0.5, hint: 'Line width in pixels.' },
+    { key: 'scroll', label: 'Scroll', min: 0, max: 4, hint: 'Spectrogram: how fast time scrolls by. 1 crosses the width in about 4 seconds; 0 freezes it.' },
     OPACITY,
   ],
   glyphs: [
     { key: 'cell', label: 'Cell', min: 4, max: 60, step: 1, hint: 'Grid cell size in pixels. Smaller = more detail, more work.' },
     { key: 'contrast', label: 'Contrast', min: 0.2, max: 4, hint: 'Pushes darks darker and lights lighter before picking a glyph.' },
+    { key: 'shift', label: 'Offset', min: 0, max: 16, hint: 'ASCII: moves every cell along the character ramp, wrapping round. Map an LFO or a beat onto it and the glyphs shuffle through the set.' },
+    { key: 'spread', label: 'Spread', min: 0, max: 1, hint: 'ASCII: each cell strays from its glyph by a random amount of its own, so flat areas get a mix of characters instead of one.' },
     OPACITY,
   ],
   contours: [
@@ -674,6 +710,7 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'bounce', label: 'Bounce', min: 0, max: 1, hint: 'How bouncy collisions are.' },
     { key: 'friction', label: 'Friction', min: 0, max: 1, hint: 'How quickly sliding bodies stop.' },
     { key: 'threshold', label: 'Solid above', min: 0, max: 1, hint: 'Solid picture: brightness at or above this is solid ground.' },
+    { key: 'scatter', label: 'Scatter', min: 0, max: 5, hint: 'How hard a Scatter (the button, or an action) throws them. Multiplies the action\'s amount.' },
     OPACITY,
   ],
   camera: [

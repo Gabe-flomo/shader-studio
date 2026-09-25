@@ -7,7 +7,8 @@
 import type { ReactNode } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
-import { LAYER_NUMERIC_PROPS, layerTarget, type PlayLayer } from '../../../types/play';
+import { LAYER_NUMERIC_PROPS, defaultLayer, layerTarget, type PlayLayer } from '../../../types/play';
+import { Button } from '../../ui/Button';
 import { PARTICLE_PALETTES, paletteColour } from '../../../play/particle-sim.js';
 import { IconButton } from '../../ui/Button';
 import { Segmented, Toggle } from '../../ui/Choice';
@@ -32,7 +33,8 @@ export interface FieldKit {
   seg: (label: string, key: string, options: Choice[], hint?: string) => ReactNode;
   select: (label: string, key: string, options: Choice[], hint?: string) => ReactNode;
   toggle: (label: string, key: string, text: string, hint?: string) => ReactNode;
-  pick: (label: string, key: string, layers: ReadonlyArray<{ id: string; label: string }>, empty: string, hint?: string) => ReactNode;
+  /** A layer picker. With `create`, a null can be made from here: it is added and picked at once. */
+  pick: (label: string, key: string, layers: ReadonlyArray<{ id: string; label: string }>, empty: string, hint?: string, create?: () => void) => ReactNode;
   palette: (key?: string) => ReactNode;
   note: (text: ReactNode) => ReactNode;
 }
@@ -55,6 +57,8 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose }: {
   onExpose: (key: string) => void;
 }): FieldKit {
   const rec = l as unknown as Record<string, unknown>;
+  // Double-clicking a ruler puts it back to the layer kind's default.
+  const defaults = defaultLayer(l.kind, '', '') as unknown as Record<string, unknown>;
   const get = <T,>(key: string) => rec[key] as T;
   const numStyle: React.CSSProperties = { width: 58, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' };
   const labelStyle: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62, flexShrink: 0, display: 'inline-block' };
@@ -76,7 +80,7 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose }: {
       <div key={`prop:${key}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
         {label(def.label, def.hint)}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <RulerSlider value={value} min={def.min} max={def.max} step={def.step ?? 0.01} defaultValue={value} onChange={v => set({ [key]: v })} onType={v => set({ [key]: v })} ariaLabel={`${l.label} ${def.label}`} touch={touch} />
+          <RulerSlider value={value} min={def.min} max={def.max} step={def.step ?? 0.01} defaultValue={typeof defaults[key] === 'number' ? defaults[key] as number : undefined} onChange={v => set({ [key]: v })} onType={v => set({ [key]: v })} ariaLabel={`${l.label} ${def.label}`} touch={touch} />
         </div>
         <IconButton icon={exposed ? 'check' : 'plus'} label={exposed ? 'Already a control' : `Make ${def.label} a control (then map anything onto it)`} size="sm" active={exposed} disabled={exposed} onClick={() => onExpose(key)} />
       </div>
@@ -96,10 +100,18 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose }: {
     row(text, <Select ariaLabel={text} value={String(get(key))} options={options} onChange={v => set({ [key]: v })} height={26} />, hint);
   const toggle = (text: string, key: string, what: string, hint?: string) =>
     row(text, <Toggle checked={get<boolean>(key)} onChange={v => set({ [key]: v })} label={what} />, hint);
-  const pick = (text: string, key: string, layers: ReadonlyArray<{ id: string; label: string }>, empty: string, hint?: string) =>
+  const pick = (text: string, key: string, layers: ReadonlyArray<{ id: string; label: string }>, empty: string, hint?: string, create?: () => void) =>
     row(text, layers.length
-      ? <Select ariaLabel={text} value={get<string>(key)} options={[{ value: '', label: 'Pick one' }, ...layers.map(x => ({ value: x.id, label: x.label }))]} onChange={v => set({ [key]: v })} height={26} />
-      : <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{empty}</span>, hint);
+      ? <Select
+          ariaLabel={text}
+          value={get<string>(key)}
+          options={[{ value: '', label: 'Pick one' }, ...layers.map(x => ({ value: x.id, label: x.label })), ...(create ? [{ value: '__new', label: '+ New null here' }] : [])]}
+          onChange={v => { if (v === '__new') create?.(); else set({ [key]: v }); }}
+          height={26}
+        />
+      : create
+        ? <Button size="sm" icon="plus" onClick={create}>Create a null</Button>
+        : <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{empty}</span>, hint);
   const swatch = (i: number) => `linear-gradient(90deg, ${[0, 0.25, 0.5, 0.75, 1].map(t => `rgb(${paletteColour(i, t).map(v => Math.round(v * 255)).join(',')})`).join(',')})`;
   const palette = (key = 'palette') => row('Palette', (
     <>

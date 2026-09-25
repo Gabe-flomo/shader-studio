@@ -10,6 +10,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { getNodeDefinition } from '../../nodes/definitions';
+import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
@@ -18,10 +20,9 @@ import { SENSOR_READS_FOR, type SensorRead } from '../../types/play';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
 import { playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
-import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
 import {
-  candidateLabel, collectPlayCandidates, controlExists, controlHelp, playId, readControlValue, targetParts, type PlayCandidate,
+  candidateLabel, collectPlayCandidates, controlExists, controlHelp, findTargetNode, playId, readControlValue, targetParts, type PlayCandidate,
 } from '../../play/playControls';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
@@ -35,10 +36,13 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
 import { LayersPanel } from './LayersPanel';
 import { NotesCard } from './NotesCard';
+import { NOTE_REF_TYPE, noteRef, type NoteRefKind } from './noteRefs';
+import { LayerContextMenu } from './LayerContextMenu';
+import { usePlayUi, type PanelSize } from './playUi';
 import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, OscStatusChip } from './chips';
 import { TriggerPicker } from './TriggerPicker';
-import { DEFAULT_DISPLAY, parseLayerTarget, type PlayDisplay } from '../../types/play';
+import { DEFAULT_DISPLAY, LAYER_NUMERIC_PROPS, layerTarget, parseLayerTarget, type PlayDisplay } from '../../types/play';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
 
@@ -121,8 +125,6 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const exportPlayFile = useNodeGraphStore(s => s.exportPlayFile);
   const [embedOpen, setEmbedOpen] = useState(false);
-  const previewAspect = useNodeGraphStore(s => s.previewAspect);
-  const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
 
   // Mouse and keyboard sources listen only while this page shows.
@@ -160,6 +162,42 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
     }));
   }, [update]);
 
+  // Where a control comes from, and how to get there.
+  const revealLayerFor = usePlayUi(s => s.reveal);
+  const focusNode = useNodeGraphStore(s => s.focusNode);
+  const sourceOf = (c: PlayControl): ControlSource => {
+    const lt = parseLayerTarget(c.target);
+    if (lt) {
+      const l = play.layers.find(x => x.id === lt.layerId);
+      const d = l ? LAYER_NUMERIC_PROPS[l.kind].find(x => x.key === lt.key) : undefined;
+      return { kind: 'layer', title: l?.label ?? 'a deleted layer', param: d?.label ?? lt.key, missing: !l, go: () => { if (l) revealLayerFor(l.id); } };
+    }
+    const { nodeId } = targetParts(c.target);
+    const top = nodes.find(n => n.id === nodeId), node = findTargetNode(nodes, c.target);
+    const key = c.target.split('::').pop() ?? '';
+    const nameOf = (n: GraphNode) => (typeof n.params.label === 'string' && n.params.label.trim()) || getNodeDefinition(n.type)?.label || n.type;
+    const param = (node && getNodeDefinition(node.type)?.paramDefs?.[key]?.label) || key;
+    return {
+      kind: 'node', title: node ? nameOf(node) : 'a deleted node', param, missing: !node,
+      within: top && node && top !== node ? nameOf(top) : undefined,
+      go: () => { if (top) focusNode(top.id); },
+    };
+  };
+
+  // Every layer's numbers can be controls too (the + beside them in the Layers tab does the same).
+  const layerCandidates = useMemo<LayerCandidates[]>(() => play.layers.map(l => ({
+    id: l.id, label: l.label,
+    props: LAYER_NUMERIC_PROPS[l.kind].map(d => ({ key: d.key, label: d.label, hint: d.hint, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
+  })), [play.layers]);
+  const addLayerControl = useCallback((layerId: string, key: string) => {
+    update(p => {
+      const l = p.layers.find(x => x.id === layerId);
+      const d = l && LAYER_NUMERIC_PROPS[l.kind].find(x => x.key === key);
+      if (!l || !d || p.controls.some(c => c.target === layerTarget(layerId, key))) return p;
+      return { ...p, controls: [...p.controls, { id: playId('ctl'), target: layerTarget(layerId, key), kind: 'float', label: `${l.label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
+    });
+  }, [update]);
+
   const addMapping = useCallback((source: PlaySource, controlId?: string) => {
     update(p => {
       const control = p.controls.find(c => c.id === controlId) ?? p.controls[0];
@@ -176,9 +214,26 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
 
   const [drawerOpen, setDrawerOpen] = useState(true);
   // Phones: Controls and Mappings are tabs instead of stacked panes.
-  const [tab, setTab] = useState<'controls' | 'layers' | 'mappings'>('controls');
+  const tab = usePlayUi(s => s.tab), setTab = usePlayUi(s => s.setTab);
+  const panel = usePlayUi(s => s.panel), setPanel = usePlayUi(s => s.setPanel);
   const nullLayers = useMemo(() => play.layers.filter(l => l.kind === 'null').map(l => ({ id: l.id, label: l.label })), [play.layers]);
   const [notesEditing, setNotesEditing] = useState(false);
+  // Links in the notes: what they can point at, and going there.
+  const noteTargets = useMemo(() => ({ layers: play.layers.map(l => ({ id: l.id, label: l.label })), controls: play.controls.map(c => ({ id: c.id, label: c.label })) }), [play.layers, play.controls]);
+  const revealLayer = usePlayUi(s => s.reveal);
+  const openRef = useCallback((kind: NoteRefKind, id: string) => {
+    if (kind === 'layer') { revealLayer(id); return; }
+    setTab('controls');
+    // After the tab renders: scroll to the control and flash it.
+    requestAnimationFrame(() => {
+      const el = rootRef.current?.querySelector<HTMLElement>(`[data-control-id="${CSS.escape(id)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      const was = el.style.boxShadow;
+      el.style.boxShadow = `inset 0 0 0 2px ${tk.accent.base}`;
+      window.setTimeout(() => { el.style.boxShadow = was; }, 900);
+    });
+  }, [revealLayer, setTab, tk.accent.base]);
   // Layers a source or trigger can read: shapes (click, fill, hover), particles (speed, spread), cameras (motion), nulls (distance).
   const layerRefs = useMemo(() => play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind })), [play.layers]);
   // Desktop: the drawer's height, dragged from its top edge and remembered.
@@ -214,7 +269,8 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   return (
     <div ref={rootRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
       {/* Sections. Desktop keeps Mappings as a drawer underneath; phones make it a third tab. */}
-      <div style={{ flexShrink: 0, padding: '8px 12px 2px', background: tk.bg.panel }}>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 2px', background: tk.bg.panel }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
         <Segmented
           fill
           ariaLabel="Play section"
@@ -226,13 +282,17 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
             ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length ? ` · ${play.mappings.length}` : ''}` }] : []),
           ]}
         />
+        </div>
+        {!compact && <Segmented size="sm" ariaLabel="Panel width" value={panel} onChange={v => setPanel(v as PanelSize)} options={[{ value: 's', label: 'S', title: 'Narrow panel' }, { value: 'm', label: 'M', title: 'Medium panel' }, { value: 'l', label: 'L', title: 'Wide panel' }]} />}
       </div>
       {(play.notes || notesEditing) && (
         <NotesCard
           notes={play.notes ?? ''}
           editing={notesEditing}
+          targets={noteTargets}
+          onOpen={openRef}
           onEdit={setNotesEditing}
-          onChange={notes => update(p => { const next = { ...p, notes }; if (!notes) delete next.notes; return next; })}
+          onChange={notes => update(p => { const next: PlayRecord = { ...p, notes }; if (!notes) delete next.notes; return next; })}
         />
       )}
       {tab === 'layers' && (
@@ -253,15 +313,10 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
             <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
             {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
             <IconButton icon="code" label="Put it on a website: a player with controls, or the picture as a background, as a snippet or a page" onClick={() => setEmbedOpen(true)} />
-            <AddControlButton candidates={candidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} />
+            <AddControlButton candidates={candidates} layers={layerCandidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} />
           </>
         )}
       />}
-      {/* The picture's shape: the same setting the export dialog uses, so what you see is what you export. */}
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel }}>
-        <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
-        <Select ariaLabel="Canvas shape" value={previewAspect} options={PREVIEW_ASPECTS.map(a => ({ value: a.id, label: a.id === 'free' ? 'Free (fill the panel)' : `${a.label} · ${a.hint}` }))} onChange={v => setPreviewAspect(v as typeof previewAspect)} height={26} style={{ flex: 1, minWidth: 0 }} />
-      </div>
       <PictureRow play={play} onChange={update} />
       {tab === 'controls' && <div style={{ flex: 1, minHeight: play.notes ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {play.controls.length === 0 ? (
@@ -279,6 +334,8 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
             count={play.controls.length}
             exists={controlExists(nodes, c, play)}
             help={controlHelp(nodes, c.target, play)}
+            source={sourceOf(c)}
+            onMap={() => addMapping({ kind: 'mouse', axis: 'x' }, c.id)}
             value={readControlValue(nodes, c.target, play)}
             live={liveValues.get(c.id)}
             drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers))}
@@ -313,6 +370,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
         layerRefs={layerRefs}
       />}
       {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
+      <LayerContextMenu play={play} onChange={update} />
     </div>
   );
 }
@@ -352,40 +410,80 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 
 // ── Add control ──────────────────────────────────────────────────────────────
 
-function AddControlButton({ candidates, taken, onAdd }: { candidates: PlayCandidate[]; taken: Set<string>; onAdd: (c: PlayCandidate) => void }) {
+/** A layer's numbers, for the Add control menu. */
+interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number }> }
+
+function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer }: {
+  candidates: PlayCandidate[];
+  layers: LayerCandidates[];
+  taken: Set<string>;
+  onAdd: (c: PlayCandidate) => void;
+  onAddLayer: (layerId: string, key: string) => void;
+}) {
   const tk = useTokens();
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  // Folders: 'graph', 'layers', and one per layer id. The graph starts open; layers start folded.
+  const [unfolded, setUnfolded] = useState<Set<string>>(() => new Set(['graph', 'layers']));
+  const flip = (k: string) => setUnfolded(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const q = query.trim().toLowerCase();
-  const shown = candidates.filter(c => !taken.has(c.target) && (!q || candidateLabel(c).toLowerCase().includes(q)));
+  const close = () => { setOpen(false); setQuery(''); };
+  const graphShown = candidates.filter(c => !taken.has(c.target) && (!q || candidateLabel(c).toLowerCase().includes(q)));
+  const layerShown = layers.map(l => ({
+    ...l,
+    props: l.props.filter(pr => !taken.has(layerTarget(l.id, pr.key)) && (!q || `${l.label} ${pr.label}`.toLowerCase().includes(q))),
+  })).filter(l => l.props.length > 0);
+  const layerCount = layerShown.reduce((n, l) => n + l.props.length, 0);
+  // While searching every folder with a match is open.
+  const isOpen = (k: string) => !!q || unfolded.has(k);
+  const itemStyle: React.CSSProperties = {
+    width: '100%', display: 'flex', alignItems: 'center', gap: 8, height: 30, padding: '0 8px', border: 0, borderRadius: radius.md,
+    background: 'none', cursor: 'pointer', color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, textAlign: 'left',
+  };
+  const hover = {
+    onMouseEnter: (e: React.MouseEvent) => ((e.currentTarget as HTMLElement).style.background = tk.bg.hover),
+    onMouseLeave: (e: React.MouseEvent) => ((e.currentTarget as HTMLElement).style.background = 'none'),
+  };
+  const folder = (k: string, title: string, count: number, indent = 0) => (
+    <button key={`f:${k}`} type="button" onClick={() => flip(k)} {...hover} style={{ ...itemStyle, height: 28, paddingLeft: 6 + indent, color: tk.text.secondary, font: `650 11.5px ${fontFamily.ui}` }}>
+      <Icon name={isOpen(k) ? 'chevD' : 'chevR'} size={12} style={{ color: tk.text.faint }} />
+      <Icon name="folder" size={13} style={{ color: tk.text.faint }} />
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+      <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{count}</span>
+    </button>
+  );
+  const nothing = candidates.length === 0 && layers.every(l => l.props.length === 0);
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <Button size="sm" icon="plus" onClick={() => setOpen(o => !o)} disabled={candidates.length === 0}>Add control</Button>
+      <Button size="sm" icon="plus" onClick={() => setOpen(o => !o)} disabled={nothing}>Add control</Button>
       {open && (
-        <Popover anchorRef={anchor} onClose={() => { setOpen(false); setQuery(''); }} align="end" width={300} padding={8}>
-          <Field autoFocus placeholder="Search sliders and colours" value={query} onChange={e => setQuery(e.target.value)} height={30} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
-          <div style={{ maxHeight: 360, overflowY: 'auto', marginTop: 6 }}>
-            {shown.length === 0 ? (
-              <div style={{ padding: '10px 8px', color: tk.text.faint }}>{candidates.length === 0 ? 'Nothing in the graph can be a control.' : taken.size === candidates.length ? 'Every slider is already on the panel.' : 'No match.'}</div>
-            ) : shown.map(c => (
-              <button
-                key={c.target}
-                type="button"
-                title={c.hint}
-                onClick={() => { onAdd(c); setOpen(false); setQuery(''); }}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 8, height: 32, padding: '0 8px', border: 0, borderRadius: radius.md,
-                  background: 'none', cursor: 'pointer', color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, textAlign: 'left',
-                }}
-                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = tk.bg.hover)}
-                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = 'none')}
-              >
+        <Popover anchorRef={anchor} onClose={close} align="end" width={320} padding={8}>
+          <Field autoFocus placeholder="Search sliders, colours and layers" value={query} onChange={e => setQuery(e.target.value)} height={30} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
+          <div style={{ maxHeight: 400, overflowY: 'auto', marginTop: 6 }}>
+            {graphShown.length === 0 && layerCount === 0 && (
+              <div style={{ padding: '10px 8px', color: tk.text.faint }}>{q ? 'No match.' : 'Everything is already on the panel.'}</div>
+            )}
+            {graphShown.length > 0 && folder('graph', 'From the graph', graphShown.length)}
+            {graphShown.length > 0 && isOpen('graph') && graphShown.map(c => (
+              <button key={c.target} type="button" title={c.hint} onClick={() => { onAdd(c); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 24 }}>
                 {c.kind === 'color'
                   ? <span style={{ width: 12, height: 12, borderRadius: 3, background: `rgb(${(c.value as number[]).map(v => Math.round(v * 255)).join(',')})`, boxShadow: `inset 0 0 0 1px ${alpha('#000', 0.12)}`, flexShrink: 0 }} />
                   : <Icon name="curve" size={13} style={{ color: tk.text.faint }} />}
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidateLabel(c)}</span>
               </button>
+            ))}
+            {layerCount > 0 && folder('layers', 'From layers', layerCount)}
+            {layerCount > 0 && isOpen('layers') && layerShown.map(l => (
+              <div key={l.id}>
+                {folder(`layer:${l.id}`, l.label, l.props.length, 14)}
+                {isOpen(`layer:${l.id}`) && l.props.map(pr => (
+                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { onAddLayer(l.id, pr.key); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
+                    <Icon name="curve" size={13} style={{ color: tk.text.faint }} />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.label}</span>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </Popover>
@@ -429,13 +527,17 @@ function PictureRow({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: P
   );
 }
 
-function ControlRow({ control, index, count, exists, help, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove }: {
+/** Where a control's value lives: a layer's property or a node's param. */
+interface ControlSource { kind: 'layer' | 'node'; title: string; param: string; within?: string; missing: boolean; go: () => void }
+
+function ControlRow({ control, index, count, exists, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, onMap }: {
   control: PlayControl;
   index: number;
   count: number;
   exists: boolean;
   /** The param's hint and the node's comment from the graph, shown on the ⓘ. */
   help: { hint?: string; comment?: string };
+  source: ControlSource;
   value: number | number[] | undefined;
   live: ControlValue | undefined;
   drivenBy: string[];
@@ -445,9 +547,12 @@ function ControlRow({ control, index, count, exists, help, value, live, drivenBy
   onRange: (min: number, max: number) => void;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
+  /** Add a mapping onto this control. */
+  onMap: () => void;
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
+  const [details, setDetails] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(control.label);
   const driven = drivenBy.length > 0;
@@ -456,14 +561,24 @@ function ControlRow({ control, index, count, exists, help, value, live, drivenBy
   const shown = driven && live !== undefined ? live : value;
   return (
     <div
+      data-control-id={control.id}
+      // A tap on the card itself (not a slider or a button) opens its details.
+      onClick={e => { if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.cardBg) setDetails(d => !d); }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        padding: '10px 10px 10px 12px', marginTop: 6, borderRadius: radius.card, background: tk.bg.panel,
+        padding: '10px 10px 10px 12px', marginTop: 6, borderRadius: radius.card, background: tk.bg.panel, transition: 'box-shadow 0.3s',
         boxShadow: `inset 0 0 0 1px ${driven ? alpha(tk.accent.base, 0.45) : tk.border.default}`, opacity: exists ? 1 : 0.6,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26, marginBottom: 6 }}>
+      <div data-card-bg="1" style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26, marginBottom: 6 }}>
+        <IconButton icon={details ? 'chevD' : 'chevR'} label={details ? 'Hide details' : 'Details: where it comes from'} size="sm" tooltip={false} onClick={() => setDetails(d => !d)} style={{ marginLeft: -6 }} />
+        <span
+          draggable
+          onDragStart={e => { e.dataTransfer.setData(NOTE_REF_TYPE, noteRef('control', control.id)); e.dataTransfer.setData('text/plain', noteRef('control', control.id)); e.dataTransfer.effectAllowed = 'copy'; }}
+          title="Drag onto the notes to link this control"
+          style={{ display: 'inline-flex', color: tk.text.faint, cursor: 'grab', marginLeft: -4, visibility: hover || touch ? 'visible' : 'hidden' }}
+        ><Icon name="grip" size={12} /></span>
         {editing ? (
           <Field autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commitLabel} onKeyDown={e => { if (e.key === 'Enter') commitLabel(); if (e.key === 'Escape') { setDraft(control.label); setEditing(false); } }} height={26} style={{ flex: 1 }} />
         ) : (
@@ -516,7 +631,32 @@ function ControlRow({ control, index, count, exists, help, value, live, drivenBy
               touch={touch}
             />
           </div>
-          {hover && !touch && <RangeEditor min={control.min} max={control.max} onRange={onRange} />}
+          {hover && !touch && !details && <RangeEditor min={control.min} max={control.max} onRange={onRange} />}
+        </div>
+      )}
+      {details && (
+        <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 6, font: `12px/1.45 ${fontFamily.ui}`, color: tk.text.secondary }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name={source.kind === 'layer' ? 'layoutCanvas' : 'nodes'} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              {source.kind === 'layer' ? 'Layer' : 'Node'} <b style={{ color: source.missing ? tk.status.warningText : tk.text.primary }}>{source.title}</b>
+              {source.within && <> in group <b>{source.within}</b></>} · {source.param}
+            </span>
+            <Button size="sm" variant="ghost" disabled={source.missing} onClick={source.go}>{source.kind === 'layer' ? 'Go to layer' : 'Show in graph'}</Button>
+          </div>
+          {help.hint && <div style={{ color: tk.text.muted }}>{help.hint}</div>}
+          {help.comment && <div style={{ color: tk.text.muted }}><b>Note on the node:</b> {help.comment}</div>}
+          {control.kind !== 'color' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62 }}>Range</span>
+              <RangeEditor min={control.min} max={control.max} onRange={onRange} />
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62 }}>Driven by</span>
+            <span style={{ flex: 1, minWidth: 0 }}>{driven ? drivenBy.join(', ') : 'Nothing yet: drag the slider, or map an input onto it.'}</span>
+            <Button size="sm" variant="ghost" icon="plus" onClick={onMap}>Map</Button>
+          </div>
         </div>
       )}
     </div>
@@ -670,7 +810,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               title="Nothing mapped"
               body={noControls
                 ? 'Add a control first, then map an input onto it.'
-                : `Press Learn and move a knob or a key, or add a row by hand. ${midi.status === 'unsupported' ? 'This browser has no Web MIDI; the keyboard stand-in on a MIDI Input node still works.' : midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}.` : ''} Connecting Ableton, a controller, OSC or live audio for the first time? The ⓘ button above walks you through it.`}
+                : `Press Learn and move a knob or a key, or add a row by hand. ${midiEngine.blockReason() ?? (midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}.` : '')} Connecting Ableton, a controller, OSC or live audio for the first time? The ⓘ button above walks you through it.`}
             />
           ) : play.mappings.map(m => (
             <MappingRow

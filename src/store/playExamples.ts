@@ -579,18 +579,33 @@ A little smoothing turns the jumps into glides.
 • Set the absorber to follow the mouse.`,
   })),
   ex('playFlock', quietGraph(), play({
-    layers: [layer('particles', 'birds', 'Flock', { count: 500, field: 'noise', noiseScale: 1.5, speed: 1, steer: 0.2, flock: 0.8, flockRadius: 0.07, shape: 'triangle', rotate: 'heading', size: 3, sizeJitter: 0.2, edges: 'wrap', colour: 'palette', palette: 5, paletteBy: 'heading', trail: 0.2 })],
-    controls: [ctl('align', 'layer:birds::flockAlign', 'Flock · Alignment', 0, 2), ctl('cohere', 'layer:birds::flockCohere', 'Flock · Cohesion', 0, 2), ctl('sep', 'layer:birds::flockSeparate', 'Flock · Separation', 0, 2)],
-    notes: `**What it shows.** Flocking (boids) makes each particle steer by its neighbours within **Sight**:
+    layers: [layer('particles', 'birds', 'Flock', { count: 600, field: 'noise', noiseScale: 1.2, noiseEvolve: 0.1, speed: 1, steer: 0.1, flock: 0.8, flockRadius: 0.08, flockAlign: 1.2, flockCohere: 0.8, flockSeparate: 1.2, flockSpace: 0.35, shape: 'triangle', rotate: 'heading', size: 3, sizeJitter: 0.2, edges: 'wrap', colour: 'palette', palette: 5, paletteBy: 'heading', trail: 0.2 })],
+    controls: [
+      ctl('flock', 'layer:birds::flock', 'Flock · Amount', 0, 1),
+      ctl('sight', 'layer:birds::flockRadius', 'Flock · Sight', 0.02, 0.25),
+      ctl('align', 'layer:birds::flockAlign', 'Flock · Alignment', 0, 2),
+      ctl('cohere', 'layer:birds::flockCohere', 'Flock · Cohesion', 0, 2),
+      ctl('sep', 'layer:birds::flockSeparate', 'Flock · Separation', 0, 2),
+      ctl('space', 'layer:birds::flockSpace', 'Flock · Personal space', 0.05, 1),
+    ],
+    notes: `**What it shows.** Flocking (boids) makes each particle steer by the neighbours it can see, within **Sight**:
 • **Alignment**: fly the way they fly.
 • **Cohesion**: head for their middle.
-• **Separation**: keep your distance.
-It adds to the field, attractors and zones, so a flock can still follow the picture or the mouse.
+• **Separation**: back off from anyone inside your **Personal space**.
+It adds to the field, attractors and zones, so a flock can still follow the picture or the mouse. **Amount** says how much the flock wins over everything else.
+
+**How it's built.** A weak noise field (Steer 0.1) gives the flock somewhere to wander. Everything else comes from the six flocking controls here.
+
+**Good starting points.**
+• **Starlings**: Sight 0.08, Alignment 1.2, Cohesion 0.8, Separation 1.2, Personal space 0.35 (what loads).
+• **Fish school**: Sight 0.15, Alignment 2, Cohesion 0.4, Personal space 0.25. Long, orderly streams.
+• **Swarm of gnats**: Alignment 0, Cohesion 1.5, Personal space 0.5. They buzz around a middle without flying together.
+• **Scattered pairs**: Sight 0.03, Cohesion 2. Tiny groups that meet and split.
 
 **Try this.**
-• Set Alignment to 0: they jostle but don't fly together.
-• Turn Cohesion up for tight balls.
-• Turn Separation up for spread-out formations.`,
+• Set Alignment to 0 and watch the formations melt.
+• Turn Personal space down to 0.1 for tight balls; up to 1 for an even spread.
+• Raise Sight slowly: small flocks merge into rivers.`,
   })),
   ex('playBursts', quietGraph(), play({
     layers: [layer('particles', 'pop', 'Pop', { count: 1500, emit: 'burst', spawn: 'center', spawnRadius: 0.02, field: 'none', speed: 1.2, life: 1.2, fade: 0.6, size: 2.2, sizeJitter: 0.6, colour: 'palette', palette: 3, paletteBy: 'age', trail: 0.4, blend: 'screen' })],
@@ -682,14 +697,18 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
       layer('shape', 'honey', 'Drag', { shape: 'box', x: 0.85, w: 0.4, h: 1.1, action: 'drag', strength: 2, fillOpacity: 0.06, fill: [1, 0.8, 0.3], stroke: [1, 0.8, 0.3] }),
       layer('particles', 'air', 'Air', { count: 1400, field: 'noise', speed: 0.8, size: 1.3, trail: 0.7, colour: 'palette', palette: 1, paletteBy: 'speed', blend: 'screen' }),
     ],
+    controls: [ctl('tilt', 'layer:swirl::tilt', 'Vortex · Tilt', 0, 85, 1)],
+    mappings: [map('lean', 'tilt', S.lfo('sine', 0.05), 0, 70)],
     notes: `**What it shows.** Force zones act on particles inside (or near) a shape:
 • **Wind** is a steady push in a direction (Wind angle: 0 right, −90 up).
-• **Vortex** swirls them around it, within Reach.
+• **Vortex** swirls them around it, within Reach. **Tilt** leans the swirl back like a disc seen from the side: orbits become ellipses, and particles grow on the near side and shrink on the far side.
 • **Drag** slows them, like honey.
+
+**How it's built.** A slow LFO leans the vortex between flat (0°) and 70°.
 
 **Try this.**
 • Change the wind's angle.
-• Turn the vortex's Strength negative to swirl the other way.
+• Stop the LFO (turn its mapping off) and set Tilt yourself; rotate the vortex shape to turn the lean.
 • Make the drag zone a Drawn shape.`,
   })),
   ex('playTintZones', quietGraph(), play({

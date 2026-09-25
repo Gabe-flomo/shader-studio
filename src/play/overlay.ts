@@ -17,8 +17,11 @@ import type { PlayLayer, PlayRecord } from '../types/play';
 import { emptyPlayRecord } from '../types/play';
 import { playEngine } from '../lib/playEngine';
 import { liveAudio } from '../lib/liveAudio';
+import { layerAudio } from '../lib/layerAudio';
 import { cameraInput } from '../lib/cameraInput';
 import { createLayerKit, type KitEnv, type KitPointer, type LayerKit } from './kit/kit.js';
+import { klFontFor } from './kit/layers.js';
+import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
 
 export type LayerWriter = (layerId: string, patch: Partial<PlayLayer>) => void;
 export type { ShaderTap } from './kit/kit.js';
@@ -35,7 +38,10 @@ class PlayOverlay {
   private images = new Map<string, HTMLImageElement>();
   private kit: LayerKit = createLayerKit();
   private pointer: KitPointer = { x: 0.5, y: 0.5, over: false, down: false };
-  private drag: { id: string; dx: number; dy: number } | null = null;
+  private drag: { id: string; dx: number; dy: number } | { id: string; handle: Handle; start: Bounds; layer: PlayLayer } | null = null;
+  private selectListeners = new Set<(id: string) => void>();
+  private menuListeners = new Set<(m: { layerId: string; x: number; y: number }) => void>();
+  private measure: CanvasRenderingContext2D | null = null;
   private pressedZone: string | null = null;
   private editing = false;
   private selectedId = '';
@@ -72,6 +78,77 @@ class PlayOverlay {
 
   /** Anything moving on its own keeps the render loop running. */
   isAnimated(): boolean { return this.kit.isAnimated(this.record) || !!this.drawing; }
+
+  /** A layer picked on the picture (a click while editing). Returns an unsubscribe. */
+  onSelect(cb: (id: string) => void): () => void { this.selectListeners.add(cb); return () => { this.selectListeners.delete(cb); }; }
+  /** A right-click on a layer: its id and where (page pixels). Returns an unsubscribe. */
+  onContextMenu(cb: (m: { layerId: string; x: number; y: number }) => void): () => void { this.menuListeners.add(cb); return () => { this.menuListeners.delete(cb); }; }
+
+  // ── Bounds and handles ─────────────────────────────────────────────────────
+
+  private value = (l: PlayLayer, k: string) => playEngine.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]);
+
+  /** A layer's box on the picture (see transform.ts), or null for layers without one. */
+  bounds(l: PlayLayer): Bounds | null {
+    return layerBounds(l, this.value, {
+      textWidth: (layer, line) => {
+        const m = this.measure ?? (this.measure = document.createElement('canvas').getContext('2d'));
+        if (!m) return line.length * 0.55;
+        const t = layer as PlayLayer & { weight?: number };
+        m.font = `${t.weight ?? 700} 100px ${klFontFor(layer as unknown as { font?: string; fontUrl?: string })}`;
+        return m.measureText(line).width / 100;
+      },
+      mediaAspect: layer => {
+        if (layer.kind === 'image') { const img = this.image(layer.src); return img ? img.naturalWidth / Math.max(1, img.naturalHeight) : 0; }
+        if (layer.kind === 'camera') { const v = cameraInput.element(); return v && v.videoWidth ? v.videoWidth / Math.max(1, v.videoHeight) : 0; }
+        return 0;
+      },
+    });
+  }
+
+  /** The top-most layer under a point: nulls first, then anything with a box, then shapes' own outlines. */
+  private layerAt(u: { x: number; y: number; w: number; h: number }): PlayLayer | null {
+    const layers = this.record.layers;
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const l = layers[i];
+      if (l.kind !== 'null' || !l.visible) continue;
+      if (Math.hypot((u.x - this.value(l, 'x')) * u.w, (u.y - this.value(l, 'y')) * u.h) <= Math.max(l.size, 10) + 6) return l;
+    }
+    const px = u.x * u.w, py = (1 - u.y) * u.h;
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const l = layers[i];
+      if (!l.visible || l.kind === 'shape') continue;
+      const b = this.bounds(l);
+      if (b && insideBounds(b, px, py, u.w, u.h)) return l;
+    }
+    const id = this.kit.shapeAt(this.record, u.x, u.y, u.w / Math.max(1, u.h), this.value);
+    return id ? this.record.layers.find(x => x.id === id) ?? null : null;
+  }
+
+  private drawHandles(ctx: CanvasRenderingContext2D, W: number, H: number, dpr: number): void {
+    const l = this.record.layers.find(x => x.id === this.selectedId);
+    const b = l && l.visible ? this.bounds(l) : null;
+    if (!b) return;
+    const cw = W / dpr, ch = H / dpr;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(91,140,255,0.9)'; ctx.setLineDash([4, 3]);
+    const o = outlinePoints(b, cw, ch);
+    ctx.beginPath(); o.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.stroke();
+    ctx.setLineDash([]);
+    for (const p of handlePoints(b, cw, ch)) {
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#5b8cff'; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      if (p.handle.kind === 'rotate') {
+        // A stem from the middle of the top edge.
+        const [a, c] = o;
+        ctx.moveTo((a[0] + c[0]) / 2, (a[1] + c[1]) / 2); ctx.lineTo(p.x, p.y); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+      } else ctx.rect(p.x - 4, p.y - 4, 8, 8);
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   // ── Drawing a shape outline ────────────────────────────────────────────────
 
@@ -131,19 +208,25 @@ class PlayOverlay {
         e.preventDefault(); e.stopPropagation();
         return;
       }
-      const n = this.writer ? hitNull(u) : null;
-      if (n) {
-        this.drag = { id: n.id, dx: value(n, 'x') - u.x, dy: value(n, 'y') - u.y };
+      // The selected layer's handles come first, while editing.
+      const sel = this.editing && this.writer ? this.record.layers.find(x => x.id === this.selectedId && x.visible) : undefined;
+      const sb = sel ? this.bounds(sel) : null;
+      const grab = sel && sb ? handleAt(sb, u.x * u.w, (1 - u.y) * u.h, u.w, u.h) : null;
+      if (sel && sb && grab) {
+        this.drag = { id: sel.id, handle: grab, start: sb, layer: sel };
       } else {
-        const id = this.kit.shapeAt(this.record, u.x, u.y, u.w / Math.max(1, u.h), value);
-        if (id && this.editing && this.writer) {
-          const l = this.record.layers.find(x => x.id === id)!;
-          this.drag = { id, dx: value(l, 'x') - u.x, dy: value(l, 'y') - u.y };
-        } else if (id) {
+        const n = this.writer ? hitNull(u) : null;
+        const hit = n ?? (this.editing && this.writer ? this.layerAt(u) : null);
+        if (hit) {
+          if (this.editing) for (const cb of this.selectListeners) cb(hit.id);
+          this.drag = { id: hit.id, dx: this.value(hit, 'x') - u.x, dy: this.value(hit, 'y') - u.y };
+        } else {
+          const id = this.kit.shapeAt(this.record, u.x, u.y, u.w / Math.max(1, u.h), value);
+          if (!id) return;
           this.pressedZone = id;
           playEngine.pressZone(id);
           return;
-        } else return;
+        }
       }
       container.setPointerCapture?.(e.pointerId);
       e.preventDefault(); e.stopPropagation();
@@ -159,14 +242,28 @@ class PlayOverlay {
         return;
       }
       if (this.drag) {
-        this.writer?.(this.drag.id, { x: Math.max(0, Math.min(1, u.x + this.drag.dx)), y: Math.max(0, Math.min(1, u.y + this.drag.dy)) } as Partial<PlayLayer>);
+        const dr = this.drag;
+        if ('handle' in dr) {
+          const b = dragHandle(dr.start, dr.handle, u.x * u.w, (1 - u.y) * u.h, u.w, u.h, { proportional: e.shiftKey, centred: e.altKey, snap: e.shiftKey });
+          this.writer?.(dr.id, patchFor(dr.layer, dr.start, b, this.value) as Partial<PlayLayer>);
+        } else this.writer?.(dr.id, { x: Math.max(0, Math.min(1, u.x + dr.dx)), y: Math.max(0, Math.min(1, u.y + dr.dy)) } as Partial<PlayLayer>);
         e.preventDefault(); e.stopPropagation();
         return;
       }
       if (this.drawing) { container.style.cursor = 'crosshair'; return; }
       const overNull = hitNull(u);
-      const overShape = !overNull && this.editing ? this.kit.shapeAt(this.record, u.x, u.y, u.w / Math.max(1, u.h), value) : null;
-      container.style.cursor = overNull || overShape ? 'grab' : '';
+      const sel = this.editing ? this.record.layers.find(x => x.id === this.selectedId && x.visible) : undefined;
+      const sb = sel ? this.bounds(sel) : null;
+      const h = sb ? handleAt(sb, u.x * u.w, (1 - u.y) * u.h, u.w, u.h) : null;
+      if (h && sb) {
+        if (h.kind === 'rotate') { container.style.cursor = 'crosshair'; return; }
+        // Resize cursors follow the handle's direction on screen, turned with the layer.
+        const a = ((Math.atan2(h.sy, h.sx) * 180) / Math.PI + sb.rot + 360) % 180;
+        container.style.cursor = a < 22.5 || a >= 157.5 ? 'ew-resize' : a < 67.5 ? 'nwse-resize' : a < 112.5 ? 'ns-resize' : 'nesw-resize';
+        return;
+      }
+      const over = overNull ?? (this.editing ? this.layerAt(u) : null);
+      container.style.cursor = over ? 'grab' : '';
     };
     const onUp = () => {
       this.pointer.down = false;
@@ -175,6 +272,15 @@ class PlayOverlay {
       if (this.drawing?.mode === 'lasso' && this.drawing.pts.length >= 6) this.finishDrawing();
     };
     const onLeave = () => { this.pointer.over = false; };
+    const onContext = (e: MouseEvent) => {
+      if (this.drawing || !this.menuListeners.size) return;
+      const r = container.getBoundingClientRect();
+      const u = { x: (e.clientX - r.left) / Math.max(1, r.width), y: 1 - (e.clientY - r.top) / Math.max(1, r.height), w: r.width, h: r.height };
+      const hit = this.layerAt(u);
+      if (!hit) return;
+      e.preventDefault(); e.stopPropagation();
+      for (const cb of this.menuListeners) cb({ layerId: hit.id, x: e.clientX, y: e.clientY });
+    };
     const onDbl = (e: MouseEvent) => { if (this.drawing?.mode === 'polygon') { e.preventDefault(); this.finishDrawing(); } };
     const onKey = (e: KeyboardEvent) => {
       if (!this.drawing) return;
@@ -187,6 +293,7 @@ class PlayOverlay {
     container.addEventListener('pointercancel', onUp, true);
     container.addEventListener('pointerleave', onLeave);
     container.addEventListener('dblclick', onDbl, true);
+    container.addEventListener('contextmenu', onContext, true);
     window.addEventListener('keydown', onKey, true);
     return () => {
       container.removeEventListener('pointerdown', onDown, true);
@@ -195,6 +302,7 @@ class PlayOverlay {
       container.removeEventListener('pointercancel', onUp, true);
       container.removeEventListener('pointerleave', onLeave);
       container.removeEventListener('dblclick', onDbl, true);
+      container.removeEventListener('contextmenu', onContext, true);
       window.removeEventListener('keydown', onKey, true);
       container.style.cursor = '';
     };
@@ -214,6 +322,7 @@ class PlayOverlay {
       hidden: this.record.display?.picture === false,
       backdrop: this.record.display?.backdrop ?? [0, 0, 0],
       audio: needsAudio ? liveAudio.raw() : null,
+      audioFor: l => ((l as { input?: string }).input === 'file' ? layerAudio.raw(l.id) : needsAudio ? liveAudio.raw() : null),
       camera: cameraInput.element(),
       image: src => this.image(src),
       sensor: forExport ? () => {} : (k, v) => playEngine.setSensor(k, v),
@@ -232,6 +341,7 @@ class PlayOverlay {
     playEngine.setAspect(this.aspect);
     this.kit.frame(ctx, this.record, this.env(gl, W, H, dpr, time, dt));
     if (this.drawing) this.drawOutline(ctx, W, H, dpr);
+    else if (this.editing && this.selectedId) this.drawHandles(ctx, W, H, dpr);
     if (this.composite) {
       const c = this.composite;
       if (c.width !== gl.width || c.height !== gl.height) { c.width = gl.width; c.height = gl.height; }

@@ -4,6 +4,8 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Popover } from '../ui/Popover';
+import { Tooltip } from '../ui/Tooltip';
+import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
 import { timeReadoutRef } from '../../lib/timeTick';
 
 // Header and footer bars for the shader preview. The preview is a render surface, so callers
@@ -17,6 +19,38 @@ export function PreviewHeader({ children }: { children?: ReactNode }) {
     <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: '0 8px 0 18px', background: tk.bg.render, borderBottom: `1px solid ${RULE}` }}>
       <span style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>PREVIEW</span>
       {children}
+    </div>
+  );
+}
+
+/**
+ * The picture's shape, as a row of little frames drawn in each proportion
+ * (Free is a dashed one). The same setting as the export dialog's.
+ */
+export function AspectPicker() {
+  const tk = useTokens();
+  const value = useNodeGraphStore(s => s.previewAspect);
+  const set = useNodeGraphStore(s => s.setPreviewAspect);
+  return (
+    <div role="radiogroup" aria-label="Canvas shape" style={{ display: 'flex', alignItems: 'center', gap: 1, marginRight: 6 }}>
+      {PREVIEW_ASPECTS.map(a => {
+        const on = a.id === value;
+        const r = a.ratio ?? 1.5, w = r >= 1 ? 16 : 16 * r, h = r >= 1 ? 16 / r : 16;
+        return (
+          <Tooltip key={a.id} label={a.id === 'free' ? 'Free' : a.label} description={a.hint} placement="bottom">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={on}
+              aria-label={`${a.label}: ${a.hint}`}
+              onClick={() => set(a.id)}
+              style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, borderRadius: radius.md, cursor: 'pointer', background: on ? alpha('#ffffff', 0.12) : 'transparent' }}
+            >
+              <span style={{ width: Math.round(w), height: Math.round(h), borderRadius: 2, boxSizing: 'border-box', border: `1.5px ${a.ratio ? 'solid' : 'dashed'} ${on ? tk.accent.base : alpha('#ffffff', 0.45)}` }} />
+            </button>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 }

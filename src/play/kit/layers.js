@@ -6,13 +6,73 @@
  * draw into a 2D context W × H device pixels; positions come in 0..1 with y
  * up and are flipped here.
  */
-import { paletteCssAt } from '../particle-sim.js';
+import { paletteCssAt, paletteColour } from '../particle-sim.js';
 
 export const KL_BLEND = {
   normal: 'source-over', multiply: 'multiply', screen: 'screen', overlay: 'overlay', lighten: 'lighten', darken: 'darken',
   difference: 'difference', exclusion: 'exclusion', add: 'lighter',
 };
 export const KL_FONTS = { sans: 'Inter, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif', serif: 'Georgia, "Times New Roman", serif', mono: '"JetBrains Mono", Menlo, Consolas, monospace' };
+
+// ── Web fonts ────────────────────────────────────────────────────────────────
+// A text layer's fontUrl can be a Google Fonts link (css2?family=…, a
+// specimen page, a pasted <link> or @import), a bare family name, or a
+// .woff2/.woff/.ttf/.otf file. Only those load: nothing else is fetched.
+
+const klFontSeen = new Map();
+let klFontGen = 0;
+
+/** { family, css } for a Google Fonts source, { family, file } for a font file, or null. */
+const klDecode = x => { try { return decodeURIComponent(x); } catch (e) { return x; } };
+
+export function klParseFontUrl(input) {
+  let u = String(input || '').trim();
+  if (!u) return null;
+  const href = /href\s*=\s*["']([^"']+)["']/i.exec(u) || /url\(\s*["']?([^"')]+)["']?\s*\)/i.exec(u);
+  if (href) u = href[1];
+  u = u.replace(/&amp;/g, '&');
+  if (/^https:\/\/[^\s]+\.(woff2?|ttf|otf)(\?[^\s]*)?$/i.test(u)) {
+    const name = klDecode(u.split('/').pop().split('?')[0].replace(/\.[a-z0-9]+$/i, '')).replace(/[^\w -]/g, '');
+    return { family: 'SS ' + (name || 'Font'), file: u };
+  }
+  const spec = /^https:\/\/fonts\.google\.com\/specimen\/([^/?#]+)/i.exec(u);
+  if (spec) u = klDecode(spec[1].replace(/\+/g, ' '));
+  if (/^https:\/\/fonts\.googleapis\.com\/css2?\?/i.test(u)) {
+    const fam = /[?&]family=([^&:]+)/.exec(u);
+    return fam ? { family: klDecode(fam[1].replace(/\+/g, ' ')).replace(/["\\]/g, ''), css: u } : null;
+  }
+  if (/^[A-Za-z0-9][A-Za-z0-9 ]{0,60}$/.test(u)) {
+    return { family: u.replace(/\s+/g, ' '), css: 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(u.replace(/\s+/g, ' ')).replace(/%20/g, '+') + '&display=swap' };
+  }
+  return null;
+}
+
+/** Bumped whenever a web font finishes loading, so cached text redraws in it. */
+export function klFontGeneration() { return klFontGen; }
+
+/** The CSS font-family for a layer: its web font (loading it the first time) with Font as the fallback. */
+export function klFontFor(l) {
+  const base = KL_FONTS[l.font] || KL_FONTS.sans;
+  const f = klParseFontUrl(l.fontUrl);
+  if (!f) return base;
+  if (!klFontSeen.has(f.family) && typeof document !== 'undefined') {
+    klFontSeen.set(f.family, true);
+    const done = () => { klFontGen++; };
+    if (f.file && typeof FontFace !== 'undefined') {
+      new FontFace(f.family, 'url(' + JSON.stringify(f.file) + ')').load().then(face => { document.fonts.add(face); done(); }).catch(() => {});
+    } else if (f.css) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet'; link.href = f.css; link.crossOrigin = 'anonymous';
+      link.onload = () => {
+        // The stylesheet only declares the faces; ask for the weights text uses so they download now.
+        if (document.fonts) Promise.all([400, 700, l.weight || 400].map(w => document.fonts.load(w + ' 32px "' + f.family + '"'))).then(done, done);
+        else done();
+      };
+      document.head.appendChild(link);
+    }
+  }
+  return '"' + f.family + '", ' + base;
+}
 const KL_TAU = Math.PI * 2;
 
 export function klCss(c, a) {
@@ -67,7 +127,7 @@ export function klPaintShape(s, l, v, W, H, src, text, anim) {
   s.save(); s.translate(x, y + (anim ? anim.dy * H : 0)); s.rotate(v('rotation') * Math.PI / 180);
   if (l.kind === 'text') {
     const size = Math.max(1, v('size') * H);
-    s.font = l.weight + ' ' + size + 'px ' + KL_FONTS[l.font];
+    s.font = l.weight + ' ' + size + 'px ' + klFontFor(l);
     s.textAlign = 'center'; s.textBaseline = 'middle';
     s.fillStyle = l.matte === 'over' ? klCss(l.color) : '#fff';
     if (anim) s.globalAlpha = anim.alpha;
@@ -250,7 +310,32 @@ export function klDrawAudio(ctx, l, v, W, H, dpr, audio, st, time) {
   ctx.globalAlpha = v('opacity') * (audio ? 1 : 0.3);
   ctx.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
   ctx.lineWidth = Math.max(0.5, v('thickness') * dpr); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  if (l.style === 'wave') {
+  if (l.style === 'spectrogram') {
+    // Time runs left to right: each new column is the spectrum now, low notes at the bottom, loud is bright.
+    const cols = 256;
+    let sc = st.spec;
+    if (!sc || sc.height !== n) { sc = st.spec = document.createElement('canvas'); sc.width = cols; sc.height = n; st.acc = 0; }
+    const dt = st.lastT == null ? 0 : Math.max(0, Math.min(0.1, time - st.lastT));
+    st.lastT = time;
+    st.acc = (st.acc || 0) + dt * Math.max(0, v('scroll')) * cols / 4;
+    const steps = Math.min(cols, Math.floor(st.acc));
+    st.acc -= steps;
+    if (steps > 0) {
+      const sx = sc.getContext('2d');
+      sx.globalCompositeOperation = 'copy'; sx.drawImage(sc, -steps, 0); sx.globalCompositeOperation = 'source-over';
+      const img = sx.createImageData(steps, n), d = img.data, tint = l.color || [1, 1, 1];
+      for (let i = 0; i < n; i++) {
+        const val = Math.max(0, Math.min(1, vals[i])), rgb = l.colour === 'palette' ? paletteColour(l.palette, val) : tint, row = n - 1 - i;
+        for (let k = 0; k < steps; k++) {
+          const o = (row * steps + k) * 4;
+          d[o] = rgb[0] * 255; d[o + 1] = rgb[1] * 255; d[o + 2] = rgb[2] * 255; d[o + 3] = val * 255;
+        }
+      }
+      sx.putImageData(img, cols - steps, 0);
+    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(sc, cx - w / 2, cy - h / 2, w, h);
+  } else if (l.style === 'wave') {
     const draw = sign => {
       ctx.beginPath();
       for (let i = 0; i < n; i++) { const px = cx - w / 2 + (i / (n - 1)) * w, py = cy - sign * vals[i] * h / 2; if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
@@ -299,17 +384,34 @@ export function klDrawAudio(ctx, l, v, W, H, dpr, audio, st, time) {
 
 // ── Glyphs ───────────────────────────────────────────────────────────────────
 
-/** A strip of the ramp's characters, white, one cell each. Cached per ramp and size. */
-function klGlyphAtlas(pool, chars, cellPx) {
-  const key = chars + '|' + cellPx;
+/**
+ * The ramp split into what reads as one character each: emoji (flags, skin
+ * tones, ZWJ families) stay whole instead of splitting into halves.
+ */
+export function klGlyphList(chars) {
+  const text = String(chars || '');
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), x => x.segment);
+  return Array.from(text);
+}
+
+/** A strip of the ramp's characters, white (emoji keep their colours), one cell each. Cached per ramp and size. */
+function klGlyphAtlas(pool, glyphs, cellPx) {
+  const key = glyphs.join('\u0000') + '|' + cellPx;
   if (pool.glyphKey === key && pool.glyphAtlas) return pool.glyphAtlas;
-  const n = Math.max(1, chars.length);
-  const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(cellPx * n)); c.height = Math.max(1, Math.ceil(cellPx));
+  const n = Math.max(1, glyphs.length);
+  // One row at most 16384 px wide (a canvas limit): long ramps wrap onto more rows.
+  const perRow = Math.max(1, Math.min(n, Math.floor(16384 / Math.max(1, cellPx))));
+  const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(cellPx * perRow)); c.height = Math.max(1, Math.ceil(cellPx * Math.ceil(n / perRow)));
   const x = c.getContext('2d');
   x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.font = '600 ' + Math.max(4, cellPx * 1.05) + 'px ' + KL_FONTS.mono;
-  for (let i = 0; i < n; i++) x.fillText(chars[i], (i + 0.5) * cellPx, cellPx * 0.54);
-  pool.glyphAtlas = c; pool.glyphKey = key;
+  x.font = '600 ' + Math.max(4, cellPx * 1.05) + 'px ' + KL_FONTS.mono + ', "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"';
+  for (let i = 0; i < n; i++) {
+    const gx = (i % perRow) * cellPx, gy = Math.floor(i / perRow) * cellPx;
+    // Wide glyphs (emoji, CJK) are squeezed to fit their cell.
+    const w = x.measureText(glyphs[i]).width, k = w > cellPx * 1.05 ? (cellPx * 1.05) / w : 1;
+    x.save(); x.translate(gx + cellPx / 2, gy + cellPx * 0.54); x.scale(k, k); x.fillText(glyphs[i], 0, 0); x.restore();
+  }
+  pool.glyphAtlas = c; pool.glyphKey = key; pool.glyphPerRow = perRow;
   return c;
 }
 
@@ -318,27 +420,34 @@ function klGlyphAtlas(pool, chars, cellPx) {
  * pixel per cell (RGBA, cols × rows). Glyphs are drawn white, then coloured:
  * tint and palette per brightness level, picture by the picture itself.
  */
-export function klDrawGlyphs(ctx, l, v, W, H, dpr, grid, cols, rows, pool, gl) {
+export function klDrawGlyphs(ctx, l, v, W, H, dpr, grid, cols, rows, pool, gl, useAlpha) {
   const cell = Math.max(3, v('cell') * dpr), contrast = v('contrast');
   const s = klCanvas(pool, 'glyphs', W, H).getContext('2d');
   s.setTransform(1, 0, 0, 1, 0, 0); s.globalCompositeOperation = 'source-over'; s.globalAlpha = 1;
   s.clearRect(0, 0, W, H);
   const LEVELS = 16;
   const levelOf = (k) => {
-    let b = (grid[k] * 0.299 + grid[k + 1] * 0.587 + grid[k + 2] * 0.114) / 255;
+    // Read from a layer, transparent is dark: faint trails count for little.
+    let b = (grid[k] * 0.299 + grid[k + 1] * 0.587 + grid[k + 2] * 0.114) / 255 * (useAlpha ? grid[k + 3] / 255 : 1);
     b = Math.max(0, Math.min(1, (b - 0.5) * contrast + 0.5));
     return l.invert ? 1 - b : b;
   };
   const colourFor = t => l.colour === 'palette' ? paletteCssAt(l.palette, t) : l.colour === 'tint' ? klCss(l.color) : '#fff';
   if (l.style === 'ascii') {
-    const chars = l.chars && l.chars.length ? l.chars : ' .:-=+*#%@';
-    const atlas = klGlyphAtlas(pool, chars, Math.round(cell));
-    const n = chars.length, ac = atlas.height;
+    let glyphs = klGlyphList(l.chars);
+    if (!glyphs.length) glyphs = klGlyphList(' .:-=+*#%@');
+    const ac = Math.max(1, Math.round(cell));
+    const atlas = klGlyphAtlas(pool, glyphs, ac), perRow = pool.glyphPerRow || glyphs.length;
+    const n = glyphs.length, shift = v('shift') || 0, spread = Math.max(0, Math.min(1, v('spread') || 0));
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
       const b = levelOf((r * cols + c) * 4);
-      const i = Math.min(n - 1, Math.floor(b * n));
-      if (chars[i] === ' ') continue;
-      s.drawImage(atlas, i * ac, 0, ac, ac, c * cell, r * cell, cell, cell);
+      let i = Math.min(n - 1, Math.floor(b * n));
+      // A blank stays blank (that's what makes the dark areas read), whatever the shift.
+      if (glyphs[i] === ' ') continue;
+      if (spread > 0) { const h = Math.sin((c * 127.1 + r * 311.7) * 0.0137) * 43758.5453; i += Math.round((h - Math.floor(h) - 0.5) * spread * n); }
+      i = (((Math.floor(i + shift)) % n) + n) % n;
+      if (glyphs[i] === ' ') continue;
+      s.drawImage(atlas, (i % perRow) * ac, Math.floor(i / perRow) * ac, ac, ac, c * cell, r * cell, cell, cell);
     }
   } else {
     const paths = Array.from({ length: LEVELS }, () => new Path2D());
@@ -359,7 +468,7 @@ export function klDrawGlyphs(ctx, l, v, W, H, dpr, grid, cols, rows, pool, gl) {
       else { s.fillStyle = col; s.fill(paths[q]); }
     }
   }
-  if (l.style === 'ascii' && l.colour !== 'picture') {
+  if (l.style === 'ascii' && l.colour !== 'picture' && l.colour !== 'own') {
     // Colour the white glyphs: one tint, or a palette by brightness level.
     s.globalCompositeOperation = 'source-in';
     if (l.colour === 'tint') { s.fillStyle = klCss(l.color); s.fillRect(0, 0, W, H); }
@@ -515,4 +624,58 @@ export function klDrawBrush(ctx, l, v, W, H, dpr, st, time) {
     ctx.beginPath(); ctx.arc(p.x * W, (1 - p.y) * H, size / 2, 0, KL_TAU); ctx.fill();
   }
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+}
+
+// ── Field preview ────────────────────────────────────────────────────────────
+
+/**
+ * A particles layer's field and forces, drawn while editing: grey arrows
+ * where the field points (dots where particles settle), warm arrows for the
+ * pull of the attractor and force zones, and rings on the attractor and on
+ * each zone's reach. `samples` come from particleFieldGrid.
+ */
+export function klDrawFieldPreview(ctx, samples, cols, rows, W, H, dpr, attractor, zones) {
+  const cw = W / cols, ch = H / rows, cell = Math.min(cw, ch);
+  const arrow = (x, y, dx, dy, len) => {
+    const ex = x + dx * len, ey = y - dy * len, hx = dx * len * 0.35, hy = -dy * len * 0.35;
+    ctx.moveTo(x - dx * len * 0.5, y + dy * len * 0.5); ctx.lineTo(ex - dx * len * 0.5, ey + dy * len * 0.5);
+    ctx.moveTo(ex - dx * len * 0.5 - hx + hy * 0.6, ey + dy * len * 0.5 - hy - hx * 0.6); ctx.lineTo(ex - dx * len * 0.5, ey + dy * len * 0.5);
+    ctx.lineTo(ex - dx * len * 0.5 - hx - hy * 0.6, ey + dy * len * 0.5 - hy + hx * 0.6);
+  };
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // The field.
+  ctx.beginPath();
+  const dots = new Path2D();
+  for (const s of samples) {
+    const x = s.x * W, y = (1 - s.y) * H;
+    if (s.settle) { dots.moveTo(x + 1.5 * dpr, y); dots.arc(x, y, 1.5 * dpr, 0, KL_TAU); continue; }
+    if (!s.fx && !s.fy) continue;
+    arrow(x, y, s.fx, s.fy, cell * 0.55);
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 3 * dpr; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 1.2 * dpr; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fill(dots);
+  // The forces: length grows with strength and levels off, so strong pulls don't swamp the picture.
+  ctx.beginPath();
+  for (const s of samples) {
+    const m = Math.hypot(s.ax, s.ay);
+    if (m < 0.02) continue;
+    arrow(s.x * W, (1 - s.y) * H, s.ax / m, s.ay / m, cell * 0.85 * (1 - Math.exp(-m * 0.8)));
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 3.4 * dpr; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,170,60,0.95)'; ctx.lineWidth = 1.6 * dpr; ctx.stroke();
+  // Where the pulls come from.
+  ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.strokeStyle = 'rgba(255,170,60,0.8)'; ctx.lineWidth = 1.2 * dpr;
+  if (attractor) { ctx.beginPath(); ctx.arc(attractor.x * W, (1 - attractor.y) * H, 12 * dpr, 0, KL_TAU); ctx.stroke(); }
+  for (const z of zones || []) {
+    if (z.action !== 'vortex' && z.action !== 'attract' && z.action !== 'repel' && z.action !== 'emitter' && z.action !== 'absorber') continue;
+    const r = z.action === 'emitter' || z.action === 'absorber' ? Math.min(z.reach, 0.5) : z.reach + Math.max(z.w || 0, z.h || 0) / 2;
+    ctx.beginPath();
+    if (z.action === 'vortex' && z.tilt > 0.01) ctx.ellipse(z.x * W, (1 - z.y) * H, r * H, r * H * Math.cos(z.tilt), z.rot || 0, 0, KL_TAU);
+    else ctx.arc(z.x * W, (1 - z.y) * H, r * H, 0, KL_TAU);
+    ctx.stroke();
+  }
+  ctx.restore();
 }

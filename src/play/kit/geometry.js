@@ -40,7 +40,7 @@ export function geoCompile(shape, aspect) {
     id: shape.id, action: shape.action || 'none', dist,
     x: cx, y: cy, w: shape.w, h: shape.h, rot, aspect,
     strength: shape.strength == null ? 1 : shape.strength, reach: Math.max(0.001, shape.reach == null ? 0.15 : shape.reach),
-    bounce: shape.bounce || 0, angle: (shape.angle || 0) * Math.PI / 180,
+    bounce: shape.bounce || 0, angle: (shape.angle || 0) * Math.PI / 180, tilt: Math.max(0, Math.min(85, shape.tilt || 0)) * Math.PI / 180,
     targetId: shape.targetId || '', tint: shape.tint || [1, 1, 1], scale: shape.scale == null ? 1.5 : shape.scale,
     affects: shape.affects || '',
     inside: 0, total: 0,

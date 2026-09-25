@@ -26,9 +26,9 @@
  * sequences) between frames, keyed by layer id. Actions (burst, next line…)
  * are queued with kit.act() and applied on the next frame.
  */
-import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, paletteCssAt } from '../particle-sim.js';
+import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromMask, sdfSegments } from './geometry.js';
-import { KL_BLEND, klCss, klCanvas, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush } from './layers.js';
+import { KL_BLEND, klCss, klCanvas, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush } from './layers.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
@@ -47,6 +47,7 @@ export function createLayerKit() {
     x.imageSmoothingQuality = 'high';
     try {
       x.setTransform(1, 0, 0, 1, 0, 0);
+      x.clearRect(0, 0, w, h);
       if (mirror) { x.translate(w, 0); x.scale(-1, 1); }
       x.drawImage(src, 0, 0, w, h);
       x.setTransform(1, 0, 0, 1, 0, 0);
@@ -91,7 +92,7 @@ export function createLayerKit() {
     if (!src || (src.kind !== 'text' && src.kind !== 'image' && src.kind !== 'camera')) return null;
     const gh = 90, gw = Math.max(8, Math.round(gh * aspect));
     const v = k => env.value(src, k);
-    const key = [src.kind, src.text, src.sequence ? textState(src, env.time).index : -1, src.src ? src.src.length : 0, src.font, src.weight, v('x'), v('y'), v(src.kind === 'text' ? 'size' : 'scale'), v('rotation'), gw].join('|');
+    const key = [src.kind, src.text, src.sequence ? textState(src, env.time).index : -1, src.src ? src.src.length : 0, src.font, src.fontUrl, klFontGeneration(), src.weight, v('x'), v('y'), v(src.kind === 'text' ? 'size' : 'scale'), v('rotation'), gw].join('|');
     let m = masks.get(shape.id);
     if (m && m.key === key && src.kind !== 'camera') return m;
     const c = klCanvas(pool, 'layerMask', gw, gh), s = c.getContext('2d', { willReadFrequently: true });
@@ -186,7 +187,7 @@ export function createLayerKit() {
       if (l.kind !== 'shape') continue;
       const v = k => env.value(l, k);
       const spec = { id: l.id, shape: l.shape, x: v('x'), y: v('y'), w: v('w'), h: v('h'), rotation: v('rotation'), round: v('round'), points: l.points, invert: l.invert,
-        action: l.action, strength: v('strength'), reach: v('reach'), bounce: v('bounce'), angle: v('angle'), targetId: l.targetId, tint: l.tint, scale: v('scale'), affects: l.affects };
+        action: l.action, strength: v('strength'), reach: v('reach'), bounce: v('bounce'), angle: v('angle'), targetId: l.targetId, tint: l.tint, scale: v('scale'), tilt: v('tilt'), affects: l.affects };
       if (l.shape === 'picture' || l.shape === 'layer') {
         let field = null;
         if (l.shape === 'picture') { if (coarse) field = geoFieldFromBrightness(coarse, KIT_COARSE_W, KIT_COARSE_H, v('threshold')); }
@@ -207,7 +208,7 @@ export function createLayerKit() {
       if (l.kind !== 'null' || !l.role || l.role === 'none') continue;
       const r = env.value(l, 'radius');
       const far = l.role === 'emitter' || l.role === 'absorber';
-      zones.push(geoCompile({ id: l.id, shape: 'circle', x: env.value(l, 'x'), y: env.value(l, 'y'), w: r * 2, h: r * 2, action: l.role, strength: env.value(l, 'strength'), reach: far ? 3 : r * 5, affects: '' }, aspect));
+      zones.push(geoCompile({ id: l.id, shape: 'circle', x: env.value(l, 'x'), y: env.value(l, 'y'), w: r * 2, h: r * 2, action: l.role, strength: env.value(l, 'strength'), reach: far ? 3 : r * 5, tilt: env.value(l, 'tilt'), affects: '' }, aspect));
     }
     for (const l of vis) {
       if (l.kind !== 'brush' || !l.walls) continue;
@@ -243,7 +244,7 @@ export function createLayerKit() {
           else if (l.kind === 'particles') { if (!pending.has(l.id)) pending.set(l.id, []); pending.get(l.id).push(a); }
           break;
         case 'scatter':
-          if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) bdScatter(b.st, a.amount, Math.random); }
+          if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) bdScatter(b.st, (a.amount || 1) * env.value(l, 'scatter'), Math.random); }
           else if (l.kind === 'particles') { if (!pending.has(l.id)) pending.set(l.id, []); pending.get(l.id).push(a); }
           break;
         case 'burst':
@@ -301,15 +302,16 @@ export function createLayerKit() {
           case 'audio': {
             let st = audios.get(l.id);
             if (!st) { st = {}; audios.set(l.id, st); }
-            klDrawAudio(c, l, v, W, H, dpr, env.audio, st, time);
+            klDrawAudio(c, l, v, W, H, dpr, env.audioFor ? env.audioFor(l) : env.audio, st, time);
             break;
           }
           case 'glyphs': {
             const cell = Math.max(3, v('cell') * dpr), cols = Math.max(1, Math.min(320, Math.ceil(W / cell))), rows = Math.max(1, Math.min(240, Math.ceil(H / cell)));
-            const src = l.readFrom === 'camera' ? cam : gl;
+            const fromLayer = l.readFrom === 'layer';
+            const src = fromLayer ? pool['src:' + l.sourceId] || null : l.readFrom === 'camera' ? cam : gl;
             if (!src) break;
             const grid = sampleInto('glyphGrid', src, cols, rows, l.readFrom === 'camera' && camMirror);
-            if (grid) klDrawGlyphs(c, l, v, W, H, dpr, grid, cols, rows, pool, l.readFrom === 'camera' ? null : gl);
+            if (grid) klDrawGlyphs(c, l, v, W, H, dpr, grid, cols, rows, pool, l.readFrom === 'camera' ? null : src, fromLayer);
             break;
           }
           case 'contours': {
@@ -350,17 +352,38 @@ export function createLayerKit() {
         }
       } finally { c.restore(); }
     };
+    // Layers a glyph layer reads are also drawn into a canvas of their own (even while hidden), for it to sample.
+    const glyphSources = new Set();
+    for (const l of layers) if (l.kind === 'glyphs' && l.readFrom === 'layer' && l.sourceId && l.sourceId !== l.id && isVisible(l)) glyphSources.add(l.sourceId);
+    const drawLayer = (c, l) => {
+      if (!glyphSources.has(l.id)) { drawOne(c, l); return; }
+      const off = klCanvas(pool, 'src:' + l.id, W, H), o = off.getContext('2d');
+      o.setTransform(1, 0, 0, 1, 0, 0); o.globalAlpha = 1; o.globalCompositeOperation = 'source-over';
+      o.clearRect(0, 0, W, H);
+      drawOne(o, l);
+      if (isVisible(l)) c.drawImage(off, 0, 0);
+    };
+    const drawn = l => isVisible(l) || glyphSources.has(l.id);
     const tap = env.shaderTap;
     if (tap) {
       // The Layers node: draw what it sees into a buffer of its own, hand that over, then lay it on the overlay.
       const buf = klCanvas(pool, 'shaderBuf', W, H), b = buf.getContext('2d');
       b.setTransform(1, 0, 0, 1, 0, 0); b.globalAlpha = 1; b.globalCompositeOperation = 'source-over';
       b.clearRect(0, 0, W, H);
-      for (const l of layers) if (isVisible(l) && l.toShader !== false) drawOne(b, l);
+      for (const l of layers) if (drawn(l) && l.toShader !== false) drawLayer(b, l);
       tap(shaderTapOf(buf, W, H, aspect));
       ctx.drawImage(buf, 0, 0);
-      for (const l of layers) if (isVisible(l) && l.toShader === false) drawOne(ctx, l);
-    } else for (const l of layers) if (isVisible(l)) drawOne(ctx, l);
+      for (const l of layers) if (drawn(l) && l.toShader === false) drawLayer(ctx, l);
+    } else for (const l of layers) if (drawn(l)) drawLayer(ctx, l);
+
+    // While editing: a particles layer's field and forces, on top (never into the Layers node).
+    if (env.editing) for (const l of layers) {
+      if (l.kind !== 'particles' || !l.showField || !isVisible(l)) continue;
+      const s = parts.get(l.id);
+      if (!s || !s.penv) continue;
+      const rows = 14, cols = Math.max(4, Math.round(rows * aspect));
+      klDrawFieldPreview(ctx, particleFieldGrid(s.p, s.penv, cols, rows, s.sim.seed), cols, rows, W, H, dpr, s.penv.attractorPoint, s.penv.zones);
+    }
 
     // 6. Sensors.
     for (const z of zones) {
@@ -423,7 +446,8 @@ export function createLayerKit() {
   function drawParticleLayer(ctx, l, v, env, record, zones, zoneById, pic, actions, W, H, dpr, aspect, time, dt, pointer, gl) {
     const num = key => v(key);
     const p = Object.assign({}, l);
-    for (const k of ['speed', 'steer', 'turns', 'angle', 'noiseScale', 'noiseEvolve', 'collide', 'strength', 'catchRadius', 'spawnRadius', 'life', 'fade', 'size', 'sizeJitter', 'sizeAmount', 'opacityAmount', 'falloff', 'links', 'opacity', 'trail']) p[k] = num(k);
+    // Every number can be driven (a control or a mapping), except the ones that rebuild the layer.
+    for (const k in l) if (typeof l[k] === 'number' && k !== 'count' && k !== 'seed' && k !== 'palette') p[k] = num(k);
     const nul = l.nullId ? nullPos(record, env, l.nullId) : null;
     const mine = zones.filter(z => !z.affects || z.affects === l.id);
     const penv = {
@@ -440,9 +464,10 @@ export function createLayerKit() {
       parts.set(l.id, s);
     } else if (s.sim.count !== l.count) s.sim = resizeParticles(s.sim, l.count, s.rand, dead);
     const sim = s.sim;
+    s.p = p; s.penv = penv;
     if (actions) for (const a of actions) {
       if (a.do === 'burst') burstParticles(sim, p, penv, a.amount || 60, s.rand);
-      else if (a.do === 'scatter') scatterParticles(sim, p, a.amount || 1, s.rand);
+      else if (a.do === 'scatter') scatterParticles(sim, p, (a.amount || 1) * (p.scatter ?? 1), s.rand);
       else if (a.do === 'reset') resetParticles(sim, p, penv, s.rand);
     }
     if (!frozen.has(l.id)) stepParticles(sim, p, penv, s.rand);

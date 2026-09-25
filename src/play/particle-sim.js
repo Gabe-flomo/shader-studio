@@ -248,6 +248,75 @@ export function resetParticles(st, p, env, rand = Math.random) {
 }
 
 /**
+ * The field's direction at (x, y): [dx, dy, settle] with (dx, dy) a unit
+ * vector, or 0 to coast; settle = 1 on flat ground when the layer settles.
+ * `z` is the noise's time coordinate (time × evolve + the layer's seed).
+ */
+function fieldDir(p, sample, sw, sh, ex, ey, aspect, z, rot, x, y) {
+  const noise = () => { const a = noise3(x * p.noiseScale * aspect, y * p.noiseScale, z) * TAU * 2 + rot; return [Math.cos(a), Math.sin(a), 0]; };
+  if (p.field === 'noise') return noise();
+  if (!sample || (p.field !== 'flow' && p.field !== 'climb' && p.field !== 'descend')) return [0, 0, 0];
+  if (p.field === 'flow') { const a = brightnessAt(sample, sw, sh, x, y) * p.turns * TAU + rot; return [Math.cos(a), Math.sin(a), 0]; }
+  const gx = brightnessAt(sample, sw, sh, x + ex, y) - brightnessAt(sample, sw, sh, x - ex, y);
+  const gy = brightnessAt(sample, sw, sh, x, y + ey) - brightnessAt(sample, sw, sh, x, y - ey);
+  const m = Math.hypot(gx, gy);
+  if (m > 0.004) { const s = p.field === 'climb' ? 1 : -1; return [s * gx / m, s * gy / m, 0]; }
+  return p.flat === 'settle' ? [0, 0, 1] : noise();
+}
+
+/**
+ * What the layer's field and forces do across the picture, for drawing:
+ * `cols × rows` samples (centres of a grid over 0..1), each
+ * { x, y, fx, fy, settle } for the field (unit) and { ax, ay } for the pull
+ * of the attractor and force zones on a particle at rest there (picture
+ * heights / s², x already scaled by the aspect).
+ */
+export function particleFieldGrid(p, env, cols, rows, seed = 0) {
+  const aspect = env.aspect || 1, sh = env.sh || 36, ey = 1 / Math.max(sh, 1), ex = ey / aspect;
+  const rot = ((p.angle || 0) * Math.PI) / 180, z = (env.time || 0) * p.noiseEvolve + seed;
+  const ap = p.attractor !== 'none' ? env.attractorPoint : null;
+  const zones = env.zones || [], out = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const x = (c + 0.5) / cols, y = (r + 0.5) / rows;
+    const f = fieldDir(p, env.sample, env.sw, env.sh, ex, ey, aspect, z, rot, x, y);
+    let ax = 0, ay = 0;
+    if (ap) {
+      const dx = (ap.x - x) * aspect, dy = ap.y - y, d2 = Math.max(0.0004, dx * dx + dy * dy), d = Math.sqrt(d2);
+      const k = (p.strength * 0.02) / Math.min(Math.max(d2, 0.0025), 0.25), s = p.force === 'repel' ? -1 : 1;
+      ax += s * (dx / d) * k; ay += s * (dy / d) * k;
+      if (p.force === 'spiral') { ax += -(dy / d) * k * 1.5; ay += (dx / d) * k * 1.5; }
+    }
+    for (const zn of zones) {
+      const act = zn.action;
+      if (act === 'emitter' || act === 'absorber') {
+        const dx = (zn.x - x) * aspect, dy = zn.y - y, d2 = dx * dx + dy * dy, d = Math.sqrt(d2) || 1e-6;
+        if (d > zn.reach) continue;
+        const k = (zn.strength * 0.02) / Math.min(Math.max(d2, 0.0025), 0.25), s = act === 'absorber' ? 1 : -1;
+        ax += s * (dx / d) * k; ay += s * (dy / d) * k;
+        continue;
+      }
+      if (act !== 'attract' && act !== 'repel' && act !== 'vortex' && act !== 'wind' && act !== 'drag') continue;
+      const d = zn.dist(x, y);
+      if (act === 'wind') { if (d < 0) { ax += Math.cos(zn.angle) * zn.strength * 0.5; ay -= Math.sin(zn.angle) * zn.strength * 0.5; } continue; }
+      if (act === 'drag' || d > zn.reach || (act === 'attract' && d < 0)) continue;
+      const falloff = 1 - Math.max(0, d) / zn.reach;
+      if (act === 'vortex' && zn.tilt > 0.01) {
+        const ct = Math.cos(zn.tilt), cr = Math.cos(zn.rot), sr = Math.sin(zn.rot), wx = (x - zn.x) * aspect, wy = y - zn.y;
+        const qx = wx * cr - wy * sr, qy = (wx * sr + wy * cr) / ct, qm = Math.hypot(qx, qy) || 1e-6;
+        const tx = -qy / qm, ty = (qx / qm) * ct, k = zn.strength * 0.5 * falloff;
+        ax += (tx * cr + ty * sr) * k; ay += (-tx * sr + ty * cr) * k;
+        continue;
+      }
+      const n = zn.normal(x, y);
+      if (act === 'vortex') { const k = zn.strength * 0.5 * falloff; ax += -n[1] * k; ay += n[0] * k; }
+      else { const k = zn.strength * 0.6 * falloff * (act === 'attract' ? -1 : 1); ax += n[0] * k; ay += n[1] * k; }
+    }
+    out.push({ x, y, fx: f[0], fy: f[1], settle: f[2] === 1, ax, ay });
+  }
+  return out;
+}
+
+/**
  * Advance every particle by env.dt seconds.
  * p:   the layer's settings (see types/play.ts ParticlesLayer), numbers already driven
  * env: { dt, time, aspect (W/H), sample, sw, sh, attractorPoint ({x,y}|null),
@@ -275,22 +344,9 @@ export function stepParticles(st, p, env, rand = Math.random) {
     if (!st.alive[i]) { st.zt[i] = -1; continue; }
     let x = st.x[i], y = st.y[i], vx = st.vx[i], vy = st.vy[i];
     // 1. Where the field wants to go (unit direction, or 0 to coast).
-    let dx = 0, dy = 0, settle = false;
-    const noiseDir = () => { const n = noise3(x * p.noiseScale * aspect, y * p.noiseScale, nz + st.seed); const a = n * TAU * 2 + rot; dx = Math.cos(a); dy = Math.sin(a); };
-    if (p.field === 'noise') noiseDir();
-    else if (sample && (p.field === 'flow' || p.field === 'climb' || p.field === 'descend')) {
-      if (p.field === 'flow') {
-        const a = brightnessAt(sample, sw, sh, x, y) * p.turns * TAU + rot;
-        dx = Math.cos(a); dy = Math.sin(a);
-      } else {
-        const gx = brightnessAt(sample, sw, sh, x + ex, y) - brightnessAt(sample, sw, sh, x - ex, y);
-        const gy = brightnessAt(sample, sw, sh, x, y + ey) - brightnessAt(sample, sw, sh, x, y - ey);
-        const m = Math.hypot(gx, gy);
-        if (m > 0.004) { const s = p.field === 'climb' ? 1 : -1; dx = s * gx / m; dy = s * gy / m; }
-        else if (p.flat === 'settle') settle = true;
-        else noiseDir();
-      }
-    }
+    const fd = fieldDir(p, sample, sw, sh, ex, ey, aspect, nz + st.seed, rot, x, y);
+    let dx = fd[0], dy = fd[1];
+    const settle = fd[2] === 1;
     // 2. Steer the velocity toward it (inertia keeps motion smooth).
     if (settle) { vx *= Math.exp(-dt * 6); vy *= Math.exp(-dt * 6); }
     else if (dx || dy) { vx += (dx * maxV - vx) * steer; vy += (dy * maxV - vy) * steer; }
@@ -310,6 +366,7 @@ export function stepParticles(st, p, env, rand = Math.random) {
       if (sp > cap) { vx *= cap / sp; vy *= cap / sp; }
     }
     // 4. Zone forces, read where the particle is now.
+    let depth = 1;
     for (let k = 0; k < zones.length; k++) {
       const z = zones[k];
       const act = z.action;
@@ -332,8 +389,25 @@ export function stepParticles(st, p, env, rand = Math.random) {
         vx += s * n[0] * f * dt; vy += s * n[1] * f * dt;
       } else if (act === 'vortex') {
         if (d > z.reach) continue;
-        const n = z.normal(x, y), f = z.strength * 0.5 * (1 - Math.max(0, d) / z.reach);
-        vx += -n[1] * f * dt; vy += n[0] * f * dt;
+        const f = z.strength * 0.5 * (1 - Math.max(0, d) / z.reach);
+        if (z.tilt > 0.01) {
+          // A tilted disc: orbits are ellipses round the middle (squashed along the shape's
+          // up axis), and particles grow on the near side and shrink on the far side.
+          const ct = Math.cos(z.tilt), c = Math.cos(z.rot), sn = Math.sin(z.rot);
+          const wx = (x - z.x) * aspect, wy = y - z.y;
+          const qx = wx * c - wy * sn, qy = (wx * sn + wy * c) / ct;
+          const qm = Math.hypot(qx, qy) || 1e-6;
+          // The disc's tangent seen from the side: its up part is squashed too, speed and all.
+          const tx = -qy / qm, ty = (qx / qm) * ct;
+          // Steer onto the ellipse (like a flow field) rather than push: a push alone flings
+          // particles off tangentially, which hides the ellipse.
+          const w = 1 - Math.exp(-dt * 6 * f), sp = 0.12 + f * 0.25;
+          vx += ((tx * c + ty * sn) * sp - vx) * w; vy += ((-tx * sn + ty * c) * sp - vy) * w;
+          depth *= 1 - 0.45 * Math.sin(z.tilt) * (qy / qm) * Math.min(1, f / (z.strength * 0.5 || 1));
+        } else {
+          const n = z.normal(x, y);
+          vx += -n[1] * f * dt; vy += n[0] * f * dt;
+        }
       } else if (d < 0) {
         if (act === 'wind') { vx += Math.cos(z.angle) * z.strength * 0.5 * dt; vy -= Math.sin(z.angle) * z.strength * 0.5 * dt; }
         else { const k2 = Math.exp(-dt * z.strength * 4); vx *= k2; vy *= k2; }
@@ -344,7 +418,7 @@ export function stepParticles(st, p, env, rand = Math.random) {
     st.age[i] += dt;
     if (st.cool[i] > 0) st.cool[i] -= dt;
     // 6. Zones at the new position: walls, sinks, portals, tints, sensors.
-    let respawn = caught, tint = -1, scale = 1;
+    let respawn = caught, tint = -1, scale = depth;
     for (let k = 0; k < zones.length && !respawn; k++) {
       const z = zones[k];
       let d = z.dist(x, y);
@@ -385,6 +459,10 @@ export function stepParticles(st, p, env, rand = Math.random) {
     const out = x < 0 || x > 1 || y < 0 || y > 1;
     if (out && !respawn) {
       if (p.edges === 'wrap') { x -= Math.floor(x); y -= Math.floor(y); }
+      else if (p.edges === 'random') {
+        // Somewhere new, still heading the same way (and fading in again, if the layer fades).
+        x = rand(); y = rand(); st.age[i] = 0;
+      }
       else if (p.edges === 'bounce') {
         if (x < 0) { x = -x; vx = -vx; } else if (x > 1) { x = 2 - x; vx = -vx; }
         if (y < 0) { y = -y; vy = -vy; } else if (y > 1) { y = 2 - y; vy = -vy; }
@@ -399,13 +477,19 @@ export function stepParticles(st, p, env, rand = Math.random) {
 }
 
 /**
- * Boids: each particle looks at up to 16 neighbours within flockRadius and
- * steers to match their heading, toward their middle and away from the ones
- * too close. Speeds are nudged toward the layer's speed so a flock keeps
- * flying even with no field.
+ * Boids: each particle looks at up to 24 neighbours within flockRadius
+ * (its sight) and steers three ways:
+ *   alignment  — toward the average heading of what it sees,
+ *   cohesion   — toward the middle of what it sees,
+ *   separation — away from any neighbour inside its personal space
+ *                (flockSpace × sight), harder the closer it is.
+ * Separation is summed, not averaged, so a crowd pushes harder than one
+ * neighbour: flocks stay loose instead of collapsing into dots. Speeds are
+ * nudged toward the layer's speed so a flock keeps flying even with no field.
  */
 function flockPass(st, p, env, dt) {
   const aspect = env.aspect || 1, R = Math.max(0.005, p.flockRadius), maxV = Math.max(0.02, p.speed * 0.18);
+  const Rs = R * Math.min(1, Math.max(0.05, p.flockSpace ?? 0.4));
   const cols = Math.max(1, Math.ceil(aspect / R)), rows = Math.max(1, Math.ceil(1 / R));
   if (cols * rows > 400000) return;
   const head = new Int32Array(cols * rows).fill(-1), next = new Int32Array(st.count);
@@ -414,33 +498,43 @@ function flockPass(st, p, env, dt) {
     const cx = Math.min(cols - 1, Math.max(0, Math.floor((st.x[i] * aspect) / R))), cy = Math.min(rows - 1, Math.max(0, Math.floor(st.y[i] / R)));
     const h = cy * cols + cx; next[i] = head[h]; head[h] = i;
   }
-  const k = p.flock * 4 * dt;
+  const k = Math.min(1, p.flock * 4 * dt);
   const ax = new Float32Array(st.count), ay = new Float32Array(st.count);
   for (let i = 0; i < st.count; i++) {
     if (!st.alive[i]) continue;
     const X = st.x[i] * aspect, Y = st.y[i], cx = Math.floor(X / R), cy = Math.floor(Y / R);
     let n = 0, avx = 0, avy = 0, px = 0, py = 0, sx = 0, sy = 0;
-    for (let oy = -1; oy <= 1 && n < 16; oy++) for (let ox = -1; ox <= 1 && n < 16; ox++) {
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
       const gx = cx + ox, gy = cy + oy;
       if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
-      for (let j = head[gy * cols + gx]; j >= 0 && n < 16; j = next[j]) {
+      for (let j = head[gy * cols + gx]; j >= 0; j = next[j]) {
         if (j === i) continue;
         const dx = st.x[j] * aspect - X, dy = st.y[j] - Y, d = Math.hypot(dx, dy);
-        if (d >= R || d < 1e-7) continue;
-        n++; avx += st.vx[j]; avy += st.vy[j]; px += dx; py += dy;
-        const push = (1 - d / R) / d; sx -= dx * push; sy -= dy * push;
+        if (d >= R) continue;
+        // Everyone close counts for separation; only the first 24 for heading and middle.
+        if (d < Rs) {
+          if (d < 1e-7) { const a = st.r[i] * TAU; sx += Math.cos(a); sy += Math.sin(a); }
+          else { const push = (1 - d / Rs) / d; sx -= dx * push; sy -= dy * push; }
+        }
+        if (n < 24) { n++; avx += st.vx[j]; avy += st.vy[j]; px += dx; py += dy; }
       }
     }
     if (n) {
-      ax[i] = ((avx / n - st.vx[i]) * p.flockAlign + (px / n / R) * maxV * p.flockCohere + (sx / n) * R * maxV * 4 * p.flockSeparate);
-      ay[i] = ((avy / n - st.vy[i]) * p.flockAlign + (py / n / R) * maxV * p.flockCohere + (sy / n) * R * maxV * 4 * p.flockSeparate);
+      ax[i] = (avx / n - st.vx[i]) * p.flockAlign * 1.5 + (px / n / R) * maxV * 0.8 * p.flockCohere;
+      ay[i] = (avy / n - st.vy[i]) * p.flockAlign * 1.5 + (py / n / R) * maxV * 0.8 * p.flockCohere;
     }
+    ax[i] += sx * maxV * 6 * p.flockSeparate; ay[i] += sy * maxV * 6 * p.flockSeparate;
     // Keep flying: nudge the speed toward the layer's.
     const sp = Math.hypot(st.vx[i], st.vy[i]);
     if (sp > 1e-6) { const f = (maxV - sp) / sp * 0.5; ax[i] += st.vx[i] * f; ay[i] += st.vy[i] * f; }
-    else { const a = st.r[i] * Math.PI * 2; ax[i] += Math.cos(a) * maxV * 0.5; ay[i] += Math.sin(a) * maxV * 0.5; }
+    else { const a = st.r[i] * TAU; ax[i] += Math.cos(a) * maxV * 0.5; ay[i] += Math.sin(a) * maxV * 0.5; }
   }
-  for (let i = 0; i < st.count; i++) { st.vx[i] += ax[i] * k; st.vy[i] += ay[i] * k; }
+  const cap = maxV * 2.5 + 0.05;
+  for (let i = 0; i < st.count; i++) {
+    st.vx[i] += ax[i] * k; st.vy[i] += ay[i] * k;
+    const sp = Math.hypot(st.vx[i], st.vy[i]);
+    if (sp > cap) { st.vx[i] *= cap / sp; st.vy[i] *= cap / sp; }
+  }
 }
 
 /**

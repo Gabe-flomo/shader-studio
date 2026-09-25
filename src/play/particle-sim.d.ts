@@ -11,7 +11,7 @@ export interface ParticleState {
 export type ParticleParams = Omit<ParticlesLayer, 'id' | 'label' | 'kind' | 'visible' | 'toShader'> & Partial<Pick<ParticlesLayer, 'id' | 'label' | 'kind' | 'visible' | 'toShader'>>;
 export interface CompiledZone {
   id: string; action: string; dist(x: number, y: number): number; normal(x: number, y: number): [number, number];
-  x: number; y: number; w: number; h: number; rot: number; strength: number; reach: number; bounce: number; angle: number;
+  x: number; y: number; w: number; h: number; rot: number; strength: number; reach: number; bounce: number; angle: number; tilt: number;
   targetId: string; tint: number[]; scale: number; affects: string; inside: number; total: number; area?: number;
   randomPoint(rand: () => number): [number, number];
 }
@@ -38,4 +38,6 @@ export function burstParticles(st: ParticleState, p: ParticleParams, env: Partic
 export function scatterParticles(st: ParticleState, p: ParticleParams, strength: number, rand?: () => number): void;
 export function resetParticles(st: ParticleState, p: ParticleParams, env: ParticleEnv, rand?: () => number): void;
 export function modulator(by: ParticleParams['sizeBy'], st: ParticleState, i: number, p: ParticleParams, env: ParticleEnv): number;
+export interface FieldSample { x: number; y: number; fx: number; fy: number; settle: boolean; ax: number; ay: number }
+export function particleFieldGrid(p: ParticleParams, env: ParticleEnv, cols: number, rows: number, seed?: number): FieldSample[];
 export function drawParticles(ctx: CanvasRenderingContext2D, st: ParticleState, p: ParticleParams, env: ParticleEnv & { W: number; H: number }): void;

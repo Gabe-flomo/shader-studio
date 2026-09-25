@@ -127,6 +127,52 @@ describe('flocking, bursts and counts', () => {
     expect(before).toBeLessThan(0.5);
   });
 
+  it('flocks keep their personal space instead of clumping into dots', () => {
+    const nearest = (st: ReturnType<typeof createParticles>) => {
+      let total = 0;
+      for (let i = 0; i < st.count; i++) {
+        let best = 9;
+        for (let j = 0; j < st.count; j++) if (j !== i) best = Math.min(best, Math.hypot(st.x[j] - st.x[i], st.y[j] - st.y[i]));
+        total += best;
+      }
+      return total / st.count;
+    };
+    const free = createParticles(500, seeded(3)), flock = createParticles(500, seeded(3));
+    run(free, params(), env(), 60 * 8);
+    run(flock, params({ flock: 1 }), env(), 60 * 8);
+    // Tighter than a random spread (they group up), but nowhere near stacked on top of each other.
+    expect(nearest(flock)).toBeGreaterThan(nearest(free) * 0.5);
+  });
+
+  it('random edges put a leaving particle somewhere new, still heading the same way', () => {
+    const st = createParticles(1, seeded(12));
+    st.x[0] = 0.999; st.y[0] = 0.5; st.vx[0] = 0.5; st.vy[0] = 0;
+    stepParticles(st, params({ edges: 'random', speed: 0 }), env([], { dt: 0.05 }), seeded(13));
+    expect(st.x[0]).toBeGreaterThanOrEqual(0); expect(st.x[0]).toBeLessThanOrEqual(1);
+    expect(Math.abs(st.y[0] - 0.5) + Math.abs(st.x[0] - 0.02)).toBeGreaterThan(0.05);
+    expect(st.vx[0]).toBeGreaterThan(0);
+  });
+
+  it('a tilted vortex swirls in ellipses, bigger on the near side', () => {
+    const spread = (tilt: number) => {
+      const rand = seeded(4), st = createParticles(300, rand);
+      for (let i = 0; i < st.count; i++) { const a = rand() * Math.PI * 2, r = 0.1 + rand() * 0.25; st.x[i] = 0.5 + Math.cos(a) * r; st.y[i] = 0.5 + Math.sin(a) * r; st.vx[i] = st.vy[i] = 0; }
+      const z = geoCompile({ id: 'v', shape: 'circle', x: 0.5, y: 0.5, w: 0.05, h: 0.05, action: 'vortex', strength: 3, reach: 0.6, tilt }, 1);
+      let sx = 0, sy = 0, near = 0, far = 0;
+      const p = params({ speed: 0.5 }), e = env([z]);
+      for (let f = 0; f < 400; f++) {
+        stepParticles(st, p, e, rand);
+        if (f > 200) for (let i = 0; i < st.count; i++) { sx += Math.abs(st.x[i] - 0.5); sy += Math.abs(st.y[i] - 0.5); if (st.y[i] < 0.45) near = Math.max(near, st.zs[i]); if (st.y[i] > 0.55) far = Math.max(far, 1 / st.zs[i]); }
+      }
+      return { ratio: sx / sy, near, far };
+    };
+    expect(spread(0).ratio).toBeCloseTo(1, 0);
+    const t = spread(60);
+    expect(t.ratio).toBeGreaterThan(1.4);
+    expect(t.near).toBeGreaterThan(1.05);
+    expect(t.far).toBeGreaterThan(1.05);
+  });
+
   it('burst particles start unborn, appear on a burst and die with their life', () => {
     const p = params({ emit: 'burst', life: 1, spawn: 'center', spawnRadius: 0 });
     const st = createParticles(100, seeded(12), true);

@@ -15,7 +15,8 @@ import { MobilePreviewPill } from './components/shell/MobilePreviewPill';
 import { MobileIconSegment } from './components/shell/MobileIconSegment';
 import { Button, IconButton } from './components/ui/Button';
 import { ThemeOverrideContext, useTokens } from './theme/themeStore';
-import { PreviewFooter, PreviewHeader } from './components/shell/PreviewChrome';
+import { AspectPicker, PreviewFooter, PreviewHeader } from './components/shell/PreviewChrome';
+import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/page';
@@ -408,6 +409,7 @@ function App() {
   const [isDragging, setIsDragging]     = useState(false);
   const [showCode, setShowCode]         = useState(false);
   const [page, setPage]                 = useState<Page>('studio');
+  const playWidth = PANEL_WIDTHS[usePlayUi(s => s.panel)];
 
   // Navigate to Function Builder when an ExprBlock requests it
   useEffect(() => {
@@ -416,6 +418,14 @@ function App() {
         setPage('fn');
         useFunctionBuilder.getState().clearNavRequest();
       }
+    });
+  }, []);
+  // "Go to source" on a Play control opens the Studio (NodeGraph centres on the node).
+  useEffect(() => {
+    let last = useNodeGraphStore.getState().focusNodeRequest?.n ?? 0;
+    return useNodeGraphStore.subscribe(s => {
+      const n = s.focusNodeRequest?.n ?? 0;
+      if (n !== last) { last = n; setPage('studio'); }
     });
   }, []);
   // An imported play file opens on the Play page.
@@ -1021,7 +1031,7 @@ function App() {
 
           {/* Play: the control panel takes the graph's place, the picture gets the rest */}
           {page === 'play' && (
-            <div style={{ width: 340, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }}>
+            <div style={{ width: playWidth, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }}>
               <PlayPage />
             </div>
           )}
@@ -1119,7 +1129,7 @@ function App() {
 
         {/* Center content. On Play the panel is a fixed column and the picture takes the rest. */}
         <div style={page === 'play'
-          ? { width: 380, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }
+          ? { width: playWidth, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }
           : { flex: 1, position: 'relative', minWidth: 0 }}>
           {page === 'play' && <PlayPage />}
           {page === 'studio' && (
@@ -1158,6 +1168,7 @@ function App() {
           <ThemeOverrideContext.Provider value="dark">
             <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
               <PreviewHeader>
+                {page === 'play' && <AspectPicker />}
                 <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
                 <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
               </PreviewHeader>

@@ -256,6 +256,24 @@ class MidiEngine implements InputSource {
     return { status: this.webMidiStatus, inputs: this.inputNames };
   }
 
+  /**
+   * Why MIDI can't work on this page, in words, or null. The usual case is a
+   * page embedded in another site (an iframe) that wasn't given MIDI: the
+   * browser refuses without asking, so nothing shows up.
+   */
+  blockReason(): string | null {
+    if (this.webMidiStatus === 'unsupported') return 'This browser has no Web MIDI (Chrome, Edge and Opera have it; Safari does not). The keyboard stand-in on a MIDI Input node still works.';
+    const embedded = typeof window !== 'undefined' && window.self !== window.top;
+    const policy = typeof document !== 'undefined'
+      ? ((document as unknown as { permissionsPolicy?: { allowsFeature(f: string): boolean }; featurePolicy?: { allowsFeature(f: string): boolean } }).permissionsPolicy
+        ?? (document as unknown as { featurePolicy?: { allowsFeature(f: string): boolean } }).featurePolicy)
+      : undefined;
+    const allowed = policy ? policy.allowsFeature('midi') : true;
+    if (embedded && (!allowed || this.webMidiStatus === 'denied')) return 'This page is running inside another site (like a preview on claude.ai), and that site doesn\'t allow MIDI. Open Shader Studio in its own tab or the desktop app to use a controller.';
+    if (this.webMidiStatus === 'denied') return 'The browser refused MIDI access. Allow MIDI for this site (the icon left of the address bar) and reload.';
+    return null;
+  }
+
   /** Ask the browser for MIDI access and listen to every input. Safe to call repeatedly. */
   async connectWebMidi(): Promise<MidiBackendStatus> {
     if (this.webMidiStatus === 'unsupported') return 'unsupported';

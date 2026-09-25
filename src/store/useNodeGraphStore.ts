@@ -355,6 +355,9 @@ interface NodeGraphState {
   exportPlayHtml: (options: EmbedOptions, title: string) => Promise<FileResult>;
   /** Bumped when a play file is imported; App switches to the Play page. */
   playOpenRequest: number;
+  /** Asks the app to open the Studio centred on a node (a Play control's "go to source"). `n` counts requests. */
+  focusNodeRequest: { id: string; n: number } | null;
+  focusNode: (id: string) => void;
   /** Does a graph in browser storage carry a Play setup? (For the "Play" tag on its row.) */
   savedGraphHasPlay: (name: string) => boolean;
 
@@ -1264,6 +1267,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   paramBindings: {},
   play: emptyPlayRecord(),
   playOpenRequest: 0,
+  focusNodeRequest: null,
+  focusNode: (id) => set(s => ({ selectedNodeIds: [id], selectedNodeId: id, focusNodeRequest: { id, n: (s.focusNodeRequest?.n ?? 0) + 1 } })),
   glslErrors: [],
   glslErrorSource: null,
   glContextLost: false,
