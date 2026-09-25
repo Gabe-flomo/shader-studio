@@ -909,6 +909,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
     const nodeEl = target.closest('[data-node-id]') as HTMLElement | null;
     const nodeId = nodeEl?.dataset.nodeId ?? null;
+    // On empty canvas the menu only has "Group selection" — with fewer than two nodes
+    // selected there is nothing to show, so don't open an empty strip.
+    if (!nodeId && useNodeGraphStore.getState().selectedNodeIds.length < 2) { setContextMenu(null); return; }
     setContextMenu({ x: e.clientX, y: e.clientY, nodeId });
   }, []);
 
