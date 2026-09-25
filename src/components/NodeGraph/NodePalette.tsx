@@ -367,6 +367,41 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               style={{ flexShrink: 0, marginBottom: 6 }}
             />
             <NodeBrowser onAdd={handleAdd} swapTargetNodeId={swapTargetNodeId} favorites={favorites} onToggleFavorite={onToggleFavorite} nodeButtonRefs={nodeButtonRefs} searchQuery={query} context={context} onGlslInsert={onGlslInsert} />
+            {query.trim().length > 0 && (() => {
+              // Examples that match the search too, under their own heading: "blur" finds the
+              // Blur & Lens folder, "3D" the 3D examples, "midi" the MIDI one.
+              const words = query.trim().toLowerCase().split(/\s+/);
+              const hits = EXAMPLE_FOLDERS.flatMap(f => f.keys.filter(k => EXAMPLE_INDEX[k]).map(k => ({ k, folder: f.label })))
+                .filter(({ k, folder }) => {
+                  const e = EXAMPLE_INDEX[k];
+                  const hay = `${e.label} ${e.description ?? ''} ${folder}`.toLowerCase();
+                  return words.every(w => hay.includes(w));
+                })
+                .sort((a, b) => {
+                  // Label matches first, then folder matches, then descriptions
+                  const rank = ({ k, folder }: { k: string; folder: string }) =>
+                    words.every(w => EXAMPLE_INDEX[k].label.toLowerCase().includes(w)) ? 0 : words.every(w => folder.toLowerCase().includes(w)) ? 1 : 2;
+                  return rank(a) - rank(b) || EXAMPLE_INDEX[a.k].label.localeCompare(EXAMPLE_INDEX[b.k].label);
+                });
+              if (hits.length === 0) return null;
+              return (
+                <div style={{ marginTop: 8, borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 6 }}>
+                  <div style={{ ...foldRow, color: tk.text.muted, fontWeight: 600, fontSize: 12, cursor: 'default' }}>
+                    <Icon name="graphs" size={14} style={{ color: tk.status.success }} />
+                    Examples
+                    <span style={{ fontSize: 11, color: tk.text.faint, fontWeight: 500 }}>{hits.length}</span>
+                  </div>
+                  <div style={{ paddingLeft: 14, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {hits.slice(0, 15).map(({ k, folder }) => (
+                      <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success}
+                        hint={`${folder}${EXAMPLE_INDEX[k].description ? ` · ${EXAMPLE_INDEX[k].description}` : ''}`}
+                        onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }} />
+                    ))}
+                    {hits.length > 15 && <div style={{ fontSize: 11.5, color: tk.text.faint, padding: '4px 10px' }}>{hits.length - 15} more — narrow the search</div>}
+                  </div>
+                </div>
+              );
+            })()}
             {query.trim().length === 0 && (
               <div style={{ marginTop: 8, borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 6 }}>
                 <button onClick={() => setExamplesExpanded(v => !v)} style={{ ...foldRow, color: tk.text.muted, fontWeight: 600, fontSize: 12 }}>

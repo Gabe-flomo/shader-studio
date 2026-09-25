@@ -48,7 +48,7 @@ function feedRules(type: string, text: string): Rule[] {
     case 'vec3':
     case 'vec4':
       if (has(text, 'pos', 'normal', 'dir')) return [];
-      return [['palette', 'color', 'cosine colours'], ['makeVec3', 'rgb', 'pick a colour'], ['colorRamp', 'color', 'a gradient of stops']];
+      return [['colorPicker', 'rgb', 'pick a colour'], ['palette', 'color', 'cosine colours'], ['colorRamp', 'color', 'a gradient of stops']];
     default:
       return [];
   }

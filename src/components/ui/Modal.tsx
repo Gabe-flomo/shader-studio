@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -33,9 +33,12 @@ export function Modal({
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; });
 
+  // Captured during the first render, before any child's autoFocus moves focus into the panel.
+  const [opener] = useState(() => (typeof document !== 'undefined' ? document.activeElement as HTMLElement | null : null));
+
   useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
+    // A child that asked for focus (a text field's autoFocus) keeps it; otherwise the panel takes it.
+    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       // A field with its own open popup (autocomplete) handles Esc itself
       if (e.key === 'Escape' && !(e.target as HTMLElement | null)?.closest?.('[data-captures-escape]')) {
@@ -48,7 +51,7 @@ export function Modal({
       window.removeEventListener('keydown', onKey, true);
       opener?.focus?.();
     };
-  }, []);
+  }, [opener]);
 
   const tile = iconColor ?? tk.accent.base;
   return createPortal(

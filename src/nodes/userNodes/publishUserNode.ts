@@ -4,7 +4,7 @@
  * and registers the result.
  */
 
-import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
+import { GROUP_PORT_SENTINEL, type GraphNode, type SubgraphData, type DataType, type GroupInputPort } from '../../types/nodeGraph';
 import type { UserNodeDefinition, UserNodeIterations, UserNodeParam, UserNodePort, UserNodeTexture } from '../../types/userNode';
 import { flattenSubgraphToFunction, findTextureInputs } from '../../compiler/flattenSubgraph';
 import { makeUserNodeId } from './userNodeRegistry';
@@ -57,11 +57,62 @@ function fnNameFor(id: string): string {
   return id.replace(/[^A-Za-z0-9_]/g, '_').replace(/_{2,}/g, '_');
 }
 
-/** What gets published: a group node on the canvas, a subgraph built from a whole graph, or GLSL written by hand. */
+/** What gets published: a group node on the canvas, one Expression Block or Custom Function node,
+ *  a subgraph built from a whole graph, or GLSL written by hand. */
 export type PublishSource =
   | { kind: 'group'; node: GraphNode }
+  | { kind: 'node'; node: GraphNode }
   | { kind: 'subgraph'; subgraph: SubgraphData; label: string; iterations?: number }
   | { kind: 'code'; code: string; entry?: string; label: string };
+
+/** Node types that can be published on their own, without grouping first. */
+export const SINGLE_NODE_PUBLISH_TYPES: ReadonlySet<string> = new Set(['exprNode', 'customFn']);
+
+/** The sockets an Expression Block / Custom Function declares (they are dynamic, from params.inputs). */
+export interface DynamicInputSpec { name: string; type: string; slider?: { min: number; max: number } | null }
+
+export function dynamicInputs(node: GraphNode): DynamicInputSpec[] {
+  const raw = node.params.inputs;
+  return Array.isArray(raw) ? (raw as DynamicInputSpec[]).filter(i => i && typeof i.name === 'string') : [];
+}
+
+/** The label a single-node source publishes under. */
+export function singleNodeLabel(node: GraphNode): string {
+  const l = typeof node.params.label === 'string' ? node.params.label.trim() : '';
+  return l || (node.type === 'customFn' ? 'Custom Function' : 'Expression');
+}
+
+/**
+ * Wrap one Expression Block or Custom Function in a one-node subgraph so it
+ * publishes exactly like a group would: every declared input becomes an input
+ * port (wired or not — a slider input's current value is offered as the
+ * port's slider default), `result` becomes the output port, and a Custom
+ * Function's helper block travels along inside the node's params.
+ */
+export function nodeToSubgraph(node: GraphNode): SubgraphData {
+  const inner = JSON.parse(JSON.stringify(node)) as GraphNode & { carryMode?: unknown; assignOp?: unknown };
+  inner.position = { x: 0, y: 0 };
+  delete inner.carryMode;
+  delete inner.assignOp;
+  const inputPorts: GroupInputPort[] = [];
+  for (const spec of dynamicInputs(node)) {
+    const sock = inner.inputs[spec.name];
+    if (!sock) continue;
+    const type = (sock.type || spec.type) as DataType;
+    inner.inputs[spec.name] = { ...sock, connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: spec.name } };
+    inputPorts.push({ key: spec.name, type, label: spec.name, toNodeId: inner.id, toInputKey: spec.name });
+  }
+  // Carry sockets (`<name>_init`) only mean something inside a loop.
+  for (const k of Object.keys(inner.inputs)) if (k.endsWith('_init') && !inputPorts.some(p => p.key === k)) delete inner.inputs[k];
+  const declared = typeof node.params.outputType === 'string' ? node.params.outputType : undefined;
+  const outType = (declared || node.outputs.result?.type || 'float') as DataType;
+  inner.outputs = { result: { type: outType, label: 'Result' } };
+  return {
+    nodes: [inner],
+    inputPorts,
+    outputPorts: [{ key: 'result', type: outType, label: 'Result', fromNodeId: inner.id, fromOutputKey: 'result' }],
+  };
+}
 
 export function sourceSubgraph(source: PublishSource): { subgraph: SubgraphData | undefined; iterations: number; label: string } {
   if (source.kind === 'group') {
@@ -71,17 +122,21 @@ export function sourceSubgraph(source: PublishSource): { subgraph: SubgraphData 
       label: typeof source.node.params.label === 'string' ? source.node.params.label : 'Group',
     };
   }
+  if (source.kind === 'node') return { subgraph: nodeToSubgraph(source.node), iterations: 1, label: singleNodeLabel(source.node) };
   if (source.kind === 'code') return { subgraph: undefined, iterations: 1, label: source.label };
   return { subgraph: source.subgraph, iterations: source.iterations ?? 1, label: source.label };
 }
 
 /** The sockets a source offers, in a shape the publish dialog can turn into rows. */
 export interface SourcePorts {
-  inputs: Array<{ portKey: string; type: DataType; label: string }>;
+  /** `slider` is a suggested range for a float port: a single node's slider input offers its current value as the default. */
+  inputs: Array<{ portKey: string; type: DataType; label: string; slider?: { min: number; max: number; default: number } }>;
   outputs: Array<{ portKey: string; type: DataType; label: string }>;
   textures: Array<{ sourceKey: string; label: string }>;
   /** Code sources: the functions found, and which one is the entry. */
   functions?: CodeFunction[];
+  /** Code sources: top-level declarations (#define, const, globals) that travel with the node. */
+  globals?: string;
   entry?: string;
   error?: string;
 }
@@ -97,6 +152,7 @@ export function describeSource(source: PublishSource): SourcePorts {
     if (!d.ok) return { inputs: [], outputs: [], textures: [], functions: parsed.functions, entry: entry.name, error: d.error };
     return {
       functions: parsed.functions,
+      globals: parsed.globals,
       entry: entry.name,
       inputs: d.inputs.map(p => ({ portKey: p.name, type: p.type as DataType, label: p.name })),
       outputs: [
@@ -108,8 +164,15 @@ export function describeSource(source: PublishSource): SourcePorts {
   }
   const { subgraph } = sourceSubgraph(source);
   if (!subgraph) return { inputs: [], outputs: [], textures: [], error: 'This group has no contents.' };
+  const sliderFor = (portKey: string) => {
+    if (source.kind !== 'node') return undefined;
+    const spec = dynamicInputs(source.node).find(i => i.name === portKey);
+    if (!spec?.slider || spec.type !== 'float') return undefined;
+    const v = source.node.params[portKey];
+    return { min: spec.slider.min, max: spec.slider.max, default: typeof v === 'number' ? v : 0 };
+  };
   return {
-    inputs: subgraph.inputPorts.map(p => ({ portKey: p.key, type: p.type, label: p.label })),
+    inputs: subgraph.inputPorts.map(p => ({ portKey: p.key, type: p.type, label: p.label, slider: sliderFor(p.key) })),
     outputs: subgraph.outputPorts.map(p => ({ portKey: p.key, type: p.type, label: p.label })),
     textures: findTextureInputs(subgraph).map(t => ({ sourceKey: t.id, label: t.label })),
   };
@@ -161,16 +224,17 @@ export function buildUserNodeDefinition(source: PublishSource, spec: PublishUser
       textures: (spec.textures ?? []).map(t => t.sourceKey),
       inputs: spec.inputs.map(i => i.portKey),
       outs: spec.outputs.slice(1).map(o => o.portKey),
-    });
+    }, ports.globals ?? '');
     if ('error' in renamed) return { ok: false, error: renamed.error };
-    const implicitGlobals = /\bg_uv\b/.test(renamed.entryCode + renamed.helpers.join('\n')) ? ['g_uv'] : [];
+    const implicitGlobals = /\bg_uv\b/.test(renamed.entryCode + renamed.helpers.join('\n') + renamed.preamble) ? ['g_uv'] : [];
     return {
       ok: true,
       def: {
         ...common,
         params: [],
         functionCode: renamed.entryCode,
-        helperFunctions: renamed.helpers,
+        // Declarations first: helpers and the entry read them.
+        helperFunctions: renamed.preamble ? [renamed.preamble, ...renamed.helpers] : renamed.helpers,
         implicitGlobals,
         source: { kind: 'code', code: source.code, entry: ports.entry },
       },
@@ -226,6 +290,7 @@ export function buildUserNodeDefinition(source: PublishSource, spec: PublishUser
       helperFunctions: flat.helperFunctions,
       implicitGlobals: flat.implicitGlobals,
       iterations: iterationsOut,
+      // A single node publishes as the subgraph that wraps it: "Open source" places that group.
       source: { kind: 'subgraph', subgraph, iterations },
     },
   };

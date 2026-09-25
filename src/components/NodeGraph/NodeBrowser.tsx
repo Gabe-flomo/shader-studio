@@ -53,8 +53,8 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   ],
   '3D Transforms': [
     { label: 'Move',   types: ['translate3D', 'rotate3D', 'rotateAxis3D', 'scale3d'] },
-    { label: 'Repeat', types: ['repeat3D', 'limitedRepeat3D', 'polarRepeat3D', 'mirroredRepeat3D'] },
-    { label: 'Warp',   types: ['twist3D', 'bend3D', 'sinWarp3D', 'displace3D', 'spiralWarp3D', 'domainWarp3D', 'shear3D'] },
+    { label: 'Repeat', types: ['repeat3D', 'limitedRepeat3D', 'polarRepeat3D', 'mirroredRepeat3D', 'voxelize'] },
+    { label: 'Warp',   types: ['twist3D', 'bend3D', 'sinWarp3D', 'displace3D', 'spiralWarp3D', 'domainWarp3D', 'turbulence3D', 'shear3D'] },
     { label: 'Fold',   types: ['fold3D', 'mirrorFold3D', 'kaleidoscope3D', 'sphereInvert3D', 'mobiusWarp3D', 'logPolarWarp3D', 'helixWarp3D'] },
   ],
   '3D Lighting': [
@@ -64,7 +64,8 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Volume',  types: ['volumetricFog', 'phaseHG'] },
   ],
   Color: [
-    { label: 'Palette', types: ['palette', 'gradient', 'colorRamp', 'blackbody'] },
+    { label: 'Build',   types: ['colorPicker', 'colorize', 'makeVec3'] },
+    { label: 'Palette', types: ['palette', 'stopPalette', 'gradient', 'colorRamp', 'blackbody'] },
     { label: 'Adjust',  types: ['invert', 'colorSaturation', 'posterize', 'hueRange', 'brightnessContrast'] },
     { label: 'Convert', types: ['hsv', 'normalToColor'] },
     { label: 'Blend',   types: ['blendModes', 'oklabMix'] },
@@ -109,9 +110,9 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   '2D Space': [
     { label: 'Basic',   types: ['uvTransform2d', 'rotate2d', 'shear', 'perspective2d', 'fract', 'displace'] },
     { label: 'Repeat',  types: ['infiniteRepeatSpace', 'limitedRepeat2D', 'mirroredRepeat2D', 'angularRepeat2D', 'kaleidoSpace', 'grid'] },
-    { label: 'Warp',    types: ['uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
+    { label: 'Warp',    types: ['uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'turbulence', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
     { label: 'Map',     types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace'] },
-    { label: 'Pattern', types: ['waveTexture', 'magicTexture'] },
+    { label: 'Pattern', types: ['waveTexture', 'magicTexture', 'chaosLayers'] },
   ],
   Combiners: [
     { label: 'Blend',   types: ['mix', 'blendModes', 'mask', 'addColor', 'alphaBlend'] },

@@ -10,6 +10,8 @@
  */
 
 import { errorMessage } from '../../utils/fileIO';
+import { ColorSwatch } from '../ui/ColorPicker';
+import { toRgb } from '../../lib/colorMath';
 import { toast } from '../ui/toastStore';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore, getActiveNodes, getActiveLooseGroups } from '../../store/useNodeGraphStore';
@@ -2240,6 +2242,14 @@ export function MobileGraphBrowser() {
             ✦ Publish as node…
           </button>
         )}
+        {(node.type === 'exprNode' || node.type === 'customFn') && (
+          <button
+            onClick={() => setPublishSource({ kind: 'node', node })}
+            style={{ background: tc.mauve, border: 0, color: tc.crust, borderRadius: '8px', padding: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            ✦ Publish as node…
+          </button>
+        )}
         {publishSource && <PublishNodeModal source={publishSource} onClose={() => setPublishSource(null)} />}
         {isPlainGroup && !node.sealed && (
           <button
@@ -2636,21 +2646,13 @@ export function MobileGraphBrowser() {
         );
       }
       if (pd.type === 'vec3color') {
-        const vals = Array.isArray(node.params[key]) ? node.params[key] as number[] : [0, 0, 0];
-        const toHex = (v: number) => Math.round(Math.max(0, Math.min(1, v ?? 0)) * 255).toString(16).padStart(2, '0');
-        const hex = `#${toHex(vals[0])}${toHex(vals[1])}${toHex(vals[2])}`;
         return (
           <div key={key} style={{ background: tc.base, border: `1px solid ${tc.surface0}`, borderRadius: '8px', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
             <span style={{ flex: 1, fontSize: '12px', color: tc.text }}>{pd.label}</span>
-            <input
-              type="color"
-              value={hex}
-              onChange={e => {
-                const h = e.target.value;
-                const r = parseInt(h.slice(1, 3), 16) / 255, g = parseInt(h.slice(3, 5), 16) / 255, b = parseInt(h.slice(5, 7), 16) / 255;
-                updateNodeParams(node.id, { [key]: [r, g, b] }, { immediate: true });
-              }}
-              style={{ width: '36px', height: '26px', border: `1px solid ${tc.surface1}`, borderRadius: '4px', background: 'none', cursor: 'pointer', padding: '1px 2px' }}
+            <ColorSwatch
+              label={pd.label}
+              value={toRgb(node.params[key])}
+              onChange={rgb => updateNodeParams(node.id, { [key]: rgb }, { immediate: true })}
             />
           </div>
         );

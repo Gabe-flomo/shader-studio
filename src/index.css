@@ -4,6 +4,25 @@
   box-sizing: border-box;
 }
 
+/* Thin, quiet scrollbars everywhere. Without these, a Mac set to "Always show scroll bars"
+   (or with a mouse plugged in) and the desktop app's WebKit draw a thick opaque bar beside
+   every scrolling panel — the node list, inspectors, menus. A translucent grey thumb on a
+   transparent track reads on both the light and dark themes. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(127, 127, 127, 0.4) transparent;
+}
+/* WebKit / older Safari, which ignore the two properties above */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: rgba(127, 127, 127, 0.4);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: rgba(127, 127, 127, 0.6); }
+
 /* A sideways trackpad pan that reaches the edge would otherwise trigger the browser's
    swipe-back navigation (leaving the app mid-edit); this also stops pull-to-refresh on phones. */
 html, body {

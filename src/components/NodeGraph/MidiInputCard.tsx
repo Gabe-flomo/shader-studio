@@ -52,24 +52,33 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
   const [keyboard, setKeyboard] = useState(() => midiEngine.keyboard().enabled);
   const [last, setLast] = useState<string>('');
   useEffect(() => {
-    // Ask for MIDI access the first time a MIDI node is on the canvas. If the
-    // browser has no Web MIDI, fall back to the keyboard stand-in right away.
+    // Ask for MIDI access the first time a MIDI node is on the canvas. The keyboard
+    // stand-in switches itself on whenever there is nothing else to play: no Web MIDI,
+    // access refused, no controller plugged in, or a permission prompt that never
+    // resolves (an embedded page). A connected device leaves it as the user set it.
+    const enableKeyboard = () => { midiEngine.setKeyboardEnabled(true); setKeyboard(true); };
+    const pending = window.setTimeout(() => { if (midiEngine.webMidi().status === 'requesting') enableKeyboard(); }, 1500);
     void midiEngine.connectWebMidi().then(status => {
-      setWebMidi(midiEngine.webMidi());
-      if (status === 'unsupported' || status === 'denied') {
-        midiEngine.setKeyboardEnabled(true);
-        setKeyboard(true);
-      }
+      window.clearTimeout(pending);
+      const wm = midiEngine.webMidi();
+      setWebMidi(wm);
+      if (status !== 'ready' || wm.inputs.length === 0) enableKeyboard();
     });
-    return midiEngine.subscribe((e: MidiEvent) => {
+    const unsubscribe = midiEngine.subscribe((e: MidiEvent) => {
       switch (e.kind) {
-        case 'devices': setWebMidi(midiEngine.webMidi()); break;
+        case 'devices': {
+          const wm = midiEngine.webMidi();
+          setWebMidi(wm);
+          if (wm.inputs.length === 0) enableKeyboard();
+          break;
+        }
         case 'noteOn':  setLast(`${midiNoteName(e.note)} · vel ${e.velocity}`); break;
         case 'cc':      setLast(`CC ${e.cc} · ${e.value}`); break;
         case 'bend':    setLast(`bend ${e.value.toFixed(2)}`); break;
         default: break;
       }
     });
+    return () => { window.clearTimeout(pending); unsubscribe(); };
   }, []);
 
   const toggleKeyboard = () => {

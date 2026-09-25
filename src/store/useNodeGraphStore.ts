@@ -36,6 +36,8 @@ import { USER_NODE_DEFAULT_CATEGORY } from '../types/userNode';
 import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes } from '../nodes/userNodes/userNodeRegistry';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams } from '../nodes/definitions';
+import { paletteNodeCoeffs, STOP_PALETTE_MAX } from '../nodes/definitions/color';
+import { autoFitCosineStops, fitCosineStops } from '../lib/palette';
 import { compileGraph } from '../compiler/graphCompiler';
 import { recordGraphCompile } from '../lib/perfStats';
 import { convertFragmentShader } from '../nodes/userNodes/glslImport';
@@ -392,6 +394,14 @@ interface NodeGraphState {
   /** Set by revealNode; NodeGraph centres on the node once it is on screen, then clears it. */
   focusRequest: { nodeId: string; seq: number } | null;
   clearFocusRequest: () => void;
+  /**
+   * Wires that were removed or replaced this session, newest first. A node's
+   * right-click menu offers them back as "Reconnect …" — a per-node memory,
+   * unlike undo, which rewinds everything since. Not saved with the graph.
+   */
+  wireHistory: WireMemory[];
+  /** Past wires touching `nodeId` that could be restored: both ends still exist in `scope` and the wire is not currently present. */
+  pastWiresFor: (nodeId: string, scope: GraphNode[]) => WireMemory[];
   /** After a node is added from search, NodeGraph opens Smart connect on its first output */
   smartConnectRequest: { nodeId: string; at: number } | null;
   requestSmartConnect: (nodeId: string | null) => void;
@@ -589,6 +599,21 @@ interface NodeGraphState {
   ) => void;
 
   disconnectInput: (nodeId: string, inputKey: string) => void;
+  /**
+   * Give a palette node these colour stops. A Stops Palette just takes them; a cosine Palette is
+   * converted in place into a Stops Palette (same id, so every wire stays) and then takes them.
+   * More stops than the node holds are thinned evenly. Returns how many stops were used.
+   */
+  setPaletteStops: (nodeId: string, colors: Array<[number, number, number]>, opts?: { wrap?: string; blend?: string }) => number;
+  /**
+   * Convert a cosine Palette into a Stops Palette in place (one undo step). Its colours are
+   * sampled into `count` evenly spaced Loop stops — 'auto' picks the fewest that stay within
+   * about 1% of the original — with whichever blend follows it best, unless `colors` gives
+   * the stops outright.
+   */
+  convertPaletteToStops: (nodeId: string, count?: number | 'auto', colors?: Array<[number, number, number]>, opts?: { wrap?: string; blend?: string }) => boolean;
+  /** Remove every wire leaving `nodeId.outputKey` at the level being edited (one undo step). Returns how many were removed. */
+  disconnectOutput: (nodeId: string, outputKey: string) => number;
 
   // Rebuild a node's input sockets from a custom-fn inputs definition array
   updateNodeSockets: (
@@ -1201,6 +1226,31 @@ function pickSurfacedParams(
     }
   }
   return result;
+}
+
+/** One remembered wire (see NodeGraphState.wireHistory). */
+export interface WireMemory {
+  fromNodeId: string;
+  fromOutputKey: string;
+  toNodeId: string;
+  toInputKey: string;
+  at: number;
+}
+
+const WIRE_HISTORY_MAX = 60;
+
+/** Prepend a wire to the memory, dropping an earlier copy of the same wire. */
+function rememberWire(history: WireMemory[], w: Omit<WireMemory, 'at'>): WireMemory[] {
+  const same = (h: WireMemory) => h.fromNodeId === w.fromNodeId && h.fromOutputKey === w.fromOutputKey && h.toNodeId === w.toNodeId && h.toInputKey === w.toInputKey;
+  return [{ ...w, at: Date.now() }, ...history.filter(h => !same(h))].slice(0, WIRE_HISTORY_MAX);
+}
+
+/** The node `id` at the level the user is editing (top level or the active group). */
+function nodeInScope(state: { nodes: GraphNode[]; activeGroupPath: string[] }, id: string): GraphNode | undefined {
+  const top = state.nodes.find(n => n.id === id);
+  if (top) return top;
+  if (state.activeGroupPath.length === 0) return undefined;
+  return getActiveNodes(state.nodes, state.activeGroupPath)?.find(n => n.id === id);
 }
 
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
@@ -3538,6 +3588,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   connectNodes: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
     undoManager.push(get().nodes);
+    {
+      // Replacing a wire: keep the old one so the node's menu can offer it back.
+      const st = get();
+      const prev = nodeInScope(st, targetNodeId)?.inputs[targetInputKey]?.connection;
+      if (prev && (prev.nodeId !== sourceNodeId || prev.outputKey !== sourceOutputKey)) {
+        set({ wireHistory: rememberWire(st.wireHistory, { fromNodeId: prev.nodeId, fromOutputKey: prev.outputKey, toNodeId: targetNodeId, toInputKey: targetInputKey }) });
+      }
+    }
     set(state => {
       // Top-level connection
       if (state.nodes.some(n => n.id === targetNodeId)) {
@@ -3595,6 +3653,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   disconnectInput: (nodeId, inputKey) => {
     undoManager.push(get().nodes);
+    {
+      const st = get();
+      const prev = nodeInScope(st, nodeId)?.inputs[inputKey]?.connection;
+      if (prev) set({ wireHistory: rememberWire(st.wireHistory, { fromNodeId: prev.nodeId, fromOutputKey: prev.outputKey, toNodeId: nodeId, toInputKey: inputKey }) });
+    }
     set(state => {
       // Top-level
       if (state.nodes.some(n => n.id === nodeId)) {
@@ -3622,6 +3685,110 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return { nodes: newTop ?? state.nodes };
     });
     get().compile();
+  },
+
+  setPaletteStops: (nodeId, colors, opts) => {
+    const st = get();
+    const node = nodeInScope(st, nodeId);
+    if (!node || colors.length < 2) return 0;
+    // Thin a long palette evenly rather than cutting it off
+    const picked = colors.length <= STOP_PALETTE_MAX ? colors
+      : Array.from({ length: STOP_PALETTE_MAX }, (_, i) => colors[Math.round(i * (colors.length - 1) / (STOP_PALETTE_MAX - 1))]);
+    const stopParams: Record<string, unknown> = { stops: String(picked.length) };
+    picked.forEach((c, i) => { stopParams[`color${i}`] = [c[0], c[1], c[2]]; });
+    if (opts?.wrap) stopParams.wrap = opts.wrap;
+    if (opts?.blend) stopParams.blend = opts.blend;
+    if (node.type === 'palette') {
+      get().convertPaletteToStops(nodeId, picked.length, picked, opts);
+    } else if (node.type === 'stopPalette') {
+      get().updateNodeParams(nodeId, stopParams, { immediate: true });
+    } else {
+      return 0;
+    }
+    return picked.length;
+  },
+
+  convertPaletteToStops: (nodeId, count = 'auto', given, opts) => {
+    const st = get();
+    const old = nodeInScope(st, nodeId);
+    const def = getNodeDefinition('stopPalette');
+    if (!old || old.type !== 'palette' || !def) return false;
+    let colors: Array<[number, number, number]>;
+    let blend = opts?.blend ?? 'smooth';
+    // When the stops span several Angle units (a palette that repeats every 2, say), Scale and
+    // Speed shrink by the same factor so the result cycles exactly as fast as the cosine did.
+    let period = 1;
+    if (given) {
+      colors = given.slice(0, STOP_PALETTE_MAX);
+    } else {
+      const coeffs = paletteNodeCoeffs(old.params);
+      const fit = count === 'auto'
+        ? autoFitCosineStops(coeffs, STOP_PALETTE_MAX)
+        : fitCosineStops(coeffs, Math.max(2, Math.min(STOP_PALETTE_MAX, count)));
+      colors = fit.stops;
+      blend = opts?.blend ?? fit.blend;
+      period = fit.period;
+    }
+    const n = colors.length;
+    const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+    const params: Record<string, unknown> = {
+      ...(def.defaultParams ?? {}),
+      value: old.params.value ?? 0, anim: old.params.anim ?? 0,
+      scale: num(old.params.scale, 1) / period, speed: num(old.params.speed, 1) / period,
+      stops: String(n), wrap: opts?.wrap ?? 'loop', blend,
+    };
+    colors.forEach((c, i) => { params[`color${i}`] = c; });
+    // Same id and the same socket keys (value, anim → color), so wires in and out survive untouched.
+    const converted: GraphNode = {
+      ...old,
+      type: 'stopPalette',
+      inputs: {
+        value: { ...def.inputs.value, connection: old.inputs.value?.connection },
+        anim: { ...def.inputs.anim, connection: old.inputs.anim?.connection },
+      },
+      outputs: { ...def.outputs },
+      params,
+    };
+    undoManager.push(st.nodes);
+    set(state => {
+      const swap = (nodes: GraphNode[]) => nodes.map(n2 => (n2.id === nodeId ? converted : n2));
+      if (state.activeGroupPath.length === 0) return { nodes: swap(state.nodes) };
+      const active = getActiveNodes(state.nodes, state.activeGroupPath);
+      if (!active) return {};
+      return { nodes: setActiveNodes(state.nodes, state.activeGroupPath, swap(active)) ?? state.nodes };
+    });
+    get().compile();
+    return true;
+  },
+
+  disconnectOutput: (nodeId, outputKey) => {
+    const st = get();
+    const scope = st.activeGroupPath.length > 0 ? (getActiveNodes(st.nodes, st.activeGroupPath) ?? []) : st.nodes;
+    const targets: Array<{ id: string; key: string }> = [];
+    for (const n of scope) {
+      for (const [k, inp] of Object.entries(n.inputs)) {
+        if (inp.connection?.nodeId === nodeId && inp.connection.outputKey === outputKey) targets.push({ id: n.id, key: k });
+      }
+    }
+    if (targets.length === 0) return 0;
+    undoManager.push(st.nodes);
+    let history = st.wireHistory;
+    for (const t of targets) history = rememberWire(history, { fromNodeId: nodeId, fromOutputKey: outputKey, toNodeId: t.id, toInputKey: t.key });
+    const strip = (nodes: GraphNode[]) => nodes.map(n => {
+      const hit = targets.filter(t => t.id === n.id);
+      if (hit.length === 0) return n;
+      const inputs = { ...n.inputs };
+      for (const t of hit) { const copy = { ...inputs[t.key] }; delete copy.connection; inputs[t.key] = copy; }
+      return { ...n, inputs };
+    });
+    set(state => {
+      if (state.activeGroupPath.length === 0) return { nodes: strip(state.nodes), wireHistory: history };
+      const active = getActiveNodes(state.nodes, state.activeGroupPath);
+      if (!active) return {};
+      return { nodes: setActiveNodes(state.nodes, state.activeGroupPath, strip(active)) ?? state.nodes, wireHistory: history };
+    });
+    get().compile();
+    return targets.length;
   },
 
   clearDisconnectedNotice: () => set({ disconnectedNotice: null }),
@@ -4459,6 +4626,17 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
   focusRequest: null,
   clearFocusRequest: () => set({ focusRequest: null }),
+  wireHistory: [],
+  pastWiresFor: (nodeId, scope) => {
+    const byId = new Map(scope.map(n => [n.id, n]));
+    return get().wireHistory.filter(w => {
+      if (w.fromNodeId !== nodeId && w.toNodeId !== nodeId) return false;
+      const from = byId.get(w.fromNodeId), to = byId.get(w.toNodeId);
+      if (!from || !to) return false;
+      const cur = to.inputs[w.toInputKey]?.connection;
+      return !(cur && cur.nodeId === w.fromNodeId && cur.outputKey === w.fromOutputKey);
+    });
+  },
   smartConnectRequest: null,
   requestSmartConnect: (nodeId) => set({ smartConnectRequest: nodeId ? { nodeId, at: Date.now() } : null }),
   setNodeProbeValues: (values) => set(state => {

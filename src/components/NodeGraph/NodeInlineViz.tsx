@@ -5224,6 +5224,7 @@ function NodeInlineVizSwitch({ node }: { node: GraphNode }) {
 
     // ── 3D transforms missing ─────────────────────────────────────────────────
     case 'mirroredRepeat3D':
+    case 'voxelize':
     case 'spiralWarp3D':     return <SDF3DParamViz           node={node} />;
 
     // ── Lighting ──────────────────────────────────────────────────────────────
@@ -5323,7 +5324,7 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   'cappedConeSDF3D', 'roundedCylinderSDF3D', 'solidAngleSDF3D', 'verticalCapsuleSDF3D',
   // 3D transforms
   'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'fold3D',
-  'scale3d', 'rotateAxis3D', 'sinWarp3D', 'bend3D', 'limitedRepeat3D', 'polarRepeat3D', 'displace3D',
+  'scale3d', 'rotateAxis3D', 'sinWarp3D', 'bend3D', 'limitedRepeat3D', 'polarRepeat3D', 'displace3D', 'voxelize',
   // 3D boolean ops
   'sdfOnion',
   // Effects / post-process

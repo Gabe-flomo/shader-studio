@@ -112,7 +112,7 @@ export function CanvasToolbar({
       {onToggleOutline && (
         <IconButton icon="layoutGraph" label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} size="sm" active={!!showOutline} onClick={onToggleOutline} />
       )}
-      <span onContextMenu={e => { if (onClearMinimal) { e.preventDefault(); onClearMinimal(); } }} style={{ display: 'inline-flex' }}>
+      <span onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onClearMinimal?.(); }} style={{ display: 'inline-flex' }}>
         <IconButton icon="trash" label={onClearMinimal ? 'Reset to the starter graph · right-click: clear to just UV and Output' : 'Clear all nodes'} size="sm" tone="danger" onClick={onClear} />
       </span>
     </div>

@@ -76,4 +76,18 @@ describe('bundled examples', () => {
     }
     expect(failures).toEqual([]);
   });
+
+  it('vectorised arithmetic nodes declare the type their sockets carry (the GPU compiles from params.outputType)', () => {
+    const ARITH = new Set(['add', 'subtract', 'multiply', 'divide', 'mix', 'mod', 'abs', 'fractRaw', 'floor', 'ceil', 'smoothstep', 'clamp', 'max', 'minMath']);
+    const bad: string[] = [];
+    for (const k of keys) {
+      walk(EXAMPLE_GRAPHS[k].nodes, n => {
+        if (!ARITH.has(n.type)) return;
+        const vec = Object.values(n.inputs).map(i => i.type).find(t => t === 'vec2' || t === 'vec3' || t === 'vec4');
+        const declared = n.params?.outputType;
+        if (vec && declared !== vec) bad.push(`${k}/${n.id} (${n.type}): sockets are ${vec} but params.outputType is ${String(declared)}`);
+      });
+    }
+    expect(bad).toEqual([]);
+  });
 });

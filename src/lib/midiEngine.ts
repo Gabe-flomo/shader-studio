@@ -315,6 +315,6 @@ class MidiEngine implements InputSource {
 }
 
 export const midiEngine = new MidiEngine();
-// The engine is a bus source for as long as the app runs; the bus only ticks
-// it while a compiled shader binds a MIDI uniform.
+// The engine is a bus source for the life of the app: the render loop asks the
+// bus for values every frame, and this is what makes a MIDI node's outputs move.
 inputBus.addSource(midiEngine);

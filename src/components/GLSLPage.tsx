@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useLayoutEffect, useEffect, useCallback, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { safeSetItem } from '../utils/fileIO';
 import type { FileResult } from '../utils/fileIO';
@@ -202,13 +202,29 @@ export function GLSLPage() {
   }, []);
 
   // ── Side effects ──────────────────────────────────────────────────────────
+  // Where the caret should land after a programmatic edit (Tab, Enter, undo, insert).
+  // Applied in a layout effect, straight after React writes the new value: a
+  // controlled textarea jumps its caret to the end on every value change, and
+  // restoring it a frame later let fast typing land at the end of the file.
+  const pendingSel = useRef<{ start: number; end: number } | null>(null);
+  const setSel = (start: number, end = start) => { pendingSel.current = { start, end }; };
+  useLayoutEffect(() => {
+    const ta = textareaRef.current;
+    const sel = pendingSel.current;
+    if (ta && sel) {
+      pendingSel.current = null;
+      ta.selectionStart = sel.start;
+      ta.selectionEnd = sel.end;
+    }
+    syncScroll();
+  }, [code, syncScroll]);
+
+  // Compiling the shader on every keystroke stalls typing; wait for a pause.
   useEffect(() => {
-    setRawGlslShader(code);
     localStorage.setItem(EDITOR_KEY, code);
-    // Re-sync overlay scroll after every code change — the browser silently
-    // repositions the textarea on paste/undo without firing onScroll.
-    requestAnimationFrame(syncScroll);
-  }, [code, setRawGlslShader, syncScroll]);
+    const t = setTimeout(() => setRawGlslShader(code), 250);
+    return () => clearTimeout(t);
+  }, [code, setRawGlslShader]);
 
   useEffect(() => () => { setRawGlslShader(null); }, [setRawGlslShader]);
 
@@ -234,12 +250,10 @@ export function GLSLPage() {
                           text.length;
       cursorPos = start + innerOffset;
     }
+    setSel(cursorPos);
     setCode(newCode);
     pushHistory(newCode);
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.selectionStart = ta.selectionEnd = cursorPos;
-    });
+    requestAnimationFrame(() => ta.focus());
   }, [code, pushHistory]);
 
   // ── Keyboard handler ──────────────────────────────────────────────────────
@@ -255,8 +269,8 @@ export function GLSLPage() {
       if (undoIdx.current > 0) {
         undoIdx.current--;
         const restored = undoStack.current[undoIdx.current];
+        setSel(Math.min(start, restored.length));
         setCode(restored);
-        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start; });
       }
       return;
     }
@@ -267,8 +281,8 @@ export function GLSLPage() {
       if (undoIdx.current < undoStack.current.length - 1) {
         undoIdx.current++;
         const restored = undoStack.current[undoIdx.current];
+        setSel(Math.min(start, restored.length));
         setCode(restored);
-        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start; });
       }
       return;
     }
@@ -277,9 +291,9 @@ export function GLSLPage() {
     if (e.key === 'Tab') {
       e.preventDefault();
       const newCode = code.slice(0, start) + '    ' + code.slice(end);
+      setSel(start + 4);
       setCode(newCode);
       pushHistory(newCode);
-      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 4; });
       return;
     }
 
@@ -293,9 +307,9 @@ export function GLSLPage() {
       const extra     = line.trimEnd().endsWith('{') ? '    ' : '';
       const insertion = '\n' + indent + extra;
       const newCode   = code.slice(0, start) + insertion + code.slice(end);
+      setSel(start + insertion.length);
       setCode(newCode);
       pushHistory(newCode);
-      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + insertion.length; });
       return;
     }
 
@@ -305,9 +319,9 @@ export function GLSLPage() {
       const [open, close] = BRACKET_PAIRS[e.key];
       const selected = code.slice(start, end);
       const newCode  = code.slice(0, start) + open + selected + close + code.slice(end);
+      setSel(start + 1, end + 1);
       setCode(newCode);
       pushHistory(newCode);
-      requestAnimationFrame(() => { ta.selectionStart = start + 1; ta.selectionEnd = end + 1; });
       return;
     }
   }, [code, pushHistory]);
@@ -360,7 +374,8 @@ export function GLSLPage() {
   const lines      = code.split('\n');
 
   const [paletteWidth, setPaletteWidth] = useState(320);
-  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  // The node palette is an optional helper here: collapsed until asked for.
+  const [paletteCollapsed, setPaletteCollapsed] = useState(true);
   const paletteResizeRef = useRef<{ startX: number; startW: number } | null>(null);
 
   const handlePaletteResizeStart = useCallback((e: React.MouseEvent) => {
@@ -474,6 +489,7 @@ export function GLSLPage() {
                 position: 'absolute', inset: 0, padding: EDITOR_PADDING,
                 fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT, fontFamily: EDITOR_FONT,
                 whiteSpace: 'pre', overflowY: 'hidden', overflowX: 'hidden', pointerEvents: 'none', tabSize: 4,
+                fontVariantLigatures: 'none', letterSpacing: 0,
               }}
             >
               {lines.map((line, i) => (
@@ -491,6 +507,9 @@ export function GLSLPage() {
               onChange={handleChange}
               onKeyDown={handleKeyDown}
               onScroll={syncScroll}
+              // The overlay never wraps, so the textarea must not either: a soft-wrapped long
+              // line pushed every later line down and the caret no longer matched the text.
+              wrap="off"
               spellCheck={false}
               autoCapitalize="none"
               autoCorrect="off"
@@ -499,6 +518,7 @@ export function GLSLPage() {
                 border: 'none', outline: 'none', resize: 'none', padding: EDITOR_PADDING,
                 fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT, fontFamily: EDITOR_FONT,
                 tabSize: 4, overflowY: 'auto', overflowX: 'auto', zIndex: 1,
+                whiteSpace: 'pre', fontVariantLigatures: 'none', letterSpacing: 0,
               }}
             />
           </div>

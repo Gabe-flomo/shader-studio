@@ -97,11 +97,11 @@ export {
   SDFUnionNode, SDFSubtractNode, SDFIntersectNode,
   SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
-  MirroredRepeat3DNode, SdCrossNode, MengerSpongeNode,
+  MirroredRepeat3DNode, VoxelizeNode, SdCrossNode, MengerSpongeNode,
   SphereInvert3DNode, Shear3DNode, Kaleidoscope3DNode,
   MobiusWarp3DNode, LogPolarWarp3DNode, HelixWarp3DNode,
   GyroidFieldNode, SchwarzPFieldNode,
-  MirrorFold3DNode, DomainWarp3DNode,
+  MirrorFold3DNode, DomainWarp3DNode, Turbulence3DNode,
 } from './sdf3d';
 
 // 3D Scene (composable)
@@ -171,7 +171,7 @@ import {
   RippleSpaceNode, InfiniteRepeatSpaceNode,
   WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
   Perspective2DNode,
-  MirroredRepeat2DNode, LimitedRepeat2DNode, AngularRepeat2DNode, CrtScreenNode, LensDistortionNode } from './spaces';
+  MirroredRepeat2DNode, LimitedRepeat2DNode, AngularRepeat2DNode, CrtScreenNode, LensDistortionNode, TurbulenceNode, ChaosLayersNode } from './spaces';
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 import { SdSegmentNode, SdEllipseNode, SdfOffsetNode, SdfSharpenNode } from './sdf';
 import {
@@ -208,16 +208,16 @@ import {
   SDFUnionNode, SDFSubtractNode, SDFIntersectNode,
   SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
-  MirroredRepeat3DNode, SdCrossNode, MengerSpongeNode,
+  MirroredRepeat3DNode, VoxelizeNode, SdCrossNode, MengerSpongeNode,
   SphereInvert3DNode, Shear3DNode, Kaleidoscope3DNode,
   MobiusWarp3DNode, LogPolarWarp3DNode, HelixWarp3DNode,
   GyroidFieldNode, SchwarzPFieldNode,
-  MirrorFold3DNode, DomainWarp3DNode,
+  MirrorFold3DNode, DomainWarp3DNode, Turbulence3DNode,
 } from './sdf3d';
 import { ScenePosNode, SceneGroupNode, SceneOutputNode, SpaceWarpGroupNode, RayRenderNode, RayMarchNode, MarchCameraNode, ForwardCameraNode, MarchPosNode, MarchDistNode, MarchWarpOutputNode, MarchLoopGroupNode, MarchLoopInputsNode, MarchLoopOutputNode, MarchSceneDistNode, GILitMarchGroupNode, VolumeGlowNode } from './scene3d';
 import { PaletteNode, GradientNode, HSVNode, PosterizeNode, InvertNode, HueRangeNode,
   ColorRampNode, BlendModesNode, BrightnessContrastNode, BlackbodyNode,
-  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, OklabMixNode } from './color';
+  LiftGammaGainNode, HueRotateNode, SaturationNode, ShadowsHighlightsNode, ToneCurveNode, OklabMixNode, ColorPickerNode, ColorizeNode, StopPaletteNode } from './color';
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
@@ -348,8 +348,13 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   glowToColor: GlowToColorNode,
   crtMask: CrtMaskNode,
   oklabMix: OklabMixNode,
+  colorPicker: ColorPickerNode,
+  colorize: ColorizeNode,
+  stopPalette: StopPaletteNode,
   crtScreen: CrtScreenNode,
   lensDistortion: LensDistortionNode,
+  turbulence: TurbulenceNode,
+  chaosLayers: ChaosLayersNode,
   normalToColor: NormalToColorNode,
   rotationMatrix: RotationMatrixNode,
   volumeGlow: VolumeGlowNode,
@@ -489,6 +494,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   polarRepeat3D: PolarRepeat3DNode,
   displace3D: Displace3DNode,
   mirroredRepeat3D: MirroredRepeat3DNode,
+  voxelize: VoxelizeNode,
   sdCross3D: SdCrossNode,
   mengerSponge: MengerSpongeNode,
   sphereInvert3D: SphereInvert3DNode,
@@ -502,6 +508,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   schwarzPField: SchwarzPFieldNode,
   mirrorFold3D:  MirrorFold3DNode,
   domainWarp3D:  DomainWarp3DNode,
+  turbulence3D:  Turbulence3DNode,
   // 3D Fractals (DE nodes)
   mandelboxDE: MandelboxDENode,
   kifsTetra: KIFSTetrahedronDENode,
