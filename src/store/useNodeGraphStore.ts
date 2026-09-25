@@ -20,7 +20,7 @@ import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, imp
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams } from '../nodes/definitions';
 import { paletteNodeCoeffs, STOP_PALETTE_MAX } from '../nodes/definitions/color';
-import { cosineToStops } from '../lib/palette';
+import { autoFitCosineStops, fitCosineStops } from '../lib/palette';
 import { compileGraph } from '../compiler/graphCompiler';
 import { recordGraphCompile } from '../lib/perfStats';
 import { convertFragmentShader } from '../nodes/userNodes/glslImport';
@@ -565,9 +565,11 @@ interface NodeGraphState {
   setPaletteStops: (nodeId: string, colors: Array<[number, number, number]>, opts?: { wrap?: string; blend?: string }) => number;
   /**
    * Convert a cosine Palette into a Stops Palette in place (one undo step). Its colours are
-   * sampled into `count` stops with Loop wrap, unless `colors` gives the stops outright.
+   * sampled into `count` evenly spaced Loop stops — 'auto' picks the fewest that stay within
+   * about 1% of the original — with whichever blend follows it best, unless `colors` gives
+   * the stops outright.
    */
-  convertPaletteToStops: (nodeId: string, count?: number, colors?: Array<[number, number, number]>, opts?: { wrap?: string; blend?: string }) => boolean;
+  convertPaletteToStops: (nodeId: string, count?: number | 'auto', colors?: Array<[number, number, number]>, opts?: { wrap?: string; blend?: string }) => boolean;
   /** Remove every wire leaving `nodeId.outputKey` at the level being edited (one undo step). Returns how many were removed. */
   disconnectOutput: (nodeId: string, outputKey: string) => number;
 
@@ -3662,18 +3664,34 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return picked.length;
   },
 
-  convertPaletteToStops: (nodeId, count = 8, given, opts) => {
+  convertPaletteToStops: (nodeId, count = 'auto', given, opts) => {
     const st = get();
     const old = nodeInScope(st, nodeId);
     const def = getNodeDefinition('stopPalette');
     if (!old || old.type !== 'palette' || !def) return false;
-    const n = Math.max(2, Math.min(STOP_PALETTE_MAX, given ? given.length : count));
-    const colors = given ? given.slice(0, n) : cosineToStops(paletteNodeCoeffs(old.params), n);
+    let colors: Array<[number, number, number]>;
+    let blend = opts?.blend ?? 'smooth';
+    // When the stops span several Angle units (a palette that repeats every 2, say), Scale and
+    // Speed shrink by the same factor so the result cycles exactly as fast as the cosine did.
+    let period = 1;
+    if (given) {
+      colors = given.slice(0, STOP_PALETTE_MAX);
+    } else {
+      const coeffs = paletteNodeCoeffs(old.params);
+      const fit = count === 'auto'
+        ? autoFitCosineStops(coeffs, STOP_PALETTE_MAX)
+        : fitCosineStops(coeffs, Math.max(2, Math.min(STOP_PALETTE_MAX, count)));
+      colors = fit.stops;
+      blend = opts?.blend ?? fit.blend;
+      period = fit.period;
+    }
+    const n = colors.length;
+    const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
     const params: Record<string, unknown> = {
       ...(def.defaultParams ?? {}),
       value: old.params.value ?? 0, anim: old.params.anim ?? 0,
-      scale: old.params.scale ?? 1, speed: old.params.speed ?? 1,
-      stops: String(n), wrap: opts?.wrap ?? 'loop', blend: opts?.blend ?? 'smooth',
+      scale: num(old.params.scale, 1) / period, speed: num(old.params.speed, 1) / period,
+      stops: String(n), wrap: opts?.wrap ?? 'loop', blend,
     };
     colors.forEach((c, i) => { params[`color${i}`] = c; });
     // Same id and the same socket keys (value, anim → color), so wires in and out survive untouched.

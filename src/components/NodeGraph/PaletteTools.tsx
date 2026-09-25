@@ -5,7 +5,8 @@
  *   Save        name and keep this palette
  *   Paste       read a palette from text: hex codes, a coolors.co link, rgb(), JSON…
  *   Copy hex    (Stops Palette) the stops as a hex list, to paste elsewhere
- *   → Stops     (Palette) convert this cosine palette into editable colour stops
+ *   → Stops ▾   (Palette) convert this cosine palette into editable colour stops:
+ *               Auto picks the fewest stops within ~1% of the original, or pick a count
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -20,9 +21,14 @@ import { toast } from '../ui/toastStore';
 import { paletteNodeCoeffs, STOP_PALETTE_MAX } from '../../nodes/definitions/color';
 import { getNodeDefinition } from '../../nodes/definitions';
 import {
-  parsePaletteText, rgbToHex, cosineToStops, loadPalettePresets, savePalettePreset, deletePalettePreset,
-  PALETTE_PRESETS_CHANGED, type PalettePresetRecord, type RGB,
+  parsePaletteText, rgbToHex, autoFitCosineStops, fitCosineStops, loadPalettePresets, savePalettePreset, deletePalettePreset,
+  PALETTE_PRESETS_CHANGED, PASTE_FORMATS, type PalettePresetRecord, type RGB,
 } from '../../lib/palette';
+
+const pct = (e: number) => (e < 0.001 ? '<0.1%' : `${(e * 100).toFixed(e < 0.1 ? 1 : 0)}%`);
+/** How the stops cover the palette, in a few words. */
+const coverage = (f: { period: number; seamless: boolean }) =>
+  !f.seamless ? 'one trip — this palette never repeats exactly' : f.period > 1 ? `loops every ${f.period} (its full repeat)` : 'loops exactly';
 
 /** The stop colours a Stops Palette node currently has, in order. */
 function stopsOf(node: GraphNode): RGB[] {
@@ -62,8 +68,12 @@ export function PaletteTools({ node }: { node: GraphNode }) {
   // ── Presets ─────────────────────────────────────────────────────────────────
   const applyPreset = (p: PalettePresetRecord) => {
     if (isStops) {
-      const colors = p.kind === 'stops' ? p.stops ?? [] : p.cosine ? cosineToStops(p.cosine, 8) : [];
-      useNodeGraphStore.getState().setPaletteStops(node.id, colors, { wrap: p.kind === 'cosine' ? 'loop' : p.wrap, blend: p.kind === 'cosine' ? 'smooth' : p.blend });
+      if (p.kind === 'cosine' && p.cosine) {
+        const fit = autoFitCosineStops(p.cosine, STOP_PALETTE_MAX);
+        useNodeGraphStore.getState().setPaletteStops(node.id, fit.stops, { wrap: 'loop', blend: fit.blend });
+      } else {
+        useNodeGraphStore.getState().setPaletteStops(node.id, p.stops ?? [], { wrap: p.wrap, blend: p.blend });
+      }
       return;
     }
     if (p.kind === 'cosine' && p.cosine) {
@@ -83,7 +93,7 @@ export function PaletteTools({ node }: { node: GraphNode }) {
     if (own.length && other.length) items.push('separator');
     for (const p of other) items.push({
       label: p.name, icon: 'presets',
-      hint: isStops ? 'from a Palette · sampled into 8 stops' : 'stops · converts this node',
+      hint: isStops ? 'from a Palette · auto-fitted into stops' : 'stops · converts this node',
       onSelect: () => applyPreset(p),
     });
     if (items.length === 0) items.push({ label: 'No saved palettes yet — use Save', disabled: true, onSelect: () => {} });
@@ -141,13 +151,29 @@ export function PaletteTools({ node }: { node: GraphNode }) {
     );
   };
 
-  const toStops = () => {
-    if (useNodeGraphStore.getState().convertPaletteToStops(node.id, 8)) {
+  const toStops = (count: number | 'auto') => {
+    const coeffs = paletteNodeCoeffs(node.params);
+    const fit = count === 'auto' ? autoFitCosineStops(coeffs, STOP_PALETTE_MAX) : fitCosineStops(coeffs, count);
+    if (useNodeGraphStore.getState().convertPaletteToStops(node.id, count)) {
       const wired = ['offset', 'amplitude', 'freq', 'phase'].some(k => node.inputs[k]?.connection);
-      toast.success('Converted to a Stops Palette', {
-        message: `8 stops sampled from this palette; every colour is now its own swatch.${wired ? ' Wires into Offset / Amplitude / Frequency / Phase were dropped — their current values were sampled.' : ''} Undo to go back.`,
+      toast.success(`Converted to ${fit.stops.length} stops`, {
+        message: `Largest colour difference from the original: ${pct(fit.error)}; ${coverage(fit)}${fit.period > 1 ? `, so Scale and Speed were divided by ${fit.period}` : ''}. Blend: ${fit.blend === 'curve' ? 'Curve' : 'Linear'}. Every colour is now its own swatch.${wired ? ' Wires into Offset / Amplitude / Frequency / Phase were dropped — their current values were sampled.' : ''} Undo to go back.`,
       });
     }
+  };
+  /** The fidelity choices, each with how closely it matches the palette. */
+  const toStopsItems = (): MenuItem[] => {
+    const coeffs = paletteNodeCoeffs(node.params);
+    const auto = autoFitCosineStops(coeffs, STOP_PALETTE_MAX);
+    const items: MenuItem[] = [
+      { label: `Auto — ${auto.stops.length} stops`, icon: 'spark', hint: `max error ${pct(auto.error)} · ${coverage(auto)}`, onSelect: () => toStops('auto') },
+      'separator',
+    ];
+    for (const n of [4, 8, 12, 16, 24, 32]) {
+      const fit = fitCosineStops(coeffs, n);
+      items.push({ label: `${n} stops`, hint: `max error ${pct(fit.error)}`, onSelect: () => toStops(n) });
+    }
+    return items;
   };
 
   return (
@@ -164,7 +190,7 @@ export function PaletteTools({ node }: { node: GraphNode }) {
       </span>
       {isStops
         ? <Button size="sm" variant="ghost" icon="copy" onClick={copyHex} title="Copy the stops as a hex list">Copy hex</Button>
-        : <Button size="sm" variant="ghost" icon="spark" onClick={toStops} title="Turn this cosine palette into editable colour stops">→ Stops</Button>}
+        : <Button size="sm" variant="ghost" icon="spark" onClick={e => openMenuAt(e, toStopsItems())} title="Turn this cosine palette into editable colour stops — Auto, or choose how many">→ Stops</Button>}
 
       {menu && <Menu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} minWidth={220} />}
 
@@ -172,6 +198,14 @@ export function PaletteTools({ node }: { node: GraphNode }) {
         <Popover anchorRef={pasteBtn} clearRef={cardRef} onClose={() => setPasteOpen(false)} padding={10}>
           <div style={{ width: 280, display: 'flex', flexDirection: 'column', gap: 8 }} onPointerDown={e => e.stopPropagation()}>
             <div style={{ fontWeight: 600 }}>Paste a palette</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }} aria-label="Accepted formats">
+              {PASTE_FORMATS.map(f => (
+                <span key={f.label} title={f.example} style={{
+                  font: `500 10.5px ${fontFamily.mono}`, padding: '2px 6px', borderRadius: 999, cursor: 'help',
+                  background: tk.bg.field, color: tk.text.muted,
+                }}>{f.label}</span>
+              ))}
+            </div>
             <textarea
               autoFocus
               value={pasteText}
@@ -194,7 +228,7 @@ export function PaletteTools({ node }: { node: GraphNode }) {
               </>
             )}
             {parsed && !parsed.ok && <div style={{ fontSize: 11.5, color: tk.status.danger, whiteSpace: 'normal' }}>{parsed.error}</div>}
-            {!parsed && <div style={{ fontSize: 11.5, color: tk.text.faint, whiteSpace: 'normal' }}>Hex codes in any layout, a coolors.co link, CSS rgb()/hsl(), GLSL vec3(), a JSON list, or lines of “R G B”.</div>}
+            {!parsed && <div style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'normal' }}>Any of the formats above — hover one for an example. Mixed formats are read in order.</div>}
             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
               <Button size="sm" variant="ghost" onClick={() => setPasteOpen(false)}>Cancel</Button>
               <Button size="sm" variant="primary" disabled={!parsed?.ok || parsed.colors.length < 2} onClick={applyPaste}>

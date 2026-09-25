@@ -128,14 +128,23 @@ describe('palette conversion', () => {
     expect(p.type).toBe('palette');
   });
 
-  it('thins a palette longer than twelve stops evenly, keeping both ends', () => {
+  it('thins a palette longer than 32 stops evenly, keeping both ends', () => {
     useNodeGraphStore.setState({ nodes: withPalette(pal('p', 'stopPalette', { stops: '5' })) });
-    const many = Array.from({ length: 20 }, (_, i) => [i / 19, 0, 0] as [number, number, number]);
-    expect(useNodeGraphStore.getState().setPaletteStops('p', many)).toBe(12);
+    const many = Array.from({ length: 40 }, (_, i) => [i / 39, 0, 0] as [number, number, number]);
+    expect(useNodeGraphStore.getState().setPaletteStops('p', many)).toBe(32);
     const p = useNodeGraphStore.getState().nodes.find(n => n.id === 'p')!;
-    expect(p.params.stops).toBe('12');
+    expect(p.params.stops).toBe('32');
     expect((p.params.color0 as number[])[0]).toBe(0);
-    expect((p.params.color11 as number[])[0]).toBe(1);
+    expect((p.params.color31 as number[])[0]).toBe(1);
+  });
+
+  it('Auto conversion of a palette that repeats every 2 spans both halves and halves Scale and Speed', () => {
+    // preset 3 = IQ Lemon (blue channel at frequency 0.5)
+    useNodeGraphStore.setState({ nodes: withPalette(pal('p', 'palette', { preset: '3', scale: 1, speed: 0.4, value: 0, anim: 0 })) });
+    expect(useNodeGraphStore.getState().convertPaletteToStops('p', 'auto')).toBe(true);
+    const p = useNodeGraphStore.getState().nodes.find(n => n.id === 'p')!;
+    expect(p.params).toMatchObject({ scale: 0.5, speed: 0.2, wrap: 'loop', blend: 'curve' });
+    expect(Number(p.params.stops)).toBeGreaterThan(8);
   });
 });
 

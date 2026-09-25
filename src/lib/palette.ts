@@ -99,6 +99,17 @@ function fromJson(value: unknown): RGB[] | null {
   return out.length ? out : null;
 }
 
+/** The paste formats, compactly, with an example each (shown as chips in the paste box). */
+export const PASTE_FORMATS: ReadonlyArray<{ label: string; example: string }> = [
+  { label: '#hex', example: '#264653 2a9d8f #e9c46a — any separators, 3/6/8 digits, 0xff8800' },
+  { label: 'coolors', example: 'https://coolors.co/264653-2a9d8f-e9c46a' },
+  { label: 'rgb()', example: 'rgb(38, 70, 83)  rgba(0,255,0,.5)  rgb(100% 50% 0%)' },
+  { label: 'hsl()', example: 'hsl(200, 40%, 30%)' },
+  { label: 'vec3()', example: 'vec3(0.15, 0.27, 0.33)' },
+  { label: 'JSON', example: '["#264653", …]  [[38,70,83], …]  {"colors": […]}' },
+  { label: 'R G B', example: 'Lines of three numbers, e.g. a GIMP .gpl: 38 70 83 Charcoal' },
+];
+
 /** Colour tokens in reading order: CSS functions, vec3(), #hex / 0xhex, then bare 6-digit hex words. */
 const TOKEN_RE = /\b(rgba?)\(([^)]*)\)|\b(hsla?)\(([^)]*)\)|\bvec[34]\(([^)]*)\)|(?:#|\b0x)([0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4})\b|(?<![\w#-])([0-9a-f]{6})(?![\w-])/gi;
 
@@ -152,12 +163,134 @@ export function cosineColor(c: CosineCoeffs, t: number): RGB {
 }
 
 /**
- * Sample a cosine palette into `count` evenly spaced stops over one trip
- * (t = 0 … (count-1)/count), for a Stops Palette in Loop mode: the last stop
- * then blends back into the first exactly where the cosine wraps.
+ * Sample a cosine palette into `count` evenly spaced stops over `period`
+ * (t = 0 … period·(count-1)/count), for a Stops Palette in Loop mode: when
+ * `period` is the palette's true repeat length the last stop blends back into
+ * the first exactly where the cosine repeats.
  */
-export function cosineToStops(c: CosineCoeffs, count = 8): RGB[] {
-  return Array.from({ length: count }, (_, i) => cosineColor(c, i / count).map(clamp01) as RGB);
+export function cosineToStops(c: CosineCoeffs, count = 8, period = 1): RGB[] {
+  return Array.from({ length: count }, (_, i) => cosineColor(c, (i / count) * period).map(clamp01) as RGB);
+}
+
+/**
+ * The shortest whole-number Angle span after which the cosine palette repeats
+ * exactly: every channel's frequency × span is a whole number (a flat channel
+ * doesn't count). IQ-style palettes (freq 1) repeat every 1; freq 0.5 needs 2;
+ * Sunset's 1 / 0.7 / 0.4 needs 10. Null when nothing up to `maxPeriod` works.
+ */
+export function cosinePeriod(c: CosineCoeffs, maxPeriod = 10, tol = 0.01): number | null {
+  for (let P = 1; P <= maxPeriod; P++) {
+    const repeats = [0, 1, 2].every(i => {
+      if (Math.abs(c.amplitude[i]) < 1e-6) return true;
+      const x = Math.abs(c.freq[i]) * P;
+      return Math.abs(x - Math.round(x)) < tol;
+    });
+    if (repeats) return P;
+  }
+  return null;
+}
+
+// ─── Evaluating a Stops Palette (mirrors its GLSL) ─────────────────────────────
+
+export type StopWrap = 'loop' | 'mirror' | 'clamp';
+export type StopBlend = 'smooth' | 'linear' | 'curve' | 'bands';
+
+/** Catmull-Rom through p1 → p2, shaped by the neighbours p0 and p3: passes through every stop with no flat spots. */
+function catmull(p0: number, p1: number, p2: number, p3: number, f: number): number {
+  return 0.5 * (2 * p1 + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f);
+}
+
+/** The colour a Stops Palette gives at `t`, exactly as its shader computes it. */
+export function evalStops(stops: RGB[], t: number, wrap: string = 'loop', blend: string = 'smooth'): RGB {
+  const n = stops.length;
+  if (n === 0) return [0, 0, 0];
+  if (n === 1) return stops[0];
+  const fract = (x: number) => x - Math.floor(x);
+  const loop = wrap === 'loop';
+  const segs = loop ? n : n - 1;
+  const u = loop ? fract(t) : wrap === 'mirror' ? Math.abs(fract(t * 0.5) * 2 - 1) : clamp01(t);
+  const x = Math.min(u * segs, segs - 0.0001);
+  const k = Math.floor(x), f = x - k;
+  const at = (i: number) => stops[loop ? ((i % n) + n) % n : Math.max(0, Math.min(n - 1, i))];
+  const a = at(k), b = at(k + 1);
+  if (blend === 'curve') {
+    const p0 = at(k - 1), p3 = at(k + 2);
+    return [0, 1, 2].map(c => catmull(p0[c], a[c], b[c], p3[c], f)) as RGB;
+  }
+  const w = blend === 'bands' ? 0 : blend === 'linear' ? f : f * f * (3 - 2 * f);
+  return [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w];
+}
+
+// ─── Fitting a cosine palette with stops ──────────────────────────────────────
+
+/**
+ * How far a set of stops strays from the cosine palette: the largest channel
+ * difference, 0–1, with the stops spanning `period` of the cosine's Angle.
+ * `seamless: false` leaves out the last segment, where a palette that never
+ * repeats has to blend back to the start (that seam is unavoidable, not a miss).
+ */
+export function stopsError(c: CosineCoeffs, stops: RGB[], blend: StopBlend, period = 1, seamless = true, samples = 384): number {
+  let worst = 0;
+  const end = seamless ? 1 : 1 - 1 / stops.length;
+  for (let i = 0; i < samples; i++) {
+    const u = (i / samples) * end;
+    const want = cosineColor(c, u * period).map(clamp01);
+    const got = evalStops(stops, u, 'loop', blend);
+    for (let ch = 0; ch < 3; ch++) worst = Math.max(worst, Math.abs(clamp01(got[ch]) - want[ch]));
+  }
+  return worst;
+}
+
+export interface StopsFit {
+  stops: RGB[];
+  blend: StopBlend;
+  /** Largest channel difference from the cosine palette, 0–1. */
+  error: number;
+  /**
+   * Angle span the stops cover. The converted node's Scale and Speed are divided by it,
+   * so the stops cycle exactly as fast as the cosine palette did.
+   */
+  period: number;
+  /** False when the palette never repeats: the stops follow one trip and blend back at the seam. */
+  seamless: boolean;
+}
+
+function bestBlend(c: CosineCoeffs, count: number, period: number, seamless: boolean): StopsFit {
+  const stops = cosineToStops(c, count, period);
+  const curve = stopsError(c, stops, 'curve', period, seamless);
+  const linear = stopsError(c, stops, 'linear', period, seamless);
+  return curve <= linear
+    ? { stops, blend: 'curve', error: curve, period, seamless }
+    : { stops, blend: 'linear', error: linear, period, seamless };
+}
+
+/**
+ * `count` evenly spaced stops with whichever blend (Curve or Linear) follows the palette more
+ * closely. When the palette repeats (see cosinePeriod) the stops span a whole repeat so they
+ * loop exactly; if that repeat is too long for `count` stops to follow, one trip is used instead.
+ */
+export function fitCosineStops(c: CosineCoeffs, count: number): StopsFit {
+  const P = cosinePeriod(c);
+  if (P === 1) return bestBlend(c, count, 1, true);
+  const oneTrip = bestBlend(c, count, 1, false);
+  if (P === null) return oneTrip;
+  const full = bestBlend(c, count, P, true);
+  return full.error <= Math.max(oneTrip.error, 0.02) ? full : oneTrip;
+}
+
+/**
+ * The fewest evenly spaced stops that reproduce the cosine palette within
+ * `tolerance` (largest channel error, 0–1; 0.01 ≈ 2.5/255). Falls back to
+ * `maxStops` when even that isn't close enough (e.g. very high frequencies).
+ */
+export function autoFitCosineStops(c: CosineCoeffs, maxStops: number, tolerance = 0.01): StopsFit {
+  let best: StopsFit | null = null;
+  for (let n = 3; n <= maxStops; n++) {
+    const fit = fitCosineStops(c, n);
+    if (!best || fit.error < best.error) best = fit;
+    if (fit.error <= tolerance) return fit;
+  }
+  return best ?? fitCosineStops(c, maxStops);
 }
 
 // ─── User presets ─────────────────────────────────────────────────────────────

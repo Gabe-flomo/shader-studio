@@ -10,7 +10,8 @@ vi.hoisted(() => {
 });
 (globalThis as unknown as { __ps?: Map<string, string> }).__ps = store;
 
-import { parsePaletteText, rgbToHex, cosineColor, cosineToStops, loadPalettePresets, savePalettePreset, deletePalettePreset } from '../palette';
+import { parsePaletteText, rgbToHex, cosineColor, cosineToStops, loadPalettePresets, savePalettePreset, deletePalettePreset, evalStops, cosinePeriod, autoFitCosineStops, fitCosineStops, PASTE_FORMATS } from '../palette';
+import { PALETTE_PRESETS } from '../../nodes/definitions/color';
 
 const hexes = (text: string) => {
   const r = parsePaletteText(text);
@@ -68,6 +69,52 @@ describe('cosine palette → stops', () => {
     stops[1].forEach((v, i) => expect(v).toBeCloseTo(Math.max(0, Math.min(1, expected[i])), 6));
     // t = 0 of a (0.5, 0.5, 1, 0) red channel is 1.0
     expect(stops[0][0]).toBeCloseTo(1, 6);
+  });
+});
+
+describe('fitting stops to a cosine palette', () => {
+  const coeffs = (name: string) => { const p = PALETTE_PRESETS.find(x => x.name === name)!; return { offset: p.offset, amplitude: p.amplitude, freq: p.freq, phase: p.phase }; };
+
+  it('Curve passes through every stop; the evaluator matches the node at the stops', () => {
+    const stops: [number, number, number][] = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0]];
+    for (let i = 0; i < 4; i++) {
+      for (const blend of ['curve', 'linear', 'smooth']) expect(evalStops(stops, i / 4, 'loop', blend)).toEqual(stops[i]);
+    }
+    // Loop blends the last stop back into the first
+    const nearEnd = evalStops(stops, 0.999, 'loop', 'linear');
+    expect(nearEnd[0]).toBeCloseTo(1, 1);
+  });
+
+  it('finds how long a palette takes to repeat', () => {
+    expect(cosinePeriod(coeffs('IQ Rainbow'))).toBe(1);
+    expect(cosinePeriod(coeffs('IQ Lemon'))).toBe(2);      // freq 0.5 on blue
+    expect(cosinePeriod(coeffs('Sunset'))).toBe(10);       // 1, 0.7, 0.4
+    expect(cosinePeriod(coeffs('Psychedelic'))).toBeNull();
+  });
+
+  it('Auto fits every built-in preset within ~1% using at most 32 stops', () => {
+    for (const p of PALETTE_PRESETS) {
+      const fit = autoFitCosineStops(coeffs(p.name), 32);
+      expect(fit.error, p.name).toBeLessThanOrEqual(0.01);
+      expect(fit.stops.length, p.name).toBeLessThanOrEqual(32);
+    }
+    const rainbow = autoFitCosineStops(coeffs('IQ Rainbow'), 32);
+    expect(rainbow).toMatchObject({ period: 1, seamless: true, blend: 'curve' });
+    expect(rainbow.stops.length).toBeLessThan(10);
+    // IQ Lemon repeats every 2: its stops span both halves so they loop exactly
+    expect(autoFitCosineStops(coeffs('IQ Lemon'), 32)).toMatchObject({ period: 2, seamless: true });
+    // A palette that never repeats is fitted over one trip
+    expect(autoFitCosineStops(coeffs('Psychedelic'), 32)).toMatchObject({ period: 1, seamless: false });
+  });
+
+  it('more stops never follow the palette worse by much, and Curve beats the old Smooth sampling', () => {
+    const c = coeffs('Fire');
+    expect(fitCosineStops(c, 32).error).toBeLessThan(fitCosineStops(c, 8).error);
+    expect(fitCosineStops(c, 8).error).toBeLessThan(0.05);
+  });
+
+  it('lists the paste formats compactly', () => {
+    expect(PASTE_FORMATS.map(f => f.label)).toEqual(['#hex', 'coolors', 'rgb()', 'hsl()', 'vec3()', 'JSON', 'R G B']);
   });
 });
 

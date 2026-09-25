@@ -181,18 +181,20 @@ export function paletteNodeCoeffs(params: Record<string, unknown>): { offset: [n
 // same Angle / Angle offset / Scale / Speed as Palette, so Time on Angle
 // offset cycles it; Loop wraps the last stop back to the first so it cycles
 // without a seam.
-export const STOP_PALETTE_MAX = 12;
+export const STOP_PALETTE_MAX = 32;
 const STOP_PALETTE_DEFAULTS: number[][] = [
   [0.16, 0.07, 0.35], [0.72, 0.13, 0.52], [0.98, 0.45, 0.22], [0.99, 0.84, 0.38],
   [0.18, 0.62, 0.67], [0.35, 0.80, 0.45], [0.20, 0.35, 0.85], [0.95, 0.95, 0.95],
   [0.55, 0.20, 0.20], [0.90, 0.60, 0.70], [0.40, 0.30, 0.15], [0.10, 0.10, 0.12],
 ];
+/** Default colour for stop `i` (the 12 above, repeated). */
+const stopDefault = (i: number) => STOP_PALETTE_DEFAULTS[i % STOP_PALETTE_DEFAULTS.length];
 export const StopPaletteNode: NodeDefinition = {
   type: 'stopPalette',
   label: 'Stops Palette', aliases: ['palette creator', 'palette builder', 'custom palette', 'color stops', 'colour stops', 'gradient palette', 'cycle colors', 'paste palette', 'hex palette', 'coolors'],
   category: 'Color', subcategory: 'Palette',
   description:
-    'A palette made from your own colour stops (up to 12). Angle picks where on it to sample; wire Time into Angle offset to cycle through the colours. ' +
+    'A palette made from your own colour stops (up to 32). Angle picks where on it to sample; wire Time into Angle offset to cycle through the colours. ' +
     'Paste a palette from anywhere (hex codes, a coolors.co link, rgb() values) and save your own presets from the tools under the stops. ' +
     'Loop joins the last stop back to the first so cycling never jumps; Mirror runs there and back; Clamp holds the ends. Blend chooses smooth, linear or hard bands.',
   inputs: {
@@ -200,17 +202,22 @@ export const StopPaletteNode: NodeDefinition = {
     anim:  { type: 'float', label: 'Angle offset', defaultValue: 0, hint: 'Added to Angle. Wire Time here to cycle the colours.' },
   },
   outputs: { color: { type: 'vec3', label: 'Color' } },
+  // Catmull-Rom through the stops, for Blend: Curve
+  glslFunction: `
+vec3 stopPaletteCurve(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t) {
+    return 0.5 * (2.0 * p1 + (p2 - p0) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t * t + (3.0 * p1 - p0 - 3.0 * p2 + p3) * t * t * t);
+}`,
   defaultParams: {
     value: 0, anim: 0, scale: 1.0, speed: 0.2, stops: '5', wrap: 'loop', blend: 'smooth',
-    ...Object.fromEntries(STOP_PALETTE_DEFAULTS.map((c, i) => [`color${i}`, c])),
+    ...Object.fromEntries(Array.from({ length: STOP_PALETTE_MAX }, (_, i) => [`color${i}`, stopDefault(i)])),
   },
   paramDefs: {
     stops: { label: 'Stops', type: 'select', hint: 'How many colours. Stops are evenly spaced along the palette. Paste a palette (below) to fill them from hex codes or a link.', options: Array.from({ length: STOP_PALETTE_MAX - 1 }, (_, i) => ({ value: String(i + 2), label: String(i + 2) })) },
     wrap:  { label: 'Wrap', type: 'select', hint: 'Past the last stop: Loop blends back to the first (seamless cycling), Mirror runs back down, Clamp holds the end colours.', options: [
       { value: 'loop', label: 'Loop' }, { value: 'mirror', label: 'Mirror' }, { value: 'clamp', label: 'Clamp' },
     ] },
-    blend: { label: 'Blend', type: 'select', hint: 'How neighbouring stops meet: Smooth eases, Linear is a straight mix, Bands is hard steps.', options: [
-      { value: 'smooth', label: 'Smooth' }, { value: 'linear', label: 'Linear' }, { value: 'bands', label: 'Bands' },
+    blend: { label: 'Blend', type: 'select', hint: 'How neighbouring stops meet: Smooth eases in and out of each stop, Curve flows through every stop without flat spots (best for gradients converted from a Palette), Linear is a straight mix, Bands is hard steps.', options: [
+      { value: 'smooth', label: 'Smooth' }, { value: 'curve', label: 'Curve' }, { value: 'linear', label: 'Linear' }, { value: 'bands', label: 'Bands' },
     ] },
     value: { label: 'Angle',        type: 'float', min: 0, max: 1, step: 0.01, hint: 'Where to sample when nothing is wired.' },
     anim:  { label: 'Angle offset', type: 'float', min: 0, max: 10, step: 0.1, hint: 'Only added to Angle. Wire Time here to animate.' },
@@ -231,7 +238,7 @@ export const StopPaletteNode: NodeDefinition = {
     const t = `(${valRaw} * ${p(node.params.scale, 1.0)} + ${offRaw} * ${p(node.params.speed, 0.2)})`;
     const lines: string[] = [];
     for (let i = 0; i < n; i++) {
-      const fallback = STOP_PALETTE_DEFAULTS[i] ?? [0.5, 0.5, 0.5];
+      const fallback = stopDefault(i);
       lines.push(`    vec3 ${id}_c${i} = ${pv3(node.params[`color${i}`], fallback)};\n`);
     }
     // Position along the stops: Loop has n segments (last → first), the others n - 1.
@@ -240,10 +247,14 @@ export const StopPaletteNode: NodeDefinition = {
     lines.push(`    float ${id}_x = min(${u} * ${segs}.0, ${segs}.0 - 0.0001);\n`);
     lines.push(`    float ${id}_f = fract(${id}_x);\n`);
     const w = blend === 'bands' ? '0.0' : blend === 'linear' ? `${id}_f` : `${id}_f * ${id}_f * (3.0 - 2.0 * ${id}_f)`;
+    // Neighbour index: Loop wraps around, Mirror / Clamp hold the end stops.
+    const at = (i: number) => (wrap === 'loop' ? ((i % n) + n) % n : Math.max(0, Math.min(n - 1, i)));
     lines.push(`    vec3 ${id}_color = ${id}_c0;\n`);
     for (let k = 0; k < segs; k++) {
-      const next = (k + 1) % n;
-      lines.push(`    if (${id}_x >= ${k}.0) ${id}_color = mix(${id}_c${k}, ${id}_c${next}, ${w});\n`);
+      const seg = blend === 'curve'
+        ? `stopPaletteCurve(${id}_c${at(k - 1)}, ${id}_c${at(k)}, ${id}_c${at(k + 1)}, ${id}_c${at(k + 2)}, ${id}_f)`
+        : `mix(${id}_c${at(k)}, ${id}_c${at(k + 1)}, ${w})`;
+      lines.push(`    if (${id}_x >= ${k}.0) ${id}_color = ${seg};\n`);
     }
     return { code: lines.join(''), outputVars: { color: `${id}_color` } };
   },
