@@ -11449,12 +11449,15 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     counter: 10,
     play: {
       version: 1,
-      layers: [],
+      layers: [
+        { id: 'dust', kind: 'particles', label: 'Dust', visible: true, count: 500, speed: 0.8, size: 1.5, opacity: 0.55, color: [1, 1, 1], colorFromPicture: true, mode: 'climb', turns: 1, trail: 0.7, blend: 'add' },
+      ],
       controls: [
         { id: 'threshold', target: 'thr::threshold', kind: 'float', label: 'Blob threshold', min: 0.2, max: 1.2 },
         { id: 'softness', target: 'thr::softness', kind: 'float', label: 'Edge softness', min: 0.01, max: 0.2 },
         { id: 'tight', target: 'g2::k', kind: 'float', label: 'Second blob tightness', min: 0.5, max: 6 },
         { id: 'pinkR', target: 'pink::r', kind: 'float', label: 'Pink · red', min: 0, max: 1 },
+        { id: 'dustSpeed', target: 'layer:dust::speed', kind: 'float', label: 'Dust · speed', min: 0, max: 3 },
       ],
       mappings: [
         { id: 'drift', controlId: 'threshold', source: { kind: 'lfo', shape: 'triangle', rate: 0.08, phase: 0 }, outMin: 0.35, outMax: 0.65, curve: 'linear', smoothMs: 0, enabled: true },
@@ -12124,16 +12127,21 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     counter: 13,
     play: {
       version: 1,
-      layers: [],
+      layers: [
+        { id: 'word', kind: 'text', label: 'Word', visible: true, text: 'BEAT', x: 0.5, y: 0.5, size: 0.42, rotation: 0, opacity: 1, color: [1, 1, 1], font: 'sans', weight: 700, blend: 'normal', matte: 'luma' },
+        { id: 'pin', kind: 'null', label: 'Pin', visible: true, x: 0.5, y: 0.8, size: 9, color: '#f9a86b' },
+      ],
       controls: [
         { id: 'width', target: 'box::width', kind: 'float', label: 'Cell width', min: 0.05, max: 1 },
         { id: 'height', target: 'box::height', kind: 'float', label: 'Cell height', min: 0.05, max: 1 },
         { id: 'palScale', target: 'pal::scale', kind: 'float', label: 'Palette scale', min: -3, max: 3 },
+        { id: 'wordSize', target: 'layer:word::size', kind: 'float', label: 'Word · size', min: 0.02, max: 1 },
       ],
       mappings: [
         { id: 'beat', controlId: 'width', source: { kind: 'clock', shape: 'random', bpm: 120, beats: 1 }, outMin: 0.15, outMax: 0.5, curve: 'linear', smoothMs: 90, enabled: true },
         { id: 'aspect', controlId: 'height', source: { kind: 'control', controlId: 'width' }, outMin: 0.5, outMax: 0.15, curve: 'linear', smoothMs: 0, enabled: true },
-        { id: 'sweep', controlId: 'palScale', source: { kind: 'lfo', shape: 'sine', rate: 0.05, phase: 0.25 }, outMin: -1, outMax: 1, curve: 'linear', smoothMs: 0, enabled: true },
+        { id: 'sweep', controlId: 'palScale', source: { kind: 'null', layerId: 'pin', axis: 'x' }, outMin: -2, outMax: 2, curve: 'linear', smoothMs: 60, enabled: true },
+        { id: 'pulse', controlId: 'wordSize', source: { kind: 'clock', shape: 'saw', bpm: 120, beats: 4 }, outMin: 0.5, outMax: 0.36, curve: 'exp', smoothMs: 40, enabled: true },
       ],
     },
     nodes: [
