@@ -21,6 +21,9 @@
 import { inputBus, paramChannelKey, type InputSource, type InputWriter } from './inputBus';
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { audioEngine } from './audioEngine';
+import { oscClient, oscNumber, type OscMessage } from './oscClient';
+import { beatAt, newTriggerState, noiseAt, stepTrigger, triggerKey, type TriggerState } from '../play/triggers';
+import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
 import { CURVE_POINTS, emptyPlayRecord, parseLayerTarget } from '../types/play';
 
@@ -121,7 +124,56 @@ class PlayEngine implements InputSource {
   private mouseDown = 0;
   private keysHeld = new Set<string>();
   private learnCb: ((source: PlaySource) => void) | null = null;
+  private learnTriggerCb: ((trigger: TriggerSpec) => void) | null = null;
   private learnOffMidi: (() => void) | null = null;
+  private learnOffOsc: (() => void) | null = null;
+  private frame = 0;
+
+  // ── Trigger hub: presses are counted (a tap between frames still fires), gates are held counts ──
+  private presses = new Map<string, number>();
+  private held = new Map<string, number>();
+  private velocities = new Map<string, number>();
+  private triggerStates = new Map<string, TriggerState>();
+  private triggerKeysBound = new Set<string>();
+  private oscHeld = new Set<string>();
+
+  private press(key: string, velocity = 1): void {
+    this.presses.set(key, (this.presses.get(key) ?? 0) + 1);
+    this.held.set(key, (this.held.get(key) ?? 0) + 1);
+    this.velocities.set(key, velocity);
+    if (this.triggerKeysBound.has(key)) inputBus.wake();
+  }
+
+  private release(key: string): void {
+    const n = (this.held.get(key) ?? 0) - 1;
+    if (n > 0) this.held.set(key, n); else this.held.delete(key);
+    if (this.triggerKeysBound.has(key)) inputBus.wake();
+  }
+
+  private noteKeys(channel: number, note: number): string[] {
+    return [`note:0:*`, `note:0:${note}`, `note:${channel}:*`, `note:${channel}:${note}`];
+  }
+
+  private onOsc = (m: OscMessage) => {
+    const v = oscNumber(m.args);
+    const key = `osc:${m.address}`;
+    // A message with no number is a momentary press; otherwise > 0.5 is "down".
+    if (v === null) { this.press(key); this.release(key); }
+    else if (v > 0.5 && !this.oscHeld.has(key)) { this.oscHeld.add(key); this.press(key); }
+    else if (v <= 0.5 && this.oscHeld.has(key)) { this.oscHeld.delete(key); this.release(key); }
+    if (this.oscIsBound) inputBus.wake();
+    if (this.learnCb) this.finishLearn({ kind: 'osc', address: m.address, arg: 0, min: 0, max: 1 });
+    else if (this.learnTriggerCb) this.finishLearnTrigger({ on: 'osc', address: m.address });
+  };
+  private oscIsBound = false;
+
+  constructor() {
+    midiEngine.subscribe((e: MidiEvent) => {
+      if (e.kind === 'noteOn') for (const k of this.noteKeys(e.channel, e.note)) this.press(k, e.velocity / 127);
+      else if (e.kind === 'noteOff') for (const k of this.noteKeys(e.channel, e.note)) this.release(k);
+    });
+    oscClient.subscribe(this.onOsc);
+  }
   /** Graph clock at the last tick, for LFOs and the drawer's meters. */
   private time = 0;
 
@@ -143,29 +195,54 @@ class PlayEngine implements InputSource {
     this.mouseY = Math.max(0, Math.min(1, 1 - e.clientY / h));
     if (this.mouseIsBound) inputBus.wake();
   };
-  private onPointerDown = () => { this.mouseDown = 1; if (this.mouseIsBound) inputBus.wake(); };
-  private onPointerUp = () => { this.mouseDown = 0; if (this.mouseIsBound) inputBus.wake(); };
+  private onPointerDown = (e: PointerEvent) => {
+    this.mouseDown = 1;
+    // Clicks on the picture (not on the panel) are the "mouse" trigger.
+    const onPicture = (e.target as Element | null)?.tagName === 'CANVAS';
+    if (onPicture) {
+      if (this.learnTriggerCb) { this.finishLearnTrigger({ on: 'mouse' }); return; }
+      this.press('mouse');
+      this.pictureDown = true;
+    }
+    if (this.mouseIsBound) inputBus.wake();
+  };
+  private pictureDown = false;
+  private onPointerUp = () => {
+    this.mouseDown = 0;
+    if (this.pictureDown) { this.pictureDown = false; this.release('mouse'); }
+    if (this.mouseIsBound) inputBus.wake();
+  };
   private onKeyDown = (e: KeyboardEvent) => {
     if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
-    if (this.learnCb) {
+    if (this.learnCb || this.learnTriggerCb) {
       e.preventDefault();
       e.stopPropagation();
-      if (!e.repeat) this.finishLearn({ kind: 'key', code: e.code });
+      if (e.repeat) return;
+      if (this.learnCb) this.finishLearn({ kind: 'key', code: e.code });
+      else this.finishLearnTrigger({ on: 'key', code: e.code });
       return;
     }
     if (!this.keyIsBound(e.code)) return;
     e.preventDefault();
     e.stopPropagation();
+    if (e.repeat) return;
     this.keysHeld.add(e.code);
+    this.press(`key:${e.code}`);
     inputBus.wake();
   };
   private onKeyUp = (e: KeyboardEvent) => {
     if (!this.keysHeld.delete(e.code)) return;
     e.preventDefault();
     e.stopPropagation();
+    this.release(`key:${e.code}`);
     inputBus.wake();
   };
-  private onBlur = () => { this.keysHeld.clear(); this.mouseDown = 0; };
+  private onBlur = () => {
+    for (const code of this.keysHeld) this.release(`key:${code}`);
+    this.keysHeld.clear();
+    this.mouseDown = 0;
+    if (this.pictureDown) { this.pictureDown = false; this.release('mouse'); }
+  };
 
   // ── Configuration (from the store, via ShaderCanvas) ──────────────────────
 
@@ -176,6 +253,10 @@ class PlayEngine implements InputSource {
     this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse');
     this.tiltIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'tilt');
     this.gamepadIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'gamepad');
+    this.triggerKeysBound = new Set(record.mappings.filter(m => m.enabled && m.source.kind === 'trigger').map(m => triggerKey((m.source as Extract<PlaySource, { kind: 'trigger' }>).trigger)));
+    this.oscIsBound = record.mappings.some(m => m.enabled && (m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')));
+    oscClient.setWanted(this.oscIsBound || oscClient.getStatus() === 'connected');
+    for (const id of [...this.triggerStates.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger')) this.triggerStates.delete(id);
     // Show the new state (a mapping added, removed or disabled) even while the clock is paused.
     inputBus.wake();
     // Drop state for mappings that are gone; keep the rest so a re-label doesn't jump.
@@ -247,6 +328,16 @@ class PlayEngine implements InputSource {
         return source.axis === 'x' ? this.mouseX : source.axis === 'y' ? this.mouseY : this.mouseDown;
       case 'key':
         return this.keysHeld.has(source.code) ? 1 : 0;
+      case 'osc': {
+        const v = oscNumber(oscClient.value(source.address), source.arg);
+        if (v === null) return null;
+        return Math.max(0, Math.min(1, (v - source.min) / (source.max - source.min)));
+      }
+      case 'noise':
+        return noiseAt(source.type, this.time, source.rate, source.seed, source.steps, this.frame);
+      case 'trigger':
+        // Triggers keep per-mapping state; readMapping() reads it. A bare source reading is its gate.
+        return (this.held.get(triggerKey(source.trigger)) ?? 0) > 0 ? 1 : 0;
       case 'lfo':
         return lfoValue(source.shape, this.time * source.rate + source.phase);
       case 'clock':
@@ -296,8 +387,34 @@ class PlayEngine implements InputSource {
     return navigator.getGamepads()[index] ?? null;
   }
 
+  /** A mapping's 0..1 reading this frame (a trigger's envelope, toggle, step or random value), for meters. */
+  readMapping(m: PlayMapping): number | null {
+    if (m.source.kind === 'trigger') return this.triggerStates.get(m.id)?.value ?? 0;
+    return this.readSource(m.source);
+  }
+
+  private readTrigger(m: PlayMapping, dt: number): number {
+    const src = m.source as Extract<PlaySource, { kind: 'trigger' }>;
+    const t = src.trigger;
+    let presses: number, gate: boolean, velocity = 1;
+    if (t.on === 'beat') {
+      const b = beatAt(t.bpm, t.beats, this.time);
+      presses = b.count; gate = b.gate;
+    } else {
+      const key = triggerKey(t);
+      presses = this.presses.get(key) ?? 0;
+      gate = (this.held.get(key) ?? 0) > 0;
+      if (src.velocity) velocity = this.velocities.get(key) ?? 1;
+    }
+    let st = this.triggerStates.get(m.id);
+    // A new mapping starts from "no presses yet", so it doesn't fire for presses made before it existed.
+    if (!st) { st = newTriggerState(presses); this.triggerStates.set(m.id, st); }
+    return stepTrigger(st, src, presses, gate, dt, velocity);
+  }
+
   tickInputs(dt: number, time: number, write: InputWriter): void {
     this.time = time;
+    this.frame++;
     if (this.learnCb && this.performing) this.pollGamepadLearn();
     // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.
     if (this.gamepadIsBound && this.performing) inputBus.wake();
@@ -308,7 +425,7 @@ class PlayEngine implements InputSource {
       if (!m.enabled) continue;
       const control = this.controls.get(m.controlId);
       if (!control) continue;
-      const reading = this.readSource(m.source);
+      const reading = m.source.kind === 'trigger' ? this.readTrigger(m, dt) : this.readSource(m.source);
       if (reading === null) continue;
       const target = mapValue(reading, m);
       let st = this.state.get(m.id);
@@ -447,8 +564,20 @@ class PlayEngine implements InputSource {
   }
 
   private keyIsBound(code: string): boolean {
-    for (const m of this.record.mappings) if (m.enabled && m.source.kind === 'key' && m.source.code === code) return true;
+    for (const m of this.record.mappings) {
+      if (!m.enabled) continue;
+      if (m.source.kind === 'key' && m.source.code === code) return true;
+      if (m.source.kind === 'trigger' && m.source.trigger.on === 'key' && m.source.trigger.code === code) return true;
+    }
     return false;
+  }
+
+  /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
+  isAnimating(): boolean {
+    return this.record.mappings.some(m => m.enabled && (
+      m.source.kind === 'noise' ||
+      (m.source.kind === 'trigger' && (m.source.trigger.on === 'beat' || (this.triggerStates.get(m.id)?.stage ?? 'idle') !== 'idle'))
+    ));
   }
 
   // ── Learn ─────────────────────────────────────────────────────────────────
@@ -458,6 +587,26 @@ class PlayEngine implements InputSource {
    * A note → its velocity, a knob → that CC, the wheel → pitch bend. Returns a
    * cancel function; only one learn runs at a time.
    */
+  /**
+   * Like startLearn, but for what fires a trigger: a key, a note (with its
+   * number), a click on the picture or an OSC address.
+   */
+  startLearnTrigger(cb: (trigger: TriggerSpec) => void): () => void {
+    this.cancelLearn();
+    this.learnTriggerCb = cb;
+    if (this.performing) inputBus.wake();
+    this.learnOffMidi = midiEngine.subscribe((e: MidiEvent) => {
+      if (e.kind === 'noteOn') this.finishLearnTrigger({ on: 'note', channel: e.channel, note: e.note });
+    });
+    return () => this.cancelLearn();
+  }
+
+  private finishLearnTrigger(t: TriggerSpec): void {
+    const cb = this.learnTriggerCb;
+    this.cancelLearn();
+    cb?.(t);
+  }
+
   startLearn(cb: (source: PlaySource) => void): () => void {
     this.cancelLearn();
     this.learnCb = cb;
@@ -475,13 +624,16 @@ class PlayEngine implements InputSource {
   }
 
   isLearning(): boolean {
-    return this.learnCb !== null;
+    return this.learnCb !== null || this.learnTriggerCb !== null;
   }
 
   cancelLearn(): void {
     this.learnOffMidi?.();
     this.learnOffMidi = null;
+    this.learnOffOsc?.();
+    this.learnOffOsc = null;
     this.learnCb = null;
+    this.learnTriggerCb = null;
   }
 
   private finishLearn(source: PlaySource): void {

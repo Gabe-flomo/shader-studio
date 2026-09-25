@@ -3,9 +3,9 @@
  * <select> offers, conversion to and from the record's PlaySource shape, and
  * short labels. Pure; shared by the Play page and the control rows.
  */
-import type { LfoShape, PlayCurve, PlaySource } from '../types/play';
+import type { LfoShape, NoiseType, PlayCurve, PlaySource, TriggerMode, TriggerSpec } from '../types/play';
 
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'control' | 'null' | 'lfo' | 'clock' | 'audio' | 'tilt' | 'gamepad' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
+export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'lfo' | 'noise' | 'clock' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
 
 /** In the order the drop-down shows them: what everyone has first, MIDI hardware last. */
 export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
@@ -13,13 +13,16 @@ export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
   { value: 'mouse:y', label: 'Mouse Y' },
   { value: 'mouse:down', label: 'Mouse button' },
   { value: 'key', label: 'Keyboard key' },
+  { value: 'trigger', label: 'Trigger (envelope, toggle…)' },
   { value: 'control', label: 'Another control' },
   { value: 'null', label: 'Null position' },
   { value: 'lfo', label: 'LFO' },
+  { value: 'noise', label: 'Noise' },
   { value: 'clock', label: 'Clock (BPM)' },
   { value: 'audio', label: 'Audio band' },
   { value: 'tilt', label: 'Phone tilt' },
   { value: 'gamepad', label: 'Gamepad' },
+  { value: 'osc', label: 'OSC (Ableton, TouchOSC…)' },
   { value: 'midi:cc', label: 'MIDI CC' },
   { value: 'midi:note', label: 'MIDI note' },
   { value: 'midi:velocity', label: 'MIDI velocity' },
@@ -65,6 +68,9 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
     case 'control': return { kind: 'control', controlId: prev.kind === 'control' ? prev.controlId : otherControlId };
     case 'null': return { kind: 'null', layerId: prev.kind === 'null' ? prev.layerId : nullId, axis: 'x' };
     case 'lfo': return { kind: 'lfo', shape: 'sine', rate: 0.5, phase: 0 };
+    case 'noise': return { kind: 'noise', type: 'smooth', rate: 1, seed: Math.floor(Math.random() * 1000), steps: 0 };
+    case 'osc': return { kind: 'osc', address: prev.kind === 'osc' ? prev.address : '/1/fader1', arg: 0, min: 0, max: 1 };
+    case 'trigger': return { kind: 'trigger', trigger: prev.kind === 'key' ? { on: 'key', code: prev.code } : { on: 'key', code: 'Space' }, mode: 'envelope', attack: 10, decay: 200, sustain: 0.5, release: 400, steps: 4, velocity: false };
     case 'clock': return { kind: 'clock', shape: 'saw', bpm: 120, beats: 4 };
     case 'audio': return { kind: 'audio', nodeId: prev.kind === 'audio' ? prev.nodeId : '', band: 0 };
     case 'tilt': return { kind: 'tilt', axis: 'gamma' };
@@ -79,6 +85,9 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'key') return `Key ${keyName(s.code)}`;
   if (s.kind === 'control') return `← ${controls.find(c => c.id === s.controlId)?.label ?? 'control'}`;
   if (s.kind === 'lfo') return `LFO ${s.shape} ${s.rate} Hz`;
+  if (s.kind === 'noise') return `Noise ${s.type}${s.type === 'random' ? '' : ` ${s.rate}/s`}`;
+  if (s.kind === 'osc') return `OSC ${s.address}`;
+  if (s.kind === 'trigger') return `${s.mode === 'envelope' ? 'Env' : s.mode === 'toggle' ? 'Toggle' : s.mode === 'step' ? 'Step' : 'Random'} · ${triggerLabel(s.trigger)}`;
   if (s.kind === 'clock') return `${s.bpm} bpm · ${s.beats} beat${s.beats === 1 ? '' : 's'}`;
   if (s.kind === 'audio') return `Audio band ${s.band + 1}`;
   if (s.kind === 'tilt') return `Tilt ${s.axis === 'beta' ? 'front/back' : s.axis === 'gamma' ? 'left/right' : 'compass'}`;
@@ -113,4 +122,49 @@ export const TILT_AXES = [
   { value: 'gamma', label: 'Left / right' },
   { value: 'beta', label: 'Front / back' },
   { value: 'alpha', label: 'Compass' },
+];
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+/** "Key Space", "C4 · ch. 2", "Any note", "Click", "OSC /1/push1", "Every beat". */
+export function triggerLabel(t: TriggerSpec): string {
+  switch (t.on) {
+    case 'key': return `Key ${keyName(t.code)}`;
+    case 'note': return `${t.note < 0 ? 'Any note' : `${NOTE_NAMES[t.note % 12]}${Math.floor(t.note / 12) - 1}`}${t.channel ? ` · ch. ${t.channel}` : ''}`;
+    case 'mouse': return 'Click';
+    case 'osc': return `OSC ${t.address}`;
+    case 'beat': return t.beats === 1 ? `Every beat @ ${t.bpm}` : `Every ${t.beats} beats @ ${t.bpm}`;
+  }
+}
+
+export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
+  { value: 'key', label: 'Key' },
+  { value: 'mouse', label: 'Click on the picture' },
+  { value: 'beat', label: 'Beat' },
+  { value: 'note', label: 'MIDI note' },
+  { value: 'osc', label: 'OSC message' },
+];
+
+export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec): TriggerSpec {
+  switch (on) {
+    case 'key': return { on: 'key', code: prev.on === 'key' ? prev.code : 'Space' };
+    case 'mouse': return { on: 'mouse' };
+    case 'beat': return { on: 'beat', bpm: prev.on === 'beat' ? prev.bpm : 120, beats: prev.on === 'beat' ? prev.beats : 1 };
+    case 'note': return { on: 'note', channel: 0, note: -1 };
+    case 'osc': return { on: 'osc', address: prev.on === 'osc' ? prev.address : '/1/push1' };
+  }
+}
+
+export const TRIGGER_MODES: { value: TriggerMode; label: string; title: string }[] = [
+  { value: 'envelope', label: 'Envelope', title: 'Attack, decay, sustain while held, release' },
+  { value: 'toggle', label: 'Toggle', title: 'Flips between 0 and 1' },
+  { value: 'step', label: 'Step', title: 'Walks through even steps, then wraps' },
+  { value: 'random', label: 'Random', title: 'A new random value each time' },
+];
+
+export const NOISE_TYPES: { value: NoiseType; label: string; title: string }[] = [
+  { value: 'smooth', label: 'Smooth', title: 'Glides between random points' },
+  { value: 'drift', label: 'Drift', title: 'Slow wandering with finer wobble on top' },
+  { value: 'random', label: 'Random', title: 'A new random value every frame' },
+  { value: 'stepped', label: 'Stepped', title: 'Holds a random value, then jumps: posterised time' },
 ];

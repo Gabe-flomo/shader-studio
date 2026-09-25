@@ -13,8 +13,9 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
-import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, SOURCE_TYPES, TILT_AXES, keyName, sourceFromType, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
-import type { LfoShape } from '../../types/play';
+import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, NOISE_TYPES, SOURCE_TYPES, TILT_AXES, TRIGGER_KINDS, TRIGGER_MODES, keyName, sourceFromType, sourceLabel, sourceType, triggerFromKind, triggerLabel, type SourceType } from '../../play/playSources';
+import type { LfoShape, TriggerSpec } from '../../types/play';
+import { oscClient, OSC_DEFAULT_UDP_PORT, type OscStatus } from '../../lib/oscClient';
 import { playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
 import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
@@ -90,7 +91,7 @@ function useSourceMeter(mappings: PlayMapping[]): Map<string, number> {
         let changed = prev.size !== mappings.length;
         const next = new Map<string, number>();
         for (const m of mappings) {
-          const v = Math.round((playEngine.readSource(m.source) ?? 0) * 100) / 100;
+          const v = Math.round((playEngine.readMapping(m) ?? 0) * 100) / 100;
           next.set(m.id, v);
           if (prev.get(m.id) !== v) changed = true;
         }
@@ -517,12 +518,22 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
   useEffect(() => {
     if (!learnFor) return;
     void midiEngine.connectWebMidi();
+    // A trigger row's Learn picks what fires it (key, note, click, OSC); every other Learn picks a source.
+    const row = learnFor === 'new' ? undefined : play.mappings.find(m => m.id === learnFor);
+    if (row?.source.kind === 'trigger') {
+      const src = row.source;
+      return playEngine.startLearnTrigger(trigger => {
+        onUpdate(row.id, { source: { ...src, trigger } });
+        setLearnFor(null);
+      });
+    }
     const stop = playEngine.startLearn(source => {
       if (learnFor === 'new') onAdd(source);
       else onUpdate(learnFor, { source });
       setLearnFor(null);
     });
     return stop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [learnFor, onAdd, onUpdate]);
   useEffect(() => {
     if (!learnFor) return;
@@ -802,9 +813,129 @@ function SourceOptions({ source, audioNodes, numStyle, labelStyle, onChange }: {
         <NumberInput value={source.index} min={0} max={31} step={1} title="Axis or button number" onCommit={n => onChange({ ...source, index: Math.max(0, Math.round(n)) })} style={{ ...numStyle, width: 40 }} />
         {hint('or press Learn and move it')}
       </>);
+    case 'noise':
+      return row(<>
+        <Segmented size="sm" ariaLabel="Noise type" value={source.type} options={NOISE_TYPES} onChange={v => onChange({ ...source, type: v })} />
+        {source.type !== 'random' && <>
+          <NumberInput value={source.rate} min={0.01} max={60} step={0.1} title={source.type === 'stepped' ? 'Jumps per second' : 'Changes per second'} onCommit={n => onChange({ ...source, rate: Math.max(0.01, n) })} style={{ ...numStyle, width: 48 }} />
+          {hint('/ s')}
+        </>}
+        {source.type === 'stepped' && <>
+          <NumberInput value={source.steps} min={0} max={64} step={1} title="Snap to this many levels (0 = any value)" onCommit={n => onChange({ ...source, steps: Math.max(0, Math.min(64, Math.round(n))) })} style={{ ...numStyle, width: 40 }} />
+          {hint('levels')}
+        </>}
+        <IconButton icon="dice" label="New seed: a different random path" size="sm" onClick={() => onChange({ ...source, seed: Math.floor(Math.random() * 100000) })} />
+      </>);
+    case 'osc':
+      return (
+        <>
+          {row(<>
+            <Field value={source.address} onChange={e => onChange({ ...source, address: e.target.value.startsWith('/') ? e.target.value : `/${e.target.value}` })} height={26} mono style={{ flex: 1, minWidth: 120 }} placeholder="/1/fader1" />
+            <NumberInput value={source.arg} min={0} max={15} step={1} title="Which argument (0 = the first)" onCommit={n => onChange({ ...source, arg: Math.max(0, Math.round(n)) })} style={{ ...numStyle, width: 36 }} />
+            {hint('arg')}
+          </>)}
+          {row(<>
+            <NumberInput value={source.min} title="OSC value that means 0" onCommit={n => onChange({ ...source, min: n })} style={{ ...numStyle, width: 48 }} />
+            {hint('→')}
+            <NumberInput value={source.max} title="OSC value that means 1" onCommit={n => onChange({ ...source, max: n === source.min ? n + 1 : n })} style={{ ...numStyle, width: 48 }} />
+            <OscStatusChip />
+          </>)}
+        </>
+      );
+    case 'trigger':
+      return <TriggerOptions source={source} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />;
     default:
       return null;
   }
+}
+
+/** Where a trigger fires from and what it does. */
+function TriggerOptions({ source, numStyle, labelStyle, onChange }: {
+  source: Extract<PlaySource, { kind: 'trigger' }>;
+  numStyle: React.CSSProperties;
+  labelStyle: React.CSSProperties;
+  onChange: (source: PlaySource) => void;
+}) {
+  const tk = useTokens();
+  const hint = (text: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{text}</span>;
+  const row = (label: string, children: ReactNode) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+      <span style={labelStyle}>{label}</span>
+      {children}
+    </div>
+  );
+  const t = source.trigger;
+  const setT = (trigger: TriggerSpec) => onChange({ ...source, trigger });
+  return (
+    <>
+      {row('On', <>
+        <Select ariaLabel="Trigger" value={t.on} options={TRIGGER_KINDS} onChange={v => setT(triggerFromKind(v as TriggerSpec['on'], t))} height={26} />
+        {t.on === 'key' && <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(t.code)}</span>}
+        {t.on === 'note' && <>
+          <NumberInput value={t.note} min={-1} max={127} step={1} title="Note number, -1 for any note" onCommit={n => setT({ ...t, note: Math.max(-1, Math.min(127, Math.round(n))) })} style={{ ...numStyle, width: 44 }} />
+          <Select ariaLabel="Trigger channel" value={`${t.channel}`} options={CHANNELS} onChange={v => setT({ ...t, channel: parseInt(v, 10) || 0 })} height={26} />
+        </>}
+        {t.on === 'osc' && <>
+          <Field value={t.address} onChange={e => setT({ ...t, address: e.target.value.startsWith('/') ? e.target.value : `/${e.target.value}` })} height={26} mono style={{ flex: 1, minWidth: 110 }} placeholder="/1/push1" />
+          <OscStatusChip />
+        </>}
+        {t.on === 'beat' && <>
+          <NumberInput value={t.bpm} min={1} max={999} step={1} title="Beats per minute" onCommit={n => setT({ ...t, bpm: Math.max(1, n) })} style={{ ...numStyle, width: 48 }} />
+          {hint('bpm, every')}
+          <NumberInput value={t.beats} min={0.0625} max={64} step={1} title="Fire every this many beats" onCommit={n => setT({ ...t, beats: Math.max(0.0625, n) })} style={{ ...numStyle, width: 40 }} />
+          {hint('beats')}
+        </>}
+        {(t.on === 'key' || t.on === 'note' || t.on === 'osc' || t.on === 'mouse') && hint(`${triggerLabel(t)} · Learn to change`)}
+      </>)}
+      {row('Does', <Segmented size="sm" ariaLabel="Trigger mode" value={source.mode} options={TRIGGER_MODES} onChange={v => onChange({ ...source, mode: v })} />)}
+      {source.mode === 'envelope' && (
+        <>
+          {row('ADSR', <>
+            <NumberInput value={source.attack} min={0} max={10000} step={10} title="Attack, ms" onCommit={n => onChange({ ...source, attack: Math.max(0, n) })} style={{ ...numStyle, width: 44 }} />
+            <NumberInput value={source.decay} min={0} max={10000} step={10} title="Decay, ms" onCommit={n => onChange({ ...source, decay: Math.max(0, n) })} style={{ ...numStyle, width: 44 }} />
+            <NumberInput value={source.sustain} min={0} max={1} step={0.05} title="Sustain level while held, 0–1" onCommit={n => onChange({ ...source, sustain: Math.max(0, Math.min(1, n)) })} style={{ ...numStyle, width: 40 }} />
+            <NumberInput value={source.release} min={0} max={20000} step={10} title="Release, ms" onCommit={n => onChange({ ...source, release: Math.max(0, n) })} style={{ ...numStyle, width: 44 }} />
+            <EnvelopeGlyph a={source.attack} d={source.decay} s={source.sustain} r={source.release} />
+          </>)}
+          {t.on === 'note' && row('Velocity', <Toggle checked={source.velocity} onChange={velocity => onChange({ ...source, velocity })} label="Harder hits peak higher" />)}
+        </>
+      )}
+      {source.mode === 'step' && row('Steps', <NumberInput value={source.steps} min={2} max={64} step={1} title="How many steps before it wraps" onCommit={n => onChange({ ...source, steps: Math.max(2, Math.min(64, Math.round(n))) })} style={{ ...numStyle, width: 44 }} />)}
+    </>
+  );
+}
+
+/** A small picture of the ADSR shape, with a fixed hold between decay and release. */
+function EnvelopeGlyph({ a, d, s, r }: { a: number; d: number; s: number; r: number }) {
+  const tk = useTokens();
+  const hold = Math.max(150, (a + d + r) * 0.3);
+  const total = Math.max(1, a + d + hold + r);
+  const W = 64, H = 22;
+  const x = (ms: number) => (ms / total) * W;
+  const pts = [[0, H], [x(a), 2], [x(a + d), H - s * (H - 2)], [x(a + d + hold), H - s * (H - 2)], [W, H]];
+  return (
+    <svg width={W} height={H} aria-hidden style={{ flexShrink: 0 }}>
+      <polyline points={pts.map(p => p.join(',')).join(' ')} fill="none" stroke={tk.accent.base} strokeWidth={1.5} strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** OSC bridge connection: status dot, port, connect. */
+function OscStatusChip() {
+  const tk = useTokens();
+  const [status, setStatus] = useState<OscStatus>(() => oscClient.getStatus());
+  const [port, setPort] = useState(() => oscClient.getPort());
+  useEffect(() => oscClient.onStatus(setStatus), []);
+  const colour = status === 'connected' ? tk.status.success : status === 'connecting' ? tk.status.warning : status === 'error' ? tk.status.danger : tk.text.disabled;
+  const text = status === 'connected' ? 'Bridge connected' : status === 'connecting' ? 'Connecting…' : status === 'error' ? 'No bridge — run npm run osc-bridge' : 'Not connected';
+  return (
+    <span title={`Send OSC to UDP port ${OSC_DEFAULT_UDP_PORT} on this computer; the bridge forwards it here over ws://127.0.0.1:${port}.`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
+      <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}` }}>{text}</span>
+      <NumberInput value={port} min={1} max={65535} step={1} title="Bridge WebSocket port" onCommit={n => { const p = Math.round(n); setPort(p); oscClient.setPort(p); }} style={{ width: 52, height: 22, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 10.5px ${fontFamily.mono}`, textAlign: 'center' }} />
+      {status !== 'connected' && <Button size="sm" onClick={() => oscClient.setWanted(true)}>Connect</Button>}
+    </span>
+  );
 }
 
 /**

@@ -205,6 +205,49 @@ describe('play engine on the bus', () => {
     expect(playEngine.readSource({ kind: 'gamepad', pad: 0, control: 'axis', index: 0 })).toBeNull();
   });
 
+  it('drives a control from OSC and fires an OSC-triggered envelope', async () => {
+    const { oscClient } = await import('../oscClient');
+    const nodes = [floatNode('node_3', 1), floatNode('node_5', 0), outputNode('node_3', 'value')];
+    const r = compileGraph({ nodes });
+    inputBus.setParamBindings(r.paramBindings);
+    const a = r.paramBindings['node_3::value'];
+    const b = r.paramBindings['node_5::value'];
+    const record: PlayRecord = {
+      version: 1, layers: [],
+      controls: [
+        { id: 'a', target: 'node_3::value', kind: 'float', label: 'A', min: 0, max: 10 },
+        { id: 'b', target: 'node_5::value', kind: 'float', label: 'B', min: 0, max: 1 },
+      ],
+      mappings: [
+        { id: 'fader', controlId: 'a', source: { kind: 'osc', address: '/1/fader1', arg: 0, min: 0, max: 127 }, outMin: 0, outMax: 10, curve: 'linear', smoothMs: 0, enabled: true },
+        { id: 'hit', controlId: 'b', source: { kind: 'trigger', trigger: { on: 'osc', address: '/1/push1' }, mode: 'envelope', attack: 0, decay: 0, sustain: 1, release: 100, steps: 4, velocity: false }, outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0, enabled: true },
+      ],
+    };
+    playEngine.setRecord(record);
+    playEngine.setBaseValues(readBaseValues(nodes, record));
+    // Nothing received yet: the fader leaves its control alone.
+    expect(inputBus.tick(1 / 60, 0).has(a)).toBe(false);
+    oscClient.inject({ address: '/1/fader1', args: [63.5] });
+    expect(inputBus.tick(1 / 60, 0).get(a)).toBeCloseTo(5);
+    // Push: 1 → envelope to full; 0 → release.
+    oscClient.inject({ address: '/1/push1', args: [1] });
+    expect(inputBus.tick(1 / 60, 0).get(b)).toBeCloseTo(1);
+    oscClient.inject({ address: '/1/push1', args: [0] });
+    inputBus.tick(0.05, 0);
+    const mid = inputBus.tick(0.02, 0).get(b) as number;
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(1);
+    for (let i = 0; i < 20; i++) inputBus.tick(0.02, 0);
+    expect(inputBus.tick(0.02, 0).get(b)).toBe(0);
+  });
+
+  it('noise and beat triggers keep the render loop running', () => {
+    playEngine.setRecord({ ...RECORD, controls: [RECORD.controls[0]], mappings: [{ ...RECORD.mappings[0], source: { kind: 'noise', type: 'smooth', rate: 1, seed: 1, steps: 0 } }] });
+    expect(playEngine.isAnimating()).toBe(true);
+    playEngine.setRecord({ ...RECORD, controls: [RECORD.controls[0]], mappings: [RECORD.mappings[0]] });
+    expect(playEngine.isAnimating()).toBe(false);
+  });
+
   it('reads a unit value per source kind', () => {
     midiEngine.handleBytes(0xe0, 0, 64); // bend centre
     expect(playEngine.readSource({ kind: 'midi', signal: 'bend', channel: 0 })).toBeCloseTo(0.5);
@@ -258,6 +301,17 @@ describe('controls and the record', () => {
       { id: 'gone', controlId: 'a', source: { kind: 'control', controlId: 'zzz' } },
     ] });
     expect(self.mappings.map(m => m.id)).toEqual(['ok']);
+    const newer = parsePlayRecord({ controls: [{ id: 'a', target: 'n::k' }], mappings: [
+      { id: 'o', controlId: 'a', source: { kind: 'osc', address: '/x', min: 2, max: 2 } },
+      { id: 'bad-osc', controlId: 'a', source: { kind: 'osc', address: 'no-slash' } },
+      { id: 'n', controlId: 'a', source: { kind: 'noise', type: 'stepped', rate: 0, steps: 99 } },
+      { id: 't', controlId: 'a', source: { kind: 'trigger', trigger: { on: 'note', note: 200 }, mode: 'step', steps: 1 } },
+      { id: 'bad-t', controlId: 'a', source: { kind: 'trigger', trigger: { on: 'laser' } } },
+    ] });
+    expect(newer.mappings.map(m => m.id)).toEqual(['o', 'n', 't']);
+    expect(newer.mappings[0].source).toEqual({ kind: 'osc', address: '/x', arg: 0, min: 2, max: 3 });
+    expect(newer.mappings[1].source).toEqual({ kind: 'noise', type: 'stepped', rate: 0.01, seed: 1, steps: 64 });
+    expect(newer.mappings[2].source).toMatchObject({ kind: 'trigger', mode: 'step', steps: 2, trigger: { on: 'note', channel: 0, note: 127 } });
     const more = parsePlayRecord({ controls: [{ id: 'a', target: 'n::k' }], mappings: [
       { id: 'l', controlId: 'a', source: { kind: 'lfo', shape: 'bogus', rate: -1 } },
       { id: 'c', controlId: 'a', source: { kind: 'clock', bpm: 128 } },

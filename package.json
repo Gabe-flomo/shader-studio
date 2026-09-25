@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "osc-bridge": "node tools/osc-bridge.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

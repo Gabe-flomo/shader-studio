@@ -35,6 +35,32 @@ export interface PlayControl {
 // ── Sources (what drives a control) ─────────────────────────────────────────
 
 export type MidiSignal = 'note' | 'velocity' | 'gate' | 'bend' | 'cc';
+
+/** What fires a trigger source. `note: -1` is any note. */
+export type TriggerSpec =
+  | { on: 'key'; code: string }
+  | { on: 'note'; channel: number; note: number }
+  | { on: 'mouse' }
+  | { on: 'osc'; address: string }
+  | { on: 'beat'; bpm: number; beats: number };
+
+/**
+ * What a trigger does each time it fires.
+ *   envelope  attack → decay → sustain while held → release (ms; sustain 0..1)
+ *   toggle    flips between 0 and 1
+ *   step      walks 0 → 1 in `steps` even steps, then wraps
+ *   random    a new random value
+ */
+export type TriggerMode = 'envelope' | 'toggle' | 'step' | 'random';
+
+/**
+ * Noise shapes, all 0..1 on the graph clock:
+ *   smooth   gradient-free value noise, eased between random points (`rate` points a second)
+ *   drift    three octaves of smooth noise: slow wandering with finer wobble on top
+ *   random   a new random value every frame (jitter)
+ *   stepped  a random value held for 1/`rate` s, snapped to `steps` levels (posterised time)
+ */
+export type NoiseType = 'smooth' | 'drift' | 'random' | 'stepped';
 export type LfoShape = 'sine' | 'triangle' | 'saw' | 'square' | 'random';
 
 export type PlaySource =
@@ -61,7 +87,13 @@ export type PlaySource =
   /** A gamepad stick axis (−1..1 → 0..1) or a button (0..1). `pad` is the slot, `index` the axis or button number. */
   | { kind: 'gamepad'; pad: number; control: 'axis' | 'button'; index: number }
   /** A null layer's position on the picture (0..1). */
-  | { kind: 'null'; layerId: string; axis: 'x' | 'y' };
+  | { kind: 'null'; layerId: string; axis: 'x' | 'y' }
+  /** An OSC message's argument (via the OSC bridge), scaled from `min..max` to 0..1. */
+  | { kind: 'osc'; address: string; arg: number; min: number; max: number }
+  /** Random motion on the graph clock. `seed` makes two noise rows differ. `steps` (stepped only) posterises the value, 0 = no snapping. */
+  | { kind: 'noise'; type: NoiseType; rate: number; seed: number; steps: number }
+  /** A trigger (key, note, click, OSC message, beat) driving an envelope, toggle, step or random value. */
+  | { kind: 'trigger'; trigger: TriggerSpec; mode: TriggerMode; attack: number; decay: number; sustain: number; release: number; steps: number; velocity: boolean };
 
 export type PlayCurve = 'linear' | 'exp' | 'log' | 'custom';
 
@@ -263,6 +295,19 @@ function str(v: unknown): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null;
 }
 
+function parseTrigger(raw: unknown): TriggerSpec | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const t = raw as Record<string, unknown>;
+  switch (t.on) {
+    case 'key': { const code = str(t.code); return code ? { on: 'key', code } : null; }
+    case 'note': return { on: 'note', channel: Math.max(0, Math.min(16, Math.round(num(t.channel, 0)))), note: Math.max(-1, Math.min(127, Math.round(num(t.note, -1)))) };
+    case 'mouse': return { on: 'mouse' };
+    case 'osc': { const address = str(t.address); return address && address.startsWith('/') ? { on: 'osc', address } : null; }
+    case 'beat': return { on: 'beat', bpm: Math.max(1, num(t.bpm, 120)), beats: Math.max(0.0625, num(t.beats, 1)) };
+    default: return null;
+  }
+}
+
 function parseSource(raw: unknown): PlaySource | null {
   if (!raw || typeof raw !== 'object') return null;
   const s = raw as Record<string, unknown>;
@@ -306,6 +351,27 @@ function parseSource(raw: unknown): PlaySource | null {
     case 'null': {
       const layerId = str(s.layerId);
       return layerId && (s.axis === 'x' || s.axis === 'y') ? { kind: 'null', layerId, axis: s.axis } : null;
+    }
+    case 'osc': {
+      const address = str(s.address);
+      if (!address || !address.startsWith('/')) return null;
+      const min = num(s.min, 0), max = num(s.max, 1);
+      return { kind: 'osc', address, arg: Math.max(0, Math.round(num(s.arg, 0))), min, max: max === min ? min + 1 : max };
+    }
+    case 'noise': {
+      const type = s.type === 'drift' || s.type === 'random' || s.type === 'stepped' ? s.type : 'smooth';
+      return { kind: 'noise', type, rate: Math.max(0.01, num(s.rate, 1)), seed: Math.round(num(s.seed, 1)), steps: Math.max(0, Math.min(64, Math.round(num(s.steps, 0)))) };
+    }
+    case 'trigger': {
+      const trigger = parseTrigger(s.trigger);
+      if (!trigger) return null;
+      const mode = s.mode === 'toggle' || s.mode === 'step' || s.mode === 'random' ? s.mode : 'envelope';
+      return {
+        kind: 'trigger', trigger, mode,
+        attack: Math.max(0, num(s.attack, 10)), decay: Math.max(0, num(s.decay, 200)),
+        sustain: Math.max(0, Math.min(1, num(s.sustain, 0.6))), release: Math.max(0, num(s.release, 400)),
+        steps: Math.max(2, Math.min(64, Math.round(num(s.steps, 4)))), velocity: s.velocity === true,
+      };
     }
     default:
       return null;

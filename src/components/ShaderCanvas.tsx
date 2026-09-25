@@ -1044,7 +1044,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 ||
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
-      )) || playOverlay.isAnimated();
+      )) || playOverlay.isAnimated() || playEngine.isAnimating();
       const doRender = dynamic || needsRender;
       if (doRender) {
         needsRender = false;
