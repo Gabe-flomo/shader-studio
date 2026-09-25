@@ -30,6 +30,7 @@ import { toast } from '../ui/toastStore';
 import { openTextFile } from '../../utils/fileIO';
 import { convertFragmentShader } from '../../nodes/userNodes/glslImport';
 import { spawnPoint } from './spawnPoint';
+import { LibraryCard } from '../shell/LibraryPanel';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes';
@@ -455,6 +456,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 <Button size="sm" icon="folder" title="Import a folder of graphs; its folders are recreated here" onClick={() => importGraphs('folder')}>Import folder…</Button>
               </div>
             )}
+            <LibraryCard />
             <FolderableList
               scopeKey="graphs"
               color={tabColor('graphs')}

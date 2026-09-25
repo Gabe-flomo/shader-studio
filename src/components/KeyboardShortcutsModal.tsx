@@ -16,7 +16,7 @@ import {
   getGroupPresetDir, setGroupPresetDir,
 } from '../store/useNodeGraphStore';
 import { pickDirectory } from '../utils/fileIO';
-import { exportBackupZip } from '../utils/backupExport';
+import { LibraryPanel } from './shell/LibraryPanel';
 import { ctp } from '../theme/palette';
 
 const isTauri = (): boolean =>
@@ -39,20 +39,6 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
   const [fnDir, setFnDirState]             = useState(() => getCustomFnDir());
   const [exprDir, setExprDirState]         = useState(() => getExprDir());
   const [groupPresetDir, setGroupPresetDirState] = useState(() => getGroupPresetDir());
-
-  // Backup export state
-  const [backupState, setBackupState] = useState<'idle' | 'busy' | 'done'>('idle');
-
-  const handleExportBackup = useCallback(async () => {
-    setBackupState('busy');
-    try {
-      await exportBackupZip();
-      setBackupState('done');
-      setTimeout(() => setBackupState('idle'), 2500);
-    } catch {
-      setBackupState('idle');
-    }
-  }, []);
 
   // Close on Escape (but not if we're in binding mode)
   useEffect(() => {
@@ -256,31 +242,9 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
               </div>
             ))}
 
-            {/* ── Backup ── */}
+            {/* ── Library: export everything, import, backup folder ── */}
             <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: `1px solid ${ctp.surface0}` }}>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: ctp.subtext0, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Backup
-              </div>
-              <div style={{ fontSize: '11px', color: ctp.surface2, marginBottom: '10px', lineHeight: 1.5 }}>
-                Export all saved graphs, group presets, and functions as a ZIP — organized into your existing folders.
-              </div>
-              <button
-                onClick={handleExportBackup}
-                disabled={backupState === 'busy'}
-                style={{
-                  background: backupState === 'done' ? `${ctp.green}22` : ctp.surface0,
-                  border: `1px solid ${backupState === 'done' ? ctp.green : ctp.surface1}`,
-                  color: backupState === 'done' ? ctp.green : ctp.text,
-                  borderRadius: '6px',
-                  padding: '6px 16px',
-                  fontSize: '12px',
-                  cursor: backupState === 'busy' ? 'default' : 'pointer',
-                  opacity: backupState === 'busy' ? 0.6 : 1,
-                  transition: 'all 0.2s',
-                }}
-              >
-                {backupState === 'busy' ? '⏳ Exporting…' : backupState === 'done' ? '✓ Saved!' : '⬇ Save Backup ZIP'}
-              </button>
+              <LibraryPanel />
             </div>
           </div>
         )}

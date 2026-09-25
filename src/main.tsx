@@ -28,4 +28,6 @@ if (import.meta.env.DEV && location.hash === '#ui') {
   import('./components/ui/UiGallery').then(({ UiGallery }) => root.render(<UiGallery />))
 } else {
   root.render(<><App /><Toaster /><DialogHost /></>)
+  // The backup folder (desktop app; a picked folder in Chrome/Edge) starts once the app is up.
+  window.setTimeout(() => { void import('./utils/backupFolder').then(m => m.startBackups()) }, 1500)
 }

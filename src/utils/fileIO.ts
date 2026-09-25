@@ -306,3 +306,51 @@ export async function openTextFile(
     });
   }
 }
+
+/** Save bytes (a ZIP, say): the native save dialog in the desktop app, a download on the web. */
+export async function saveBinaryFile(bytes: Uint8Array, suggestedName: string, mime = 'application/octet-stream'): Promise<FileResult> {
+  const ext = (suggestedName.match(/\.([a-z0-9]+)$/i)?.[1] ?? 'bin').toLowerCase();
+  if (isTauri()) {
+    try {
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const { writeFile } = await import('@tauri-apps/plugin-fs');
+      const path = await save({ defaultPath: suggestedName, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] });
+      if (!path) return CANCELLED;
+      await writeFile(path, bytes);
+      return { ok: true };
+    } catch (e) {
+      console.error('[fileIO] saveBinaryFile failed', e);
+      return { ok: false, error: `Could not save "${suggestedName}": ${errorMessage(e)}` };
+    }
+  }
+  const url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: mime }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: suggestedName });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return { ok: true };
+}
+
+/** Pick a file and read its bytes; null when cancelled. */
+export async function openBinaryFile(accept: string): Promise<{ name: string; bytes: Uint8Array } | null> {
+  if (isTauri()) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const extensions = accept.split(',').map(a => a.trim().replace(/^\./, '')).filter(a => a && !a.includes('/'));
+    const path = await open({ multiple: false, filters: [{ name: 'Files', extensions }] });
+    if (typeof path !== 'string') return null;
+    const { readFile } = await import('@tauri-apps/plugin-fs');
+    return { name: path.split(/[\\/]/).pop() ?? path, bytes: await readFile(path) };
+  }
+  return new Promise((resolve, reject) => {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept, style: 'display:none' });
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) { input.remove(); resolve(null); return; }
+      file.arrayBuffer().then(b => { input.remove(); resolve({ name: file.name, bytes: new Uint8Array(b) }); }, e => { input.remove(); reject(e); });
+    };
+    input.oncancel = () => { input.remove(); resolve(null); };
+    document.body.appendChild(input);
+    input.click();
+  });
+}

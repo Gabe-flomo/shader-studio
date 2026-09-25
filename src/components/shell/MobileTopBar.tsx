@@ -10,6 +10,7 @@ import { Menu } from '../ui/Menu';
 import { LoadGraphButton, SaveGraphButton } from './DesktopTopNav';
 import { reportFileResult, reportGlslImport } from './reportFileResult';
 import { isPlayRecordEmpty } from '../../types/play';
+import { exportEverything, importEverything } from '../../utils/libraryActions';
 
 /**
  * Phone top bar (Mobile board): logo (back to Studio), the Studio | Play switch, undo/redo,
@@ -105,6 +106,8 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             { label: 'Import a graph', icon: 'import', onSelect: async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); } },
             { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
             { label: 'Export this graph', icon: 'export', onSelect: async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); } },
+            { label: 'Export everything', icon: 'export', hint: 'Every graph, preset and setting as one ZIP', onSelect: () => { void exportEverything(); } },
+            { label: 'Import a library', icon: 'import', hint: 'A library ZIP: adds to what you have', onSelect: () => { void importEverything(); } },
             'separator',
             page === 'shortcuts'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
