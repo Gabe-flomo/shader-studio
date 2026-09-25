@@ -14107,10 +14107,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Solar ──
+  // ── Web: Solar ──
   fcSolar: {
-    label: 'FC: Solar',
-    description: 'After "solar" on FragCoord (community shader; author credit to follow). Circle SDF → 1/max(−d, 10d) glow, dimmed by a per-pixel flicker and slow pulse, tinted, Tone Map Tanh² for the golfed-shader roll-off.',
+    label: 'Web: Solar',
+    description: 'After "solar", a community shader from the web (author credit to follow). Circle SDF → 1/max(−d, 10d) glow, dimmed by a per-pixel flicker and slow pulse, tinted, Tone Map Tanh² for the golfed-shader roll-off.',
     counter: 11,
     nodes: [
       {
@@ -14246,10 +14246,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Pillars ──
+  // ── Web: Pillars ──
   fcPillars: {
-    label: 'FC: Pillars',
-    description: 'After "pillars" on FragCoord (community shader; author credit to follow). Scrolling UV → Infinite Repeat (2×2 cells) → a sqrt(1 − x²) cylinder profile that flips sign per column → sine Palette.',
+    label: 'Web: Pillars',
+    description: 'After "pillars", a community shader from the web (author credit to follow). Scrolling UV → Infinite Repeat (2×2 cells) → a sqrt(1 − x²) cylinder profile that flips sign per column → sine Palette.',
     counter: 7,
     nodes: [
       {
@@ -14358,10 +14358,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Gradient 4 ──
+  // ── Web: Gradient 4 ──
   fcGradient4: {
-    label: 'FC: Gradient 4',
-    description: 'After "gradient 4" on FragCoord (community shader; author credit to follow). One phase expression (folded cosines + hash grain) into a sine Palette, divided by |cos(x/0.1)| stripes. Noise Float in Hash mode replaces the fract(cos(dot…)) one-liner.',
+    label: 'Web: Gradient 4',
+    description: 'After "gradient 4", a community shader from the web (author credit to follow). One phase expression (folded cosines + hash grain) into a sine Palette, divided by |cos(x/0.1)| stripes. Noise Float in Hash mode replaces the fract(cos(dot…)) one-liner.',
     counter: 7,
     nodes: [
       {
@@ -14468,10 +14468,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Grain Gradient ──
+  // ── Web: Grain Gradient ──
   fcGrainGradient: {
-    label: 'FC: Grain Gradient',
-    description: 'After "grain gradient" on FragCoord (community shader; author credit to follow). Perlin Noise Float → Remap → Rotate 2D spins the canvas; a two-line wave warp; four Mix nodes cycle six colours; two Smoothstep-driven Mix layers; Brightness/Contrast and Grain finish.',
+    label: 'Web: Grain Gradient',
+    description: 'After "grain gradient", a community shader from the web (author credit to follow). Perlin Noise Float → Remap → Rotate 2D spins the canvas; a two-line wave warp; four Mix nodes cycle six colours; two Smoothstep-driven Mix layers; Brightness/Contrast and Grain finish.',
     counter: 31,
     nodes: [
       {
@@ -14839,10 +14839,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Rotating Cross Tiles ──
+  // ── Web: Rotating Cross Tiles ──
   fcTiling: {
-    label: 'FC: Rotating Cross Tiles',
-    description: 'After "tiling" on FragCoord (community shader; author credit to follow). One group used twice: Rotate 2D → Infinite Repeat (√10 cells) → un-rotate → per-cell spin phase from the Cell ID → Shape SDF Cross → Smoothstep. The white and black grids are offset copies; an expression picks whichever is spinning.',
+    label: 'Web: Rotating Cross Tiles',
+    description: 'After "tiling", a community shader from the web (author credit to follow). One group used twice: Rotate 2D → Infinite Repeat (√10 cells) → un-rotate → per-cell spin phase from the Cell ID → Shape SDF Cross → Smoothstep. The white and black grids are offset copies; an expression picks whichever is spinning.',
     counter: 8,
     nodes: [
       {
@@ -15199,10 +15199,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: The Screen ──
+  // ── Web: The Screen ──
   fcTheScreen: {
-    label: 'FC: The Screen',
-    description: 'After "the screen" on FragCoord (community shader; author credit to follow). A 16-iteration group (the loop cap; the original steps ~127 times): Loop Index → layer depth → one projection expression → window-light expression accumulated with +=. Then a ⁴√ tone tail. Shows how a golfed for-loop maps onto an iterated group.',
+    label: 'Web: The Screen',
+    description: 'After "the screen", a community shader from the web (author credit to follow). A 16-iteration group (the loop cap; the original steps ~127 times): Loop Index → layer depth → one projection expression → window-light expression accumulated with +=. Then a ⁴√ tone tail. Shows how a golfed for-loop maps onto an iterated group.',
     counter: 6,
     nodes: [
       {
@@ -15371,10 +15371,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Shield ──
+  // ── Web: Shield ──
   fcShield: {
-    label: 'FC: Shield',
-    description: 'After "Shield" on FragCoord (community shader; author credit to follow). 16 zoomed layers in an iterated group (the loop cap; the original uses 100): Spherical (Dome mode) bulges each layer and its Height output shades it; Infinite Repeat with Stagger 0.5 makes the brickwork; an edge-glow expression accumulates; Tone Map Tanh².',
+    label: 'Web: Shield',
+    description: 'After "Shield", a community shader from the web (author credit to follow). 16 zoomed layers in an iterated group (the loop cap; the original uses 100): Spherical (Dome mode) bulges each layer and its Height output shades it; Infinite Repeat with Stagger 0.5 makes the brickwork; an edge-glow expression accumulates; Tone Map Tanh².',
     counter: 5,
     nodes: [
       {
@@ -15596,10 +15596,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Main Frame ──
+  // ── Web: Main Frame ──
   fcMainFrame: {
-    label: 'FC: Main Frame',
-    description: 'After "main frame" on FragCoord (community shader; author credit to follow). Nine layers in an iterated group; each runs a 7-step fold in a Custom Function, then 0.02/l² glow × a cosine Palette accumulates. Previous Frame sampled through a sine warp, squared and added, gives the feedback smear; Tone Map Tanh.',
+    label: 'Web: Main Frame',
+    description: 'After "main frame", a community shader from the web (author credit to follow). Nine layers in an iterated group; each runs a 7-step fold in a Custom Function, then 0.02/l² glow × a cosine Palette accumulates. Previous Frame sampled through a sine warp, squared and added, gives the feedback smear; Tone Map Tanh.',
     counter: 11,
     nodes: [
       {
@@ -15908,10 +15908,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Atlantic ──
+  // ── Web: Atlantic ──
   fcAtlantic: {
-    label: 'FC: Atlantic',
-    description: 'After "atlantic" on FragCoord (community shader; author credit to follow). March Camera + Scene Group + March Loop Group. The scene is Scene Pos → Turbulence 3D (ten sine octaves) → tilted plane → a soft step-size expression; the volumetric loop accumulates 1.2/(d·z); tint and Tone Map Tanh.',
+    label: 'Web: Atlantic',
+    description: 'After "atlantic", a community shader from the web (author credit to follow). March Camera + Scene Group + March Loop Group. The scene is Scene Pos → Turbulence 3D (ten sine octaves) → tilted plane → a soft step-size expression; the volumetric loop accumulates 1.2/(d·z); tint and Tone Map Tanh.',
     counter: 9,
     nodes: [
       {
@@ -16168,10 +16168,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Orb ──
+  // ── Web: Orb ──
   fcOrb: {
-    label: 'FC: Orb',
-    description: 'After "orb" on FragCoord (community shader; author credit to follow). March Camera orbiting a Scene Group: a gyroid shell (|1.4 + cos·cos|) intersected with a Sphere 3D. Inside the volumetric March Loop Group a Palette of the x position, divided by the distance, accumulates per step; Tone Map Tanh.',
+    label: 'Web: Orb',
+    description: 'After "orb", a community shader from the web (author credit to follow). March Camera orbiting a Scene Group: a gyroid shell (|1.4 + cos·cos|) intersected with a Sphere 3D. Inside the volumetric March Loop Group a Palette of the x position, divided by the distance, accumulates per step; Tone Map Tanh.',
     counter: 8,
     nodes: [
       {
@@ -16456,10 +16456,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Bitshift ──
+  // ── Web: Bitshift ──
   fcBitshift: {
-    label: 'FC: Bitshift',
-    description: 'After "bitshift" on FragCoord (community shader; author credit to follow). Split → two Quantize (1/32) → Make Vec2 snaps the UV to a coarse grid; one expression for the tan() ripple; ×¼ then Posterize (4 levels) reproduces floor(x)/4.',
+    label: 'Web: Bitshift',
+    description: 'After "bitshift", a community shader from the web (author credit to follow). Split → two Quantize (1/32) → Make Vec2 snaps the UV to a coarse grid; one expression for the tan() ripple; ×¼ then Posterize (4 levels) reproduces floor(x)/4.',
     counter: 11,
     nodes: [
       {
@@ -16590,10 +16590,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
     ],
   },
-  // ── FC: Trippy Noise ──
+  // ── Web: Trippy Noise ──
   fcTrippyNoise: {
-    label: 'FC: Trippy Noise',
-    description: 'After "trippy noise" on FragCoord (community shader; author credit to follow). Rotate 2D → |uv| → Polar angle drives a second Rotate; three Noise Floats (value noise, offset ±0.333) → Smoothstep → RGB tints summed; Vignette, lift, a Texture Input screened in through Blend Modes (an empty image slot changes nothing), and Bloom replaces the threshold → blur X → blur Y → screen passes.',
+    label: 'Web: Trippy Noise',
+    description: 'After "trippy noise", a community shader from the web (author credit to follow). Rotate 2D → |uv| → Polar angle drives a second Rotate; three Noise Floats (value noise, offset ±0.333) → Smoothstep → RGB tints summed; Vignette, lift, a Texture Input screened in through Blend Modes (an empty image slot changes nothing), and Bloom replaces the threshold → blur X → blur Y → screen passes.',
     counter: 33,
     nodes: [
       {
@@ -17094,7 +17094,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Combo: Turbulence + SDF + Glow ──
   comboTurbulenceGlow: {
     label: 'Combo: Turbulence + SDF + Glow',
-    description: 'Turbulence (Xor\'s sine loop) warps the UV before a Circle SDF; SDF Glow in Simple mode with a Palette tint turns the wobbling distance into light. Swap the SDF for FBM or a Grid to see the warp on anything. The same loop in 3D, warping a plane: FC: Atlantic (Turbulence 3D); the glow-to-colour half again: Combo: Chaos Layers + Glow to Color.',
+    description: 'Turbulence (Xor\'s sine loop) warps the UV before a Circle SDF; SDF Glow in Simple mode with a Palette tint turns the wobbling distance into light. Swap the SDF for FBM or a Grid to see the warp on anything. The same loop in 3D, warping a plane: Web: Atlantic (Turbulence 3D); the glow-to-colour half again: Combo: Chaos Layers + Glow to Color.',
     counter: 7,
     nodes: [
       {
@@ -17179,7 +17179,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Combo: Grid + SDF Fill + Bloom ──
   comboBloomDots: {
     label: 'Combo: Grid + SDF Fill + Bloom',
-    description: 'Grid → Circle SDF on the Cell UV → SDF Fill draws bright dots coloured by Cell ID; Bloom (Luma select, Layered kernel — Xor\'s bloom article) thresholds, blurs and screens the highlights: the whole threshold → Blur X → Blur Y → screen pass chain in one node. Bloom on a full picture: FC: Trippy Noise; the blur half on its own: Combo: Wave Texture + Blur H/V.',
+    description: 'Grid → Circle SDF on the Cell UV → SDF Fill draws bright dots coloured by Cell ID; Bloom (Luma select, Layered kernel — Xor\'s bloom article) thresholds, blurs and screens the highlights: the whole threshold → Blur X → Blur Y → screen pass chain in one node. Bloom on a full picture: Web: Trippy Noise; the blur half on its own: Combo: Wave Texture + Blur H/V.',
     counter: 11,
     nodes: [
       {
@@ -17317,7 +17317,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Combo: Dome + Repeat + Height ──
   comboDomeRepeat: {
     label: 'Combo: Dome + Repeat + Height',
-    description: 'Spherical in Dome mode bulges the plane like a hemisphere; Infinite Repeat tiles a Box SDF over it; the Height output shades the dome and masks everything outside the unit circle. Dome mode where it came from: FC: Shield; the Repeat + Cell ID half: Combo: Repeat + Cell ID + Hash.',
+    description: 'Spherical in Dome mode bulges the plane like a hemisphere; Infinite Repeat tiles a Box SDF over it; the Height output shades the dome and masks everything outside the unit circle. Dome mode where it came from: Web: Shield; the Repeat + Cell ID half: Combo: Repeat + Cell ID + Hash.',
     counter: 12,
     nodes: [
       {
