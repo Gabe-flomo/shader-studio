@@ -1045,7 +1045,7 @@ export const VignetteNode: NodeDefinition = {
   description: 'Add a soft darkening vignette around the edges of the frame.',
   inputs: {
     color:    { type: 'vec3',  label: 'Color' },
-    uv:       { type: 'vec2',  label: 'UV (0-1)' },
+    uv:       { type: 'vec2',  label: 'UV (0-1)', hint: 'Leave empty to darken toward the frame edges. Wire a 0–1 UV (Pixel UV) to move or warp the vignette.' },
     radius:   { type: 'float', label: 'Radius' },
     softness: { type: 'float', label: 'Softness' },
     strength: { type: 'float', label: 'Strength' },
@@ -1060,7 +1060,9 @@ export const VignetteNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id  = node.id;
     const col = inputVars.color    || 'vec3(0.5)';
-    const uv  = inputVars.uv       || 'vec2(0.5)';
+    // An unwired `uv` socket is auto-filled with g_uv (centred, aspect-corrected), but this node
+    // measures from a 0–1 frame: fall back to the raw 0–1 varying so the vignette stays centred.
+    const uv  = inputVars.uv && inputVars.uv !== 'g_uv' ? inputVars.uv : 'vUv';
     const rad = inputVars.radius   || p(node.params.radius,   0.65);
     const sft = inputVars.softness || p(node.params.softness, 0.45);
     const str = inputVars.strength || p(node.params.strength, 1.0);
