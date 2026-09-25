@@ -19,7 +19,7 @@ import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE
 import { SENSOR_READS_FOR, type SensorRead } from '../../types/play';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
-import { playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
+import { applyCurve, playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
 import {
   candidateLabel, collectPlayCandidates, controlExists, controlHelp, findTargetNode, playId, readControlValue, targetParts, type PlayCandidate,
@@ -1007,6 +1007,8 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
     onUpdate(c ? { controlId: id, outMin: c.min, outMax: c.max, channel: undefined, source } : { controlId: id, source });
   };
 
+  // Where the source lands after the curve (0..1 of the range): what the control actually gets.
+  const shaped = applyCurve(meter, m.curve, m.curveY);
   const frame = { marginTop: 6, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${learning ? tk.accent.base : tk.border.default}`, opacity: m.enabled ? 1 : 0.55 };
   const chevron = <IconButton icon={collapsed ? 'chevR' : 'chevD'} label={collapsed ? 'Expand mapping' : 'Collapse mapping'} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />;
 
@@ -1023,9 +1025,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
           <SoloButton kind="mapping" id={m.id} />
           <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} />
         </div>
-        <div style={{ height: 3, margin: '2px 0 0 22px', borderRadius: 2, background: tk.bg.field, overflow: 'hidden' }}>
-          <div style={{ width: `${Math.round(meter * 100)}%`, height: '100%', background: m.enabled ? tk.accent.base : tk.text.disabled, transition: 'width 60ms linear' }} />
-        </div>
+        <MappingMeter input={meter} output={shaped} on={m.enabled} margin="2px 0 0 22px" />
       </div>
     );
   }
@@ -1064,9 +1064,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <IconButton icon="trash" label="Remove mapping" size="sm" tone="danger" onClick={onRemove} />
       </div>
       {/* Meter */}
-      <div style={{ height: 3, margin: '6px 0 8px 60px', borderRadius: 2, background: tk.bg.field, overflow: 'hidden' }}>
-        <div style={{ width: `${Math.round(meter * 100)}%`, height: '100%', background: m.enabled ? tk.accent.base : tk.text.disabled, transition: 'width 60ms linear' }} />
-      </div>
+      <MappingMeter input={meter} output={shaped} on={m.enabled} margin="6px 0 8px 60px" />
       <SourceOptions source={m.source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={source => onUpdate({ source })} />
       {/* Target row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1087,7 +1085,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <Segmented size="sm" ariaLabel="Curve" value={m.curve} options={CURVES} onChange={v => onUpdate(v === 'custom' ? { curve: 'custom', curveY: m.curveY ?? sampleCurve(m.curve) } : { curve: v })} />
       </div>
       {m.curve === 'custom' && (
-        <CurvePad value={m.curveY ?? sampleCurve('linear')} meter={meter} onChange={curveY => onUpdate({ curveY })} onReset={() => onUpdate({ curveY: sampleCurve('linear') })} />
+        <CurvePad value={m.curveY ?? sampleCurve('linear')} meter={meter} range={[m.outMin, m.outMax]} onChange={curveY => onUpdate({ curveY })} onReset={() => onUpdate({ curveY: sampleCurve('linear') })} />
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
         <span style={labelStyle}>Smooth</span>
@@ -1308,7 +1306,23 @@ function EnvelopeGlyph({ a, d, s, r }: { a: number; d: number; s: number; r: num
  * the dot is the source's reading right now, so you can see where you are on
  * the curve while you turn the knob.
  */
-function CurvePad({ value, meter, onChange, onReset }: { value: number[]; meter: number; onChange: (ys: number[]) => void; onReset: () => void }) {
+/**
+ * A mapping's meter: the bar is what the control gets (after the curve), the
+ * tick is the source's raw reading. With a straight curve they sit together;
+ * a drawn or Exp/Log curve pulls them apart, so its effect is visible.
+ */
+function MappingMeter({ input, output, on, margin }: { input: number; output: number; on: boolean; margin: string }) {
+  const tk = useTokens();
+  const i = Math.max(0, Math.min(1, input)), o = Math.max(0, Math.min(1, output));
+  return (
+    <div title={`Bar: what the control gets (${Math.round(o * 100)}% of its range). Tick: the source (${Math.round(i * 100)}%).`} style={{ position: 'relative', height: 5, margin, borderRadius: 2, background: tk.bg.field, overflow: 'hidden' }}>
+      <div style={{ width: `${o * 100}%`, height: '100%', background: on ? tk.accent.base : tk.text.disabled, transition: 'width 60ms linear' }} />
+      <div style={{ position: 'absolute', top: 0, bottom: 0, left: `calc(${i * 100}% - 1px)`, width: 2, background: on ? tk.text.secondary : tk.text.disabled, opacity: 0.7, transition: 'left 60ms linear' }} />
+    </div>
+  );
+}
+
+function CurvePad({ value, meter, range, onChange, onReset }: { value: number[]; meter: number; range: [number, number]; onChange: (ys: number[]) => void; onReset: () => void }) {
   const tk = useTokens();
   const ref = useRef<HTMLDivElement>(null);
   const draw = useRef<{ ys: number[]; lastI: number; lastY: number } | null>(null);
@@ -1359,6 +1373,7 @@ function CurvePad({ value, meter, onChange, onReset }: { value: number[]; meter:
   const pos = mx * (n - 1);
   const mi = Math.min(n - 2, Math.floor(pos));
   const my = value[mi] + (value[mi + 1] - value[mi]) * (pos - mi);
+  const fmtOut = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2));
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, marginTop: 6, marginLeft: 60 }}>
       <div
@@ -1373,7 +1388,13 @@ function CurvePad({ value, meter, onChange, onReset }: { value: number[]; meter:
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}>
           <line x1={0} y1={H} x2={W} y2={0} stroke={tk.text.disabled} strokeWidth={0.6} strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
           <path d={path} fill="none" stroke={tk.accent.base} strokeWidth={2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          {/* Up from the source, across to what the control gets. */}
+          <line x1={mx * W} y1={H} x2={mx * W} y2={(1 - my) * H} stroke={tk.text.faint} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          <line x1={0} y1={(1 - my) * H} x2={mx * W} y2={(1 - my) * H} stroke={tk.accent.base} strokeWidth={1} strokeDasharray="3 2" vectorEffect="non-scaling-stroke" />
         </svg>
+        <span style={{ position: 'absolute', right: 6, top: 4, color: tk.text.faint, font: `500 10px ${fontFamily.mono}`, pointerEvents: 'none' }}>
+          in {mx.toFixed(2)} → {fmtOut(range[0] + (range[1] - range[0]) * my)}
+        </span>
         <span style={{ position: 'absolute', left: `calc(${mx * 100}% - 4px)`, top: `calc(${(1 - my) * 100}% - 4px)`, width: 8, height: 8, borderRadius: '50%', background: tk.accent.base, boxShadow: `0 0 0 2px ${tk.bg.panel}`, pointerEvents: 'none' }} />
       </div>
       <IconButton icon="reset" label="Back to a straight line" size="sm" onClick={onReset} style={{ alignSelf: 'flex-start' }} />
