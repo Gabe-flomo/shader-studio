@@ -19,7 +19,12 @@ export interface KitEnv {
   image(src: string): HTMLImageElement | null;
   sensor(key: string, value: number): void;
   override(layerId: string, key: string, value: number | null): void;
+  /** Set when the shader has a Layers node: gets the layers' colour and distance field each frame. */
+  shaderTap?: (tap: ShaderTap) => void;
 }
+
+/** What the graph's Layers node reads: colour at half resolution, and a 16-bit packed distance grid (row 0 at the top). */
+export interface ShaderTap { color: HTMLCanvasElement; field: Uint8Array; gw: number; gh: number }
 
 export interface LayerKit {
   frame(ctx: CanvasRenderingContext2D, record: PlayRecord, env: KitEnv): void;

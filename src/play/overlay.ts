@@ -21,6 +21,8 @@ import { cameraInput } from '../lib/cameraInput';
 import { createLayerKit, type KitEnv, type KitPointer, type LayerKit } from './kit/kit.js';
 
 export type LayerWriter = (layerId: string, patch: Partial<PlayLayer>) => void;
+export type { ShaderTap } from './kit/kit.js';
+import type { ShaderTap } from './kit/kit.js';
 
 /** Drawing a shape's outline on the picture: click corners (polygon) or drag freehand (lasso). */
 export interface ShapeDrawing { layerId: string; mode: 'polygon' | 'lasso'; pts: number[] }
@@ -41,6 +43,7 @@ class PlayOverlay {
   private drawingListeners = new Set<(d: ShapeDrawing | null) => void>();
   private aspect = 16 / 9;
   private composite: HTMLCanvasElement | null = null;
+  private shaderTap: ((tap: ShaderTap) => void) | null = null;
 
   constructor() {
     playEngine.onAction(a => this.kit.act({ do: a.do, layerId: a.layerId, amount: a.amount }));
@@ -61,6 +64,9 @@ class PlayOverlay {
 
   /** The Layers tab is open: shapes can be dragged and invisible zones are outlined. */
   setEditing(on: boolean, selectedId = ''): void { this.editing = on; this.selectedId = selectedId; }
+
+  /** The graph's Layers node reads what the layers draw: receive it after every frame (null = off). */
+  setShaderTap(fn: ((tap: ShaderTap) => void) | null): void { this.shaderTap = fn; }
 
   hasLayers(): boolean { return this.record.layers.some(l => l.visible) || this.record.display?.picture === false; }
 
@@ -212,6 +218,7 @@ class PlayOverlay {
       image: src => this.image(src),
       sensor: forExport ? () => {} : (k, v) => playEngine.setSensor(k, v),
       override: forExport ? () => {} : (id, k, v) => playEngine.setOverride(id, k, v),
+      shaderTap: forExport ? undefined : this.shaderTap ?? undefined,
     };
   }
 

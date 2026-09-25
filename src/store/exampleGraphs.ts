@@ -474,6 +474,189 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     ],
   },
 
+  // ── Particle Glow (Play layers) ──
+  particleGlow: {
+    label: 'Particle Glow',
+    description: 'The Layers node turns what the Play layers draw into a distance field, so SDF Glow makes the particles themselves glow. An emitter null launches a flock that an absorber (following the mouse on a spring) swallows.',
+    counter: 5,
+    play: {
+      version: 1,
+      layers: [
+        layer('null', 'source', 'Emitter', { x: 0.3, y: 0.5, size: 8, color: '#ffb86b', role: 'emitter', radius: 0.04, strength: 1 }),
+        layer('null', 'sink', 'Absorber', { x: 0.7, y: 0.5, size: 8, color: '#6bb8ff', role: 'absorber', radius: 0.04, strength: 4, follow: 'mouse', spring: 0.35, wobble: 0.55 }),
+        layer('particles', 'sparks', 'Sparks', {
+          count: 300, field: 'none', speed: 0.5, steer: 0.2, edges: 'respawn', fade: 0.3,
+          flock: 0.15, flockRadius: 0.05, size: 1.6, sizeJitter: 0.4,
+          colour: 'palette', palette: 3, paletteBy: 'speed', trail: 0, blend: 'screen',
+        }),
+      ],
+      controls: [
+        { id: 'falloff', target: 'glow::brightness', kind: 'float', label: 'Glow falloff', min: 10, max: 100 },
+        { id: 'pull', target: 'layer:sink::strength', kind: 'float', label: 'Absorber pull', min: 0, max: 8 },
+        { id: 'flock', target: 'layer:sparks::flock', kind: 'float', label: 'Flocking', min: 0, max: 1 },
+      ],
+      mappings: [
+        { id: 'breathe', controlId: 'falloff', source: { kind: 'lfo', shape: 'sine', rate: 0.15, phase: 0 }, outMin: 35, outMax: 70, curve: 'linear', smoothMs: 0, enabled: true },
+      ],
+      actions: [
+        { id: 'scatter', trigger: { on: 'key', code: 'Space' }, do: 'scatter', layerId: 'sparks', amount: 1.5, enabled: true },
+      ],
+    },
+    nodes: [
+      { id: 'uv', type: 'uv', position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      {
+        id: 'layers', type: 'playLayers', position: { x: 420, y: 200 },
+        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' }, distance: { type: 'float', label: 'Distance' } },
+        params: {},
+      },
+      {
+        id: 'glow', type: 'light', position: { x: 820, y: 200 },
+        inputs: {
+          distance: { type: 'float', label: 'Distance', connection: { nodeId: 'layers', outputKey: 'distance' } },
+          brightness: { type: 'float', label: 'Brightness' },
+          tint: { type: 'vec3', label: 'Tint' },
+        },
+        outputs: { glow: { type: 'float', label: 'Glow' }, inner: { type: 'float', label: 'Inner' }, tinted: { type: 'vec3', label: 'Tinted' } },
+        params: { mode: 'glow', brightness: 50, ringFreq: 8, tint: [1, 0.55, 0.3], innerFalloff: 8 },
+      },
+      {
+        id: 'tone', type: 'toneMap', position: { x: 1220, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glow', outputKey: 'tinted' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' },
+      },
+      {
+        id: 'out', type: 'output', position: { x: 1620, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Flow Around Words (Play layers) ──
+  flowAroundWords: {
+    label: 'Flow Around Words',
+    description: 'Particles stream over an FBM landscape and part around a word: a Shape layer takes the text layer\'s shape and acts as a wall. N steps the word to its next line; drag on the picture to paint more walls with the brush.',
+    counter: 6,
+    play: {
+      version: 1,
+      layers: [
+        layer('text', 'word', 'Word', { text: 'FLOW\nAROUND\nWORDS', size: 0.3, opacity: 0.18, sequence: true, transition: 'rise', toShader: false }),
+        layer('shape', 'wordWall', 'Word wall', { shape: 'layer', sourceId: 'word', show: false, action: 'wall', bounce: 0.1 }),
+        layer('particles', 'stream', 'Stream', {
+          count: 1400, field: 'noise', speed: 1.3, steer: 0.6, noiseScale: 2.2, noiseEvolve: 0.15, angle: 0,
+          shape: 'streak', size: 1.2, sizeJitter: 0.4, colour: 'palette', palette: 5, paletteBy: 'speed', trail: 0.7, blend: 'screen', fade: 0.2, life: 8,
+        }),
+        layer('brush', 'walls', 'Walls', { walls: true, fade: 12, size: 10, colour: 'tint', color: [1, 1, 1], opacity: 0.35, blend: 'normal' }),
+      ],
+      controls: [
+        { id: 'dir', target: 'layer:stream::angle', kind: 'float', label: 'Stream direction', min: -180, max: 180, step: 1 },
+        { id: 'speed', target: 'layer:stream::speed', kind: 'float', label: 'Stream speed', min: 0, max: 3 },
+      ],
+      mappings: [
+        { id: 'turn', controlId: 'dir', source: { kind: 'lfo', shape: 'triangle', rate: 0.03, phase: 0 }, outMin: -40, outMax: 40, curve: 'linear', smoothMs: 0, enabled: true },
+      ],
+      actions: [
+        { id: 'next', trigger: { on: 'key', code: 'KeyN' }, do: 'next', layerId: 'word', amount: 1, enabled: true },
+        { id: 'clear', trigger: { on: 'key', code: 'KeyC' }, do: 'clear', layerId: 'walls', amount: 1, enabled: true },
+      ],
+    },
+    nodes: [
+      { id: 'uv_0', type: 'uv', position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'time_1', type: 'time', position: { x: 40, y: 400 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'fbm_2', type: 'fbm', position: { x: 280, y: 200 },
+        inputs: {
+          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+          scale: { type: 'float', label: 'Scale' },
+          time_scale: { type: 'float', label: 'Time Scale' },
+        },
+        outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
+        params: { octaves: 5, lacunarity: 2, gain: 0.5, scale: 2, time_scale: 0.05 },
+      },
+      {
+        id: 'palette_3', type: 'palettePreset', position: { x: 560, y: 200 },
+        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_2', outputKey: 'value' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '4' },
+      },
+      {
+        id: 'tone_4', type: 'toneMap', position: { x: 780, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette_3', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' },
+      },
+      {
+        id: 'output_5', type: 'output', position: { x: 1000, y: 220 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_4', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
+  // ── Letter Drop (Play layers) ──
+  letterDrop: {
+    label: 'Letter Drop',
+    description: 'Physics bodies: the letters of a word slide down a funnel (two drawn Shapes set to Wall) and pile on a glowing hill (Solid picture: the bright parts of the shader are ground). Space drops them again, a click scatters them, and the mouse tilts gravity.',
+    counter: 5,
+    play: {
+      version: 1,
+      layers: [
+        // A funnel of two drawn ramps (corners in picture heights around the centre, so it keeps its shape on any canvas), with a gap to fall through.
+        layer('shape', 'rampL', 'Left ramp', { shape: 'polygon', x: 0.5, y: 0.34, w: 0.78, h: 0.3, points: [-0.9, 0.3, -0.12, 0, -0.12, -0.03, -0.9, 0.27], action: 'wall', fill: [1, 1, 1], fillOpacity: 0.45, strokeWidth: 0 }),
+        layer('shape', 'rampR', 'Right ramp', { shape: 'polygon', x: 0.5, y: 0.34, w: 0.78, h: 0.3, points: [0.9, 0.3, 0.12, 0, 0.12, -0.03, 0.9, 0.27], action: 'wall', fill: [1, 1, 1], fillOpacity: 0.45, strokeWidth: 0 }),
+        layer('bodies', 'letters', 'Letters', { text: 'SHADER STUDIO', size: 46, solidPicture: true, threshold: 0.6, colour: 'palette', palette: 3, bounce: 0.25, friction: 0.6 }),
+      ],
+      controls: [
+        { id: 'tilt', target: 'layer:letters::angle', kind: 'float', label: 'Gravity angle', min: -60, max: 60, step: 1 },
+        { id: 'radius', target: 'circ::radius', kind: 'float', label: 'Hill height', min: 1.1, max: 1.8 },
+      ],
+      mappings: [
+        { id: 'mouse', controlId: 'tilt', source: { kind: 'mouse', axis: 'x' }, outMin: 10, outMax: -10, curve: 'linear', smoothMs: 150, enabled: true },
+      ],
+      actions: [
+        { id: 'drop', trigger: { on: 'key', code: 'Space' }, do: 'drop', layerId: 'letters', amount: 1, enabled: true },
+        { id: 'scatter', trigger: { on: 'mouse' }, do: 'scatter', layerId: 'letters', amount: 1, enabled: true },
+      ],
+    },
+    nodes: [
+      { id: 'uv', type: 'uv', position: { x: 60, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      {
+        id: 'circ', type: 'circleSDF', position: { x: 480, y: 200 },
+        inputs: {
+          position: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } },
+          radius: { type: 'float', label: 'Radius' },
+          offset: { type: 'vec2', label: 'Center' },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 1.4, posX: 0, posY: -2.1 },
+      },
+      {
+        id: 'glow', type: 'light', position: { x: 900, y: 200 },
+        inputs: {
+          distance: { type: 'float', label: 'Distance', connection: { nodeId: 'circ', outputKey: 'distance' } },
+          brightness: { type: 'float', label: 'Brightness' },
+          tint: { type: 'vec3', label: 'Tint' },
+        },
+        outputs: { glow: { type: 'float', label: 'Glow' }, inner: { type: 'float', label: 'Inner' }, tinted: { type: 'vec3', label: 'Tinted' } },
+        params: { mode: 'glow', brightness: 10, ringFreq: 8, tint: [0.45, 0.6, 1], innerFalloff: 8 },
+      },
+      {
+        id: 'tone', type: 'toneMap', position: { x: 1320, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glow', outputKey: 'tinted' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { mode: 'aces' },
+      },
+      {
+        id: 'out', type: 'output', position: { x: 1740, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone', outputKey: 'color' } } },
+        outputs: {}, params: {},
+      },
+    ],
+  },
+
   // ── FBM Landscape ──
   fbmLandscape: {
     label: 'FBM Landscape',

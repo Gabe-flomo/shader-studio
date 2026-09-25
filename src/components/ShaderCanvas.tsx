@@ -9,6 +9,7 @@ import { inputBus } from '../lib/inputBus';
 import { playEngine } from '../lib/playEngine';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
+import { layersUniforms, setLayersTap } from '../play/layersTexture';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick, hasTimeTickListeners } from '../lib/timeTick';
@@ -469,6 +470,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // Echo snapshot ring (see nodes/definitions/echo.ts); the shader declares only the ones it uses.
       ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
       u_fontTexture: { value: FONT_TEXTURE },
+      // The graph's Layers node (play/layersTexture.ts); shared objects, refreshed in place each frame.
+      ...layersUniforms,
     };
     for (const [name, value] of Object.entries(pu))  initialUniforms[name] = { value };
     for (const name of Object.keys(tu))              initialUniforms[name] = { value: null };
@@ -1739,6 +1742,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     setGlslErrors([]);
     // Every shader *declares* u_time in its preamble; what matters is whether
     // the body reads it (a Time node, keyframe curves, rotate(..., u_time)…).
+    setLayersTap(/\bu_layers(Field)?\b/.test(activeFragmentShader), () => requestRenderRef.current());
     usesTimeRef.current = /\bu_time\b/.test(activeFragmentShader.replace(/uniform\s+float\s+u_time\s*;/g, ''));
     // Register uniforms on the shared uniforms object — the new program is
     // compiled against it, and the old one ignores names it doesn't declare.

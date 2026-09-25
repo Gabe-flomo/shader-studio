@@ -27,7 +27,7 @@
  * are queued with kit.act() and applied on the next frame.
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, paletteCssAt } from '../particle-sim.js';
-import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, sdfSegments } from './geometry.js';
+import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromMask, sdfSegments } from './geometry.js';
 import { KL_BLEND, klCss, klCanvas, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush } from './layers.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 
@@ -257,10 +257,9 @@ export function createLayerKit() {
     // 5. Draw, bottom to top.
     let lumaReady = false;
     const luma = () => { if (!lumaReady) { lumaReady = klBuildLuma(klCanvas(pool, 'luma', 320, 180), gl); } return lumaReady ? pool.luma : null; };
-    for (const l of layers) {
-      if (!isVisible(l)) continue;
+    const drawOne = (c, l) => {
       const v = k => env.value(l, k);
-      ctx.save();
+      c.save();
       try {
         switch (l.kind) {
           case 'null': break; // markers are drawn last, above everything
@@ -280,13 +279,13 @@ export function createLayerKit() {
             }
             const scratch = klCanvas(pool, 'scratch', W, H), s = scratch.getContext('2d');
             klPaintShape(s, l, v, W, H, src, text, anim);
-            klMatte(ctx, s, scratch, l, gl, W, H, opacity, env.hidden, l.matte === 'luma' ? luma() : null);
+            klMatte(c, s, scratch, l, gl, W, H, opacity, env.hidden, l.matte === 'luma' ? luma() : null);
             break;
           }
           case 'shape':
-            klDrawShape(ctx, l, v, W, H, dpr, maskShows.get(l.id) || null, env.editing, env.selectedId === l.id);
+            klDrawShape(c, l, v, W, H, dpr, maskShows.get(l.id) || null, env.editing, env.selectedId === l.id);
             break;
-          case 'particles': drawParticleLayer(ctx, l, v, env, record, zones, zoneById, pictureFor(l.readFrom, l.detail), pending.get(l.id), W, H, dpr, aspect, time, dt, pointer, gl); break;
+          case 'particles': drawParticleLayer(c, l, v, env, record, zones, zoneById, pictureFor(l.readFrom, l.detail), pending.get(l.id), W, H, dpr, aspect, time, dt, pointer, gl); break;
           case 'bodies': {
             const sizeH = (v('size') * dpr) / H;
             const key = l.source + '|' + l.text + '|' + l.count;
@@ -296,13 +295,13 @@ export function createLayerKit() {
             const walls = zones.filter(z => !z.affects || z.affects === l.id);
             const solid = l.solidPicture && coarse ? geoFieldFromBrightness(coarse, KIT_COARSE_W, KIT_COARSE_H, v('threshold')) : null;
             bdStep(b.st, l, v, dt, aspect, sizeH, walls, solid);
-            bdDraw(ctx, b.st, l, v, W, H, dpr, aspect);
+            bdDraw(c, b.st, l, v, W, H, dpr, aspect);
             break;
           }
           case 'audio': {
             let st = audios.get(l.id);
             if (!st) { st = {}; audios.set(l.id, st); }
-            klDrawAudio(ctx, l, v, W, H, dpr, env.audio, st, time);
+            klDrawAudio(c, l, v, W, H, dpr, env.audio, st, time);
             break;
           }
           case 'glyphs': {
@@ -310,19 +309,19 @@ export function createLayerKit() {
             const src = l.readFrom === 'camera' ? cam : gl;
             if (!src) break;
             const grid = sampleInto('glyphGrid', src, cols, rows, l.readFrom === 'camera' && camMirror);
-            if (grid) klDrawGlyphs(ctx, l, v, W, H, dpr, grid, cols, rows, pool, l.readFrom === 'camera' ? null : gl);
+            if (grid) klDrawGlyphs(c, l, v, W, H, dpr, grid, cols, rows, pool, l.readFrom === 'camera' ? null : gl);
             break;
           }
           case 'contours': {
             const pic = pictureFor(l.readFrom, l.detail);
-            if (pic) klDrawContours(ctx, l, v, W, H, dpr, pic.s, pic.w, pic.h, time);
+            if (pic) klDrawContours(c, l, v, W, H, dpr, pic.s, pic.w, pic.h, time);
             break;
           }
           case 'lens': {
             let px = v('x'), py = v('y');
             if (l.follow === 'mouse' && pointer.over) { px = pointer.x; py = pointer.y; }
             else if (l.follow === 'null') { const n = nullPos(record, env, l.nullId); if (n) { px = n.x; py = n.y; } }
-            klDrawLens(ctx, l, v, W, H, dpr, gl, px, py, pool);
+            klDrawLens(c, l, v, W, H, dpr, gl, px, py, pool);
             break;
           }
           case 'brush': {
@@ -345,12 +344,23 @@ export function createLayerKit() {
             const fadeS = v('fade');
             if (fadeS > 0) { let cut = 0; while (cut < b.pts.length && time - b.pts[cut].t > fadeS) cut++; if (cut) b.pts.splice(0, cut); }
             if (b.pts.length > 3000) b.pts.splice(0, b.pts.length - 3000);
-            klDrawBrush(ctx, l, v, W, H, dpr, b, time);
+            klDrawBrush(c, l, v, W, H, dpr, b, time);
             break;
           }
         }
-      } finally { ctx.restore(); }
-    }
+      } finally { c.restore(); }
+    };
+    const tap = env.shaderTap;
+    if (tap) {
+      // The Layers node: draw what it sees into a buffer of its own, hand that over, then lay it on the overlay.
+      const buf = klCanvas(pool, 'shaderBuf', W, H), b = buf.getContext('2d');
+      b.setTransform(1, 0, 0, 1, 0, 0); b.globalAlpha = 1; b.globalCompositeOperation = 'source-over';
+      b.clearRect(0, 0, W, H);
+      for (const l of layers) if (isVisible(l) && l.toShader !== false) drawOne(b, l);
+      tap(shaderTapOf(buf, W, H, aspect));
+      ctx.drawImage(buf, 0, 0);
+      for (const l of layers) if (isVisible(l) && l.toShader === false) drawOne(ctx, l);
+    } else for (const l of layers) if (isVisible(l)) drawOne(ctx, l);
 
     // 6. Sensors.
     for (const z of zones) {
@@ -376,6 +386,32 @@ export function createLayerKit() {
 
     // 7. Null markers on top of everything.
     if (env.markers) for (const l of vis) if (l.kind === 'null') klDrawNull(ctx, l, env.value(l, 'x'), env.value(l, 'y'), env.value(l, 'size'), dpr, W, H, l.role && l.role !== 'none' ? env.value(l, 'radius') * H : 0);
+  }
+
+  /**
+   * What the Layers node reads: the layers at half resolution (colour), and
+   * a signed distance to them (graph UV units, a picture height = 2) packed
+   * 16-bit into red and green of an RGBA grid, row 0 at the top.
+   */
+  function shaderTapOf(buf, W, H, aspect) {
+    const cw = Math.max(1, Math.round(W / 2)), ch = Math.max(1, Math.round(H / 2));
+    const color = klCanvas(pool, 'shaderColor', cw, ch), cx = color.getContext('2d');
+    cx.clearRect(0, 0, cw, ch); cx.drawImage(buf, 0, 0, cw, ch);
+    const gh = 180, gw = Math.max(8, Math.round(gh * aspect));
+    const small = klCanvas(pool, 'shaderMask', gw, gh), sx = small.getContext('2d', { willReadFrequently: true });
+    sx.clearRect(0, 0, gw, gh); sx.drawImage(buf, 0, 0, gw, gh);
+    let data;
+    try { data = sx.getImageData(0, 0, gw, gh).data; } catch (e) { data = new Uint8ClampedArray(gw * gh * 4); }
+    // Low enough that a particle smaller than a cell still counts, high enough that faint trails don't.
+    const mask = new Uint8Array(gw * gh);
+    for (let i = 0; i < gw * gh; i++) mask[i] = data[i * 4 + 3] > 36 ? 1 : 0;
+    const f = geoFieldFromMask(mask, gw, gh);
+    const field = new Uint8Array(gw * gh * 4);
+    for (let i = 0; i < gw * gh; i++) {
+      const u = Math.max(0, Math.min(1, f.d[i] * 2 * 0.25 + 0.5)), q = Math.round(u * 65535);
+      field[i * 4] = q >> 8; field[i * 4 + 1] = q & 255; field[i * 4 + 3] = 255;
+    }
+    return { color, field, gw, gh };
   }
 
   function report(env, key, v) {

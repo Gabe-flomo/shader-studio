@@ -14,6 +14,7 @@ export { MidiInputNode };
 
 // Sources
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
+export { PlayLayersNode } from './playLayers';
 
 // Grid
 export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
@@ -161,6 +162,7 @@ export {
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
+import { PlayLayersNode } from './playLayers';
 import { EchoNode } from './echo';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
 import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
@@ -267,6 +269,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   audioInput: AudioInputNode,
   videoInput: VideoInputNode,
   midiInput: MidiInputNode,
+  playLayers: PlayLayersNode,
   // Transforms
   fract: FractNode,
   rotate2d: Rotate2DNode,

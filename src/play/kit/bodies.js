@@ -48,11 +48,18 @@ export function bdStep(st, l, v, dt, aspect, sizeH, zones, solid) {
   const gx = -Math.sin(ang) * g, gy = -Math.cos(ang) * g;
   const bounce = v('bounce'), fric = v('friction');
   const r0 = sizeH * (l.source === 'letters' ? 0.36 : 0.5);
-  const SUB = 3, h = Math.min(0.05, dt) / SUB;
+  // Enough substeps that nothing moves more than half its radius in one: fast letters can't tunnel through thin walls.
+  const step = Math.min(0.05, dt);
+  let vmax = 0;
+  for (const b of bodies) vmax = Math.max(vmax, Math.hypot(b.vx, b.vy));
+  vmax += Math.abs(g) * step;
+  const SUB = Math.max(3, Math.min(24, Math.ceil((vmax * step) / Math.max(1e-4, r0 * 0.5)))), h = step / SUB;
   for (let s = 0; s < SUB; s++) {
     for (const b of bodies) {
       b.r = r0;
       b.vx += gx * h; b.vy += gy * h;
+      const sp = Math.hypot(b.vx, b.vy);
+      if (sp > 4) { b.vx *= 4 / sp; b.vy *= 4 / sp; }
       b.x += b.vx * h; b.y += b.vy * h; b.a += b.va * h;
       b.va *= Math.exp(-h * 1.5);
       // Picture edges: floor, walls and a ceiling well above the top (so drops can fall in).

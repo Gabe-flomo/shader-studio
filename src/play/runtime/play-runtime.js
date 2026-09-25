@@ -269,6 +269,30 @@
     const setUniform = (n, v) => { const l = loc(n); if (!l) return; if (typeof v === 'number') gl.uniform1f(l, v); else if (Array.isArray(v)) { if (v.length === 2) gl.uniform2fv(l, v); else if (v.length === 3) gl.uniform3fv(l, v); else if (v.length === 4) gl.uniform4fv(l, v); } };
     const fontLoc = loc('u_fontTexture');
     if (fontLoc) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, white); gl.uniform1i(fontLoc, 0); }
+    // The graph's Layers node: the layers' colour and distance field, uploaded after each frame's layers are drawn.
+    const usesLayersNode = /\bu_layers(Field)?\b/.test(B.fragmentShader);
+    let layersTap = null, layersColourTex = null, layersFieldTex = null, layersFieldSize = [0, 0];
+    if (usesLayersNode) {
+      const mk = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0])); return t; };
+      gl.activeTexture(gl.TEXTURE1);
+      layersColourTex = mk(); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.activeTexture(gl.TEXTURE2);
+      layersFieldTex = mk(); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.activeTexture(gl.TEXTURE0);
+      // Units 1 and 2 are the Layers node's own; unit 0 keeps the font texture.
+      layersTap = tap => {
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, layersColourTex);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tap.color); } catch (e) { /* tainted */ }
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, layersFieldTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tap.gw, tap.gh, 0, gl.RGBA, gl.UNSIGNED_BYTE, tap.field);
+        gl.activeTexture(gl.TEXTURE0);
+        layersFieldSize = [tap.gw, tap.gh];
+      };
+    }
 
     // Size: contain letterboxes to the exported shape; cover fills the box.
     const ratio = fit === 'contain' && B.aspect && B.aspect.ratio ? B.aspect.ratio : null;
@@ -574,6 +598,7 @@
         camera: camVideo, image: img,
         sensor: (k, v) => sensors.set(k, v),
         override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },
+        shaderTap: layersTap || undefined,
       });
     }
 
@@ -606,8 +631,15 @@
       setUniform('u_resolution', [glCanvas.width, glCanvas.height]);
       setUniform('u_mouse', [mouse.x * glCanvas.width, mouse.y * glCanvas.height]);
       for (const k in uniformValues) setUniform(k, uniformValues[k]);
+      if (usesLayersNode) {
+        const lc = loc('u_layers'), lf = loc('u_layersField'), ls = loc('u_layersFieldSize');
+        if (lc) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, layersColourTex); gl.uniform1i(lc, 1); }
+        if (lf) { gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, layersFieldTex); gl.uniform1i(lf, 2); }
+        if (ls) gl.uniform2fv(ls, layersFieldSize);
+        gl.activeTexture(gl.TEXTURE0);
+      }
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      if (play.layers.length || hidden) drawLayers(dt);
+      if (play.layers.length || hidden || usesLayersNode) drawLayers(dt);
       refreshPanel(now);
     }
     raf = requestAnimationFrame(tick);
