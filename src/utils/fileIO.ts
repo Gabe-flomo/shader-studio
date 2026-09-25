@@ -75,7 +75,9 @@ const isTauri = (): boolean =>
 export async function saveTextFile(
   content: string,
   suggestedName = 'shader-graph.json',
+  mime = 'application/json',
 ): Promise<FileResult> {
+  const ext = (suggestedName.match(/\.([a-z0-9]+)$/i)?.[1] ?? 'json').toLowerCase();
   if (isTauri()) {
     try {
       // Dynamic import so the web bundle never fails on these imports
@@ -84,7 +86,7 @@ export async function saveTextFile(
 
       const path = await save({
         defaultPath: suggestedName,
-        filters: [{ name: 'Shader Graph', extensions: ['json'] }],
+        filters: [{ name: ext === 'html' ? 'Web page' : 'Shader Graph', extensions: [ext] }],
       });
 
       if (!path) return CANCELLED;
@@ -96,7 +98,7 @@ export async function saveTextFile(
     }
   } else {
     // Browser fallback: blob download
-    const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+    const url = URL.createObjectURL(new Blob([content], { type: mime }));
     const a = Object.assign(document.createElement('a'), {
       href: url,
       download: suggestedName,

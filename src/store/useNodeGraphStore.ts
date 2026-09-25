@@ -12,6 +12,7 @@ import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord } from '../types/play';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
+import { buildPlayHtml, unsupportedFeatures } from '../play/exportHtml';
 
 /** Top-level `kind` a play file carries, so importing one opens the Play page. */
 export const PLAY_FILE_KIND = 'shader-studio-play';
@@ -343,6 +344,12 @@ interface NodeGraphState {
    * opens looking exactly as the picture does at export time.
    */
   exportPlayFile: () => Promise<FileResult>;
+  /**
+   * Save the picture, the panel, the mappings and the layers as one
+   * self-contained web page (see play/exportHtml.ts). Warns about graph
+   * features the standalone page can't run.
+   */
+  exportPlayHtml: () => Promise<FileResult>;
   /** Bumped when a play file is imported; App switches to the Play page. */
   playOpenRequest: number;
   /** Does a graph in browser storage carry a Play setup? (For the "Play" tag on its row.) */
@@ -4262,6 +4269,46 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const parsed = JSON.parse(localStorage.getItem(`shader-studio:${name}`) ?? 'null') as { play?: unknown } | null;
       return !isPlayRecordEmpty(parsePlayRecord(parsed?.play));
     } catch { return false; }
+  },
+
+  exportPlayHtml: async () => {
+    const st = get();
+    const live = new Map<string, number | number[]>();
+    for (const c of st.play.controls) {
+      const v = playEngine.liveValue(c.id);
+      if (v !== undefined) live.set(c.id, v);
+    }
+    // Uniforms at their current values, with driven ones at their live value.
+    const uniforms: Record<string, number | number[]> = { ...st.paramUniforms };
+    for (const c of st.play.controls) {
+      const v = live.get(c.id);
+      const u = st.paramBindings[c.target.split('::').slice(-2).join('::')];
+      if (v !== undefined && u && !c.target.startsWith('layer:')) uniforms[u] = Array.isArray(v) ? [...v] : v;
+    }
+    const missing = unsupportedFeatures({
+      textureUniforms: st.textureUniforms, videoUniforms: st.videoUniforms, audioUniforms: st.audioUniforms, liveUniforms: st.liveUniforms,
+      isStateful: st.isStateful, particleSystems: st.particleSystems, usesEcho: /\bu_echo0\b/.test(st.fragmentShader), play: st.play,
+    });
+    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    let name = 'play';
+    if (!isTauri) {
+      const typed = await askText('Export as a web page', { label: 'File name', initial: 'play', confirmLabel: 'Export' });
+      if (typed === null) return CANCELLED;
+      name = typed;
+    }
+    const html = buildPlayHtml({
+      title: name.replace(/\.html?$/i, '') || 'Shader Studio',
+      fragmentShader: st.fragmentShader,
+      uniforms,
+      paramBindings: st.paramBindings,
+      play: bakeLayerValues(st.play, live),
+      aspect: st.previewAspect,
+    });
+    const result = await saveTextFile(html, /\.html?$/i.test(name) ? name : `${name}.html`, 'text/html');
+    if (result.ok && missing.length) {
+      toast.warning('Exported, but this graph uses things the page can’t run', { message: `${missing.join(', ')} will be blank or still in the exported page.` });
+    }
+    return result;
   },
 
   exportPlayFile: async () => {

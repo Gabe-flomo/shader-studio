@@ -113,6 +113,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   const paramBindings = useNodeGraphStore(s => s.paramBindings);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const exportPlayFile = useNodeGraphStore(s => s.exportPlayFile);
+  const exportPlayHtml = useNodeGraphStore(s => s.exportPlayHtml);
   const previewAspect = useNodeGraphStore(s => s.previewAspect);
   const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
@@ -232,6 +233,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
           <>
             <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
             <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
+            <IconButton icon="code" label="Export as a web page: one HTML file with the picture, the controls, the mappings and the layers, for your own site" onClick={async () => { reportFileResult(await exportPlayHtml(), { failTitle: 'Couldn’t export the page', success: 'Web page exported' }); }} />
             <AddControlButton candidates={candidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} />
           </>
         )}
