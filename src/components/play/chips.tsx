@@ -1,6 +1,6 @@
 /**
  * chips.tsx — small live-status chips used across the Play page: the OSC
- * listener or bridge, the live audio input and the camera. Each shows a dot
+ * listener or bridge, MIDI, the live audio input and the camera. Each shows a dot
  * (green on, amber starting, red failed), a short status, and the one button
  * that fixes it.
  */
@@ -10,6 +10,7 @@ import { fontFamily } from '../../theme/tokens';
 import { oscClient, type OscStatus } from '../../lib/oscClient';
 import { liveAudio, type LiveStatus } from '../../lib/liveAudio';
 import { cameraInput, type CameraStatus } from '../../lib/cameraInput';
+import { midiEngine } from '../../lib/midiEngine';
 import { Button } from '../ui/Button';
 import { Toggle } from '../ui/Choice';
 import { Select } from '../ui/Select';
@@ -65,6 +66,53 @@ export function OscStatusChip() {
             </>
           )}
         </>
+      )}
+    </span>
+  );
+}
+
+/**
+ * MIDI: which devices are listened to and the last message that arrived
+ * ("CC 21 = 64 · ch 1"), so "is my controller getting through, and what does
+ * this knob send?" has an answer on the page.
+ */
+export function MidiStatusChip() {
+  const tk = useTokens();
+  const [wm, setWm] = useState(() => midiEngine.webMidi());
+  const [last, setLast] = useState(() => midiEngine.lastActivity());
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    // A knob sends hundreds of messages a second: read the newest a few times a second, not per message.
+    const id = window.setInterval(() => { setLast(midiEngine.lastActivity()); setNow(Date.now()); }, 250);
+    const off = midiEngine.subscribe(e => { if (e.kind === 'devices') setWm(midiEngine.webMidi()); });
+    return () => { window.clearInterval(id); off(); };
+  }, []);
+  const { status, inputs, busy } = wm;
+  const ok = status === 'ready' && inputs.length > busy.length;
+  const colour = ok ? tk.status.success : status === 'requesting' ? tk.status.warning : status === 'denied' || busy.length ? tk.status.danger : tk.text.disabled;
+  const text = status === 'ready'
+    ? (inputs.length ? inputs.join(', ') : 'No MIDI devices found. Plug one in: it shows up here.')
+    : status === 'requesting' ? 'Waiting for the browser’s MIDI permission…'
+    : status === 'denied' ? (EMBEDDED ? 'MIDI blocked by this page' : 'MIDI access refused')
+    : status === 'unsupported' ? 'No Web MIDI in this browser (use Chrome or Edge)'
+    : 'MIDI not connected';
+  const why = midiEngine.blockReason();
+  const ago = last && now ? Math.max(0, Math.round((now - last.at) / 1000)) : 0;
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
+        <span title={why ?? text} style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}`, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
+        <span style={{ flex: 1 }} />
+        {(status === 'idle' || (status === 'denied' && !EMBEDDED) || busy.length > 0) && (
+          <Button size="sm" onClick={() => void midiEngine.connectWebMidi({ retry: true }).then(() => setWm(midiEngine.webMidi()))}>Connect</Button>
+        )}
+      </span>
+      {why && status !== 'unsupported' && <span style={{ color: tk.status.danger, font: `11px/1.4 ${fontFamily.ui}` }}>{why}</span>}
+      {status === 'ready' && inputs.length > 0 && (
+        <span style={{ color: last && ago < 3 ? tk.text.secondary : tk.text.faint, font: `500 10.5px ${fontFamily.mono}` }}>
+          {last ? `Last: ${last.text}${ago >= 3 ? ` · ${ago < 60 ? `${ago}s` : `${Math.round(ago / 60)} min`} ago` : ''}` : 'Nothing received yet: move a knob or play a note.'}
+        </span>
       )}
     </span>
   );

@@ -945,8 +945,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     }
   }, [getLocalXY, hitTestKeyframe, seekToTime]);
 
+  // React's wheel listener is passive: the native one below keeps the page from zooming or scrolling.
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
     // This modal is a React portal — its events still bubble through the
     // React *component* tree (NodeGraph is a logical ancestor), not the DOM
     // tree, so without stopPropagation() a wheel gesture here also reaches
@@ -975,6 +975,13 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
       }));
     }
   }, [getLocalXY, fromY]);
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const prevent = (e: WheelEvent) => e.preventDefault();
+    el.addEventListener('wheel', prevent, { passive: false });
+    return () => el.removeEventListener('wheel', prevent);
+  }, []);
 
   // ── Tool-mode hotkeys (V/C/X/D) — scoped to while this modal is mounted,
   // ignored while typing in one of the grid/loop-back number inputs. ──

@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { dragHandle, handleAt, handlePoints, insideBounds, patchFor, type Bounds } from '../transform';
 import { klGlyphList, klParseFontUrl } from '../kit/layers.js';
-import { addNullFor, duplicateLayer, renameLayer, resetLayer } from '../../components/play/layerOps';
+import { addNullFor, driveWithNull, duplicateLayer, pairedKey, renameLayer, resetLayer } from '../../components/play/layerOps';
 import { defaultLayer, emptyPlayRecord, type PlayLayer } from '../../types/play';
 
 const W = 1600, H = 900;
@@ -123,5 +123,40 @@ describe('action controls', () => {
     off();
     expect(fired.length).toBeGreaterThanOrEqual(3);
     expect(fired.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('driving controls with a null', () => {
+  it('pairs X with Y keys, and only real X/Y endings', () => {
+    expect(pairedKey('posX')).toEqual({ axis: 'x', other: 'posY' });
+    expect(pairedKey('centerY')).toEqual({ axis: 'y', other: 'centerX' });
+    expect(pairedKey('x')).toEqual({ axis: 'x', other: 'y' });
+    expect(pairedKey('radius')).toBeNull();
+  });
+
+  it('adds the controls, one null where the values are, and a mapping per axis', () => {
+    const p = emptyPlayRecord();
+    const { play, nullId, controlIds } = driveWithNull(p, [
+      { target: 'c::posX', label: 'Circle · X', min: -1, max: 1, value: 0.5, axis: 'x' },
+      { target: 'c::posY', label: 'Circle · Y', min: -1, max: 1, value: -1, axis: 'y' },
+    ], 'Circle null');
+    const nul = play.layers.find(l => l.id === nullId)!;
+    expect(nul.kind).toBe('null');
+    expect(nul.label).toBe('Circle null');
+    expect((nul as { x: number }).x).toBeCloseTo(0.75);
+    expect((nul as { y: number }).y).toBeCloseTo(0.03); // kept on the picture
+    expect(play.controls.map(c => c.target)).toEqual(['c::posX', 'c::posY']);
+    expect(play.mappings.map(m => [m.controlId, m.source, m.outMin, m.outMax])).toEqual([
+      [controlIds[0], { kind: 'null', layerId: nullId, axis: 'x' }, -1, 1],
+      [controlIds[1], { kind: 'null', layerId: nullId, axis: 'y' }, -1, 1],
+    ]);
+  });
+
+  it('reuses a control already on the panel, with its own range', () => {
+    const p = { ...emptyPlayRecord(), controls: [{ id: 'k', target: 'g::brightness', kind: 'float' as const, label: 'Glow', min: 2, max: 10 }] };
+    const { play } = driveWithNull(p, [{ target: 'g::brightness', label: 'x', min: 0, max: 100, value: 6, axis: 'x' }], 'Glow null');
+    expect(play.controls).toHaveLength(1);
+    expect(play.mappings[0]).toMatchObject({ controlId: 'k', outMin: 2, outMax: 10 });
+    expect((play.layers[0] as { x: number }).x).toBeCloseTo(0.5); // 6 is halfway along 2..10
   });
 });

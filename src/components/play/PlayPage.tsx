@@ -39,9 +39,11 @@ import { NotesCard } from './NotesCard';
 import { AspectPicker } from '../shell/PreviewChrome';
 import { NOTE_REF_TYPE, noteRef, type NoteRefKind } from './noteRefs';
 import { LayerContextMenu } from './LayerContextMenu';
+import { driveWithNull, pairedKey, type NullDrive } from './layerOps';
+import { toast } from '../ui/toastStore';
 import { usePlayUi, type PanelSize } from './playUi';
 import { EmbedDialog } from './EmbedDialog';
-import { LiveAudioChip, OscStatusChip } from './chips';
+import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
 import { TriggerPicker } from './TriggerPicker';
 import { ACTIONS_FOR, DEFAULT_DISPLAY, LAYER_NUMERIC_PROPS, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
 import { ACTION_LABELS } from './layers/help';
@@ -138,10 +140,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     playEngine.setPerforming(true);
     return () => playEngine.setPerforming(false);
   }, []);
-  // A MIDI mapping needs the browser's MIDI access; ask once the page is open.
+  // A MIDI mapping, note trigger or note action needs the browser's MIDI access; ask once the page is open.
+  const wantsMidi = usesMidi(play);
   useEffect(() => {
-    if (play.mappings.some(m => m.source.kind === 'midi')) void midiEngine.connectWebMidi();
-  }, [play.mappings]);
+    if (wantsMidi) void midiEngine.connectWebMidi();
+  }, [wantsMidi]);
 
   const liveValues = useLiveValues(play);
   const candidates = useMemo(() => collectPlayCandidates(nodes, paramBindings), [nodes, paramBindings]);
@@ -198,7 +201,10 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // Every layer's numbers can be controls too (the + beside them in the Layers tab does the same).
   const layerCandidates = useMemo<LayerCandidates[]>(() => play.layers.map(l => ({
     id: l.id, label: l.label,
-    props: LAYER_NUMERIC_PROPS[l.kind].map(d => ({ key: d.key, label: d.label, hint: d.hint, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
+    props: LAYER_NUMERIC_PROPS[l.kind].map(d => {
+      const v = (l as unknown as Record<string, unknown>)[d.key];
+      return { key: d.key, label: d.label, hint: d.hint, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), value: typeof v === 'number' ? v : d.min };
+    }),
     actions: [...(ACTIONS_FOR[l.kind] ?? ACTIONS_FOR.other)],
   })), [play.layers]);
   // A layer's actions (Drop again, Burst…) as buttons on the panel, which mappings can press.
@@ -217,6 +223,13 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       if (!l || !d || p.controls.some(c => c.target === layerTarget(layerId, key))) return p;
       return { ...p, controls: [...p.controls, { id: playId('ctl'), target: layerTarget(layerId, key), kind: 'float', label: `${l.label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
     });
+  }, [update]);
+
+  // A slider (or an X/Y pair) with a Null on the picture that drives it.
+  const addWithNull = useCallback((drives: NullDrive[], label: string) => {
+    let made = '';
+    update(p => { const r = driveWithNull(p, drives, label); made = r.nullId; return r.play; });
+    if (made) toast.success(`Added “${label}”`, { message: 'Drag the dot on the picture to change the value.' });
   }, [update]);
 
   const addMapping = useCallback((source: PlaySource, controlId?: string) => {
@@ -337,7 +350,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
             {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
             <IconButton icon="code" label="Put it on a website: a player with controls, or the picture as a background, as a snippet or a page" onClick={() => setEmbedOpen(true)} />
-            <AddControlButton candidates={candidates} layers={layerCandidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} />
+            <AddControlButton candidates={candidates} layers={layerCandidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
           </>
         )}
       />}
@@ -377,6 +390,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             help={controlHelp(nodes, c.target, play)}
             source={sourceOf(c)}
             onMap={() => addMapping(c.kind === 'action' ? { kind: 'mouse', axis: 'down' } : { kind: 'mouse', axis: 'x' }, c.id)}
+            onNull={c.kind === 'float' ? () => {
+              const v = readControlValue(nodes, c.target, play);
+              const key = parseLayerTarget(c.target)?.key ?? targetParts(c.target).paramKey;
+              addWithNull([{ target: c.target, label: c.label, min: c.min, max: c.max, value: typeof v === 'number' ? v : c.min, axis: pairedKey(key)?.axis ?? 'x' }], `${c.label} null`);
+            } : undefined}
             onAmount={amount => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, amount } : x) }))}
             value={readControlValue(nodes, c.target, play)}
             live={liveValues.get(c.id)}
@@ -440,6 +458,12 @@ function PanelHeader({ title, hint, extra, onClick, chevron }: { title: string; 
   );
 }
 
+/** Does anything in the setup listen to MIDI (a MIDI source, a note trigger or an action fired by a note)? */
+function usesMidi(play: PlayRecord): boolean {
+  return play.mappings.some(m => m.source.kind === 'midi' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'))
+    || (play.actions ?? []).some(a => a.trigger.on === 'note');
+}
+
 function EmptyState({ title, body }: { title: string; body: string }) {
   const tk = useTokens();
   return (
@@ -453,30 +477,65 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 // ── Add control ──────────────────────────────────────────────────────────────
 
 /** A layer's numbers, for the Add control menu. */
-interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number }>; actions: ActionKind[] }
+interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number; value: number }>; actions: ActionKind[] }
 
-function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer, onAddAction }: {
+/**
+ * What a null should drive when a slider is picked with "Drive with a null":
+ * the slider, and its X/Y partner when it has one (posX with posY), so one
+ * null moves both.
+ */
+function nullDrivesFor(picked: { target: string; key: string; label: string; min: number; max: number; step?: number; value: number }, siblings: Array<{ target: string; key: string; label: string; min: number; max: number; step?: number; value: number }>): { drives: NullDrive[]; label: string } {
+  const one = (d: typeof picked, axis: 'x' | 'y'): NullDrive => ({ target: d.target, label: d.label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), value: d.value, axis });
+  const pair = pairedKey(picked.key);
+  const partner = pair && siblings.find(s => s.key === pair.other);
+  if (pair && partner) {
+    const [x, y] = pair.axis === 'x' ? [picked, partner] : [partner, picked];
+    return { drives: [one(x, 'x'), one(y, 'y')], label: `${x.label.replace(/[\s·_-]*[Xx]$/, '') || x.label} null` };
+  }
+  return { drives: [one(picked, 'x')], label: `${picked.label} null` };
+}
+
+function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer, onAddAction, onAddNull }: {
   candidates: PlayCandidate[];
   layers: LayerCandidates[];
   taken: Set<string>;
   onAdd: (c: PlayCandidate) => void;
   onAddLayer: (layerId: string, key: string) => void;
   onAddAction: (layerId: string, kind: ActionKind) => void;
+  /** Add the slider (and its X/Y partner) with a Null layer that drives it. */
+  onAddNull: (drives: NullDrive[], label: string) => void;
 }) {
   const tk = useTokens();
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [withNull, setWithNull] = useState(false);
+  const graphDrive = (c: PlayCandidate) => ({ target: c.target, key: targetParts(c.target).paramKey, label: candidateLabel(c), min: c.min, max: c.max, step: c.step, value: typeof c.value === 'number' ? c.value : c.min });
+  const pickGraph = (c: PlayCandidate) => {
+    if (!withNull || c.kind !== 'float') { onAdd(c); return; }
+    const node = targetParts(c.target).nodeId;
+    const { drives, label } = nullDrivesFor(graphDrive(c), candidates.filter(x => x.kind === 'float' && targetParts(x.target).nodeId === node).map(graphDrive));
+    onAddNull(drives, label);
+  };
+  const pickLayer = (l: LayerCandidates, key: string) => {
+    if (!withNull) { onAddLayer(l.id, key); return; }
+    const drive = (pr: LayerCandidates['props'][number]) => ({ target: layerTarget(l.id, pr.key), key: pr.key, label: `${l.label} · ${pr.label}`, min: pr.min, max: pr.max, step: pr.step, value: pr.value });
+    const pr = l.props.find(x => x.key === key);
+    if (!pr) return;
+    const { drives, label } = nullDrivesFor(drive(pr), l.props.map(drive));
+    onAddNull(drives, label);
+  };
   // Folders: 'graph', 'layers', and one per layer id. The graph starts open; layers start folded.
   const [unfolded, setUnfolded] = useState<Set<string>>(() => new Set(['graph', 'layers']));
   const flip = (k: string) => setUnfolded(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const q = query.trim().toLowerCase();
   const close = () => { setOpen(false); setQuery(''); };
-  const graphShown = candidates.filter(c => !taken.has(c.target) && (!q || candidateLabel(c).toLowerCase().includes(q)));
+  // With a null, a slider already on the panel can still get one (the null drives the existing control); colours and buttons can't.
+  const graphShown = candidates.filter(c => (withNull ? c.kind === 'float' : !taken.has(c.target)) && (!q || candidateLabel(c).toLowerCase().includes(q)));
   const layerShown = layers.map(l => ({
     ...l,
-    props: l.props.filter(pr => !taken.has(layerTarget(l.id, pr.key)) && (!q || `${l.label} ${pr.label}`.toLowerCase().includes(q))),
-    actions: l.actions.filter(a => !taken.has(actionTarget(l.id, a)) && (!q || `${l.label} ${ACTION_LABELS[a]}`.toLowerCase().includes(q))),
+    props: l.props.filter(pr => (withNull || !taken.has(layerTarget(l.id, pr.key))) && (!q || `${l.label} ${pr.label}`.toLowerCase().includes(q))),
+    actions: withNull ? [] : l.actions.filter(a => !taken.has(actionTarget(l.id, a)) && (!q || `${l.label} ${ACTION_LABELS[a]}`.toLowerCase().includes(q))),
   })).filter(l => l.props.length + l.actions.length > 0);
   const layerCount = layerShown.reduce((n, l) => n + l.props.length + l.actions.length, 0);
   // While searching every folder with a match is open.
@@ -504,17 +563,24 @@ function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer, onAddA
       {open && (
         <Popover anchorRef={anchor} onClose={close} align="end" width={320} padding={8}>
           <Field autoFocus placeholder="Search sliders, colours and layers" value={query} onChange={e => setQuery(e.target.value)} height={30} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px 2px' }}>
+            <Toggle checked={withNull} onChange={setWithNull} label="Drive with a null" />
+            <Tooltip label="Drive with a null" description="Adds the slider and a Null on the picture that drives it: drag the dot to change the value. The dot's left-to-right is the slider's range. An X/Y pair (Position X and Y) shares one null that starts where the thing is.">
+              <span style={{ display: 'inline-flex', color: tk.text.faint, cursor: 'help' }}><Icon name="info" size={13} /></span>
+            </Tooltip>
+          </div>
           <div style={{ maxHeight: 400, overflowY: 'auto', marginTop: 6 }}>
             {graphShown.length === 0 && layerCount === 0 && (
               <div style={{ padding: '10px 8px', color: tk.text.faint }}>{q ? 'No match.' : 'Everything is already on the panel.'}</div>
             )}
             {graphShown.length > 0 && folder('graph', 'From the graph', graphShown.length)}
             {graphShown.length > 0 && isOpen('graph') && graphShown.map(c => (
-              <button key={c.target} type="button" title={c.hint} onClick={() => { onAdd(c); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 24 }}>
+              <button key={c.target} type="button" title={c.hint} onClick={() => { pickGraph(c); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 24 }}>
                 {c.kind === 'color'
                   ? <span style={{ width: 12, height: 12, borderRadius: 3, background: `rgb(${(c.value as number[]).map(v => Math.round(v * 255)).join(',')})`, boxShadow: `inset 0 0 0 1px ${alpha('#000', 0.12)}`, flexShrink: 0 }} />
                   : <Icon name="curve" size={13} style={{ color: tk.text.faint }} />}
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidateLabel(c)}</span>
+                {withNull && taken.has(c.target) && <span style={{ color: tk.text.faint, fontSize: 10.5 }}>on panel</span>}
               </button>
             ))}
             {layerCount > 0 && folder('layers', 'From layers', layerCount)}
@@ -529,9 +595,10 @@ function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer, onAddA
                   </button>
                 ))}
                 {isOpen(`layer:${l.id}`) && l.props.map(pr => (
-                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { onAddLayer(l.id, pr.key); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
+                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { pickLayer(l, pr.key); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
                     <Icon name="curve" size={13} style={{ color: tk.text.faint }} />
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.label}</span>
+                    {withNull && taken.has(layerTarget(l.id, pr.key)) && <span style={{ color: tk.text.faint, fontSize: 10.5 }}>on panel</span>}
                   </button>
                 ))}
               </div>
@@ -581,7 +648,7 @@ function PictureRow({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: P
 /** Where a control's value lives: a layer's property or a node's param. */
 interface ControlSource { kind: 'layer' | 'node'; title: string; param: string; within?: string; missing: boolean; go: () => void }
 
-function ControlRow({ control, index, count, exists, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, onMap, onAmount }: {
+function ControlRow({ control, index, count, exists, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, onMap, onNull, onAmount }: {
   control: PlayControl;
   index: number;
   count: number;
@@ -600,6 +667,8 @@ function ControlRow({ control, index, count, exists, help, source, value, live, 
   onRemove: () => void;
   /** Add a mapping onto this control. */
   onMap: () => void;
+  /** Add a Null on the picture that drives this control (sliders only). */
+  onNull?: () => void;
   /** Action controls: how much (particles for a burst, strength for a scatter). */
   onAmount: (amount: number) => void;
 }) {
@@ -724,6 +793,7 @@ function ControlRow({ control, index, count, exists, help, source, value, live, 
             <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62 }}>Driven by</span>
             <span style={{ flex: 1, minWidth: 0 }}>{driven ? drivenBy.join(', ') : 'Nothing yet: drag the slider, or map an input onto it.'}</span>
             <Button size="sm" variant="ghost" icon="plus" onClick={onMap}>Map</Button>
+            {onNull && <Button size="sm" variant="ghost" icon="plus" title="Add a Null on the picture that drives this slider: drag the dot to change it" onClick={onNull}>Null</Button>}
           </div>
         </div>
       )}
@@ -799,7 +869,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
   const [guideOpen, setGuideOpen] = useState(false);
   useEffect(() => {
     if (!learnFor) return;
-    void midiEngine.connectWebMidi();
+    void midiEngine.connectWebMidi({ retry: true });
     // A trigger row's Learn picks what fires it (key, note, click, OSC); every other Learn picks a source.
     const row = learnFor === 'new' ? undefined : play.mappings.find(m => m.id === learnFor);
     if (row?.source.kind === 'trigger') {
@@ -868,6 +938,11 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
       />
       {open && (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+          {(learnFor || usesMidi(play)) && (
+            <div style={{ margin: '4px 0 6px', padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field }}>
+              <MidiStatusChip />
+            </div>
+          )}
           {learnFor && (
             <div style={{ margin: '6px 0 2px', padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 12px ${fontFamily.ui}` }}>
               Move a knob, hit a note or press a key… <span style={{ fontWeight: 500, opacity: 0.8 }}>Esc to cancel</span>

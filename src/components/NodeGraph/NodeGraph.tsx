@@ -481,8 +481,8 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   // ── Wheel / trackpad handler (Ableton-style) ─────────────────────────────
   // • Two-finger scroll (no ctrl) → pan X + Y
   // • Pinch gesture / ctrl+wheel  → zoom toward cursor
+  // React's wheel listener is passive, so this can't cancel anything; the native listener above does.
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
     const canvas = canvasRef.current;
     if (!canvas) return;
 

@@ -2,9 +2,10 @@
  * layerOps.ts — edits to a Play record's layers that more than one place
  * offers (the Layers list, the picture's right-click menu): remove with
  * everything that pointed at it, duplicate, reset to defaults, move in the
- * draw order, and make a null for a property that follows one.
+ * draw order, make a null for a property that follows one, and make a null
+ * that drives a control.
  */
-import { defaultLayer, type NullLayer, type PlayLayer, type PlayRecord } from '../../types/play';
+import { defaultLayer, type NullLayer, type PlayControl, type PlayLayer, type PlayRecord } from '../../types/play';
 import { playId } from '../../play/playControls';
 
 /** Remove a layer and the controls, mappings and actions that read or drive it. */
@@ -93,4 +94,59 @@ export function renameLayer(p: PlayRecord, id: string, label: string): PlayRecor
     layers: p.layers.map(l => (l.id === id ? { ...l, label } : l)),
     controls: p.controls.map(c => (c.target.startsWith(`layer:${id}::`) && c.label.startsWith(`${old} · `) ? { ...c, label: label + c.label.slice(old.length) } : c)),
   };
+}
+
+/** A slider a null should drive: its target, range and value now, and which way of the null moves it. */
+export interface NullDrive {
+  target: string;
+  label: string;
+  min: number;
+  max: number;
+  step?: number;
+  value: number;
+  axis: 'x' | 'y';
+}
+
+/**
+ * The other half of an X/Y pair ("posX" → "posY", "x" → "y", "centerY" →
+ * "centerX"), so one null can drive both. The key ends in X or Y after a
+ * lower-case letter, or is just "x"/"y".
+ */
+export function pairedKey(key: string): { axis: 'x' | 'y'; other: string } | null {
+  const m = /^(|.*[a-z0-9_])([XxYy])$/.exec(key);
+  if (!m) return null;
+  const c = m[2];
+  const axis = c === 'x' || c === 'X' ? 'x' : 'y';
+  const swap = c === 'x' ? 'y' : c === 'y' ? 'x' : c === 'X' ? 'Y' : 'X';
+  return { axis, other: m[1] + swap };
+}
+
+/**
+ * Add a Null layer on the picture that drives one or two controls (X across
+ * its range left to right, Y bottom to top), making each control if the
+ * panel doesn't have it yet. The null starts where the values are now, so
+ * nothing jumps.
+ */
+export function driveWithNull(p: PlayRecord, drives: NullDrive[], label: string): { play: PlayRecord; nullId: string; controlIds: string[] } {
+  const nullId = playId('layer');
+  const nul = defaultLayer('null', nullId, label) as NullLayer;
+  // Where along the control's range the value is now (the control's range, when it's already on the panel).
+  const at = (value: number, c: PlayControl) => {
+    const span = c.max - c.min;
+    return Math.max(0.03, Math.min(0.97, span ? (value - c.min) / span : 0.5));
+  };
+  const controls = [...p.controls];
+  const mappings = [...p.mappings];
+  const controlIds: string[] = [];
+  for (const d of drives) {
+    let c = controls.find(x => x.target === d.target);
+    if (!c) {
+      c = { id: playId('ctl'), target: d.target, kind: 'float', label: d.label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) } as PlayControl;
+      controls.push(c);
+    }
+    controlIds.push(c.id);
+    if (d.axis === 'x') nul.x = at(d.value, c); else nul.y = at(d.value, c);
+    mappings.push({ id: playId('map'), controlId: c.id, source: { kind: 'null', layerId: nullId, axis: d.axis }, outMin: c.min, outMax: c.max, curve: 'linear', smoothMs: 0, enabled: true });
+  }
+  return { play: { ...p, layers: [...p.layers, nul], controls, mappings }, nullId, controlIds };
 }

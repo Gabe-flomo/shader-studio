@@ -197,8 +197,8 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
     }
   }, []);
 
+  // React's touch listeners are passive; `touchAction: 'none'` on the plot is what stops the page scrolling.
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
     const rect = canvasWrapRef.current!.getBoundingClientRect();
 
     if (e.touches.length === 2 && pinchDist.current !== null && pinchCenter.current) {
@@ -256,7 +256,7 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
           {/* Plot: drag to pan, wheel or pinch to zoom, double-click to reset */}
           <div
             ref={canvasWrapRef}
-            style={{ flex: 1, position: 'relative', minHeight: 0, cursor: 'default', background: PLOT_THEMES[mode].bg }}
+            style={{ flex: 1, position: 'relative', minHeight: 0, cursor: 'default', touchAction: 'none', background: PLOT_THEMES[mode].bg }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}

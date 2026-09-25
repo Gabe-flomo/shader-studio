@@ -76,7 +76,7 @@ function isTypingTarget(el: EventTarget | null): boolean {
 
 // ─── Engine ───────────────────────────────────────────────────────────────────
 
-class MidiEngine implements InputSource {
+export class MidiEngine implements InputSource {
   private channels: ChannelState[] = Array.from({ length: 17 }, () => new ChannelState());
   private nodes = new Map<string, NodeState>();
   private listeners = new Set<MidiListener>();
@@ -85,6 +85,10 @@ class MidiEngine implements InputSource {
   private access: MIDIAccess | null = null;
   private webMidiStatus: MidiBackendStatus = typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator ? 'idle' : 'unsupported';
   private inputNames: string[] = [];
+  /** Inputs the browser lists but couldn't open (on Windows: another app, like Ableton, has it). */
+  private busyNames: string[] = [];
+  private lastMessage: { text: string; at: number } | null = null;
+  private permissionWatched = false;
   private onMidiMessage = (e: Event) => {
     const data = (e as MIDIMessageEvent).data;
     if (data && data.length >= 1) this.handleBytes(data[0], data[1] ?? 0, data[2] ?? 0);
@@ -188,6 +192,8 @@ class MidiEngine implements InputSource {
 
   handleMessage(e: MidiEvent): void {
     if (e.kind === 'devices') { this.emit(e); return; }
+    // A note-off says less than the note-on before it: keep that one on show.
+    if (e.kind !== 'noteOff') this.lastMessage = { text: describeMidiEvent(e), at: Date.now() };
     const targets = [this.channels[OMNI], this.channels[Math.max(1, Math.min(16, e.channel))]];
     for (const ch of targets) {
       switch (e.kind) {
@@ -252,8 +258,13 @@ class MidiEngine implements InputSource {
 
   // ── Web MIDI backend ─────────────────────────────────────────────────────
 
-  webMidi(): { status: MidiBackendStatus; inputs: string[] } {
-    return { status: this.webMidiStatus, inputs: this.inputNames };
+  webMidi(): { status: MidiBackendStatus; inputs: string[]; busy: string[] } {
+    return { status: this.webMidiStatus, inputs: this.inputNames, busy: this.busyNames };
+  }
+
+  /** The newest message from any backend ("CC 21 = 64 · ch 1"), and when it came. */
+  lastActivity(): { text: string; at: number } | null {
+    return this.lastMessage;
   }
 
   /**
@@ -270,39 +281,86 @@ class MidiEngine implements InputSource {
       : undefined;
     const allowed = policy ? policy.allowsFeature('midi') : true;
     if (embedded && (!allowed || this.webMidiStatus === 'denied')) return 'This page is running inside another site (like a preview on claude.ai), and that site doesn\'t allow MIDI. Open Shader Studio in its own tab or the desktop app to use a controller.';
-    if (this.webMidiStatus === 'denied') return 'The browser refused MIDI access. Allow MIDI for this site (the icon left of the address bar) and reload.';
+    if (this.webMidiStatus === 'denied') return 'The browser refused MIDI access. Allow MIDI for this site (the icon left of the address bar), then press Connect.';
+    if (this.busyNames.length) return `Couldn't open ${this.busyNames.join(', ')}: another app is probably using it (on Windows only one app can hold a MIDI device). Turn it off in Ableton's MIDI preferences or close the app, then press Connect.`;
     return null;
   }
 
-  /** Ask the browser for MIDI access and listen to every input. Safe to call repeatedly. */
-  async connectWebMidi(): Promise<MidiBackendStatus> {
+  /**
+   * Ask the browser for MIDI access and listen to every input. Safe to call
+   * repeatedly. A refusal sticks (asking again on every render would nag),
+   * except when `retry` is set: a click on Connect or Learn asks again, and
+   * re-opens devices that another app was holding.
+   */
+  async connectWebMidi(opts: { retry?: boolean } = {}): Promise<MidiBackendStatus> {
     if (this.webMidiStatus === 'unsupported') return 'unsupported';
-    if (this.access) return 'ready';
-    if (this.webMidiStatus === 'requesting') return 'requesting';
-    this.webMidiStatus = 'requesting';
-    try {
-      const access = await navigator.requestMIDIAccess({ sysex: false });
-      this.access = access;
-      this.webMidiStatus = 'ready';
-      access.addEventListener('statechange', () => this.bindInputs());
-      this.bindInputs();
-    } catch (e) {
-      console.warn('[midiEngine] Web MIDI access refused', e);
-      this.webMidiStatus = 'denied';
+    if (this.access) {
+      if (opts.retry && this.busyNames.length) this.bindInputs();
+      return 'ready';
     }
-    return this.webMidiStatus;
+    if (this.webMidiStatus === 'requesting') return this.pending ?? 'requesting';
+    if (this.webMidiStatus === 'denied' && !opts.retry) return 'denied';
+    this.webMidiStatus = 'requesting';
+    this.emit({ kind: 'devices', inputs: this.inputNames });
+    this.watchPermission();
+    this.pending = (async () => {
+      try {
+        const access = await navigator.requestMIDIAccess({ sysex: false });
+        this.access = access;
+        this.webMidiStatus = 'ready';
+        access.addEventListener('statechange', () => this.bindInputs());
+        this.bindInputs();
+      } catch (e) {
+        console.warn('[midi] The browser refused MIDI access:', e);
+        this.webMidiStatus = 'denied';
+        this.emit({ kind: 'devices', inputs: [] });
+      }
+      this.pending = null;
+      return this.webMidiStatus;
+    })();
+    return this.pending;
+  }
+  private pending: Promise<MidiBackendStatus> | null = null;
+
+  /** Allowing MIDI in the site settings after a refusal connects without a reload. */
+  private watchPermission(): void {
+    if (this.permissionWatched || typeof navigator === 'undefined' || !navigator.permissions?.query) return;
+    this.permissionWatched = true;
+    navigator.permissions.query({ name: 'midi' as PermissionName }).then(p => {
+      p.addEventListener('change', () => {
+        if (p.state === 'granted' && !this.access) void this.connectWebMidi({ retry: true });
+      });
+    }).catch(() => { /* no MIDI permission in this browser's Permissions API */ });
   }
 
   private bindInputs(): void {
     if (!this.access) return;
     const names: string[] = [];
+    const busy: string[] = [];
+    const opening: Promise<unknown>[] = [];
     this.access.inputs.forEach(input => {
       // Assigning the handler is idempotent; statechange fires on every plug/unplug.
       input.onmidimessage = this.onMidiMessage;
-      if (input.state === 'connected') names.push(input.name ?? input.id);
+      if (input.state !== 'connected') return;
+      const name = input.name ?? input.id;
+      names.push(name);
+      // The handler opens the port implicitly, but silently: opening it ourselves says when that fails.
+      if (input.connection !== 'open' && typeof input.open === 'function') {
+        opening.push(input.open().then(() => {}, err => {
+          console.warn(`[midi] Couldn't open "${name}" (is another app using it?):`, err);
+          busy.push(name);
+        }));
+      }
     });
     this.inputNames = names;
+    this.busyNames = [];
+    console.info(names.length ? `[midi] Listening to ${names.join(', ')}` : '[midi] Access granted, but no MIDI inputs are connected');
     this.emit({ kind: 'devices', inputs: names });
+    if (opening.length) void Promise.all(opening).then(() => {
+      if (!busy.length) return;
+      this.busyNames = busy;
+      this.emit({ kind: 'devices', inputs: names });
+    });
   }
 
   // ── Keyboard stand-in backend ────────────────────────────────────────────
@@ -329,6 +387,17 @@ class MidiEngine implements InputSource {
   private releaseKeyboardNotes(): void {
     for (const [, note] of this.keyboardHeld) this.handleMessage({ kind: 'noteOff', channel: 1, note });
     this.keyboardHeld.clear();
+  }
+}
+
+/** "C4 · vel 100", "CC 21 = 64", "bend 0.25", with the channel. */
+export function describeMidiEvent(e: MidiEvent): string {
+  switch (e.kind) {
+    case 'noteOn': return `${midiNoteName(e.note)} (note ${e.note}) · vel ${e.velocity} · ch ${e.channel}`;
+    case 'noteOff': return `${midiNoteName(e.note)} off · ch ${e.channel}`;
+    case 'cc': return `CC ${e.cc} = ${e.value} · ch ${e.channel}`;
+    case 'bend': return `bend ${e.value.toFixed(2)} · ch ${e.channel}`;
+    case 'devices': return 'devices changed';
   }
 }
 

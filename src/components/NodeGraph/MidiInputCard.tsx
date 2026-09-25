@@ -102,7 +102,8 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
   const fieldStyle: React.CSSProperties = { flex: 1, background: tc.surface0, border: `1px solid ${tc.surface1}`, color: tc.text, fontSize: 10, borderRadius: 4, padding: '2px 4px' };
 
   const sourceLabel =
-    webMidi.status === 'ready' && webMidi.inputs.length > 0 ? `${webMidi.inputs.length} device${webMidi.inputs.length === 1 ? '' : 's'}`
+    webMidi.busy.length > 0 ? `${webMidi.busy.join(', ')} is in use by another app`
+    : webMidi.status === 'ready' && webMidi.inputs.length > 0 ? `${webMidi.inputs.length} device${webMidi.inputs.length === 1 ? '' : 's'}`
     : webMidi.status === 'ready' ? 'no devices'
     : webMidi.status === 'requesting' ? 'connecting…'
     : webMidi.status === 'denied' ? (window.self !== window.top ? 'blocked by the host page' : 'access denied')
@@ -150,8 +151,8 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
       <div style={{ padding: '6px 10px 4px', display: 'flex', flexDirection: 'column', gap: 5 }} onMouseDown={e => e.stopPropagation()}>
         <div style={rowStyle}>
           <span style={labelStyle}>Devices</span>
-          <span style={{ flex: 1, fontSize: 10, color: webMidi.status === 'ready' && webMidi.inputs.length ? tc.text : tc.overlay0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={webMidi.inputs.length ? webMidi.inputs.join(', ') : midiEngine.blockReason() ?? ''}>
-            {webMidi.inputs.length ? webMidi.inputs.join(', ') : sourceLabel}
+          <span style={{ flex: 1, fontSize: 10, color: webMidi.status === 'ready' && webMidi.inputs.length ? tc.text : tc.overlay0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={midiEngine.blockReason() ?? webMidi.inputs.join(', ')}>
+            {webMidi.inputs.length && !webMidi.busy.length ? webMidi.inputs.join(', ') : sourceLabel}
           </span>
           <button
             onClick={toggleKeyboard}
