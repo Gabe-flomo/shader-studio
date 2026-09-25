@@ -17540,4 +17540,57 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       { id: 'mk_out', type: 'output', position: { x: 1500, y: 340 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mk_amp', outputKey: 'result' } } }, outputs: {}, params: {} },
     ],
   },
+  colorStopsCycle: {
+    label: 'Color: Stops Palette + Colorize',
+    description: 'Stops Palette builds a palette from five colour stops (Loop, Smooth) and cycles it with Time on Angle offset; the angle around the centre (Vec2 → Angle, Scale 1/2π) runs the stops once around the ring, and Loop makes the join seamless. A ring\'s SDF Glow is the field, and Colorize paints it with the palette: Colour × Field, the job Scale Color used to do. Change a stop\'s swatch or the Wrap mode to see the cycle change.',
+    counter: 10,
+    nodes: [
+      { id: 'cc_uv', type: 'uv', position: { x: 40, y: 160 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'cc_t', type: 'time', position: { x: 40, y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'cc_len', type: 'vec2Angle', position: { x: 260, y: 300 },
+        inputs: { v: { type: 'vec2', label: 'Vector', connection: { nodeId: 'cc_uv', outputKey: 'uv' } } },
+        outputs: { result: { type: 'float', label: 'Angle (rad)' } }, params: {},
+      },
+      {
+        id: 'cc_pal', type: 'stopPalette', position: { x: 500, y: 300 },
+        inputs: {
+          value: { type: 'float', label: 'Angle', connection: { nodeId: 'cc_len', outputKey: 'result' } },
+          anim: { type: 'float', label: 'Angle offset', connection: { nodeId: 'cc_t', outputKey: 'time' } },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { value: 0, anim: 0, scale: 0.159155, speed: 0.15, stops: '5', wrap: 'loop', blend: 'smooth',
+          color0: [0.16, 0.07, 0.35], color1: [0.72, 0.13, 0.52], color2: [0.98, 0.45, 0.22], color3: [0.99, 0.84, 0.38], color4: [0.18, 0.62, 0.67],
+          color5: [0.35, 0.8, 0.45], color6: [0.2, 0.35, 0.85], color7: [0.95, 0.95, 0.95] },
+      },
+      {
+        id: 'cc_ring', type: 'ringSDF', position: { x: 260, y: 120 },
+        inputs: { position: { type: 'vec2', label: 'UV', connection: { nodeId: 'cc_uv', outputKey: 'uv' } }, radius: { type: 'float', label: 'Radius' } },
+        outputs: { distance: { type: 'float', label: 'Distance' } }, params: { radius: 0.45, posX: 0, posY: 0 },
+      },
+      {
+        id: 'cc_glow', type: 'light', position: { x: 500, y: 100 },
+        inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'cc_ring', outputKey: 'distance' } }, brightness: { type: 'float', label: 'Brightness' }, tint: { type: 'vec3', label: 'Tint' } },
+        outputs: { glow: { type: 'float', label: 'Glow' }, inner: { type: 'float', label: 'Inner' }, tinted: { type: 'vec3', label: 'Tinted' } },
+        params: { mode: 'simple', brightness: 1.5, tint: [1, 1, 1] },
+      },
+      {
+        id: 'cc_col', type: 'colorize', position: { x: 760, y: 200 },
+        inputs: {
+          field: { type: 'float', label: 'Field', connection: { nodeId: 'cc_glow', outputKey: 'glow' } },
+          color: { type: 'vec3', label: 'Colour', connection: { nodeId: 'cc_pal', outputKey: 'color' } },
+          background: { type: 'vec3', label: 'Background' },
+          gain: { type: 'float', label: 'Gain' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { color: [1, 0.55, 0.2], background: [0.02, 0.01, 0.05], gain: 1 },
+      },
+      {
+        id: 'cc_tone', type: 'toneMap', position: { x: 1000, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'cc_col', outputKey: 'color' } } },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'tanh' },
+      },
+      { id: 'cc_out', type: 'output', position: { x: 1220, y: 200 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'cc_tone', outputKey: 'color' } } }, outputs: {}, params: {} },
+    ],
+  },
 };
