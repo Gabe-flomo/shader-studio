@@ -206,13 +206,19 @@ export function ColorSwatch({ value, onChange, label, size = 'md', showHex = tru
   const tk = useTokens();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
+  // On a node card the picker opens beside the card, so it never hides the card's own sockets.
+  const cardRef = useRef<HTMLElement | null>(null);
+  const toggle = () => {
+    cardRef.current = ref.current?.closest<HTMLElement>('[data-node-id]') ?? null;
+    setOpen(o => !o);
+  };
   const hex = rgbToHex(value);
   const dims = size === 'lg' ? { width: '100%', height: 44 } : size === 'sm' ? { width: 28, height: 20 } : { width: 44, height: 26 };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, ...style }}>
       <button
         ref={ref} type="button" aria-label={`${label}: ${hex}. Open colour picker`} aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
         onPointerDown={e => e.stopPropagation()}
         style={{
           ...dims, borderRadius: radius.md, border: 0, padding: 0, cursor: 'pointer', flexShrink: size === 'lg' ? 1 : 0, background: hex,
@@ -221,7 +227,7 @@ export function ColorSwatch({ value, onChange, label, size = 'md', showHex = tru
       />
       {showHex && <span style={{ font: `500 12px ${fontFamily.mono}`, color: tk.text.muted }}>{hex}</span>}
       {open && (
-        <Popover anchorRef={ref} onClose={() => setOpen(false)} align="start" padding={4}>
+        <Popover anchorRef={ref} clearRef={cardRef} onClose={() => setOpen(false)} align="start" padding={4}>
           <ColorPickerPanel value={value} onChange={onChange} />
         </Popover>
       )}
