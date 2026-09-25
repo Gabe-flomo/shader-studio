@@ -12,7 +12,8 @@
 
 // ── Controls (the panel) ────────────────────────────────────────────────────
 
-export type PlayControlKind = 'float' | 'color';
+/** float and color are sliders and colour pads; action is a button that fires a layer action (Drop again, Burst…). */
+export type PlayControlKind = 'float' | 'color' | 'action';
 
 export interface PlayControl {
   /** Stable id mappings point at (a control keeps its mappings when re-labelled). */
@@ -30,6 +31,8 @@ export interface PlayControl {
   min: number;
   max: number;
   step?: number;
+  /** Action controls: the action's amount (particles for Burst, strength for Scatter). */
+  amount?: number;
 }
 
 // ── Sources (what drives a control) ─────────────────────────────────────────
@@ -191,6 +194,25 @@ export const ACTIONS_FOR: Record<string, readonly ActionKind[]> = {
   brush: ['clear', 'toggle', 'show', 'hide'],
   other: ['toggle', 'show', 'hide'],
 };
+
+export const ACTION_TARGET_PREFIX = 'act:';
+
+/** Control target for an action on a layer: pressing the control (or a mapping crossing 0.5) fires it. */
+export function actionTarget(layerId: string, kind: ActionKind): string {
+  return `${ACTION_TARGET_PREFIX}${layerId}::${kind}`;
+}
+
+export function parseActionTarget(target: string): { layerId: string; do: ActionKind } | null {
+  if (!target.startsWith(ACTION_TARGET_PREFIX)) return null;
+  const rest = target.slice(ACTION_TARGET_PREFIX.length);
+  const i = rest.lastIndexOf('::');
+  const kind = rest.slice(i + 2);
+  if (i <= 0 || !(ACTION_KINDS as readonly string[]).includes(kind)) return null;
+  return { layerId: rest.slice(0, i), do: kind as ActionKind };
+}
+
+/** A new action's default amount: Burst throws a handful, everything else is 1. */
+export const defaultActionAmount = (kind: ActionKind) => (kind === 'burst' ? 60 : 1);
 
 export const LAYER_TARGET_PREFIX = 'layer:';
 
@@ -386,7 +408,8 @@ function parseControl(raw: unknown): PlayControl | null {
   const id = str(c.id);
   const target = str(c.target);
   if (!id || !target || !target.includes('::')) return null;
-  const kind: PlayControlKind = c.kind === 'color' ? 'color' : 'float';
+  const act = parseActionTarget(target);
+  const kind: PlayControlKind = act ? 'action' : c.kind === 'color' ? 'color' : 'float';
   const min = num(c.min, 0);
   const max = num(c.max, 1);
   const out: PlayControl = {
@@ -396,6 +419,7 @@ function parseControl(raw: unknown): PlayControl | null {
     max: Math.max(min, max),
   };
   if (typeof c.step === 'number' && c.step > 0) out.step = c.step;
+  if (act) out.amount = num(c.amount, defaultActionAmount(act.do));
   return out;
 }
 
@@ -460,7 +484,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   }
   // Controls on a layer property need that layer; mappings reading a null need that null.
   const layerIds = new Set(layers.map(l => l.id));
-  const keptControls = controls.filter(c => { const lt = parseLayerTarget(c.target); return !lt || layerIds.has(lt.layerId); });
+  const keptControls = controls.filter(c => { const lt = parseLayerTarget(c.target) ?? parseActionTarget(c.target); return !lt || layerIds.has(lt.layerId); });
   const keptIds = new Set(keptControls.map(c => c.id));
   // A trigger or sensor on a layer needs that layer too.
   const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId);

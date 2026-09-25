@@ -27,7 +27,7 @@ export function PreviewHeader({ children }: { children?: ReactNode }) {
  * The picture's shape, as a row of little frames drawn in each proportion
  * (Free is a dashed one). The same setting as the export dialog's.
  */
-export function AspectPicker() {
+export function AspectPicker({ onPanel = false }: { onPanel?: boolean } = {}) {
   const tk = useTokens();
   const value = useNodeGraphStore(s => s.previewAspect);
   const set = useNodeGraphStore(s => s.setPreviewAspect);
@@ -44,9 +44,9 @@ export function AspectPicker() {
               aria-checked={on}
               aria-label={`${a.label}: ${a.hint}`}
               onClick={() => set(a.id)}
-              style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, borderRadius: radius.md, cursor: 'pointer', background: on ? alpha('#ffffff', 0.12) : 'transparent' }}
+              style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, borderRadius: radius.md, cursor: 'pointer', background: on ? (onPanel ? tk.bg.field : alpha('#ffffff', 0.12)) : 'transparent' }}
             >
-              <span style={{ width: Math.round(w), height: Math.round(h), borderRadius: 2, boxSizing: 'border-box', border: `1.5px ${a.ratio ? 'solid' : 'dashed'} ${on ? tk.accent.base : alpha('#ffffff', 0.45)}` }} />
+              <span style={{ width: Math.round(w), height: Math.round(h), borderRadius: 2, boxSizing: 'border-box', border: `1.5px ${a.ratio ? 'solid' : 'dashed'} ${on ? tk.accent.base : onPanel ? tk.text.faint : alpha('#ffffff', 0.45)}` }} />
             </button>
           </Tooltip>
         );

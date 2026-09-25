@@ -22,7 +22,8 @@ import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuil
 import type { Page } from './components/page';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useShallow } from 'zustand/react/shallow';
-import { useNodeGraphStore, EXAMPLE_INDEX, EXAMPLE_FOLDERS } from './store/useNodeGraphStore';
+import { useNodeGraphStore, EXAMPLE_INDEX, EXAMPLE_FOLDERS, PLAY_SETUP_TOAST } from './store/useNodeGraphStore';
+import { useToastStore } from './components/ui/toastStore';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { useShortcuts } from './hooks/useShortcuts';
@@ -410,6 +411,13 @@ function App() {
   const [showCode, setShowCode]         = useState(false);
   const [page, setPage]                 = useState<Page>('studio');
   const playWidth = PANEL_WIDTHS[usePlayUi(s => s.panel)];
+  // "This graph has a Play setup · Open Play" means nothing while Play is already open.
+  useEffect(() => {
+    if (page !== 'play') return;
+    const clear = () => { const t = useToastStore.getState(); for (const x of t.toasts) if (x.title === PLAY_SETUP_TOAST) t.dismiss(x.id); };
+    clear();
+    return useToastStore.subscribe(clear);
+  }, [page]);
 
   // Navigate to Function Builder when an ExprBlock requests it
   useEffect(() => {
@@ -1031,8 +1039,8 @@ function App() {
 
           {/* Play: the control panel takes the graph's place, the picture gets the rest */}
           {page === 'play' && (
-            <div style={{ width: playWidth, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }}>
-              <PlayPage />
+            <div style={{ width: `min(${playWidth}px, 50vw)`, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }}>
+              <PlayPage canvasRow />
             </div>
           )}
 

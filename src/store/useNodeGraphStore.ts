@@ -18,10 +18,13 @@ import { buildPlayHtml, unsupportedFeatures, type EmbedOptions, type PlayHtmlInp
 export const PLAY_FILE_KIND = 'shader-studio-play';
 
 /** A loaded graph brought a Play setup with it: say so, with a way straight to it. */
+/** The title of the "open Play" notice; the app clears it while the Play page is open. */
+export const PLAY_SETUP_TOAST = 'This graph has a Play setup';
+
 function announcePlay(play: PlayRecord, openPlay: () => void): void {
   if (isPlayRecordEmpty(play)) return;
   const c = play.controls.length, m = play.mappings.length;
-  toast.info('This graph has a Play setup', {
+  toast.info(PLAY_SETUP_TOAST, {
     message: `${c} control${c === 1 ? '' : 's'} · ${m} mapping${m === 1 ? '' : 's'}`,
     action: { label: 'Open Play', onClick: openPlay },
   });

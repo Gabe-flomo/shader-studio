@@ -4,6 +4,7 @@ import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import type { Page } from '../page';
 import { IconButton } from '../ui/Button';
+import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { Menu } from '../ui/Menu';
 import { LoadGraphButton, SaveGraphButton } from './DesktopTopNav';
@@ -11,8 +12,9 @@ import { reportFileResult, reportGlslImport } from './reportFileResult';
 import { isPlayRecordEmpty } from '../../types/play';
 
 /**
- * Phone top bar (Mobile board): logo (back to Studio), undo/redo, save/load, and a ⋯ menu with
- * the rest — Keys, Record, Import, Export and the theme. Grows by the status-bar inset.
+ * Phone top bar (Mobile board): logo (back to Studio), the Studio | Play switch, undo/redo,
+ * save/load, and a ⋯ menu with the rest — Keys, Record, Import, Export and the theme. Grows by
+ * the status-bar inset.
  */
 export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
   page: Page;
@@ -52,14 +54,28 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
       >
         <Icon name="presets" size={13} />
       </button>
-      {page !== 'studio' && (
-        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : page === 'play' ? 'Play' : 'Builder'}</span>
+      {page === 'studio' || page === 'play' ? (
+        // Studio and Play are the two halves of the app: the switch between them is always in sight.
+        <span style={{ marginLeft: 8 }}>
+          <Segmented
+            size="sm"
+            ariaLabel="Page"
+            value={page}
+            onChange={v => onPageChange(v)}
+            options={[
+              { value: 'studio', label: 'Studio' },
+              { value: 'play', label: hasPlay ? 'Play •' : 'Play', title: hasPlay ? 'This graph has a Play setup' : 'Perform this graph: controls, mappings, layers' },
+            ]}
+          />
+        </span>
+      ) : (
+        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : 'Builder'}</span>
       )}
       <span style={{ flex: 1 }} />
-      <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 40, height: 40 }} />
-      <IconButton icon="redo" label="Redo" tooltip={false} onClick={redo} style={{ width: 40, height: 40 }} />
-      <span style={{ width: 1, height: 20, background: tk.border.default, margin: '0 4px' }} />
-      <SaveGraphButton />
+      <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 36, height: 40 }} />
+      <IconButton icon="redo" label="Redo" tooltip={false} onClick={redo} style={{ width: 36, height: 40 }} />
+      <span style={{ width: 1, height: 20, background: tk.border.default, margin: '0 2px' }} />
+      <SaveGraphButton compact />
       <LoadGraphButton />
       <span ref={moreRef} style={{ display: 'inline-flex' }}>
         <IconButton
@@ -67,7 +83,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
           label="More"
           tooltip={false}
           active={!!menu}
-          style={{ width: 40, height: 40 }}
+          style={{ width: 36, height: 40 }}
           onClick={() => {
             const r = moreRef.current?.getBoundingClientRect();
             setMenu(r ? { x: r.right - 220, y: r.bottom + 6 } : null);

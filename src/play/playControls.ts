@@ -13,7 +13,7 @@
 
 import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
-import { LAYER_NUMERIC_PROPS, parseLayerTarget } from '../types/play';
+import { LAYER_NUMERIC_PROPS, parseActionTarget, parseLayerTarget } from '../types/play';
 import { getNodeDefinition } from '../nodes/definitions';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
 import { isParamVisible } from '../compiler/uniformPatcher';
@@ -143,6 +143,7 @@ export function readLayerValue(play: PlayRecord | undefined, target: string): nu
 /** The control's current value: a graph param (a group override wins over the inner node's own value) or a layer property. */
 export function readControlValue(nodes: GraphNode[], target: string, play?: PlayRecord): number | number[] | undefined {
   if (parseLayerTarget(target)) return readLayerValue(play, target);
+  if (parseActionTarget(target)) return undefined;
   const parts = target.split('::');
   const top = nodes.find(n => n.id === parts[0]);
   if (!top) return undefined;
@@ -160,6 +161,8 @@ export function readControlValue(nodes: GraphNode[], target: string, play?: Play
 
 /** Does the control's target still exist (in the graph, or as a layer)? */
 export function controlExists(nodes: GraphNode[], control: PlayControl, play?: PlayRecord): boolean {
+  const at = parseActionTarget(control.target);
+  if (at) return !!play?.layers.some(l => l.id === at.layerId);
   return readControlValue(nodes, control.target, play) !== undefined;
 }
 
@@ -195,7 +198,7 @@ export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: 
   let out = nodes;
   for (const c of play.controls) {
     const v = values.get(c.id);
-    if (v === undefined || parseLayerTarget(c.target)) continue;
+    if (v === undefined || parseLayerTarget(c.target) || parseActionTarget(c.target)) continue;
     const value = Array.isArray(v) ? [v[0], v[1], v[2]] : v;
     const parts = c.target.split('::');
     const key = parts[parts.length - 1];

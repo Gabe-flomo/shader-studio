@@ -67,13 +67,15 @@ export function Menu({ x, y, items, onClose, minWidth = 190 }: {
       ref={ref}
       role="menu"
       style={{
-        position: 'fixed', left: pos.left, top: pos.top, zIndex: 9000, minWidth, padding: 4,
+        position: 'fixed', left: pos.left, top: pos.top, zIndex: 9000, minWidth, maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100vh - 16px)', overflowY: 'auto', padding: 4,
         background: tk.bg.panel, borderRadius: 10, boxShadow: tk.shadow.popover, font: `12.5px ${fontFamily.ui}`,
       }}
     >
-      {items.map((it, i) => it === 'separator'
-        ? <div key={i} style={{ height: 1, background: tk.border.subtle, margin: '4px 2px' }} />
-        : (
+      {items.map((it, i) => {
+        if (it === 'separator') return <div key={i} style={{ height: 1, background: tk.border.subtle, margin: '4px 2px' }} />;
+        // A short hint (a shortcut, "Rotation 0°") sits at the right; a sentence goes under the label.
+        const long = !!it.hint && it.hint.length > 28;
+        return (
           <button
             key={i}
             type="button"
@@ -82,17 +84,27 @@ export function Menu({ x, y, items, onClose, minWidth = 190 }: {
             onMouseEnter={() => setActive(i)}
             onClick={() => { it.onSelect(); onClose(); }}
             style={{
-              width: '100%', height: 30, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', border: 0,
+              width: '100%', minHeight: 30, display: 'flex', alignItems: long ? 'flex-start' : 'center', gap: 8, padding: long ? '6px 10px' : '0 10px', border: 0,
               borderRadius: radius.md - 1, background: active === i ? tk.bg.field : 'transparent', textAlign: 'left',
               color: it.danger ? tk.status.danger : tk.text.primary, font: 'inherit', cursor: 'pointer',
               opacity: it.disabled ? 0.45 : 1,
             }}
           >
-            {it.icon && <Icon name={it.icon} size={15} style={{ color: it.danger ? tk.status.danger : tk.text.muted }} />}
-            <span style={{ flex: 1 }}>{it.label}</span>
-            {it.hint && <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.faint }}>{it.hint}</span>}
+            {it.icon && <Icon name={it.icon} size={15} style={{ color: it.danger ? tk.status.danger : tk.text.muted, marginTop: long ? 1 : 0 }} />}
+            {long ? (
+              <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                <span>{it.label}</span>
+                <span style={{ font: `11.5px/1.35 ${fontFamily.ui}`, color: tk.text.faint }}>{it.hint}</span>
+              </span>
+            ) : (
+              <>
+                <span style={{ flex: 1 }}>{it.label}</span>
+                {it.hint && <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.faint }}>{it.hint}</span>}
+              </>
+            )}
           </button>
-        ))}
+        );
+      })}
     </div>,
     document.body,
   );

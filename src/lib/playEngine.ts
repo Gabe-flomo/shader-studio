@@ -26,7 +26,7 @@ import { liveAudio } from './liveAudio';
 import { beatAt, newTriggerState, noiseAt, stepTrigger, triggerKey, type TriggerState } from '../play/triggers';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
-import { CURVE_POINTS, emptyPlayRecord, parseLayerTarget } from '../types/play';
+import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parseLayerTarget } from '../types/play';
 
 export type ControlValue = number | number[];
 
@@ -148,6 +148,8 @@ class PlayEngine implements InputSource {
   /** Presses an action has already fired for, per action id. */
   private actionSeen = new Map<string, number>();
   private actionListeners = new Set<(a: PlayAction) => void>();
+  /** Action controls: the last mapped level, so a rise through 0.5 fires once. */
+  private actionLevel = new Map<string, number>();
 
   private press(key: string, velocity = 1): void {
     this.presses.set(key, (this.presses.get(key) ?? 0) + 1);
@@ -332,6 +334,15 @@ class PlayEngine implements InputSource {
   onAction(cb: (a: PlayAction) => void): () => void {
     this.actionListeners.add(cb);
     return () => { this.actionListeners.delete(cb); };
+  }
+
+  /** Fire an action control now (its button on the panel). */
+  fireControl(controlId: string): void {
+    const c = this.controls.get(controlId);
+    const at = c ? parseActionTarget(c.target) : null;
+    if (!c || !at) return;
+    const a: PlayAction = { id: c.id, trigger: { on: 'mouse' }, do: at.do, layerId: at.layerId, amount: c.amount ?? 1, enabled: true };
+    for (const cb of this.actionListeners) cb(a);
   }
 
   /** Did a driven layer property change in the last tick? (The overlay redraws.) */
@@ -552,6 +563,15 @@ class PlayEngine implements InputSource {
         if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target;
       }
       st.value = v;
+      if (control.kind === 'action') {
+        // A button: fires once each time its mapping rises through the middle (a key down, a click, a beat).
+        const was = this.actionLevel.get(control.id) ?? 0;
+        this.actionLevel.set(control.id, v);
+        if (v >= 0.5 && was < 0.5) this.fireControl(control.id);
+        this.live.set(control.id, v);
+        driven.add(control.id);
+        continue;
+      }
       const layerTarget = parseLayerTarget(control.target);
       if (layerTarget) {
         // A layer property: not a uniform. The overlay reads it after this tick.
@@ -583,6 +603,7 @@ class PlayEngine implements InputSource {
     for (const id of this.drivenLastFrame) if (!driven.has(id)) this.restoreOnce.add(id);
     for (const id of this.restoreOnce) {
       if (driven.has(id)) continue;
+      this.actionLevel.delete(id);
       const control = this.controls.get(id);
       const base = this.base.get(id);
       const lt = control ? parseLayerTarget(control.target) : null;
@@ -687,7 +708,7 @@ class PlayEngine implements InputSource {
 
   /** Actions and layer-property mappings run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.record.controls.some(c => parseLayerTarget(c.target) !== null);
+    return !!this.record.actions?.length || this.record.controls.some(c => c.kind === 'action' || parseLayerTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */

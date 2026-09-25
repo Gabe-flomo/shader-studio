@@ -17,6 +17,13 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
 import { toast } from '../ui/toastStore';
 
+/**
+ * Inside another site's frame (a preview on claude.ai, say) the browser refuses the camera,
+ * the mic and MIDI unless that site allows them, without asking. Say so rather than "no camera".
+ */
+const EMBEDDED = typeof window !== 'undefined' && window.self !== window.top;
+const EMBEDDED_HINT = 'This page is running inside another site, which does not allow the camera, the microphone or MIDI. Open Shader Studio in its own tab (or the desktop app) to use them.';
+
 export function OscStatusChip() {
   const tk = useTokens();
   const native = oscClient.getMode() === 'native';
@@ -71,11 +78,11 @@ export function LiveAudioChip() {
   useEffect(() => liveAudio.onStatus(st => { setStatus(st); setDeviceId(liveAudio.getDeviceId()); if (st === 'on') void liveAudio.devices().then(setDevices); }), []);
   useEffect(() => { if (liveAudio.isOn()) void liveAudio.devices().then(setDevices); }, []);
   const colour = status === 'on' ? tk.status.success : status === 'requesting' ? tk.status.warning : status === 'denied' ? tk.status.danger : tk.text.disabled;
-  const text = status === 'on' ? (liveAudio.getLabel() || 'Listening') : status === 'requesting' ? 'Asking…' : status === 'denied' ? 'Blocked or no input' : status === 'unsupported' ? 'Not available here' : 'Not listening';
+  const text = status === 'on' ? (liveAudio.getLabel() || 'Listening') : status === 'requesting' ? 'Asking…' : status === 'denied' ? (EMBEDDED ? 'Blocked by this page' : 'Blocked or no input') : status === 'unsupported' ? 'Not available here' : 'Not listening';
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-      <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}`, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={text}>{text}</span>
+      <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}`, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={status === 'denied' && EMBEDDED ? EMBEDDED_HINT : text}>{text}</span>
       {status === 'on' && devices.length > 1 && (
         <Select ariaLabel="Audio input" value={deviceId} options={devices.map(d => ({ value: d.id, label: d.label }))} onChange={id => { setDeviceId(id); void liveAudio.start(id); }} height={24} style={{ maxWidth: 160 }} />
       )}
@@ -90,11 +97,11 @@ export function CameraChip() {
   const [status, setStatus] = useState<CameraStatus>(() => cameraInput.getStatus());
   useEffect(() => cameraInput.onStatus(setStatus), []);
   const colour = status === 'on' ? tk.status.success : status === 'requesting' ? tk.status.warning : status === 'denied' ? tk.status.danger : tk.text.disabled;
-  const text = status === 'on' ? 'Camera on' : status === 'requesting' ? 'Asking…' : status === 'denied' ? 'Blocked or no camera' : status === 'unsupported' ? 'Not available here' : 'Camera off';
+  const text = status === 'on' ? 'Camera on' : status === 'requesting' ? 'Asking…' : status === 'denied' ? (EMBEDDED ? 'Blocked by this page' : 'Blocked or no camera') : status === 'unsupported' ? 'Not available here' : 'Camera off';
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-      <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}` }}>{text}</span>
+      <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}` }} title={status === 'denied' && EMBEDDED ? EMBEDDED_HINT : undefined}>{text}</span>
       {status !== 'on' && status !== 'unsupported' && <Button size="sm" onClick={() => void cameraInput.start()}>Turn on camera</Button>}
       {status === 'on' && <Button size="sm" variant="ghost" onClick={() => cameraInput.stop()}>Stop</Button>}
     </span>

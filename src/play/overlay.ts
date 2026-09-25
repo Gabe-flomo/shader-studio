@@ -194,9 +194,27 @@ class PlayOverlay {
       }
       return best;
     };
+    // Touch: holding still on a layer for a moment opens its menu (phones have no right-click).
+    let hold: { timer: number; x: number; y: number } | null = null;
+    const cancelHold = () => { if (hold) { window.clearTimeout(hold.timer); hold = null; } };
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
       const u = toUnit(e);
+      cancelHold();
+      if (e.pointerType === 'touch' && !this.drawing && this.menuListeners.size) {
+        const hit = this.layerAt(u);
+        if (hit) {
+          const { clientX, clientY } = e;
+          hold = {
+            x: clientX, y: clientY,
+            timer: window.setTimeout(() => {
+              hold = null;
+              this.drag = null;
+              for (const cb of this.menuListeners) cb({ layerId: hit.id, x: clientX, y: clientY });
+            }, 550),
+          };
+        }
+      }
       this.pointer.down = true;
       const d = this.drawing;
       if (d) {
@@ -211,7 +229,7 @@ class PlayOverlay {
       // The selected layer's handles come first, while editing.
       const sel = this.editing && this.writer ? this.record.layers.find(x => x.id === this.selectedId && x.visible) : undefined;
       const sb = sel ? this.bounds(sel) : null;
-      const grab = sel && sb ? handleAt(sb, u.x * u.w, (1 - u.y) * u.h, u.w, u.h) : null;
+      const grab = sel && sb ? handleAt(sb, u.x * u.w, (1 - u.y) * u.h, u.w, u.h, e.pointerType === 'touch' ? 20 : 9) : null;
       if (sel && sb && grab) {
         this.drag = { id: sel.id, handle: grab, start: sb, layer: sel };
       } else {
@@ -232,6 +250,7 @@ class PlayOverlay {
       e.preventDefault(); e.stopPropagation();
     };
     const onMove = (e: PointerEvent) => {
+      if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 8) cancelHold();
       const u = toUnit(e);
       this.pointer.x = u.x; this.pointer.y = u.y; this.pointer.over = u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1;
       const d = this.drawing;
@@ -266,6 +285,7 @@ class PlayOverlay {
       container.style.cursor = over ? 'grab' : '';
     };
     const onUp = () => {
+      cancelHold();
       this.pointer.down = false;
       this.drag = null;
       if (this.pressedZone) { playEngine.releaseZone(this.pressedZone); this.pressedZone = null; }

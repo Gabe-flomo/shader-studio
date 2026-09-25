@@ -628,6 +628,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 
 **Try this.**
 • Space drops the letters again; a click scatters them.
+• Drop again is also a button on the Controls tab: an action control. Space is mapped onto it; map a beat or a MIDI note instead.
 • Move the mouse to tip the letters off the hill.
 • Change the text, or switch Source to circles or boxes and raise Count.`,
       layers: [
@@ -639,12 +640,13 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       controls: [
         { id: 'tilt', target: 'layer:letters::angle', kind: 'float', label: 'Gravity angle', min: -60, max: 60, step: 1 },
         { id: 'radius', target: 'circ::radius', kind: 'float', label: 'Hill height', min: 1.1, max: 1.8 },
+        { id: 'dropBtn', target: 'act:letters::drop', kind: 'action', label: 'Letters · Drop again', min: 0, max: 1, amount: 1 },
       ],
       mappings: [
         { id: 'mouse', controlId: 'tilt', source: { kind: 'mouse', axis: 'x' }, outMin: 10, outMax: -10, curve: 'linear', smoothMs: 150, enabled: true },
+        { id: 'space', controlId: 'dropBtn', source: { kind: 'key', code: 'Space' }, outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0, enabled: true },
       ],
       actions: [
-        { id: 'drop', trigger: { on: 'key', code: 'Space' }, do: 'drop', layerId: 'letters', amount: 1, enabled: true },
         { id: 'scatter', trigger: { on: 'mouse' }, do: 'scatter', layerId: 'letters', amount: 1, enabled: true },
       ],
     },

@@ -74,7 +74,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
               aria-selected={on}
               onClick={() => onPageChange(t.page)}
               style={{
-                padding: '6px 14px', borderRadius: 7, border: 0, cursor: 'pointer',
+                padding: compact ? '6px 10px' : '6px 14px', borderRadius: 7, border: 0, cursor: 'pointer',
                 background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
                 color: on ? tk.text.primary : tk.text.faint, font: `${on ? 600 : 500} 13px ${fontFamily.ui}`,
               }}
@@ -89,16 +89,16 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
         <IconButton icon="undo" label="Undo" shortcut={shortcuts.undo} onClick={undo} />
         <IconButton icon="redo" label="Redo" onClick={redo} />
-        <Divider />
-        <SaveGraphButton />
+        {!compact && <Divider />}
+        <SaveGraphButton compact={compact} />
         <LoadGraphButton />
-        <Divider />
+        {!compact && <Divider />}
         <IconButton
           icon={mode === 'light' ? 'moon' : 'sun'}
           label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
           onClick={toggleTheme}
         />
-        <Divider />
+        {!compact && <Divider />}
         {compact ? (
           <>
             <IconButton icon="import" label="Import a graph file" shortcut={shortcuts.import}
@@ -126,13 +126,13 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
             type="button"
             onClick={onRecord}
             style={{
-              height: 32, marginLeft: 4, padding: '0 13px 0 11px', border: 0, borderRadius: radius.control, cursor: 'pointer',
+              height: 32, marginLeft: 4, padding: compact ? '0 11px' : '0 13px 0 11px', border: 0, borderRadius: radius.control, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 7, background: tk.ink.base, color: tk.ink.text,
               font: `600 12.5px ${fontFamily.ui}`,
             }}
           >
             <span style={{ width: 9, height: 9, borderRadius: '50%', background: tk.status.danger, boxShadow: `0 0 0 3px ${alpha(tk.status.danger, 0.25)}` }} />
-            Record
+            {!compact && 'Record'}
           </button>
         </Tooltip>
       </div>
@@ -145,7 +145,8 @@ function Divider() {
   return <span style={{ width: 1, height: 20, background: tk.border.default, margin: '0 6px', flexShrink: 0 }} />;
 }
 
-export function SaveGraphButton() {
+/** Save (a new version of the open graph, or under a name). `compact` (phones) drops the name label; the dot stays on the icon. */
+export function SaveGraphButton({ compact = false }: { compact?: boolean }) {
   const tk = useTokens();
   const current = useNodeGraphStore(s => s.currentGraph);
   const dirty = useNodeGraphStore(s => s.graphDirty);
@@ -153,7 +154,7 @@ export function SaveGraphButton() {
   const [open, setOpen] = useState(false);
   return (
     <span ref={anchor} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-      {current && (
+      {current && !compact && (
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
@@ -165,7 +166,10 @@ export function SaveGraphButton() {
           {dirty && <span aria-label="Unsaved changes" style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.warning, flexShrink: 0 }} />}
         </button>
       )}
-      <IconButton icon="save" label={current ? `Save “${current.name}” as a new version` : 'Save graph'} active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
+      <span style={{ position: 'relative', display: 'inline-flex' }}>
+        <IconButton icon="save" label={current ? `Save “${current.name}” as a new version` : 'Save graph'} active={open} tooltip={!open} onClick={() => setOpen(o => !o)} style={compact ? { width: 36, height: 40 } : undefined} />
+        {compact && dirty && <span aria-label="Unsaved changes" style={{ position: 'absolute', top: 8, right: 6, width: 6, height: 6, borderRadius: '50%', background: tk.status.warning, pointerEvents: 'none' }} />}
+      </span>
       {open && (
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={300} padding={10}>
           <SaveGraphForm onDone={() => setOpen(false)} />

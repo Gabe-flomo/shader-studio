@@ -120,6 +120,8 @@
     return st.value;
   }
   function layerTarget(t) { if (!t.startsWith('layer:')) return null; const r = t.slice(6); const i = r.lastIndexOf('::'); return i > 0 ? { layerId: r.slice(0, i), key: r.slice(i + 2) } : null; }
+  // An action control (a button): `act:<layerId>::<action>`.
+  function actTarget(t) { if (!t.startsWith('act:')) return null; const r = t.slice(4); const i = r.lastIndexOf('::'); return i > 0 ? { layerId: r.slice(0, i), do: r.slice(i + 2) } : null; }
   function bindingKey(t) { return t.split('::').slice(-2).join('::'); }
   function isTyping(t) { return t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || (t && t.isContentEditable); }
 
@@ -313,7 +315,7 @@
     // Mapping engine
     const controls = new Map(play.controls.map(c => [c.id, c]));
     const layersById = new Map(play.layers.map(l => [l.id, l]));
-    const base = new Map(), live = new Map(), layerLive = new Map(), smooth = new Map(), trig = new Map();
+    const base = new Map(), live = new Map(), layerLive = new Map(), smooth = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = 0, playing = true, lastNow = 0, frame = 0;
     const bindings = B.paramBindings || {};
@@ -419,6 +421,14 @@
         if (m.smoothMs <= 0 || v === undefined) v = target;
         else { const a = 1 - Math.exp(-(dt * 1000) / m.smoothMs); v = v + (target - v) * a; if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target; }
         smooth.set(m.id, v);
+        const at = actTarget(c.target);
+        if (at) {
+          // Fires once each time its mapping rises through the middle (a key down, a click, a beat).
+          const was = actLevel.get(c.id) || 0;
+          actLevel.set(c.id, v);
+          if (v >= 0.5 && was < 0.5 && K) { K.act({ do: at.do, layerId: at.layerId, amount: c.amount || 1 }); needsDraw = true; }
+          live.set(c.id, v); driven.add(c.id); continue;
+        }
         const lt = layerTarget(c.target);
         if (lt) { layerLive.set(lt.layerId + '::' + lt.key, v); live.set(c.id, v); driven.add(c.id); continue; }
         const un = uniformFor(c); if (!un) continue;
@@ -432,6 +442,7 @@
         driven.add(c.id);
       }
       for (const id of [...live.keys()]) if (!driven.has(id)) {
+        actLevel.delete(id);
         const c = controls.get(id); const lt = c && layerTarget(c.target);
         if (lt) layerLive.delete(lt.layerId + '::' + lt.key); else if (c) { const un = uniformFor(c); if (un && base.has(id)) uniformValues[un] = base.get(id); }
         live.delete(id);
@@ -544,6 +555,15 @@
         const out = el('span', 'ssp-value', '');
         top.append(out);
         row.append(top);
+        const at = actTarget(c.target);
+        if (at) {
+          // A button: press it to fire the action.
+          const b = el('button', 'ssp-btn', c.label);
+          b.onclick = () => { if (K) { K.act({ do: at.do, layerId: at.layerId, amount: c.amount || 1 }); needsDraw = true; } };
+          row.replaceChildren(b);
+          panel.append(row);
+          continue;
+        }
         if (c.kind === 'color') {
           const input = el('input'); input.type = 'color'; input.className = 'ssp-colour';
           const b = base.get(c.id); if (Array.isArray(b)) input.value = hex(b);

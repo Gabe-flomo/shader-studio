@@ -104,3 +104,24 @@ describe('layer operations', () => {
     expect((n.play.layers[0] as { nullId: string }).nullId).toBe(n.id);
   });
 });
+
+describe('action controls', () => {
+  it('fire their action on a press and each time a mapping rises past the middle', async () => {
+    const { playEngine } = await import('../../lib/playEngine');
+    const { actionTarget } = await import('../../types/play');
+    const p = emptyPlayRecord();
+    p.layers = [defaultLayer('bodies', 'b', 'Letters')];
+    p.controls = [{ id: 'drop', target: actionTarget('b', 'drop'), kind: 'action', label: 'Drop', min: 0, max: 1, amount: 1 }];
+    p.mappings = [{ id: 'm', controlId: 'drop', source: { kind: 'lfo', shape: 'square', rate: 1, phase: 0 }, outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0, enabled: true }];
+    playEngine.setRecord(p);
+    const fired: string[] = [];
+    const off = playEngine.onAction(a => fired.push(`${a.do}:${a.layerId}`));
+    playEngine.fireControl('drop');
+    expect(fired).toEqual(['drop:b']);
+    // A square LFO at 1 Hz: high for half a second, low for half. Two seconds = two rises.
+    for (let t = 0; t <= 2.0; t += 0.05) playEngine.tickInputs(0.05, t, () => {});
+    off();
+    expect(fired.length).toBeGreaterThanOrEqual(3);
+    expect(fired.length).toBeLessThanOrEqual(4);
+  });
+});

@@ -36,13 +36,15 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
 import { LayersPanel } from './LayersPanel';
 import { NotesCard } from './NotesCard';
+import { AspectPicker } from '../shell/PreviewChrome';
 import { NOTE_REF_TYPE, noteRef, type NoteRefKind } from './noteRefs';
 import { LayerContextMenu } from './LayerContextMenu';
 import { usePlayUi, type PanelSize } from './playUi';
 import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, OscStatusChip } from './chips';
 import { TriggerPicker } from './TriggerPicker';
-import { DEFAULT_DISPLAY, LAYER_NUMERIC_PROPS, layerTarget, parseLayerTarget, type PlayDisplay } from '../../types/play';
+import { ACTIONS_FOR, DEFAULT_DISPLAY, LAYER_NUMERIC_PROPS, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
+import { ACTION_LABELS } from './layers/help';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
 
@@ -116,7 +118,11 @@ function useSourceMeter(mappings: PlayMapping[]): Map<string, number> {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export function PlayPage({ compact = false }: { compact?: boolean }) {
+/**
+ * `compact`: phones (tabs for everything, one scroll under the picture).
+ * `canvasRow`: the picture's shape picker in the panel, for layouts whose preview has no header (tablets).
+ */
+export function PlayPage({ compact = false, canvasRow = false }: { compact?: boolean; canvasRow?: boolean }) {
   const tk = useTokens();
   const play = useNodeGraphStore(s => s.play);
   const setPlay = useNodeGraphStore(s => s.setPlay);
@@ -166,6 +172,11 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   const revealLayerFor = usePlayUi(s => s.reveal);
   const focusNode = useNodeGraphStore(s => s.focusNode);
   const sourceOf = (c: PlayControl): ControlSource => {
+    const at = parseActionTarget(c.target);
+    if (at) {
+      const l = play.layers.find(x => x.id === at.layerId);
+      return { kind: 'layer', title: l?.label ?? 'a deleted layer', param: ACTION_LABELS[at.do], missing: !l, go: () => { if (l) revealLayerFor(l.id); } };
+    }
     const lt = parseLayerTarget(c.target);
     if (lt) {
       const l = play.layers.find(x => x.id === lt.layerId);
@@ -188,7 +199,17 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   const layerCandidates = useMemo<LayerCandidates[]>(() => play.layers.map(l => ({
     id: l.id, label: l.label,
     props: LAYER_NUMERIC_PROPS[l.kind].map(d => ({ key: d.key, label: d.label, hint: d.hint, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
+    actions: [...(ACTIONS_FOR[l.kind] ?? ACTIONS_FOR.other)],
   })), [play.layers]);
+  // A layer's actions (Drop again, Burst…) as buttons on the panel, which mappings can press.
+  const addActionControl = useCallback((layerId: string, kind: ActionKind) => {
+    update(p => {
+      const l = p.layers.find(x => x.id === layerId);
+      const target = actionTarget(layerId, kind);
+      if (!l || p.controls.some(c => c.target === target)) return p;
+      return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'action', label: `${l.label} · ${ACTION_LABELS[kind]}`, min: 0, max: 1, amount: defaultActionAmount(kind) }] };
+    });
+  }, [update]);
   const addLayerControl = useCallback((layerId: string, key: string) => {
     update(p => {
       const l = p.layers.find(x => x.id === layerId);
@@ -266,6 +287,17 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
     bands: Array.isArray(n.params._bands) ? Math.max(1, n.params._bands.length) : 1,
   })), [nodes]);
 
+  const notesCard = (play.notes || notesEditing) ? (
+    <NotesCard
+      notes={play.notes ?? ''}
+      editing={notesEditing}
+      targets={noteTargets}
+      onOpen={openRef}
+      onEdit={setNotesEditing}
+      onChange={notes => update(p => { const next: PlayRecord = { ...p, notes }; if (!notes) delete next.notes; return next; })}
+    />
+  ) : null;
+
   return (
     <div ref={rootRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
       {/* Sections. Desktop keeps Mappings as a drawer underneath; phones make it a third tab. */}
@@ -285,18 +317,10 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
         </div>
         {!compact && <Segmented size="sm" ariaLabel="Panel width" value={panel} onChange={v => setPanel(v as PanelSize)} options={[{ value: 's', label: 'S', title: 'Narrow panel' }, { value: 'm', label: 'M', title: 'Medium panel' }, { value: 'l', label: 'L', title: 'Wide panel' }]} />}
       </div>
-      {(play.notes || notesEditing) && (
-        <NotesCard
-          notes={play.notes ?? ''}
-          editing={notesEditing}
-          targets={noteTargets}
-          onOpen={openRef}
-          onEdit={setNotesEditing}
-          onChange={notes => update(p => { const next: PlayRecord = { ...p, notes }; if (!notes) delete next.notes; return next; })}
-        />
-      )}
+      {!compact && notesCard}
       {tab === 'layers' && (
         <LayersPanel
+          top={compact ? notesCard : undefined}
           play={play}
           touch={compact}
           exposedTargets={new Set(play.controls.map(c => c.target))}
@@ -313,12 +337,29 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
             <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
             {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
             <IconButton icon="code" label="Put it on a website: a player with controls, or the picture as a background, as a snippet or a page" onClick={() => setEmbedOpen(true)} />
-            <AddControlButton candidates={candidates} layers={layerCandidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} />
+            <AddControlButton candidates={candidates} layers={layerCandidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} />
           </>
         )}
       />}
-      <PictureRow play={play} onChange={update} />
-      {tab === 'controls' && <div style={{ flex: 1, minHeight: play.notes ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+      {canvasRow && !compact && (
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel, overflowX: 'auto' }}>
+          <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
+          <AspectPicker onPanel />
+        </div>
+      )}
+      {!compact && <PictureRow play={play} onChange={update} />}
+      {tab === 'controls' && <div style={{ flex: 1, minHeight: play.notes && !compact ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+        {compact && (
+          // Phones: everything scrolls together under the picture, notes first.
+          <div style={{ margin: '0 -12px 6px' }}>
+            {notesCard}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', overflowX: 'auto' }}>
+              <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
+              <AspectPicker onPanel />
+            </div>
+            <PictureRow play={play} onChange={update} />
+          </div>
+        )}
         {play.controls.length === 0 ? (
           <EmptyState
             title="No controls yet"
@@ -335,7 +376,8 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
             exists={controlExists(nodes, c, play)}
             help={controlHelp(nodes, c.target, play)}
             source={sourceOf(c)}
-            onMap={() => addMapping({ kind: 'mouse', axis: 'x' }, c.id)}
+            onMap={() => addMapping(c.kind === 'action' ? { kind: 'mouse', axis: 'down' } : { kind: 'mouse', axis: 'x' }, c.id)}
+            onAmount={amount => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, amount } : x) }))}
             value={readControlValue(nodes, c.target, play)}
             live={liveValues.get(c.id)}
             drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers))}
@@ -411,14 +453,15 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 // ── Add control ──────────────────────────────────────────────────────────────
 
 /** A layer's numbers, for the Add control menu. */
-interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number }> }
+interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number }>; actions: ActionKind[] }
 
-function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer }: {
+function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer, onAddAction }: {
   candidates: PlayCandidate[];
   layers: LayerCandidates[];
   taken: Set<string>;
   onAdd: (c: PlayCandidate) => void;
   onAddLayer: (layerId: string, key: string) => void;
+  onAddAction: (layerId: string, kind: ActionKind) => void;
 }) {
   const tk = useTokens();
   const anchor = useRef<HTMLSpanElement>(null);
@@ -433,8 +476,9 @@ function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer }: {
   const layerShown = layers.map(l => ({
     ...l,
     props: l.props.filter(pr => !taken.has(layerTarget(l.id, pr.key)) && (!q || `${l.label} ${pr.label}`.toLowerCase().includes(q))),
-  })).filter(l => l.props.length > 0);
-  const layerCount = layerShown.reduce((n, l) => n + l.props.length, 0);
+    actions: l.actions.filter(a => !taken.has(actionTarget(l.id, a)) && (!q || `${l.label} ${ACTION_LABELS[a]}`.toLowerCase().includes(q))),
+  })).filter(l => l.props.length + l.actions.length > 0);
+  const layerCount = layerShown.reduce((n, l) => n + l.props.length + l.actions.length, 0);
   // While searching every folder with a match is open.
   const isOpen = (k: string) => !!q || unfolded.has(k);
   const itemStyle: React.CSSProperties = {
@@ -453,7 +497,7 @@ function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer }: {
       <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{count}</span>
     </button>
   );
-  const nothing = candidates.length === 0 && layers.every(l => l.props.length === 0);
+  const nothing = candidates.length === 0 && layers.every(l => l.props.length + l.actions.length === 0);
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
       <Button size="sm" icon="plus" onClick={() => setOpen(o => !o)} disabled={nothing}>Add control</Button>
@@ -476,7 +520,14 @@ function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer }: {
             {layerCount > 0 && folder('layers', 'From layers', layerCount)}
             {layerCount > 0 && isOpen('layers') && layerShown.map(l => (
               <div key={l.id}>
-                {folder(`layer:${l.id}`, l.label, l.props.length, 14)}
+                {folder(`layer:${l.id}`, l.label, l.props.length + l.actions.length, 14)}
+                {isOpen(`layer:${l.id}`) && l.actions.map(a => (
+                  <button key={`a:${a}`} type="button" title="A button on the panel. Map a key, a click, a beat or a note onto it to press it." onClick={() => { onAddAction(l.id, a); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
+                    <Icon name="play" size={12} style={{ color: tk.accent.text }} />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ACTION_LABELS[a]}</span>
+                    <span style={{ color: tk.text.faint, fontSize: 10.5 }}>button</span>
+                  </button>
+                ))}
                 {isOpen(`layer:${l.id}`) && l.props.map(pr => (
                   <button key={pr.key} type="button" title={pr.hint} onClick={() => { onAddLayer(l.id, pr.key); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
                     <Icon name="curve" size={13} style={{ color: tk.text.faint }} />
@@ -530,7 +581,7 @@ function PictureRow({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: P
 /** Where a control's value lives: a layer's property or a node's param. */
 interface ControlSource { kind: 'layer' | 'node'; title: string; param: string; within?: string; missing: boolean; go: () => void }
 
-function ControlRow({ control, index, count, exists, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, onMap }: {
+function ControlRow({ control, index, count, exists, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, onMap, onAmount }: {
   control: PlayControl;
   index: number;
   count: number;
@@ -549,6 +600,8 @@ function ControlRow({ control, index, count, exists, help, source, value, live, 
   onRemove: () => void;
   /** Add a mapping onto this control. */
   onMap: () => void;
+  /** Action controls: how much (particles for a burst, strength for a scatter). */
+  onAmount: (amount: number) => void;
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
@@ -611,7 +664,15 @@ function ControlRow({ control, index, count, exists, help, source, value, live, 
           <IconButton icon="trash" label="Remove from panel" size="sm" tone="danger" tooltip={false} onClick={onRemove} />
         </span>
       </div>
-      {control.kind === 'color' ? (
+      {control.kind === 'action' ? (
+        // A button: press it here, or map a key, a click, a beat or a note onto it.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Button size="sm" variant="primary" icon="play" disabled={!exists} onClick={() => playEngine.fireControl(control.id)} style={{ flex: 1, justifyContent: 'center', boxShadow: typeof live === 'number' && live >= 0.5 ? `0 0 0 2px ${alpha(tk.accent.base, 0.5)}` : undefined }}>
+            {source.param}
+          </Button>
+          {!driven && <span style={{ color: tk.text.faint, fontSize: 11 }}>Map a key or click to press it</span>}
+        </div>
+      ) : control.kind === 'color' ? (
         // A mapping on a colour scales it or sets one channel; the rest comes from
         // this colour, so it stays editable while driven. The live result shows beside it.
         <ColourPad value={Array.isArray(value) ? value : [0, 0, 0]} live={driven && Array.isArray(live) ? live : undefined} disabled={!exists} onChange={onChange} />
@@ -646,10 +707,17 @@ function ControlRow({ control, index, count, exists, help, source, value, live, 
           </div>
           {help.hint && <div style={{ color: tk.text.muted }}>{help.hint}</div>}
           {help.comment && <div style={{ color: tk.text.muted }}><b>Note on the node:</b> {help.comment}</div>}
-          {control.kind !== 'color' && (
+          {control.kind === 'float' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62 }}>Range</span>
               <RangeEditor min={control.min} max={control.max} onRange={onRange} />
+            </div>
+          )}
+          {control.kind === 'action' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62 }}>Amount</span>
+              <NumberInput value={control.amount ?? 1} min={0} max={1000} step={source.param === ACTION_LABELS.burst ? 10 : 0.1} title="Burst: how many particles. Scatter: how hard. Others ignore it." onCommit={n => onAmount(Math.max(0, n))} style={{ width: 64, height: 24, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' }} />
+              <span style={{ color: tk.text.faint, fontSize: 11 }}>A mapping presses it each time it rises past the middle of its range.</span>
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

@@ -47,7 +47,7 @@ const KINDS: { kind: PlayLayerKind; label: string; hint: string; icon: IconName 
 ];
 const KIND = Object.fromEntries(KINDS.map(k => [k.kind, k])) as Record<PlayLayerKind, (typeof KINDS)[number]>;
 
-export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose }: {
+export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, top }: {
   play: PlayRecord;
   touch: boolean;
   /** Targets that already have a control (their + is shown pressed). */
@@ -55,6 +55,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose }:
   onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
   /** Add a control for a numeric layer property. */
   onExpose: (control: PlayControl) => void;
+  /** Scrolls with the list, above the layers (phones put the notes here). */
+  top?: ReactNode;
 }) {
   const tk = useTokens();
   const addRef = useRef<HTMLSpanElement>(null);
@@ -103,7 +105,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose }:
         </span>
         {menu && <Menu x={menu.x} y={menu.y} minWidth={280} onClose={() => setMenu(null)} items={KINDS.map(k => ({ label: k.label, hint: k.hint, onSelect: () => add(k.kind) }))} />}
       </div>
-      <div ref={listRef} style={{ flex: 1, minHeight: play.notes ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+      <div ref={listRef} style={{ flex: 1, minHeight: play.notes && !top ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+        {top && <div style={{ margin: '0 -12px' }}>{top}</div>}
         {play.layers.length === 0 ? (
           <div style={{ margin: '18px 4px', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, lineHeight: 1.5 }}>
             <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>No layers yet</div>
