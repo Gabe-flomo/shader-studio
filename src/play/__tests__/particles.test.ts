@@ -25,7 +25,7 @@ function picture(f: (x: number, y: number) => number, sw = 16, sh = 16): Uint8Cl
   return d;
 }
 
-const params = (over: Partial<ParticlesLayer> = {}): ParticleParams => ({ ...(defaultLayer('particles', 'p', 'P') as ParticlesLayer), ...over });
+const params = (over: Partial<ParticlesLayer> = {}): ParticleParams => ({ ...(defaultLayer('particles', 'p', 'P') as ParticlesLayer), ...over }) as ParticleParams;
 const env = (over: Partial<ParticleEnv> = {}): ParticleEnv => ({ dt: 1 / 60, time: 0, aspect: 1, sample: null, sw: 16, sh: 16, attractorPoint: null, spawnPoint: null, ...over });
 const run = (st: ReturnType<typeof createParticles>, p: ParticleParams, e: ParticleEnv, frames: number, rand = seeded(2)) => {
   for (let f = 0; f < frames; f++) { e.time = f / 60; stepParticles(st, p, e, rand); }
@@ -149,16 +149,17 @@ describe('particles in play files and web exports', () => {
     expect(parsePlayRecord({ version: 1, controls: [], mappings: [], layers: [] }).display).toBeUndefined();
   });
 
-  it('the web export carries the particle system as a plain script', () => {
+  it('the web export carries the layer kit as a plain script that runs', () => {
     const html = buildPlayHtml({ title: 'P', fragmentShader: 'void main(){}', uniforms: {}, paramBindings: {}, play: emptyPlayRecord(), aspect: 'free' }, DEFAULT_EMBED);
-    const start = html.indexOf('var SSParticles = (function () {');
+    const start = html.indexOf('var SSKit = (function () {');
     expect(start).toBeGreaterThan(-1);
-    const block = html.slice(start, html.indexOf('})();', start) + 5);
+    const block = html.slice(start, html.indexOf('\n})();', start) + 5);
     expect(block).not.toMatch(/^export /m);
-    const lib = new Function(`${block}; return SSParticles;`)() as Record<string, unknown>;
-    expect(typeof lib.createParticles).toBe('function');
-    expect(typeof lib.stepParticles).toBe('function');
-    expect(typeof lib.drawParticles).toBe('function');
+    expect(block).not.toMatch(/^import /m);
+    // Every kit file shares this scope: a duplicate top-level name would throw here.
+    const lib = new Function(`${block}; return SSKit;`)() as { createLayerKit: () => Record<string, unknown> };
+    const kit = lib.createLayerKit();
+    for (const k of ['frame', 'act', 'shapeAt', 'isAnimated', 'reset']) expect(typeof kit[k]).toBe('function');
     // The whole runtime script parses (compiling it runs nothing).
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
     expect(() => new Function(scripts[scripts.length - 1])).not.toThrow();

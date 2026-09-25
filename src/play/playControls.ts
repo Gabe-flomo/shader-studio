@@ -212,7 +212,7 @@ export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: 
 
 let seq = 0;
 /** Ids for controls and mappings: unique within a session, readable in a file. */
-export function playId(prefix: 'ctl' | 'map' | 'layer'): string {
+export function playId(prefix: 'ctl' | 'map' | 'layer' | 'act'): string {
   seq += 1;
   return `${prefix}_${Date.now().toString(36)}_${seq.toString(36)}`;
 }

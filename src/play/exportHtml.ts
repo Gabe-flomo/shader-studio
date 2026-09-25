@@ -19,6 +19,10 @@
  */
 import runtimeSource from './runtime/play-runtime.js?raw';
 import particleSource from './particle-sim.js?raw';
+import geometrySource from './kit/geometry.js?raw';
+import layersSource from './kit/layers.js?raw';
+import bodiesSource from './kit/bodies.js?raw';
+import kitSource from './kit/kit.js?raw';
 import type { PlayRecord } from '../types/play';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
 
@@ -107,16 +111,18 @@ function runtimeOptions(o: EmbedOptions) {
 }
 
 /**
- * The particle system as a plain script: particle-sim.js with its `export`s
- * removed, in a closure that hands the runtime what it calls.
+ * The layer kit as a plain script: its files in dependency order, with their
+ * imports and `export`s removed, in one closure that hands the runtime
+ * createLayerKit. The kit's files keep their top-level names distinct so
+ * they can share this scope.
  */
-const particleScript = () => `var SSParticles = (function () {
-${particleSource.replace(/^export /gm, '')}
-return { createParticles: createParticles, stepParticles: stepParticles, drawParticles: drawParticles };
-})();
-`;
+export const KIT_SOURCES = [particleSource, geometrySource, layersSource, bodiesSource, kitSource];
+export function kitScript(): string {
+  const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit };\n})();\n`;
+}
 
-const runtimeScript = () => (particleScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
+const runtimeScript = () => (kitScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
 
 /** The complete page. Pure: same input, same string. */
 export function buildPlayHtml(input: PlayHtmlInput, options: EmbedOptions = DEFAULT_EMBED): string {

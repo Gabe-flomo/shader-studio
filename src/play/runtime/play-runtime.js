@@ -92,7 +92,7 @@
     return x;
   }
   function triggerKey(t) {
-    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; }
+    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; }
     return '';
   }
   function beatAt(bpm, beats, time) {
@@ -299,7 +299,13 @@
       if (lt) { const l = layersById.get(lt.layerId); if (l && typeof l[lt.key] === 'number') base.set(c.id, l[lt.key]); }
       else { const u = uniformFor(c); if (u && uniformValues[u] !== undefined) base.set(c.id, Array.isArray(uniformValues[u]) ? uniformValues[u].slice() : uniformValues[u]); }
     }
-    const layerValue = (id, key, fb) => { const v = layerLive.get(id + '::' + key); return v === undefined ? fb : v; };
+    // Layers talk back: sensors (zone fill, speed…) and where following nulls are. The layer kit (inlined ahead of this file) draws them.
+    const sensors = new Map(), overrides = new Map();
+    const K = typeof SSKit !== 'undefined' ? SSKit.createLayerKit() : null;
+    const layerValue = (id, key, fb) => { const k = id + '::' + key; let v = overrides.get(k); if (v === undefined) v = layerLive.get(k); return v === undefined ? fb : v; };
+    const value = (l, k) => layerValue(l.id, k, l[k]);
+    const actions = (play.actions || []).filter(a => a.enabled);
+    const allTriggers = play.mappings.filter(m => m.enabled && m.source.kind === 'trigger').map(m => m.source.trigger).concat(actions.map(a => a.trigger));
     const gamepad = i => (navigator.getGamepads ? navigator.getGamepads()[i] : null);
     const keysUsed = new Set();
     for (const m of play.mappings) {
@@ -307,6 +313,7 @@
       if (m.source.kind === 'key') keysUsed.add(m.source.code);
       if (m.source.kind === 'trigger' && m.source.trigger.on === 'key') keysUsed.add(m.source.trigger.code);
     }
+    for (const a of actions) if (a.trigger.on === 'key') keysUsed.add(a.trigger.code);
     function readSource(s) {
       switch (s.kind) {
         case 'mouse': return s.axis === 'x' ? mouse.x : s.axis === 'y' ? mouse.y : mouse.down;
@@ -320,6 +327,15 @@
         case 'live': { if (shared.live.status !== 'on') return null; updateLive(); return Math.max(0, Math.min(1, shared.live.v[s.band] * s.gain)); }
         case 'osc': { const a = shared.osc.get(s.address); if (!a) return null; const raw = a[s.arg]; const v = typeof raw === 'number' ? raw : typeof raw === 'boolean' ? (raw ? 1 : 0) : null; return v === null ? null : Math.max(0, Math.min(1, (v - s.min) / (s.max - s.min))); }
         case 'null': { const l = layersById.get(s.layerId); if (!l) return null; return Math.max(0, Math.min(1, layerValue(l.id, s.axis, l[s.axis]))); }
+        case 'sensor': {
+          if (s.read === 'distance') {
+            const a = layersById.get(s.layerId), b = layersById.get(s.otherId);
+            if (!a || !b) return null;
+            return Math.min(1, Math.hypot((value(a, 'x') - value(b, 'x')) * glCanvas.width / Math.max(1, glCanvas.height), value(a, 'y') - value(b, 'y')));
+          }
+          const v = sensors.get(s.layerId + '::' + s.read);
+          return v === undefined ? null : v;
+        }
         case 'control': { const c = controls.get(s.controlId); if (!c) return null; const v = live.has(c.id) ? live.get(c.id) : base.get(c.id); if (v === undefined) return null; if (Array.isArray(v)) return (v[0] + v[1] + v[2]) / 3; const span = c.max - c.min; return span > 0 ? Math.max(0, Math.min(1, (v - c.min) / span)) : 0; }
         default: return null;
       }
@@ -344,8 +360,30 @@
         else if (open && v < t.threshold * 0.8) { shared.live.gates.delete(k); release(k); }
       }
     }
+    // Shape enter / fill triggers: a sensor crossing its threshold is a press (80% hysteresis).
+    const zoneGates = new Set(), actionSeen = new Map();
+    function tickZoneTriggers() {
+      for (const t of allTriggers) {
+        if (t.on !== 'zone' || t.event === 'click') continue;
+        const k = triggerKey(t), v = sensors.get(t.layerId + '::' + (t.event === 'enter' ? 'hover' : 'fill')) || 0, th = t.event === 'enter' ? 0.5 : t.threshold, open = zoneGates.has(k);
+        if (!open && v >= th) { zoneGates.add(k); press(k); }
+        else if (open && v < th * 0.8) { zoneGates.delete(k); release(k); }
+      }
+    }
+    // Actions (burst, next line, drop…): once per new press of their trigger.
+    function tickActions() {
+      for (const a of actions) {
+        const presses = a.trigger.on === 'beat' ? beatAt(a.trigger.bpm, a.trigger.beats, time).count : shared.presses.get(triggerKey(a.trigger)) || 0;
+        const seen = actionSeen.get(a.id);
+        actionSeen.set(a.id, presses);
+        if (seen === undefined || presses <= seen || !K) continue;
+        for (let i = 0; i < Math.min(4, presses - seen); i++) K.act(a);
+      }
+    }
     function tickMappings(dt) {
       tickAudioTriggers();
+      tickZoneTriggers();
+      tickActions();
       const driven = new Set();
       for (const m of play.mappings) {
         if (!m.enabled) continue;
@@ -377,7 +415,10 @@
     }
 
     // Pointer. Player: on the picture (drag nulls, clicks are the mouse trigger). Background: the whole page, never captured.
-    let drag = null, pictureDown = false;
+    let drag = null, pictureDown = false, pressedZone = null;
+    const zoneAt = u => K ? K.shapeAt(play, u.x, u.y, u.w / Math.max(1, u.h), value) : null;
+    const pressZoneAt = u => { const id = zoneAt(u); if (id) { pressedZone = id; press('zone:' + id + ':click'); } };
+    const releaseZone = () => { if (pressedZone) { release('zone:' + pressedZone + ':click'); pressedZone = null; } };
     const toUnit = (cx, cy) => { const r = fitBox.getBoundingClientRect(); return { x: (cx - r.left) / Math.max(1, r.width), y: 1 - (cy - r.top) / Math.max(1, r.height), w: r.width, h: r.height }; };
     const clampedMouse = (cx, cy) => { const u = toUnit(cx, cy); mouse.x = Math.max(0, Math.min(1, u.x)); mouse.y = Math.max(0, Math.min(1, u.y)); mouse.over = u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1; return u; };
     const listeners = [];
@@ -395,18 +436,19 @@
           const d = Math.hypot((u.x - layerValue(l.id, 'x', l.x)) * u.w, (u.y - layerValue(l.id, 'y', l.y)) * u.h);
           if (d <= Math.max(l.size, 10) + 6) { drag = { id: l.id, dx: l.x - u.x, dy: l.y - u.y }; stage.setPointerCapture(e.pointerId); return; }
         }
+        pressZoneAt(u);
         press('mouse'); pictureDown = true;
       });
-      const up = () => { mouse.down = 0; drag = null; if (pictureDown) { pictureDown = false; release('mouse'); } };
+      const up = () => { mouse.down = 0; drag = null; releaseZone(); if (pictureDown) { pictureDown = false; release('mouse'); } };
       on(stage, 'pointerup', up); on(stage, 'pointercancel', up);
       on(stage, 'pointerleave', () => { mouse.over = false; });
     } else {
       on(window, 'pointerdown', e => {
         const u = toUnit(e.clientX, e.clientY);
         mouse.down = 1;
-        if (u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1) { press('mouse'); pictureDown = true; }
+        if (u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1) { pressZoneAt(u); press('mouse'); pictureDown = true; }
       }, { passive: true });
-      on(window, 'pointerup', () => { mouse.down = 0; if (pictureDown) { pictureDown = false; release('mouse'); } }, { passive: true });
+      on(window, 'pointerup', () => { mouse.down = 0; releaseZone(); if (pictureDown) { pictureDown = false; release('mouse'); } }, { passive: true });
     }
 
     // Panel (player only)
@@ -414,7 +456,10 @@
     const usesMidi = play.mappings.some(m => m.source.kind === 'midi' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'));
     const usesOsc = play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc'));
     const usesTilt = play.mappings.some(m => m.source.kind === 'tilt');
-    const usesLive = play.mappings.some(m => m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio'));
+    const usesLive = play.mappings.some(m => m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio'))
+      || actions.some(a => a.trigger.on === 'audio') || play.layers.some(l => l.kind === 'audio' && l.visible);
+    const usesCamera = play.layers.some(l => l.visible && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
+    let camVideo = null;
     const fmt = (v, step) => { const d = step && step >= 1 ? 0 : step && step >= 0.1 ? 1 : step && step >= 0.01 ? 2 : 3; return Number(v).toFixed(d); };
     const hex = c => '#' + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
     if (!bg) {
@@ -449,6 +494,16 @@
           });
         });
         tools.append(b, pick);
+      }
+      if (usesCamera && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const b = el('button', 'ssp-btn', 'Enable camera');
+        b.onclick = () => navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then(stream => {
+          const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.autoplay = true; v.srcObject = stream;
+          v.play().catch(() => {});
+          camVideo = v; b.textContent = 'Camera on'; b.disabled = true;
+          listeners.push(() => stream.getTracks().forEach(t => t.stop()));
+        }, () => { b.textContent = 'Camera blocked'; });
+        tools.append(b);
       }
       if (usesTilt && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         const b = el('button', 'ssp-btn', 'Enable motion');
@@ -499,96 +554,27 @@
       }
     };
 
-    // Layers
+    // Layers: the layer kit draws them all (the same code as the app).
     const octx = ovCanvas.getContext('2d');
-    const BLEND = { normal: 'source-over', multiply: 'multiply', screen: 'screen', overlay: 'overlay', lighten: 'lighten', darken: 'darken', difference: 'difference', exclusion: 'exclusion', add: 'lighter' };
-    const FONT = { sans: 'Inter, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif', serif: 'Georgia, "Times New Roman", serif', mono: 'Menlo, Consolas, monospace' };
-    const css = (c, a) => 'rgba(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ',' + (a == null ? 1 : a) + ')';
-    const scratch = document.createElement('canvas'), sctx = scratch.getContext('2d');
-    const luma = document.createElement('canvas'); luma.width = 320; luma.height = 180; const lctx = luma.getContext('2d', { willReadFrequently: true });
-    const samp = document.createElement('canvas'); samp.width = 64; samp.height = 36; const pctx = samp.getContext('2d', { willReadFrequently: true });
-    const images = new Map(), particles = new Map();
-    let sample = null;
+    const images = new Map();
     const img = src => { if (!src) return null; let i = images.get(src); if (!i) { i = new Image(); i.onload = () => { needsDraw = true; }; i.src = src; images.set(src, i); } return i.complete && i.naturalWidth ? i : null; };
-    const num = (l, k) => layerValue(l.id, k, l[k]);
-    // The particle system (play/particle-sim.js), inlined ahead of this file by the exporter.
-    const P = typeof SSParticles !== 'undefined' ? SSParticles : null;
-    const PNUM = ['speed', 'steer', 'turns', 'noiseScale', 'noiseEvolve', 'strength', 'catchRadius', 'spawnRadius', 'life', 'size', 'sizeJitter', 'sizeAmount', 'opacityAmount', 'falloff', 'opacity', 'trail'];
     const hidden = !!(play.display && play.display.picture === false);
+    const audioLayer = play.layers.some(l => l.kind === 'audio' && l.visible);
+    const pointer = { x: 0.5, y: 0.5, over: false, down: false };
     function drawLayers(dt) {
+      if (!K) return;
       const W = ovCanvas.width, H = ovCanvas.height, dpr = W / Math.max(1, fitBox.clientWidth);
-      octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
-      // Picture hidden: the backdrop covers the shader; reveal mattes and particle masks still show it.
-      if (hidden) { octx.fillStyle = css(play.display.backdrop); octx.fillRect(0, 0, W, H); }
-      let sampled = false, lumaReady = false;
-      for (const l of play.layers) {
-        if (!l.visible) continue;
-        octx.save();
-        if (l.kind === 'null') {
-          if (markers) {
-            const x = num(l, 'x') * W, y = (1 - num(l, 'y')) * H, r = num(l, 'size') * dpr;
-            if (r > 0) { octx.beginPath(); octx.arc(x, y, r, 0, 7); octx.fillStyle = l.color; octx.fill(); octx.lineWidth = 2 * dpr; octx.strokeStyle = 'rgba(255,255,255,0.9)'; octx.stroke(); }
-          }
-        } else if (l.kind === 'text' || l.kind === 'image') {
-          const op = num(l, 'opacity');
-          if (op > 0) {
-            if (scratch.width !== W || scratch.height !== H) { scratch.width = W; scratch.height = H; }
-            sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.clearRect(0, 0, W, H); sctx.globalCompositeOperation = 'source-over';
-            sctx.save(); sctx.translate(num(l, 'x') * W, (1 - num(l, 'y')) * H); sctx.rotate(num(l, 'rotation') * Math.PI / 180);
-            if (l.kind === 'text') {
-              const size = num(l, 'size') * H;
-              sctx.font = l.weight + ' ' + Math.max(1, size) + 'px ' + FONT[l.font]; sctx.textAlign = 'center'; sctx.textBaseline = 'middle';
-              sctx.fillStyle = l.matte === 'over' ? css(l.color) : '#fff';
-              const lines = String(l.text).split('\n'); lines.forEach((t, i) => sctx.fillText(t, 0, (i - (lines.length - 1) / 2) * size * 1.15));
-            } else { const im = img(l.src); if (im) { const h = num(l, 'scale') * H, w = h * im.naturalWidth / im.naturalHeight; sctx.drawImage(im, -w / 2, -h / 2, w, h); } }
-            sctx.restore();
-            if (l.matte === 'reveal' && hidden) { sctx.globalCompositeOperation = 'source-in'; sctx.drawImage(glCanvas, 0, 0, W, H); }
-            else if (l.matte === 'reveal') { sctx.globalCompositeOperation = 'source-out'; sctx.fillStyle = css(l.color); sctx.fillRect(0, 0, W, H); }
-            else if (l.matte === 'luma') {
-              if (!lumaReady) { try { lctx.globalCompositeOperation = 'source-over'; lctx.drawImage(glCanvas, 0, 0, 320, 180); const d = lctx.getImageData(0, 0, 320, 180); const p = d.data; for (let i = 0; i < p.length; i += 4) { p[i + 3] = Math.round(p[i] * 0.299 + p[i + 1] * 0.587 + p[i + 2] * 0.114); p[i] = p[i + 1] = p[i + 2] = 255; } lctx.putImageData(d, 0, 0); lumaReady = true; } catch (e) { /* unmatted */ } }
-              if (lumaReady) { sctx.globalCompositeOperation = 'destination-in'; sctx.drawImage(luma, 0, 0, W, H); }
-            }
-            octx.globalAlpha = op; octx.globalCompositeOperation = l.matte === 'over' ? BLEND[l.blend] || 'source-over' : 'source-over';
-            octx.drawImage(scratch, 0, 0);
-          }
-        } else if (l.kind === 'particles' && P) {
-          if (!sampled) { try { pctx.drawImage(glCanvas, 0, 0, 64, 36); sample = pctx.getImageData(0, 0, 64, 36).data; } catch (e) { sample = null; } sampled = true; }
-          let st = particles.get(l.id);
-          if (!st || st.sim.count !== l.count) { st = { sim: P.createParticles(l.count), trail: st ? st.trail : null }; particles.set(l.id, st); }
-          const p = Object.assign({}, l);
-          for (const k of PNUM) p[k] = num(l, k);
-          const nl = l.nullId && layersById.get(l.nullId);
-          const nul = nl && nl.kind === 'null' ? { x: layerValue(nl.id, 'x', nl.x), y: layerValue(nl.id, 'y', nl.y) } : null;
-          const env = {
-            dt, time, aspect: W / H, sample, sw: 64, sh: 36,
-            attractorPoint: l.attractor === 'mouse' ? (mouse.over ? { x: mouse.x, y: mouse.y } : null) : l.attractor === 'null' ? nul : null,
-            spawnPoint: nul, modPoint: nul, W, H, dpr, alpha: 1,
-            sprite: l.shape === 'image' ? img(l.sprite) : null,
-          };
-          P.stepParticles(st.sim, p, env);
-          const op = p.opacity, trail = p.trail;
-          if (!(trail > 0) && !l.reveal) {
-            octx.globalCompositeOperation = BLEND[l.blend] || 'source-over'; env.alpha = op;
-            P.drawParticles(octx, st.sim, p, env);
-          } else {
-            if (!st.trail) st.trail = document.createElement('canvas');
-            if (st.trail.width !== W || st.trail.height !== H) { st.trail.width = W; st.trail.height = H; }
-            const t = st.trail.getContext('2d'); t.setTransform(1, 0, 0, 1, 0, 0); t.globalAlpha = 1;
-            if (trail > 0) { t.globalCompositeOperation = 'destination-out'; t.fillStyle = 'rgba(0,0,0,' + Math.max(0.02, 1 - Math.pow(trail, 0.6)) + ')'; t.fillRect(0, 0, W, H); t.globalCompositeOperation = 'source-over'; }
-            else t.clearRect(0, 0, W, H);
-            P.drawParticles(t, st.sim, p, env);
-            let out = st.trail;
-            if (l.reveal) {
-              if (scratch.width !== W || scratch.height !== H) { scratch.width = W; scratch.height = H; }
-              sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.globalAlpha = 1; sctx.globalCompositeOperation = 'source-over'; sctx.clearRect(0, 0, W, H);
-              sctx.drawImage(st.trail, 0, 0); sctx.globalCompositeOperation = 'source-in'; sctx.drawImage(glCanvas, 0, 0, W, H); sctx.globalCompositeOperation = 'source-over';
-              out = scratch;
-            }
-            octx.globalAlpha = op; octx.globalCompositeOperation = BLEND[l.blend] || 'source-over'; octx.drawImage(out, 0, 0);
-          }
-        }
-        octx.restore();
-      }
+      const L = shared.live;
+      if (audioLayer && L.status === 'on') updateLive();
+      pointer.x = mouse.x; pointer.y = mouse.y; pointer.over = mouse.over; pointer.down = !!mouse.down;
+      K.frame(octx, play, {
+        gl: glCanvas, W, H, dpr, time, dt, value, pointer, markers, editing: false, hidden,
+        backdrop: play.display ? play.display.backdrop : [0, 0, 0],
+        audio: L.status === 'on' ? { wave: L.wave, freq: L.freq, sampleRate: L.sr } : null,
+        camera: camVideo, image: img,
+        sensor: (k, v) => sensors.set(k, v),
+        override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },
+      });
     }
 
     // Visibility: a background pauses off-screen and in hidden tabs; reduced motion gets a still frame.

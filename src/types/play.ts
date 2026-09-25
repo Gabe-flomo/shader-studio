@@ -46,7 +46,12 @@ export type TriggerSpec =
   | { on: 'note'; channel: number; note: number }
   | { on: 'mouse' }
   | { on: 'osc'; address: string }
-  | { on: 'beat'; bpm: number; beats: number };
+  | { on: 'beat'; bpm: number; beats: number }
+  /**
+   * A shape layer: `click` a press on it, `enter` the pointer moving onto it,
+   * `fill` particles filling it past `threshold` (0..1, see the sensor source).
+   */
+  | { on: 'zone'; layerId: string; event: 'click' | 'enter' | 'fill'; threshold: number };
 
 /**
  * What a trigger does each time it fires.
@@ -99,7 +104,25 @@ export type PlaySource =
   /** Random motion on the graph clock. `seed` makes two noise rows differ. `steps` (stepped only) posterises the value, 0 = no snapping. */
   | { kind: 'noise'; type: NoiseType; rate: number; seed: number; steps: number }
   /** A trigger (key, note, click, OSC message, beat) driving an envelope, toggle, step or random value. */
-  | { kind: 'trigger'; trigger: TriggerSpec; mode: TriggerMode; attack: number; decay: number; sustain: number; release: number; steps: number; velocity: boolean };
+  | { kind: 'trigger'; trigger: TriggerSpec; mode: TriggerMode; attack: number; decay: number; sustain: number; release: number; steps: number; velocity: boolean }
+  /**
+   * Something a layer measures, 0..1:
+   *   fill      shape: how full of particles it is (0.5 = as dense as average, 1 = twice that or more)
+   *   hover     shape: 1 while the pointer is over it
+   *   speed     particles: how fast they move on average (vs their Speed)
+   *   spread    particles: how spread out they are (0 = in a clump, 1 = everywhere)
+   *   motion    camera: how much is moving in front of it
+   *   distance  null: how far it is from another null (`otherId`), 1 = a picture height or more
+   */
+  | { kind: 'sensor'; layerId: string; read: SensorRead; otherId: string };
+
+export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance';
+export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
+  shape: ['fill', 'hover'],
+  particles: ['speed', 'spread'],
+  camera: ['motion'],
+  null: ['distance'],
+};
 
 export type PlayCurve = 'linear' | 'exp' | 'log' | 'custom';
 
@@ -123,175 +146,50 @@ export interface PlayMapping {
   enabled: boolean;
 }
 
-// ── Layers (drawn over the picture in JavaScript) ───────────────────────────
+// ── Layers (drawn over the picture in JavaScript: types/playLayers.ts) ─────
 
-export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken' | 'difference' | 'exclusion' | 'add';
+export type {
+  BlendMode, MatteMode, NullLayer, TextLayer, ImageLayer, ParticlesLayer, ParticleField, ParticleShape, ParticleModulator,
+  ShapeLayer, ZoneAction, AudioLayer, GlyphsLayer, ContoursLayer, LensLayer, BrushLayer, BodiesLayer, CameraLayer,
+  PlayLayer, PlayLayerKind, LayerNumericProp,
+} from './playLayers';
+export { LAYER_KINDS, LAYER_NUMERIC_PROPS, defaultLayer, parseLayer } from './playLayers';
+import { parseLayer, type PlayLayer } from './playLayers';
 
-/** How a text or image layer meets the picture. */
-export type MatteMode =
-  /** Drawn over the picture with a blend mode. */
-  | 'over'
-  /** The picture shows only inside the layer's shape; everywhere else is the layer's colour. */
-  | 'reveal'
-  /** The picture's brightness is the layer's alpha: the layer shows where the picture is bright. */
-  | 'luma';
-
-interface LayerBase {
-  id: string;
-  label: string;
-  visible: boolean;
-}
-
-/** A draggable point. Its position is a source ("Null X" / "Null Y") and can be a control. Coordinates 0..1, y up. */
-export interface NullLayer extends LayerBase {
-  kind: 'null';
-  x: number;
-  y: number;
-  /** Marker radius in px. 0 hides the marker but keeps the point. */
-  size: number;
-  color: string;
-}
-
-export interface TextLayer extends LayerBase {
-  kind: 'text';
-  text: string;
-  x: number;
-  y: number;
-  /** Font size as a fraction of the picture height. */
-  size: number;
-  rotation: number;
-  opacity: number;
-  color: [number, number, number];
-  font: 'sans' | 'serif' | 'mono';
-  weight: number;
-  blend: BlendMode;
-  matte: MatteMode;
-}
-
-export interface ImageLayer extends LayerBase {
-  kind: 'image';
-  /** A data URL; the image travels with the play file. */
-  src: string;
-  x: number;
-  y: number;
-  /** 1 = fit the picture height. */
-  scale: number;
-  rotation: number;
-  opacity: number;
-  /** Background for the reveal and cut mattes. */
-  color: [number, number, number];
-  blend: BlendMode;
-  matte: MatteMode;
-}
-
-export type ParticleField = 'flow' | 'climb' | 'descend' | 'noise' | 'none';
-export type ParticleShape = 'dot' | 'square' | 'triangle' | 'streak' | 'ring' | 'star' | 'image';
-export type ParticleModulator = 'none' | 'brightness' | 'speed' | 'age' | 'null';
+// ── Actions (a trigger does something to a layer) ─────────────────────────────
 
 /**
- * A particle system over the picture (play/particle-sim.js). Each particle
- * steers toward its field's direction, may be pulled by an attractor, is born
- * in a spawn area and respawns at the edges, when caught, or when its life
- * runs out. Size and opacity can follow brightness, speed, age or a null.
+ * What an action does when its trigger fires.
+ *   burst    particles: `amount` are born at once, flying out (best with Emit: burst)
+ *   scatter  particles or bodies: a random kick
+ *   reset    particles reborn · bodies back at the top · brush cleared · text back to its first line
+ *   freeze   particles or bodies stop or start again
+ *   next / prev / shuffle   text sequence: another line
+ *   toggle / show / hide    any layer's visibility
+ *   drop     bodies: drop them again from the top
+ *   clear    brush: wipe the strokes
  */
-export interface ParticlesLayer extends LayerBase {
-  kind: 'particles';
-  count: number;
-  // Motion
-  field: ParticleField;
-  speed: number;
-  /** 0..1: how quickly particles turn toward the field (low = floaty, high = snappy). */
-  steer: number;
-  /** flow: brightness 0→1 turns the heading this many full turns. */
-  turns: number;
-  /** noise field: size of the swirls (higher = smaller) and how fast it evolves. */
-  noiseScale: number;
-  noiseEvolve: number;
-  /** climb/descend on flat parts of the picture: keep moving on noise, or slow down and collect. */
-  flat: 'wander' | 'settle';
-  // Attractor
-  attractor: 'none' | 'mouse' | 'null';
-  force: 'gravitate' | 'spiral' | 'repel';
-  strength: number;
-  /** A particle this close to the attractor (picture heights) respawns. */
-  catchRadius: number;
-  // Birth and death
-  spawn: 'anywhere' | 'edges' | 'center' | 'null';
-  spawnRadius: number;
-  edges: 'wrap' | 'bounce' | 'respawn';
-  /** Seconds before a particle respawns (each gets 60–140% of it); 0 = never. */
-  life: number;
-  /** The null an attractor, a null spawn or a null modulator uses. */
-  nullId: string;
-  // Look
-  shape: ParticleShape;
-  rotate: 'heading' | 'spin' | 'none';
-  /** Image sprite (a data URL: PNG, JPG or SVG) for shape 'image'. */
-  sprite: string;
-  crop: boolean;
-  size: number;
-  /** 0..1: random size variation between particles. */
-  sizeJitter: number;
-  opacity: number;
-  colour: 'tint' | 'picture' | 'palette';
-  color: [number, number, number];
-  palette: number;
-  paletteBy: 'heading' | 'speed' | 'age' | 'brightness';
-  sizeBy: ParticleModulator;
-  sizeAmount: number;
-  opacityBy: ParticleModulator;
-  opacityAmount: number;
-  /** Null modulator reach (picture heights): full effect at the null, none this far away. */
-  falloff: number;
-  /** Show the picture through the particles instead of colouring them. */
-  reveal: boolean;
-  /** 0 = no trail, 1 = long trails. */
-  trail: number;
-  blend: BlendMode;
+export type ActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear';
+
+export interface PlayAction {
+  id: string;
+  trigger: TriggerSpec;
+  do: ActionKind;
+  layerId: string;
+  /** burst: how many particles; scatter: how hard. */
+  amount: number;
+  enabled: boolean;
 }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer;
-export type PlayLayerKind = PlayLayer['kind'];
+export const ACTION_KINDS: readonly ActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear'];
 
-/** Numeric layer properties a control can drive, per kind. The control's target is `layer:<layerId>::<key>`. */
-export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<{ key: string; label: string; min: number; max: number; step?: number; hint: string }>> = {
-  null: [
-    { key: 'x', label: 'X', min: 0, max: 1, hint: 'Across the picture: 0 is the left edge, 1 the right.' },
-    { key: 'y', label: 'Y', min: 0, max: 1, hint: 'Up the picture: 0 is the bottom, 1 the top.' },
-    { key: 'size', label: 'Size', min: 0, max: 60, step: 1, hint: 'Marker radius in pixels. 0 hides the marker; the null still works.' },
-  ],
-  text: [
-    { key: 'x', label: 'X', min: 0, max: 1, hint: 'Centre of the text across the picture (0 left, 1 right).' },
-    { key: 'y', label: 'Y', min: 0, max: 1, hint: 'Centre of the text up the picture (0 bottom, 1 top).' },
-    { key: 'size', label: 'Size', min: 0.02, max: 1, hint: 'Letter height as a fraction of the picture height.' },
-    { key: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1, hint: 'Degrees, clockwise.' },
-    { key: 'opacity', label: 'Opacity', min: 0, max: 1, hint: 'How solid the layer is. 0 is invisible.' },
-  ],
-  image: [
-    { key: 'x', label: 'X', min: 0, max: 1, hint: 'Centre of the image across the picture (0 left, 1 right).' },
-    { key: 'y', label: 'Y', min: 0, max: 1, hint: 'Centre of the image up the picture (0 bottom, 1 top).' },
-    { key: 'scale', label: 'Scale', min: 0.05, max: 3, hint: 'Image height as a fraction of the picture height (1 = as tall as the picture).' },
-    { key: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1, hint: 'Degrees, clockwise.' },
-    { key: 'opacity', label: 'Opacity', min: 0, max: 1, hint: 'How solid the layer is. 0 is invisible.' },
-  ],
-  particles: [
-    { key: 'speed', label: 'Speed', min: 0, max: 3, hint: 'How fast particles travel. 1 crosses the picture\'s height in about 5 seconds.' },
-    { key: 'steer', label: 'Steering', min: 0, max: 1, hint: 'How quickly particles turn toward where the field points. Low is floaty and drifting; high follows the field tightly.' },
-    { key: 'turns', label: 'Turns', min: 0, max: 4, hint: 'Flow only: how many full turns the heading makes from black to white. 0 = everything goes right; higher = tighter swirls.' },
-    { key: 'noiseScale', label: 'Swirl size', min: 0.5, max: 12, hint: 'Noise field (and wandering): how many swirls fit across the picture. Higher = smaller, busier swirls.' },
-    { key: 'noiseEvolve', label: 'Evolve', min: 0, max: 2, hint: 'How fast the noise field changes over time. 0 = frozen lanes.' },
-    { key: 'strength', label: 'Pull', min: 0, max: 3, hint: 'How hard the attractor pulls (or pushes, for Repel). Stronger near it.' },
-    { key: 'catchRadius', label: 'Catch', min: 0, max: 0.3, hint: 'Particles this close to the attractor are caught and respawn (fraction of picture height). 0 = never caught.' },
-    { key: 'spawnRadius', label: 'Spawn radius', min: 0, max: 0.8, hint: 'Spawn at centre or at a null: how wide the birth circle is (fraction of picture height).' },
-    { key: 'life', label: 'Life (s)', min: 0, max: 20, hint: 'Seconds before a particle respawns (each lives 60–140% of this). 0 = they live forever and only respawn at edges or when caught.' },
-    { key: 'size', label: 'Size', min: 0.5, max: 40, step: 0.5, hint: 'Particle radius in pixels.' },
-    { key: 'sizeJitter', label: 'Size variety', min: 0, max: 1, hint: 'Random size differences between particles. 0 = all the same.' },
-    { key: 'sizeAmount', label: 'Size follow', min: -1, max: 3, hint: 'How much size follows the chosen reading. +1 doubles it where the reading is full; −1 shrinks particles to nothing there.' },
-    { key: 'opacityAmount', label: 'Opacity follow', min: -1, max: 1, hint: 'How much opacity follows the chosen reading. Negative fades particles out where the reading is full (e.g. old age).' },
-    { key: 'falloff', label: 'Null reach', min: 0.02, max: 1, hint: 'Following a null: full effect at the null, fading to none this far away (fraction of picture height).' },
-    { key: 'opacity', label: 'Opacity', min: 0, max: 1, hint: 'How solid the whole layer is.' },
-    { key: 'trail', label: 'Trail', min: 0, max: 1, hint: 'How long the streaks behind particles last. 0 = no trail; 1 = long, slow-fading trails.' },
-  ],
+/** Which actions make sense for which layer kinds. */
+export const ACTIONS_FOR: Record<string, readonly ActionKind[]> = {
+  particles: ['burst', 'scatter', 'reset', 'freeze', 'toggle', 'show', 'hide'],
+  bodies: ['drop', 'scatter', 'reset', 'freeze', 'toggle', 'show', 'hide'],
+  text: ['next', 'prev', 'shuffle', 'reset', 'toggle', 'show', 'hide'],
+  brush: ['clear', 'toggle', 'show', 'hide'],
+  other: ['toggle', 'show', 'hide'],
 };
 
 export const LAYER_TARGET_PREFIX = 'layer:';
@@ -321,6 +219,8 @@ export interface PlayRecord {
   controls: PlayControl[];
   mappings: PlayMapping[];
   layers: PlayLayer[];
+  /** Triggers that do something to a layer (burst, next line, drop…). Absent = none. */
+  actions?: PlayAction[];
   /** Absent means the defaults (picture shown). */
   display?: PlayDisplay;
 }
@@ -333,24 +233,6 @@ export function emptyPlayRecord(): PlayRecord {
   return { version: PLAY_VERSION, controls: [], mappings: [], layers: [] };
 }
 
-/** A fresh layer of a kind with sensible defaults. */
-export function defaultLayer(kind: PlayLayerKind, id: string, label: string): PlayLayer {
-  switch (kind) {
-    case 'null': return { id, kind, label, visible: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7' };
-    case 'text': return { id, kind, label, visible: true, text: 'PLAY', x: 0.5, y: 0.5, size: 0.25, rotation: 0, opacity: 1, color: [1, 1, 1], font: 'sans', weight: 700, blend: 'normal', matte: 'over' };
-    case 'image': return { id, kind, label, visible: true, src: '', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], blend: 'normal', matte: 'over' };
-    case 'particles': return {
-      id, kind, label, visible: true, count: 800,
-      field: 'flow', speed: 1, steer: 0.5, turns: 1, noiseScale: 3, noiseEvolve: 0.2, flat: 'wander',
-      attractor: 'none', force: 'gravitate', strength: 1, catchRadius: 0.02,
-      spawn: 'anywhere', spawnRadius: 0.2, edges: 'wrap', life: 0, nullId: '',
-      shape: 'dot', rotate: 'heading', sprite: '', crop: false, size: 2, sizeJitter: 0.3, opacity: 0.8,
-      colour: 'tint', color: [1, 1, 1], palette: 1, paletteBy: 'heading',
-      sizeBy: 'none', sizeAmount: 1, opacityBy: 'none', opacityAmount: 0.5, falloff: 0.3,
-      reveal: false, trail: 0.6, blend: 'normal',
-    };
-  }
-}
 
 // ── Parsing ─────────────────────────────────────────────────────────────────
 
@@ -392,8 +274,25 @@ function parseTrigger(raw: unknown): TriggerSpec | null {
     case 'osc': { const address = str(t.address); return address && address.startsWith('/') ? { on: 'osc', address } : null; }
     case 'beat': return { on: 'beat', bpm: Math.max(1, num(t.bpm, 120)), beats: Math.max(0.0625, num(t.beats, 1)) };
     case 'audio': return { on: 'audio', band: LIVE_BANDS_SET.has(t.band as string) ? (t.band as LiveAudioBand) : 'bass', threshold: Math.max(0.01, Math.min(0.99, num(t.threshold, 0.6))) };
+    case 'zone': {
+      const layerId = str(t.layerId);
+      const event = t.event === 'enter' || t.event === 'fill' ? t.event : 'click';
+      return layerId ? { on: 'zone', layerId, event, threshold: Math.max(0.01, Math.min(0.99, num(t.threshold, 0.5))) } : null;
+    }
     default: return null;
   }
+}
+
+const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance']);
+
+function parseAction(raw: unknown): PlayAction | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const a = raw as Record<string, unknown>;
+  const id = str(a.id), layerId = str(a.layerId);
+  const trigger = parseTrigger(a.trigger);
+  const kind = typeof a.do === 'string' && (ACTION_KINDS as readonly string[]).includes(a.do) ? (a.do as ActionKind) : null;
+  if (!id || !layerId || !trigger || !kind) return null;
+  return { id, trigger, do: kind, layerId, amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
 }
 
 function parseSource(raw: unknown): PlaySource | null {
@@ -453,6 +352,11 @@ function parseSource(raw: unknown): PlaySource | null {
     case 'noise': {
       const type = s.type === 'drift' || s.type === 'random' || s.type === 'stepped' ? s.type : 'smooth';
       return { kind: 'noise', type, rate: Math.max(0.01, num(s.rate, 1)), seed: Math.round(num(s.seed, 1)), steps: Math.max(0, Math.min(64, Math.round(num(s.steps, 0)))) };
+    }
+    case 'sensor': {
+      const layerId = str(s.layerId);
+      const read = SENSOR_READS.has(s.read as string) ? (s.read as SensorRead) : null;
+      return layerId && read ? { kind: 'sensor', layerId, read, otherId: str(s.otherId) ?? '' } : null;
     }
     case 'trigger': {
       const trigger = parseTrigger(s.trigger);
@@ -552,10 +456,23 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   const layerIds = new Set(layers.map(l => l.id));
   const keptControls = controls.filter(c => { const lt = parseLayerTarget(c.target); return !lt || layerIds.has(lt.layerId); });
   const keptIds = new Set(keptControls.map(c => c.id));
+  // A trigger or sensor on a layer needs that layer too.
+  const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId);
+  const triggerOk = (t: TriggerSpec) => t.on !== 'zone' || layerIds.has(t.layerId);
   const keptMappings = mappings.filter(m => keptIds.has(m.controlId)
     && (m.source.kind !== 'control' || keptIds.has(m.source.controlId))
-    && (m.source.kind !== 'null' || layerIds.has(m.source.layerId)));
+    && layerOk(m.source)
+    && (m.source.kind !== 'trigger' || triggerOk(m.source.trigger)));
   const out: PlayRecord = { version: PLAY_VERSION, controls: keptControls, mappings: keptMappings, layers };
+  if (Array.isArray(r.actions)) {
+    const seenA = new Set<string>();
+    const actions: PlayAction[] = [];
+    for (const a of r.actions) {
+      const parsed = parseAction(a);
+      if (parsed && !seenA.has(parsed.id) && layerIds.has(parsed.layerId) && triggerOk(parsed.trigger)) { seenA.add(parsed.id); actions.push(parsed); }
+    }
+    if (actions.length) out.actions = actions;
+  }
   const disp = r.display as Record<string, unknown> | undefined;
   if (disp && typeof disp === 'object' && (disp.picture === false || disp.backdrop !== undefined)) {
     out.display = { picture: disp.picture !== false, backdrop: rgb(disp.backdrop, DEFAULT_DISPLAY.backdrop) };
@@ -563,8 +480,6 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   return out;
 }
 
-const BLENDS: ReadonlySet<string> = new Set<BlendMode>(['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken', 'difference', 'exclusion', 'add']);
-const MATTES: ReadonlySet<string> = new Set<MatteMode>(['over', 'reveal', 'luma']);
 
 function rgb(v: unknown, fallback: [number, number, number]): [number, number, number] {
   return Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every(n => typeof n === 'number' && Number.isFinite(n))
@@ -572,66 +487,7 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
     : fallback;
 }
 
-function parseLayer(raw: unknown): PlayLayer | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const l = raw as Record<string, unknown>;
-  const id = str(l.id);
-  const kind = l.kind;
-  if (!id || (kind !== 'null' && kind !== 'text' && kind !== 'image' && kind !== 'particles')) return null;
-  const d = defaultLayer(kind, id, str(l.label) ?? kind);
-  const visible = l.visible !== false;
-  const blend = (v: unknown, f: BlendMode) => (typeof v === 'string' && BLENDS.has(v) ? (v as BlendMode) : f);
-  const matte = (v: unknown, f: MatteMode) => (typeof v === 'string' && MATTES.has(v) ? (v as MatteMode) : f);
-  switch (d.kind) {
-    case 'null':
-      return { ...d, visible, x: num(l.x, d.x), y: num(l.y, d.y), size: Math.max(0, num(l.size, d.size)), color: str(l.color) ?? d.color };
-    case 'text':
-      return {
-        ...d, visible, text: typeof l.text === 'string' ? l.text : d.text, x: num(l.x, d.x), y: num(l.y, d.y), size: Math.max(0.005, num(l.size, d.size)),
-        rotation: num(l.rotation, 0), opacity: Math.max(0, Math.min(1, num(l.opacity, 1))), color: rgb(l.color, d.color),
-        font: l.font === 'serif' || l.font === 'mono' ? l.font : 'sans', weight: num(l.weight, d.weight), blend: blend(l.blend, d.blend), matte: matte(l.matte, d.matte),
-      };
-    case 'image':
-      return {
-        ...d, visible, src: typeof l.src === 'string' ? l.src : '', x: num(l.x, d.x), y: num(l.y, d.y), scale: Math.max(0.01, num(l.scale, 1)),
-        rotation: num(l.rotation, 0), opacity: Math.max(0, Math.min(1, num(l.opacity, 1))), color: rgb(l.color, d.color), blend: blend(l.blend, d.blend), matte: matte(l.matte, d.matte),
-      };
-    case 'particles': {
-      const pick = <T extends string>(v: unknown, allowed: readonly T[], f: T): T => (typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : f);
-      const unit = (v: unknown, f: number) => Math.max(0, Math.min(1, num(v, f)));
-      const mods = ['none', 'brightness', 'speed', 'age', 'null'] as const;
-      // Files from before the particle system: `mode` was the field and `colorFromPicture` the colour.
-      const legacyField = l.field === undefined && (l.mode === 'climb' || l.mode === 'descend') ? l.mode : undefined;
-      return {
-        ...d, visible,
-        count: Math.max(1, Math.min(5000, Math.round(num(l.count, d.count)))),
-        field: pick(l.field ?? legacyField, ['flow', 'climb', 'descend', 'noise', 'none'] as const, d.field),
-        speed: Math.max(0, num(l.speed, d.speed)), steer: unit(l.steer, d.steer), turns: Math.max(0, num(l.turns, d.turns)),
-        noiseScale: Math.max(0.1, num(l.noiseScale, d.noiseScale)), noiseEvolve: Math.max(0, num(l.noiseEvolve, d.noiseEvolve)),
-        flat: pick(l.flat, ['wander', 'settle'] as const, l.field === undefined && legacyField ? 'settle' : d.flat),
-        attractor: pick(l.attractor, ['none', 'mouse', 'null'] as const, d.attractor), force: pick(l.force, ['gravitate', 'spiral', 'repel'] as const, d.force),
-        strength: Math.max(0, num(l.strength, d.strength)), catchRadius: Math.max(0, num(l.catchRadius, d.catchRadius)),
-        spawn: pick(l.spawn, ['anywhere', 'edges', 'center', 'null'] as const, d.spawn), spawnRadius: Math.max(0, num(l.spawnRadius, d.spawnRadius)),
-        edges: pick(l.edges, ['wrap', 'bounce', 'respawn'] as const, d.edges), life: Math.max(0, num(l.life, d.life)),
-        nullId: typeof l.nullId === 'string' ? l.nullId : '',
-        shape: pick(l.shape, ['dot', 'square', 'triangle', 'streak', 'ring', 'star', 'image'] as const, d.shape),
-        rotate: pick(l.rotate, ['heading', 'spin', 'none'] as const, d.rotate),
-        sprite: typeof l.sprite === 'string' ? l.sprite : '', crop: l.crop === true,
-        size: Math.max(0.1, num(l.size, d.size)), sizeJitter: unit(l.sizeJitter, l.sizeJitter === undefined && l.field === undefined ? 0 : d.sizeJitter),
-        opacity: unit(l.opacity, d.opacity),
-        colour: pick(l.colour, ['tint', 'picture', 'palette'] as const, l.colorFromPicture === true ? 'picture' : d.colour),
-        color: rgb(l.color, d.color), palette: Math.max(0, Math.min(9, Math.round(num(l.palette, d.palette)))),
-        paletteBy: pick(l.paletteBy, ['heading', 'speed', 'age', 'brightness'] as const, d.paletteBy),
-        sizeBy: pick(l.sizeBy, mods, d.sizeBy), sizeAmount: num(l.sizeAmount, d.sizeAmount),
-        opacityBy: pick(l.opacityBy, mods, d.opacityBy), opacityAmount: num(l.opacityAmount, d.opacityAmount),
-        falloff: Math.max(0.01, num(l.falloff, d.falloff)), reveal: l.reveal === true,
-        trail: unit(l.trail, d.trail), blend: blend(l.blend, d.blend),
-      };
-    }
-  }
-}
-
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && (play.display?.picture ?? true));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.actions?.length && (play.display?.picture ?? true));
 }

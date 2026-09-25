@@ -13,11 +13,10 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
-import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, SOURCE_TYPES, TILT_AXES, TRIGGER_KINDS, TRIGGER_MODES, keyName, sourceFromType, sourceLabel, sourceType, triggerFromKind, triggerLabel, type SourceType } from '../../play/playSources';
-import { liveAudio, type LiveStatus } from '../../lib/liveAudio';
+import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, SENSOR_HINTS, SENSOR_LABELS, SOURCE_TYPES, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
+import { SENSOR_READS_FOR, type SensorRead } from '../../types/play';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
-import { oscClient, type OscStatus } from '../../lib/oscClient';
 import { playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
 import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
@@ -34,9 +33,10 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
-import { toast } from '../ui/toastStore';
 import { LayersPanel } from './LayersPanel';
 import { EmbedDialog } from './EmbedDialog';
+import { LiveAudioChip, OscStatusChip } from './chips';
+import { TriggerPicker } from './TriggerPicker';
 import { DEFAULT_DISPLAY, parseLayerTarget, type PlayDisplay } from '../../types/play';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
@@ -177,6 +177,8 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   // Phones: Controls and Mappings are tabs instead of stacked panes.
   const [tab, setTab] = useState<'controls' | 'layers' | 'mappings'>('controls');
   const nullLayers = useMemo(() => play.layers.filter(l => l.kind === 'null').map(l => ({ id: l.id, label: l.label })), [play.layers]);
+  // Layers a source or trigger can read: shapes (click, fill, hover), particles (speed, spread), cameras (motion), nulls (distance).
+  const layerRefs = useMemo(() => play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind })), [play.layers]);
   // Desktop: the drawer's height, dragged from its top edge and remembered.
   const rootRef = useRef<HTMLDivElement>(null);
   const [drawerH, setDrawerH] = useState<number>(() => {
@@ -297,6 +299,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
         onRemove={id => update(p => ({ ...p, mappings: p.mappings.filter(m => m.id !== id) }))}
         audioNodes={audioNodes}
         nullLayers={nullLayers}
+        layerRefs={layerRefs}
       />}
       {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
     </div>
@@ -554,7 +557,7 @@ function ColourPad({ value, live, disabled, onChange }: { value: number[]; live?
 
 interface AudioNodeOption { id: string; label: string; bands: number }
 
-function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, audioNodes, nullLayers }: {
+function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, audioNodes, nullLayers, layerRefs }: {
   play: PlayRecord;
   /** `drawer`: folds under the controls with a draggable top edge. `tab`: fills the page (phones). */
   mode: 'drawer' | 'tab';
@@ -567,6 +570,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
   onRemove: (id: string) => void;
   audioNodes: AudioNodeOption[];
   nullLayers: { id: string; label: string }[];
+  layerRefs: LayerRef[];
 }) {
   const tk = useTokens();
   const meters = useSourceMeter(open ? play.mappings : EMPTY_MAPPINGS);
@@ -665,6 +669,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               controls={play.controls}
               audioNodes={audioNodes}
               nullLayers={nullLayers}
+              layerRefs={layerRefs}
               meter={meters.get(m.id) ?? 0}
               learning={learnFor === m.id}
               collapsed={collapsed.has(m.id)}
@@ -683,12 +688,13 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
 
 const EMPTY_MAPPINGS: PlayMapping[] = [];
 
-function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
+function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
   mapping: PlayMapping;
   control: PlayControl | undefined;
   controls: PlayControl[];
   audioNodes: AudioNodeOption[];
   nullLayers: { id: string; label: string }[];
+  layerRefs: LayerRef[];
   meter: number;
   learning: boolean;
   collapsed: boolean;
@@ -718,7 +724,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, met
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26 }}>
           {chevron}
           <button type="button" onClick={onToggle} title="Expand" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `500 12px ${fontFamily.ui}`, textAlign: 'left' }}>
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{sourceLabel(m.source, controls, nullLayers)}</span>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{sourceLabel(m.source, controls, layerRefs)}</span>
             <Icon name="chevR" size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: tk.text.secondary }}>{control?.label ?? 'missing control'}</span>
           </button>
@@ -737,7 +743,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, met
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {chevron}
         <span style={{ ...labelStyle, width: 40 }}>Source</span>
-        <Select ariaLabel="Source" value={type} options={SOURCE_TYPES} onChange={v => onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '') })} height={26} style={{ flex: 1, minWidth: 0 }} />
+        <Select ariaLabel="Source" value={type} options={SOURCE_TYPES} onChange={v => onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs)) })} height={26} style={{ flex: 1, minWidth: 0 }} />
         {m.source.kind === 'null' && (
           nullLayers.length === 0
             ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a Null layer first</span>
@@ -767,7 +773,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, met
       <div style={{ height: 3, margin: '6px 0 8px 60px', borderRadius: 2, background: tk.bg.field, overflow: 'hidden' }}>
         <div style={{ width: `${Math.round(meter * 100)}%`, height: '100%', background: m.enabled ? tk.accent.base : tk.text.disabled, transition: 'width 60ms linear' }} />
       </div>
-      <SourceOptions source={m.source} audioNodes={audioNodes} numStyle={numStyle} labelStyle={labelStyle} onChange={source => onUpdate({ source })} />
+      <SourceOptions source={m.source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={source => onUpdate({ source })} />
       {/* Target row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={labelStyle}>Control</span>
@@ -803,10 +809,19 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, met
   );
 }
 
+interface LayerRef { id: string; label: string; kind: string }
+
+/** The first layer that measures something, and what it reads (a new sensor source starts there). */
+function firstSensor(layers: LayerRef[]): { layerId: string; read: SensorRead } | null {
+  const l = layers.find(x => SENSOR_READS_FOR[x.kind]);
+  return l ? { layerId: l.id, read: SENSOR_READS_FOR[l.kind][0] } : null;
+}
+
 /** The second row of a mapping: the fields a source kind needs beyond its name. */
-function SourceOptions({ source, audioNodes, numStyle, labelStyle, onChange }: {
+function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, onChange }: {
   source: PlaySource;
   audioNodes: AudioNodeOption[];
+  layerRefs: LayerRef[];
   numStyle: React.CSSProperties;
   labelStyle: React.CSSProperties;
   onChange: (source: PlaySource) => void;
@@ -911,21 +926,38 @@ function SourceOptions({ source, audioNodes, numStyle, labelStyle, onChange }: {
         <LiveAudioChip />
       </>);
     case 'trigger':
-      return <TriggerOptions source={source} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />;
+      return <TriggerOptions source={source} shapes={layerRefs.filter(l => l.kind === 'shape')} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />;
+    case 'sensor': {
+      const sensing = layerRefs.filter(l => SENSOR_READS_FOR[l.kind]);
+      if (!sensing.length) return row(hint('Add a Shape, Particles, Camera or Null layer first'));
+      const layer = layerRefs.find(l => l.id === source.layerId);
+      const reads = layer ? SENSOR_READS_FOR[layer.kind] ?? [] : [];
+      const nulls = layerRefs.filter(l => l.kind === 'null' && l.id !== source.layerId);
+      return (
+        <>
+          {row(<>
+            <Select ariaLabel="Sensor layer" value={source.layerId} options={sensing.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const k = layerRefs.find(l => l.id === v)?.kind ?? ''; const r = SENSOR_READS_FOR[k] ?? []; onChange({ ...source, layerId: v, read: r.includes(source.read) ? source.read : r[0] ?? 'fill' }); }} height={26} />
+            {reads.length > 1 && <Segmented size="sm" ariaLabel="Reads" value={source.read} options={reads.map(r => ({ value: r, label: SENSOR_LABELS[r], title: SENSOR_HINTS[r] }))} onChange={v => onChange({ ...source, read: v })} />}
+            {reads.length === 1 && hint(SENSOR_LABELS[reads[0]])}
+            {source.read === 'distance' && (nulls.length ? <>{hint('to')}<Select ariaLabel="Other null" value={source.otherId} options={[{ value: '', label: 'Pick a null' }, ...nulls.map(l => ({ value: l.id, label: l.label }))]} onChange={v => onChange({ ...source, otherId: v })} height={26} /></> : hint('Add a second null'))}
+          </>)}
+          <div style={{ margin: '-2px 0 6px 60px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{SENSOR_HINTS[source.read]}</div>
+        </>
+      );
+    }
     default:
       return null;
   }
 }
 
 /** Where a trigger fires from and what it does. */
-function TriggerOptions({ source, numStyle, labelStyle, onChange }: {
+function TriggerOptions({ source, shapes, numStyle, labelStyle, onChange }: {
   source: Extract<PlaySource, { kind: 'trigger' }>;
+  shapes: ReadonlyArray<{ id: string; label: string }>;
   numStyle: React.CSSProperties;
   labelStyle: React.CSSProperties;
   onChange: (source: PlaySource) => void;
 }) {
-  const tk = useTokens();
-  const hint = (text: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{text}</span>;
   const row = (label: string, children: ReactNode) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
       <span style={labelStyle}>{label}</span>
@@ -936,31 +968,7 @@ function TriggerOptions({ source, numStyle, labelStyle, onChange }: {
   const setT = (trigger: TriggerSpec) => onChange({ ...source, trigger });
   return (
     <>
-      {row('On', <>
-        <Select ariaLabel="Trigger" value={t.on} options={TRIGGER_KINDS} onChange={v => setT(triggerFromKind(v as TriggerSpec['on'], t))} height={26} />
-        {t.on === 'key' && <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(t.code)}</span>}
-        {t.on === 'note' && <>
-          <NumberInput value={t.note} min={-1} max={127} step={1} title="Note number, -1 for any note" onCommit={n => setT({ ...t, note: Math.max(-1, Math.min(127, Math.round(n))) })} style={{ ...numStyle, width: 44 }} />
-          <Select ariaLabel="Trigger channel" value={`${t.channel}`} options={CHANNELS} onChange={v => setT({ ...t, channel: parseInt(v, 10) || 0 })} height={26} />
-        </>}
-        {t.on === 'osc' && <>
-          <Field value={t.address} onChange={e => setT({ ...t, address: e.target.value.startsWith('/') ? e.target.value : `/${e.target.value}` })} height={26} mono style={{ flex: 1, minWidth: 110 }} placeholder="/1/push1" />
-          <OscStatusChip />
-        </>}
-        {t.on === 'audio' && <>
-          <Select ariaLabel="Hit band" value={t.band} options={LIVE_BAND_OPTIONS} onChange={v => setT({ ...t, band: v as LiveAudioBand })} height={26} />
-          <NumberInput value={t.threshold} min={0.01} max={0.99} step={0.05} title="Fires when the band goes above this (0–1)" onCommit={n => setT({ ...t, threshold: Math.max(0.01, Math.min(0.99, n)) })} style={{ ...numStyle, width: 44 }} />
-          {hint('threshold')}
-          <LiveAudioChip />
-        </>}
-        {t.on === 'beat' && <>
-          <NumberInput value={t.bpm} min={1} max={999} step={1} title="Beats per minute" onCommit={n => setT({ ...t, bpm: Math.max(1, n) })} style={{ ...numStyle, width: 48 }} />
-          {hint('bpm, every')}
-          <NumberInput value={t.beats} min={0.0625} max={64} step={1} title="Fire every this many beats" onCommit={n => setT({ ...t, beats: Math.max(0.0625, n) })} style={{ ...numStyle, width: 40 }} />
-          {hint('beats')}
-        </>}
-        {(t.on === 'key' || t.on === 'note' || t.on === 'osc' || t.on === 'mouse') && hint(`${triggerLabel(t)} · Learn to change`)}
-      </>)}
+      {row('On', <TriggerPicker trigger={t} shapes={shapes} numStyle={numStyle} onChange={setT} />)}
       {row('Does', <Segmented size="sm" ariaLabel="Trigger mode" value={source.mode} options={TRIGGER_MODES} onChange={v => onChange({ ...source, mode: v })} />)}
       {source.mode === 'envelope' && (
         <>
@@ -1000,52 +1008,6 @@ function EnvelopeGlyph({ a, d, s, r }: { a: number; d: number; s: number; r: num
  * has to run on the computer; the chip offers it as a download and shows the
  * one command to start it.
  */
-function OscStatusChip() {
-  const tk = useTokens();
-  const native = oscClient.getMode() === 'native';
-  const [status, setStatus] = useState<OscStatus>(() => oscClient.getStatus());
-  const [port, setPort] = useState(() => oscClient.getPort());
-  const [lan, setLan] = useState(() => oscClient.getLan());
-  useEffect(() => oscClient.onStatus(setStatus), []);
-  const colour = status === 'connected' ? tk.status.success : status === 'connecting' ? tk.status.warning : status === 'error' ? tk.status.danger : tk.text.disabled;
-  const text = native
-    ? (status === 'connected' ? `Listening on UDP ${port}` : status === 'connecting' ? 'Starting…' : status === 'error' ? (oscClient.getError() || 'Couldn’t listen') : 'Not listening')
-    : (status === 'connected' ? 'Bridge connected' : status === 'connecting' ? 'Connecting…' : status === 'error' ? 'No bridge running' : 'Not connected');
-  const portInput = (
-    <NumberInput value={port} min={1} max={65535} step={1} title={native ? 'UDP port to listen on (send OSC here)' : 'The bridge’s WebSocket port'} onCommit={n => { const p = Math.round(n); setPort(p); oscClient.setPort(p); }} style={{ width: 52, height: 22, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 10.5px ${fontFamily.mono}`, textAlign: 'center' }} />
-  );
-  const downloadBridge = async () => {
-    const { buildStandaloneBridge, BRIDGE_FILE_NAME } = await import('../../play/bridgeDownload');
-    const { saveTextFile } = await import('../../utils/fileIO');
-    reportFileResult(await saveTextFile(buildStandaloneBridge(), BRIDGE_FILE_NAME, 'text/javascript'), { failTitle: 'Couldn’t save the bridge', success: `Saved ${BRIDGE_FILE_NAME}` });
-  };
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-      <span title={text} style={{ color: status === 'error' ? tk.status.danger : tk.text.muted, font: `11px ${fontFamily.ui}`, maxWidth: 190, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
-      {portInput}
-      {native ? (
-        <>
-          <Toggle checked={lan} onChange={on => { setLan(on); oscClient.setLan(on); }} label="Phones too" />
-          {status === 'connected'
-            ? <Button size="sm" variant="ghost" onClick={() => oscClient.setWanted(false)}>Stop</Button>
-            : <Button size="sm" onClick={() => oscClient.setWanted(true)}>Start listening</Button>}
-        </>
-      ) : (
-        <>
-          {status !== 'connected' && <Button size="sm" onClick={() => oscClient.setWanted(true)}>Connect</Button>}
-          {status === 'error' && (
-            <>
-              <Button size="sm" icon="export" onClick={() => void downloadBridge()} title="A small program that passes OSC to this tab. Needs Node.js (nodejs.org).">Download bridge</Button>
-              <Button size="sm" variant="ghost" icon="copy" title="Copy the command that starts it (run it in Terminal where the file downloaded)" onClick={() => { void navigator.clipboard?.writeText('node shader-studio-osc-bridge.mjs').then(() => toast.success('Command copied', { message: 'Paste it in Terminal, in the folder the bridge downloaded to.' })); }}>Command</Button>
-            </>
-          )}
-        </>
-      )}
-    </span>
-  );
-}
-
 /**
  * The drawn remap curve: x is the source (0..1), y what the mapping sees.
  * Drag across the pad to draw; the faint diagonal is the untouched 1:1 line and
@@ -1122,28 +1084,5 @@ function CurvePad({ value, meter, onChange, onReset }: { value: number[]; meter:
       </div>
       <IconButton icon="reset" label="Back to a straight line" size="sm" onClick={onReset} style={{ alignSelf: 'flex-start' }} />
     </div>
-  );
-}
-
-/** Live audio input: status, which device, start/stop. Browsers ask for microphone permission for any input. */
-function LiveAudioChip() {
-  const tk = useTokens();
-  const [status, setStatus] = useState<LiveStatus>(() => liveAudio.getStatus());
-  const [devices, setDevices] = useState<Array<{ id: string; label: string }>>([]);
-  const [deviceId, setDeviceId] = useState(() => liveAudio.getDeviceId());
-  useEffect(() => liveAudio.onStatus(st => { setStatus(st); setDeviceId(liveAudio.getDeviceId()); if (st === 'on') void liveAudio.devices().then(setDevices); }), []);
-  useEffect(() => { if (liveAudio.isOn()) void liveAudio.devices().then(setDevices); }, []);
-  const colour = status === 'on' ? tk.status.success : status === 'requesting' ? tk.status.warning : status === 'denied' ? tk.status.danger : tk.text.disabled;
-  const text = status === 'on' ? (liveAudio.getLabel() || 'Listening') : status === 'requesting' ? 'Asking…' : status === 'denied' ? 'Blocked or no input' : status === 'unsupported' ? 'Not available here' : 'Not listening';
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-      <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}`, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={text}>{text}</span>
-      {status === 'on' && devices.length > 1 && (
-        <Select ariaLabel="Audio input" value={deviceId} options={devices.map(d => ({ value: d.id, label: d.label }))} onChange={id => { setDeviceId(id); void liveAudio.start(id); }} height={24} style={{ maxWidth: 160 }} />
-      )}
-      {status !== 'on' && status !== 'unsupported' && <Button size="sm" onClick={() => void liveAudio.start(deviceId)}>Listen</Button>}
-      {status === 'on' && <Button size="sm" variant="ghost" onClick={() => liveAudio.stop()}>Stop</Button>}
-    </span>
   );
 }

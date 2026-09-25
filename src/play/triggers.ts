@@ -43,6 +43,7 @@ export function triggerKey(t: TriggerSpec): string {
     case 'osc': return `osc:${t.address}`;
     case 'beat': return `beat:${t.bpm}:${t.beats}`;
     case 'audio': return `audio:${t.band}:${t.threshold}`;
+    case 'zone': return t.event === 'fill' ? `zone:${t.layerId}:fill:${t.threshold}` : `zone:${t.layerId}:${t.event}`;
   }
 }
 

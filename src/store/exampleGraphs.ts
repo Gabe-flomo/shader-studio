@@ -2,6 +2,12 @@ import { BLANK_GRAPH } from './exampleIndex';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 
 import type { ExampleGraph } from './exampleIndex';
+import { defaultLayer, type PlayLayer, type PlayLayerKind } from '../types/play';
+
+/** A Play layer for an example: the defaults plus what the example changes, so examples never miss a field. */
+function layer<K extends PlayLayerKind>(kind: K, id: string, label: string, over: Partial<Extract<PlayLayer, { kind: K }>> = {}): PlayLayer {
+  return { ...defaultLayer(kind, id, label), ...over } as PlayLayer;
+}
 export type { ExampleGraph } from './exampleIndex';
 
 // Generated data. Every example here is loaded through the same path as a saved graph, so old
@@ -10951,16 +10957,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     play: {
       version: 1,
       layers: [
-        {
-          id: 'dust', kind: 'particles', label: 'Dust', visible: true, count: 700,
-          field: 'flow', speed: 0.8, steer: 0.5, turns: 1.5, noiseScale: 3, noiseEvolve: 0.2, flat: 'wander',
-          attractor: 'none', force: 'gravitate', strength: 1, catchRadius: 0.02,
-          spawn: 'anywhere', spawnRadius: 0.2, edges: 'wrap', life: 6, nullId: '',
-          shape: 'dot', rotate: 'heading', sprite: '', crop: false, size: 1.5, sizeJitter: 0.4, opacity: 0.8,
-          colour: 'tint', color: [1, 0.85, 0.95], palette: 1, paletteBy: 'heading',
-          sizeBy: 'none', sizeAmount: 1, opacityBy: 'age', opacityAmount: -0.8, falloff: 0.3,
-          reveal: false, trail: 0.75, blend: 'screen',
-        },
+        layer('particles', 'dust', 'Dust', {
+          count: 700, speed: 0.8, turns: 1.5, life: 6, size: 1.5, sizeJitter: 0.4, fade: 0.3,
+          color: [1, 0.85, 0.95], opacityBy: 'age', opacityAmount: -0.8, trail: 0.75, blend: 'screen',
+        }),
       ],
       controls: [
         { id: 'threshold', target: 'thr::threshold', kind: 'float', label: 'Blob threshold', min: 0.2, max: 1.2 },
@@ -11638,8 +11638,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     play: {
       version: 1,
       layers: [
-        { id: 'word', kind: 'text', label: 'Word', visible: true, text: 'BEAT', x: 0.5, y: 0.5, size: 0.42, rotation: 0, opacity: 1, color: [1, 1, 1], font: 'sans', weight: 700, blend: 'normal', matte: 'luma' },
-        { id: 'pin', kind: 'null', label: 'Pin', visible: true, x: 0.5, y: 0.8, size: 9, color: '#f9a86b' },
+        layer('text', 'word', 'Word', { text: 'BEAT', size: 0.42, matte: 'luma' }),
+        layer('null', 'pin', 'Pin', { y: 0.8, size: 9, color: '#f9a86b' }),
       ],
       controls: [
         { id: 'width', target: 'box::width', kind: 'float', label: 'Cell width', min: 0.05, max: 1 },

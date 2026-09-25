@@ -129,6 +129,15 @@ class LiveAudio {
     for (const band of ['bass', 'lowmid', 'highmid', 'treble'] as const) this.values[band] = bandFromSpectrum(this.freq, sr, LIVE_BANDS[band].lo, LIVE_BANDS[band].hi);
   }
 
+  /** The waveform and spectrum right now (for the audio layer), or null while no input is open. */
+  raw(): { wave: Float32Array; freq: Float32Array; sampleRate: number } | null {
+    if (this.status !== 'on' || !this.analyser || !this.freq || !this.wave || !this.ctx) return null;
+    const now = performance.now();
+    if (now - this.rawAt > 8) { this.rawAt = now; this.analyser.getFloatFrequencyData(this.freq); this.analyser.getFloatTimeDomainData(this.wave); }
+    return { wave: this.wave, freq: this.freq, sampleRate: this.ctx.sampleRate };
+  }
+  private rawAt = 0;
+
   /** 0..1 for a band, or null while no input is open. */
   value(band: LiveBand): number | null {
     return this.status === 'on' ? this.values[band] : null;

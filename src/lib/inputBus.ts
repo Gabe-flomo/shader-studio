@@ -28,6 +28,8 @@ export interface InputSource {
    * with no binding in the current shader is dropped silently.
    */
   tickInputs(dt: number, time: number, write: InputWriter): void;
+  /** Tick even when the shader binds nothing (the Play engine: actions, layer mappings). */
+  wantsTick?(): boolean;
 }
 
 const PARAM_PREFIX = 'param:';
@@ -107,7 +109,7 @@ class InputBus {
     const result = this.result;
     result.clear();
     this.moved = false;
-    if (this.live.size === 0 && this.params.size === 0) return result;
+    if (this.live.size === 0 && this.params.size === 0 && ![...this.sources].some(s => s.wantsTick?.())) return result;
     for (const source of this.sources) source.tickInputs(dt, time, this.writer);
     // Did any scalar change since last frame? (Vectors are mutated in place by
     // their source, so a written vector always counts as movement.)

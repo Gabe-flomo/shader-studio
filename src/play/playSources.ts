@@ -3,9 +3,9 @@
  * <select> offers, conversion to and from the record's PlaySource shape, and
  * short labels. Pure; shared by the Play page and the control rows.
  */
-import type { LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySource, TriggerMode, TriggerSpec } from '../types/play';
+import type { LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySource, SensorRead, TriggerMode, TriggerSpec } from '../types/play';
 
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
+export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
 
 /** In the order the drop-down shows them: what everyone has first, MIDI hardware last. */
 export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
@@ -16,6 +16,7 @@ export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
   { value: 'trigger', label: 'Trigger (envelope, toggle…)' },
   { value: 'control', label: 'Another control' },
   { value: 'null', label: 'Null position' },
+  { value: 'sensor', label: 'Layer sensor (zone fill, speed…)' },
   { value: 'lfo', label: 'LFO' },
   { value: 'noise', label: 'Noise' },
   { value: 'clock', label: 'Clock (BPM)' },
@@ -53,8 +54,8 @@ export function sourceType(s: PlaySource): SourceType {
   return s.kind;
 }
 
-/** `otherControlId` is the first control a new control source may point at (not the mapping's own target); `nullId` the first null layer. */
-export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId = '', nullId = ''): PlaySource {
+/** `otherControlId` is the first control a new control source may point at (not the mapping's own target); `nullId` the first null layer; `sensor` the first layer that measures something. */
+export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId = '', nullId = '', sensor: { layerId: string; read: SensorRead } | null = null): PlaySource {
   const channel = prev.kind === 'midi' ? prev.channel : 0;
   switch (t) {
     case 'midi:cc': return { kind: 'midi', signal: 'cc', channel, cc: prev.kind === 'midi' && prev.cc !== undefined ? prev.cc : 1 };
@@ -68,6 +69,7 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
     case 'key': return { kind: 'key', code: prev.kind === 'key' ? prev.code : 'Space' };
     case 'control': return { kind: 'control', controlId: prev.kind === 'control' ? prev.controlId : otherControlId };
     case 'null': return { kind: 'null', layerId: prev.kind === 'null' ? prev.layerId : nullId, axis: 'x' };
+    case 'sensor': return prev.kind === 'sensor' ? prev : { kind: 'sensor', layerId: sensor?.layerId ?? '', read: sensor?.read ?? 'fill', otherId: '' };
     case 'lfo': return { kind: 'lfo', shape: 'sine', rate: 0.5, phase: 0 };
     case 'live': return { kind: 'live', band: 'bass', gain: 1 };
     case 'noise': return { kind: 'noise', type: 'smooth', rate: 1, seed: Math.floor(Math.random() * 1000), steps: 0 };
@@ -84,6 +86,7 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
 export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string; label: string }> = [], layers: ReadonlyArray<{ id: string; label: string }> = []): string {
   if (s.kind === 'mouse') return s.axis === 'down' ? 'Mouse button' : `Mouse ${s.axis.toUpperCase()}`;
   if (s.kind === 'null') return `${layers.find(l => l.id === s.layerId)?.label ?? 'Null'} ${s.axis.toUpperCase()}`;
+  if (s.kind === 'sensor') return `${layers.find(l => l.id === s.layerId)?.label ?? 'Layer'} ${SENSOR_LABELS[s.read].toLowerCase()}`;
   if (s.kind === 'key') return `Key ${keyName(s.code)}`;
   if (s.kind === 'control') return `← ${controls.find(c => c.id === s.controlId)?.label ?? 'control'}`;
   if (s.kind === 'lfo') return `LFO ${s.shape} ${s.rate} Hz`;
@@ -138,8 +141,19 @@ export function triggerLabel(t: TriggerSpec): string {
     case 'osc': return `OSC ${t.address}`;
     case 'beat': return t.beats === 1 ? `Every beat @ ${t.bpm}` : `Every ${t.beats} beats @ ${t.bpm}`;
     case 'audio': return `${LIVE_BAND_LABELS[t.band]} hit`;
+    case 'zone': return t.event === 'click' ? 'Click on shape' : t.event === 'enter' ? 'Pointer enters shape' : `Shape fills to ${Math.round(t.threshold * 100)}%`;
   }
 }
+
+export const SENSOR_LABELS: Record<SensorRead, string> = { fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance' };
+export const SENSOR_HINTS: Record<SensorRead, string> = {
+  fill: 'How full of particles the shape is: 0.5 is as dense as average, 1 is twice that or more.',
+  hover: '1 while the pointer is over the shape, else 0.',
+  speed: 'How fast the particles are moving on average, against their Speed setting.',
+  spread: 'How spread out the particles are: near 0 in a clump, near 1 everywhere.',
+  motion: 'How much is moving in front of the camera.',
+  distance: 'How far this null is from another one: 1 is a picture height or more.',
+};
 
 export const LIVE_BAND_LABELS: Record<LiveAudioBand, string> = { level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble' };
 export const LIVE_BAND_OPTIONS = (Object.keys(LIVE_BAND_LABELS) as LiveAudioBand[]).map(b => ({ value: b, label: LIVE_BAND_LABELS[b] }));
@@ -151,9 +165,11 @@ export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
   { value: 'audio', label: 'Audio hit (live input)' },
   { value: 'note', label: 'MIDI note' },
   { value: 'osc', label: 'OSC message' },
+  { value: 'zone', label: 'Shape (click, enter, fill)' },
 ];
 
-export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec): TriggerSpec {
+/** `shapeId` is the first shape layer, for a new shape trigger. */
+export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec, shapeId = ''): TriggerSpec {
   switch (on) {
     case 'key': return { on: 'key', code: prev.on === 'key' ? prev.code : 'Space' };
     case 'mouse': return { on: 'mouse' };
@@ -161,6 +177,7 @@ export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec): Trigg
     case 'note': return { on: 'note', channel: 0, note: -1 };
     case 'osc': return { on: 'osc', address: prev.on === 'osc' ? prev.address : '/1/push1' };
     case 'audio': return { on: 'audio', band: prev.on === 'audio' ? prev.band : 'bass', threshold: prev.on === 'audio' ? prev.threshold : 0.6 };
+    case 'zone': return { on: 'zone', layerId: prev.on === 'zone' ? prev.layerId : shapeId, event: prev.on === 'zone' ? prev.event : 'click', threshold: prev.on === 'zone' ? prev.threshold : 0.5 };
   }
 }
 

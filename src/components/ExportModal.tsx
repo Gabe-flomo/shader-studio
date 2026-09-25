@@ -14,6 +14,7 @@ import { Modal } from './ui/Modal';
 import { RulerSlider } from './ui/RulerSlider';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
+import { playOverlay } from '../play/overlay';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
@@ -199,6 +200,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const current = support?.[resId] ?? null;
 
   const restoreScale = () => {
+    playOverlay.stopCompositing();
     if (!scaledRef.current) return;
     scaledRef.current.setRenderSize(null);
     scaledRef.current = null;
@@ -283,7 +285,9 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
     try {
       // Record the live canvas directly — at 2×/4× its drawing buffer is
       // already rendering at the export resolution.
-      const rec = new CanvasRecorder(canvas, {
+      // Play layers (particles, text…) live on their own canvas: record the two together.
+      const source = playOverlay.hasLayers() ? playOverlay.startCompositing(canvas) : canvas;
+      const rec = new CanvasRecorder(source, {
         format: 'mediarecorder',
         fps,
         duration: manualStop ? null : duration,
@@ -349,6 +353,8 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
     // Use the dedicated render target dimensions from the handle.
     // These are fixed at registration time — immune to live canvas resizes.
     const { width: w, height: h, renderAtTime, readPixels: handleReadPixels } = offlineRender;
+    // Each frame gets the Play layers laid over it, stepped at the export's frame rate.
+    let frameTime = 0, firstFrame = true;
     const startT = performance.now();
 
     try {
@@ -362,8 +368,13 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
         renderFrame: (t) => {
           if (abortRef.current) throw new Error('cancelled');
           renderAtTime(t);
+          frameTime = t;
         },
-        readPixels: handleReadPixels,
+        readPixels: (out, width, height) => {
+          handleReadPixels(out, width, height);
+          playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame);
+          firstFrame = false;
+        },
         onProgress: (fraction, frame) => {
           if (abortRef.current) return;
           setCaptureProgress(fraction);
@@ -418,7 +429,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const handleScreenshot = () => {
     if (!canvas) return;
     const name = filename || `screenshot-${Date.now()}`;
-    canvas.toBlob(blob => {
+    (playOverlay.hasLayers() ? playOverlay.snapshot(canvas) : canvas).toBlob(blob => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

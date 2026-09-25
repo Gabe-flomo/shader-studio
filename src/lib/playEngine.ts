@@ -25,7 +25,7 @@ import { oscClient, oscNumber, type OscMessage } from './oscClient';
 import { liveAudio } from './liveAudio';
 import { beatAt, newTriggerState, noiseAt, stepTrigger, triggerKey, type TriggerState } from '../play/triggers';
 import type { TriggerSpec } from '../types/play';
-import type { LfoShape, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
+import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
 import { CURVE_POINTS, emptyPlayRecord, parseLayerTarget } from '../types/play';
 
 export type ControlValue = number | number[];
@@ -137,6 +137,17 @@ class PlayEngine implements InputSource {
   private triggerStates = new Map<string, TriggerState>();
   private triggerKeysBound = new Set<string>();
   private oscHeld = new Set<string>();
+
+  // ── Layers talking back: sensors, following nulls, zone triggers, actions ──
+  /** What layers measure (`layerId::read`), reported by the overlay each frame. */
+  private sensors = new Map<string, number>();
+  /** Where a following null is (`layerId::x|y`); wins over mappings and the record. */
+  private overrides = new Map<string, number>();
+  private aspect = 16 / 9;
+  private zoneGates = new Set<string>();
+  /** Presses an action has already fired for, per action id. */
+  private actionSeen = new Map<string, number>();
+  private actionListeners = new Set<(a: PlayAction) => void>();
 
   private press(key: string, velocity = 1): void {
     this.presses.set(key, (this.presses.get(key) ?? 0) + 1);
@@ -254,8 +265,10 @@ class PlayEngine implements InputSource {
     this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse');
     this.tiltIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'tilt');
     this.gamepadIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'gamepad');
-    this.triggerKeysBound = new Set(record.mappings.filter(m => m.enabled && m.source.kind === 'trigger').map(m => triggerKey((m.source as Extract<PlaySource, { kind: 'trigger' }>).trigger)));
-    this.oscIsBound = record.mappings.some(m => m.enabled && (m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')));
+    this.triggerKeysBound = new Set(this.allTriggers().map(triggerKey));
+    this.oscIsBound = record.mappings.some(m => m.enabled && (m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')))
+      || (record.actions ?? []).some(a => a.enabled && a.trigger.on === 'osc');
+    for (const id of [...this.actionSeen.keys()]) if (!(record.actions ?? []).some(a => a.id === id)) this.actionSeen.delete(id);
     oscClient.setWanted(this.oscIsBound || oscClient.getStatus() === 'connected');
     for (const id of [...this.triggerStates.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger')) this.triggerStates.delete(id);
     // Show the new state (a mapping added, removed or disabled) even while the clock is paused.
@@ -291,7 +304,34 @@ class PlayEngine implements InputSource {
 
   /** A layer property right now: what a mapping drives it to, else the layer's own value. */
   layerValue(layerId: string, key: string, base: number): number {
-    return this.layerLive.get(`${layerId}::${key}`) ?? base;
+    const k = `${layerId}::${key}`;
+    return this.overrides.get(k) ?? this.layerLive.get(k) ?? base;
+  }
+
+  /** A layer measured something (fill, hover, speed, spread, motion). */
+  setSensor(key: string, value: number): void {
+    this.sensors.set(key, value);
+  }
+
+  /** A following null moved (null clears it). */
+  setOverride(layerId: string, key: string, value: number | null): void {
+    const k = `${layerId}::${key}`;
+    if (value === null) this.overrides.delete(k); else this.overrides.set(k, value);
+  }
+
+  /** The picture's width / height, for distances between nulls. */
+  setAspect(aspect: number): void {
+    if (aspect > 0 && Number.isFinite(aspect)) this.aspect = aspect;
+  }
+
+  /** A press on a shape (the overlay calls this; release on pointer up). */
+  pressZone(layerId: string): void { this.press(`zone:${layerId}:click`); }
+  releaseZone(layerId: string): void { this.release(`zone:${layerId}:click`); }
+
+  /** Listen for fired actions (the overlay hands them to the layer kit). */
+  onAction(cb: (a: PlayAction) => void): () => void {
+    this.actionListeners.add(cb);
+    return () => { this.actionListeners.delete(cb); };
   }
 
   /** Did a driven layer property change in the last tick? (The overlay redraws.) */
@@ -304,6 +344,46 @@ class PlayEngine implements InputSource {
     if (!layer) return null;
     const v = (layer as unknown as Record<string, unknown>)[key];
     return typeof v === 'number' ? v : null;
+  }
+
+  private nullAt(id: string): { x: number; y: number } | null {
+    const l = this.record.layers.find(x => x.id === id);
+    return l && l.kind === 'null' ? { x: this.layerValue(id, 'x', l.x), y: this.layerValue(id, 'y', l.y) } : null;
+  }
+
+  /** Every trigger in the record: mapping triggers and action triggers. */
+  private allTriggers(): TriggerSpec[] {
+    const out: TriggerSpec[] = [];
+    for (const m of this.record.mappings) if (m.enabled && m.source.kind === 'trigger') out.push(m.source.trigger);
+    for (const a of this.record.actions ?? []) if (a.enabled) out.push(a.trigger);
+    return out;
+  }
+
+  /** Zone enter / fill triggers: a sensor crossing its threshold is a press; dropping below 80% of it releases. */
+  private tickZoneTriggers(): void {
+    for (const t of this.allTriggers()) {
+      if (t.on !== 'zone' || t.event === 'click') continue;
+      const key = triggerKey(t);
+      const v = this.sensors.get(`${t.layerId}::${t.event === 'enter' ? 'hover' : 'fill'}`) ?? 0;
+      const threshold = t.event === 'enter' ? 0.5 : t.threshold;
+      const open = this.zoneGates.has(key);
+      if (!open && v >= threshold) { this.zoneGates.add(key); this.press(key); }
+      else if (open && v < threshold * 0.8) { this.zoneGates.delete(key); this.release(key); }
+    }
+  }
+
+  /** Fire each action once per new press of its trigger. */
+  private tickActions(): void {
+    for (const a of this.record.actions ?? []) {
+      if (!a.enabled) continue;
+      const presses = a.trigger.on === 'beat' ? beatAt(a.trigger.bpm, a.trigger.beats, this.time).count : this.presses.get(triggerKey(a.trigger)) ?? 0;
+      const seen = this.actionSeen.get(a.id);
+      this.actionSeen.set(a.id, presses);
+      // A new action starts from "no presses yet"; a beat that jumped (a seek) fires once.
+      if (seen === undefined || presses <= seen) continue;
+      const times = Math.min(4, presses - seen);
+      for (let i = 0; i < times; i++) for (const cb of this.actionListeners) cb(a);
+    }
   }
 
   /**
@@ -365,6 +445,13 @@ class PlayEngine implements InputSource {
         }
         const b = pad.buttons[source.index];
         return b === undefined ? null : b.value;
+      }
+      case 'sensor': {
+        if (source.read === 'distance') {
+          const a = this.nullAt(source.layerId), b = this.nullAt(source.otherId);
+          return a && b ? Math.min(1, Math.hypot((a.x - b.x) * this.aspect, a.y - b.y)) : null;
+        }
+        return this.sensors.get(`${source.layerId}::${source.read}`) ?? null;
       }
       case 'null': {
         const base = this.layerBase(source.layerId, source.axis);
@@ -438,6 +525,8 @@ class PlayEngine implements InputSource {
     this.time = time;
     this.frame++;
     this.tickAudioTriggers();
+    this.tickZoneTriggers();
+    this.tickActions();
     if (this.learnCb && this.performing) this.pollGamepadLearn();
     // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.
     if (this.gamepadIsBound && this.performing) inputBus.wake();
@@ -592,11 +681,18 @@ class PlayEngine implements InputSource {
       if (m.source.kind === 'key' && m.source.code === code) return true;
       if (m.source.kind === 'trigger' && m.source.trigger.on === 'key' && m.source.trigger.code === code) return true;
     }
+    for (const a of this.record.actions ?? []) if (a.enabled && a.trigger.on === 'key' && a.trigger.code === code) return true;
     return false;
+  }
+
+  /** Actions and layer-property mappings run whatever the shader binds. */
+  wantsTick(): boolean {
+    return !!this.record.actions?.length || this.record.controls.some(c => parseLayerTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
   isAnimating(): boolean {
+    if ((this.record.actions ?? []).some(a => a.enabled && a.trigger.on === 'beat')) return true;
     return this.record.mappings.some(m => m.enabled && (
       m.source.kind === 'noise' ||
       ((m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio')) && liveAudio.isOn()) ||
