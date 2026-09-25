@@ -417,6 +417,50 @@ export const Repeat3DNode: NodeDefinition = {
   },
 };
 
+// Voxel builder: snap space to a cube grid. A Box 3D on Cell Pos is a cube per
+// cell; a hash or noise on Cell ID picks which cells are solid; Edge (distance
+// to the nearest wall of the current cell) is what an empty cell returns so
+// the march steps cleanly into the next cell instead of overshooting.
+export const VoxelizeNode: NodeDefinition = {
+  type: 'voxelize', label: 'Voxelize', aliases: ['voxel grid', 'snap to grid 3d', 'cubes', 'minecraft'],
+  category: '3D Transforms',
+  description:
+    'Snaps 3D space to a cube grid. Cell Pos is the position inside the current cell (centred on 0), Cell ID the integer ' +
+    'cell coordinates, Cell Center that cell\'s centre in world space, Edge the distance to the nearest wall of the cell. ' +
+    'Box 3D on Cell Pos gives one cube per cell; a Hash or Noise on Cell ID decides which cells are solid — for an empty cell ' +
+    'return Edge (Mix by the solid mask) so the ray marches on to the next cell. Same habits as the 2D Grid: Cell UV → Cell Pos, Cell ID → Cell ID.',
+  inputs: {
+    pos:  { type: 'vec3',  label: 'Position' },
+    size: { type: 'float', label: 'Cell Size' },
+  },
+  outputs: {
+    cellPos:    { type: 'vec3',  label: 'Cell Pos',    hint: 'Position relative to the cell centre, in ±Cell Size / 2. Feed a Box 3D or Sphere 3D.' },
+    cellID:     { type: 'vec3',  label: 'Cell ID',     hint: 'Integer cell coordinates (floor(pos / size)). Hash it to vary or drop cells; a Palette on it colours per cube.' },
+    cellCenter: { type: 'vec3',  label: 'Cell Center', hint: 'World-space centre of the cell.' },
+    edge:       { type: 'float', label: 'Edge',        hint: 'Distance from the position to the nearest wall of its cell. Return it for empty cells so the march skips ahead; for an exact voxel traversal, wire the camera\'s Ray Dir into the Scene Group and step to the cell exit along it (see 3D: Voxel Terrain).' },
+  },
+  defaultParams: { size: 0.5 },
+  paramDefs: {
+    size: { label: 'Cell Size', type: 'float', min: 0.05, max: 5.0, step: 0.01, hint: 'Edge length of one voxel cell.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const pos  = inputVars.pos  || 'vec3(0.0)';
+    const size = inputVars.size || p(node.params.size, 0.5);
+    return {
+      code: [
+        `    float ${id}_size       = max(${size}, 1e-4);\n`,
+        `    vec3  ${id}_cellID     = floor(${pos} / ${id}_size);\n`,
+        `    vec3  ${id}_cellCenter = (${id}_cellID + 0.5) * ${id}_size;\n`,
+        `    vec3  ${id}_cellPos    = ${pos} - ${id}_cellCenter;\n`,
+        `    vec3  ${id}_wall       = 0.5 * ${id}_size - abs(${id}_cellPos);\n`,
+        `    float ${id}_edge       = min(min(${id}_wall.x, ${id}_wall.y), ${id}_wall.z);\n`,
+      ].join(''),
+      outputVars: { cellPos: `${id}_cellPos`, cellID: `${id}_cellID`, cellCenter: `${id}_cellCenter`, edge: `${id}_edge` },
+    };
+  },
+};
+
 export const Twist3DNode: NodeDefinition = {
   type: 'twist3D', label: 'Twist 3D', category: '3D Transforms',
   description: 'Twist 3D space around the Y axis by a given amount. Wire MarchDist → angle for depth-dependent twist.',
