@@ -350,6 +350,14 @@ interface NodeGraphState {
   /** Set by revealNode; NodeGraph centres on the node once it is on screen, then clears it. */
   focusRequest: { nodeId: string; seq: number } | null;
   clearFocusRequest: () => void;
+  /**
+   * Wires that were removed or replaced this session, newest first. A node's
+   * right-click menu offers them back as "Reconnect …" — a per-node memory,
+   * unlike undo, which rewinds everything since. Not saved with the graph.
+   */
+  wireHistory: WireMemory[];
+  /** Past wires touching `nodeId` that could be restored: both ends still exist in `scope` and the wire is not currently present. */
+  pastWiresFor: (nodeId: string, scope: GraphNode[]) => WireMemory[];
   /** After a node is added from search, NodeGraph opens Smart connect on its first output */
   smartConnectRequest: { nodeId: string; at: number } | null;
   requestSmartConnect: (nodeId: string | null) => void;
@@ -1159,6 +1167,31 @@ function pickSurfacedParams(
     }
   }
   return result;
+}
+
+/** One remembered wire (see NodeGraphState.wireHistory). */
+export interface WireMemory {
+  fromNodeId: string;
+  fromOutputKey: string;
+  toNodeId: string;
+  toInputKey: string;
+  at: number;
+}
+
+const WIRE_HISTORY_MAX = 60;
+
+/** Prepend a wire to the memory, dropping an earlier copy of the same wire. */
+function rememberWire(history: WireMemory[], w: Omit<WireMemory, 'at'>): WireMemory[] {
+  const same = (h: WireMemory) => h.fromNodeId === w.fromNodeId && h.fromOutputKey === w.fromOutputKey && h.toNodeId === w.toNodeId && h.toInputKey === w.toInputKey;
+  return [{ ...w, at: Date.now() }, ...history.filter(h => !same(h))].slice(0, WIRE_HISTORY_MAX);
+}
+
+/** The node `id` at the level the user is editing (top level or the active group). */
+function nodeInScope(state: { nodes: GraphNode[]; activeGroupPath: string[] }, id: string): GraphNode | undefined {
+  const top = state.nodes.find(n => n.id === id);
+  if (top) return top;
+  if (state.activeGroupPath.length === 0) return undefined;
+  return getActiveNodes(state.nodes, state.activeGroupPath)?.find(n => n.id === id);
 }
 
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
@@ -3494,6 +3527,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   connectNodes: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
     undoManager.push(get().nodes);
+    {
+      // Replacing a wire: keep the old one so the node's menu can offer it back.
+      const st = get();
+      const prev = nodeInScope(st, targetNodeId)?.inputs[targetInputKey]?.connection;
+      if (prev && (prev.nodeId !== sourceNodeId || prev.outputKey !== sourceOutputKey)) {
+        set({ wireHistory: rememberWire(st.wireHistory, { fromNodeId: prev.nodeId, fromOutputKey: prev.outputKey, toNodeId: targetNodeId, toInputKey: targetInputKey }) });
+      }
+    }
     set(state => {
       // Top-level connection
       if (state.nodes.some(n => n.id === targetNodeId)) {
@@ -3551,6 +3592,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   disconnectInput: (nodeId, inputKey) => {
     undoManager.push(get().nodes);
+    {
+      const st = get();
+      const prev = nodeInScope(st, nodeId)?.inputs[inputKey]?.connection;
+      if (prev) set({ wireHistory: rememberWire(st.wireHistory, { fromNodeId: prev.nodeId, fromOutputKey: prev.outputKey, toNodeId: nodeId, toInputKey: inputKey }) });
+    }
     set(state => {
       // Top-level
       if (state.nodes.some(n => n.id === nodeId)) {
@@ -4353,6 +4399,17 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
   focusRequest: null,
   clearFocusRequest: () => set({ focusRequest: null }),
+  wireHistory: [],
+  pastWiresFor: (nodeId, scope) => {
+    const byId = new Map(scope.map(n => [n.id, n]));
+    return get().wireHistory.filter(w => {
+      if (w.fromNodeId !== nodeId && w.toNodeId !== nodeId) return false;
+      const from = byId.get(w.fromNodeId), to = byId.get(w.toNodeId);
+      if (!from || !to) return false;
+      const cur = to.inputs[w.toInputKey]?.connection;
+      return !(cur && cur.nodeId === w.fromNodeId && cur.outputKey === w.fromOutputKey);
+    });
+  },
   smartConnectRequest: null,
   requestSmartConnect: (nodeId) => set({ smartConnectRequest: nodeId ? { nodeId, at: Date.now() } : null }),
   setNodeProbeValues: (values) => set(state => {
