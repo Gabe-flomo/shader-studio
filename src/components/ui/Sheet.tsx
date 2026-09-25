@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { IconButton } from './Button';
+import { portalGuard } from './portalGuard';
 
 /**
  * Phone bottom sheet: scrim, 24px top corners, grab handle, optional title row with close, and a
@@ -26,7 +27,8 @@ export function Sheet({ title, onClose, children, maxHeight = '80dvh', headerExt
 
   return createPortal(
     <div
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      {...portalGuard}
+      onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 60, background: tk.bg.scrim, display: 'flex', alignItems: 'flex-end' }}
     >
       <div

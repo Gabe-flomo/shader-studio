@@ -3,6 +3,7 @@ import { TYPE_COLORS } from '../NodeGraph/typeColors';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import type { Completion } from './glslReference';
+import { portalGuard } from '../ui/portalGuard';
 
 /**
  * Autocomplete list shown under the caret: up to six matches with the typed prefix in accent,
@@ -28,7 +29,8 @@ export function CompletionPopup({ items, index, word, x, y, onPick, onHover }: {
       role="listbox"
       aria-label="Suggestions"
       // Keep focus in the field: a click picks without blurring it
-      onMouseDown={e => e.preventDefault()}
+      {...portalGuard}
+      onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
       style={{
         position: 'fixed', left: Math.max(8, left), top: y, zIndex: 2100, display: 'flex', alignItems: 'flex-start', padding: 4,
         background: tk.bg.panel, borderRadius: radius.lg, boxShadow: tk.shadow.popover, font: `12px ${fontFamily.ui}`, color: tk.text.primary,

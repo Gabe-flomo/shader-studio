@@ -26,6 +26,8 @@ import { Icon } from '../ui/Icon';
 import { TYPE_COLORS } from './typeColors';
 import { SelectionBar } from '../shell/SelectionBar';
 import { GraphOutline } from './GraphOutline';
+import { portalGuard } from '../ui/portalGuard';
+import { removeFromPlay } from '../../play/playDriven';
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
@@ -487,6 +489,9 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const handleWheel = useCallback((e: React.WheelEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    // A pop-up opened from a card is portalled out of the canvas, but React still
+    // bubbles its events here: only wheel over the canvas itself pans or zooms.
+    if (!canvas.contains(e.target as Node)) return;
 
     if (e.ctrlKey) {
       // Pinch-to-zoom (trackpad) or ctrl+scroll (mouse wheel)
@@ -514,6 +519,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
 
   // ── Canvas mouse down — pan on middle-click, space+drag, or option+drag; box select otherwise ──
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!canvasRef.current?.contains(e.target as Node)) return; // from a portalled pop-up
     const isMiddle    = e.button === 1;
     const isSpaceDrag = spaceDown.current  && e.button === 0;
     const isOptionDrag = optionDown.current && e.button === 0;
@@ -1363,8 +1369,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       {/* Right-click context menu — rendered via portal so it's outside the transformed canvas tree */}
       {contextMenu && createPortal(
         <div
-          onMouseDown={e => e.stopPropagation()}
-          onClick={e => e.stopPropagation()}
+          {...portalGuard}
           style={{
             position: 'fixed', left: contextMenu.x, top: contextMenu.y,
             background: tc.base, border: `1px solid ${tc.surface1}`, borderRadius: '6px',
@@ -1411,16 +1416,31 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                       <div style={{ padding: '4px 12px 6px', fontSize: '11px', color: tc.surface2, maxWidth: 240 }}>This param is baked into the shader, so it can't be a Play control.</div>
                     ) : (
                       <>
-                        <button style={{ ...ctxBtnStyle, opacity: playParam.taken ? 0.5 : 1 }} disabled={playParam.taken}
-                          title="A slider on the Play panel that MIDI, keys, the mouse and more can drive"
-                          onClick={() => {
-                            const c = playParam.c!;
-                            useNodeGraphStore.getState().setPlay(p => addCandidateControl(p, c));
-                            toast.success(`“${candidateLabel(c)}” is a Play control`, { action: openPlay });
-                            setContextMenu(null);
-                          }}>
-                          {playParam.taken ? 'Already a Play control' : 'Add to Play controls'}
-                        </button>
+                        {playParam.taken ? (
+                          <button style={ctxBtnStyle}
+                            title="Take it off the Play panel, with the mappings that drive it: the slider here is in charge again"
+                            onClick={() => {
+                              const c = playParam.c!;
+                              const st = useNodeGraphStore.getState();
+                              const control = st.play.controls.find(x => x.target === c.target);
+                              if (control) st.setPlay(p => removeFromPlay(p, control.id));
+                              toast.success(`“${control?.label ?? candidateLabel(c)}” is off the Play panel`, { message: 'Its mappings went with it.' });
+                              setContextMenu(null);
+                            }}>
+                            Remove from Play controls
+                          </button>
+                        ) : (
+                          <button style={ctxBtnStyle}
+                            title="A slider on the Play panel that MIDI, keys, the mouse and more can drive"
+                            onClick={() => {
+                              const c = playParam.c!;
+                              useNodeGraphStore.getState().setPlay(p => addCandidateControl(p, c));
+                              toast.success(`“${candidateLabel(c)}” is a Play control`, { action: openPlay });
+                              setContextMenu(null);
+                            }}>
+                            Add to Play controls
+                          </button>
+                        )}
                         {playParam.c.kind === 'float' && (
                           <button style={ctxBtnStyle}
                             title="A Play control, and a null on the picture that drives it (X and Y together for a position)"

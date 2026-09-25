@@ -6,6 +6,7 @@ import { Icon } from '../ui/Icon';
 import { TYPE_COLORS } from './typeColors';
 import type { Suggestion } from './smartConnect';
 import type { QuickAdd } from './quickAdds';
+import { portalGuard } from '../ui/portalGuard';
 
 const MARGIN = 8;
 
@@ -81,6 +82,7 @@ export function SmartConnectMenu({ x, y, title, items, quickAdds = [], onPick, o
 
   return createPortal(
     <div
+      {...portalGuard}
       ref={ref}
       role="menu"
       aria-label={title}

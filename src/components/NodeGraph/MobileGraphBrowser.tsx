@@ -51,6 +51,8 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { PlayParamActions } from '../play/PlayParamActions';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
+import { playDrivenMap } from '../../play/playDriven';
+import { PlayDriveChip } from './PlayDriveChip';
 
 /** Breadcrumb segment in the phone graph header: the current one is bold and dark. */
 const crumbStyle = (tk: Tokens, current: boolean): React.CSSProperties => ({
@@ -1430,6 +1432,7 @@ export function MobileGraphBrowser() {
   const setPreviewNodeId = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass = useNodeGraphStore(s => s.toggleBypass);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
+  const playDriven = useNodeGraphStore(s => playDrivenMap(s.play));
   const updateNodeSockets = useNodeGraphStore(s => s.updateNodeSockets);
   const setNodeAssignOp = useNodeGraphStore(s => s.setNodeAssignOp);
   const setNodeAssignInit = useNodeGraphStore(s => s.setNodeAssignInit);
@@ -2519,6 +2522,7 @@ export function MobileGraphBrowser() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <TypeIcon type={inp.type} />
             <div style={{ flex: 1, minWidth: 0, font: `500 13.5px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inp.label}</div>
+            {pd && playDriven.get(`${node.id}::${key}`) && <PlayDriveChip drive={playDriven.get(`${node.id}::${key}`)!} />}
             {kfEligible && (
               <button
                 onClick={() => openKeyframes(isKeyframed ? 'select' : 'add')}
@@ -2560,7 +2564,7 @@ export function MobileGraphBrowser() {
                     step={pd.step ?? 0.01}
                     integer={pd.step === 1}
                     defaultValue={typeof defVal === 'number' ? defVal : (effMin + effMax) / 2}
-                    disabled={isExternallyDriven}
+                    disabled={isExternallyDriven || playDriven.has(`${node.id}::${key}`)}
                     onChange={v => updateNodeParams(node.id, { [key]: v }, { immediate: true })}
                     onType={n => {
                       if (Math.abs(n) > effMax) setCustomMax(n);

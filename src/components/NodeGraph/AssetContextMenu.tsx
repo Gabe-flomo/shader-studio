@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { ctp } from '../../theme/palette';
+import { portalGuard } from '../ui/portalGuard';
 
 export interface ContextMenuItem {
   label: string;
@@ -42,6 +43,7 @@ export function AssetContextMenu({ x, y, items, onDismiss }: Props) {
 
   return ReactDOM.createPortal(
     <div
+      {...portalGuard}
       ref={ref}
       onMouseDown={e => e.stopPropagation()}
       style={{

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } fr
 import { createPortal } from 'react-dom';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
+import { portalGuard } from './portalGuard';
 
 const GAP = 6;
 const MARGIN = 8;
@@ -72,6 +73,7 @@ export function Popover({
 
   return createPortal(
     <div
+      {...portalGuard}
       ref={ref}
       data-popover=""
       style={{

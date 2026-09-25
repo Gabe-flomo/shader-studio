@@ -4,6 +4,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from './Icon';
 import type { IconName } from './iconPaths';
+import { portalGuard } from './portalGuard';
 
 export type MenuItem =
   | { label: string; icon?: IconName; hint?: string; danger?: boolean; disabled?: boolean; onSelect: () => void }
@@ -64,6 +65,7 @@ export function Menu({ x, y, items, onClose, minWidth = 190 }: {
 
   return createPortal(
     <div
+      {...portalGuard}
       ref={ref}
       role="menu"
       style={{

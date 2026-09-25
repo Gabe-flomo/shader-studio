@@ -20,6 +20,34 @@ import { Tooltip } from './Tooltip';
  * `keyframed` greys the ruler out and stops edits: the value is animated, so the chip shows the
  * live value and hovering explains why.
  */
+/**
+ * Which slider, if any, a trackpad swipe belongs to. A swipe is a run of wheel
+ * events with short gaps (its momentum included); who owns it is settled at its
+ * first event. A slider owns it only when the swipe starts on it and the pointer
+ * was moved onto that slider (and rested a moment) beforehand. So a two-finger
+ * pan that passes over sliders, or starts where a pan left a slider under a
+ * still pointer, stays a pan.
+ */
+const SWIPE_GAP_MS = 200;
+const SETTLE_MS = 200;
+const wheel = { owner: null as Element | null, armed: null as Element | null, armedAt: 0, lastAt: 0, installed: false };
+
+function installWheelGestures(): void {
+  if (wheel.installed || typeof window === 'undefined') return;
+  wheel.installed = true;
+  // Capture runs before the slider's own listener sees the event.
+  window.addEventListener('wheel', e => {
+    const now = performance.now();
+    if (now - wheel.lastAt > SWIPE_GAP_MS) {
+      const on = (e.target as Element | null)?.closest?.('[data-ruler-track]') ?? null;
+      wheel.owner = on && on === wheel.armed && now - wheel.armedAt >= SETTLE_MS ? on : null;
+      // A pan moves things under the pointer: nothing is armed until the pointer moves again.
+      if (!wheel.owner) wheel.armed = null;
+    }
+    wheel.lastAt = now;
+  }, { capture: true, passive: true });
+}
+
 export function RulerSlider({
   value, min, max, step = 0.01, defaultValue, onChange, integer = false, keyframed, disabled = false,
   ariaLabel, touch = false, onType,
@@ -54,19 +82,37 @@ export function RulerSlider({
   const live = useRef({ value, locked, unit, min, max, step: effectiveStep, integer, onChange });
   useEffect(() => { live.current = { value, locked, unit, min, max, step: effectiveStep, integer, onChange }; });
 
-  // Horizontal wheel/trackpad nudges the value. Needs a non-passive listener to preventDefault.
+  // Horizontal wheel/trackpad nudges the value, but only a swipe that belongs to this
+  // slider (see wheelGesture): a pan that slides over it moves the view, not the value.
+  // Needs a non-passive listener to preventDefault.
   useEffect(() => {
     const el = trackRef.current;
     if (!el) return;
+    installWheelGestures();
     const onWheel = (e: WheelEvent) => {
       const s = live.current;
-      if (s.locked || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      if (s.locked || Math.abs(e.deltaX) <= Math.abs(e.deltaY) || wheel.owner !== el) return;
       e.preventDefault();
+      e.stopPropagation(); // the swipe is the slider's: the canvas behind must not pan with it
       const next = s.integer ? countAfterDrag(s.value, e.deltaX, e.shiftKey) : valueAfterDrag(s.value, -e.deltaX, s.unit, e.shiftKey);
       s.onChange(clampToStep(next, s.min, s.max, s.step));
     };
+    // Arm on a real pointer move over the track: content panned under a still pointer doesn't count.
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse' || (!e.movementX && !e.movementY)) return;
+      if (wheel.armed !== el) { wheel.armed = el; wheel.armedAt = performance.now(); }
+    };
+    const onLeave = () => { if (wheel.armed === el) wheel.armed = null; };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerleave', onLeave);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerleave', onLeave);
+      if (wheel.armed === el) wheel.armed = null;
+      if (wheel.owner === el) wheel.owner = null;
+    };
   }, []);
 
   const drag = useRef<{ lastX: number; acc: number } | null>(null);
@@ -130,6 +176,7 @@ export function RulerSlider({
   const track = (
     <div
       ref={trackRef}
+      data-ruler-track=""
       role="slider"
       aria-label={ariaLabel}
       aria-valuemin={min}

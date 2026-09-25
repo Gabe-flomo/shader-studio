@@ -5,6 +5,7 @@ import { fontFamily } from '../../theme/tokens';
 import { Icon } from './Icon';
 import { toneStyle } from './tone';
 import { useToastStore, type Toast } from './toastStore';
+import { portalGuard } from './portalGuard';
 
 const AUTO_DISMISS_MS = 5000;
 
@@ -13,6 +14,7 @@ export function Toaster() {
   const toasts = useToastStore(s => s.toasts);
   return createPortal(
     <div
+      {...portalGuard}
       aria-live="polite"
       style={{
         position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 11000,

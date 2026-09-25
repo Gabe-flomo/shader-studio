@@ -84,6 +84,8 @@ import { ColorSwatch } from '../ui/ColorPicker';
 import { PaletteTools } from './PaletteTools';
 import { toRgb } from '../../lib/colorMath';
 import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip } from './NodeCardParts';
+import { driveKey, playDrivenMap } from '../../play/playDriven';
+import { PlayDriveChip } from './PlayDriveChip';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -446,6 +448,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const setNodeAssignOp      = useNodeGraphStore(s => s.setNodeAssignOp);
   const setNodeAssignInit    = useNodeGraphStore(s => s.setNodeAssignInit);
   const setHoveredParamHint  = useNodeGraphStore(s => s.setHoveredParamHint);
+  // Sliders the Play page is driving (cached per Play record, so this selector is stable)
+  const playDriven = useNodeGraphStore(s => playDrivenMap(s.play));
   const toggleCarryMode    = useNodeGraphStore(s => s.toggleNodeCarryMode);
   const setSelectedNodeId  = useNodeGraphStore(s => s.setSelectedNodeId);
   const revealNode         = useNodeGraphStore(s => s.revealNode);
@@ -1904,6 +1908,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     }) => {
       const wired = !!node.inputs[o.psKey]?.connection;
       const wire = node.inputs[o.psKey]?.connection;
+      const drive = playDriven.get(driveKey(o.overrideKey));
       return (
         <div key={o.rowKey} data-param-key={o.overrideKey} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}
           onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
@@ -1921,6 +1926,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, o.psKey)} />
             </>
           ) : (
+            <>
+            {drive && <PlayDriveChip drive={drive} />}
             <RulerSlider
               value={o.value}
               min={o.min}
@@ -1931,7 +1938,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               onType={n => updateNodeParams(node.id, { [o.overrideKey]: n }, { immediate: true })}
               ariaLabel={o.label}
               touch={isTouchDevice}
+              disabled={!!drive}
             />
+            </>
           )}
         </div>
       );
@@ -3759,6 +3768,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             const effMin = bidir ? -effMax : (customMax != null ? 0 : (paramDef.min ?? 0));
             const defVal = def?.defaultParams?.[key];
             const hovered = hoveredSliderKey === key;
+            const drive = playDriven.get(`${node.id}::${key}`);
             const isKeyframed = node.inputs[key]?.type === 'float' && !node.inputs[key]?.connection
               && socketHasKeyframes(node, key) && !isKeyframeBypassed(node, key);
 
@@ -3783,6 +3793,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                     onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
                 )}
                 <ParamLabel title={paramDef.hint}>{paramDef.label}</ParamLabel>
+                {drive && <PlayDriveChip drive={drive} />}
                 {isKeyframed ? (
                   <KeyframedRuler node={node} socketKey={key} label={paramDef.label} min={effMin} max={effMax} step={step} touch={isTouchDevice} />
                 ) : (
@@ -3796,14 +3807,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                     onType={handleTyped}
                     ariaLabel={paramDef.label}
                     touch={isTouchDevice}
+                    disabled={!!drive}
                   />
                 )}
-                {/* Range tools: bidirectional (±max) and, after typing past the range, reset it */}
-                <div style={{ display: 'flex', gap: 1, marginRight: -6, visibility: hovered || bidir || customMax != null ? 'visible' : 'hidden' }}>
+                {/* Range tools: bidirectional (±max) and, after typing past the range, reset it.
+                    Always there (faint until needed) so hovering never moves the slider under the pointer. */}
+                <div style={{ display: 'flex', gap: 1, marginRight: -6, opacity: hovered || bidir || customMax != null ? 1 : 0.4, transition: 'opacity 120ms' }}>
                   <CardButton icon="bidir" on={bidir}
                     label={bidir ? `Range is −${+effMax.toFixed(3)} to ${+effMax.toFixed(3)}: click for 0 to max` : 'Make the range run both ways (−max to max)'}
                     onClick={() => updateNodeParams(node.id, { [`__scBidir_${key}`]: !bidir })} />
-                  {customMax != null && hovered && (
+                  {customMax != null && (
                     <CardButton icon="reset" label="Reset the slider range" onClick={() => updateNodeParams(node.id, { [`__scMax_${key}`]: null })} />
                   )}
                 </div>

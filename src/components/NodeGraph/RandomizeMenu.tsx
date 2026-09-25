@@ -5,6 +5,7 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
+import { portalGuard } from '../ui/portalGuard';
 
 const MARGIN = 8;
 
@@ -52,6 +53,7 @@ export function RandomizeMenu({ x, y, params, excluded, onChange, amount, onAmou
 
   return createPortal(
     <div
+      {...portalGuard}
       ref={ref}
       role="dialog"
       aria-label="Sliders to randomize"

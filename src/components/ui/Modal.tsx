@@ -5,6 +5,7 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { IconButton } from './Button';
 import { Icon } from './Icon';
 import type { IconName } from './iconPaths';
+import { portalGuard } from './portalGuard';
 
 /**
  * Modal shell: scrim over the live app, 16px panel, 60px header (tinted icon tile, title,
@@ -56,7 +57,8 @@ export function Modal({
   const tile = iconColor ?? tk.accent.base;
   return createPortal(
     <div
-      onPointerDown={e => { if (closeOnScrim && e.target === e.currentTarget) onClose(); }}
+      {...portalGuard}
+      onPointerDown={e => { e.stopPropagation(); if (closeOnScrim && e.target === e.currentTarget) onClose(); }}
       style={{
         position: 'fixed', inset: 0, zIndex: 2000, background: tk.bg.scrim,
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
