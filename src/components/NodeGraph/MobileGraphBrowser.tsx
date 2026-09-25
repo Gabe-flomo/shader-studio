@@ -2242,6 +2242,14 @@ export function MobileGraphBrowser() {
             ✦ Publish as node…
           </button>
         )}
+        {(node.type === 'exprNode' || node.type === 'customFn') && (
+          <button
+            onClick={() => setPublishSource({ kind: 'node', node })}
+            style={{ background: tc.mauve, border: 0, color: tc.crust, borderRadius: '8px', padding: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            ✦ Publish as node…
+          </button>
+        )}
         {publishSource && <PublishNodeModal source={publishSource} onClose={() => setPublishSource(null)} />}
         {isPlainGroup && !node.sealed && (
           <button

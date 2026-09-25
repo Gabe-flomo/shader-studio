@@ -859,6 +859,11 @@ export class ShaderAssembler {
               if (subDef.glslFunction) this.functions.add(subDef.glslFunction);
               subDef.glslFunctions?.forEach(f => this.functions.add(f));
               subDef.glslFunctionsFor?.(subNode).forEach(f => this.functions.add(f));
+              // A Custom Function's own helper block travels with the node (nested groups already do this).
+              if (subNode.type === 'customFn' && typeof subNode.params.glslFunctions === 'string') {
+                const h = (subNode.params.glslFunctions as string).trim();
+                if (h) this.functions.add(h);
+              }
               // slugId = the slug portion of subNode.id (after iterPrefix has been stripped)
               const slugId = subNode.id.slice(iterPrefix.length);
               // originalId = the original node id (pre-slug) — needed for carryModeNaturalVars lookup

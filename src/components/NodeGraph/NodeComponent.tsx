@@ -554,6 +554,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   }, [pendingPublishGroupId, node.id, node.type, setPendingPublishGroupId]);
   // Custom Fn card → Publish as node (code source), or a user node's "open source" for code-backed types
   const [publishCode, setPublishCode] = useState<{ code: string; entry?: string; label: string; existingId?: string } | null>(null);
+  // Expression Block card → Publish as node: the block alone, its inputs as sockets
+  const [showPublishNode, setShowPublishNode] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [showExprModal, setShowExprModal] = useState(false);
@@ -2864,6 +2866,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           {node.type === 'exprNode' && (
             <CardButton icon="expr" tint="expr" on={showExprBlockModal} label="Open the Expression Block editor" onClick={() => setShowExprBlockModal(v => !v)} />
           )}
+          {node.type === 'exprNode' && !isInsideLoop && (
+            <CardButton icon="spark" tint="expr" on={showPublishNode} label="Publish as a node type (this block becomes a reusable node; its inputs become sockets)" onClick={() => setShowPublishNode(true)} />
+          )}
           {node.type === 'transformVec' && (
             <CardButton icon="grid" on={showTransformVecModal} label="Open the Transform Vec editor" onClick={() => setShowTransformVecModal(v => !v)} />
           )}
@@ -4042,6 +4047,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {publishCode && (
         <PublishNodeModal source={{ kind: 'code', code: publishCode.code, entry: publishCode.entry, label: publishCode.label }}
           existingId={publishCode.existingId} onClose={() => setPublishCode(null)} />
+      )}
+      {showPublishNode && node.type === 'exprNode' && (
+        <PublishNodeModal source={{ kind: 'node', node }} onClose={() => setShowPublishNode(false)} />
       )}
 
       {/* ── Comment editor (hidden when collapsed) ── */}
