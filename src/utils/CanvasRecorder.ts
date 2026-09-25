@@ -1,4 +1,5 @@
 import { renderKeepAlive } from '../lib/renderKeepAlive';
+import { saveRecording } from './recordingsFolder';
 /**
  * CanvasRecorder — adapted from the provided CanvasRecorder.js
  * Supports two browser-native formats:
@@ -23,6 +24,8 @@ export interface CanvasRecorderOptions {
   verbose?: boolean;
   /** Called if the encoder fails (e.g. frame size beyond its limits). Nothing is downloaded. */
   onError?: (message: string) => void;
+  /** Called with where the file went (a path, or a folder/file name), after it's saved. */
+  onSaved?: (where: string) => void;
 }
 
 export interface RecordStats {
@@ -38,7 +41,7 @@ export interface RecordStats {
 
 export class CanvasRecorder {
   private canvas: HTMLCanvasElement;
-  private config: Required<Omit<CanvasRecorderOptions, 'mimeType' | 'onError'>> & Pick<CanvasRecorderOptions, 'mimeType' | 'onError'>;
+  private config: Required<Omit<CanvasRecorderOptions, 'mimeType' | 'onError' | 'onSaved'>> & Pick<CanvasRecorderOptions, 'mimeType' | 'onError' | 'onSaved'>;
   /** Set when MediaRecorder reported an error or produced no data */
   error: string | null = null;
 
@@ -70,6 +73,7 @@ export class CanvasRecorder {
       verbose:            options.verbose            !== false,
       mimeType:           options.mimeType,
       onError:            options.onError,
+      onSaved:            options.onSaved,
     };
   }
 
@@ -274,36 +278,13 @@ export class CanvasRecorder {
 
   private async _downloadBlob(blob: Blob, filename: string) {
     this._log(`saving ${filename} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
-    // In Tauri, blob: URLs don't work for downloads — use native save dialog instead
-    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    if (isTauri) {
-      try {
-        const { save } = await import('@tauri-apps/plugin-dialog');
-        const { writeFile } = await import('@tauri-apps/plugin-fs');
-        const ext  = filename.split('.').pop() ?? 'mp4';
-        const path = await save({
-          defaultPath: filename,
-          filters: [{ name: 'Video', extensions: [ext] }],
-        });
-        if (path) {
-          const buf = await blob.arrayBuffer();
-          await writeFile(path, new Uint8Array(buf));
-          this._log(`saved to ${path}`);
-        }
-      } catch (err) {
-        this._fail(`Couldn\u2019t save the video: ${err instanceof Error ? err.message : String(err)}`);
-      }
-      return;
+    // Where it goes (a folder, a save dialog or Downloads) is the Recordings setting.
+    try {
+      const where = await saveRecording(blob, filename);
+      if (where) { this._log(`saved to ${where}`); this.config.onSaved?.(where); }
+    } catch (err) {
+      this._fail(`Couldn\u2019t save the recording: ${err instanceof Error ? err.message : String(err)}`);
     }
-    // Browser: standard blob download
-    const url  = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href     = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 100);
   }
 
   private _fail(message: string) {

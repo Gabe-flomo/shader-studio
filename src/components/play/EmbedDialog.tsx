@@ -13,7 +13,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { DEFAULT_EMBED, buildPlaySnippet, type EmbedOptions } from '../../play/exportHtml';
+import { DEFAULT_EMBED, buildPlaySnippet, leftBehind, type EmbedOptions } from '../../play/exportHtml';
+import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
@@ -42,6 +43,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   // Built once per open + option change; the snapshot is taken when the dialog opens.
   const { input, missing } = useMemo(() => playWebInput(title), [playWebInput, title]);
   const snippet = useMemo(() => buildPlaySnippet(input, opts), [input, opts]);
+  const left = useMemo(() => leftBehind(input.play), [input]);
   // Show what the reader recognises: the div, then the mount call; the runtime and the piece are elided.
   const preview = useMemo(() => {
     const lines = snippet.trimEnd().split('\n');
@@ -140,6 +142,20 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
           This graph uses {missing.join(', ')}, which can’t run outside Shader Studio. {missing.length === 1 ? 'It' : 'They'} will be blank or frozen in the export.
         </div>
       )}
+      {left.length > 0 && (
+        <>
+          {label('Won’t come along')}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {left.map(x => (
+              <div key={x.what} style={{ display: 'flex', gap: 8, font: `12px/1.45 ${fontFamily.ui}`, color: tk.text.muted }}>
+                <Icon name="close" size={12} style={{ color: tk.status.warningText, flexShrink: 0, marginTop: 3 }} />
+                <span><b style={{ color: tk.text.secondary }}>{x.what}</b>: {x.why}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {note(`Comes along: the picture, ${bg ? '' : 'controls, '}mappings and layers${input.play.layers.some(l => l.kind === 'image') ? ', images placed as layers' : ''}. Google Fonts load from Google when the page opens.`)}
       </div>
       <SitePreview snippet={snippet} opts={opts} title={title} site={site} device={device} onSite={setSite} onDevice={setDevice} wide={wide} />
       </div>

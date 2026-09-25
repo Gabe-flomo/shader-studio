@@ -46,6 +46,8 @@ export interface PublishUserNodeSpec {
   existingId?: string;
   /** Expose the group's iteration count as a stepped slider (one pre-built variant per count in [min, max]). */
   iterations?: { key: string; label: string; min: number; max: number; default: number };
+  /** Leave the source graph (or GLSL) out: the node can be used but not opened. */
+  hideSource?: boolean;
 }
 
 export type PublishResult =
@@ -213,6 +215,7 @@ export function buildUserNodeDefinition(source: PublishSource, spec: PublishUser
     textures: textures.length ? textures : undefined,
     version: 1 as const,
     savedAt: Date.now(),
+    ...(spec.hideSource ? { sourceHidden: true } : {}),
   };
 
   // ── Hand-written GLSL ────────────────────────────────────────────────────────
@@ -236,7 +239,7 @@ export function buildUserNodeDefinition(source: PublishSource, spec: PublishUser
         // Declarations first: helpers and the entry read them.
         helperFunctions: renamed.preamble ? [renamed.preamble, ...renamed.helpers] : renamed.helpers,
         implicitGlobals,
-        source: { kind: 'code', code: source.code, entry: ports.entry },
+        ...(spec.hideSource ? {} : { source: { kind: 'code' as const, code: source.code, entry: ports.entry } }),
       },
     };
   }
@@ -291,7 +294,7 @@ export function buildUserNodeDefinition(source: PublishSource, spec: PublishUser
       implicitGlobals: flat.implicitGlobals,
       iterations: iterationsOut,
       // A single node publishes as the subgraph that wraps it: "Open source" places that group.
-      source: { kind: 'subgraph', subgraph, iterations },
+      ...(spec.hideSource ? {} : { source: { kind: 'subgraph' as const, subgraph, iterations } }),
     },
   };
 }

@@ -121,6 +121,7 @@ export function PublishNodeModal({ source: initialSource, onClose, onPublished, 
   const [label, setLabel] = useState(existing?.label ?? (isCode ? (existing ? sourceLabel : 'My Node') : sourceLabel) ?? 'My Node');
   const [category, setCategory] = useState(existing?.category ?? USER_NODE_DEFAULT_CATEGORY);
   const [description, setDescription] = useState(existing?.description ?? '');
+  const [shareSource, setShareSource] = useState(!existing?.sourceHidden);
   const [replace, setReplace] = useState(!!existing);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -221,6 +222,7 @@ export function PublishNodeModal({ source: initialSource, onClose, onPublished, 
         ? { key: keyFromLabel(iters.label, taken, 'iterations'), label: iters.label.trim() || 'Iterations', min: iters.min, max: iters.max, default: iters.default }
         : undefined,
       existingId: forPreview ? PREVIEW_ID : (replace && existing ? existing.id : undefined),
+      hideSource: !shareSource,
     };
   };
 
@@ -385,6 +387,13 @@ export function PublishNodeModal({ source: initialSource, onClose, onPublished, 
             <textarea aria-label="Description" rows={3} value={description} onChange={e => setDescription(e.target.value)}
               placeholder={'What does it do? Shown in the node browser and info panel.\nSupports `code`, **bold** and - bullets.'}
               style={{ resize: 'vertical', minHeight: 76, padding: '8px 10px', border: 0, outline: 'none', borderRadius: radius.control, background: tk.bg.field, color: tk.text.primary, font: `500 12.5px/1.45 ${fontFamily.ui}` }} />
+            <Toggle checked={shareSource} onChange={setShareSource} label={isCode ? 'Include the GLSL (others can open and edit it)' : 'Include the source graph (others can open how it’s built)'} />
+            {!shareSource && (
+              <div style={{ color: tk.text.faint, font: `11.5px/1.45 ${fontFamily.ui}` }}>
+                The node works the same, but “{isCode ? 'Edit GLSL' : 'Open source graph'}” won’t be offered to anyone, you included: keep the original {isCode ? 'code' : 'group or graph'} if you’ll want to change it.
+                The compiled GLSL still travels inside the node, so this hides how it’s built rather than locking it.
+              </div>
+            )}
           </div>
           {/* Preview: a render surface, so it keeps its own dark look in both themes */}
           <div title={preview.error ?? 'Live preview of the node with its default values'}

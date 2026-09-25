@@ -81,7 +81,7 @@ async function desktopTarget(base: string): Promise<Target> {
 }
 
 // The File System Access API isn't in TypeScript's DOM types yet.
-interface DirHandle {
+export interface DirHandle {
   name: string;
   getDirectoryHandle(name: string, o?: { create?: boolean }): Promise<DirHandle>;
   getFileHandle(name: string, o?: { create?: boolean }): Promise<{ getFile(): Promise<File>; createWritable(): Promise<{ write(d: string): Promise<void>; close(): Promise<void> }> }>;
@@ -90,7 +90,7 @@ interface DirHandle {
   queryPermission(o: { mode: 'readwrite' }): Promise<PermissionState>;
   requestPermission(o: { mode: 'readwrite' }): Promise<PermissionState>;
 }
-type PickerWindow = Window & { showDirectoryPicker?: (o?: { id?: string; mode?: 'readwrite' }) => Promise<DirHandle> };
+export type PickerWindow = Window & { showDirectoryPicker?: (o?: { id?: string; mode?: 'readwrite' }) => Promise<DirHandle> };
 
 function browserTarget(root: DirHandle): Target {
   const dirOf = async (parts: string[], create: boolean) => {
@@ -120,7 +120,7 @@ function browserTarget(root: DirHandle): Target {
 }
 
 // The picked folder's handle is kept in IndexedDB (handles can't go in localStorage).
-function idb<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest): Promise<T | undefined> {
+export function idb<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest): Promise<T | undefined> {
   return new Promise(resolve => {
     try {
       const open = indexedDB.open('shader-studio-backup', 1);
@@ -303,6 +303,14 @@ export async function chooseBackupFolder(): Promise<void> {
 export async function reconnectBackupFolder(): Promise<void> {
   if (!handle) return;
   if ((await handle.requestPermission({ mode: 'readwrite' })) === 'granted') await connect(browserTarget(handle));
+}
+
+/** Back to the default folder (desktop: Documents/Shader Studio; a browser forgets its picked folder). */
+export async function resetBackupFolder(): Promise<void> {
+  if (status.support === 'desktop') {
+    localStorage.removeItem(DIR_KEY);
+    await connect(await desktopTarget(await defaultDesktopDir()));
+  } else await stopBrowserBackups();
 }
 
 export async function stopBrowserBackups(): Promise<void> {

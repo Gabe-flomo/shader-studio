@@ -318,7 +318,12 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
         <Button size="sm" variant="primary" icon="plus" onClick={onAdd}>{swapMode ? 'Replace with this' : 'Add to graph'}</Button>
       )}
       {userNode && !isGlsl && (
-        <div style={{ display: 'flex', gap: 6, paddingTop: 6, borderTop: `1px solid ${tk.border.subtle}` }}>
+        <div style={{ display: 'flex', gap: 6, paddingTop: 6, borderTop: `1px solid ${tk.border.subtle}`, flexWrap: 'wrap' }}>
+          {userNode.sourceHidden && (
+            <span title="Published without its source graph: it can be used, not opened" style={{ flexBasis: '100%', color: tk.text.faint, fontSize: 11.5 }}>
+              Source not included: this node can be used but not opened.
+            </span>
+          )}
           {userNode.source && (
             <Button size="sm" icon="layoutGraph" style={{ flex: 1 }} title="Place the node's source graph as a group; publish it again to update this node type"
               onClick={() => openUserNodeSource(userNode.id, { x: 200 + Math.random() * 120, y: 120 + Math.random() * 200 })}>

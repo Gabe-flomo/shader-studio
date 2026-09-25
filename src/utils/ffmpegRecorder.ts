@@ -28,6 +28,8 @@ export interface FfmpegEncodeOptions {
   duration: number;
   /** Codec to use */
   codec: FfmpegCodec;
+  /** Where to write the file; asks with a save dialog when unset. */
+  outputPath?: string;
   /**
    * Called once per frame.
    * Implementation should:
@@ -64,7 +66,7 @@ export async function runFfmpegEncode(opts: FfmpegEncodeOptions): Promise<string
             : opts.codec === 'ffv1'   ? 'mkv'
             : 'mp4';
 
-  const outputPath = await save({
+  const outputPath = opts.outputPath ?? await save({
     defaultPath: `shader-export-${Date.now()}.${ext}`,
     filters: [{ name: 'Video', extensions: [ext] }],
   });

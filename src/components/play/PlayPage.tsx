@@ -22,7 +22,7 @@ import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
 import { applyCurve, playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
 import {
-  candidateLabel, collectPlayCandidates, controlExists, controlHelp, findTargetNode, playId, readControlValue, targetParts, type PlayCandidate,
+  candidateLabel, collectPlayCandidates, controlExists, controlHelp, findTargetNode, locateTarget, playId, readControlValue, targetParts, type PlayCandidate, type TargetFate,
 } from '../../play/playControls';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
@@ -387,6 +387,22 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             <PictureRow play={play} onChange={update} />
           </div>
         )}
+        {(() => {
+          // Several controls whose nodes were grouped together: relink them in one go.
+          const moved = play.controls.flatMap(c => {
+            if (controlExists(nodes, c, play) || parseLayerTarget(c.target) || parseActionTarget(c.target)) return [];
+            const f = locateTarget(nodes, c.target);
+            return f.status === 'moved' ? [{ id: c.id, target: f.target }] : [];
+          });
+          if (moved.length < 2) return null;
+          const to = new Map(moved.map(m => [m.id, m.target]));
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
+              <span style={{ flex: 1, minWidth: 0 }}>{moved.length} controls lost their sliders when their nodes were grouped.</span>
+              <Button size="sm" variant="primary" onClick={() => update(p => ({ ...p, controls: p.controls.map(x => (to.has(x.id) ? { ...x, target: to.get(x.id)! } : x)) }))} title="Point each control at its slider inside the group">Relink all</Button>
+            </div>
+          );
+        })()}
         {play.controls.length === 0 ? (
           <EmptyState
             title="No controls yet"
@@ -401,6 +417,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             index={i}
             count={play.controls.length}
             exists={controlExists(nodes, c, play)}
+            fate={controlExists(nodes, c, play) ? undefined : parseLayerTarget(c.target) || parseActionTarget(c.target) ? { status: 'deleted' } : locateTarget(nodes, c.target)}
+            onRelink={target => update(p => ({ ...p, controls: p.controls.map(x => (x.id === c.id ? { ...x, target } : x)) }))}
             help={controlHelp(nodes, c.target, play)}
             source={sourceOf(c)}
             onMap={() => addMapping(c.kind === 'action' ? { kind: 'mouse', axis: 'down' } : { kind: 'mouse', axis: 'x' }, c.id)}
@@ -643,11 +661,15 @@ function PictureRow({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: P
 /** Where a control's value lives: a layer's property or a node's param. */
 interface ControlSource { kind: 'layer' | 'node'; title: string; param: string; within?: string; missing: boolean; go: () => void }
 
-function ControlRow({ control, index, count, exists, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, onMap, onNull, onAmount }: {
+function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, onMap, onNull, onAmount }: {
   control: PlayControl;
   index: number;
   count: number;
   exists: boolean;
+  /** Why it's missing, when it is (moved into a group, deleted…). */
+  fate?: TargetFate;
+  /** Point the control at where its slider is now. */
+  onRelink: (target: string) => void;
   /** The param's hint and the node's comment from the graph, shown on the ⓘ. */
   help: { hint?: string; comment?: string };
   source: ControlSource;
@@ -685,7 +707,7 @@ function ControlRow({ control, index, count, exists, help, source, value, live, 
       onMouseLeave={() => setHover(false)}
       style={{
         padding: '10px 10px 10px 12px', marginTop: 6, borderRadius: radius.card, background: tk.bg.panel, transition: 'box-shadow 0.3s',
-        boxShadow: `inset 0 0 0 1px ${driven ? alpha(tk.accent.base, 0.45) : tk.border.default}`, opacity: exists ? 1 : 0.6,
+        boxShadow: `inset 0 0 0 1px ${driven ? alpha(tk.accent.base, 0.45) : tk.border.default}`, opacity: exists || fate?.status === 'moved' ? 1 : 0.6,
       }}
     >
       <div data-card-bg="1" style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26, marginBottom: 6 }}>
@@ -721,7 +743,7 @@ function ControlRow({ control, index, count, exists, help, source, value, live, 
             <Icon name="bidir" size={11} />{drivenBy[0]}{drivenBy.length > 1 ? ` +${drivenBy.length - 1}` : ''}
           </span>
         )}
-        {!exists && <span style={{ color: tk.status.warningText, font: `600 10.5px ${fontFamily.ui}` }}>node missing</span>}
+        {!exists && <span style={{ color: tk.status.warningText, font: `600 10.5px ${fontFamily.ui}` }}>{fate?.status === 'moved' ? 'moved' : 'missing'}</span>}
         <span style={{ display: 'flex', gap: 0, visibility: hover || touch ? 'visible' : 'hidden' }}>
           <IconButton icon="chevU" label="Move up" size="sm" disabled={index === 0} tooltip={false} onClick={() => onMove(-1)} />
           <IconButton icon="chevD" label="Move down" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />
@@ -757,6 +779,16 @@ function ControlRow({ control, index, count, exists, help, source, value, live, 
             />
           </div>
           {hover && !touch && !details && <RangeEditor min={control.min} max={control.max} onRange={onRange} />}
+        </div>
+      )}
+      {!exists && fate && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 6px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            {fate.status === 'moved' ? <>Its node was grouped: it’s now inside <b>{fate.groups.join(' › ')}</b>.</>
+              : fate.status === 'param' ? 'Its node is still there, but not this slider (the node changed, or the slider is wired or hidden).'
+              : source.kind === 'layer' ? 'Its layer was deleted.' : 'Its node was deleted.'}
+          </span>
+          {fate.status === 'moved' && <Button size="sm" variant="primary" onClick={() => onRelink(fate.target)} title="Point this control at the slider in its new place">Relink</Button>}
         </div>
       )}
       {details && (

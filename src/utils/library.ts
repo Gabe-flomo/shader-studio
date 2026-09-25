@@ -302,3 +302,54 @@ export function importLibrary(s: LibrarySnapshot, kv: KV = localKV): ImportResul
 
 /** Events the lists listen for, so imported things show up without a reload where possible. */
 export const LIBRARY_REFRESH_EVENTS = ['saved-graphs-changed', 'assetbrowser-folders-changed', 'customfn-changed', 'exprpreset-changed', 'transformpreset-changed', 'keyframepreset-changed'];
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+export type LibraryKind = 'graphs' | 'versions' | 'group presets' | 'functions' | 'expressions' | 'transforms' | 'keyframe presets' | 'published nodes' | 'palettes' | 'glsl shaders' | 'settings';
+
+export interface LibraryStats {
+  /** Per kind: how many and how much space (characters, about bytes: saved work is mostly plain text). */
+  kinds: Record<LibraryKind, { count: number; size: number }>;
+  /** Saved graphs that carry a Play setup (controls, mappings or layers). */
+  playSetups: number;
+  total: number;
+}
+
+/** Most browsers give a site about 5 million characters of this storage; when it's full, saving fails. */
+export const STORAGE_LIMIT = 5 * 1024 * 1024;
+
+export function libraryStats(s: LibrarySnapshot): LibraryStats {
+  const kinds = Object.fromEntries((['graphs', 'versions', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'palettes', 'glsl shaders', 'settings'] as LibraryKind[]).map(k => [k, { count: 0, size: 0 }])) as LibraryStats['kinds'];
+  let playSetups = 0, total = 0;
+  for (const [k, v] of Object.entries(s.items)) {
+    const size = k.length + v.length;
+    total += size;
+    let kind: LibraryKind, count = 1;
+    if (isGraphKey(k, v)) {
+      kind = 'graphs';
+      const p = parse(v) as { play?: { controls?: unknown[]; mappings?: unknown[]; layers?: unknown[] } } | undefined;
+      if (p?.play && ((p.play.controls?.length ?? 0) + (p.play.mappings?.length ?? 0) + (p.play.layers?.length ?? 0)) > 0) playSetups++;
+    } else if (k.startsWith(VERSIONS_PREFIX)) {
+      kind = 'versions';
+      const h = parse(v);
+      count = Array.isArray(h) ? h.length : 0;
+    } else if (k === 'shader-studio:palette-presets' || k === 'shader-studio:glsl-shaders') {
+      kind = k === 'shader-studio:palette-presets' ? 'palettes' : 'glsl shaders';
+      const a = parse(v);
+      count = Array.isArray(a) ? a.length : 0;
+    } else {
+      const found = KINDS.find(x => k.startsWith(x.prefix));
+      kind = found ? found.dir as LibraryKind : 'settings';
+    }
+    kinds[kind].count += count;
+    kinds[kind].size += size;
+  }
+  return { kinds, playSetups, total };
+}
+
+/** "12 KB", "1.4 MB" */
+export function formatSize(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}

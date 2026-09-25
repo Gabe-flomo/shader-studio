@@ -92,6 +92,9 @@ export interface UserNodeDefinition {
   textures?: UserNodeTexture[];
   /** Kept so the node can be re-opened in the builder. Not used by the compiler. */
   source?: UserNodeSource;
+  /** Published without its source: whoever has the node can use it but not open
+   *  the graph or GLSL it was built from (`source` is then left out). */
+  sourceHidden?: boolean;
   version: 1;
   savedAt: number;
 }

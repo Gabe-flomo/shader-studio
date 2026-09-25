@@ -140,4 +140,16 @@ describe('publishing a single node', () => {
     expect(built.ok, built.ok ? '' : built.error).toBe(true);
     if (built.ok) expect(built.def.inputs).toEqual([]);
   });
+  it('can leave its source out: same function, nothing to open', () => {
+    const source: PublishSource = { kind: 'node', node: exprBlock() };
+    const open = buildUserNodeDefinition(source, { ...specFor(source, 'Stripes'), existingId: 'un_open' });
+    const hidden = buildUserNodeDefinition(source, { ...specFor(source, 'Stripes'), existingId: 'un_open', hideSource: true });
+    expect(open.ok && hidden.ok).toBe(true);
+    if (!open.ok || !hidden.ok) return;
+    expect(open.def.source?.kind).toBe('subgraph');
+    expect(hidden.def.source).toBeUndefined();
+    expect(hidden.def.sourceHidden).toBe(true);
+    expect(hidden.def.functionCode).toBe(open.def.functionCode);
+    expect(JSON.stringify(hidden.def)).not.toContain('"subgraph"');
+  });
 });

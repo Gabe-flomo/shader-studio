@@ -11,6 +11,8 @@ import { LoadGraphButton, SaveGraphButton } from './DesktopTopNav';
 import { reportFileResult, reportGlslImport } from './reportFileResult';
 import { isPlayRecordEmpty } from '../../types/play';
 import { exportEverything, importEverything } from '../../utils/libraryActions';
+import { Modal } from '../ui/Modal';
+import { LibraryPanel } from './LibraryPanel';
 
 /**
  * Phone top bar (Mobile board): logo (back to Studio), the Studio | Play switch, undo/redo,
@@ -35,6 +37,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
   const hasPlay = useNodeGraphStore(s => !isPlayRecordEmpty(s.play));
   const moreRef = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [library, setLibrary] = useState(false);
 
   return (
     <div style={{
@@ -106,6 +109,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             { label: 'Import a graph', icon: 'import', onSelect: async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); } },
             { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
             { label: 'Export this graph', icon: 'export', onSelect: async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); } },
+            { label: 'Library…', icon: 'folder', hint: 'What’s saved, export and import, backup and recordings', onSelect: () => setLibrary(true) },
             { label: 'Export everything', icon: 'export', hint: 'Every graph, preset and setting as one ZIP', onSelect: () => { void exportEverything(); } },
             { label: 'Import a library', icon: 'import', hint: 'A library ZIP: adds to what you have', onSelect: () => { void importEverything(); } },
             'separator',
@@ -116,6 +120,11 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             ...(onClear ? ['separator' as const, { label: 'Clear the graph…', icon: 'trash' as const, danger: true, onSelect: onClear }] : []),
           ]}
         />
+      )}
+      {library && (
+        <Modal title="Library" subtitle="Everything saved in this browser" icon="folder" onClose={() => setLibrary(false)} width={440}>
+          <div style={{ padding: '14px 16px 18px' }}><LibraryPanel inCard /></div>
+        </Modal>
       )}
     </div>
   );

@@ -249,3 +249,35 @@ export function playId(prefix: 'ctl' | 'map' | 'layer' | 'act'): string {
   seq += 1;
   return `${prefix}_${Date.now().toString(36)}_${seq.toString(36)}`;
 }
+
+/** What became of a graph control's slider: still there, moved into a group, or gone. */
+export type TargetFate =
+  | { status: 'ok' }
+  | { status: 'moved'; target: string; groups: string[] }
+  | { status: 'param' }
+  | { status: 'deleted' };
+
+/**
+ * Where a control's node is now. A node wrapped into a group (or a group
+ * into another) keeps its id, so it's found by id at its new depth, and the
+ * control can be pointed at the new path (group::…::node::param).
+ */
+export function locateTarget(nodes: GraphNode[], target: string): TargetFate {
+  if (parseLayerTarget(target) || parseActionTarget(target)) return { status: 'ok' };
+  if (readControlValue(nodes, target) !== undefined) return { status: 'ok' };
+  const parts = target.split('::');
+  const nodeId = parts[parts.length - 2], key = parts[parts.length - 1];
+  const find = (list: GraphNode[], path: GraphNode[]): { node: GraphNode; path: GraphNode[] } | null => {
+    for (const n of list) {
+      if (n.id === nodeId) return { node: n, path };
+      const sub = n.params.subgraph as SubgraphData | undefined;
+      if (sub?.nodes) { const f = find(sub.nodes, [...path, n]); if (f) return f; }
+    }
+    return null;
+  };
+  const hit = find(nodes, []);
+  if (!hit) return { status: 'deleted' };
+  const moved = [...hit.path.map(g => g.id), nodeId, key].join('::');
+  if (moved === target || readControlValue(nodes, moved) === undefined) return { status: 'param' };
+  return { status: 'moved', target: moved, groups: hit.path.map(labelOf) };
+}

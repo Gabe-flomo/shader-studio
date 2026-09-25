@@ -17,6 +17,8 @@ import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
 import { playOverlay } from '../play/overlay';
 import { midiEngine } from '../lib/midiEngine';
 import { formatDuration } from '../lib/midiFile';
+import { recordingBaseName, recordingPath, saveRecording } from '../utils/recordingsFolder';
+import { RecordingsSetting } from './shell/RecordingsSetting';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
@@ -121,7 +123,8 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const [codec, setCodec]           = useState<FfmpegCodec>('h264');
   const [mode, setMode]             = useState<RecordMode>(inTauri ? 'ffmpeg' : 'mediarecorder');
-  const [filename, setFilename]     = useState('shader-export');
+  // Named after the saved graph ("shader graph" when it isn't saved); rename it here.
+  const [filename, setFilename]     = useState(() => recordingBaseName(useNodeGraphStore.getState().currentGraph?.name));
 
   const [state, setState]                       = useState<RecordState>('idle');
   const [captureProgress, setCaptureProgress]   = useState(0);
@@ -300,7 +303,8 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
         duration: manualStop ? null : duration,
         videoBitsPerSecond: bitrate * 1_000_000,
         mimeType: current.format.mimeType,
-        name: filename || `shader-export-${Date.now()}`,
+        name: filename || 'shader graph',
+        onSaved: where => setOutputPath(where),
         verbose: false,
         autoDownload: true,
         onError: (msg) => setErrorMsg(msg),
@@ -365,7 +369,11 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
     const startT = performance.now();
 
     try {
+      const ffExt = codec === 'prores' ? 'mov' : codec === 'ffv1' ? 'mkv' : 'mp4';
+      const target = await recordingPath(`${filename || 'shader graph'}.${ffExt}`);
+      if (!target) { restoreScale(); setState('idle'); return; }
       const run = runFfmpegEncode({
+        outputPath: target,
         width: w,
         height: h,
         fps,
@@ -440,17 +448,10 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
 
   const handleScreenshot = () => {
     if (!canvas) return;
-    const name = filename || `screenshot-${Date.now()}`;
+    const name = filename || 'shader graph';
     (playOverlay.hasLayers() ? playOverlay.snapshot(canvas) : canvas).toBlob(blob => {
       if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${name}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 100);
+      saveRecording(blob, `${name}.png`).then(where => { if (where) setOutputPath(where); }, e => setErrorMsg(String(e)));
     }, 'image/png');
   };
 
@@ -651,8 +652,12 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
             )}
 
             <Section label="File name">
-              <Field mono value={filename} onChange={e => setFilename(e.target.value)} placeholder="shader-export" suffix={`.${ext}`} aria-label="File name" />
-              {mode === 'mediarecorder' && <Help>Records in real time. The file downloads when recording stops.</Help>}
+              <Field mono value={filename} onChange={e => setFilename(e.target.value)} placeholder="shader graph" suffix={`.${ext}`} aria-label="File name" />
+              {mode === 'mediarecorder' && <Help>Records in real time and saves when recording stops. A name that’s taken in the folder gets (2), (3)…</Help>}
+            </Section>
+
+            <Section label="Save to">
+              <RecordingsSetting />
             </Section>
           </>
         )}

@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import { buildLibraryZip, describeSnapshot, importLibrary, mergeJson, readableFiles, readLibrary, takeSnapshot, type KV } from '../library';
+import { buildLibraryZip, formatSize, libraryStats, describeSnapshot, importLibrary, mergeJson, readableFiles, readLibrary, takeSnapshot, type KV } from '../library';
 
 function memKV(init: Record<string, string> = {}): KV & { data: Map<string, string> } {
   const data = new Map(Object.entries(init));
@@ -95,5 +95,23 @@ describe('library import', () => {
   it('merges lists by id and maps key by key, yours winning', () => {
     expect(mergeJson([{ id: 'a', v: 1 }], [{ id: 'a', v: 2 }, { id: 'b' }])).toEqual([{ id: 'a', v: 1 }, { id: 'b' }]);
     expect(mergeJson({ x: 1, y: { a: 1 } }, { x: 2, y: { b: 2 }, z: 3 })).toEqual({ x: 1, y: { a: 1, b: 2 }, z: 3 });
+  });
+});
+
+describe('library stats', () => {
+  it('counts each kind and adds up the size', () => {
+    const st = libraryStats(takeSnapshot(memKV(SAMPLE)));
+    expect(st.kinds.graphs.count).toBe(2);
+    expect(st.kinds.versions.count).toBe(1);
+    expect(st.kinds['published nodes'].count).toBe(1);
+    expect(st.kinds.palettes.count).toBe(1);
+    const sum = Object.values(st.kinds).reduce((n, k) => n + k.size, 0);
+    expect(st.total).toBe(sum);
+    expect(st.total).toBeGreaterThan(0);
+  });
+
+  it('writes sizes the way people read them', () => {
+    expect(formatSize(512)).toMatch(/B$/);
+    expect(formatSize(1.4 * 1024 * 1024)).toBe('1.4 MB');
   });
 });

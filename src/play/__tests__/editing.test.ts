@@ -9,7 +9,7 @@ import { klGlyphList, klParseFontUrl } from '../kit/layers.js';
 import { addNullFor, driveWithNull, duplicateLayer, pairedKey, renameLayer, resetLayer } from '../../components/play/layerOps';
 import { defaultLayer, emptyPlayRecord, type PlayLayer } from '../../types/play';
 import { applySolo } from '../../components/play/playUi';
-import { candidateFor, findTargetNode, readControlValue } from '../playControls';
+import { candidateFor, findTargetNode, locateTarget, readControlValue } from '../playControls';
 
 const W = 1600, H = 900;
 const box: Bounds = { x: 0.5, y: 0.5, w: 0.4, h: 0.2, rot: 0, uniform: false, turns: true };
@@ -213,5 +213,26 @@ describe('controls inside groups', () => {
     expect(candidateFor(cands, 'g0', 'g1::c1::radius')?.target).toBe('g0::g1::c1::radius');
     expect(candidateFor(cands, 'g0', 'c1::radius')).toBeUndefined();
     expect(candidateFor(cands, 'c1', 'radius')?.target).toBe('g0::g1::c1::radius');
+  });
+});
+
+describe('a control whose node was grouped', () => {
+  const leaf = { id: 'c1', type: 'circleSDF', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { radius: 0.3 } };
+  const group = { id: 'g1', type: 'group', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { label: 'Rings', subgraph: { nodes: [leaf], edges: [] } } };
+  const nodes = [group] as unknown as import('../../types/nodeGraph').GraphNode[];
+
+  it('says where it went and how to relink', () => {
+    const f = locateTarget(nodes, 'c1::radius');
+    expect(f.status).toBe('moved');
+    if (f.status === 'moved') {
+      expect(f.target).toBe('g1::c1::radius');
+      expect(readControlValue(nodes, f.target)).toBe(0.3);
+    }
+  });
+
+  it('tells a deleted node and a lost slider apart', () => {
+    expect(locateTarget(nodes, 'gone::radius').status).toBe('deleted');
+    expect(locateTarget(nodes, 'c1::nope').status).toBe('param');
+    expect(locateTarget(nodes, 'g1::c1::radius').status).toBe('ok');
   });
 });

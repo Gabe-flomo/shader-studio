@@ -83,6 +83,32 @@ export function unsupportedFeatures(f: GraphFeatures): string[] {
   return out;
 }
 
+/** Something in the Play setup the web page leaves out, and why. */
+export interface LeftBehind { what: string; why: string }
+
+const AUDIO_BAND_READS = new Set(['level', 'bass', 'lowmid', 'highmid', 'treble']);
+
+/**
+ * What the Play setup has that the exported page won't carry: a loaded song
+ * (never saved, even in the app), the MIDI file, audio-layer band mappings
+ * (measured by the app's player only) and the notes. Images placed as layers
+ * are data URLs and do travel.
+ */
+export function leftBehind(play: PlayRecord): LeftBehind[] {
+  const out: LeftBehind[] = [];
+  for (const l of play.layers) {
+    if (l.kind === 'audio' && l.input === 'file') {
+      out.push({ what: l.fileName ? `The song “${l.fileName}” (${l.label})` : `The song in ${l.label}`, why: 'Songs aren’t saved with a setup, so the page listens to the visitor’s microphone instead, after they click Enable.' });
+    }
+  }
+  if (play.midiFile) out.push({ what: `The MIDI file “${play.midiFile.name}”`, why: 'The web player doesn’t play MIDI files yet: what it drives stays where you left it. Record a video to keep the performance.' });
+  const audioIds = new Set(play.layers.filter(l => l.kind === 'audio').map(l => l.id));
+  const bands = play.mappings.filter(m => m.source.kind === 'sensor' && audioIds.has(m.source.layerId) && AUDIO_BAND_READS.has(m.source.read)).length;
+  if (bands) out.push({ what: `${bands} mapping${bands === 1 ? '' : 's'} from an audio layer’s bands`, why: 'Band readings come from the app’s player only; use Live audio mappings for the web.' });
+  if (play.notes?.trim()) out.push({ what: 'Your notes', why: 'They’re for you and learners in the app; the page never shows them.' });
+  return out;
+}
+
 /** JSON that is safe inside a <script> element. */
 function scriptJson(value: unknown): string {
   return JSON.stringify(value).replace(/<\//g, '<\\/').replace(/<!--/g, '<\\!--').replace(/[\u2028\u2029]/g, c => c === '\u2028' ? '\\u2028' : '\\u2029');

@@ -4,8 +4,8 @@
  * script element early, and the mode and placement the user picked.
  */
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_EMBED, buildPlayHtml, buildPlaySnippet, unsupportedFeatures, type PlayHtmlInput } from '../exportHtml';
-import { emptyPlayRecord } from '../../types/play';
+import { DEFAULT_EMBED, buildPlayHtml, buildPlaySnippet, leftBehind, unsupportedFeatures, type PlayHtmlInput } from '../exportHtml';
+import { defaultLayer, emptyPlayRecord, type PlayLayer, type PlayRecord } from '../../types/play';
 
 const input = (): PlayHtmlInput => ({
   title: 'My <Piece>', fragmentShader: 'precision highp float; void main(){ gl_FragColor = vec4(1.0); }',
@@ -77,5 +77,27 @@ describe('mock websites for the preview', () => {
       expect(section.indexOf(SNIP)).toBeGreaterThan(section.indexOf('<nav'));
     }
     expect(buildMockSite('blog', SNIP, { mode: 'player', placement: 'section' }, '<b>')).toContain('&lt;b&gt;');
+  });
+});
+
+describe('what the web page leaves out', () => {
+  it('lists a loaded song, the MIDI file, audio-band mappings and notes', () => {
+    const audio = { ...defaultLayer('audio', 'a', 'Beat'), input: 'file', fileName: 'track.mp3' } as PlayLayer;
+    const play = {
+      ...emptyPlayRecord(),
+      layers: [audio],
+      midiFile: { name: 'lead.mid', data: '', loop: false, offset: 0 },
+      mappings: [{ id: 'm', controlId: 'c', enabled: true, source: { kind: 'sensor', layerId: 'a', read: 'bass', otherId: '' } }] as unknown as PlayRecord['mappings'],
+      notes: 'hi',
+    } as PlayRecord;
+    const what = leftBehind(play).map(x => x.what).join(' | ');
+    expect(what).toContain('track.mp3');
+    expect(what).toContain('lead.mid');
+    expect(what).toContain('1 mapping');
+    expect(what).toContain('notes');
+  });
+
+  it('has nothing to say about a plain setup', () => {
+    expect(leftBehind(emptyPlayRecord())).toEqual([]);
   });
 });
