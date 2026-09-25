@@ -45,7 +45,7 @@ export const PaletteNode: NodeDefinition = {
   type: 'palette',
   label: 'Palette',
   category: 'Color',
-  description: 'Cosine-based color palette. Wire a gradient or distance to Angle to paint with it, and Time to Angle offset to animate it. `Scale` stretches the Angle and `Speed` scales the offset, so the usual Length → Multiply → Add(Time) → Palette chain is just Length → Palette with Time on Angle offset.',
+  description: 'Cosine-based color palette. Wire a gradient or distance to Angle to paint with it, and Time to Angle offset to animate it. `Scale` stretches the Angle and `Speed` scales the offset, so the usual Length → Multiply → Add(Time) → Palette chain is just Length → Palette with Time on Angle offset. The tools under the sliders save your own presets, paste a palette from hex codes or a link, and turn this into a Stops Palette (→ Stops) so each colour can be edited.',
   // Offset/Amplitude/Frequency/Phase are one vec3 socket each (they used to be twelve
   // per-channel floats); unwired, each falls back to its colour param below. Older graphs keep any
   // per-channel wire they had, and it still drives its channel (see legacyLabels.ts).
@@ -166,22 +166,34 @@ export const ColorizeNode: NodeDefinition = {
   },
 };
 
+/** The cosine coefficients a Palette node is using: its selected preset, or its own sliders. */
+export function paletteNodeCoeffs(params: Record<string, unknown>): { offset: [number, number, number]; amplitude: [number, number, number]; freq: [number, number, number]; phase: [number, number, number] } {
+  const preset = paletteNodePreset(params.preset);
+  const v = (key: 'offset' | 'amplitude' | 'freq' | 'phase', fallback: [number, number, number]): [number, number, number] => {
+    const raw = preset ? preset[key] : params[key];
+    return Array.isArray(raw) && raw.length >= 3 && raw.every(n => typeof n === 'number') ? [raw[0], raw[1], raw[2]] : fallback;
+  };
+  return { offset: v('offset', [0.5, 0.5, 0.5]), amplitude: v('amplitude', [0.5, 0.5, 0.5]), freq: v('freq', [1, 1, 1]), phase: v('phase', [0, 0.33, 0.67]) };
+}
+
 // ─── Stops Palette ───────────────────────────────────────────────────────────
 // A palette built from colour stops instead of cosine coefficients. Takes the
 // same Angle / Angle offset / Scale / Speed as Palette, so Time on Angle
 // offset cycles it; Loop wraps the last stop back to the first so it cycles
 // without a seam.
-export const STOP_PALETTE_MAX = 8;
+export const STOP_PALETTE_MAX = 12;
 const STOP_PALETTE_DEFAULTS: number[][] = [
   [0.16, 0.07, 0.35], [0.72, 0.13, 0.52], [0.98, 0.45, 0.22], [0.99, 0.84, 0.38],
   [0.18, 0.62, 0.67], [0.35, 0.80, 0.45], [0.20, 0.35, 0.85], [0.95, 0.95, 0.95],
+  [0.55, 0.20, 0.20], [0.90, 0.60, 0.70], [0.40, 0.30, 0.15], [0.10, 0.10, 0.12],
 ];
 export const StopPaletteNode: NodeDefinition = {
   type: 'stopPalette',
-  label: 'Stops Palette', aliases: ['palette creator', 'palette builder', 'custom palette', 'color stops', 'colour stops', 'gradient palette', 'cycle colors'],
+  label: 'Stops Palette', aliases: ['palette creator', 'palette builder', 'custom palette', 'color stops', 'colour stops', 'gradient palette', 'cycle colors', 'paste palette', 'hex palette', 'coolors'],
   category: 'Color', subcategory: 'Palette',
   description:
-    'A palette made from your own colour stops. Angle picks where on it to sample; wire Time into Angle offset to cycle through the colours. ' +
+    'A palette made from your own colour stops (up to 12). Angle picks where on it to sample; wire Time into Angle offset to cycle through the colours. ' +
+    'Paste a palette from anywhere (hex codes, a coolors.co link, rgb() values) and save your own presets from the tools under the stops. ' +
     'Loop joins the last stop back to the first so cycling never jumps; Mirror runs there and back; Clamp holds the ends. Blend chooses smooth, linear or hard bands.',
   inputs: {
     value: { type: 'float', label: 'Angle', defaultValue: 0, hint: 'Where on the palette to sample. 0 → 1 goes once through every stop.' },
@@ -193,7 +205,7 @@ export const StopPaletteNode: NodeDefinition = {
     ...Object.fromEntries(STOP_PALETTE_DEFAULTS.map((c, i) => [`color${i}`, c])),
   },
   paramDefs: {
-    stops: { label: 'Stops', type: 'select', hint: 'How many colours. Stops are evenly spaced along the palette.', options: [2, 3, 4, 5, 6, 7, 8].map(n => ({ value: String(n), label: String(n) })) },
+    stops: { label: 'Stops', type: 'select', hint: 'How many colours. Stops are evenly spaced along the palette. Paste a palette (below) to fill them from hex codes or a link.', options: Array.from({ length: STOP_PALETTE_MAX - 1 }, (_, i) => ({ value: String(i + 2), label: String(i + 2) })) },
     wrap:  { label: 'Wrap', type: 'select', hint: 'Past the last stop: Loop blends back to the first (seamless cycling), Mirror runs back down, Clamp holds the end colours.', options: [
       { value: 'loop', label: 'Loop' }, { value: 'mirror', label: 'Mirror' }, { value: 'clamp', label: 'Clamp' },
     ] },

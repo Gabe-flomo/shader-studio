@@ -81,6 +81,7 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
 import { ColorSwatch } from '../ui/ColorPicker';
+import { PaletteTools } from './PaletteTools';
 import { toRgb } from '../../lib/colorMath';
 import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip } from './NodeCardParts';
 
@@ -3920,6 +3921,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
           return null;
         })}
+
+        {/* ── Palette tools: presets, paste, copy / convert ── */}
+        {!collapsed && (node.type === 'palette' || node.type === 'stopPalette') && <PaletteTools node={node} />}
 
         {/* ── CustomFn / ExprNode slider params (hidden when collapsed) ── */}
         {!collapsed && (node.type === 'customFn' || node.type === 'exprNode') && (() => {
