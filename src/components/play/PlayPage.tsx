@@ -160,6 +160,31 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   }, [update]);
 
   const [drawerOpen, setDrawerOpen] = useState(true);
+  // Phones: Controls and Mappings are tabs instead of stacked panes.
+  const [tab, setTab] = useState<'controls' | 'mappings'>('controls');
+  // Desktop: the drawer's height, dragged from its top edge and remembered.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [drawerH, setDrawerH] = useState<number>(() => {
+    try { const v = parseInt(localStorage.getItem(DRAWER_HEIGHT_KEY) ?? '', 10); return Number.isFinite(v) && v > 0 ? v : 340; } catch { return 340; }
+  });
+  const startDrawerResize = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = drawerH;
+    const rootH = rootRef.current?.clientHeight ?? 800;
+    let next = startH;
+    const onMove = (ev: PointerEvent) => {
+      next = Math.max(120, Math.min(rootH - 180, startH + (startY - ev.clientY)));
+      setDrawerH(next);
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      try { localStorage.setItem(DRAWER_HEIGHT_KEY, String(Math.round(next))); } catch { /* preference only */ }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [drawerH]);
   // Audio Input nodes a mapping can read a band from.
   const audioNodes = useMemo<AudioNodeOption[]>(() => nodes.filter(n => n.type === 'audioInput').map(n => ({
     id: n.id,
@@ -168,8 +193,22 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   })), [nodes]);
 
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
-      <PanelHeader
+    <div ref={rootRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
+      {compact && (
+        <div style={{ flexShrink: 0, padding: '8px 12px 2px', background: tk.bg.panel }}>
+          <Segmented
+            fill
+            ariaLabel="Play section"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'controls', label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` },
+              { value: 'mappings', label: `Mappings${play.mappings.length ? ` · ${play.mappings.length}` : ''}` },
+            ]}
+          />
+        </div>
+      )}
+      {(!compact || tab === 'controls') && <PanelHeader
         title="Controls"
         hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
         extra={(
@@ -179,13 +218,13 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
             <AddControlButton candidates={candidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} />
           </>
         )}
-      />
+      />}
       {/* The picture's shape: the same setting the export dialog uses, so what you see is what you export. */}
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel }}>
         <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
         <Select ariaLabel="Canvas shape" value={previewAspect} options={PREVIEW_ASPECTS.map(a => ({ value: a.id, label: a.id === 'free' ? 'Free (fill the panel)' : `${a.label} · ${a.hint}` }))} onChange={v => setPreviewAspect(v as typeof previewAspect)} height={26} style={{ flex: 1, minWidth: 0 }} />
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+      {(!compact || tab === 'controls') && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {play.controls.length === 0 ? (
           <EmptyState
             title="No controls yet"
@@ -217,21 +256,25 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
             onRemove={() => update(p => ({ ...p, controls: p.controls.filter(x => x.id !== c.id), mappings: p.mappings.filter(m => m.controlId !== c.id) }))}
           />
         ))}
-      </div>
+      </div>}
 
-      <MappingsDrawer
+      {(!compact || tab === 'mappings') && <MappingsDrawer
         play={play}
-        open={drawerOpen}
+        mode={compact ? 'tab' : 'drawer'}
+        height={drawerH}
+        onResizeStart={startDrawerResize}
+        open={compact || drawerOpen}
         onToggle={() => setDrawerOpen(o => !o)}
         onAdd={addMapping}
         onUpdate={(id, patch) => update(p => ({ ...p, mappings: p.mappings.map(m => m.id === id ? { ...m, ...patch } : m) }))}
         onRemove={id => update(p => ({ ...p, mappings: p.mappings.filter(m => m.id !== id) }))}
-        compact={compact}
         audioNodes={audioNodes}
-      />
+      />}
     </div>
   );
 }
+
+const DRAWER_HEIGHT_KEY = 'shader-studio:play:drawerHeight';
 
 // ── Header + empty state ─────────────────────────────────────────────────────
 
@@ -432,14 +475,17 @@ function ColourPad({ value, disabled, onChange }: { value: number[]; disabled: b
 
 interface AudioNodeOption { id: string; label: string; bands: number }
 
-function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compact, audioNodes }: {
+function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, audioNodes }: {
   play: PlayRecord;
+  /** `drawer`: folds under the controls with a draggable top edge. `tab`: fills the page (phones). */
+  mode: 'drawer' | 'tab';
+  height: number;
+  onResizeStart: (e: React.PointerEvent) => void;
   open: boolean;
   onToggle: () => void;
   onAdd: (source: PlaySource, controlId?: string) => void;
   onUpdate: (id: string, patch: Partial<PlayMapping>) => void;
   onRemove: (id: string) => void;
-  compact: boolean;
   audioNodes: AudioNodeOption[];
 }) {
   const tk = useTokens();
@@ -472,12 +518,23 @@ function MappingsDrawer({ play, open, onToggle, onAdd, onUpdate, onRemove, compa
   const allCollapsed = play.mappings.length > 0 && play.mappings.every(m => collapsed.has(m.id));
 
   return (
-    <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', maxHeight: open ? (compact ? '55%' : '50%') : undefined, borderTop: `1px solid ${tk.border.default}` }}>
+    <div style={mode === 'tab'
+      ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }
+      : { position: 'relative', flexShrink: 0, display: 'flex', flexDirection: 'column', height: open ? height : undefined, maxHeight: '85%', borderTop: `1px solid ${tk.border.default}` }}>
+      {mode === 'drawer' && open && (
+        <div
+          onPointerDown={onResizeStart}
+          title="Drag to resize the mappings"
+          style={{ position: 'absolute', left: 0, right: 0, top: -4, height: 9, cursor: 'row-resize', zIndex: 2 }}
+          onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.background = alpha(tk.accent.base, 0.25))}
+          onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.background = 'transparent')}
+        />
+      )}
       <PanelHeader
         title="Mappings"
         hint={play.mappings.length ? `${play.mappings.length}` : undefined}
-        chevron={open ? 'down' : 'up'}
-        onClick={onToggle}
+        chevron={mode === 'drawer' ? (open ? 'down' : 'up') : undefined}
+        onClick={mode === 'drawer' ? onToggle : undefined}
         extra={open && (
           <>
             {play.mappings.length > 1 && (
