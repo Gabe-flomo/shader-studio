@@ -11450,7 +11450,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     play: {
       version: 1,
       layers: [
-        { id: 'dust', kind: 'particles', label: 'Dust', visible: true, count: 500, speed: 0.8, size: 1.5, opacity: 0.55, color: [1, 1, 1], colorFromPicture: true, mode: 'climb', turns: 1, trail: 0.7, blend: 'add' },
+        { id: 'dust', kind: 'particles', label: 'Dust', visible: true, count: 700, speed: 0.8, size: 1.5, opacity: 0.8, color: [1, 0.85, 0.95], colorFromPicture: false, mode: 'flow', turns: 1.5, trail: 0.75, blend: 'screen' },
       ],
       controls: [
         { id: 'threshold', target: 'thr::threshold', kind: 'float', label: 'Blob threshold', min: 0.2, max: 1.2 },
