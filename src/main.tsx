@@ -9,8 +9,10 @@ import { nodePreviewRenderer } from './lib/nodePreviewRenderer'
 import { loadExampleGraphs } from './store/exampleIndex'
 import { resolveNodeAliases } from './nodes/definitions/aliases'
 import { getNodeDefinition } from './nodes/definitions'
+import { watchForStaleBuild } from './lib/staleBuild'
 
 const root = createRoot(document.getElementById('root')!)
+watchForStaleBuild()
 
 // Dev-only: the store on window, so scripted checks (and the in-app browser) can load examples and
 // read state without clicking through the UI. Not bundled in production.

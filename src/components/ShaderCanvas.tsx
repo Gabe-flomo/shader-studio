@@ -7,6 +7,7 @@ import { audioEngine } from '../lib/audioEngine';
 import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
 import { inputBus } from '../lib/inputBus';
 import { playEngine } from '../lib/playEngine';
+import { midiEngine } from '../lib/midiEngine';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
 import { applySolo, usePlayUi } from './play/playUi';
@@ -1057,6 +1058,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 ||
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
+        || midiEngine.hasFile()
       )) || playOverlay.isAnimated() || playEngine.isAnimating();
       const doRender = dynamic || needsRender;
       if (doRender) {

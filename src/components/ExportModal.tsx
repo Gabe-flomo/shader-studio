@@ -15,6 +15,8 @@ import { RulerSlider } from './ui/RulerSlider';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
 import { playOverlay } from '../play/overlay';
+import { midiEngine } from '../lib/midiEngine';
+import { formatDuration } from '../lib/midiFile';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
@@ -108,6 +110,11 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const [fps, setFps]               = useState(60);
   const [duration, setDuration]     = useState(5);
   const [manualStop, setManualStop] = useState(false);
+  // A Play MIDI file: record its whole length, from the top, so the video lines up with the song.
+  const midiFile = useNodeGraphStore(s => s.play.midiFile);
+  const midiInfo = midiFile ? midiEngine.fileInfo() : null;
+  const midiLength = midiFile && midiInfo && 'duration' in midiInfo ? Math.ceil(midiInfo.duration + Math.max(0, midiFile.offset) + 0.5) : 0;
+  const [fromTop, setFromTop] = useState(true);
   const [bitrate, setBitrate]       = useState(50); // Mbps
   const [resId, setResId]           = useState('preview');
   const previewAspect    = useNodeGraphStore(s => s.previewAspect);
@@ -405,6 +412,11 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   // ── Unified start/stop ────────────────────────────────────────────────────
 
   const handleStart = () => {
+    if (midiLength && fromTop) {
+      // The clock (and the MIDI file on it) from 0, running.
+      window.dispatchEvent(new CustomEvent('reset-time'));
+      useNodeGraphStore.getState().setTimePlaying(true);
+    }
     if (mode === 'ffmpeg') handleStartFfmpeg();
     else handleStartMediaRecorder();
   };
@@ -578,7 +590,15 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
             <Section label="Duration">
               {(!manualStop || mode === 'ffmpeg') && (
                 <div style={{ display: 'flex' }}>
-                  <RulerSlider value={duration} min={1} max={60} step={1} defaultValue={5} onChange={setDuration} ariaLabel="Duration in seconds" />
+                  <RulerSlider value={duration} min={1} max={Math.max(60, midiLength, duration)} step={1} defaultValue={5} onChange={setDuration} ariaLabel="Duration in seconds" />
+                </div>
+              )}
+              {midiLength > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <Button size="sm" icon="wave" variant={duration === midiLength && !manualStop ? 'primary' : 'secondary'} onClick={() => { setDuration(midiLength); setManualStop(false); }}>
+                    Whole MIDI file ({formatDuration(midiLength)})
+                  </Button>
+                  <Toggle checked={fromTop} onChange={setFromTop} label="Start the clock and the file from 0" />
                 </div>
               )}
               {mode === 'mediarecorder' && <Toggle checked={manualStop} onChange={setManualStop} label="Stop manually instead" />}

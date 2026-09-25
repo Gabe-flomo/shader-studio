@@ -46,6 +46,7 @@ import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
 import { SoloButton, SoloStrip } from './Solo';
 import { GuidesToggle } from './GuidesToggle';
+import { MidiFileCard } from './MidiFileCard';
 import { TriggerPicker } from './TriggerPicker';
 import { ACTIONS_FOR, DEFAULT_DISPLAY, LAYER_NUMERIC_PROPS, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
 import { ACTION_LABELS } from './layers/help';
@@ -943,6 +944,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
             </div>
           )}
           <SoloStrip kind="mapping" total={play.mappings.length} />
+          {play.midiFile && <MidiFileCard />}
           {play.mappings.length === 0 ? (
             <EmptyState
               title="Nothing mapped"
@@ -968,6 +970,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               onRemove={() => onRemove(m.id)}
             />
           ))}
+          {!play.midiFile && <MidiFileCard />}
         </div>
       )}
       {guideOpen && <ConnectGuide onClose={() => setGuideOpen(false)} />}

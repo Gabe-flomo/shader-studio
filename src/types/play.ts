@@ -251,7 +251,22 @@ export interface PlayRecord {
   notes?: string;
   /** Absent means the defaults (picture shown). */
   display?: PlayDisplay;
+  /** A MIDI file that plays on the graph clock as if a controller sent it. Absent = none. */
+  midiFile?: PlayMidiFile;
 }
+
+/** A .mid file carried in the record (base64), so it saves with the graph and in play files. */
+export interface PlayMidiFile {
+  name: string;
+  data: string;
+  /** Start over at the end. */
+  loop: boolean;
+  /** Seconds of graph clock before the file starts (negative starts partway in), to line up with a song. */
+  offset: number;
+}
+
+/** Largest .mid a record keeps (base64 characters, about 1.5 MB of file). */
+export const MIDI_FILE_MAX = 2_000_000;
 
 export const DEFAULT_DISPLAY: PlayDisplay = { picture: true, backdrop: [0, 0, 0] };
 
@@ -504,6 +519,15 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     if (actions.length) out.actions = actions;
   }
   if (typeof r.notes === 'string' && r.notes.trim()) out.notes = r.notes.slice(0, 8000);
+  const mf = r.midiFile as Partial<PlayMidiFile> | undefined;
+  if (mf && typeof mf === 'object' && typeof mf.data === 'string' && mf.data.length > 0 && mf.data.length <= MIDI_FILE_MAX && /^[A-Za-z0-9+/=]+$/.test(mf.data)) {
+    out.midiFile = {
+      name: typeof mf.name === 'string' && mf.name.trim() ? mf.name.slice(0, 120) : 'MIDI file',
+      data: mf.data,
+      loop: mf.loop === true,
+      offset: typeof mf.offset === 'number' && Number.isFinite(mf.offset) ? Math.max(-3600, Math.min(3600, mf.offset)) : 0,
+    };
+  }
   const disp = r.display as Record<string, unknown> | undefined;
   if (disp && typeof disp === 'object' && (disp.picture === false || disp.backdrop !== undefined)) {
     out.display = { picture: disp.picture !== false, backdrop: rgb(disp.backdrop, DEFAULT_DISPLAY.backdrop) };
@@ -520,5 +544,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.actions?.length && !play.notes && (play.display?.picture ?? true));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.actions?.length && !play.notes && !play.midiFile && (play.display?.picture ?? true));
 }

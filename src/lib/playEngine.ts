@@ -262,6 +262,8 @@ class PlayEngine implements InputSource {
 
   setRecord(record: PlayRecord): void {
     this.record = record;
+    // The record's MIDI file plays through the MIDI engine, like a controller would.
+    midiEngine.setFile(record.midiFile);
     this.controls.clear();
     for (const c of record.controls) this.controls.set(c.id, c);
     this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse');

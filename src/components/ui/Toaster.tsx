@@ -31,7 +31,7 @@ function ToastCard({ toast }: { toast: Toast }) {
   const [hovered, setHovered] = useState(false);
   const [copied, setCopied] = useState(false);
   const { color, icon } = toneStyle(tk, toast.tone);
-  const sticky = toast.tone === 'danger';
+  const sticky = toast.tone === 'danger' || !!toast.sticky;
 
   useEffect(() => {
     if (sticky || hovered) return;

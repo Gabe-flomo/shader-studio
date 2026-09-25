@@ -1,4 +1,5 @@
 import React, { Suspense } from 'react';
+import { isChunkLoadError, reportStaleBuild } from '../lib/staleBuild';
 
 /**
  * React.lazy plus its own Suspense boundary, so a chunk loading never blanks
@@ -8,7 +9,13 @@ import React, { Suspense } from 'react';
  * build time and so doesn't pull the chunk into the caller's bundle).
  */
 export function lazyWithSuspense<P extends object>(loader: () => Promise<{ default: React.ComponentType<P> }>) {
-  const Lazy = React.lazy(loader);
+  // A chunk from a version that was redeployed under this tab is gone: explain and render nothing,
+  // rather than crash the page.
+  const Lazy = React.lazy(() => loader().catch(err => {
+    if (!isChunkLoadError(err)) throw err;
+    reportStaleBuild();
+    return { default: (() => null) as React.ComponentType<P> };
+  }));
   return function LazyBoundary(props: P) {
     return <Suspense fallback={null}><Lazy {...props} /></Suspense>;
   };

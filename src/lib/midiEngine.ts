@@ -6,6 +6,8 @@
  *   - Web MIDI (Chrome, Edge, Windows WebView2)
  *   - the computer keyboard stand-in (two octaves on the QWERTY rows), for
  *     Safari, Firefox, phones, and testing without hardware
+ *   - a MIDI file (the Play record's midiFile), played on the graph clock, so
+ *     a performance can be recorded to video in sync without a DAW attached
  *   - later: a Tauri plugin on macOS (WKWebView has no Web MIDI)
  *
  * State is kept per MIDI channel (1–16) plus an "omni" merge of all of them,
@@ -16,6 +18,11 @@
 
 import { inputBus, type InputSource, type InputWriter } from './inputBus';
 import { midiCcList, midiCcKey, liveChannelKey } from './midiOutputs';
+import { base64ToBytes, eventIndexAt, parseMidiFile, type MidiFileData } from './midiFile';
+import type { PlayMidiFile } from '../types/play';
+
+/** A seek further ahead than this skips to the new spot instead of firing everything in between. */
+const FILE_SKIP_S = 2;
 
 // ─── Message model ────────────────────────────────────────────────────────────
 
@@ -126,6 +133,14 @@ export class MidiEngine implements InputSource {
   };
   private onBlur = () => { this.releaseKeyboardNotes(); };
 
+  // MIDI file backend
+  private file: { src: PlayMidiFile; data: MidiFileData } | null = null;
+  private fileError: string | null = null;
+  private fileIdx = 0;
+  private fileLastT = Number.NEGATIVE_INFINITY;
+  private fileLap = 0;
+  private fileHeld = new Set<number>(); // (channel - 1) * 128 + note
+
   // ── Node registration ─────────────────────────────────────────────────────
 
   /** Called by the node card whenever the node's params change. */
@@ -228,7 +243,13 @@ export class MidiEngine implements InputSource {
 
   // ── Per-frame output (InputSource) ───────────────────────────────────────
 
-  tickInputs(dt: number, _time: number, write: InputWriter): void {
+  /** A loaded file plays whether or not a MIDI node is in the graph (mappings read it too). */
+  wantsTick(): boolean {
+    return this.file !== null;
+  }
+
+  tickInputs(dt: number, time: number, write: InputWriter): void {
+    this.tickFile(time);
     for (const [nodeId, st] of this.nodes) {
       const ch = this.channels[st.channel];
       // Exponential smoothing: alpha = 1 - exp(-dt / tau). smoothMs 0 → snap.
@@ -361,6 +382,107 @@ export class MidiEngine implements InputSource {
       this.busyNames = busy;
       this.emit({ kind: 'devices', inputs: names });
     });
+  }
+
+  // ── MIDI file backend ────────────────────────────────────────────────────
+
+  /**
+   * Load (or clear) the record's MIDI file. The same file object is a no-op;
+   * a new one is parsed and starts from the clock's current time.
+   */
+  setFile(src: PlayMidiFile | undefined): void {
+    if (src === this.file?.src || (!src && !this.file && !this.fileError)) return;
+    if (this.file && src && src.data === this.file.src.data) {
+      // Only the loop or the offset changed: keep the parse, find the spot again.
+      this.file = { src, data: this.file.data };
+      this.seekFile();
+      return;
+    }
+    this.releaseFileNotes();
+    this.file = null;
+    this.fileError = null;
+    if (src) {
+      try {
+        this.file = { src, data: parseMidiFile(base64ToBytes(src.data)) };
+      } catch (e) {
+        this.fileError = e instanceof Error ? e.message : 'Couldn’t read that MIDI file';
+      }
+    }
+    this.seekFile();
+    inputBus.wake();
+  }
+
+  /** The loaded file: its length, how many notes, which channels; or why it couldn't be read. */
+  fileInfo(): { duration: number; notes: number; channels: number[] } | { error: string } | null {
+    if (this.fileError) return { error: this.fileError };
+    return this.file ? { duration: this.file.data.duration, notes: this.file.data.notes, channels: this.file.data.channels } : null;
+  }
+
+  hasFile(): boolean {
+    return this.file !== null;
+  }
+
+  /** Seconds into the file at the last frame (negative before it starts), or null before it has played. */
+  filePosition(): number | null {
+    return this.file && Number.isFinite(this.fileLastT) ? this.fileLastT : null;
+  }
+
+  /** Where the file is at graph time `time` (seconds into the file; negative before it starts). */
+  fileTimeAt(time: number): number {
+    const f = this.file;
+    if (!f) return 0;
+    const t = time - f.src.offset;
+    const dur = f.data.duration;
+    return f.src.loop && dur > 0 && t >= 0 ? t % dur : t;
+  }
+
+  private seekFile(): void {
+    this.fileIdx = 0;
+    this.fileLastT = Number.NEGATIVE_INFINITY;
+    this.fileLap = 0;
+  }
+
+  private tickFile(time: number): void {
+    const f = this.file;
+    if (!f) return;
+    const ev = f.data.events;
+    const t = this.fileTimeAt(time);
+    // The loop coming round by itself (not a seek): play out to the end, then carry on from 0.
+    const raw = time - f.src.offset, dur = f.data.duration;
+    const lap = f.src.loop && dur > 0 && raw >= 0 ? Math.floor(raw / dur) : 0;
+    if (lap === this.fileLap + 1 && t < this.fileLastT && this.fileLastT - t > dur - FILE_SKIP_S) {
+      this.playFileTo(dur);
+      this.fileIdx = 0;
+      this.fileLastT = 0;
+    }
+    this.fileLap = lap;
+    // Back in time (a reset, a seek, the loop coming round) or far ahead: release what's held and
+    // carry on from the new spot, without replaying what was skipped.
+    // Landing near the start (a reset, the loop wrapping) plays from 0, so a downbeat on 0 isn't lost.
+    if (t < this.fileLastT || t - this.fileLastT > FILE_SKIP_S) {
+      this.releaseFileNotes();
+      this.fileIdx = eventIndexAt(ev, t <= 0.25 ? 0 : t);
+    }
+    this.playFileTo(t);
+    this.fileLastT = t;
+  }
+
+  /** Send every file event up to file time `t`, keeping track of held notes. */
+  private playFileTo(t: number): void {
+    const ev = this.file?.data.events;
+    if (!ev) return;
+    while (this.fileIdx < ev.length && ev[this.fileIdx].t <= t) {
+      const e = ev[this.fileIdx++];
+      const type = e.status & 0xf0, key = (e.status & 0x0f) * 128 + e.d1;
+      if (type === 0x90 && e.d2 > 0) this.fileHeld.add(key);
+      else if (type === 0x80 || type === 0x90) this.fileHeld.delete(key);
+      this.handleBytes(e.status, e.d1, e.d2);
+    }
+  }
+
+  private releaseFileNotes(): void {
+    for (const key of this.fileHeld) this.handleMessage({ kind: 'noteOff', channel: Math.floor(key / 128) + 1, note: key % 128 });
+    this.fileHeld.clear();
   }
 
   // ── Keyboard stand-in backend ────────────────────────────────────────────
