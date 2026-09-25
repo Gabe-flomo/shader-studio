@@ -103,6 +103,12 @@ const SPACE_MAPS: Record<string, SpaceMap> = {
   },
   sphericalSpace: ([x, y], n) => {
     const r = Math.hypot(x, y), k = num(n, 'strength', 0.5);
+    if (str(n, 'mode', 'fisheye') === 'dome') {
+      // The unit disc as a hemisphere seen from inside: stretches toward the rim, undefined beyond it.
+      const h = Math.sqrt(Math.max(1 - r * r, 0));
+      const f = 1 / Math.max(1 - k * (1 - h), 0.05);
+      return r <= 1 ? [x * f, y * f] : [NaN, NaN];
+    }
     const f = r > 1e-4 && Math.abs(k) > 1e-4 ? Math.atan(r * k * 1.5708) / (r * k * 1.5708) : 1;
     return [x * f, y * f];
   },
@@ -117,6 +123,24 @@ const SPACE_MAPS: Record<string, SpaceMap> = {
       const a = d * rot, c = Math.cos(a), sn = Math.sin(a);
       const rx = px * c - py * sn, ry = px * sn + py * c;
       px += str * Math.sin(rx * d * fr) / d; py += str * Math.sin(ry * d * fr) / d; d /= dec;
+    }
+    return [px, py];
+  },
+  turbulence3D: ([x, y], n) => {
+    // The z = 0 slice of the 3D sine loop: p += strength · sin(rotateAxis(p, axis, d) · d · freq) / d, d /= decay.
+    let px = x, py = y, pz = 0, d = 1;
+    const str3 = num(n, 'strength', 0.3), fr = num(n, 'frequency', 1), dec = num(n, 'decay', 0.7);
+    let ax = num(n, 'ax', 1), ay = num(n, 'ay', 0.6), az = num(n, 'az', 0.6);
+    const al = Math.hypot(ax, ay, az) || 1; ax /= al; ay /= al; az /= al;
+    const oct = Math.max(1, Math.min(12, Math.round(num(n, 'octaves', 8))));
+    for (let k = 0; k < oct; k++) {
+      const c = Math.cos(d), sn = Math.sin(d), dt = ax * px + ay * py + az * pz;
+      // Rodrigues: p·c + (axis × p)·s + axis·(axis·p)·(1 − c)
+      const rx = px * c + (ay * pz - az * py) * sn + ax * dt * (1 - c);
+      const ry = py * c + (az * px - ax * pz) * sn + ay * dt * (1 - c);
+      const rz = pz * c + (ax * py - ay * px) * sn + az * dt * (1 - c);
+      px += str3 * Math.sin(rx * d * fr) / d; py += str3 * Math.sin(ry * d * fr) / d; pz += str3 * Math.sin(rz * d * fr) / d;
+      d /= dec;
     }
     return [px, py];
   },
@@ -176,6 +200,82 @@ function SpaceViz({ node }: { node: GraphNode }) {
   );
 }
 
+// ── Scalar fields: the node's float output over the screen, as a greyscale image ──
+type FieldFn = (p: Vec2, n: GraphNode) => number;
+
+const chaosHash = ([x, y]: Vec2): number => {
+  let p3x = fract(x * 0.1031), p3y = fract(y * 0.1031), p3z = fract(x * 0.1031);
+  const d = p3x * (p3y + 33.33) + p3y * (p3z + 33.33) + p3z * (p3x + 33.33);
+  p3x += d; p3y += d; p3z += d;
+  return fract((p3x + p3y) * p3z);
+};
+
+const FIELDS: Record<string, FieldFn> = {
+  chaosLayers: ([x, y], n) => {
+    // Xor's Efficient Chaos at time 0: N golden-angle rotated, shifted, scaled cell grids summed as point lights.
+    const layers = Math.max(1, Math.min(8, Math.round(num(n, 'layers', 5))));
+    const sc = num(n, 'scale', 0.1), br = num(n, 'brightness', 0.04), size = num(n, 'size', 1);
+    const shift = num(n, 'shift', 2.618), lsc = num(n, 'layerScale', 0.6), wav = num(n, 'waves', 0.2), cut = num(n, 'cutout', 0);
+    const cx = x / sc, cy = y / sc;
+    // orient *= gold each layer; gold = mat2(0.2225, -0.9749, 0.9749, 0.2225) applied as c * orient
+    let m00 = 1, m01 = 0, m10 = 0, m11 = 1;
+    const g00 = 0.22252093, g01 = -0.97492791, g10 = 0.97492791, g11 = 0.22252093;
+    let glow = 0;
+    for (let k = 0; k < layers; k++) {
+      const i = (k + 0.5) / layers;
+      // orient = orient * gold (GLSL column-major product)
+      const n00 = m00 * g00 + m10 * g01, n10 = m00 * g10 + m10 * g11, n01 = m01 * g00 + m11 * g01, n11 = m01 * g10 + m11 * g11;
+      m00 = n00; m10 = n10; m01 = n01; m11 = n11;
+      // pp = c * orient  (row vector times matrix)
+      let ppx = cx * m00 + cy * m01, ppy = cx * m10 + cy * m11;
+      ppx += shift * i; ppy += shift * i;
+      ppx /= 1 + lsc * i; ppy /= 1 + lsc * i;
+      ppx += wav * Math.sin(ppy); ppy += wav * Math.sin(ppx);
+      const keep = chaosHash([Math.floor(ppx / 2) + i, Math.floor(ppy / 2) + i]) >= cut ? 1 : 0;
+      const len = Math.hypot(glslMod(ppx, 2) - 1, glslMod(ppy, 2) - 1) / size;
+      glow += keep * Math.max(1 - len, 0) / Math.max(len, 1e-4);
+    }
+    return glow * br;
+  },
+};
+
+function FieldViz({ node }: { node: GraphNode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const field = FIELDS[node.type];
+  const paramsKey = JSON.stringify(node.params);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !field) return;
+    const viz = setupViz(canvas);
+    if (!viz) return;
+    const { ctx, W, H } = viz;
+    const { IW, IH } = imageSize(viz, 220);
+    const img = ctx.createImageData(IW, IH);
+    const aspect = IW / IH;
+    const bg = hexRgb(pal.crust), light = hexRgb(pal.text);
+    for (let j = 0; j < IH; j++) {
+      const y = 1 - (j / (IH - 1)) * 2;
+      for (let i = 0; i < IW; i++) {
+        const x = ((i / (IW - 1)) * 2 - 1) * aspect;
+        const v = Math.max(0, Math.min(1, field([x, y], node)));
+        const k = (j * IW + i) * 4;
+        img.data[k]     = Math.round(bg[0] + (light[0] - bg[0]) * v);
+        img.data[k + 1] = Math.round(bg[1] + (light[1] - bg[1]) * v);
+        img.data[k + 2] = Math.round(bg[2] + (light[2] - bg[2]) * v);
+        img.data[k + 3] = 255;
+      }
+    }
+    blitImage(ctx, img, W, H);
+    ctx.fillStyle = pal.overlay0; ctx.font = `9px ${MONO}`;
+    ctx.fillText('glow over the screen, at time 0', 4, H - 4);
+  }, [field, node, paramsKey]);
+  return (
+    <div style={vizContainer()}>
+      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 96 }} />
+    </div>
+  );
+}
+
 // ── Transfer curves ─────────────────────────────────────────────────────────
 interface Curve {
   /** Input range along x */
@@ -209,6 +309,15 @@ const CURVES: Record<string, Curve> = {
     { label: 'blob', color: p => p.blue, fn: (f, n) => smoothstep(num(n, 'threshold', 0.8) - num(n, 'softness', 0.05), num(n, 'threshold', 0.8) + num(n, 'softness', 0.05), f) },
     { label: 'edge', color: p => p.peach, fn: (f, n) => 1 - smoothstep(0, num(n, 'softness', 0.05) * 2, Math.abs(f - num(n, 'threshold', 0.8))) },
   ] },
+  bloom: { x: [0, 1], y: [0, 1], xLabel: 'distance  (fraction of Radius)', series: [{ label: 'kernel weight', color: p => p.yellow, fn: (r, n) => {
+    if (str(n, 'kernel', 'spiral') === 'layered') {
+      // Four 3×3 box blurs at step L·Radius/4, weighted 1/L — a pixel at distance r is inside every box that reaches it.
+      let w = 0, total = 0;
+      for (let L = 1; L <= 4; L++) { total += 1 / L; if (r <= 0.25 * L) w += 1 / L; }
+      return w / total;
+    }
+    return 1 / (1 + r * r * 9);
+  } }] },
   fresnelSchlick: { x: [0, 1], y: [0, 1], xLabel: 'cos θ  (1 = facing you)', series: [{ label: 'reflect', color: p => p.sky, fn: (c, n) => { const ior = num(n, 'ior', 1.5); const f0 = Math.pow((ior - 1) / (ior + 1), 2); return f0 + (1 - f0) * Math.pow(Math.max(1 - c, 0), 5); } }] },
   fresnel3d:      { x: [0, 1], y: [0, 1], xLabel: 'cos θ  (1 = facing you)', series: [{ label: 'rim', color: p => p.sky, fn: (c, n) => Math.pow(Math.max(0, 1 - c), num(n, 'power', 3)) }] },
 };
@@ -524,12 +633,13 @@ function Shape3DViz({ node }: { node: GraphNode }) {
   );
 }
 
-export const GENERIC_VIZ_TYPES: ReadonlySet<string> = new Set([...Object.keys(SPACE_MAPS), ...Object.keys(CURVES), ...Object.keys(SDF3), 'echo', 'waveRadius']);
+export const GENERIC_VIZ_TYPES: ReadonlySet<string> = new Set([...Object.keys(SPACE_MAPS), ...Object.keys(CURVES), ...Object.keys(SDF3), ...Object.keys(FIELDS), 'echo', 'waveRadius']);
 
 export function GenericViz({ node }: { node: GraphNode }) {
   if (SPACE_MAPS[node.type]) return <SpaceViz node={node} />;
   if (CURVES[node.type]) return <CurveViz node={node} />;
   if (SDF3[node.type]) return <Shape3DViz node={node} />;
+  if (FIELDS[node.type]) return <FieldViz node={node} />;
   if (node.type === 'echo') return <EchoViz node={node} />;
   if (node.type === 'waveRadius') return <WaveRadiusViz node={node} />;
   return null;
