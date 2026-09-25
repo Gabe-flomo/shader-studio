@@ -87,6 +87,26 @@ export function klCanvas(pool, name, W, H) {
   return c;
 }
 
+/**
+ * Shrink `src` (W×H) into `dst` (a context, w×h) by halving. One big drawImage
+ * samples only a few source pixels per target pixel, so something a few
+ * pixels wide (a particle) falls between them and vanishes on some frames and
+ * not others; each 2× step averages its pixels, so what arrives is the true
+ * coverage. The steps are pooled canvases under `name`.
+ */
+export function klDownscale(pool, name, src, W, H, dst, w, h) {
+  let c = src, cw = W, ch = H, level = 0;
+  while (cw / 2 >= w && ch / 2 >= h) {
+    const nw = Math.ceil(cw / 2), nh = Math.ceil(ch / 2);
+    const n = klCanvas(pool, name + ':' + level++, nw, nh), x = n.getContext('2d');
+    x.globalCompositeOperation = 'copy';
+    x.drawImage(c, 0, 0, cw, ch, 0, 0, nw, nh);
+    c = n; cw = nw; ch = nh;
+  }
+  dst.clearRect(0, 0, w, h);
+  dst.drawImage(c, 0, 0, cw, ch, 0, 0, w, h);
+}
+
 // ── Null ─────────────────────────────────────────────────────────────────────
 
 export function klDrawNull(ctx, l, x, y, size, dpr, W, H, zoneR) {

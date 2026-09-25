@@ -28,7 +28,7 @@
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments } from './geometry.js';
-import { KL_BLEND, klCss, klCanvas, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush } from './layers.js';
+import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush } from './layers.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
@@ -422,7 +422,7 @@ export function createLayerKit() {
     cx.clearRect(0, 0, cw, ch); cx.drawImage(buf, 0, 0, cw, ch);
     const gh = 180, gw = Math.max(8, Math.round(gh * aspect));
     const small = klCanvas(pool, 'shaderMask', gw, gh), sx = small.getContext('2d', { willReadFrequently: true });
-    sx.clearRect(0, 0, gw, gh); sx.drawImage(buf, 0, 0, gw, gh);
+    klDownscale(pool, 'shaderHalf', buf, W, H, sx, gw, gh);
     let data;
     try { data = sx.getImageData(0, 0, gw, gh).data; } catch (e) { data = new Uint8ClampedArray(gw * gh * 4); }
     // Coverage, not a yes/no threshold: a particle smaller than a cell counts as a small disc, so it
