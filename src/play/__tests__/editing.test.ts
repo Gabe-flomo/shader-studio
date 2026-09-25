@@ -9,6 +9,7 @@ import { klGlyphList, klParseFontUrl } from '../kit/layers.js';
 import { addNullFor, driveWithNull, duplicateLayer, pairedKey, renameLayer, resetLayer } from '../../components/play/layerOps';
 import { defaultLayer, emptyPlayRecord, type PlayLayer } from '../../types/play';
 import { applySolo } from '../../components/play/playUi';
+import { candidateFor, findTargetNode, readControlValue } from '../playControls';
 
 const W = 1600, H = 900;
 const box: Bounds = { x: 0.5, y: 0.5, w: 0.4, h: 0.2, rot: 0, uniform: false, turns: true };
@@ -187,5 +188,30 @@ describe('a new null keeps clear of the others', () => {
     const n = play.layers.find(l => l.id === nullId) as { x: number; y: number };
     expect(n.x).toBeCloseTo(0.3);
     expect(n.y).toBeCloseTo(0.3);
+  });
+});
+
+describe('controls inside groups', () => {
+  const leaf = { id: 'c1', type: 'circleSDF', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { radius: 0.3 } };
+  const inner = { id: 'g1', type: 'group', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { 'c1::radius': 0.4, subgraph: { nodes: [leaf], edges: [] } } };
+  const outer = { id: 'g0', type: 'group', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { subgraph: { nodes: [inner], edges: [] } } };
+  const nodes = [outer] as unknown as import('../../types/nodeGraph').GraphNode[];
+
+  it('reads a slider two groups deep, the outer group’s override winning', () => {
+    expect(readControlValue(nodes, 'g0::g1::c1::radius')).toBe(0.4);
+    const overridden = [{ ...outer, params: { ...outer.params, 'g1::c1::radius': 0.9 } }] as unknown as typeof nodes;
+    expect(readControlValue(overridden, 'g0::g1::c1::radius')).toBe(0.9);
+    expect(findTargetNode(nodes, 'g0::g1::c1::radius')?.id).toBe('c1');
+    expect(readControlValue(nodes, 'g0::missing::c1::radius')).toBeUndefined();
+  });
+
+  it('finds a group card slider by its inner path', () => {
+    const cands = [
+      { target: 'g0::g1::c1::radius', kind: 'float' as const, nodeLabel: 'Circle', paramLabel: 'Radius', min: 0, max: 1, value: 0.4 },
+      { target: 'g9::c1::radius', kind: 'float' as const, nodeLabel: 'Circle', paramLabel: 'Radius', min: 0, max: 1, value: 0.1 },
+    ];
+    expect(candidateFor(cands, 'g0', 'g1::c1::radius')?.target).toBe('g0::g1::c1::radius');
+    expect(candidateFor(cands, 'g0', 'c1::radius')).toBeUndefined();
+    expect(candidateFor(cands, 'c1', 'radius')?.target).toBe('g0::g1::c1::radius');
   });
 });

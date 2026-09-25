@@ -85,11 +85,32 @@ export function collectPlayCandidates(nodes: GraphNode[], paramBindings: Record<
     target: c.sourcePath, kind: 'float', nodeLabel: c.nodeLabel, groupLabel: c.groupLabel, paramLabel: c.paramLabel,
     min: c.min, max: c.max, step: c.step, value: c.value, ...(c.hint ? { hint: c.hint } : {}),
   }));
-  return [...floats, ...collectColourCandidates(nodes)].filter(c => bindingKeyOf(c.target) in paramBindings);
+  // A group inside a group (what an outer group card "surfaces"): its nodes' sliders, two levels in.
+  const nested: PlayCandidate[] = [];
+  for (const outer of nodes) {
+    if (outer.type !== 'group') continue;
+    for (const inner of ((outer.params.subgraph as SubgraphData | undefined)?.nodes ?? [])) {
+      const sub = inner.type === 'group' ? inner.params.subgraph as SubgraphData | undefined : undefined;
+      if (!sub) continue;
+      for (const c of collectParamCandidates(sub)) {
+        if (c.sourcePath.split('::').length !== 2) continue;
+        const over = outer.params[`${inner.id}::${c.sourcePath}`] ?? inner.params[c.sourcePath];
+        nested.push({
+          target: `${outer.id}::${inner.id}::${c.sourcePath}`, kind: 'float', nodeLabel: c.nodeLabel, groupLabel: `${labelOf(outer)} › ${labelOf(inner)}`,
+          paramLabel: c.paramLabel, min: c.min, max: c.max, step: c.step, value: typeof over === 'number' ? over : c.value, ...(c.hint ? { hint: c.hint } : {}),
+        });
+      }
+    }
+  }
+  const seen = new Set(floats.map(c => c.target));
+  return [...floats, ...nested.filter(c => !seen.has(c.target)), ...collectColourCandidates(nodes)].filter(c => bindingKeyOf(c.target) in paramBindings);
 }
 
 /** The candidate for one node's param (its target may carry a group in front), if it can be a control. */
 export function candidateFor(candidates: readonly PlayCandidate[], nodeId: string, paramKey: string): PlayCandidate | undefined {
+  // A group card's slider names its inner node too ("inner::radius", or "innerGroup::inner::radius").
+  const exact = candidates.find(c => c.target === `${nodeId}::${paramKey}`);
+  if (exact || paramKey.includes('::')) return exact;
   return candidates.find(c => { const p = c.target.split('::'); return p[p.length - 2] === nodeId && p[p.length - 1] === paramKey; });
 }
 
@@ -108,10 +129,13 @@ export function targetParts(target: string): { nodeId: string; paramKey: string 
 /** The node a target path names, walking one group in when needed. */
 export function findTargetNode(nodes: GraphNode[], target: string): GraphNode | undefined {
   const parts = target.split('::');
-  const top = nodes.find(n => n.id === parts[0]);
-  if (!top || parts.length < 3) return top;
-  const inner = top.params.subgraph as SubgraphData | undefined;
-  return inner?.nodes.find(n => n.id === parts[1]);
+  let list: GraphNode[] | undefined = nodes, n: GraphNode | undefined;
+  for (let i = 0; i < Math.max(1, parts.length - 1); i++) {
+    n = list?.find(x => x.id === parts[i]);
+    if (!n) return undefined;
+    list = (n.params.subgraph as SubgraphData | undefined)?.nodes;
+  }
+  return n;
 }
 
 /**
@@ -149,19 +173,20 @@ export function readLayerValue(play: PlayRecord | undefined, target: string): nu
 export function readControlValue(nodes: GraphNode[], target: string, play?: PlayRecord): number | number[] | undefined {
   if (parseLayerTarget(target)) return readLayerValue(play, target);
   if (parseActionTarget(target)) return undefined;
+  // "group::…::node::param": an outer group's override of the rest of the path wins (that's what its
+  // card's slider sets), then the next group's, then the node's own value.
   const parts = target.split('::');
-  const top = nodes.find(n => n.id === parts[0]);
-  if (!top) return undefined;
   const key = parts[parts.length - 1];
-  if (parts.length >= 3) {
-    const override = top.params[`${parts[1]}::${key}`];
+  let list: GraphNode[] | undefined = nodes;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const n: GraphNode | undefined = list?.find(x => x.id === parts[i]);
+    if (!n) return undefined;
+    if (i === parts.length - 2) { const v = n.params[key]; return typeof v === 'number' ? v : colourValue(v) ?? undefined; }
+    const override = n.params[parts.slice(i + 1).join('::')];
     if (typeof override === 'number' || colourValue(override)) return override as number | number[];
-    const inner = (top.params.subgraph as SubgraphData | undefined)?.nodes.find(n => n.id === parts[1]);
-    const v = inner?.params[key];
-    return typeof v === 'number' ? v : colourValue(v) ?? undefined;
+    list = (n.params.subgraph as SubgraphData | undefined)?.nodes;
   }
-  const v = top.params[key];
-  return typeof v === 'number' ? v : colourValue(v) ?? undefined;
+  return undefined;
 }
 
 /** Does the control's target still exist (in the graph, or as a layer)? */

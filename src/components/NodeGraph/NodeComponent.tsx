@@ -1905,7 +1905,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       const wired = !!node.inputs[o.psKey]?.connection;
       const wire = node.inputs[o.psKey]?.connection;
       return (
-        <div key={o.rowKey} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}
+        <div key={o.rowKey} data-param-key={o.overrideKey} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}
           onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
           <ParamSocket color={TYPE_COLORS.float} wired={wired} touch={isTouchDevice}
             register={el => { registerSocket(node.id, 'in', o.psKey, el); }}
