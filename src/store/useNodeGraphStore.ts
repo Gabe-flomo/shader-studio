@@ -18,6 +18,28 @@ import { buildPlayHtml, unsupportedFeatures, type EmbedOptions, type PlayHtmlInp
 export const PLAY_FILE_KIND = 'shader-studio-play';
 
 /** A loaded graph brought a Play setup with it: say so, with a way straight to it. */
+/**
+ * SDF Glow's Tint only colours its Tinted output. When someone picks a tint on a glow whose
+ * plain Glow output (a brightness) is what feeds a colour input, say so once, with a fix.
+ */
+const tintNudged = new Set<string>();
+function suggestTintedOutput(nodeId: string): void {
+  const s = useNodeGraphStore.getState();
+  const node = s.nodes.find(n => n.id === nodeId);
+  if (!node || node.type !== 'light' || tintNudged.has(nodeId)) return;
+  const users = s.nodes.flatMap(n => Object.entries(n.inputs)
+    .filter(([, inp]) => inp.connection?.nodeId === nodeId)
+    .map(([key, inp]) => ({ target: n.id, key, out: inp.connection!.outputKey, type: inp.type })));
+  if (users.some(u => u.out === 'tinted')) return;
+  const plain = users.filter(u => u.out === 'glow' && u.type === 'vec3');
+  if (!plain.length) return;
+  tintNudged.add(nodeId);
+  toast.info('Tint colours the Tinted output', {
+    message: 'This SDF Glow sends its plain Glow output (brightness only) into a colour, so the tint has nowhere to go.',
+    action: { label: 'Use Tinted', onClick: () => { for (const u of plain) useNodeGraphStore.getState().connectNodes(nodeId, 'tinted', u.target, u.key); } },
+  });
+}
+
 /** The title of the "open Play" notice; the app clears it while the Play page is open. */
 export const PLAY_SETUP_TOAST = 'This graph has a Play setup';
 
@@ -3421,6 +3443,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   updateNodeParams: (nodeId, params, options?) => {
+    if ('tint' in params) suggestTintedOutput(nodeId);
     // Push history once at the start of an edit burst (debounced — not on every keystroke/tick)
     if (!_historyParamPending) {
       undoManager.push(get().nodes);

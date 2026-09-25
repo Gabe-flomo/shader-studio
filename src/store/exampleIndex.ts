@@ -45,13 +45,16 @@ export const BLANK_GRAPH: ExampleGraph = {
         inputs: {
           distance:   { type: 'float', label: 'Distance', connection: { nodeId: 'n3', outputKey: 'distance' } },
           brightness: { type: 'float', label: 'Falloff' },
+          tint:       { type: 'vec3', label: 'Tint' },
         },
-        outputs: { glow: { type: 'float', label: 'Glow' } },
-        params: { mode: 'glow', brightness: 10.0, ringFreq: 8.0 },
+        outputs: { glow: { type: 'float', label: 'Glow' }, inner: { type: 'float', label: 'Inner' }, tinted: { type: 'vec3', label: 'Tinted' } },
+        // White tint, so it starts looking as it always did; pick a colour and the glow takes it.
+        params: { mode: 'glow', brightness: 10.0, ringFreq: 8.0, tint: [1, 1, 1], innerFalloff: 8.0 },
       },
       {
         id: 'n2', type: 'output', position: { x: 820, y: 240 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'n4', outputKey: 'glow' } } },
+        // Tinted, not Glow: Glow is a plain brightness, and the Tint colour only reaches the Tinted output.
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'n4', outputKey: 'tinted' } } },
         outputs: {}, params: {},
       },
     ],

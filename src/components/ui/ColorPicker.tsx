@@ -118,7 +118,8 @@ export function ColorPickerPanel({ value, onChange, onCommit }: { value: RGB; on
       key={key} type="button" title={hex} aria-label={`Use ${hex}`}
       onClick={() => { const c = hexToRgb(hex); if (c) setRgb(c); }}
       style={{
-        width: 20, height: 20, borderRadius: radius.xs, border: 0, padding: 0, cursor: 'pointer', background: hex,
+        // Fills its grid cell (square), so a row of twelve always fits the picker's width.
+        width: '100%', aspectRatio: '1', minWidth: 0, borderRadius: radius.xs, border: 0, padding: 0, cursor: 'pointer', background: hex,
         boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.15)}${hex === rgbToHex(rgb) ? `, 0 0 0 2px ${tk.accent.base}` : ''}`,
       }}
     />
