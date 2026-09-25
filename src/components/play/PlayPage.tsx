@@ -17,7 +17,7 @@ import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE
 import { liveAudio, type LiveStatus } from '../../lib/liveAudio';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
-import { oscClient, OSC_DEFAULT_UDP_PORT, type OscStatus } from '../../lib/oscClient';
+import { oscClient, type OscStatus } from '../../lib/oscClient';
 import { playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
 import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
@@ -33,6 +33,7 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
+import { toast } from '../ui/toastStore';
 import { LayersPanel } from './LayersPanel';
 import { EmbedDialog } from './EmbedDialog';
 import { parseLayerTarget } from '../../types/play';
@@ -940,20 +941,54 @@ function EnvelopeGlyph({ a, d, s, r }: { a: number; d: number; s: number; r: num
   );
 }
 
-/** OSC bridge connection: status dot, port, connect. */
+/**
+ * OSC in. Desktop app: the app listens on UDP itself (Start / Stop, the UDP
+ * port, and whether phones on the network may send). Browser: a small bridge
+ * has to run on the computer; the chip offers it as a download and shows the
+ * one command to start it.
+ */
 function OscStatusChip() {
   const tk = useTokens();
+  const native = oscClient.getMode() === 'native';
   const [status, setStatus] = useState<OscStatus>(() => oscClient.getStatus());
   const [port, setPort] = useState(() => oscClient.getPort());
+  const [lan, setLan] = useState(() => oscClient.getLan());
   useEffect(() => oscClient.onStatus(setStatus), []);
   const colour = status === 'connected' ? tk.status.success : status === 'connecting' ? tk.status.warning : status === 'error' ? tk.status.danger : tk.text.disabled;
-  const text = status === 'connected' ? 'Bridge connected' : status === 'connecting' ? 'Connecting…' : status === 'error' ? 'No bridge — run npm run osc-bridge' : 'Not connected';
+  const text = native
+    ? (status === 'connected' ? `Listening on UDP ${port}` : status === 'connecting' ? 'Starting…' : status === 'error' ? (oscClient.getError() || 'Couldn’t listen') : 'Not listening')
+    : (status === 'connected' ? 'Bridge connected' : status === 'connecting' ? 'Connecting…' : status === 'error' ? 'No bridge running' : 'Not connected');
+  const portInput = (
+    <NumberInput value={port} min={1} max={65535} step={1} title={native ? 'UDP port to listen on (send OSC here)' : 'The bridge’s WebSocket port'} onCommit={n => { const p = Math.round(n); setPort(p); oscClient.setPort(p); }} style={{ width: 52, height: 22, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 10.5px ${fontFamily.mono}`, textAlign: 'center' }} />
+  );
+  const downloadBridge = async () => {
+    const { buildStandaloneBridge, BRIDGE_FILE_NAME } = await import('../../play/bridgeDownload');
+    const { saveTextFile } = await import('../../utils/fileIO');
+    reportFileResult(await saveTextFile(buildStandaloneBridge(), BRIDGE_FILE_NAME, 'text/javascript'), { failTitle: 'Couldn’t save the bridge', success: `Saved ${BRIDGE_FILE_NAME}` });
+  };
   return (
-    <span title={`Send OSC to UDP port ${OSC_DEFAULT_UDP_PORT} on this computer; the bridge forwards it here over ws://127.0.0.1:${port}.`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-      <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}` }}>{text}</span>
-      <NumberInput value={port} min={1} max={65535} step={1} title="Bridge WebSocket port" onCommit={n => { const p = Math.round(n); setPort(p); oscClient.setPort(p); }} style={{ width: 52, height: 22, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 10.5px ${fontFamily.mono}`, textAlign: 'center' }} />
-      {status !== 'connected' && <Button size="sm" onClick={() => oscClient.setWanted(true)}>Connect</Button>}
+      <span title={text} style={{ color: status === 'error' ? tk.status.danger : tk.text.muted, font: `11px ${fontFamily.ui}`, maxWidth: 190, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
+      {portInput}
+      {native ? (
+        <>
+          <Toggle checked={lan} onChange={on => { setLan(on); oscClient.setLan(on); }} label="Phones too" />
+          {status === 'connected'
+            ? <Button size="sm" variant="ghost" onClick={() => oscClient.setWanted(false)}>Stop</Button>
+            : <Button size="sm" onClick={() => oscClient.setWanted(true)}>Start listening</Button>}
+        </>
+      ) : (
+        <>
+          {status !== 'connected' && <Button size="sm" onClick={() => oscClient.setWanted(true)}>Connect</Button>}
+          {status === 'error' && (
+            <>
+              <Button size="sm" icon="export" onClick={() => void downloadBridge()} title="A small program that passes OSC to this tab. Needs Node.js (nodejs.org).">Download bridge</Button>
+              <Button size="sm" variant="ghost" icon="copy" title="Copy the command that starts it (run it in Terminal where the file downloaded)" onClick={() => { void navigator.clipboard?.writeText('node shader-studio-osc-bridge.mjs').then(() => toast.success('Command copied', { message: 'Paste it in Terminal, in the folder the bridge downloaded to.' })); }}>Command</Button>
+            </>
+          )}
+        </>
+      )}
     </span>
   );
 }

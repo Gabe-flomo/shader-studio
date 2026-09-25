@@ -1,7 +1,9 @@
 use std::io::Write;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
+
+mod osc_listener;
 
 // ── FFmpeg session state ──────────────────────────────────────────────────────
 
@@ -129,15 +131,56 @@ fn stop_ffmpeg_encode(state: State<FfmpegState>) -> Result<(), String> {
 // ── App entry point ───────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+// ── OSC in (Play page) ────────────────────────────────────────────────────────
+//
+// The desktop app listens for OSC itself, so Ableton / TouchOSC reach the Play
+// page with one click. Each datagram goes to the webview as an `osc-packet`
+// event (an array of bytes); src/lib/oscClient.ts decodes it.
+
+struct OscState(Mutex<Option<osc_listener::Listener>>);
+
+/// Start (or keep) listening on UDP `port`. `lan` accepts other devices on
+/// the network. Returns the bound port.
+#[tauri::command]
+fn osc_start(app: AppHandle, state: State<OscState>, port: u16, lan: bool) -> Result<u16, String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(l) = guard.as_ref() {
+        if l.port() == port && l.lan() == lan {
+            return Ok(port);
+        }
+    }
+    if let Some(old) = guard.take() {
+        old.stop();
+    }
+    let listener = osc_listener::Listener::start(port, lan, move |packet: Vec<u8>| {
+        let _ = app.emit("osc-packet", packet);
+    })?;
+    let bound = listener.port();
+    *guard = Some(listener);
+    Ok(bound)
+}
+
+#[tauri::command]
+fn osc_stop(state: State<OscState>) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(l) = guard.take() {
+        l.stop();
+    }
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(FfmpegState(Mutex::new(None)))
+        .manage(OscState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             start_ffmpeg_encode,
             send_frame_rgba,
             stop_ffmpeg_encode,
+            osc_start,
+            osc_stop,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

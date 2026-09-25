@@ -15,6 +15,7 @@ import { toast } from '../ui/toastStore';
 type Topic = 'which' | 'midi' | 'osc' | 'audio' | 'controller';
 type Platform = 'mac' | 'win';
 
+const isDesktopApp = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 export function ConnectGuide({ onClose }: { onClose: () => void }) {
@@ -113,7 +114,7 @@ function Which({ onPick }: { onPick: (t: Topic) => void }) {
       <P>MIDI, OSC and audio carry different things. MIDI is notes and knobs, not sound. Audio is the sound itself, turned into loudness per band. You can use all three at once.</P>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {row('midi', 'Ableton → MIDI', 'notes (which, how hard), knobs as CC 0–127, pitch bend', 'hitting notes to fire envelopes; drawing CC automation', 'a free virtual MIDI port (built into macOS; loopMIDI on Windows), Chrome or Edge')}
-        {row('osc', 'Ableton → OSC', 'any number from any knob or fader in Live, at full resolution', 'mapping many Live parameters, smooth sweeps, TouchOSC on a phone', 'Max for Live (Suite) with the free Connection Kit, and the bridge: npm run osc-bridge')}
+        {row('osc', 'Ableton → OSC', 'any number from any knob or fader in Live, at full resolution', 'mapping many Live parameters, smooth sweeps, TouchOSC on a phone', isDesktopApp ? 'Max for Live (Suite) with the free Connection Kit; the app listens with one click' : 'Max for Live (Suite) with the free Connection Kit, and the small bridge (one download, one command)')}
         {row('audio', 'Ableton → Audio', 'the actual sound: level, bass, low-mid, high-mid, treble, plus hits', 'visuals that react to the music; kick-driven flashes', 'a free virtual audio cable (BlackHole on Mac, VB-CABLE on Windows), or just a microphone')}
         {row('controller', 'A MIDI controller', 'the keys, knobs and pads of any USB MIDI controller', 'playing the visuals by hand', 'Chrome or Edge; no Ableton needed')}
       </div>
@@ -160,13 +161,21 @@ function AbletonMidi({ os }: { os: Platform }) {
 function AbletonOsc({ os }: { os: Platform }) {
   return (
     <>
-      <P>OSC sends plain numbers over the network, so any knob in Live can drive any control at full resolution. Browsers can't receive OSC directly, so a small <B>bridge</B> runs on your computer and passes it on.</P>
-      <H>1 · Start the bridge</H>
-      <Steps>
-        <li>Install <B>Node.js</B> 18 or newer (nodejs.org) if you don't have it.</li>
-        <li>In a terminal, in the shader-studio folder, run <Code>npm run osc-bridge</Code></li>
-        <li>Leave it running. It listens for OSC on <B>port 9000</B> and prints each tab that connects. Add <Code>--verbose</Code> to see every message.</li>
-      </Steps>
+      <P>OSC sends plain numbers over the network, so any knob in Live can drive any control at full resolution.</P>
+      <H>1 · Let Shader Studio listen</H>
+      {isDesktopApp ? (
+        <Steps>
+          <li>In the desktop app there's nothing to install. On an OSC mapping row, click <B>Start listening</B>. The app now takes OSC on <B>UDP port 9000</B>.</li>
+          <li>Sending from a phone? Tick <B>Phones too</B> so other devices on your network can reach it.</li>
+        </Steps>
+      ) : (
+        <Steps>
+          <li>Browsers can't receive OSC themselves, so a tiny <B>bridge</B> passes it on. (The desktop app doesn't need one: it has a Start listening button.)</li>
+          <li>Install <B>Node.js</B> 18 or newer (nodejs.org) if you don't have it.</li>
+          <li>On an OSC mapping row, click <B>Download bridge</B>. Then open Terminal (Mac) or PowerShell (Windows) in the folder it saved to and run <Code>node shader-studio-osc-bridge.mjs</Code>. Working from the shader-studio source instead? <Code>npm run osc-bridge</Code> does the same.</li>
+          <li>Leave it running. It listens for OSC on <B>port 9000</B>, and the row's dot turns green. Add <Code>--verbose</Code> to see every message.</li>
+        </Steps>
+      )}
       <H>2 · Send OSC from Ableton</H>
       <Steps>
         <li>You need <B>Max for Live</B> (included in Suite) and Ableton's free <B>Connection Kit</B> pack (Live's Browser → Packs; install it from ableton.com/packs if it's missing).</li>
@@ -177,12 +186,12 @@ function AbletonOsc({ os }: { os: Platform }) {
       <Note>Labels differ a little between Live versions. What matters is the host 127.0.0.1, the port 9000, and a mapped parameter.</Note>
       <H>From a phone instead (TouchOSC and similar)</H>
       <Steps>
-        <li>Start the bridge with <Code>npm run osc-bridge -- --lan</Code> so it accepts other devices.</li>
+        <li>{isDesktopApp ? <>Tick <B>Phones too</B> on the OSC row.</> : <>Start the bridge with <Code>node shader-studio-osc-bridge.mjs --lan</Code> so it accepts other devices.</>}</li>
         <li>Find your computer's address: {os === 'mac' ? <Code>ipconfig getifaddr en0</Code> : <>run <Code>ipconfig</Code> and read <B>IPv4 Address</B></>}.</li>
         <li>In the app, set the OSC host to that address and the send port to <B>9000</B>.</li>
       </Steps>
       <InShaderStudio>
-        <li>Add a mapping and set its source to <B>OSC</B>. The dot turns green when the bridge is connected (click Connect if it isn't).</li>
+        <li>Add a mapping and set its source to <B>OSC</B>. The dot turns green when {isDesktopApp ? 'the app is listening' : 'the bridge is connected (click Connect if it isn’t)'}.</li>
         <li>Press the row's <B>Learn</B> and move the knob in Ableton: the address fills in by itself.</li>
         <li>Ableton sends 0–1, which is the default range. For other senders, set the two numbers to their minimum and maximum.</li>
         <li>For a button, choose <B>Trigger</B> → <B>On: OSC message</B>: a value above 0.5 is a press.</li>

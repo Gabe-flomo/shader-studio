@@ -146,3 +146,16 @@ describe('live audio analysis', () => {
     expect(levelFromWave(new Float32Array(2048))).toBe(0);
   });
 });
+
+describe('standalone OSC bridge download', () => {
+  it('inlines the decoder so the file runs without the repo', async () => {
+    const { buildStandaloneBridge } = await import('../bridgeDownload');
+    const src = buildStandaloneBridge();
+    expect(src).not.toMatch(/from '\.\.\/src\/lib\/osc\/decode\.js'/);
+    expect(src).toContain('function decodeOsc(');
+    expect(src).toContain('function encodeOsc(');
+    expect(src).not.toMatch(/^export function/m);
+    expect(src).toContain("import dgram from 'node:dgram'");
+    expect(src).toContain('node shader-studio-osc-bridge.mjs');
+  });
+});
