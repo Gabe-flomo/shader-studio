@@ -22,7 +22,7 @@ import { inputBus, paramChannelKey, type InputSource, type InputWriter } from '.
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { audioEngine } from './audioEngine';
 import type { LfoShape, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
-import { emptyPlayRecord } from '../types/play';
+import { CURVE_POINTS, emptyPlayRecord } from '../types/play';
 
 export type ControlValue = number | number[];
 
@@ -32,19 +32,31 @@ export function bindingKeyOf(target: string): string {
   return parts.slice(-2).join('::');
 }
 
-/** Source unit value → 0..1 shaped by the curve. */
-export function applyCurve(u: number, curve: PlayCurve): number {
+/** Source unit value → 0..1 shaped by the curve. A drawn curve interpolates its samples. */
+export function applyCurve(u: number, curve: PlayCurve, curveY?: number[]): number {
   const x = u < 0 ? 0 : u > 1 ? 1 : u;
   switch (curve) {
     case 'exp': return x * x;
     case 'log': return Math.sqrt(x);
+    case 'custom': {
+      if (!curveY || curveY.length < 2) return x;
+      const pos = x * (curveY.length - 1);
+      const i = Math.min(curveY.length - 2, Math.floor(pos));
+      const f = pos - i;
+      return curveY[i] + (curveY[i + 1] - curveY[i]) * f;
+    }
     default: return x;
   }
 }
 
+/** The samples a drawn curve starts from: the current preset curve, so switching to Draw changes nothing until you draw. */
+export function sampleCurve(curve: PlayCurve, curveY?: number[], n = CURVE_POINTS): number[] {
+  return Array.from({ length: n }, (_, i) => applyCurve(i / (n - 1), curve, curveY));
+}
+
 /** Range + curve: the value a mapping produces for a unit source reading, before smoothing. */
-export function mapValue(u: number, m: Pick<PlayMapping, 'outMin' | 'outMax' | 'curve'>): number {
-  return m.outMin + (m.outMax - m.outMin) * applyCurve(u, m.curve);
+export function mapValue(u: number, m: Pick<PlayMapping, 'outMin' | 'outMax' | 'curve'> & { curveY?: number[] }): number {
+  return m.outMin + (m.outMax - m.outMin) * applyCurve(u, m.curve, m.curveY);
 }
 
 /** Deterministic 0..1 per cycle index, for the random (sample-and-hold) shape. */

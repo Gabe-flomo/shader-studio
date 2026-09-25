@@ -7,7 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { inputBus } from '../inputBus';
 import { midiEngine } from '../midiEngine';
-import { applyCurve, clockRate, lfoValue, mapValue, playEngine, bindingKeyOf } from '../playEngine';
+import { applyCurve, clockRate, lfoValue, mapValue, playEngine, bindingKeyOf, sampleCurve } from '../playEngine';
 import { emptyPlayRecord, parsePlayRecord, type PlayRecord } from '../../types/play';
 import { bakeControlValues, collectPlayCandidates, readBaseValues, readControlValue, targetParts } from '../../play/playControls';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -54,6 +54,16 @@ describe('mapping math', () => {
     expect(applyCurve(1.5, 'linear')).toBe(1);
     expect(applyCurve(-1, 'exp')).toBe(0);
   });
+  it('interpolates a drawn curve and falls back to linear without samples', () => {
+    const ys = [0, 1, 0]; // up then down
+    expect(applyCurve(0.25, 'custom', ys)).toBeCloseTo(0.5);
+    expect(applyCurve(0.5, 'custom', ys)).toBeCloseTo(1);
+    expect(applyCurve(1, 'custom', ys)).toBeCloseTo(0);
+    expect(applyCurve(0.3, 'custom')).toBeCloseTo(0.3);
+    expect(sampleCurve('exp', undefined, 5)).toEqual([0, 0.0625, 0.25, 0.5625, 1]);
+    expect(mapValue(0.5, { outMin: 0, outMax: 10, curve: 'custom', curveY: ys })).toBeCloseTo(10);
+  });
+
   it('maps into the output range, inverted ranges included', () => {
     expect(mapValue(0.5, { outMin: 2, outMax: 4, curve: 'linear' })).toBe(3);
     expect(mapValue(1, { outMin: 4, outMax: 2, curve: 'linear' })).toBe(2);
@@ -252,6 +262,13 @@ describe('controls and the record', () => {
       { id: 'g', controlId: 'a', source: { kind: 'gamepad', control: 'button', index: 3 } },
       { id: 't', controlId: 'a', source: { kind: 'tilt', axis: 'sideways' } },
     ] });
+    const drawn = parsePlayRecord({ controls: [{ id: 'a', target: 'n::k' }], mappings: [
+      { id: 'ok', controlId: 'a', source: { kind: 'mouse', axis: 'x' }, curve: 'custom', curveY: [0, 2, -1, 0.5] },
+      { id: 'bad', controlId: 'a', source: { kind: 'mouse', axis: 'x' }, curve: 'custom', curveY: [0, 'x'] },
+    ] });
+    expect(drawn.mappings[0]).toMatchObject({ curve: 'custom', curveY: [0, 1, 0, 0.5] });
+    expect(drawn.mappings[1]).toMatchObject({ curve: 'linear' });
+    expect(drawn.mappings[1].curveY).toBeUndefined();
     expect(more.mappings.map(m => m.source)).toEqual([
       { kind: 'lfo', shape: 'sine', rate: 0.001, phase: 0 },
       { kind: 'clock', shape: 'sine', bpm: 128, beats: 4 },

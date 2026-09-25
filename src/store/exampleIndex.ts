@@ -9,9 +9,16 @@
  * available synchronously at startup: the blank starter.
  */
 import type { GraphNode } from '../types/nodeGraph';
+import type { PlayRecord } from '../types/play';
 import { ctp } from '../theme/palette';
 
-export type ExampleGraph = { label: string; nodes: GraphNode[]; counter: number; /** One line on what the example teaches, shown in the Examples list */ description?: string };
+export type ExampleGraph = {
+  label: string; nodes: GraphNode[]; counter: number;
+  /** One line on what the example teaches, shown in the Examples list */
+  description?: string;
+  /** A ready-made Play setup (controls + mappings) that loads with the graph. */
+  play?: PlayRecord;
+};
 
 // A brand-new graph used to be just UV -> Output with nothing wired — a
 // black screen with no hint of what to do next. A minimal UV -> Circle SDF
@@ -50,14 +57,14 @@ export const BLANK_GRAPH: ExampleGraph = {
   };
 
 /** Key → label for every bundled example (generated from exampleGraphs.ts). */
-export const EXAMPLE_INDEX: Record<string, { label: string; description?: string }> = {
+export const EXAMPLE_INDEX: Record<string, { label: string; description?: string; /** Loads with a Play setup */ play?: boolean }> = {
   blank: { label: BLANK_GRAPH.label },
   fractalRings: { label: "Fractal Rings" },
   forLoopRings: { label: "For Loop Rings" },
   exprOrbit: { label: "Expr Orbit" },
   shapeShowcase: { label: "Shape Showcase" },
   toneMapDemo: { label: "Tone Map — ACES" },
-  glowCircle: { label: "Glowing Circle", description: "The smallest complete graph: UV → Circle SDF → SDF Glow → Tone Map → Output. SDF Glow's Tinted output already carries the colour, so no Palette or Multiply is needed." },
+  glowCircle: { label: "Glowing Circle", description: "The smallest complete graph: UV → Circle SDF → SDF Glow → Tone Map → Output. SDF Glow's Tinted output already carries the colour, so no Palette or Multiply is needed.", play: true },
   fbmLandscape: { label: "FBM Landscape" },
   angularGradient: { label: "Angular Gradient" },
   raymarchSpheres: { label: "Raymarch Spheres" },
@@ -77,7 +84,7 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   gridDemo: { label: "Grid: Checker" },
   blendModesDemo: { label: "Blend Modes — Screen" },
   colorRampFBM: { label: "Color Ramp: FBM Terrain" },
-  waveInterference: { label: "Wave Interference" },
+  waveInterference: { label: "Wave Interference", play: true },
   complexPowFlower: { label: "Complex Power Flower" },
   shapesAndGround3D: { label: "3D: Shapes + Ground" },
   spiralWorld3D: { label: "3D: Spiral World" },
@@ -146,13 +153,13 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   gridMetaballs: { label: "Grid: Metaballs" },
   gridBreathing: { label: "Grid: Breathing", description: "Animated Cell Center moves each cell's dot on its own phase (seeded by Cell ID); Circle SDF takes that as its centre and SDF Fill paints it." },
   gridDensityWave: { label: "Grid: Density Wave" },
-  gridLavaLamp: { label: "Lava Lamp", description: "Metaballs from the Field family: two Gaussian Fields (one follows the mouse) are summed and Metaball Threshold turns the sum into a blob mask with a soft edge; Mask picks the two colours." },
+  gridLavaLamp: { label: "Lava Lamp", description: "Metaballs from the Field family: two Gaussian Fields (one follows the mouse) are summed and Metaball Threshold turns the sum into a blob mask with a soft edge; Mask picks the two colours.", play: true },
   gridOnionRings: { label: "Grid: Onion Rings" },
   gridIronFilings: { label: "Grid: Iron Filings" },
   gridNeighborDisplaced: { label: "Grid: Attract", description: "Cell Displace pulls each cell's UV toward the mouse (strongly nearby, barely far away); its Attract Amount colours the dots through Palette." },
   echoTrails: { label: "Echo Trails", description: "Echo layers dimmer copies of earlier frames. A circle orbits (Rotate 2D driven by Time), SDF Glow tints it, and Add Color lays the live glow over the echoes." },
   feedbackSmear: { label: "Feedback Smear", description: "The feedback loop: Previous Frame is sampled through a slightly rotated, shrunk UV, then mixed 92/8 with fresh noise colour. Every frame smears the last one inward." },
-  beatGrid: { label: "Beat Grid", description: "Grid Layout cuts the screen into cells; BPM Sync pulses every box on the beat and Audio Input (load a track) pushes them further. Cell Filter strokes every other cell; Palette colours by column with its Scale param." },
+  beatGrid: { label: "Beat Grid", description: "Grid Layout cuts the screen into cells; BPM Sync pulses every box on the beat and Audio Input (load a track) pushes them further. Cell Filter strokes every other cell; Palette colours by column with its Scale param.", play: true },
   webcamCmyk: { label: "Webcam CMYK", description: "Video Input (choose a file or the camera) sampled through Pixelate, then CMYK Halftone prints it as four rotated dot screens. Swap the halftone for Grid UV → Luma Radius → Dot Mask for a single-ink version." },
   particleGalaxy: { label: "Particle Galaxy", description: "The particle pipeline: P: Init seeds points on a disc, P: Rotate spins them with differential twist, P: Wave adds a breathing ripple, P: Color by Distance and P: Size shade them, P: Render draws them additively over the FBM nebula below." },
   litStillLife: { label: "Lit Still Life", description: "The full 3D lighting stack. A Scene Group holds a capsule, a cone and a ground plane joined by smooth Union; the March Loop Group finds the surface; SDF AO and Soft Shadow read the scene again; Multi Light combines sun, sky and bounce; Tone Map finishes." },

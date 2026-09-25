@@ -51,10 +51,12 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint }: {
+function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint, tag }: {
   label: string; icon: IconName; color: string;
   /** One line shown in the row's tooltip (an example's description) */
   hint?: string;
+  /** Small pill after the name ("Play" for a graph that loads with a Play setup). */
+  tag?: string;
   onClick: () => void;
   /** Saved items: click selects (showing `preview`), double-click places */
   onDoubleClick?: () => void;
@@ -92,6 +94,9 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
           color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}
       >{label}</button>
+      {tag && (
+        <span title={`Loads with a Play setup`} style={{ height: 18, padding: '0 6px', borderRadius: 5, display: 'inline-flex', alignItems: 'center', flexShrink: 0, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.02em' }}>{tag}</span>
+      )}
       {(hovered || selected) && onExport && <IconButton icon="export" label="Export as a file" size="sm" onClick={e => { e.stopPropagation(); onExport(); }} />}
       {(hovered || selected) && onEdit && <IconButton icon="layoutGraph" label={editLabel} size="sm" onClick={e => { e.stopPropagation(); onEdit(); }} />}
       {(hovered || selected) && onRename && <IconButton icon="edit" label="Rename" size="sm" onClick={e => { e.stopPropagation(); onRename(); }} />}
@@ -198,6 +203,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const addNode                 = useNodeGraphStore(s => s.addNode);
   const saveGraph               = useNodeGraphStore(s => s.saveGraph);
   const getSavedGraphNames      = useNodeGraphStore(s => s.getSavedGraphNames);
+  const savedGraphHasPlay       = useNodeGraphStore(s => s.savedGraphHasPlay);
   const loadSavedGraph          = useNodeGraphStore(s => s.loadSavedGraph);
   const deleteSavedGraph        = useNodeGraphStore(s => s.deleteSavedGraph);
   const deleteCustomFn          = useNodeGraphStore(s => s.deleteCustomFn);
@@ -383,7 +389,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                           {folder.keys.filter(k => EXAMPLE_INDEX[k])
                             .sort((a, b) => EXAMPLE_INDEX[a].label.localeCompare(EXAMPLE_INDEX[b].label))
                             .map(k => (
-                              <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success} hint={EXAMPLE_INDEX[k].description}
+                              <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success} hint={EXAMPLE_INDEX[k].description} tag={EXAMPLE_INDEX[k].play ? 'Play' : undefined}
                                 onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }} />
                             ))}
                         </div>
@@ -431,7 +437,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               color={tabColor('graphs')}
               items={savedNames.map(name => ({ id: name, label: name }))}
               renderItem={(item) => (
-                <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')}
+                <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')} tag={savedGraphHasPlay(item.id) ? 'Play' : undefined}
                   onClick={() => { if (reportFileResult(loadSavedGraph(item.id), { failTitle: `Couldn’t open “${item.label}”` })) onNodeAdded?.(); }}
                   onDelete={() => { deleteSavedGraph(item.id); refreshSavedNames(); }} />
               )}

@@ -398,6 +398,19 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     label: 'Glowing Circle',
     description: 'The smallest complete graph: UV → Circle SDF → SDF Glow → Tone Map → Output. SDF Glow\'s Tinted output already carries the colour, so no Palette or Multiply is needed.',
     counter: 5,
+    play: {
+      version: 1,
+      controls: [
+        { id: 'radius', target: 'circ::radius', kind: 'float', label: 'Radius', min: 0.05, max: 0.8 },
+        { id: 'falloff', target: 'glow::brightness', kind: 'float', label: 'Falloff', min: 1, max: 30 },
+        { id: 'tint', target: 'glow::tint', kind: 'color', label: 'Tint', min: 0, max: 1 },
+      ],
+      mappings: [
+        { id: 'breathe', controlId: 'radius', source: { kind: 'lfo', shape: 'sine', rate: 0.2, phase: 0 }, outMin: 0.2, outMax: 0.45, curve: 'linear', smoothMs: 0, enabled: true },
+        { id: 'mouse', controlId: 'falloff', source: { kind: 'mouse', axis: 'y' }, outMin: 3, outMax: 24, curve: 'exp', smoothMs: 120, enabled: true },
+        { id: 'pulse', controlId: 'tint', source: { kind: 'clock', shape: 'saw', bpm: 100, beats: 1 }, outMin: 1, outMax: 0.55, curve: 'log', smoothMs: 40, enabled: true },
+      ],
+    },
     nodes: [
       {
         id: 'uv',
@@ -1993,6 +2006,19 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   waveInterference: {
     label: 'Wave Interference',
     counter: 7,
+    play: {
+      version: 1,
+      controls: [
+        { id: 'scaleA', target: 'wA_2::scale', kind: 'float', label: 'Rings scale', min: 0.5, max: 20 },
+        { id: 'scaleB', target: 'wB_3::scale', kind: 'float', label: 'Stripes scale', min: 0.5, max: 20 },
+        { id: 'distort', target: 'wA_2::distortion', kind: 'float', label: 'Ring distortion', min: 0, max: 2 },
+      ],
+      mappings: [
+        { id: 'mouse', controlId: 'scaleA', source: { kind: 'mouse', axis: 'x' }, outMin: 2, outMax: 14, curve: 'linear', smoothMs: 100, enabled: true },
+        { id: 'counter', controlId: 'scaleB', source: { kind: 'control', controlId: 'scaleA' }, outMin: 14, outMax: 2, curve: 'linear', smoothMs: 0, enabled: true },
+        { id: 'wobble', controlId: 'distort', source: { kind: 'clock', shape: 'triangle', bpm: 90, beats: 2 }, outMin: 0, outMax: 0.9, curve: 'custom', curveY: [0, 0.289, 0.408, 0.5, 0.577, 0.645, 0.707, 0.764, 0.816, 0.866, 0.913, 0.957, 1, 0.957, 0.913, 0.866, 0.816, 0.764, 0.707, 0.645, 0.577, 0.5, 0.408, 0.289, 0], smoothMs: 60, enabled: true },
+      ],
+    },
     nodes: [
       {
         id: 'uv_0',
@@ -11419,6 +11445,21 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     label: 'Lava Lamp',
     description: 'Metaballs from the Field family: two Gaussian Fields (one follows the mouse, one sits off-centre) are summed and Metaball Threshold turns the sum into a blob mask with a soft edge; Mask picks the two colours. Grid Size sets how big a blob is.',
     counter: 10,
+    play: {
+      version: 1,
+      controls: [
+        { id: 'threshold', target: 'thr::threshold', kind: 'float', label: 'Blob threshold', min: 0.2, max: 1.2 },
+        { id: 'softness', target: 'thr::softness', kind: 'float', label: 'Edge softness', min: 0.01, max: 0.2 },
+        { id: 'tight', target: 'g2::k', kind: 'float', label: 'Second blob tightness', min: 0.5, max: 6 },
+        { id: 'pinkR', target: 'pink::r', kind: 'float', label: 'Pink · red', min: 0, max: 1 },
+      ],
+      mappings: [
+        { id: 'drift', controlId: 'threshold', source: { kind: 'lfo', shape: 'triangle', rate: 0.08, phase: 0 }, outMin: 0.35, outMax: 0.65, curve: 'linear', smoothMs: 0, enabled: true },
+        { id: 'follow', controlId: 'softness', source: { kind: 'control', controlId: 'threshold' }, outMin: 0.03, outMax: 0.16, curve: 'custom', curveY: [0, 0.005, 0.02, 0.043, 0.074, 0.112, 0.156, 0.206, 0.259, 0.316, 0.376, 0.438, 0.5, 0.562, 0.624, 0.684, 0.741, 0.794, 0.844, 0.888, 0.926, 0.957, 0.98, 0.995, 1], smoothMs: 60, enabled: true },
+        { id: 'squeeze', controlId: 'tight', source: { kind: 'mouse', axis: 'x' }, outMin: 0.8, outMax: 4, curve: 'linear', smoothMs: 80, enabled: true },
+        { id: 'blush', controlId: 'pinkR', source: { kind: 'mouse', axis: 'down' }, outMin: 1, outMax: 0.4, curve: 'linear', smoothMs: 200, enabled: true },
+      ],
+    },
     nodes: [
       {
         id: 'uv',
@@ -12078,6 +12119,19 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     label: 'Beat Grid',
     description: 'Grid Layout cuts the screen into cells; BPM Sync pulses every box on the beat and Audio Input (load a track) pushes them further. Cell Filter strokes every other cell; Palette colours by column with its Scale param.',
     counter: 13,
+    play: {
+      version: 1,
+      controls: [
+        { id: 'width', target: 'box::width', kind: 'float', label: 'Cell width', min: 0.05, max: 1 },
+        { id: 'height', target: 'box::height', kind: 'float', label: 'Cell height', min: 0.05, max: 1 },
+        { id: 'palScale', target: 'pal::scale', kind: 'float', label: 'Palette scale', min: -3, max: 3 },
+      ],
+      mappings: [
+        { id: 'beat', controlId: 'width', source: { kind: 'clock', shape: 'random', bpm: 120, beats: 1 }, outMin: 0.15, outMax: 0.5, curve: 'linear', smoothMs: 90, enabled: true },
+        { id: 'aspect', controlId: 'height', source: { kind: 'control', controlId: 'width' }, outMin: 0.5, outMax: 0.15, curve: 'linear', smoothMs: 0, enabled: true },
+        { id: 'sweep', controlId: 'palScale', source: { kind: 'lfo', shape: 'sine', rate: 0.05, phase: 0.25 }, outMin: -1, outMax: 1, curve: 'linear', smoothMs: 0, enabled: true },
+      ],
+    },
     nodes: [
       {
         id: 'uv',

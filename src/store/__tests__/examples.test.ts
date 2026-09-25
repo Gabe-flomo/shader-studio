@@ -4,6 +4,8 @@ import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../exampleGraphs';
 import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../exampleIndex';
 import type { GraphNode } from '../../types/nodeGraph';
+import { parsePlayRecord } from '../../types/play';
+import { collectPlayCandidates } from '../../play/playControls';
 
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} });
 
@@ -37,6 +39,28 @@ describe('bundled examples', () => {
       });
     }
     expect(bad).toEqual([]);
+  });
+
+  it('Play setups point at live params of their own graph, and the index flags them', () => {
+    const problems: string[] = [];
+    for (const k of keys) {
+      const g = EXAMPLE_GRAPHS[k];
+      if (!!EXAMPLE_INDEX[k].play !== !!g.play) problems.push(`${k}: index play flag ${EXAMPLE_INDEX[k].play ? 'set' : 'unset'} but graph ${g.play ? 'has' : 'lacks'} a setup`);
+      if (!g.play) continue;
+      const play = parsePlayRecord(g.play);
+      // Nothing may be dropped by the parser: the bundled record has to be exactly valid.
+      expect(play, `${k}: play record parses without loss`).toEqual(g.play);
+      const nodes = resolveNodeAliases(g.nodes, getNodeDefinition);
+      const r = compileGraph({ nodes });
+      const targets = new Set(collectPlayCandidates(nodes, r.paramBindings).map(c => c.target));
+      for (const c of play.controls) if (!targets.has(c.target)) problems.push(`${k}: control "${c.label}" targets ${c.target}, which is not a live param`);
+      const ids = new Set(play.controls.map(c => c.id));
+      for (const m of play.mappings) {
+        if (!ids.has(m.controlId)) problems.push(`${k}: mapping ${m.id} drives a missing control`);
+        if (m.source.kind === 'control' && !ids.has(m.source.controlId)) problems.push(`${k}: mapping ${m.id} reads a missing control`);
+      }
+    }
+    expect(problems).toEqual([]);
   });
 
   it('all compile without errors', () => {

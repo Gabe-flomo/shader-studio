@@ -6,6 +6,7 @@ import { getMembership, loadFolders, toggleFolderCollapsed } from '../../utils/a
 const GRAPH_FOLDER_SCOPE = 'graphs';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { isPlayRecordEmpty } from '../../types/play';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
 import type { Page } from '../page';
 import { Button, IconButton } from '../ui/Button';
@@ -45,6 +46,8 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
   const importGlslFromFile = useNodeGraphStore(s => s.importGlslFromFile);
   // Shortcut labels follow the user's rebinding on the Keys page.
   const [shortcuts] = useState(loadShortcutMap);
+  // The Play tab shows a dot while the graph carries controls or mappings.
+  const hasPlay = useNodeGraphStore(s => !isPlayRecordEmpty(s.play));
 
   return (
     <div
@@ -75,7 +78,10 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
                 background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
                 color: on ? tk.text.primary : tk.text.faint, font: `${on ? 600 : 500} 13px ${fontFamily.ui}`,
               }}
-            >{t.label}</button>
+            >
+              {t.label}
+              {t.page === 'play' && hasPlay && <span aria-label="This graph has a Play setup" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: tk.accent.base, marginLeft: 6, verticalAlign: 'middle' }} />}
+            </button>
           );
         })}
       </div>
@@ -184,6 +190,7 @@ export function LoadGraphButton() {
   const getSavedGraphNames = useNodeGraphStore(s => s.getSavedGraphNames);
   const loadSavedGraph = useNodeGraphStore(s => s.loadSavedGraph);
   const deleteSavedGraph = useNodeGraphStore(s => s.deleteSavedGraph);
+  const savedGraphHasPlay = useNodeGraphStore(s => s.savedGraphHasPlay);
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   const [, bump] = useState(0);
@@ -204,6 +211,7 @@ export function LoadGraphButton() {
       key={n}
       name={n}
       indent={indent}
+      hasPlay={savedGraphHasPlay(n)}
       onLoad={() => { reportFileResult(loadSavedGraph(n), { failTitle: `Couldn’t open “${n}”` }); setOpen(false); }}
       onDelete={() => deleteSavedGraph(n)}
     />
@@ -247,7 +255,7 @@ export function LoadGraphButton() {
   );
 }
 
-function LoadRow({ name, indent = false, onLoad, onDelete }: { name: string; indent?: boolean; onLoad: () => void; onDelete: () => void }) {
+function LoadRow({ name, indent = false, hasPlay = false, onLoad, onDelete }: { name: string; indent?: boolean; hasPlay?: boolean; onLoad: () => void; onDelete: () => void }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
@@ -261,6 +269,7 @@ function LoadRow({ name, indent = false, onLoad, onDelete }: { name: string; ind
         onClick={onLoad}
         style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
       >{name}</button>
+      {hasPlay && <span title="Loads with a Play setup" style={{ height: 18, padding: '0 6px', borderRadius: 5, display: 'inline-flex', alignItems: 'center', background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10px ${fontFamily.ui}` }}>Play</span>}
       {hover && <IconButton icon="trash" label={`Delete “${name}”`} size="sm" tone="danger" tooltip={false} onClick={onDelete} />}
     </div>
   );

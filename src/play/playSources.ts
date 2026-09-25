@@ -32,6 +32,7 @@ export const CURVES: { value: PlayCurve; label: string }[] = [
   { value: 'linear', label: 'Linear' },
   { value: 'exp', label: 'Exp' },
   { value: 'log', label: 'Log' },
+  { value: 'custom', label: 'Draw' },
 ];
 
 export const COLOUR_CHANNELS = [

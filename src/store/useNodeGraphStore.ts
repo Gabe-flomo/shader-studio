@@ -15,6 +15,16 @@ import { bakeControlValues } from '../play/playControls';
 
 /** Top-level `kind` a play file carries, so importing one opens the Play page. */
 export const PLAY_FILE_KIND = 'shader-studio-play';
+
+/** A loaded graph brought a Play setup with it: say so, with a way straight to it. */
+function announcePlay(play: PlayRecord, openPlay: () => void): void {
+  if (isPlayRecordEmpty(play)) return;
+  const c = play.controls.length, m = play.mappings.length;
+  toast.info('This graph has a Play setup', {
+    message: `${c} control${c === 1 ? '' : 's'} · ${m} mapping${m === 1 ? '' : 's'}`,
+    action: { label: 'Open Play', onClick: openPlay },
+  });
+}
 import type { CustomFnPreset, CustomFnPresetExport } from '../types/customFnPreset';
 import type { ExprPreset } from '../types/exprPreset';
 import type { TransformPreset } from '../types/transformPreset';
@@ -335,6 +345,8 @@ interface NodeGraphState {
   exportPlayFile: () => Promise<FileResult>;
   /** Bumped when a play file is imported; App switches to the Play page. */
   playOpenRequest: number;
+  /** Does a graph in browser storage carry a Play setup? (For the "Play" tag on its row.) */
+  savedGraphHasPlay: (name: string) => boolean;
 
   // Runtime debug info (set by ShaderCanvas)
   glslErrors: string[];           // WebGL shader compile errors (from Three.js)
@@ -4245,6 +4257,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return play === state.play ? state : { play };
   }),
 
+  savedGraphHasPlay: (name) => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(`shader-studio:${name}`) ?? 'null') as { play?: unknown } | null;
+      return !isPlayRecordEmpty(parsePlayRecord(parsed?.play));
+    } catch { return false; }
+  },
+
   exportPlayFile: async () => {
     const { nodes, looseGroups, play } = get();
     const live = new Map<string, number | number[]>();
@@ -4364,8 +4383,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Example graphs don't carry their own loose groups yet — reset rather
     // than leave a previous graph's groups referencing node ids that don't
     // exist in this one.
-    set({ nodes, looseGroups: [], play: emptyPlayRecord(), previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+    const play = graph.play ? parsePlayRecord(graph.play) : emptyPlayRecord();
+    set({ nodes, looseGroups: [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
+    announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
   },
 
   setPreviewNodeId: (id) => {
@@ -4498,6 +4519,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // subgraph doesn't leave the editor stranded in a non-existent group.
     set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
     get().compile();
+    announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
     return { ok: true };
   },
 
@@ -4549,6 +4571,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       ...(isPlayFile ? { playOpenRequest: state.playOpenRequest + 1 } : {}),
     }));
     get().compile();
+    // A play file already opens on Play; a plain graph that happens to carry a setup just says so.
+    if (!isPlayFile) announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
     return { ok: true };
   },
 

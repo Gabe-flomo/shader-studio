@@ -61,7 +61,10 @@ export type PlaySource =
   /** A gamepad stick axis (−1..1 → 0..1) or a button (0..1). `pad` is the slot, `index` the axis or button number. */
   | { kind: 'gamepad'; pad: number; control: 'axis' | 'button'; index: number };
 
-export type PlayCurve = 'linear' | 'exp' | 'log';
+export type PlayCurve = 'linear' | 'exp' | 'log' | 'custom';
+
+/** Samples in a drawn remap curve: y values on a uniform 0..1 grid. */
+export const CURVE_POINTS = 25;
 
 export interface PlayMapping {
   id: string;
@@ -71,6 +74,8 @@ export interface PlayMapping {
   outMin: number;
   outMax: number;
   curve: PlayCurve;
+  /** `curve: 'custom'`: the drawn remap, CURVE_POINTS y values (0..1) on a uniform x grid. */
+  curveY?: number[];
   /** Exponential smoothing time constant in ms (0 = snap). */
   smoothMs: number;
   /** Colour controls only: which channel the mapping writes (all three when unset). */
@@ -92,7 +97,17 @@ export function emptyPlayRecord(): PlayRecord {
 
 // ── Parsing ─────────────────────────────────────────────────────────────────
 
-const CURVES: ReadonlySet<string> = new Set<PlayCurve>(['linear', 'exp', 'log']);
+const CURVES: ReadonlySet<string> = new Set<PlayCurve>(['linear', 'exp', 'log', 'custom']);
+
+function curveY(v: unknown): number[] | null {
+  if (!Array.isArray(v) || v.length < 2) return null;
+  const out: number[] = [];
+  for (const y of v) {
+    if (typeof y !== 'number' || !Number.isFinite(y)) return null;
+    out.push(Math.max(0, Math.min(1, y)));
+  }
+  return out;
+}
 const MIDI_SIGNALS: ReadonlySet<string> = new Set<MidiSignal>(['note', 'velocity', 'gate', 'bend', 'cc']);
 const LFO_SHAPES: ReadonlySet<string> = new Set<LfoShape>(['sine', 'triangle', 'saw', 'square', 'random']);
 
@@ -191,6 +206,10 @@ function parseMapping(raw: unknown, controlIds: Set<string>): PlayMapping | null
     enabled: m.enabled !== false,
   };
   if (m.channel === 0 || m.channel === 1 || m.channel === 2) out.channel = m.channel;
+  if (out.curve === 'custom') {
+    const ys = curveY(m.curveY);
+    if (ys) out.curveY = ys; else out.curve = 'linear';
+  }
   return out;
 }
 

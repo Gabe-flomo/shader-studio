@@ -15,7 +15,8 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
 import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, SOURCE_TYPES, TILT_AXES, keyName, sourceFromType, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import type { LfoShape } from '../../types/play';
-import { playEngine, type ControlValue } from '../../lib/playEngine';
+import { playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
+import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
 import {
   candidateLabel, collectPlayCandidates, controlExists, playId, readControlValue, targetParts, type PlayCandidate,
@@ -110,6 +111,8 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   const paramBindings = useNodeGraphStore(s => s.paramBindings);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const exportPlayFile = useNodeGraphStore(s => s.exportPlayFile);
+  const previewAspect = useNodeGraphStore(s => s.previewAspect);
+  const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
 
   // Mouse and keyboard sources listen only while this page shows.
@@ -177,6 +180,11 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
           </>
         )}
       />
+      {/* The picture's shape: the same setting the export dialog uses, so what you see is what you export. */}
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel }}>
+        <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
+        <Select ariaLabel="Canvas shape" value={previewAspect} options={PREVIEW_ASPECTS.map(a => ({ value: a.id, label: a.id === 'free' ? 'Free (fill the panel)' : `${a.label} · ${a.hint}` }))} onChange={v => setPreviewAspect(v as typeof previewAspect)} height={26} style={{ flex: 1, minWidth: 0 }} />
+      </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {play.controls.length === 0 ? (
           <EmptyState
@@ -616,8 +624,11 @@ function MappingRow({ mapping: m, control, controls, audioNodes, meter, learning
         <NumberInput value={m.outMax} title="Value at the source's maximum" onCommit={n => onUpdate({ outMax: n })} style={numStyle} />
         <IconButton icon="bidir" label="Invert the range" size="sm" onClick={() => onUpdate({ outMin: m.outMax, outMax: m.outMin })} />
         <span style={{ flex: 1 }} />
-        <Segmented size="sm" ariaLabel="Curve" value={m.curve} options={CURVES} onChange={v => onUpdate({ curve: v })} />
+        <Segmented size="sm" ariaLabel="Curve" value={m.curve} options={CURVES} onChange={v => onUpdate(v === 'custom' ? { curve: 'custom', curveY: m.curveY ?? sampleCurve(m.curve) } : { curve: v })} />
       </div>
+      {m.curve === 'custom' && (
+        <CurvePad value={m.curveY ?? sampleCurve('linear')} meter={meter} onChange={curveY => onUpdate({ curveY })} onReset={() => onUpdate({ curveY: sampleCurve('linear') })} />
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
         <span style={labelStyle}>Smooth</span>
         <NumberInput value={m.smoothMs} min={0} max={5000} step={10} title="Smoothing time in milliseconds" onCommit={n => onUpdate({ smoothMs: Math.max(0, n) })} style={numStyle} />
@@ -706,4 +717,83 @@ function SourceOptions({ source, audioNodes, numStyle, labelStyle, onChange }: {
     default:
       return null;
   }
+}
+
+/**
+ * The drawn remap curve: x is the source (0..1), y what the mapping sees.
+ * Drag across the pad to draw; the faint diagonal is the untouched 1:1 line and
+ * the dot is the source's reading right now, so you can see where you are on
+ * the curve while you turn the knob.
+ */
+function CurvePad({ value, meter, onChange, onReset }: { value: number[]; meter: number; onChange: (ys: number[]) => void; onReset: () => void }) {
+  const tk = useTokens();
+  const ref = useRef<HTMLDivElement>(null);
+  const draw = useRef<{ ys: number[]; lastI: number; lastY: number } | null>(null);
+  const n = value.length;
+  const W = 100, H = 60;
+  const pointAt = (e: React.PointerEvent): { i: number; y: number } | null => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r || r.width === 0 || r.height === 0) return null;
+    const x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    const y = Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / r.height));
+    return { i: Math.round(x * (n - 1)), y };
+  };
+  const onDown = (e: React.PointerEvent) => {
+    const pt = pointAt(e);
+    if (!pt) return;
+    e.preventDefault();
+    const ys = [...value];
+    ys[pt.i] = pt.y;
+    draw.current = { ys, lastI: pt.i, lastY: pt.y };
+    onChange([...ys]);
+    // Keep the stroke even when the pointer leaves the pad. Some inputs have no capturable pointer; drawing still works without it.
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* fall back to window-level tracking below */ }
+  };
+  useEffect(() => {
+    const up = () => { draw.current = null; };
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => { window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+  }, []);
+  const onMove = (e: React.PointerEvent) => {
+    const d = draw.current;
+    const pt = pointAt(e);
+    if (!d || !pt) return;
+    // Fill every grid column the pointer crossed since the last event, so a fast stroke has no gaps.
+    const from = d.lastI, to = pt.i;
+    const step = to >= from ? 1 : -1;
+    for (let i = from; ; i += step) {
+      const t = to === from ? 1 : (i - from) / (to - from);
+      d.ys[i] = d.lastY + (pt.y - d.lastY) * t;
+      if (i === to) break;
+    }
+    d.lastI = to; d.lastY = pt.y;
+    onChange([...d.ys]);
+  };
+  const onUp = () => { draw.current = null; };
+  const path = value.map((y, i) => `${i === 0 ? 'M' : 'L'}${(i / (n - 1)) * W},${(1 - y) * H}`).join(' ');
+  const mx = Math.max(0, Math.min(1, meter));
+  const pos = mx * (n - 1);
+  const mi = Math.min(n - 2, Math.floor(pos));
+  const my = value[mi] + (value[mi + 1] - value[mi]) * (pos - mi);
+  return (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, marginTop: 6, marginLeft: 60 }}>
+      <div
+        ref={ref}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+        title="Drag to draw the remap: left to right is the source, bottom to top is what the control gets"
+        style={{ flex: 1, height: 96, borderRadius: radius.md, background: tk.bg.field, cursor: 'crosshair', touchAction: 'none', position: 'relative', overflow: 'hidden' }}
+      >
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}>
+          <line x1={0} y1={H} x2={W} y2={0} stroke={tk.text.disabled} strokeWidth={0.6} strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
+          <path d={path} fill="none" stroke={tk.accent.base} strokeWidth={2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        </svg>
+        <span style={{ position: 'absolute', left: `calc(${mx * 100}% - 4px)`, top: `calc(${(1 - my) * 100}% - 4px)`, width: 8, height: 8, borderRadius: '50%', background: tk.accent.base, boxShadow: `0 0 0 2px ${tk.bg.panel}`, pointerEvents: 'none' }} />
+      </div>
+      <IconButton icon="reset" label="Back to a straight line" size="sm" onClick={onReset} style={{ alignSelf: 'flex-start' }} />
+    </div>
+  );
 }
