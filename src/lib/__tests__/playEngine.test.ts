@@ -28,6 +28,7 @@ function outputNode(fromId: string, outKey: string): GraphNode {
 
 const RECORD: PlayRecord = {
   version: 1,
+  layers: [],
   controls: [
     { id: 'c1', target: 'node_3::value', kind: 'float', label: 'Amount', min: 0, max: 10 },
     { id: 'c2', target: 'node_4::color0', kind: 'color', label: 'Tint', min: 0, max: 1 },
@@ -174,6 +175,7 @@ describe('play engine on the bus', () => {
     const target = r.paramBindings['node_3::value'];
     const record: PlayRecord = {
       version: 1,
+      layers: [],
       controls: [
         { id: 'a', target: 'node_5::value', kind: 'float', label: 'A', min: 0, max: 1 },
         { id: 'b', target: 'node_3::value', kind: 'float', label: 'B', min: 0, max: 10 },

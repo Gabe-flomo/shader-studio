@@ -5,7 +5,7 @@
  */
 import type { LfoShape, PlayCurve, PlaySource } from '../types/play';
 
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'control' | 'lfo' | 'clock' | 'audio' | 'tilt' | 'gamepad' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
+export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'control' | 'null' | 'lfo' | 'clock' | 'audio' | 'tilt' | 'gamepad' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
 
 /** In the order the drop-down shows them: what everyone has first, MIDI hardware last. */
 export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
@@ -14,6 +14,7 @@ export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
   { value: 'mouse:down', label: 'Mouse button' },
   { value: 'key', label: 'Keyboard key' },
   { value: 'control', label: 'Another control' },
+  { value: 'null', label: 'Null position' },
   { value: 'lfo', label: 'LFO' },
   { value: 'clock', label: 'Clock (BPM)' },
   { value: 'audio', label: 'Audio band' },
@@ -48,8 +49,8 @@ export function sourceType(s: PlaySource): SourceType {
   return s.kind;
 }
 
-/** `otherControlId` is the first control a new control source may point at (not the mapping's own target). */
-export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId = ''): PlaySource {
+/** `otherControlId` is the first control a new control source may point at (not the mapping's own target); `nullId` the first null layer. */
+export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId = '', nullId = ''): PlaySource {
   const channel = prev.kind === 'midi' ? prev.channel : 0;
   switch (t) {
     case 'midi:cc': return { kind: 'midi', signal: 'cc', channel, cc: prev.kind === 'midi' && prev.cc !== undefined ? prev.cc : 1 };
@@ -62,6 +63,7 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
     case 'mouse:down': return { kind: 'mouse', axis: 'down' };
     case 'key': return { kind: 'key', code: prev.kind === 'key' ? prev.code : 'Space' };
     case 'control': return { kind: 'control', controlId: prev.kind === 'control' ? prev.controlId : otherControlId };
+    case 'null': return { kind: 'null', layerId: prev.kind === 'null' ? prev.layerId : nullId, axis: 'x' };
     case 'lfo': return { kind: 'lfo', shape: 'sine', rate: 0.5, phase: 0 };
     case 'clock': return { kind: 'clock', shape: 'saw', bpm: 120, beats: 4 };
     case 'audio': return { kind: 'audio', nodeId: prev.kind === 'audio' ? prev.nodeId : '', band: 0 };
@@ -71,8 +73,9 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
 }
 
 /** Short human name for a source ("CC 74 · ch. 1", "Key D", "Mouse X", "← Amount"). */
-export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string; label: string }> = []): string {
+export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string; label: string }> = [], layers: ReadonlyArray<{ id: string; label: string }> = []): string {
   if (s.kind === 'mouse') return s.axis === 'down' ? 'Mouse button' : `Mouse ${s.axis.toUpperCase()}`;
+  if (s.kind === 'null') return `${layers.find(l => l.id === s.layerId)?.label ?? 'Null'} ${s.axis.toUpperCase()}`;
   if (s.kind === 'key') return `Key ${keyName(s.code)}`;
   if (s.kind === 'control') return `← ${controls.find(c => c.id === s.controlId)?.label ?? 'control'}`;
   if (s.kind === 'lfo') return `LFO ${s.shape} ${s.rate} Hz`;

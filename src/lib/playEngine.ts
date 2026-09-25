@@ -22,7 +22,7 @@ import { inputBus, paramChannelKey, type InputSource, type InputWriter } from '.
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { audioEngine } from './audioEngine';
 import type { LfoShape, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
-import { CURVE_POINTS, emptyPlayRecord } from '../types/play';
+import { CURVE_POINTS, emptyPlayRecord, parseLayerTarget } from '../types/play';
 
 export type ControlValue = number | number[];
 
@@ -106,6 +106,9 @@ class PlayEngine implements InputSource {
   private live = new Map<string, ControlValue>();
   /** Colour buffers written each frame; owned here and mutated in place (no allocation per frame). */
   private colour = new Map<string, number[]>();
+  /** Driven layer properties, keyed `${layerId}::${key}`. The overlay reads these each frame. */
+  private layerLive = new Map<string, number>();
+  private layerMoved = false;
   /** Controls that were driven last frame; a control that drops out gets its base written once. */
   private drivenLastFrame = new Set<string>();
   private restoreOnce = new Set<string>();
@@ -204,6 +207,23 @@ class PlayEngine implements InputSource {
     return this.live.get(controlId);
   }
 
+  /** A layer property right now: what a mapping drives it to, else the layer's own value. */
+  layerValue(layerId: string, key: string, base: number): number {
+    return this.layerLive.get(`${layerId}::${key}`) ?? base;
+  }
+
+  /** Did a driven layer property change in the last tick? (The overlay redraws.) */
+  layerChanged(): boolean {
+    return this.layerMoved;
+  }
+
+  private layerBase(layerId: string, key: string): number | null {
+    const layer = this.record.layers.find(l => l.id === layerId);
+    if (!layer) return null;
+    const v = (layer as unknown as Record<string, unknown>)[key];
+    return typeof v === 'number' ? v : null;
+  }
+
   /**
    * Raw unit reading of a source right now, or null while the source has never
    * produced one (a knob nobody has touched yet): such a mapping leaves its
@@ -249,6 +269,11 @@ class PlayEngine implements InputSource {
         const b = pad.buttons[source.index];
         return b === undefined ? null : b.value;
       }
+      case 'null': {
+        const base = this.layerBase(source.layerId, source.axis);
+        if (base === null) return null;
+        return Math.max(0, Math.min(1, this.layerValue(source.layerId, source.axis, base)));
+      }
       case 'control': {
         // Another control, as 0..1 across its range. What was written for it
         // this frame if it is driven (mappings run in list order; a later row
@@ -277,6 +302,7 @@ class PlayEngine implements InputSource {
     // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.
     if (this.gamepadIsBound && this.performing) inputBus.wake();
     const driven = new Set<string>();
+    this.layerMoved = false;
     // Colour controls start each frame from their base so an un-mapped channel keeps the slider's value.
     for (const m of this.record.mappings) {
       if (!m.enabled) continue;
@@ -297,6 +323,15 @@ class PlayEngine implements InputSource {
         if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target;
       }
       st.value = v;
+      const layerTarget = parseLayerTarget(control.target);
+      if (layerTarget) {
+        // A layer property: not a uniform. The overlay reads it after this tick.
+        const lk = `${layerTarget.layerId}::${layerTarget.key}`;
+        if (this.layerLive.get(lk) !== v) { this.layerLive.set(lk, v); this.layerMoved = true; }
+        this.live.set(control.id, v);
+        driven.add(control.id);
+        continue;
+      }
       const key = paramChannelKey(bindingKeyOf(control.target));
       if (control.kind === 'color') {
         const buf = this.colourBuffer(control.id, driven.has(control.id));
@@ -321,7 +356,11 @@ class PlayEngine implements InputSource {
       if (driven.has(id)) continue;
       const control = this.controls.get(id);
       const base = this.base.get(id);
-      if (control && base !== undefined) {
+      const lt = control ? parseLayerTarget(control.target) : null;
+      if (lt) {
+        this.layerLive.delete(`${lt.layerId}::${lt.key}`);
+        this.layerMoved = true;
+      } else if (control && base !== undefined) {
         write(paramChannelKey(bindingKeyOf(control.target)), Array.isArray(base) ? [...base] : base);
       }
       this.live.delete(id);

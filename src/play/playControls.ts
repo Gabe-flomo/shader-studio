@@ -13,6 +13,7 @@
 
 import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
+import { parseLayerTarget } from '../types/play';
 import { getNodeDefinition } from '../nodes/definitions';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
 import { isParamVisible } from '../compiler/uniformPatcher';
@@ -106,8 +107,18 @@ export function findTargetNode(nodes: GraphNode[], target: string): GraphNode | 
   return inner?.nodes.find(n => n.id === parts[1]);
 }
 
-/** The param's current value in the graph (a group override wins over the inner node's own value). */
-export function readControlValue(nodes: GraphNode[], target: string): number | number[] | undefined {
+/** A layer property's current value from the record, or undefined when the layer is gone. */
+export function readLayerValue(play: PlayRecord | undefined, target: string): number | undefined {
+  const lt = parseLayerTarget(target);
+  if (!lt || !play) return undefined;
+  const layer = play.layers.find(l => l.id === lt.layerId);
+  const v = layer ? (layer as unknown as Record<string, unknown>)[lt.key] : undefined;
+  return typeof v === 'number' ? v : undefined;
+}
+
+/** The control's current value: a graph param (a group override wins over the inner node's own value) or a layer property. */
+export function readControlValue(nodes: GraphNode[], target: string, play?: PlayRecord): number | number[] | undefined {
+  if (parseLayerTarget(target)) return readLayerValue(play, target);
   const parts = target.split('::');
   const top = nodes.find(n => n.id === parts[0]);
   if (!top) return undefined;
@@ -123,19 +134,31 @@ export function readControlValue(nodes: GraphNode[], target: string): number | n
   return typeof v === 'number' ? v : colourValue(v) ?? undefined;
 }
 
-/** Does the control's target still exist in the graph? */
-export function controlExists(nodes: GraphNode[], control: PlayControl): boolean {
-  return readControlValue(nodes, control.target) !== undefined;
+/** Does the control's target still exist (in the graph, or as a layer)? */
+export function controlExists(nodes: GraphNode[], control: PlayControl, play?: PlayRecord): boolean {
+  return readControlValue(nodes, control.target, play) !== undefined;
 }
 
 /** Store values of every control, keyed by control id (the engine's base values). */
 export function readBaseValues(nodes: GraphNode[], play: PlayRecord): Map<string, number | number[]> {
   const out = new Map<string, number | number[]>();
   for (const c of play.controls) {
-    const v = readControlValue(nodes, c.target);
+    const v = readControlValue(nodes, c.target, play);
     if (v !== undefined) out.set(c.id, v);
   }
   return out;
+}
+
+/** A copy of `play` with driven layer properties written into their layers (for a play file export). */
+export function bakeLayerValues(play: PlayRecord, values: Map<string, number | number[]>): PlayRecord {
+  let layers = play.layers;
+  for (const c of play.controls) {
+    const lt = parseLayerTarget(c.target);
+    const v = values.get(c.id);
+    if (!lt || typeof v !== 'number') continue;
+    layers = layers.map(l => l.id === lt.layerId ? { ...l, [lt.key]: v } as typeof l : l);
+  }
+  return layers === play.layers ? play : { ...play, layers };
 }
 
 /**
@@ -148,7 +171,7 @@ export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: 
   let out = nodes;
   for (const c of play.controls) {
     const v = values.get(c.id);
-    if (v === undefined) continue;
+    if (v === undefined || parseLayerTarget(c.target)) continue;
     const value = Array.isArray(v) ? [v[0], v[1], v[2]] : v;
     const parts = c.target.split('::');
     const key = parts[parts.length - 1];
@@ -165,7 +188,7 @@ export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: 
 
 let seq = 0;
 /** Ids for controls and mappings: unique within a session, readable in a file. */
-export function playId(prefix: 'ctl' | 'map'): string {
+export function playId(prefix: 'ctl' | 'map' | 'layer'): string {
   seq += 1;
   return `${prefix}_${Date.now().toString(36)}_${seq.toString(36)}`;
 }

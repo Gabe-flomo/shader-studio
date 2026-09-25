@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS, fitAspect } from '../utils/graphImportPlan';
@@ -8,6 +8,7 @@ import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumR
 import { inputBus } from '../lib/inputBus';
 import { playEngine } from '../lib/playEngine';
 import { readBaseValues } from '../play/playControls';
+import { playOverlay } from '../play/overlay';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick, hasTimeTickListeners } from '../lib/timeTick';
@@ -1012,8 +1013,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         const u = material.uniforms[uName];
         if (u) u.value = v;
       }
-      // A knob turned while the clock is paused still has to show.
-      if (inputBus.changed()) needsRender = true;
+      // A knob turned while the clock is paused still has to show; so does a layer a mapping moved.
+      if (inputBus.changed() || playEngine.layerChanged()) needsRender = true;
       // Draw live spectrum into any open AudioInputModal canvases
       for (const audioId of audioIdsRef.current) {
         if (!audioSpectrumRegistry.has(audioId)) continue;
@@ -1043,7 +1044,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 ||
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
-      ));
+      )) || playOverlay.isAnimated();
       const doRender = dynamic || needsRender;
       if (doRender) {
         needsRender = false;
@@ -1088,6 +1089,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           gpuTimer.end();
           renderer.autoClear = true;
         }
+
+        // ── Play layers: drawn over the picture while it is still in the drawing buffer ──
+        playOverlay.draw(renderer.domElement, elapsed, dt);
 
         // Check for GLSL errors after first few renders
         const newErrors = flushGlErrors();
@@ -1702,6 +1706,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     inputBus.setBindings(lastLive);
     inputBus.setParamBindings(lastBindings);
     playEngine.setRecord(lastPlay);
+    playOverlay.setRecord(lastPlay);
+    playOverlay.setWriter((layerId, patch) => useNodeGraphStore.getState().setPlay(p => ({ ...p, layers: p.layers.map(l => l.id === layerId ? { ...l, ...patch } as typeof l : l) })));
     playEngine.setBaseValues(readBaseValues(lastPlayNodes, lastPlay));
     const unsub = useNodeGraphStore.subscribe(state => {
       selectedNodeIdRef.current   = state.selectedNodeId;
@@ -1711,7 +1717,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (state.liveUniforms !== lastLive) { lastLive = state.liveUniforms; inputBus.setBindings(lastLive); }
       if (state.paramBindings !== lastBindings) { lastBindings = state.paramBindings; inputBus.setParamBindings(lastBindings); }
       // Play mappings: the record itself, and the sliders' values the engine falls back to.
-      if (state.play !== lastPlay) { lastPlay = state.play; playEngine.setRecord(lastPlay); }
+      if (state.play !== lastPlay) { lastPlay = state.play; playEngine.setRecord(lastPlay); playOverlay.setRecord(lastPlay); }
       if (state.play !== lastPlay || state.nodes !== lastPlayNodes) {
         lastPlayNodes = state.nodes;
         if (lastPlay.controls.length > 0) playEngine.setBaseValues(readBaseValues(lastPlayNodes, lastPlay));
@@ -1911,6 +1917,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   // ResizeObserver above, so the renderer follows the fitted size.
   const previewAspect = useNodeGraphStore(s => s.previewAspect);
   const outerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useCallback((el: HTMLCanvasElement | null) => { playOverlay.setCanvas(el); }, []);
+  // Null markers drag from the picture itself.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    return playOverlay.attachPointer(el);
+  }, []);
   const [fit, setFit] = useState<{ width: number; height: number } | null>(null);
   useEffect(() => {
     const ratio = PREVIEW_ASPECTS.find(a => a.id === previewAspect)?.ratio ?? null;
@@ -1933,7 +1946,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         style={fit
           ? { width: fit.width, height: fit.height, background: '#000', position: 'relative', overflow: 'hidden', flexShrink: 0 }
           : { width: '100%', height: '100%', background: '#000', position: 'relative', overflow: 'hidden' }}
-      />
+      >
+        {/* Play layers (nulls, text, images, particles) draw here, over the WebGL canvas. */}
+        <canvas ref={overlayRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+      </div>
     </div>
   );
 }

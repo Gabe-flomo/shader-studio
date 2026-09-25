@@ -400,6 +400,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     counter: 5,
     play: {
       version: 1,
+      layers: [],
       controls: [
         { id: 'radius', target: 'circ::radius', kind: 'float', label: 'Radius', min: 0.05, max: 0.8 },
         { id: 'falloff', target: 'glow::brightness', kind: 'float', label: 'Falloff', min: 1, max: 30 },
@@ -2008,6 +2009,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     counter: 7,
     play: {
       version: 1,
+      layers: [],
       controls: [
         { id: 'scaleA', target: 'wA_2::scale', kind: 'float', label: 'Rings scale', min: 0.5, max: 20 },
         { id: 'scaleB', target: 'wB_3::scale', kind: 'float', label: 'Stripes scale', min: 0.5, max: 20 },
@@ -11447,6 +11449,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     counter: 10,
     play: {
       version: 1,
+      layers: [],
       controls: [
         { id: 'threshold', target: 'thr::threshold', kind: 'float', label: 'Blob threshold', min: 0.2, max: 1.2 },
         { id: 'softness', target: 'thr::softness', kind: 'float', label: 'Edge softness', min: 0.01, max: 0.2 },
@@ -12121,6 +12124,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     counter: 13,
     play: {
       version: 1,
+      layers: [],
       controls: [
         { id: 'width', target: 'box::width', kind: 'float', label: 'Cell width', min: 0.05, max: 1 },
         { id: 'height', target: 'box::height', kind: 'float', label: 'Cell height', min: 0.05, max: 1 },

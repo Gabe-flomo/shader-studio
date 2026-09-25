@@ -30,6 +30,8 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
+import { LayersPanel } from './LayersPanel';
+import { parseLayerTarget } from '../../types/play';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
 
@@ -129,9 +131,14 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   const candidates = useMemo(() => collectPlayCandidates(nodes, paramBindings), [nodes, paramBindings]);
 
   const writeControl = useCallback((control: PlayControl, value: number | number[]) => {
+    const lt = parseLayerTarget(control.target);
+    if (lt) {
+      if (typeof value === 'number') setPlay(p => ({ ...p, layers: p.layers.map(l => l.id === lt.layerId ? { ...l, [lt.key]: value } as typeof l : l) }));
+      return;
+    }
     const { nodeId, paramKey } = targetParts(control.target);
     updateNodeParams(nodeId, { [paramKey]: value }, { immediate: true });
-  }, [updateNodeParams]);
+  }, [updateNodeParams, setPlay]);
 
   const update = useCallback((fn: (p: PlayRecord) => PlayRecord) => setPlay(fn), [setPlay]);
 
@@ -161,7 +168,8 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
 
   const [drawerOpen, setDrawerOpen] = useState(true);
   // Phones: Controls and Mappings are tabs instead of stacked panes.
-  const [tab, setTab] = useState<'controls' | 'mappings'>('controls');
+  const [tab, setTab] = useState<'controls' | 'layers' | 'mappings'>('controls');
+  const nullLayers = useMemo(() => play.layers.filter(l => l.kind === 'null').map(l => ({ id: l.id, label: l.label })), [play.layers]);
   // Desktop: the drawer's height, dragged from its top edge and remembered.
   const rootRef = useRef<HTMLDivElement>(null);
   const [drawerH, setDrawerH] = useState<number>(() => {
@@ -194,21 +202,30 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
 
   return (
     <div ref={rootRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
-      {compact && (
-        <div style={{ flexShrink: 0, padding: '8px 12px 2px', background: tk.bg.panel }}>
-          <Segmented
-            fill
-            ariaLabel="Play section"
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: 'controls', label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` },
-              { value: 'mappings', label: `Mappings${play.mappings.length ? ` · ${play.mappings.length}` : ''}` },
-            ]}
-          />
-        </div>
+      {/* Sections. Desktop keeps Mappings as a drawer underneath; phones make it a third tab. */}
+      <div style={{ flexShrink: 0, padding: '8px 12px 2px', background: tk.bg.panel }}>
+        <Segmented
+          fill
+          ariaLabel="Play section"
+          value={compact || tab !== 'mappings' ? tab : 'controls'}
+          onChange={setTab}
+          options={[
+            { value: 'controls', label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` },
+            { value: 'layers', label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}` },
+            ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length ? ` · ${play.mappings.length}` : ''}` }] : []),
+          ]}
+        />
+      </div>
+      {tab === 'layers' && (
+        <LayersPanel
+          play={play}
+          touch={compact}
+          exposedTargets={new Set(play.controls.map(c => c.target))}
+          onChange={update}
+          onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))}
+        />
       )}
-      {(!compact || tab === 'controls') && <PanelHeader
+      {tab === 'controls' && <PanelHeader
         title="Controls"
         hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
         extra={(
@@ -224,7 +241,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
         <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
         <Select ariaLabel="Canvas shape" value={previewAspect} options={PREVIEW_ASPECTS.map(a => ({ value: a.id, label: a.id === 'free' ? 'Free (fill the panel)' : `${a.label} · ${a.hint}` }))} onChange={v => setPreviewAspect(v as typeof previewAspect)} height={26} style={{ flex: 1, minWidth: 0 }} />
       </div>
-      {(!compact || tab === 'controls') && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+      {tab === 'controls' && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {play.controls.length === 0 ? (
           <EmptyState
             title="No controls yet"
@@ -238,10 +255,10 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
             control={c}
             index={i}
             count={play.controls.length}
-            exists={controlExists(nodes, c)}
-            value={readControlValue(nodes, c.target)}
+            exists={controlExists(nodes, c, play)}
+            value={readControlValue(nodes, c.target, play)}
             live={liveValues.get(c.id)}
-            drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls))}
+            drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers))}
             touch={compact}
             onChange={v => writeControl(c, v)}
             onRename={label => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }))}
@@ -269,6 +286,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
         onUpdate={(id, patch) => update(p => ({ ...p, mappings: p.mappings.map(m => m.id === id ? { ...m, ...patch } : m) }))}
         onRemove={id => update(p => ({ ...p, mappings: p.mappings.filter(m => m.id !== id) }))}
         audioNodes={audioNodes}
+        nullLayers={nullLayers}
       />}
     </div>
   );
@@ -475,7 +493,7 @@ function ColourPad({ value, disabled, onChange }: { value: number[]; disabled: b
 
 interface AudioNodeOption { id: string; label: string; bands: number }
 
-function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, audioNodes }: {
+function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, audioNodes, nullLayers }: {
   play: PlayRecord;
   /** `drawer`: folds under the controls with a draggable top edge. `tab`: fills the page (phones). */
   mode: 'drawer' | 'tab';
@@ -487,6 +505,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
   onUpdate: (id: string, patch: Partial<PlayMapping>) => void;
   onRemove: (id: string) => void;
   audioNodes: AudioNodeOption[];
+  nullLayers: { id: string; label: string }[];
 }) {
   const tk = useTokens();
   const meters = useSourceMeter(open ? play.mappings : EMPTY_MAPPINGS);
@@ -572,6 +591,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               control={play.controls.find(c => c.id === m.controlId)}
               controls={play.controls}
               audioNodes={audioNodes}
+              nullLayers={nullLayers}
               meter={meters.get(m.id) ?? 0}
               learning={learnFor === m.id}
               collapsed={collapsed.has(m.id)}
@@ -589,11 +609,12 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
 
 const EMPTY_MAPPINGS: PlayMapping[] = [];
 
-function MappingRow({ mapping: m, control, controls, audioNodes, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
+function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
   mapping: PlayMapping;
   control: PlayControl | undefined;
   controls: PlayControl[];
   audioNodes: AudioNodeOption[];
+  nullLayers: { id: string; label: string }[];
   meter: number;
   learning: boolean;
   collapsed: boolean;
@@ -623,7 +644,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, meter, learning
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26 }}>
           {chevron}
           <button type="button" onClick={onToggle} title="Expand" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `500 12px ${fontFamily.ui}`, textAlign: 'left' }}>
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{sourceLabel(m.source, controls)}</span>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{sourceLabel(m.source, controls, nullLayers)}</span>
             <Icon name="chevR" size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: tk.text.secondary }}>{control?.label ?? 'missing control'}</span>
           </button>
@@ -642,7 +663,15 @@ function MappingRow({ mapping: m, control, controls, audioNodes, meter, learning
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {chevron}
         <span style={{ ...labelStyle, width: 40 }}>Source</span>
-        <Select ariaLabel="Source" value={type} options={SOURCE_TYPES} onChange={v => onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '') })} height={26} style={{ flex: 1, minWidth: 0 }} />
+        <Select ariaLabel="Source" value={type} options={SOURCE_TYPES} onChange={v => onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '') })} height={26} style={{ flex: 1, minWidth: 0 }} />
+        {m.source.kind === 'null' && (
+          nullLayers.length === 0
+            ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a Null layer first</span>
+            : <>
+                <Select ariaLabel="Null layer" value={m.source.layerId} options={nullLayers.map(l => ({ value: l.id, label: l.label }))} onChange={v => onUpdate({ source: { kind: 'null', layerId: v, axis: m.source.kind === 'null' ? m.source.axis : 'x' } })} height={26} style={{ flex: 1, minWidth: 0 }} />
+                <Segmented size="sm" ariaLabel="Null axis" value={m.source.axis} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }]} onChange={v => onUpdate({ source: { kind: 'null', layerId: m.source.kind === 'null' ? m.source.layerId : '', axis: v } })} />
+              </>
+        )}
         {m.source.kind === 'control' && (
           otherControls.length === 0
             ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a second control</span>

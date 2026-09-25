@@ -11,7 +11,7 @@ import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord } from '../types/play';
 import { playEngine } from '../lib/playEngine';
-import { bakeControlValues } from '../play/playControls';
+import { bakeControlValues, bakeLayerValues } from '../play/playControls';
 
 /** Top-level `kind` a play file carries, so importing one opens the Play page. */
 export const PLAY_FILE_KIND = 'shader-studio-play';
@@ -4271,7 +4271,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const v = playEngine.liveValue(c.id);
       if (v !== undefined) live.set(c.id, v);
     }
-    const json = JSON.stringify({ kind: PLAY_FILE_KIND, nodes: bakeControlValues(nodes, play, live), looseGroups, play, layout: LAYOUT_VERSION }, null, 2);
+    const json = JSON.stringify({ kind: PLAY_FILE_KIND, nodes: bakeControlValues(nodes, play, live), looseGroups, play: bakeLayerValues(play, live), layout: LAYOUT_VERSION }, null, 2);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     let name = 'play-file';
     if (!isTauri) {
