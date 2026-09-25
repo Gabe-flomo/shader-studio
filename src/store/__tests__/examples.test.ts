@@ -4,7 +4,7 @@ import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../exampleGraphs';
 import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../exampleIndex';
 import type { GraphNode } from '../../types/nodeGraph';
-import { parsePlayRecord } from '../../types/play';
+import { parseLayerTarget, parsePlayRecord } from '../../types/play';
 import { collectPlayCandidates } from '../../play/playControls';
 
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} });
@@ -53,7 +53,11 @@ describe('bundled examples', () => {
       const nodes = resolveNodeAliases(g.nodes, getNodeDefinition);
       const r = compileGraph({ nodes });
       const targets = new Set(collectPlayCandidates(nodes, r.paramBindings).map(c => c.target));
-      for (const c of play.controls) if (!targets.has(c.target)) problems.push(`${k}: control "${c.label}" targets ${c.target}, which is not a live param`);
+      const layerIds = new Set(play.layers.map(l => l.id));
+      for (const c of play.controls) {
+        const lt = parseLayerTarget(c.target);
+        if (lt ? !layerIds.has(lt.layerId) : !targets.has(c.target)) problems.push(`${k}: control "${c.label}" targets ${c.target}, which is not a live param or layer`);
+      }
       const ids = new Set(play.controls.map(c => c.id));
       for (const m of play.mappings) {
         if (!ids.has(m.controlId)) problems.push(`${k}: mapping ${m.id} drives a missing control`);
