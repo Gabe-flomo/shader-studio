@@ -64,6 +64,24 @@ describe('Stops Palette', () => {
     expect(mirror).toMatch(/abs\(fract\([^;]+\* 0\.5\) \* 2\.0 - 1\.0\)/);
   });
 
+  it('Curve blends through neighbours with Catmull-Rom, wrapping them in Loop and holding them at the ends otherwise', () => {
+    const loop = body({ stops: '4', wrap: 'loop', blend: 'curve' });
+    expect(loop).toContain('vec3 stopPaletteCurve(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t)');
+    expect(loop).toMatch(/if \(\w+_x >= 0\.0\) \w+_color = stopPaletteCurve\((\w+)_c3, \1_c0, \1_c1, \1_c2, \1_f\);/);
+    expect(loop).toMatch(/if \(\w+_x >= 3\.0\) \w+_color = stopPaletteCurve\((\w+)_c2, \1_c3, \1_c0, \1_c1, \1_f\);/);
+    const clamp = body({ stops: '3', wrap: 'clamp', blend: 'curve' });
+    expect(clamp).toMatch(/if \(\w+_x >= 0\.0\) \w+_color = stopPaletteCurve\((\w+)_c0, \1_c0, \1_c1, \1_c2, \1_f\);/);
+    expect(clamp).toMatch(/if \(\w+_x >= 1\.0\) \w+_color = stopPaletteCurve\((\w+)_c0, \1_c1, \1_c2, \1_c2, \1_f\);/);
+    // not pulled in unless Curve is chosen
+    expect(body({ stops: '3', blend: 'linear' })).not.toContain('stopPaletteCurve');
+  });
+
+  it('holds up to 32 stops', () => {
+    const fs = body({ stops: '32', wrap: 'loop', blend: 'linear' });
+    expect(fs.match(/if \(\w+_x >= \d+\.0\)/g)).toHaveLength(32);
+    expect(fs).toMatch(/mix\(\w+_c31, \w+_c0, /);
+  });
+
   it('stop colours are live uniforms', () => {
     const fs = body({ stops: '2', color0: [1, 0, 0], color1: [0, 0, 1] });
     expect(fs).toMatch(/vec3 \w+_c0 = u_p_\w+_color0;/);

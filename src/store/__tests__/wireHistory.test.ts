@@ -86,5 +86,65 @@ describe('wire memory', () => {
     expect(st.pastWiresFor('f2v', st.nodes).map(w => w.fromNodeId)).toEqual(['circ']);
     expect(useNodeGraphStore.getState().disconnectOutput('circ', 'distance')).toBe(0);
   });
+
+});
+
+describe('palette conversion', () => {
+  const pal = (id: string, type: 'palette' | 'stopPalette', params: Record<string, unknown>): GraphNode => node(id, type,
+    { value: { type: 'float', label: 'Angle', connection: { nodeId: 't', outputKey: 'time' } }, anim: { type: 'float', label: 'Angle offset' },
+      ...(type === 'palette' ? { offset: { type: 'vec3', label: 'Offset' } } : {}) },
+    { color: { type: 'vec3', label: 'Color' } }, params);
+  const withPalette = (p: GraphNode) => [
+    node('t', 'time', {}, { time: { type: 'float', label: 'Time' } }),
+    p,
+    node('out', 'output', { color: { type: 'vec3', label: 'Color', connection: { nodeId: p.id, outputKey: 'color' } } }, {}),
+  ];
+
+  beforeEach(() => {
+    useNodeGraphStore.setState({ nodes: withPalette(pal('p', 'palette', { preset: '1', scale: 2, speed: 0.5, value: 0, anim: 0 })), activeGroupPath: [], activeGroupId: null, wireHistory: [] });
+  });
+
+  it('converts a cosine Palette in place: same id, wires in and out kept, colours sampled from its preset', () => {
+    expect(useNodeGraphStore.getState().convertPaletteToStops('p', 6)).toBe(true);
+    const st = useNodeGraphStore.getState();
+    const p = st.nodes.find(n => n.id === 'p')!;
+    expect(p.type).toBe('stopPalette');
+    expect(p.inputs.value.connection).toEqual({ nodeId: 't', outputKey: 'time' });
+    expect(p.inputs.offset).toBeUndefined();
+    expect(st.nodes.find(n => n.id === 'out')!.inputs.color.connection).toEqual({ nodeId: 'p', outputKey: 'color' });
+    expect(p.params).toMatchObject({ stops: '6', wrap: 'loop', scale: 2, speed: 0.5 });
+    // IQ Rainbow (preset 1) at t = 0: red channel 0.5 + 0.5·cos(0) = 1
+    expect((p.params.color0 as number[])[0]).toBeCloseTo(1, 5);
+  });
+
+  it('pasting onto a cosine Palette converts it and takes the colours in one undo step', () => {
+    const used = useNodeGraphStore.getState().setPaletteStops('p', [[1, 0, 0], [0, 1, 0], [0, 0, 1]]);
+    expect(used).toBe(3);
+    let p = useNodeGraphStore.getState().nodes.find(n => n.id === 'p')!;
+    expect(p.type).toBe('stopPalette');
+    expect(p.params).toMatchObject({ stops: '3', color0: [1, 0, 0], color2: [0, 0, 1] });
+    useNodeGraphStore.getState().undo();
+    p = useNodeGraphStore.getState().nodes.find(n => n.id === 'p')!;
+    expect(p.type).toBe('palette');
+  });
+
+  it('thins a palette longer than 32 stops evenly, keeping both ends', () => {
+    useNodeGraphStore.setState({ nodes: withPalette(pal('p', 'stopPalette', { stops: '5' })) });
+    const many = Array.from({ length: 40 }, (_, i) => [i / 39, 0, 0] as [number, number, number]);
+    expect(useNodeGraphStore.getState().setPaletteStops('p', many)).toBe(32);
+    const p = useNodeGraphStore.getState().nodes.find(n => n.id === 'p')!;
+    expect(p.params.stops).toBe('32');
+    expect((p.params.color0 as number[])[0]).toBe(0);
+    expect((p.params.color31 as number[])[0]).toBe(1);
+  });
+
+  it('Auto conversion of a palette that repeats every 2 spans both halves and halves Scale and Speed', () => {
+    // preset 3 = IQ Lemon (blue channel at frequency 0.5)
+    useNodeGraphStore.setState({ nodes: withPalette(pal('p', 'palette', { preset: '3', scale: 1, speed: 0.4, value: 0, anim: 0 })) });
+    expect(useNodeGraphStore.getState().convertPaletteToStops('p', 'auto')).toBe(true);
+    const p = useNodeGraphStore.getState().nodes.find(n => n.id === 'p')!;
+    expect(p.params).toMatchObject({ scale: 0.5, speed: 0.2, wrap: 'loop', blend: 'curve' });
+    expect(Number(p.params.stops)).toBeGreaterThan(8);
+  });
 });
 

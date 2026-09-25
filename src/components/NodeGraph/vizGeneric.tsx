@@ -15,6 +15,7 @@ import { useEffect, useRef } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { pal, MONO, vizContainer, setupViz, imageSize, blitImage } from './vizKit';
+import { evalStops } from '../../lib/palette';
 
 const num = (node: GraphNode, key: string, fallback: number): number => {
   const v = node.params[key];
@@ -278,21 +279,13 @@ function FieldViz({ node }: { node: GraphNode }) {
 
 // ── Stops Palette: the palette over two trips, so Loop / Mirror / Clamp read at a glance ──
 function stopPaletteColor(n: GraphNode, t: number): [number, number, number] {
-  const count = Math.max(2, Math.min(8, Math.round(num(n, 'stops', 5))));
-  const wrap = str(n, 'wrap', 'loop'), blend = str(n, 'blend', 'smooth');
-  const col = (i: number): [number, number, number] => {
-    const v = n.params[`color${i}`];
-    const d = getNodeDefinition(n.type)?.defaultParams?.[`color${i}`];
-    const a = Array.isArray(v) ? v : Array.isArray(d) ? d : [0.5, 0.5, 0.5];
-    return [Number(a[0]) || 0, Number(a[1]) || 0, Number(a[2]) || 0];
-  };
-  const segs = wrap === 'loop' ? count : count - 1;
-  const u = wrap === 'loop' ? fract(t) : wrap === 'mirror' ? Math.abs(fract(t * 0.5) * 2 - 1) : Math.max(0, Math.min(1, t));
-  const x = Math.min(u * segs, segs - 0.0001);
-  const k = Math.floor(x), f = x - k;
-  const w = blend === 'bands' ? 0 : blend === 'linear' ? f : f * f * (3 - 2 * f);
-  const a = col(k), b = col((k + 1) % count);
-  return [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w];
+  const count = Math.max(2, Math.min(32, Math.round(num(n, 'stops', 5))));
+  const defs = getNodeDefinition(n.type)?.defaultParams ?? {};
+  const stops = Array.from({ length: count }, (_, i): [number, number, number] => {
+    const v = n.params[`color${i}`] ?? defs[`color${i}`];
+    return Array.isArray(v) ? [Number(v[0]) || 0, Number(v[1]) || 0, Number(v[2]) || 0] : [0.5, 0.5, 0.5];
+  });
+  return evalStops(stops, t, str(n, 'wrap', 'loop'), str(n, 'blend', 'smooth'));
 }
 
 function StopPaletteViz({ node }: { node: GraphNode }) {

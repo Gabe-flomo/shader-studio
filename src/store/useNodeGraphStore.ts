@@ -19,6 +19,8 @@ import { USER_NODE_DEFAULT_CATEGORY } from '../types/userNode';
 import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes } from '../nodes/userNodes/userNodeRegistry';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams } from '../nodes/definitions';
+import { paletteNodeCoeffs, STOP_PALETTE_MAX } from '../nodes/definitions/color';
+import { autoFitCosineStops, fitCosineStops } from '../lib/palette';
 import { compileGraph } from '../compiler/graphCompiler';
 import { recordGraphCompile } from '../lib/perfStats';
 import { convertFragmentShader } from '../nodes/userNodes/glslImport';
@@ -555,6 +557,19 @@ interface NodeGraphState {
   ) => void;
 
   disconnectInput: (nodeId: string, inputKey: string) => void;
+  /**
+   * Give a palette node these colour stops. A Stops Palette just takes them; a cosine Palette is
+   * converted in place into a Stops Palette (same id, so every wire stays) and then takes them.
+   * More stops than the node holds are thinned evenly. Returns how many stops were used.
+   */
+  setPaletteStops: (nodeId: string, colors: Array<[number, number, number]>, opts?: { wrap?: string; blend?: string }) => number;
+  /**
+   * Convert a cosine Palette into a Stops Palette in place (one undo step). Its colours are
+   * sampled into `count` evenly spaced Loop stops — 'auto' picks the fewest that stay within
+   * about 1% of the original — with whichever blend follows it best, unless `colors` gives
+   * the stops outright.
+   */
+  convertPaletteToStops: (nodeId: string, count?: number | 'auto', colors?: Array<[number, number, number]>, opts?: { wrap?: string; blend?: string }) => boolean;
   /** Remove every wire leaving `nodeId.outputKey` at the level being edited (one undo step). Returns how many were removed. */
   disconnectOutput: (nodeId: string, outputKey: string) => number;
 
@@ -3626,6 +3641,80 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       return { nodes: newTop ?? state.nodes };
     });
     get().compile();
+  },
+
+  setPaletteStops: (nodeId, colors, opts) => {
+    const st = get();
+    const node = nodeInScope(st, nodeId);
+    if (!node || colors.length < 2) return 0;
+    // Thin a long palette evenly rather than cutting it off
+    const picked = colors.length <= STOP_PALETTE_MAX ? colors
+      : Array.from({ length: STOP_PALETTE_MAX }, (_, i) => colors[Math.round(i * (colors.length - 1) / (STOP_PALETTE_MAX - 1))]);
+    const stopParams: Record<string, unknown> = { stops: String(picked.length) };
+    picked.forEach((c, i) => { stopParams[`color${i}`] = [c[0], c[1], c[2]]; });
+    if (opts?.wrap) stopParams.wrap = opts.wrap;
+    if (opts?.blend) stopParams.blend = opts.blend;
+    if (node.type === 'palette') {
+      get().convertPaletteToStops(nodeId, picked.length, picked, opts);
+    } else if (node.type === 'stopPalette') {
+      get().updateNodeParams(nodeId, stopParams, { immediate: true });
+    } else {
+      return 0;
+    }
+    return picked.length;
+  },
+
+  convertPaletteToStops: (nodeId, count = 'auto', given, opts) => {
+    const st = get();
+    const old = nodeInScope(st, nodeId);
+    const def = getNodeDefinition('stopPalette');
+    if (!old || old.type !== 'palette' || !def) return false;
+    let colors: Array<[number, number, number]>;
+    let blend = opts?.blend ?? 'smooth';
+    // When the stops span several Angle units (a palette that repeats every 2, say), Scale and
+    // Speed shrink by the same factor so the result cycles exactly as fast as the cosine did.
+    let period = 1;
+    if (given) {
+      colors = given.slice(0, STOP_PALETTE_MAX);
+    } else {
+      const coeffs = paletteNodeCoeffs(old.params);
+      const fit = count === 'auto'
+        ? autoFitCosineStops(coeffs, STOP_PALETTE_MAX)
+        : fitCosineStops(coeffs, Math.max(2, Math.min(STOP_PALETTE_MAX, count)));
+      colors = fit.stops;
+      blend = opts?.blend ?? fit.blend;
+      period = fit.period;
+    }
+    const n = colors.length;
+    const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+    const params: Record<string, unknown> = {
+      ...(def.defaultParams ?? {}),
+      value: old.params.value ?? 0, anim: old.params.anim ?? 0,
+      scale: num(old.params.scale, 1) / period, speed: num(old.params.speed, 1) / period,
+      stops: String(n), wrap: opts?.wrap ?? 'loop', blend,
+    };
+    colors.forEach((c, i) => { params[`color${i}`] = c; });
+    // Same id and the same socket keys (value, anim → color), so wires in and out survive untouched.
+    const converted: GraphNode = {
+      ...old,
+      type: 'stopPalette',
+      inputs: {
+        value: { ...def.inputs.value, connection: old.inputs.value?.connection },
+        anim: { ...def.inputs.anim, connection: old.inputs.anim?.connection },
+      },
+      outputs: { ...def.outputs },
+      params,
+    };
+    undoManager.push(st.nodes);
+    set(state => {
+      const swap = (nodes: GraphNode[]) => nodes.map(n2 => (n2.id === nodeId ? converted : n2));
+      if (state.activeGroupPath.length === 0) return { nodes: swap(state.nodes) };
+      const active = getActiveNodes(state.nodes, state.activeGroupPath);
+      if (!active) return {};
+      return { nodes: setActiveNodes(state.nodes, state.activeGroupPath, swap(active)) ?? state.nodes };
+    });
+    get().compile();
+    return true;
   },
 
   disconnectOutput: (nodeId, outputKey) => {
