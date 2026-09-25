@@ -12,7 +12,7 @@ import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord } from '../types/play';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
-import { buildPlayHtml, unsupportedFeatures } from '../play/exportHtml';
+import { buildPlayHtml, unsupportedFeatures, type EmbedOptions, type PlayHtmlInput } from '../play/exportHtml';
 
 /** Top-level `kind` a play file carries, so importing one opens the Play page. */
 export const PLAY_FILE_KIND = 'shader-studio-play';
@@ -345,11 +345,12 @@ interface NodeGraphState {
    */
   exportPlayFile: () => Promise<FileResult>;
   /**
-   * Save the picture, the panel, the mappings and the layers as one
-   * self-contained web page (see play/exportHtml.ts). Warns about graph
-   * features the standalone page can't run.
+   * Everything a web export needs, as the picture is right now (driven
+   * controls at their live value), and what in the graph it can't run.
    */
-  exportPlayHtml: () => Promise<FileResult>;
+  playWebInput: (title: string) => { input: PlayHtmlInput; missing: string[] };
+  /** Save a web page (player or background) to a file. See play/exportHtml.ts. */
+  exportPlayHtml: (options: EmbedOptions, title: string) => Promise<FileResult>;
   /** Bumped when a play file is imported; App switches to the Play page. */
   playOpenRequest: number;
   /** Does a graph in browser storage carry a Play setup? (For the "Play" tag on its row.) */
@@ -4271,7 +4272,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     } catch { return false; }
   },
 
-  exportPlayHtml: async () => {
+  playWebInput: (title) => {
     const st = get();
     const live = new Map<string, number | number[]>();
     for (const c of st.play.controls) {
@@ -4289,26 +4290,16 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       textureUniforms: st.textureUniforms, videoUniforms: st.videoUniforms, audioUniforms: st.audioUniforms, liveUniforms: st.liveUniforms,
       isStateful: st.isStateful, particleSystems: st.particleSystems, usesEcho: /\bu_echo0\b/.test(st.fragmentShader), play: st.play,
     });
-    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    let name = 'play';
-    if (!isTauri) {
-      const typed = await askText('Export as a web page', { label: 'File name', initial: 'play', confirmLabel: 'Export' });
-      if (typed === null) return CANCELLED;
-      name = typed;
-    }
-    const html = buildPlayHtml({
-      title: name.replace(/\.html?$/i, '') || 'Shader Studio',
-      fragmentShader: st.fragmentShader,
-      uniforms,
-      paramBindings: st.paramBindings,
-      play: bakeLayerValues(st.play, live),
-      aspect: st.previewAspect,
-    });
-    const result = await saveTextFile(html, /\.html?$/i.test(name) ? name : `${name}.html`, 'text/html');
-    if (result.ok && missing.length) {
-      toast.warning('Exported, but this graph uses things the page can’t run', { message: `${missing.join(', ')} will be blank or still in the exported page.` });
-    }
-    return result;
+    return {
+      input: { title: title.trim() || 'Shader Studio', fragmentShader: st.fragmentShader, uniforms, paramBindings: st.paramBindings, play: bakeLayerValues(st.play, live), aspect: st.previewAspect },
+      missing,
+    };
+  },
+
+  exportPlayHtml: async (options, title) => {
+    const { input } = get().playWebInput(title);
+    const base = (title.trim() || 'play').replace(/\.html?$/i, '').replace(/[^\w\- ]+/g, '').trim() || 'play';
+    return saveTextFile(buildPlayHtml(input, options), `${base}${options.mode === 'background' ? '-background' : ''}.html`, 'text/html');
   },
 
   exportPlayFile: async () => {

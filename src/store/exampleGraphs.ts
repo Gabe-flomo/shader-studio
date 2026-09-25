@@ -405,11 +405,15 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         { id: 'radius', target: 'circ::radius', kind: 'float', label: 'Radius', min: 0.05, max: 0.8 },
         { id: 'falloff', target: 'glow::brightness', kind: 'float', label: 'Falloff', min: 1, max: 30 },
         { id: 'tint', target: 'glow::tint', kind: 'color', label: 'Tint', min: 0, max: 1 },
+        { id: 'kick', target: 'circ::posX', kind: 'float', label: 'Kick (Space)', min: -1, max: 1 },
+        { id: 'wander', target: 'circ::posY', kind: 'float', label: 'Wander', min: -1, max: 1 },
       ],
       mappings: [
         { id: 'breathe', controlId: 'radius', source: { kind: 'lfo', shape: 'sine', rate: 0.2, phase: 0 }, outMin: 0.2, outMax: 0.45, curve: 'linear', smoothMs: 0, enabled: true },
         { id: 'mouse', controlId: 'falloff', source: { kind: 'mouse', axis: 'y' }, outMin: 3, outMax: 24, curve: 'exp', smoothMs: 120, enabled: true },
         { id: 'pulse', controlId: 'tint', source: { kind: 'clock', shape: 'saw', bpm: 100, beats: 1 }, outMin: 1, outMax: 0.55, curve: 'log', smoothMs: 40, enabled: true },
+        { id: 'space', controlId: 'kick', source: { kind: 'trigger', trigger: { on: 'key', code: 'Space' }, mode: 'envelope', attack: 15, decay: 250, sustain: 0.3, release: 500, steps: 4, velocity: false }, outMin: 0, outMax: 0.5, curve: 'linear', smoothMs: 0, enabled: true },
+        { id: 'drift', controlId: 'wander', source: { kind: 'noise', type: 'drift', rate: 0.4, seed: 11, steps: 0 }, outMin: -0.25, outMax: 0.25, curve: 'linear', smoothMs: 0, enabled: true },
       ],
     },
     nodes: [

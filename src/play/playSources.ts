@@ -3,9 +3,9 @@
  * <select> offers, conversion to and from the record's PlaySource shape, and
  * short labels. Pure; shared by the Play page and the control rows.
  */
-import type { LfoShape, NoiseType, PlayCurve, PlaySource, TriggerMode, TriggerSpec } from '../types/play';
+import type { LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySource, TriggerMode, TriggerSpec } from '../types/play';
 
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'lfo' | 'noise' | 'clock' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
+export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
 
 /** In the order the drop-down shows them: what everyone has first, MIDI hardware last. */
 export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
@@ -19,7 +19,8 @@ export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
   { value: 'lfo', label: 'LFO' },
   { value: 'noise', label: 'Noise' },
   { value: 'clock', label: 'Clock (BPM)' },
-  { value: 'audio', label: 'Audio band' },
+  { value: 'live', label: 'Live audio in (mic, Ableton…)' },
+  { value: 'audio', label: 'Audio Input node band' },
   { value: 'tilt', label: 'Phone tilt' },
   { value: 'gamepad', label: 'Gamepad' },
   { value: 'osc', label: 'OSC (Ableton, TouchOSC…)' },
@@ -68,6 +69,7 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
     case 'control': return { kind: 'control', controlId: prev.kind === 'control' ? prev.controlId : otherControlId };
     case 'null': return { kind: 'null', layerId: prev.kind === 'null' ? prev.layerId : nullId, axis: 'x' };
     case 'lfo': return { kind: 'lfo', shape: 'sine', rate: 0.5, phase: 0 };
+    case 'live': return { kind: 'live', band: 'bass', gain: 1 };
     case 'noise': return { kind: 'noise', type: 'smooth', rate: 1, seed: Math.floor(Math.random() * 1000), steps: 0 };
     case 'osc': return { kind: 'osc', address: prev.kind === 'osc' ? prev.address : '/1/fader1', arg: 0, min: 0, max: 1 };
     case 'trigger': return { kind: 'trigger', trigger: prev.kind === 'key' ? { on: 'key', code: prev.code } : { on: 'key', code: 'Space' }, mode: 'envelope', attack: 10, decay: 200, sustain: 0.5, release: 400, steps: 4, velocity: false };
@@ -87,6 +89,7 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'lfo') return `LFO ${s.shape} ${s.rate} Hz`;
   if (s.kind === 'noise') return `Noise ${s.type}${s.type === 'random' ? '' : ` ${s.rate}/s`}`;
   if (s.kind === 'osc') return `OSC ${s.address}`;
+  if (s.kind === 'live') return `Live ${LIVE_BAND_LABELS[s.band]}`;
   if (s.kind === 'trigger') return `${s.mode === 'envelope' ? 'Env' : s.mode === 'toggle' ? 'Toggle' : s.mode === 'step' ? 'Step' : 'Random'} · ${triggerLabel(s.trigger)}`;
   if (s.kind === 'clock') return `${s.bpm} bpm · ${s.beats} beat${s.beats === 1 ? '' : 's'}`;
   if (s.kind === 'audio') return `Audio band ${s.band + 1}`;
@@ -134,13 +137,18 @@ export function triggerLabel(t: TriggerSpec): string {
     case 'mouse': return 'Click';
     case 'osc': return `OSC ${t.address}`;
     case 'beat': return t.beats === 1 ? `Every beat @ ${t.bpm}` : `Every ${t.beats} beats @ ${t.bpm}`;
+    case 'audio': return `${LIVE_BAND_LABELS[t.band]} hit`;
   }
 }
+
+export const LIVE_BAND_LABELS: Record<LiveAudioBand, string> = { level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble' };
+export const LIVE_BAND_OPTIONS = (Object.keys(LIVE_BAND_LABELS) as LiveAudioBand[]).map(b => ({ value: b, label: LIVE_BAND_LABELS[b] }));
 
 export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
   { value: 'key', label: 'Key' },
   { value: 'mouse', label: 'Click on the picture' },
   { value: 'beat', label: 'Beat' },
+  { value: 'audio', label: 'Audio hit (live input)' },
   { value: 'note', label: 'MIDI note' },
   { value: 'osc', label: 'OSC message' },
 ];
@@ -152,6 +160,7 @@ export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec): Trigg
     case 'beat': return { on: 'beat', bpm: prev.on === 'beat' ? prev.bpm : 120, beats: prev.on === 'beat' ? prev.beats : 1 };
     case 'note': return { on: 'note', channel: 0, note: -1 };
     case 'osc': return { on: 'osc', address: prev.on === 'osc' ? prev.address : '/1/push1' };
+    case 'audio': return { on: 'audio', band: prev.on === 'audio' ? prev.band : 'bass', threshold: prev.on === 'audio' ? prev.threshold : 0.6 };
   }
 }
 

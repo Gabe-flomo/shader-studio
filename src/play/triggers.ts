@@ -42,6 +42,7 @@ export function triggerKey(t: TriggerSpec): string {
     case 'mouse': return 'mouse';
     case 'osc': return `osc:${t.address}`;
     case 'beat': return `beat:${t.bpm}:${t.beats}`;
+    case 'audio': return `audio:${t.band}:${t.threshold}`;
   }
 }
 

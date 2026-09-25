@@ -128,3 +128,21 @@ describe('OSC decoder', () => {
     expect(decodeOsc(new TextEncoder().encode('no slash\0\0\0\0'))).toEqual([]);
   });
 });
+
+describe('live audio analysis', () => {
+  it('maps dB to 0..1 and averages a band', async () => {
+    const { bandFromSpectrum, dbToUnit, levelFromWave } = await import('../../lib/liveAudio');
+    expect(dbToUnit(-80)).toBe(0);
+    expect(dbToUnit(-10)).toBe(1);
+    expect(dbToUnit(-45)).toBeCloseTo(0.5);
+    // 1024 bins at 48 kHz: ~23.4 Hz per bin. Loud bass, silent elsewhere.
+    const spec = new Float32Array(1024).fill(-100);
+    for (let i = 1; i <= 7; i++) spec[i] = -10;
+    expect(bandFromSpectrum(spec, 48000, 25, 150)).toBeGreaterThan(0.8);
+    expect(bandFromSpectrum(spec, 48000, 3000, 12000)).toBe(0);
+    // A full-scale sine is loud; silence is 0.
+    const sine = Float32Array.from({ length: 2048 }, (_, i) => Math.sin(i / 5));
+    expect(levelFromWave(sine)).toBeGreaterThan(0.9);
+    expect(levelFromWave(new Float32Array(2048))).toBe(0);
+  });
+});

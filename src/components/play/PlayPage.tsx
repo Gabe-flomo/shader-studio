@@ -13,8 +13,10 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
-import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, NOISE_TYPES, SOURCE_TYPES, TILT_AXES, TRIGGER_KINDS, TRIGGER_MODES, keyName, sourceFromType, sourceLabel, sourceType, triggerFromKind, triggerLabel, type SourceType } from '../../play/playSources';
-import type { LfoShape, TriggerSpec } from '../../types/play';
+import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, SOURCE_TYPES, TILT_AXES, TRIGGER_KINDS, TRIGGER_MODES, keyName, sourceFromType, sourceLabel, sourceType, triggerFromKind, triggerLabel, type SourceType } from '../../play/playSources';
+import { liveAudio, type LiveStatus } from '../../lib/liveAudio';
+import { ConnectGuide } from './ConnectGuide';
+import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
 import { oscClient, OSC_DEFAULT_UDP_PORT, type OscStatus } from '../../lib/oscClient';
 import { playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
 import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
@@ -32,6 +34,7 @@ import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
 import { LayersPanel } from './LayersPanel';
+import { EmbedDialog } from './EmbedDialog';
 import { parseLayerTarget } from '../../types/play';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
@@ -114,7 +117,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
   const paramBindings = useNodeGraphStore(s => s.paramBindings);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const exportPlayFile = useNodeGraphStore(s => s.exportPlayFile);
-  const exportPlayHtml = useNodeGraphStore(s => s.exportPlayHtml);
+  const [embedOpen, setEmbedOpen] = useState(false);
   const previewAspect = useNodeGraphStore(s => s.previewAspect);
   const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
@@ -234,7 +237,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
           <>
             <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
             <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
-            <IconButton icon="code" label="Export as a web page: one HTML file with the picture, the controls, the mappings and the layers, for your own site" onClick={async () => { reportFileResult(await exportPlayHtml(), { failTitle: 'Couldn’t export the page', success: 'Web page exported' }); }} />
+            <IconButton icon="code" label="Put it on a website: a player with controls, or the picture as a background, as a snippet or a page" onClick={() => setEmbedOpen(true)} />
             <AddControlButton candidates={candidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} />
           </>
         )}
@@ -291,6 +294,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
         audioNodes={audioNodes}
         nullLayers={nullLayers}
       />}
+      {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
     </div>
   );
 }
@@ -515,6 +519,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
   // Learn: the next knob, key or MIDI note becomes a source. `learnFor` is a
   // mapping id (replace its source) or 'new' (add a mapping).
   const [learnFor, setLearnFor] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   useEffect(() => {
     if (!learnFor) return;
     void midiEngine.connectWebMidi();
@@ -576,6 +581,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
                 onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(play.mappings.map(m => m.id)))}
               />
             )}
+            <IconButton icon="info" label="Connect Ableton, a MIDI controller, OSC or live audio: step-by-step" onClick={() => setGuideOpen(true)} />
             <Button size="sm" icon="spark" variant={learnFor === 'new' ? 'primary' : 'secondary'} disabled={noControls} onClick={() => setLearnFor(l => (l === 'new' ? null : 'new'))}>
               {learnFor === 'new' ? 'Listening…' : 'Learn'}
             </Button>
@@ -595,7 +601,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               title="Nothing mapped"
               body={noControls
                 ? 'Add a control first, then map an input onto it.'
-                : `Press Learn and move a knob or a key, or add a row by hand. ${midi.status === 'unsupported' ? 'This browser has no Web MIDI; the keyboard stand-in on a MIDI Input node still works.' : midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}.` : ''} Ableton and other DAWs: send MIDI to a virtual port (IAC Driver on macOS, loopMIDI on Windows) and it shows up here as MIDI.`}
+                : `Press Learn and move a knob or a key, or add a row by hand. ${midi.status === 'unsupported' ? 'This browser has no Web MIDI; the keyboard stand-in on a MIDI Input node still works.' : midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}.` : ''} Connecting Ableton, a controller, OSC or live audio for the first time? The ⓘ button above walks you through it.`}
             />
           ) : play.mappings.map(m => (
             <MappingRow
@@ -616,6 +622,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
           ))}
         </div>
       )}
+      {guideOpen && <ConnectGuide onClose={() => setGuideOpen(false)} />}
     </div>
   );
 }
@@ -842,6 +849,13 @@ function SourceOptions({ source, audioNodes, numStyle, labelStyle, onChange }: {
           </>)}
         </>
       );
+    case 'live':
+      return row(<>
+        <Select ariaLabel="Band" value={source.band} options={LIVE_BAND_OPTIONS} onChange={v => onChange({ ...source, band: v as LiveAudioBand })} height={26} />
+        <NumberInput value={source.gain} min={0.1} max={10} step={0.1} title="Gain: turn up for quiet inputs" onCommit={n => onChange({ ...source, gain: Math.max(0.1, Math.min(10, n)) })} style={{ ...numStyle, width: 44 }} />
+        {hint('×')}
+        <LiveAudioChip />
+      </>);
     case 'trigger':
       return <TriggerOptions source={source} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />;
     default:
@@ -878,6 +892,12 @@ function TriggerOptions({ source, numStyle, labelStyle, onChange }: {
         {t.on === 'osc' && <>
           <Field value={t.address} onChange={e => setT({ ...t, address: e.target.value.startsWith('/') ? e.target.value : `/${e.target.value}` })} height={26} mono style={{ flex: 1, minWidth: 110 }} placeholder="/1/push1" />
           <OscStatusChip />
+        </>}
+        {t.on === 'audio' && <>
+          <Select ariaLabel="Hit band" value={t.band} options={LIVE_BAND_OPTIONS} onChange={v => setT({ ...t, band: v as LiveAudioBand })} height={26} />
+          <NumberInput value={t.threshold} min={0.01} max={0.99} step={0.05} title="Fires when the band goes above this (0–1)" onCommit={n => setT({ ...t, threshold: Math.max(0.01, Math.min(0.99, n)) })} style={{ ...numStyle, width: 44 }} />
+          {hint('threshold')}
+          <LiveAudioChip />
         </>}
         {t.on === 'beat' && <>
           <NumberInput value={t.bpm} min={1} max={999} step={1} title="Beats per minute" onCommit={n => setT({ ...t, bpm: Math.max(1, n) })} style={{ ...numStyle, width: 48 }} />
@@ -1014,5 +1034,28 @@ function CurvePad({ value, meter, onChange, onReset }: { value: number[]; meter:
       </div>
       <IconButton icon="reset" label="Back to a straight line" size="sm" onClick={onReset} style={{ alignSelf: 'flex-start' }} />
     </div>
+  );
+}
+
+/** Live audio input: status, which device, start/stop. Browsers ask for microphone permission for any input. */
+function LiveAudioChip() {
+  const tk = useTokens();
+  const [status, setStatus] = useState<LiveStatus>(() => liveAudio.getStatus());
+  const [devices, setDevices] = useState<Array<{ id: string; label: string }>>([]);
+  const [deviceId, setDeviceId] = useState(() => liveAudio.getDeviceId());
+  useEffect(() => liveAudio.onStatus(st => { setStatus(st); setDeviceId(liveAudio.getDeviceId()); if (st === 'on') void liveAudio.devices().then(setDevices); }), []);
+  useEffect(() => { if (liveAudio.isOn()) void liveAudio.devices().then(setDevices); }, []);
+  const colour = status === 'on' ? tk.status.success : status === 'requesting' ? tk.status.warning : status === 'denied' ? tk.status.danger : tk.text.disabled;
+  const text = status === 'on' ? (liveAudio.getLabel() || 'Listening') : status === 'requesting' ? 'Asking…' : status === 'denied' ? 'Blocked or no input' : status === 'unsupported' ? 'Not available here' : 'Not listening';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
+      <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}`, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={text}>{text}</span>
+      {status === 'on' && devices.length > 1 && (
+        <Select ariaLabel="Audio input" value={deviceId} options={devices.map(d => ({ value: d.id, label: d.label }))} onChange={id => { setDeviceId(id); void liveAudio.start(id); }} height={24} style={{ maxWidth: 160 }} />
+      )}
+      {status !== 'on' && status !== 'unsupported' && <Button size="sm" onClick={() => void liveAudio.start(deviceId)}>Listen</Button>}
+      {status === 'on' && <Button size="sm" variant="ghost" onClick={() => liveAudio.stop()}>Stop</Button>}
+    </span>
   );
 }

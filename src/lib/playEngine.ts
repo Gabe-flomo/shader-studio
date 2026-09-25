@@ -22,6 +22,7 @@ import { inputBus, paramChannelKey, type InputSource, type InputWriter } from '.
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
+import { liveAudio } from './liveAudio';
 import { beatAt, newTriggerState, noiseAt, stepTrigger, triggerKey, type TriggerState } from '../play/triggers';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
@@ -335,6 +336,11 @@ class PlayEngine implements InputSource {
       }
       case 'noise':
         return noiseAt(source.type, this.time, source.rate, source.seed, source.steps, this.frame);
+      case 'live': {
+        liveAudio.update(this.frame);
+        const v = liveAudio.value(source.band);
+        return v === null ? null : Math.max(0, Math.min(1, v * source.gain));
+      }
       case 'trigger':
         // Triggers keep per-mapping state; readMapping() reads it. A bare source reading is its gate.
         return (this.held.get(triggerKey(source.trigger)) ?? 0) > 0 ? 1 : 0;
@@ -412,9 +418,26 @@ class PlayEngine implements InputSource {
     return stepTrigger(st, src, presses, gate, dt, velocity);
   }
 
+  /** Audio-hit triggers: a band crossing its threshold is a press; falling below 80% of it releases (hysteresis). */
+  private audioGates = new Set<string>();
+  private tickAudioTriggers(): void {
+    if (!liveAudio.isOn()) return;
+    liveAudio.update(this.frame);
+    for (const m of this.record.mappings) {
+      if (!m.enabled || m.source.kind !== 'trigger' || m.source.trigger.on !== 'audio') continue;
+      const t = m.source.trigger;
+      const key = triggerKey(t);
+      const v = liveAudio.value(t.band) ?? 0;
+      const open = this.audioGates.has(key);
+      if (!open && v >= t.threshold) { this.audioGates.add(key); this.press(key, v); }
+      else if (open && v < t.threshold * 0.8) { this.audioGates.delete(key); this.release(key); }
+    }
+  }
+
   tickInputs(dt: number, time: number, write: InputWriter): void {
     this.time = time;
     this.frame++;
+    this.tickAudioTriggers();
     if (this.learnCb && this.performing) this.pollGamepadLearn();
     // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.
     if (this.gamepadIsBound && this.performing) inputBus.wake();
@@ -576,6 +599,7 @@ class PlayEngine implements InputSource {
   isAnimating(): boolean {
     return this.record.mappings.some(m => m.enabled && (
       m.source.kind === 'noise' ||
+      ((m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio')) && liveAudio.isOn()) ||
       (m.source.kind === 'trigger' && (m.source.trigger.on === 'beat' || (this.triggerStates.get(m.id)?.stage ?? 'idle') !== 'idle'))
     ));
   }
