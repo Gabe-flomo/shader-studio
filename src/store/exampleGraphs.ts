@@ -17548,7 +17548,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Combo: Wave Texture + Blur H/V ──
   comboBlurDirectional: {
     label: 'Combo: Wave Texture + Blur H/V',
-    description: 'A sharp Wave Texture through Gaussian Blur set to Horizontal only: the separable Blur X pass from the blur articles, on its own a streak. Switch Direction to Vertical or Both on the card to compare. Both passes plus threshold and screen in one node: Combo: Grid + SDF Fill + Bloom.',
+    description: 'A sharp Wave Texture through Gaussian Blur set to Horizontal only, Kawase quality (the four diagonal taps from Intel\'s fast-blur article): the separable Blur X pass from the blur articles, on its own a streak. Switch Direction to Vertical or Both on the card to compare. Both passes plus threshold and screen in one node: Combo: Grid + SDF Fill + Bloom.',
     counter: 7,
     nodes: [
       {
@@ -17615,7 +17615,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'bl_uv', outputKey: 'uv' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { radius: 6, quality: 'high', direction: 'horizontal' },
+        params: { radius: 6, quality: 'kawase', direction: 'horizontal' },
       },
       {
         id: 'bl_out',
@@ -17925,6 +17925,121 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         params: { outputType: 'vec3', b: 1.8 },
       },
       { id: 'vs_out', type: 'output', position: { x: 2120, y: 260 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'vs_gain', outputKey: 'result' } } }, outputs: {}, params: {} },
+    ],
+  },
+  colorSwatches: {
+    label: 'Color: Swatches',
+    description: 'Three Color nodes feed SDF Fill\'s Fill, Stroke and Background. Click any swatch to open the picker: drag the square and hue strip, type a hex or 0–255 values, pick a preset or use the eyedropper; the shader updates live without recompiling. The R / G / B outputs give the channels as floats when you need one.',
+    counter: 8,
+    nodes: [
+      { id: 'cs_uv', type: 'uv', position: { x: 40, y: 200 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      {
+        id: 'cs_sdf', type: 'circleSDF', position: { x: 280, y: 200 },
+        inputs: { position: { type: 'vec2', label: 'UV', connection: { nodeId: 'cs_uv', outputKey: 'uv' } }, radius: { type: 'float', label: 'Radius' }, offset: { type: 'vec2', label: 'Center' } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.45 },
+      },
+      { id: 'cs_fill', type: 'colorPicker', position: { x: 280, y: 380 }, inputs: {}, outputs: { rgb: { type: 'vec3', label: 'Color' }, r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } }, params: { label: 'Fill', color: [0.96, 0.55, 0.2] } },
+      { id: 'cs_stroke', type: 'colorPicker', position: { x: 280, y: 540 }, inputs: {}, outputs: { rgb: { type: 'vec3', label: 'Color' }, r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } }, params: { label: 'Stroke', color: [0.98, 0.93, 0.8] } },
+      { id: 'cs_bg', type: 'colorPicker', position: { x: 280, y: 700 }, inputs: {}, outputs: { rgb: { type: 'vec3', label: 'Color' }, r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } }, params: { label: 'Background', color: [0.11, 0.13, 0.22] } },
+      {
+        id: 'cs_shape', type: 'sdfFill', position: { x: 560, y: 300 },
+        inputs: {
+          d: { type: 'float', label: 'SDF', connection: { nodeId: 'cs_sdf', outputKey: 'distance' } },
+          fillColor: { type: 'vec3', label: 'Fill', connection: { nodeId: 'cs_fill', outputKey: 'rgb' } },
+          strokeColor: { type: 'vec3', label: 'Stroke', connection: { nodeId: 'cs_stroke', outputKey: 'rgb' } },
+          background: { type: 'vec3', label: 'Background', connection: { nodeId: 'cs_bg', outputKey: 'rgb' } },
+          strokeWidth: { type: 'float', label: 'Stroke Width' },
+        },
+        outputs: { result: { type: 'vec3', label: 'Color' } },
+        params: { strokeWidth: 0.03, antialias: 0.005, strokeAlign: 'center', aaMode: 'pixel' },
+      },
+      { id: 'cs_out', type: 'output', position: { x: 820, y: 300 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'cs_shape', outputKey: 'result' } } }, outputs: {}, params: {} },
+    ],
+  },
+  midiGlowKeys: {
+    label: 'MIDI: Keys to Glow',
+    description: 'MIDI Input turns a controller into floats — or the computer keyboard: turn on the keyboard stand-in on the card and play the A–K row. Velocity sets the circle\'s Radius (Multiply + Add), Gate brightens the SDF Glow while a key is held (Multiply on the Tinted output), Note picks the Palette colour, and CC 1 (the mod wheel) drives Turbulence strength on the UV. The same shape as the Audio Input examples: an outside signal in, floats out, everything else is ordinary nodes.',
+    counter: 14,
+    nodes: [
+      { id: 'mk_uv', type: 'uv', position: { x: 40, y: 120 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+      { id: 'mk_t', type: 'time', position: { x: 40, y: 260 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      {
+        id: 'mk_midi', type: 'midiInput', position: { x: 40, y: 420 }, inputs: {},
+        outputs: { note: { type: 'float', label: 'Note' }, velocity: { type: 'float', label: 'Velocity' }, gate: { type: 'float', label: 'Gate' }, bend: { type: 'float', label: 'Pitch Bend' }, cc_1: { type: 'float', label: 'CC 1' } },
+        params: { channel: 'all', smooth_ms: 20, _ccs: [1] },
+      },
+      {
+        id: 'mk_ccStr', type: 'multiply', position: { x: 300, y: 560 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_midi', outputKey: 'cc_1' } }, b: { type: 'float', label: 'B' } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.4 },
+      },
+      {
+        id: 'mk_turb', type: 'turbulence', position: { x: 300, y: 120 },
+        inputs: {
+          input: { type: 'vec2', label: 'UV', connection: { nodeId: 'mk_uv', outputKey: 'uv' } },
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'mk_t', outputKey: 'time' } },
+          strength: { type: 'float', label: 'Strength', connection: { nodeId: 'mk_ccStr', outputKey: 'result' } },
+        },
+        outputs: { output: { type: 'vec2', label: 'Warped UV' } },
+        params: { octaves: 5, strength: 0.2, frequency: 1.5, decay: 0.7, rotate: 1 },
+      },
+      {
+        id: 'mk_velR', type: 'multiply', position: { x: 300, y: 340 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_midi', outputKey: 'velocity' } }, b: { type: 'float', label: 'B' } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.35 },
+      },
+      {
+        id: 'mk_rad', type: 'add', position: { x: 520, y: 340 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_velR', outputKey: 'result' } }, b: { type: 'float', label: 'B' } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.2 },
+      },
+      {
+        id: 'mk_sdf', type: 'circleSDF', position: { x: 760, y: 200 },
+        inputs: {
+          position: { type: 'vec2', label: 'UV', connection: { nodeId: 'mk_turb', outputKey: 'output' } },
+          radius: { type: 'float', label: 'Radius', connection: { nodeId: 'mk_rad', outputKey: 'result' } },
+          offset: { type: 'vec2', label: 'Center' },
+        },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.3 },
+      },
+      {
+        id: 'mk_gateB', type: 'multiply', position: { x: 520, y: 480 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_midi', outputKey: 'gate' } }, b: { type: 'float', label: 'B' } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 1.2 },
+      },
+      {
+        id: 'mk_bright', type: 'add', position: { x: 760, y: 480 },
+        inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_gateB', outputKey: 'result' } }, b: { type: 'float', label: 'B' } },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.35 },
+      },
+      {
+        id: 'mk_pal', type: 'palette', position: { x: 760, y: 660 },
+        inputs: {
+          value: { type: 'float', label: 'Angle', connection: { nodeId: 'mk_midi', outputKey: 'note' } },
+          anim: { type: 'float', label: 'Angle offset', connection: { nodeId: 'mk_t', outputKey: 'time' } },
+          offset: { type: 'vec3', label: 'Offset' }, amplitude: { type: 'vec3', label: 'Amplitude' }, freq: { type: 'vec3', label: 'Frequency' }, phase: { type: 'vec3', label: 'Phase' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { preset: '3', scale: 2, speed: 0.05 },
+      },
+      {
+        id: 'mk_glow', type: 'light', position: { x: 1020, y: 340 },
+        inputs: {
+          distance: { type: 'float', label: 'Distance', connection: { nodeId: 'mk_sdf', outputKey: 'distance' } },
+          brightness: { type: 'float', label: 'Brightness' },
+          tint: { type: 'vec3', label: 'Tint', connection: { nodeId: 'mk_pal', outputKey: 'color' } },
+        },
+        outputs: { glow: { type: 'float', label: 'Glow' }, inner: { type: 'float', label: 'Inner' }, tinted: { type: 'vec3', label: 'Tinted' } },
+        params: { mode: 'glow', brightness: 5 },
+      },
+      {
+        id: 'mk_amp', type: 'multiply', position: { x: 1260, y: 340 },
+        inputs: { a: { type: 'vec3', label: 'A', connection: { nodeId: 'mk_glow', outputKey: 'tinted' } }, b: { type: 'float', label: 'B', connection: { nodeId: 'mk_bright', outputKey: 'result' } } },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { outputType: 'vec3' },
+      },
+      { id: 'mk_out', type: 'output', position: { x: 1500, y: 340 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mk_amp', outputKey: 'result' } } }, outputs: {}, params: {} },
     ],
   },
 };
