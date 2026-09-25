@@ -17636,6 +17636,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     nodes: [
       { id: 'vt_uv', type: 'uv', position: { x: 40, y: 160 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
       { id: 'vt_t', type: 'time', position: { x: 40, y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'vt_size', type: 'constant', position: { x: 40, y: 440 }, inputs: { value: { type: 'float', label: 'Value' } }, outputs: { value: { type: 'float', label: 'Value' } }, params: { label: 'Cell Size', value: 0.5, x: 0, y: 0, z: 0, w: 1, outputType: 'float' } },
       {
         id: 'vt_cam', type: 'marchCamera', position: { x: 280, y: 120 },
         inputs: {
@@ -17650,12 +17651,18 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'vt_scene', type: 'sceneGroup', position: { x: 280, y: 380 },
-        inputs: { rd: { type: 'vec3', label: 'Ray Dir', connection: { nodeId: 'vt_cam', outputKey: 'rd' } } },
+        inputs: {
+          rd: { type: 'vec3', label: 'Ray Dir', connection: { nodeId: 'vt_cam', outputKey: 'rd' } },
+          size: { type: 'float', label: 'Cell Size', connection: { nodeId: 'vt_size', outputKey: 'value' } },
+        },
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
           label: 'Voxel Terrain',
           subgraph: {
-            inputPorts: [{ key: 'rd', type: 'vec3', label: 'Ray Dir', toNodeId: 'vt_sel', toInputKey: 'rd' }],
+            inputPorts: [
+              { key: 'rd', type: 'vec3', label: 'Ray Dir', toNodeId: 'vt_sel', toInputKey: 'rd' },
+              { key: 'size', type: 'float', label: 'Cell Size', toNodeId: 'vt_vox', toInputKey: 'size' },
+            ],
             nodes: [
               { id: 'vt_sp', type: 'scenePos', position: { x: 40, y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
               {
@@ -17736,7 +17743,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'vt_vox2', type: 'voxelize', position: { x: 960, y: 420 },
-        inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vt_mlg', outputKey: 'pos' } }, size: { type: 'float', label: 'Cell Size' } },
+        inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vt_mlg', outputKey: 'pos' } }, size: { type: 'float', label: 'Cell Size', connection: { nodeId: 'vt_size', outputKey: 'value' } } },
         outputs: { cellPos: { type: 'vec3', label: 'Cell Pos' }, cellID: { type: 'vec3', label: 'Cell ID' }, cellCenter: { type: 'vec3', label: 'Cell Center' }, edge: { type: 'float', label: 'Edge' } },
         params: { size: 0.5 },
       },
@@ -17788,11 +17795,12 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   },
   comboVoxelSpheres: {
     label: 'Combo: Voxelize + Sphere 3D + Hash',
-    description: 'Voxelize → Sphere 3D on the Cell Pos puts one sphere in every 0.6 cell; an Expression Block hashes the Cell ID into the sphere\'s Radius so sizes vary per cell (some vanish), and Intersect with a Box 3D on the raw position trims the infinite field to a block. Outside the scene, Hit Pos → Voxelize → Cell ID → Palette colours each sphere. The 3D twin of Combo: Repeat + Cell ID + Hash; the terrain version is 3D: Voxel Terrain.',
+    description: 'Voxelize → Sphere 3D on the Cell Pos puts one sphere in every 0.6 cell; an Expression Block hashes the Cell ID into the sphere\'s Radius so sizes vary per cell (some vanish), and Intersect with a Box 3D on the raw position trims the infinite field to a block. Outside the scene, Hit Pos → Voxelize → Cell ID → Palette colours each sphere — one Cell Size Constant feeds both Voxelize nodes (the scene\'s through a group port), so the colour grid always matches the geometry. The 3D twin of Combo: Repeat + Cell ID + Hash; the terrain version is 3D: Voxel Terrain.',
     counter: 20,
     nodes: [
       { id: 'vs_uv', type: 'uv', position: { x: 40, y: 160 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
       { id: 'vs_t', type: 'time', position: { x: 40, y: 300 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'vs_size', type: 'constant', position: { x: 40, y: 440 }, inputs: { value: { type: 'float', label: 'Value' } }, outputs: { value: { type: 'float', label: 'Value' } }, params: { label: 'Cell Size', value: 0.6, x: 0, y: 0, z: 0, w: 1, outputType: 'float' } },
       {
         id: 'vs_cam', type: 'marchCamera', position: { x: 280, y: 120 },
         inputs: {
@@ -17807,10 +17815,12 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'vs_scene', type: 'sceneGroup', position: { x: 280, y: 380 },
-        inputs: {}, outputs: { scene: { type: 'scene3d', label: 'Scene' } },
+        inputs: { size: { type: 'float', label: 'Cell Size', connection: { nodeId: 'vs_size', outputKey: 'value' } } },
+        outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
           label: 'Voxel Spheres',
           subgraph: {
+            inputPorts: [{ key: 'size', type: 'float', label: 'Cell Size', toNodeId: 'vs_vox', toInputKey: 'size' }],
             nodes: [
               { id: 'vs_sp', type: 'scenePos', position: { x: 40, y: 200 }, inputs: {}, outputs: { pos: { type: 'vec3', label: 'Position' } }, params: {} },
               {
@@ -17887,7 +17897,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'vs_vox2', type: 'voxelize', position: { x: 960, y: 420 },
-        inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vs_mlg', outputKey: 'pos' } }, size: { type: 'float', label: 'Cell Size' } },
+        inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'vs_mlg', outputKey: 'pos' } }, size: { type: 'float', label: 'Cell Size', connection: { nodeId: 'vs_size', outputKey: 'value' } } },
         outputs: { cellPos: { type: 'vec3', label: 'Cell Pos' }, cellID: { type: 'vec3', label: 'Cell ID' }, cellCenter: { type: 'vec3', label: 'Cell Center' }, edge: { type: 'float', label: 'Edge' } },
         params: { size: 0.6 },
       },
@@ -18007,7 +18017,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       {
         id: 'mk_gateB', type: 'multiply', position: { x: 520, y: 480 },
         inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_midi', outputKey: 'gate' } }, b: { type: 'float', label: 'B' } },
-        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 1.2 },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.6 },
       },
       {
         id: 'mk_bright', type: 'add', position: { x: 760, y: 480 },
