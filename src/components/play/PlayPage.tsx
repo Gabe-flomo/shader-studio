@@ -22,13 +22,14 @@ import { playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine
 import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
 import {
-  candidateLabel, collectPlayCandidates, controlExists, playId, readControlValue, targetParts, type PlayCandidate,
+  candidateLabel, collectPlayCandidates, controlExists, controlHelp, playId, readControlValue, targetParts, type PlayCandidate,
 } from '../../play/playControls';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
+import { Tooltip } from '../ui/Tooltip';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
@@ -36,7 +37,7 @@ import { reportFileResult } from '../shell/reportFileResult';
 import { toast } from '../ui/toastStore';
 import { LayersPanel } from './LayersPanel';
 import { EmbedDialog } from './EmbedDialog';
-import { parseLayerTarget } from '../../types/play';
+import { DEFAULT_DISPLAY, parseLayerTarget, type PlayDisplay } from '../../types/play';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
 
@@ -248,6 +249,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
         <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
         <Select ariaLabel="Canvas shape" value={previewAspect} options={PREVIEW_ASPECTS.map(a => ({ value: a.id, label: a.id === 'free' ? 'Free (fill the panel)' : `${a.label} · ${a.hint}` }))} onChange={v => setPreviewAspect(v as typeof previewAspect)} height={26} style={{ flex: 1, minWidth: 0 }} />
       </div>
+      <PictureRow play={play} onChange={update} />
       {tab === 'controls' && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {play.controls.length === 0 ? (
           <EmptyState
@@ -263,6 +265,7 @@ export function PlayPage({ compact = false }: { compact?: boolean }) {
             index={i}
             count={play.controls.length}
             exists={controlExists(nodes, c, play)}
+            help={controlHelp(nodes, c.target, play)}
             value={readControlValue(nodes, c.target, play)}
             live={liveValues.get(c.id)}
             drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers))}
@@ -355,6 +358,7 @@ function AddControlButton({ candidates, taken, onAdd }: { candidates: PlayCandid
               <button
                 key={c.target}
                 type="button"
+                title={c.hint}
                 onClick={() => { onAdd(c); setOpen(false); setQuery(''); }}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: 8, height: 32, padding: '0 8px', border: 0, borderRadius: radius.md,
@@ -378,11 +382,46 @@ function AddControlButton({ candidates, taken, onAdd }: { candidates: PlayCandid
 
 // ── Control row ──────────────────────────────────────────────────────────────
 
-function ControlRow({ control, index, count, exists, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove }: {
+/**
+ * Show the shader, or only the layers on a backdrop colour. The shader keeps
+ * rendering underneath, so reveal mattes, masks and particles still read it:
+ * text with a Reveal matte then shows the picture inside the letters only.
+ */
+function PictureRow({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: PlayRecord) => PlayRecord) => void }) {
+  const tk = useTokens();
+  const d = play.display ?? DEFAULT_DISPLAY;
+  const hex = `#${d.backdrop.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('')}`;
+  const setDisplay = (patch: Partial<PlayDisplay>) => onChange(p => {
+    const next = { ...(p.display ?? DEFAULT_DISPLAY), ...patch };
+    const isDefault = next.picture && next.backdrop.every((v, i) => v === DEFAULT_DISPLAY.backdrop[i]);
+    if (isDefault) { const rest = { ...p }; delete rest.display; return rest; }
+    return { ...p, display: next };
+  });
+  return (
+    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel }}>
+      <Tooltip label="Picture" description="Layers only hides the shader and shows the layers on a backdrop. The shader still runs underneath: text or images with a Reveal matte, and particles with Mask on, show it only inside themselves.">
+        <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'help' }}>Picture</span>
+      </Tooltip>
+      <Segmented size="sm" ariaLabel="Picture" value={d.picture ? 'shown' : 'hidden'} options={[
+        { value: 'shown', label: 'Shown', title: 'The shader, with the layers on top' },
+        { value: 'hidden', label: 'Layers only', title: 'Hide the shader; layers can still reveal it' },
+      ]} onChange={v => setDisplay({ picture: v === 'shown' })} />
+      {!d.picture && (
+        <label title="Backdrop colour" style={{ position: 'relative', width: 36, height: 22, borderRadius: radius.md, background: hex, boxShadow: `inset 0 0 0 1px ${alpha('#888', 0.5)}`, cursor: 'pointer' }}>
+          <input type="color" aria-label="Backdrop colour" value={hex} onChange={e => { const h = e.target.value; setDisplay({ backdrop: [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255] }); }} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+        </label>
+      )}
+    </div>
+  );
+}
+
+function ControlRow({ control, index, count, exists, help, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove }: {
   control: PlayControl;
   index: number;
   count: number;
   exists: boolean;
+  /** The param's hint and the node's comment from the graph, shown on the ⓘ. */
+  help: { hint?: string; comment?: string };
   value: number | number[] | undefined;
   live: ControlValue | undefined;
   drivenBy: string[];
@@ -420,6 +459,16 @@ function ControlRow({ control, index, count, exists, value, live, drivenBy, touc
             onClick={() => { setDraft(control.label); setEditing(true); }}
             style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'text', color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
           >{control.label}</button>
+        )}
+        {(help.hint || help.comment) && (
+          <Tooltip
+            label={help.hint ?? 'Note on the node'}
+            description={help.comment ? (help.hint ? <><b>Node note:</b> {help.comment}</> : help.comment) : undefined}
+          >
+            <span aria-label={[help.hint, help.comment].filter(Boolean).join(' — ')} style={{ display: 'inline-flex', color: help.comment ? tk.accent.text : tk.text.faint, cursor: 'help' }}>
+              <Icon name="info" size={13} />
+            </span>
+          </Tooltip>
         )}
         {driven && (
           <span title={drivenBy.join(', ')} style={{ height: 20, padding: '0 7px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 4, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>

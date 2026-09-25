@@ -18,6 +18,7 @@
  * `unsupportedFeatures` lists what a graph uses that the runtime can't run.
  */
 import runtimeSource from './runtime/play-runtime.js?raw';
+import particleSource from './particle-sim.js?raw';
 import type { PlayRecord } from '../types/play';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
 
@@ -105,7 +106,17 @@ function runtimeOptions(o: EmbedOptions) {
   return { mode: o.mode, fit: bg ? 'cover' : o.fit, followPage: o.followPage, markers: bg ? o.markers : true, osc: o.osc };
 }
 
-const runtimeScript = () => runtimeSource.replace(/<\/script/gi, '<\\/script');
+/**
+ * The particle system as a plain script: particle-sim.js with its `export`s
+ * removed, in a closure that hands the runtime what it calls.
+ */
+const particleScript = () => `var SSParticles = (function () {
+${particleSource.replace(/^export /gm, '')}
+return { createParticles: createParticles, stepParticles: stepParticles, drawParticles: drawParticles };
+})();
+`;
+
+const runtimeScript = () => (particleScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
 
 /** The complete page. Pure: same input, same string. */
 export function buildPlayHtml(input: PlayHtmlInput, options: EmbedOptions = DEFAULT_EMBED): string {

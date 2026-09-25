@@ -9,7 +9,7 @@
  *   null       a draggable point (its X/Y are sources and can be controls)
  *   text       over the picture with a blend mode, or a matte (see MatteMode)
  *   image      the same, from a data URL that travels with the play file
- *   particles  points steered by the picture's brightness (flow fields)
+ *   particles  a particle system steered by the picture (play/particle-sim.js)
  *
  * Driven properties come from playEngine.layerValue(); everything else from
  * the record. Module singleton, no React.
@@ -18,6 +18,8 @@
 import type { BlendMode, ImageLayer, NullLayer, ParticlesLayer, PlayLayer, PlayRecord, TextLayer } from '../types/play';
 import { emptyPlayRecord } from '../types/play';
 import { playEngine } from '../lib/playEngine';
+import { createParticles, drawParticles, stepParticles } from './particle-sim.js';
+import type { ParticleEnv, ParticleParams, ParticleState as SimState } from './particle-sim.js';
 
 const BLEND_OPS: Record<BlendMode, GlobalCompositeOperation> = {
   normal: 'source-over', multiply: 'multiply', screen: 'screen', overlay: 'overlay', lighten: 'lighten', darken: 'darken',
@@ -33,7 +35,7 @@ function css(c: [number, number, number], a = 1): string {
   return `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${a})`;
 }
 
-interface ParticleState { x: Float32Array; y: Float32Array; count: number; trail: HTMLCanvasElement | null }
+interface ParticleState { sim: SimState; trail: HTMLCanvasElement | null }
 
 export type LayerWriter = (layerId: string, patch: Partial<NullLayer>) => void;
 
@@ -49,6 +51,8 @@ class PlayOverlay {
   private sampleCanvas: HTMLCanvasElement | null = null;
   private sample: Uint8ClampedArray | null = null;
   private drag: { id: string; dx: number; dy: number } | null = null;
+  /** The pointer over the picture (0..1, y up), for the particles' mouse attractor. */
+  private pointer: { x: number; y: number } | null = null;
   private container: HTMLElement | null = null;
 
   setCanvas(el: HTMLCanvasElement | null): void {
@@ -100,8 +104,9 @@ class PlayOverlay {
       e.preventDefault(); e.stopPropagation();
     };
     const onMove = (e: PointerEvent) => {
+      const u = toUnit(e);
+      this.pointer = { x: u.x, y: u.y };
       if (this.drag) {
-        const u = toUnit(e);
         this.writer?.(this.drag.id, { x: Math.max(0, Math.min(1, u.x + this.drag.dx)), y: Math.max(0, Math.min(1, u.y + this.drag.dy)) });
         e.preventDefault(); e.stopPropagation();
         return;
@@ -109,7 +114,9 @@ class PlayOverlay {
       if (this.record.layers.some(l => l.kind === 'null' && l.visible)) container.style.cursor = hit(e) ? 'grab' : '';
     };
     const onUp = () => { this.drag = null; };
+    const onLeave = () => { this.pointer = null; };
     container.addEventListener('pointerdown', onDown, true);
+    container.addEventListener('pointerleave', onLeave);
     container.addEventListener('pointermove', onMove, true);
     container.addEventListener('pointerup', onUp, true);
     container.addEventListener('pointercancel', onUp, true);
@@ -118,6 +125,7 @@ class PlayOverlay {
       container.removeEventListener('pointermove', onMove, true);
       container.removeEventListener('pointerup', onUp, true);
       container.removeEventListener('pointercancel', onUp, true);
+      container.removeEventListener('pointerleave', onLeave);
       container.style.cursor = '';
       if (this.container === container) this.container = null;
     };
@@ -133,8 +141,11 @@ class PlayOverlay {
     if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    void time;
     const layers = this.record.layers;
+    // Picture hidden: the overlay covers it with the backdrop. The shader
+    // still renders underneath, so mattes and particles can still read it.
+    const hidden = this.record.display?.picture === false;
+    if (hidden) { ctx.fillStyle = css(this.record.display!.backdrop); ctx.fillRect(0, 0, W, H); }
     if (!layers.some(l => l.visible)) return;
     let sampled = false, lumaReady = false;
     for (const layer of layers) {
@@ -146,12 +157,12 @@ class PlayOverlay {
           case 'text':
           case 'image': {
             if (layer.matte === 'luma' && !lumaReady) { this.buildLuma(gl); lumaReady = true; }
-            this.drawShape(ctx, layer, gl, W, H);
+            this.drawShape(ctx, layer, gl, W, H, hidden);
             break;
           }
           case 'particles': {
             if (!sampled) { this.sampleBrightness(gl); sampled = true; }
-            this.drawParticles(ctx, layer, W, H, dpr, dt);
+            this.drawParticles(ctx, layer, gl, W, H, dpr, time, dt);
             break;
           }
         }
@@ -177,7 +188,7 @@ class PlayOverlay {
   }
 
   /** Text and image share the matte pipeline: paint the shape into a scratch canvas, then composite. */
-  private drawShape(ctx: CanvasRenderingContext2D, l: TextLayer | ImageLayer, gl: HTMLCanvasElement, W: number, H: number): void {
+  private drawShape(ctx: CanvasRenderingContext2D, l: TextLayer | ImageLayer, gl: HTMLCanvasElement, W: number, H: number, hidden: boolean): void {
     const opacity = this.num(l, 'opacity', l.opacity);
     if (opacity <= 0) return;
     const scratch = this.scratch(W, H);
@@ -203,7 +214,12 @@ class PlayOverlay {
     }
     s.restore();
     // 2. The matte.
-    if (l.matte === 'reveal') {
+    if (l.matte === 'reveal' && hidden) {
+      // Picture hidden: paint the picture into the shape; the backdrop stays around it.
+      s.globalCompositeOperation = 'source-in';
+      s.drawImage(gl, 0, 0, W, H);
+      s.globalCompositeOperation = 'source-over';
+    } else if (l.matte === 'reveal') {
       // Picture inside the shape, colour everywhere else: colour plate minus the shape.
       s.globalCompositeOperation = 'source-out';
       s.fillStyle = css(l.color); s.fillRect(0, 0, W, H);
@@ -217,51 +233,60 @@ class PlayOverlay {
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = l.matte === 'over' ? BLEND_OPS[l.blend] : 'source-over';
     ctx.drawImage(scratch, 0, 0);
-    void gl;
   }
 
-  private drawParticles(ctx: CanvasRenderingContext2D, l: ParticlesLayer, W: number, H: number, dpr: number, dt: number): void {
+  private drawParticles(ctx: CanvasRenderingContext2D, l: ParticlesLayer, gl: HTMLCanvasElement, W: number, H: number, dpr: number, time: number, dt: number): void {
+    const n = (key: keyof ParticlesLayer & string) => this.num(l, key, l[key] as number);
+    const p: ParticleParams = {
+      ...l,
+      speed: n('speed'), steer: n('steer'), turns: n('turns'), noiseScale: n('noiseScale'), noiseEvolve: n('noiseEvolve'),
+      strength: n('strength'), catchRadius: n('catchRadius'), spawnRadius: n('spawnRadius'), life: n('life'),
+      size: n('size'), sizeJitter: n('sizeJitter'), sizeAmount: n('sizeAmount'), opacityAmount: n('opacityAmount'), falloff: n('falloff'),
+    };
+    const nul = l.nullId ? this.nullPoint(l.nullId) : null;
+    const env: ParticleEnv & { W: number; H: number } = {
+      dt, time, aspect: W / H, sample: this.sample, sw: SAMPLE_W, sh: SAMPLE_H,
+      attractorPoint: l.attractor === 'mouse' ? this.pointer : l.attractor === 'null' ? nul : null,
+      spawnPoint: nul, modPoint: nul,
+      W, H, dpr, alpha: 1,
+      sprite: l.shape === 'image' ? this.image(l.sprite) : null,
+    };
     const st = this.particleState(l);
-    const speed = this.num(l, 'speed', l.speed), size = this.num(l, 'size', l.size) * dpr;
-    const opacity = this.num(l, 'opacity', l.opacity), turns = this.num(l, 'turns', l.turns), trail = this.num(l, 'trail', l.trail);
-    const sample = this.sample;
-    const step = Math.min(0.1, dt) * speed * 0.18;
-    const target: CanvasRenderingContext2D = trail > 0 ? this.trailCtx(st, W, H, trail) : ctx;
-    if (trail <= 0) ctx.globalCompositeOperation = BLEND_OPS[l.blend];
-    target.globalAlpha = trail > 0 ? 1 : opacity;
-    const fixed = css(l.color);
-    for (let i = 0; i < st.count; i++) {
-      let x = st.x[i], y = st.y[i];
-      let b = 0.5, r = 255, g = 255, bl = 255, gx = 0, gy = 0;
-      if (sample) {
-        const cx = Math.min(SAMPLE_W - 1, Math.max(0, Math.floor(x * SAMPLE_W)));
-        const cy = Math.min(SAMPLE_H - 1, Math.max(0, Math.floor((1 - y) * SAMPLE_H)));
-        const at = (px: number, py: number) => {
-          const k = (Math.min(SAMPLE_H - 1, Math.max(0, py)) * SAMPLE_W + Math.min(SAMPLE_W - 1, Math.max(0, px))) * 4;
-          return (sample[k] * 0.299 + sample[k + 1] * 0.587 + sample[k + 2] * 0.114) / 255;
-        };
-        const k = (cy * SAMPLE_W + cx) * 4;
-        r = sample[k]; g = sample[k + 1]; bl = sample[k + 2];
-        b = at(cx, cy);
-        gx = at(cx + 1, cy) - at(cx - 1, cy);
-        gy = at(cx, cy - 1) - at(cx, cy + 1); // y up
-      }
-      let vx: number, vy: number;
-      if (l.mode === 'flow') { const a = b * turns * Math.PI * 2; vx = Math.cos(a); vy = Math.sin(a); }
-      else { const m = Math.hypot(gx, gy) || 1e-6; const sgn = l.mode === 'climb' ? 1 : -1; vx = sgn * gx / m; vy = sgn * gy / m; }
-      x += vx * step; y += vy * step;
-      // wrap
-      if (x < 0) x += 1; else if (x > 1) x -= 1;
-      if (y < 0) y += 1; else if (y > 1) y -= 1;
-      st.x[i] = x; st.y[i] = y;
-      target.fillStyle = l.colorFromPicture ? `rgb(${r},${g},${bl})` : fixed;
-      target.beginPath(); target.arc(x * W, (1 - y) * H, size, 0, Math.PI * 2); target.fill();
-    }
-    if (trail > 0 && st.trail) {
-      ctx.globalAlpha = opacity;
+    stepParticles(st.sim, p, env);
+    const opacity = n('opacity'), trail = n('trail');
+    // Particles draw into their own canvas: it keeps the trail, and lets
+    // `reveal` turn them into a mask the picture shows through.
+    const useLayer = trail > 0 || l.reveal;
+    if (!useLayer) {
       ctx.globalCompositeOperation = BLEND_OPS[l.blend];
-      ctx.drawImage(st.trail, 0, 0);
+      env.alpha = opacity;
+      drawParticles(ctx, st.sim, p, env);
+      return;
     }
+    const t = this.trailCtx(st, W, H, trail);
+    drawParticles(t, st.sim, p, env);
+    let out: HTMLCanvasElement = st.trail!;
+    if (l.reveal) {
+      const scratch = this.scratch(W, H), s = scratch.getContext('2d')!;
+      s.setTransform(1, 0, 0, 1, 0, 0);
+      s.globalCompositeOperation = 'source-over'; s.globalAlpha = 1;
+      s.clearRect(0, 0, W, H);
+      s.drawImage(st.trail!, 0, 0);
+      s.globalCompositeOperation = 'source-in';
+      s.drawImage(gl, 0, 0, W, H);
+      s.globalCompositeOperation = 'source-over';
+      out = scratch;
+    }
+    ctx.globalAlpha = opacity;
+    ctx.globalCompositeOperation = BLEND_OPS[l.blend];
+    ctx.drawImage(out, 0, 0);
+  }
+
+  /** A null's current position (driven X/Y included), or null when it is missing or hidden. */
+  private nullPoint(id: string): { x: number; y: number } | null {
+    const l = this.record.layers.find(x => x.id === id);
+    if (!l || l.kind !== 'null') return null;
+    return { x: playEngine.layerValue(l.id, 'x', l.x), y: playEngine.layerValue(l.id, 'y', l.y) };
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -286,10 +311,8 @@ class PlayOverlay {
 
   private particleState(l: ParticlesLayer): ParticleState {
     let st = this.particles.get(l.id);
-    if (!st || st.count !== l.count) {
-      const x = new Float32Array(l.count), y = new Float32Array(l.count);
-      for (let i = 0; i < l.count; i++) { x[i] = Math.random(); y[i] = Math.random(); }
-      st = { x, y, count: l.count, trail: st?.trail ?? null };
+    if (!st || st.sim.count !== l.count) {
+      st = { sim: createParticles(l.count), trail: st?.trail ?? null };
       this.particles.set(l.id, st);
     }
     return st;
@@ -300,11 +323,14 @@ class PlayOverlay {
     if (st.trail.width !== W || st.trail.height !== H) { st.trail.width = W; st.trail.height = H; }
     const t = st.trail.getContext('2d')!;
     t.setTransform(1, 0, 0, 1, 0, 0);
-    t.globalCompositeOperation = 'destination-out';
     t.globalAlpha = 1;
-    // Long trails fade slowly: trail 1 → 2% per frame, trail 0.1 → ~60%.
-    t.fillStyle = `rgba(0,0,0,${Math.max(0.02, 1 - Math.pow(trail, 0.6))})`;
-    t.fillRect(0, 0, W, H);
+    if (trail <= 0) t.clearRect(0, 0, W, H);
+    else {
+      t.globalCompositeOperation = 'destination-out';
+      // Long trails fade slowly: trail 1 → 2% per frame, trail 0.1 → ~60%.
+      t.fillStyle = `rgba(0,0,0,${Math.max(0.02, 1 - Math.pow(trail, 0.6))})`;
+      t.fillRect(0, 0, W, H);
+    }
     t.globalCompositeOperation = 'source-over';
     return t;
   }

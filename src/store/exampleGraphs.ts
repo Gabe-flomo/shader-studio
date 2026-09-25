@@ -11454,7 +11454,16 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     play: {
       version: 1,
       layers: [
-        { id: 'dust', kind: 'particles', label: 'Dust', visible: true, count: 700, speed: 0.8, size: 1.5, opacity: 0.8, color: [1, 0.85, 0.95], colorFromPicture: false, mode: 'flow', turns: 1.5, trail: 0.75, blend: 'screen' },
+        {
+          id: 'dust', kind: 'particles', label: 'Dust', visible: true, count: 700,
+          field: 'flow', speed: 0.8, steer: 0.5, turns: 1.5, noiseScale: 3, noiseEvolve: 0.2, flat: 'wander',
+          attractor: 'none', force: 'gravitate', strength: 1, catchRadius: 0.02,
+          spawn: 'anywhere', spawnRadius: 0.2, edges: 'wrap', life: 6, nullId: '',
+          shape: 'dot', rotate: 'heading', sprite: '', crop: false, size: 1.5, sizeJitter: 0.4, opacity: 0.8,
+          colour: 'tint', color: [1, 0.85, 0.95], palette: 1, paletteBy: 'heading',
+          sizeBy: 'none', sizeAmount: 1, opacityBy: 'age', opacityAmount: -0.8, falloff: 0.3,
+          reveal: false, trail: 0.75, blend: 'screen',
+        },
       ],
       controls: [
         { id: 'threshold', target: 'thr::threshold', kind: 'float', label: 'Blob threshold', min: 0.2, max: 1.2 },

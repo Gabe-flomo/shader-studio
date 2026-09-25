@@ -62,3 +62,20 @@ describe('unsupported features', () => {
     expect(unsupportedFeatures({ ...base, textureUniforms: { u_tex: 'n1' }, isStateful: true })).toEqual(['image inputs', 'the previous-frame feedback']);
   });
 });
+
+describe('mock websites for the preview', () => {
+  const SNIP = '<div data-shader-studio></div>';
+  it('puts a player in the content, a section background in the hero, a page background first in <body>', async () => {
+    const { buildMockSite, MOCK_SITES } = await import('../mockSites');
+    for (const { id } of MOCK_SITES) {
+      const player = buildMockSite(id, SNIP, { mode: 'player', placement: 'section' }, 'T');
+      const section = buildMockSite(id, SNIP, { mode: 'background', placement: 'section' }, 'T');
+      const page = buildMockSite(id, SNIP, { mode: 'background', placement: 'page' }, 'T');
+      for (const html of [player, section, page]) expect(html.split(SNIP).length - 1).toBe(1);
+      expect(page).toMatch(/<body class="bgpage">\s*<div data-shader-studio>/);
+      expect(section).not.toContain('class="bgpage"');
+      expect(section.indexOf(SNIP)).toBeGreaterThan(section.indexOf('<nav'));
+    }
+    expect(buildMockSite('blog', SNIP, { mode: 'player', placement: 'section' }, '<b>')).toContain('&lt;b&gt;');
+  });
+});

@@ -5,8 +5,11 @@
  * your content). Output: a paste-in snippet for any page or site builder, or
  * a self-contained HTML file to host or iframe. Both run the standalone
  * runtime (play/runtime/play-runtime.js) with no app code.
+ *
+ * The right side is a live preview: the real snippet running on a mock
+ * website (play/mockSites.ts), at desktop or phone width.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -15,6 +18,8 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
 import { Field } from '../ui/Field';
+import { Select } from '../ui/Select';
+import { MOCK_SITES, buildMockSite, type MockSite } from '../../play/mockSites';
 import { reportFileResult } from '../shell/reportFileResult';
 import { toast } from '../ui/toastStore';
 
@@ -28,6 +33,9 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const usesOsc = useNodeGraphStore(s => s.play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')));
   const needsGesture = useNodeGraphStore(s => s.play.mappings.some(m => m.enabled && (m.source.kind === 'midi' || m.source.kind === 'live' || (m.source.kind === 'trigger' && (m.source.trigger.on === 'note' || m.source.trigger.on === 'audio')))));
   const [title, setTitle] = useState('Shader Studio');
+  const [site, setSite] = useState<MockSite>('landing');
+  const [device, setDevice] = useState<'desktop' | 'phone'>('desktop');
+  const wide = useWide();
   const [opts, setOpts] = useState<EmbedOptions>(DEFAULT_EMBED);
   const set = (p: Partial<EmbedOptions>) => setOpts(o => ({ ...o, ...p, ...(p.mode === 'background' ? { markers: false } : p.mode === 'player' ? { markers: true } : {}) }));
   const bg = opts.mode === 'background';
@@ -58,7 +66,8 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
       subtitle="The picture, and optionally the controls, as a snippet or a page"
       icon="code"
       onClose={onClose}
-      width={560}
+      width={wide ? 1160 : 560}
+      height={wide ? 780 : undefined}
       footer={(
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', width: '100%' }}>
           <Button variant="ghost" onClick={onClose}>Close</Button>
@@ -67,7 +76,8 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
         </div>
       )}
     >
-      <div style={{ padding: '4px 20px 18px' }}>
+      <div style={{ display: 'flex', flexDirection: wide ? 'row' : 'column', height: wide ? '100%' : undefined, minHeight: 0 }}>
+      <div style={{ width: wide ? 400 : undefined, flexShrink: 0, overflowY: wide ? 'auto' : undefined, padding: '4px 20px 18px', borderRight: wide ? `1px solid ${tk.border.subtle}` : undefined }}>
       {label('What')}
       <Segmented
         fill
@@ -93,7 +103,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
             ]}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-            <Toggle checked={opts.followPage} onChange={followPage => set({ followPage })} label="Mouse mappings follow the pointer across the whole page" />
+            <Toggle checked={opts.followPage} onChange={followPage => set({ followPage })} label="Mouse follows the pointer across the whole page" />
             {hasNulls && <Toggle checked={opts.markers} onChange={markers => set({ markers })} label="Show null markers" />}
             {usesOsc && <Toggle checked={opts.osc} onChange={osc => set({ osc })} label="Connect to the OSC bridge on load" />}
           </div>
@@ -131,6 +141,87 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
         </div>
       )}
       </div>
+      <SitePreview snippet={snippet} opts={opts} title={title} site={site} device={device} onSite={setSite} onDevice={setDevice} wide={wide} />
+      </div>
     </Modal>
+  );
+}
+
+/** Room for the preview beside the settings? */
+function useWide(): boolean {
+  const q = '(min-width: 1000px) and (min-height: 640px)';
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.matchMedia?.(q).matches === true);
+  useEffect(() => {
+    const m = window.matchMedia?.(q);
+    if (!m) return;
+    const on = () => setWide(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return wide;
+}
+
+const DEVICE_WIDTH = { desktop: 1280, phone: 390 } as const;
+
+/**
+ * The snippet running on a mock website in a sandboxed iframe, laid out at a
+ * real desktop or phone width and scaled down to fit. It reloads when the
+ * options change (typing in the title waits for a pause).
+ */
+function SitePreview({ snippet, opts, title, site, device, onSite, onDevice, wide }: {
+  snippet: string;
+  opts: EmbedOptions;
+  title: string;
+  site: MockSite;
+  device: 'desktop' | 'phone';
+  onSite: (s: MockSite) => void;
+  onDevice: (d: 'desktop' | 'phone') => void;
+  wide: boolean;
+}) {
+  const tk = useTokens();
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const html = useMemo(() => buildMockSite(site, snippet, opts, title), [site, snippet, opts, title]);
+  const [doc, setDoc] = useState(html);
+  useEffect(() => { const t = window.setTimeout(() => setDoc(html), 350); return () => window.clearTimeout(t); }, [html]);
+
+  const vw = DEVICE_WIDTH[device];
+  const pad = 16;
+  const scale = box.w > 0 ? Math.min(1, (box.w - pad * 2) / vw) : 0.5;
+  const frameH = device === 'phone' ? Math.min(844, (box.h - pad * 2) / scale) : (box.h - pad * 2) / scale;
+  const where = opts.mode === 'player' ? 'in the page, like a video' : opts.placement === 'page' ? 'behind the whole page' : 'behind one section';
+  return (
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', background: tk.bg.app, minHeight: wide ? 0 : 420 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: `1px solid ${tk.border.subtle}`, flexWrap: 'wrap' }}>
+        <span style={{ color: tk.text.faint, font: `600 10.5px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Preview</span>
+        <Select ariaLabel="Example website" value={site} options={MOCK_SITES.map(m => ({ value: m.id, label: m.label }))} onChange={v => onSite(v as MockSite)} height={28} />
+        <Segmented size="sm" ariaLabel="Device" value={device} onChange={onDevice} options={[{ value: 'desktop', label: 'Desktop' }, { value: 'phone', label: 'Phone' }]} />
+        <span style={{ marginLeft: 'auto', color: tk.text.muted, font: `12px ${fontFamily.ui}` }}>Your snippet, {where}</span>
+      </div>
+      <div ref={boxRef} style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
+        {box.w > 0 && (
+          <div style={{
+            position: 'absolute', top: pad, left: '50%', width: vw, height: frameH, transform: `translateX(-50%) scale(${scale})`, transformOrigin: 'top center',
+            borderRadius: device === 'phone' ? 36 / scale : 10 / scale, overflow: 'hidden', background: '#fff',
+            boxShadow: `0 0 0 ${1 / scale}px ${alpha('#000', 0.18)}, 0 ${12 / scale}px ${40 / scale}px ${alpha('#000', 0.25)}`,
+          }}>
+            <iframe
+              title="Website preview"
+              sandbox="allow-scripts"
+              allow="accelerometer; gyroscope"
+              srcDoc={doc}
+              style={{ border: 0, width: '100%', height: '100%', display: 'block' }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

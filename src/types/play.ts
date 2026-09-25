@@ -184,18 +184,67 @@ export interface ImageLayer extends LayerBase {
   matte: MatteMode;
 }
 
+export type ParticleField = 'flow' | 'climb' | 'descend' | 'noise' | 'none';
+export type ParticleShape = 'dot' | 'square' | 'triangle' | 'streak' | 'ring' | 'star' | 'image';
+export type ParticleModulator = 'none' | 'brightness' | 'speed' | 'age' | 'null';
+
+/**
+ * A particle system over the picture (play/particle-sim.js). Each particle
+ * steers toward its field's direction, may be pulled by an attractor, is born
+ * in a spawn area and respawns at the edges, when caught, or when its life
+ * runs out. Size and opacity can follow brightness, speed, age or a null.
+ */
 export interface ParticlesLayer extends LayerBase {
   kind: 'particles';
   count: number;
+  // Motion
+  field: ParticleField;
   speed: number;
-  size: number;
-  opacity: number;
-  color: [number, number, number];
-  /** Take each particle's colour from the picture under it instead of `color`. */
-  colorFromPicture: boolean;
-  /** flow: brightness is the heading (turns × 360°). climb: move toward brighter. descend: toward darker. */
-  mode: 'flow' | 'climb' | 'descend';
+  /** 0..1: how quickly particles turn toward the field (low = floaty, high = snappy). */
+  steer: number;
+  /** flow: brightness 0→1 turns the heading this many full turns. */
   turns: number;
+  /** noise field: size of the swirls (higher = smaller) and how fast it evolves. */
+  noiseScale: number;
+  noiseEvolve: number;
+  /** climb/descend on flat parts of the picture: keep moving on noise, or slow down and collect. */
+  flat: 'wander' | 'settle';
+  // Attractor
+  attractor: 'none' | 'mouse' | 'null';
+  force: 'gravitate' | 'spiral' | 'repel';
+  strength: number;
+  /** A particle this close to the attractor (picture heights) respawns. */
+  catchRadius: number;
+  // Birth and death
+  spawn: 'anywhere' | 'edges' | 'center' | 'null';
+  spawnRadius: number;
+  edges: 'wrap' | 'bounce' | 'respawn';
+  /** Seconds before a particle respawns (each gets 60–140% of it); 0 = never. */
+  life: number;
+  /** The null an attractor, a null spawn or a null modulator uses. */
+  nullId: string;
+  // Look
+  shape: ParticleShape;
+  rotate: 'heading' | 'spin' | 'none';
+  /** Image sprite (a data URL: PNG, JPG or SVG) for shape 'image'. */
+  sprite: string;
+  crop: boolean;
+  size: number;
+  /** 0..1: random size variation between particles. */
+  sizeJitter: number;
+  opacity: number;
+  colour: 'tint' | 'picture' | 'palette';
+  color: [number, number, number];
+  palette: number;
+  paletteBy: 'heading' | 'speed' | 'age' | 'brightness';
+  sizeBy: ParticleModulator;
+  sizeAmount: number;
+  opacityBy: ParticleModulator;
+  opacityAmount: number;
+  /** Null modulator reach (picture heights): full effect at the null, none this far away. */
+  falloff: number;
+  /** Show the picture through the particles instead of colouring them. */
+  reveal: boolean;
   /** 0 = no trail, 1 = long trails. */
   trail: number;
   blend: BlendMode;
@@ -205,32 +254,43 @@ export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
 /** Numeric layer properties a control can drive, per kind. The control's target is `layer:<layerId>::<key>`. */
-export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<{ key: string; label: string; min: number; max: number; step?: number }>> = {
+export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<{ key: string; label: string; min: number; max: number; step?: number; hint: string }>> = {
   null: [
-    { key: 'x', label: 'X', min: 0, max: 1 },
-    { key: 'y', label: 'Y', min: 0, max: 1 },
-    { key: 'size', label: 'Size', min: 0, max: 60, step: 1 },
+    { key: 'x', label: 'X', min: 0, max: 1, hint: 'Across the picture: 0 is the left edge, 1 the right.' },
+    { key: 'y', label: 'Y', min: 0, max: 1, hint: 'Up the picture: 0 is the bottom, 1 the top.' },
+    { key: 'size', label: 'Size', min: 0, max: 60, step: 1, hint: 'Marker radius in pixels. 0 hides the marker; the null still works.' },
   ],
   text: [
-    { key: 'x', label: 'X', min: 0, max: 1 },
-    { key: 'y', label: 'Y', min: 0, max: 1 },
-    { key: 'size', label: 'Size', min: 0.02, max: 1 },
-    { key: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1 },
-    { key: 'opacity', label: 'Opacity', min: 0, max: 1 },
+    { key: 'x', label: 'X', min: 0, max: 1, hint: 'Centre of the text across the picture (0 left, 1 right).' },
+    { key: 'y', label: 'Y', min: 0, max: 1, hint: 'Centre of the text up the picture (0 bottom, 1 top).' },
+    { key: 'size', label: 'Size', min: 0.02, max: 1, hint: 'Letter height as a fraction of the picture height.' },
+    { key: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1, hint: 'Degrees, clockwise.' },
+    { key: 'opacity', label: 'Opacity', min: 0, max: 1, hint: 'How solid the layer is. 0 is invisible.' },
   ],
   image: [
-    { key: 'x', label: 'X', min: 0, max: 1 },
-    { key: 'y', label: 'Y', min: 0, max: 1 },
-    { key: 'scale', label: 'Scale', min: 0.05, max: 3 },
-    { key: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1 },
-    { key: 'opacity', label: 'Opacity', min: 0, max: 1 },
+    { key: 'x', label: 'X', min: 0, max: 1, hint: 'Centre of the image across the picture (0 left, 1 right).' },
+    { key: 'y', label: 'Y', min: 0, max: 1, hint: 'Centre of the image up the picture (0 bottom, 1 top).' },
+    { key: 'scale', label: 'Scale', min: 0.05, max: 3, hint: 'Image height as a fraction of the picture height (1 = as tall as the picture).' },
+    { key: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1, hint: 'Degrees, clockwise.' },
+    { key: 'opacity', label: 'Opacity', min: 0, max: 1, hint: 'How solid the layer is. 0 is invisible.' },
   ],
   particles: [
-    { key: 'speed', label: 'Speed', min: 0, max: 3 },
-    { key: 'size', label: 'Size', min: 0.5, max: 12, step: 0.5 },
-    { key: 'opacity', label: 'Opacity', min: 0, max: 1 },
-    { key: 'turns', label: 'Turns', min: 0, max: 4 },
-    { key: 'trail', label: 'Trail', min: 0, max: 1 },
+    { key: 'speed', label: 'Speed', min: 0, max: 3, hint: 'How fast particles travel. 1 crosses the picture\'s height in about 5 seconds.' },
+    { key: 'steer', label: 'Steering', min: 0, max: 1, hint: 'How quickly particles turn toward where the field points. Low is floaty and drifting; high follows the field tightly.' },
+    { key: 'turns', label: 'Turns', min: 0, max: 4, hint: 'Flow only: how many full turns the heading makes from black to white. 0 = everything goes right; higher = tighter swirls.' },
+    { key: 'noiseScale', label: 'Swirl size', min: 0.5, max: 12, hint: 'Noise field (and wandering): how many swirls fit across the picture. Higher = smaller, busier swirls.' },
+    { key: 'noiseEvolve', label: 'Evolve', min: 0, max: 2, hint: 'How fast the noise field changes over time. 0 = frozen lanes.' },
+    { key: 'strength', label: 'Pull', min: 0, max: 3, hint: 'How hard the attractor pulls (or pushes, for Repel). Stronger near it.' },
+    { key: 'catchRadius', label: 'Catch', min: 0, max: 0.3, hint: 'Particles this close to the attractor are caught and respawn (fraction of picture height). 0 = never caught.' },
+    { key: 'spawnRadius', label: 'Spawn radius', min: 0, max: 0.8, hint: 'Spawn at centre or at a null: how wide the birth circle is (fraction of picture height).' },
+    { key: 'life', label: 'Life (s)', min: 0, max: 20, hint: 'Seconds before a particle respawns (each lives 60–140% of this). 0 = they live forever and only respawn at edges or when caught.' },
+    { key: 'size', label: 'Size', min: 0.5, max: 40, step: 0.5, hint: 'Particle radius in pixels.' },
+    { key: 'sizeJitter', label: 'Size variety', min: 0, max: 1, hint: 'Random size differences between particles. 0 = all the same.' },
+    { key: 'sizeAmount', label: 'Size follow', min: -1, max: 3, hint: 'How much size follows the chosen reading. +1 doubles it where the reading is full; −1 shrinks particles to nothing there.' },
+    { key: 'opacityAmount', label: 'Opacity follow', min: -1, max: 1, hint: 'How much opacity follows the chosen reading. Negative fades particles out where the reading is full (e.g. old age).' },
+    { key: 'falloff', label: 'Null reach', min: 0.02, max: 1, hint: 'Following a null: full effect at the null, fading to none this far away (fraction of picture height).' },
+    { key: 'opacity', label: 'Opacity', min: 0, max: 1, hint: 'How solid the whole layer is.' },
+    { key: 'trail', label: 'Trail', min: 0, max: 1, hint: 'How long the streaks behind particles last. 0 = no trail; 1 = long, slow-fading trails.' },
   ],
 };
 
@@ -250,12 +310,22 @@ export function parseLayerTarget(target: string): { layerId: string; key: string
   return { layerId: rest.slice(0, i), key: rest.slice(i + 2) };
 }
 
+/** How the Play picture is shown. Hiding it leaves only the layers on the backdrop; the shader still runs, so mattes and particles can still read it. */
+export interface PlayDisplay {
+  picture: boolean;
+  backdrop: [number, number, number];
+}
+
 export interface PlayRecord {
   version: 1;
   controls: PlayControl[];
   mappings: PlayMapping[];
   layers: PlayLayer[];
+  /** Absent means the defaults (picture shown). */
+  display?: PlayDisplay;
 }
+
+export const DEFAULT_DISPLAY: PlayDisplay = { picture: true, backdrop: [0, 0, 0] };
 
 export const PLAY_VERSION = 1 as const;
 
@@ -269,7 +339,16 @@ export function defaultLayer(kind: PlayLayerKind, id: string, label: string): Pl
     case 'null': return { id, kind, label, visible: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7' };
     case 'text': return { id, kind, label, visible: true, text: 'PLAY', x: 0.5, y: 0.5, size: 0.25, rotation: 0, opacity: 1, color: [1, 1, 1], font: 'sans', weight: 700, blend: 'normal', matte: 'over' };
     case 'image': return { id, kind, label, visible: true, src: '', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], blend: 'normal', matte: 'over' };
-    case 'particles': return { id, kind, label, visible: true, count: 600, speed: 1, size: 2, opacity: 0.8, color: [1, 1, 1], colorFromPicture: false, mode: 'flow', turns: 1, trail: 0.6, blend: 'normal' };
+    case 'particles': return {
+      id, kind, label, visible: true, count: 800,
+      field: 'flow', speed: 1, steer: 0.5, turns: 1, noiseScale: 3, noiseEvolve: 0.2, flat: 'wander',
+      attractor: 'none', force: 'gravitate', strength: 1, catchRadius: 0.02,
+      spawn: 'anywhere', spawnRadius: 0.2, edges: 'wrap', life: 0, nullId: '',
+      shape: 'dot', rotate: 'heading', sprite: '', crop: false, size: 2, sizeJitter: 0.3, opacity: 0.8,
+      colour: 'tint', color: [1, 1, 1], palette: 1, paletteBy: 'heading',
+      sizeBy: 'none', sizeAmount: 1, opacityBy: 'none', opacityAmount: 0.5, falloff: 0.3,
+      reveal: false, trail: 0.6, blend: 'normal',
+    };
   }
 }
 
@@ -476,7 +555,12 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   const keptMappings = mappings.filter(m => keptIds.has(m.controlId)
     && (m.source.kind !== 'control' || keptIds.has(m.source.controlId))
     && (m.source.kind !== 'null' || layerIds.has(m.source.layerId)));
-  return { version: PLAY_VERSION, controls: keptControls, mappings: keptMappings, layers };
+  const out: PlayRecord = { version: PLAY_VERSION, controls: keptControls, mappings: keptMappings, layers };
+  const disp = r.display as Record<string, unknown> | undefined;
+  if (disp && typeof disp === 'object' && (disp.picture === false || disp.backdrop !== undefined)) {
+    out.display = { picture: disp.picture !== false, backdrop: rgb(disp.backdrop, DEFAULT_DISPLAY.backdrop) };
+  }
+  return out;
 }
 
 const BLENDS: ReadonlySet<string> = new Set<BlendMode>(['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken', 'difference', 'exclusion', 'add']);
@@ -512,16 +596,42 @@ function parseLayer(raw: unknown): PlayLayer | null {
         ...d, visible, src: typeof l.src === 'string' ? l.src : '', x: num(l.x, d.x), y: num(l.y, d.y), scale: Math.max(0.01, num(l.scale, 1)),
         rotation: num(l.rotation, 0), opacity: Math.max(0, Math.min(1, num(l.opacity, 1))), color: rgb(l.color, d.color), blend: blend(l.blend, d.blend), matte: matte(l.matte, d.matte),
       };
-    case 'particles':
+    case 'particles': {
+      const pick = <T extends string>(v: unknown, allowed: readonly T[], f: T): T => (typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : f);
+      const unit = (v: unknown, f: number) => Math.max(0, Math.min(1, num(v, f)));
+      const mods = ['none', 'brightness', 'speed', 'age', 'null'] as const;
+      // Files from before the particle system: `mode` was the field and `colorFromPicture` the colour.
+      const legacyField = l.field === undefined && (l.mode === 'climb' || l.mode === 'descend') ? l.mode : undefined;
       return {
-        ...d, visible, count: Math.max(1, Math.min(5000, Math.round(num(l.count, d.count)))), speed: Math.max(0, num(l.speed, d.speed)), size: Math.max(0.1, num(l.size, d.size)),
-        opacity: Math.max(0, Math.min(1, num(l.opacity, d.opacity))), color: rgb(l.color, d.color), colorFromPicture: l.colorFromPicture === true,
-        mode: l.mode === 'climb' || l.mode === 'descend' ? l.mode : 'flow', turns: Math.max(0, num(l.turns, d.turns)), trail: Math.max(0, Math.min(1, num(l.trail, d.trail))), blend: blend(l.blend, d.blend),
+        ...d, visible,
+        count: Math.max(1, Math.min(5000, Math.round(num(l.count, d.count)))),
+        field: pick(l.field ?? legacyField, ['flow', 'climb', 'descend', 'noise', 'none'] as const, d.field),
+        speed: Math.max(0, num(l.speed, d.speed)), steer: unit(l.steer, d.steer), turns: Math.max(0, num(l.turns, d.turns)),
+        noiseScale: Math.max(0.1, num(l.noiseScale, d.noiseScale)), noiseEvolve: Math.max(0, num(l.noiseEvolve, d.noiseEvolve)),
+        flat: pick(l.flat, ['wander', 'settle'] as const, l.field === undefined && legacyField ? 'settle' : d.flat),
+        attractor: pick(l.attractor, ['none', 'mouse', 'null'] as const, d.attractor), force: pick(l.force, ['gravitate', 'spiral', 'repel'] as const, d.force),
+        strength: Math.max(0, num(l.strength, d.strength)), catchRadius: Math.max(0, num(l.catchRadius, d.catchRadius)),
+        spawn: pick(l.spawn, ['anywhere', 'edges', 'center', 'null'] as const, d.spawn), spawnRadius: Math.max(0, num(l.spawnRadius, d.spawnRadius)),
+        edges: pick(l.edges, ['wrap', 'bounce', 'respawn'] as const, d.edges), life: Math.max(0, num(l.life, d.life)),
+        nullId: typeof l.nullId === 'string' ? l.nullId : '',
+        shape: pick(l.shape, ['dot', 'square', 'triangle', 'streak', 'ring', 'star', 'image'] as const, d.shape),
+        rotate: pick(l.rotate, ['heading', 'spin', 'none'] as const, d.rotate),
+        sprite: typeof l.sprite === 'string' ? l.sprite : '', crop: l.crop === true,
+        size: Math.max(0.1, num(l.size, d.size)), sizeJitter: unit(l.sizeJitter, l.sizeJitter === undefined && l.field === undefined ? 0 : d.sizeJitter),
+        opacity: unit(l.opacity, d.opacity),
+        colour: pick(l.colour, ['tint', 'picture', 'palette'] as const, l.colorFromPicture === true ? 'picture' : d.colour),
+        color: rgb(l.color, d.color), palette: Math.max(0, Math.min(9, Math.round(num(l.palette, d.palette)))),
+        paletteBy: pick(l.paletteBy, ['heading', 'speed', 'age', 'brightness'] as const, d.paletteBy),
+        sizeBy: pick(l.sizeBy, mods, d.sizeBy), sizeAmount: num(l.sizeAmount, d.sizeAmount),
+        opacityBy: pick(l.opacityBy, mods, d.opacityBy), opacityAmount: num(l.opacityAmount, d.opacityAmount),
+        falloff: Math.max(0.01, num(l.falloff, d.falloff)), reveal: l.reveal === true,
+        trail: unit(l.trail, d.trail), blend: blend(l.blend, d.blend),
       };
+    }
   }
 }
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0);
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && (play.display?.picture ?? true));
 }

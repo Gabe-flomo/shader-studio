@@ -290,7 +290,7 @@
     const controls = new Map(play.controls.map(c => [c.id, c]));
     const layersById = new Map(play.layers.map(l => [l.id, l]));
     const base = new Map(), live = new Map(), layerLive = new Map(), smooth = new Map(), trig = new Map();
-    const mouse = { x: 0.5, y: 0.5, down: 0 };
+    const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = 0, playing = true, lastNow = 0, frame = 0;
     const bindings = B.paramBindings || {};
     const uniformFor = c => bindings[bindingKey(c.target)];
@@ -379,7 +379,7 @@
     // Pointer. Player: on the picture (drag nulls, clicks are the mouse trigger). Background: the whole page, never captured.
     let drag = null, pictureDown = false;
     const toUnit = (cx, cy) => { const r = fitBox.getBoundingClientRect(); return { x: (cx - r.left) / Math.max(1, r.width), y: 1 - (cy - r.top) / Math.max(1, r.height), w: r.width, h: r.height }; };
-    const clampedMouse = (cx, cy) => { const u = toUnit(cx, cy); mouse.x = Math.max(0, Math.min(1, u.x)); mouse.y = Math.max(0, Math.min(1, u.y)); return u; };
+    const clampedMouse = (cx, cy) => { const u = toUnit(cx, cy); mouse.x = Math.max(0, Math.min(1, u.x)); mouse.y = Math.max(0, Math.min(1, u.y)); mouse.over = u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1; return u; };
     const listeners = [];
     const on = (target, type, fn, o) => { target.addEventListener(type, fn, o); listeners.push(() => target.removeEventListener(type, fn, o)); };
     if (!bg) {
@@ -399,6 +399,7 @@
       });
       const up = () => { mouse.down = 0; drag = null; if (pictureDown) { pictureDown = false; release('mouse'); } };
       on(stage, 'pointerup', up); on(stage, 'pointercancel', up);
+      on(stage, 'pointerleave', () => { mouse.over = false; });
     } else {
       on(window, 'pointerdown', e => {
         const u = toUnit(e.clientX, e.clientY);
@@ -508,9 +509,15 @@
     let sample = null;
     const img = src => { if (!src) return null; let i = images.get(src); if (!i) { i = new Image(); i.onload = () => { needsDraw = true; }; i.src = src; images.set(src, i); } return i.complete && i.naturalWidth ? i : null; };
     const num = (l, k) => layerValue(l.id, k, l[k]);
+    // The particle system (play/particle-sim.js), inlined ahead of this file by the exporter.
+    const P = typeof SSParticles !== 'undefined' ? SSParticles : null;
+    const PNUM = ['speed', 'steer', 'turns', 'noiseScale', 'noiseEvolve', 'strength', 'catchRadius', 'spawnRadius', 'life', 'size', 'sizeJitter', 'sizeAmount', 'opacityAmount', 'falloff', 'opacity', 'trail'];
+    const hidden = !!(play.display && play.display.picture === false);
     function drawLayers(dt) {
       const W = ovCanvas.width, H = ovCanvas.height, dpr = W / Math.max(1, fitBox.clientWidth);
       octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, W, H);
+      // Picture hidden: the backdrop covers the shader; reveal mattes and particle masks still show it.
+      if (hidden) { octx.fillStyle = css(play.display.backdrop); octx.fillRect(0, 0, W, H); }
       let sampled = false, lumaReady = false;
       for (const l of play.layers) {
         if (!l.visible) continue;
@@ -533,7 +540,8 @@
               const lines = String(l.text).split('\n'); lines.forEach((t, i) => sctx.fillText(t, 0, (i - (lines.length - 1) / 2) * size * 1.15));
             } else { const im = img(l.src); if (im) { const h = num(l, 'scale') * H, w = h * im.naturalWidth / im.naturalHeight; sctx.drawImage(im, -w / 2, -h / 2, w, h); } }
             sctx.restore();
-            if (l.matte === 'reveal') { sctx.globalCompositeOperation = 'source-out'; sctx.fillStyle = css(l.color); sctx.fillRect(0, 0, W, H); }
+            if (l.matte === 'reveal' && hidden) { sctx.globalCompositeOperation = 'source-in'; sctx.drawImage(glCanvas, 0, 0, W, H); }
+            else if (l.matte === 'reveal') { sctx.globalCompositeOperation = 'source-out'; sctx.fillStyle = css(l.color); sctx.fillRect(0, 0, W, H); }
             else if (l.matte === 'luma') {
               if (!lumaReady) { try { lctx.globalCompositeOperation = 'source-over'; lctx.drawImage(glCanvas, 0, 0, 320, 180); const d = lctx.getImageData(0, 0, 320, 180); const p = d.data; for (let i = 0; i < p.length; i += 4) { p[i + 3] = Math.round(p[i] * 0.299 + p[i + 1] * 0.587 + p[i + 2] * 0.114); p[i] = p[i + 1] = p[i + 2] = 255; } lctx.putImageData(d, 0, 0); lumaReady = true; } catch (e) { /* unmatted */ } }
               if (lumaReady) { sctx.globalCompositeOperation = 'destination-in'; sctx.drawImage(luma, 0, 0, W, H); }
@@ -541,35 +549,41 @@
             octx.globalAlpha = op; octx.globalCompositeOperation = l.matte === 'over' ? BLEND[l.blend] || 'source-over' : 'source-over';
             octx.drawImage(scratch, 0, 0);
           }
-        } else if (l.kind === 'particles') {
+        } else if (l.kind === 'particles' && P) {
           if (!sampled) { try { pctx.drawImage(glCanvas, 0, 0, 64, 36); sample = pctx.getImageData(0, 0, 64, 36).data; } catch (e) { sample = null; } sampled = true; }
           let st = particles.get(l.id);
-          if (!st || st.count !== l.count) { st = { count: l.count, x: new Float32Array(l.count), y: new Float32Array(l.count), trail: st ? st.trail : null }; for (let i = 0; i < l.count; i++) { st.x[i] = Math.random(); st.y[i] = Math.random(); } particles.set(l.id, st); }
-          const speed = num(l, 'speed'), size = num(l, 'size') * dpr, op = num(l, 'opacity'), turns = num(l, 'turns'), trail = num(l, 'trail');
-          const step = Math.min(0.1, dt) * speed * 0.18;
-          let t = octx;
-          if (trail > 0) {
+          if (!st || st.sim.count !== l.count) { st = { sim: P.createParticles(l.count), trail: st ? st.trail : null }; particles.set(l.id, st); }
+          const p = Object.assign({}, l);
+          for (const k of PNUM) p[k] = num(l, k);
+          const nl = l.nullId && layersById.get(l.nullId);
+          const nul = nl && nl.kind === 'null' ? { x: layerValue(nl.id, 'x', nl.x), y: layerValue(nl.id, 'y', nl.y) } : null;
+          const env = {
+            dt, time, aspect: W / H, sample, sw: 64, sh: 36,
+            attractorPoint: l.attractor === 'mouse' ? (mouse.over ? { x: mouse.x, y: mouse.y } : null) : l.attractor === 'null' ? nul : null,
+            spawnPoint: nul, modPoint: nul, W, H, dpr, alpha: 1,
+            sprite: l.shape === 'image' ? img(l.sprite) : null,
+          };
+          P.stepParticles(st.sim, p, env);
+          const op = p.opacity, trail = p.trail;
+          if (!(trail > 0) && !l.reveal) {
+            octx.globalCompositeOperation = BLEND[l.blend] || 'source-over'; env.alpha = op;
+            P.drawParticles(octx, st.sim, p, env);
+          } else {
             if (!st.trail) st.trail = document.createElement('canvas');
             if (st.trail.width !== W || st.trail.height !== H) { st.trail.width = W; st.trail.height = H; }
-            t = st.trail.getContext('2d'); t.setTransform(1, 0, 0, 1, 0, 0); t.globalCompositeOperation = 'destination-out'; t.globalAlpha = 1;
-            t.fillStyle = 'rgba(0,0,0,' + Math.max(0.02, 1 - Math.pow(trail, 0.6)) + ')'; t.fillRect(0, 0, W, H); t.globalCompositeOperation = 'source-over';
-          } else { octx.globalCompositeOperation = BLEND[l.blend] || 'source-over'; octx.globalAlpha = op; }
-          const at = (px, py) => { const k = (Math.min(35, Math.max(0, py)) * 64 + Math.min(63, Math.max(0, px))) * 4; return (sample[k] * 0.299 + sample[k + 1] * 0.587 + sample[k + 2] * 0.114) / 255; };
-          const fixed = css(l.color);
-          for (let i = 0; i < st.count; i++) {
-            let x = st.x[i], y = st.y[i], b = 0.5, gx = 0, gy = 0, col = fixed;
-            if (sample) {
-              const cx = Math.min(63, Math.max(0, Math.floor(x * 64))), cy = Math.min(35, Math.max(0, Math.floor((1 - y) * 36)));
-              b = at(cx, cy); gx = at(cx + 1, cy) - at(cx - 1, cy); gy = at(cx, cy - 1) - at(cx, cy + 1);
-              if (l.colorFromPicture) { const k = (cy * 64 + cx) * 4; col = 'rgb(' + sample[k] + ',' + sample[k + 1] + ',' + sample[k + 2] + ')'; }
+            const t = st.trail.getContext('2d'); t.setTransform(1, 0, 0, 1, 0, 0); t.globalAlpha = 1;
+            if (trail > 0) { t.globalCompositeOperation = 'destination-out'; t.fillStyle = 'rgba(0,0,0,' + Math.max(0.02, 1 - Math.pow(trail, 0.6)) + ')'; t.fillRect(0, 0, W, H); t.globalCompositeOperation = 'source-over'; }
+            else t.clearRect(0, 0, W, H);
+            P.drawParticles(t, st.sim, p, env);
+            let out = st.trail;
+            if (l.reveal) {
+              if (scratch.width !== W || scratch.height !== H) { scratch.width = W; scratch.height = H; }
+              sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.globalAlpha = 1; sctx.globalCompositeOperation = 'source-over'; sctx.clearRect(0, 0, W, H);
+              sctx.drawImage(st.trail, 0, 0); sctx.globalCompositeOperation = 'source-in'; sctx.drawImage(glCanvas, 0, 0, W, H); sctx.globalCompositeOperation = 'source-over';
+              out = scratch;
             }
-            let vx, vy;
-            if (l.mode === 'flow') { const a = b * turns * Math.PI * 2; vx = Math.cos(a); vy = Math.sin(a); } else { const mm = Math.hypot(gx, gy) || 1e-6; const sg = l.mode === 'climb' ? 1 : -1; vx = sg * gx / mm; vy = sg * gy / mm; }
-            x += vx * step; y += vy * step; if (x < 0) x += 1; else if (x > 1) x -= 1; if (y < 0) y += 1; else if (y > 1) y -= 1;
-            st.x[i] = x; st.y[i] = y;
-            t.fillStyle = col; t.beginPath(); t.arc(x * W, (1 - y) * H, size, 0, 7); t.fill();
+            octx.globalAlpha = op; octx.globalCompositeOperation = BLEND[l.blend] || 'source-over'; octx.drawImage(out, 0, 0);
           }
-          if (trail > 0) { octx.globalAlpha = op; octx.globalCompositeOperation = BLEND[l.blend] || 'source-over'; octx.drawImage(st.trail, 0, 0); }
         }
         octx.restore();
       }
@@ -605,7 +619,7 @@
       setUniform('u_mouse', [mouse.x * glCanvas.width, mouse.y * glCanvas.height]);
       for (const k in uniformValues) setUniform(k, uniformValues[k]);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      if (play.layers.length) drawLayers(dt);
+      if (play.layers.length || hidden) drawLayers(dt);
       refreshPanel(now);
     }
     raf = requestAnimationFrame(tick);

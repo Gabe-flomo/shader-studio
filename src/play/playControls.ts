@@ -13,7 +13,7 @@
 
 import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
-import { parseLayerTarget } from '../types/play';
+import { LAYER_NUMERIC_PROPS, parseLayerTarget } from '../types/play';
 import { getNodeDefinition } from '../nodes/definitions';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
 import { isParamVisible } from '../compiler/uniformPatcher';
@@ -29,6 +29,8 @@ export interface PlayCandidate {
   max: number;
   step?: number;
   value: number | number[];
+  /** The param's docstring from its node definition. */
+  hint?: string;
 }
 
 const SKIP_TYPES = new Set(['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'loopIndex', 'loopCarry', 'group', 'exprNode', 'customFn']);
@@ -60,7 +62,7 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
         if (node.inputs[`__param_${key}`]?.connection) continue;
         const value = colourValue(overrides[`${node.id}::${key}`]) ?? colourValue(node.params[key]) ?? colourValue(def.defaultParams?.[key]);
         if (!value) continue;
-        out.push({ target: `${prefix}${node.id}::${key}`, kind: 'color', nodeLabel: labelOf(node), groupLabel, paramLabel: pd.label, min: 0, max: 1, value });
+        out.push({ target: `${prefix}${node.id}::${key}`, kind: 'color', nodeLabel: labelOf(node), groupLabel, paramLabel: pd.label, min: 0, max: 1, value, ...(pd.hint ? { hint: pd.hint } : {}) });
       }
     }
   };
@@ -81,7 +83,7 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
 export function collectPlayCandidates(nodes: GraphNode[], paramBindings: Record<string, string>): PlayCandidate[] {
   const floats: PlayCandidate[] = collectParamCandidates({ nodes, inputPorts: [], outputPorts: [] }).map(c => ({
     target: c.sourcePath, kind: 'float', nodeLabel: c.nodeLabel, groupLabel: c.groupLabel, paramLabel: c.paramLabel,
-    min: c.min, max: c.max, step: c.step, value: c.value,
+    min: c.min, max: c.max, step: c.step, value: c.value, ...(c.hint ? { hint: c.hint } : {}),
   }));
   return [...floats, ...collectColourCandidates(nodes)].filter(c => bindingKeyOf(c.target) in paramBindings);
 }
@@ -105,6 +107,28 @@ export function findTargetNode(nodes: GraphNode[], target: string): GraphNode | 
   if (!top || parts.length < 3) return top;
   const inner = top.params.subgraph as SubgraphData | undefined;
   return inner?.nodes.find(n => n.id === parts[1]);
+}
+
+/**
+ * What the Play page can say about a control: the param's hint from its node
+ * definition, and the comment written on the node in the graph (a group's
+ * comment when the node inside it has none). Layer properties get their
+ * built-in description.
+ */
+export function controlHelp(nodes: GraphNode[], target: string, play?: PlayRecord): { hint?: string; comment?: string } {
+  const lt = parseLayerTarget(target);
+  if (lt) {
+    const kind = play?.layers.find(l => l.id === lt.layerId)?.kind;
+    const hint = kind ? LAYER_NUMERIC_PROPS[kind].find(d => d.key === lt.key)?.hint : undefined;
+    return hint ? { hint } : {};
+  }
+  const node = findTargetNode(nodes, target);
+  if (!node) return {};
+  const key = target.split('::').pop() ?? '';
+  const hint = getNodeDefinition(node.type)?.paramDefs?.[key]?.hint;
+  const commentOf = (n: GraphNode | undefined) => typeof n?.params.__comment === 'string' ? (n.params.__comment as string).trim() : '';
+  const comment = commentOf(node) || commentOf(nodes.find(n => n.id === target.split('::')[0]));
+  return { ...(hint ? { hint } : {}), ...(comment ? { comment } : {}) };
 }
 
 /** A layer property's current value from the record, or undefined when the layer is gone. */
