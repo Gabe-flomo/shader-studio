@@ -135,6 +135,8 @@ export interface SourcePorts {
   textures: Array<{ sourceKey: string; label: string }>;
   /** Code sources: the functions found, and which one is the entry. */
   functions?: CodeFunction[];
+  /** Code sources: top-level declarations (#define, const, globals) that travel with the node. */
+  globals?: string;
   entry?: string;
   error?: string;
 }
@@ -150,6 +152,7 @@ export function describeSource(source: PublishSource): SourcePorts {
     if (!d.ok) return { inputs: [], outputs: [], textures: [], functions: parsed.functions, entry: entry.name, error: d.error };
     return {
       functions: parsed.functions,
+      globals: parsed.globals,
       entry: entry.name,
       inputs: d.inputs.map(p => ({ portKey: p.name, type: p.type as DataType, label: p.name })),
       outputs: [
@@ -221,16 +224,17 @@ export function buildUserNodeDefinition(source: PublishSource, spec: PublishUser
       textures: (spec.textures ?? []).map(t => t.sourceKey),
       inputs: spec.inputs.map(i => i.portKey),
       outs: spec.outputs.slice(1).map(o => o.portKey),
-    });
+    }, ports.globals ?? '');
     if ('error' in renamed) return { ok: false, error: renamed.error };
-    const implicitGlobals = /\bg_uv\b/.test(renamed.entryCode + renamed.helpers.join('\n')) ? ['g_uv'] : [];
+    const implicitGlobals = /\bg_uv\b/.test(renamed.entryCode + renamed.helpers.join('\n') + renamed.preamble) ? ['g_uv'] : [];
     return {
       ok: true,
       def: {
         ...common,
         params: [],
         functionCode: renamed.entryCode,
-        helperFunctions: renamed.helpers,
+        // Declarations first: helpers and the entry read them.
+        helperFunctions: renamed.preamble ? [renamed.preamble, ...renamed.helpers] : renamed.helpers,
         implicitGlobals,
         source: { kind: 'code', code: source.code, entry: ports.entry },
       },

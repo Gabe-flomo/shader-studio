@@ -34,7 +34,8 @@ export interface CodeFunction {
 }
 
 export type ParseCodeResult =
-  | { ok: true; functions: CodeFunction[] }
+  /** `globals` is every top-level line that isn't a function: #defines, consts, globals, structs. */
+  | { ok: true; functions: CodeFunction[]; globals: string }
   | { ok: false; error: string };
 
 const HEADER_RE = /\b(void|float|vec[234]|int|bool|mat[234]|ivec[234]|bvec[234])\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*\{/g;
@@ -83,7 +84,50 @@ export function parseCodeSource(code: string): ParseCodeResult {
     HEADER_RE.lastIndex = end;
   }
   if (functions.length === 0) return { ok: false, error: 'No GLSL function found. Write something like `vec3 glow(vec2 uv, float radius) { … }`.' };
-  return { ok: true, functions };
+  // Everything between the functions, comments removed. Precision statements belong to the
+  // host shader and are dropped; the rest (#define, const, globals, struct) travels with the node.
+  let globals = '';
+  let cursor = 0;
+  for (const f of functions) { globals += src.slice(cursor, f.start) + '\n'; cursor = f.end; }
+  globals += src.slice(cursor);
+  globals = globals.split('\n')
+    .map(l => l.replace(/\s+$/, ''))
+    .filter(l => l.trim() && !/^\s*precision\s+\w+\s+\w+\s*;/.test(l) && !/^\s*#\s*(version|extension)\b/.test(l))
+    .join('\n');
+  return { ok: true, functions, globals };
+}
+
+/** Split on commas that aren't inside parentheses or brackets (`vec2 a = vec2(1., 2.), b;`). */
+function splitTopLevelCommas(s: string): string[] {
+  const out: string[] = []; let depth = 0; let cur = '';
+  for (const ch of s) {
+    if (ch === '(' || ch === '[') depth++;
+    else if (ch === ')' || ch === ']') depth--;
+    if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
+/** Names declared by a globals block: macros, structs, consts and global variables. */
+export function globalNames(globals: string): string[] {
+  const names = new Set<string>();
+  for (const m of globals.matchAll(/^\s*#\s*define\s+([A-Za-z_]\w*)/gm)) names.add(m[1]);
+  for (const m of globals.matchAll(/\bstruct\s+([A-Za-z_]\w*)/g)) names.add(m[1]);
+  const statements = globals
+    .replace(/^\s*#[^\n]*$/gm, '')          // preprocessor lines are not declarations
+    .replace(/\bstruct\s+\w+\s*\{[^}]*\}/g, '') // nor are struct bodies
+    .split(';');
+  for (const st of statements) {
+    const tokens = st.trim().replace(/\b(const|uniform|varying|attribute|lowp|mediump|highp|in|out)\b/g, ' ').trim();
+    const m = /^([A-Za-z_]\w*)\s+([\s\S]+)$/.exec(tokens);
+    if (!m) continue;
+    for (const part of splitTopLevelCommas(m[2])) {
+      const n = /^\s*([A-Za-z_]\w*)/.exec(part);
+      if (n) names.add(n[1]);
+    }
+  }
+  return [...names];
 }
 
 /** What the entry function would look like as a node. Pure validation; no renaming. */
@@ -111,6 +155,8 @@ export interface RenamedCode {
   entryCode: string;
   /** Helper functions, renamed under the prefix. */
   helpers: string[];
+  /** The source's top-level declarations with their names prefixed; emitted before the helpers. Empty when there are none. */
+  preamble: string;
   /** Original name → new name. */
   renames: Record<string, string>;
 }
@@ -126,15 +172,22 @@ export function renameAndCanonicalise(
   entryName: string,
   newEntryName: string,
   order: { textures: string[]; inputs: string[]; outs: string[] },
+  globals = '',
 ): RenamedCode | { error: string } {
   const entry = functions.find(f => f.name === entryName);
   if (!entry) return { error: `Entry function "${entryName}" not found.` };
   const renames: Record<string, string> = {};
   for (const f of functions) renames[f.name] = f.name === entryName ? newEntryName : `${newEntryName}_h_${f.name}`;
+  // Top-level names get the same treatment, so two imported shaders that both
+  // `#define PI` or declare `const float scale` can sit in one graph.
+  const globalRenames: Record<string, string> = {};
+  for (const g of globalNames(globals)) if (!renames[g]) globalRenames[g] = `${newEntryName}_g_${g}`;
 
   const applyRenames = (text: string) => {
     let out = text;
     for (const [from, to] of Object.entries(renames)) out = out.replace(new RegExp(`\\b${from}\\s*\\(`, 'g'), `${to}(`);
+    // Not after `.` (a swizzle or struct member of the same name) or inside a longer identifier.
+    for (const [from, to] of Object.entries(globalRenames)) out = out.replace(new RegExp(`(?<![\\w.])${from}\\b`, 'g'), to);
     return out;
   };
 
@@ -148,7 +201,8 @@ export function renameAndCanonicalise(
   const body = entry.text.slice(bodyStart);
   const entryCode = applyRenames(`${entry.returnType} ${newEntryName}(${headerParams.join(', ')}) ${body}`);
   const helpers = functions.filter(f => f.name !== entryName).map(f => applyRenames(f.text));
-  return { entryCode, helpers, renames };
+  const preamble = globals.trim() ? applyRenames(globals) : '';
+  return { entryCode, helpers, preamble, renames: { ...renames, ...globalRenames } };
 }
 
 /** Best-effort DataType for a GLSL param type (callers validate first). */
