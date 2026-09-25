@@ -4,6 +4,7 @@ import { parseGlslFunctions, buildCustomFnParams } from '../../utils/glslParser'
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { Modal } from '../ui/Modal';
 import { useTokens } from '../../theme/themeStore';
+import { spawnPoint } from './spawnPoint';
 
 interface Props {
   onClose: () => void;
@@ -33,9 +34,7 @@ export function ImportGlslModal({ onClose }: Props) {
   const handleCreate = () => {
     if (parsed.length === 0) return;
     const params = buildCustomFnParams(parsed[0], code);
-    const x = 200 + Math.random() * 160;
-    const y = 120 + Math.random() * 200;
-    addNode('customFn', { x, y }, params);
+    addNode('customFn', spawnPoint(), params);
     onClose();
   };
 

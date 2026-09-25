@@ -14,6 +14,7 @@ import type { NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { CATEGORY_COLORS, HIDDEN_TYPES } from './nodeCategoryMeta';
 import { ctp } from '../../theme/palette';
+import { spawnPoint } from './spawnPoint';
 
 // ── Build searchable list once ─────────────────────────────────────────────────
 interface SearchEntry {
@@ -155,7 +156,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
   }, [activeIdx]);
 
   const place = useCallback((type: string) => {
-    const pos = spawnPosition ?? { x: 300 + Math.random() * 120, y: 200 + Math.random() * 120 };
+    const pos = spawnPosition ?? spawnPoint();
     const newId = addNode(type, pos);
     if (newId && onNodePlaced) onNodePlaced(newId);
     onClose();
@@ -286,7 +287,7 @@ export function NodeSearchPalette({ open, onClose, spawnPosition, filterOutputTy
                       onMouseEnter={e => (e.currentTarget.style.background = ctp.surface0)}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       onClick={() => {
-                        const pos = spawnPosition ?? { x: 300 + Math.random() * 120, y: 200 + Math.random() * 120 };
+                        const pos = spawnPosition ?? spawnPoint();
                         instantiateGroupPreset(preset.id, pos);
                         onClose();
                       }}

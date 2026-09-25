@@ -14,6 +14,8 @@ import { explainPreview, previewLegend } from '../../lib/previewExplain';
 import { SmartConnectMenu } from './SmartConnectMenu';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
+import { candidateFor, candidateLabel, collectPlayCandidates } from '../../play/playControls';
+import { addCandidateControl, driveWithNull, graphNullDrives } from '../play/layerOps';
 import { Minimap } from './Minimap';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
@@ -234,7 +236,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     [compilationErrors, glslErrors, glslErrorSource, nodeSlugMap],
   );
 
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null; paramKey?: string } | null>(null);
   const [addingGroupInput, setAddingGroupInput] = useState<{ name: string; type: import('../../types/nodeGraph').DataType } | null>(null);
   const [editingOutputPortKey, setEditingOutputPortKey] = useState<string | null>(null);
   const [editingOutputPortLabel, setEditingOutputPortLabel] = useState('');
@@ -852,10 +854,17 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
       const pos = node && key ? socketWorld(node.id, 'out', key) : null;
       if (!pos || !node || !key) { if (tries++ < 30) raf = requestAnimationFrame(attempt); return; }
       useNodeGraphStore.getState().requestSmartConnect(null);
-      // Show the node that was just added: select it and bring it to the middle of the view
+      // Select the node that was just added. New nodes land in the middle of the view, so the view
+      // stays put; it only moves when the node is somehow off screen (you'd lose it otherwise).
       useNodeGraphStore.getState().setSelectedNodeId(nodeId);
       const size = getCardSize(nodeId) ?? { w: 360, h: 200 };
-      handleMinimapPanTo(node.position.x + size.w / 2, node.position.y + size.h / 2);
+      const view = canvasRef.current?.getBoundingClientRect();
+      if (view) {
+        const z = zoomRef.current, pan = panRef.current;
+        const left = node.position.x * z + pan.x, top = node.position.y * z + pan.y;
+        const onScreen = left + size.w * z > 0 && top + size.h * z > 0 && left < view.width && top < view.height;
+        if (!onScreen) handleMinimapPanTo(node.position.x + size.w / 2, node.position.y + size.h / 2);
+      }
       const suggestions = suggestConnections({
         nodes: displayNodesRef.current, from: { nodeId, key, dir: 'out' }, socketPos: socketWorld,
         labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type,
@@ -917,7 +926,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     // On empty canvas the menu only has "Group selection" — with fewer than two nodes
     // selected there is nothing to show, so don't open an empty strip.
     if (!nodeId && useNodeGraphStore.getState().selectedNodeIds.length < 2) { setContextMenu(null); return; }
-    setContextMenu({ x: e.clientX, y: e.clientY, nodeId });
+    // On a slider or colour row, the menu starts with making it a Play control.
+    const paramKey = nodeId ? (target.closest('[data-param-key]') as HTMLElement | null)?.dataset.paramKey : undefined;
+    setContextMenu({ x: e.clientX, y: e.clientY, nodeId, paramKey });
   }, []);
 
   // ── Feature 1: Alt-click socket handler ─────────────────────────────────────
@@ -1382,8 +1393,51 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                 ? `${nameOf(from)} · ${outLabel}  →  ${inLabel}`
                 : `${outLabel}  →  ${nameOf(to)} · ${inLabel}`;
             };
+            // The right-clicked slider as a Play control: one step, from here.
+            const playParam = (() => {
+              if (!contextMenu.nodeId || !contextMenu.paramKey) return null;
+              const st = useNodeGraphStore.getState();
+              const candidates = collectPlayCandidates(st.nodes, st.paramBindings);
+              const c = candidateFor(candidates, contextMenu.nodeId, contextMenu.paramKey);
+              return { c, candidates, taken: !!c && st.play.controls.some(x => x.target === c.target) };
+            })();
+            const openPlay = { label: 'Open Play', onClick: () => useNodeGraphStore.setState(s => ({ playOpenRequest: s.playOpenRequest + 1 })) };
             return (
               <>
+                {playParam && (
+                  <>
+                    <div style={{ padding: '4px 12px 2px', fontSize: '10px', letterSpacing: 0.6, textTransform: 'uppercase', color: tc.surface2 }}>Play</div>
+                    {!playParam.c ? (
+                      <div style={{ padding: '4px 12px 6px', fontSize: '11px', color: tc.surface2, maxWidth: 240 }}>This param is baked into the shader, so it can't be a Play control.</div>
+                    ) : (
+                      <>
+                        <button style={{ ...ctxBtnStyle, opacity: playParam.taken ? 0.5 : 1 }} disabled={playParam.taken}
+                          title="A slider on the Play panel that MIDI, keys, the mouse and more can drive"
+                          onClick={() => {
+                            const c = playParam.c!;
+                            useNodeGraphStore.getState().setPlay(p => addCandidateControl(p, c));
+                            toast.success(`“${candidateLabel(c)}” is a Play control`, { action: openPlay });
+                            setContextMenu(null);
+                          }}>
+                          {playParam.taken ? 'Already a Play control' : 'Add to Play controls'}
+                        </button>
+                        {playParam.c.kind === 'float' && (
+                          <button style={ctxBtnStyle}
+                            title="A Play control, and a null on the picture that drives it (X and Y together for a position)"
+                            onClick={() => {
+                              const { drives, label } = graphNullDrives(playParam.candidates, playParam.c!);
+                              useNodeGraphStore.getState().setPlay(p => driveWithNull(p, drives, label).play);
+                              toast.success(`Added “${label}”`, { message: 'In Play, drag the dot on the picture to change the value.', action: openPlay });
+                              setContextMenu(null);
+                            }}>
+                            Drive with a null in Play
+                          </button>
+                        )}
+                      </>
+                    )}
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                  </>
+                )}
                 {pastWires.length > 0 && (
                   <>
                     <div style={{ padding: '4px 12px 2px', fontSize: '10px', letterSpacing: 0.6, textTransform: 'uppercase', color: tc.surface2 }}>Reconnect</div>

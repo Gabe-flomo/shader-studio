@@ -16,6 +16,7 @@ import { MobileIconSegment } from './components/shell/MobileIconSegment';
 import { Button, IconButton } from './components/ui/Button';
 import { ThemeOverrideContext, useTokens } from './theme/themeStore';
 import { AspectPicker, PreviewFooter, PreviewHeader } from './components/shell/PreviewChrome';
+import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
@@ -1177,6 +1178,7 @@ function App() {
             <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
               <PreviewHeader>
                 {page === 'play' && <AspectPicker />}
+                {page === 'play' && <GuidesToggle />}
                 <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
                 <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
               </PreviewHeader>

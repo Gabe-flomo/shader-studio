@@ -1,7 +1,8 @@
 /**
  * fields.tsx — the building blocks every layer editor uses. makeFieldKit()
  * returns row helpers bound to one layer: a numeric property (a ruler plus
- * the + that makes it a control), a colour, a segmented choice, a select, a
+ * the + that makes it a control; right-click or long-press it to make it a
+ * control, drive it with a null or reset it), a colour, a segmented choice, a select, a
  * toggle, a layer picker and a note. Every label carries a tooltip.
  */
 import type { ReactNode } from 'react';
@@ -15,6 +16,8 @@ import { Segmented, Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { RulerSlider } from '../../ui/RulerSlider';
 import { Tooltip } from '../../ui/Tooltip';
+import { ContextMenuArea } from '../../ui/ContextMenuArea';
+import { pairedKey } from '../layerOps';
 
 type Tokens = ReturnType<typeof useTokens>;
 type RGB = [number, number, number];
@@ -45,16 +48,21 @@ export const BLENDS: Choice[] = [
 ];
 export const BLEND_HINT = 'How the layer mixes with what is under it. Screen and Add glow; Multiply darkens.';
 
+/** A touch-first screen (phones, tablets): no right-click to find the property menu with. */
+const COARSE = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
+
 const toHex = (v: RGB) => `#${v.map(c => Math.round(Math.max(0, Math.min(1, c)) * 255).toString(16).padStart(2, '0')).join('')}`;
 const fromHex = (h: string): RGB => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
 
-export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose }: {
+export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onDriveNull }: {
   l: PlayLayer;
   tk: Tokens;
   touch: boolean;
   exposedTargets: Set<string>;
   set: (patch: Record<string, unknown>) => void;
   onExpose: (key: string) => void;
+  /** Make the property a control with a Null on the picture that drives it (its X/Y partner too). */
+  onDriveNull?: (key: string) => void;
 }): FieldKit {
   const rec = l as unknown as Record<string, unknown>;
   // Double-clicking a ruler puts it back to the layer kind's default.
@@ -76,14 +84,35 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose }: {
     if (!def) return null;
     const value = get<number>(key);
     const exposed = exposedTargets.has(layerTarget(l.id, key));
+    const fallback = typeof defaults[key] === 'number' ? defaults[key] as number : undefined;
+    const pair = pairedKey(key);
+    const partner = pair && LAYER_NUMERIC_PROPS[l.kind].find(d => d.key === pair.other);
+    const items = () => [
+      { label: exposed ? 'Already a control' : 'Add to controls', icon: 'plus' as const, hint: exposed ? undefined : 'A slider on the panel; map anything onto it', disabled: exposed, onSelect: () => onExpose(key) },
+      ...(onDriveNull ? [{
+        label: partner ? `Drive ${pair.axis === 'x' ? def.label : partner.label} and ${pair.axis === 'x' ? partner.label : def.label} with a null` : 'Drive with a null',
+        icon: 'target' as const,
+        hint: 'A control, and a null on the picture that moves it: drag the dot',
+        onSelect: () => onDriveNull(key),
+      }] : []),
+      'separator' as const,
+      { label: 'Reset to default', icon: 'resetParams' as const, disabled: fallback === undefined || fallback === value, onSelect: () => set({ [key]: fallback }) },
+    ];
     return (
-      <div key={`prop:${key}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-        {label(def.label, def.hint)}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <RulerSlider value={value} min={def.min} max={def.max} step={def.step ?? 0.01} defaultValue={typeof defaults[key] === 'number' ? defaults[key] as number : undefined} onChange={v => set({ [key]: v })} onType={v => set({ [key]: v })} ariaLabel={`${l.label} ${def.label}`} touch={touch} />
-        </div>
-        <IconButton icon={exposed ? 'check' : 'plus'} label={exposed ? 'Already a control' : `Make ${def.label} a control (then map anything onto it)`} size="sm" active={exposed} disabled={exposed} onClick={() => onExpose(key)} />
-      </div>
+      <ContextMenuArea key={`prop:${key}`} items={items} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+        {open => (
+          <>
+            {label(def.label, def.hint)}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <RulerSlider value={value} min={def.min} max={def.max} step={def.step ?? 0.01} defaultValue={fallback} onChange={v => set({ [key]: v })} onType={v => set({ [key]: v })} ariaLabel={`${l.label} ${def.label}`} touch={touch} />
+            </div>
+            {touch || COARSE
+              // No right-click on a phone or tablet: the + opens the same menu.
+              ? <IconButton icon={exposed ? 'check' : 'plus'} label={`${def.label}: add to controls, or drive with a null`} size="sm" active={exposed} onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); open(r.left, r.bottom + 4); }} />
+              : <IconButton icon={exposed ? 'check' : 'plus'} label={exposed ? 'Already a control (right-click for more)' : `Make ${def.label} a control (right-click to drive it with a null)`} size="sm" active={exposed} disabled={exposed} onClick={() => onExpose(key)} />}
+          </>
+        )}
+      </ContextMenuArea>
     );
   };
   const colour = (text: string, key: string, hint?: string) => {

@@ -5,8 +5,8 @@
  * draw order, make a null for a property that follows one, and make a null
  * that drives a control.
  */
-import { defaultLayer, type NullLayer, type PlayControl, type PlayLayer, type PlayRecord } from '../../types/play';
-import { playId } from '../../play/playControls';
+import { LAYER_NUMERIC_PROPS, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayRecord } from '../../types/play';
+import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
 
 /** Remove a layer and the controls, mappings and actions that read or drive it. */
 export function removeLayer(p: PlayRecord, id: string): PlayRecord {
@@ -148,5 +148,54 @@ export function driveWithNull(p: PlayRecord, drives: NullDrive[], label: string)
     if (d.axis === 'x') nul.x = at(d.value, c); else nul.y = at(d.value, c);
     mappings.push({ id: playId('map'), controlId: c.id, source: { kind: 'null', layerId: nullId, axis: d.axis }, outMin: c.min, outMax: c.max, curve: 'linear', smoothMs: 0, enabled: true });
   }
+  // An axis nothing drives (a single slider moves the dot sideways): pick a height clear of the other nulls.
+  if (!drives.some(d => d.axis === 'y')) {
+    const others = p.layers.filter((l): l is NullLayer => l.kind === 'null');
+    nul.y = [0.5, 0.3, 0.7, 0.15, 0.85].find(y => others.every(o => Math.hypot(o.x - nul.x, o.y - y) > 0.12)) ?? 0.5;
+  }
   return { play: { ...p, layers: [...p.layers, nul], controls, mappings }, nullId, controlIds };
+}
+
+/** A slider as the null helpers see it: where it lives, its key (for X/Y pairing), range and value now. */
+interface Slider { target: string; key: string; label: string; min: number; max: number; step?: number; value: number }
+
+/**
+ * What a null should drive when `picked` is chosen: the slider, and its X/Y
+ * partner among `siblings` when it has one (posX with posY), so one null
+ * moves both. The label names the null.
+ */
+export function nullDrivesFor(picked: Slider, siblings: readonly Slider[]): { drives: NullDrive[]; label: string } {
+  const one = (d: Slider, axis: 'x' | 'y'): NullDrive => ({ target: d.target, label: d.label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), value: d.value, axis });
+  const pair = pairedKey(picked.key);
+  const partner = pair && siblings.find(s => s.key === pair.other);
+  if (pair && partner) {
+    const [x, y] = pair.axis === 'x' ? [picked, partner] : [partner, picked];
+    return { drives: [one(x, 'x'), one(y, 'y')], label: `${x.label.replace(/[\s·_-]*[Xx]$/, '') || x.label} null` };
+  }
+  return { drives: [one(picked, 'x')], label: `${picked.label} null` };
+}
+
+const graphSlider = (c: PlayCandidate): Slider => ({ target: c.target, key: targetParts(c.target).paramKey, label: candidateLabel(c), min: c.min, max: c.max, step: c.step, value: typeof c.value === 'number' ? c.value : c.min });
+
+/** A graph slider (and its X/Y partner on the same node), ready for driveWithNull. */
+export function graphNullDrives(candidates: readonly PlayCandidate[], c: PlayCandidate): { drives: NullDrive[]; label: string } {
+  const node = targetParts(c.target).nodeId;
+  return nullDrivesFor(graphSlider(c), candidates.filter(x => x.kind === 'float' && targetParts(x.target).nodeId === node).map(graphSlider));
+}
+
+/** A layer's numeric property (and its X/Y partner), ready for driveWithNull. */
+export function layerNullDrives(l: PlayLayer, key: string): { drives: NullDrive[]; label: string } | null {
+  const rec = l as unknown as Record<string, unknown>;
+  const sliders: Slider[] = LAYER_NUMERIC_PROPS[l.kind].map(d => ({
+    target: layerTarget(l.id, d.key), key: d.key, label: `${l.label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}),
+    value: typeof rec[d.key] === 'number' ? rec[d.key] as number : d.min,
+  }));
+  const picked = sliders.find(s => s.key === key);
+  return picked ? nullDrivesFor(picked, sliders) : null;
+}
+
+/** A graph param as a panel control (unchanged when it's already one). */
+export function addCandidateControl(p: PlayRecord, c: PlayCandidate): PlayRecord {
+  if (p.controls.some(x => x.target === c.target)) return p;
+  return { ...p, controls: [...p.controls, { id: playId('ctl'), target: c.target, kind: c.kind, label: candidateLabel(c), min: c.min, max: c.max, ...(c.step ? { step: c.step } : {}) }] };
 }

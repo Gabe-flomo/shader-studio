@@ -1,15 +1,26 @@
 /**
  * playUi.ts — Play page state that more than one panel needs: which tab is
  * open, which layer is selected (the Layers list, the picture's right-click
- * menu and links in the notes all set it), and which editor sections are
- * folded (remembered per layer kind, across sessions).
+ * menu and links in the notes all set it), which editor sections are
+ * folded (remembered per layer kind, across sessions), whether the picture
+ * shows its guides, and what is soloed.
+ *
+ * Solo is for looking, not saving: soloed layers are the only ones drawn
+ * (nulls stay, they're handles) and soloed mappings the only ones running.
+ * The record itself never changes, so exports and saves are unaffected.
  */
 import { create } from 'zustand';
+import type { PlayRecord } from '../../types/play';
 
 export type PlayTab = 'controls' | 'layers' | 'mappings';
 
 const FOLD_KEY = 'shader-studio:play:folded';
 const PANEL_KEY = 'shader-studio:play:panel';
+const GUIDES_KEY = 'shader-studio:play:guides';
+
+function loadGuides(): boolean {
+  try { return localStorage.getItem(GUIDES_KEY) !== '0'; } catch { return true; }
+}
 
 export type PanelSize = 's' | 'm' | 'l';
 /** The Play panel's width for each size, in px. */
@@ -39,6 +50,26 @@ interface PlayUi {
   /** How wide the Play panel is. */
   panel: PanelSize;
   setPanel: (size: PanelSize) => void;
+  /** Null markers, handles, zone outlines and field guides on the picture. */
+  guides: boolean;
+  toggleGuides: () => void;
+  /** Soloed layer and mapping ids (empty = no solo). */
+  soloLayers: ReadonlySet<string>;
+  soloMappings: ReadonlySet<string>;
+  toggleSolo: (kind: 'layer' | 'mapping', id: string) => void;
+  clearSolo: () => void;
+}
+
+const NONE: ReadonlySet<string> = new Set();
+
+/** The record as it plays with solo applied (the same object when nothing is soloed). */
+export function applySolo(p: PlayRecord, layers: ReadonlySet<string>, mappings: ReadonlySet<string>): PlayRecord {
+  if (!layers.size && !mappings.size) return p;
+  return {
+    ...p,
+    layers: layers.size ? p.layers.map(l => (l.kind === 'null' || layers.has(l.id) || !l.visible ? l : { ...l, visible: false })) : p.layers,
+    mappings: mappings.size ? p.mappings.map(m => (mappings.has(m.id) || !m.enabled ? m : { ...m, enabled: false })) : p.mappings,
+  };
 }
 
 export const usePlayUi = create<PlayUi>((set, get) => ({
@@ -50,6 +81,20 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   reveal: id => set({ tab: 'layers', selected: id, revealTick: get().revealTick + 1 }),
   panel: loadPanel(),
   setPanel: panel => { try { localStorage.setItem(PANEL_KEY, panel); } catch { /* preference only */ } set({ panel }); },
+  guides: loadGuides(),
+  toggleGuides: () => {
+    const guides = !get().guides;
+    try { localStorage.setItem(GUIDES_KEY, guides ? '1' : '0'); } catch { /* preference only */ }
+    set({ guides });
+  },
+  soloLayers: NONE,
+  soloMappings: NONE,
+  toggleSolo: (kind, id) => {
+    const next = new Set(kind === 'layer' ? get().soloLayers : get().soloMappings);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    set(kind === 'layer' ? { soloLayers: next } : { soloMappings: next });
+  },
+  clearSolo: () => set({ soloLayers: NONE, soloMappings: NONE }),
   folded: loadFolded(),
   toggleFold: key => {
     const folded = { ...get().folded };

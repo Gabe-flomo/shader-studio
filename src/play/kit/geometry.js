@@ -129,6 +129,28 @@ export function geoFieldFromMask(mask, gw, gh) {
   return { d, gw, gh };
 }
 
+/**
+ * A field from partial coverage (`cover` 0..1 per cell), for things smaller
+ * than a cell like particles. A cell counts as a disc of its covered area
+ * (radius √(a/π) cells), so a dot moving between cells, or fading, shrinks
+ * and grows smoothly instead of popping in and out as a threshold would. A
+ * cell at least half covered is inside, measured like geoFieldFromMask.
+ */
+export function geoFieldFromCoverage(cover, gw, gh, minCover) {
+  const INF = 1e9, n = gw * gh;
+  const outD = new Float32Array(n), inD = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = cover[i];
+    // A half-covered cell or more is solid: its edge half a cell out, as geoFieldFromMask has it.
+    outD[i] = a >= 0.5 ? -0.5 : a > minCover ? -Math.sqrt(a / Math.PI) : INF;
+    inD[i] = a >= 0.5 ? INF : 0;
+  }
+  geoChamfer(outD, gw, gh); geoChamfer(inD, gw, gh);
+  const d = new Float32Array(n), cell = 1 / gh;
+  for (let i = 0; i < n; i++) d[i] = (cover[i] >= 0.5 ? -(inD[i] - 0.5) : outD[i]) * cell;
+  return { d, gw, gh };
+}
+
 function geoChamfer(g, w, h) {
   const A = 1, B = 1.4142;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {

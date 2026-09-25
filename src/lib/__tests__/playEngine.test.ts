@@ -8,7 +8,7 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import { inputBus } from '../inputBus';
 import { midiEngine } from '../midiEngine';
 import { applyCurve, clockRate, lfoValue, mapValue, playEngine, bindingKeyOf, sampleCurve } from '../playEngine';
-import { emptyPlayRecord, parsePlayRecord, type PlayRecord } from '../../types/play';
+import { defaultLayer, emptyPlayRecord, parsePlayRecord, type PlayRecord } from '../../types/play';
 import { bakeControlValues, collectPlayCandidates, readBaseValues, readControlValue, targetParts } from '../../play/playControls';
 import type { GraphNode } from '../../types/nodeGraph';
 
@@ -239,6 +239,18 @@ describe('play engine on the bus', () => {
     expect(mid).toBeLessThan(1);
     for (let i = 0; i < 20; i++) inputBus.tick(0.02, 0);
     expect(inputBus.tick(0.02, 0).get(b)).toBe(0);
+  });
+
+  it('a drawn curve reshapes what a layer property and a trigger get, not just graph params', () => {
+    const flat = Array.from({ length: 25 }, () => 0.2);
+    playEngine.setRecord({
+      ...RECORD,
+      layers: [{ ...defaultLayer('particles', 'p', 'P') }],
+      controls: [{ id: 'spd', target: 'layer:p::speed', kind: 'float', label: 'Speed', min: 0, max: 2 }],
+      mappings: [{ id: 'lm', controlId: 'spd', source: { kind: 'lfo', shape: 'saw', rate: 1, phase: 0 }, outMin: 0, outMax: 2, curve: 'custom', curveY: flat, smoothMs: 0, enabled: true }],
+    });
+    inputBus.tick(1 / 60, 0.9);
+    expect(playEngine.layerValue('p', 'speed', 1)).toBeCloseTo(0.4);
   });
 
   it('noise and beat triggers keep the render loop running', () => {

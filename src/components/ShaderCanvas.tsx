@@ -9,6 +9,7 @@ import { inputBus } from '../lib/inputBus';
 import { playEngine } from '../lib/playEngine';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
+import { applySolo, usePlayUi } from './play/playUi';
 import { layersUniforms, setLayersTap } from '../play/layersTexture';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
@@ -720,12 +721,21 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (!compilingProbeMats.has(pm)) {
         compilingProbeMats.add(pm);
         probeCompileMesh.material = pm;
+        const settle = () => { readyProbeMats.add(pm); if (disposeWhenReady.has(pm)) pm.dispose(); };
         renderer.compileAsync(probeCompileScene, camera).then(
-          () => { readyProbeMats.add(pm); requestRender(); },
-          () => { readyProbeMats.add(pm); },
+          () => { settle(); requestRender(); },
+          settle,
         );
       }
       return false;
+    };
+    // compileAsync polls each material until its program is ready; disposing one mid-poll made
+    // three.js throw ("reading 'isReady'") and that compile never finish. A probe material dropped
+    // while it compiles is disposed once the compile settles instead.
+    const disposeWhenReady = new WeakSet<THREE.ShaderMaterial>();
+    const disposeProbeMat = (m: THREE.ShaderMaterial) => {
+      if (compilingProbeMats.has(m) && !readyProbeMats.has(m)) disposeWhenReady.add(m);
+      else m.dispose();
     };
     let lastProbedNodeId: string | null = null;
     let lastProbeFs: string | null = null;   // invalidate cache when shader recompiles
@@ -1207,13 +1217,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             if (outputVars && selNode && curFs && curVs) {
               // If shader recompiled since last probe, stale materials must be rebuilt
               if (lastProbeFs !== curFs) {
-                probeMatCache.forEach(m => m.dispose());
+                probeMatCache.forEach(disposeProbeMat);
                 probeMatCache.clear();
                 lastProbeFs = curFs;
               }
               // If selected node changed, also clear cache (different set of varNames)
               if (lastProbedNodeId !== selId) {
-                probeMatCache.forEach(m => m.dispose());
+                probeMatCache.forEach(disposeProbeMat);
                 probeMatCache.clear();
                 lastProbedNodeId = selId;
               }
@@ -1268,7 +1278,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             }
           } else if (lastProbedNodeId !== null) {
             // Node deselected — clear probe state
-            probeMatCache.forEach(m => m.dispose());
+            probeMatCache.forEach(disposeProbeMat);
             probeMatCache.clear();
             lastProbedNodeId = null;
             setNodeProbeValues(null);
@@ -1283,7 +1293,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           const curScopeVs = vertexShaderRef.current;
           if (curScopeFs && curScopeVs) {
             if (lastScopeFs !== curScopeFs) {
-              scopeMatCache.forEach(m => m.dispose());
+              scopeMatCache.forEach(disposeProbeMat);
               scopeMatCache.clear();
               lastScopeFs = curScopeFs;
             }
@@ -1347,7 +1357,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             const curVs = vertexShaderRef.current;
             if (curFs && curVs) {
               if (lastPreviewScopeFs !== curFs) {
-                previewScopeMatCache.forEach(m => m.dispose());
+                previewScopeMatCache.forEach(disposeProbeMat);
                 previewScopeMatCache.clear();
                 lastPreviewScopeFs = curFs;
               }
@@ -1646,9 +1656,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       probeRT.dispose();
       probeGeo.dispose();
       probeDummy.dispose();
-      probeMatCache.forEach(m => m.dispose());
-      scopeMatCache.forEach(m => m.dispose());
-      previewScopeMatCache.forEach(m => m.dispose());
+      probeMatCache.forEach(disposeProbeMat);
+      scopeMatCache.forEach(disposeProbeMat);
+      previewScopeMatCache.forEach(disposeProbeMat);
       pingPongA.current?.dispose();
       pingPongB.current?.dispose();
       // Dispose all GPU particle systems
@@ -1708,8 +1718,20 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     let lastPlayNodes = init.nodes;
     inputBus.setBindings(lastLive);
     inputBus.setParamBindings(lastBindings);
-    playEngine.setRecord(lastPlay);
-    playOverlay.setRecord(lastPlay);
+    // What plays is the record with any solo applied (the Play page's S buttons); the store keeps the real one.
+    const feedPlay = () => {
+      const ui = usePlayUi.getState();
+      const shown = applySolo(lastPlay, ui.soloLayers, ui.soloMappings);
+      playEngine.setRecord(shown);
+      playOverlay.setRecord(shown);
+      requestRenderRef.current();
+    };
+    feedPlay();
+    playOverlay.setGuides(usePlayUi.getState().guides);
+    const unsubSolo = usePlayUi.subscribe((ui, prev) => {
+      if (ui.soloLayers !== prev.soloLayers || ui.soloMappings !== prev.soloMappings) feedPlay();
+      if (ui.guides !== prev.guides) { playOverlay.setGuides(ui.guides); requestRenderRef.current(); }
+    });
     playOverlay.setWriter((layerId, patch) => useNodeGraphStore.getState().setPlay(p => ({ ...p, layers: p.layers.map(l => l.id === layerId ? { ...l, ...patch } as typeof l : l) })));
     playEngine.setBaseValues(readBaseValues(lastPlayNodes, lastPlay));
     const unsub = useNodeGraphStore.subscribe(state => {
@@ -1720,7 +1742,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (state.liveUniforms !== lastLive) { lastLive = state.liveUniforms; inputBus.setBindings(lastLive); }
       if (state.paramBindings !== lastBindings) { lastBindings = state.paramBindings; inputBus.setParamBindings(lastBindings); }
       // Play mappings: the record itself, and the sliders' values the engine falls back to.
-      if (state.play !== lastPlay) { lastPlay = state.play; playEngine.setRecord(lastPlay); playOverlay.setRecord(lastPlay); }
+      if (state.play !== lastPlay) { lastPlay = state.play; feedPlay(); }
       if (state.play !== lastPlay || state.nodes !== lastPlayNodes) {
         lastPlayNodes = state.nodes;
         if (lastPlay.controls.length > 0) playEngine.setBaseValues(readBaseValues(lastPlayNodes, lastPlay));
@@ -1732,7 +1754,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     previewNodeIdRef.current    = s.previewNodeId;
     nodeOutputVarMapRef.current = s.nodeOutputVarMap;
     syncNodes(s.nodes);
-    return unsub;
+    return () => { unsub(); unsubSolo(); };
   }, []);
 
   // Update shader when compiled output changes — flush old errors first.

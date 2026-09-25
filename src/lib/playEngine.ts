@@ -696,7 +696,8 @@ class PlayEngine implements InputSource {
     }
   }
 
-  private keyIsBound(code: string): boolean {
+  /** A mapping, trigger or action listens to this key (so the page leaves it alone). */
+  keyIsBound(code: string): boolean {
     for (const m of this.record.mappings) {
       if (!m.enabled) continue;
       if (m.source.kind === 'key' && m.source.code === code) return true;

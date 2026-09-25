@@ -3771,6 +3771,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             return (
               <div
                 key={key}
+                data-param-key={key}
                 style={rowStyle}
                 onMouseDown={e => e.stopPropagation()}
                 onMouseEnter={() => { setHoveredSliderKey(key); setHoveredParamHint(paramDef.hint ?? null); }}
@@ -3896,7 +3897,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           if (paramDef.type === 'vec3color') {
             const vals = toRgb(node.params[key]);
             return (
-              <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
+              <div key={key} data-param-key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
                 <ParamLabel>{paramDef.label}</ParamLabel>
                 <ColorSwatch
                   label={paramDef.label}

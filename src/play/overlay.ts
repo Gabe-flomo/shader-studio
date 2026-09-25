@@ -44,6 +44,7 @@ class PlayOverlay {
   private measure: CanvasRenderingContext2D | null = null;
   private pressedZone: string | null = null;
   private editing = false;
+  private guides = true;
   private selectedId = '';
   private drawing: ShapeDrawing | null = null;
   private drawingListeners = new Set<(d: ShapeDrawing | null) => void>();
@@ -70,6 +71,9 @@ class PlayOverlay {
 
   /** The Layers tab is open: shapes can be dragged and invisible zones are outlined. */
   setEditing(on: boolean, selectedId = ''): void { this.editing = on; this.selectedId = selectedId; }
+
+  /** Draw the guides (null markers, handles, zone outlines, fields) or just the picture. */
+  setGuides(on: boolean): void { this.guides = on; }
 
   /** The graph's Layers node reads what the layers draw: receive it after every frame (null = off). */
   setShaderTap(fn: ((tap: ShaderTap) => void) | null): void { this.shaderTap = fn; }
@@ -336,8 +340,8 @@ class PlayOverlay {
       gl, W, H, dpr, time, dt,
       value: (l, k) => playEngine.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]),
       pointer: this.pointer,
-      markers: !forExport,
-      editing: this.editing && !forExport,
+      markers: !forExport && this.guides,
+      editing: this.editing && !forExport && this.guides,
       selectedId: this.selectedId,
       hidden: this.record.display?.picture === false,
       backdrop: this.record.display?.backdrop ?? [0, 0, 0],
@@ -361,7 +365,7 @@ class PlayOverlay {
     playEngine.setAspect(this.aspect);
     this.kit.frame(ctx, this.record, this.env(gl, W, H, dpr, time, dt));
     if (this.drawing) this.drawOutline(ctx, W, H, dpr);
-    else if (this.editing && this.selectedId) this.drawHandles(ctx, W, H, dpr);
+    else if (this.editing && this.guides && this.selectedId) this.drawHandles(ctx, W, H, dpr);
     if (this.composite) {
       const c = this.composite;
       if (c.width !== gl.width || c.height !== gl.height) { c.width = gl.width; c.height = gl.height; }

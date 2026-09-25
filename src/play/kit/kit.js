@@ -27,7 +27,7 @@
  * are queued with kit.act() and applied on the next frame.
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
-import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromMask, sdfSegments } from './geometry.js';
+import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments } from './geometry.js';
 import { KL_BLEND, klCss, klCanvas, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush } from './layers.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 
@@ -425,10 +425,11 @@ export function createLayerKit() {
     sx.clearRect(0, 0, gw, gh); sx.drawImage(buf, 0, 0, gw, gh);
     let data;
     try { data = sx.getImageData(0, 0, gw, gh).data; } catch (e) { data = new Uint8ClampedArray(gw * gh * 4); }
-    // Low enough that a particle smaller than a cell still counts, high enough that faint trails don't.
-    const mask = new Uint8Array(gw * gh);
-    for (let i = 0; i < gw * gh; i++) mask[i] = data[i * 4 + 3] > 36 ? 1 : 0;
-    const f = geoFieldFromMask(mask, gw, gh);
+    // Coverage, not a yes/no threshold: a particle smaller than a cell counts as a small disc, so it
+    // doesn't blink in and out of the field as it crosses cells. Barely-there pixels (faint trails) don't count.
+    const cover = new Float32Array(gw * gh);
+    for (let i = 0; i < gw * gh; i++) cover[i] = data[i * 4 + 3] / 255;
+    const f = geoFieldFromCoverage(cover, gw, gh, 0.04);
     const field = new Uint8Array(gw * gh * 4);
     for (let i = 0; i < gw * gh; i++) {
       const u = Math.max(0, Math.min(1, f.d[i] * 2 * 0.25 + 0.5)), q = Math.round(u * 65535);

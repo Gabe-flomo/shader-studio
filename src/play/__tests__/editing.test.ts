@@ -8,6 +8,7 @@ import { dragHandle, handleAt, handlePoints, insideBounds, patchFor, type Bounds
 import { klGlyphList, klParseFontUrl } from '../kit/layers.js';
 import { addNullFor, driveWithNull, duplicateLayer, pairedKey, renameLayer, resetLayer } from '../../components/play/layerOps';
 import { defaultLayer, emptyPlayRecord, type PlayLayer } from '../../types/play';
+import { applySolo } from '../../components/play/playUi';
 
 const W = 1600, H = 900;
 const box: Bounds = { x: 0.5, y: 0.5, w: 0.4, h: 0.2, rot: 0, uniform: false, turns: true };
@@ -158,5 +159,33 @@ describe('driving controls with a null', () => {
     expect(play.controls).toHaveLength(1);
     expect(play.mappings[0]).toMatchObject({ controlId: 'k', outMin: 2, outMax: 10 });
     expect((play.layers[0] as { x: number }).x).toBeCloseTo(0.5); // 6 is halfway along 2..10
+  });
+});
+
+describe('solo', () => {
+  it('shows only soloed layers (nulls stay) and runs only soloed mappings, without touching the record', () => {
+    const p = {
+      ...emptyPlayRecord(),
+      layers: [defaultLayer('text', 'a', 'A'), defaultLayer('shape', 'b', 'B'), defaultLayer('null', 'n', 'N')],
+      mappings: [
+        { id: 'm1', controlId: 'c', source: { kind: 'lfo' as const, shape: 'sine' as const, rate: 1, phase: 0 }, outMin: 0, outMax: 1, curve: 'linear' as const, smoothMs: 0, enabled: true },
+        { id: 'm2', controlId: 'c', source: { kind: 'lfo' as const, shape: 'sine' as const, rate: 1, phase: 0 }, outMin: 0, outMax: 1, curve: 'linear' as const, smoothMs: 0, enabled: true },
+      ],
+    };
+    expect(applySolo(p, new Set(), new Set())).toBe(p);
+    const s = applySolo(p, new Set(['a']), new Set(['m2']));
+    expect(s.layers.map(l => l.visible)).toEqual([true, false, true]);
+    expect(s.mappings.map(m => m.enabled)).toEqual([false, true]);
+    expect(p.layers.every(l => l.visible) && p.mappings.every(m => m.enabled)).toBe(true);
+  });
+});
+
+describe('a new null keeps clear of the others', () => {
+  it('moves a one-slider null off a null already at the middle', () => {
+    const p = { ...emptyPlayRecord(), layers: [{ ...defaultLayer('null', 'e', 'Emitter'), x: 0.3, y: 0.5 } as PlayLayer] };
+    const { play, nullId } = driveWithNull(p, [{ target: 'g::speed', label: 'Speed', min: 0, max: 2, value: 0.6, axis: 'x' }], 'Speed null');
+    const n = play.layers.find(l => l.id === nullId) as { x: number; y: number };
+    expect(n.x).toBeCloseTo(0.3);
+    expect(n.y).toBeCloseTo(0.3);
   });
 });

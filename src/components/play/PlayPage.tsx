@@ -14,7 +14,7 @@ import { getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import type { PlayControl, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
+import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
 import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, SENSOR_HINTS, SENSOR_LABELS, SOURCE_TYPES, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import { SENSOR_READS_FOR, type SensorRead } from '../../types/play';
 import { ConnectGuide } from './ConnectGuide';
@@ -39,11 +39,13 @@ import { NotesCard } from './NotesCard';
 import { AspectPicker } from '../shell/PreviewChrome';
 import { NOTE_REF_TYPE, noteRef, type NoteRefKind } from './noteRefs';
 import { LayerContextMenu } from './LayerContextMenu';
-import { driveWithNull, pairedKey, type NullDrive } from './layerOps';
+import { driveWithNull, graphNullDrives, layerNullDrives, pairedKey, type NullDrive } from './layerOps';
 import { toast } from '../ui/toastStore';
 import { usePlayUi, type PanelSize } from './playUi';
 import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
+import { SoloButton, SoloStrip } from './Solo';
+import { GuidesToggle } from './GuidesToggle';
 import { TriggerPicker } from './TriggerPicker';
 import { ACTIONS_FOR, DEFAULT_DISPLAY, LAYER_NUMERIC_PROPS, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
 import { ACTION_LABELS } from './layers/help';
@@ -135,10 +137,22 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const [embedOpen, setEmbedOpen] = useState(false);
   const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
 
-  // Mouse and keyboard sources listen only while this page shows.
+  // Mouse and keyboard sources listen only while this page shows. Solo is for this page only.
   useEffect(() => {
     playEngine.setPerforming(true);
-    return () => playEngine.setPerforming(false);
+    return () => { playEngine.setPerforming(false); usePlayUi.getState().clearSolo(); };
+  }, []);
+  // H shows or hides the picture's guides, unless a mapping listens to H.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyH' || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (playEngine.keyIsBound('KeyH')) return;
+      usePlayUi.getState().toggleGuides();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
   // A MIDI mapping, note trigger or note action needs the browser's MIDI access; ask once the page is open.
   const wantsMidi = usesMidi(play);
@@ -201,10 +215,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // Every layer's numbers can be controls too (the + beside them in the Layers tab does the same).
   const layerCandidates = useMemo<LayerCandidates[]>(() => play.layers.map(l => ({
     id: l.id, label: l.label,
-    props: LAYER_NUMERIC_PROPS[l.kind].map(d => {
-      const v = (l as unknown as Record<string, unknown>)[d.key];
-      return { key: d.key, label: d.label, hint: d.hint, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), value: typeof v === 'number' ? v : d.min };
-    }),
+    props: LAYER_NUMERIC_PROPS[l.kind].map(d => ({ key: d.key, label: d.label, hint: d.hint, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
     actions: [...(ACTIONS_FOR[l.kind] ?? ACTIONS_FOR.other)],
   })), [play.layers]);
   // A layer's actions (Drop again, Burst…) as buttons on the panel, which mappings can press.
@@ -350,7 +361,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
             {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
             <IconButton icon="code" label="Put it on a website: a player with controls, or the picture as a background, as a snippet or a page" onClick={() => setEmbedOpen(true)} />
-            <AddControlButton candidates={candidates} layers={layerCandidates} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
+            <AddControlButton candidates={candidates} layers={layerCandidates} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
           </>
         )}
       />}
@@ -358,6 +369,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel, overflowX: 'auto' }}>
           <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
           <AspectPicker onPanel />
+          <GuidesToggle onPanel />
         </div>
       )}
       {!compact && <PictureRow play={play} onChange={update} />}
@@ -369,6 +381,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', overflowX: 'auto' }}>
               <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
               <AspectPicker onPanel />
+              <GuidesToggle onPanel />
             </div>
             <PictureRow play={play} onChange={update} />
           </div>
@@ -477,27 +490,12 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 // ── Add control ──────────────────────────────────────────────────────────────
 
 /** A layer's numbers, for the Add control menu. */
-interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number; value: number }>; actions: ActionKind[] }
+interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number }>; actions: ActionKind[] }
 
-/**
- * What a null should drive when a slider is picked with "Drive with a null":
- * the slider, and its X/Y partner when it has one (posX with posY), so one
- * null moves both.
- */
-function nullDrivesFor(picked: { target: string; key: string; label: string; min: number; max: number; step?: number; value: number }, siblings: Array<{ target: string; key: string; label: string; min: number; max: number; step?: number; value: number }>): { drives: NullDrive[]; label: string } {
-  const one = (d: typeof picked, axis: 'x' | 'y'): NullDrive => ({ target: d.target, label: d.label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), value: d.value, axis });
-  const pair = pairedKey(picked.key);
-  const partner = pair && siblings.find(s => s.key === pair.other);
-  if (pair && partner) {
-    const [x, y] = pair.axis === 'x' ? [picked, partner] : [partner, picked];
-    return { drives: [one(x, 'x'), one(y, 'y')], label: `${x.label.replace(/[\s·_-]*[Xx]$/, '') || x.label} null` };
-  }
-  return { drives: [one(picked, 'x')], label: `${picked.label} null` };
-}
-
-function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer, onAddAction, onAddNull }: {
+function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLayer, onAddAction, onAddNull }: {
   candidates: PlayCandidate[];
   layers: LayerCandidates[];
+  layerById: (id: string) => PlayLayer | undefined;
   taken: Set<string>;
   onAdd: (c: PlayCandidate) => void;
   onAddLayer: (layerId: string, key: string) => void;
@@ -510,20 +508,16 @@ function AddControlButton({ candidates, layers, taken, onAdd, onAddLayer, onAddA
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [withNull, setWithNull] = useState(false);
-  const graphDrive = (c: PlayCandidate) => ({ target: c.target, key: targetParts(c.target).paramKey, label: candidateLabel(c), min: c.min, max: c.max, step: c.step, value: typeof c.value === 'number' ? c.value : c.min });
   const pickGraph = (c: PlayCandidate) => {
     if (!withNull || c.kind !== 'float') { onAdd(c); return; }
-    const node = targetParts(c.target).nodeId;
-    const { drives, label } = nullDrivesFor(graphDrive(c), candidates.filter(x => x.kind === 'float' && targetParts(x.target).nodeId === node).map(graphDrive));
+    const { drives, label } = graphNullDrives(candidates, c);
     onAddNull(drives, label);
   };
   const pickLayer = (l: LayerCandidates, key: string) => {
     if (!withNull) { onAddLayer(l.id, key); return; }
-    const drive = (pr: LayerCandidates['props'][number]) => ({ target: layerTarget(l.id, pr.key), key: pr.key, label: `${l.label} · ${pr.label}`, min: pr.min, max: pr.max, step: pr.step, value: pr.value });
-    const pr = l.props.find(x => x.key === key);
-    if (!pr) return;
-    const { drives, label } = nullDrivesFor(drive(pr), l.props.map(drive));
-    onAddNull(drives, label);
+    const layer = layerById(l.id);
+    const r = layer && layerNullDrives(layer, key);
+    if (r) onAddNull(r.drives, r.label);
   };
   // Folders: 'graph', 'layers', and one per layer id. The graph starts open; layers start folded.
   const [unfolded, setUnfolded] = useState<Set<string>>(() => new Set(['graph', 'layers']));
@@ -948,6 +942,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               Move a knob, hit a note or press a key… <span style={{ fontWeight: 500, opacity: 0.8 }}>Esc to cancel</span>
             </div>
           )}
+          <SoloStrip kind="mapping" total={play.mappings.length} />
           {play.mappings.length === 0 ? (
             <EmptyState
               title="Nothing mapped"
@@ -1022,6 +1017,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
             <Icon name="chevR" size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: tk.text.secondary }}>{control?.label ?? 'missing control'}</span>
           </button>
+          <SoloButton kind="mapping" id={m.id} />
           <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} />
         </div>
         <div style={{ height: 3, margin: '2px 0 0 22px', borderRadius: 2, background: tk.bg.field, overflow: 'hidden' }}>
@@ -1060,6 +1056,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         {m.source.kind === 'key' && (
           <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(m.source.code)}</span>
         )}
+        <SoloButton kind="mapping" id={m.id} />
         <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
         <IconButton icon="trash" label="Remove mapping" size="sm" tone="danger" onClick={onRemove} />
       </div>

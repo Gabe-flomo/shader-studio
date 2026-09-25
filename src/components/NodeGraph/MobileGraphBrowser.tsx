@@ -48,6 +48,7 @@ import { suggestConnections } from './smartConnect';
 import { suggestQuickAdds } from './quickAdds';
 import { wirePath } from './wirePath';
 import { RulerSlider } from '../ui/RulerSlider';
+import { PlayParamActions } from '../play/PlayParamActions';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
 
@@ -2585,6 +2586,7 @@ export function MobileGraphBrowser() {
                       </span>
                     ))}
                     <span style={{ fontSize: 12, color: tk.text.faint }}>Range {formatSliderValue(effMin, pd.step)} to {formatSliderValue(effMax, pd.step)}</span>
+                    {cfgRow('Play', <PlayParamActions nodeId={node.id} paramKey={key} />)}
                   </div>
                 )}
               </>

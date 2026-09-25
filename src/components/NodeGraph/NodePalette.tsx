@@ -29,6 +29,7 @@ import { reportFileResult } from '../shell/reportFileResult';
 import { toast } from '../ui/toastStore';
 import { openTextFile } from '../../utils/fileIO';
 import { convertFragmentShader } from '../../nodes/userNodes/glslImport';
+import { spawnPoint } from './spawnPoint';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes';
@@ -200,10 +201,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const [selectedSaved, setSelectedSaved] = useState<string | null>(null);
   const toggleSaved = (id: string) => setSelectedSaved(cur => (cur === id ? null : id));
   /** Where a saved item lands: the middle of the view (a card's top-left, so offset by half a card) */
-  const placeAt = () => {
-    const c = useNodeGraphStore.getState()._viewportCenterGetter?.();
-    return c ? { x: c.x - 180, y: c.y - 90 } : { x: 200 + Math.random() * 120, y: 120 + Math.random() * 200 };
-  };
+  const placeAt = spawnPoint;
   const addNode                 = useNodeGraphStore(s => s.addNode);
   const currentGraph            = useNodeGraphStore(s => s.currentGraph);
   const graphDirty              = useNodeGraphStore(s => s.graphDirty);
@@ -247,7 +245,6 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
     toast.success('Node types imported', { message: parts.join(' · ') });
   };
   const userNodes          = useUserNodes();
-  const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
   const loadExampleGraph  = useNodeGraphStore(s => s.loadExampleGraph);
 
   const [query, setQuery]                           = useState('');
@@ -331,8 +328,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
 
   const handleAdd = (type: string) => {
     if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
-    const center = getViewportCenter?.() ?? { x: 300, y: 200 };
-    addNode(type, { x: center.x + (Math.random() - 0.5) * 60, y: center.y + (Math.random() - 0.5) * 60 });
+    addNode(type, spawnPoint());
     onNodeAdded?.();
   };
 
@@ -542,11 +538,10 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 if (!d) return null;
                 return (
                   <ItemRow label={d.label} icon="spark" color={tk.kind.fn}
-                    onClick={() => { const x = 200+Math.random()*120, y = 120+Math.random()*200; addNode(d.id, {x,y}); onNodeAdded?.(); }}
+                    onClick={() => { addNode(d.id, spawnPoint()); onNodeAdded?.(); }}
                     onEdit={d.source ? () => {
                       if (d.source?.kind === 'code') { setPublishExisting(d.id); setPublishSource({ kind: 'code', code: d.source.code, entry: d.source.entry, label: d.label }); return; }
-                      const x = 200+Math.random()*120, y = 120+Math.random()*200;
-                      if (openUserNodeSource(d.id, {x,y})) onNodeAdded?.();
+                      if (openUserNodeSource(d.id, spawnPoint())) onNodeAdded?.();
                     } : undefined}
                     editLabel={d.source?.kind === 'code' ? 'Edit the GLSL (publish again to update)' : 'Open source graph (publish again to update)'}
                     onExport={async () => reportFileResult(await exportUserNodes([d.id]), { failTitle: `Couldn’t export “${d.label}”` })}
@@ -743,7 +738,6 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
   const addNode          = useNodeGraphStore(s => s.addNode);
   const swapTargetNodeId = useNodeGraphStore(s => s.swapTargetNodeId);
   const swapNode         = useNodeGraphStore(s => s.swapNode);
-  const getViewportCenter = useNodeGraphStore(s => s._viewportCenterGetter);
 
   const [favorites, setFavorites] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('nodepalette_favorites') ?? '[]'); } catch { return []; }
@@ -768,8 +762,7 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
   if (mode === 'drawer') {
     const handleAdd = (type: string) => {
       if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
-      const center = getViewportCenter?.() ?? { x: 300, y: 200 };
-      addNode(type, { x: center.x + (Math.random()-0.5)*60, y: center.y + (Math.random()-0.5)*60 });
+      addNode(type, spawnPoint());
       onNodeAdded?.();
     };
     return (

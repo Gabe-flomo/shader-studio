@@ -88,6 +88,11 @@ export function collectPlayCandidates(nodes: GraphNode[], paramBindings: Record<
   return [...floats, ...collectColourCandidates(nodes)].filter(c => bindingKeyOf(c.target) in paramBindings);
 }
 
+/** The candidate for one node's param (its target may carry a group in front), if it can be a control. */
+export function candidateFor(candidates: readonly PlayCandidate[], nodeId: string, paramKey: string): PlayCandidate | undefined {
+  return candidates.find(c => { const p = c.target.split('::'); return p[p.length - 2] === nodeId && p[p.length - 1] === paramKey; });
+}
+
 /** Default panel label for a candidate: "Node · Param" (with the group in front when nested). */
 export function candidateLabel(c: Pick<PlayCandidate, 'nodeLabel' | 'groupLabel' | 'paramLabel'>): string {
   return `${c.groupLabel ? `${c.groupLabel} › ` : ''}${c.nodeLabel} · ${c.paramLabel}`;
