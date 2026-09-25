@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Shader Studio: the header mark — a hexagon on an ink tile -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#1a1b23"/>
+  <path d="M32 12.2l17.3 10v20L32 52.2l-17.3-10v-20z" fill="none" stroke="#ffffff" stroke-width="4.8" stroke-linejoin="round"/>
+</svg>

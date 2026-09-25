@@ -417,6 +417,50 @@ export const Repeat3DNode: NodeDefinition = {
   },
 };
 
+// Voxel builder: snap space to a cube grid. A Box 3D on Cell Pos is a cube per
+// cell; a hash or noise on Cell ID picks which cells are solid; Edge (distance
+// to the nearest wall of the current cell) is what an empty cell returns so
+// the march steps cleanly into the next cell instead of overshooting.
+export const VoxelizeNode: NodeDefinition = {
+  type: 'voxelize', label: 'Voxelize', aliases: ['voxel grid', 'snap to grid 3d', 'cubes', 'minecraft'],
+  category: '3D Transforms',
+  description:
+    'Snaps 3D space to a cube grid. Cell Pos is the position inside the current cell (centred on 0), Cell ID the integer ' +
+    'cell coordinates, Cell Center that cell\'s centre in world space, Edge the distance to the nearest wall of the cell. ' +
+    'Box 3D on Cell Pos gives one cube per cell; a Hash or Noise on Cell ID decides which cells are solid — for an empty cell ' +
+    'return Edge (Mix by the solid mask) so the ray marches on to the next cell. Same habits as the 2D Grid: Cell UV → Cell Pos, Cell ID → Cell ID.',
+  inputs: {
+    pos:  { type: 'vec3',  label: 'Position' },
+    size: { type: 'float', label: 'Cell Size' },
+  },
+  outputs: {
+    cellPos:    { type: 'vec3',  label: 'Cell Pos',    hint: 'Position relative to the cell centre, in ±Cell Size / 2. Feed a Box 3D or Sphere 3D.' },
+    cellID:     { type: 'vec3',  label: 'Cell ID',     hint: 'Integer cell coordinates (floor(pos / size)). Hash it to vary or drop cells; a Palette on it colours per cube.' },
+    cellCenter: { type: 'vec3',  label: 'Cell Center', hint: 'World-space centre of the cell.' },
+    edge:       { type: 'float', label: 'Edge',        hint: 'Distance from the position to the nearest wall of its cell. Return it for empty cells so the march skips ahead; for an exact voxel traversal, wire the camera\'s Ray Dir into the Scene Group and step to the cell exit along it (see 3D: Voxel Terrain).' },
+  },
+  defaultParams: { size: 0.5 },
+  paramDefs: {
+    size: { label: 'Cell Size', type: 'float', min: 0.05, max: 5.0, step: 0.01, hint: 'Edge length of one voxel cell.' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id   = node.id;
+    const pos  = inputVars.pos  || 'vec3(0.0)';
+    const size = inputVars.size || p(node.params.size, 0.5);
+    return {
+      code: [
+        `    float ${id}_size       = max(${size}, 1e-4);\n`,
+        `    vec3  ${id}_cellID     = floor(${pos} / ${id}_size);\n`,
+        `    vec3  ${id}_cellCenter = (${id}_cellID + 0.5) * ${id}_size;\n`,
+        `    vec3  ${id}_cellPos    = ${pos} - ${id}_cellCenter;\n`,
+        `    vec3  ${id}_wall       = 0.5 * ${id}_size - abs(${id}_cellPos);\n`,
+        `    float ${id}_edge       = min(min(${id}_wall.x, ${id}_wall.y), ${id}_wall.z);\n`,
+      ].join(''),
+      outputVars: { cellPos: `${id}_cellPos`, cellID: `${id}_cellID`, cellCenter: `${id}_cellCenter`, edge: `${id}_edge` },
+    };
+  },
+};
+
 export const Twist3DNode: NodeDefinition = {
   type: 'twist3D', label: 'Twist 3D', category: '3D Transforms',
   description: 'Twist 3D space around the Y axis by a given amount. Wire MarchDist → angle for depth-dependent twist.',
@@ -1695,6 +1739,59 @@ float fbm3(vec3 p, int octaves, float lacunarity, float gain) {
     }
     return v;
 }`;
+
+// ─── Turbulence 3D (Xor) ────────────────────────────────────────────────────
+// The 3D form of the sine turbulence loop ('atlantic' on FragCoord):
+// p += strength · sin(rotateAxis(p, axis, d) · d + time) / d, d /= decay.
+export const Turbulence3DNode: NodeDefinition = {
+  type: 'turbulence3D',
+  label: 'Turbulence 3D', aliases: ['xor warp 3d', 'sine warp loop 3d'],
+  category: '3D Primitives',
+  description:
+    'Xor-style 3D turbulence: octaves of sin(rotated p · d) / d added to the position, d growing each pass. ' +
+    'Place between Scene Pos and a Plane 3D or Gyroid Field for water, smoke and cloth; cheaper and more fluid than 3D Domain Warp.',
+  inputs: {
+    pos:      { type: 'vec3',  label: 'Position' },
+    time:     { type: 'float', label: 'Time', hint: 'Wire Time so the volume flows.' },
+    strength: { type: 'float', label: 'Strength' },
+  },
+  outputs: {
+    pos: { type: 'vec3', label: 'Warped Position' },
+  },
+  defaultParams: { octaves: 8, strength: 0.3, frequency: 1.0, decay: 0.7, ax: 1.0, ay: 0.6, az: 0.6 },
+  paramDefs: {
+    octaves:   { label: 'Octaves',   type: 'float', min: 1,   max: 12,   step: 1,    hint: 'Sine layers per sample. 8–10 for water; every octave runs on every march step.' },
+    strength:  { label: 'Strength',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Displacement per octave (divided by d).' },
+    frequency: { label: 'Frequency', type: 'float', min: 0.1, max: 8.0,  step: 0.1,  hint: 'Wave frequency of the first octave.' },
+    decay:     { label: 'Decay',     type: 'float', min: 0.3, max: 0.95, step: 0.01, hint: 'd /= decay each octave; smaller decay = frequencies climb faster.' },
+    ax:        { label: 'Axis X',    type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Rotation axis each octave spins around (normalised for you).' },
+    ay:        { label: 'Axis Y',    type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Rotation axis Y.' },
+    az:        { label: 'Axis Z',    type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Rotation axis Z.' },
+  },
+  glslFunction: ROTATE_AXIS_3D_GLSL,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id    = node.id;
+    const pos   = inputVars.pos      ?? 'vec3(0.0)';
+    const t     = inputVars.time     ?? '0.0';
+    const str   = inputVars.strength ?? p(node.params.strength, 0.3);
+    const freq  = p(node.params.frequency, 1.0);
+    const decay = p(node.params.decay, 0.7);
+    const axis  = `normalize(vec3(${p(node.params.ax, 1.0)}, ${p(node.params.ay, 0.6)}, ${p(node.params.az, 0.6)}) + 1e-5)`;
+    const oct   = Math.max(1, Math.min(12, Math.round(Number(node.params.octaves) || 8)));
+    return {
+      code: [
+        `    vec3 ${id}_pos = ${pos};\n`,
+        `    vec3 ${id}_axis = ${axis};\n`,
+        `    float ${id}_d = 1.0;\n`,
+        `    for (int ${id}_k = 0; ${id}_k < ${oct}; ${id}_k++) {\n`,
+        `        ${id}_pos += ${str} * sin(rotateAxis3d_fn(${id}_pos, ${id}_axis, ${id}_d) * ${id}_d * ${freq} + ${t}) / ${id}_d;\n`,
+        `        ${id}_d /= ${decay};\n`,
+        `    }\n`,
+      ].join(''),
+      outputVars: { pos: `${id}_pos` },
+    };
+  },
+};
 
 export const DomainWarp3DNode: NodeDefinition = {
   type: 'domainWarp3D',

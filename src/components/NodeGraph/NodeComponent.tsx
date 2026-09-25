@@ -80,6 +80,8 @@ import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
+import { ColorSwatch } from '../ui/ColorPicker';
+import { toRgb } from '../../lib/colorMath';
 import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip } from './NodeCardParts';
 
 function adaptiveStep(value: number, baseStep: number): number {
@@ -345,12 +347,19 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
 interface TooltipProps {
   lines: React.ReactNode[];
   side: 'left' | 'right'; // left = input socket (tooltip appears right), right = output socket (tooltip appears left)
+  /** Keep the tooltip while the pointer moves onto it, so its links can be clicked. */
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-function SocketTooltip({ lines, side }: TooltipProps) {
+function SocketTooltip({ lines, side, onMouseEnter, onMouseLeave }: TooltipProps) {
   const tk = useTokens();
+  const interactive = !!onMouseEnter;
   return (
     <div
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onMouseDown={e => e.stopPropagation()}
       style={{
         position: 'absolute',
         [side === 'left' ? 'left' : 'right']: '22px',
@@ -364,7 +373,7 @@ function SocketTooltip({ lines, side }: TooltipProps) {
         maxWidth: 280,
         font: `11.5px/1.5 ${fontFamily.ui}`,
         color: tk.text.primary,
-        pointerEvents: 'none',
+        pointerEvents: interactive ? 'auto' : 'none',
         boxShadow: tk.shadow.popover,
         whiteSpace: 'nowrap',
       }}
@@ -552,6 +561,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   }, [pendingPublishGroupId, node.id, node.type, setPendingPublishGroupId]);
   // Custom Fn card → Publish as node (code source), or a user node's "open source" for code-backed types
   const [publishCode, setPublishCode] = useState<{ code: string; entry?: string; label: string; existingId?: string } | null>(null);
+  // Expression Block card → Publish as node: the block alone, its inputs as sockets
+  const [showPublishNode, setShowPublishNode] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [showExprModal, setShowExprModal] = useState(false);
@@ -571,7 +582,25 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // to", "sources in graph"). Subscribing to it unconditionally re-rendered
   // every card on every graph change, so it's selected only while one of
   // those tooltips is open; otherwise a stable empty array.
-  const nodes = useNodeGraphStore(s => (showNodeTooltip || hoveredInput !== null) ? s.nodes : EMPTY_NODES);
+  const nodes = useNodeGraphStore(s => (showNodeTooltip || hoveredInput !== null || hoveredOutput !== null) ? s.nodes : EMPTY_NODES);
+  // Socket tooltips stay open for a moment after the pointer leaves the socket, so the
+  // pointer can travel onto the tooltip and click a "jump to node" link.
+  const tipLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdTip = () => { if (tipLeaveTimer.current) { clearTimeout(tipLeaveTimer.current); tipLeaveTimer.current = null; } };
+  const leaveInputSocket = () => { holdTip(); tipLeaveTimer.current = setTimeout(() => setHoveredInput(null), 160); onSocketHover?.(null); };
+  const leaveOutputSocket = () => { holdTip(); tipLeaveTimer.current = setTimeout(() => setHoveredOutput(null), 160); onSocketHover?.(null); };
+  /** Centre the canvas on another node at this level and select it (the tooltip's node names). */
+  const jumpToNode = (id: string) => {
+    holdTip(); setHoveredInput(null); setHoveredOutput(null);
+    revealNode(useNodeGraphStore.getState().activeGroupPath, id);
+  };
+  const nodeLink = (id: string, text: React.ReactNode, color?: string) => (
+    <button
+      type="button" title="Jump to this node"
+      onClick={e => { e.stopPropagation(); jumpToNode(id); }}
+      style={{ background: 'none', border: 0, padding: 0, margin: 0, font: 'inherit', color: color ?? 'inherit', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }}
+    >{text}</button>
+  );
   const [showCommentEditor, setShowCommentEditor] = useState(false);
   const [zIndex, setZIndex] = useState(1);
   // Info tooltip: close on any click outside the tooltip itself or the info
@@ -1572,8 +1601,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               <div
                 key={key}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 8px 2px 10px', gap: 6, position: 'relative' }}
-                onMouseEnter={() => { setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
-                onMouseLeave={() => { setHoveredOutput(null); onSocketHover?.(null); }}
+                onMouseEnter={() => { holdTip(); setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
+                onMouseLeave={leaveOutputSocket}
               >
                 <span style={{ fontSize: '10px', color: tc.surface2 }}>&#128274;</span>
                 <span style={{ fontSize: '11px', color: tc.subtext0 }}>{label}</span>
@@ -1600,8 +1629,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               <div
                 key={key}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '2px 8px 2px 10px', gap: 6, position: 'relative' }}
-                onMouseEnter={() => { setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
-                onMouseLeave={() => { setHoveredOutput(null); onSocketHover?.(null); }}
+                onMouseEnter={() => { holdTip(); setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
+                onMouseLeave={leaveOutputSocket}
               >
                 <button
                   onClick={() => activeGroupId && removeMarchLoopInput(activeGroupId, key)}
@@ -2686,11 +2715,13 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       lines.push(
         <span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>Connected to:</span>
       );
+      const srcName = (typeof srcNode?.params.label === 'string' && srcNode.params.label.trim()) || srcDef?.label || srcNode?.type || input.connection.nodeId;
       lines.push(
         <span style={{ color: srcType ? (TYPE_COLORS[srcType] || tc.text) : tc.text, paddingLeft: '6px' }}>
-          {srcDef?.label ?? srcNode?.type} → {srcOutLabel} <span style={{ color: tc.surface2 }}>({srcType})</span>
+          {srcNode ? nodeLink(srcNode.id, srcName) : srcName} → {srcOutLabel} <span style={{ color: tc.surface2 }}>({srcType})</span>
         </span>
       );
+      lines.push(<span style={{ color: tc.surface2, paddingLeft: '6px', fontSize: 10.5 }}>click the name to jump to it</span>);
     } else {
       // Show compatible sources
       const sources = getCompatibleSources(nodes, node.id, input.type as DataType);
@@ -2722,11 +2753,30 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         <span style={{ color: typeColor }}>◀</span> {output.label} <span style={{ color: tc.surface2 }}>({output.type})</span>
       </span>
     );
-    // List what types this can connect to
-    const compatMsg = output.type === 'float'
-      ? 'Connects to float or vec3 inputs'
-      : `Connects to ${output.type} inputs`;
-    lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>{compatMsg}</span>);
+    // What this output feeds, each name a jump link
+    const targets: Array<{ n: GraphNode; inputKey: string }> = [];
+    for (const n of nodes) {
+      for (const [k, inp] of Object.entries(n.inputs)) {
+        if (inp.connection?.nodeId === node.id && inp.connection.outputKey === outputKey) targets.push({ n, inputKey: k });
+      }
+    }
+    if (targets.length > 0) {
+      lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>Feeds:</span>);
+      for (const { n, inputKey } of targets.slice(0, 8)) {
+        const tDef = getNodeDefinition(n.type);
+        const name = (typeof n.params.label === 'string' && n.params.label.trim()) || tDef?.label || n.type;
+        const inLabel = n.inputs[inputKey]?.label ?? tDef?.inputs[inputKey]?.label ?? inputKey;
+        lines.push(<span style={{ paddingLeft: '6px', color: tc.subtext0 }}>{nodeLink(n.id, name)} ← {inLabel}</span>);
+      }
+      if (targets.length > 8) lines.push(<span style={{ paddingLeft: '6px', color: tc.surface2 }}>...+{targets.length - 8} more</span>);
+      lines.push(<span style={{ color: tc.surface2, paddingLeft: '6px', fontSize: 10.5 }}>click a name to jump to it</span>);
+    } else {
+      // List what types this can connect to
+      const compatMsg = output.type === 'float'
+        ? 'Connects to float or vec3 inputs'
+        : `Connects to ${output.type} inputs`;
+      lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>{compatMsg}</span>);
+    }
     return lines;
   };
 
@@ -2861,6 +2911,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           )}
           {node.type === 'exprNode' && (
             <CardButton icon="expr" tint="expr" on={showExprBlockModal} label="Open the Expression Block editor" onClick={() => setShowExprBlockModal(v => !v)} />
+          )}
+          {node.type === 'exprNode' && !isInsideLoop && (
+            <CardButton icon="spark" tint="expr" on={showPublishNode} label="Publish as a node type (this block becomes a reusable node; its inputs become sockets)" onClick={() => setShowPublishNode(true)} />
           )}
           {node.type === 'transformVec' && (
             <CardButton icon="grid" on={showTransformVecModal} label="Open the Transform Vec editor" onClick={() => setShowTransformVecModal(v => !v)} />
@@ -3154,8 +3207,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   transition: 'box-shadow 0.1s, opacity 0.1s',
                   touchAction: 'manipulation',
                 }}
-                onMouseEnter={() => { setHoveredInput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'in' }); }}
-                onMouseLeave={() => { setHoveredInput(null); onSocketHover?.(null); }}
+                onMouseEnter={() => { holdTip(); setHoveredInput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'in' }); }}
+                onMouseLeave={leaveInputSocket}
                 onContextMenu={(e) => {
                   if (!kfEligible) return;
                   e.preventDefault();
@@ -3211,6 +3264,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 <SocketTooltip
                   lines={isExternal ? [`🔒 Wired from outside group`, `(${input.type})`] : buildInputTooltip(key)}
                   side="left"
+                  onMouseEnter={holdTip}
+                  onMouseLeave={() => setHoveredInput(null)}
                 />
               )}
               {/* Discoverability hint: unconnected float sockets can be keyframed —
@@ -3834,32 +3889,17 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           }
 
           if (paramDef.type === 'vec3color') {
-            // Native colour picker — converts between [r,g,b] 0-1 and hex
-            const vals = Array.isArray(node.params[key]) ? (node.params[key] as number[]) : [0, 0, 0];
-            const toHex = (v: number) => Math.round(Math.max(0, Math.min(1, v ?? 0)) * 255).toString(16).padStart(2, '0');
-            const hexValue = `#${toHex(vals[0])}${toHex(vals[1])}${toHex(vals[2])}`;
+            const vals = toRgb(node.params[key]);
             return (
               <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
                 <ParamLabel>{paramDef.label}</ParamLabel>
-                <label style={{
-                  position: 'relative', width: 44, height: 26, borderRadius: radius.md, cursor: 'pointer', flexShrink: 0,
-                  background: hexValue, boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.12)}`,
-                }}>
-                  <input
-                    type="color"
-                    aria-label={paramDef.label}
-                    value={hexValue}
-                    onChange={e => {
-                      const hex = e.target.value;
-                      const r = parseInt(hex.slice(1, 3), 16) / 255;
-                      const g = parseInt(hex.slice(3, 5), 16) / 255;
-                      const b = parseInt(hex.slice(5, 7), 16) / 255;
-                      updateNodeParams(node.id, { [key]: [r, g, b] }, { immediate: true });
-                    }}
-                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-                  />
-                </label>
-                <span style={{ font: `500 12px ${fontFamily.mono}`, color: tk.text.muted }}>{hexValue}</span>
+                <ColorSwatch
+                  label={paramDef.label}
+                  value={vals}
+                  size={node.type === 'colorPicker' ? 'lg' : 'md'}
+                  onChange={rgb => updateNodeParams(node.id, { [key]: rgb }, { immediate: true })}
+                  style={{ flex: node.type === 'colorPicker' ? 1 : undefined }}
+                />
               </div>
             );
           }
@@ -3962,8 +4002,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   e.preventDefault();
                   onTapOutputSocket?.(node.id, key);
                 }}
-                onMouseEnter={() => { setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
-                onMouseLeave={() => { setHoveredOutput(null); onSocketHover?.(null); }}
+                onMouseEnter={() => { holdTip(); setHoveredOutput(key); onSocketHover?.({ nodeId: node.id, key, dir: 'out' }); }}
+                onMouseLeave={leaveOutputSocket}
                 title={`${output.label} (${output.type})`}
                 style={{
                   width: isTouchDevice ? '22px' : '12px',
@@ -3985,7 +4025,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               />
               {/* Hover tooltip for output socket */}
               {isHovered && !draggingType && (
-                <SocketTooltip lines={buildOutputTooltip(key)} side="right" />
+                <SocketTooltip lines={buildOutputTooltip(key)} side="right" onMouseEnter={holdTip} onMouseLeave={() => setHoveredOutput(null)} />
               )}
             </div>
           );
@@ -4055,6 +4095,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {publishCode && (
         <PublishNodeModal source={{ kind: 'code', code: publishCode.code, entry: publishCode.entry, label: publishCode.label }}
           existingId={publishCode.existingId} onClose={() => setPublishCode(null)} />
+      )}
+      {showPublishNode && node.type === 'exprNode' && (
+        <PublishNodeModal source={{ kind: 'node', node }} onClose={() => setShowPublishNode(false)} />
       )}
 
       {/* ── Comment editor (hidden when collapsed) ── */}

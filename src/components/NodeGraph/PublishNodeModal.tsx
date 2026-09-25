@@ -133,12 +133,14 @@ export function PublishNodeModal({ source: initialSource, onClose, onPublished, 
   }, [existing]);
 
   // ── Rows. Keyed by portKey so edits survive a re-parse of the code. ──────────
-  const freshInput = (p: { portKey: string; type: DataType; label: string }): PortRow => {
+  const freshInput = (p: { portKey: string; type: DataType; label: string; slider?: { min: number; max: number; default: number } }): PortRow => {
     const prev = existing?.inputs.find(i => i.label === p.label && i.type === p.type);
+    // A single node's slider input keeps its slider (and current value) on the published port.
+    const suggested = prev?.slider ?? p.slider;
     return {
       portKey: p.portKey, type: p.type, label: p.label,
-      slider: !!prev?.slider,
-      min: prev?.slider?.min ?? 0, max: prev?.slider?.max ?? 1, default: prev?.slider?.default ?? 0,
+      slider: !!suggested,
+      min: suggested?.min ?? 0, max: suggested?.max ?? 1, default: suggested?.default ?? 0,
       hint: prev?.hint ?? '',
     };
   };
@@ -335,10 +337,12 @@ export function PublishNodeModal({ source: initialSource, onClose, onPublished, 
     </div>
   ) : null;
 
-  const sourceWord = initialSource.kind === 'group' ? 'group' : initialSource.kind === 'code' ? 'GLSL' : 'graph';
+  const sourceWord = initialSource.kind === 'group' ? 'group' : initialSource.kind === 'code' ? 'GLSL' : initialSource.kind === 'node' ? 'node' : 'graph';
   const subtitle = isCode
     ? `Hand-written GLSL · ${ports.functions?.length ?? 0} function${(ports.functions?.length ?? 0) === 1 ? '' : 's'}${ports.entry ? ` · entry: ${ports.entry}` : ''}`
-    : `From ${sourceWord} "${sourceLabel}" · ${subgraph?.nodes.length ?? 0} nodes flatten into one GLSL function`;
+    : initialSource.kind === 'node'
+      ? `From ${initialSource.node.type === 'customFn' ? 'Custom Function' : 'Expression Block'} "${sourceLabel}" · its inputs become sockets (sliders stay sliders), Result becomes the output`
+      : `From ${sourceWord} "${sourceLabel}" · ${subgraph?.nodes.length ?? 0} nodes flatten into one GLSL function`;
 
   return (
     <Modal
