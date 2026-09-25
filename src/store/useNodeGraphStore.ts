@@ -708,6 +708,8 @@ interface NodeGraphState {
   saveGraph: (name: string, note?: string) => Promise<FileResult>;
   /** The saved graph open right now (loaded or last saved), and which version; null for examples, imports and new graphs. */
   currentGraph: { name: string; version: number; latest: boolean } | null;
+  /** Bumped whenever a whole different graph is loaded (an example, a saved graph, an import): not by edits or undo. */
+  graphEpoch: number;
   /** The open graph changed since it was loaded or saved. */
   graphDirty: boolean;
   /** Open an earlier version of a saved graph. Saving it makes it the newest version. */
@@ -1305,6 +1307,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   play: emptyPlayRecord(),
   playOpenRequest: 0,
   currentGraph: null,
+  graphEpoch: 0,
   graphDirty: false,
   focusNodeRequest: null,
   focusNode: (id) => set(s => ({ selectedNodeIds: [id], selectedNodeId: id, focusNodeRequest: { id, n: (s.focusNodeRequest?.n ?? 0) + 1 } })),
@@ -4634,7 +4637,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // than leave a previous graph's groups referencing node ids that don't
     // exist in this one.
     const play = graph.play ? parsePlayRecord(graph.play) : emptyPlayRecord();
-    set({ nodes, looseGroups: [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+    set(st => ({ nodes, looseGroups: [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
     // An example is not a saved project: saving it asks for a name.
     set({ currentGraph: null, graphDirty: false });
@@ -4792,7 +4795,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     try { const v = (JSON.parse(raw) as { version?: unknown }).version; if (typeof v === 'number') version = v; } catch { /* parsed above */ }
     let latestVersion = version;
     try { const v = latest ? (JSON.parse(latest) as { version?: unknown }).version : undefined; if (typeof v === 'number') latestVersion = v; } catch { /* newest is unreadable: treat this as it */ }
-    set({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [] });
+    set(st => ({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
     set({ currentGraph: { name, version, latest: version === latestVersion }, graphDirty: false });
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
@@ -4845,7 +4848,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     idGenerator.syncFromGraph(nodes);
     set(state => ({
       nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play,
-      previewNodeId: null, activeGroupId: null, activeGroupPath: [],
+      previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: state.graphEpoch + 1,
       ...(isPlayFile ? { playOpenRequest: state.playOpenRequest + 1 } : {}),
     }));
     get().compile();
@@ -4887,7 +4890,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const out = instantiateNode(idGenerator.next(), 'output', outDef, { x: 980, y: 220 });
     shader.inputs.uv = { ...shader.inputs.uv, connection: { nodeId: uv.id, outputKey: 'uv' } };
     out.inputs.color = { ...out.inputs.color, connection: { nodeId: shader.id, outputKey: 'color' } };
-    set({ nodes: [uv, shader, out], activeGroupPath: [], activeGroupId: null, selectedNodeId: shader.id, selectedNodeIds: [shader.id] });
+    set(st => ({ nodes: [uv, shader, out], activeGroupPath: [], activeGroupId: null, selectedNodeId: shader.id, selectedNodeIds: [shader.id], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
     return { ok: true, notes: converted.notes, label: fileName };
   },

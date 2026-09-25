@@ -28,6 +28,8 @@ if (import.meta.env.DEV && location.hash === '#ui') {
   import('./components/ui/UiGallery').then(({ UiGallery }) => root.render(<UiGallery />))
 } else {
   root.render(<><App /><Toaster /><DialogHost /></>)
+  // Songs stop when the graph that owns them is closed or they're deleted.
+  void import('./lib/audioSync').then(m => m.startAudioSync())
   // The backup folder (desktop app; a picked folder in Chrome/Edge) starts once the app is up.
   window.setTimeout(() => { void import('./utils/backupFolder').then(m => m.startBackups()) }, 1500)
 }
