@@ -68,6 +68,36 @@ function draw(s) {
 | `null(name)` | A Null layer's position in pixels, by label or id, or `null`. The cheap way to give a script a handle you can drag or map. |
 | `random()` | `Math.random`. |
 
+### p5-style helpers
+
+The sketch's top level runs inside a `with` scope over a helper object, so
+the p5 vocabulary works as plain names: `background`, `fill`, `noFill`,
+`stroke`, `noStroke`, `strokeWeight`, `circle`, `ellipse`, `rect`,
+`square`, `line`, `point`, `triangle`, `quad`, `arc`, `beginShape` /
+`vertex` / `endShape`, `text`, `textSize`, `textAlign`, `textFont`,
+`push`, `pop`, `translate`, `rotate`, `scale`, `color`, `hsl`,
+`lerpColor`, `map`, `lerp`, `constrain`, `dist`, `mag`, `norm`,
+`radians`, `degrees`, `random`, `noise`, `noiseSeed`, the `Math`
+shortcuts, `PI` / `TWO_PI` / `HALF_PI`, and the live values `width`,
+`height`, `mouseX`, `mouseY`, `mouseIsPressed`, `frameCount`, `deltaTime`,
+`millis()`. Colours take p5's forms (gray, gray + alpha, r g b, r g b a in
+0–255, or any CSS string). A function you define with the same name wins.
+The editor's **Reference** section lists all of it with one line each and
+inserts a name at the caret when clicked. (`src/play/kit/layers.js`,
+`klSketchHelpers`; the list in `scriptReference.ts`.)
+
+### Make a variable a slider
+
+Select a top-level variable set to a number (`let speed = 2;`, or double
+click its name) and the editor offers **Make ‘speed’ a slider**. One click
+adds `speed: { value: 2, min: 0, max: 8, step: 1 }` to the params object
+(creating one if the sketch has none), turns a `const` into a `let`, and
+applies. The kit then writes the slider's value into that variable every
+frame before `draw`, so the rest of the sketch keeps saying `speed`. The
+same variable is now a Play control, a null drive or a keyframe target
+like any layer property. (`scriptTools.ts`; the kit's `set(name, value)`
+assigns through a direct `eval` inside the sketch's scope.)
+
 ### Sliders you declare
 
 `params` is read once when the code is applied. Each entry becomes a slider

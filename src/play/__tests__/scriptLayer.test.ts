@@ -76,3 +76,77 @@ describe('script layer', () => {
     expect(scriptStatusVersion()).toBe(v0 + 2);
   });
 });
+
+import { klSketchHelpers, klCompileSketch, KL_SKETCH_NAMES } from '../kit/layers.js';
+import { findNumericDeclaration, makeSlider, sliderCandidate, guessRange, declaredParams } from '../../components/play/layers/scriptTools';
+
+describe('sketch helpers and compiler', () => {
+  const fakeCtx = () => {
+    const calls: string[] = [];
+    const ctx = new Proxy({} as Record<string, unknown>, {
+      get: (_t, k) => (typeof k === 'string' ? (...a: unknown[]) => { calls.push(`${k}(${a.map(v => typeof v === 'number' ? +v.toFixed(2) : String(v)).join(',')})`); } : undefined),
+      set: (_t, k, v) => { calls.push(`${String(k)}=${String(v)}`); return true; },
+    });
+    return { ctx, calls };
+  };
+
+  it('helpers draw on the current frame’s canvas with p5 colour forms and state', () => {
+    const { ctx, calls } = fakeCtx();
+    const s = { ctx: ctx as unknown as CanvasRenderingContext2D, width: 200, height: 100, mouse: { x: 5, y: 6, down: true }, frame: 3, dt: 0.016, time: 2 };
+    const P = klSketchHelpers(() => s) as Record<string, (...a: unknown[]) => unknown>;
+    P.fill(255, 128, 0); P.noStroke(); P.circle(10, 20, 8);
+    expect(calls).toContain('arc(10,20,4,0,6.28)');
+    expect(calls).toContain('fillStyle=rgb(255, 128, 0)');
+    expect(calls).toContain('fill()');
+    expect(calls).not.toContain('stroke()');
+    expect(P.map(5, 0, 10, 0, 100)).toBe(50);
+    expect(P.color(20)).toBe('rgb(20, 20, 20)');
+    expect(P.color(1, 2, 3, 127.5)).toBe('rgba(1, 2, 3, 0.5)');
+    expect(P.hsl(200, 80, 60)).toBe('hsl(200 80% 60%)');
+    expect(P.width).toBe(200); expect(P.mouseX).toBe(5); expect(P.mouseIsPressed).toBe(true); expect(P.frameCount).toBe(3);
+    const n = P.noise(1.5, 2.5) as number; expect(n).toBeGreaterThanOrEqual(0); expect(n).toBeLessThanOrEqual(1);
+    expect(P.noise(1.5, 2.5)).toBe(n);
+    expect(KL_SKETCH_NAMES).toContain('circle');
+  });
+
+  it('compiles a sketch inside the helper scope: helpers are plain names, the sketch’s own names win, params come back', () => {
+    const { ctx, calls } = fakeCtx();
+    const s = { ctx: ctx as unknown as CanvasRenderingContext2D, width: 10, height: 10, mouse: { x: 0, y: 0, down: false }, frame: 0, dt: 0, time: 0 };
+    const P = klSketchHelpers(() => s);
+    const r = klCompileSketch(`const params = { size: { value: 3, min: 0, max: 9 } };\nlet size = 3;\nfunction noise() { return 42; }\nfunction draw(s) { fill(255); circle(1, 2, size); s.state.n = noise(); }`, P);
+    expect(r.params).toEqual({ size: { value: 3, min: 0, max: 9 } });
+    expect(r.has('size')).toBe(true);
+    expect(r.has('nothing')).toBe(false);
+    expect(r.has('width')).toBe(false); // a helper name, not the sketch’s variable
+    r.set('size', 7);
+    const state: Record<string, unknown> = {};
+    r.draw!({ ...s, state });
+    expect(calls).toContain('arc(1,2,3.5,0,6.28)'); // diameter 7 → radius 3.5: the slider drove the let
+    expect(state.n).toBe(42);
+  });
+});
+
+describe('make a slider', () => {
+  const code = `let count = 60;\nconst wobble = 0.35;\nfunction draw(s) { circle(1, 1, count); }`;
+  it('finds top-level numeric declarations and guesses a range', () => {
+    expect(findNumericDeclaration(code, 'count')).toMatchObject({ value: 60, keyword: 'let' });
+    expect(findNumericDeclaration(code, 'wobble')).toMatchObject({ value: 0.35, keyword: 'const' });
+    expect(findNumericDeclaration(code, 'draw')).toBeNull();
+    expect(guessRange(60)).toEqual({ min: 0, max: 240, step: 1 });
+    expect(guessRange(0.35)).toEqual({ min: 0, max: 1.4, step: 0.001 });
+    expect(guessRange(0)).toEqual({ min: 0, max: 1, step: 0.01 });
+    expect(sliderCandidate(code, ' count ')?.name).toBe('count');
+    expect(sliderCandidate(code, 'count + 1')).toBeNull();
+  });
+  it('adds the entry to params (creating it), keeps the variable and makes const a let', () => {
+    const a = makeSlider(code, 'wobble')!;
+    expect(a.code.startsWith('const params = {\n  wobble: { value: 0.35, min: 0, max: 1.4, step: 0.001 },\n};\n')).toBe(true);
+    expect(a.code).toContain('let wobble = 0.35;');
+    expect(declaredParams(a.code)).toEqual(['wobble']);
+    const b = makeSlider(a.code, 'count')!;
+    expect(declaredParams(b.code)).toEqual(['wobble', 'count']);
+    expect(b.code).toContain('  count: { value: 60, min: 0, max: 240, step: 1 },\n};');
+    expect(sliderCandidate(b.code, 'count')).toBeNull(); // already a slider
+    expect(extractScriptParams(b.code).ok).toBe(true);
+  });
+});

@@ -827,3 +827,122 @@ export function klDrawCopy(ctx, copy, srcX, srcY, W, H, scratch, box) {
   else ctx.drawImage(scratch, 0, 0, W, H);
   ctx.restore();
 }
+
+// ── Sketch helpers for the Script layer ───────────────────────────────────────
+// p5-style drawing and maths, bound to whatever canvas the layer is drawing on
+// this frame. The script's top level runs inside `with (P)`, so these are plain
+// names in the sketch (fill(…), circle(…), map(…)); the script's own functions
+// shadow them. Everything stateful (fill, stroke, weight, text) lives on P.
+/** Names the helpers provide, for the editor's reference and its param reader. */
+export const KL_SKETCH_NAMES = [
+  'background', 'fill', 'noFill', 'stroke', 'noStroke', 'strokeWeight', 'clear',
+  'circle', 'ellipse', 'rect', 'square', 'line', 'point', 'triangle', 'quad', 'arc', 'beginShape', 'vertex', 'endShape',
+  'text', 'textSize', 'textAlign', 'textFont',
+  'push', 'pop', 'translate', 'rotate', 'scale',
+  'color', 'hsl', 'lerpColor', 'map', 'lerp', 'constrain', 'dist', 'mag', 'norm', 'radians', 'degrees', 'random', 'noise', 'noiseSeed', 'floor', 'ceil', 'round', 'abs', 'min', 'max', 'sqrt', 'pow', 'sin', 'cos', 'tan', 'atan2',
+  'PI', 'TWO_PI', 'HALF_PI',
+  'width', 'height', 'mouseX', 'mouseY', 'mouseIsPressed', 'frameCount', 'deltaTime', 'millis',
+];
+
+function klCssColor(args) {
+  // color(gray) · color(gray, a) · color(r, g, b) · color(r, g, b, a) · color('#hex' | 'css') ; numbers are 0..255 like p5.
+  if (args.length === 0) return '#ffffff';
+  const a0 = args[0];
+  if (typeof a0 === 'string') return a0;
+  if (Array.isArray(a0)) return klCssColor(a0);
+  const n = args.length;
+  const c = v => Math.max(0, Math.min(255, Math.round(v)));
+  if (n === 1) return `rgb(${c(a0)}, ${c(a0)}, ${c(a0)})`;
+  if (n === 2) return `rgba(${c(a0)}, ${c(a0)}, ${c(a0)}, ${Math.max(0, Math.min(1, args[1] / 255))})`;
+  if (n === 3) return `rgb(${c(a0)}, ${c(args[1])}, ${c(args[2])})`;
+  return `rgba(${c(a0)}, ${c(args[1])}, ${c(args[2])}, ${Math.max(0, Math.min(1, args[3] / 255))})`;
+}
+
+function klValueNoise(x, y, z, seed) {
+  const h = (i, j, k) => { const s = Math.sin(i * 127.1 + j * 311.7 + k * 74.7 + seed * 13.13) * 43758.5453; return s - Math.floor(s); };
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const f = t => t * t * (3 - 2 * t);
+  const fx = f(x - xi), fy = f(y - yi), fz = f(z - zi);
+  const l = (a, b, t) => a + (b - a) * t;
+  const c00 = l(h(xi, yi, zi), h(xi + 1, yi, zi), fx), c10 = l(h(xi, yi + 1, zi), h(xi + 1, yi + 1, zi), fx);
+  const c01 = l(h(xi, yi, zi + 1), h(xi + 1, yi, zi + 1), fx), c11 = l(h(xi, yi + 1, zi + 1), h(xi + 1, yi + 1, zi + 1), fx);
+  return l(l(c00, c10, fy), l(c01, c11, fy), fz);
+}
+
+/**
+ * The helper object for one script. `get()` must return the current frame's `s`
+ * (ctx, width, height, mouse…); the helpers read it live, so the same object
+ * serves every frame.
+ */
+export function klSketchHelpers(get) {
+  const st = { fill: '#ffffff', stroke: null, doFill: true, doStroke: false, weight: 1, textSize: 16, textFont: 'sans-serif', align: 'left', baseline: 'alphabetic', shape: null, noiseSeed: 0 };
+  const ctx = () => get().ctx;
+  const paint = (path, closeIt) => {
+    const c = ctx();
+    if (closeIt !== false && path) c.closePath();
+    if (st.doFill) { c.fillStyle = st.fill; c.fill(); }
+    if (st.doStroke && st.stroke) { c.strokeStyle = st.stroke; c.lineWidth = st.weight; c.stroke(); }
+  };
+  const P = {
+    background: (...a) => { const c = ctx(), s = get(); c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = klCssColor(a); c.fillRect(0, 0, s.width, s.height); c.restore(); },
+    clear: () => { const c = ctx(), s = get(); c.save(); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, s.width, s.height); c.restore(); },
+    fill: (...a) => { st.fill = klCssColor(a); st.doFill = true; },
+    noFill: () => { st.doFill = false; },
+    stroke: (...a) => { st.stroke = klCssColor(a); st.doStroke = true; },
+    noStroke: () => { st.doStroke = false; },
+    strokeWeight: w => { st.weight = w; },
+    circle: (x, y, d) => { const c = ctx(); c.beginPath(); c.arc(x, y, d / 2, 0, Math.PI * 2); paint(true); },
+    ellipse: (x, y, w, h) => { const c = ctx(); c.beginPath(); c.ellipse(x, y, w / 2, (h === undefined ? w : h) / 2, 0, 0, Math.PI * 2); paint(true); },
+    rect: (x, y, w, h, r) => { const c = ctx(); c.beginPath(); if (r) c.roundRect(x, y, w, h === undefined ? w : h, r); else c.rect(x, y, w, h === undefined ? w : h); paint(true); },
+    square: (x, y, s, r) => P.rect(x, y, s, s, r),
+    line: (x1, y1, x2, y2) => { const c = ctx(); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.strokeStyle = st.stroke || st.fill; c.lineWidth = st.weight; c.stroke(); },
+    point: (x, y) => { const c = ctx(); c.beginPath(); c.arc(x, y, Math.max(0.5, st.weight / 2), 0, Math.PI * 2); c.fillStyle = st.stroke || st.fill; c.fill(); },
+    triangle: (x1, y1, x2, y2, x3, y3) => { const c = ctx(); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.lineTo(x3, y3); paint(true); },
+    quad: (x1, y1, x2, y2, x3, y3, x4, y4) => { const c = ctx(); c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.lineTo(x3, y3); c.lineTo(x4, y4); paint(true); },
+    arc: (x, y, w, h, a0, a1) => { const c = ctx(); c.beginPath(); c.ellipse(x, y, w / 2, h / 2, 0, a0, a1); paint(false); },
+    beginShape: () => { st.shape = 0; ctx().beginPath(); },
+    vertex: (x, y) => { const c = ctx(); if (st.shape === 0) c.moveTo(x, y); else c.lineTo(x, y); st.shape = (st.shape || 0) + 1; },
+    endShape: close => { paint(close === true || close === 'close'); st.shape = null; },
+    text: (str, x, y) => { const c = ctx(); c.font = `${st.textSize}px ${st.textFont}`; c.textAlign = st.align; c.textBaseline = st.baseline; if (st.doFill) { c.fillStyle = st.fill; c.fillText(String(str), x, y); } if (st.doStroke && st.stroke) { c.strokeStyle = st.stroke; c.lineWidth = st.weight; c.strokeText(String(str), x, y); } },
+    textSize: n => { st.textSize = n; },
+    textAlign: (h, v) => { st.align = h || 'left'; if (v) st.baseline = v === 'center' ? 'middle' : v; },
+    textFont: f => { st.textFont = f; },
+    push: () => ctx().save(),
+    pop: () => ctx().restore(),
+    translate: (x, y) => ctx().translate(x, y),
+    rotate: a => ctx().rotate(a),
+    scale: (x, y) => ctx().scale(x, y === undefined ? x : y),
+    color: (...a) => klCssColor(a),
+    hsl: (h, s, l, a) => (a === undefined ? `hsl(${h} ${s}% ${l}%)` : `hsl(${h} ${s}% ${l}% / ${a})`),
+    lerpColor: (a, b, t) => { const p = c => { const m = String(c).match(/[\d.]+/g) || [255, 255, 255]; return m.map(Number); }; const A = p(a), B = p(b); const k = i => Math.round(A[i] + ((B[i] ?? A[i]) - A[i]) * t); return `rgb(${k(0)}, ${k(1)}, ${k(2)})`; },
+    map: (v, a, b, c, d, clampIt) => { const t = (v - a) / (b - a || 1); const r = c + (d - c) * t; return clampIt ? Math.max(Math.min(c, d), Math.min(Math.max(c, d), r)) : r; },
+    lerp: (a, b, t) => a + (b - a) * t,
+    constrain: (v, lo, hi) => Math.max(lo, Math.min(hi, v)),
+    dist: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1),
+    mag: (x, y) => Math.hypot(x, y),
+    norm: (v, a, b) => (v - a) / (b - a || 1),
+    radians: d => (d * Math.PI) / 180,
+    degrees: r => (r * 180) / Math.PI,
+    random: (a, b) => { if (Array.isArray(a)) return a[Math.floor(Math.random() * a.length)]; if (a === undefined) return Math.random(); if (b === undefined) return Math.random() * a; return a + Math.random() * (b - a); },
+    noise: (x, y, z) => klValueNoise(x || 0, y || 0, z || 0, st.noiseSeed),
+    noiseSeed: n => { st.noiseSeed = n || 0; },
+    floor: Math.floor, ceil: Math.ceil, round: Math.round, abs: Math.abs, min: Math.min, max: Math.max, sqrt: Math.sqrt, pow: Math.pow, sin: Math.sin, cos: Math.cos, tan: Math.tan, atan2: Math.atan2,
+    PI: Math.PI, TWO_PI: Math.PI * 2, HALF_PI: Math.PI / 2,
+    get width() { return get().width; }, get height() { return get().height; },
+    get mouseX() { return get().mouse.x; }, get mouseY() { return get().mouse.y; }, get mouseIsPressed() { return get().mouse.down; },
+    get frameCount() { return get().frame; }, get deltaTime() { return get().dt * 1000; },
+    millis: () => get().time * 1000,
+  };
+  return P;
+}
+
+/**
+ * Compile a sketch. The code runs inside `with (P)` so the helpers are plain
+ * names; setup/draw/params are read back from inside the same block, and
+ * `set(name, value)` assigns a top-level variable of the sketch (how a
+ * declared slider drives a plain `let`), via a direct eval in that scope.
+ */
+export function klCompileSketch(code, P) {
+  const make = new Function('P', `with (P) {\n${code}\n;\nreturn {\n  setup: typeof setup === 'function' ? setup : null,\n  draw: typeof draw === 'function' ? draw : null,\n  params: typeof params === 'object' && params ? params : {},\n  has: function (k) { try { return eval('typeof ' + k) !== 'undefined' && !(k in P); } catch (e) { return false; } },\n  set: function (k, v) { try { eval(k + ' = v;'); } catch (e) { /* not a plain variable */ } },\n};\n}`);
+  return make(P);
+}

@@ -28,7 +28,7 @@
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments } from './geometry.js';
-import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor } from './layers.js';
+import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchHelpers, klCompileSketch } from './layers.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
@@ -277,12 +277,12 @@ export function createLayerKit() {
     function drawScript(c, l, v) {
       let st = scripts.get(l.id);
       if (!st || st.code !== l.code) {
-        st = { code: l.code, setup: null, draw: null, error: null, state: {}, frame: 0, w: 0, h: 0, ready: false };
+        st = { code: l.code, setup: null, draw: null, set: null, has: null, vars: null, error: null, state: {}, frame: 0, w: 0, h: 0, ready: false, s: null };
         scripts.set(l.id, st);
         try {
-          const make = new Function(l.code + '\n;return { setup: typeof setup === "function" ? setup : null, draw: typeof draw === "function" ? draw : null };');
-          const r = make();
-          st.setup = r.setup; st.draw = r.draw;
+          const P = klSketchHelpers(() => st.s);
+          const r = klCompileSketch(l.code, P);
+          st.setup = r.setup; st.draw = r.draw; st.set = r.set; st.has = r.has;
           if (!st.draw) st.error = 'The script needs a draw(s) function.';
         } catch (e) { st.error = 'Compile: ' + ((e && e.message) || e); }
         if (env.scriptStatus) env.scriptStatus(l.id, st.error);
@@ -305,6 +305,10 @@ export function createLayerKit() {
         null: name => { const n = record.layers.find(x => x.kind === 'null' && (x.id === name || x.label === name)); return n ? { x: env.value(n, 'x') * W, y: (1 - env.value(n, 'y')) * H } : null; },
         random: Math.random,
       };
+      st.s = s; // the helpers read the current frame through this
+      // A declared slider whose name is also a top-level variable of the sketch drives that variable.
+      if (!st.vars) { st.vars = {}; for (const d of l.paramDefs || []) st.vars[d.key] = !!(st.has && st.has(d.key)); }
+      for (const d of l.paramDefs || []) if (st.vars[d.key] && st.set) st.set(d.key, params[d.key]);
       try {
         if (!st.ready || st.w !== W || st.h !== H) {
           st.w = W; st.h = H; st.state = {}; s.state = st.state; st.frame = 0; s.frame = 0;

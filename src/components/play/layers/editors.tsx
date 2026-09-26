@@ -4,7 +4,7 @@
  * under the choices that change behaviour, and "try it" buttons for the
  * actions a trigger would fire (burst, drop, next line, clear).
  */
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import type { ActionKind, NullLayer, ParticleField, PlayLayer, ZoneAction } from '../../../types/play';
 import { Button } from '../../ui/Button';
 import { Field } from '../../ui/Field';
@@ -16,6 +16,8 @@ import { FIELD_HELP, ZONE_HELP } from './help';
 import { Section } from './Section';
 import { AudioSourceRows, FontRow } from './rows';
 import { SCRIPT_EXAMPLES, extractScriptParams } from './scriptExamples';
+import { sliderCandidate, makeSlider } from './scriptTools';
+import { SCRIPT_REFERENCE } from './scriptReference';
 import { useScriptStatus } from '../../../play/scriptStatus';
 import { selectTokenOnDoubleClick, wrapOnKeyDown } from '../../code/editKeys';
 import { fontFamily, radius } from '../../../theme/tokens';
@@ -599,14 +601,36 @@ export function ScriptEditor({ f }: { f: FieldKit }) {
   const runError = useScriptStatus(l.id);
   const dirty = draft !== l.code;
   const wrap = wrapOnKeyDown(setDraft);
+  const ta = useRef<HTMLTextAreaElement>(null);
+  const [selected, setSelected] = useState('');
+  const [refFilter, setRefFilter] = useState('');
+  const candidate = sliderCandidate(draft, selected);
+  const readSelection = () => { const el = ta.current; if (!el) return; setSelected(el.value.slice(el.selectionStart, el.selectionEnd)); };
+  const insertAtCaret = (text: string) => {
+    const el = ta.current;
+    const at = el ? el.selectionStart : draft.length, end = el ? el.selectionEnd : draft.length;
+    const next = `${draft.slice(0, at)}${text}${draft.slice(end)}`;
+    setDraft(next);
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(at + text.length, at + text.length); });
+  };
+  const turnIntoSlider = () => {
+    if (!candidate) return;
+    const r = makeSlider(draft, candidate.name);
+    if (!r) return;
+    // The slider starts at the variable's own value, even when an earlier sketch left a value under the same key.
+    setDraft(r.code); apply(r.code, undefined, { [candidate.name]: candidate.value }); setSelected('');
+  };
 
-  const apply = (code: string, settings?: { clear: boolean; readPicture: boolean }) => {
+  const apply = (code: string, settings?: { clear: boolean; readPicture: boolean }, startAt?: Record<string, number>) => {
     const r = extractScriptParams(code);
     if (!r.ok) { setApplyError(r.error); return; }
     setApplyError(null);
     const patch: Record<string, unknown> = { code, paramDefs: r.defs, ...(settings ?? {}) };
-    // New sliders start at their declared value; ones that already have a value keep it.
-    for (const d of r.defs) if (typeof (l as unknown as Record<string, unknown>)[`p_${d.key}`] !== 'number') patch[`p_${d.key}`] = d.value;
+    // New sliders start at their declared value; ones that already have a value keep it (a starter resets them all).
+    for (const d of r.defs) {
+      if (startAt && d.key in startAt) patch[`p_${d.key}`] = startAt[d.key];
+      else if (settings || typeof (l as unknown as Record<string, unknown>)[`p_${d.key}`] !== 'number') patch[`p_${d.key}`] = d.value;
+    }
     f.set(patch);
   };
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -633,8 +657,12 @@ export function ScriptEditor({ f }: { f: FieldKit }) {
           ))}
         </div>
         <textarea
+          ref={ta}
           aria-label="Script code"
           value={draft}
+          onSelect={readSelection}
+          onKeyUp={readSelection}
+          onMouseUp={readSelection}
           spellCheck={false}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
@@ -649,11 +677,32 @@ export function ScriptEditor({ f }: { f: FieldKit }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
           <Button size="sm" variant={dirty ? 'primary' : undefined} disabled={!dirty} onClick={() => apply(draft)} title="⌘/Ctrl+Enter">Apply</Button>
           {dirty && <Button size="sm" variant="ghost" onClick={() => { setDraft(l.code); setApplyError(null); }}>Revert</Button>}
+          {candidate && <Button size="sm" icon="plus" title={`Add ${candidate.name} to the sketch’s params (starting at ${candidate.value}) and keep it a plain variable the slider drives`} onClick={turnIntoSlider}>{`Make ‘${candidate.name}’ a slider`}</Button>}
           <span style={{ flex: 1, minWidth: 0, fontSize: 11, lineHeight: 1.4, color: error ? f.tk.status.danger : f.tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis' }} title={error ?? undefined}>
             {error ?? (dirty ? 'Edited: Apply to run it.' : `Running · ${defs.length} slider${defs.length === 1 ? '' : 's'}`)}
           </span>
         </div>
-        {f.note(<>In <code>s</code>: <code>ctx</code> (2D canvas), <code>width</code>, <code>height</code>, <code>time</code>, <code>dt</code>, <code>frame</code>, <code>params</code> (your sliders), <code>mouse</code> {'{x, y, over, down}'} in pixels, <code>state</code> (kept between frames), <code>picture.brightness(x, y)</code> (Picture on), <code>null(name)</code> (a Null layer’s position), <code>random()</code>.</>)}
+        {f.note(<>p5-style helpers (<code>fill</code>, <code>circle</code>, <code>map</code>, <code>noise</code>…) work as plain names; <code>s</code> carries the frame. Select a variable like <code>let speed = 2;</code> and press <b>Make a slider</b> to control it from Play. The Reference below lists everything.</>)}
+      </Section>
+      <Section kind="script" title="Reference" hint="Click a name to insert it at the caret.">
+        <Field aria-label="Filter the reference" placeholder="Filter…" height={26} value={refFilter} onChange={e => setRefFilter(e.target.value)} style={{ margin: '0 0 6px 0' }} />
+        {SCRIPT_REFERENCE.map(group => {
+          const q = refFilter.trim().toLowerCase();
+          const rows = q ? group.items.filter(it => `${it.name} ${it.doc}`.toLowerCase().includes(q)) : group.items;
+          if (!rows.length) return null;
+          return (
+            <div key={group.title} style={{ marginBottom: 8 }}>
+              <div style={{ font: `650 10.5px ${fontFamily.ui}`, color: f.tk.text.faint, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '4px 0' }}>{group.title}</div>
+              {rows.map(it => (
+                <div key={it.name} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '2px 0' }}>
+                  <button type="button" onClick={() => insertAtCaret(it.insert ?? it.name)} title="Insert at the caret"
+                    style={{ flexShrink: 0, border: 0, background: f.tk.bg.field, color: f.tk.text.primary, borderRadius: radius.sm, padding: '1px 6px', cursor: 'pointer', font: `500 11px ${fontFamily.mono}`, textAlign: 'left' }}>{it.name}</button>
+                  <span style={{ fontSize: 11, lineHeight: 1.35, color: f.tk.text.muted }}>{it.doc}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </Section>
       {defs.length > 0 && (
         <Section kind="script" title="Sliders" hint="Declared by the script. Right-click one to make it a Play control or drive it with a null.">

@@ -4,6 +4,7 @@
  * canvas kept between frames; picture readers need the picture sampled).
  */
 import { DEFAULT_SCRIPT } from '../../../types/playLayers';
+import { KL_SKETCH_NAMES, klCompileSketch } from '../../../play/kit/layers.js';
 
 export interface ScriptExample { name: string; hint: string; code: string; settings: { clear: boolean; readPicture: boolean } }
 
@@ -11,6 +12,29 @@ export const SCRIPT_EXAMPLES: ScriptExample[] = [
   {
     name: 'Dots', hint: 'Bouncing dots that light up near the mouse. Three sliders declared in the script.', settings: { clear: true, readPicture: false },
     code: DEFAULT_SCRIPT,
+  },
+  {
+    name: 'p5 sketch', hint: 'p5-style: background, fill, circle, map, noise as plain names; plain variables become sliders with one click.', settings: { clear: true, readPicture: false },
+    code: `// p5-style. Select a variable below (double-click "count") and press "Make a slider".
+let count = 60;
+let wobble = 30;
+let hue = 210;
+
+function draw(s) {
+  background(12, 12, 18);
+  noStroke();
+  for (let i = 0; i < count; i++) {
+    const t = i / count;
+    const x = map(t, 0, 1, 40, width - 40);
+    const y = height / 2 + Math.sin(t * TWO_PI * 2 + s.time * 2) * wobble * 3;
+    const n = noise(i * 0.2, s.time * 0.5);
+    fill(hsl(hue + i * 2, 80, 40 + n * 40));
+    circle(x, y, 8 + n * 24);
+  }
+  fill(255); textSize(14); textAlign('left', 'top');
+  text('mouse: ' + Math.round(mouseX) + ', ' + Math.round(mouseY), 12, 12);
+}
+`,
   },
   {
     name: 'Trail', hint: 'A ribbon that follows the mouse and fades. Clear is off, so each frame draws over the last.', settings: { clear: false, readPicture: false },
@@ -93,7 +117,10 @@ function draw(s) {
 export function extractScriptParams(code: string): { ok: true; defs: import('../../../types/playLayers').ScriptParamDef[] } | { ok: false; error: string } {
   let raw: unknown;
   try {
-    raw = new Function(`${code}\n;return typeof params === "object" && params ? params : {};`)();
+    // The same wrapper the kit uses, with helpers that do nothing, so a sketch that draws at its top level still parses.
+    const stub: Record<string, unknown> = {};
+    for (const n of KL_SKETCH_NAMES) stub[n] = /^[A-Z_]+$/.test(n) ? 0 : (n === 'width' || n === 'height' || n.startsWith('mouse') || n === 'frameCount' || n === 'deltaTime') ? 0 : () => 0;
+    raw = klCompileSketch(code, stub).params;
   } catch (e) {
     return { ok: false, error: (e as Error)?.message ?? String(e) };
   }
