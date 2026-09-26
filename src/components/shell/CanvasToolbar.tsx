@@ -17,7 +17,7 @@ import { PerfBadge, PerfPanel } from './PerfPanel';
  * current context (opens graph stats), zoom, fit, auto layout, minimap, clear.
  */
 export function CanvasToolbar({
-  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false,
+  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false, readOnly = false,
 }: {
   nodes: readonly GraphNode[];
   topLevel: boolean;
@@ -37,6 +37,8 @@ export function CanvasToolbar({
   onClearMinimal?: () => void;
   /** Narrow canvas (tablet): Fit and Auto layout become icon buttons. */
   compact?: boolean;
+  /** A locked canvas: no auto layout and no clearing, the view tools stay. */
+  readOnly?: boolean;
 }) {
   const tk = useTokens();
   const selected = useNodeGraphStore(s => s.selectedNodeIds.length);
@@ -99,12 +101,12 @@ export function CanvasToolbar({
       {compact ? (
         <>
           <IconButton icon="fit" label="Fit all nodes in view" shortcut="f" size="sm" onClick={onFit} />
-          <IconButton icon="layout" label="Arrange left-to-right by data flow" size="sm" onClick={onAutoLayout} />
+          {!readOnly && <IconButton icon="layout" label="Arrange left-to-right by data flow" size="sm" onClick={onAutoLayout} />}
         </>
       ) : (
         <>
           <Tooltip label="Fit all nodes in view" shortcut="f"><ToolButton icon="fit" onClick={onFit}>Fit</ToolButton></Tooltip>
-          <Tooltip label="Arrange left-to-right by data flow"><ToolButton icon="layout" onClick={onAutoLayout}>Auto layout</ToolButton></Tooltip>
+          {!readOnly && <Tooltip label="Arrange left-to-right by data flow"><ToolButton icon="layout" onClick={onAutoLayout}>Auto layout</ToolButton></Tooltip>}
         </>
       )}
       <Sep />
@@ -112,9 +114,11 @@ export function CanvasToolbar({
       {onToggleOutline && (
         <IconButton icon="layoutGraph" label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} size="sm" active={!!showOutline} onClick={onToggleOutline} />
       )}
-      <span onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onClearMinimal?.(); }} style={{ display: 'inline-flex' }}>
-        <IconButton icon="trash" label={onClearMinimal ? 'Reset to the starter graph · right-click: clear to just UV and Output' : 'Clear all nodes'} size="sm" tone="danger" onClick={onClear} />
-      </span>
+      {!readOnly && (
+        <span onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onClearMinimal?.(); }} style={{ display: 'inline-flex' }}>
+          <IconButton icon="trash" label={onClearMinimal ? 'Reset to the starter graph · right-click: clear to just UV and Output' : 'Clear all nodes'} size="sm" tone="danger" onClick={onClear} />
+        </span>
+      )}
     </div>
   );
 }

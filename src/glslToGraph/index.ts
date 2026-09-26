@@ -23,6 +23,7 @@
 import { parser, generate } from '@shaderfrog/glsl-parser';
 import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
+import { groupNodesByRank, estimateNodeHeight } from '../store/graphLayout';
 
 type T = 'float' | 'vec2' | 'vec3' | 'vec4';
 interface Ref { nodeId: string; outputKey: string; type: T }
@@ -627,20 +628,21 @@ function tokenOf(spec: Ast | undefined): string {
 }
 
 /** Columns by depth (sources left, Output right), rows in creation order. */
+/**
+ * Columns by data-flow depth, the same ranks the Studio's auto layout uses,
+ * spaced for real cards (360 wide, heights estimated the way the Studio does,
+ * plus the code a block or function shows on its card). Nodes are created in
+ * program order, so a column reads top to bottom as the shader did.
+ */
 function layout(nodes: GraphNode[]): void {
-  const byId = new Map(nodes.map(n => [n.id, n]));
-  const depth = new Map<string, number>();
-  const d = (n: GraphNode): number => {
-    if (depth.has(n.id)) return depth.get(n.id)!;
-    depth.set(n.id, 0);
-    let m = 0;
-    for (const s of Object.values(n.inputs)) if (s.connection) { const src = byId.get(s.connection.nodeId); if (src) m = Math.max(m, d(src) + 1); }
-    depth.set(n.id, m);
-    return m;
-  };
-  const rows = new Map<number, number>();
-  for (const n of nodes) {
-    const k = d(n); const r = rows.get(k) ?? 0; rows.set(k, r + 1);
-    n.position = { x: 80 + k * 320, y: 80 + r * 150 };
+  const order = new Map(nodes.map((n, i) => [n.id, i]));
+  for (const { rank, nodes: column } of groupNodesByRank(nodes)) {
+    let y = 60;
+    for (const n of [...column].sort((a, b) => order.get(a.id)! - order.get(b.id)!)) {
+      n.position = { x: 40 + rank * 440, y };
+      const codeLines = n.type === 'exprNode' ? String(n.params.expr ?? '').split('\n').length + ((n.params.lines as string[] | undefined)?.length ?? 0)
+        : n.type === 'customFn' ? String(n.params.body ?? '').split('\n').length : 0;
+      y += estimateNodeHeight(n) + codeLines * 18 + 32;
+    }
   }
 }

@@ -1,10 +1,10 @@
-import { useState, useLayoutEffect, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { safeSetItem } from '../utils/fileIO';
 import type { FileResult } from '../utils/fileIO';
-import { tokenizeLine, C, C_LIGHT } from './glslSyntax';
+import { GlslEditor, type GlslEditorHandle } from './code/GlslEditor';
 import { NodePalette } from './NodeGraph/NodePalette';
-import { useThemeMode, useTokens } from '../theme/themeStore';
+import { useTokens } from '../theme/themeStore';
 import { fontFamily, radius } from '../theme/tokens';
 import { Button, IconButton } from './ui/Button';
 import { Callout } from './ui/Callout';
@@ -114,16 +114,6 @@ const STUDIO_GROUPS: FnGroup[] = [
   ]},
 ];
 
-// ── Bracket pairs ─────────────────────────────────────────────────────────────
-
-const BRACKET_PAIRS: Record<string, [string, string]> = {
-  '(': ['(', ')'],
-  '[': ['[', ']'],
-  '{': ['{', '}'],
-  '"': ['"', '"'],
-  "'": ["'", "'"],
-};
-
 // ── Storage keys ──────────────────────────────────────────────────────────────
 
 const EDITOR_KEY  = 'shader-studio:glsl-editor';
@@ -142,18 +132,10 @@ function persistShaders(list: SavedShader[]): FileResult {
   return safeSetItem(SHADERS_KEY, JSON.stringify(list), 'shaders');
 }
 
-// ── Shared font/padding so overlay lines up perfectly ─────────────────────────
-
-const EDITOR_FONT = "'Fira Code', 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace";
-const EDITOR_FONT_SIZE = '12px';
-const EDITOR_LINE_HEIGHT = '1.6';
-const EDITOR_PADDING = '10px 12px';
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function GLSLPage() {
   const tk = useTokens();
-  const mode = useThemeMode();
   const setRawGlslShader = useNodeGraphStore(s => s.setRawGlslShader);
   const nodeGraphShader  = useNodeGraphStore(s => s.fragmentShader);
   const glslErrors       = useNodeGraphStore(s => s.glslErrors);
@@ -167,57 +149,7 @@ export function GLSLPage() {
   const [showSaveInput, setShowSaveInput] = useState(false);
   const [saveNameVal, setSaveNameVal]     = useState('');
 
-  const textareaRef  = useRef<HTMLTextAreaElement>(null);
-  const highlightRef = useRef<HTMLDivElement>(null);
-  const lineNumRef   = useRef<HTMLDivElement>(null);
-
-  // ── Undo / redo stack ──────────────────────────────────────────────────────
-  const undoStack = useRef<string[]>([localStorage.getItem(EDITOR_KEY) ?? BOILERPLATE]);
-  const undoIdx   = useRef<number>(0);
-  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const pushHistory = useCallback((value: string) => {
-    if (pushTimer.current) clearTimeout(pushTimer.current);
-    pushTimer.current = setTimeout(() => {
-      const stack = undoStack.current.slice(0, undoIdx.current + 1);
-      if (stack[stack.length - 1] === value) return;
-      stack.push(value);
-      if (stack.length > 100) stack.shift();
-      undoStack.current = stack;
-      undoIdx.current   = stack.length - 1;
-    }, 400);
-  }, []);
-
-  // ── Sync overlay scroll ────────────────────────────────────────────────────
-  const syncScroll = useCallback(() => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    if (highlightRef.current) {
-      highlightRef.current.scrollTop  = ta.scrollTop;
-      highlightRef.current.scrollLeft = ta.scrollLeft;
-    }
-    if (lineNumRef.current) {
-      lineNumRef.current.scrollTop = ta.scrollTop;
-    }
-  }, []);
-
-  // ── Side effects ──────────────────────────────────────────────────────────
-  // Where the caret should land after a programmatic edit (Tab, Enter, undo, insert).
-  // Applied in a layout effect, straight after React writes the new value: a
-  // controlled textarea jumps its caret to the end on every value change, and
-  // restoring it a frame later let fast typing land at the end of the file.
-  const pendingSel = useRef<{ start: number; end: number } | null>(null);
-  const setSel = (start: number, end = start) => { pendingSel.current = { start, end }; };
-  useLayoutEffect(() => {
-    const ta = textareaRef.current;
-    const sel = pendingSel.current;
-    if (ta && sel) {
-      pendingSel.current = null;
-      ta.selectionStart = sel.start;
-      ta.selectionEnd = sel.end;
-    }
-    syncScroll();
-  }, [code, syncScroll]);
+  const editorRef = useRef<GlslEditorHandle>(null);
 
   // Compiling the shader on every keystroke stalls typing; wait for a pause.
   useEffect(() => {
@@ -228,109 +160,7 @@ export function GLSLPage() {
 
   useEffect(() => () => { setRawGlslShader(null); }, [setRawGlslShader]);
 
-  // ── Insert helper (preserves undo via manual stack) ───────────────────────
-  const insertAtCursor = useCallback((text: string) => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end   = ta.selectionEnd;
-    const selected = code.slice(start, end);
-    let newCode: string;
-    let cursorPos: number;
-
-    // If text ends with an empty arg slot '()' and there's a selection, wrap it
-    if (selected && text.endsWith('()')) {
-      newCode   = code.slice(0, start) + text.slice(0, -1) + selected + ')' + code.slice(end);
-      cursorPos = start + text.length - 1 + selected.length + 1;
-    } else {
-      newCode   = code.slice(0, start) + text + code.slice(end);
-      // Place cursor at first empty comma slot or after the insertion
-      const innerOffset = text.indexOf('()') !== -1 ? text.indexOf('()') + 1 :
-                          text.indexOf(', )') !== -1 ? text.indexOf(', )') + 2 :
-                          text.length;
-      cursorPos = start + innerOffset;
-    }
-    setSel(cursorPos);
-    setCode(newCode);
-    pushHistory(newCode);
-    requestAnimationFrame(() => ta.focus());
-  }, [code, pushHistory]);
-
-  // ── Keyboard handler ──────────────────────────────────────────────────────
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const ta = e.currentTarget;
-    const start = ta.selectionStart;
-    const end   = ta.selectionEnd;
-
-    // ── Undo ────────────────────────────────────────────────────────────────
-    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
-      e.preventDefault();
-      if (pushTimer.current) { clearTimeout(pushTimer.current); pushTimer.current = null; }
-      if (undoIdx.current > 0) {
-        undoIdx.current--;
-        const restored = undoStack.current[undoIdx.current];
-        setSel(Math.min(start, restored.length));
-        setCode(restored);
-      }
-      return;
-    }
-
-    // ── Redo ────────────────────────────────────────────────────────────────
-    if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-      e.preventDefault();
-      if (undoIdx.current < undoStack.current.length - 1) {
-        undoIdx.current++;
-        const restored = undoStack.current[undoIdx.current];
-        setSel(Math.min(start, restored.length));
-        setCode(restored);
-      }
-      return;
-    }
-
-    // ── Tab → 4 spaces ──────────────────────────────────────────────────────
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const newCode = code.slice(0, start) + '    ' + code.slice(end);
-      setSel(start + 4);
-      setCode(newCode);
-      pushHistory(newCode);
-      return;
-    }
-
-    // ── Enter → auto-indent ─────────────────────────────────────────────────
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const lineStart = code.lastIndexOf('\n', start - 1) + 1;
-      const line      = code.slice(lineStart, start);
-      const indent    = line.match(/^(\s*)/)?.[1] ?? '';
-      // Also bump indent after an opening brace
-      const extra     = line.trimEnd().endsWith('{') ? '    ' : '';
-      const insertion = '\n' + indent + extra;
-      const newCode   = code.slice(0, start) + insertion + code.slice(end);
-      setSel(start + insertion.length);
-      setCode(newCode);
-      pushHistory(newCode);
-      return;
-    }
-
-    // ── Bracket / quote wrap ────────────────────────────────────────────────
-    if (e.key in BRACKET_PAIRS && start !== end) {
-      e.preventDefault();
-      const [open, close] = BRACKET_PAIRS[e.key];
-      const selected = code.slice(start, end);
-      const newCode  = code.slice(0, start) + open + selected + close + code.slice(end);
-      setSel(start + 1, end + 1);
-      setCode(newCode);
-      pushHistory(newCode);
-      return;
-    }
-  }, [code, pushHistory]);
-
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setCode(val);
-    pushHistory(val);
-  }, [pushHistory]);
+  const insertAtCursor = (text: string) => editorRef.current?.insertAtCursor(text);
 
   // ── Shader save / load ────────────────────────────────────────────────────
   const commitSave = () => {
@@ -348,13 +178,8 @@ export function GLSLPage() {
   };
 
   const loadShader = (s: SavedShader) => {
-    setCode(s.code);
-    // Push loaded code to undo stack
-    const stack = undoStack.current.slice(0, undoIdx.current + 1);
-    stack.push(s.code);
-    undoStack.current = stack;
-    undoIdx.current   = stack.length - 1;
-    textareaRef.current?.focus();
+    editorRef.current?.replaceAll(s.code);
+    editorRef.current?.focus();
   };
 
   const deleteShader = (id: string) => {
@@ -369,9 +194,6 @@ export function GLSLPage() {
     if (persistShaders(next).ok) setShaders(next);
     setRenamingId(null);
   };
-
-  const lineCount  = code.split('\n').length;
-  const lines      = code.split('\n');
 
   const [paletteWidth, setPaletteWidth] = useState(320);
   // The node palette is an optional helper here: collapsed until asked for.
@@ -396,7 +218,6 @@ export function GLSLPage() {
   }, [paletteWidth]);
 
   const sideOpen = showPanel || showFnPanel;
-  const pal = mode === 'dark' ? C : C_LIGHT;
   const panelHead = { height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px 0 12px', borderBottom: `1px solid ${tk.border.subtle}` } as const;
   const caps = { fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: tk.text.faint, margin: '10px 0 6px' };
 
@@ -466,63 +287,7 @@ export function GLSLPage() {
         </div>
 
         {/* Code area */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {/* Line numbers — scroll-synced */}
-          <div
-            ref={lineNumRef}
-            style={{
-              width: 44, flexShrink: 0, background: tk.bg.subtle, borderRight: `1px solid ${tk.border.subtle}`,
-              overflowY: 'hidden', paddingTop: EDITOR_PADDING.split(' ')[0], paddingRight: 10, textAlign: 'right',
-              color: tk.text.disabled, fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT, fontFamily: EDITOR_FONT,
-              userSelect: 'none', pointerEvents: 'none',
-            }}
-          >
-            {Array.from({ length: lineCount }, (_, i) => <div key={i}>{i + 1}</div>)}
-          </div>
-          {/* Overlay container */}
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-            {/* Syntax-highlighted background */}
-            <div
-              ref={highlightRef}
-              aria-hidden="true"
-              style={{
-                position: 'absolute', inset: 0, padding: EDITOR_PADDING,
-                fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT, fontFamily: EDITOR_FONT,
-                whiteSpace: 'pre', overflowY: 'hidden', overflowX: 'hidden', pointerEvents: 'none', tabSize: 4,
-                fontVariantLigatures: 'none', letterSpacing: 0,
-              }}
-            >
-              {lines.map((line, i) => (
-                <div key={i} style={{ minHeight: `calc(${EDITOR_LINE_HEIGHT} * ${EDITOR_FONT_SIZE})` }}>
-                  {tokenizeLine(line || ' ', pal).map((tok, j) => (
-                    <span key={j} style={{ color: tok.color }}>{tok.text}</span>
-                  ))}
-                </div>
-              ))}
-            </div>
-            {/* Transparent textarea on top */}
-            <textarea
-              ref={textareaRef}
-              value={code}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              onScroll={syncScroll}
-              // The overlay never wraps, so the textarea must not either: a soft-wrapped long
-              // line pushed every later line down and the caret no longer matched the text.
-              wrap="off"
-              spellCheck={false}
-              autoCapitalize="none"
-              autoCorrect="off"
-              style={{
-                position: 'absolute', inset: 0, background: 'transparent', color: 'transparent', caretColor: tk.text.primary,
-                border: 'none', outline: 'none', resize: 'none', padding: EDITOR_PADDING,
-                fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT, fontFamily: EDITOR_FONT,
-                tabSize: 4, overflowY: 'auto', overflowX: 'auto', zIndex: 1,
-                whiteSpace: 'pre', fontVariantLigatures: 'none', letterSpacing: 0,
-              }}
-            />
-          </div>
-        </div>
+        <GlslEditor ref={editorRef} value={code} onChange={setCode} ariaLabel="Fragment shader source" />
 
         {/* Compile errors */}
         {glslErrors.length > 0 && (

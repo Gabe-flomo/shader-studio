@@ -155,23 +155,40 @@ PSNR ≥ 40 dB counts as "same"; anything else shows the diff.
 | `.xyx`-style swizzles | block | a general Swizzle node (any pattern, any width) |
 | `mat2(c,-s,s,c) * v` | block | recognise the rotate pattern → Rotate 2D node |
 
-## The Convert page (first prototype, shipped)
+## The Convert page (shipped)
 
-`Convert` in the top nav. Paste a shader (or open a file, or pick an example);
-the outline in the middle shows the nodes it would become, in the converter's
-columns, with kept code marked `EXPR` / `FN` (dashed) and inexact nodes marked
-`≈`. Click a box for its details. On the right, the original and the converted
-graph render on one clock with a **Same picture / Differs** badge (max error
-and % of pixels off), then the report: what can't convert, the warned nodes
-(each a switch between *Node ≈* and *Expression Block*), kept expressions,
-kept functions, notes. **Materialize** replaces the current graph (undoable)
-and opens the Studio with the graph in view; kept code carries a `FROM CODE`
-badge on its card, inexact nodes an `≈` badge with the reason on hover.
-**Keep as one node…** is the older import (the whole shader as one code node).
+`Convert` in the top nav is the Studio with the shader beside it:
+
+- **Left: the shader**, in the GLSL page's editor (line numbers, colouring,
+  Tab/Enter/bracket handling, its own undo; `GlslEditor` is now shared by both
+  pages). Paste a file, open one, or pick an example. Under it, **the check**:
+  the original and the converted graph rendered on one clock (two small WebGL
+  canvases with the same uniforms and time) with a **Same picture / Differs**
+  badge (max error and % of pixels off), then what can't convert, the inexact
+  nodes (each a switch between *Node ≈* and *Expression Block*), kept
+  expressions, kept functions, notes.
+- **Centre: the real canvas, read-only.** The converted graph is put on the
+  Studio's own `NodeGraph` through the store's *scratch* mode
+  (`beginScratch` / `setScratchNodes` / `endScratch`): the user's graph, Play
+  setup, saved-graph identity and dirty flag are kept aside while the page is
+  open and restored when it closes. The canvas is `locked`: cards and wires are
+  a picture (no drags, sockets, menus, palette, auto layout or clear), the view
+  still pans, zooms, fits and box-selects; undo/redo and the editing shortcuts
+  sit out. Click a card for its details (a floating card, with the ≈ choice).
+  The view starts at a readable zoom on the sources when the whole chain
+  wouldn't fit legibly. The app's preview on the right renders the graph live.
+- **Materialize** keeps the scratch graph as the real one (undoable, unsaved)
+  and opens the Studio; kept code carries a `FROM CODE` badge, inexact nodes an
+  `≈` badge with the reason on hover. **Keep as one node…** is the older import.
+
+Layout: the converter places nodes with the Studio's rank columns (440 px
+apart, card heights estimated the way auto layout does), in program order down
+each column.
 
 Decisions taken with you: badges on imported code (yes); inexact expressions
 are offered as the node with a warning, with the option to keep the code
-exactly, per expression.
+exactly, per expression; the preview is the real canvas, read-only until
+materialized.
 
 ## Product plan
 

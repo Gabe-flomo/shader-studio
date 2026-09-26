@@ -74,7 +74,7 @@ import type { FileResult } from '../utils/fileIO';
 import { BLANK_GRAPH, DEFAULT_EXAMPLE, loadExampleGraphs } from './exampleIndex';
 import { archiveCurrent, deleteHistory, readVersion } from './graphVersions';
 import type { ExampleGraph } from './exampleIndex';
-import { groupNodesByRank } from './graphLayout';
+import { groupNodesByRank, estimateNodeHeight } from './graphLayout';
 import { typesCompatible } from '../lib/typesCompatible';
 import { audioEngine } from '../lib/audioEngine';
 import { videoEngine } from '../lib/videoEngine';
@@ -337,6 +337,20 @@ function probeValuesEqual(a: Record<string, number[]>, b: Record<string, number[
   return true;
 }
 
+/** What beginScratch keeps aside while a scratch graph is on the canvas. */
+export interface ScratchSnapshot {
+  nodes: GraphNode[];
+  looseGroups: import('../types/nodeGraph').LooseGroup[];
+  play: PlayRecord;
+  currentGraph: { name: string; version: number; latest: boolean } | null;
+  graphDirty: boolean;
+  previewNodeId: string | null;
+  activeGroupId: string | null;
+  activeGroupPath: string[];
+  selectedNodeId: string | null;
+  selectedNodeIds: string[];
+}
+
 interface NodeGraphState {
   // Graph data
   nodes: GraphNode[];
@@ -472,6 +486,9 @@ interface NodeGraphState {
   registerFitView: (cb: () => void) => void;
   _viewportCenterGetter: (() => { x: number; y: number }) | null;
   registerViewportCenterGetter: (cb: () => { x: number; y: number }) => void;
+  /** Move the canvas: `pan` in screen px, `zoom` clamped to the canvas's range. Registered by NodeGraph. */
+  _setViewCallback: ((pan: { x: number; y: number }, zoom: number) => void) | null;
+  registerSetView: (cb: (pan: { x: number; y: number }, zoom: number) => void) => void;
 
   // Swap mode — user shift-clicked a node; next palette click replaces it
   swapTargetNodeId: string | null;
@@ -683,6 +700,19 @@ interface NodeGraphState {
   loadExampleGraph: (name?: string) => Promise<void>;
   /** Put a graph built elsewhere (the GLSL → nodes converter) in place of the current one, undoably. */
   replaceGraph: (nodes: GraphNode[]) => void;
+  /**
+   * A scratch graph: the Convert page shows the graph a shader would become on
+   * the real canvas, so it swaps that graph into the store while the page is
+   * open and puts the user's graph back when it closes. `beginScratch` keeps
+   * the current graph aside, `setScratchNodes` shows another candidate (no
+   * undo entry), `endScratch(true)` keeps the scratch graph as the real one
+   * (undoable, unsaved) and `endScratch(false)` restores what was kept aside.
+   * Undo, redo and the graph-editing shortcuts sit out while a scratch is open.
+   */
+  scratch: ScratchSnapshot | null;
+  beginScratch: () => void;
+  setScratchNodes: (nodes: GraphNode[]) => void;
+  endScratch: (commit: boolean) => void;
   /** Empty the canvas down to UV → Output (the trash button's right-click) */
   clearToMinimal: () => void;
   autoLayout: () => void;
@@ -936,17 +966,6 @@ function buildPreviewGraph(nodes: GraphNode[], targetId: string): GraphNode[] {
 
 const idGenerator = new IdGenerator();
 
-function estimateNodeHeight(node: GraphNode): number {
-  const def = getNodeDefinition(node.type);
-  const inputCount  = Object.keys(node.inputs).length;
-  const outputCount = Object.keys(node.outputs).length;
-  // Count only visible param defs (float or select — things that render sliders/dropdowns)
-  const paramCount = def ? Object.values(def.paramDefs ?? {}).filter(
-    pd => pd.type === 'float' || pd.type === 'select' || pd.type === 'vec3'
-  ).length : 0;
-  // Header 43px, socket rows 26px, param rows 36px, body padding 12px, footer 37px
-  return 43 + (inputCount + outputCount) * 26 + paramCount * 36 + 12 + 37;
-}
 
 // ── Nested-group path helpers ──────────────────────────────────────────────
 /**
@@ -1341,6 +1360,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   nodeHighlightFilter: null,
   _fitViewCallback: null,
   _viewportCenterGetter: null,
+  _setViewCallback: null,
   swapTargetNodeId: null,
   searchPaletteOpen: false,
   activeGroupId: null,
@@ -2238,6 +2258,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
   registerFitView: (cb) => set({ _fitViewCallback: cb }),
   registerViewportCenterGetter: (cb) => set({ _viewportCenterGetter: cb }),
+  registerSetView: (cb) => set({ _setViewCallback: cb }),
   setSwapTargetNodeId: (id) => set({ swapTargetNodeId: id }),
   setSearchPaletteOpen: (open) => set({ searchPaletteOpen: open }),
 
@@ -2970,6 +2991,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   undo: () => {
+    if (get().scratch) return;
     const prev = undoManager.pop();
     if (!prev) return;
     undoManager.pushRedo(get().nodes);
@@ -2980,6 +3002,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   redo: () => {
+    if (get().scratch) return;
     const next = undoManager.popRedo();
     if (!next) return;
     undoManager.pushUndo(get().nodes);
@@ -4653,6 +4676,42 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set(st => ({ nodes, looseGroups: [], play: emptyPlayRecord(), previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
     set({ currentGraph: null, graphDirty: true });
+  },
+
+  scratch: null,
+  beginScratch: () => {
+    const s = get();
+    if (s.scratch) return;
+    set({ scratch: {
+      nodes: s.nodes, looseGroups: s.looseGroups, play: s.play, currentGraph: s.currentGraph, graphDirty: s.graphDirty,
+      previewNodeId: s.previewNodeId, activeGroupId: s.activeGroupId, activeGroupPath: s.activeGroupPath,
+      selectedNodeId: s.selectedNodeId, selectedNodeIds: s.selectedNodeIds,
+    } });
+  },
+  setScratchNodes: (rawNodes) => {
+    if (!get().scratch) get().beginScratch();
+    const nodes = rawNodes.map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
+    idGenerator.syncFromGraph(nodes);
+    set(st => ({ nodes, looseGroups: [], play: emptyPlayRecord(), previewNodeId: null, activeGroupId: null, activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [], nodeProbeValues: null, graphEpoch: st.graphEpoch + 1 }));
+    get().compile();
+  },
+  endScratch: (commit) => {
+    const kept = get().scratch;
+    if (!kept) return;
+    if (commit) {
+      undoManager.push(kept.nodes);
+      set({ scratch: null, currentGraph: null, graphDirty: true });
+      return;
+    }
+    idGenerator.syncFromGraph(kept.nodes);
+    set(st => ({
+      scratch: null, nodes: kept.nodes, looseGroups: kept.looseGroups, play: kept.play, currentGraph: kept.currentGraph, graphDirty: true,
+      previewNodeId: kept.previewNodeId, activeGroupId: kept.activeGroupId, activeGroupPath: kept.activeGroupPath,
+      selectedNodeId: kept.selectedNodeId, selectedNodeIds: kept.selectedNodeIds, nodeProbeValues: null, graphEpoch: st.graphEpoch + 1,
+    }));
+    get().compile();
+    // Restored last, on its own: the dirty-marking subscriber sees the nodes change first and would set it back.
+    set({ graphDirty: kept.graphDirty });
   },
 
   setPreviewNodeId: (id) => {

@@ -378,6 +378,9 @@ function StatusReadout({ swatchSize, probeGap, emptyText, swatchTitle }: { swatc
   return <span style={{ opacity: 0.4 }}>{selectedNodeId ? 'computing…' : emptyText}</span>;
 }
 
+// While the Convert page has a scratch graph on the canvas, nothing may edit, save or load it.
+const unlessScratch = (fn: () => void) => () => { if (!useNodeGraphStore.getState().scratch) fn(); };
+
 function App() {
   const tc = useCtp();
   const tk = useTokens();
@@ -533,42 +536,42 @@ function App() {
   }, [addNode]);
 
   const shortcutHandlers = useMemo(() => ({
-    undo:           () => undo(),
-    export:         () => exportGraph(),
-    import:         () => importGraphFromFile(),
+    undo:           unlessScratch(() => undo()),
+    export:         unlessScratch(() => exportGraph()),
+    import:         unlessScratch(() => importGraphFromFile()),
     fitView:        () => _fitViewCallback?.(),
     toggleCode:     () => setShowCode(v => !v),
     toggleRecord:   () => setShowExport(v => !v),
-    addNode:        () => setSearchPaletteOpen(true),
-    groupSelected:  () => {
+    addNode:        unlessScratch(() => setSearchPaletteOpen(true)),
+    groupSelected:  unlessScratch(() => {
       const ids = useNodeGraphStore.getState().selectedNodeIds;
       if (ids.length >= 2) { groupNodes(ids); deselectAll(); }
-    },
-    duplicateSelected: () => {
+    }),
+    duplicateSelected: unlessScratch(() => {
       const st = useNodeGraphStore.getState();
       const ids = st.selectedNodeIds.length > 0 ? st.selectedNodeIds : st.selectedNodeId ? [st.selectedNodeId] : [];
       if (ids.length > 0) st.duplicateNodes(ids);
-    },
-    deleteSelected: () => {
+    }),
+    deleteSelected: unlessScratch(() => {
       const st = useNodeGraphStore.getState();
       const ids = st.selectedNodeIds.length > 0 ? st.selectedNodeIds : st.selectedNodeId ? [st.selectedNodeId] : [];
       if (ids.length === 0) return;
       st.removeNodes(ids);
       st.deselectAll();
       st.setSelectedNodeId(null);
-    },
+    }),
     exitGroup: () => {
       const st = useNodeGraphStore.getState();
       // Esc belongs to whatever dialog, menu or popover is open first
       if (st.activeGroupPath.length === 0 || document.querySelector('[role="dialog"], [role="menu"], [data-popover]')) return;
       st.exitGroup();
     },
-    addUV:          () => addRandomNode('uv'),
-    addTime:        () => addRandomNode('time'),
-    addFloat:       () => addRandomNode('float'),
-    addOutput:      () => addRandomNode('output'),
-    addMix:         () => addRandomNode('mix'),
-    addColor:       () => addRandomNode('color'),
+    addUV:          unlessScratch(() => addRandomNode('uv')),
+    addTime:        unlessScratch(() => addRandomNode('time')),
+    addFloat:       unlessScratch(() => addRandomNode('float')),
+    addOutput:      unlessScratch(() => addRandomNode('output')),
+    addMix:         unlessScratch(() => addRandomNode('mix')),
+    addColor:       unlessScratch(() => addRandomNode('color')),
     selectAll:      () => setNodeHighlightFilter(null),
     filterFloat:    () => setNodeHighlightFilter('float'),
     filterVec2:     () => setNodeHighlightFilter('vec2'),
@@ -1052,6 +1055,7 @@ function App() {
 
         {page === 'shortcuts' && <ShortcutsPage />}
         {page === 'glsl' && <GLSLPage />}
+        {page === 'convert' && <div style={{ flex: 1, position: 'relative', minWidth: 0 }}><ConvertPage onMaterialized={openStudioFitted} /></div>}
 
         <div style={{ display: (page === 'studio' || page === 'play') ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
 

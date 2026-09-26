@@ -1,4 +1,18 @@
 import type { GraphNode } from '../types/nodeGraph';
+import { getNodeDefinition } from '../nodes/definitions';
+
+/** Roughly how tall a card renders (header, socket rows, param rows, footer), for layouts done before it's measured. */
+export function estimateNodeHeight(node: GraphNode): number {
+  const def = getNodeDefinition(node.type);
+  const inputCount  = Object.keys(node.inputs).length;
+  const outputCount = Object.keys(node.outputs).length;
+  // Count only visible param defs (float or select — things that render sliders/dropdowns)
+  const paramCount = def ? Object.values(def.paramDefs ?? {}).filter(
+    pd => pd.type === 'float' || pd.type === 'select' || pd.type === 'vec3'
+  ).length : 0;
+  // Header 43px, socket rows 26px, param rows 36px, body padding 12px, footer 37px
+  return 43 + (inputCount + outputCount) * 26 + paramCount * 36 + 12 + 37;
+}
 
 /**
  * BFS rank assignment: rank(node) = max(rank(upstream nodes feeding it)) + 1,

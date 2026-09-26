@@ -53,11 +53,19 @@ function groupLabel(gn: import('../../types/nodeGraph').GraphNode): string {
 /** The last focus request handled (see focusNodeRequest), across remounts. */
 let handledFocus = 0;
 
-export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false }: {
+export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false, locked = false }: {
   transparent?: boolean;
   /** Desktop redesign: the top-centre CanvasToolbar (node count, zoom, fit, layout, minimap, clear) replaces the legacy corner toolbar. */
   redesignToolbar?: boolean;
+  /**
+   * Read-only: the cards and wires are a picture (no drags, edits, sockets or
+   * menus), the canvas still pans, zooms, fits and box-selects. The Convert
+   * page shows a graph-to-be this way until it's materialized.
+   */
+  locked?: boolean;
 }) {
+  const lockedRef = useRef(locked);
+  useEffect(() => { lockedRef.current = locked; }, [locked]);
   const tc = useCtp();
   const tk = useTokens();
   const ctxBtnStyle = ctxBtnStyleFor(tc);
@@ -93,6 +101,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const nodeHighlightFilter   = useNodeGraphStore(s => s.nodeHighlightFilter);
   const registerFitView       = useNodeGraphStore(s => s.registerFitView);
   const registerViewportCenterGetter = useNodeGraphStore(s => s.registerViewportCenterGetter);
+  const registerSetView = useNodeGraphStore(s => s.registerSetView);
   const addNode               = useNodeGraphStore(s => s.addNode);
   const setSearchPaletteOpen  = useNodeGraphStore(s => s.setSearchPaletteOpen);
 
@@ -393,7 +402,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
         e.preventDefault();
         if (e.shiftKey) {
           // Shift+Space → open node search palette
-          setSearchPaletteOpen(true);
+          if (!lockedRef.current) setSearchPaletteOpen(true);
           return;
         }
         spaceDown.current = true;
@@ -408,7 +417,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
           && document.activeElement?.tagName !== 'INPUT'
           && document.activeElement?.tagName !== 'TEXTAREA') {
         const ids = useNodeGraphStore.getState().selectedNodeIds;
-        if (ids.length >= 2) {
+        if (ids.length >= 2 && !lockedRef.current) {
           e.preventDefault();
           useNodeGraphStore.getState().groupNodes(ids, 'Group');
         }
@@ -925,7 +934,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     // Ctrl+click on Mac triggers contextmenu — suppress the menu, only handle right-click
-    if (e.ctrlKey) return;
+    if (e.ctrlKey || lockedRef.current) return;
     const target = e.target as HTMLElement;
     const nodeEl = target.closest('[data-node-id]') as HTMLElement | null;
     const nodeId = nodeEl?.dataset.nodeId ?? null;
@@ -1019,6 +1028,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   const handleFitViewRef = useRef(handleFitView);
   handleFitViewRef.current = handleFitView;
   useEffect(() => { registerFitView(() => handleFitViewRef.current()); }, [registerFitView]);
+  useEffect(() => { registerSetView((p, z) => applyView(p, Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)), 'now')); }, [registerSetView, applyView]);
 
   useEffect(() => {
     registerViewportCenterGetter(() => {
@@ -1143,7 +1153,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       onDrop={e => {
         e.preventDefault();
         const type = e.dataTransfer.getData('application/shader-studio-node');
-        if (type) {
+        if (type && !locked) {
           const worldPos = screenToWorld(e.clientX, e.clientY);
           addNode(type, worldPos);
         }
@@ -1245,9 +1255,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           onClear={() => loadExampleGraph('blank')}
           onClearMinimal={() => useNodeGraphStore.getState().clearToMinimal()}
           compact={compactToolbar}
+          readOnly={locked}
         />
       )}
-      {redesignToolbar && <SelectionBar top={previewNodeId ? 108 : 66} />}
+      {redesignToolbar && !locked && <SelectionBar top={previewNodeId ? 108 : 66} />}
       {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 132 : 66} onClose={() => setShowOutline(false)} />}
 
       {/* Toolbar — top-right, always in screen space */}
@@ -1654,6 +1665,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           height: 0,
           transformOrigin: '0 0',
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          pointerEvents: locked ? 'none' : undefined,
         }}
       >
         {/* Wires — data-derived from node positions + measured socket offsets */}

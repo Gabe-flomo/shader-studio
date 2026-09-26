@@ -5,6 +5,11 @@
  * so a difference is the conversion's, not the renderer's. Every half second
  * both are read back and compared; `onDiff` gets the max error (0..255) or
  * the compile error of either side.
+ *
+ * Each canvas keeps one context for its whole life and only swaps programs
+ * when a shader changes: a canvas has a single context, so losing it on
+ * every change (as this once did) left both pictures black from the second
+ * shader on.
  */
 import { useEffect, useRef } from 'react';
 import { useTokens } from '../../theme/themeStore';
@@ -16,21 +21,31 @@ const VS = 'attribute vec2 p; varying vec2 vUv; void main(){ vUv = p * 0.5 + 0.5
 
 interface Side { gl: WebGLRenderingContext; prog: WebGLProgram | null; error: string | null; locs: Map<string, WebGLUniformLocation | null> }
 
-function setup(canvas: HTMLCanvasElement, frag: string): Side {
-  const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false })!;
-  const side: Side = { gl, prog: null, error: null, locs: new Map() };
-  const compile = (type: number, src: string) => { const s = gl.createShader(type)!; gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) ?? 'shader error'); return s; };
+function context(canvas: HTMLCanvasElement): Side | null {
+  const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false });
+  if (!gl) return null;
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  gl.disable(gl.DITHER);
+  return { gl, prog: null, error: null, locs: new Map() };
+}
+
+/** Compile `frag` into the side's program, replacing the previous one; null clears it. */
+function program(side: Side, frag: string | null): void {
+  const { gl } = side;
+  if (side.prog) { gl.deleteProgram(side.prog); side.prog = null; }
+  side.locs.clear(); side.error = null;
+  if (!frag) return;
+  const compile = (type: number, src: string) => { const s = gl.createShader(type)!; gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { const log = gl.getShaderInfoLog(s) ?? 'shader error'; gl.deleteShader(s); throw new Error(log); } return s; };
   try {
     const prog = gl.createProgram()!;
-    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, frag)); gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) ?? 'link error');
-    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const vs = compile(gl.VERTEX_SHADER, VS), fs = compile(gl.FRAGMENT_SHADER, frag);
+    gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+    gl.deleteShader(vs); gl.deleteShader(fs);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { const log = gl.getProgramInfoLog(prog) ?? 'link error'; gl.deleteProgram(prog); throw new Error(log); }
     gl.useProgram(prog);
     const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    gl.disable(gl.DITHER);
     side.prog = prog;
   } catch (e) { side.error = String((e as Error).message).split('\u0000').join('').trim(); }
-  return side;
 }
 
 function draw(side: Side, size: number, time: number, uniforms: Record<string, number | number[]>): void {
@@ -53,13 +68,27 @@ export function RenderPair({ original, graph, uniforms, onDiff, size = 168 }: {
 }) {
   const tk = useTokens();
   const a = useRef<HTMLCanvasElement>(null), b = useRef<HTMLCanvasElement>(null);
+  const sides = useRef<{ A: Side | null; B: Side | null }>({ A: null, B: null });
+
+  // One context per canvas for the component's life.
   useEffect(() => {
-    if (!a.current || !b.current) return;
-    const A = setup(a.current, original);
-    const B = graph ? setup(b.current, graph) : null;
+    const s = sides.current;
+    if (a.current && !s.A) s.A = context(a.current);
+    if (b.current && !s.B) s.B = context(b.current);
+    return () => {
+      for (const side of [s.A, s.B]) { if (side) { program(side, null); side.gl.getExtension('WEBGL_lose_context')?.loseContext(); } }
+      s.A = null; s.B = null;
+    };
+  }, []);
+
+  // Programs follow the shaders; the frame loop restarts with them.
+  useEffect(() => {
+    const { A, B } = sides.current;
+    if (!A || !B) { onDiff({ error: 'WebGL isn’t available here', side: 'original' }); return; }
+    program(A, original); program(B, graph);
     if (A.error) { onDiff({ error: A.error, side: 'original' }); return; }
-    if (B?.error) { onDiff({ error: B.error, side: 'graph' }); return; }
-    if (!B) { onDiff(null); return; }
+    if (B.error) { onDiff({ error: B.error, side: 'graph' }); return; }
+    if (!graph) { onDiff(null); return; }
     const t0 = performance.now();
     let raf = 0, lastCmp = 0;
     const pa = new Uint8Array(size * size * 4), pb = new Uint8Array(size * size * 4);
@@ -77,8 +106,9 @@ export function RenderPair({ original, graph, uniforms, onDiff, size = 168 }: {
       }
     };
     raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); for (const s of [A, B]) s?.gl.getExtension('WEBGL_lose_context')?.loseContext(); };
+    return () => cancelAnimationFrame(raf);
   }, [original, graph, uniforms, size, onDiff]);
+
   const frame = { width: size, height: size, borderRadius: radius.md, background: '#000', display: 'block' } as const;
   const cap = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginTop: 4 };
   return (
