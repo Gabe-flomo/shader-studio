@@ -464,12 +464,19 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
     <div ref={canvasWrap} style={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative' }}
       onMouseDownCapture={e => { press.current = { x: e.clientX, y: e.clientY }; }} onClick={onCanvasClick}>
       <NodeGraph redesignToolbar locked />
-      <div style={{ position: 'absolute', top: 66, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', alignItems: 'center', gap: 8, padding: compact ? '6px 12px' : '4px 4px 4px 12px', borderRadius: 10, maxWidth: 'calc(100% - 32px)', background: tk.bg.panel, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${alpha(tk.accent.base, 0.35)}`, color: tk.text.secondary, whiteSpace: 'nowrap' }}>
-        <span style={{ width: 7, height: 7, borderRadius: '50%', background: stale ? tk.status.warning : tk.accent.base, flexShrink: 0 }} />
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Read-only preview <span style={{ color: tk.text.muted }}>· {summary}</span>{stale && <span style={{ color: tk.status.warningText }}> · edited: press Convert</span>}</span>
-        {!compact && formSwitch}
-        {!compact && <Button size="sm" variant="ghost" onClick={keepAsOne} title="The older import: the whole shader as one code node">Keep as one node…</Button>}
-        {!compact && <Button size="sm" variant="primary" icon="nodes" disabled={blocked} onClick={materialize} title={blocked ? 'Fix what the check lists first' : 'Keep these nodes as the graph and open the Studio (undoable)'}>Materialize</Button>}
+      {/* The status keeps its words; when the canvas is too narrow for it and the buttons in one row, the buttons wrap under it. */}
+      <div style={{ position: 'absolute', top: 66, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', columnGap: 8, rowGap: 4, padding: compact ? '6px 12px' : '4px 4px 4px 12px', borderRadius: 10, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', background: tk.bg.panel, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${alpha(tk.accent.base, 0.35)}`, color: tk.text.secondary, whiteSpace: 'nowrap' }}>
+        <span style={{ flex: '1 0 auto', maxWidth: '100%', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, minHeight: 30 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: stale ? tk.status.warning : tk.accent.base, flexShrink: 0 }} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Read-only preview <span style={{ color: tk.text.muted }}>· {summary}</span>{stale && <span style={{ color: tk.status.warningText }}> · edited: press Convert</span>}</span>
+        </span>
+        {!compact && (
+          <span style={{ flex: '0 1 auto', maxWidth: '100%', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
+            {formSwitch}
+            <Button size="sm" variant="ghost" onClick={keepAsOne} title="The older import: the whole shader as one code node">Keep as one node…</Button>
+            <Button size="sm" variant="primary" icon="nodes" disabled={blocked} onClick={materialize} title={blocked ? 'Fix what the check lists first' : 'Keep these nodes as the graph and open the Studio (undoable)'}>Materialize</Button>
+          </span>
+        )}
       </div>
       {conv.nodes.length === 0 && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
