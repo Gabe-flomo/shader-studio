@@ -141,7 +141,7 @@ figure{margin:0}
 .pp-render{display:flex;flex-direction:column;align-items:center;gap:8px}.pp-render>*{width:var(--w);max-width:100%;min-width:min(200px,100%)}
 .pp-render figcaption{color:#6b6f7a;font-size:13.5px;text-align:center}
 .pp-canvas{position:relative;width:100%;border-radius:12px;overflow:hidden;background:#0d0d12}
-.slides .pp-canvas{max-width:calc(64vh * var(--ar,1.78));margin:0 auto}
+.slides .pp-render .pp-canvas{max-width:calc(56vh * var(--ar,1.78));margin:0 auto}
 .pp-host{position:absolute;inset:0;background-size:cover;background-position:center}
 .pp-note{position:absolute;left:10px;right:10px;bottom:10px;padding:7px 10px;border-radius:8px;background:#0b0b10c7;color:#e8e8ef;font:500 12.5px/1.35 system-ui,sans-serif}
 .pp-wait{display:none}.pp-waiting .pp-wait{display:block}

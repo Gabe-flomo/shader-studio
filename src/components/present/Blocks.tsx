@@ -49,9 +49,13 @@ function BlockFrame({ block, selected, editing, children }: { block: Block; sele
   const duplicateBlock = usePresentation(s => s.duplicateBlock);
   const deleteBlock = usePresentation(s => s.deleteBlock);
   const [hover, setHover] = useState(false);
+  // A block just added (or picked from afar) comes into view.
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (selected && editing) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, [selected, editing]);
   if (!editing) return <div className="pp-block">{children}</div>;
   return (
     <div
+      ref={ref}
       className="pp-block"
       data-block={block.id}
       onMouseEnter={() => setHover(true)}
@@ -157,7 +161,7 @@ function RenderBlockView({ block, ctx }: { block: RenderBlock; ctx: BlockContext
       <div style={{ width: `${pct}%`, minWidth: ctx.compact ? 0 : 200, maxWidth: '100%' }}>
         {/* On a slide the picture fits the screen's height too. */}
         <PlayCanvas slotId={block.id} source={ctx.sources.get(block.source)} aspect={block.aspect} pointer={block.pointer} startTime={block.startTime} paused={block.paused} active={ctx.active} sandbox={ctx.sandbox}
-          style={ctx.large ? { maxWidth: `calc(64vh * ${aspectRatio(block.aspect)})`, margin: '0 auto' } : undefined} />
+          style={ctx.large ? { maxWidth: `calc(52vh * ${aspectRatio(block.aspect)})`, margin: '0 auto' } : undefined} />
       </div>
       {block.caption && <figcaption style={{ width: `${pct}%`, maxWidth: '100%', color: tk.text.muted, font: `500 13px/1.45 ${fontFamily.ui}`, textAlign: 'center' }}>{block.caption}</figcaption>}
     </figure>

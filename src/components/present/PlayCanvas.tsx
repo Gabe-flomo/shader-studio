@@ -122,6 +122,11 @@ export function PlayCanvas({ slotId, source, aspect, pointer, startTime, paused,
       {live && framed && frameHtml && (
         <iframe title={source?.title ?? 'Play'} sandbox="allow-scripts" srcDoc={frameHtml} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0, pointerEvents: pointer ? 'auto' : 'none' }} />
       )}
+      {live && framed && (
+        <span title="This presentation came from a file, so its Script layers are someone else's code: they run in a sealed-off frame with no access to Playfield." style={{ position: 'absolute', top: 10, left: 10, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 7, background: alpha('#0b0b10', 0.7), color: alpha('#ffffff', 0.85), font: `600 11px ${fontFamily.ui}`, pointerEvents: 'auto' }}>
+          <Icon name="lock" size={12} />Sandboxed
+        </span>
+      )}
       {!source && note('warning', 'Its source was removed from this presentation.')}
       {source && limits.length > 0 && note('warning', `Still frame: the web player can’t run ${limits.join(', ')} yet.`)}
       {source && runnable && wanted && slot === 'waiting' && note('pause', 'Paused to keep the page light: other canvases are running.', (

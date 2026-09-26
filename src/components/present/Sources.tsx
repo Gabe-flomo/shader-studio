@@ -61,9 +61,9 @@ export function SourcePicker({ anchorRef, compact, onPick, onClose }: { anchorRe
   };
   const caps: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint, padding: '10px 12px 4px' };
   const body = (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, maxHeight: compact ? '70dvh' : 'min(70vh, 600px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: compact ? '70dvh' : 'min(64vh, 540px)' }}>
       {sources.length > 0 && (
-        <div style={{ flexShrink: 0, maxHeight: '40%', overflowY: 'auto', borderBottom: `1px solid ${tk.border.subtle}`, paddingBottom: 6 }}>
+        <div style={{ flexShrink: 0, maxHeight: compact ? '26dvh' : 176, overflowY: 'auto', borderBottom: `1px solid ${tk.border.subtle}`, paddingBottom: 6 }}>
           <div style={caps}>In this presentation</div>
           {sources.map(s => <SourceRow key={s.id} s={s} onPick={() => { onPick(s); onClose(); }} />)}
         </div>

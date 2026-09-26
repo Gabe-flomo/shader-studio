@@ -20,9 +20,9 @@ import { exportPresentationFile, fileBase } from './presentationFiles';
 
 /** KaTeX's stylesheet with its fonts (woff2) inlined as data URLs, so the exported page needs nothing else. */
 async function katexCssInline(): Promise<string> {
-  const { default: href } = await import('katex/dist/katex.min.css?url');
-  const css = await (await fetch(href)).text();
-  const base = new URL(href, location.href);
+  // The stylesheet as built (its font URLs point at this app's copies of the fonts).
+  const { default: css } = await import('katex/dist/katex.min.css?inline');
+  const base = new URL(location.href);
   const fonts = new Map<string, string>();
   for (const m of css.matchAll(/url\(([^)]+\.woff2)\)/g)) {
     const u = m[1].replace(/["']/g, '');
@@ -33,7 +33,7 @@ async function katexCssInline(): Promise<string> {
     fonts.set(u, `data:font/woff2;base64,${btoa(bin)}`);
   }
   // Only the woff2 fonts: drop the woff / ttf fallbacks.
-  return css.replace(/url\(([^)]+)\)\s*format\(["']?(woff|truetype)["']?\)\s*,?/g, '').replace(/,\s*;/g, ';').replace(/url\(([^)]+\.woff2)\)/g, (_m, u: string) => `url(${fonts.get(u.replace(/["']/g, '')) ?? u})`);
+  return css.replace(/url\(([^)]+)\)\s*format\(["']?(woff|truetype)["']?\)\s*,?/g, '').replace(/,\s*([;}])/g, '$1').replace(/url\(([^)]+\.woff2)\)/g, (_m, u: string) => `url(${fonts.get(u.replace(/["']/g, '')) ?? u})`);
 }
 
 export function ExportDialog({ onClose }: { onClose: () => void }) {
@@ -74,7 +74,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
           One HTML file with everything in it: the steps, the maths, every picture and its controls. Put it on any website or open it from your computer; nothing else to host.
         </div>
         <div>{label('Layout')}<Segmented fill ariaLabel="Layout" value={layout} onChange={setLayout} options={[{ value: 'slides', label: 'Slides', sub: 'one step at a time' }, { value: 'scroll', label: 'Scroll', sub: 'one long page' }]} /></div>
-        <div>{label('Maths')}<Segmented fill ariaLabel="Maths" value={math} onChange={setMath} options={[{ value: 'mathml', label: 'MathML', sub: 'small, the browser draws it' }, { value: 'html', label: 'KaTeX', sub: 'same everywhere, ~300 KB more' }]} /></div>
+        <div>{label('Maths')}<Segmented fill ariaLabel="Maths" value={math} onChange={setMath} options={[{ value: 'mathml', label: 'MathML', sub: 'small, the browser draws it' }, { value: 'html', label: 'KaTeX', sub: 'same everywhere, ~360 KB more' }]} /></div>
         {notes.length > 0 && (
           <div style={{ padding: '10px 12px', borderRadius: radius.lg, background: tk.bg.field, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: tk.status.warningText, font: `650 12px ${fontFamily.ui}` }}><Icon name="warning" size={13} />What the page leaves behind</div>
