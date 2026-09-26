@@ -26,6 +26,8 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { groupNodesByRank, estimateNodeHeight } from '../store/graphLayout';
 import { translateToStudio, dialectLabel } from '../glsl/dialects';
 import { threadGlobals } from './threadGlobals';
+import { stripComments } from '../glsl/comments';
+import { ES3_INTEGER, ES3_INTEGER_NOTE } from '../glsl/dialects';
 import type { ConstantsItem } from '../nodes/definitions/constants';
 import { ALWAYS_HELPERS_GLSL } from '../compiler/shaderAssembler';
 
@@ -933,7 +935,10 @@ function hostToOurs(source: string, report: ConversionReport): { code: string; t
   // are expanded the way the preprocessor would: arguments substituted, the result rescanned, so a macro
   // may use another. A comment after the value is a comment, not part of it; a bare flag stays for #ifdef.
   // Comments go (newlines kept, so lines still map): a commented-out #define or a name in prose is not code.
-  s = s.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' ')).replace(/\/\/[^\n]*/g, '');
+  s = stripComments(s);
+  // Integer features of GLSL ES 3.00 (uint, uvec, bit shifts, `U` and hex literals) have no ES 1.00 form:
+  // the shader can't run here at all, so say so instead of failing on a stray token.
+  if (ES3_INTEGER.test(s)) report.unsupported.push(ES3_INTEGER_NOTE);
   const macros = collectMacros(s);
   s = macros.stripped;
   if (macros.defs.length) s = expandMacros(s, macros.defs);

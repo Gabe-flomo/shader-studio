@@ -45,7 +45,7 @@ export function validateGraph(nodes: GraphNode[]): ValidationResult {
       // exprNode/expr/customFn store actual output type in params.outputType —
       // the socket always declares 'vec3' as a placeholder, so read the real type here.
       const sourceOutputType: string | undefined =
-        (sourceNode.type === 'exprNode' || sourceNode.type === 'expr' || sourceNode.type === 'customFn')
+        (sourceNode.type === 'exprNode' || sourceNode.type === 'expr' || sourceNode.type === 'customFn') && input.connection.outputKey === 'result'
           ? ((sourceNode.params?.outputType as string | undefined) ??
              sourceNode.outputs[input.connection.outputKey]?.type)
           : (sourceNode.outputs[input.connection.outputKey]?.type ??

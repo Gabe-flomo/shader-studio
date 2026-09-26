@@ -11,6 +11,7 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Toggle } from '../ui/Choice';
 import { Field, TypeSelect } from '../ui/Field';
+import { Chip } from '../ui/Chip';
 import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
 import { Select } from '../ui/Select';
@@ -89,6 +90,20 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const lines: WarpLine[]        = (node.params.lines as WarpLine[] | undefined) ?? [];
   const result: string           = (node.params.result as string | undefined) ?? 'p';
   const outputType: DataType     = (node.params.outputType as DataType | undefined) ?? 'float';
+  // Exposed locals: inputs and typed line variables the block also outputs.
+  const exposed = (node.params.outputs as string[] | undefined) ?? [];
+  const candidates = useMemo(() => {
+    const out: Array<{ name: string; type: DataType }> = [];
+    for (const i of (node.params.inputs as Array<{ name: string; type: DataType }> | undefined) ?? []) if (i.name && !out.some(o => o.name === i.name)) out.push({ name: i.name, type: i.type });
+    for (const l of (node.params.lines as Array<{ lhs: string }> | undefined) ?? []) { const m = /^\s*(float|vec[234])\s+([A-Za-z_]\w*)/.exec(l.lhs); if (m && !out.some(o => o.name === m[2])) out.push({ name: m[2], type: m[1] as DataType }); }
+    return out.filter(o => o.name !== 'result');
+  }, [node.params.inputs, node.params.lines]);
+  const exposedOutputs = (names: string[]) => names.map(n => candidates.find(c => c.name === n)).filter((c): c is { name: string; type: DataType } => !!c);
+  const toggleExposed = (name: string) => {
+    const next = exposed.includes(name) ? exposed.filter(n => n !== name) : [...exposed, name];
+    updateNodeParams(node.id, { outputs: next });
+    updateNodeSockets(node.id, (node.params.inputs as Array<{ name: string; type: DataType; slider: { min: number; max: number } | null }> | undefined) ?? [], outputType, exposedOutputs(next));
+  };
   const label = typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Expression Block';
 
   const [autoWrap, setAutoWrap]             = useState(false);
@@ -138,7 +153,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
 
   const setInputs = (next: InputDef[], extra: Record<string, unknown> = {}) => {
     updateNodeParams(node.id, { inputs: next, ...extra });
-    updateNodeSockets(node.id, next, outputType);
+    updateNodeSockets(node.id, next, outputType, exposedOutputs(exposed));
   };
 
   const addInput = () => setInputs([...customInputs, { name: `in${customInputs.length}`, type: 'float', slider: null }]);
@@ -163,7 +178,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
 
   const changeOutputType = (type: DataType) => {
     updateNodeParams(node.id, { outputType: type });
-    updateNodeSockets(node.id, customInputs, type);
+    updateNodeSockets(node.id, customInputs, type, exposedOutputs(exposed));
   };
 
   // ── Lines management ───────────────────────────────────────────────────────
@@ -192,7 +207,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
       slider: null,
     }));
     updateNodeParams(node.id, { inputs: migrated });
-    updateNodeSockets(node.id, migrated, outputType);
+    updateNodeSockets(node.id, migrated, outputType, exposedOutputs(exposed));
   };
 
   // Auto-import existing sockets into params.inputs when the modal first opens
@@ -406,6 +421,17 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
               />
             </div>
             <Note>The final expression of type {outputType} that the block outputs.</Note>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <SectionLabel meta="more sockets">Also outputs</SectionLabel>
+            <Note>Any input or line variable can be an output socket too, as it is after the lines ran.</Note>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {candidates.length === 0 && <Note>Name a variable in a line (`float d = …`) to expose it.</Note>}
+              {candidates.map(c => (
+                <Chip key={c.name} mono active={exposed.includes(c.name)} dot={TYPE_COLORS[c.type] ?? tk.text.faint} title={`${c.type} · click to ${exposed.includes(c.name) ? 'stop exposing' : 'expose'} it`} onClick={() => toggleExposed(c.name)}>{c.name}</Chip>
+              ))}
+            </div>
           </div>
         </div>
 

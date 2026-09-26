@@ -163,6 +163,8 @@ Feature documentation lives in `docs/`:
 | [`docs/iterated-groups.md`](docs/iterated-groups.md) | `carryMode` and `assignOp` — per-node feedback and accumulation inside iterated groups |
 | [`docs/glsl-to-nodes.md`](docs/glsl-to-nodes.md) | The Convert page: pasted GLSL (Shadertoy, GLSL Sandbox, twigl, ES 3.00) to a node graph, loops as iterated groups, the render-equivalence check, the optimise-graph pass |
 | [`docs/input-expressions.md`](docs/input-expressions.md) | A one-line expression on a float input (`input * 2.0 + sin(t)`) that leaves the raw input keyframeable; how the optimiser writes them |
+| [`docs/multi-output-nodes.md`](docs/multi-output-nodes.md) | Custom Functions with extra `out`-style outputs, Expression Blocks that expose their variables as sockets |
+| [`docs/cloner-layer.md`](docs/cloner-layer.md) | Design for a Play Cloner layer: copies of a layer in a grid, ring, line or path, varied by index, shaped by null and shape effectors (not built) |
 | [`docs/constants-node.md`](docs/constants-node.md) | The Constants card: named values, fixed or with sliders, outputs only, Play-controllable |
 | [`docs/playfield-sdk.md`](docs/playfield-sdk.md) | The SDK / add-on idea: layers, mappings and feeds as installable extensions (a write-up, not built) |
 

@@ -794,16 +794,36 @@ export const ExprBlockNode: NodeDefinition = {
       }
     }
 
+    // Exposed locals: an input or a line's variable named in params.outputs is also an output socket,
+    // copied out of the block after the lines ran. Its type is the input's, the line's typed lhs, or the block's.
+    const exposed = ((node.params.outputs as string[] | undefined) ?? []).filter(n => /^[A-Za-z_]\w*$/.test(n) && n !== 'result');
+    const localType = (name: string): string => {
+      const inp = Array.isArray(dynamicInputs) ? dynamicInputs.find(i => i.name === name) : undefined;
+      if (inp) return inp.type;
+      for (const l of Array.isArray(lines) ? lines : []) { const m = /^\s*(float|vec[234]|int|bool)\s+(\w+)/.exec(l.lhs); if (m && m[2] === name) return m[1]; }
+      return outType;
+    };
+    const exposedDecls: string[] = [];
+    const exposedCopies: string[] = [];
+    const extraVars: Record<string, string> = {};
+    for (const name of exposed) {
+      const v = `${id}_${name}`; extraVars[name] = v;
+      exposedDecls.push(`    ${localType(name)} ${v};\n`);
+      exposedCopies.push(`        ${v} = ${name};\n`);
+    }
+
     const code = [
       `    ${outType} ${outVar};\n`,
+      ...exposedDecls,
       `    {\n`,
       ...decls,
       ...stmts,
+      ...exposedCopies,
       ...carryWritebacks,
       `    }\n`,
     ].join('');
 
-    return { code, outputVars: { result: outVar } };
+    return { code, outputVars: { result: outVar, ...extraVars } };
   },
 };
 
@@ -832,6 +852,16 @@ export const CustomFnNode: NodeDefinition = {
       const escaped = inp.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       body = body.replace(new RegExp(`\\b${escaped}\\b`, 'g'), glslVar);
     }
+    // Extra outputs: like GLSL `out` parameters. The body assigns them by name; each is a socket.
+    const extras = ((node.params.outputs as Array<{ name: string; type: string }> | undefined) ?? []).filter(o => /^[A-Za-z_]\w*$/.test(o.name) && o.name !== 'result');
+    const extraDecls: string[] = [];
+    const extraVars: Record<string, string> = {};
+    for (const o of extras) {
+      const v = `${node.id}_${o.name}`;
+      extraVars[o.name] = v;
+      extraDecls.push(`    ${o.type} ${v} = ${o.type === 'float' ? '0.0' : `${o.type}(0.0)`};\n`);
+      body = body.replace(new RegExp(`\\b${o.name}\\b`, 'g'), v);
+    }
     const trimmed = body.trim();
     // A lone expression, or a lone `return X;`, is inlined as the result.
     const single = /^return\b\s*([\s\S]*?);?\s*$/.exec(trimmed);
@@ -849,7 +879,7 @@ export const CustomFnNode: NodeDefinition = {
       const indented = rewritten.split('\n').map(l => `            ${l}`).join('\n');
       code = `    ${outType} ${outVar} = ${zero};\n    for (int ${node.id}_once = 0; ${node.id}_once < 1; ${node.id}_once++) {\n${indented}\n    }\n`;
     }
-    return { code, outputVars: { result: outVar } };
+    return { code: extraDecls.join('') + code, outputVars: { result: outVar, ...extraVars } };
   },
 };
 

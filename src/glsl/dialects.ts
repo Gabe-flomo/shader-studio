@@ -53,6 +53,10 @@ function closeOf(src: string, open: number): number {
 /** Whole-word rename, leaving member accesses (`.time`) alone. */
 const renameWord = (src: string, from: string, to: string) => src.replace(new RegExp(`(?<![\\w.])${from}\\b`, 'g'), to);
 
+/** GLSL ES 3.00 integer features with no ES 1.00 form: uint / uvec types, bit shifts, `U` and hex literals. */
+export const ES3_INTEGER = /\b(uint|uvec[234]|usampler2D|isampler2D)\b|\b\d+[uU]\b|\b0x[0-9a-fA-F]+[uU]?\b|<<|>>/;
+export const ES3_INTEGER_NOTE = 'Uses uint / bit operations (GLSL ES 3.00 integer features). Playfield compiles GLSL ES 1.00, where they don’t exist; a hash written with floats (fract(sin(dot(…))·k)) runs here.';
+
 export interface TranslateOptions {
   /**
    * Lower an early `return;` in a Shadertoy mainImage to straight-line math
@@ -141,6 +145,7 @@ export function translateToStudio(source: string, options: TranslateOptions = {}
     }
     if (renamed.length) notes.push(`${[...new Set(renamed)].join(', ')} → ours`);
   }
+  if (ES3_INTEGER.test(s.replace(/\/\/[^\n]*/g, ''))) unsupported.push(ES3_INTEGER_NOTE);
 
   // ── GLSL Sandbox ──────────────────────────────────────────────────────────
   if (dialect === 'glslsandbox') {

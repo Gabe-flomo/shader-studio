@@ -223,7 +223,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
   const tc = useCtp();
   const tk = useTokens();
   const inputEntries  = Object.entries(def.inputs);
-  const outputEntries = Object.entries(def.outputs);
+  const outputEntries = Object.entries(Object.keys(node.outputs).length ? node.outputs : def.outputs);
 
   function getInputInfo(k: string, type: string): React.ReactNode {
     const sock = node.inputs[k];

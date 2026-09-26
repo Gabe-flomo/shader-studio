@@ -25,7 +25,20 @@ const PRECISION = '(?:(?:highp|mediump|lowp)\\s+)?';
 const matchBrace = (s: string, open: number): number => { let d = 0; for (let i = open; i < s.length; i++) { if (s[i] === '{') d++; else if (s[i] === '}' && --d === 0) return i; } return -1; };
 const matchParen = (s: string, open: number): number => { let d = 0; for (let i = open; i < s.length; i++) { if (s[i] === '(') d++; else if (s[i] === ')' && --d === 0) return i; } return -1; };
 /** Comments blanked (same length), so names inside them don't count and offsets still line up. */
-const blankComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' ')).replace(/\/\/[^\n]*/g, m => ' '.repeat(m.length));
+function blankComments(s: string): string {
+  let out = '';
+  for (let i = 0; i < s.length;) {
+    const c = s[i], n = s[i + 1];
+    if (c === '/' && n === '/') { while (i < s.length && s[i] !== '\n') { out += ' '; i++; } continue; }
+    if (c === '/' && n === '*') {
+      out += '  '; i += 2;
+      while (i < s.length && !(s[i] === '*' && s[i + 1] === '/')) { out += s[i] === '\n' ? '\n' : ' '; i++; }
+      out += '  '; i += 2; continue;
+    }
+    out += c; i++;
+  }
+  return out;
+}
 
 function functions(s: string): Fn[] {
   const out: Fn[] = [];
@@ -65,8 +78,8 @@ export function threadGlobals(source: string): ThreadResult {
       const word = new RegExp(`(?<![\\w.])${name}\\b`, 'g');
       const assigns = new RegExp(`(?<![\\w.])${name}(\\.[xyzwrgba]+)?\\s*([-+*/]?=(?!=)|\\+\\+|--)|(\\+\\+|--)\\s*${name}\\b`, 'g');
       const readers = fns.filter(f => f.name !== 'main' && word.test(s.slice(f.bodyOpen, f.bodyClose)));
-      if (!readers.length) continue; // only main uses it: a local already, once it moves
       if (readers.some(f => assigns.test(s.slice(f.bodyOpen, f.bodyClose)))) continue; // a helper writes it: real shared state
+      // Only main uses it: it simply becomes a local of main.
       // Callers of readers need it too, transitively (overloads share a name, so all get it).
       const need = new Set(readers.map(f => f.name));
       for (let grew = true; grew;) {
@@ -96,7 +109,7 @@ export function threadGlobals(source: string): ThreadResult {
       let next = code;
       for (const e of edits) next = next.slice(0, e.at) + e.text + next.slice(e.at + e.del);
       code = next;
-      notes.push(`Global ${name} passed to ${[...need].join(', ')} as a parameter`);
+      notes.push(need.size ? `Global ${name} passed to ${[...need].join(', ')} as a parameter` : `Global ${name} made a local of main()`);
       done = true;
       break; // offsets changed: rescan
     }

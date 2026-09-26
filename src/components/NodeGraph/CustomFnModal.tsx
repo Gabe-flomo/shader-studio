@@ -39,6 +39,11 @@ export function CustomFnModal({ node, onClose }: Props) {
   // Read current params
   const customInputs = (node.params.inputs as Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>) || [];
   const outputType   = (node.params.outputType as DataType) || 'float';
+  const extraOutputs = ((node.params.outputs as Array<{ name: string; type: DataType }> | undefined) ?? []);
+  const setExtraOutputs = (next: Array<{ name: string; type: DataType }>) => {
+    updateNodeParams(node.id, { outputs: next });
+    updateNodeSockets(node.id, customInputs, outputType, next.filter(o => /^[A-Za-z_]\w*$/.test(o.name)));
+  };
   const body         = typeof node.params.body === 'string' ? node.params.body : '0.0';
   const glslFns      = typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : '';
   const labelParam   = typeof node.params.label === 'string' ? node.params.label : 'Custom Function';
@@ -141,19 +146,19 @@ export function CustomFnModal({ node, onClose }: Props) {
     const newName = `in${customInputs.length}`;
     const next = [...customInputs, { name: newName, type: 'float' as DataType, slider: null as { min: number; max: number } | null }];
     updateNodeParams(node.id, { inputs: next });
-    updateNodeSockets(node.id, next, outputType);
+    updateNodeSockets(node.id, next, outputType, extraOutputs);
   };
 
   const removeInput = (idx: number) => {
     const next = customInputs.filter((_, i) => i !== idx);
     updateNodeParams(node.id, { inputs: next });
-    updateNodeSockets(node.id, next, outputType);
+    updateNodeSockets(node.id, next, outputType, extraOutputs);
   };
 
   const updateInputName = (idx: number, name: string) => {
     const next = customInputs.map((inp, i) => i === idx ? { ...inp, name } : inp);
     updateNodeParams(node.id, { inputs: next });
-    updateNodeSockets(node.id, next, outputType);
+    updateNodeSockets(node.id, next, outputType, extraOutputs);
   };
 
   const updateInputType = (idx: number, type: DataType) => {
@@ -162,7 +167,7 @@ export function CustomFnModal({ node, onClose }: Props) {
       i === idx ? { ...inp, type, slider: type !== 'float' ? null : inp.slider } : inp
     );
     updateNodeParams(node.id, { inputs: next });
-    updateNodeSockets(node.id, next, outputType);
+    updateNodeSockets(node.id, next, outputType, extraOutputs);
   };
 
   const toggleSlider = (idx: number) => {
@@ -175,7 +180,7 @@ export function CustomFnModal({ node, onClose }: Props) {
     }
     const next = customInputs.map((c, i) => i === idx ? { ...c, slider: newSlider } : c);
     updateNodeParams(node.id, { inputs: next, ...extraParams });
-    updateNodeSockets(node.id, next, outputType);
+    updateNodeSockets(node.id, next, outputType, extraOutputs);
   };
 
   const updateSliderRange = (idx: number, field: 'min' | 'max', val: number) => {
@@ -184,12 +189,12 @@ export function CustomFnModal({ node, onClose }: Props) {
     const newSlider = { ...oldSlider, [field]: val };
     const next = customInputs.map((c, i) => i === idx ? { ...c, slider: newSlider } : c);
     updateNodeParams(node.id, { inputs: next });
-    updateNodeSockets(node.id, next, outputType);
+    updateNodeSockets(node.id, next, outputType, extraOutputs);
   };
 
   const changeOutputType = (type: DataType) => {
     updateNodeParams(node.id, { outputType: type });
-    updateNodeSockets(node.id, customInputs, type);
+    updateNodeSockets(node.id, customInputs, type, extraOutputs);
   };
 
   const smallField: React.CSSProperties = {
@@ -262,6 +267,18 @@ export function CustomFnModal({ node, onClose }: Props) {
               <TypeSelect value={outputType} options={TYPE_OPTIONS} onChange={t => changeOutputType(t as DataType)} ariaLabel="Return type" />
               <Note>The body’s result becomes the node’s output.</Note>
             </div>
+          </Section>
+
+          <Section label="Also outputs">
+            <Note>Like GLSL <code>out</code> parameters: assign these by name in the body and each becomes an output socket (they start at zero).</Note>
+            {extraOutputs.map((o, idx) => (
+              <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 104px 32px', gap: 8, alignItems: 'center' }}>
+                <Field mono value={o.name} onChange={e => setExtraOutputs(extraOutputs.map((x, j) => j === idx ? { ...x, name: e.target.value.replace(/[^A-Za-z0-9_]/g, '') } : x))} placeholder="name" spellCheck={false} aria-label={`Output ${idx + 1} name`} />
+                <TypeSelect value={o.type} options={TYPE_OPTIONS} onChange={t => setExtraOutputs(extraOutputs.map((x, j) => j === idx ? { ...x, type: t as DataType } : x))} ariaLabel={`Output ${idx + 1} type`} />
+                <IconButton icon="close" label="Remove output" size="sm" tone="danger" tooltip={false} onClick={() => setExtraOutputs(extraOutputs.filter((_, j) => j !== idx))} />
+              </div>
+            ))}
+            <AddRow onClick={() => setExtraOutputs([...extraOutputs, { name: `out${extraOutputs.length + 1}`, type: 'float' }])}>Add output</AddRow>
           </Section>
 
           <Section label="Body" grow>

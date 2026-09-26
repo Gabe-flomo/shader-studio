@@ -666,7 +666,9 @@ interface NodeGraphState {
   updateNodeSockets: (
     nodeId: string,
     inputs: Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>,
-    outputType: DataType
+    outputType: DataType,
+    /** Further outputs besides `result` (a Custom Function's out values, an Expression Block's exposed locals). */
+    extraOutputs?: Array<{ name: string; type: DataType }>,
   ) => void;
   /** Rewrite a Constants card's entries: params, output sockets, and wires to outputs that went away. One undo step. */
   setConstantsItems: (nodeId: string, items: ConstantsItem[]) => void;
@@ -4337,8 +4339,16 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
-  updateNodeSockets: (nodeId, inputDefs, outputType) => {
+  updateNodeSockets: (nodeId, inputDefs, outputType, extraOutputs = []) => {
     undoManager.push(get().nodes);
+    const outputs: Record<string, { type: DataType; label: string }> = { result: { type: outputType, label: 'Result' } };
+    for (const o of extraOutputs) if (o.name && o.name !== 'result' && !outputs[o.name]) outputs[o.name] = { type: o.type, label: o.name };
+    /** A wire into an output that went away is dropped. */
+    const pruneReaders = (list: import('../types/nodeGraph').GraphNode[]) => list.map(n => {
+      let changed = false; const inputs = { ...n.inputs };
+      for (const [k, sck] of Object.entries(inputs)) if (sck.connection?.nodeId === nodeId && !outputs[sck.connection.outputKey]) { inputs[k] = { ...sck, connection: undefined }; changed = true; }
+      return changed ? { ...n, inputs } : n;
+    });
 
     const buildUpdatedNode = (n: import('../types/nodeGraph').GraphNode): import('../types/nodeGraph').GraphNode => {
       const newInputs: Record<string, InputSocket> = {};
@@ -4362,13 +4372,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           };
         }
       }
-      return { ...n, inputs: newInputs, outputs: { result: { type: outputType, label: 'Result' } } };
+      return { ...n, inputs: newInputs, outputs };
     };
 
     set(state => {
       // Top-level node
       if (state.nodes.some(n => n.id === nodeId)) {
-        return { nodes: state.nodes.map(n => n.id === nodeId ? buildUpdatedNode(n) : n) };
+        return { nodes: pruneReaders(state.nodes.map(n => n.id === nodeId ? buildUpdatedNode(n) : n)) };
       }
       // Subgraph node (inside active group)
       const groupId = state.activeGroupId;

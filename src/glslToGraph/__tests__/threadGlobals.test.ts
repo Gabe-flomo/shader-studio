@@ -35,11 +35,13 @@ describe('threadGlobals', () => {
     expect(code).toContain('// set in main');
   });
 
-  it('leaves a global a helper writes, and one only main uses, as they are', () => {
+  it('leaves a global a helper writes alone, and makes one only main uses a local of main', () => {
     const shared = 'float acc = 0.0;\nvoid bump() { acc += 1.0; }\nvoid main() { bump(); gl_FragColor = vec4(acc); }';
     expect(threadGlobals(shared)).toEqual({ code: shared, notes: [] });
     const local = 'float a;\nvoid main() { a = 1.0; gl_FragColor = vec4(a); }';
-    expect(threadGlobals(local).notes).toEqual([]);
+    const t = threadGlobals(local);
+    expect(t.notes).toEqual(['Global a made a local of main()']);
+    expect(t.code).toBe('\nvoid main() { float a; a = 1.0; gl_FragColor = vec4(a); }');
   });
 
   it('lets the converter take a Shadertoy-style shader with a global set in main', () => {
