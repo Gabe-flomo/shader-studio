@@ -137,7 +137,7 @@ export const MarchCameraNode: NodeDefinition = {
     camAngle:     { label: 'Angle',      type: 'float' as const, min: 0.0,  max: 6.28, step: 0.02, hint: 'Horizontal orbit angle (radians) around Y axis.' },
     camElevation: { label: 'Elevation',  type: 'float' as const, min: -1.5, max: 1.5,  step: 0.02, hint: 'Vertical angle: 0 = horizon, positive = above, negative = below.' },
     rotSpeed:     { label: 'Rot Speed',  type: 'float' as const, min: 0.0,  max: 2.0,  step: 0.01, hint: 'Auto-rotation speed. 0 = static.' },
-    fov:          { label: 'FOV',        type: 'float' as const, min: 0.5,  max: 3.14, step: 0.05, hint: 'Field of view. Higher = wider angle.' },
+    fov:          { label: 'FOV',        type: 'float' as const, min: 0.5,  max: 3.14, step: 0.05, hint: 'How far the screen sits in front of the camera, like a lens length. Higher = narrower view (zoomed in), lower = wider angle.' },
     targetX:      { label: 'Target X',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'X position of the look-at target.' },
     targetY:      { label: 'Target Y',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'Y position of the look-at target.' },
     targetZ:      { label: 'Target Z',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'Z position of the look-at target.' },

@@ -2439,11 +2439,13 @@ export class ShaderAssembler {
             `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
             `    }\n`,
           ] : [
-            // Standard raymarching: hit detection + stepScale
+            // Standard raymarching: hit detection + stepScale.
+            // si starts at Max Steps: a ray that neither hits nor passes Max
+            // Dist has used every step, so Iter reads 1 there, not 0.
             accumDecls,
             jitterDecl,
             `    float ${nodeSlug}_hit = 0.0;\n`,
-            `    int   ${nodeSlug}_si  = 0;\n`,
+            `    int   ${nodeSlug}_si  = ${mlMaxSteps};\n`,
             `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
             `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
             `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
@@ -3170,10 +3172,11 @@ export class ShaderAssembler {
             `        if (${nodeSlug}_t > ${mlMaxDist}) { ${nodeSlug}_si = ${nodeSlug}_i; break; }\n`,
             `    }\n`,
           ] : [
+            // si starts at Max Steps: a ray that runs out of steps used them all.
             accumDecls,
             jitterDecl,
             `    float ${nodeSlug}_hit = 0.0;\n`,
-            `    int   ${nodeSlug}_si  = 0;\n`,
+            `    int   ${nodeSlug}_si  = ${mlMaxSteps};\n`,
             `    for (int ${nodeSlug}_i = 0; ${nodeSlug}_i < ${mlMaxSteps}; ${nodeSlug}_i++) {\n`,
             `        vec3  ${nodeSlug}_rp_raw = ${mlRo} + ${nodeSlug}_t * ${mlRd};\n`,
             `        vec3  ${nodeSlug}_rp = ${warpPos(`${nodeSlug}_rp_raw`, `${nodeSlug}_t`)};\n`,
