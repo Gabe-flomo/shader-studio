@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions';
 import { NodeComponent } from './NodeComponent';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { CanvasToolbar } from '../shell/CanvasToolbar';
@@ -156,7 +156,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
 
   // When inside a group, previewNodeId may refer to a subgraph node not in top-level `nodes`
   const previewNode  = previewNodeId ? (nodes.find(n => n.id === previewNodeId) ?? displayNodes.find(n => n.id === previewNodeId)) : null;
-  const previewDef   = previewNode ? getNodeDefinition(previewNode.type) : null;
+  const previewDef   = previewNode ? getNodeDefinitionFor(previewNode) : null;
   const previewStats = useNodeGraphStore(s => s.previewStats);
   const previewCaption = previewNode ? (explainPreview(previewNode, previewDef ?? undefined, previewStats) ?? previewLegend(previewNode, previewDef ?? undefined)) : null;
   const previewLabel = previewDef
@@ -625,7 +625,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     }
     const srcNode = displayNodes.find(n => n.id === dragConnection.sourceNodeId);
     if (!srcNode) return null;
-    const srcDef = getNodeDefinition(srcNode.type);
+    const srcDef = getNodeDefinitionFor(srcNode);
     return (srcNode.outputs[dragConnection.sourceOutputKey]?.type ??
       srcDef?.outputs[dragConnection.sourceOutputKey]?.type ?? null) as import('../../types/nodeGraph').DataType | null;
   }, [dragConnection, displayNodes, activeSubgraph]);
@@ -824,7 +824,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
       nodes: displayNodes,
       from: smartConnect,
       socketPos: socketWorld,
-      labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type,
+      labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinitionFor(n)?.label || n.type,
     });
   }, [smartConnect, displayNodes, socketWorld]);
   // New nodes worth adding and wiring straight to the clicked socket (see quickAdds.ts)
@@ -882,7 +882,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
       }
       const suggestions = suggestConnections({
         nodes: displayNodesRef.current, from: { nodeId, key, dir: 'out' }, socketPos: socketWorld,
-        labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type,
+        labelOf: n => (typeof n.params?.label === 'string' && n.params.label) || getNodeDefinitionFor(n)?.label || n.type,
       });
       const rect = canvasRef.current?.getBoundingClientRect();
       if (suggestions.length === 0 || !rect) return;
@@ -963,7 +963,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         return getActiveNodes(useNodeGraphStore.getState().nodes, activeGroupPath)?.find(n => n.id === newNodeId);
       })();
     if (!newNode) return;
-    const newDef = getNodeDefinition(newNode.type);
+    const newDef = getNodeDefinitionFor(newNode);
     if (!newDef) return;
 
     if (pendingSocket.dir === 'in') {
@@ -1399,12 +1399,12 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             const canGroup = ids.length >= 2 && activeGroupPath.length < 2;
             // Wires this node used to have (disconnected or replaced this session) that can come back.
             const pastWires = clickedNode ? useNodeGraphStore.getState().pastWiresFor(clickedNode.id, displayNodes) : [];
-            const nameOf = (n: import('../../types/nodeGraph').GraphNode) => (typeof n.params.label === 'string' && n.params.label.trim()) || getNodeDefinition(n.type)?.label || n.type;
+            const nameOf = (n: import('../../types/nodeGraph').GraphNode) => (typeof n.params.label === 'string' && n.params.label.trim()) || getNodeDefinitionFor(n)?.label || n.type;
             const describeWire = (w: (typeof pastWires)[number]) => {
               const from = displayNodes.find(n => n.id === w.fromNodeId)!;
               const to = displayNodes.find(n => n.id === w.toNodeId)!;
-              const outLabel = from.outputs[w.fromOutputKey]?.label ?? getNodeDefinition(from.type)?.outputs[w.fromOutputKey]?.label ?? w.fromOutputKey;
-              const inLabel = to.inputs[w.toInputKey]?.label ?? getNodeDefinition(to.type)?.inputs[w.toInputKey]?.label ?? w.toInputKey.replace(/^__param_/, '');
+              const outLabel = from.outputs[w.fromOutputKey]?.label ?? getNodeDefinitionFor(from)?.outputs[w.fromOutputKey]?.label ?? w.fromOutputKey;
+              const inLabel = to.inputs[w.toInputKey]?.label ?? getNodeDefinitionFor(to)?.inputs[w.toInputKey]?.label ?? w.toInputKey.replace(/^__param_/, '');
               // Name the other end; this node's own socket keeps just its label.
               return w.toNodeId === clickedNode!.id
                 ? `${nameOf(from)} · ${outLabel}  →  ${inLabel}`
@@ -1725,7 +1725,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             {/* One row per output port */}
             {(activeSubgraph.outputPorts ?? []).map(port => {
               const srcNode  = displayNodes.find(n => n.id === port.fromNodeId);
-              const srcDef   = srcNode ? getNodeDefinition(srcNode.type) : null;
+              const srcDef   = srcNode ? getNodeDefinitionFor(srcNode) : null;
               const srcLabel = port.fromNodeId
                 ? (typeof srcNode?.params?.label === 'string' ? srcNode.params.label : (srcDef?.label ?? srcNode?.type ?? '?'))
                 : 'not connected';

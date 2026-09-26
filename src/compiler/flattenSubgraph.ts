@@ -29,7 +29,7 @@ import type { DataType, GraphNode, InputSocket, OutputSocket, SubgraphData } fro
 import type { UserNodeParam, UserNodePort } from '../types/userNode';
 import { ShaderAssembler } from './shaderAssembler';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
-import { getNodeDefinition } from '../nodes/definitions';
+import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { f, vec3Str } from '../nodes/definitions/helpers';
 
 /** Phantom source node id whose "outputs" are the function's input parameters. */
@@ -121,7 +121,7 @@ export function findUnsupportedNode(subgraph: SubgraphData, depth = 0): { node: 
     if (STATEFUL_TYPES.has(n.type)) return { node: n, reason: 'it reads the previous frame' };
     if (MEDIA_TYPES.has(n.type)) return { node: n, reason: 'texture, audio, video and MIDI inputs are bound per instance' };
     if (OUTPUT_TYPES.has(n.type)) return { node: n, reason: 'output nodes belong to the graph, not a node' };
-    if (!getNodeDefinition(n.type)) return { node: n, reason: `unknown node type "${n.type}"` };
+    if (!getNodeDefinitionFor(n)) return { node: n, reason: `unknown node type "${n.type}"` };
     if (n.type === 'group') {
       // The published node is itself the outer group, so a group here is
       // already level 2 — the compiler inlines at most two levels deep.

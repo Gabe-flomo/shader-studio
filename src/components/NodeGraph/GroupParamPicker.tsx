@@ -14,7 +14,7 @@
  */
 import { useCallback } from 'react';
 import type { SurfacedParam, SubgraphData } from '../../types/nodeGraph';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import type { GraphNode } from '../../types/nodeGraph';
 import { ctp } from '../../theme/palette';
@@ -145,7 +145,7 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
 
             for (const inn of innerSub.nodes) {
               if (inn.type === 'loopIndex' || inn.type === 'loopCarry') continue;
-              const innDef = getNodeDefinition(inn.type);
+              const innDef = getNodeDefinitionFor(inn);
               const innLabel = typeof inn.params.label === 'string' ? inn.params.label : (innDef?.label ?? inn.type);
 
               // ExprBlock: derive rows from dynamic slider inputs (params.inputs)
@@ -220,7 +220,7 @@ export function GroupParamPicker({ outerNode, onClose }: Props) {
           subgraph.nodes
             .filter(n => !SKIP_TYPES.has(n.type))
             .map(innerNode => {
-              const innerDef = getNodeDefinition(innerNode.type);
+              const innerDef = getNodeDefinitionFor(innerNode);
               const innerLabel = typeof innerNode.params.label === 'string'
                 ? innerNode.params.label
                 : (innerDef?.label ?? innerNode.type);

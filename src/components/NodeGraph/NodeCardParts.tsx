@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { getActiveNodes, useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 import { evaluateKeyframes, getKeyframeConfig } from '../../compiler/keyframes';
 import { RulerSlider } from '../ui/RulerSlider';
@@ -125,7 +125,7 @@ function sourceLabelOf(nodes: GraphNode[], path: string[], nodeId: string, outpu
   const scope = path.length > 0 ? (getActiveNodes(nodes, path) ?? nodes) : nodes;
   const src = scope.find(n => n.id === nodeId) ?? nodes.find(n => n.id === nodeId);
   if (!src) return null;
-  const name = (typeof src.params?.label === 'string' && src.params.label.trim()) || getNodeDefinition(src.type)?.label || src.type;
+  const name = (typeof src.params?.label === 'string' && src.params.label.trim()) || getNodeDefinitionFor(src)?.label || src.type;
   const outs = Object.keys(src.outputs);
   return outs.length > 1 ? `${name} · ${src.outputs[outputKey]?.label ?? outputKey}` : name;
 }

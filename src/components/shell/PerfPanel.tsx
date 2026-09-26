@@ -8,7 +8,7 @@ import { getPerfSnapshot, subscribePerf, getShaderCostMeasurer, type PerfSnapsho
 import { shaderShape } from '../../lib/shaderShape';
 import { measureNodeCosts, type NodeCostReport } from '../../lib/nodeCost';
 import { SKIP_UNIFORM_TYPES } from '../../compiler/uniformPatcher';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 
 /** 60 fps frame budget in ms */
@@ -83,7 +83,7 @@ function recompileTriggers(nodes: GraphNode[]): string[] {
   const out = new Map<string, number>();
   const visit = (list: GraphNode[]) => {
     for (const n of list) {
-      const def = getNodeDefinition(n.type);
+      const def = getNodeDefinitionFor(n);
       const forces = SKIP_UNIFORM_TYPES.has(n.type) || Object.values(def?.paramDefs ?? {}).some(pd => pd.compileTime);
       if (forces && def) out.set(def.label, (out.get(def.label) ?? 0) + 1);
       const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;

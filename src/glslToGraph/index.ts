@@ -24,13 +24,19 @@ import { parser, generate } from '@shaderfrog/glsl-parser';
 import { GROUP_PORT_SENTINEL, type GraphNode, type InputSocket, type DataType, type GroupInputPort, type GroupOutputPort } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { groupNodesByRank, estimateNodeHeight } from '../store/graphLayout';
+import { translateToStudio, dialectLabel } from '../glsl/dialects';
+import type { ConstantsItem } from '../nodes/definitions/constants';
+import { ALWAYS_HELPERS_GLSL } from '../compiler/shaderAssembler';
 
 type T = 'float' | 'vec2' | 'vec3' | 'vec4';
-interface Ref { nodeId: string; outputKey: string; type: T }
+interface Ref { nodeId: string; outputKey: string; type: T; /** A literal's value and, when it initialised a variable, that name. */ lit?: number; name?: string }
 /** A value in flight: a node output, or a float literal not yet spent on a slider. */
-interface Val { ref?: Ref; lit?: number; type: T; ast: Ast }
+interface Val { ref?: Ref; lit?: number; type: T; ast: Ast; /** The variable a literal initialised, so its slider can carry the name. */ name?: string }
 type Ast = Record<string, unknown> & { type: string };
-interface UserFn { name: string; ret: string; params: { name: string; type: string }[]; source: string; body: string }
+interface UserFn { name: string; ret: string; params: { name: string; type: string; qual: 'in' | 'out' | 'inout' }[]; source: string; body: string; /** Every definition under this name (overloads), this one included. */ overloads: UserFn[] }
+interface ConstDecl { name: string; type: string; init: Ast | undefined; text: string }
+/** A literal on its way to a socket: `mk` folds it into the socket's slider or makes a node for it. */
+const LIT = '__lit__';
 
 export interface ConversionOptions {
   /** Warned expressions (by `ConversionWarning.id`) to keep as Expression Blocks instead of the inexact node. */
@@ -118,26 +124,38 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   const fns = new Map<string, UserFn>();
   const uniforms = new Map<string, string>();
   const globals = new Set<string>();
+  const consts: ConstDecl[] = [];
   for (const st of ast.program) {
     if (st.type === 'function') {
       const proto = st.prototype as Ast; const header = proto.header as Ast;
       const name = ((header.name as Ast).identifier as string);
       const ret = tokenOf((header.returnType as Ast).specifier as Ast);
-      const params = ((proto.parameters as Ast[] | undefined) ?? []).map(p => ({ name: (p.identifier as Ast)?.identifier as string ?? '', type: tokenOf((p.specifier as Ast) ?? (p.declaration as Ast)) }));
+      const params = ((proto.parameters as Ast[] | undefined) ?? []).map(p => ({
+        name: (p.identifier as Ast)?.identifier as string ?? '', type: tokenOf((p.specifier as Ast) ?? (p.declaration as Ast)),
+        qual: ((((p.qualifier as Ast[] | undefined) ?? []).map(q => q.token as string).find(q => q === 'out' || q === 'inout') ?? 'in') as 'in' | 'out' | 'inout'),
+      }));
       const body = generate(st.body as never).trim().replace(/^\{/, '').replace(/\}$/, '').trim();
-      fns.set(name, { name, ret, params, source: generate(st as never), body });
+      const f: UserFn = { name, ret, params, source: generate(st as never), body, overloads: [] };
+      const prev = fns.get(name);
+      if (prev) { prev.overloads.push(f); f.overloads = prev.overloads; } else { f.overloads.push(f); fns.set(name, f); }
     } else if (st.type === 'declaration_statement') {
       const decl = st.declaration as Ast;
       const quals = ((decl.specified_type as Ast)?.qualifiers as Ast[] | undefined) ?? [];
       const isUniform = quals.some(q => (q as Ast).token === 'uniform');
+      const isConst = quals.some(q => (q as Ast).token === 'const');
       const ty = tokenOf(((decl.specified_type as Ast)?.specifier as Ast) ?? decl);
       for (const d of ((decl.declarations as Ast[] | undefined) ?? [])) {
         const n = (d.identifier as Ast).identifier as string;
-        if (isUniform) uniforms.set(n, ty); else globals.add(n);
+        if (isUniform) uniforms.set(n, ty);
+        else if (isConst) consts.push({ name: n, type: ty, init: d.initializer as Ast | undefined, text: `const ${ty} ${n} = ${generate(d.initializer as never)};` });
+        else globals.add(n);
       }
       if (decl.type === 'precision') continue;
     }
   }
+  /** The program's const declarations, as text every region carries (the assembler emits repeats once). */
+  const constText = consts.map(c => c.text).join('\n');
+  const withConsts = (helpers: string) => [constText, helpers].filter(Boolean).join('\n\n');
   for (const [u, ty] of uniforms) if (!SOURCES[u] && !['sampler2D', 'samplerCube'].includes(ty)) report.unsupported.push(`Uniform ${ty} ${u} has no source node (only time, resolution, mouse, fragCoord are known)`);
   for (const [u, ty] of uniforms) if (['sampler2D', 'samplerCube'].includes(ty)) report.unsupported.push(`Texture ${u}: textures can't be imported yet`);
   if (globals.size) report.unsupported.push(`Global variables (${[...globals].join(', ')}) aren't supported yet`);
@@ -147,9 +165,28 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
 
   // ── Node making ────────────────────────────────────────────────────────────
   const sourceRefs = new Map<string, Ref>();
-  function mk(type: string, params: Record<string, unknown>, wires: Record<string, Ref | undefined>, sockets?: { inputs: Record<string, InputSocket>; outputs: GraphNode['outputs'] }): GraphNode {
+  function mk(type: string, params: Record<string, unknown>, rawWires: Record<string, Ref | undefined>, sockets?: { inputs: Record<string, InputSocket>; outputs: GraphNode['outputs'] }): GraphNode {
     const def = getNodeDefinition(type);
     if (!def && !sockets) throw new Unsupported(`No node type ${type}`);
+    // An anonymous number wired to a socket that has its own slider is that slider's value: a
+    // separate card for the `0.5` next to a Multiply that already has a B slider is noise. Blocks
+    // and functions take one as a slider input the same way. A number the shader named
+    // (`float ang = 5.0`, a `const`) is a constant: it goes on the scope's Constants card, fixed,
+    // where it reads like the shader and can be freed into a slider on purpose.
+    const wires: Record<string, Ref | undefined> = {};
+    const dyn = (params.inputs as Array<{ name: string; type: string; slider: unknown }> | undefined);
+    for (const [k, w] of Object.entries(rawWires)) {
+      if (!isLit(w)) { wires[k] = w; continue; }
+      if (w.name) { wires[k] = materialize(w); continue; }
+      const pd = def?.paramDefs?.[k];
+      const socketT = sockets?.inputs[k]?.type ?? def?.inputs[k]?.type;
+      const polyT = POLY[type]?.includes(k) ? (params.outputType as string | undefined) : undefined;
+      if (pd?.type === 'float' && (polyT ?? socketT) === 'float') { params[k] = w.lit; report.stats.sliders++; continue; }
+      const di = dyn?.find(i => i.name === k);
+      // The socket stays (unwired): the compiler reads a slider input's value off the params only for a socket it can see.
+      if ((type === 'exprNode' || type === 'customFn') && di && di.type === 'float') { di.slider = sliderRange(w.lit); params[k] = w.lit; report.stats.sliders++; continue; }
+      wires[k] = materialize(w);
+    }
     const inputs: Record<string, InputSocket> = {};
     for (const [k, s] of Object.entries(sockets?.inputs ?? def!.inputs)) inputs[k] = { type: s.type, label: s.label, connection: wires[k] ? { nodeId: wires[k]!.nodeId, outputKey: wires[k]!.outputKey } : undefined };
     for (const [k, w] of Object.entries(wires)) if (w && !inputs[k]) inputs[k] = { type: w.type, label: k, connection: { nodeId: w.nodeId, outputKey: w.outputKey } };
@@ -163,6 +200,28 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     return node;
   }
   const ref = (n: GraphNode, out: string, t: T): Ref => ({ nodeId: n.id, outputKey: out, type: t });
+  const isLit = (r: Ref | undefined): r is Ref & { lit: number } => !!r && r.nodeId === LIT;
+  /**
+   * A literal as a real output: an entry on the scope's one Constants card,
+   * fixed (the shader's number, changed in the card's editor; its slider can
+   * be turned on there). Named after the variable it initialised when it had
+   * one; the same named value is one entry however often it's read.
+   */
+  const constantsCards = new WeakMap<GraphNode[], GraphNode>();
+  function materialize(r: Ref): Ref {
+    if (!isLit(r)) return r;
+    let card = constantsCards.get(sink);
+    if (!card) { card = mk('constants', { items: [] }, {}, { inputs: {}, outputs: {} }); constantsCards.set(sink, card); }
+    const items = card.params.items as ConstantsItem[];
+    const taken = new Set(items.map(i => i.key));
+    if (r.name && taken.has(r.name)) { const same = items.find(i => i.key === r.name && i.value === r.lit); if (same) return { nodeId: card.id, outputKey: same.key, type: 'float' }; }
+    let key = r.name ?? `k${items.length + 1}`; const base = key; let k = 2;
+    while (taken.has(key)) key = `${base}_${k++}`;
+    items.push({ key, label: key, type: 'float', value: r.lit, slider: false });
+    card.params[key] = r.lit;
+    card.outputs[key] = { type: 'float', label: key };
+    return { nodeId: card.id, outputKey: key, type: 'float' };
+  }
 
   // ── Loop scope: a for loop being built as an iterated group ────────────────
   /**
@@ -173,7 +232,9 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
    */
   interface LoopCtx { ports: Map<string, Ref>; inputPorts: GroupInputPort[]; wires: Record<string, Ref>; sockets: Record<string, InputSocket>; outerSink: GraphNode[] }
   let loopCtx: LoopCtx | null = null;
-  function portRef(ctx: LoopCtx, outer: Ref, label: string): Ref {
+  function portRef(ctx: LoopCtx, outerRef: Ref, label: string): Ref {
+    let outer = outerRef;
+    if (isLit(outer)) { const saved = sink; sink = ctx.outerSink; try { outer = materialize(outer); } finally { sink = saved; } }
     const k = `${outer.nodeId}:${outer.outputKey}`;
     let r = ctx.ports.get(k);
     if (!r) {
@@ -203,9 +264,10 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     }
     return r;
   };
-  const constant = (v: number): Ref => ref(mk('constant', { value: v, outputType: 'float' }, {}), 'value', 'float');
-  /** A Val as a node output (a literal becomes a Constant node). */
-  const asRef = (v: Val): Ref => v.ref ?? constant(v.lit ?? 0);
+  /** A number the shader didn't name: free to fold into a slider or another number. A named one is a constant (see mk). */
+  const anon = (v: Val): v is Val & { lit: number } => v.lit !== undefined && !v.name;
+  /** A Val as a node output. A literal is a pending Ref: `mk` folds it into a slider or makes it a node. */
+  const asRef = (v: Val): Ref => v.ref ?? { nodeId: LIT, outputKey: 'value', type: 'float', lit: v.lit ?? 0, ...(v.name ? { name: v.name } : {}) };
 
   // ── Types ──────────────────────────────────────────────────────────────────
   type Env = Map<string, Val>;
@@ -243,13 +305,20 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         if (FLOAT_T.has(name)) return 'float';
         if (SAME_T.has(name)) { let t: T = 'float'; for (const x of args) { const at = typeOf(x, env); if (N_OF[at] > N_OF[t]) t = at; } return t; }
         const f = fns.get(name);
-        if (f) { if (f.ret in N_OF || f.ret.startsWith('mat')) return f.ret as T; throw new Unsupported(`Function ${name} returns ${f.ret}`); }
+        if (f) { const o = overloadFor(f, args, env); if (o.ret in N_OF || o.ret.startsWith('mat')) return o.ret as T; throw new Unsupported(`Function ${name} returns ${o.ret}`); }
         throw new Unmapped(`built-in ${name}`);
       }
       default: throw new Unmapped(`expression ${a.type}`);
     }
   }
 
+  /** The overload a call reaches: by argument count, then by the first argument's type; else the first definition. */
+  function overloadFor(f: UserFn, args: Ast[], env: Env): UserFn {
+    if (f.overloads.length < 2) return f;
+    const byCount = f.overloads.filter(o => o.params.length === args.length);
+    if (byCount.length < 2) return byCount[0] ?? f;
+    try { const t0 = typeOf(args[0], env); return byCount.find(o => o.params[0]?.type === t0) ?? byCount[0]; } catch { return byCount[0]; }
+  }
   /** What a call calls: a constructor (vec3, mat2, float…) or a function by name. The parser files a user function under type_specifier too. */
   function calleeOf(idn: Ast): { name: string; ctor: boolean } {
     if (idn.type === 'identifier') return { name: idn.identifier as string, ctor: false };
@@ -318,7 +387,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   function binary(a: Ast, env: Env): Val {
     const op = (a.operator as Ast).literal as string;
     const L = build(a.left as Ast, env), R = build(a.right as Ast, env);
-    if (L.lit !== undefined && R.lit !== undefined) {
+    if (anon(L) && anon(R)) {
       const f = { '+': L.lit + R.lit, '-': L.lit - R.lit, '*': L.lit * R.lit, '/': L.lit / R.lit }[op];
       if (f !== undefined) return { lit: f, type: 'float', ast: a };
     }
@@ -336,8 +405,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       if (!w) throw new Unmapped('a / b kept as code (your choice)');
       return warned(typed(kind, {}, { a: asRef(L), b: asRef(R) }, 'result', t), w);
     }
-    if (R.lit !== undefined) { report.stats.sliders++; return typed(kind, { b: R.lit }, { a: asRef(L) }, 'result', t); }
-    if (L.lit !== undefined && (kind === 'add' || kind === 'multiply')) { report.stats.sliders++; return typed(kind, { b: L.lit }, { a: asRef(R) }, 'result', t); }
+    if (anon(R)) { report.stats.sliders++; return typed(kind, { b: R.lit }, { a: asRef(L) }, 'result', t); }
+    if (anon(L) && (kind === 'add' || kind === 'multiply')) { report.stats.sliders++; return typed(kind, { b: L.lit }, { a: asRef(R) }, 'result', t); }
     return typed(kind, {}, { a: asRef(L), b: asRef(R) }, 'result', t);
   }
 
@@ -350,6 +419,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       const vs = args.map(x => build(x, env));
       if (tk === 'float' || tk === 'int') { if (vs.length === 1 && vs[0].type === 'float') return { ...vs[0], ast: a }; throw new Unmapped(`${tk}() of a vector`); }
       if (tk === 'vec2' && vs.length === 2 && vs.every(v => v.type === 'float')) return typed('makeVec2', {}, { x: asRef(vs[0]), y: asRef(vs[1]) }, 'xy', 'vec2');
+      // Three numbers in 0..1 are a colour: the picker card, not three sliders.
+      if (tk === 'vec3' && vs.length === 3 && vs.every(v => v.lit !== undefined && v.lit >= 0 && v.lit <= 1)) return { ref: ref(mk('colorPicker', { color: vs.map(v => v.lit) }, {}), 'rgb', 'vec3'), type: 'vec3', ast: a };
       if (tk === 'vec3' && vs.length === 3 && vs.every(v => v.type === 'float')) return typed('makeVec3', {}, { r: asRef(vs[0]), g: asRef(vs[1]), b: asRef(vs[2]) }, 'rgb', 'vec3');
       if (tk === 'vec3' && vs.length === 1 && vs[0].type === 'float') return typed('floatToVec3', {}, { input: asRef(vs[0]) }, 'rgb', 'vec3');
       if (tk === 'vec2' && vs.length === 1 && vs[0].type === 'float') { const r = asRef(vs[0]); return typed('makeVec2', {}, { x: r, y: r }, 'xy', 'vec2'); }
@@ -357,7 +428,12 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     }
     const name = callee.name;
     const user = fns.get(name);
-    if (user) { if (!(user.ret in N_OF)) throw new Unmapped(`${name}() returns a ${user.ret}`); return region(a, env, `call to ${name}()`); }
+    if (user) {
+      const o = overloadFor(user, args, env);
+      if (o.params.some(p => p.qual !== 'in')) return outCall(a, env, o) ?? (() => { throw new Unmapped(`${name}() returns nothing`); })();
+      if (!(o.ret in N_OF)) throw new Unmapped(`${name}() returns a ${o.ret}`);
+      return region(a, env, `call to ${name}()`);
+    }
     const vs = args.map(x => build(x, env));
     const t = vs.reduce<T>((m, v) => (N_OF[v.type] > N_OF[m] ? v.type : m), 'float');
     const one = (type: string, params: Record<string, unknown>, key: string, out: string) => typed(type, params, { [key]: asRef(vs[0]) }, out, t);
@@ -374,17 +450,17 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       case 'normalize': if (vs[0].type === 'vec2') return typed('normalizeVec2', {}, { v: asRef(vs[0]) }, 'result', 'vec2'); break;
       case 'dot': if (vs.length === 2 && vs[0].type === 'vec2' && vs[1].type === 'vec2') return typed('dot', {}, { a: asRef(vs[0]), b: asRef(vs[1]) }, 'result', 'float'); break;
       case 'cross': if (vs.length === 2 && vs[0].type === 'vec3') return typed('crossProduct', {}, { a: asRef(vs[0]), b: asRef(vs[1]) }, 'result', 'vec3'); break;
-      case 'min': case 'max': if (vs.length === 2 && allF) { report.stats.sliders += vs[1].lit !== undefined ? 1 : 0; return typed(name === 'min' ? 'minMath' : 'max', vs[1].lit !== undefined ? { b: vs[1].lit } : {}, { a: asRef(vs[0]), ...(vs[1].lit === undefined ? { b: asRef(vs[1]) } : {}) }, 'result', 'float'); } break;
-      case 'clamp': if (vs.length === 3 && vs[1].type === 'float' && vs[2].type === 'float') return typed('clamp', { ...(vs[1].lit !== undefined ? { lo: vs[1].lit } : {}), ...(vs[2].lit !== undefined ? { hi: vs[2].lit } : {}) }, { input: asRef(vs[0]), ...(vs[1].lit === undefined ? { lo: asRef(vs[1]) } : {}), ...(vs[2].lit === undefined ? { hi: asRef(vs[2]) } : {}) }, 'result', t); break;
-      case 'mix': if (vs.length === 3 && vs[2].type === 'float' && vs[0].type === vs[1].type) return typed('mix', vs[2].lit !== undefined ? { t: vs[2].lit } : {}, { a: asRef(vs[0]), b: asRef(vs[1]), ...(vs[2].lit === undefined ? { t: asRef(vs[2]) } : {}) }, 'result', vs[0].type); break;
-      case 'smoothstep': if (vs.length === 3 && vs[0].type === 'float' && vs[1].type === 'float') { report.stats.sliders += (vs[0].lit !== undefined ? 1 : 0) + (vs[1].lit !== undefined ? 1 : 0); return typed('smoothstep', { ...(vs[0].lit !== undefined ? { edge0: vs[0].lit } : {}), ...(vs[1].lit !== undefined ? { edge1: vs[1].lit } : {}) }, { value: asRef(vs[2]), ...(vs[0].lit === undefined ? { edge0: asRef(vs[0]) } : {}), ...(vs[1].lit === undefined ? { edge1: asRef(vs[1]) } : {}) }, 'result', vs[2].type); } break;
+      case 'min': case 'max': if (vs.length === 2 && allF) { report.stats.sliders += anon(vs[1]) ? 1 : 0; return typed(name === 'min' ? 'minMath' : 'max', anon(vs[1]) ? { b: vs[1].lit } : {}, { a: asRef(vs[0]), ...(!anon(vs[1]) ? { b: asRef(vs[1]) } : {}) }, 'result', 'float'); } break;
+      case 'clamp': if (vs.length === 3 && vs[1].type === 'float' && vs[2].type === 'float') return typed('clamp', { ...(anon(vs[1]) ? { lo: vs[1].lit } : {}), ...(anon(vs[2]) ? { hi: vs[2].lit } : {}) }, { input: asRef(vs[0]), ...(!anon(vs[1]) ? { lo: asRef(vs[1]) } : {}), ...(!anon(vs[2]) ? { hi: asRef(vs[2]) } : {}) }, 'result', t); break;
+      case 'mix': if (vs.length === 3 && vs[2].type === 'float' && vs[0].type === vs[1].type) return typed('mix', anon(vs[2]) ? { t: vs[2].lit } : {}, { a: asRef(vs[0]), b: asRef(vs[1]), ...(!anon(vs[2]) ? { t: asRef(vs[2]) } : {}) }, 'result', vs[0].type); break;
+      case 'smoothstep': if (vs.length === 3 && vs[0].type === 'float' && vs[1].type === 'float') { report.stats.sliders += (anon(vs[0]) ? 1 : 0) + (anon(vs[1]) ? 1 : 0); return typed('smoothstep', { ...(anon(vs[0]) ? { edge0: vs[0].lit } : {}), ...(anon(vs[1]) ? { edge1: vs[1].lit } : {}) }, { value: asRef(vs[2]), ...(!anon(vs[0]) ? { edge0: asRef(vs[0]) } : {}), ...(!anon(vs[1]) ? { edge1: asRef(vs[1]) } : {}) }, 'result', vs[2].type); } break;
       case 'step': if (vs.length === 2 && allF) return typed('step', {}, { edge: asRef(vs[0]), x: asRef(vs[1]) }, 'result', 'float'); break;
-      case 'mod': if (vs.length === 2 && vs[1].type === 'float') return typed('mod', vs[1].lit !== undefined ? { period: vs[1].lit } : {}, { input: asRef(vs[0]), ...(vs[1].lit === undefined ? { period: asRef(vs[1]) } : {}) }, 'output', vs[0].type); break;
+      case 'mod': if (vs.length === 2 && vs[1].type === 'float') return typed('mod', anon(vs[1]) ? { period: vs[1].lit } : {}, { input: asRef(vs[0]), ...(!anon(vs[1]) ? { period: asRef(vs[1]) } : {}) }, 'output', vs[0].type); break;
       case 'atan': if (vs.length === 2 && allF) return typed('atan2', {}, { y: asRef(vs[0]), x: asRef(vs[1]) }, 'angle', 'float'); break;
       case 'pow': if (vs.length === 2 && allF) {
         const w = inexact(a, 'The Pow node clamps its base to ≥ 0 (GLSL leaves a negative base undefined)');
         if (!w) throw new Unmapped('pow kept as code (your choice)');
-        return warned(typed('pow', vs[1].lit !== undefined ? { exponent: vs[1].lit } : {}, { base: asRef(vs[0]), ...(vs[1].lit === undefined ? { exponent: asRef(vs[1]) } : {}) }, 'result', 'float'), w);
+        return warned(typed('pow', anon(vs[1]) ? { exponent: vs[1].lit } : {}, { base: asRef(vs[0]), ...(!anon(vs[1]) ? { exponent: asRef(vs[1]) } : {}) }, 'result', 'float'), w);
       } break;
       case 'sqrt': {
         const w = inexact(a, 'The Sqrt node clamps its input to ≥ 0 (GLSL leaves a negative input undefined)');
@@ -456,10 +532,73 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       const c = queue.pop()!;
       if (need.has(c)) continue;
       need.add(c);
-      const inner = new Set<string>(); collectCalls(parser.parse(fns.get(c)!.source, { quiet: true }).program, inner);
+      const inner = new Set<string>(); for (const o of fns.get(c)!.overloads) collectCalls(parser.parse(o.source, { quiet: true }).program, inner);
       for (const d of inner) if (fns.has(d) && !need.has(d)) queue.push(d);
     }
-    return [...fns.values()].filter(f => f.name !== 'main' && need.has(f.name)).map(f => f.source).join('\n\n');
+    return withConsts([...fns.values()].filter(f => f.name !== 'main' && need.has(f.name)).flatMap(f => f.overloads.map(o => o.source)).join('\n\n'));
+  }
+
+  /**
+   * A call to a function with `out` / `inout` parameters. GLSL wants variables
+   * there, and a region's inputs are values, so the region declares locals for
+   * them, makes the call, and returns everything the call produced (the return
+   * value and each out argument) packed into one vector when they fit in four
+   * components, else in several regions that each make the call again. Blocks
+   * then pull each value back out and the out variables take the new values.
+   * Returns the call's value, or null for a void function.
+   */
+  function outCall(a: Ast, env: Env, fn: UserFn): Val | null {
+    const args = (a.args as Ast[] | undefined ?? []).filter(x => x.type !== 'literal');
+    const outs = fn.params.map((p, i) => ({ p, arg: args[i] })).filter(x => x.p.qual !== 'in');
+    for (const o of outs) if (!o.arg || o.arg.type !== 'identifier' || !env.has(o.arg.identifier as string)) throw new Unsupported(`${fn.name}(): the ${o.p.qual} argument ${o.arg ? generate(o.arg as never) : '?'} must be a variable`);
+    const outNames = new Set(outs.map(o => o.arg.identifier as string));
+    type Product = { name: string; type: T };
+    const products: Product[] = [];
+    if (fn.ret !== 'void') { if (!(fn.ret in N_OF)) throw new Unmapped(`${fn.name}() returns a ${fn.ret}`); products.push({ name: 'ret_', type: fn.ret as T }); }
+    for (const o of outs) { if (!(o.p.type in N_OF)) throw new Unmapped(`${fn.name}(): ${o.p.qual} ${o.p.type} ${o.p.name}`); products.push({ name: o.arg.identifier as string, type: o.p.type as T }); }
+    // Pack into groups of at most four components, in order.
+    const groups: Product[][] = []; let cur: Product[] = []; let sum = 0;
+    for (const p of products) { if (sum + N_OF[p.type] > 4) { groups.push(cur); cur = []; sum = 0; } cur.push(p); sum += N_OF[p.type]; }
+    if (cur.length) groups.push(cur);
+    // Inputs: what the call reads (out arguments excluded; inout ones come in under another name).
+    const names = new Set<string>(); freeNames(a, names);
+    const inputs: { name: string; type: T }[] = []; const wires: Record<string, Ref> = {}; const prelude: string[] = [];
+    let code = generate(a as never);
+    for (const n of names) {
+      const o = outs.find(x => x.arg.identifier === n);
+      if (o) {
+        const t = o.p.type as T;
+        if (o.p.qual === 'inout') { const v = env.get(n)!; inputs.push({ name: `${n}_in`, type: v.type }); wires[`${n}_in`] = asRef(v); prelude.push(`${t} ${n} = ${n}_in;`); }
+        else prelude.push(`${t} ${n} = ${t === 'float' ? '0.0' : `${t}(0.0)`};`);
+      }
+      else if (env.has(n)) { const v = env.get(n)!; inputs.push({ name: n, type: v.type }); wires[n] = asRef(v); }
+      else if (SOURCES[n]) { const s = SOURCES[n]; inputs.push({ name: s.name, type: s.t }); wires[s.name] = srcRef(n); code = code.replace(new RegExp(`\\b${n}\\b`, 'g'), s.name); }
+      else if (!fns.has(n)) throw new Unsupported(`Unknown identifier ${n}`);
+    }
+    const helpers = helpersFor(a);
+    const callLine = fn.ret === 'void' ? `${code};` : `${fn.ret} ret_ = ${code};`;
+    const results = new Map<string, Val>();
+    groups.forEach((g, gi) => {
+      const total = g.reduce((s, p) => s + N_OF[p.type], 0);
+      const outT = VEC_T[total];
+      const ret = g.length === 1 ? g[0].name : `${outT}(${g.map(p => p.name).join(', ')})`;
+      const body = `${prelude.join('\n')}\n${callLine}\nreturn ${ret};`;
+      const label = `${fn.name}${groups.length > 1 ? ` (${gi + 1}/${groups.length})` : ''}`;
+      const n = mk('customFn', { __importedCode: 'region', label, inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: outT, body, glslFunctions: helpers }, { ...wires },
+        { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: outT as DataType, label: 'Result' } } });
+      const packed: Val = { ref: ref(n, 'result', outT), type: outT, ast: a };
+      if (g.length === 1) { results.set(g[0].name, packed); return; }
+      let off = 0;
+      for (const p of g) {
+        const sw = 'xyzw'.slice(off, off + N_OF[p.type]); off += N_OF[p.type];
+        const ex = mk('exprNode', { __importedCode: 'block', inputs: [{ name: 'v', type: outT, slider: null }], outputType: p.type, lines: [], result: `v.${sw}`, expr: `v.${sw}` }, { v: packed.ref },
+          { inputs: { v: { type: outT as DataType, label: 'v' } }, outputs: { result: { type: p.type as DataType, label: 'Result' } } });
+        results.set(p.name, { ref: ref(ex, 'result', p.type), type: p.type, ast: a });
+      }
+    });
+    report.regions.push({ code: generate(a as never), why: `call to ${fn.name}() with ${[...outNames].join(', ')} as out argument${outNames.size === 1 ? '' : 's'}` });
+    for (const o of outs) env.set(o.arg.identifier as string, { ...results.get(o.arg.identifier as string)!, name: o.arg.identifier as string });
+    return results.get('ret_') ?? null;
   }
 
   // ── Rung 3: a Custom Function node for a region ────────────────────────────
@@ -468,7 +607,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     const { inputs, wires, code } = inputsFor(a, env);
     const helpers = helpersFor(a);
     const body = stmtCode ? `${stmtCode}\n  return ${outVar};` : `return ${code};`;
-    const n = mk('customFn', { __importedCode: 'region', label: why.replace(/^call to /, '').replace(/\(\)$/, '') || 'Region', inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, body, glslFunctions: helpers }, wires,
+    const n = mk('customFn', { __importedCode: 'region', label: why.replace(/^call to /, '').replace(/\(\)$/, '') || 'Region', inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, body, glslFunctions: helpers }, { ...wires },
       { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
     report.regions.push({ code: stmtCode ?? code, why });
     return { ref: ref(n, 'result', t), type: t, ast: a };
@@ -490,7 +629,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     if (left.type === 'identifier') {
       const name = left.identifier as string;
       if (name === 'gl_FragColor' || name === 'fragColor') { output = finish(right, env); return; }
-      env.set(name, expr(rhsAst, env));
+      { const v = expr(rhsAst, env); env.set(name, v.lit !== undefined ? { ...v, name: v.name ?? name } : v); }
       return;
     }
     if (left.type === 'postfix' && (left.postfix as Ast).type === 'field_selection' && (left.expression as Ast).type === 'identifier') {
@@ -628,7 +767,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         for (const d of ((decl.declarations as Ast[] | undefined) ?? [])) {
           const name = (d.identifier as Ast).identifier as string;
           if (d.quantifier) throw new Unsupported(`array ${name}`);
-          if (d.initializer) env.set(name, expr(d.initializer as Ast, env));
+          // A number keeps the first name it was given: `float k = SIZE;` reads SIZE's constant, not a second one.
+          if (d.initializer) { const v = expr(d.initializer as Ast, env); env.set(name, v.lit !== undefined ? { ...v, name: v.name ?? name } : v); }
           else env.set(name, { lit: ty === 'float' || ty === 'int' ? 0 : undefined, type: (ty in N_OF ? ty : 'float') as T, ast: { type: 'zero' } });
         }
         return;
@@ -636,6 +776,10 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       case 'expression_statement': {
         const e = s.expression as Ast;
         if (e.type === 'assignment') { assign(e.left as Ast, (e.operator as Ast).literal as string, e.right as Ast, env); return; }
+        if (e.type === 'function_call') {
+          const c = calleeOf(e.identifier as Ast); const u = c.ctor ? undefined : fns.get(c.name);
+          if (u) { const o = overloadFor(u, (e.args as Ast[] | undefined ?? []).filter(x => x.type !== 'literal'), env); if (o.params.some(p => p.qual !== 'in')) { outCall(e, env, o); return; } }
+        }
         if (e.type === 'postfix' && ['++', '--'].includes(((e.postfix as Ast).operator as Ast)?.literal as string ?? (e.postfix as Ast).type)) throw new Unmapped('increment');
         throw new Unmapped(`statement ${e.type}`);
       }
@@ -679,6 +823,13 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   // ── Go ─────────────────────────────────────────────────────────────────────
   const env: Env = new Map();
   try {
+    // Global consts are the shader's dials: values in the environment, so main() and blocks read them
+    // (regions also get their text). One a graph can't hold (a matrix) stays text-only.
+    for (const c of consts) {
+      if (!c.init) continue;
+      try { const v = expr(c.init, env); env.set(c.name, v.lit !== undefined ? { ...v, name: v.name ?? c.name } : v); }
+      catch (e) { if (!(e instanceof Unsupported || e instanceof Unmapped)) throw e; }
+    }
     stmts(((main!.body as Ast).statements as Ast[]), env);
     if (!output) report.unsupported.push('main() never writes gl_FragColor');
   } catch (e) {
@@ -686,6 +837,9 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   }
   if (report.unsupported.length) return { nodes: [], report };
 
+  // Nodes nothing reads (a const the shader never used, a split only half read) go.
+  for (const g of nodes) if (g.type === 'group') { const sg = g.params.subgraph as { nodes: GraphNode[]; outputPorts: { fromNodeId: string }[] }; prune(sg.nodes, new Set(sg.outputPorts.map(p => p.fromNodeId))); }
+  prune(nodes, new Set());
   layout(nodes);
   for (const sg of subgraphs) layout(sg);
   report.stats = { nodes: nodes.length, blocks: report.blocks.length, regions: report.regions.length, sliders: report.stats.sliders, loops: report.stats.loops };
@@ -699,28 +853,31 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
 export function normaliseHostShader(source: string): string { return hostToOurs(source, { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0, loops: 0 } }); }
 
 function hostToOurs(source: string, report: ConversionReport): string {
-  let s = source;
-  const renames: Array<[RegExp, string]> = [
-    [/\biResolution\.xy\b/g, 'u_resolution'], [/\biResolution\b/g, 'vec3(u_resolution, 1.0)'],
-    [/\biTime\b/g, 'u_time'], [/\biGlobalTime\b/g, 'u_time'], [/\biMouse\.xy\b/g, 'u_mouse'],
-  ];
-  for (const [re, to] of renames) s = s.replace(re, to);
-  const m = /void\s+mainImage\s*\(\s*out\s+vec4\s+(\w+)\s*,\s*(?:in\s+)?vec2\s+(\w+)\s*\)\s*\{/.exec(s);
-  if (m) {
-    s = s.slice(0, m.index) + `void main() {\n  vec2 ${m[2]} = gl_FragCoord.xy;\n` + s.slice(m.index + m[0].length);
-    s = s.replace(new RegExp(`\\b${m[1]}\\b`, 'g'), 'gl_FragColor');
-    report.notes.push('Shadertoy entry point mainImage() read as main()');
-  }
-  s = s.replace(/^\s*#version.*$/m, '');
+  // Another host's names (Shadertoy, GLSL Sandbox, twigl, ES 3.00) become ours first.
+  const tr = translateToStudio(source);
+  let s = tr.code;
+  if (tr.dialect !== 'studio') report.notes.push(`Read as ${dialectLabel(tr.dialect)}: ${tr.notes.join('; ')}`);
+  for (const u of tr.unsupported) report.notes.push(u);
+  // The compiled shader defines PI and TAU as macros; a shader's own constant of that name would be a macro clash.
+  for (const name of ['PI', 'TAU']) if (new RegExp(`\\b(?:const\\s+)?(?:float|int)\\s+${name}\\s*=`).test(s)) s = s.replace(new RegExp(`(?<![\\w.])${name}\\b`, 'g'), `${name}_`);
+  // A function named like one of the app's always-included helpers (smin, fbm, rot2d…) would lose to it: rename ours.
+  const own = new Set<string>();
+  for (const m of s.matchAll(/\b(?:float|vec[234]|mat[234]|int|bool|void)\s+([A-Za-z_]\w*)\s*\(/g)) if (m[1] !== 'main') own.add(m[1]);
+  const clashes = [...own].filter(n => BUILTIN_HELPER_NAMES.has(n));
+  for (const n of clashes) s = s.replace(new RegExp(`\\b${n}\\b`, 'g'), `${n}_`);
+  if (clashes.length) report.notes.push(`Renamed ${clashes.join(', ')}: the app has a built-in helper of that name`);
   // Simple object-like macros (#define PI 3.14159) are expanded; anything else the preprocessor would do is left to fail loudly.
   const macros: Array<[RegExp, string]> = [];
   s = s.replace(/^[ \t]*#define[ \t]+(\w+)[ \t]+([^\n(]+?)[ \t]*$/gm, (_m, name: string, value: string) => { macros.push([new RegExp(`\\b${name}\\b`, 'g'), `(${value.trim()})`]); return ''; });
   for (const [re, to] of macros) s = s.replace(re, to);
   if (macros.length) report.notes.push(`${macros.length} #define${macros.length === 1 ? '' : 's'} expanded`);
-  // Precision and varying lines are the host's, not the shader's.
+  // Precision, uniform and varying lines are the host's, not the shader's (the translator adds the ones a paste lacks).
   s = s.replace(/^\s*precision\s+\w+\s+float\s*;\s*$/gm, '').replace(/^\s*varying\s+vec2\s+vUv\s*;\s*$/gm, '');
   return s;
 }
+
+/** The functions the compiled shader always defines; a user function of the same name is renamed on the way in. */
+const BUILTIN_HELPER_NAMES = new Set([...ALWAYS_HELPERS_GLSL().matchAll(/\b(?:float|vec[234]|mat[234]|int|bool|void)\s+([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]));
 
 function tokenOf(spec: Ast | undefined): string {
   if (!spec) return '';
@@ -729,6 +886,25 @@ function tokenOf(spec: Ast | undefined): string {
   if (spec.identifier && typeof (spec.identifier as Ast).identifier === 'string') return (spec.identifier as Ast).identifier as string;
   if (typeof spec.identifier === 'string') return spec.identifier;
   return '';
+}
+
+/** A slider range that shows a literal comfortably: symmetric around zero for small values, 0..2× for larger ones. */
+function sliderRange(v: number): { min: number; max: number } {
+  const a = Math.abs(v);
+  if (a <= 1) return { min: v < 0 ? -1 : 0, max: 1 };
+  const top = Math.pow(10, Math.ceil(Math.log10(a * 2)));
+  return { min: v < 0 ? -top : 0, max: top };
+}
+
+/** Drop nodes nothing reads, repeatedly, keeping outputs and `keep`. */
+function prune(list: GraphNode[], keep: Set<string>): void {
+  for (;;) {
+    const used = new Set(keep);
+    for (const n of list) for (const s of Object.values(n.inputs)) if (s.connection) used.add(s.connection.nodeId);
+    const before = list.length;
+    for (let i = list.length - 1; i >= 0; i--) { const n = list[i]; if (n.type === 'output' || n.type === 'vec4Output' || used.has(n.id)) continue; list.splice(i, 1); }
+    if (list.length === before) return;
+  }
 }
 
 /** Columns by depth (sources left, Output right), rows in creation order. */

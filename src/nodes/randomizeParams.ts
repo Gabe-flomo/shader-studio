@@ -1,5 +1,5 @@
 import type { GraphNode, NodeDefinition, ParamDef, SubgraphData, SurfacedParam } from '../types/nodeGraph';
-import { getNodeDefinition } from './definitions';
+import { getNodeDefinitionFor } from './definitions';
 import { isParamVisible } from '../compiler/uniformPatcher';
 import { isKeyframeBypassed, socketHasKeyframes } from '../compiler/keyframes';
 
@@ -88,7 +88,7 @@ function groupRandomRows(group: GraphNode): GroupRow[] {
   const sectionLabel = (inner: GraphNode) => {
     const custom = group.params[`__sectionLabel_${inner.id}`];
     if (typeof custom === 'string') return custom;
-    return typeof inner.params.label === 'string' ? inner.params.label : getNodeDefinition(inner.type)?.label ?? inner.type;
+    return typeof inner.params.label === 'string' ? inner.params.label : getNodeDefinitionFor(inner)?.label ?? inner.type;
   };
   const rows: GroupRow[] = [];
   for (const inner of sg.nodes) {
@@ -96,13 +96,13 @@ function groupRandomRows(group: GraphNode): GroupRow[] {
       const innerSub = inner.params.subgraph as SubgraphData | undefined;
       for (const sp of surfaced.filter(x => x.innerGroupId === inner.id)) {
         const innNode = innerSub?.nodes.find(n => n.id === sp.nodeId);
-        const pd = innNode ? getNodeDefinition(innNode.type)?.paramDefs?.[sp.paramKey] : undefined;
+        const pd = innNode ? getNodeDefinitionFor(innNode)?.paramDefs?.[sp.paramKey] : undefined;
         if (!innNode || !pd || group.inputs[`ps_${inner.id}_${sp.nodeId}_${sp.paramKey}`]?.connection) continue;
         rows.push({ key: `${inner.id}::${sp.nodeId}::${sp.paramKey}`, label: `${sectionLabel(inner)} · ${sp.label ?? pd.label}`, lo: pd.min ?? 0, hi: pd.max ?? 1, pd, current: innNode.params[sp.paramKey] });
       }
       continue;
     }
-    const def = getNodeDefinition(inner.type);
+    const def = getNodeDefinitionFor(inner);
     for (const [key, pd] of Object.entries(def?.paramDefs ?? {})) {
       if (pd.type !== 'float' || pd.step === 1 || !isParamVisible(pd, inner.params, def?.defaultParams)) continue;
       if (inner.inputs[`__param_${key}`]?.connection) continue;

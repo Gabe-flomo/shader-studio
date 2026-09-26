@@ -1,7 +1,7 @@
 // Numbers behind the canvas toolbar's node count and its stats panel. Pure functions over a list
 // of nodes (the current context: the whole graph at the top level, a group's subgraph inside one).
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 
 const OUTPUT_TYPES = new Set(['output', 'vec4Output']);
 
@@ -62,7 +62,7 @@ export function computeGraphStats(nodes: readonly GraphNode[], topLevel: boolean
     for (const [k, v] of Object.entries(n.params ?? {})) if (k.startsWith('__keyframes_') && Array.isArray(v) && v.length > 0) keyframed++;
     if (subgraphOf(n)) { groups++; return; }
     if (n.bypassed) bypassed.push(n.id);
-    const def = getNodeDefinition(n.type);
+    const def = getNodeDefinitionFor(n);
     const category = def?.category ?? 'Other';
     byCat.set(category, (byCat.get(category) ?? 0) + 1);
     const entry = byType.get(n.type) ?? { label: def?.label ?? n.type, category, ids: [] };
@@ -82,7 +82,7 @@ export function computeGraphStats(nodes: readonly GraphNode[], topLevel: boolean
   }
   const labelOf = (id: string) => {
     const n = nodes.find(x => x.id === id);
-    return n ? (getNodeDefinition(n.type)?.label ?? n.type) : id;
+    return n ? (getNodeDefinitionFor(n)?.label ?? n.type) : id;
   };
 
   let deadEnds: string[] = [];

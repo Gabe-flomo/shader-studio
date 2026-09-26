@@ -15,7 +15,7 @@ import { toRgb } from '../../lib/colorMath';
 import { toast } from '../ui/toastStore';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore, getActiveNodes, getActiveLooseGroups } from '../../store/useNodeGraphStore';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { GROUP_PORT_SENTINEL } from '../../types/nodeGraph';
 import type { GraphNode, DataType, LooseGroup, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
@@ -80,7 +80,7 @@ function nodeDotColor(n: GraphNode, tc: CtpPalette): string {
 // out of the component so MobileNodeGraphOverlay (a separate exported
 // component) can use it too.
 function labelFor(n: GraphNode): string {
-  return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
+  return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinitionFor(n)?.label || n.type;
 }
 
 // Node types that collapse a subgraph — same set NodeGraph.tsx's context
@@ -105,12 +105,12 @@ const ASSIGN_OP_EXCLUDED = new Set(['output', 'vec4Output', 'loopIndex', 'loopCa
 function paramVisible(node: GraphNode, paramDef: { showWhen?: { param: string; value: string | string[] } }): boolean {
   if (!paramDef.showWhen) return true;
   // A gate param an older save never had reads as its default (same rule as isParamVisible)
-  const val = node.params[paramDef.showWhen.param] ?? getNodeDefinition(node.type)?.defaultParams?.[paramDef.showWhen.param];
+  const val = node.params[paramDef.showWhen.param] ?? getNodeDefinitionFor(node)?.defaultParams?.[paramDef.showWhen.param];
   const want = paramDef.showWhen.value;
   return Array.isArray(want) ? want.includes(val as string) : val === want;
 }
 function sliderableParam(node: GraphNode, key: string) {
-  const def = getNodeDefinition(node.type);
+  const def = getNodeDefinitionFor(node);
   const pd = def?.paramDefs?.[key];
   if (!pd || (pd.type !== 'float' && pd.type !== 'int')) return undefined;
   if (!paramVisible(node, pd)) return undefined;
@@ -125,7 +125,7 @@ function nodeHasKeyframeableKey(node: GraphNode, key: string): boolean {
   return !!pd && pd.type === 'float' && pd.step !== 1 && !SKIP_UNIFORM_TYPES.has(node.type);
 }
 function selectableParam(node: GraphNode, key: string) {
-  const def = getNodeDefinition(node.type);
+  const def = getNodeDefinitionFor(node);
   const pd = def?.paramDefs?.[key];
   if (!pd || pd.type !== 'select') return undefined;
   if (!paramVisible(node, pd)) return undefined;
@@ -133,7 +133,7 @@ function selectableParam(node: GraphNode, key: string) {
 }
 function currentSliderValue(node: GraphNode, key: string, pd: { min?: number }): number {
   if (typeof node.params[key] === 'number') return node.params[key] as number;
-  const def = getNodeDefinition(node.type);
+  const def = getNodeDefinitionFor(node);
   const dv = def?.defaultParams?.[key];
   return typeof dv === 'number' ? dv : (pd.min ?? 0);
 }
@@ -2078,7 +2078,7 @@ export function MobileGraphBrowser() {
   // plain 'group' never stamps a def.anchored type on its own content, so
   // this only ever hides Remove where the store would no-op anyway.
   function renderNodeHeader(node: GraphNode) {
-    const originalLocked = !!node.params?._groupOriginal && !!getNodeDefinition(node.type)?.anchored;
+    const originalLocked = !!node.params?._groupOriginal && !!getNodeDefinitionFor(node)?.anchored;
     const canRemove = node.type !== 'output' && focusStack.length > 0 && !originalLocked;
     const isPreviewActive = previewNodeId === node.id;
     const isBypassed = !!node.bypassed;
@@ -2190,7 +2190,7 @@ export function MobileGraphBrowser() {
   // groups compile as a standalone function; entering them is blocked by
   // the store itself, so this shows why instead of a button that no-ops.
   function renderGroupBanner(node: GraphNode) {
-    const def = getNodeDefinition(node.type);
+    const def = getNodeDefinitionFor(node);
     const isPlainGroup = node.type === 'group';
     const isRenaming = renamingGroupFor === node.id;
     return (
@@ -2270,7 +2270,7 @@ export function MobileGraphBrowser() {
 
   // ── Node detail (focused) view ───────────────────────────────────────────
   function renderNodeDetail(node: GraphNode) {
-    const def = getNodeDefinition(node.type);
+    const def = getNodeDefinitionFor(node);
     // Most sliderable params (Radius, Width/2...) double as declared input
     // sockets, so they're already in node.inputs. Some paramDefs never do —
     // a group's own Iterations (a group's `inputs` is built entirely from
@@ -2554,7 +2554,7 @@ export function MobileGraphBrowser() {
             const baseMax = pd.max ?? 1;
             const effMax = customMax ?? baseMax;
             const effMin = bidir ? -effMax : (customMax != null ? 0 : (pd.min ?? 0));
-            const defVal = getNodeDefinition(node.type)?.defaultParams?.[key];
+            const defVal = getNodeDefinitionFor(node)?.defaultParams?.[key];
             const setCustomMax = (n: number) => {
               const absN = Math.abs(n);
               if (absN > 0) updateNodeParams(node.id, { [`__scMax_${key}`]: absN });
@@ -3097,7 +3097,7 @@ export function MobileGraphBrowser() {
     const loopCount = cfg?.loopCount ?? null;
 
     const paramDefKey = axis ? input.axisParams?.[axes!.indexOf(axis)] : target.socketKey;
-    const pd = paramDefKey ? getNodeDefinition(node.type)?.paramDefs?.[paramDefKey] : undefined;
+    const pd = paramDefKey ? getNodeDefinitionFor(node)?.paramDefs?.[paramDefKey] : undefined;
     const kfVals = keyframes.map(k => k.v);
     const autoMin = kfVals.length ? Math.min(...kfVals) : 0;
     const autoMax = kfVals.length ? Math.max(...kfVals) : 1;
@@ -4235,7 +4235,7 @@ export function MobileGraphBrowser() {
     if (!longPressMenuFor) return null;
     const node = nodes.find(n => n.id === longPressMenuFor);
     if (!node) return null;
-    const originalLocked = !!node.params?._groupOriginal && !!getNodeDefinition(node.type)?.anchored;
+    const originalLocked = !!node.params?._groupOriginal && !!getNodeDefinitionFor(node)?.anchored;
     const canDelete = node.type !== 'output' && !originalLocked;
     const openInputs = Object.entries(node.inputs).filter(([, inp]) => !inp.connection);
     const outputs = Object.entries(node.outputs);

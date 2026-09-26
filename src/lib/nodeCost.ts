@@ -15,7 +15,7 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { compileGraph } from '../compiler/graphCompiler';
-import { getNodeDefinition } from '../nodes/definitions';
+import { getNodeDefinitionFor } from '../nodes/definitions';
 import { getActiveNodes, setActiveNodes } from '../store/useNodeGraphStore';
 import type { ShaderCostMeasurer } from './perfStats';
 
@@ -49,7 +49,7 @@ const OUTPUT_TYPES = new Set(['output', 'vec4Output']);
 const SOURCE_TYPES = new Set(['uv', 'pixelUV', 'time', 'mouse', 'fragCoord', 'resolution', 'loopIndex', 'scenePos', 'marchPos', 'marchDist', 'marchLoopInputs']);
 
 function labelOf(node: GraphNode): string {
-  return (typeof node.params.label === 'string' && node.params.label.trim()) || getNodeDefinition(node.type)?.label || node.type;
+  return (typeof node.params.label === 'string' && node.params.label.trim()) || getNodeDefinitionFor(node)?.label || node.type;
 }
 
 /** One variant per measurable node in `scopePath`; the returned lists are full top-level graphs. */

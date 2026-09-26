@@ -14,7 +14,7 @@
 import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
 import { LAYER_NUMERIC_PROPS, parseActionTarget, parseLayerTarget } from '../types/play';
-import { getNodeDefinition } from '../nodes/definitions';
+import { getNodeDefinitionFor } from '../nodes/definitions';
 import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDrivers';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
 import { isParamVisible } from '../compiler/uniformPatcher';
@@ -37,7 +37,7 @@ export interface PlayCandidate {
 const SKIP_TYPES = new Set(['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'loopIndex', 'loopCarry', 'group', 'exprNode', 'customFn']);
 
 function labelOf(node: GraphNode): string {
-  const def = getNodeDefinition(node.type);
+  const def = getNodeDefinitionFor(node);
   return (typeof node.params.label === 'string' && node.params.label.trim()) || def?.label || node.type;
 }
 
@@ -55,7 +55,7 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
   const visit = (list: GraphNode[], prefix: string, groupLabel: string | undefined, overrides: Record<string, unknown>) => {
     for (const node of list) {
       if (SKIP_TYPES.has(node.type)) continue;
-      const def = getNodeDefinition(node.type);
+      const def = getNodeDefinitionFor(node);
       if (!def?.paramDefs) continue;
       for (const [key, pd] of Object.entries(def.paramDefs)) {
         if (!isColourDef(pd) || pd.compileTime) continue;
@@ -139,7 +139,7 @@ export function upstreamControls(nodes: GraphNode[], candidates: readonly PlayCa
     const first = [...d.entries()][0];
     if (first) {
       const from = findTargetNode(nodes, `${first[1].connection.nodeId}::x`);
-      const pd = getNodeDefinition(source.type)?.paramDefs?.[first[0]];
+      const pd = getNodeDefinitionFor(source)?.paramDefs?.[first[0]];
       blockedBy = { param: pd?.label ?? first[0], from: from ? nodeLabelOf(from) : 'another node' };
     }
   }
@@ -194,7 +194,7 @@ export function controlHelp(nodes: GraphNode[], target: string, play?: PlayRecor
   const node = findTargetNode(nodes, target);
   if (!node) return {};
   const key = target.split('::').pop() ?? '';
-  const hint = getNodeDefinition(node.type)?.paramDefs?.[key]?.hint;
+  const hint = getNodeDefinitionFor(node)?.paramDefs?.[key]?.hint;
   const commentOf = (n: GraphNode | undefined) => typeof n?.params.__comment === 'string' ? (n.params.__comment as string).trim() : '';
   const comment = commentOf(node) || commentOf(nodes.find(n => n.id === target.split('::')[0]));
   return { ...(hint ? { hint } : {}), ...(comment ? { comment } : {}) };

@@ -1,6 +1,6 @@
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { GraphNode, DataType, InputSocket, NodeDefinition, SubgraphData } from '../types/nodeGraph';
-import { getNodeDefinition } from '../nodes/definitions';
+import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { f as formatFloat } from '../nodes/definitions/helpers';
 import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
@@ -59,6 +59,8 @@ export const GLSL_SD_ELLIPSE = `float sdEllipse(vec2 p, vec2 ab) {
 export const GLSL_OP_REPEAT = `vec2 opRepeat(vec2 p, float s) {
     return mod(p + s*0.5, s) - s*0.5;
 }`;
+/** Every helper the compiled shader always carries (the prelude plus the six added to every assembly): what a user function must not be named. */
+export const ALWAYS_HELPERS_GLSL = (): string => [BUILTIN_HELPERS_GLSL, GLSL_SMIN, GLSL_SD_BOX, GLSL_SD_SEGMENT, GLSL_SD_ELLIPSE, GLSL_OP_REPEAT, GLSL_OP_REPEAT_POLAR].join('\n');
 export const GLSL_OP_REPEAT_POLAR = `vec2 opRepeatPolar(vec2 p, float n) {
     float angle = TAU / n;
     float a = atan(p.y, p.x) + angle * 0.5;
@@ -182,7 +184,7 @@ export function resolveInputVars(
       vectorAxes !== null && socketHasVectorKeyframes(node, inputKey, vectorAxes);
     if (input.connection) {
       const sourceNode = nodeMap.get(input.connection.nodeId);
-      const sourceDef = sourceNode ? getNodeDefinition(sourceNode.type) : undefined;
+      const sourceDef = sourceNode ? getNodeDefinitionFor(sourceNode) : undefined;
       const sourceOutputType =
         sourceNode?.outputs[input.connection.outputKey]?.type ??
         sourceDef?.outputs[input.connection.outputKey]?.type;
@@ -344,15 +346,25 @@ function resolveGroupPortOverrides(
 // worded block both get emitted — and GLSL rejects the redefinition, which
 // showed up as a black canvas for specific node pairs (raymarch3d + domainWarp3D,
 // mandelbrot + newtonFractal, uvWarp + smoothWarp…). This pass splits every
-// block into its top-level function definitions and emits each *name* once
-// (first definition wins); non-function text (#defines, consts, structs) is
-// kept per block.
+// block into its top-level function definitions and emits each *signature*
+// (name plus parameter types, so `mod289(vec3)` and `mod289(vec4)` are two
+// functions) once, first definition wins. Non-function text (#defines,
+// consts, structs) is kept per block, except that a top-level statement
+// repeated verbatim (the same `const float PI = …;` several imported
+// regions each carry) is emitted once too.
 
-const FN_HEADER = /\b(?:float|vec[234]|mat[234]|int|ivec[234]|bool|bvec[234]|void)\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*\{/g;
+const FN_HEADER = /\b(?:float|vec[234]|mat[234]|int|ivec[234]|bool|bvec[234]|void)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*\{/g;
+const PARAM_NOISE = new Set(['in', 'out', 'inout', 'const', 'highp', 'mediump', 'lowp']);
 
-/** Split a GLSL block into top-level chunks; function chunks carry their name. */
-function splitGlslBlock(block: string): Array<{ name?: string; text: string }> {
-  const chunks: Array<{ name?: string; text: string }> = [];
+/** `name(vec3,vec4)`: the overload-distinguishing identity of a function header. */
+function signatureOf(name: string, params: string): string {
+  const types = params.split(',').map(p => p.trim().split(/\s+/).filter(w => w && !PARAM_NOISE.has(w))[0] ?? '').filter(Boolean);
+  return `${name}(${types.join(',')})`;
+}
+
+/** Split a GLSL block into top-level chunks; function chunks carry their signature (`name`) and bare name (`fn`). */
+function splitGlslBlock(block: string): Array<{ name?: string; fn?: string; text: string }> {
+  const chunks: Array<{ name?: string; fn?: string; text: string }> = [];
   let cursor = 0;
   FN_HEADER.lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -370,7 +382,7 @@ function splitGlslBlock(block: string): Array<{ name?: string; text: string }> {
     }
     if (end === -1) break; // unbalanced — leave the rest as-is
     if (m.index > cursor) chunks.push({ text: block.slice(cursor, m.index) });
-    chunks.push({ name: m[1], text: block.slice(m.index, end) });
+    chunks.push({ name: signatureOf(m[1], m[2]), fn: m[1], text: block.slice(m.index, end) });
     cursor = end;
     FN_HEADER.lastIndex = end;
   }
@@ -378,9 +390,24 @@ function splitGlslBlock(block: string): Array<{ name?: string; text: string }> {
   return chunks;
 }
 
-/** Emit each helper function name once across all blocks (first definition wins). */
+/** Top-level statements of a non-function chunk: each `…;` (at brace depth 0) or `#…` line on its own. */
+function topLevelStatements(text: string): string[] {
+  const out: string[] = [];
+  let cur = '', depth = 0;
+  for (const line of text.split('\n')) {
+    if (/^\s*#/.test(line) && !cur.trim()) { out.push(line); continue; }
+    cur += (cur ? '\n' : '') + line;
+    for (const c of line) { if (c === '{') depth++; else if (c === '}') depth--; }
+    if (depth === 0 && /;\s*(\/\/.*)?$/.test(line)) { out.push(cur); cur = ''; }
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
+/** Emit each helper function signature once across all blocks (first definition wins), and each repeated top-level statement once. */
 export function dedupeGlslFunctions(blocks: string[]): string[] {
   const seen = new Set<string>();
+  const seenText = new Set<string>();
   const out: string[] = [];
   for (const block of blocks) {
     const kept: string[] = [];
@@ -388,10 +415,16 @@ export function dedupeGlslFunctions(blocks: string[]): string[] {
       if (chunk.name) {
         if (seen.has(chunk.name)) continue;
         seen.add(chunk.name);
-      } else if (!chunk.text.trim()) {
-        continue;
+        kept.push(chunk.text);
+      } else if (chunk.text.trim()) {
+        for (const st of topLevelStatements(chunk.text)) {
+          const key = st.replace(/\s+/g, ' ').trim();
+          if (!key || key.startsWith('//')) { if (key) kept.push(st); continue; }
+          if (seenText.has(key)) continue;
+          seenText.add(key);
+          kept.push(st);
+        }
       }
-      kept.push(chunk.text);
     }
     if (kept.length) out.push(kept.join('\n'));
   }
@@ -422,9 +455,10 @@ function calledNames(text: string): Set<string> {
  */
 export function pruneUnusedGlslFunctions(blocks: string[], rootText: string): string[] {
   const split = blocks.map(splitGlslBlock);
+  // By bare name: a call site names the function, not the overload, so every overload of a called name stays.
   const byName = new Map<string, string[]>();
   for (const chunks of split) for (const c of chunks) {
-    if (c.name) byName.set(c.name, [...(byName.get(c.name) ?? []), c.text]);
+    if (c.fn) byName.set(c.fn, [...(byName.get(c.fn) ?? []), c.text]);
   }
   if (byName.size === 0) return blocks;
 
@@ -444,7 +478,7 @@ export function pruneUnusedGlslFunctions(blocks: string[], rootText: string): st
 
   const out: string[] = [];
   for (const chunks of split) {
-    const kept = chunks.filter(c => !c.name || live.has(c.name)).map(c => c.text);
+    const kept = chunks.filter(c => !c.fn || live.has(c.fn)).map(c => c.text);
     if (kept.some(t => t.trim())) out.push(kept.join('\n'));
   }
   return out;
@@ -576,7 +610,7 @@ export class ShaderAssembler {
         // Particle pipeline nodes are compiled by particleAssembler — skip here
         if (PARTICLE_PIPELINE_TYPES.has(node.type)) return;
 
-        const def = getNodeDefinition(node.type);
+        const def = getNodeDefinitionFor(node);
         if (!def) return;
 
         // Collect GLSL helper this.functions (deduplicated)
@@ -663,7 +697,7 @@ export class ShaderAssembler {
                 }
               }
               // ps_ external socket connections override slider values with GLSL vars
-              const snDefForOverrides = getNodeDefinition(subNode.type);
+              const snDefForOverrides = getNodeDefinitionFor(subNode);
               if (snDefForOverrides?.paramDefs) {
                 for (const paramKey of Object.keys(snDefForOverrides.paramDefs)) {
                   const psKey = `ps_${subNode.id}_${paramKey}`;
@@ -694,7 +728,7 @@ export class ShaderAssembler {
             // and their next→value feedback creates a cycle that would throw in Kahn's algorithm.
             const sortedSub = topologicalSort(prefixedNodes.filter(sn => sn.type !== 'loopCarry'));
             for (const subNode of sortedSub) {
-              const subDef = getNodeDefinition(subNode.type);
+              const subDef = getNodeDefinitionFor(subNode);
               if (!subDef) continue;
               // Skip nodes already pre-computed before this pass (e.g. loopIndex nodes
               // whose output was pre-injected with the real loop variable before the pass ran).
@@ -741,7 +775,7 @@ export class ShaderAssembler {
                 const innerPortOverrides = resolveGroupPortOverrides(innerSubgraph.nodes, innerPortValues, innerSlugMap);
                 // Collect GLSL helpers from inner subgraph nodes
                 for (const inn of innerSubgraph.nodes) {
-                  const innDef = getNodeDefinition(inn.type);
+                  const innDef = getNodeDefinitionFor(inn);
                   if (innDef?.glslFunction) this.functions.add(innDef.glslFunction);
                   innDef?.glslFunctions?.forEach(f => this.functions.add(f));
                   innDef?.glslFunctionsFor?.(inn).forEach(f => this.functions.add(f));
@@ -786,7 +820,7 @@ export class ShaderAssembler {
                   // Check for ps_ socket wiring at two levels:
                   // 1. 2-level: outer group's ps_innerGroupId_innId_paramKey wired from the main graph
                   // 2. 1-level: a node inside the outer group wired directly to the inner group's ps_ port
-                  const innDef = getNodeDefinition(inn.type);
+                  const innDef = getNodeDefinitionFor(inn);
                   if (innDef?.paramDefs) {
                     for (const paramKey of Object.keys(innDef.paramDefs)) {
                       const psKey2 = `ps_${nestedOrigId}_${inn.id}_${paramKey}`;
@@ -820,7 +854,7 @@ export class ShaderAssembler {
                 const sortedInner = topologicalSort(innerPrefixedNodes.filter(inn => inn.type !== 'loopCarry'));
                 for (const inn of sortedInner) {
                   if (this.nodeOutputs.has(inn.id)) continue;
-                  const innDef = getNodeDefinition(inn.type);
+                  const innDef = getNodeDefinitionFor(inn);
                   if (!innDef) continue;
                   // innSlugId = slug portion of inn.id (already slug after innerPrefix)
                   const innSlugId = inn.id.slice(innerPrefix.length);
@@ -1047,7 +1081,7 @@ export class ShaderAssembler {
             const carryModeNaturalVars = new Map<string, string>();  // originalNodeId → naturalVarName
             for (const sn of subgraph.nodes) {
               if (!sn.carryMode) continue;
-              const def = getNodeDefinition(sn.type);
+              const def = getNodeDefinitionFor(sn);
               if (!def) continue;
               const firstOutEntry = Object.entries(def.outputs)[0];
               if (!firstOutEntry) continue;
@@ -1109,7 +1143,7 @@ export class ShaderAssembler {
               const op = sn.assignOp;
               if (!op || op === '=') continue;
               if (sn.carryMode) continue;  // carry-mode nodes handle assignOp via the carry mechanism
-              const def = getNodeDefinition(sn.type);
+              const def = getNodeDefinitionFor(sn);
               if (!def) continue;
               // Neutral initializer: 0 for +/-, 1 for *//
               const isMultiply = op === '*=' || op === '/=';
@@ -1351,7 +1385,7 @@ export class ShaderAssembler {
             if (outerVar && isGlslVarRef(outerVar)) sgExternalVarMap.set(outerVar, port.type);
           }
           for (const subNode of subgraph.nodes) {
-            const snDefScan = getNodeDefinition(subNode.type);
+            const snDefScan = getNodeDefinitionFor(subNode);
             if (snDefScan?.paramDefs) {
               for (const paramKey of Object.keys(snDefScan.paramDefs)) {
                 const psKey = `ps_${subNode.id}_${paramKey}`;
@@ -1377,7 +1411,7 @@ export class ShaderAssembler {
             }
             // ps_ external socket connections: wire GLSL vars into inner node params
             // e.g. outer input key "ps_hd_tr_ty" → innerNodeId="hd_tr", paramKey="ty"
-            const snDef = getNodeDefinition(subNode.type);
+            const snDef = getNodeDefinitionFor(subNode);
             if (snDef?.paramDefs) {
               for (const paramKey of Object.keys(snDef.paramDefs)) {
                 const psKey = `ps_${subNode.id}_${paramKey}`;
@@ -1436,7 +1470,7 @@ export class ShaderAssembler {
                   }
                 }
                 // Apply ps_ socket connections as GLSL var overrides (automation)
-                const gnDefForOverrides = getNodeDefinition(gn.type);
+                const gnDefForOverrides = getNodeDefinitionFor(gn);
                 if (gnDefForOverrides?.paramDefs) {
                   for (const paramKey of Object.keys(gnDefForOverrides.paramDefs)) {
                     const psKey = `ps_${gn.id}_${paramKey}`;
@@ -1458,7 +1492,7 @@ export class ShaderAssembler {
               });
               for (const gn of topologicalSort(grpPrefixed)) {
                 if (this.nodeOutputs.has(gn.id)) continue;
-                const gDef = getNodeDefinition(gn.type);
+                const gDef = getNodeDefinitionFor(gn);
                 if (!gDef) continue;
                 if (gDef.glslFunction) this.functions.add(gDef.glslFunction);
                 gDef.glslFunctions?.forEach(h => this.functions.add(h));
@@ -1494,7 +1528,7 @@ export class ShaderAssembler {
               continue;
             }
 
-            const snDef = getNodeDefinition(sn.type);
+            const snDef = getNodeDefinitionFor(sn);
             if (!snDef) continue;
 
             // Collect GLSL helper this.functions
@@ -1671,7 +1705,7 @@ export class ShaderAssembler {
               }
             }
             for (const subNode of subgraph.nodes) {
-              const snDefScan = getNodeDefinition(subNode.type);
+              const snDefScan = getNodeDefinitionFor(subNode);
               if (snDefScan?.paramDefs) {
                 for (const paramKey of Object.keys(snDefScan.paramDefs)) {
                   const psKey = `ps_${subNode.id}_${paramKey}`;
@@ -1693,7 +1727,7 @@ export class ShaderAssembler {
                   paramOverrides[key.slice(overridePrefix.length)] = val;
                 }
               }
-              const snDef = getNodeDefinition(subNode.type);
+              const snDef = getNodeDefinitionFor(subNode);
               if (snDef?.paramDefs) {
                 for (const paramKey of Object.keys(snDef.paramDefs)) {
                   const psKey = `ps_${subNode.id}_${paramKey}`;
@@ -1723,7 +1757,7 @@ export class ShaderAssembler {
             for (const sn of subgraph.nodes) {
               const op = sn.assignOp;
               if (!op || op === '=') continue;
-              const snDefAcc = getNodeDefinition(sn.type);
+              const snDefAcc = getNodeDefinitionFor(sn);
               if (!snDefAcc) continue;
               const snSlugAcc = mlSubSlugMap.get(sn.id) ?? sn.id;
               const isMultiplyAcc = op === '*=' || op === '/=';
@@ -1746,7 +1780,7 @@ export class ShaderAssembler {
               for (const innerGn of innerSg.nodes) {
                 const op = innerGn.assignOp;
                 if (!op || op === '=') continue;
-                const innerDef = getNodeDefinition(innerGn.type);
+                const innerDef = getNodeDefinitionFor(innerGn);
                 if (!innerDef) continue;
                 const isMultiplyAcc = op === '*=' || op === '/=';
                 const safeInnerNodeId = innerGn.id.replace(/[^a-zA-Z0-9]/g, '');
@@ -1772,7 +1806,7 @@ export class ShaderAssembler {
 
             for (const sn of mlProcessOrder) {
               if (this.nodeOutputs.has(sn.id)) continue;  // marchPos/marchDist already pre-registered
-              const snDef = getNodeDefinition(sn.type);
+              const snDef = getNodeDefinitionFor(sn);
               if (!snDef) continue;
 
               // ── Time / Mouse passthrough inside body ──────────────────────────
@@ -1839,7 +1873,7 @@ export class ShaderAssembler {
                     if (isGlslVarRef(val)) sgInlineExternalVarMap.set(val, 'float');
                   }
                   for (const inn of sgSubgraph.nodes) {
-                    const innDefScan = getNodeDefinition(inn.type);
+                    const innDefScan = getNodeDefinitionFor(inn);
                     if (innDefScan?.paramDefs) {
                       for (const paramKey of Object.keys(innDefScan.paramDefs)) {
                         const overrideKey = `${inn.id}::${paramKey}`;
@@ -1863,7 +1897,7 @@ export class ShaderAssembler {
                       }
                     }
                     // ps_ external socket connections from the outer MLG inputVars
-                    const innDefPs = getNodeDefinition(inn.type);
+                    const innDefPs = getNodeDefinitionFor(inn);
                     if (innDefPs?.paramDefs) {
                       for (const paramKey of Object.keys(innDefPs.paramDefs)) {
                         const psKey = `ps_${inn.id}_${paramKey}`;
@@ -1928,7 +1962,7 @@ export class ShaderAssembler {
                       }));
                       for (const gn of topologicalSort(igrpPrefixed)) {
                         if (this.nodeOutputs.has(gn.id)) continue;
-                        const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
+                        const gDef = getNodeDefinitionFor(gn); if (!gDef) continue;
                         if (gDef.glslFunction) this.functions.add(gDef.glslFunction);
                         gDef.glslFunctions?.forEach(h => this.functions.add(h));
                         gDef?.glslFunctionsFor?.(gn).forEach(f => this.functions.add(f));
@@ -1955,7 +1989,7 @@ export class ShaderAssembler {
                       this.nodeOutputs.set(sgn.id, igrpOutVars); continue;
                     }
 
-                    const sgnDef = getNodeDefinition(sgn.type);
+                    const sgnDef = getNodeDefinitionFor(sgn);
                     if (!sgnDef) continue;
 
                     if (sgnDef.glslFunction) this.functions.add(sgnDef.glslFunction);
@@ -2044,7 +2078,7 @@ export class ShaderAssembler {
                 }));
                 for (const gn of topologicalSort(mlGrpPrefixed)) {
                   if (this.nodeOutputs.has(gn.id)) continue;
-                  const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
+                  const gDef = getNodeDefinitionFor(gn); if (!gDef) continue;
                   if (gDef.glslFunction) this.functions.add(gDef.glslFunction);
                   gDef.glslFunctions?.forEach(h => this.functions.add(h));
                   gDef?.glslFunctionsFor?.(gn).forEach(f => this.functions.add(f));
@@ -2439,7 +2473,7 @@ export class ShaderAssembler {
               }
             }
             for (const subNode of subgraph.nodes) {
-              const snDefScan = getNodeDefinition(subNode.type);
+              const snDefScan = getNodeDefinitionFor(subNode);
               if (snDefScan?.paramDefs) {
                 for (const paramKey of Object.keys(snDefScan.paramDefs)) {
                   const psKey = `ps_${subNode.id}_${paramKey}`;
@@ -2460,7 +2494,7 @@ export class ShaderAssembler {
                   paramOverrides[key.slice(overridePrefix.length)] = val;
                 }
               }
-              const snDef = getNodeDefinition(subNode.type);
+              const snDef = getNodeDefinitionFor(subNode);
               if (snDef?.paramDefs) {
                 for (const paramKey of Object.keys(snDef.paramDefs)) {
                   const psKey = `ps_${subNode.id}_${paramKey}`;
@@ -2489,7 +2523,7 @@ export class ShaderAssembler {
             for (const sn of subgraph.nodes) {
               const op = sn.assignOp;
               if (!op || op === '=') continue;
-              const snDefAcc = getNodeDefinition(sn.type);
+              const snDefAcc = getNodeDefinitionFor(sn);
               if (!snDefAcc) continue;
               const snSlugAcc = mlSubSlugMap.get(sn.id) ?? sn.id;
               const isMultiplyAcc = op === '*=' || op === '/=';
@@ -2510,7 +2544,7 @@ export class ShaderAssembler {
               for (const innerGn of innerSg.nodes) {
                 const op = innerGn.assignOp;
                 if (!op || op === '=') continue;
-                const innerDef = getNodeDefinition(innerGn.type);
+                const innerDef = getNodeDefinitionFor(innerGn);
                 if (!innerDef) continue;
                 const isMultiplyAcc = op === '*=' || op === '/=';
                 const safeInnerNodeId = innerGn.id.replace(/[^a-zA-Z0-9]/g, '');
@@ -2534,7 +2568,7 @@ export class ShaderAssembler {
 
             for (const sn of mlProcessOrder) {
               if (this.nodeOutputs.has(sn.id)) continue;
-              const snDef = getNodeDefinition(sn.type);
+              const snDef = getNodeDefinitionFor(sn);
               if (!snDef) continue;
 
               if (sn.type === 'time') {
@@ -2591,7 +2625,7 @@ export class ShaderAssembler {
                     if (isGlslVarRef(val)) sgInlineExternalVarMap.set(val, 'float');
                   }
                   for (const inn of sgSubgraph.nodes) {
-                    const innDefScan = getNodeDefinition(inn.type);
+                    const innDefScan = getNodeDefinitionFor(inn);
                     if (innDefScan?.paramDefs) {
                       for (const paramKey of Object.keys(innDefScan.paramDefs)) {
                         const overrideKey = `${inn.id}::${paramKey}`;
@@ -2613,7 +2647,7 @@ export class ShaderAssembler {
                         innerParamOverrides[k.slice(overridePrefix2.length)] = v;
                       }
                     }
-                    const innDefPs = getNodeDefinition(inn.type);
+                    const innDefPs = getNodeDefinitionFor(inn);
                     if (innDefPs?.paramDefs) {
                       for (const paramKey of Object.keys(innDefPs.paramDefs)) {
                         const psKey = `ps_${inn.id}_${paramKey}`;
@@ -2677,7 +2711,7 @@ export class ShaderAssembler {
                       }));
                       for (const gn of topologicalSort(igrpPrefixed)) {
                         if (this.nodeOutputs.has(gn.id)) continue;
-                        const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
+                        const gDef = getNodeDefinitionFor(gn); if (!gDef) continue;
                         if (gDef.glslFunction) this.functions.add(gDef.glslFunction);
                         gDef.glslFunctions?.forEach(h => this.functions.add(h));
                         gDef?.glslFunctionsFor?.(gn).forEach(f => this.functions.add(f));
@@ -2704,7 +2738,7 @@ export class ShaderAssembler {
                       this.nodeOutputs.set(sgn.id, igrpOutVars); continue;
                     }
 
-                    const sgnDef = getNodeDefinition(sgn.type);
+                    const sgnDef = getNodeDefinitionFor(sgn);
                     if (!sgnDef) continue;
 
                     if (sgnDef.glslFunction) this.functions.add(sgnDef.glslFunction);
@@ -2787,7 +2821,7 @@ export class ShaderAssembler {
                 }));
                 for (const gn of topologicalSort(mlGrpPrefixed)) {
                   if (this.nodeOutputs.has(gn.id)) continue;
-                  const gDef = getNodeDefinition(gn.type); if (!gDef) continue;
+                  const gDef = getNodeDefinitionFor(gn); if (!gDef) continue;
                   if (gDef.glslFunction) this.functions.add(gDef.glslFunction);
                   gDef.glslFunctions?.forEach(h => this.functions.add(h));
                   gDef?.glslFunctionsFor?.(gn).forEach(f => this.functions.add(f));
@@ -3223,7 +3257,7 @@ export class ShaderAssembler {
               }
             }
             // ps_ external socket connections inject GLSL vars as param overrides
-            const snDef = getNodeDefinition(subNode.type);
+            const snDef = getNodeDefinitionFor(subNode);
             if (snDef?.paramDefs) {
               for (const paramKey of Object.keys(snDef.paramDefs)) {
                 const psKey = `ps_${subNode.id}_${paramKey}`;
@@ -3254,7 +3288,7 @@ export class ShaderAssembler {
 
           for (const sn of swSorted) {
             if (this.nodeOutputs.has(sn.id)) continue;  // scenePos already pre-registered
-            const snDef = getNodeDefinition(sn.type);
+            const snDef = getNodeDefinitionFor(sn);
             if (!snDef) continue;
 
             if (snDef.glslFunction) this.functions.add(snDef.glslFunction);

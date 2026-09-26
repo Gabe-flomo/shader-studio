@@ -5,7 +5,7 @@ export type { NodeAlias } from './aliases';
 // Each category lives in its own file. This module re-exports everything and
 // builds the unified NODE_REGISTRY consumed by the rest of the app.
 
-import type { NodeDefinition } from '../../types/nodeGraph';
+import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { getUserNodeDefinition, getAllUserNodeDefinitions } from '../userNodes/userNodeRegistry';
 import { VideoInputNode } from './sources';
 export { VideoInputNode };
@@ -14,6 +14,7 @@ export { MidiInputNode };
 
 // Sources
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
+export { ConstantsNode } from './constants';
 export { PlayLayersNode } from './playLayers';
 
 // Grid
@@ -162,6 +163,7 @@ export {
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
+import { ConstantsNode } from './constants';
 import { PlayLayersNode } from './playLayers';
 import { EchoNode } from './echo';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
@@ -261,6 +263,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   resolution: ResolutionNode,
   time: TimeNode,
   constant: ConstantNode,
+  constants: ConstantsNode,
   mouse: MouseNode,
   textureInput: TextureInputNode,
   prevFrame: PrevFrameNode,
@@ -637,6 +640,24 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
 export function getNodeDefinition(type: string): NodeDefinition | undefined {
   // Built-ins, then user-published nodes, then merged (aliased) types — see ./aliases.ts.
   return NODE_REGISTRY[type] ?? getUserNodeDefinition(type) ?? (NODE_ALIASES[type] ? NODE_REGISTRY[NODE_ALIASES[type].to] : undefined);
+}
+
+/**
+ * The definition as it applies to one node: the same as getNodeDefinition
+ * unless the type declares `paramDefsFor`, in which case the instance's own
+ * param definitions (and its sockets) are merged in. Cached per node object;
+ * the store replaces the object on every change, so the cache follows.
+ */
+const perNodeDefs = new WeakMap<GraphNode, NodeDefinition>();
+export function getNodeDefinitionFor(node: GraphNode): NodeDefinition | undefined {
+  const def = getNodeDefinition(node.type);
+  if (!def?.paramDefsFor) return def;
+  let d = perNodeDefs.get(node);
+  if (!d) {
+    d = { ...def, paramDefs: { ...(def.paramDefs ?? {}), ...def.paramDefsFor(node) }, outputs: Object.keys(node.outputs).length ? node.outputs : def.outputs };
+    perNodeDefs.set(node, d);
+  }
+  return d;
 }
 
 /** Every definition that can be offered for adding: built-ins plus user nodes.

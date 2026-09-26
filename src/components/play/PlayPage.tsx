@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -174,8 +174,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     const { nodeId } = targetParts(c.target);
     const top = nodes.find(n => n.id === nodeId), node = findTargetNode(nodes, c.target);
     const key = c.target.split('::').pop() ?? '';
-    const nameOf = (n: GraphNode) => (typeof n.params.label === 'string' && n.params.label.trim()) || getNodeDefinition(n.type)?.label || n.type;
-    const param = (node && getNodeDefinition(node.type)?.paramDefs?.[key]?.label) || key;
+    const nameOf = (n: GraphNode) => (typeof n.params.label === 'string' && n.params.label.trim()) || getNodeDefinitionFor(n)?.label || n.type;
+    const param = (node && getNodeDefinitionFor(node)?.paramDefs?.[key]?.label) || key;
     return {
       kind: 'node', title: node ? nameOf(node) : 'a deleted node', param, missing: !node,
       within: top && node && top !== node ? nameOf(top) : undefined,

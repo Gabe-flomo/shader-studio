@@ -2,7 +2,7 @@ import React, { useRef, useCallback, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { saveTransformPreset } from '../../store/useNodeGraphStore';
 import type { GraphNode, DataType, SubgraphData } from '../../types/nodeGraph';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -165,7 +165,7 @@ export function TransformVecModal({ node, onClose }: Props) {
       if (mapKey === n.id || mapKey.endsWith(`_${n.id}`)) { sourceNode = n; break; }
     }
 
-    const def       = sourceNode ? getNodeDefinition(sourceNode.type) : undefined;
+    const def       = sourceNode ? getNodeDefinitionFor(sourceNode) : undefined;
     const nodeLabel = sourceNode
       ? (typeof sourceNode.params.label === 'string' ? sourceNode.params.label : (def?.label ?? sourceNode.type))
       : mapKey.split('_').pop() ?? mapKey;

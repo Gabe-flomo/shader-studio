@@ -7,7 +7,7 @@
  */
 import React, { useRef, useState } from 'react';
 import type { GraphNode, DataType, SubgraphData } from '../../types/nodeGraph';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { Modal } from '../ui/Modal';
@@ -132,7 +132,7 @@ export function AssignInitModal({ node, onClose }: Props) {
       }
     }
 
-    const def       = sourceNode ? getNodeDefinition(sourceNode.type) : undefined;
+    const def       = sourceNode ? getNodeDefinitionFor(sourceNode) : undefined;
     const nodeLabel = sourceNode
       ? (typeof sourceNode.params.label === 'string' ? sourceNode.params.label : (def?.label ?? sourceNode.type))
       : mapKey.split('_').pop() ?? mapKey; // fallback: last segment of prefixed key
@@ -204,7 +204,7 @@ export function AssignInitModal({ node, onClose }: Props) {
     onClose();
   };
 
-  const nodeDef   = getNodeDefinition(node.type);
+  const nodeDef   = getNodeDefinitionFor(node);
   const nodeLabel = typeof node.params.label === 'string'
     ? node.params.label
     : (nodeDef?.label ?? node.type);

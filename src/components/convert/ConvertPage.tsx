@@ -21,7 +21,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { glslToGraph, normaliseHostShader, type ConversionResult } from '../../glslToGraph';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { convertFragmentShader } from '../../nodes/userNodes/glslImport';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { estimateNodeHeight } from '../../store/graphLayout';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
@@ -294,6 +294,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
           <Select ariaLabel="Example shader" value="" height={30} onChange={k => { if (EXAMPLES[k]) changeCode(EXAMPLES[k].code); }}
             options={[{ value: '', label: 'Examples…' }, ...Object.entries(EXAMPLES).map(([k, e]) => ({ value: k, label: e.label }))]} />
           <IconButton icon="import" label="Open a .glsl / .frag file" size="sm" onClick={loadFile} />
+          <Button size="sm" variant="ghost" onClick={() => changeCode('')} disabled={!code.trim()} title="Empty the editor">Clear</Button>
         </div>
         <GlslEditor value={code} onChange={changeCode} placeholder={'Paste a fragment shader: a plain void main() with gl_FragColor, or a Shadertoy mainImage().'} />
         {!compact && check}
@@ -333,7 +334,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
 function Detail({ node, nodes, report, asBlock, onToggleBlock, onClose }: { node: GraphNode; nodes: GraphNode[]; report: ConversionResult['report']; asBlock: Set<string>; onToggleBlock: (id: string) => void; onClose: () => void }) {
   const tk = useTokens();
   const kind = kindOf(node);
-  const def = getNodeDefinition(node.type);
+  const def = getNodeDefinitionFor(node);
   const warning = report.warnings.find(w => w.nodeId === node.id);
   const code = node.type === 'exprNode' ? String(node.params.expr ?? '') : node.type === 'customFn' ? String(node.params.body ?? '') : null;
   const why = warning?.why ?? report.blocks.find(b => b.code === code)?.why ?? report.regions.find(g => node.type === 'customFn' && String(node.params.label ?? '').includes(g.why.replace(/^call to /, '').replace(/\(\)$/, '')))?.why;

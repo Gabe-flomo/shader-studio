@@ -10,7 +10,7 @@
  */
 
 import type { SubgraphData, GraphNode, ParamDef } from '../../types/nodeGraph';
-import { getNodeDefinition } from '../definitions';
+import { getNodeDefinitionFor } from '../definitions';
 import { isParamVisible } from '../../compiler/uniformPatcher';
 
 export interface ParamCandidate {
@@ -32,13 +32,13 @@ export interface ParamCandidate {
 const SKIP_TYPES = new Set(['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'loopIndex', 'loopCarry', 'group', 'exprNode', 'customFn']);
 
 function labelOf(node: GraphNode): string {
-  const def = getNodeDefinition(node.type);
+  const def = getNodeDefinitionFor(node);
   return (typeof node.params.label === 'string' && node.params.label.trim()) || def?.label || node.type;
 }
 
 function eligible(node: GraphNode, key: string, pd: ParamDef): boolean {
   if (pd.type !== 'float' || pd.step === 1 || pd.compileTime) return false;
-  if (!isParamVisible(pd, node.params, getNodeDefinition(node.type)?.defaultParams)) return false;
+  if (!isParamVisible(pd, node.params, getNodeDefinitionFor(node)?.defaultParams)) return false;
   // Driven from inside the group by a wire → not a free param
   if (node.inputs[`__param_${key}`]?.connection) return false;
   const sameNamed = Object.entries(node.inputs).find(([k, inp]) => k.toLowerCase() === key.toLowerCase() && inp.connection);
@@ -55,7 +55,7 @@ export function collectParamCandidates(subgraph: SubgraphData): ParamCandidate[]
   const visit = (nodes: GraphNode[], prefix: string, groupLabel: string | undefined, overrides: Record<string, unknown>) => {
     for (const node of nodes) {
       if (SKIP_TYPES.has(node.type)) continue;
-      const def = getNodeDefinition(node.type);
+      const def = getNodeDefinitionFor(node);
       if (!def?.paramDefs) continue;
       for (const [key, pd] of Object.entries(def.paramDefs)) {
         if (!eligible(node, key, pd)) continue;

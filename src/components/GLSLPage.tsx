@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { safeSetItem } from '../utils/fileIO';
 import type { FileResult } from '../utils/fileIO';
 import { GlslEditor, type GlslEditorHandle } from './code/GlslEditor';
+import { translateToStudio, dialectLabel } from '../glsl/dialects';
 import { NodePalette } from './NodeGraph/NodePalette';
 import { useTokens } from '../theme/themeStore';
-import { fontFamily, radius } from '../theme/tokens';
+import { alpha, fontFamily, radius } from '../theme/tokens';
 import { Button, IconButton } from './ui/Button';
 import { Callout } from './ui/Callout';
 import { Segmented } from './ui/Choice';
@@ -151,12 +152,14 @@ export function GLSLPage() {
 
   const editorRef = useRef<GlslEditorHandle>(null);
 
+  // A paste from Shadertoy, GLSL Sandbox, twigl or an ES 3.00 file is read as ours before it compiles.
+  const translation = useMemo(() => translateToStudio(code), [code]);
   // Compiling the shader on every keystroke stalls typing; wait for a pause.
   useEffect(() => {
     localStorage.setItem(EDITOR_KEY, code);
-    const t = setTimeout(() => setRawGlslShader(code), 250);
+    const t = setTimeout(() => setRawGlslShader(translation.code), 250);
     return () => clearTimeout(t);
-  }, [code, setRawGlslShader]);
+  }, [code, translation, setRawGlslShader]);
 
   useEffect(() => () => { setRawGlslShader(null); }, [setRawGlslShader]);
 
@@ -263,7 +266,14 @@ export function GLSLPage() {
       {/* ── Editor pane ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, minWidth: 0 }}>
         <div style={{ ...panelHead, padding: '0 12px 0 16px' }}>
-          <span style={{ fontWeight: 650, fontSize: 13.5, marginRight: 'auto', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>Fragment shader</span>
+          <span style={{ fontWeight: 650, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>Fragment shader</span>
+          {translation.dialect !== 'studio' && (
+            <span
+              title={[...translation.notes, ...translation.unsupported.map(u => `⚠ ${u}`)].join('\n')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px', borderRadius: 11, whiteSpace: 'nowrap', background: translation.unsupported.length ? alpha(tk.status.warning, 0.16) : alpha(tk.accent.base, 0.14), color: translation.unsupported.length ? tk.status.warningText : tk.accent.base, font: `600 11px ${fontFamily.ui}`, cursor: 'help' }}
+            >Read as {dialectLabel(translation.dialect)}</span>
+          )}
+          <span style={{ marginRight: 'auto' }} />
           {showSaveInput ? (
             <>
               <Field

@@ -147,6 +147,12 @@ export interface NodeDefinition {
 
   // Editable param metadata — drives inline UI controls on the node card
   paramDefs?: Record<string, ParamDef>;
+  /**
+   * Param metadata that depends on the instance (a Constants card's entries).
+   * Read through getNodeDefinitionFor(node), which merges it over `paramDefs`;
+   * the static `paramDefs` stays what a fresh node has.
+   */
+  paramDefsFor?: (node: GraphNode) => Record<string, ParamDef>;
 
   /**
    * When true the node is auto-added to its parent container (SceneGroup, etc.)

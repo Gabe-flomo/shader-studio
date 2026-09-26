@@ -38,20 +38,32 @@ which the "fall back to the original text" rungs below depend on.
 
 ## How the converter works
 
-The source is normalised first (Shadertoy `mainImage(out vec4 fragColor, in vec2
-fragCoord)` becomes `main()`; `iTime`/`iResolution`/`iMouse` become
-`u_time`/`u_resolution`/`u_mouse`; simple `#define NAME value` macros are
-expanded; `vUv` becomes fragCoord ÷ resolution). Then `main()` is walked
-statement by statement, keeping an environment of *variable name → value in
-flight*, where a value is either a node output or a float literal not yet spent.
-Each expression takes the highest rung it can:
+The source is read as ours first, by the shared dialect translator
+(`src/glsl/dialects.ts`, also what the GLSL page compiles a paste through):
+Shadertoy (`mainImage`, `iTime`, `iResolution` and its components, `iMouse`,
+`iFrame`, `iChannel` textures read as black), GLSL Sandbox (`time`,
+`resolution`, `mouse`, `surfacePosition`), twigl golf (`FC`, `r`, `t`, `m`,
+`o`; geekest code gets its `main()`), GLSL ES 3.00 (`#version 300 es`, the
+`out vec4`, `in` varyings, `texture()`), and a paste that declares nothing gets
+its precision and uniforms. Then simple `#define NAME value` macros are
+expanded, a `const float PI`/`TAU` of the shader's own is renamed (the compiled
+shader defines those as macros), and a function named like one of the app's
+always-included helpers (`smin`, `sdBox`, `rot2d`…) is renamed too, or the
+app's version would silently win. Then `main()` is walked statement by
+statement, keeping an environment of *variable name → value in flight*, where
+a value is either a node output or a number not yet spent. Each expression
+takes the highest rung it can:
 
 1. **A node.** `a * b` → Multiply, `sin(x)` → Sin (freq 1, amp 1), `vec3(r, g, b)`
    → Make Vec3, `p.x` → Split Vec2, `smoothstep(e0, e1, x)` → Smoothstep, `gl_FragCoord`
-   → Frag Coord, `u_time` → Time… A **literal operand becomes the node's slider**:
-   `uv * 4.0` is a Multiply with B = 4. That is the "procedural" payoff: the
-   graph arrives with every magic number already draggable (case 06 yields 17
-   sliders, case 07 15).
+   → Frag Coord, `u_time` → Time… **Numbers** go two ways. An anonymous one
+   (`uv * 4.0`, the edges of a smoothstep) becomes the using node's own slider,
+   or a slider input on a block/region: no separate card for it. A number the
+   shader **named** (`float ang = 5.0;`, a `const`) is a constant: it goes on
+   the scope's one **Constants card**, fixed, under its name, wired to where it's
+   read; free it into a slider in that card's editor when you want to play with
+   it. Three numbers in 0..1 in a `vec3(…)` are a **Color** card. Nothing else
+   makes a Constant node any more, and nodes nothing reads are pruned.
 2. **An Expression Block.** Anything rung 1 can't express becomes an Expression
    Block whose inputs are the live variables it reads and whose expression is
    the original sub-expression **verbatim** (regenerated from the AST). Examples:
@@ -83,10 +95,20 @@ is a ternary block inside the group. Loops with `break`/`continue`/`return`,
 non-constant bounds, more than 16 iterations, or a loop inside a loop stay
 rung 3 (a region), which is why the 64-step raymarcher is still code.
 
+**Global `const`s** are values in the environment (so `main()` and blocks read
+them, on the Constants card when named) and text every region carries (the
+assembler emits a repeated top-level statement once). **Overloaded helpers**
+(`mod289(vec3)` and `mod289(vec4)`) all come along; the assembler de-duplicates
+helpers by signature, not by name. **A call with `out`/`inout` arguments**
+(`pattern(p, t, field, grad)`) becomes a region that declares locals for them,
+makes the call, and returns everything the call produced packed into one
+vector when it fits in four components (else several regions, each calling
+again); blocks pull the values back out and the out variables take them.
+
 The **report** lists every block and region with the reason, counts sliders
 and loops, and lists what makes the shader unconvertible (`unsupported`):
-`discard`, textures, uniforms with no source node, globals, arrays, `return`
-in main. That report is the preview step.
+`discard`, textures, uniforms with no source node, non-const globals, arrays,
+`return` in main. That report is the preview step.
 
 The graph is laid out in columns by depth (sources left, Output right).
 
@@ -164,8 +186,9 @@ PSNR ≥ 40 dB counts as "same"; anything else shows the diff.
 |---|---|---|
 | `discard` | refused | `if (c) discard;` → alpha 0 through Output (RGBA); a general `discard` stays refused |
 | textures / `iChannelN` | refused | Texture Input node + `texture2D` → its colour/alpha outputs; iChannel slots become upload prompts in the preview |
-| unknown uniforms | refused | become Play controls (a uniform *is* a slider) or Constant nodes; the preview asks for a default |
-| global variables | refused | treat as first-assignment locals when only written in main; else region |
+| unknown uniforms | refused | become Play controls (a uniform *is* a slider) or Constants entries; the preview asks for a default |
+| global `const`s | done | on the Constants card and in region text |
+| global variables (mutable) | refused | treat as first-assignment locals when only written in main; else region |
 | arrays, structs | refused | region (Custom Function) |
 | loop changing 2+ variables | iterated group (done) | a loop with `break` still needs a region; a "stop when" port on iterated groups would lift that |
 | vec4 arithmetic, `vec3` length/dot/normalize, `abs`, `pow`, `sqrt`, `min/max` on vectors | block | new nodes or type-generic versions of existing ones; an "exact" switch on Divide/Pow/Sqrt |

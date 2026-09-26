@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { ConnectionLine } from './ConnectionLine';
 import { getDragPosition, getSocketElement, getSocketOffset, subscribeLayout, type Pt } from './socketRegistry';
 
@@ -88,11 +88,13 @@ export const WireLayer = React.memo(function WireLayer({
       const toPos   = socketWorld(node.id, 'in', inputKey);
       if (!fromPos || !toPos) continue;
 
-      const srcDef = getNodeDefinition(sourceNode.type);
-      // For group nodes the static def has empty outputs (they're dynamic);
-      // fall back to the live node's outputs so wires get the right colour.
-      const lineType = srcDef?.outputs[input.connection.outputKey]?.type
-        ?? sourceNode.outputs[input.connection.outputKey]?.type;
+      const srcDef = getNodeDefinitionFor(sourceNode);
+      // The live socket first: a polymorphic card (Multiply switched to vec2) and a
+      // group (dynamic ports) both carry their current type on the node, and the
+      // wire should be the colour the socket is right now. The static definition
+      // is the fallback for older saves that never stored socket types.
+      const lineType = sourceNode.outputs[input.connection.outputKey]?.type
+        ?? srcDef?.outputs[input.connection.outputKey]?.type;
       const edgeKey = edgeKeyOf(input.connection.nodeId, input.connection.outputKey, node.id, inputKey);
       edges.set(edgeKey, {
         info: {

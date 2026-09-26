@@ -17,7 +17,7 @@ import type React from 'react';
  * promotion rules (float -> vec2/vec3, ...) used everywhere else.
  */
 import { useMemo, useState } from 'react';
-import { getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
+import { getOfferedDefinitions, getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions';
 import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
@@ -32,7 +32,7 @@ import { INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 
 function labelFor(n: GraphNode): string {
-  return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
+  return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinitionFor(n)?.label || n.type;
 }
 
 // Rebuilt when the user-node registry changes (built-ins are static).
@@ -91,7 +91,7 @@ interface Pairing {
   exact: boolean;
 }
 function pairingsFor(newDef: NodeDefinition, existing: GraphNode): Pairing[] {
-  const existingDef = getNodeDefinition(existing.type);
+  const existingDef = getNodeDefinitionFor(existing);
   if (!existingDef) return [];
   const out: Pairing[] = [];
   for (const [newInKey, newIn] of Object.entries(newDef.inputs)) {

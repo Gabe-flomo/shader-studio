@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { Modal } from '../ui/Modal';
 
@@ -94,7 +94,7 @@ export function LoopModal({ node, onClose }: Props) {
     if (n.id === node.id) return false;
     if (steps.includes(n.id)) return false;
     // Check if node has at least one output matching carryType
-    const def = getNodeDefinition(n.type);
+    const def = getNodeDefinitionFor(n);
     const outputs = Object.values(n.outputs).length > 0
       ? Object.values(n.outputs)
       : Object.values(def?.outputs ?? {});
@@ -106,7 +106,7 @@ export function LoopModal({ node, onClose }: Props) {
     const n = nodes.find(nd => nd.id === id);
     if (!n) return `[deleted: ${id}]`;
     const label = typeof n.params.label === 'string' ? n.params.label
-      : getNodeDefinition(n.type)?.label ?? n.type;
+      : getNodeDefinitionFor(n)?.label ?? n.type;
     return label;
   };
 
@@ -229,7 +229,7 @@ export function LoopModal({ node, onClose }: Props) {
                 <option value=''>— pick a node —</option>
                 {eligible.map(n => {
                   const label = typeof n.params.label === 'string' ? n.params.label
-                    : getNodeDefinition(n.type)?.label ?? n.type;
+                    : getNodeDefinitionFor(n)?.label ?? n.type;
                   return (
                     <option key={n.id} value={n.id}>{label} ({n.type})</option>
                   );

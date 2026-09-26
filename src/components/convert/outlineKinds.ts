@@ -1,8 +1,8 @@
 /** How the outline (and the detail panel) reads a converted node: its kind and the words on its box. */
 import type { GraphNode } from '../../types/nodeGraph';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 
-const SOURCES = new Set(['fragCoord', 'resolution', 'time', 'mouse', 'pixelUV', 'uv', 'constant']);
+const SOURCES = new Set(['fragCoord', 'resolution', 'time', 'mouse', 'pixelUV', 'uv', 'constant', 'constants', 'colorPicker']);
 
 export type OutlineKind = 'source' | 'node' | 'block' | 'region' | 'output' | 'warned' | 'loop';
 
@@ -21,8 +21,9 @@ export function labelOf(n: GraphNode): string {
   if (n.type === 'exprNode') return String(n.params.expr ?? n.params.result ?? 'expression');
   if (n.type === 'customFn') return String(n.params.label ?? 'function');
   if (n.type === 'constant') return `${n.params.value}`;
+  if (n.type === 'constants') { const items = (n.params.items as Array<{ label: string }> | undefined) ?? []; return `Constants: ${items.map(i => i.label).join(', ')}`; }
   if (n.type === 'group') return String(n.params.label ?? 'Group');
-  const def = getNodeDefinition(n.type);
+  const def = getNodeDefinitionFor(n);
   const base = def?.label ?? n.type;
   // Sliders the converter set: show the number, the way the card will.
   const b = n.params.b, e0 = n.params.edge0, e1 = n.params.edge1;

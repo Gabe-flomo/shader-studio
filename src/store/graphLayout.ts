@@ -1,9 +1,9 @@
 import type { GraphNode } from '../types/nodeGraph';
-import { getNodeDefinition } from '../nodes/definitions';
+import { getNodeDefinitionFor } from '../nodes/definitions';
 
 /** Roughly how tall a card renders (header, socket rows, param rows, footer), for layouts done before it's measured. */
 export function estimateNodeHeight(node: GraphNode): number {
-  const def = getNodeDefinition(node.type);
+  const def = getNodeDefinitionFor(node);
   const inputCount  = Object.keys(node.inputs).length;
   const outputCount = Object.keys(node.outputs).length;
   // Count only visible param defs (float or select — things that render sliders/dropdowns)

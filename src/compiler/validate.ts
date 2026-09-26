@@ -1,5 +1,5 @@
 import type { GraphNode } from '../types/nodeGraph';
-import { getNodeDefinition } from '../nodes/definitions';
+import { getNodeDefinitionFor } from '../nodes/definitions';
 import { typesCompatible } from '../lib/typesCompatible';
 
 export interface ValidationResult {
@@ -19,14 +19,14 @@ export function validateGraph(nodes: GraphNode[]): ValidationResult {
 
   // All types registered
   for (const node of visibleNodes) {
-    if (!getNodeDefinition(node.type)) {
+    if (!getNodeDefinitionFor(node)) {
       errors.push(`Unknown node type: ${node.type}`);
     }
   }
 
   // Type-safe connections
   for (const node of visibleNodes) {
-    const def = getNodeDefinition(node.type);
+    const def = getNodeDefinitionFor(node);
     if (!def) continue;
 
     for (const [inputKey, input] of Object.entries(node.inputs)) {
@@ -41,7 +41,7 @@ export function validateGraph(nodes: GraphNode[]): ValidationResult {
       // customFn has dynamic / inferred types — skip
       if (node.type === 'customFn') continue;
 
-      const sourceDef = getNodeDefinition(sourceNode.type);
+      const sourceDef = getNodeDefinitionFor(sourceNode);
       // exprNode/expr/customFn store actual output type in params.outputType —
       // the socket always declares 'vec3' as a placeholder, so read the real type here.
       const sourceOutputType: string | undefined =

@@ -60,7 +60,7 @@ import { buildUserNodeDefinition, CODE_RETURN_PORT, type PublishUserNodeSpec, ty
 import { USER_NODE_DEFAULT_CATEGORY } from '../types/userNode';
 import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes } from '../nodes/userNodes/userNodeRegistry';
 import type { KeyframePreset } from '../types/keyframePreset';
-import { getNodeDefinition, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams } from '../nodes/definitions';
+import { getNodeDefinition, getNodeDefinitionFor, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams } from '../nodes/definitions';
 import { paletteNodeCoeffs, STOP_PALETTE_MAX } from '../nodes/definitions/color';
 import { autoFitCosineStops, fitCosineStops } from '../lib/palette';
 import { compileGraph } from '../compiler/graphCompiler';
@@ -75,6 +75,7 @@ import { BLANK_GRAPH, DEFAULT_EXAMPLE, loadExampleGraphs } from './exampleIndex'
 import { archiveCurrent, deleteHistory, readVersion } from './graphVersions';
 import type { ExampleGraph } from './exampleIndex';
 import { groupNodesByRank, estimateNodeHeight } from './graphLayout';
+import { constantsItems, constantsOutputs, paramKeysOf, paramsFor, type ConstantsItem } from '../nodes/definitions/constants';
 import { typesCompatible } from '../lib/typesCompatible';
 import { audioEngine } from '../lib/audioEngine';
 import { videoEngine } from '../lib/videoEngine';
@@ -667,6 +668,8 @@ interface NodeGraphState {
     inputs: Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>,
     outputType: DataType
   ) => void;
+  /** Rewrite a Constants card's entries: params, output sockets, and wires to outputs that went away. One undo step. */
+  setConstantsItems: (nodeId: string, items: ConstantsItem[]) => void;
 
   /** Change the vector type of a vectorizable math node (sin, cos, pow, etc.).
    *  Updates params.outputType plus the primary input and output socket types. */
@@ -1004,7 +1007,7 @@ export function removeNodeFromList(nodeList: GraphNode[], nodeId: string): Graph
     for (const input of Object.values(deletedNode.inputs)) {
       if (!input.connection) continue;
       const srcNode = nodeList.find(n => n.id === input.connection!.nodeId);
-      const srcDef = srcNode ? getNodeDefinition(srcNode.type) : undefined;
+      const srcDef = srcNode ? getNodeDefinitionFor(srcNode) : undefined;
       const srcType = srcDef?.outputs[input.connection!.outputKey]?.type ?? '';
       if (srcType) upstream.push({ sourceNodeId: input.connection.nodeId, sourceOutputKey: input.connection.outputKey, sourceType: srcType });
     }
@@ -1016,7 +1019,7 @@ export function removeNodeFromList(nodeList: GraphNode[], nodeId: string): Graph
     if (n.id === nodeId) continue;
     for (const [inputKey, input] of Object.entries(n.inputs)) {
       if (input.connection?.nodeId !== nodeId) continue;
-      const tgtDef = getNodeDefinition(n.type);
+      const tgtDef = getNodeDefinitionFor(n);
       const tgtType = tgtDef?.inputs[inputKey]?.type ?? '';
       downstream.push({ targetNodeId: n.id, targetInputKey: inputKey, targetType: tgtType });
     }
@@ -1257,7 +1260,7 @@ function pickSurfacedParams(
 
     for (const inn of innerSub.nodes) {
       if (inn.type === 'loopIndex' || inn.type === 'loopCarry') continue;
-      const innDef = getNodeDefinition(inn.type);
+      const innDef = getNodeDefinitionFor(inn);
       if (!innDef?.paramDefs) continue;
       const floatParams = Object.entries(innDef.paramDefs).filter(
         ([, pd]) => pd.type === 'float' && pd.step !== 1,
@@ -1770,7 +1773,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (!hasPsSockets && groupNodeForMigration) {
         const newPsSockets: Record<string, import('../types/nodeGraph').InputSocket> = {};
         for (const sn of finalNodes) {
-          const snDef = getNodeDefinition(sn.type);
+          const snDef = getNodeDefinitionFor(sn);
           const snParamDefs = snDef?.paramDefs ?? {};
           for (const [paramKey, paramDef] of Object.entries(snParamDefs)) {
             if (paramDef.type !== 'float') continue;
@@ -2119,7 +2122,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         let anyNew = false;
         if (sg?.nodes) {
           for (const sn of sg.nodes) {
-            const snDef = getNodeDefinition(sn.type);
+            const snDef = getNodeDefinitionFor(sn);
 
             // ExprBlock: surface slider inputs from params.inputs
             if (sn.type === 'exprNode') {
@@ -2326,7 +2329,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // Add param input sockets for each inner node's float paramDefs
     for (const sn of selectedNodes) {
-      const snDef = getNodeDefinition(sn.type);
+      const snDef = getNodeDefinitionFor(sn);
       const snParamDefs = snDef?.paramDefs ?? {};
       for (const [paramKey, paramDef] of Object.entries(snParamDefs)) {
         if (paramDef.type !== 'float') continue;
@@ -2354,7 +2357,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         } else {
           // Determine the output type from the source node definition
           const srcNode = selectedNodes.find(sn => sn.id === inp.connection!.nodeId);
-          const srcDef = srcNode ? getNodeDefinition(srcNode.type) : undefined;
+          const srcDef = srcNode ? getNodeDefinitionFor(srcNode) : undefined;
           const outType: import('../types/nodeGraph').DataType =
             srcNode?.outputs[inp.connection.outputKey]?.type ??
             srcDef?.outputs[inp.connection.outputKey]?.type ??
@@ -2389,7 +2392,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       let sinkOutKey = '';
       for (const sn of selectedNodes) {
         if (sn.type === 'loopIndex') continue;
-        const snDef = getNodeDefinition(sn.type);
+        const snDef = getNodeDefinitionFor(sn);
         if (!snDef) continue;
         for (const [outKey, outSock] of Object.entries(snDef.outputs)) {
           if (outSock.type !== 'float') continue;
@@ -2457,7 +2460,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const innerSub = innerGrpNode?.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
       const innNode = innerSub?.nodes.find(n => n.id === sp.nodeId);
       if (!innNode) continue;
-      const innDef = getNodeDefinition(innNode.type);
+      const innDef = getNodeDefinitionFor(innNode);
       const paramDef = innDef?.paramDefs?.[sp.paramKey];
       if (!paramDef) continue;
       groupInputSockets[psKey] = {
@@ -2913,7 +2916,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const oldSock = oldNode.inputs[key];
       if (oldSock?.connection) {
         const srcNode = workingNodes.find(n => n.id === oldSock.connection!.nodeId);
-        const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : null;
+        const srcDef  = srcNode ? getNodeDefinitionFor(srcNode) : null;
         const srcType = srcDef?.outputs[oldSock.connection!.outputKey]?.type;
         if (srcType && typesCompatible(srcType, socket.type)) {
           newSocket.connection = oldSock.connection;
@@ -2925,7 +2928,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         for (const oldS of Object.values(oldNode.inputs)) {
           if (!oldS.connection) continue;
           const srcNode = workingNodes.find(n => n.id === oldS.connection!.nodeId);
-          const srcDef  = srcNode ? getNodeDefinition(srcNode.type) : null;
+          const srcDef  = srcNode ? getNodeDefinitionFor(srcNode) : null;
           const srcType = srcDef?.outputs[oldS.connection!.outputKey]?.type;
           if (srcType && typesCompatible(srcType, socket.type)) {
             newSocket.connection = oldS.connection;
@@ -3416,7 +3419,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           // flag NodeComponent.tsx's own 🔒 "Anchored — cannot be deleted"
           // indicator already keys off, so this stays consistent with
           // desktop's existing convention rather than inventing a new one.
-          if (sgNode.params?._groupOriginal && getNodeDefinition(sgNode.type)?.anchored) return;
+          if (sgNode.params?._groupOriginal && getNodeDefinitionFor(sgNode)?.anchored) return;
 
           undoManager.push(nodes);
           const newSgNodes = removeNodeFromList(activeNodes, nodeId);
@@ -3629,7 +3632,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const { nodes, activeGroupPath } = get();
     const scope = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
     const node = scope.find(n => n.id === nodeId);
-    const def = node ? getNodeDefinition(node.type) : undefined;
+    const def = node ? getNodeDefinitionFor(node) : undefined;
     if (!node || !def) return;
     const patch = randomizedParams(node, def);
     if (Object.keys(patch).length === 0) return;
@@ -3700,7 +3703,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       let socketLabel = targetSgNode.inputs[targetInputKey]?.label ?? targetInputKey;
       if (targetInputKey.startsWith('__param_')) {
         const paramKey = targetInputKey.slice('__param_'.length);
-        const def = getNodeDefinition(targetSgNode.type);
+        const def = getNodeDefinitionFor(targetSgNode);
         const pd = def?.paramDefs?.[paramKey];
         if (pd) { socketType = (pd.type as import('../types/nodeGraph').DataType) ?? 'float'; socketLabel = pd.label; }
       }
@@ -4291,6 +4294,32 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return { nodes: newTop ?? state.nodes };
       }
       return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, bypassed: !n.bypassed } : n) };
+    });
+    get().compile();
+  },
+
+  setConstantsItems: (nodeId, items) => {
+    undoManager.push(get().nodes);
+    const outputs = constantsOutputs(items);
+    const rebuild = (list: GraphNode[]): GraphNode[] => list.map(n => {
+      if (n.id === nodeId) {
+        const params = { ...n.params };
+        // Values of entries that no longer exist go, so a stale slider value can't come back under a reused name.
+        for (const it of constantsItems(n)) for (const k of paramKeysOf(it)) delete params[k];
+        return { ...n, params: { ...params, items, ...paramsFor(items) }, outputs };
+      }
+      const stale = Object.entries(n.inputs).filter(([, s]) => s.connection?.nodeId === nodeId && !(s.connection.outputKey in outputs));
+      if (!stale.length) return n;
+      const inputs = { ...n.inputs };
+      for (const [k, s] of stale) inputs[k] = { ...s, connection: undefined };
+      return { ...n, inputs };
+    });
+    set(state => {
+      if (state.nodes.some(n => n.id === nodeId)) return { nodes: rebuild(state.nodes) };
+      const path = state.activeGroupPath;
+      const inner = getActiveNodes(state.nodes, path);
+      if (!inner || !inner.some(n => n.id === nodeId)) return {};
+      return { nodes: setActiveNodes(state.nodes, path, rebuild(inner)) ?? state.nodes };
     });
     get().compile();
   },

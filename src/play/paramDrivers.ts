@@ -17,7 +17,7 @@
  * Results are cached per node object (nodes are replaced, not mutated).
  */
 import type { GraphNode, ParamDef } from '../types/nodeGraph';
-import { getNodeDefinition } from '../nodes/definitions';
+import { getNodeDefinitionFor } from '../nodes/definitions';
 
 export interface ParamDriver {
   /** The socket whose wire replaces the slider. */
@@ -35,7 +35,7 @@ export function paramDrivers(node: GraphNode): Map<string, ParamDriver> {
   if (hit) return hit;
   const out = new Map<string, ParamDriver>();
   cache.set(node, out);
-  const def = getNodeDefinition(node.type);
+  const def = getNodeDefinitionFor(node);
   if (!def?.paramDefs) return out;
   const socketLabel = (k: string) => node.inputs[k]?.label || def.inputs?.[k]?.label || k;
   const sliders = Object.entries(def.paramDefs).filter(([, pd]) => (pd as ParamDef).type === 'float').map(([k]) => k);
@@ -87,5 +87,5 @@ export function driverOf(node: GraphNode, paramKey: string): ParamDriver | null 
 
 /** A node's name as its card shows it. */
 export function nodeLabelOf(node: GraphNode): string {
-  return (typeof node.params.label === 'string' && node.params.label.trim()) || getNodeDefinition(node.type)?.label || node.type;
+  return (typeof node.params.label === 'string' && node.params.label.trim()) || getNodeDefinitionFor(node)?.label || node.type;
 }

@@ -3,7 +3,7 @@ import { useNodeGraphStore, saveKeyframePreset, loadKeyframePresets } from '../.
 import type { KeyframePreset } from '../../types/keyframePreset';
 import type { GraphNode } from '../../types/nodeGraph';
 import { EASING_PRESETS, isKeyframeBypassed, VECTOR_AXES, type Keyframe, type KeyframeLoopMode } from '../../compiler/keyframes';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { NumberInput } from './NumberInput';
 import { useCtp } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
@@ -1024,7 +1024,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     Math.abs(a.a - b.a) < 1e-3 && Math.abs(a.b - b.b) < 1e-3 && Math.abs(a.c - b.c) < 1e-3 && Math.abs(a.d - b.d) < 1e-3;
   const hasNextSegment = selectedKf !== null && (selectedKf < keyframes.length - 1 || mode === 'interpolate');
 
-  const nodeLabel = typeof node.params.label === 'string' && node.params.label ? node.params.label : (getNodeDefinition(node.type)?.label ?? node.type);
+  const nodeLabel = typeof node.params.label === 'string' && node.params.label ? node.params.label : (getNodeDefinitionFor(node)?.label ?? node.type);
   const socketLabel = node.inputs[socketKey]?.label ?? socketKey;
   const hint =
     toolMode === 'add' ? 'Click empty space to add a key · drag a key to move it'

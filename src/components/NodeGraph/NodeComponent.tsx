@@ -21,7 +21,7 @@ import type { GraphNode, DataType, NodeDefinition } from '../../types/nodeGraph'
 import { TYPE_COLORS } from './typeColors';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 // Editors that only open on demand load in their own chunks (type-only imports
@@ -29,6 +29,8 @@ import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { ExprModal as ExprModalT } from './ExprModal';
 import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
 import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
+import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
+import { constantsItems } from '../../nodes/definitions/constants';
 import type { BezierEditorModal as BezierEditorModalT } from './BezierEditorModal';
 import type { TransformVecModal as TransformVecModalT } from './TransformVecModal';
 import type { AssignInitModal as AssignInitModalT } from './AssignInitModal';
@@ -36,6 +38,7 @@ import type { KeyframeEditorModal as KeyframeEditorModalT } from './KeyframeEdit
 const ExprModal           = lazyWithSuspense<PropsOf<typeof ExprModalT>>(() => import('./ExprModal').then(m => ({ default: m.ExprModal })));
 const CustomFnModal       = lazyWithSuspense<PropsOf<typeof CustomFnModalT>>(() => import('./CustomFnModal').then(m => ({ default: m.CustomFnModal })));
 const ExprBlockModal      = lazyWithSuspense<PropsOf<typeof ExprBlockModalT>>(() => import('./ExprBlockModal').then(m => ({ default: m.ExprBlockModal })));
+const ConstantsModal      = lazyWithSuspense<PropsOf<typeof ConstantsModalT>>(() => import('./ConstantsModal').then(m => ({ default: m.ConstantsModal })));
 const BezierEditorModal   = lazyWithSuspense<PropsOf<typeof BezierEditorModalT>>(() => import('./BezierEditorModal').then(m => ({ default: m.BezierEditorModal })));
 const TransformVecModal   = lazyWithSuspense<PropsOf<typeof TransformVecModalT>>(() => import('./TransformVecModal').then(m => ({ default: m.TransformVecModal })));
 const AssignInitModal     = lazyWithSuspense<PropsOf<typeof AssignInitModalT>>(() => import('./AssignInitModal').then(m => ({ default: m.AssignInitModal })));
@@ -187,7 +190,7 @@ function getCompatibleSources(
   const results: Array<{ nodeId: string; nodeLabel: string; outputKey: string; outputLabel: string }> = [];
   for (const n of nodes) {
     if (n.id === currentNodeId) continue; // skip self
-    const def = getNodeDefinition(n.type);
+    const def = getNodeDefinitionFor(n);
     if (!def) continue;
     // Use the node instance's outputs (handles customFn dynamic outputs)
     const outputsToCheck = Object.keys(n.outputs).length > 0 ? n.outputs : def.outputs;
@@ -224,7 +227,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
     if (!sock) return null;
     if (sock.connection) {
       const src = allNodes.find(n => n.id === sock.connection!.nodeId);
-      const srcDef = src ? getNodeDefinition(src.type) : null;
+      const srcDef = src ? getNodeDefinitionFor(src) : null;
       const srcLabel = src && src.type === 'customFn' && typeof src.params.label === 'string'
         ? src.params.label || srcDef?.label
         : srcDef?.label;
@@ -548,7 +551,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     [fragmentShader],
   );
 
-  const def = getNodeDefinition(node.type);
+  const def = getNodeDefinitionFor(node);
   const isBypassed = !!node.bypassed;
   const assignOp = node.assignOp ?? '=';
   const isCarry = !!node.carryMode;
@@ -573,6 +576,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [showExprModal, setShowExprModal] = useState(false);
   const [showExprBlockModal, setShowExprBlockModal] = useState(false);
+  const [showConstantsModal, setShowConstantsModal] = useState(false);
   const [showBezierModal, setShowBezierModal] = useState(false);
   const [showTransformVecModal, setShowTransformVecModal] = useState(false);
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
@@ -2367,7 +2371,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               : [];
             const innerGroupSub = innerNode.params.subgraph as SubgraphData | undefined;
             const hasInnerParams = innerGroupSub?.nodes.some(inn => {
-              const d = getNodeDefinition(inn.type);
+              const d = getNodeDefinitionFor(inn);
               return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
             }) ?? false;
             if (!hasInnerParams) return null;
@@ -2420,7 +2424,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 {shownSurfaced.map(sp => {
                   const innNode = innerGroupSub?.nodes.find(n => n.id === sp.nodeId);
                   if (!innNode) return null;
-                  const innDef = getNodeDefinition(innNode.type);
+                  const innDef = getNodeDefinitionFor(innNode);
                   const paramDef = innDef?.paramDefs?.[sp.paramKey];
                   if (!paramDef) return null;
                   const psKey = `ps_${innerNode.id}_${sp.nodeId}_${sp.paramKey}`;
@@ -2439,7 +2443,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           }
 
           // ── Regular inner node — show float params (minus hidden ones) ───────────
-          const innerDef = getNodeDefinition(innerNode.type);
+          const innerDef = getNodeDefinitionFor(innerNode);
           const innerParamDefs = innerDef?.paramDefs ?? {};
           const paramEntries = Object.entries(innerParamDefs).filter(([, pd]) =>
             pd.type === 'float' && pd.step !== 1
@@ -2454,7 +2458,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             : [];
           const visibleParams = paramEntries.filter(([paramKey, pd]) => {
             // Same showWhen gate as the node's own card (a vec3 Constant has no Value slider)
-            if (!isParamVisible(pd, innerNode.params, getNodeDefinition(innerNode.type)?.defaultParams)) return false;
+            if (!isParamVisible(pd, innerNode.params, getNodeDefinitionFor(innerNode)?.defaultParams)) return false;
             if (innerNode.inputs[`__param_${paramKey}`]?.connection) return false;
             const matchingInput = Object.entries(innerNode.inputs).find(
               ([k, inp]) => k.toLowerCase() === paramKey.toLowerCase() && inp.connection
@@ -2531,7 +2535,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
         {/* MarchLoopGroup outer params — maxSteps, maxDist, stepScale, bg, albedo */}
         {isMarchLoopGroup && !collapsed && (() => {
-          const outerDef = getNodeDefinition(node.type);
+          const outerDef = getNodeDefinitionFor(node);
           const outerParamDefs = outerDef?.paramDefs ?? {};
           const outerEntries = Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'float' || pd.type === 'bool');
           if (outerEntries.length === 0) return null;
@@ -2594,13 +2598,13 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 if (innerGrp.type !== 'group') return false;
                 const sub = innerGrp.params.subgraph as SubgraphData | undefined;
                 return sub?.nodes.some(inn => {
-                  const d = getNodeDefinition(inn.type);
+                  const d = getNodeDefinitionFor(inn);
                   return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
                 }) ?? false;
               })
             : subgraph.nodes.some(n => {
                 if (SKIP_PARAM_TYPES.has(n.type)) return false;
-                const d = getNodeDefinition(n.type);
+                const d = getNodeDefinitionFor(n);
                 return d?.paramDefs && Object.values(d.paramDefs).some(pd => pd.type === 'float' && pd.step !== 1);
               });
           if (!hasAny) return null;
@@ -2722,7 +2726,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     if (input.connection) {
       // Show what's connected
       const srcNode = nodes.find(n => n.id === input.connection!.nodeId);
-      const srcDef = srcNode ? getNodeDefinition(srcNode.type) : undefined;
+      const srcDef = srcNode ? getNodeDefinitionFor(srcNode) : undefined;
       const srcOutLabel = srcDef?.outputs[input.connection.outputKey]?.label ?? input.connection.outputKey;
       const srcType = srcDef?.outputs[input.connection.outputKey]?.type;
       lines.push(
@@ -2776,7 +2780,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     if (targets.length > 0) {
       lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>Feeds:</span>);
       for (const { n, inputKey } of targets.slice(0, 8)) {
-        const tDef = getNodeDefinition(n.type);
+        const tDef = getNodeDefinitionFor(n);
         const name = (typeof n.params.label === 'string' && n.params.label.trim()) || tDef?.label || n.type;
         const inLabel = n.inputs[inputKey]?.label ?? tDef?.inputs[inputKey]?.label ?? inputKey;
         lines.push(<span style={{ paddingLeft: '6px', color: tc.subtext0 }}>{nodeLink(n.id, name)} ← {inLabel}</span>);
@@ -2927,6 +2931,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           )}
           {node.type === 'exprNode' && (
             <CardButton icon="expr" tint="expr" on={showExprBlockModal} label="Open the Expression Block editor" onClick={() => setShowExprBlockModal(v => !v)} />
+          )}
+          {node.type === 'constants' && (
+            <CardButton icon="hash" on={showConstantsModal} label="Edit the constants: add, rename, retype, fix or free a value" onClick={() => setShowConstantsModal(v => !v)} />
           )}
           {node.type === 'exprNode' && !isInsideLoop && (
             <CardButton icon="spark" tint="expr" on={showPublishNode} label="Publish as a node type (this block becomes a reusable node; its inputs become sockets)" onClick={() => setShowPublishNode(true)} />
@@ -4001,7 +4008,25 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         })()}
 
         {/* ── Outputs (always visible) ── */}
-        {Object.keys(node.outputs).length > 0 && (Object.keys(node.inputs).length > 0 || (!collapsed && Object.keys(paramDefs).length > 0)) && sectionRule}
+        {/* ── Constants: the fixed entries (live ones are sliders above) ── */}
+        {!collapsed && node.type === 'constants' && (() => {
+          const fixed = constantsItems(node).filter(it => !it.slider);
+          if (!fixed.length) return null;
+          const fmt = (v: number) => (Number.isInteger(v) ? String(v) : +v.toFixed(4) + '');
+          return (
+            <div style={{ padding: '2px 12px 6px 16px', display: 'flex', flexDirection: 'column', gap: 3 }} onDoubleClick={() => setShowConstantsModal(true)} title="Fixed values: double-click to edit">
+              {fixed.map(it => (
+                <div key={it.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                  <Icon name="lock" size={11} style={{ color: tk.text.disabled, flexShrink: 0 }} />
+                  <span style={{ color: tk.text.secondary, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.label}</span>
+                  {it.type === 'color' && <span style={{ width: 12, height: 12, borderRadius: 3, background: `rgb(${(it.value as number[]).map(c => Math.round(c * 255)).join(',')})`, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }} />}
+                  <span style={{ color: tk.text.muted, font: `500 11.5px ${fontFamily.mono}` }}>{Array.isArray(it.value) ? it.value.map(fmt).join(', ') : fmt(it.value)}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+        {Object.keys(node.outputs).length > 0 && (Object.keys(node.inputs).length > 0 || (!collapsed && Object.keys(paramDefs).length > 0) || node.type === 'constants') && sectionRule}
         {Object.entries(node.outputs).map(([key, output]) => {
           const isHovered = hoveredOutput === key;
           // Live clock on the Time node's output (follows every frame, see timeReadoutRef)
@@ -4084,6 +4109,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {/* ── ExprBlock modal ── */}
       {showExprBlockModal && node.type === 'exprNode' && (
         <ExprBlockModal node={node} insideLoop={isInsideLoop} onClose={() => setShowExprBlockModal(false)} />
+      )}
+      {showConstantsModal && node.type === 'constants' && (
+        <ConstantsModal node={node} onClose={() => setShowConstantsModal(false)} />
       )}
 
       {/* ── Bezier editor modal ── */}

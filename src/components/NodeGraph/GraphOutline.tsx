@@ -10,7 +10,7 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { topologicalSort } from '../../compiler/topoSort';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
@@ -25,7 +25,7 @@ const GROUP_TYPES = new Set(['group', 'sceneGroup', 'spaceWarpGroup', 'marchLoop
 const OUTPUT_TYPES = new Set(['output', 'vec4Output']);
 
 function labelOf(n: GraphNode): string {
-  const def = getNodeDefinition(n.type);
+  const def = getNodeDefinitionFor(n);
   return (typeof n.params.label === 'string' && n.params.label.trim()) || def?.label || n.type;
 }
 
@@ -84,7 +84,7 @@ export function GraphOutline({ nodes, top, onClose }: { nodes: readonly GraphNod
   const stepping = stepIdx !== null;
   const previewStats = useNodeGraphStore(s => s.previewStats);
   const stepNode = stepping && stepIdx !== null && stepIdx < steps.length ? steps[stepIdx] : null;
-  const stepCaption = stepNode ? (explainPreview(stepNode, getNodeDefinition(stepNode.type), previewStats) ?? previewLegend(stepNode, getNodeDefinition(stepNode.type))) : null;
+  const stepCaption = stepNode ? (explainPreview(stepNode, getNodeDefinitionFor(stepNode), previewStats) ?? previewLegend(stepNode, getNodeDefinitionFor(stepNode))) : null;
   const goTo = (idx: number) => {
     const clamped = Math.max(0, Math.min(steps.length, idx));
     setStepIdx(clamped);
@@ -176,7 +176,7 @@ export function GraphOutline({ nodes, top, onClose }: { nodes: readonly GraphNod
       <div ref={listRef} style={{ overflowY: 'auto', padding: '0 6px 8px', display: 'flex', flexDirection: 'column', gap: 1 }}>
         {shown.length === 0 && <div style={{ padding: '8px 6px', color: tk.text.faint }}>No nodes match.</div>}
         {shown.map(n => {
-          const def = getNodeDefinition(n.type);
+          const def = getNodeDefinitionFor(n);
           const isGroup = GROUP_TYPES.has(n.type);
           const isOut = OUTPUT_TYPES.has(n.type);
           const active = n.id === activeId;

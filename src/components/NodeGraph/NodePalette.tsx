@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SaveGraphForm, VersionsButton } from '../shell/GraphVersions';
 import { useNodeGraphStore, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
-import { NODE_REGISTRY, getNodeDefinition } from '../../nodes/definitions';
+import { NODE_REGISTRY, getNodeDefinitionFor } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
 import { FolderableList } from './FolderableList';
@@ -334,7 +334,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   };
 
   const swapTargetLabel = swapTargetNodeId
-    ? (() => { const n = graphNodes.find(nd => nd.id === swapTargetNodeId); if (!n) return null; return getNodeDefinition(n.type)?.label ?? n.type; })()
+    ? (() => { const n = graphNodes.find(nd => nd.id === swapTargetNodeId); if (!n) return null; return getNodeDefinitionFor(n)?.label ?? n.type; })()
     : null;
 
   const toggleFolder = (label: string) =>

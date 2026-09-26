@@ -13,20 +13,20 @@
  */
 import { useEffect, useRef } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { pal, MONO, vizContainer, setupViz, imageSize, blitImage } from './vizKit';
 import { evalStops } from '../../lib/palette';
 
 const num = (node: GraphNode, key: string, fallback: number): number => {
   const v = node.params[key];
   if (typeof v === 'number' && Number.isFinite(v)) return v;
-  const d = getNodeDefinition(node.type)?.defaultParams?.[key];
+  const d = getNodeDefinitionFor(node)?.defaultParams?.[key];
   return typeof d === 'number' ? d : fallback;
 };
 const str = (node: GraphNode, key: string, fallback: string): string => {
   const v = node.params[key];
   if (typeof v === 'string') return v;
-  const d = getNodeDefinition(node.type)?.defaultParams?.[key];
+  const d = getNodeDefinitionFor(node)?.defaultParams?.[key];
   return typeof d === 'string' ? d : fallback;
 };
 const TAU = Math.PI * 2;
@@ -280,7 +280,7 @@ function FieldViz({ node }: { node: GraphNode }) {
 // ── Stops Palette: the palette over two trips, so Loop / Mirror / Clamp read at a glance ──
 function stopPaletteColor(n: GraphNode, t: number): [number, number, number] {
   const count = Math.max(2, Math.min(32, Math.round(num(n, 'stops', 5))));
-  const defs = getNodeDefinition(n.type)?.defaultParams ?? {};
+  const defs = getNodeDefinitionFor(n)?.defaultParams ?? {};
   const stops = Array.from({ length: count }, (_, i): [number, number, number] => {
     const v = n.params[`color${i}`] ?? defs[`color${i}`];
     return Array.isArray(v) ? [Number(v[0]) || 0, Number(v[1]) || 0, Number(v[2]) || 0] : [0.5, 0.5, 0.5];
