@@ -4,41 +4,22 @@
  * takes a snapshot), the card that says where each came from with Refresh
  * and Open, and the stills made for them in the background.
  */
-import { useEffect, useRef, useState, type RefObject } from 'react';
-import { refreshSnapshot, snapshotExample, snapshotSaved, sourceLimits } from '../../present/snapshot';
-import { renderPoster } from '../../present/runtimeHost';
+import { useState, type RefObject } from 'react';
+import { missingMedia, refreshSnapshot, sourceLimits } from '../../present/snapshot';
 import { blockSources, type PresentSource } from '../../types/presentation';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { Sheet } from '../ui/Sheet';
-import { askConfirm } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import { PlayableList, type PlayableRow } from '../play/OpenPlayable';
 import type { Page } from '../page';
 import { usePresentation } from './presentationStore';
+import { addSourceFrom, openSourceGraph, originText } from './sourceActions';
 
 const NO_SOURCES: PresentSource[] = [];
-
-/** Snapshot a saved graph or example into the open presentation. */
-export async function addSourceFrom(row: PlayableRow): Promise<PresentSource | null> {
-  const doc = usePresentation.getState().doc;
-  // The same Play twice is one source (take a new snapshot with Refresh).
-  const existing = doc?.sources.find(s => (row.kind === 'saved' ? s.from.kind === 'saved' && s.from.name === row.id : s.from.kind === 'example' && s.from.key === row.id));
-  if (existing) return existing;
-  const r = row.kind === 'saved' ? snapshotSaved(row.id) : await snapshotExample(row.id);
-  if (!r.ok) { toast.error(`Couldn’t take a snapshot of “${row.label}”`, { message: r.error }); return null; }
-  usePresentation.getState().addSource(r.source);
-  return r.source;
-}
-
-export function originText(s: PresentSource): string {
-  const when = s.capturedAt ? new Date(s.capturedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '';
-  return `${s.from.kind === 'saved' ? 'Saved graph' : 'Example'}${when ? ` · copied ${when}` : ''}`;
-}
 
 export function Poster({ source, size = 44 }: { source: PresentSource | undefined; size?: number }) {
   const tk = useTokens();
@@ -98,19 +79,6 @@ export function SourcePicker({ anchorRef, compact, onPick, onClose }: { anchorRe
     : <Popover anchorRef={anchorRef} onClose={onClose} width={380} padding={0}>{body}</Popover>;
 }
 
-/** Open a source's graph in the Studio or on the Play page (asks first if that would replace unsaved work). */
-export async function openSourceGraph(s: PresentSource, page: Page, navigate: (p: Page) => void): Promise<void> {
-  const st = useNodeGraphStore.getState();
-  if (st.graphDirty && !(await askConfirm('Open this graph?', { message: 'The graph open in the Studio has changes that aren’t saved. Opening another one replaces it.', confirmLabel: 'Open it' }))) return;
-  if (s.from.kind === 'saved') {
-    const r = st.loadSavedGraph(s.from.name);
-    if (!r.ok) { toast.error('Couldn’t open it', { message: r.error }); return; }
-  } else {
-    await st.loadExampleGraph(s.from.key);
-  }
-  navigate(page);
-}
-
 /** A source in the settings panel: where it's from, what it can't run, Refresh and Open. */
 export function SourceCard({ s, navigate, compact = false }: { s: PresentSource; navigate: (p: Page) => void; compact?: boolean }) {
   const tk = useTokens();
@@ -118,6 +86,7 @@ export function SourceCard({ s, navigate, compact = false }: { s: PresentSource;
   const removeSource = usePresentation(st => st.removeSource);
   const used = usePresentation(st => st.doc?.steps.some(step => step.blocks.some(b => blockSources(b).includes(s.id))) ?? false);
   const limits = sourceLimits(s);
+  const noFiles = missingMedia(s);
   const [busy, setBusy] = useState(false);
   const refresh = async () => {
     setBusy(true);
@@ -143,6 +112,12 @@ export function SourceCard({ s, navigate, compact = false }: { s: PresentSource;
           <span>Shown as a still: the web player can’t run {limits.join(', ')} yet.</span>
         </div>
       )}
+      {noFiles.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, color: tk.status.warningText, font: `500 11.5px/1.4 ${fontFamily.ui}` }}>
+          <Icon name="warning" size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>Without {noFiles.join(' and ')}: files stay with the graph open in the Studio. Open it there with its files loaded, then Refresh.</span>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
         <Button size="sm" icon="reset" disabled={busy} onClick={refresh} title="Take a new snapshot of the graph as it is now. Blocks keep their controls where the ids still exist.">{busy ? 'Refreshing…' : 'Refresh'}</Button>
         <Button size="sm" variant="ghost" onClick={() => void openSourceGraph(s, 'studio', navigate)} title="Open its graph in the Studio to edit it (then Refresh here)">Studio</Button>
@@ -152,25 +127,4 @@ export function SourceCard({ s, navigate, compact = false }: { s: PresentSource;
       </div>
     </div>
   );
-}
-
-/** Make the stills of sources that have none, one at a time, in the background. */
-export function usePosters(): void {
-  const sources = usePresentation(s => s.doc?.sources);
-  const setPoster = usePresentation(s => s.setPoster);
-  const working = useRef(false);
-  const tried = useRef(new Set<string>());
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    if (working.current || !sources) return;
-    const next = sources.find(s => !s.poster && !tried.current.has(`${s.id}:${s.capturedAt}`));
-    if (!next) return;
-    working.current = true;
-    tried.current.add(`${next.id}:${next.capturedAt}`);
-    void renderPoster(next.bundle).then(p => {
-      working.current = false;
-      if (p) setPoster(next.id, p);
-      setTick(t => t + 1); // on to the next one
-    });
-  }, [sources, setPoster, tick]);
 }

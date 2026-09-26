@@ -24,6 +24,7 @@ import { CodeView } from './CodeView';
 import { Markdown } from './Markdown';
 import { PlayCanvas } from './PlayCanvas';
 import { usePresentation } from './presentationStore';
+import { BLOCK_META } from './blockMeta';
 
 export interface BlockContext {
   sources: ReadonlyMap<string, PresentSource>;
@@ -38,12 +39,6 @@ export interface BlockContext {
   large: boolean;
 }
 
-export const BLOCK_META: Record<Block['type'], { label: string; icon: 'text' | 'layoutCanvas' | 'sliders' | 'code'; hint: string }> = {
-  text: { label: 'Text', icon: 'text', hint: 'Markdown with $maths$' },
-  render: { label: 'Render', icon: 'layoutCanvas', hint: 'A Play’s picture, no controls' },
-  interactive: { label: 'Interactive', icon: 'sliders', hint: 'Text, a picture and some of its controls' },
-  code: { label: 'Code', icon: 'code', hint: 'GLSL or JavaScript, typed or from a Play' },
-};
 
 // ── The frame an author clicks ──────────────────────────────────────────────
 

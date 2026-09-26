@@ -31,9 +31,11 @@ import { Inspector } from './Inspector';
 import { StepsList, StepsStrip } from './StepsList';
 import { StepView } from './StepView';
 import { ScrollView, SlidesView } from './Viewer';
-import { loadMarkdown, presentCss } from './Markdown';
-import { usePosters } from './Sources';
-import { ExportDialog, exportPresentationFile, importPresentationFile } from './ExportDialog';
+import { loadMarkdown } from './useMarkdown';
+import { presentCss } from './presentCss';
+import { usePosters } from './usePosters';
+import { ExportDialog } from './ExportDialog';
+import { exportPresentationFile, importPresentationFile } from './presentationFiles';
 import type { BlockContext } from './Blocks';
 
 function usePresentationList(): PresentationEntry[] {

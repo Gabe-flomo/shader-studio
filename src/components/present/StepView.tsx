@@ -3,13 +3,14 @@
  * interactive block always spans both; phones always use one). In Edit it
  * also has the bar that adds blocks.
  */
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { newBlock, type BlockType, type PresentSource, type Step } from '../../types/presentation';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { Menu } from '../ui/Menu';
-import { BLOCK_META, BlockView, type BlockContext } from './Blocks';
+import { BlockView, type BlockContext } from './Blocks';
+import { BLOCK_META } from './blockMeta';
 import { SourcePicker } from './Sources';
 import { usePresentation } from './presentationStore';
 
@@ -34,7 +35,8 @@ export function StepView({ step, index, ctx, total }: { step: Step; index: numbe
         ) : null}
       </header>
       {step.blocks.length > 0 && (
-        <div className="pp-step-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+        // Side by side on a slide, text sits level with the picture beside it.
+        <div className="pp-step-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, alignItems: cols === 2 && ctx.large ? 'center' : 'start' }}>
           {step.blocks.map(b => (
             <div key={b.id} style={{ gridColumn: b.type === 'interactive' || cols === 1 ? '1 / -1' : undefined, minWidth: 0 }}>
               <BlockView block={b} ctx={ctx} />
@@ -54,7 +56,7 @@ function AddBlockBar({ compact, empty }: { compact: boolean; empty: boolean }) {
   const sources = usePresentation(s => s.doc?.sources);
   const [picking, setPicking] = useState<BlockType | null>(null);
   const [codeMenu, setCodeMenu] = useState<{ x: number; y: number } | null>(null);
-  const anchors = useRef(new Map<BlockType, HTMLButtonElement>());
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const add = (type: BlockType, s?: PresentSource) => addBlock(newBlock(type, s));
   const types: BlockType[] = ['text', 'render', 'interactive', 'code'];
   return (
@@ -67,11 +69,10 @@ function AddBlockBar({ compact, empty }: { compact: boolean; empty: boolean }) {
         {types.map(t => (
           <button
             key={t} type="button" title={BLOCK_META[t].hint}
-            ref={el => { if (el) anchors.current.set(t, el); }}
             onClick={e => {
               if (t === 'text') add('text');
-              else if (t === 'code') { const r = e.currentTarget.getBoundingClientRect(); setCodeMenu({ x: r.left, y: r.bottom + 6 }); }
-              else setPicking(t);
+              else if (t === 'code') { setAnchor(e.currentTarget); const r = e.currentTarget.getBoundingClientRect(); setCodeMenu({ x: r.left, y: r.bottom + 6 }); }
+              else { setAnchor(e.currentTarget); setPicking(t); }
             }}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 7, height: 34, padding: '0 13px 0 10px', borderRadius: radius.control, cursor: 'pointer',
@@ -86,7 +87,7 @@ function AddBlockBar({ compact, empty }: { compact: boolean; empty: boolean }) {
       </div>
       {picking && (
         <SourcePicker
-          anchorRef={{ current: anchors.current.get(picking) ?? null }}
+          anchorRef={{ current: anchor }}
           compact={compact}
           onPick={s => { add(picking, s); setPicking(null); }}
           onClose={() => setPicking(null)}

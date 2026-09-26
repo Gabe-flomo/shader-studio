@@ -30,7 +30,7 @@ function wholeText(text: string, language: 'glsl' | 'js', from: string, ranges?:
 }
 
 export function resolveCode(b: CodeBlock, sources: ReadonlyMap<string, PresentSource>): ResolvedCode {
-  if (!b.from) return wholeText(b.code ?? '', b.language, b.language === 'js' ? 'JavaScript' : 'GLSL', b.highlightLines);
+  if (!b.from) return wholeText(b.code ?? '', b.language, '', b.highlightLines);
   const src = sources.get(b.from.source);
   if (!src) return { language: b.language, rows: [], text: '', from: '', problem: 'Its source was removed from this presentation.' };
   if ('layerId' in b.from) {

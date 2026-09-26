@@ -9,7 +9,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
-import { BLOCK_META } from './Blocks';
+import { BLOCK_META } from './blockMeta';
 import { usePresentation } from './presentationStore';
 
 function summary(s: Step): string {

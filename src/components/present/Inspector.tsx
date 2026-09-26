@@ -16,10 +16,11 @@ import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { Select } from '../ui/Select';
 import type { Page } from '../page';
-import { BLOCK_META } from './Blocks';
-import { Poster, SourceCard, SourcePicker, originText } from './Sources';
+import { BLOCK_META } from './blockMeta';
+import { Poster, SourceCard, SourcePicker } from './Sources';
+import { originText } from './sourceActions';
 import { usePresentation } from './presentationStore';
-import { useMarkdownModule } from './Markdown';
+import { useMarkdownModule } from './useMarkdown';
 
 function Section({ title, children, extra }: { title: string; children: ReactNode; extra?: ReactNode }) {
   const tk = useTokens();

@@ -1,13 +1,11 @@
 /**
  * ExportDialog — the open presentation as a web page (slides or scroll,
  * maths as MathML or KaTeX's HTML) or as a `.present.json` file, with what
- * the page leaves behind. Also the file import, which marks what it brings
- * in as someone else's (its Script layers then run sandboxed).
+ * the page leaves behind.
  */
 import { useMemo, useState } from 'react';
-import { buildPresentationHtml, exportNotes, presentationFileJson } from '../../present/exportPresentation';
-import { PRESENTATION_FILE_KIND, parsePresentation } from '../../types/presentation';
-import { openTextFile, saveTextFile } from '../../utils/fileIO';
+import { buildPresentationHtml, exportNotes } from '../../present/exportPresentation';
+import { saveTextFile } from '../../utils/fileIO';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
@@ -16,32 +14,9 @@ import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
 import { toast } from '../ui/toastStore';
 import { reportFileResult } from '../shell/reportFileResult';
-import { loadMarkdown } from './Markdown';
+import { loadMarkdown } from './useMarkdown';
 import { usePresentation } from './presentationStore';
-
-const fileBase = (title: string) => title.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'presentation';
-
-export async function exportPresentationFile(): Promise<void> {
-  const doc = usePresentation.getState().doc;
-  if (!doc) return;
-  reportFileResult(await saveTextFile(presentationFileJson(doc), `${fileBase(doc.title)}.present.json`), { failTitle: 'Couldn’t export the presentation', success: 'Presentation exported' });
-}
-
-export async function importPresentationFile(): Promise<void> {
-  let text: string | null;
-  try { text = await openTextFile('.json,.present.json'); } catch (e) { toast.error('Couldn’t open the file', { message: e instanceof Error ? e.message : String(e) }); return; }
-  if (text === null) return;
-  let raw: unknown;
-  try { raw = JSON.parse(text); } catch { toast.error('That isn’t a presentation file', { message: 'It isn’t JSON.' }); return; }
-  const kind = (raw as { kind?: unknown } | null)?.kind;
-  if (kind !== undefined && kind !== PRESENTATION_FILE_KIND) { toast.error('That isn’t a presentation file', { message: kind === 'shader-studio-play' ? 'It’s a play file: import it on the Play page.' : 'Its kind is something else.' }); return; }
-  const doc = parsePresentation(raw);
-  if (!doc) { toast.error('That isn’t a presentation file', { message: 'It has no steps.' }); return; }
-  // Its Script layers are someone else's JavaScript: they run in a sandboxed frame.
-  const name = usePresentation.getState().adopt({ ...doc, origin: 'imported' });
-  const scripts = doc.sources.some(s => s.bundle.play.layers.some(l => l.kind === 'script'));
-  toast.success(`Imported “${name}”`, scripts ? { message: 'Its Script layers run in a sandboxed frame, since they’re code from somewhere else.' } : undefined);
-}
+import { exportPresentationFile, fileBase } from './presentationFiles';
 
 /** KaTeX's stylesheet with its fonts (woff2) inlined as data URLs, so the exported page needs nothing else. */
 async function katexCssInline(): Promise<string> {
