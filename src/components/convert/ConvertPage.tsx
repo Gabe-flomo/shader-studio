@@ -364,6 +364,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
       <Select ariaLabel="Example shader" value="" height={30} onChange={k => { if (EXAMPLES[k]) load(EXAMPLES[k].code); }}
         options={[{ value: '', label: 'Examples…' }, ...Object.entries(EXAMPLES).map(([k, e]) => ({ value: k, label: e.label }))]} />
       <IconButton icon="import" label="Open a .glsl / .frag file" size="sm" onClick={loadFile} />
+      <IconButton icon="copy" label="Copy the whole shader" size="sm" disabled={!code.trim()} onClick={() => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); }} />
       <Button size="sm" variant="ghost" onClick={tidy} disabled={!code.trim()} title="Rewrite the paste as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
       <Button size="sm" variant="ghost" onClick={() => load('')} disabled={!code.trim()} title="Empty the editor">Clear</Button>
       {!compact && convertButton}

@@ -100,4 +100,14 @@ describe('line map and tidy', () => {
     expect(t.code).not.toMatch(/\u00a0/);
     expect(t.code).toContain('\n  vec2 C = U - vec2(0.5);');
   });
+
+  it('puts for loops with several updates, and integer %, into ES 1.00 form', () => {
+    const t = translateToStudio('void main(){ float a = .5; vec3 p = vec3(1.0); float v = 0.;\nfor (int i = 0; i < 9; i++, p*=2.,a/=2.) \n    v += a * length(p);\nint k = (int(v)%2)*2; for (int j = 0; j < 3; j++, k++) { v += 1.0; }\ngl_FragColor = vec4(v); }');
+    expect(t.code).toMatch(/for \(int i = 0; i < 9; i\+\+\) \{ \n\s+v \+= a \* length\(p\); p\*=2\.; a\/=2\.; \}/);
+    expect(t.code).toMatch(/for \(int j = 0; j < 3; j\+\+\) \{\s+v \+= 1\.0;\s+k\+\+; \}/);
+    expect(t.code).toContain('int k = (int(mod(float(int(v)), float(2))))*2;');
+    expect(t.notes).toContain('2 for loops put in ES 1.00 form (extra updates moved into the body)');
+    expect(t.notes).toContain('1 integer % rewritten as mod()');
+    expect(t.code.split('\n')).toHaveLength(6); // the added precision line, then the paste's five
+  });
 });

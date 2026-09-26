@@ -67,6 +67,54 @@ export interface TranslateOptions {
   lowerReturns?: boolean;
 }
 
+/**
+ * GLSL ES 1.00 is stricter than most desktop drivers about two things pastes
+ * use freely: a `for` loop's third part must be one update of the counter
+ * (`i++, p *= 2.` is "Invalid expression" on strict compilers), and there is
+ * no integer `%`. Both have exact rewrites: extra updates move to the end of
+ * the body, and `a % b` becomes `int(mod(float(a), float(b)))`.
+ */
+export function toEs100(src: string): { code: string; notes: string[] } {
+  const notes: string[] = [];
+  let s = src;
+  // for (init; cond; i++, x, y) body → for (init; cond; i++) { body x; y; }
+  let moved = 0;
+  for (let guard = 0; guard < 64; guard++) {
+    const m = /\bfor\s*\(/.exec(s.slice(0));
+    let found = false;
+    for (const f of s.matchAll(/\bfor\s*\(/g)) {
+      const open = f.index! + f[0].length - 1;
+      const close = matchParen(s, open); if (close < 0) continue;
+      const head = s.slice(open + 1, close);
+      const parts = splitTop(head, ';'); if (parts.length !== 3) continue;
+      const updates = splitTop(parts[2], ',').map(x => x.trim()).filter(Boolean);
+      if (updates.length < 2) continue;
+      const extras = updates.slice(1);
+      const newHead = `${parts[0]};${parts[1]}; ${updates[0]}`;
+      // The body: a block, or one statement up to its `;`.
+      let after = close + 1; while (/\s/.test(s[after] ?? '')) after++;
+      const ws = s.slice(close + 1, after); // newlines between `)` and the body stay, so line numbers hold
+      let bodyText: string, bodyEnd: number;
+      if (s[after] === '{') { const bc = matchBrace(s, after); if (bc < 0) continue; bodyText = s.slice(after + 1, bc); bodyEnd = bc + 1; }
+      else { let i = after, depth = 0; while (i < s.length && !(s[i] === ';' && depth === 0)) { if (s[i] === '(') depth++; else if (s[i] === ')') depth--; i++; } bodyText = s.slice(after, i + 1); bodyEnd = i + 1; }
+      const tail = extras.map(x => `${x};`).join(' ');
+      s = s.slice(0, open + 1) + newHead + ') {' + ws + bodyText + (bodyText.trimEnd().endsWith(';') || bodyText.trimEnd().endsWith('}') || !bodyText.trim() ? '' : ';') + ' ' + tail + ' }' + s.slice(bodyEnd);
+      moved++; found = true; break;
+    }
+    if (!found || !m) break;
+  }
+  if (moved) notes.push(`${moved} for loop${moved === 1 ? '' : 's'} put in ES 1.00 form (extra updates moved into the body)`);
+  // a % b on simple operands
+  let mods = 0;
+  const operand = '(?:[A-Za-z_]\\w*\\([^()]*\\)|\\([^()]*\\)|[A-Za-z_]\\w*|\\d+)';
+  s = s.replace(new RegExp(`(${operand})\\s*%\\s*(${operand})`, 'g'), (_m, a: string, b: string) => { mods++; return `int(mod(float(${a}), float(${b})))`; });
+  if (mods) notes.push(`${mods} integer % rewritten as mod()`);
+  return { code: s, notes };
+}
+function matchParen(s: string, open: number): number { let d = 0; for (let i = open; i < s.length; i++) { if (s[i] === '(') d++; else if (s[i] === ')' && --d === 0) return i; } return -1; }
+function matchBrace(s: string, open: number): number { let d = 0; for (let i = open; i < s.length; i++) { if (s[i] === '{') d++; else if (s[i] === '}' && --d === 0) return i; } return -1; }
+function splitTop(s: string, sep: string): string[] { const out: string[] = []; let d = 0, cur = ''; for (const c of s) { if (c === '(' || c === '[') d++; else if (c === ')' || c === ']') d--; if (c === sep && d === 0) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; }
+
 export function translateToStudio(source: string, options: TranslateOptions = {}): Translation {
   const dialect = detectDialect(source);
   const notes: string[] = []; const unsupported: string[] = [];
@@ -146,6 +194,8 @@ export function translateToStudio(source: string, options: TranslateOptions = {}
     if (renamed.length) notes.push(`${[...new Set(renamed)].join(', ')} → ours`);
   }
   if (ES3_INTEGER.test(s.replace(/\/\/[^\n]*/g, ''))) unsupported.push(ES3_INTEGER_NOTE);
+  // Strict ES 1.00 form, whatever the dialect (line count unchanged: edits stay on their lines).
+  { const es = toEs100(s); if (es.notes.length) { s = es.code; notes.push(...es.notes); } }
 
   // ── GLSL Sandbox ──────────────────────────────────────────────────────────
   if (dialect === 'glslsandbox') {
