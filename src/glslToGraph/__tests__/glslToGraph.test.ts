@@ -51,6 +51,60 @@ describe('GLSL → node graph', () => {
   });
 });
 
+describe('for loops become iterated groups', () => {
+  const by = (prefix: string) => corpus.find(([f]) => f.startsWith(prefix))![1];
+  const groupsOf = (src: string) => { const r = glslToGraph(src); return { r, groups: r.nodes.filter(n => n.type === 'group') }; };
+
+  it('a constant loop is one group running that many times, with a Loop Carry per changed variable and a Loop Index', () => {
+    const { r, groups } = groupsOf(by('06'));
+    expect(groups).toHaveLength(1);
+    const g = groups[0];
+    expect(g.params.iterations).toBe(4);
+    const sg = g.params.subgraph as { nodes: { type: string }[]; inputPorts: { label: string; type: string }[]; outputPorts: { label: string }[] };
+    expect(sg.nodes.filter(n => n.type === 'loopCarry')).toHaveLength(1);
+    expect(sg.nodes.filter(n => n.type === 'loopIndex')).toHaveLength(1);
+    expect(sg.outputPorts.map(p => p.label)).toEqual(['a']);
+    // Carry init ports come first, in the output ports' order (the compiler pairs them by position).
+    expect(sg.inputPorts[0]).toMatchObject({ label: 'a', type: 'float' });
+    expect(r.report.stats.loops).toBe(1);
+    expect(r.report.notes.join(' ')).toMatch(/iterated group carrying a/);
+    const c = compileGraph({ nodes: r.nodes });
+    expect(c.success).toBe(true);
+    expect(c.fragmentShader).toMatch(/for \(float \w+ = 0\.0; \w+ < 4\.0; \w+\+\+\)/);
+  });
+
+  it('carries every variable the body changes, in any type', () => {
+    const { groups } = groupsOf(by('13'));
+    const sg = groups[0].params.subgraph as { outputPorts: { label: string; type: string }[] };
+    expect(sg.outputPorts.map(p => `${p.label}:${p.type}`)).toEqual(['v:float', 'p:vec2', 'a:float']);
+  });
+
+  it('a stepped counter is the index scaled and offset', () => {
+    const { r, groups } = groupsOf(by('14'));
+    expect(groups[0].params.iterations).toBe(4);
+    const sg = groups[0].params.subgraph as { nodes: { type: string; params: Record<string, unknown> }[] };
+    expect(sg.nodes.find(n => n.type === 'multiply')?.params.b).toBe(2);
+    expect(sg.nodes.find(n => n.type === 'add')?.params.b).toBe(1);
+    expect(compileGraph({ nodes: r.nodes }).success).toBe(true);
+  });
+
+  it('a branch inside the loop is a ternary block inside the group', () => {
+    const { groups } = groupsOf(by('15'));
+    const sg = groups[0].params.subgraph as { nodes: { type: string }[]; outputPorts: { label: string }[] };
+    expect(sg.nodes.some(n => n.type === 'exprNode')).toBe(true);
+    expect(sg.outputPorts.map(p => p.label).sort()).toEqual(['col', 'w']);
+  });
+
+  it('a loop with an early exit, or too many iterations, stays code', () => {
+    const { r, groups } = groupsOf(by('11'));
+    expect(groups).toHaveLength(0);
+    expect(r.report.regions.map(x => x.why).join(' ')).toMatch(/loop/);
+    const many = glslToGraph('void main(){ float s = 0.0; for (int i = 0; i < 40; i++) { s += 0.01; } gl_FragColor = vec4(vec3(s), 1.0); }');
+    expect(many.nodes.filter(n => n.type === 'group')).toHaveLength(0);
+    expect(many.report.regions).toHaveLength(1);
+  });
+});
+
 describe('inexact nodes are offered with a warning, or kept as code on request', () => {
   const src = 'void main(){ vec2 uv = gl_FragCoord.xy / u_resolution.xy; float k = uv.x - 0.5; float v = 0.1 / k; gl_FragColor = vec4(vec3(v), 1.0); }';
   it('warns and marks the node', () => {

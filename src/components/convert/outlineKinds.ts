@@ -4,10 +4,11 @@ import { getNodeDefinition } from '../../nodes/definitions';
 
 const SOURCES = new Set(['fragCoord', 'resolution', 'time', 'mouse', 'pixelUV', 'uv', 'constant']);
 
-export type OutlineKind = 'source' | 'node' | 'block' | 'region' | 'output' | 'warned';
+export type OutlineKind = 'source' | 'node' | 'block' | 'region' | 'output' | 'warned' | 'loop';
 
 export function kindOf(n: GraphNode): OutlineKind {
   if (n.params.__importWarning) return 'warned';
+  if (n.type === 'group' && (n.params.iterations as number) > 1) return 'loop';
   if (n.type === 'exprNode') return 'block';
   if (n.type === 'customFn') return 'region';
   if (n.type === 'output' || n.type === 'vec4Output') return 'output';
@@ -20,6 +21,7 @@ export function labelOf(n: GraphNode): string {
   if (n.type === 'exprNode') return String(n.params.expr ?? n.params.result ?? 'expression');
   if (n.type === 'customFn') return String(n.params.label ?? 'function');
   if (n.type === 'constant') return `${n.params.value}`;
+  if (n.type === 'group') return String(n.params.label ?? 'Group');
   const def = getNodeDefinition(n.type);
   const base = def?.label ?? n.type;
   // Sliders the converter set: show the number, the way the card will.

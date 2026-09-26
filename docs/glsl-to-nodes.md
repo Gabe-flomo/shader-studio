@@ -59,20 +59,34 @@ Each expression takes the highest rung it can:
    `a / b` when `b` might be ≤ 0 (see traps). The block is as small as possible:
    only the offending sub-expression, so its neighbours still become nodes.
 3. **A Custom Function region.** A call to a user function, or a loop that can't
-   be unrolled, becomes a Custom Function node carrying that code plus every
+   be a group, becomes a Custom Function node carrying that code plus every
    helper it reaches (transitively, in program order). Loops that change one
    live variable become `T loop(inputs) { … return v; }`.
 
 Statements: declarations and assignments (including `+=` etc. and single-component
 writes like `uv.x *= …`, done with Split + Make); `if`/`else` where both branches
 are evaluated on copies of the environment and each changed variable becomes a
-ternary block `(cond) ? then : else`; `for` loops with constant bounds ≤ 16 are
-unrolled (the loop variable is folded as a literal), otherwise rung 3.
+ternary block `(cond) ? then : else`.
 
-The **report** lists every block and region with the reason, counts sliders,
-and lists what makes the shader unconvertible (`unsupported`): `discard`,
-textures, uniforms with no source node, globals, arrays, loops that change more
-than one variable, `return` in main. That report is the preview step.
+**`for` loops** with constant bounds (1 to 16 iterations) and no early exit
+become the app's own loop construct, an **iterated group**: the body converts
+to nodes inside the group's subgraph, the loop variable is a **Loop Index**
+(scaled and offset when the loop doesn't count 0, 1, 2…), and every outer
+variable the body changes gets a **Loop Carry**: init from outside through an
+input port, next from the body's last value for it, the final value on an
+output port that the code after the loop reads. Other outer values the body
+reads (variables, time, resolution…) come in through ports too, one per value.
+Carry init ports are emitted first, in the output ports' order, because the
+compiler pairs input and output ports by position as carries: that pairing
+then names the same carries the Loop Carry nodes do. An `if` inside the loop
+is a ternary block inside the group. Loops with `break`/`continue`/`return`,
+non-constant bounds, more than 16 iterations, or a loop inside a loop stay
+rung 3 (a region), which is why the 64-step raymarcher is still code.
+
+The **report** lists every block and region with the reason, counts sliders
+and loops, and lists what makes the shader unconvertible (`unsupported`):
+`discard`, textures, uniforms with no source node, globals, arrays, `return`
+in main. That report is the preview step.
 
 The graph is laid out in columns by depth (sources left, Output right).
 
@@ -85,15 +99,18 @@ The graph is laid out in columns by depth (sources left, Output right).
 | 03 | rings with glow (`abs`) | 20 | 2 | 0 | 3 | identical |
 | 04 | helper function `sdBox` | 18 | 1 | 1 | 3 | identical |
 | 05 | `if` branch + step | 15 | 2 | 0 | 0 | identical |
-| 06 | `for` loop, 4 iterations | 42 | 1 | 0 | 17 | identical |
+| 06 | `for` loop, 4 iterations → iterated group carrying `a` | 16 | 0 | 0 | 5 | identical |
 | 07 | plasma (sqrt) | 49 | 1 | 0 | 15 | identical |
 | 08 | rotation + hash + `discard` | – | – | – | – | **refused: `discard`** (preview still lists 2 regions) |
 | 09 | Shadertoy fbm (`mainImage`, 3 nested helpers, loop) | 15 | 0 | 1 | 0 | identical |
 | 10 | inline `mat2` rotation, box SDF | 25 | 4 | 0 | 4 | identical |
 | 11 | raymarcher (64-step loop with `break`) | 18 | 2 | 1 | 2 | identical |
 | 12 | editor-style (`#define`, `vUv`, value noise helper) | 34 | 0 | 1 | 8 | identical |
+| 13 | loop carrying three variables (`v`, `p`, `a`) | 10 | 0 | 0 | 3 | identical |
+| 14 | loop with a stepped counter (`k = 1; k <= 7; k += 2`) | 10 | 0 | 0 | 3 | identical |
+| 15 | `if` inside a loop, two carries | 8 | 1 | 0 | 2 | identical |
 
-Determinism: converting each shader twice gives byte-identical graphs (12/12).
+Determinism: converting each shader twice gives byte-identical graphs (15/15).
 
 Comparison recipe (from the WebGL CTS / GraphicsFuzz survey): same context,
 `antialias: false`, dither disabled, `highp`, fixed `u_time = 1.5`, fixed
@@ -150,7 +167,7 @@ PSNR ≥ 40 dB counts as "same"; anything else shows the diff.
 | unknown uniforms | refused | become Play controls (a uniform *is* a slider) or Constant nodes; the preview asks for a default |
 | global variables | refused | treat as first-assignment locals when only written in main; else region |
 | arrays, structs | refused | region (Custom Function) |
-| loop changing 2+ variables | refused | region returning a vec of them + Split; or the app's loop groups |
+| loop changing 2+ variables | iterated group (done) | a loop with `break` still needs a region; a "stop when" port on iterated groups would lift that |
 | vec4 arithmetic, `vec3` length/dot/normalize, `abs`, `pow`, `sqrt`, `min/max` on vectors | block | new nodes or type-generic versions of existing ones; an "exact" switch on Divide/Pow/Sqrt |
 | `.xyx`-style swizzles | block | a general Swizzle node (any pattern, any width) |
 | `mat2(c,-s,s,c) * v` | block | recognise the rotate pattern → Rotate 2D node |
@@ -232,8 +249,8 @@ No randomness, no timestamps in ids (ids are sequential per conversion).
   (palette, SDF shapes, rotate), a layout pass that groups a helper function's
   nodes into a Group. This is where an e-graph would earn its place; a small
   port is a few hundred lines.
-- *Phase 4:* textures, Shadertoy buffers (multi-pass → Prev Frame), loop groups
-  instead of regions.
+- *Phase 4:* textures, Shadertoy buffers (multi-pass → Prev Frame); loops with
+  `break` (an early-exit port on iterated groups) and loops over 16 iterations.
 
 **Open questions for you.**
 

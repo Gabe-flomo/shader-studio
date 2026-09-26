@@ -64,6 +64,18 @@ const EXAMPLES: Record<string, { label: string; code: string }> = {
   float glow = 0.02 / abs(rings);
   gl_FragColor = vec4(vec3(glow) * vec3(0.9, 0.4, 0.2), 1.0);
 }` },
+  loop: { label: 'For loop: layered waves', code: `void main() {
+  vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+  float v = 0.0;
+  float a = 0.5;
+  vec2 p = uv * 4.0;
+  for (int i = 0; i < 5; i++) {
+    v += a * sin(p.x + p.y + u_time + float(i));
+    p *= 2.0;
+    a *= 0.5;
+  }
+  gl_FragColor = vec4(vec3(0.5 + v) * vec3(0.4, 0.8, 1.0), 1.0);
+}` },
   shadertoy: { label: 'Shadertoy: fbm', code: `float hash21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
   vec2 i = floor(p); vec2 f = fract(p);
@@ -201,6 +213,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const summary = [
     `${conv.nodes.length} ${conv.nodes.length === 1 ? 'node' : 'nodes'}`,
     report.stats.sliders ? `${report.stats.sliders} ${report.stats.sliders === 1 ? 'slider' : 'sliders'}` : null,
+    report.stats.loops ? `${report.stats.loops} ${report.stats.loops === 1 ? 'loop' : 'loops'}` : null,
     report.blocks.length ? `${report.blocks.length} kept as ${report.blocks.length === 1 ? 'an expression' : 'expressions'}` : null,
     report.regions.length ? `${report.regions.length} kept as ${report.regions.length === 1 ? 'a function' : 'functions'}` : null,
     warnedCount ? `${warnedCount} ≈` : null,
@@ -328,7 +341,7 @@ function Detail({ node, nodes, report, asBlock, onToggleBlock, onClose }: { node
   const wired = Object.entries(node.inputs).filter(([, s]) => s.connection);
   const sliders = Object.entries(node.params).filter(([k, v]) => typeof v === 'number' && def?.paramDefs?.[k] && !node.inputs[k]?.connection);
   const label = kind === 'block' ? 'Expression Block' : kind === 'region' ? 'Custom Function' : def?.label ?? node.type;
-  const kindText = kind === 'warned' ? 'node, not quite GLSL' : kind === 'block' ? 'code kept as an expression' : kind === 'region' ? 'code kept as a function' : kind === 'source' ? 'source' : kind === 'output' ? 'output' : 'node';
+  const kindText = kind === 'warned' ? 'node, not quite GLSL' : kind === 'block' ? 'code kept as an expression' : kind === 'region' ? 'code kept as a function' : kind === 'source' ? 'source' : kind === 'output' ? 'output' : kind === 'loop' ? 'a for loop: an iterated group (open it in the Studio)' : 'node';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

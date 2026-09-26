@@ -24,11 +24,17 @@ export function estimateNodeHeight(node: GraphNode): number {
  * computing their own notion of it.
  */
 export function computeNodeRanks(nodes: GraphNode[]): Map<string, number> {
+  const ids = new Set(nodes.map(n => n.id));
   const upstreamOf: Map<string, Set<string>> = new Map();
   for (const node of nodes) {
     if (!upstreamOf.has(node.id)) upstreamOf.set(node.id, new Set());
-    for (const input of Object.values(node.inputs)) {
-      if (input.connection) upstreamOf.get(node.id)!.add(input.connection.nodeId);
+    for (const [key, input] of Object.entries(node.inputs)) {
+      // A Loop Carry's `next` is the feedback edge of an iterated group: it points back
+      // upstream, and following it would make the ranks below climb forever.
+      if (node.type === 'loopCarry' && key === 'next') continue;
+      // Only wires from nodes in this list count: a group's port sentinel (or a node
+      // outside the scope) isn't upstream here, and a node fed by one is a source.
+      if (input.connection && ids.has(input.connection.nodeId)) upstreamOf.get(node.id)!.add(input.connection.nodeId);
     }
   }
 
@@ -42,9 +48,13 @@ export function computeNodeRanks(nodes: GraphNode[]): Map<string, number> {
     }
   }
 
+  // No rank can exceed the node count in a graph without cycles; any other cycle
+  // (a malformed graph) stops there instead of spinning.
+  const maxRank = nodes.length;
   while (queue.length > 0) {
     const id = queue.shift()!;
     const r = rank.get(id)!;
+    if (r >= maxRank) continue;
     for (const node of nodes) {
       if (upstreamOf.get(node.id)?.has(id)) {
         const prev = rank.get(node.id) ?? -1;

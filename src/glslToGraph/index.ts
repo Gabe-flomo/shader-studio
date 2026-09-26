@@ -21,7 +21,7 @@
  * reported as unsupported and the caller keeps the whole-shader import.
  */
 import { parser, generate } from '@shaderfrog/glsl-parser';
-import type { GraphNode, InputSocket, DataType } from '../types/nodeGraph';
+import { GROUP_PORT_SENTINEL, type GraphNode, type InputSocket, type DataType, type GroupInputPort, type GroupOutputPort } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { groupNodesByRank, estimateNodeHeight } from '../store/graphLayout';
 
@@ -56,7 +56,7 @@ export interface ConversionReport {
   regions: { code: string; why: string }[];
   /** Why the shader can't be a graph at all (empty when it can). */
   unsupported: string[];
-  stats: { nodes: number; blocks: number; regions: number; sliders: number };
+  stats: { nodes: number; blocks: number; regions: number; sliders: number; loops: number };
 }
 
 export interface ConversionResult { nodes: GraphNode[]; report: ConversionReport }
@@ -86,7 +86,7 @@ const POLY: Record<string, string[]> = {
 };
 
 export function glslToGraph(source: string, options: ConversionOptions = {}): ConversionResult {
-  const report: ConversionReport = { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0 } };
+  const report: ConversionReport = { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0, loops: 0 } };
   const seen = new Map<string, number>();
   /** An inexact mapping: the node with a warning, unless the user asked for the code. Returns the warning to attach, or null for "make a block". */
   const inexact = (a: Ast, why: string): ConversionWarning | null => {
@@ -97,8 +97,14 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     if (options.asBlock?.has(w.id)) return null;
     return w;
   };
-  const warned = (v: Val, w: ConversionWarning): Val => { const n = nodes.find(x => x.id === v.ref?.nodeId); if (n) { n.params.__importWarning = w.why; w.nodeId = n.id; } return v; };
+  const warned = (v: Val, w: ConversionWarning): Val => { const n = sink.find(x => x.id === v.ref?.nodeId); if (n) { n.params.__importWarning = w.why; w.nodeId = n.id; } return v; };
   const nodes: GraphNode[] = [];
+  /** Where new nodes go: the graph, or the subgraph of the loop group being built. */
+  let sink: GraphNode[] = nodes;
+  /** The subgraphs made along the way, laid out at the end like the graph itself. */
+  const subgraphs: GraphNode[][] = [];
+  /** Split nodes already made, per scope, by the vector they split. */
+  const splits = new WeakMap<GraphNode[], Map<string, GraphNode>>();
   let seq = 0;
   const id = (p: string) => `${p}_${++seq}`;
 
@@ -153,11 +159,40 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     const t = params.outputType as T | undefined;
     if (poly && t) for (const k of poly) { if (inputs[k]) inputs[k].type = t as DataType; if (outputs[k]) outputs[k].type = t as DataType; }
     const node = { id: id(type), type, position: { x: 0, y: 0 }, inputs, outputs, params: { ...(def?.defaultParams ?? {}), ...params } } as GraphNode;
-    nodes.push(node);
+    sink.push(node);
     return node;
   }
   const ref = (n: GraphNode, out: string, t: T): Ref => ({ nodeId: n.id, outputKey: out, type: t });
+
+  // ── Loop scope: a for loop being built as an iterated group ────────────────
+  /**
+   * Inside a loop group, anything from outside (a variable, a source) comes in
+   * through an input port: the group node gets a socket wired to the outer
+   * value, and the body's nodes wire to the port sentinel. One port per outer
+   * value, however often it's read.
+   */
+  interface LoopCtx { ports: Map<string, Ref>; inputPorts: GroupInputPort[]; wires: Record<string, Ref>; sockets: Record<string, InputSocket>; outerSink: GraphNode[] }
+  let loopCtx: LoopCtx | null = null;
+  function portRef(ctx: LoopCtx, outer: Ref, label: string): Ref {
+    const k = `${outer.nodeId}:${outer.outputKey}`;
+    let r = ctx.ports.get(k);
+    if (!r) {
+      const key = `in${ctx.inputPorts.length}`;
+      ctx.inputPorts.push({ key, type: outer.type as DataType, label, toNodeId: '', toInputKey: '' });
+      ctx.wires[key] = outer;
+      ctx.sockets[key] = { type: outer.type as DataType, label };
+      r = { nodeId: GROUP_PORT_SENTINEL, outputKey: key, type: outer.type };
+      ctx.ports.set(k, r);
+    }
+    return r;
+  }
   const srcRef = (name: string): Ref => {
+    // Inside a loop group the source node lives outside and comes in through a port.
+    if (loopCtx) {
+      const ctx = loopCtx, saved = sink;
+      loopCtx = null; sink = ctx.outerSink;
+      try { return portRef(ctx, srcRef(name), SOURCES[name].name); } finally { loopCtx = ctx; sink = saved; }
+    }
     const s = SOURCES[name];
     let r = sourceRefs.get(name);
     if (!r) {
@@ -261,7 +296,10 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         const comps = 'xyzw';
         if (sw.length === 1 && n > 1) {
           const i = 'xyzwrgbastpq'.indexOf(sw) % 4;
-          const split = mk(`splitVec${n}`, {}, { v: asRef(v) });
+          // One Split per vector per scope: p.x + p.y reads the same card twice.
+          const src = asRef(v); const key = `${src.nodeId}:${src.outputKey}`;
+          let scope = splits.get(sink); if (!scope) { scope = new Map(); splits.set(sink, scope); }
+          let split = scope.get(key); if (!split) { split = mk(`splitVec${n}`, {}, { v: src }); scope.set(key, split); }
           return { ref: ref(split, comps[i], 'float'), type: 'float', ast: a };
         }
         if (sw.length === n && [...sw].every((c, i) => 'xyzwrgba'.indexOf(c) % 4 === i)) return { ...v, ast: a };
@@ -291,7 +329,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     // Divide guards its divisor with max(b, 0.0001): only the same as GLSL for a positive divisor.
     // Known-positive divisors: a positive literal, the resolution, or one of its components.
     const resId = sourceRefs.get('u_resolution')?.nodeId;
-    const fromRes = (r?: Ref) => !!r && (r.nodeId === resId || nodes.find(n => n.id === r.nodeId)?.inputs.v?.connection?.nodeId === resId);
+    const fromRes = (r?: Ref) => !!r && (r.nodeId === resId || sink.find(n => n.id === r.nodeId)?.inputs.v?.connection?.nodeId === resId);
     const positive = (R.lit !== undefined && R.lit > 0) || fromRes(R.ref);
     if (kind === 'divide' && !positive) {
       const w = inexact(a, 'The Divide node guards its divisor with max(b, 0.0001): the same as GLSL only while b stays positive');
@@ -475,7 +513,75 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     const v = block(right, env, 'the final colour with its own alpha');
     return mk('vec4Output', {}, { color: asRef(v) });
   }
-  /** A loop that can't be unrolled: a Custom Function running it, when it changes one live variable. */
+  /**
+   * A for loop as an iterated group: the body's nodes inside a group that runs
+   * `count` times, a Loop Index for the loop variable, and a Loop Carry for
+   * each outer variable the body changes (init from outside, next from the
+   * body's last value, the final value on an output port). Other outer values
+   * the body reads come in through ports. The compiler pairs input and output
+   * ports by position as carries, so the carry init ports go first, in the
+   * output ports' order: that pairing then names the same carries.
+   */
+  function loopGroup(s: Ast, env: Env, name: string, start: number, step: number, count: number): void {
+    const assigned = new Set<string>(); assignedNames(s.body, assigned);
+    const carried = [...assigned].filter(n => env.has(n) && n !== name);
+    // The carries' starting values, as nodes in the scope outside the loop.
+    const inits = new Map(carried.map(v => [v, asRef(env.get(v)!)]));
+    const ctx: LoopCtx = { ports: new Map(), inputPorts: [], wires: {}, sockets: {}, outerSink: sink };
+    const inner: GraphNode[] = [];
+    const savedSink = sink, savedCtx = loopCtx;
+    sink = inner; loopCtx = ctx;
+    const carries = new Map<string, GraphNode>();
+    const innerEnv: Env = new Map();
+    try {
+      for (const v of carried) {
+        const t = env.get(v)!.type;
+        const c = mk('loopCarry', { dataType: t }, { init: portRef(ctx, inits.get(v)!, v) },
+          { inputs: { init: { type: t as DataType, label: 'Init' }, next: { type: t as DataType, label: 'Next' } }, outputs: { value: { type: t as DataType, label: 'Value' } } });
+        carries.set(v, c);
+        innerEnv.set(v, { ref: ref(c, 'value', t), type: t, ast: { type: 'carry' } });
+      }
+      // Outer variables the body only reads: through ports (a literal travels as itself).
+      const used = new Set<string>(); freeNames(s.body, used);
+      for (const [k, v] of env) {
+        if (carries.has(k) || !used.has(k)) continue;
+        innerEnv.set(k, v.ref ? { ref: portRef(ctx, v.ref, k), type: v.type, ast: v.ast } : v);
+      }
+      // The loop variable: the group's index, scaled and offset when the loop doesn't count 0, 1, 2…
+      const idx = mk('loopIndex', {}, {});
+      let iv: Val = { ref: ref(idx, 'i', 'float'), type: 'float', ast: { type: 'loopvar' } };
+      if (step !== 1) iv = typed('multiply', { b: step }, { a: asRef(iv) }, 'result', 'float');
+      if (start !== 0) iv = typed('add', { b: start }, { a: asRef(iv) }, 'result', 'float');
+      innerEnv.set(name, iv);
+      stmt(s.body as Ast, innerEnv);
+      for (const [v, c] of carries) { const nx = asRef(innerEnv.get(v)!); c.inputs.next.connection = { nodeId: nx.nodeId, outputKey: nx.outputKey }; }
+    } finally { sink = savedSink; loopCtx = savedCtx; }
+    // The group's terminals draw a wire to a port's first reader.
+    for (const p of ctx.inputPorts) {
+      const reader = inner.find(n => Object.values(n.inputs).some(i => i.connection?.nodeId === GROUP_PORT_SENTINEL && i.connection.outputKey === p.key));
+      if (reader) { p.toNodeId = reader.id; p.toInputKey = Object.entries(reader.inputs).find(([, i]) => i.connection?.nodeId === GROUP_PORT_SENTINEL && i.connection.outputKey === p.key)![0]; }
+    }
+    const outputPorts: GroupOutputPort[] = []; const outSockets: GraphNode['outputs'] = {};
+    carried.forEach((v, k) => {
+      const c = carries.get(v)!; const t = c.outputs.value.type;
+      outputPorts.push({ key: `out${k}`, type: t, label: v, fromNodeId: c.id, fromOutputKey: 'value' });
+      outSockets[`out${k}`] = { type: t, label: v };
+    });
+    const label = `for ${name}: ${count}×`;
+    const g = mk('group', { label, iterations: count, subgraph: { nodes: inner, inputPorts: ctx.inputPorts, outputPorts } }, ctx.wires, { inputs: ctx.sockets, outputs: outSockets });
+    carried.forEach((v, k) => { const t = env.get(v)!.type; env.set(v, { ref: ref(g, `out${k}`, t), type: t, ast: s }); });
+    subgraphs.push(inner);
+    report.stats.loops++;
+    report.notes.push(`Loop over ${name} (${count}×) is an iterated group${carried.length ? ` carrying ${carried.join(', ')}` : ''}`);
+  }
+  function hasAny(a: unknown, types: string[]): boolean {
+    if (Array.isArray(a)) return a.some(x => hasAny(x, types));
+    if (!a || typeof a !== 'object') return false;
+    const n = a as Ast;
+    if (types.includes(n.type)) return true;
+    return Object.entries(n).some(([k, v]) => k !== 'type' && hasAny(v, types));
+  }
+  /** A loop that can't be a group: a Custom Function running it, when it changes one live variable. */
   function loopRegion(s: Ast, env: Env, loopVar: string | undefined): void {
     const assigned = new Set<string>(); assignedNames(s.body, assigned);
     const live = [...assigned].filter(n => env.has(n));
@@ -558,12 +664,9 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         const step = upd?.type === 'postfix' && ((upd.postfix as Ast)?.literal === '++') ? 1 : upd?.type === 'assignment' && (upd.operator as Ast).literal === '+=' ? litOf(upd.right as Ast) : null;
         if (name && start !== null && end !== null && step && (condOp === '<' || condOp === '<=')) {
           const count = Math.floor(((condOp === '<' ? end - 1e-9 : end) - start) / step) + 1;
-          if (count >= 1 && count <= 16) {
-            for (let k = 0; k < count; k++) { env.set(name, { lit: start + k * step, type: 'float', ast: { type: 'loopvar' } }); stmt(s.body as Ast, env); }
-            env.delete(name);
-            report.notes.push(`Loop over ${name} unrolled ${count}×`);
-            return;
-          }
+          // An iterated group runs up to 16 times and has no early exit; a loop inside a loop stays code.
+          const exits = hasAny(s.body, ['break_statement', 'continue_statement', 'return_statement', 'discard_statement']);
+          if (count >= 1 && count <= 16 && !exits && !loopCtx) { loopGroup(s, env, name, start, step, count); return; }
         }
         return loopRegion(s, env, name);
       }
@@ -584,7 +687,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   if (report.unsupported.length) return { nodes: [], report };
 
   layout(nodes);
-  report.stats = { nodes: nodes.length, blocks: report.blocks.length, regions: report.regions.length, sliders: report.stats.sliders };
+  for (const sg of subgraphs) layout(sg);
+  report.stats = { nodes: nodes.length, blocks: report.blocks.length, regions: report.regions.length, sliders: report.stats.sliders, loops: report.stats.loops };
   return { nodes, report };
 }
 
@@ -592,7 +696,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
  * `mainImage(out vec4 fragColor, in vec2 fragCoord)` becomes main(), iTime and
  * friends become u_time…, so a pasted Shadertoy shader converts like our own.
  */
-export function normaliseHostShader(source: string): string { return hostToOurs(source, { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0 } }); }
+export function normaliseHostShader(source: string): string { return hostToOurs(source, { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0, loops: 0 } }); }
 
 function hostToOurs(source: string, report: ConversionReport): string {
   let s = source;
