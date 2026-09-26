@@ -13,7 +13,9 @@ import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord } from '../types/play';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
-import { buildPlayHtml, unsupportedFeatures, type EmbedOptions, type PlayHtmlInput } from '../play/exportHtml';
+import { buildPlayHtml, unsupportedFeatures, type EmbedOptions, type PlayHtmlInput, type PlayMedia } from '../play/exportHtml';
+import { imageDataUrl, mediaSource } from '../lib/mediaSources';
+import { audioUniformNamesByNode } from '../compiler/audioUniformNames';
 
 /** Top-level `kind` a play file carries, so importing one opens the Play page. */
 export const PLAY_FILE_KIND = 'shader-studio-play';
@@ -1358,6 +1360,49 @@ function nodeInScope(state: { nodes: GraphNode[]; activeGroupPath: string[] }, i
   if (top) return top;
   if (state.activeGroupPath.length === 0) return undefined;
   return getActiveNodes(state.nodes, state.activeGroupPath)?.find(n => n.id === id);
+}
+
+/**
+ * The files a web export carries for the graph's inputs: each Texture Input's
+ * picture (encoded from its decoded canvas), and the videos and songs
+ * mediaSources.ts kept when they were loaded.
+ */
+function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTextures' | 'videoUniforms' | 'audioUniforms'>): PlayMedia {
+  const byId = new Map(st.nodes.map(n => [n.id, n]));
+  const labelOf = (id: string, fallback: string) => {
+    const n = byId.get(id);
+    const own = n && typeof n.params.label === 'string' && n.params.label.trim();
+    return own || (n && getNodeDefinition(n.type)?.label) || fallback;
+  };
+  const textures: NonNullable<PlayMedia['textures']> = {};
+  for (const [uniform, key] of Object.entries(st.textureUniforms)) {
+    const [id, slot] = key.split('::');
+    const label = slot ? `${labelOf(id, 'a node')} (${slot})` : labelOf(id, 'Texture Input');
+    const enc = imageDataUrl(st.nodeTextures[key]?.image);
+    textures[uniform] = { label, name: '', src: enc?.dataUrl ?? null, bytes: enc?.dataUrl.length ?? 0, scaledTo: enc?.scaledTo ?? null };
+  }
+  const videos: NonNullable<PlayMedia['videos']> = {};
+  for (const [uniform, id] of Object.entries(st.videoUniforms)) {
+    const m = mediaSource(id), p = byId.get(id)?.params ?? {};
+    videos[uniform] = {
+      label: labelOf(id, 'Video Input'), name: m?.name ?? '', src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : 0),
+      loop: p._loop !== false, speed: typeof p._speed === 'number' && p._speed > 0 ? p._speed : 1,
+    };
+  }
+  // Every Audio Input node, wired into the shader or not: Play mappings can read its bands either way.
+  const names = audioUniformNamesByNode(st.audioUniforms);
+  const audio: NonNullable<PlayMedia['audio']> = [];
+  for (const n of st.nodes) {
+    if (n.type !== 'audioInput') continue;
+    const m = mediaSource(n.id);
+    const bands = Array.isArray(n.params._bands) ? (n.params._bands as unknown[]).map(b => Number(b) || 0) : [200];
+    audio.push({
+      id: n.id, label: labelOf(n.id, 'Audio Input'), name: m?.name ?? '', src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : 0),
+      uniforms: Array.from({ length: bands.length }, (_, i) => names.get(n.id)?.[i] ?? ''),
+      bands, range: typeof n.params.freq_range === 'number' ? n.params.freq_range : 200, mode: n.params.mode === 'full' ? 'full' : 'band',
+    });
+  }
+  return { textures, videos, audio };
 }
 
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
@@ -4416,12 +4461,17 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const u = st.paramBindings[c.target.split('::').slice(-2).join('::')];
       if (v !== undefined && u && !c.target.startsWith('layer:')) uniforms[u] = Array.isArray(v) ? [...v] : v;
     }
-    const missing = unsupportedFeatures({
-      textureUniforms: st.textureUniforms, videoUniforms: st.videoUniforms, audioUniforms: st.audioUniforms, liveUniforms: st.liveUniforms,
-      isStateful: st.isStateful, particleSystems: st.particleSystems, usesEcho: /\bu_echo0\b/.test(st.fragmentShader), play: st.play,
-    });
+    const missing = unsupportedFeatures({ liveUniforms: st.liveUniforms });
     return {
-      input: { title: title.trim() || 'Playfield', fragmentShader: st.fragmentShader, uniforms, paramBindings: st.paramBindings, play: bakeLayerValues(st.play, live), aspect: st.previewAspect },
+      input: {
+        title: title.trim() || 'Playfield', fragmentShader: st.fragmentShader, uniforms, paramBindings: st.paramBindings, play: bakeLayerValues(st.play, live), aspect: st.previewAspect,
+        passes: {
+          stateful: st.isStateful,
+          echo: st.echoConfig,
+          particles: st.particleSystems.map(p => ({ vertexShader: p.vertexShader, fragmentShader: p.fragmentShader, count: p.count, shape: p.shape })),
+        },
+        media: webMedia(st),
+      },
       missing,
     };
   },

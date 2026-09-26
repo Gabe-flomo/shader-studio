@@ -15,7 +15,11 @@
  *               your content, never takes clicks or keys from the page, pauses
  *               off-screen, and shows a still frame for reduced motion
  *
- * `unsupportedFeatures` lists what a graph uses that the runtime can't run.
+ * The runtime runs what the app's canvas does: previous-frame feedback and
+ * echo (ping-pong targets), image, video and audio inputs (carried in the page
+ * as data URLs), and GPU particle systems. `unsupportedFeatures` lists what a
+ * graph uses that it still can't run, `leftBehind` what stays out of the page,
+ * and `mediaCarried` what each image, video or song adds to it.
  */
 import runtimeSource from './runtime/play-runtime.js?raw';
 import particleSource from './particle-sim.js?raw';
@@ -35,6 +39,41 @@ export interface PlayHtmlInput {
   paramBindings: Record<string, string>;
   play: PlayRecord;
   aspect: PreviewAspect;
+  /** Extra passes the picture needs; absent means a single fragment pass. */
+  passes?: PlayPasses;
+  /** The files the graph's inputs read. */
+  media?: PlayMedia;
+}
+
+/** What ShaderCanvas runs around the fragment shader, from the compile. */
+export interface PlayPasses {
+  /** Previous Frame and the blur family: ping-pong targets bound to u_prevFrame. */
+  stateful: boolean;
+  /** Echo nodes: `copies` snapshots `delay` frames apart, bound to u_echo0… */
+  echo: { copies: number; delay: number } | null;
+  /** GPU particle chains, drawn additively over the picture. */
+  particles: { vertexShader: string; fragmentShader: string; count: number; shape: number }[];
+}
+
+/** One input's file. `src` is a data URL, or null when none is loaded or it is too big to carry (`bytes` > 0). */
+export interface PlayMediaFile {
+  /** What the dialog calls it: the node's label, and the file name when known. */
+  label: string;
+  name: string;
+  src: string | null;
+  /** The file's size (for a left-out one) or what it adds to the page. */
+  bytes: number;
+  /** An image scaled down to fit the page: its new longest side. */
+  scaledTo?: number | null;
+}
+
+export interface PlayMedia {
+  /** sampler uniform → its image. */
+  textures?: Record<string, PlayMediaFile>;
+  /** sampler uniform → its video. */
+  videos?: Record<string, PlayMediaFile & { loop: boolean; speed: number }>;
+  /** Audio Input nodes: the uniform per band (index = band), and how the bands are read. */
+  audio?: (PlayMediaFile & { id: string; uniforms: string[]; bands: number[]; range: number; mode: string })[];
 }
 
 export type EmbedMode = 'player' | 'background';
@@ -59,27 +98,17 @@ export interface EmbedOptions {
 export const DEFAULT_EMBED: EmbedOptions = { mode: 'player', placement: 'section', fit: 'contain', followPage: true, markers: true, osc: false, height: 560 };
 
 export interface GraphFeatures {
-  textureUniforms: Record<string, string>;
-  videoUniforms: Record<string, string>;
-  audioUniforms: Record<string, string>;
   liveUniforms: Record<string, string>;
-  isStateful: boolean;
-  particleSystems: unknown[];
-  usesEcho: boolean;
-  play: PlayRecord;
 }
 
-/** Human-readable list of things in this graph the standalone page can't run. */
+/**
+ * Human-readable list of things in this graph the standalone page can't run.
+ * Feedback, echo, particles and image, video and audio inputs all run there;
+ * a MIDI Input node's outputs don't yet (the page's MIDI drives mappings only).
+ */
 export function unsupportedFeatures(f: GraphFeatures): string[] {
   const out: string[] = [];
-  if (Object.keys(f.textureUniforms).length) out.push('image inputs');
-  if (Object.keys(f.videoUniforms).length) out.push('video inputs');
-  if (Object.keys(f.audioUniforms).length) out.push('audio inputs');
   if (Object.keys(f.liveUniforms).length) out.push('MIDI Input node outputs');
-  if (f.isStateful) out.push('the previous-frame feedback');
-  if (f.usesEcho) out.push('echo snapshots');
-  if (f.particleSystems.length) out.push('GPU particle systems');
-  if (f.play.mappings.some(m => m.source.kind === 'audio')) out.push('audio-band mappings');
   return out;
 }
 
@@ -88,14 +117,23 @@ export interface LeftBehind { what: string; why: string }
 
 const AUDIO_BAND_READS = new Set(['level', 'bass', 'lowmid', 'highmid', 'treble']);
 
+const sizeText = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
 /**
- * What the Play setup has that the exported page won't carry: a loaded song
- * (never saved, even in the app), the MIDI file, audio-layer band mappings
- * (measured by the app's player only) and the notes. Images placed as layers
- * are data URLs and do travel.
+ * What the Play setup has that the exported page won't carry: a video or song
+ * too big to put in a page, a loaded song in an audio layer (never saved, even
+ * in the app), the MIDI file, audio-layer band mappings (measured by the app's
+ * player only) and the notes. Images placed as layers are data URLs and do
+ * travel, as do the graph's images and small videos and songs.
  */
-export function leftBehind(play: PlayRecord): LeftBehind[] {
+export function leftBehind(play: PlayRecord, media?: PlayMedia): LeftBehind[] {
   const out: LeftBehind[] = [];
+  for (const v of Object.values(media?.videos ?? {})) {
+    if (!v.src && v.bytes > 0) out.push({ what: `The video “${v.name}” (${sizeText(v.bytes)}) in ${v.label}`, why: `Videos over ${sizeText(VIDEO_LIMIT)} stay out of the page to keep it light, so that input shows black there. Trim or compress it under ${sizeText(VIDEO_LIMIT)} to bring it along.` });
+  }
+  for (const a of media?.audio ?? []) {
+    if (!a.src && a.bytes > 0) out.push({ what: `The song “${a.name}” (${sizeText(a.bytes)}) in ${a.label}`, why: `Songs over ${sizeText(AUDIO_LIMIT)} stay out of the page, so ${a.label} listens to the visitor’s microphone instead, after they click Listen to audio.` });
+  }
   for (const l of play.layers) {
     if (l.kind === 'audio' && l.input === 'file') {
       out.push({ what: l.fileName ? `The song “${l.fileName}” (${l.label})` : `The song in ${l.label}`, why: 'Songs aren’t saved with a setup, so the page listens to the visitor’s microphone instead, after they click Enable.' });
@@ -109,6 +147,19 @@ export function leftBehind(play: PlayRecord): LeftBehind[] {
   return out;
 }
 
+/** Mirrors lib/mediaSources.ts EMBED_LIMIT (this module stays free of browser-only imports). */
+const VIDEO_LIMIT = 4 * 1024 * 1024;
+const AUDIO_LIMIT = 6 * 1024 * 1024;
+
+/** Each image, video and song the page carries, and what it adds to the page's size. */
+export function mediaCarried(media?: PlayMedia): { what: string; bytes: number }[] {
+  const out: { what: string; bytes: number }[] = [];
+  for (const t of Object.values(media?.textures ?? {})) if (t.src) out.push({ what: `Image in ${t.label}${t.scaledTo ? ` (scaled to ${t.scaledTo} px)` : ''}`, bytes: t.src.length });
+  for (const v of Object.values(media?.videos ?? {})) if (v.src) out.push({ what: `Video “${v.name}” in ${v.label}`, bytes: v.src.length });
+  for (const a of media?.audio ?? []) if (a.src) out.push({ what: `Song “${a.name}” in ${a.label}`, bytes: a.src.length });
+  return out;
+}
+
 /** JSON that is safe inside a <script> element. */
 function scriptJson(value: unknown): string {
   return JSON.stringify(value).replace(/<\//g, '<\\/').replace(/<!--/g, '<\\!--').replace(/[\u2028\u2029]/g, c => c === '\u2028' ? '\\u2028' : '\\u2029');
@@ -116,6 +167,17 @@ function scriptJson(value: unknown): string {
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+}
+
+/** What the runtime reads of the media: the files and how to play them, without the dialog's labels and sizes. */
+function runtimeMedia(m: PlayMedia) {
+  const file = (f: PlayMediaFile) => ({ src: f.src });
+  const map = <T extends PlayMediaFile, R>(r: Record<string, T> | undefined, fn: (f: T) => R) => Object.fromEntries(Object.entries(r ?? {}).map(([k, v]) => [k, fn(v)]));
+  return {
+    textures: map(m.textures, file),
+    videos: map(m.videos, v => ({ src: v.src, loop: v.loop, speed: v.speed })),
+    audio: (m.audio ?? []).map(a => ({ id: a.id, src: a.src, uniforms: a.uniforms, bands: a.bands, range: a.range, mode: a.mode })),
+  };
 }
 
 function bundleOf(input: PlayHtmlInput) {
@@ -130,6 +192,8 @@ function bundleOf(input: PlayHtmlInput) {
     paramBindings: input.paramBindings,
     play,
     aspect: aspect ? { id: aspect.id, ratio: aspect.ratio } : { id: 'free', ratio: null },
+    ...(input.passes && (input.passes.stateful || input.passes.echo || input.passes.particles.length) ? { passes: input.passes } : {}),
+    ...(input.media ? { media: runtimeMedia(input.media) } : {}),
     generatedBy: 'Playfield',
   };
 }

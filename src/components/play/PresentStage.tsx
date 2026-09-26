@@ -64,7 +64,7 @@ export function PresentStage({ canvas, onRecord }: {
   const exact = useMemo(() => {
     if (mode !== 'exact') return null;
     const { input, missing } = useNodeGraphStore.getState().playWebInput(graphName);
-    return { html: buildPlayHtml(input, { ...DEFAULT_EMBED, mode: 'player' }), missing, left: leftBehind(input.play) };
+    return { html: buildPlayHtml(input, { ...DEFAULT_EMBED, mode: 'player' }), missing, left: leftBehind(input.play, input.media) };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, build]);
 
