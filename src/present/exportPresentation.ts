@@ -10,10 +10,16 @@
  * interactive blocks. Sources the player can't run yet show their still with
  * a note, and the export lists them. Pure: same presentation and options,
  * same page.
+ *
+ * Live code blocks are editable there too (a plain text box, without the
+ * app's highlighting): the edit runs in that step's canvases of the source.
+ * Canvases whose Play reads the camera get Enable camera, and ones with the
+ * graph's own songs get Play sound, over the picture.
  */
 import runtimeSource from '../play/runtime/play-runtime.js?raw';
 import pageSource from './present-page.js?raw';
-import { kitScript, leftBehind, playBundle } from '../play/exportHtml';
+import { kitScript, leftBehind, playBundle, playUsesCamera } from '../play/exportHtml';
+import { isLiveScript } from './liveScript';
 import { C_LIGHT, tokenizeLine } from '../components/glslSyntax';
 import { tokenizeJsLine } from '../components/code/jsSyntax';
 import { resolveCode } from './code';
@@ -52,8 +58,15 @@ export function exportNotes(p: Presentation): ExportNote[] {
   return out;
 }
 
+/** A live code block: a text box whose edit runs in the step's canvases of its source (present-page.js). */
+function liveCodeHtml(b: Extract<Block, { type: 'code' }> & { from: { source: string; layerId: string } }, r: ReturnType<typeof resolveCode>): string {
+  const lines = Math.max(6, Math.min(24, r.text.split('\n').length + 1));
+  return `<figure class="pp-code pp-live" data-source="${esc(b.from.source)}" data-layer="${esc(b.from.layerId)}"><div class="pp-code-head"><b>JS</b><span>${esc(r.from)}</span><em class="pp-live-tag" title="Edit it and the picture on this step runs your version">LIVE</em><button type="button" class="pp-reset"${b.edited !== undefined && b.edited !== r.original ? '' : ' hidden'}>Reset</button><button type="button" class="pp-copy">Copy</button></div><textarea class="pp-edit" rows="${lines}" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Script code, live: ${esc(r.from)}">${esc(r.text)}</textarea><div class="pp-status">Change the code: the picture on this step runs your version.</div>${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ''}<textarea class="pp-original" hidden>${esc(r.original ?? '')}</textarea></figure>`;
+}
+
 function codeHtml(b: Extract<Block, { type: 'code' }>, sources: ReadonlyMap<string, PresentSource>): string {
   const r = resolveCode(b, sources);
+  if (isLiveScript(b) && !r.problem) return liveCodeHtml(b, r);
   const tok = r.language === 'js' ? tokenizeJsLine : tokenizeLine;
   const width = String(r.rows.reduce((m, x) => ('n' in x ? Math.max(m, x.n) : m), 1)).length;
   const body = r.problem
@@ -69,7 +82,11 @@ function canvasHtml(id: string, s: PresentSource | undefined, aspect: number, po
   const limits = sourceLimits(s);
   const still = limits.length > 0;
   const poster = s.poster ? ` style="background-image:url(${s.poster})"` : '';
-  return `<div class="pp-canvas" id="c-${esc(id)}" data-source="${esc(s.id)}" data-pointer="${pointer ? 1 : 0}"${start ? ` data-start="${start}"` : ''}${paused ? ' data-paused="1"' : ''}${still ? ' data-still="1"' : ''} style="aspect-ratio:${aspect};--ar:${aspect}"><div class="pp-host"${poster}></div>${still ? `<div class="pp-note">Still frame: the web player can’t run ${esc(limits.join(', '))} yet.</div>` : '<div class="pp-note pp-wait">Paused to keep the page light: other canvases are running.</div>'}</div>`;
+  // Shown while the canvas runs (present-page.js): the camera for the whole page, this canvas's songs.
+  const camera = !still && playUsesCamera(s.bundle.play) ? '<button type="button" class="pp-over pp-camera" hidden title="The picture reads your camera. Nothing leaves this computer.">Enable camera</button>' : '';
+  const sound = !still && s.bundle.media?.audio?.some(a => a.src) ? '<button type="button" class="pp-over pp-sound" hidden title="Play the song the picture reacts to">Play sound</button>' : '';
+  const overs = camera || sound ? `<div class="pp-overs">${camera}${sound}</div>` : '';
+  return `<div class="pp-canvas" id="c-${esc(id)}" data-source="${esc(s.id)}" data-pointer="${pointer ? 1 : 0}"${start ? ` data-start="${start}"` : ''}${paused ? ' data-paused="1"' : ''}${still ? ' data-still="1"' : ''} style="aspect-ratio:${aspect};--ar:${aspect}"><div class="pp-host"${poster}></div>${overs}${still ? `<div class="pp-note">Still frame: the web player can’t run ${esc(limits.join(', '))} yet.</div>` : '<div class="pp-note pp-wait">Paused to keep the page light: other canvases are running.</div>'}</div>`;
 }
 
 function interactiveHtml(b: Extract<Block, { type: 'interactive' }>, s: PresentSource | undefined, render: Render, math: MarkdownOptions['math']): string {
@@ -168,6 +185,15 @@ figure{margin:0}
 .pp-mark{background:#3a6ff71f;box-shadow:inset 3px 0 0 #3a6ff7}.pp-mark i{color:#3a6ff7}.pp-gap{color:#9a9da8;font:500 11px system-ui,sans-serif;padding:2px 0}
 .pp-code figcaption{padding:7px 12px 8px;border-top:1px solid #eef0f3;color:#6b6f7a;font-size:13px}
 .pp-code-problem{padding:14px;color:#8a5d05;font-size:13px}
+.pp-live:focus-within{border-color:#3a6ff7;box-shadow:0 0 0 3px #3a6ff72e}
+.pp-live-tag{flex-shrink:0;padding:1px 7px;border-radius:9px;background:#3a6ff724;color:#2f5fe0;font:650 10px system-ui,sans-serif;letter-spacing:.05em;font-style:normal}
+.pp-reset{border:0;background:none;color:#3a3d47;font:500 12px system-ui,sans-serif;cursor:pointer;padding:4px 8px;border-radius:6px}.pp-reset:hover{background:#f2f3f6}
+.pp-edit{display:block;width:100%;min-height:120px;max-height:460px;margin:0;padding:8px 14px;border:0;outline:none;resize:vertical;background:#fbfbfc;color:#1a1b23;font:12.5px/1.62 ui-monospace,SFMono-Regular,Menlo,monospace;tab-size:2;white-space:pre;overflow:auto;overflow-wrap:normal}
+.pp-status{padding:7px 12px;border-top:1px solid #eef0f3;color:#6b6f7a;font-size:12.5px;line-height:1.45}
+.pp-status.pp-ok::before{content:'✓ ';color:#2e8b57}
+.pp-status.pp-err{color:#b3261e;background:#fdf1f0;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.pp-overs{position:absolute;top:10px;right:10px;display:flex;gap:6px;z-index:2}
+.pp-over{display:inline-flex;align-items:center;height:28px;padding:0 10px;border:0;border-radius:8px;background:#0b0b10b3;color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}.pp-over:disabled{opacity:.75;cursor:default}
 .slides{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .slides .pp-stage{flex:1;min-height:0;overflow-y:auto}
 .slides .pp-step{min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:44px 56px;max-width:1180px}
@@ -206,6 +232,7 @@ export function buildPresentationHtml(p: Presentation, render: Render, opts: Pre
   const body = opts.layout === 'slides'
     ? `<main class="pp-stage">${steps}</main>${nav}`
     : `${nav}<main class="pp-doc"><h1 class="pp-title">${esc(p.title)}</h1>${steps}<p class="pp-by">Made with Playfield.</p></main>`;
+  // Copy takes what the block shows: a live block's current edit, or the code as quoted.
   const copy = `document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('.pp-copy');if(!b)return;var t=b.closest('.pp-code').querySelector('textarea').value;navigator.clipboard&&navigator.clipboard.writeText(t).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1400)})});`;
   const scripts = `${kitScript()}${runtimeSource}\n${pageSource}`.replace(/<\/script/gi, '<\\/script');
   return `<!doctype html>

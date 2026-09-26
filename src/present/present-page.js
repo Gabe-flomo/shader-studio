@@ -10,6 +10,11 @@
  * Interactive blocks (.pp-inter) wire their sliders to the canvas's controls
  * and their chips to the sliders. Slides: ← / →, Space, Home, End, the
  * progress bar. Scroll: ← / → jump between steps.
+ *
+ * Live code blocks (.pp-live) edit a Script layer: after a pause in typing
+ * the edit goes into that step's canvases of the source (setScript), and
+ * what the canvas says back (running, or the error) shows under the code.
+ * Over a running canvas: Enable camera (once for the page) and Play sound.
  */
 (function () {
   'use strict';
@@ -23,6 +28,33 @@
   // ── Canvases ──────────────────────────────────────────────────────────────
   var canvases = Array.prototype.slice.call(document.querySelectorAll('.pp-canvas[data-source]'));
   var state = new Map(); // el → { want, mount, still, inter }
+  var live = Array.prototype.slice.call(document.querySelectorAll('.pp-live'));
+  var camera = 'off';
+  // A live block's current code, if it differs from the snapshot's; the canvases of its step and source run it.
+  function editsFor(el) {
+    var step = el.closest('.pp-step'), src = el.getAttribute('data-source'), out = {};
+    live.forEach(function (b) {
+      if (b.closest('.pp-step') !== step || b.getAttribute('data-source') !== src) return;
+      out[b.getAttribute('data-layer')] = b.querySelector('.pp-edit').value;
+    });
+    return out;
+  }
+  function scriptStatus(el, layerId, error) {
+    var step = el.closest('.pp-step'), src = el.getAttribute('data-source');
+    live.forEach(function (b) {
+      if (b.closest('.pp-step') !== step || b.getAttribute('data-source') !== src || b.getAttribute('data-layer') !== layerId) return;
+      var st = b.querySelector('.pp-status');
+      st.className = 'pp-status ' + (error ? 'pp-err' : 'pp-ok');
+      st.textContent = error || 'Running in the picture on this step.';
+    });
+  }
+  function overs(el, on) {
+    var s = state.get(el);
+    Array.prototype.forEach.call(el.querySelectorAll('.pp-over'), function (b) {
+      b.hidden = !on || (b.classList.contains('pp-camera') && camera === 'on');
+      if (b.classList.contains('pp-sound')) { b.textContent = 'Play sound'; s.audible = false; }
+    });
+  }
   function wanted(el) {
     var s = state.get(el);
     if (!s.onScreen) return false;
@@ -38,14 +70,19 @@
       mode: 'player', panel: false, fit: 'cover', pauseOffscreen: true,
       pointer: el.getAttribute('data-pointer') === '1', markers: el.getAttribute('data-pointer') === '1',
       startTime: parseFloat(el.getAttribute('data-start') || '0') || 0, paused: el.getAttribute('data-paused') === '1',
+      onScript: function (layerId, error) { scriptStatus(el, layerId, error); },
     });
+    var edits = editsFor(el);
+    if (s.mount.setScript) for (var id in edits) s.mount.setScript(id, edits[id]);
     if (s.inter) s.inter.attach(s.mount);
+    overs(el, true);
   }
   function stop(el) {
     var s = state.get(el);
     if (!s.mount) return;
     var png = s.mount.still ? s.mount.still() : null;
     if (s.inter) s.inter.attach(null);
+    overs(el, false);
     s.mount.destroy();
     s.mount = null;
     var host = el.querySelector('.pp-host');
@@ -69,6 +106,58 @@
   canvases.forEach(function (el) {
     state.set(el, { onScreen: !io, mount: null, inter: null });
     if (io) io.observe(el);
+  });
+
+  // ── Over the picture: the camera (for the whole page) and the graph's songs ──
+  canvases.forEach(function (el) {
+    var cam = el.querySelector('.pp-camera'), snd = el.querySelector('.pp-sound');
+    if (cam) cam.onclick = function () {
+      if (!P.enableCamera) return;
+      cam.disabled = true; cam.textContent = 'Asking…';
+      P.enableCamera().then(function (r) {
+        camera = r;
+        Array.prototype.forEach.call(document.querySelectorAll('.pp-camera'), function (b) {
+          if (r === 'on') b.hidden = true;
+          else { b.disabled = false; b.textContent = r === 'blocked' ? 'Camera blocked' : 'No camera'; }
+        });
+      });
+    };
+    if (snd) snd.onclick = function () {
+      var s = state.get(el);
+      if (!s.mount || !s.mount.sound) return;
+      s.audible = !s.audible;
+      s.mount.sound(s.audible);
+      snd.textContent = s.audible ? 'Mute' : 'Play sound';
+    };
+  });
+
+  // ── Live code blocks ──────────────────────────────────────────────────────
+  live.forEach(function (b) {
+    var ta = b.querySelector('.pp-edit'), original = b.querySelector('.pp-original').value, reset = b.querySelector('.pp-reset');
+    var step = b.closest('.pp-step'), src = b.getAttribute('data-source'), layer = b.getAttribute('data-layer');
+    var linked = canvases.filter(function (c) { return c.closest('.pp-step') === step && c.getAttribute('data-source') === src; });
+    if (!linked.length) {
+      var st = b.querySelector('.pp-status');
+      st.textContent = 'No canvas of this Play on this step, so the edit has nowhere to run.';
+    }
+    var timer = 0;
+    function run() {
+      reset.hidden = ta.value === original;
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        linked.forEach(function (c) { var s = state.get(c); if (s.mount && s.mount.setScript) s.mount.setScript(layer, ta.value); });
+      }, 300);
+    }
+    ta.addEventListener('input', run);
+    ta.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab' || e.metaKey || e.ctrlKey || e.altKey) return;
+      e.preventDefault();
+      var a = ta.selectionStart, z = ta.selectionEnd;
+      ta.value = ta.value.slice(0, a) + '  ' + ta.value.slice(z);
+      ta.selectionStart = ta.selectionEnd = a + 2;
+      run();
+    });
+    reset.onclick = function () { ta.value = original; run(); };
   });
 
   // ── Interactive blocks ────────────────────────────────────────────────────

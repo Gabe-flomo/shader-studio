@@ -18,6 +18,8 @@ export interface ResolvedCode {
   from: string;
   /** Something is missing (a source, a node, a layer): shown instead of the code. */
   problem?: string;
+  /** A Script layer's code as the snapshot has it (what a live block's Reset goes back to). */
+  original?: string;
 }
 
 function inRanges(n: number, ranges: [number, number][] | undefined): boolean {
@@ -37,7 +39,9 @@ export function resolveCode(b: CodeBlock, sources: ReadonlyMap<string, PresentSo
     const id = b.from.layerId;
     const layer = src.bundle.play.layers.find(l => l.id === id);
     if (!layer || layer.kind !== 'script') return { language: 'js', rows: [], text: '', from: src.title, problem: 'That Script layer isn’t in this source any more.' };
-    return wholeText(layer.code, 'js', `${layer.label} · Script layer in ${src.title}`, b.highlightLines);
+    // A live block shows the reader's edit, when there is one.
+    const text = b.live && b.edited !== undefined ? b.edited : layer.code;
+    return { ...wholeText(text, 'js', `${layer.label} · Script layer in ${src.title}`, b.highlightLines), original: layer.code };
   }
   const shader = src.bundle.fragmentShader;
   if (!b.from.node) return wholeText(shader, 'glsl', `Generated shader · ${src.title}`, b.highlightLines);

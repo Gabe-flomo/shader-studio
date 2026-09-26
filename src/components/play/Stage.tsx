@@ -12,13 +12,19 @@
  * Play page, and fullscreen. The side panel has only what a visitor gets:
  * the controls, and which keys, clicks and MIDI do what. Record captures the
  * picture from whichever mode is showing. Esc leaves.
+ *
+ * A Present page's canvas can open here too: then the Stage runs that
+ * canvas's snapshot (as the presentation has it, with the step's Script
+ * edits) in Exact, and says so; Full isn't offered, since the app's picture
+ * is the open graph, not the snapshot.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { controlExists, readControlValue, targetParts } from '../../play/playControls';
 import { sourceLabel } from '../../play/playSources';
-import { DEFAULT_EMBED, buildPlayHtml, leftBehind } from '../../play/exportHtml';
-import { parseLayerTarget, type PlayControl } from '../../types/play';
+import { leftBehind } from '../../play/exportHtml';
+import { stagePageHtml } from '../../present/liveScript';
+import { parseLayerTarget, type PlayControl, type PlayRecord } from '../../types/play';
 import { playEngine } from '../../lib/playEngine';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -29,7 +35,7 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { AspectPicker } from '../shell/PreviewChrome';
 import { ColourPad } from './ColourPad';
 import { useLiveValues } from './useLiveValues';
-import { PHONE_SIZE, useStage, type StageMode } from './stageStore';
+import { PHONE_SIZE, useStage, type StageMode, type StageSnapshot } from './stageStore';
 import { useTakes } from '../../lib/takes';
 import { TakesList } from './TakesList';
 
@@ -40,11 +46,14 @@ export function Stage({ canvas, onRecord }: {
   onRecord: (source: HTMLCanvasElement | null) => void;
 }) {
   const tk = useTokens();
-  const { mode, device, panel, open, exit, setDevice, togglePanel } = useStage();
+  const { mode, device, panel, snapshot: snap, open, exit, setDevice, togglePanel } = useStage();
   const rootRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
-  const graphName = useNodeGraphStore(s => s.currentGraph?.name) ?? 'Playfield';
+  const openGraph = useNodeGraphStore(s => s.currentGraph?.name) ?? 'Playfield';
+  const graphName = snap ? snap.title : openGraph;
+  const graphPlay = useNodeGraphStore(s => s.play);
+  const narrow = useNarrow();
 
   // Esc leaves (the browser's own Esc leaves fullscreen first).
   useEffect(() => {
@@ -63,10 +72,11 @@ export function Stage({ canvas, onRecord }: {
   const [build, setBuild] = useState(0);
   const exact = useMemo(() => {
     if (mode !== 'exact') return null;
+    if (snap) return { html: snap.html, missing: snap.missing, left: snap.left };
     const { input, missing } = useNodeGraphStore.getState().playWebInput(graphName);
-    return { html: buildPlayHtml(input, { ...DEFAULT_EMBED, mode: 'player' }), missing, left: leftBehind(input.play, input.media) };
+    return { html: stagePageHtml(input), missing, left: leftBehind(input.play, input.media) };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, build]);
+  }, [mode, build, snap]);
 
   const record = () => {
     if (mode === 'full') { onRecord(null); return; }
@@ -74,30 +84,40 @@ export function Stage({ canvas, onRecord }: {
     onRecord(c);
   };
 
-  const stageBox = useFitBox(device === 'phone' ? PHONE_SIZE : null);
+  const stageBox = useFitBox(device === 'phone' && !narrow ? PHONE_SIZE : null);
 
   const bar = { height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderBottom: `1px solid ${alpha('#ffffff', 0.08)}`, background: '#101016', color: '#e8e8ef' } as const;
   return (
     <div ref={rootRef} style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#07070b', color: '#e8e8ef', font: `12.5px ${fontFamily.ui}` }}>
       <div style={bar}>
         <IconButton icon="close" label="Leave the Stage (Esc)" onClick={exit} />
-        <b style={{ fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{graphName}</b>
-        <Segmented size="sm" ariaLabel="Stage mode" value={mode ?? 'full'} onChange={m => open(m as StageMode)} options={[
-          { value: 'full', label: 'Full', title: 'Everything Playfield can do: songs, MIDI files, every layer' },
-          { value: 'exact', label: 'Exact', title: 'The website player itself: exactly what a visitor to the exported page gets' },
-        ]} />
+        <b style={{ fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: narrow ? 120 : 220, minWidth: 0 }}>{graphName}</b>
+        {snap ? (
+          <span title={`The snapshot in “${snap.presentation}”, run by the website player: not the graph open in the Studio`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px', borderRadius: 12, background: alpha('#ffffff', 0.1), color: alpha('#ffffff', 0.8), font: `600 11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
+            <Icon name="slides" size={12} />Snapshot
+          </span>
+        ) : (
+          <Segmented size="sm" ariaLabel="Stage mode" value={mode ?? 'full'} onChange={m => open(m as StageMode)} options={[
+            { value: 'full', label: 'Full', title: 'Everything Playfield can do: songs, MIDI files, every layer' },
+            { value: 'exact', label: 'Exact', title: 'The website player itself: exactly what a visitor to the exported page gets' },
+          ]} />
+        )}
         <span style={{ flex: 1 }} />
-        <Segmented size="sm" ariaLabel="Screen" value={device} onChange={setDevice} options={[
-          { value: 'screen', label: 'Screen', title: 'Fill the window' },
-          { value: 'phone', label: 'Phone', title: `A phone's screen (${PHONE_SIZE.w} × ${PHONE_SIZE.h})` },
-        ]} />
-        {mode === 'full' && <AspectPicker />}
-        {mode === 'exact' && <IconButton icon="reset" label="Rebuild the page with your latest changes" onClick={() => setBuild(b => b + 1)} />}
-        <IconButton icon="layoutSplit" label={panel ? 'Hide the controls panel' : 'Show the controls panel'} active={panel} onClick={togglePanel} />
-        <IconButton icon="fit" label={fullscreen ? 'Leave fullscreen' : 'Fullscreen'} active={fullscreen} onClick={toggleFullscreen} />
-        <Button size="sm" variant="primary" icon="record" onClick={record} style={{ background: tk.status.danger }}>Record</Button>
+        {!narrow && (
+          <Segmented size="sm" ariaLabel="Screen" value={device} onChange={setDevice} options={[
+            { value: 'screen', label: 'Screen', title: 'Fill the window' },
+            { value: 'phone', label: 'Phone', title: `A phone's screen (${PHONE_SIZE.w} × ${PHONE_SIZE.h})` },
+          ]} />
+        )}
+        {mode === 'full' && !narrow && <AspectPicker />}
+        {mode === 'exact' && !snap && <IconButton icon="reset" label="Rebuild the page with your latest changes" onClick={() => setBuild(b => b + 1)} />}
+        <IconButton icon="layoutSplit" label={panel ? 'Hide the side panel' : 'Show the side panel'} active={panel} onClick={togglePanel} />
+        {!narrow && <IconButton icon="fit" label={fullscreen ? 'Leave fullscreen' : 'Fullscreen'} active={fullscreen} onClick={toggleFullscreen} />}
+        <Button size="sm" variant="primary" icon="record" onClick={record} disabled={!!snap?.sandboxed}
+          title={snap?.sandboxed ? 'Its Script layers are someone else’s code, so it runs sealed off from Playfield, where Record can’t reach its picture' : undefined}
+          style={{ background: tk.status.danger }}>{narrow ? null : 'Record'}</Button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: narrow ? 'column' : 'row' }}>
         <div ref={stageBox.ref} style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
           <div style={{
             position: 'relative', flexShrink: 0,
@@ -109,6 +129,7 @@ export function Stage({ canvas, onRecord }: {
                 key={build}
                 title="The exported page"
                 srcDoc={exact.html}
+                sandbox={snap?.sandboxed ? 'allow-scripts' : undefined}
                 allow="accelerometer; gyroscope; midi; microphone; camera; fullscreen"
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0, background: '#0d0d12' }}
               />
@@ -116,10 +137,13 @@ export function Stage({ canvas, onRecord }: {
           </div>
         </div>
         {panel && (
-          <div style={{ width: 300, flexShrink: 0, overflowY: 'auto', borderLeft: `1px solid ${alpha('#ffffff', 0.08)}`, background: '#101016', padding: '12px 14px 18px' }}>
-            {mode === 'exact' && exact ? <ExactNotes missing={exact.missing} left={exact.left} /> : <StageControls />}
+          <div style={{
+            flexShrink: 0, overflowY: 'auto', background: '#101016', padding: '12px 14px 18px',
+            ...(narrow ? { maxHeight: '32%', borderTop: `1px solid ${alpha('#ffffff', 0.08)}` } : { width: 300, borderLeft: `1px solid ${alpha('#ffffff', 0.08)}` }),
+          }}>
+            {snap ? <SnapshotNotes snap={snap} /> : mode === 'exact' && exact ? <ExactNotes missing={exact.missing} left={exact.left} /> : <StageControls />}
             {mode === 'full' && <TakesPanel onRender={() => onRecord(null)} />}
-            <InputLegend />
+            <InputLegend play={snap ? snap.play : graphPlay} />
           </div>
         )}
       </div>
@@ -203,9 +227,22 @@ function StageControls() {
   );
 }
 
+/** Phone-sized windows: the bar keeps what matters, the panel goes under the picture. */
+function useNarrow(px = 640) {
+  const q = `(max-width: ${px}px)`;
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia?.(q);
+    if (!m) return;
+    const on = () => setNarrow(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, [q]);
+  return narrow;
+}
+
 /** Which keys, clicks, MIDI and so on do what: the mappings, read as a legend. */
-function InputLegend() {
-  const play = useNodeGraphStore(s => s.play);
+function InputLegend({ play }: { play: PlayRecord }) {
   const rows = play.mappings.filter(m => m.enabled).map(m => ({
     id: m.id,
     from: sourceLabel(m.source, play.controls, play.layers),
@@ -224,6 +261,34 @@ function InputLegend() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** A Present canvas on the Stage: whose snapshot this is, and what the page leaves out. */
+function SnapshotNotes({ snap }: { snap: StageSnapshot }) {
+  const when = snap.capturedAt ? new Date(snap.capturedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : null;
+  return (
+    <div style={{ marginBottom: 18, lineHeight: 1.5 }}>
+      {heading('From the presentation')}
+      <div style={{ color: alpha('#ffffff', 0.7) }}>
+        The snapshot of <b style={{ color: '#fff' }}>{snap.title}</b> in “{snap.presentation}”{when ? `, taken ${when}` : ''}, run by the website player. It isn’t the graph open in the Studio: edit that and the snapshot stays as it is until you Refresh it on the Present page.
+      </div>
+      {snap.edited && <div style={{ marginTop: 10, color: alpha('#ffffff', 0.7) }}>Its Script layer runs the code as edited on this step.</div>}
+      {snap.sandboxed && (
+        <div style={{ marginTop: 10, display: 'flex', gap: 6, alignItems: 'flex-start', color: alpha('#ffffff', 0.7) }}>
+          <Icon name="lock" size={12} style={{ flexShrink: 0, marginTop: 4 }} />
+          <span>Sandboxed: this presentation came from a file, so its Script layers run sealed off from Playfield, and Record can’t reach the picture.</span>
+        </div>
+      )}
+      {(snap.missing.length > 0 || snap.left.length > 0) && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {snap.missing.length > 0 && <div style={{ color: '#f5c46b' }}>Can’t run on the web: {snap.missing.join(', ')}. Blank or frozen there.</div>}
+          {snap.left.map(x => (
+            <div key={x.what} style={{ color: alpha('#ffffff', 0.7) }}><b style={{ color: '#f5c46b' }}>{x.what}</b>: {x.why}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

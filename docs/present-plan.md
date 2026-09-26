@@ -370,13 +370,72 @@ the empty page and in the presentations menu (`present/sample.ts`).
   the Studio, as saved, when the snapshot is taken. Otherwise the source card
   says which files it lacks and how to bring them (open it, Refresh).
 
+### Finished afterwards (branch `claude/present-finish`)
+
+**Live script blocks** (3.4 item 2). A code block that quotes a Script layer
+has a Live switch in its settings. Live, it is an editor (the Script editor's
+`CodeField`, highlighting and completions): after a 300 ms pause in typing,
+the edit runs in the canvases of that source *on the same step* only (never
+the source graph, never other steps), and the canvas reports back under the
+code: running, or the compile or runtime error. The edit is saved with the
+presentation (`CodeBlock.edited`, `live`; `parsePresentation` keeps them only
+on a Script-layer quote), and Reset goes back to the snapshot's code. With no
+canvas of that source on the step, the block says so. `present/liveScript.ts`
+has the pure part (which edits a step carries, the bundle with them).
+
+The runtime is version 5: every mount copies its layers (so a script edit or
+a dragged null never reaches the bundle), and gains `setScript(layerId, code)`,
+the `onScript(layerId, error)` option and `usesCamera`, plus page-wide
+`enableCamera()` / `stopCamera()`. In an imported presentation, canvases with
+Script layers run in the sandboxed frame; the edit crosses by postMessage. A
+full-page export built with the `host` option (only the Present page's frames,
+never a published page) takes `{ ssp: 'script', layerId, code }` from its
+parent and posts `ready` and `scriptStatus` back.
+
+The exported page has live blocks too: a plain text box (no highlighting),
+the same pause, status line and Reset, running in that step's canvases.
+
+**Stage from a step.** Render and interactive canvases have a Stage button
+over the picture (an icon on phones), and Slides has one in its bar (the
+step's first canvas). A snapshot isn't the open graph, so the Stage opens in
+Exact with the snapshot's own page: `snapshotStagePage` is exactly the page
+the Stage builds for a graph (`stagePageHtml`, the website player with its
+panel), from the snapshot's bundle with the step's Script edits (tested equal
+to the Stage's page for the same example loaded in the Studio). The bar says
+**Snapshot** instead of Full / Exact, there's no Rebuild, and the side panel
+says whose snapshot it is, when it was taken, that it isn't the open graph,
+and whether a Script layer runs edited code. From an imported presentation
+with Script layers it runs sandboxed, and Record is off (it can't reach a
+sealed-off frame's canvas). On phone-sized windows the Stage bar keeps only
+what fits and its panel goes under the picture.
+
+**Camera layers.** Canvases whose Play reads the camera (a Camera layer, or
+particles, glyphs or contours reading from it) show Enable camera over the
+picture, in the app and the exported page. The camera is turned on once for
+the page and every such canvas sees it; the app turns it off when the Present
+page closes. Blocked or missing cameras say so and can be asked again.
+
+**Sound in the exported page.** Each canvas with the graph's own songs has a
+Play sound / Mute button over the picture while it runs, as in the app (one
+per canvas, since each canvas plays its own songs).
+
+**MathML.** The exported page's MathML is rewritten for MathML Core
+(`mathmlForCore` in `present/markdown.ts`): `mathvariant` letters (bold,
+bold italic, double-struck, script, fraktur, sans-serif, monospace; Latin,
+digits and Greek where Unicode has them) become the Unicode maths letters,
+and `\|` / `\lVert` (KaTeX's ∥, a relation with wide spacing) become the
+fence ‖ with no spacing; `\parallel` stays a relation. Checked in Chrome on
+the sample: 𝐩, 𝐨, 𝐝 upright bold, ‖𝐩‖ tight. MathML stays the default; the
+KaTeX HTML option is unchanged.
+
 ### Left
 
-- Live script blocks (edit a Script layer's code in a code block and watch).
-- Open a step's canvas on the Stage; the Tauri pop-out window.
-- Canvases in Present don't offer "Enable camera" (camera layers stay dark);
-  the exported page has no Play sound button for a graph's songs (the app
-  page has one on each canvas).
-- MathML: Chrome draws `\mathbf` as italic (MathML Core has no bold
-  variants); the KaTeX option looks the same everywhere.
+- The Tauri pop-out window for a presentation (needs a Rust toolchain, not
+  installed where this was built).
+- In an imported presentation, a *render* block's sandboxed canvas has no
+  Enable camera or Play sound (browsers don't pass the click into the frame,
+  and a background page has no buttons of its own); an interactive block's
+  sandboxed canvas has them in its own panel.
+- The exported page's live blocks aren't highlighted (the app's tokenizer
+  isn't carried into the page, to keep it small).
 - Hosted links (decision 5).

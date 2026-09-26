@@ -97,6 +97,13 @@ export interface CodeBlock {
   /** 1-based inclusive line ranges to mark. */
   highlightLines?: [number, number][];
   caption?: string;
+  /**
+   * A Script layer's code that readers can edit: the canvases of that source
+   * on the same step run the edit (never the source graph, never other steps).
+   */
+  live?: boolean;
+  /** The edited code (live blocks), kept with the presentation; Reset drops it. */
+  edited?: string;
 }
 
 export type Block = TextBlock | RenderBlock | InteractiveBlock | CodeBlock;
@@ -391,6 +398,12 @@ function parseBlock(v: unknown, sources: ReadonlyMap<string, PresentSource>): Bl
       if (lines) b.highlightLines = lines;
       const caption = str(v.caption, 400);
       if (caption) b.caption = caption;
+      // Live only for a Script layer's code; the edit travels with it.
+      if (v.live === true && b.from && 'layerId' in b.from) {
+        b.live = true;
+        const edited = str(v.edited, MAX_CODE);
+        if (edited !== null) b.edited = edited;
+      }
       return b;
     }
     default: return null;

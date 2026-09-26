@@ -216,8 +216,8 @@ function CodeSettings({ block, compact }: { block: CodeBlock; compact: boolean }
               <Segmented fill size="sm" ariaLabel="Show" value={what} onChange={v => {
                 if (!block.from) return;
                 const src = block.from.source;
-                if (v === 'shader') put({ ...block, from: { source: src }, language: 'glsl' });
-                else if (v === 'node') put({ ...block, from: { source: src, node: source?.shader.nodes[0]?.id }, language: 'glsl' });
+                if (v === 'shader') put({ ...block, from: { source: src }, language: 'glsl', live: undefined, edited: undefined });
+                else if (v === 'node') put({ ...block, from: { source: src, node: source?.shader.nodes[0]?.id }, language: 'glsl', live: undefined, edited: undefined });
                 else if (v === 'layer' && scripts[0]) put({ ...block, from: { source: src, layerId: scripts[0].id }, language: 'js' });
               }} options={[
                 { value: 'shader', label: 'Shader' },
@@ -232,16 +232,24 @@ function CodeSettings({ block, compact }: { block: CodeBlock; compact: boolean }
             )}
             {what === 'layer' && source && block.from && 'layerId' in block.from && (
               <Row label="Script layer">
-                <Select ariaLabel="Script layer" value={block.from.layerId} onChange={layerId => put({ ...block, from: { source: source.id, layerId } })} options={scripts.map(l => ({ value: l.id, label: l.label }))} />
+                <Select ariaLabel="Script layer" value={block.from.layerId} onChange={layerId => put({ ...block, from: { source: source.id, layerId }, edited: undefined })} options={scripts.map(l => ({ value: l.id, label: l.label }))} />
+              </Row>
+            )}
+            {what === 'layer' && source && (
+              <Row label="Live" hint={`Readers edit the code and the canvas of “${source.title}” on this step runs it (not the graph, not other steps). The edit is kept with the presentation.`}>
+                <Toggle checked={!!block.live} onChange={live => put({ ...block, live: live || undefined, edited: live ? block.edited : undefined })} label="Edit it and watch" />
               </Row>
             )}
           </>
         )}
       </Section>
       <Section title="Marks">
-        <Row label="Highlight lines" hint="Line numbers as shown, like 3-5, 9">
-          <Field height={32} mono value={lines} placeholder="3-5, 9" onChange={e => { setLines(e.target.value); const r = parseLineRanges(e.target.value); put({ ...block, highlightLines: r.length ? r : undefined }); }} />
-        </Row>
+        {/* A live block is an editor: its lines move as the reader types, so there's nothing to mark. */}
+        {!block.live && (
+          <Row label="Highlight lines" hint="Line numbers as shown, like 3-5, 9">
+            <Field height={32} mono value={lines} placeholder="3-5, 9" onChange={e => { setLines(e.target.value); const r = parseLineRanges(e.target.value); put({ ...block, highlightLines: r.length ? r : undefined }); }} />
+          </Row>
+        )}
         <Row label="Caption"><Field height={32} value={block.caption ?? ''} placeholder="Under the code" onChange={e => put({ ...block, caption: e.target.value || undefined })} /></Row>
       </Section>
     </>

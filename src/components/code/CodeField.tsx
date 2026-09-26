@@ -149,7 +149,7 @@ export function CodeField({
         height: 38, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: '0 6px 0 12px',
         background: tk.bg.subtle, borderBottom: `1px solid ${tk.border.subtle}`,
       }}>
-        <span style={{ marginRight: 'auto', fontWeight: 600, fontSize: 12, color: tk.text.secondary }}>{title}</span>
+        <span style={{ marginRight: 'auto', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 12, color: tk.text.secondary }}>{title}</span>
         {actions}
       </div>
       <div

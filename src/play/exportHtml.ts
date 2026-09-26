@@ -93,6 +93,12 @@ export interface EmbedOptions {
   osc: boolean;
   /** Player snippet height in px. */
   height: number;
+  /**
+   * The page that frames this one may replace its Script layers' code by
+   * postMessage (the Present page's sandboxed canvases). Never set for pages
+   * people publish: any page framing them could run code in them.
+   */
+  host?: boolean;
 }
 
 export const DEFAULT_EMBED: EmbedOptions = { mode: 'player', placement: 'section', fit: 'contain', followPage: true, markers: true, osc: false, height: 560 };
@@ -118,6 +124,11 @@ export interface LeftBehind { what: string; why: string }
 const AUDIO_BAND_READS = new Set(['level', 'bass', 'lowmid', 'highmid', 'treble']);
 
 const sizeText = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+/** Does a Play read the camera (a Camera layer, or particles, glyphs or contours reading from it)? As the runtime decides. */
+export function playUsesCamera(play: PlayRecord): boolean {
+  return play.layers.some(l => l.visible && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
+}
 
 /**
  * What the Play setup has that the exported page won't carry: a video or song
@@ -203,7 +214,7 @@ export function playBundle(input: PlayHtmlInput) {
 
 function runtimeOptions(o: EmbedOptions) {
   const bg = o.mode === 'background';
-  return { mode: o.mode, fit: bg ? 'cover' : o.fit, followPage: o.followPage, markers: bg ? o.markers : true, osc: o.osc };
+  return { mode: o.mode, fit: bg ? 'cover' : o.fit, followPage: o.followPage, markers: bg ? o.markers : true, osc: o.osc, ...(o.host ? { host: true } : {}) };
 }
 
 /**

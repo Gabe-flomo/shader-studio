@@ -8,11 +8,17 @@
  *   Interactive  text, the picture and the chosen controls, relabelled, with
  *                what drives each one; chips in the text point at a slider.
  *   Code         highlighted GLSL or JavaScript, typed or quoted from a source.
+ *                A live one (a Script layer's code) is an editor: the edit
+ *                runs in this step's canvases of that source, with its
+ *                errors under it and Reset back to the snapshot's code.
+ *
+ * Canvases carry a Stage button: that snapshot on the Stage (stageHandoff).
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { aspectRatio, type Block, type CodeBlock, type InteractiveBlock, type PresentSource, type RenderBlock, type TextBlock } from '../../types/presentation';
+import { aspectRatio, type Block, type CodeBlock, type InteractiveBlock, type PresentSource, type RenderBlock, type Step, type TextBlock } from '../../types/presentation';
 import { baseValue, mappingsByControl } from '../../present/controls';
-import { resolveCode } from '../../present/code';
+import { resolveCode, type ResolvedCode } from '../../present/code';
+import { isLiveScript, linkedCanvases, stepScriptEdits } from '../../present/liveScript';
 import { playRuntime, type PlayMount } from '../../present/runtimeHost';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -21,6 +27,11 @@ import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
 import { ColourPad } from '../play/ColourPad';
 import { CodeView } from './CodeView';
+import { CodeField } from '../code/CodeField';
+import { tokenizeJsLine } from '../code/jsSyntax';
+import { scriptCompletions } from '../play/layers/scriptCompletions';
+import { scriptKey, useScriptStatus } from './scriptStatus';
+import { openOnStage } from './stageHandoff';
 import { Markdown } from './Markdown';
 import { PlayCanvas } from './PlayCanvas';
 import { usePresentation } from './presentationStore';
@@ -37,6 +48,23 @@ export interface BlockContext {
   compact: boolean;
   /** Slides: bigger text. */
   large: boolean;
+  /** The step these blocks are on (StepView sets it): live script edits run within it. */
+  step?: Step;
+}
+
+/** What a canvas of `source` on this step needs: its Script edits, where to report how they run, and the Stage. */
+function useCanvasLinks(ctx: BlockContext, sourceId: string) {
+  const step = ctx.step;
+  const scripts = useMemo(() => stepScriptEdits(step).get(sourceId), [step, sourceId]);
+  const report = useScriptStatus(s => s.report);
+  const stepId = step?.id;
+  const onScript = useMemo(() => (stepId ? (layerId: string, err: string | null) => report(scriptKey(stepId, sourceId, layerId), err) : undefined), [stepId, sourceId, report]);
+  const source = ctx.sources.get(sourceId);
+  const onStage = () => {
+    const doc = usePresentation.getState().doc;
+    if (doc && source) openOnStage(doc, source, step);
+  };
+  return { scripts, onScript, onStage: source ? onStage : undefined };
 }
 
 
@@ -155,12 +183,14 @@ const WIDTH_PCT = { full: 100, half: 50, third: 100 / 3 } as const;
 
 function RenderBlockView({ block, ctx }: { block: RenderBlock; ctx: BlockContext }) {
   const tk = useTokens();
+  const links = useCanvasLinks(ctx, block.source);
   const pct = ctx.compact ? 100 : WIDTH_PCT[block.width];
   return (
     <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
       <div style={{ width: `${pct}%`, minWidth: ctx.compact ? 0 : 200, maxWidth: '100%' }}>
         {/* On a slide the picture fits the screen's height too. */}
         <PlayCanvas slotId={block.id} source={ctx.sources.get(block.source)} aspect={block.aspect} pointer={block.pointer} startTime={block.startTime} paused={block.paused} active={ctx.active} sandbox={ctx.sandbox}
+          scripts={links.scripts} onScript={links.onScript} onStage={links.onStage} compact={ctx.compact}
           style={ctx.large ? { maxWidth: `calc(52vh * ${aspectRatio(block.aspect)})`, margin: '0 auto' } : undefined} />
       </div>
       {block.caption && <figcaption style={{ width: `${pct}%`, maxWidth: '100%', color: tk.text.muted, font: `500 13px/1.45 ${fontFamily.ui}`, textAlign: 'center' }}>{block.caption}</figcaption>}
@@ -175,6 +205,7 @@ type Value = number | number[];
 function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: BlockContext }) {
   const tk = useTokens();
   const source = ctx.sources.get(block.source);
+  const links = useCanvasLinks(ctx, block.source);
   const play = source?.bundle.play;
   const chosen = useMemo(() => {
     if (!play) return [];
@@ -240,7 +271,8 @@ function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: Bl
 
   const stacked = ctx.compact || block.layout === 'stacked';
   const text = <Markdown text={block.markdown} controls={labels} layers={layerLabels} hot={hot ?? flash} onChip={nudge} onChipHover={setHot} size={ctx.large ? 'lg' : 'md'} placeholder={ctx.editing ? 'Add the lesson’s text in the block settings.' : undefined} />;
-  const canvas = <PlayCanvas slotId={block.id} source={source} aspect={block.aspect} pointer={block.pointer} active={ctx.active} sandbox={ctx.sandbox} onMount={onMount} />;
+  const canvas = <PlayCanvas slotId={block.id} source={source} aspect={block.aspect} pointer={block.pointer} active={ctx.active} sandbox={ctx.sandbox} onMount={onMount}
+    scripts={links.scripts} onScript={links.onScript} onStage={links.onStage} compact={ctx.compact} />;
   const panel = (
     <div style={{ display: 'grid', gridTemplateColumns: stacked && !ctx.compact ? 'repeat(auto-fill, minmax(220px, 1fr))' : '1fr', gap: 10 }}>
       {chosen.length === 0 && ctx.editing && <div style={{ color: tk.text.faint, font: `500 12.5px ${fontFamily.ui}` }}>No controls chosen. Pick some in the block settings.</div>}
@@ -321,6 +353,7 @@ function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: Bl
 function CodeBlockView({ block, ctx, selected }: { block: CodeBlock; ctx: BlockContext; selected: boolean }) {
   const patchBlock = usePresentation(s => s.patchBlock);
   const resolved = useMemo(() => resolveCode(block, ctx.sources), [block, ctx.sources]);
+  if (isLiveScript(block) && !resolved.problem) return <LiveCodeView block={block} ctx={ctx} resolved={resolved} />;
   if (ctx.editing && selected && !block.from) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -330,4 +363,73 @@ function CodeBlockView({ block, ctx, selected }: { block: CodeBlock; ctx: BlockC
     );
   }
   return <CodeView code={resolved} caption={block.caption} maxHeight={ctx.large ? 560 : 460} />;
+}
+
+/**
+ * A live code block: a Script layer's code to edit. The edit is saved with
+ * the presentation and runs in this step's canvases of that source (after a
+ * short pause in typing); what they report comes back here: running, or the
+ * error. Reset goes back to the snapshot's code.
+ */
+function LiveCodeView({ block, ctx, resolved }: { block: CodeBlock & { from: { source: string; layerId: string } }; ctx: BlockContext; resolved: ResolvedCode }) {
+  const tk = useTokens();
+  const patchBlock = usePresentation(s => s.patchBlock);
+  const original = resolved.original ?? '';
+  const code = block.edited ?? original;
+  const changed = block.edited !== undefined && block.edited !== original;
+  const { source, layerId } = block.from;
+  const status = useScriptStatus(s => (ctx.step ? s.status[scriptKey(ctx.step.id, source, layerId)] : undefined));
+  const linked = linkedCanvases(ctx.step, source).length > 0;
+  const sourceTitle = ctx.sources.get(source)?.title ?? 'its source';
+  const completions = useMemo(() => scriptCompletions(code), [code]);
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1400); } catch { /* still selectable */ }
+  };
+  const failed = linked && typeof status === 'string';
+  const line = (icon: 'check' | 'warning' | 'info', colour: string, body: ReactNode) => (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', color: colour, font: `500 12.5px/1.45 ${fontFamily.ui}` }}>
+      <Icon name={icon} size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+      <div style={{ minWidth: 0, flex: 1 }}>{body}</div>
+    </div>
+  );
+  return (
+    <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }} onKeyDown={e => e.stopPropagation()}>
+      <CodeField
+        title={(
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{ font: `650 10.5px ${fontFamily.mono}`, letterSpacing: '0.04em', color: tk.text.faint }}>JS</span>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tk.text.muted, fontWeight: 500 }}>{resolved.from}</span>
+            <span title="Edit it and the picture on this step runs your version" style={{ flexShrink: 0, padding: '1px 7px', borderRadius: 9, background: alpha(tk.accent.base, 0.14), color: tk.accent.text, font: `650 10px ${fontFamily.ui}`, letterSpacing: '0.05em' }}>{changed ? 'EDITED' : 'LIVE'}</span>
+          </span>
+        )}
+        actions={(
+          <>
+            {changed && <Button size="sm" variant="ghost" icon="reset" onClick={() => patchBlock(block.id, { edited: undefined })} title="Back to the code in the snapshot" style={{ height: 26 }}>Reset</Button>}
+            <Button size="sm" variant="ghost" icon={copied ? 'check' : 'copy'} onClick={copy} style={{ height: 26 }}>{copied ? 'Copied' : 'Copy'}</Button>
+          </>
+        )}
+        ariaLabel={`Script code, live: ${resolved.from}`}
+        value={code}
+        onChange={v => patchBlock(block.id, { edited: v === original ? undefined : v })}
+        completions={completions.all}
+        members={completions.members}
+        tokenize={tokenizeJsLine}
+        autoIndent
+        invalid={failed}
+        minHeight={120}
+        maxHeight={ctx.large ? 520 : 420}
+      />
+      <div style={{ borderRadius: radius.md, background: failed ? alpha(tk.status.danger, 0.08) : tk.bg.subtle, border: `1px solid ${failed ? alpha(tk.status.danger, 0.35) : tk.border.subtle}` }}>
+        {!linked
+          ? line('warning', tk.status.warningText, <>No canvas of “{sourceTitle}” on this step, so the edit has nowhere to run. Add a Render or Interactive block of it to this step.</>)
+          : failed
+            ? line('warning', tk.status.danger, <span style={{ font: `500 12px/1.45 ${fontFamily.mono}`, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{status}</span>)
+            : status === null
+              ? line('check', tk.text.muted, changed ? 'Your edit is running in the picture on this step.' : 'Running in the picture on this step. Change the code and watch it.')
+              : line('info', tk.text.muted, 'Change the code: the picture on this step runs your version once it’s playing.')}
+      </div>
+      {block.caption && <figcaption style={{ padding: '0 2px', color: tk.text.muted, font: `500 12.5px/1.4 ${fontFamily.ui}` }}>{block.caption}</figcaption>}
+    </figure>
+  );
 }
