@@ -21,3 +21,20 @@ describe('editKeys', () => {
     expect(wrapSelection('a', 'abc', 0, 2)).toBeNull();
   });
 });
+
+describe('double-click', () => {
+  it('selects the token, and the same token double-clicked again selects everything', async () => {
+    const { selectTokenOnDoubleClick } = await import('../editKeys');
+    const field = { value: 'a = sin(x) * 0.5;', selectionStart: 5, selectionEnd: 5, setSelectionRange(a: number, b: number) { this.selectionStart = a; this.selectionEnd = b; } };
+    const ev = { currentTarget: field as unknown as HTMLInputElement, preventDefault() {} };
+    selectTokenOnDoubleClick(ev);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([4, 7]); // sin
+    field.selectionStart = 5; field.selectionEnd = 5; // the browser's own word selection happens first; we read the caret
+    selectTokenOnDoubleClick(ev);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, field.value.length]);
+    // A third double-click starts over with the token
+    field.selectionStart = 5; field.selectionEnd = 5;
+    selectTokenOnDoubleClick(ev);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([4, 7]);
+  });
+});

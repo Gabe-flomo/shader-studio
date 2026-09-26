@@ -1041,7 +1041,8 @@ function App() {
     return (
       <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
-        <GLSLPage onConvert={openConvertWith} />
+        {/* Bounded, so the page's own panes scroll instead of the whole screen growing */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><GLSLPage onConvert={openConvertWith} /></div>
       </div>
     );
   }

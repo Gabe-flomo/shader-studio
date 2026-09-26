@@ -32,13 +32,25 @@ export function tokenRangeAt(text: string, pos: number): [number, number] | null
   return [a, b];
 }
 
-/** onDoubleClick handler: select the token under the caret. */
+/** The token a double-click last selected in a field, so the next double-click on it selects everything. */
+const lastTokenSelection = new WeakMap<Field, { start: number; end: number; at: number }>();
+const AGAIN_MS = 2500;
+
+/** onDoubleClick handler: select the token under the caret; double-click the same token again to select all. */
 export function selectTokenOnDoubleClick(e: { currentTarget: Field; preventDefault: () => void }): void {
   const el = e.currentTarget;
   const r = tokenRangeAt(el.value, el.selectionStart ?? 0);
   if (!r) return;
   e.preventDefault();
+  const last = lastTokenSelection.get(el);
+  const now = Date.now();
+  if (last && last.start === r[0] && last.end === r[1] && now - last.at < AGAIN_MS) {
+    el.setSelectionRange(0, el.value.length);
+    lastTokenSelection.delete(el);
+    return;
+  }
   el.setSelectionRange(r[0], r[1]);
+  lastTokenSelection.set(el, { start: r[0], end: r[1], at: now });
 }
 
 /**

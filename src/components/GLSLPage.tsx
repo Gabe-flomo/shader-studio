@@ -14,6 +14,8 @@ import { Button, IconButton } from './ui/Button';
 import { Callout } from './ui/Callout';
 import { Segmented } from './ui/Choice';
 import { Field } from './ui/Field';
+import { Icon } from './ui/Icon';
+import { Menu } from './ui/Menu';
 
 // ── Boilerplate ───────────────────────────────────────────────────────────────
 
@@ -123,7 +125,9 @@ const STUDIO_GROUPS: FnGroup[] = [
 const EDITOR_KEY  = 'shader-studio:glsl-editor';
 const SHADERS_KEY = 'shader-studio:glsl-shaders';
 
-interface SavedShader { id: string; name: string; code: string; }
+interface SavedShader { id: string; name: string; code: string; /** Folder in the list; '' or missing = none. */ group?: string }
+const GROUPS_OPEN_KEY = 'glsl-editor:groups-open';
+const NO_GROUP = '';
 function loadShaders(): SavedShader[] {
   try { return JSON.parse(localStorage.getItem(SHADERS_KEY) ?? '[]'); } catch { return []; }
 }
@@ -151,6 +155,23 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameVal, setRenameVal]   = useState('');
   const [showSaveInput, setShowSaveInput] = useState(false);
+  // Groups: which are folded, and the move-to menu for a card
+  const [closedGroups, setClosedGroups] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem(GROUPS_OPEN_KEY) ?? '[]') as string[]); } catch { return new Set(); } });
+  const [groupMenu, setGroupMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [newGroupFor, setNewGroupFor] = useState<string | null>(null);
+  const [newGroupName, setNewGroupName] = useState('');
+  const toggleGroup = (g: string) => setClosedGroups(prev => { const n = new Set(prev); if (n.has(g)) n.delete(g); else n.add(g); try { localStorage.setItem(GROUPS_OPEN_KEY, JSON.stringify([...n])); } catch { /* preference only */ } return n; });
+  const moveToGroup = (id: string, group: string) => {
+    const next = shaders.map(s => (s.id === id ? { ...s, group: group || undefined } : s));
+    if (persistShaders(next).ok) setShaders(next);
+    setGroupMenu(null); setNewGroupFor(null); setNewGroupName('');
+  };
+  const renameGroup = (from: string, to: string) => {
+    const t = to.trim(); if (!t || t === from) return;
+    const next = shaders.map(s => (s.group === from ? { ...s, group: t } : s));
+    if (persistShaders(next).ok) setShaders(next);
+  };
+  const groupNames = useMemo(() => [...new Set(shaders.map(s => s.group).filter((g): g is string => !!g))].sort((a, b) => a.localeCompare(b)), [shaders]);
   const [saveNameVal, setSaveNameVal]     = useState('');
 
   const editorRef = useRef<GlslEditorHandle>(null);
@@ -259,7 +280,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', height: '100%', background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100%', flex: 1, minWidth: 0, minHeight: 0, background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }}>
 
       {/* ── Node palette sidebar ──────────────────────────────────────── */}
       {paletteCollapsed ? (
@@ -330,8 +351,26 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
       </div>
 
       {/* ── Side panel: saved shaders / functions reference ─────────── */}
+      {groupMenu && (
+        <Menu
+          x={groupMenu.x} y={groupMenu.y} onClose={() => setGroupMenu(null)}
+          items={[
+            ...groupNames.map(g => ({ label: g, icon: 'folder' as const, hint: shaders.find(s => s.id === groupMenu.id)?.group === g ? 'here' : undefined, onSelect: () => moveToGroup(groupMenu.id, g) })),
+            ...(groupNames.length ? ['separator' as const] : []),
+            { label: 'New group…', icon: 'plus' as const, onSelect: () => { setNewGroupFor(groupMenu.id); setNewGroupName(''); setGroupMenu(null); } },
+            ...(shaders.find(s => s.id === groupMenu.id)?.group ? [{ label: 'Remove from group', icon: 'unlink' as const, onSelect: () => moveToGroup(groupMenu.id, NO_GROUP) }] : []),
+          ]}
+        />
+      )}
       {sideOpen && (
-        <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
+        <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
+          {newGroupFor && (
+            <div style={{ padding: '8px 10px', borderBottom: `1px solid ${tk.border.subtle}`, display: 'flex', gap: 6, alignItems: 'center' }}>
+              <Field autoFocus value={newGroupName} placeholder="Group name" height={28} onChange={e => setNewGroupName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newGroupName.trim()) moveToGroup(newGroupFor, newGroupName.trim()); if (e.key === 'Escape') setNewGroupFor(null); }} style={{ flex: 1 }} aria-label="New group name" />
+              <Button size="sm" variant="primary" disabled={!newGroupName.trim()} onClick={() => moveToGroup(newGroupFor, newGroupName.trim())}>Add</Button>
+              <IconButton icon="close" label="Cancel" size="sm" onClick={() => setNewGroupFor(null)} />
+            </div>
+          )}
           <div style={panelHead}>
             <div style={{ flex: 1 }}>
               <Segmented
@@ -346,7 +385,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           </div>
 
           {showFnPanel ? (
-            <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 12px' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 12px 12px' }}>
               <div style={caps}>GLSL built-ins</div>
               {BUILTIN_GROUPS.map(group => (
                 <div key={group.name} style={{ marginBottom: 10 }}>
@@ -363,26 +402,38 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
               ))}
             </div>
           ) : (
-            <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
               {shaders.length === 0 ? (
                 <div style={{ padding: '6px 4px', fontSize: 12, color: tk.text.faint, lineHeight: 1.5 }}>
                   No saved shaders yet. Click <b style={{ color: tk.text.muted }}>Save</b> to keep the current file here.
                 </div>
-              ) : shaders.map(s => (
-                <SavedShaderCard
-                  key={s.id}
-                  name={s.name}
-                  code={s.code}
-                  renaming={renamingId === s.id}
-                  renameVal={renameVal}
-                  onRenameChange={setRenameVal}
-                  onStartRename={() => { setRenamingId(s.id); setRenameVal(s.name); }}
-                  onCommitRename={() => commitRename(s.id)}
-                  onCancelRename={() => setRenamingId(null)}
-                  onLoad={() => loadShader(s)}
-                  onDelete={() => deleteShader(s.id)}
-                />
-              ))}
+              ) : [...groupNames, NO_GROUP].map(g => {
+                const inGroup = shaders.filter(s => (s.group ?? NO_GROUP) === g);
+                if (!inGroup.length) return null;
+                const closed = closedGroups.has(g);
+                const card = (s: SavedShader) => (
+                  <SavedShaderCard
+                    key={s.id}
+                    name={s.name}
+                    code={s.code}
+                    renaming={renamingId === s.id}
+                    renameVal={renameVal}
+                    onRenameChange={setRenameVal}
+                    onStartRename={() => { setRenamingId(s.id); setRenameVal(s.name); }}
+                    onCommitRename={() => commitRename(s.id)}
+                    onCancelRename={() => setRenamingId(null)}
+                    onLoad={() => loadShader(s)}
+                    onDelete={() => deleteShader(s.id)}
+                    onGroup={(x, y) => setGroupMenu({ id: s.id, x, y })}
+                  />
+                );
+                if (g === NO_GROUP) return <div key="__none" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{groupNames.length > 0 && <div style={{ ...caps, marginTop: 6 }}>Ungrouped</div>}{inGroup.map(card)}</div>;
+                return (
+                  <GroupSection key={g} name={g} count={inGroup.length} closed={closed} onToggle={() => toggleGroup(g)} onRename={to => renameGroup(g, to)}>
+                    {inGroup.map(card)}
+                  </GroupSection>
+                );
+              })}
             </div>
           )}
         </div>
@@ -391,10 +442,32 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
   );
 }
 
-function SavedShaderCard({ name, code, renaming, renameVal, onRenameChange, onStartRename, onCommitRename, onCancelRename, onLoad, onDelete }: {
+/** A folder in the saved list: a header that folds it, renamed by double-clicking the name. */
+function GroupSection({ name, count, closed, onToggle, onRename, children }: { name: string; count: number; closed: boolean; onToggle: () => void; onRename: (to: string) => void; children: React.ReactNode }) {
+  const tk = useTokens();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 28, marginTop: 2 }}>
+        <IconButton icon={closed ? 'chevR' : 'chevD'} label={closed ? `Open ${name}` : `Fold ${name}`} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />
+        <Icon name="folder" size={13} style={{ color: tk.text.faint }} />
+        {editing ? (
+          <Field autoFocus value={draft} height={24} onChange={e => setDraft(e.target.value)} onBlur={() => { setEditing(false); onRename(draft); }} onKeyDown={e => { if (e.key === 'Enter') { setEditing(false); onRename(draft); } if (e.key === 'Escape') { setDraft(name); setEditing(false); } }} style={{ flex: 1 }} aria-label="Group name" />
+        ) : (
+          <span onDoubleClick={() => { setDraft(name); setEditing(true); }} title="Double-click to rename the group" style={{ flex: 1, minWidth: 0, fontWeight: 650, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'default' }}>{name}</span>
+        )}
+        <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}`, marginRight: 4 }}>{count}</span>
+      </div>
+      {!closed && <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 8, borderLeft: `2px solid ${tk.border.subtle}`, marginLeft: 4 }}>{children}</div>}
+    </div>
+  );
+}
+
+function SavedShaderCard({ name, code, renaming, renameVal, onRenameChange, onStartRename, onCommitRename, onCancelRename, onLoad, onDelete, onGroup }: {
   name: string; code: string; renaming: boolean; renameVal: string;
   onRenameChange: (v: string) => void; onStartRename: () => void; onCommitRename: () => void; onCancelRename: () => void;
-  onLoad: () => void; onDelete: () => void;
+  onLoad: () => void; onDelete: () => void; onGroup: (x: number, y: number) => void;
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
@@ -422,6 +495,7 @@ function SavedShaderCard({ name, code, renaming, renameVal, onRenameChange, onSt
         ) : (
           <span style={{ flex: 1, minWidth: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
         )}
+        {hover && !renaming && <IconButton icon="folder" label="Move to a group" size="sm" onClick={e => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); onGroup(r.left, r.bottom + 4); }} />}
         {hover && !renaming && <IconButton icon="edit" label="Rename" size="sm" onClick={e => { e.stopPropagation(); onStartRename(); }} />}
         {hover && !renaming && <IconButton icon="trash" label="Delete" size="sm" tone="danger" onClick={e => { e.stopPropagation(); onDelete(); }} />}
       </div>
