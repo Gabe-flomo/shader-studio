@@ -114,7 +114,7 @@ function folderOf(items: Record<string, string>, scope: string, id: string): str
 }
 
 /** The readable side of an export: path → content, next to library.json. */
-export function readableFiles(s: LibrarySnapshot): Record<string, string> {
+export function readableFiles(s: LibrarySnapshot, folders: Record<string, string> = s.items): Record<string, string> {
   const out: Record<string, string> = {};
   const put = (path: string, content: string) => {
     let p = path, n = 2;
@@ -125,7 +125,7 @@ export function readableFiles(s: LibrarySnapshot): Record<string, string> {
   for (const [k, v] of Object.entries(s.items)) {
     if (isGraphKey(k, v)) {
       const name = k.slice(GRAPH_PREFIX.length);
-      const folder = folderOf(s.items, 'graphs', name);
+      const folder = folderOf(folders, 'graphs', name);
       put(`graphs/${folder ? `${folder}/` : ''}${safeName(name)}.json`, v);
       const history = parse(s.items[VERSIONS_PREFIX + name]);
       if (Array.isArray(history)) {
@@ -140,11 +140,23 @@ export function readableFiles(s: LibrarySnapshot): Record<string, string> {
     if (kind) {
       const id = k.slice(kind.prefix.length);
       const p = parse(v) as { label?: string; name?: string } | undefined;
-      const folder = kind.scope ? folderOf(s.items, kind.scope, id) : null;
+      const folder = kind.scope ? folderOf(folders, kind.scope, id) : null;
       put(`${kind.dir}/${folder ? `${folder}/` : ''}${safeName(p?.label ?? p?.name ?? id)}.json`, v);
       continue;
     }
-    if (NAMED_FILES[k]) { put(NAMED_FILES[k], v); continue; }
+    if (NAMED_FILES[k]) {
+      put(NAMED_FILES[k], v);
+      // Saved shaders also as plain .glsl files, one each, so a single shader can be shared or opened elsewhere.
+      if (k === 'shader-studio:glsl-shaders') {
+        const list = parse(v);
+        if (Array.isArray(list)) for (const sh of list as Array<{ name?: string; code?: string; group?: string; note?: string }>) {
+          if (typeof sh?.code !== 'string') continue;
+          const head = sh.note?.trim() ? `// ${safeName(sh.name ?? 'shader')}\n// ${sh.note.trim().replace(/\n/g, '\n// ')}\n\n` : '';
+          put(`glsl shaders/${sh.group?.trim() ? `${safeName(sh.group)}/` : ''}${safeName(sh.name ?? 'shader')}.glsl`, head + sh.code);
+        }
+      }
+      continue;
+    }
     settings[k] = parse(v) ?? v;
   }
   if (Object.keys(settings).length) put('settings.json', JSON.stringify(settings, null, 2));
@@ -160,9 +172,9 @@ The folders are the same things as separate files, to look through or to
 share one at a time: a graph file opens with Import in Playfield.
 `;
 
-export function libraryZipName(at = new Date()): string {
+export function libraryZipName(at = new Date(), what = 'library'): string {
   const d = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
-  return `Shader Studio library ${d}.zip`;
+  return `Shader Studio ${what} ${d}.zip`;
 }
 
 /** The export ZIP: `<root>/library.json`, `<root>/README.txt` and the readable files. */
@@ -352,4 +364,71 @@ export function formatSize(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
   return `${(n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}
+
+// ── Downloading part of the library ─────────────────────────────────────
+
+/** Which kind a stored key is (the same buckets as the statistics). */
+export function kindOfKey(k: string, v: string): LibraryKind {
+  if (isGraphKey(k, v)) return 'graphs';
+  if (k.startsWith(VERSIONS_PREFIX)) return 'versions';
+  const found = KINDS.find(x => k.startsWith(x.prefix));
+  if (found) return found.dir as LibraryKind;
+  if (k === 'shader-studio:palette-presets') return 'palettes';
+  if (k === 'shader-studio:glsl-shaders') return 'glsl shaders';
+  return 'settings';
+}
+
+/** The sets the Download menu offers: everything, or one kind of thing. */
+export type DownloadSetId = 'everything' | 'graphs' | 'glsl' | 'functions' | 'nodes' | 'presets';
+export const DOWNLOAD_SETS: ReadonlyArray<{ id: DownloadSetId; label: string; hint: string; kinds: readonly LibraryKind[] | null }> = [
+  { id: 'everything', label: 'Everything', hint: 'The whole library: graphs with their versions, shaders, functions, nodes, presets and settings', kinds: null },
+  { id: 'graphs', label: 'Only graphs', hint: 'Every saved graph as a .json file (with its versions), in its folders', kinds: ['graphs', 'versions'] },
+  { id: 'glsl', label: 'Only GLSL shaders', hint: 'Every saved shader as a plain .glsl file (notes as a comment at the top), in its folders', kinds: ['glsl shaders'] },
+  { id: 'functions', label: 'Only custom functions', hint: 'The Functions library: each preset as a .json file', kinds: ['functions'] },
+  { id: 'nodes', label: 'Only published nodes', hint: 'Node types you published from the Builder, as .json files', kinds: ['published nodes'] },
+  { id: 'presets', label: 'Only the other presets', hint: 'Group, expression, transform and keyframe presets, and palettes', kinds: ['group presets', 'expressions', 'transforms', 'keyframe presets', 'palettes'] },
+];
+
+/** The part of a snapshot that is of these kinds (plus the folder store, so folders survive an import). */
+export function snapshotOfKinds(s: LibrarySnapshot, kinds: readonly LibraryKind[] | null): LibrarySnapshot {
+  if (!kinds) return s;
+  const want = new Set(kinds);
+  const items: Record<string, string> = {};
+  for (const [k, v] of Object.entries(s.items)) if (want.has(kindOfKey(k, v)) || (k === 'assetbrowser_folders' && (want.has('graphs') || want.has('functions') || want.has('group presets')))) items[k] = v;
+  return { ...s, items };
+}
+
+/** How many things a set holds in this snapshot (graphs, shaders, functions… not versions or settings). */
+export function countInSet(s: LibrarySnapshot, set: DownloadSetId): number {
+  const def = DOWNLOAD_SETS.find(d => d.id === set)!;
+  let n = 0;
+  for (const [k, v] of Object.entries(s.items)) {
+    const kind = kindOfKey(k, v);
+    if (def.kinds && !def.kinds.includes(kind)) continue;
+    if (kind === 'versions' || kind === 'settings') continue;
+    if (kind === 'glsl shaders') { const list = parse(v); n += Array.isArray(list) ? list.length : 0; continue; }
+    if (kind === 'palettes') { const list = parse(v); n += Array.isArray(list) ? list.length : 1; continue; }
+    n++;
+  }
+  return n;
+}
+
+/** A ZIP of one set: `library.json` restricted to it (importable) plus the readable files of that set. */
+export function buildSetZip(s: LibrarySnapshot, set: DownloadSetId): { bytes: Uint8Array; name: string } {
+  const def = DOWNLOAD_SETS.find(d => d.id === set)!;
+  const part = snapshotOfKinds(s, def.kinds);
+  const what = set === 'everything' ? 'library' : set === 'glsl' ? 'GLSL shaders' : set === 'nodes' ? 'published nodes' : set === 'functions' ? 'custom functions' : set;
+  const name = libraryZipName(new Date(s.savedAt), what);
+  const root = name.replace(/\.zip$/, '');
+  const files: Record<string, Uint8Array> = {
+    [`${root}/${LIBRARY_FILE}`]: strToU8(JSON.stringify(part)),
+    [`${root}/README.txt`]: strToU8(README),
+  };
+  const readable = readableFiles(part, s.items);
+  for (const [p, c] of Object.entries(readable)) {
+    if (def.kinds && p === 'settings.json') continue;
+    files[`${root}/${p}`] = strToU8(c);
+  }
+  return { bytes: zipSync(files, { level: 6 }), name };
 }

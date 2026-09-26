@@ -5,13 +5,14 @@
  * folder that keeps a copy outside the browser (utils/backupFolder.ts), and
  * where recordings are saved (utils/recordingsFolder.ts).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
-import { exportEverything, importEverything } from '../../utils/libraryActions';
+import { Menu } from '../ui/Menu';
+import { exportEverything, exportSet, importEverything } from '../../utils/libraryActions';
 import { backupNow, backupStatus, chooseBackupFolder, onBackupStatus, reconnectBackupFolder, resetBackupFolder, restoreFromFolder, stopBrowserBackups } from '../../utils/backupFolder';
-import { formatSize, LIBRARY_REFRESH_EVENTS, libraryStats, STORAGE_LIMIT, takeSnapshot, type LibraryKind, type LibraryStats } from '../../utils/library';
+import { countInSet, DOWNLOAD_SETS, formatSize, LIBRARY_REFRESH_EVENTS, libraryStats, STORAGE_LIMIT, takeSnapshot, type LibraryKind, type LibraryStats } from '../../utils/library';
 import { whenSaved } from '../../store/graphVersions';
 import { toast } from '../ui/toastStore';
 import { RecordingsSetting } from './RecordingsSetting';
@@ -39,6 +40,8 @@ function useLibraryStats(): LibraryStats {
 
 export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
   const tk = useTokens();
+  const dlRef = useRef<HTMLSpanElement>(null);
+  const [dlMenu, setDlMenu] = useState<{ x: number; y: number } | null>(null);
   const [st, setSt] = useState(backupStatus);
   const stats = useLibraryStats();
   const [showAll, setShowAll] = useState(false);
@@ -94,6 +97,13 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
       )}
       <div style={row}>
         <Button size="sm" icon="export" onClick={run(exportEverything)} title="One ZIP: library.json (for importing) plus every graph and preset as files in folders">Export everything</Button>
+        <span ref={dlRef} style={{ display: 'inline-flex' }}>
+          <Button size="sm" icon="export" title="One kind of thing as a ZIP of plain files: just the graphs, just the GLSL shaders (.glsl), just the functions, nodes or presets" onClick={() => { const r = dlRef.current?.getBoundingClientRect(); setDlMenu(r ? { x: r.left, y: r.bottom + 4 } : null); }}>Download…</Button>
+        </span>
+        {dlMenu && (
+          <Menu x={dlMenu.x} y={dlMenu.y} minWidth={280} onClose={() => setDlMenu(null)}
+            items={DOWNLOAD_SETS.map(d => { const n = d.id === 'everything' ? 0 : countInSet(takeSnapshot(), d.id); return { label: d.id === 'everything' ? d.label : `${d.label} (${n})`, hint: d.hint, icon: 'export' as const, disabled: d.id !== 'everything' && n === 0, onSelect: () => { void exportSet(d.id); } }; })} />
+        )}
         <Button size="sm" icon="import" onClick={run(importEverything)} title="A library ZIP or library.json (older Backup ZIPs work too). Adds to what you have; never overwrites.">Import a library…</Button>
       </div>
 

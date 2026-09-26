@@ -29,6 +29,7 @@ import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
 import { Callout } from '../ui/Callout';
 import { CodeField } from '../code/CodeField';
+import { tidyGlsl } from '../../glsl/format';
 import { buildCompletions } from '../code/glslReference';
 import { NumberInput } from './NumberInput';
 import { TYPE_COLORS } from './typeColors';
@@ -417,10 +418,16 @@ export function PublishNodeModal({ source: initialSource, onClose, onPublished, 
             {sectionTitle('GLSL', 'the entry function’s signature is the node')}
             <CodeField value={code} onChange={setCode} completions={completions} title="Functions" minHeight={160} maxHeight={320}
               ariaLabel="Node GLSL" invalid={!!ports.error}
-              actions={ports.functions && ports.functions.length > 1 ? (
-                <Select ariaLabel="Entry function" height={26} mono value={ports.entry ?? ''} onChange={setEntry}
-                  options={ports.functions.map(f => ({ value: f.name, label: `entry: ${f.name}` }))} />
-              ) : undefined} />
+              actions={(
+                <>
+                  {ports.functions && ports.functions.length > 1 && (
+                    <Select ariaLabel="Entry function" height={26} mono value={ports.entry ?? ''} onChange={setEntry}
+                      options={ports.functions.map(f => ({ value: f.name, label: `entry: ${f.name}` }))} />
+                  )}
+                  <Button size="sm" variant="ghost" title="Reformat: the same reading a paste gets on the GLSL and Convert pages (dialect shims, ES 1.00 form, indentation)"
+                    onClick={() => { const t = tidyGlsl(code); if (!t.changed) { toast.info('Already tidy'); return; } setCode(t.code); if (t.notes.length) toast.info('Tidied', { message: t.notes.join(' ') }); }}>Tidy</Button>
+                </>
+              )} />
             {ports.error && <Callout tone="warning" title="Can't read the node from this code yet">{ports.error}</Callout>}
           </>
         )}

@@ -115,3 +115,43 @@ describe('library stats', () => {
     expect(formatSize(1.4 * 1024 * 1024)).toBe('1.4 MB');
   });
 });
+
+describe('downloading one kind of thing', async () => {
+  const { buildSetZip, countInSet, snapshotOfKinds, kindOfKey } = await import('../library');
+  const kv = memKV({ ...SAMPLE, 'shader-studio:glsl-shaders': JSON.stringify([{ id: 's1', name: 'Rings', code: 'void main(){}', group: 'Tests', note: 'broken on\nline 2' }, { id: 's2', name: 'Plain', code: 'void main(){ gl_FragColor = vec4(1.0); }' }]) });
+  const snap = takeSnapshot(kv);
+  it('classifies keys the way the statistics do', () => {
+    expect(kindOfKey('shader-studio:Sunset', SAMPLE['shader-studio:Sunset'])).toBe('graphs');
+    expect(kindOfKey('shader-studio:cfp:f1', '{}')).toBe('functions');
+    expect(kindOfKey('shader-studio:glsl-shaders', '[]')).toBe('glsl shaders');
+    expect(kindOfKey('shader-studio:theme', '"dark"')).toBe('settings');
+  });
+  it('counts what a set holds', () => {
+    expect(countInSet(snap, 'graphs')).toBe(2);
+    expect(countInSet(snap, 'glsl')).toBe(2);
+    expect(countInSet(snap, 'functions')).toBe(1);
+    expect(countInSet(snap, 'nodes')).toBe(1);
+    expect(countInSet(snap, 'presets')).toBe(2); // one group preset + one palette
+  });
+  it('writes saved shaders as plain .glsl files, notes as a leading comment', () => {
+    const files = readableFiles(snap);
+    expect(files['glsl shaders/Tests/Rings.glsl']).toBe('// Rings\n// broken on\n// line 2\n\nvoid main(){}');
+    expect(files['glsl shaders/Plain.glsl']).toBe('void main(){ gl_FragColor = vec4(1.0); }');
+  });
+  it('a set ZIP holds only that kind, importable, folders kept', () => {
+    const { bytes, name } = buildSetZip(snap, 'graphs');
+    expect(name).toMatch(/^Shader Studio graphs \d{4}-\d{2}-\d{2}\.zip$/);
+    const paths = Object.keys(unzipSync(bytes)).map(p => p.split('/').slice(1).join('/'));
+    expect(paths).toContain('graphs/Skies/Sunset.json');
+    expect(paths).toContain('graphs/Skies/Sunset (versions)/v1.json');
+    expect(paths).toContain('graphs/Loose.json');
+    expect(paths.some(p => p.startsWith('functions/') || p.startsWith('glsl shaders'))).toBe(false);
+    expect(paths).not.toContain('settings.json');
+    const lib = JSON.parse(strFromU8(unzipSync(bytes)[Object.keys(unzipSync(bytes)).find(p => p.endsWith('library.json'))!]));
+    expect(Object.keys(lib.items).sort()).toEqual(['assetbrowser_folders', 'shader-studio-versions:Sunset', 'shader-studio:Loose', 'shader-studio:Sunset']);
+    const glsl = buildSetZip(snap, 'glsl');
+    expect(glsl.name).toMatch(/^Shader Studio GLSL shaders /);
+    expect(Object.keys(unzipSync(glsl.bytes)).filter(p => p.endsWith('.glsl'))).toHaveLength(2);
+    expect(Object.keys(snapshotOfKinds(snap, ['functions']).items)).toEqual(['shader-studio:cfp:f1', 'assetbrowser_folders']);
+  });
+});

@@ -3,7 +3,7 @@
  * ZIP, import one back, and say what happened.
  */
 import { toast } from '../components/ui/toastStore';
-import { buildLibraryZip, describeSnapshot, importLibrary, LIBRARY_REFRESH_EVENTS, libraryZipName, readLibrary, takeSnapshot } from './library';
+import { buildLibraryZip, buildSetZip, countInSet, describeSnapshot, DOWNLOAD_SETS, importLibrary, LIBRARY_REFRESH_EVENTS, libraryZipName, readLibrary, takeSnapshot, type DownloadSetId } from './library';
 import { errorMessage, openBinaryFile, saveBinaryFile } from './fileIO';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -20,6 +20,19 @@ export async function exportEverything(): Promise<void> {
   const res = await saveBinaryFile(buildLibraryZip(snap), libraryZipName(), 'application/zip');
   if (res.ok) toast.success('Library exported', { message: `${librarySummary()}, with their versions, folders and your settings.` });
   else if (!res.cancelled) toast.error('Couldn’t export the library', { message: res.error });
+}
+
+/** Download one kind of thing (or everything) as a ZIP: plain files to share, plus a library.json to import back. */
+export async function exportSet(set: DownloadSetId): Promise<void> {
+  if (set === 'everything') return exportEverything();
+  const snap = takeSnapshot();
+  const def = DOWNLOAD_SETS.find(d => d.id === set)!;
+  const n = countInSet(snap, set);
+  if (n === 0) { toast.info(`Nothing to download yet`, { message: `${def.label.replace(/^Only /, '')}: none saved so far.` }); return; }
+  const { bytes, name } = buildSetZip(snap, set);
+  const res = await saveBinaryFile(bytes, name, 'application/zip');
+  if (res.ok) toast.success(`Downloaded ${n} ${n === 1 ? 'item' : 'items'}`, { message: `${name}: the files in folders, plus a library.json that imports them back.` });
+  else if (!res.cancelled) toast.error('Couldn’t download', { message: res.error });
 }
 
 export async function importEverything(): Promise<void> {

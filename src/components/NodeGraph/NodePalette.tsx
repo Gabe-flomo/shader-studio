@@ -22,6 +22,8 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius, type Tokens } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Field } from '../ui/Field';
+import { Popover } from '../ui/Popover';
+import { tidyGlsl } from '../../glsl/format';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Tooltip } from '../ui/Tooltip';
@@ -228,6 +230,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const [publishSource, setPublishSource] = useState<PublishSource | null>(null);
   const [publishExisting, setPublishExisting] = useState<string | undefined>(undefined);
   const [exposeUv, setExposeUv] = useState(true);
+  const savedPickRef = useRef<HTMLSpanElement>(null);
+  const [savedPickOpen, setSavedPickOpen] = useState(false);
+  const [savedPickQ, setSavedPickQ] = useState('');
   const [exposeTime, setExposeTime] = useState(false);
   const openPublishFor = (nodes: GraphNode[] | null, label: string) => {
     if (!nodes) { toast.error(`Couldn’t read “${label}”`); return; }
@@ -505,23 +510,33 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                   let code: string | null;
                   try { code = await openTextFile('.glsl,.frag,.fs,.fsh,.shader,.txt'); } catch (e) { toast.error('Couldn’t read that file', { message: e instanceof Error ? e.message : String(e) }); return; }
                   if (code === null) return;
-                  const r = convertFragmentShader(code, { label: 'Imported shader' });
+                  // The same reading a paste gets on the GLSL and Convert pages: dialect shims, ES 1.00 form, indentation.
+                  const tidy = tidyGlsl(code);
+                  const r = convertFragmentShader(tidy.code, { label: 'Imported shader' });
                   if (!r.ok) { toast.error('Couldn’t convert that shader', { message: r.error }); return; }
-                  if (r.notes.length) toast.info('Check the converted code', { message: r.notes.join(' ') });
+                  const notes = [...tidy.notes, ...r.notes];
+                  if (notes.length) toast.info('Check the converted code', { message: notes.join(' ') });
                   setPublishSource({ kind: 'code', code: r.code, entry: r.entry, label: 'Imported shader' });
                 }}>Import GLSL…</Button>
             </div>
-            <TabSectionHeader label="From a saved graph" />
-            <FolderableList
-              scopeKey="builder:saved"
-              color={tabColor('graphs')}
-              items={savedNames.map(name => ({ id: name, label: name }))}
-              renderItem={(item) => (
-                <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')}
-                  onClick={() => openPublishFor(readSavedGraphNodes(item.id), item.label)} />
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span ref={savedPickRef} style={{ display: 'inline-flex' }}>
+                <Button size="sm" icon="graphs" title="Publish a saved graph as a node without opening it" disabled={savedNames.length === 0}
+                  onClick={() => { setSavedPickOpen(o => !o); setSavedPickQ(''); }}>Start from a saved graph…</Button>
+              </span>
+              {savedPickOpen && (
+                <Popover anchorRef={savedPickRef} onClose={() => setSavedPickOpen(false)} align="start" width={300} padding={8}>
+                  <Field autoFocus aria-label="Search saved graphs" placeholder="Search saved graphs" height={30} value={savedPickQ} onChange={e => setSavedPickQ(e.target.value)} />
+                  <div style={{ maxHeight: 320, overflowY: 'auto', marginTop: 6 }}>
+                    {savedNames.filter(n => !savedPickQ.trim() || n.toLowerCase().includes(savedPickQ.trim().toLowerCase())).map(name => (
+                      <ItemRow key={name} label={name} icon="graphs" color={tabColor('graphs')} tag={savedGraphHasPlay(name) ? 'Play' : undefined}
+                        onClick={() => { setSavedPickOpen(false); openPublishFor(readSavedGraphNodes(name), name); }} />
+                    ))}
+                    {savedNames.length > 0 && savedNames.every(n => savedPickQ.trim() && !n.toLowerCase().includes(savedPickQ.trim().toLowerCase())) && <EmptyHint>Nothing matches “{savedPickQ}”.</EmptyHint>}
+                  </div>
+                </Popover>
               )}
-              emptyHint={<EmptyHint>Save a graph (Saved Graphs tab) and it can be published from here without opening it.</EmptyHint>}
-            />
+            </div>
             <TabSectionHeader label="My nodes" action={
               <span style={{ display: 'flex', gap: 2 }}>
                 <IconButton icon="import" label="Import node types from a .json file" size="sm" onClick={importUserNodes} />
