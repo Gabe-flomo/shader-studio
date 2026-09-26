@@ -11854,14 +11854,13 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         layer('null', 'pin', 'Pin', { y: 0.8, size: 9, color: '#f9a86b' }),
       ],
       controls: [
-        { id: 'width', target: 'box::width', kind: 'float', label: 'Cell width', min: 0.05, max: 1 },
-        { id: 'height', target: 'box::height', kind: 'float', label: 'Cell height', min: 0.05, max: 1 },
+        { id: 'width', target: 'base::b', kind: 'float', label: 'Cell size', min: 0.05, max: 1 },
+        { id: 'height', target: 'size::b', kind: 'float', label: 'Beat depth', min: 0, max: 1 },
         { id: 'palScale', target: 'pal::scale', kind: 'float', label: 'Palette scale', min: -3, max: 3 },
         { id: 'wordSize', target: 'layer:word::size', kind: 'float', label: 'Word · size', min: 0.02, max: 1 },
       ],
       mappings: [
         { id: 'beat', controlId: 'width', source: { kind: 'clock', shape: 'random', bpm: 120, beats: 1 }, outMin: 0.15, outMax: 0.5, curve: 'linear', smoothMs: 90, enabled: true },
-        { id: 'aspect', controlId: 'height', source: { kind: 'control', controlId: 'width' }, outMin: 0.5, outMax: 0.15, curve: 'linear', smoothMs: 0, enabled: true },
         { id: 'sweep', controlId: 'palScale', source: { kind: 'null', layerId: 'pin', axis: 'x' }, outMin: -2, outMax: 2, curve: 'linear', smoothMs: 60, enabled: true },
         { id: 'pulse', controlId: 'wordSize', source: { kind: 'clock', shape: 'saw', bpm: 120, beats: 4 }, outMin: 0.5, outMax: 0.36, curve: 'exp', smoothMs: 40, enabled: true },
       ],

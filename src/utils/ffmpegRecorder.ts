@@ -15,7 +15,11 @@
  *   4. stop_ffmpeg_encode  (closes stdin, waits for FFmpeg to finish)
  */
 
-export type FfmpegCodec = 'h264' | 'prores' | 'ffv1';
+/** prores4444 keeps the alpha channel (a transparent background). */
+export type FfmpegCodec = 'h264' | 'prores' | 'prores4444' | 'ffv1';
+
+/** The file extension each codec writes. */
+export const codecExt = (c: FfmpegCodec): string => (c === 'prores' || c === 'prores4444' ? 'mov' : c === 'ffv1' ? 'mkv' : 'mp4');
 
 export interface FfmpegEncodeOptions {
   /** Width in pixels */
@@ -30,6 +34,10 @@ export interface FfmpegEncodeOptions {
   codec: FfmpegCodec;
   /** Where to write the file; asks with a save dialog when unset. */
   outputPath?: string;
+  /** Clock time of the first frame (a take starts where it was recorded). Default 0. */
+  startTime?: number;
+  /** The recording's sound as WAV bytes (see lib/recordingAudio.ts), muxed in as its audio track. */
+  audioWav?: Uint8Array | null;
   /**
    * Called once per frame.
    * Implementation should:
@@ -62,9 +70,7 @@ export async function runFfmpegEncode(opts: FfmpegEncodeOptions): Promise<string
   const { invoke } = await import('@tauri-apps/api/core');
   const { save }   = await import('@tauri-apps/plugin-dialog');
 
-  const ext = opts.codec === 'prores' ? 'mov'
-            : opts.codec === 'ffv1'   ? 'mkv'
-            : 'mp4';
+  const ext = codecExt(opts.codec);
 
   const outputPath = opts.outputPath ?? await save({
     defaultPath: `shader-export-${Date.now()}.${ext}`,
@@ -84,6 +90,7 @@ export async function runFfmpegEncode(opts: FfmpegEncodeOptions): Promise<string
     height: opts.height,
     fps:    opts.fps,
     codec:  opts.codec,
+    audioWav: opts.audioWav && opts.audioWav.length ? opts.audioWav : null,
   });
 
   // Reusable pixel buffer — allocated once, reused every frame
@@ -91,7 +98,7 @@ export async function runFfmpegEncode(opts: FfmpegEncodeOptions): Promise<string
 
   try {
     for (let i = 0; i < totalFrames; i++) {
-      const time = i / opts.fps;
+      const time = (opts.startTime ?? 0) + i / opts.fps;
 
       // Render deterministic frame
       opts.renderFrame(time);

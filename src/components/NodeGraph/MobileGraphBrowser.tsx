@@ -52,6 +52,7 @@ import { PlayParamActions } from '../play/PlayParamActions';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
 import { playDrivenMap } from '../../play/playDriven';
+import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
 
 /** Breadcrumb segment in the phone graph header: the current one is bold and dark. */
@@ -2493,6 +2494,8 @@ export function MobileGraphBrowser() {
       );
       const pd = isKeyframed ? undefined : sliderableParam(node, key);
       const val = pd ? currentSliderValue(node, key, pd) : 0;
+      // A wire into another socket has taken this slider over (Center X under a wired Center).
+      const driver = pd ? driverOf(node, key) : null;
       const selectPd = selectableParam(node, key);
       const selectVal = selectPd ? (node.params[key] !== undefined ? String(node.params[key]) : (selectPd.options?.[0]?.value ?? '')) : '';
       if (!pd && !selectPd && !kfEligible) return null;
@@ -2542,6 +2545,9 @@ export function MobileGraphBrowser() {
           {isExternallyDriven && (
             <div style={{ fontSize: 12, color: tk.text.muted }}>Set from outside the group.</div>
           )}
+          {driver && (
+            <div style={{ fontSize: 12, color: tk.text.muted }}>Set by the wire into {driver.socketLabel}: the free slider is on the node it comes from.</div>
+          )}
           {pd && (() => {
             const bidir = node.params[`__scBidir_${key}`] === true;
             const customMax = typeof node.params[`__scMax_${key}`] === 'number' ? node.params[`__scMax_${key}`] as number : null;
@@ -2564,7 +2570,7 @@ export function MobileGraphBrowser() {
                     step={pd.step ?? 0.01}
                     integer={pd.step === 1}
                     defaultValue={typeof defVal === 'number' ? defVal : (effMin + effMax) / 2}
-                    disabled={isExternallyDriven || playDriven.has(`${node.id}::${key}`)}
+                    disabled={isExternallyDriven || !!driver || playDriven.has(`${node.id}::${key}`)}
                     onChange={v => updateNodeParams(node.id, { [key]: v }, { immediate: true })}
                     onType={n => {
                       if (Math.abs(n) > effMax) setCustomMax(n);

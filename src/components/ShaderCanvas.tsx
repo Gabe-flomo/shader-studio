@@ -87,6 +87,8 @@ export interface OfflineRenderHandle {
   renderAtTime: (time: number) => void;
   /** Read pixels from the last renderAtTime call into `out` (RGBA, top-down) */
   readPixels: (out: Uint8Array, width: number, height: number) => void;
+  /** Set a uniform before the next renderAtTime (a take's recorded slider values). Unknown names are ignored. */
+  setUniform: (name: string, value: number | number[]) => void;
   /** Pixel dimensions of the export render target */
   width: number;
   height: number;
@@ -657,6 +659,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           renderScale = 1;
           applySize();
           return { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
+        },
+        setUniform: (name: string, value: number | number[]) => {
+          const u = material.uniforms[name];
+          // As the live loop writes the input bus: a colour as a plain [r, g, b].
+          if (u) u.value = Array.isArray(value) ? [...value] : value;
         },
         renderAtTime: (time: number) => {
           material.uniforms.u_time.value = time;

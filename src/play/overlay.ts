@@ -332,6 +332,9 @@ class PlayOverlay {
     };
   }
 
+  /** Where the pointer is over the picture now (a copy), for recording a take. */
+  pointerNow(): KitPointer { return { ...this.pointer }; }
+
   // ── Drawing ────────────────────────────────────────────────────────────────
 
   private env(gl: HTMLCanvasElement, W: number, H: number, dpr: number, time: number, dt: number, forExport = false): KitEnv {
@@ -415,12 +418,23 @@ class PlayOverlay {
   private exportPicture: HTMLCanvasElement | null = null;
 
   /**
-   * Offline export (FFmpeg path): lay the layers over one read-back frame, in
-   * place. A fresh kit starts with the export so particles run the same way
-   * every time (with a seed set) and the live preview's state is untouched.
+   * Offline export (FFmpeg path, PNG sequence, transparent stills): lay the
+   * layers over one read-back frame, in place. A fresh kit starts with the
+   * export so particles run the same way every time (with a seed set) and the
+   * live preview's state is untouched.
+   *
+   * Transparent: no backdrop, and the picture as `picture` says:
+   *   'own'   its own alpha (the graph ends in Output (RGBA))
+   *   'luma'  black turns clear: alpha from brightness, colour un-darkened to
+   *           match, so light on black (glows, particles) keys cleanly and
+   *           composites like Screen/Add
+   *   'drop'  left out: only the layers, over nothing
    */
-  compositePixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean): void {
-    if (!this.hasLayers()) return;
+  compositePixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean, opts: { transparent?: boolean; picture?: TransparentPicture; pointer?: KitPointer } = {}): void {
+    // The Play page's "Layers only" hides the picture as well: transparent, that means none.
+    const dropPicture = !!opts.transparent && (opts.picture === 'drop' || this.record.display?.picture === false);
+    const luma = !!opts.transparent && opts.picture === 'luma' && !dropPicture;
+    if (!this.hasLayers()) { if (dropPicture) rgba.fill(0); else if (luma) lumaKey(rgba); return; }
     if (first || !this.exportKit) this.exportKit = createLayerKit();
     const pic = this.exportPicture ?? (this.exportPicture = document.createElement('canvas'));
     const out = this.exportCanvas ?? (this.exportCanvas = document.createElement('canvas'));
@@ -429,7 +443,13 @@ class PlayOverlay {
     const img = px.createImageData(width, height); img.data.set(rgba); px.putImageData(img, 0, 0);
     const ox = out.getContext('2d')!;
     const dpr = Math.max(1, height / Math.max(1, this.canvas?.clientHeight || height));
-    this.exportKit.frame(ox, this.record, this.env(pic, width, height, dpr, time, dt, true));
+    const env = this.env(pic, width, height, dpr, time, dt, true);
+    if (opts.pointer) env.pointer = opts.pointer; // a take's pointer, frame by frame
+    if (opts.transparent) { env.transparent = true; if (dropPicture) env.hidden = true; }
+    this.exportKit.frame(ox, this.record, env);
+    if (dropPicture) { rgba.set(ox.getImageData(0, 0, width, height).data); return; }
+    // Keyed after the layers have read the picture (their mattes and colours see it as it is).
+    if (luma) { lumaKey(rgba); img.data.set(rgba); px.putImageData(img, 0, 0); }
     px.drawImage(out, 0, 0);
     rgba.set(px.getImageData(0, 0, width, height).data);
   }
@@ -450,3 +470,19 @@ class PlayOverlay {
 }
 
 export const playOverlay = new PlayOverlay();
+
+/** What a transparent export does with the shader's picture (see compositePixels). */
+export type TransparentPicture = 'own' | 'luma' | 'drop';
+
+/** Alpha from brightness, in place: a = max(r, g, b), colour divided by it (straight alpha). */
+export function lumaKey(rgba: Uint8Array): void {
+  for (let i = 0; i < rgba.length; i += 4) {
+    const m = Math.max(rgba[i], rgba[i + 1], rgba[i + 2]);
+    if (m === 0) { rgba[i + 3] = 0; continue; }
+    const k = 255 / m;
+    rgba[i] = Math.min(255, Math.round(rgba[i] * k));
+    rgba[i + 1] = Math.min(255, Math.round(rgba[i + 1] * k));
+    rgba[i + 2] = Math.min(255, Math.round(rgba[i + 2] * k));
+    rgba[i + 3] = Math.round(m * (rgba[i + 3] / 255));
+  }
+}

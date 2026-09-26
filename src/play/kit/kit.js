@@ -126,7 +126,8 @@ export function createLayerKit() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, W, H);
-    if (env.hidden) { ctx.fillStyle = klCss(env.backdrop || [0, 0, 0]); ctx.fillRect(0, 0, W, H); }
+    // A transparent export keeps the backdrop out: only the layers, over nothing.
+    if (env.hidden && !env.transparent) { ctx.fillStyle = klCss(env.backdrop || [0, 0, 0]); ctx.fillRect(0, 0, W, H); }
     const layers = record.layers;
     const ids = new Set(layers.map(l => l.id));
     for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible]) for (const id of [...m.keys()]) if (!ids.has(id)) m.delete(id);

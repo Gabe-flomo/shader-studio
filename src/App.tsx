@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { lazyWithSuspense, type PropsOf } from './components/lazyWithSuspense';
+import { lazyWithSuspense, preloadLazyComponents, type PropsOf } from './components/lazyWithSuspense';
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
@@ -32,7 +32,11 @@ import { useTimeHotkeys } from './hooks/useTimeHotkeys';
 import { useCtp, type CtpPalette } from './theme/nodePalette';
 import { ctp } from './theme/palette';
 // Type-only: erased at build time, so these don't pull the lazy chunks into the main bundle.
-import type { ExportModal as ExportModalT } from './components/ExportModal';
+// Record loads with the app, not on demand: on a busy Play page (a mapping refreshing the panel
+// every frame) React never gets idle time to finish a lazily loaded dialog, and Record would do nothing.
+import { ExportModal } from './components/ExportModal';
+import type { PresentStage as PresentStageT } from './components/play/PresentStage';
+import { usePresent } from './components/play/presentStore';
 import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './components/KeyboardShortcutsModal';
 import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
 import type { GLSLPage as GLSLPageT } from './components/GLSLPage';
@@ -47,10 +51,11 @@ import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeG
 // it, and vice versa for the desktop-only pieces it doesn't need). Each lazy
 // component carries its own Suspense boundary so a chunk loading never blanks
 // the rest of the app.
-const ExportModal            = lazyWithSuspense<PropsOf<typeof ExportModalT>>(() => import('./components/ExportModal').then(m => ({ default: m.ExportModal })));
+
 const KeyboardShortcutsModal = lazyWithSuspense<PropsOf<typeof KeyboardShortcutsModalT>>(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
 const ShortcutsPage          = lazyWithSuspense<PropsOf<typeof ShortcutsPageT>>(() => import('./components/ShortcutsPage').then(m => ({ default: m.ShortcutsPage })));
 const GLSLPage               = lazyWithSuspense<PropsOf<typeof GLSLPageT>>(() => import('./components/GLSLPage').then(m => ({ default: m.GLSLPage })));
+const PresentStage           = lazyWithSuspense<PropsOf<typeof PresentStageT>>(() => import('./components/play/PresentStage').then(m => ({ default: m.PresentStage })));
 const PlayPage               = lazyWithSuspense<PropsOf<typeof PlayPageT>>(() => import('./components/play/PlayPage').then(m => ({ default: m.PlayPage })));
 const FunctionBuilder        = lazyWithSuspense<PropsOf<typeof FunctionBuilderT>>(() => import('./components/FunctionBuilder/FunctionBuilder').then(m => ({ default: m.FunctionBuilder })));
 const MobileGraphBrowser     = lazyWithSuspense<PropsOf<typeof MobileGraphBrowserT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileGraphBrowser })));
@@ -411,6 +416,13 @@ function App() {
   const [isDragging, setIsDragging]     = useState(false);
   const [showCode, setShowCode]         = useState(false);
   const [page, setPage]                 = useState<Page>('studio');
+  // Once the app is idle, fetch the on-demand pages and dialogs (twice: loaded chunks can
+  // declare more), so opening one later never waits on React's lowest-priority work.
+  useEffect(() => {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    const run = () => { void preloadLazyComponents().then(() => preloadLazyComponents()); };
+    if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 4000 }); else window.setTimeout(run, 2000);
+  }, []);
   const playWidth = PANEL_WIDTHS[usePlayUi(s => s.panel)];
   // "This graph has a Play setup · Open Play" means nothing while Play is already open.
   useEffect(() => {
@@ -469,6 +481,9 @@ function App() {
 
   // Export animation modal
   const [showExport, setShowExport]           = useState(false);
+  // Present › Exact records the website player's canvas instead of the app's.
+  const [recordSource, setRecordSource]       = useState<HTMLCanvasElement | null>(null);
+  const presentMode = usePresent(s => s.mode);
   // Mobile: the record button opens a menu (Record / Reset / Import / Export)
   // instead of jumping straight into the export modal, and a separate
   // Examples button opens a browsable gallery of starter graphs.
@@ -701,6 +716,28 @@ function App() {
       )}
     </div>
   ) : null;
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PRESENT — the Play setup on its own, as people will play with it
+  // ══════════════════════════════════════════════════════════════════════════
+  if (presentMode) {
+    return (
+      <ThemeOverrideContext.Provider value="dark">
+        <PresentStage
+          canvas={<ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />}
+          onRecord={src => { setRecordSource(src); setShowExport(true); }}
+        />
+        {showExport && (
+          <ExportModal
+            canvas={recordSource ?? shaderCanvasRef.current}
+            offlineRender={recordSource ? null : offlineRenderRef.current}
+            external={!!recordSource}
+            onClose={() => { setShowExport(false); setRecordSource(null); }}
+          />
+        )}
+      </ThemeOverrideContext.Provider>
+    );
+  }
 
   // ══════════════════════════════════════════════════════════════════════════
   // MOBILE LAYOUT (< 768px)
@@ -1179,6 +1216,7 @@ function App() {
               <PreviewHeader>
                 {page === 'play' && <AspectPicker />}
                 {page === 'play' && <GuidesToggle />}
+                {page === 'play' && <Button size="sm" variant="ghost" icon="play" onClick={() => usePresent.getState().present('full')} title="Present: the picture and its controls on their own, as people will play with it (Full or Exact, phone or screen, fullscreen, Record)">Present</Button>}
                 <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
                 <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
               </PreviewHeader>

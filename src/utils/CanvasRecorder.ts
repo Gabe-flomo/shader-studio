@@ -26,6 +26,8 @@ export interface CanvasRecorderOptions {
   onError?: (message: string) => void;
   /** Called with where the file went (a path, or a folder/file name), after it's saved. */
   onSaved?: (where: string) => void;
+  /** Sound to record with the picture (see lib/recordingAudio.ts). Its tracks are cloned, so stopping the recording leaves it playing. */
+  audio?: MediaStream | null;
 }
 
 export interface RecordStats {
@@ -41,7 +43,7 @@ export interface RecordStats {
 
 export class CanvasRecorder {
   private canvas: HTMLCanvasElement;
-  private config: Required<Omit<CanvasRecorderOptions, 'mimeType' | 'onError' | 'onSaved'>> & Pick<CanvasRecorderOptions, 'mimeType' | 'onError' | 'onSaved'>;
+  private config: Required<Omit<CanvasRecorderOptions, 'mimeType' | 'onError' | 'onSaved' | 'audio'>> & Pick<CanvasRecorderOptions, 'mimeType' | 'onError' | 'onSaved' | 'audio'>;
   /** Set when MediaRecorder reported an error or produced no data */
   error: string | null = null;
 
@@ -74,6 +76,7 @@ export class CanvasRecorder {
       mimeType:           options.mimeType,
       onError:            options.onError,
       onSaved:            options.onSaved,
+      audio:              options.audio ?? null,
     };
   }
 
@@ -207,8 +210,12 @@ export class CanvasRecorder {
   // ── MediaRecorder ────────────────────────────────────────────────────────
 
   private async _initMediaRecorder() {
-    const stream   = this.canvas.captureStream(this.config.fps);
-    const mimeType = this.config.mimeType ?? this._bestMimeType();
+    const video    = this.canvas.captureStream(this.config.fps);
+    const sound    = this.config.audio?.getAudioTracks().filter(t => t.readyState === 'live').map(t => t.clone()) ?? [];
+    const stream   = sound.length ? new MediaStream([...video.getVideoTracks(), ...sound]) : video;
+    let mimeType   = this.config.mimeType ?? this._bestMimeType();
+    // With sound, name an audio codec too (or let the browser pick in that container).
+    if (mimeType && sound.length) mimeType = withAudioCodec(mimeType);
 
     if (!mimeType) {
       throw new Error(
@@ -243,6 +250,7 @@ export class CanvasRecorder {
       }
       if (!this.error && this.config.autoDownload) await this._downloadBlob(blob, `${this.config.name}.${ext}`);
       stream.getTracks().forEach(t => t.stop());
+      video.getTracks().forEach(t => t.stop());
       this.mediaStopResolve?.();
     };
 
@@ -259,6 +267,9 @@ export class CanvasRecorder {
       }
     });
   }
+
+  /** Does the recording carry sound? */
+  get hasAudio(): boolean { return !!this.config.audio?.getAudioTracks().length; }
 
   private _bestMimeType(): string | null {
     const types = [
@@ -298,4 +309,23 @@ export class CanvasRecorder {
   private _log(...args: unknown[]) {
     if (this.config.verbose) console.log('[CanvasRecorder]', ...args);
   }
+}
+
+/**
+ * A video mime type with an audio codec: `video/webm;codecs=vp9` → `…vp9,opus`,
+ * `video/mp4;codecs=h264` → `…avc1,mp4a.40.2`. Falls back to the bare
+ * container (the browser picks both codecs), then to the type as given.
+ */
+export function withAudioCodec(mime: string): string {
+  if (typeof MediaRecorder === 'undefined') return mime;
+  const [container, params = ''] = mime.split(';');
+  const codecs = /codecs=([^;]+)/.exec(params)?.[1]?.split(',').map(c => c.trim()).filter(Boolean) ?? [];
+  const isMp4 = container.includes('mp4');
+  const video = codecs.map(c => (isMp4 && c === 'h264' ? 'avc1' : c));
+  const tries = [
+    ...(video.length ? [`${container};codecs=${[...video, isMp4 ? 'mp4a.40.2' : 'opus'].join(',')}`] : []),
+    ...(video.length && isMp4 ? [`${container};codecs=${[...video, 'opus'].join(',')}`] : []),
+    container,
+  ];
+  return tries.find(t => MediaRecorder.isTypeSupported(t)) ?? mime;
 }

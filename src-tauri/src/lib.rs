@@ -12,6 +12,8 @@ struct FfmpegSession {
     stdin: ChildStdin,
     width: u32,
     height: u32,
+    /// The recording's sound, written for FFmpeg to read; removed when the encode ends.
+    audio_file: Option<std::path::PathBuf>,
 }
 
 struct FfmpegState(Mutex<Option<FfmpegSession>>);
@@ -19,7 +21,9 @@ struct FfmpegState(Mutex<Option<FfmpegSession>>);
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
 /// Start an FFmpeg encoding session.
-/// `codec` is one of: "h264", "prores", "ffv1"
+/// `codec` is one of: "h264", "prores", "prores4444" (keeps alpha), "ffv1"
+/// `audio_wav`, when given, is the recording's sound as a WAV file's bytes: it's
+/// muxed in as the audio track (AAC in .mp4, PCM in .mov, FLAC in .mkv).
 /// Returns an error string if FFmpeg can't be found or the session is already active.
 #[tauri::command]
 fn start_ffmpeg_encode(
@@ -29,6 +33,7 @@ fn start_ffmpeg_encode(
     height: u32,
     fps: u32,
     codec: String,
+    audio_wav: Option<Vec<u8>>,
 ) -> Result<(), String> {
     let mut guard = state.0.lock().map_err(|e| e.to_string())?;
     if guard.is_some() {
@@ -46,6 +51,13 @@ fn start_ffmpeg_encode(
             "-profile:v", "3",         // ProRes 422 HQ
             "-vendor", "apl0",
             "-pix_fmt", "yuv422p10le",
+        ],
+        "prores4444" => vec![
+            "-c:v", "prores_ks",
+            "-profile:v", "4",         // ProRes 4444: carries the alpha channel
+            "-vendor", "apl0",
+            "-pix_fmt", "yuva444p10le",
+            "-alpha_bits", "16",
         ],
         "ffv1" => vec![
             "-c:v", "ffv1",
@@ -75,17 +87,48 @@ fn start_ffmpeg_encode(
         "-r", &fps_str,
         "-i", "pipe:0",            // read frames from stdin
     ]);
+    // The sound, as a second input: a temporary WAV beside nothing the user sees.
+    let audio_file = match audio_wav {
+        Some(bytes) if !bytes.is_empty() => {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            let path = std::env::temp_dir().join(format!("shader-studio-audio-{}-{}.wav", std::process::id(), stamp));
+            std::fs::write(&path, &bytes).map_err(|e| format!("Couldn't write the recording's audio: {e}"))?;
+            Some(path)
+        }
+        _ => None,
+    };
+    if let Some(path) = &audio_file {
+        cmd.arg("-i").arg(path);
+    }
     cmd.args(&codec_args);
+    if audio_file.is_some() {
+        let audio_codec: &[&str] = match codec.as_str() {
+            "prores" | "prores4444" => &["-c:a", "pcm_s16le"],
+            "ffv1" => &["-c:a", "flac"],
+            _ => &["-c:a", "aac", "-b:a", "320k"],
+        };
+        cmd.args(audio_codec);
+        cmd.arg("-shortest");
+    }
     cmd.args(["-movflags", "+faststart"]);
     cmd.arg(&output_path);
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn FFmpeg: {e}"))?;
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            if let Some(path) = &audio_file { let _ = std::fs::remove_file(path); }
+            return Err(format!("Failed to spawn FFmpeg: {e}"));
+        }
+    };
     let stdin     = child.stdin.take().ok_or("Failed to get FFmpeg stdin")?;
 
-    *guard = Some(FfmpegSession { child, stdin, width, height });
+    *guard = Some(FfmpegSession { child, stdin, width, height, audio_file });
     Ok(())
 }
 
@@ -120,7 +163,9 @@ fn stop_ffmpeg_encode(state: State<FfmpegState>) -> Result<(), String> {
     drop(session.stdin);
     let status = session.child
         .wait_with_output()
-        .map_err(|e| format!("FFmpeg wait error: {e}"))?;
+        .map_err(|e| format!("FFmpeg wait error: {e}"));
+    if let Some(path) = &session.audio_file { let _ = std::fs::remove_file(path); }
+    let status = status?;
 
     if !status.status.success() {
         return Err(format!("FFmpeg exited with code {:?}", status.status.code()));

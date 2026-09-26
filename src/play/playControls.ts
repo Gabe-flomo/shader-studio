@@ -15,6 +15,7 @@ import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
 import { LAYER_NUMERIC_PROPS, parseActionTarget, parseLayerTarget } from '../types/play';
 import { getNodeDefinition } from '../nodes/definitions';
+import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDrivers';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
 import { isParamVisible } from '../compiler/uniformPatcher';
 import { bindingKeyOf } from '../lib/playEngine';
@@ -103,7 +104,46 @@ export function collectPlayCandidates(nodes: GraphNode[], paramBindings: Record<
     }
   }
   const seen = new Set(floats.map(c => c.target));
-  return [...floats, ...nested.filter(c => !seen.has(c.target)), ...collectColourCandidates(nodes)].filter(c => bindingKeyOf(c.target) in paramBindings);
+  return [...floats, ...nested.filter(c => !seen.has(c.target)), ...collectColourCandidates(nodes)]
+    .filter(c => bindingKeyOf(c.target) in paramBindings)
+    // Play takes free sliders only: one a wire has taken over (Center X under a wired Center) does nothing.
+    .filter(c => { const n = findTargetNode(nodes, c.target); const key = c.target.split('::').pop()!; return !n || !driverOf(n, key); });
+}
+
+/** Where a taken-over slider's value really comes from, and the free sliders there. */
+export interface UpstreamControls {
+  driver: ParamDriver;
+  /** The node feeding the wire, when it's in this graph. */
+  source: GraphNode | null;
+  sourceLabel: string;
+  /** Its free sliders, as Play candidates. */
+  candidates: PlayCandidate[];
+  /** When it has none: a wire taking over its sliders too (one hop up, named, not followed). */
+  blockedBy: { param: string; from: string } | null;
+}
+
+/**
+ * For a slider a wire has taken over: the node the wire comes from and the
+ * controls Play can make there instead. One hop only: if that node's sliders
+ * are wired too, say so and stop.
+ */
+export function upstreamControls(nodes: GraphNode[], candidates: readonly PlayCandidate[], node: GraphNode, paramKey: string): UpstreamControls | null {
+  const driver = driverOf(node, paramKey);
+  if (!driver) return null;
+  const source = findTargetNode(nodes, `${driver.connection.nodeId}::x`) ?? null;
+  const sourceLabel = source ? nodeLabelOf(source) : 'another node';
+  const own = candidates.filter(c => { const p = c.target.split('::'); return p[p.length - 2] === driver.connection.nodeId; });
+  let blockedBy: UpstreamControls['blockedBy'] = null;
+  if (source && !own.length) {
+    const d = paramDrivers(source);
+    const first = [...d.entries()][0];
+    if (first) {
+      const from = findTargetNode(nodes, `${first[1].connection.nodeId}::x`);
+      const pd = getNodeDefinition(source.type)?.paramDefs?.[first[0]];
+      blockedBy = { param: pd?.label ?? first[0], from: from ? nodeLabelOf(from) : 'another node' };
+    }
+  }
+  return { driver, source, sourceLabel, candidates: own, blockedBy };
 }
 
 /** The candidate for one node's param (its target may carry a group in front), if it can be a control. */

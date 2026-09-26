@@ -13,6 +13,8 @@ export interface KitEnv {
   editing: boolean;
   selectedId?: string;
   hidden: boolean;
+  /** Exporting with a transparent background: don't paint the backdrop. */
+  transparent?: boolean;
   backdrop: [number, number, number];
   audio: KitAudio | null;
   /** An audio layer's sound: a song loaded into it, or the live input. Falls back to `audio`. */

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CanvasRecorder } from '../utils/CanvasRecorder';
-import { runFfmpegEncode, type FfmpegCodec } from '../utils/ffmpegRecorder';
+import { codecExt, runFfmpegEncode, type FfmpegCodec } from '../utils/ffmpegRecorder';
 import type { OfflineRenderHandle } from './ShaderCanvas';
 import { getGpuLimits, pickRecorderFormat, preferredRecorderFormat, type RecorderFormat } from '../utils/exportLimits';
 import { useTokens } from '../theme/themeStore';
@@ -14,11 +14,15 @@ import { Modal } from './ui/Modal';
 import { RulerSlider } from './ui/RulerSlider';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
-import { playOverlay } from '../play/overlay';
+import { playOverlay, type TransparentPicture } from '../play/overlay';
 import { midiEngine } from '../lib/midiEngine';
 import { formatDuration } from '../lib/midiFile';
 import { recordingBaseName, recordingPath, saveRecording } from '../utils/recordingsFolder';
 import { RecordingsSetting } from './shell/RecordingsSetting';
+import { audioEngine } from '../lib/audioEngine';
+import { mixdown, recordingTracks, wavBytes } from '../lib/recordingAudio';
+import { takeApplier, takePointerAt, useTakes } from '../lib/takes';
+import { Select } from './ui/Select';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
@@ -50,12 +54,14 @@ const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 const CODEC_LABELS: Record<FfmpegCodec, string> = {
   h264:   'H.264',
   prores: 'ProRes 422 HQ',
+  prores4444: 'ProRes 4444',
   ffv1:   'FFV1 (lossless)',
 };
 
 const CODEC_DESCRIPTIONS: Record<FfmpegCodec, string> = {
   h264:   'CRF 18 · .mp4 · best compatibility',
   prores: 'Apple ProRes · .mov · editing master',
+  prores4444: 'With alpha · .mov · After Effects, Premiere, Resolve',
   ffv1:   'Lossless · .mkv · largest file',
 };
 
@@ -101,13 +107,19 @@ interface Props {
    * Required for FFmpeg offline encoding.
    */
   offlineRender?: OfflineRenderHandle | null;
+  /**
+   * A canvas that isn't the app's own picture (Present › Exact records the
+   * website player): recorded as it is, in real time, with no Play layers laid
+   * over it, no transparency and no songs (the web page has none).
+   */
+  external?: boolean;
   onClose: () => void;
 }
 
 type RecordMode  = 'mediarecorder' | 'ffmpeg';
 type RecordState = 'idle' | 'recording' | 'encoding' | 'done' | 'error';
 
-export function ExportModal({ canvas, offlineRender, onClose }: Props) {
+export function ExportModal({ canvas, offlineRender, external = false, onClose }: Props) {
   const tk = useTokens();
   const [fps, setFps]               = useState(60);
   const [duration, setDuration]     = useState(5);
@@ -122,9 +134,30 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const previewAspect    = useNodeGraphStore(s => s.previewAspect);
   const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const [codec, setCodec]           = useState<FfmpegCodec>('h264');
-  const [mode, setMode]             = useState<RecordMode>(inTauri ? 'ffmpeg' : 'mediarecorder');
+  const [mode, setMode]             = useState<RecordMode>(inTauri && !external ? 'ffmpeg' : 'mediarecorder');
   // Named after the saved graph ("shader graph" when it isn't saved); rename it here.
   const [filename, setFilename]     = useState(() => recordingBaseName(useNodeGraphStore.getState().currentGraph?.name));
+  // A transparent background, for laying the picture or the Play layers over other footage.
+  const [transparent, setTransparent] = useState(false);
+  const nodes = useNodeGraphStore(s => s.nodes);
+  const play  = useNodeGraphStore(s => s.play);
+  // Output (RGBA): the picture has its own alpha, so a transparent export keeps it.
+  const ownAlpha = nodes.some(n => n.type === 'vec4Output');
+  const layersOn = !external && playOverlay.hasLayers();
+  // What happens to the shader's picture: its own alpha, black turns clear, or left out for the layers alone.
+  const [pictureChoice, setPicture] = useState<TransparentPicture | null>(null);
+  const picture: TransparentPicture = pictureChoice === 'own' && !ownAlpha ? 'luma' : pictureChoice ?? (ownAlpha ? 'own' : 'luma');
+  const nothingShows = transparent && picture === 'drop' && !layersOn;
+  // Sound: only songs already in Shader Studio, never the microphone.
+  const tracks = external ? [] : recordingTracks(play, nodes);
+  const [withAudio, setWithAudio] = useState(true);
+  const sound = withAudio && tracks.length > 0;
+  const clockSongs = tracks.some(t => t.clock);
+  // A take: a recorded performance, rendered frame by frame from where it was recorded.
+  const takes = useTakes(s => s.takes);
+  const [takeId, setTakeId] = useState<string | null>(() => { const p = useTakes.getState().pending; if (p) useTakes.getState().renderTake(null); return p; });
+  const take = external ? null : takes.find(t => t.id === takeId) ?? null;
+  const span = take ? { from: take.from, length: Math.max(1 / fps, take.length) } : { from: 0, length: duration };
 
   const [state, setState]                       = useState<RecordState>('idle');
   const [captureProgress, setCaptureProgress]   = useState(0);
@@ -296,7 +329,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
       // Record the live canvas directly — at 2×/4× its drawing buffer is
       // already rendering at the export resolution.
       // Play layers (particles, text…) live on their own canvas: record the two together.
-      const source = playOverlay.hasLayers() ? playOverlay.startCompositing(canvas) : canvas;
+      const source = layersOn ? playOverlay.startCompositing(canvas) : canvas;
       const rec = new CanvasRecorder(source, {
         format: 'mediarecorder',
         fps,
@@ -305,6 +338,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
         mimeType: current.format.mimeType,
         name: filename || 'shader graph',
         onSaved: where => setOutputPath(where),
+        audio: sound ? audioEngine.recordingStream() : null,
         verbose: false,
         autoDownload: true,
         onError: (msg) => setErrorMsg(msg),
@@ -366,28 +400,34 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
     const { width: w, height: h, renderAtTime, readPixels: handleReadPixels } = offlineRender;
     // Each frame gets the Play layers laid over it, stepped at the export's frame rate.
     let frameTime = 0, firstFrame = true;
+    const applier = take ? takeApplier(take, offlineRender.setUniform) : null;
     const startT = performance.now();
 
     try {
-      const ffExt = codec === 'prores' ? 'mov' : codec === 'ffv1' ? 'mkv' : 'mp4';
-      const target = await recordingPath(`${filename || 'shader graph'}.${ffExt}`);
+      const useCodec: FfmpegCodec = transparent ? 'prores4444' : codec;
+      const target = await recordingPath(`${filename || 'shader graph'}.${codecExt(useCodec)}`);
       if (!target) { restoreScale(); setState('idle'); return; }
+      // The songs mixed for the export's length, from the clock's 0 (where the frames start).
+      const mix = sound ? await mixdown(tracks, span.length, span.from) : null;
       const run = runFfmpegEncode({
         outputPath: target,
         width: w,
         height: h,
         fps,
-        duration,
-        codec,
+        duration: span.length,
+        startTime: span.from,
+        codec: useCodec,
+        audioWav: mix ? wavBytes(mix) : null,
         // Throwing here is what actually stops the encode loop on Cancel.
         renderFrame: (t) => {
           if (abortRef.current) throw new Error('cancelled');
+          applier?.apply(t);
           renderAtTime(t);
           frameTime = t;
         },
         readPixels: (out, width, height) => {
           handleReadPixels(out, width, height);
-          playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame);
+          playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame, { transparent, picture, pointer: take ? takePointerAt(take, frameTime) : undefined });
           firstFrame = false;
         },
         onProgress: (fraction, frame) => {
@@ -402,10 +442,12 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
       settled.then(() => { if (ffmpegRunRef.current === settled) ffmpegRunRef.current = null; });
       const path = await run;
 
+      applier?.release();
       restoreScale();
       setOutputPath(path);
       setState('done');
     } catch (err) {
+      applier?.release();
       restoreScale();
       const msg = String(err);
       if (msg === 'Error: cancelled') {
@@ -417,20 +459,99 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
     }
   };
 
+  // ── PNG sequence (transparent, frame by frame, in the browser) ─────────────
+  //
+  // The browser's recorder can't keep an alpha channel, so a transparent
+  // export renders each frame offline (exact timing, like FFmpeg), writes it
+  // as a PNG with its alpha, and zips the sequence. After Effects and the
+  // like import it as footage; the song goes in the zip as a WAV beside it.
+
+  const handleStartPngSequence = async () => {
+    if (!offlineRender) { setErrorMsg('Offline render not available.'); return; }
+    if (!current || current.blocked) { setErrorMsg(current?.blocked ?? 'Still checking device limits…'); return; }
+    const stale = staleSize();
+    if (stale) { setErrorMsg(stale); return; }
+    setErrorMsg('');
+    setCaptureProgress(0);
+    setElapsed(0);
+    setFrameCount(0);
+    setState('encoding');
+    const scaleErr = applyScale();
+    if (scaleErr) { setErrorMsg(scaleErr); setState('error'); return; }
+    abortRef.current = false;
+    const { width: w, height: h, renderAtTime, readPixels } = offlineRender;
+    const total = Math.max(1, Math.ceil(span.length * fps));
+    const applier = take ? takeApplier(take, offlineRender.setUniform) : null;
+    const base = filename || 'shader graph';
+    const digits = Math.max(5, String(total).length);
+    const pixels = new Uint8Array(w * h * 4);
+    const frame = document.createElement('canvas');
+    frame.width = w; frame.height = h;
+    const fx = frame.getContext('2d')!;
+    const startT = performance.now();
+    try {
+      const { Zip, ZipPassThrough } = await import('fflate');
+      const chunks: Uint8Array[] = [];
+      let zipError: Error | null = null;
+      const zip = new Zip((err, data) => { if (err) zipError = err; else chunks.push(data); });
+      const add = (name: string, bytes: Uint8Array) => { const f = new ZipPassThrough(`${base}/${name}`); zip.add(f); f.push(bytes, true); };
+      for (let i = 0; i < total; i++) {
+        if (abortRef.current) throw new Error('cancelled');
+        const t = span.from + i / fps;
+        applier?.apply(t);
+        renderAtTime(t);
+        readPixels(pixels, w, h);
+        playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: take ? takePointerAt(take, t) : undefined });
+        const img = fx.createImageData(w, h);
+        img.data.set(pixels);
+        fx.putImageData(img, 0, 0);
+        const png = await new Promise<Blob | null>(r => frame.toBlob(r, 'image/png'));
+        if (!png) throw new Error(`Couldn’t write frame ${i + 1} as a PNG.`);
+        add(`${base}_${String(i).padStart(digits, '0')}.png`, new Uint8Array(await png.arrayBuffer()));
+        setCaptureProgress((i + 1) / total);
+        setFrameCount(i + 1);
+        setElapsed((performance.now() - startT) / 1000);
+      }
+      if (sound) {
+        const mix = await mixdown(tracks, span.length, span.from);
+        if (mix) add(`${base}.wav`, wavBytes(mix));
+      }
+      zip.end();
+      if (zipError) throw zipError;
+      applier?.release();
+      restoreScale();
+      const where = await saveRecording(new Blob(chunks as BlobPart[], { type: 'application/zip' }), `${base}.zip`);
+      if (!where) { setState('idle'); return; }
+      setOutputPath(where);
+      setState('done');
+    } catch (err) {
+      applier?.release();
+      restoreScale();
+      const msg = String(err);
+      if (msg === 'Error: cancelled') setState('idle');
+      else { setErrorMsg(msg); setState('error'); }
+    }
+  };
+
   // ── Unified start/stop ────────────────────────────────────────────────────
 
+  // Transparent in the browser (or the desktop's real-time mode): a PNG sequence.
+  const pngSequence = (transparent || !!take) && mode === 'mediarecorder';
+  const offline = mode === 'ffmpeg' || pngSequence;
+
   const handleStart = () => {
-    if (midiLength && fromTop) {
-      // The clock (and the MIDI file on it) from 0, running.
+    if ((midiLength || clockSongs) && fromTop && !offline) {
+      // The clock (and the MIDI file and songs on it) from 0, running.
       window.dispatchEvent(new CustomEvent('reset-time'));
       useNodeGraphStore.getState().setTimePlaying(true);
     }
     if (mode === 'ffmpeg') handleStartFfmpeg();
+    else if (pngSequence) handleStartPngSequence();
     else handleStartMediaRecorder();
   };
 
   const handleStop = async () => {
-    if (mode === 'ffmpeg') {
+    if (offline) {
       // The encode loop sees this, closes FFmpeg, restores scale, and
       // returns us to idle via its 'cancelled' error.
       abortRef.current = true;
@@ -449,7 +570,25 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   const handleScreenshot = () => {
     if (!canvas) return;
     const name = filename || 'shader graph';
-    (playOverlay.hasLayers() ? playOverlay.snapshot(canvas) : canvas).toBlob(blob => {
+    if (transparent && offlineRender) {
+      // The frame now, rendered offline so its alpha survives (the live canvas is opaque).
+      const { width: w, height: h, renderAtTime, readPixels } = offlineRender;
+      const t = useNodeGraphStore.getState().currentTime;
+      const pixels = new Uint8Array(w * h * 4);
+      renderAtTime(t);
+      readPixels(pixels, w, h);
+      playOverlay.compositePixels(pixels, w, h, t, 1 / 60, true, { transparent: true, picture });
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const x = c.getContext('2d')!;
+      const img = x.createImageData(w, h); img.data.set(pixels); x.putImageData(img, 0, 0);
+      c.toBlob(blob => {
+        if (!blob) return;
+        saveRecording(blob, `${name}.png`).then(where => { if (where) setOutputPath(where); }, e => setErrorMsg(String(e)));
+      }, 'image/png');
+      return;
+    }
+    (layersOn ? playOverlay.snapshot(canvas) : canvas).toBlob(blob => {
       if (!blob) return;
       saveRecording(blob, `${name}.png`).then(where => { if (where) setOutputPath(where); }, e => setErrorMsg(String(e)));
     }, 'image/png');
@@ -479,21 +618,21 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
   // Browser mode: H.264 can't encode this size but VP9/VP8 can.
   const formatFallback = mode === 'mediarecorder' && current?.format && preferred
     && current.format.label !== preferred.label ? current.format : null;
-  const canStart = mode === 'ffmpeg'
+  const canStart = nothingShows ? false : offline
     ? !!offlineRender && !!current && !current.blocked
     : !!canvas && !!current && !current.blocked && !!current.format;
   const blockedScales = support ? RESOLUTIONS.filter(r => support[r.id]?.blocked) : [];
 
-  const ext = mode === 'ffmpeg' ? (codec === 'prores' ? 'mov' : codec === 'ffv1' ? 'mkv' : 'mp4') : (current?.format?.ext ?? preferred?.ext ?? 'webm');
+  const ext = pngSequence ? 'zip' : mode === 'ffmpeg' ? codecExt(transparent ? 'prores4444' : codec) : (current?.format?.ext ?? preferred?.ext ?? 'webm');
   const resetToIdle = () => { setState('idle'); setCaptureProgress(0); setElapsed(0); setFrameCount(0); setErrorMsg(''); setOutputPath(''); };
 
   const footer = state === 'idle' ? (
     <>
-      <Button icon="camera" disabled={!canvas} onClick={handleScreenshot}>Snapshot PNG</Button>
+      <Button icon="camera" disabled={!canvas || nothingShows} onClick={handleScreenshot} title={transparent ? 'A PNG of this moment with its transparency' : undefined}>Snapshot PNG</Button>
       <span style={{ flex: 1 }} />
       <Button variant="ghost" onClick={onClose}>Cancel</Button>
       <Button variant="primary" disabled={!canStart} onClick={handleStart}>
-        {mode === 'ffmpeg' ? 'Encode' : <><span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start recording</>}
+        {mode === 'ffmpeg' ? 'Encode' : pngSequence ? 'Render PNGs' : <><span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start recording</>}
       </Button>
     </>
   ) : isBusy ? (
@@ -531,7 +670,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
       <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
         {/* Mode — Tauri only */}
-        {inTauri && state === 'idle' && (
+        {inTauri && !external && state === 'idle' && (
           <Section label="Mode">
             <Segmented
               fill
@@ -549,7 +688,79 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
 
         {state === 'idle' && (
           <>
-            {mode === 'ffmpeg' && (
+            {external && <Help>Recording the website player as it runs, in real time.</Help>}
+            {!external && <Section label="Background">
+              <Toggle checked={transparent} onChange={setTransparent} label="Transparent, to lay over other footage" />
+              {transparent && (
+                <Segmented
+                  fill
+                  size="sm"
+                  ariaLabel="The picture"
+                  value={picture}
+                  onChange={setPicture}
+                  options={[
+                    { value: 'luma', label: 'Black turns clear', title: 'Alpha from brightness: light on black (glows, particles) keys cleanly, like Screen/Add' },
+                    ...(ownAlpha ? [{ value: 'own' as const, label: 'Its own alpha', title: 'The graph ends in Output (RGBA): its alpha as it is' }] : []),
+                    { value: 'drop', label: 'Layers only', title: 'Leave the shader picture out: only the Play layers, over nothing' },
+                  ]}
+                />
+              )}
+              {transparent && (nothingShows ? (
+                <Callout tone="warning" title="Nothing would show">
+                  Layers only keeps just the Play layers, and this setup has none showing. Pick Black turns clear, or add layers on the Play page.
+                </Callout>
+              ) : (
+                <Help>
+                  {picture === 'own'
+                    ? 'The picture keeps its own alpha (the graph ends in Output (RGBA)), with the Play layers over it.'
+                    : picture === 'luma'
+                      ? 'Black becomes see-through and light stays: right for glows and particles on black. Dark colours turn faint, so for solid shapes end the graph with Output (RGBA) instead.'
+                      : 'Only the Play layers are kept, over nothing: the shader picture is left out.'}
+                  {' '}{mode === 'ffmpeg'
+                    ? 'Saved as ProRes 4444 (.mov), which keeps the alpha.'
+                    : 'Saved as a PNG sequence in a .zip, rendered frame by frame (exact timing). In After Effects: File › Import, pick the first PNG and tick PNG Sequence.'}
+                  {' '}Frame-by-frame rendering leaves out GPU particle nodes and feedback trails; Play layers, particles included, are in.
+                </Help>
+              ))}
+            </Section>}
+
+            {!external && takes.length > 0 && (
+              <Section label="Take">
+                <Select
+                  ariaLabel="Take"
+                  height={34}
+                  value={takeId ?? ''}
+                  onChange={v => setTakeId(v || null)}
+                  options={[{ value: '', label: 'None: record live' }, ...takes.map(t => ({ value: t.id, label: `${t.name} · ${formatDuration(t.length)}` }))]}
+                />
+                {take && (
+                  <Help>
+                    Renders {take.name} frame by frame: the clock from {take.from.toFixed(1)}s for {formatDuration(take.length)}, every control, null and the pointer as you played them.
+                    {mode === 'ffmpeg' ? '' : ' In the browser that’s a PNG sequence (with the song as a WAV); the desktop app renders it straight to video.'}
+                  </Help>
+                )}
+              </Section>
+            )}
+
+            {tracks.length > 0 && (
+              <Section label="Sound">
+                <Toggle checked={withAudio} onChange={setWithAudio} label={`Include ${tracks.length === 1 ? `“${tracks[0].label}”` : `${tracks.length} songs: ${tracks.map(t => t.label).join(', ')}`}`} />
+                <Help>
+                  {pngSequence
+                    ? 'Added to the zip as a WAV, lined up with frame 1.'
+                    : mode === 'ffmpeg'
+                      ? 'Mixed from the clock’s 0, lined up with the frames.'
+                      : 'Recorded as it plays. Songs only: the microphone is never recorded.'}
+                </Help>
+              </Section>
+            )}
+
+            {mode === 'ffmpeg' && transparent && (
+              <Section label="Codec">
+                <Help>{CODEC_LABELS.prores4444}: {CODEC_DESCRIPTIONS.prores4444}.</Help>
+              </Section>
+            )}
+            {mode === 'ffmpeg' && !transparent && (
               <Section label="Codec">
                 <div role="radiogroup" aria-label="Codec" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {(['h264', 'prores', 'ffv1'] as FfmpegCodec[]).map(c => {
@@ -589,7 +800,8 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
             </Section>
 
             <Section label="Duration">
-              {(!manualStop || mode === 'ffmpeg') && (
+              {take && <Help>The take’s length: {formatDuration(take.length)}.</Help>}
+              {!take && (!manualStop || offline) && (
                 <div style={{ display: 'flex' }}>
                   <RulerSlider value={duration} min={1} max={Math.max(60, midiLength, duration)} step={1} defaultValue={5} onChange={setDuration} ariaLabel="Duration in seconds" />
                 </div>
@@ -599,10 +811,11 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
                   <Button size="sm" icon="wave" variant={duration === midiLength && !manualStop ? 'primary' : 'secondary'} onClick={() => { setDuration(midiLength); setManualStop(false); }}>
                     Whole MIDI file ({formatDuration(midiLength)})
                   </Button>
-                  <Toggle checked={fromTop} onChange={setFromTop} label="Start the clock and the file from 0" />
+                  {!offline && <Toggle checked={fromTop} onChange={setFromTop} label="Start the clock and the file from 0" />}
                 </div>
               )}
-              {mode === 'mediarecorder' && <Toggle checked={manualStop} onChange={setManualStop} label="Stop manually instead" />}
+              {!midiLength && clockSongs && sound && !offline && <Toggle checked={fromTop} onChange={setFromTop} label="Start the clock and the song from 0" />}
+              {!offline && <Toggle checked={manualStop} onChange={setManualStop} label="Stop manually instead" />}
             </Section>
 
             <Section label="Shape" meta={PREVIEW_ASPECTS.find(a => a.id === previewAspect)?.hint}>
@@ -639,7 +852,7 @@ export function ExportModal({ canvas, offlineRender, onClose }: Props) {
               ))}
             </Section>
 
-            {mode === 'mediarecorder' && (
+            {mode === 'mediarecorder' && !pngSequence && (
               <Section label="Bitrate">
                 <Segmented
                   fill

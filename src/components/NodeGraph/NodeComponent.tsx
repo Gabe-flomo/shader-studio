@@ -85,6 +85,7 @@ import { PaletteTools } from './PaletteTools';
 import { toRgb } from '../../lib/colorMath';
 import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip } from './NodeCardParts';
 import { driveKey, playDrivenMap } from '../../play/playDriven';
+import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
 
 function adaptiveStep(value: number, baseStep: number): number {
@@ -3736,6 +3737,21 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               );
             }
             const val = typeof node.params[key] === 'number' ? (node.params[key] as number) : 0;
+            // A wire into another socket has taken this slider over (Center X under a wired Center):
+            // greyed, naming the source; hovering lights the wire and the node it comes from.
+            const driver = !isParamInternallyWired ? driverOf(node, key) : null;
+            if (driver) {
+              const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, driver.connection.nodeId, driver.connection.outputKey);
+              return (
+                <div key={key} data-param-key={key} style={rowStyle} title={`Set by the wire into ${driver.socketLabel}: this slider does nothing while it's connected`}
+                  onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: driver.socketKey, dir: 'in' })}
+                  onMouseLeave={() => onSocketHover?.(null)}>
+                  <ParamLabel muted>{paramDef.label}</ParamLabel>
+                  <WiredChip source={driver.connection} expr={srcExpr} locked />
+                  <span style={{ color: tk.text.faint, font: `500 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>via {driver.socketLabel}</span>
+                </div>
+              );
+            }
             // Reserved for, or driven by, a wire from outside the group — show the value, locked
             if (isParamExternal || isParamExternallyDriven) {
               return (

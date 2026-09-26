@@ -4,6 +4,11 @@
  *
  * Audio graph per node:
  *   AudioBufferSourceNode → AnalyserNode → masterGainNode → ctx.destination
+ *                                       ↘ recordBus → (a recording's audio track)
+ *
+ * The record bus carries every song at full level, whatever the listening
+ * volume, and only songs: the live microphone has its own context
+ * (liveAudio.ts) and never reaches it.
  */
 
 import { audioUniformNamesByNode } from '../compiler/audioUniformNames';
@@ -29,6 +34,8 @@ interface AudioNodeState {
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGainNode: GainNode | null = null;
+  private recordBus: GainNode | null = null;
+  private recordDest: MediaStreamAudioDestinationNode | null = null;
   private masterVolume = 0.7;
   private masterPaused = false;
   private pausedNodeIds = new Set<string>(); // nodes that were playing when pauseAll was called
@@ -44,6 +51,7 @@ class AudioEngine {
       this.masterGainNode = this.ctx.createGain();
       this.masterGainNode.gain.value = this.masterVolume;
       this.masterGainNode.connect(this.ctx.destination);
+      this.recordBus = this.ctx.createGain();
     }
     return this.ctx;
   }
@@ -120,6 +128,7 @@ class AudioEngine {
     // Source → Analyser → MasterGain → destination
     source.connect(state.analyser);
     state.analyser.connect(this.masterGainNode!);
+    state.analyser.connect(this.recordBus!);
 
     const dur = state.buffer.duration;
     const off = dur > 0 ? ((offset % dur) + dur) % dur : 0;
@@ -128,6 +137,25 @@ class AudioEngine {
     state.source = source;
     state.isPlaying = true;
     state.startedAt = audioCtx.currentTime - off;
+  }
+
+  /**
+   * The songs as they play, for a real-time recording's audio track. Null
+   * before any song has been loaded (there is nothing to hear yet).
+   */
+  recordingStream(): MediaStream | null {
+    if (!this.ctx || !this.recordBus || this.nodes.size === 0) return null;
+    if (!this.recordDest) {
+      this.recordDest = this.ctx.createMediaStreamDestination();
+      this.recordBus.connect(this.recordDest);
+    }
+    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    return this.recordDest.stream;
+  }
+
+  /** The decoded song of a track, for an offline mix. */
+  buffer(nodeId: string): AudioBuffer | null {
+    return this.nodes.get(nodeId)?.buffer ?? null;
   }
 
   stopAudio(nodeId: string): void {

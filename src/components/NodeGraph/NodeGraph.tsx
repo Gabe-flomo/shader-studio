@@ -14,7 +14,7 @@ import { explainPreview, previewLegend } from '../../lib/previewExplain';
 import { SmartConnectMenu } from './SmartConnectMenu';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
-import { candidateFor, candidateLabel, collectPlayCandidates } from '../../play/playControls';
+import { candidateFor, candidateLabel, collectPlayCandidates, upstreamControls } from '../../play/playControls';
 import { addCandidateControl, driveWithNull, graphNullDrives } from '../play/layerOps';
 import { Minimap } from './Minimap';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
@@ -1405,7 +1405,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
               const st = useNodeGraphStore.getState();
               const candidates = collectPlayCandidates(st.nodes, st.paramBindings);
               const c = candidateFor(candidates, contextMenu.nodeId, contextMenu.paramKey);
-              return { c, candidates, taken: !!c && st.play.controls.some(x => x.target === c.target) };
+              // A slider a wire has taken over: offer the free sliders on the node the wire comes from.
+              const here = displayNodes.find(n => n.id === contextMenu.nodeId);
+              const up = !c && here && !contextMenu.paramKey.includes('::') ? upstreamControls(st.nodes, candidates, here, contextMenu.paramKey) : null;
+              return { c, candidates, up, taken: !!c && st.play.controls.some(x => x.target === c.target) };
             })();
             const openPlay = { label: 'Open Play', onClick: () => useNodeGraphStore.setState(s => ({ playOpenRequest: s.playOpenRequest + 1 })) };
             return (
@@ -1413,7 +1416,35 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                 {playParam && (
                   <>
                     <div style={{ padding: '4px 12px 2px', fontSize: '10px', letterSpacing: 0.6, textTransform: 'uppercase', color: tc.surface2 }}>Play</div>
-                    {!playParam.c ? (
+                    {playParam.up ? (
+                      <>
+                        <div style={{ padding: '4px 12px 6px', fontSize: '11px', color: tc.surface2, maxWidth: 260, lineHeight: 1.4 }}>
+                          Set by <b>{playParam.up.sourceLabel}</b> through the wire into {playParam.up.driver.socketLabel}, so this slider isn’t free.
+                          {playParam.up.candidates.length > 0 ? ' The free sliders are there:' : playParam.up.blockedBy
+                            ? ` Its ${playParam.up.blockedBy.param} is wired too, from ${playParam.up.blockedBy.from}: no free slider one step up.`
+                            : ' It has no free sliders of its own.'}
+                        </div>
+                        {playParam.up.candidates.slice(0, 6).map(uc => {
+                          const already = useNodeGraphStore.getState().play.controls.some(x => x.target === uc.target);
+                          return (
+                            <button key={uc.target} style={{ ...ctxBtnStyle, opacity: already ? 0.5 : 1 }} disabled={already}
+                              title={already ? 'Already on the Play panel' : `A Play control for ${candidateLabel(uc)}`}
+                              onClick={() => {
+                                useNodeGraphStore.getState().setPlay(p => addCandidateControl(p, uc));
+                                toast.success(`“${candidateLabel(uc)}” is a Play control`, { action: openPlay });
+                                setContextMenu(null);
+                              }}>
+                              {already ? `Already a control: ${uc.paramLabel}` : `Add Play control from ${playParam.up!.sourceLabel} › ${uc.paramLabel}`}
+                            </button>
+                          );
+                        })}
+                        {playParam.up.source && (
+                          <button style={ctxBtnStyle} onClick={() => { useNodeGraphStore.getState().revealNode([], playParam.up!.source!.id); setContextMenu(null); }}>
+                            Go to {playParam.up.sourceLabel}
+                          </button>
+                        )}
+                      </>
+                    ) : !playParam.c ? (
                       <div style={{ padding: '4px 12px 6px', fontSize: '11px', color: tc.surface2, maxWidth: 240 }}>This param is baked into the shader, so it can't be a Play control.</div>
                     ) : (
                       <>
