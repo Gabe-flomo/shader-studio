@@ -86,6 +86,12 @@ export interface Completion {
   doc?: string;
   /** Text that replaces the typed word. */
   insert: string;
+  /** Parameters with their types and meanings, for the description beside the list (the Script editor's helpers). */
+  args?: ReadonlyArray<{ name: string; type: string; doc: string; optional?: boolean }>;
+  /** What the return value means, when `type` alone does not say it. */
+  returns?: string;
+  /** A line or a few of code showing it in use. */
+  example?: string;
 }
 
 /** Everything a code field can complete, given the node's own variables. */
