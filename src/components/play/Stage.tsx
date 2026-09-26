@@ -1,6 +1,7 @@
 /**
- * PresentStage — the last step of Play: the picture on its own, the way people
- * will play with it, with nothing to edit.
+ * Stage — the last step of Play: the picture on its own, the way people
+ * will play with it, with nothing to edit. (It used to be called Present; the
+ * Present page now builds step-by-step lessons from several Plays.)
  *
  *   Full   the app's own picture: everything works (songs, MIDI files, every
  *          layer), for playing and recording the visual you want.
@@ -28,19 +29,19 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { AspectPicker } from '../shell/PreviewChrome';
 import { ColourPad } from './ColourPad';
 import { useLiveValues } from './useLiveValues';
-import { PHONE_SIZE, usePresent, type PresentMode } from './presentStore';
+import { PHONE_SIZE, useStage, type StageMode } from './stageStore';
 import { useTakes } from '../../lib/takes';
 import { playOverlay } from '../../play/overlay';
 import { formatDuration } from '../../lib/midiFile';
 
-export function PresentStage({ canvas, onRecord }: {
+export function Stage({ canvas, onRecord }: {
   /** The app's live picture (Full). */
   canvas: ReactNode;
   /** Open Record for this canvas; null means the app's own picture. */
   onRecord: (source: HTMLCanvasElement | null) => void;
 }) {
   const tk = useTokens();
-  const { mode, device, panel, present, exit, setDevice, togglePanel } = usePresent();
+  const { mode, device, panel, open, exit, setDevice, togglePanel } = useStage();
   const rootRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -80,9 +81,9 @@ export function PresentStage({ canvas, onRecord }: {
   return (
     <div ref={rootRef} style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#07070b', color: '#e8e8ef', font: `12.5px ${fontFamily.ui}` }}>
       <div style={bar}>
-        <IconButton icon="close" label="Leave Present (Esc)" onClick={exit} />
+        <IconButton icon="close" label="Leave the Stage (Esc)" onClick={exit} />
         <b style={{ fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{graphName}</b>
-        <Segmented size="sm" ariaLabel="Present mode" value={mode ?? 'full'} onChange={m => present(m as PresentMode)} options={[
+        <Segmented size="sm" ariaLabel="Stage mode" value={mode ?? 'full'} onChange={m => open(m as StageMode)} options={[
           { value: 'full', label: 'Full', title: 'Everything Playfield can do: songs, MIDI files, every layer' },
           { value: 'exact', label: 'Exact', title: 'The website player itself: exactly what a visitor to the exported page gets' },
         ]} />
@@ -117,7 +118,7 @@ export function PresentStage({ canvas, onRecord }: {
         </div>
         {panel && (
           <div style={{ width: 300, flexShrink: 0, overflowY: 'auto', borderLeft: `1px solid ${alpha('#ffffff', 0.08)}`, background: '#101016', padding: '12px 14px 18px' }}>
-            {mode === 'exact' && exact ? <ExactNotes missing={exact.missing} left={exact.left} /> : <PresentControls />}
+            {mode === 'exact' && exact ? <ExactNotes missing={exact.missing} left={exact.left} /> : <StageControls />}
             {mode === 'full' && <TakesPanel onRender={() => onRecord(null)} />}
             <InputLegend />
           </div>
@@ -148,7 +149,7 @@ const heading = (text: string) => (
 );
 
 /** The Play panel's controls, as a visitor has them: sliders, colours and buttons. */
-function PresentControls() {
+function StageControls() {
   const tk = useTokens();
   const play = useNodeGraphStore(s => s.play);
   const nodes = useNodeGraphStore(s => s.nodes);

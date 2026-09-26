@@ -19,6 +19,8 @@
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-fs": "^2.4.5",
     "fflate": "^0.8.3",
+    "katex": "^0.18.9",
+    "markdown-it": "^15.0.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "three": "^0.182.0",
@@ -27,6 +29,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@tauri-apps/cli": "^2.10.0",
+    "@types/markdown-it": "^14.2.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",

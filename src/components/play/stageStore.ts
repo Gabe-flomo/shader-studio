@@ -1,8 +1,10 @@
 /**
- * presentStore — the Present view's state.
+ * stageStore — the Stage's state (the fullscreen view of the open Play).
+ * It was called Present; the Present page (components/present) now teaches
+ * with several Plays, and the Stage is where one Play is shown on its own.
  *
- *   mode    null when not presenting; 'full' shows the picture from the app's
- *           own engine (everything works: songs, MIDI files, all layers);
+ *   mode    null when the Stage is closed; 'full' shows the picture from the
+ *           app's own engine (everything works: songs, MIDI files, all layers);
  *           'exact' runs the website player itself, so what you see is what
  *           a visitor to the exported page gets.
  *   device  'screen' fills the window; 'phone' frames the picture at a
@@ -11,24 +13,24 @@
  */
 import { create } from 'zustand';
 
-export type PresentMode = 'full' | 'exact';
-export type PresentDevice = 'screen' | 'phone';
+export type StageMode = 'full' | 'exact';
+export type StageDevice = 'screen' | 'phone';
 
-interface PresentState {
-  mode: PresentMode | null;
-  device: PresentDevice;
+interface StageState {
+  mode: StageMode | null;
+  device: StageDevice;
   panel: boolean;
-  present: (mode: PresentMode) => void;
+  open: (mode: StageMode) => void;
   exit: () => void;
-  setDevice: (d: PresentDevice) => void;
+  setDevice: (d: StageDevice) => void;
   togglePanel: () => void;
 }
 
-export const usePresent = create<PresentState>(set => ({
+export const useStage = create<StageState>(set => ({
   mode: null,
   device: 'screen',
   panel: true,
-  present: mode => set({ mode }),
+  open: mode => set({ mode }),
   exit: () => set({ mode: null }),
   setDevice: device => set({ device }),
   togglePanel: () => set(s => ({ panel: !s.panel })),

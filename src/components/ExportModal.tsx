@@ -108,7 +108,7 @@ interface Props {
    */
   offlineRender?: OfflineRenderHandle | null;
   /**
-   * A canvas that isn't the app's own picture (Present › Exact records the
+   * A canvas that isn't the app's own picture (Stage › Exact records the
    * website player): recorded as it is, in real time, with no Play layers laid
    * over it, no transparency and no songs (the web page has none).
    */

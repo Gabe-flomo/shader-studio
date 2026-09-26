@@ -34,7 +34,7 @@ clean-ish boundary that an SDK could formalise:
    set of channels: uniforms they write per frame, textures they hand over,
    and the Layers node that reads their colour/alpha/distance back into the
    graph.
-4. **The host layer.** Storage (library, backups), recording, Present mode,
+4. **The host layer.** Storage (library, backups), recording, the Stage (fullscreen) view,
    the desktop shell (Tauri) with its folders and file dialogs, and now the
    Convert page.
 
