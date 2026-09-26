@@ -5,12 +5,14 @@
  * or is refused with its reason. That the pictures match needs a browser: the
  * pixel check over this folder is described in docs/glsl-to-nodes.md; at the
  * time of writing 41 of the 44 that convert give the same picture and the other
- * three differ in a handful of pixels of a sin-hash.
+ * three differ in a handful of pixels of a sin-hash. With the page's fix-ups
+ * applied, 45 of the 50 give the same picture as the shader as pasted.
  */
 import { describe, it, expect } from 'vitest';
 import { glslToGraph } from '..';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { optimizeGraph } from '../../optimize/optimizeGraph';
+import { suggestFixups } from '../fixups';
 
 const files = import.meta.glob('./corpus/user/*.glsl', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const corpus = Object.entries(files).map(([p, src]) => [p.split('/').pop()!.replace(/\.glsl$/, ''), src] as const).sort((a, b) => a[0].localeCompare(b[0]));
@@ -42,6 +44,19 @@ describe('the user corpus', () => {
     const r = glslToGraph(src);
     expect(r.nodes).toEqual([]);
     expect(r.report.unsupported.join(' ')).toMatch(REFUSED[n]);
+  });
+
+  /** The Convert page's fix-ups each refused one gets, in order, until it converts (black hole distortion's array is filled at run time: none). */
+  const FIXED_BY: Record<string, string[]> = { 'Fractal anxiety': ['array-function'], moire: ['hoist-writes'], oragami: ['hoist-writes'], rosace: ['hoist-writes'], 'trippy cells': ['float-hash'], 'black hole distortion': [] };
+  it.each(corpus.filter(([n]) => REFUSED[n]))('%s: the fix-ups offered make it convert', (n, src0) => {
+    let src = src0; const applied: string[] = [];
+    for (let round = 0; round < 4; round++) { const fx = suggestFixups(src); if (!fx.length) break; applied.push(fx[0].id); src = fx[0].code; }
+    expect(applied).toEqual(FIXED_BY[n]);
+    if (applied.length) {
+      const r = glslToGraph(src);
+      expect(r.report.unsupported).toEqual([]);
+      expect(compileGraph({ nodes: optimizeGraph(r.nodes, { minChain: 3, keepSliders: true }).nodes }).success).toBe(true);
+    }
   });
 
   it('is deterministic', () => {

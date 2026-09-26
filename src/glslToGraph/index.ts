@@ -639,15 +639,17 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
    */
   const frames: { rest: Ast[]; loop?: Ast }[] = [];
   let current: Ast | null = null;
-  function writesIn(a: unknown, out: string[]): void {
-    if (Array.isArray(a)) { for (const x of a) writesIn(x, out); return; }
+  /** The variables written inside a tree, each with the write's text (for the reason given when it can't stay). */
+  function writesIn(a: unknown, out: string[], texts?: Map<string, string>): void {
+    if (Array.isArray(a)) { for (const x of a) writesIn(x, out, texts); return; }
     if (!a || typeof a !== 'object') return;
     const n = a as Ast;
     const base = (t: Ast): string => (t.type === 'identifier' ? t.identifier as string : t.type === 'postfix' ? base(t.expression as Ast) : '?');
-    if (n.type === 'assignment') out.push(base(n.left as Ast));
-    if (n.type === 'unary' && ['++', '--'].includes((n.operator as Ast)?.literal as string)) out.push(base(n.expression as Ast));
-    if (n.type === 'postfix' && ['++', '--'].includes(incLit(n.postfix as Ast))) out.push(base(n.expression as Ast));
-    for (const [k, v] of Object.entries(n)) if (k !== 'type') writesIn(v, out);
+    const add = (name: string) => { out.push(name); if (texts && !texts.has(name)) texts.set(name, generate(n as never).replace(/\s+/g, ' ').trim()); };
+    if (n.type === 'assignment') add(base(n.left as Ast));
+    if (n.type === 'unary' && ['++', '--'].includes((n.operator as Ast)?.literal as string)) add(base(n.expression as Ast));
+    if (n.type === 'postfix' && ['++', '--'].includes(incLit(n.postfix as Ast))) add(base(n.expression as Ast));
+    for (const [k, v] of Object.entries(n)) if (k !== 'type') writesIn(v, out, texts);
   }
   function countOf(a: unknown, name: string): number {
     if (Array.isArray(a)) return a.reduce((s: number, x) => s + countOf(x, name), 0);
@@ -703,9 +705,12 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     return true;
   }
   function refuseLiveWrites(a: Ast, env: Env): void {
-    const targets: string[] = []; writesIn(a, targets);
+    const targets: string[] = []; const texts = new Map<string, string>(); writesIn(a, targets, texts);
     for (const x of new Set(targets)) {
-      if (!deadAfter(x, a, env)) throw new Unsupported(`${x === '?' ? 'A variable' : x} changes inside an expression (${generate(a as never).replace(/\s+/g, ' ').trim().slice(0, 60)}) and is read afterwards; a graph can’t carry that write. Give the change a line of its own.`);
+      if (!deadAfter(x, a, env)) {
+        const w = texts.get(x) ?? ''; const shown = w.length > 40 ? `${w.slice(0, 39)}…` : w;
+        throw new Unsupported(`${x === '?' ? 'A variable' : x} changes inside an expression (${shown}) and is read afterwards; a graph can’t carry that write. Give the change a line of its own.`);
+      }
     }
   }
   function collectCalls(a: unknown, out: Set<string>): void {
@@ -1293,8 +1298,11 @@ function expandMacros(src: string, defs: MacroDef[]): string {
 export function normaliseHostShader(source: string): { code: string; toSourceLine: (line: number) => number } { return hostToOurs(source, { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0, loops: 0 } }); }
 
 function hostToOurs(source: string, report: ConversionReport): { code: string; toSourceLine: (line: number) => number } {
+  // A #define continued with `\` over several lines is one line to the preprocessor (the lines it took
+  // stay, empty, after it). First, before the translator adds lines of its own.
+  const joined = source.replace(/^[ \t]*#[ \t]*define[^\n]*\\\r?\n(?:[^\n]*\\\r?\n)*[^\n]*/gm, m => { const n = m.split('\n').length - 1; return m.replace(/\\\r?\n/g, ' ') + '\n'.repeat(n); });
   // Another host's names (Shadertoy, GLSL Sandbox, twigl, ES 3.00) become ours first.
-  const tr = translateToStudio(source, { lowerReturns: true });
+  const tr = translateToStudio(joined, { lowerReturns: true });
   if (tr.dialect !== 'studio') report.notes.push(`Read as ${dialectLabel(tr.dialect)}: ${tr.notes.join('; ')}`);
   for (const u of tr.unsupported) report.notes.push(u);
   let s = tr.code;

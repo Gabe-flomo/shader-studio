@@ -25,7 +25,7 @@ const PRECISION = '(?:(?:highp|mediump|lowp)\\s+)?';
 const matchBrace = (s: string, open: number): number => { let d = 0; for (let i = open; i < s.length; i++) { if (s[i] === '{') d++; else if (s[i] === '}' && --d === 0) return i; } return -1; };
 const matchParen = (s: string, open: number): number => { let d = 0; for (let i = open; i < s.length; i++) { if (s[i] === '(') d++; else if (s[i] === ')' && --d === 0) return i; } return -1; };
 /** Comments blanked (same length), so names inside them don't count and offsets still line up. */
-function blankComments(s: string): string {
+export function blankComments(s: string): string {
   let out = '';
   for (let i = 0; i < s.length;) {
     const c = s[i], n = s[i + 1];

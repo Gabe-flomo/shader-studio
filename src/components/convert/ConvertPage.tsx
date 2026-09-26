@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { glslToGraph, normaliseHostShader, type ConversionResult } from '../../glslToGraph';
+import { suggestFixups, type Fixup } from '../../glslToGraph/fixups';
 import { tidyGlsl } from '../../glsl/format';
 import { optimizeGraph, type OptimizeReport } from '../../optimize/optimizeGraph';
 import { onHandoff, takeHandoff } from './convertHandoff';
@@ -153,13 +154,18 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const [selected, setSelected] = useState<string | null>(null);
   const [diff, setDiff] = useState<PairDiff | null>(null);
   const [oneNode, setOneNode] = useState<{ code: string; entry: string; label: string } | null>(null);
+  /** The shader from before the first fix-up applied to it (the check compares with this); null when none was. */
+  const [checkAgainst, setCheckAgainst] = useState<string | null>(null);
   // On a phone the page is one pane at a time: the code, the graph, or the check.
   const [pane, setPane] = useState<'code' | 'graph' | 'check'>('code');
   useEffect(() => { try { localStorage.setItem(CODE_KEY, code); } catch { /* preference only */ } }, [code]);
-  useEffect(() => onHandoff(c => { setCode(c); setSource(c); setAsBlock(new Set()); setSelected(null); setPane('graph'); }), []);
+  useEffect(() => onHandoff(c => { setCode(c); setSource(c); setAsBlock(new Set()); setSelected(null); setCheckAgainst(null); setPane('graph'); }), []);
   const empty = !source.trim();
 
   const raw: ConversionResult = useMemo(() => (source.trim() ? glslToGraph(source, { asBlock }) : EMPTY), [source, asBlock]);
+  // Rewrites that take a refusal away (fix-ups.ts). Applying one puts the rewrite in the editor; the check then
+  // compares the graph with the shader from before the first fix, so a rewrite that changed the picture shows.
+  const fixups = useMemo(() => (raw.report.unsupported.length ? suggestFixups(source, raw.report) : []), [source, raw]);
   // Optimised: the converted graph with runs of math cards folded into blocks and short float runs absorbed into
   // input expressions (the picture is the same; the check proves it).
   const [optimised, setOptimised] = useState(() => { try { return localStorage.getItem(OPT_KEY) !== 'off'; } catch { return true; } });
@@ -167,7 +173,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const opt = useMemo(() => (optimised && raw.nodes.length ? optimizeGraph(raw.nodes, { minChain: 3, keepSliders: true }) : null), [raw, optimised]);
   const conv: ConversionResult = useMemo(() => (opt ? { nodes: opt.nodes, report: { ...raw.report, notes: [...raw.report.notes, ...(opt.report.folds.length ? [optimisedNote(opt.report)] : [])] } } : raw), [raw, opt]);
   const compiled = useMemo(() => (conv.nodes.length ? compileGraph({ nodes: conv.nodes }) : null), [conv]);
-  const wrapped = useMemo(() => wrapOriginal(source), [source]);
+  const wrapped = useMemo(() => wrapOriginal(checkAgainst ?? source), [source, checkAgainst]);
   const original = wrapped.code;
   const uniforms = useMemo(() => compiled?.paramUniforms ?? {}, [compiled]);
   const graphFrag = compiled?.success ? compiled.fragmentShader : null;
@@ -200,11 +206,12 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const errorLines = useMemo(() => {
     const m = new Map<number, string>();
     if (report.errorLine) m.set(report.errorLine, report.unsupported.find(u => u.startsWith('Doesn’t parse') || u.startsWith("Doesn't parse"))?.replace(/^Doesn.t parse[^:]*: /, '') ?? 'Doesn’t parse here');
-    if (diff && 'error' in diff && diff.side === 'original') {
+    // (Against the shader from before a fix-up, the lines are that shader's, not the editor's.)
+    if (diff && 'error' in diff && diff.side === 'original' && !checkAgainst) {
       for (const raw of diff.error.split('\n')) { const p = parseGlslError(raw); if (p) { const l = wrapped.toSourceLine(p.line); m.set(l, m.has(l) ? `${m.get(l)} · ${friendlyGlsl(p.text)}` : friendlyGlsl(p.text)); } }
     }
     return m;
-  }, [report, diff, wrapped]);
+  }, [report, diff, wrapped, checkAgainst]);
   const [paneW, setPaneW] = useState(() => { try { return Math.max(280, Math.min(900, Number(localStorage.getItem(PANE_KEY)) || 360)); } catch { return 360; } });
   const startPaneResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -221,7 +228,15 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   };
   const sel = conv.nodes.find(n => n.id === selected) ?? null;
   const toggleBlock = (id: string) => setAsBlock(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const changeCode = (next: string) => { setCode(next); setAsBlock(new Set()); setSelected(null); };
+  /** A hand edit (or a new shader): the check goes back to comparing with what the editor holds. */
+  const changeCode = (next: string) => { setCode(next); setAsBlock(new Set()); setSelected(null); setCheckAgainst(null); };
+  /** A fix-up's rewrite into the editor, remembering the shader from before the first one for the check. */
+  const applyFix = (f: Fixup) => {
+    setCheckAgainst(prev => prev ?? source);
+    setCode(f.code); setAsBlock(new Set()); setSelected(null);
+    toast.success('Fix applied', { message: 'Press Convert to see the graph. The check compares it with your shader from before the fix.' });
+  };
+  const undoFixes = () => { if (checkAgainst === null) return; const c = checkAgainst; changeCode(c); setSource(c); };
   /** Convert what the editor holds now. */
   const run = () => { setSource(code); setAsBlock(new Set()); setSelected(null); if (compact) setPane('graph'); };
   /** A whole new shader (an example, a file, Tidy, Clear): converted straight away. */
@@ -305,6 +320,11 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
           ) : <span style={{ color: tk.text.faint }}>{graphFrag ? 'Comparing…' : 'Nothing to compare yet'}</span>}
           {diff && !('error' in diff) && <div style={{ color: tk.text.muted, font: `500 11px ${fontFamily.mono}`, marginTop: 3 }}>max {diff.max}/255 · {diff.badPct.toFixed(2)}% off</div>}
           <div style={{ color: tk.text.muted, fontSize: 11.5, lineHeight: 1.45, marginTop: 6 }}>{summary}{stale && <span style={{ color: tk.status.warningText }}> · edited since: press Convert</span>}</div>
+          {checkAgainst !== null && (
+            <div style={{ color: tk.text.muted, fontSize: 11.5, lineHeight: 1.45, marginTop: 4 }}>
+              Compared with your shader from before the fix-ups. <button type="button" onClick={undoFixes} style={{ border: 0, padding: 0, background: 'none', color: tk.accent.text, font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}>Undo the fix-ups</button>
+            </div>
+          )}
         </div>
       </div>
       )}
@@ -315,8 +335,28 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
             {heading('Can’t convert', report.unsupported.length)}
             <Callout tone="warning" title="Not a graph yet">
               <ul style={{ margin: '4px 0 0', paddingLeft: 18, lineHeight: 1.5 }}>{report.unsupported.map(u => <li key={u}>{u}</li>)}</ul>
-              <div style={{ marginTop: 6 }}>Change the shader, or keep it as one node.</div>
+              <div style={{ marginTop: 6 }}>{fixups.length ? 'A fix-up below rewrites the shader so it converts, or keep it as one node.' : 'Change the shader, or keep it as one node.'}</div>
             </Callout>
+          </>
+        )}
+        {fixups.length > 0 && (
+          <>
+            {heading('Fix-ups', fixups.length)}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {fixups.map(f => {
+                const applied = code === f.code;
+                return (
+                  <div key={f.id} style={{ padding: '8px 10px', borderRadius: radius.md, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 650, fontSize: 12.5, flex: 1, minWidth: 0 }}>{f.title}</span>
+                      <Button size="sm" variant={applied ? 'ghost' : 'secondary'} icon="spark" disabled={applied} onClick={() => applyFix(f)} title={applied ? 'In the editor: press Convert' : 'Rewrite the shader in the editor (undoable there); then press Convert'}>{applied ? 'Applied' : 'Apply fix'}</Button>
+                    </div>
+                    <div style={{ color: tk.text.muted, fontSize: 11.5, lineHeight: 1.45, marginTop: 4 }}>{f.why}</div>
+                    {!f.samePicture && <div style={{ color: tk.status.warningText, fontSize: 11.5, marginTop: 4, display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="warning" size={12} />Changes the picture</div>}
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
         {compiled && !compiled.success && (
