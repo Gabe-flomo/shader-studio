@@ -43,6 +43,7 @@ import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './compon
 import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
 import type { GLSLPage as GLSLPageT } from './components/GLSLPage';
 import type { PlayPage as PlayPageT } from './components/play/PlayPage';
+import type { PresentPage as PresentPageT } from './components/present/PresentPage';
 import type { FunctionBuilder as FunctionBuilderT } from './components/FunctionBuilder/FunctionBuilder';
 import type { MobileGraphBrowser as MobileGraphBrowserT, MobileNodeGraphOverlay as MobileNodeGraphOverlayT } from './components/NodeGraph/MobileGraphBrowser';
 import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeGraph/MobileNodeBrowser';
@@ -60,6 +61,7 @@ const GLSLPage               = lazyWithSuspense<PropsOf<typeof GLSLPageT>>(() =>
 const Stage                  = lazyWithSuspense<PropsOf<typeof StageT>>(() => import('./components/play/Stage').then(m => ({ default: m.Stage })));
 const ConvertPage            = lazyWithSuspense<PropsOf<typeof ConvertPageT>>(() => import('./components/convert/ConvertPage').then(m => ({ default: m.ConvertPage })));
 const PlayPage               = lazyWithSuspense<PropsOf<typeof PlayPageT>>(() => import('./components/play/PlayPage').then(m => ({ default: m.PlayPage })));
+const PresentPage            = lazyWithSuspense<PropsOf<typeof PresentPageT>>(() => import('./components/present/PresentPage').then(m => ({ default: m.PresentPage })));
 const FunctionBuilder        = lazyWithSuspense<PropsOf<typeof FunctionBuilderT>>(() => import('./components/FunctionBuilder/FunctionBuilder').then(m => ({ default: m.FunctionBuilder })));
 const MobileGraphBrowser     = lazyWithSuspense<PropsOf<typeof MobileGraphBrowserT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileGraphBrowser })));
 const MobileNodeGraphOverlay = lazyWithSuspense<PropsOf<typeof MobileNodeGraphOverlayT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileNodeGraphOverlay })));
@@ -1028,6 +1030,15 @@ function App() {
     );
   }
 
+  if (mobile && page === 'present') {
+    return (
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+        <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage compact onNavigate={setPage} /></div>
+      </div>
+    );
+  }
+
   if (mobile && page === 'convert') {
     return (
       <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
@@ -1059,6 +1070,7 @@ function App() {
         {page === 'shortcuts' && <ShortcutsPage />}
         {page === 'glsl' && <GLSLPage onConvert={openConvertWith} />}
         {page === 'convert' && <div style={{ flex: 1, position: 'relative', minWidth: 0 }}><ConvertPage onMaterialized={openStudioFitted} /></div>}
+        {page === 'present' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage onNavigate={setPage} /></div>}
 
         <div style={{ display: (page === 'studio' || page === 'play') ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
 
@@ -1157,6 +1169,7 @@ function App() {
       <DesktopTopNav page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
 
       {page === 'shortcuts' && <ShortcutsPage />}
+      {page === 'present' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage onNavigate={setPage} /></div>}
       {page === 'fn' && (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <FunctionBuilder onNavigateToStudio={() => setPage('studio')} />

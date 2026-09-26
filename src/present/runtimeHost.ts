@@ -6,7 +6,7 @@
  *
  * It also keeps the page's live canvases under a cap (browsers allow about
  * 16 WebGL contexts a page; every running canvas costs a frame): a canvas asks
- * for a slot while it's visible, gets one if fewer than LIVE_CAP are running,
+ * for a slot while it's visible, gets one if fewer than liveCap() are running,
  * and shows its last still frame otherwise.
  */
 import { create } from 'zustand';
@@ -69,7 +69,9 @@ export function mountPlay(el: HTMLElement, input: PlayHtmlInput, opts: PlayMount
 // ── Live canvases under a cap ───────────────────────────────────────────────
 
 /** Most canvases running at once (phones get fewer). */
-export const LIVE_CAP = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches ? 3 : 6;
+export function liveCap(): number {
+  return typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches ? 3 : 6;
+}
 
 interface SlotState { queue: string[]; want(id: string): void; drop(id: string): void; promote(id: string): void }
 export const useLiveSlots = create<SlotState>(set => ({
@@ -80,9 +82,9 @@ export const useLiveSlots = create<SlotState>(set => ({
   promote: id => set(s => ({ queue: [id, ...s.queue.filter(x => x !== id)] })),
 }));
 
-/** Whether this canvas has a live slot right now. */
-export function useHasSlot(id: string): boolean {
-  return useLiveSlots(s => { const i = s.queue.indexOf(id); return i >= 0 && i < LIVE_CAP; });
+/** 'live' when this canvas has a slot, 'waiting' when it asked but the others fill the cap, 'none' otherwise. */
+export function useSlot(id: string): 'live' | 'waiting' | 'none' {
+  return useLiveSlots(s => { const i = s.queue.indexOf(id); return i < 0 ? 'none' : i < liveCap() ? 'live' : 'waiting'; });
 }
 
 /** The last frame each canvas showed (by block), for when it isn't running. */

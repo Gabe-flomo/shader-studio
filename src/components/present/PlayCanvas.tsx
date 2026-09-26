@@ -10,7 +10,7 @@
  * run the exported page in a sandboxed frame instead (someone else's code).
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { mountPlay, stills, useHasSlot, useLiveSlots, type PlayMount } from '../../present/runtimeHost';
+import { mountPlay, stills, useLiveSlots, useSlot, type PlayMount } from '../../present/runtimeHost';
 import { sourceLimits } from '../../present/snapshot';
 import { aspectRatio, type BlockAspect, type PresentSource } from '../../types/presentation';
 import { DEFAULT_EMBED, buildPlayHtml } from '../../play/exportHtml';
@@ -60,7 +60,8 @@ export function PlayCanvas({ slotId, source, aspect, pointer, startTime, paused,
     if (wanted && runnable) want(slotId); else drop(slotId);
   }, [wanted, runnable, slotId, want, drop]);
   useEffect(() => () => drop(slotId), [slotId, drop]);
-  const live = useHasSlot(slotId) && wanted && runnable;
+  const slot = useSlot(slotId);
+  const live = slot === 'live' && wanted && runnable;
 
   const bundle = source?.bundle;
   const hostRef = useRef<HTMLDivElement>(null);
@@ -115,7 +116,7 @@ export function PlayCanvas({ slotId, source, aspect, pointer, startTime, paused,
       )}
       {!source && note('warning', 'Its source was removed from this presentation.')}
       {source && limits.length > 0 && note('warning', `Still frame: the web player can’t run ${limits.join(', ')} yet.`)}
-      {source && runnable && wanted && !live && note('pause', 'Paused to keep the page light: other canvases are running.', (
+      {source && runnable && wanted && slot === 'waiting' && note('pause', 'Paused to keep the page light: other canvases are running.', (
         <button type="button" onClick={() => promote(slotId)} style={{ border: 0, borderRadius: 6, padding: '4px 9px', background: alpha('#ffffff', 0.16), color: '#fff', font: `600 11.5px ${fontFamily.ui}`, cursor: 'pointer' }}>Run</button>
       ))}
       {failed && live && note('warning', failed)}

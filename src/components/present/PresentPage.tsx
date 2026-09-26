@@ -128,10 +128,13 @@ function Header({ compact, list, onExport }: { compact: boolean; list: Presentat
       } },
     ] : []),
   ];
+  const modeLabel = (icon: 'edit' | 'slides' | 'scroll', text: string) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Icon name={icon} size={compact ? 15 : 13} />{!compact && text}</span>
+  );
   const modes: { value: PresentMode; label: React.ReactNode; title: string }[] = [
-    { value: 'edit', label: compact ? <Icon name="edit" size={14} /> : <><Icon name="edit" size={13} /> Edit</>, title: 'Build the steps' },
-    { value: 'slides', label: compact ? <Icon name="slides" size={14} /> : <><Icon name="slides" size={13} /> Slides</>, title: 'One step at a time, for teaching in the room (← →)' },
-    { value: 'scroll', label: compact ? <Icon name="scroll" size={14} /> : <><Icon name="scroll" size={13} /> Scroll</>, title: 'Everything on one page, for reading alone' },
+    { value: 'edit', label: modeLabel('edit', 'Edit'), title: 'Build the steps' },
+    { value: 'slides', label: modeLabel('slides', 'Slides'), title: 'One step at a time, for teaching in the room (← →)' },
+    { value: 'scroll', label: modeLabel('scroll', 'Scroll'), title: 'Everything on one page, for reading alone' },
   ];
   return (
     <div style={{ height: compact ? 48 : 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: compact ? 6 : 12, padding: compact ? '0 8px 0 12px' : '0 14px 0 16px', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}` }}>

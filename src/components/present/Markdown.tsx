@@ -99,7 +99,7 @@ export function presentCss(tk: Tokens): string {
 .pp-md.pp-loading{white-space:pre-wrap;color:${tk.text.faint}}
 .pp-step-grid{display:grid;gap:28px 32px;align-items:start}
 .pp-block{position:relative;min-width:0}
-@keyframes pp-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){@keyframes pp-in{from{opacity:1}to{opacity:1}}}
+@keyframes pp-in{from{transform:translateY(10px)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){@keyframes pp-in{from{transform:none}to{transform:none}}}
 `;
 }

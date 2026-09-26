@@ -171,11 +171,6 @@ function RenderBlockView({ block, ctx }: { block: RenderBlock; ctx: BlockContext
 
 type Value = number | number[];
 
-function fmt(v: number, step?: number): string {
-  const d = step && step >= 1 ? 0 : step && step >= 0.1 ? 1 : step && step >= 0.01 ? 2 : 3;
-  return v.toFixed(d);
-}
-
 function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: BlockContext }) {
   const tk = useTokens();
   const source = ctx.sources.get(block.source);
@@ -266,7 +261,7 @@ function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: Bl
           >
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: c.kind === 'action' ? 0 : 7 }}>
               {c.kind !== 'action' && <span style={{ flex: 1, minWidth: 0, color: tk.text.primary, font: `600 13px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labels[c.id]}</span>}
-              {typeof v === 'number' && <span style={{ color: driven ? tk.accent.text : tk.text.muted, font: `500 12px ${fontFamily.mono}` }}>{fmt(v, c.step)}</span>}
+              {driven && <span title="A mapping is moving it" style={{ color: tk.accent.text, font: `650 10px ${fontFamily.ui}`, letterSpacing: '0.05em' }}>LIVE</span>}
             </div>
             {c.kind === 'action' ? (
               <Button size="sm" variant="primary" icon="play" onClick={() => mount.current?.fire?.(c.id)} style={{ width: '100%' }}>{labels[c.id]}</Button>
