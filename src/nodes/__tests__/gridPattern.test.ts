@@ -40,4 +40,24 @@ describe('Grid Pattern node', () => {
     expect(some).toMatch(/_inf {2}= smoothstep\([^\n]*length\(\w+_uv - /);
     expect(some).toMatch(/(\w+)_q -= \1_dir/);
   });
+
+  it('Grid Paint: paints a wired distance gated by Placed, or the whole placed cell when only a colour comes in', () => {
+    const nodes = (withD: boolean): GraphNode[] => [
+      ...graph({ affect: 'grow' }, false).slice(0, 3),
+      { id: 'circ', type: 'circleSDF', position: { x: 0, y: 0 }, inputs: { position: { type: 'vec2', label: 'Position', connection: { nodeId: 'gp', outputKey: 'cellUV' } }, radius: { type: 'float', label: 'Radius' }, offset: { type: 'vec2', label: 'Offset' } }, outputs: { distance: { type: 'float', label: 'Distance' } }, params: { radius: 0.3 } },
+      { id: 'paint', type: 'gridPaint', position: { x: 0, y: 0 }, inputs: { distance: { type: 'float', label: 'Distance', ...(withD ? { connection: { nodeId: 'circ', outputKey: 'distance' } } : {}) }, color: { type: 'vec3', label: 'Colour' }, placed: { type: 'float', label: 'Placed', connection: { nodeId: 'gp', outputKey: 'placed' } }, background: { type: 'vec3', label: 'Background' } }, outputs: { color: { type: 'vec3', label: 'Color' }, mask: { type: 'float', label: 'Mask' } }, params: {} },
+      { id: 'out', type: 'output', position: { x: 0, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'paint', outputKey: 'color' } } }, outputs: {}, params: {} },
+    ];
+    const withShape = compileGraph({ nodes: nodes(true) });
+    expect(withShape.errors ?? []).toEqual([]);
+    expect(withShape.fragmentShader).toMatch(/(\w+)_mask = \(1\.0 - smoothstep\([^\n]*\)\) \* \w+_on;/);
+    const colourOnly = compileGraph({ nodes: nodes(false) });
+    expect(colourOnly.errors ?? []).toEqual([]);
+    expect(colourOnly.fragmentShader).toMatch(/_mask = \w+_on \+ 0\.0/);
+  });
+  it('Cell UV carries the affect scale, so an outside shape grows with the built-in one', () => {
+    const r = compileGraph({ nodes: graph({ affect: 'grow' }) }).fragmentShader;
+    expect(r).toMatch(/(\w+)_sc = 1\.0 \+ \1_inf;/);
+    expect(r).toMatch(/(\w+)_rq {3}= vec2\([^\n]*\) \/ \1_sc;/);
+  });
 });

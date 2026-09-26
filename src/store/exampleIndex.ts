@@ -13,6 +13,7 @@ import type { PlayRecord } from '../types/play';
 import { ctp } from '../theme/palette';
 import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
 import { LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS } from './learnExampleIndex';
+import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -147,6 +148,8 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   ...PLAY_EXAMPLE_INDEX,
   // The Learn folder: the Book of Shaders course as graphs (learnExampleIndex.ts).
   ...LEARN_EXAMPLE_INDEX,
+  // Node Combos built from the definitions (comboExamples.ts): the Grid Pattern → shape → Grid Paint flow.
+  ...COMBO_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -184,5 +187,5 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
   { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },
   { label: "From the Internet",    color: ctp.yellow, keys: ['fcTrippyNoise','fcSolar','fcPillars','fcGradient4','fcGrainGradient','fcTiling','fcTheScreen','fcShield','fcMainFrame','fcAtlantic','fcOrb','fcBitshift'] },
-  { label: "Node Combos",        color: ctp.flamingo, keys: ['comboChaosStars','comboRepeatCellHash','comboTurbulenceGlow','comboBloomDots','comboDomeRepeat','comboVoxelSpheres'] },
+  { label: "Node Combos",        color: ctp.flamingo, keys: ['comboChaosStars','comboRepeatCellHash','comboTurbulenceGlow','comboBloomDots','comboDomeRepeat','comboVoxelSpheres','comboGridPaintShapes','comboGridPaintPictures','comboGridPaintGlow'] },
 ];

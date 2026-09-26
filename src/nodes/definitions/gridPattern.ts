@@ -24,7 +24,7 @@ export const GridPatternNode: NodeDefinition = {
   type: 'gridPattern',
   label: 'Grid Pattern',
   category: 'Grid',
-  description: 'Shapes on a grid in one node: pick the shape, its size, which cells get one (all, every other column or row, checker, diagonals, random), and a point that affects the shapes near it (grow, shrink, pull, hide, spin). Outputs the colour, the mask, the shape SDF and the raw grid (Cell UV, Cell ID, Cell Center, Influence) for the rest of the Grid family.',
+  description: 'Shapes on a grid: which cells get one (all, every other column or row, checker, diagonals, random) and a point that affects the shapes near it (grow, shrink, pull, push, hide, spin). For a shape of your own, take Cell UV (it already carries the pattern’s effects) into any SDF or colour and finish with Grid Paint; with nothing wired, the built-in shape below is drawn. Also outputs the mask, the SDF and the raw grid (Cell ID, Cell Center, Influence, Placed).',
   inputs: {
     uv:         { type: 'vec2',  label: 'UV' },
     columns:    { type: 'float', label: 'Columns', hint: 'Cells across; the same count as the Grid node, so the two line up.' },
@@ -39,7 +39,8 @@ export const GridPatternNode: NodeDefinition = {
     mask:       { type: 'float', label: 'Mask', hint: '1 inside a shape, 0 outside, soft at the edge.' },
     distance:   { type: 'float', label: 'Distance', hint: 'The shape SDF in cell units (negative inside). Empty cells are far outside.' },
     influence:  { type: 'float', label: 'Influence', hint: 'How much the affect point reaches this cell, 0–1. Colour or animate with it.' },
-    cellUV:     { type: 'vec2',  label: 'Cell UV', hint: 'Position inside the cell, −0.5…0.5, after jitter and the affect pull.' },
+    cellUV:     { type: 'vec2',  label: 'Cell UV', hint: 'Position inside the cell, −0.5…0.5, with jitter and the affect point already applied (grow/shrink scale it, pull/push shift it, spin rotates it). Wire it into any SDF, then Grid Paint.' },
+    scale:      { type: 'float', label: 'Scale', hint: 'How much the affect point scales this cell’s shape (1 = unchanged). Cell UV is already divided by it.' },
     cellID:     { type: 'vec2',  label: 'Cell ID', hint: 'Integer column and row: hash it for per-cell variation.' },
     cellCenter: { type: 'vec2',  label: 'Cell Center', hint: 'The cell’s centre in UV space.' },
     placed:     { type: 'float', label: 'Placed', hint: '1 where the pattern puts a shape in this cell, 0 where it leaves the cell empty.' },
@@ -52,7 +53,7 @@ export const GridPatternNode: NodeDefinition = {
   },
   paramDefs: {
     columns:  { label: 'Columns', type: 'float', min: 1, max: 60, step: 1, hint: 'Cells across the width.' },
-    shape:    { label: 'Shape', type: 'select', options: [
+    shape:    { label: 'Built-in shape', type: 'select', hint: 'Drawn when no shape of your own comes back through Grid Paint.', options: [
       { value: 'circle',  label: 'Circle' },
       { value: 'box',     label: 'Square' },
       { value: 'diamond', label: 'Diamond' },
@@ -134,15 +135,15 @@ float gpPlaced(vec2 id, float pattern, float density) {
       `    vec2  ${id}_cid  = floor(${id}_gp);`,
       `    vec2  ${id}_cc   = (${id}_cid + 0.5) * ${id}_cell;`,
       `    vec2  ${id}_q    = fract(${id}_gp) - 0.5 - (gpHash2(${id}_cid) - 0.5) * ${jit};`,
-      `    float ${id}_s    = ${size};`,
+      `    float ${id}_sc   = 1.0;`,
       `    float ${id}_ang  = ${rot};`,
       `    float ${id}_on   = gpPlaced(${id}_cid, ${patternIdx < 0 ? 0 : patternIdx}.0, ${dens});`,
       // Influence: 1 at the point, 0 at the radius; softness widens the fade inward. Always an output, whatever Affect does with it.
       `    float ${id}_inf  = smoothstep(${radius}, ${radius} * (1.0 - ${soft}), length(${ap} - ${id}_cc)) * ${amount};`,
     ];
     {
-      if (affect === 'grow') lines.push(`    ${id}_s *= 1.0 + ${id}_inf;`);
-      if (affect === 'shrink') lines.push(`    ${id}_s *= max(0.0, 1.0 - ${id}_inf);`);
+      if (affect === 'grow') lines.push(`    ${id}_sc = 1.0 + ${id}_inf;`);
+      if (affect === 'shrink') lines.push(`    ${id}_sc = max(0.001, 1.0 - ${id}_inf);`);
       if (affect === 'pull' || affect === 'push') {
         const sgn = affect === 'pull' ? '' : '-';
         lines.push(`    vec2 ${id}_dir = ${ap} - ${id}_cc; ${id}_dir = length(${id}_dir) > 1e-4 ? normalize(${id}_dir) : vec2(0.0);`);
@@ -152,8 +153,9 @@ float gpPlaced(vec2 id, float pattern, float density) {
       if (affect === 'spin') lines.push(`    ${id}_ang += ${id}_inf * 3.14159;`);
     }
     lines.push(
-      `    vec2  ${id}_rq   = vec2(cos(${id}_ang) * ${id}_q.x - sin(${id}_ang) * ${id}_q.y, sin(${id}_ang) * ${id}_q.x + cos(${id}_ang) * ${id}_q.y);`,
-      `    float ${id}_d    = mix(10.0, gpShape(${id}_rq, ${shapeIdx < 0 ? 0 : shapeIdx}.0, ${id}_s), step(0.5, ${id}_on));`,
+      // The cell's coordinates with every effect applied: rotated, then scaled so a shape drawn in them grows or shrinks.
+      `    vec2  ${id}_rq   = vec2(cos(${id}_ang) * ${id}_q.x - sin(${id}_ang) * ${id}_q.y, sin(${id}_ang) * ${id}_q.x + cos(${id}_ang) * ${id}_q.y) / ${id}_sc;`,
+      `    float ${id}_d    = mix(10.0, gpShape(${id}_rq, ${shapeIdx < 0 ? 0 : shapeIdx}.0, ${size}), step(0.5, ${id}_on));`,
       `    float ${id}_mask = (1.0 - smoothstep(-${aa}, ${aa}, ${id}_d)) * ${id}_on;`,
       `    vec3  ${id}_col  = mix(${bg}, ${col}, ${id}_mask);`,
     );
@@ -161,7 +163,7 @@ float gpPlaced(vec2 id, float pattern, float density) {
       code: lines.join('\n') + '\n',
       outputVars: {
         color: `${id}_col`, mask: `${id}_mask`, distance: `${id}_d`, influence: `${id}_inf`,
-        cellUV: `${id}_q`, cellID: `${id}_cid`, cellCenter: `${id}_cc`, placed: `${id}_on`,
+        cellUV: `${id}_rq`, scale: `${id}_sc`, cellID: `${id}_cid`, cellCenter: `${id}_cc`, placed: `${id}_on`,
       },
     };
   },

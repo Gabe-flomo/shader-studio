@@ -9,71 +9,11 @@
  * lesson can't drift from the node it teaches. The examples test compiles
  * every one and checks its Play controls point at live params.
  */
-import type { GraphNode, GroupInputPort, GroupOutputPort } from '../types/nodeGraph';
-import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
-import type { PlayControl, PlayRecord } from '../types/play';
-import { getNodeDefinition } from '../nodes/definitions';
+import type { GraphNode } from '../types/nodeGraph';
+import type { PlayControl } from '../types/play';
+import { ctl, colourCtl, group, n, out, play, port, time, uv } from './graphBuilder';
 import type { ExampleGraph } from './exampleIndex';
 import { LEARN_EXAMPLE_INDEX } from './learnExampleIndex';
-
-// ── Graph builder ───────────────────────────────────────────────────────────
-
-type Wire = [fromId: string, outputKey: string];
-type Wires = Record<string, Wire>;
-
-/** A node of `type` at (x, y): sockets from its definition, params = defaults + `params`, inputs wired per `wires`. */
-function n(type: string, id: string, x: number, y: number, params: Record<string, unknown> = {}, wires: Wires = {}, extra: Partial<GraphNode> = {}): GraphNode {
-  const def = getNodeDefinition(type);
-  if (!def) throw new Error(`learnExamples: unknown node type ${type}`);
-  const inputs: GraphNode['inputs'] = {};
-  for (const [k, v] of Object.entries(def.inputs ?? {})) {
-    inputs[k] = { type: v.type, label: v.label, ...(wires[k] ? { connection: { nodeId: wires[k][0], outputKey: wires[k][1] } } : {}) };
-  }
-  for (const k of Object.keys(wires)) if (!inputs[k]) throw new Error(`learnExamples: ${type} has no input ${k}`);
-  const outputs: GraphNode['outputs'] = {};
-  for (const [k, v] of Object.entries(def.outputs ?? {})) outputs[k] = { type: v.type, label: v.label };
-  return { id, type, position: { x, y }, inputs, outputs, params: { ...(def.defaultParams ?? {}), ...params }, ...extra };
-}
-
-/** An iterated group: ports in and out, a subgraph, and how many times it runs. */
-function group(id: string, x: number, y: number, o: {
-  label: string; iterations: number;
-  inputs: Array<{ key: string; type: GraphNode['inputs'][string]['type']; label: string; from: Wire }>;
-  outputs: Array<{ key: string; type: GraphNode['outputs'][string]['type']; label: string; from: Wire }>;
-  nodes: GraphNode[];
-}): GraphNode {
-  const inputs: GraphNode['inputs'] = {};
-  const inputPorts: GroupInputPort[] = [];
-  for (const p of o.inputs) {
-    inputs[p.key] = { type: p.type, label: p.label, connection: { nodeId: p.from[0], outputKey: p.from[1] } };
-    // The live wiring is the subgraph nodes that read GROUP_PORT_SENTINEL/p.key; toNodeId is the back-compat display target.
-    const reader = o.nodes.find(sn => Object.values(sn.inputs).some(i => i.connection?.nodeId === GROUP_PORT_SENTINEL && i.connection.outputKey === p.key));
-    const readerKey = reader ? Object.entries(reader.inputs).find(([, i]) => i.connection?.nodeId === GROUP_PORT_SENTINEL && i.connection.outputKey === p.key)![0] : '';
-    inputPorts.push({ key: p.key, type: p.type, label: p.label, toNodeId: reader?.id ?? '', toInputKey: readerKey } as GroupInputPort);
-  }
-  const outputs: GraphNode['outputs'] = {};
-  const outputPorts: GroupOutputPort[] = [];
-  for (const p of o.outputs) {
-    outputs[p.key] = { type: p.type, label: p.label };
-    outputPorts.push({ key: p.key, type: p.type, label: p.label, fromNodeId: p.from[0], fromOutputKey: p.from[1] });
-  }
-  return { id, type: 'group', position: { x, y }, inputs, outputs, params: { label: o.label, iterations: o.iterations, subgraph: { nodes: o.nodes, inputPorts, outputPorts } } };
-}
-
-/** A reference to a group port, for wiring subgraph nodes. */
-const port = (key: string): Wire => [GROUP_PORT_SENTINEL, key];
-
-const ctl = (id: string, target: string, label: string, min: number, max: number, step?: number): PlayControl =>
-  ({ id, target, kind: 'float', label, min, max, ...(step ? { step } : {}) });
-const colourCtl = (id: string, target: string, label: string): PlayControl => ({ id, target, kind: 'color', label, min: 0, max: 1 });
-
-function play(controls: PlayControl[], notes: string): PlayRecord {
-  return { version: 1, controls, mappings: [], layers: [], notes };
-}
-
-const uv = (x = 40, y = 220) => n('uv', 'uv', x, y);
-const time = (x = 40, y = 420) => n('time', 'time', x, y);
-const out = (from: Wire, x: number, y = 220) => n('output', 'out', x, y, {}, { color: from });
 
 // ── Lessons ─────────────────────────────────────────────────────────────────
 
@@ -231,22 +171,23 @@ lesson('learnGridPattern', [
   out(['gp', 'color'], 620),
 ], [ctl('s', 'gp::size', 'Size', 0.05, 0.6, 0.01), ctl('r', 'gp::affectRadius', 'Mouse radius', 0.1, 2, 0.01), ctl('a', 'gp::affectAmount', 'Mouse strength', 0, 2, 0.01)], `**What it shows.** The whole previous lesson in one node. **Grid Pattern** cuts the UV into cells, puts a shape in each, decides which cells get one (every cell, every other column or row, a checkerboard, diagonals, random), and lets a point affect the shapes near it. Here the mouse makes the dots grow.
 
-**How it is built.** UV in, Mouse UV into Affect Pos, colour out. Pick the shape, the pattern and the affect mode on the card. The raw grid is still there on the other outputs (Cell UV, Cell ID, Distance, Influence), so you can take it further with the rest of the Grid family or SDF Glow.
+**How it is built.** UV in, Mouse UV into Affect Pos, colour out. Pick the shape, the pattern and the affect mode on the card. For a shape of your own, wire Cell UV into any SDF and finish with Grid Paint (next lesson); the raw grid is also on the other outputs (Cell ID, Distance, Influence) for the rest of the Grid family or SDF Glow.
 
 **Try.** Change Pattern to Diagonal stripes and Shape to Cross. Set Affect to Hide, then to Spin. Add Jitter to break the grid.`);
 
 lesson('learnGridSpread', [
   uv(),
   n('mouse', 'mouse', 40, 420),
-  n('gridPattern', 'gp', 320, 220, { columns: 10, shape: 'box', size: 0.22, pattern: 'all', affect: 'pull', affectRadius: 1.1, affectSoftness: 1.0, affectAmount: 1.2 }, { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'] }),
-  n('palette', 'pal', 620, 400, { preset: '5', scale: 1 }, { value: ['gp', 'influence'] }),
-  n('colorize', 'paint', 880, 220, { background: [0.05, 0.05, 0.08] }, { field: ['gp', 'mask'], color: ['pal', 'color'] }),
+  n('gridPattern', 'gp', 300, 220, { columns: 10, pattern: 'all', affect: 'pull', affectRadius: 1.1, affectSoftness: 1.0, affectAmount: 1.2 }, { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'] }),
+  n('shapeSDF', 'star', 600, 160, { shape: 'box', wx: 0.22, wy: 0.22 }, { p: ['gp', 'cellUV'] }),
+  n('palette', 'pal', 600, 400, { preset: '5', scale: 1 }, { value: ['gp', 'influence'] }),
+  n('gridPaint', 'paint', 880, 220, { background: [0.05, 0.05, 0.08] }, { distance: ['star', 'distance'], color: ['pal', 'color'], placed: ['gp', 'placed'] }),
   out(['paint', 'color'], 1140),
-], [ctl('a', 'gp::affectAmount', 'Pull', 0, 2, 0.01), ctl('r', 'gp::affectRadius', 'Reach', 0.1, 3, 0.01), ctl('sz', 'gp::size', 'Size', 0.05, 0.5, 0.01)], `**What it shows.** An effect spreading across a grid is a distance from a point, measured per cell. **Influence** is 1 at the mouse and fades to 0 at the radius; here it pulls the squares toward the mouse *and* colours them through a Palette, so the disturbance ripples outward as one thing.
+], [ctl('a', 'gp::affectAmount', 'Pull', 0, 2, 0.01), ctl('r', 'gp::affectRadius', 'Reach', 0.1, 3, 0.01), ctl('o', 'paint::strokeWidth', 'Outline', 0, 0.3, 0.005)], `**What it shows.** Two things at once. First, a shape of your own on the grid: Grid Pattern's **Cell UV** goes into an ordinary Shape SDF, and **Grid Paint** brings the distance back and paints it, gated by Placed so the pattern's empty cells stay empty. Anything that turns a vec2 into a distance or a colour can sit between the two nodes. Second, an effect spreading across the grid: **Influence** is 1 at the mouse and fades to 0 at the radius, and because Cell UV already carries the pull, the squares slide toward the mouse while a Palette of the Influence colours them.
 
-**How it is built.** Grid Pattern's Influence output goes into a Palette, and Colorize paints Grid Pattern's Mask with that palette colour: the shapes and their colour come from the same node, through two different outputs. Cell Displace and Neighbor Dist in the Grid folder do the same idea by hand.
+**How it is built.** Grid Pattern → Cell UV → Shape SDF → Grid Paint (Distance), with Grid Pattern's Placed into Grid Paint's Placed and Palette(Influence) into its Colour. Swap Shape SDF for a Custom Function or a text SDF and the grid draws that instead. Cell Displace and Neighbor Dist in the Grid folder do the spreading by hand.
 
-**Try.** Set Affect to Push. Feed Influence into a Remap → Size instead of the colour. Drive Affect Pos from a Play null instead of the mouse.`);
+**Try.** Set Affect to Grow: Cell UV is scaled, so the boxes grow without the SDF knowing. Wire a Texture Input's colour into Grid Paint's Colour and leave Distance empty: every placed cell shows the picture.`);
 
 lesson('learnNoise', [
   uv(),
