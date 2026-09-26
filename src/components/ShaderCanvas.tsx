@@ -681,8 +681,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         },
         setUniform: (name: string, value: number | number[]) => {
           const u = material.uniforms[name];
+          if (!u) return;
+          // A vector uniform (u_mouse) keeps its object: the live loop calls .set on it.
+          const vec = u.value as { fromArray?: (a: number[]) => unknown } | null;
+          if (Array.isArray(value) && vec && typeof vec === 'object' && typeof vec.fromArray === 'function') vec.fromArray(value);
           // As the live loop writes the input bus: a colour as a plain [r, g, b].
-          if (u) u.value = Array.isArray(value) ? [...value] : value;
+          else u.value = Array.isArray(value) ? [...value] : value;
         },
         renderAtTime: (time: number) => {
           material.uniforms.u_time.value = time;
@@ -1058,6 +1062,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       for (const [uName, v] of liveValues) {
         const u = material.uniforms[uName];
         if (u) u.value = v;
+      }
+      // A take playing back holds u_mouse where the performance had it (0..1 of the picture).
+      const heldMouse = inputBus.mouseOverride();
+      if (heldMouse) {
+        const mu = material.uniforms.u_mouse.value as THREE.Vector2;
+        const mx = heldMouse[0] * renderer.domElement.width, my = heldMouse[1] * renderer.domElement.height;
+        if (mu.x !== mx || mu.y !== my) { mu.set(mx, my); needsRender = true; }
       }
       // A knob turned while the clock is paused still has to show; so does a layer a mapping moved.
       if (inputBus.changed() || playEngine.layerChanged()) needsRender = true;
@@ -1622,6 +1633,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const y = (e.clientY - rect.top) * renderScale;
       // Update u_mouse uniform (WebGL coords: 0 = bottom-left)
       material.uniforms.u_mouse.value.set(x, rect.height * renderScale - y);
+      // The same place as 0..1 of the picture, for a take recording the performance.
+      if (rect.width > 0 && rect.height > 0) inputBus.setMouse((e.clientX - rect.left) / rect.width, 1 - (e.clientY - rect.top) / rect.height);
       // Track for pixel readback (DOM coords: 0 = top-left)
       mousePosRef.current = { x, y };
       requestRender(); // u_mouse changed, and the pixel readout wants a sample
