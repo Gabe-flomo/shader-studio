@@ -8,7 +8,7 @@
 import type { ReactNode } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
-import { LAYER_NUMERIC_PROPS, defaultLayer, layerTarget, type PlayLayer } from '../../../types/play';
+import { layerNumericProps, defaultLayer, layerTarget, type PlayLayer } from '../../../types/play';
 import { Button } from '../../ui/Button';
 import { PARTICLE_PALETTES, paletteColour } from '../../../play/particle-sim.js';
 import { IconButton } from '../../ui/Button';
@@ -80,13 +80,15 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onDr
     </div>
   );
   const prop = (key: string) => {
-    const def = LAYER_NUMERIC_PROPS[l.kind].find(d => d.key === key);
+    const def = layerNumericProps(l).find(d => d.key === key);
     if (!def) return null;
-    const value = get<number>(key);
     const exposed = exposedTargets.has(layerTarget(l.id, key));
     const fallback = typeof defaults[key] === 'number' ? defaults[key] as number : undefined;
+    // A slider a script declared may have no value yet (a file from before it was declared): show its low end rather than crash.
+    const raw = get<number>(key);
+    const value = typeof raw === 'number' && Number.isFinite(raw) ? raw : (fallback ?? def.min);
     const pair = pairedKey(key);
-    const partner = pair && LAYER_NUMERIC_PROPS[l.kind].find(d => d.key === pair.other);
+    const partner = pair && layerNumericProps(l).find(d => d.key === pair.other);
     const items = () => [
       { label: exposed ? 'Already a control' : 'Add to controls', icon: 'plus' as const, hint: exposed ? undefined : 'A slider on the panel; map anything onto it', disabled: exposed, onSelect: () => onExpose(key) },
       ...(onDriveNull ? [{

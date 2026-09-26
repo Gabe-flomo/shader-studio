@@ -25,6 +25,8 @@ export interface KitEnv {
   override(layerId: string, key: string, value: number | null): void;
   /** Set when the shader has a Layers node: gets the layers' colour and distance field each frame. */
   shaderTap?: (tap: ShaderTap) => void;
+  /** A Script layer compiled or ran: null clears its error, a string is the message shown under its code. */
+  scriptStatus?: (layerId: string, error: string | null) => void;
 }
 
 /** What the graph's Layers node reads: colour at half resolution, and a 16-bit packed distance grid (row 0 at the top). */

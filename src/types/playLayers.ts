@@ -497,10 +497,68 @@ export interface ClonerLayer extends LayerBase {
   blend: BlendMode;
 }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer;
+/** A slider a script declares: `params = { speed: { value: 1, min: 0, max: 5, step: 0.1, label: 'Speed' } }`. Its value lives on the layer as `p_<key>`. */
+export interface ScriptParamDef { key: string; label: string; value: number; min: number; max: number; step?: number; hint?: string }
+
+/**
+ * A layer drawn by JavaScript you write: a `setup(s)` and a `draw(s)` on a 2D
+ * canvas the size of the picture, p5-style, with the sliders the script
+ * declares. Runs in the app and in exported websites (the kit is plain JS).
+ */
+export interface ScriptLayer extends LayerBase {
+  kind: 'script';
+  code: string;
+  /** Sliders the script declared the last time it compiled; controls target them as `p_<key>`. */
+  paramDefs: ScriptParamDef[];
+  /** Clear the canvas every frame; off keeps what was drawn (trails). */
+  clear: boolean;
+  /** Let the script read the picture's brightness (samples the shader at low resolution each frame). */
+  readPicture: boolean;
+  opacity: number;
+  blend: string;
+  [param: `p_${string}`]: number;
+}
+
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script'];
+
+/** The starter sketch a new Script layer holds. */
+export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
+// s.ctx is a 2D canvas the size of the picture (s.width × s.height, pixels).
+// Sliders you declare here appear on the layer and can be Play controls.
+const params = {
+  count: { value: 24, min: 1, max: 200, step: 1, label: 'Dots' },
+  size:  { value: 18, min: 2, max: 80, label: 'Size' },
+  speed: { value: 1, min: 0, max: 4, step: 0.05, label: 'Speed' },
+};
+
+let dots = [];
+
+function setup(s) {
+  dots = [];
+  for (let i = 0; i < 200; i++) dots.push({ x: Math.random() * s.width, y: Math.random() * s.height, vx: (Math.random() - 0.5) * 120, vy: (Math.random() - 0.5) * 120 });
+}
+
+function draw(s) {
+  const { ctx, width, height, dt, params, mouse } = s;
+  for (let i = 0; i < params.count; i++) {
+    const d = dots[i];
+    d.x += d.vx * dt * params.speed; d.y += d.vy * dt * params.speed;
+    if (d.x < 0 || d.x > width) d.vx *= -1;
+    if (d.y < 0 || d.y > height) d.vy *= -1;
+    const near = Math.hypot(d.x - mouse.x, d.y - mouse.y) < 120;
+    ctx.fillStyle = near ? '#ffd166' : 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.arc(d.x, d.y, params.size * (near ? 1.4 : 1) * 0.5, 0, Math.PI * 2); ctx.fill();
+  }
+}
+`;
+export const DEFAULT_SCRIPT_PARAMS: ScriptParamDef[] = [
+  { key: 'count', label: 'Dots', value: 24, min: 1, max: 200, step: 1 },
+  { key: 'size', label: 'Size', value: 18, min: 2, max: 80 },
+  { key: 'speed', label: 'Speed', value: 1, min: 0, max: 4, step: 0.05 },
+];
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -543,6 +601,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     randScale: 0, randRotation: 0, randOpacity: 0, randHue: 0,
     effectors: [], effRadius: 0.25, effSoftness: 0.6, effPush: 0, effScale: 1, effRotate: 0, effOpacity: 0, effHue: 0, effHide: 0, effInvert: false, blend: 'normal',
   },
+  script: { toShader: true, code: DEFAULT_SCRIPT, paramDefs: DEFAULT_SCRIPT_PARAMS, clear: true, readPicture: false, opacity: 1, blend: 'normal', p_count: 24, p_size: 18, p_speed: 1 },
 };
 
 /** A fresh layer of a kind with sensible defaults. */
@@ -563,6 +622,7 @@ type Field =
   | { t: 'hex' }
   | { t: 'rgb' }
   | { t: 'points' }
+  | { t: 'params' }
   /** A list of layer ids. */
   | { t: 'ids' };
 
@@ -636,6 +696,7 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     randScale: N(0), randRotation: N(0), randOpacity: N(0), randHue: N(0),
     effectors: { t: 'ids' }, effRadius: N(0), effSoftness: unit, effPush: N(), effScale: N(), effRotate: N(), effOpacity: N(), effHue: N(), effHide: unit, effInvert: B, blend: blendF,
   },
+  script: { toShader: B, code: S, paramDefs: { t: 'params' }, clear: B, readPicture: B, opacity: unit, blend: blendF },
 };
 
 function coerce(v: unknown, f: Field, fallback: unknown): unknown {
@@ -658,6 +719,8 @@ function coerce(v: unknown, f: Field, fallback: unknown): unknown {
     case 'ids': return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string' && s.length > 0) : fallback;
     case 'points':
       return Array.isArray(v) && v.length % 2 === 0 && v.length <= 2000 && v.every(n => typeof n === 'number' && Number.isFinite(n)) ? [...v] : fallback;
+    case 'params':
+      return Array.isArray(v) ? v.filter(isScriptParamDef).slice(0, 32).map(d => ({ ...d })) : fallback;
   }
 }
 
@@ -672,8 +735,18 @@ export function parseLayer(raw: unknown): PlayLayer | null {
   const d = defaultLayer(kind, id, typeof l.label === 'string' && l.label ? l.label : kind) as unknown as Record<string, unknown>;
   const out: Record<string, unknown> = { id, kind, label: d.label, visible: l.visible !== false };
   for (const [key, field] of Object.entries(LAYER_SCHEMA[kind])) out[key] = coerce(l[key], field, d[key]);
+  // A script's slider values are dynamic keys: keep every finite `p_<key>` number.
+  if (kind === 'script') for (const [k, v] of Object.entries(l)) if (k.startsWith('p_') && typeof v === 'number' && Number.isFinite(v)) out[k] = v;
   return out as unknown as PlayLayer;
 }
+
+function isScriptParamDef(d: unknown): d is ScriptParamDef {
+  if (!d || typeof d !== 'object') return false;
+  const o = d as Record<string, unknown>;
+  return typeof o.key === 'string' && /^[A-Za-z_]\w{0,30}$/.test(o.key) && typeof o.label === 'string'
+    && [o.value, o.min, o.max].every(n => typeof n === 'number' && Number.isFinite(n)) && (o.step === undefined || typeof o.step === 'number');
+}
+
 
 /** Files from before the particle system: `mode` was the field and `colorFromPicture` the colour; they had no size variety. */
 function migrateParticles(l: Record<string, unknown>): void {
@@ -847,4 +920,17 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'effHue', label: 'Hue shift', min: -180, max: 180, step: 1, hint: 'Effectors: copies inside the falloff shift colour by up to this many degrees.' },
     { key: 'effHide', label: 'Hide at', min: 0, max: 1, hint: 'Effectors: a copy disappears once the falloff weight reaches this. 0 never hides.' },
   ],
+  script: [OPACITY],
 };
+
+/**
+ * The numeric properties a control can drive on this layer: the kind's
+ * table, plus, for a Script layer, the sliders its code declares (as
+ * `p_<key>`). Prefer this over LAYER_NUMERIC_PROPS[kind] wherever a layer is
+ * at hand.
+ */
+export function layerNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
+  const base = LAYER_NUMERIC_PROPS[l.kind];
+  if (l.kind !== 'script') return base;
+  return [...l.paramDefs.map(d => ({ key: `p_${d.key}`, label: d.label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), hint: d.hint ?? `${d.label}: a slider the script declares.` })), ...base];
+}

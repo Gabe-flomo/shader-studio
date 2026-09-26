@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
-import { LAYER_NUMERIC_PROPS, SENSOR_READS_FOR, defaultLayer, layerTarget, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
+import { layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { playId } from '../../play/playControls';
 import { addNullFor, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, moveLayer, removeLayer, renameLayer, resetLayer } from './layerOps';
 import { toast } from '../ui/toastStore';
@@ -31,7 +31,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { makeFieldKit } from './layers/fields';
 import {
   AudioEditor, BodiesEditor, BrushEditor, CameraEditor, ContoursEditor, GlyphsEditor, ImageEditor, LensEditor, NullEditor, ParticlesEditor, ShapeEditor, TextEditor,
-  type EditorContext, ClonerEditor } from './layers/editors';
+  type EditorContext, ClonerEditor, ScriptEditor } from './layers/editors';
 import { ActionsSection } from './layers/ActionsSection';
 
 const KINDS: { kind: PlayLayerKind; label: string; hint: string; icon: IconName }[] = [
@@ -48,6 +48,7 @@ const KINDS: { kind: PlayLayerKind; label: string; hint: string; icon: IconName 
   { kind: 'lens', label: 'Lens', hint: 'A circle that magnifies, pixelates, blurs or inverts what is under it.', icon: 'search' },
   { kind: 'camera', label: 'Camera', hint: 'Your webcam: as a layer, a mask, or what particles read. Its motion is a source.', icon: 'camera' },
   { kind: 'cloner', label: 'Cloner', hint: 'Copies of a shape, text, image or null in a grid, ring, line or along a stroke. Vary them by index; nulls and shapes push, grow, turn or hide the copies near them.', icon: 'copy' },
+  { kind: 'script', label: 'Script', hint: 'Draw with JavaScript: a setup and a draw function on a 2D canvas over the picture, with sliders you declare. Reads the picture, the mouse and nulls.', icon: 'code' },
 ];
 const KIND = Object.fromEntries(KINDS.map(k => [k.kind, k])) as Record<PlayLayerKind, (typeof KINDS)[number]>;
 
@@ -100,7 +101,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [revealTick, selected]);
   const expose = (l: PlayLayer, key: string) => {
-    const def = LAYER_NUMERIC_PROPS[l.kind].find(d => d.key === key);
+    const def = layerNumericProps(l).find(d => d.key === key);
     if (!def) return;
     onExpose({ id: playId('ctl'), target: layerTarget(l.id, key), kind: 'float', label: `${l.label} · ${def.label}`, min: def.min, max: def.max, ...(def.step ? { step: def.step } : {}) });
   };
@@ -212,6 +213,7 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
     case 'brush': body = <BrushEditor f={f} ctx={ctx} />; break;
     case 'bodies': body = <BodiesEditor f={f} ctx={ctx} />; break;
     case 'cloner': body = <ClonerEditor f={f} ctx={ctx} />; break;
+    case 'script': body = <ScriptEditor f={f} />; break;
   }
 
   return (

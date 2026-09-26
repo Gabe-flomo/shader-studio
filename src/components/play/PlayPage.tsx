@@ -52,7 +52,7 @@ import { GuidesToggle } from './GuidesToggle';
 import { OpenPlayableButton } from './OpenPlayable';
 import { MidiFileCard } from './MidiFileCard';
 import { TriggerPicker } from './TriggerPicker';
-import { ACTIONS_FOR, DEFAULT_DISPLAY, LAYER_NUMERIC_PROPS, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
+import { ACTIONS_FOR, DEFAULT_DISPLAY, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
 import { ACTION_LABELS } from './layers/help';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
@@ -169,7 +169,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     const lt = parseLayerTarget(c.target);
     if (lt) {
       const l = play.layers.find(x => x.id === lt.layerId);
-      const d = l ? LAYER_NUMERIC_PROPS[l.kind].find(x => x.key === lt.key) : undefined;
+      const d = l ? layerNumericProps(l).find(x => x.key === lt.key) : undefined;
       return { kind: 'layer', title: l?.label ?? 'a deleted layer', param: d?.label ?? lt.key, missing: !l, go: () => { if (l) revealLayerFor(l.id); } };
     }
     const { nodeId } = targetParts(c.target);
@@ -187,7 +187,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // Every layer's numbers can be controls too (the + beside them in the Layers tab does the same).
   const layerCandidates = useMemo<LayerCandidates[]>(() => play.layers.map(l => ({
     id: l.id, label: l.label,
-    props: LAYER_NUMERIC_PROPS[l.kind].map(d => ({ key: d.key, label: d.label, hint: d.hint, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
+    props: layerNumericProps(l).map(d => ({ key: d.key, label: d.label, hint: d.hint, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
     actions: [...(ACTIONS_FOR[l.kind] ?? ACTIONS_FOR.other)],
   })), [play.layers]);
   // A layer's actions (Drop again, Burst…) as buttons on the panel, which mappings can press.
@@ -202,7 +202,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const addLayerControl = useCallback((layerId: string, key: string) => {
     update(p => {
       const l = p.layers.find(x => x.id === layerId);
-      const d = l && LAYER_NUMERIC_PROPS[l.kind].find(x => x.key === key);
+      const d = l && layerNumericProps(l).find(x => x.key === key);
       if (!l || !d || p.controls.some(c => c.target === layerTarget(layerId, key))) return p;
       return { ...p, controls: [...p.controls, { id: playId('ctl'), target: layerTarget(layerId, key), kind: 'float', label: `${l.label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
     });

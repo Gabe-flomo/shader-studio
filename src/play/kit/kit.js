@@ -36,7 +36,7 @@ const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, l
 
 export function createLayerKit() {
   const pool = {};
-  const parts = new Map(), bodies = new Map(), brushes = new Map(), springs = new Map(), texts = new Map(), audios = new Map(), masks = new Map();
+  const parts = new Map(), bodies = new Map(), brushes = new Map(), springs = new Map(), texts = new Map(), audios = new Map(), masks = new Map(), scripts = new Map();
   const frozen = new Set(), shown = new Map(), lastVisible = new Map();
   let queue = [];
   let coarse = null, fine = null, camSample = null, camPrev = null, motion = 0;
@@ -130,7 +130,7 @@ export function createLayerKit() {
     if (env.hidden && !env.transparent) { ctx.fillStyle = klCss(env.backdrop || [0, 0, 0]); ctx.fillRect(0, 0, W, H); }
     const layers = record.layers;
     const ids = new Set(layers.map(l => l.id));
-    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible]) for (const id of [...m.keys()]) if (!ids.has(id)) m.delete(id);
+    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts]) for (const id of [...m.keys()]) if (!ids.has(id)) m.delete(id);
     // A visibility change in the panel wins over an earlier show/hide action.
     for (const l of layers) { if (lastVisible.has(l.id) && lastVisible.get(l.id) !== l.visible) shown.delete(l.id); lastVisible.set(l.id, l.visible); }
     const baseVisible = l => (shown.has(l.id) ? shown.get(l.id) : l.visible);
@@ -164,6 +164,7 @@ export function createLayerKit() {
       else if (l.kind === 'bodies' && l.solidPicture) needs.coarse = true;
       else if (l.kind === 'shape' && l.shape === 'picture') needs.coarse = true;
       else if (l.kind === 'brush' && l.colour === 'picture') needs.coarse = true;
+      else if (l.kind === 'script' && l.readPicture) needs.coarse = true;
       else if (l.kind === 'contours') { if (l.readFrom === 'camera') { needs.cam = true; needs.camFine = needs.camFine || l.detail === 'fine'; } else if (l.detail === 'fine') needs.fine = true; else needs.coarse = true; }
       else if (l.kind === 'camera') needs.cam = true;
     }
@@ -267,6 +268,65 @@ export function createLayerKit() {
      * (its own driven values, at its own place), then blitted per copy with the
      * copy's transform. Effectors are the nulls and shapes the cloner names.
      */
+    /**
+     * A Script layer: the user's JavaScript, compiled once per code change into a setup and a draw
+     * function, run each frame against a 2D canvas the size of the picture, then composited with
+     * the layer's opacity and blend. A broken script reports its error and draws nothing until the
+     * code changes; the other layers carry on.
+     */
+    function drawScript(c, l, v) {
+      let st = scripts.get(l.id);
+      if (!st || st.code !== l.code) {
+        st = { code: l.code, setup: null, draw: null, error: null, state: {}, frame: 0, w: 0, h: 0, ready: false };
+        scripts.set(l.id, st);
+        try {
+          const make = new Function(l.code + '\n;return { setup: typeof setup === "function" ? setup : null, draw: typeof draw === "function" ? draw : null };');
+          const r = make();
+          st.setup = r.setup; st.draw = r.draw;
+          if (!st.draw) st.error = 'The script needs a draw(s) function.';
+        } catch (e) { st.error = 'Compile: ' + ((e && e.message) || e); }
+        if (env.scriptStatus) env.scriptStatus(l.id, st.error);
+      }
+      if (st.error) return;
+      const buf = klCanvas(pool, 'script_' + l.id, W, H), bx = buf.getContext('2d');
+      const params = {};
+      for (const d of l.paramDefs || []) { const val = v('p_' + d.key); params[d.key] = typeof val === 'number' && isFinite(val) ? val : d.value; }
+      const s = {
+        ctx: bx, width: W, height: H, dpr, time, dt, frame: st.frame, params, state: st.state,
+        mouse: { x: pointer.x * W, y: (1 - pointer.y) * H, over: !!pointer.over, down: !!pointer.down },
+        picture: {
+          brightness: (x, y) => {
+            if (!coarse) return 0;
+            const cx = Math.max(0, Math.min(KIT_COARSE_W - 1, Math.floor((x / W) * KIT_COARSE_W))), cy = Math.max(0, Math.min(KIT_COARSE_H - 1, Math.floor((y / H) * KIT_COARSE_H)));
+            const i = (cy * KIT_COARSE_W + cx) * 4;
+            return (coarse[i] + coarse[i + 1] + coarse[i + 2]) / 765;
+          },
+        },
+        null: name => { const n = record.layers.find(x => x.kind === 'null' && (x.id === name || x.label === name)); return n ? { x: env.value(n, 'x') * W, y: (1 - env.value(n, 'y')) * H } : null; },
+        random: Math.random,
+      };
+      try {
+        if (!st.ready || st.w !== W || st.h !== H) {
+          st.w = W; st.h = H; st.state = {}; s.state = st.state; st.frame = 0; s.frame = 0;
+          bx.setTransform(1, 0, 0, 1, 0, 0); bx.clearRect(0, 0, W, H);
+          if (st.setup) st.setup(s);
+          st.ready = true;
+        }
+        bx.save(); bx.setTransform(1, 0, 0, 1, 0, 0); bx.globalAlpha = 1; bx.globalCompositeOperation = 'source-over';
+        if (l.clear) bx.clearRect(0, 0, W, H);
+        st.draw(s);
+        bx.restore();
+        st.frame++;
+      } catch (e) {
+        st.error = 'Runtime: ' + ((e && e.message) || e);
+        if (env.scriptStatus) env.scriptStatus(l.id, st.error);
+        return;
+      }
+      c.globalAlpha = v('opacity'); c.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
+      c.drawImage(buf, 0, 0);
+      c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    }
+
     function drawCloner(c, l, v) {
       const src = l.sourceId ? layers.find(x => x.id === l.sourceId) : null;
       if (!src || src.id === l.id || src.kind === 'cloner') return;
@@ -349,6 +409,7 @@ export function createLayerKit() {
             klDrawShape(c, l, v, W, H, dpr, maskShows.get(l.id) || null, env.editing, env.selectedId === l.id);
             break;
           case 'cloner': drawCloner(c, l, v); break;
+          case 'script': drawScript(c, l, v); break;
           case 'particles': drawParticleLayer(c, l, v, env, record, zones, zoneById, pictureFor(l.readFrom, l.detail), pending.get(l.id), W, H, dpr, aspect, time, dt, pointer, gl); break;
           case 'bodies': {
             const sizeH = (v('size') * dpr) / H;

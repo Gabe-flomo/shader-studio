@@ -4,7 +4,7 @@
  * under the choices that change behaviour, and "try it" buttons for the
  * actions a trigger would fire (burst, drop, next line, clear).
  */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { ActionKind, NullLayer, ParticleField, PlayLayer, ZoneAction } from '../../../types/play';
 import { Button } from '../../ui/Button';
 import { Field } from '../../ui/Field';
@@ -15,6 +15,11 @@ import { ImagePicker, SpritePicker } from './pickers';
 import { FIELD_HELP, ZONE_HELP } from './help';
 import { Section } from './Section';
 import { AudioSourceRows, FontRow } from './rows';
+import { SCRIPT_EXAMPLES, extractScriptParams } from './scriptExamples';
+import { useScriptStatus } from '../../../play/scriptStatus';
+import { selectTokenOnDoubleClick, wrapOnKeyDown } from '../../code/editKeys';
+import { fontFamily, radius } from '../../../theme/tokens';
+import type { ScriptLayer, ScriptParamDef } from '../../../types/playLayers';
 
 export interface EditorContext {
   layers: PlayLayer[];
@@ -571,6 +576,95 @@ export function ClonerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           {f.toggle('Outside', 'effInvert', 'Act on the copies outside the falloff instead')}
           {f.note('Every slider here can be a control: right-click one, or press +, to drive it from a null, the beat or a knob.')}
         </>}
+      </Section>
+    </>
+  );
+}
+
+// ── Script ─────────────────────────────────────────────────────────────────
+
+/**
+ * A sketch in JavaScript: the code, the sliders it declares, and how it is
+ * composited. The code is applied on Apply (or ⌘/Ctrl+Enter), not per
+ * keystroke, so half-typed lines don't flash errors; the kit reports compile
+ * and runtime errors back here.
+ */
+export function ScriptEditor({ f }: { f: FieldKit }) {
+  const l = f.l as ScriptLayer;
+  const [draft, setDraft] = useState(l.code);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  // Another layer selected, or the code changed from outside (undo, a loaded file): show that code.
+  const [seen, setSeen] = useState({ id: l.id, code: l.code });
+  if (seen.id !== l.id || seen.code !== l.code) { setSeen({ id: l.id, code: l.code }); setDraft(l.code); setApplyError(null); }
+  const runError = useScriptStatus(l.id);
+  const dirty = draft !== l.code;
+  const wrap = wrapOnKeyDown(setDraft);
+
+  const apply = (code: string, settings?: { clear: boolean; readPicture: boolean }) => {
+    const r = extractScriptParams(code);
+    if (!r.ok) { setApplyError(r.error); return; }
+    setApplyError(null);
+    const patch: Record<string, unknown> = { code, paramDefs: r.defs, ...(settings ?? {}) };
+    // New sliders start at their declared value; ones that already have a value keep it.
+    for (const d of r.defs) if (typeof (l as unknown as Record<string, unknown>)[`p_${d.key}`] !== 'number') patch[`p_${d.key}`] = d.value;
+    f.set(patch);
+  };
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); apply(draft); return; }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const ta = e.currentTarget, a = ta.selectionStart, b = ta.selectionEnd;
+      const next = `${draft.slice(0, a)}  ${draft.slice(b)}`;
+      setDraft(next);
+      requestAnimationFrame(() => ta.setSelectionRange(a + 2, a + 2));
+      return;
+    }
+    wrap(e);
+  };
+  const error = applyError ? `Compile: ${applyError}` : runError;
+  const defs: ScriptParamDef[] = l.paramDefs ?? [];
+
+  return (
+    <>
+      <Section kind="script" title="Code" hint="A sketch: setup(s) runs once, draw(s) every frame, on a 2D canvas the size of the picture. Declare sliders in a params object; they appear below and can be Play controls.">
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', margin: '0 0 6px 0' }}>
+          {SCRIPT_EXAMPLES.map(ex => (
+            <Button key={ex.name} size="sm" variant="ghost" title={ex.hint} onClick={() => { setDraft(ex.code); apply(ex.code, ex.settings); }}>{ex.name}</Button>
+          ))}
+        </div>
+        <textarea
+          aria-label="Script code"
+          value={draft}
+          spellCheck={false}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={onKeyDown}
+          onDoubleClick={selectTokenOnDoubleClick}
+          style={{
+            display: 'block', width: '100%', boxSizing: 'border-box', minHeight: 220, height: Math.min(460, 60 + draft.split('\n').length * 17), resize: 'vertical',
+            border: 0, outline: 'none', borderRadius: radius.md, padding: '8px 10px', background: f.tk.bg.field, color: f.tk.text.primary,
+            font: `12px/1.45 ${fontFamily.mono}`, tabSize: 2, whiteSpace: 'pre', overflow: 'auto',
+            boxShadow: error ? `inset 0 0 0 1.5px ${f.tk.status.danger}` : dirty ? `inset 0 0 0 1.5px ${f.tk.accent.base}` : 'none',
+          }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+          <Button size="sm" variant={dirty ? 'primary' : undefined} disabled={!dirty} onClick={() => apply(draft)} title="⌘/Ctrl+Enter">Apply</Button>
+          {dirty && <Button size="sm" variant="ghost" onClick={() => { setDraft(l.code); setApplyError(null); }}>Revert</Button>}
+          <span style={{ flex: 1, minWidth: 0, fontSize: 11, lineHeight: 1.4, color: error ? f.tk.status.danger : f.tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis' }} title={error ?? undefined}>
+            {error ?? (dirty ? 'Edited: Apply to run it.' : `Running · ${defs.length} slider${defs.length === 1 ? '' : 's'}`)}
+          </span>
+        </div>
+        {f.note(<>In <code>s</code>: <code>ctx</code> (2D canvas), <code>width</code>, <code>height</code>, <code>time</code>, <code>dt</code>, <code>frame</code>, <code>params</code> (your sliders), <code>mouse</code> {'{x, y, over, down}'} in pixels, <code>state</code> (kept between frames), <code>picture.brightness(x, y)</code> (Picture on), <code>null(name)</code> (a Null layer’s position), <code>random()</code>.</>)}
+      </Section>
+      {defs.length > 0 && (
+        <Section kind="script" title="Sliders" hint="Declared by the script. Right-click one to make it a Play control or drive it with a null.">
+          {f.props(...defs.map(d => `p_${d.key}`))}
+        </Section>
+      )}
+      <Section kind="script" title="Canvas">
+        {f.toggle('Clear', 'clear', 'Clear the canvas every frame', 'Off keeps what was drawn, for trails; the script can fade it itself.')}
+        {f.toggle('Picture', 'readPicture', 'Let the script read the picture’s brightness', 'Samples the shader at low resolution each frame for s.picture.brightness(x, y).')}
+        {f.props('opacity')}
+        {f.select('Blend', 'blend', BLENDS, BLEND_HINT)}
       </Section>
     </>
   );

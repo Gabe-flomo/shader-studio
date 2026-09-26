@@ -13,7 +13,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { candidateLabel, collectPlayCandidates } from '../../play/playControls';
 import { SENSOR_HINTS, SENSOR_LABELS } from '../../play/playSources';
 import { playEngine } from '../../lib/playEngine';
-import { LAYER_NUMERIC_PROPS, SENSOR_READS_FOR, layerTarget, type PlayLayer, type PlaySource, type SensorRead } from '../../types/play';
+import { layerNumericProps, SENSOR_READS_FOR, layerTarget, type PlayLayer, type PlaySource, type SensorRead } from '../../types/play';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
@@ -40,7 +40,7 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
   const match = (s: string) => !query || s.toLowerCase().includes(query);
   const controls = play.controls.filter(c => c.kind !== 'color' && match(c.label));
   const graph = open ? collectPlayCandidates(nodes, bindings).filter(c => c.kind === 'float' && !taken.has(c.target) && match(candidateLabel(c))) : [];
-  const layers = play.layers.map(l => ({ l, props: LAYER_NUMERIC_PROPS[l.kind].filter(d => !taken.has(layerTarget(l.id, d.key)) && match(`${l.label} ${d.label}`)) })).filter(x => x.props.length);
+  const layers = play.layers.map(l => ({ l, props: layerNumericProps(l).filter(d => !taken.has(layerTarget(l.id, d.key)) && match(`${l.label} ${d.label}`)) })).filter(x => x.props.length);
   const isOpen = (k: string) => !!query || unfolded.has(k);
   const flip = (k: string) => setUnfolded(p => { const n = new Set(p); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 

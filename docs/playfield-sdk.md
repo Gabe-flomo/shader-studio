@@ -1,5 +1,9 @@
 # Playfield as a platform: an SDK for nodes, layers, mappings and feeds
 
+> Update: the **Script layer** (`docs/js-layers.md`) is a working prototype of
+> `defineLayer` below: a sketch with `setup`/`draw`, declared sliders, and a
+> capability object instead of app internals.
+
 A note to think with, not a build plan. The question: what would it take for
 other people (and other companies) to add to Playfield reliably, the way they
 add plugins to a DAW or effects to a video editor, instead of forking it?

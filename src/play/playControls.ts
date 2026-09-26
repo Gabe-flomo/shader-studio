@@ -13,7 +13,7 @@
 
 import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
-import { LAYER_NUMERIC_PROPS, parseActionTarget, parseLayerTarget } from '../types/play';
+import { layerNumericProps, parseActionTarget, parseLayerTarget } from '../types/play';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDrivers';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
@@ -187,8 +187,8 @@ export function findTargetNode(nodes: GraphNode[], target: string): GraphNode | 
 export function controlHelp(nodes: GraphNode[], target: string, play?: PlayRecord): { hint?: string; comment?: string } {
   const lt = parseLayerTarget(target);
   if (lt) {
-    const kind = play?.layers.find(l => l.id === lt.layerId)?.kind;
-    const hint = kind ? LAYER_NUMERIC_PROPS[kind].find(d => d.key === lt.key)?.hint : undefined;
+    const layer = play?.layers.find(l => l.id === lt.layerId);
+    const hint = layer ? layerNumericProps(layer).find(d => d.key === lt.key)?.hint : undefined;
     return hint ? { hint } : {};
   }
   const node = findTargetNode(nodes, target);

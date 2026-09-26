@@ -157,7 +157,7 @@ export type {
   ShapeLayer, ZoneAction, AudioLayer, GlyphsLayer, ContoursLayer, LensLayer, BrushLayer, BodiesLayer, CameraLayer,
   PlayLayer, PlayLayerKind, LayerNumericProp,
 } from './playLayers';
-export { LAYER_KINDS, LAYER_NUMERIC_PROPS, defaultLayer, parseLayer } from './playLayers';
+export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer } from './playLayers';
 import { parseLayer, type PlayLayer } from './playLayers';
 
 // ── Actions (a trigger does something to a layer) ─────────────────────────────

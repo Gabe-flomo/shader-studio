@@ -20,6 +20,7 @@ import { liveAudio } from '../lib/liveAudio';
 import { layerAudio } from '../lib/layerAudio';
 import { cameraInput } from '../lib/cameraInput';
 import { createLayerKit, type KitEnv, type KitPointer, type LayerKit } from './kit/kit.js';
+import { setScriptStatus } from './scriptStatus';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
 
@@ -355,6 +356,7 @@ class PlayOverlay {
       sensor: forExport ? () => {} : (k, v) => playEngine.setSensor(k, v),
       override: forExport ? () => {} : (id, k, v) => playEngine.setOverride(id, k, v),
       shaderTap: forExport ? undefined : this.shaderTap ?? undefined,
+      scriptStatus: forExport ? undefined : setScriptStatus,
     };
   }
 

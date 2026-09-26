@@ -5,7 +5,7 @@
  * draw order, make a null for a property that follows one, and make a null
  * that drives a control.
  */
-import { LAYER_NUMERIC_PROPS, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource } from '../../types/play';
+import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource } from '../../types/play';
 import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
 
 /** Remove a layer and the controls, mappings and actions that read or drive it. */
@@ -186,7 +186,7 @@ export function graphNullDrives(candidates: readonly PlayCandidate[], c: PlayCan
 /** A layer's numeric property (and its X/Y partner), ready for driveWithNull. */
 export function layerNullDrives(l: PlayLayer, key: string): { drives: NullDrive[]; label: string } | null {
   const rec = l as unknown as Record<string, unknown>;
-  const sliders: Slider[] = LAYER_NUMERIC_PROPS[l.kind].map(d => ({
+  const sliders: Slider[] = layerNumericProps(l).map(d => ({
     target: layerTarget(l.id, d.key), key: d.key, label: `${l.label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}),
     value: typeof rec[d.key] === 'number' ? rec[d.key] as number : d.min,
   }));
@@ -203,7 +203,7 @@ export function addCandidateControl(p: PlayRecord, c: PlayCandidate): PlayRecord
 /** A layer's numeric property as a panel control (unchanged when it's already one). */
 export function addLayerPropControl(p: PlayRecord, layerId: string, key: string): PlayRecord {
   const l = p.layers.find(x => x.id === layerId);
-  const d = l && LAYER_NUMERIC_PROPS[l.kind].find(x => x.key === key);
+  const d = l && layerNumericProps(l).find(x => x.key === key);
   const target = layerTarget(layerId, key);
   if (!l || !d || p.controls.some(c => c.target === target)) return p;
   return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'float', label: `${l.label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
