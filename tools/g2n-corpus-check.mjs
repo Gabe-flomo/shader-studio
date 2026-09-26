@@ -59,7 +59,7 @@ const rows = results.map(r => {
   const c = check.find(x => x.name === r.name) ?? {};
   const verdict = r.crashed ? 'crashed' : r.unsupported?.length ? 'refused' : !r.compileOk ? 'graph doesn’t compile' : !c.origOk ? 'original: WebGL error' : !c.graphOk ? 'graph: WebGL error' : c.same ? 'same picture' : 'differs';
   const why = r.crashed ? r.crashed.split('\n')[0] : r.unsupported?.length ? r.unsupported[0] : !r.compileOk ? (r.compileErrors ?? [])[0] : c.origOk === false ? c.origErr : c.graphOk === false ? c.graphErr : JSON.stringify(c.diffs);
-  return { name: r.name, verdict, why: String(why ?? '') };
+  return { name: r.name, verdict, why: `${r.fixups ? `[fix-ups: ${r.fixups.join(', ')}] ` : ''}${why ?? ''}` };
 });
 writeFileSync(join(out, `check${mode === 'webgl1' ? '-webgl1' : ''}.json`), JSON.stringify(rows, null, 1));
 const count = {};
