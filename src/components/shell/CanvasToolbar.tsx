@@ -60,7 +60,7 @@ export function CanvasToolbar({
       onMouseDown={e => e.stopPropagation()}
       style={{
         position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 15,
-        display: 'flex', alignItems: 'center', gap: 2, padding: 5, borderRadius: 12, whiteSpace: 'nowrap',
+        display: 'flex', alignItems: 'center', gap: 2, padding: 5, borderRadius: 12, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 16px)', overflowX: 'auto',
         background: tk.bg.panel, boxShadow: tk.shadow.float, font: `12px ${fontFamily.ui}`,
       }}
     >
@@ -79,11 +79,14 @@ export function CanvasToolbar({
           <GraphStatsPanel nodes={nodes} topLevel={topLevel} groupName={groupName} onClose={() => setStatsOpen(false)} />
         </Popover>
       )}
-      <span ref={perfRef} style={{ display: 'inline-flex' }}>
-        <Tooltip label="Performance: frame time, compiles, cost by node" disabled={perfOpen}>
-          <ToolButton icon="wave" active={perfOpen} onClick={() => setPerfOpen(o => !o)}><PerfBadge /></ToolButton>
-        </Tooltip>
-      </span>
+      {/* Phones: the frame-time badge is what pushed the bar past the screen's edge; the node count stays. */}
+      {!compact && (
+        <span ref={perfRef} style={{ display: 'inline-flex' }}>
+          <Tooltip label="Performance: frame time, compiles, cost by node" disabled={perfOpen}>
+            <ToolButton icon="wave" active={perfOpen} onClick={() => setPerfOpen(o => !o)}><PerfBadge /></ToolButton>
+          </Tooltip>
+        </span>
+      )}
       {perfOpen && (
         <Popover anchorRef={perfRef} onClose={() => setPerfOpen(false)} align="start" width={420} padding={0}>
           <PerfPanel onClose={() => setPerfOpen(false)} />

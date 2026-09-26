@@ -335,7 +335,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
             <IconButton icon="code" label="Put it on a website: a player with controls, or the picture as a background, as a snippet or a page" onClick={() => setEmbedOpen(true)} />
             <IconButton icon="play" label="Present: the picture and its controls on their own, as people will play with it" onClick={() => usePresent.getState().present('full')} />
-            <AddControlButton candidates={candidates} layers={layerCandidates} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
+            <AddControlButton compact={compact} candidates={candidates} layers={layerCandidates} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
           </>
         )}
       />}
@@ -450,7 +450,7 @@ function PanelHeader({ title, hint, extra, onClick, chevron }: { title: string; 
     <div
       onClick={onClick}
       style={{
-        height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 0 14px',
+        minHeight: 44, flexShrink: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '2px 8px', padding: '0 8px 0 14px',
         borderBottom: `1px solid ${tk.border.default}`, background: tk.bg.panel, cursor: onClick ? 'pointer' : 'default', userSelect: 'none',
       }}
     >
@@ -458,7 +458,8 @@ function PanelHeader({ title, hint, extra, onClick, chevron }: { title: string; 
       <span style={{ font: `650 13px ${fontFamily.ui}` }}>{title}</span>
       {hint && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}` }}>{hint}</span>}
       <span style={{ flex: 1 }} />
-      <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>{extra}</span>
+      {/* Wraps onto a second line on narrow screens rather than running off the edge. */}
+      <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', minHeight: 44, maxWidth: '100%' }}>{extra}</span>
     </div>
   );
 }
@@ -484,7 +485,9 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 /** A layer's numbers, for the Add control menu. */
 interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number }>; actions: ActionKind[] }
 
-function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLayer, onAddAction, onAddNull }: {
+function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLayer, onAddAction, onAddNull, compact = false }: {
+  /** Phones: the button is an icon, so the header's row of tools fits. */
+  compact?: boolean;
   candidates: PlayCandidate[];
   layers: LayerCandidates[];
   layerById: (id: string) => PlayLayer | undefined;
@@ -545,7 +548,9 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
   const nothing = candidates.length === 0 && layers.every(l => l.props.length + l.actions.length === 0);
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <Button size="sm" icon="plus" onClick={() => setOpen(o => !o)} disabled={nothing}>Add control</Button>
+      {compact
+        ? <IconButton icon="plus" label="Add control" active={open} onClick={() => setOpen(o => !o)} disabled={nothing} />
+        : <Button size="sm" icon="plus" onClick={() => setOpen(o => !o)} disabled={nothing}>Add control</Button>}
       {open && (
         <Popover anchorRef={anchor} onClose={close} align="end" width={320} padding={8}>
           <Field autoFocus placeholder="Search sliders, colours and layers" value={query} onChange={e => setQuery(e.target.value)} height={30} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
