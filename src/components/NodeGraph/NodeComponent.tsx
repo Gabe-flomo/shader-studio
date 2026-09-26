@@ -3292,6 +3292,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 <div
                   onMouseEnter={() => { setHoveredInput(key); setKfChipHover(true); }}
                   onMouseLeave={() => { setHoveredInput(null); setKfChipHover(false); }}
+                  // Its padding overlaps the socket dot: a right-click there is still the socket's keyframe menu
+                  onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setKfChipHover(false); setKfMenu({ x: e.clientX, y: e.clientY, key }); }}
                   style={{ position: 'absolute', right: '100%', top: '50%', transform: 'translateY(-50%)', zIndex: 200, marginRight: -4, paddingRight: 12 }}
                 >
                   <button

@@ -1370,6 +1370,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       {contextMenu && createPortal(
         <div
           {...portalGuard}
+          onClick={e => e.stopPropagation()}
           style={{
             position: 'fixed', left: contextMenu.x, top: contextMenu.y,
             background: tc.base, border: `1px solid ${tc.surface1}`, borderRadius: '6px',

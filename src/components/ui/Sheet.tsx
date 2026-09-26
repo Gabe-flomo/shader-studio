@@ -28,7 +28,7 @@ export function Sheet({ title, onClose, children, maxHeight = '80dvh', headerExt
   return createPortal(
     <div
       {...portalGuard}
-      onClick={e => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 60, background: tk.bg.scrim, display: 'flex', alignItems: 'flex-end' }}
     >
       <div
