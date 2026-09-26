@@ -489,6 +489,12 @@ function App() {
 
   // Export animation modal
   const [showExport, setShowExport]           = useState(false);
+  // Render… on a take, or Record a performance on the Play page (lib/takes.ts).
+  useEffect(() => {
+    const open = () => setShowExport(true);
+    window.addEventListener('open-record', open);
+    return () => window.removeEventListener('open-record', open);
+  }, []);
   // After Materialize on the Convert page: the Studio, with the new graph in view.
   const openStudioFitted = useCallback(() => { setPage('studio'); setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(), 80); }, []);
   const openConvertWith = useCallback((code: string) => { requestConvert(code); setPage('convert'); }, []);

@@ -186,6 +186,8 @@ export function playBundle(input: PlayHtmlInput) {
   // Notes are for the author and learners in the app; the website player never shows them.
   const play = { ...input.play };
   delete play.notes;
+  // Takes are for rendering in the app; the page never plays them back.
+  delete play.takes;
   return {
     title: input.title,
     fragmentShader: input.fragmentShader,

@@ -10,6 +10,7 @@ import { Callout } from './ui/Callout';
 import { Segmented, Toggle } from './ui/Choice';
 import { Field } from './ui/Field';
 import { Icon } from './ui/Icon';
+import { Kbd } from './ui/Kbd';
 import { Modal } from './ui/Modal';
 import { RulerSlider } from './ui/RulerSlider';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
@@ -21,7 +22,9 @@ import { recordingBaseName, recordingPath, saveRecording } from '../utils/record
 import { RecordingsSetting } from './shell/RecordingsSetting';
 import { audioEngine } from '../lib/audioEngine';
 import { mixdown, recordingTracks, wavBytes } from '../lib/recordingAudio';
-import { takeApplier, takePointerAt, useTakes } from '../lib/takes';
+import { rollingSeconds, takeApplier, useTakes } from '../lib/takes';
+import { TakesList } from './play/TakesList';
+import { TAKE_MAX_SECONDS, type PlayTake } from '../types/play';
 import { Select } from './ui/Select';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
@@ -100,6 +103,8 @@ const fmtPx = (w: number, h: number) => `${w}×${h}`;
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+const NO_TAKES: PlayTake[] = [];
+
 interface Props {
   canvas: HTMLCanvasElement | null;
   /**
@@ -154,8 +159,24 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const sound = withAudio && tracks.length > 0;
   const clockSongs = tracks.some(t => t.clock);
   // A take: a recorded performance, rendered frame by frame from where it was recorded.
-  const takes = useTakes(s => s.takes);
+  const takes = useNodeGraphStore(s => s.play.takes) ?? NO_TAKES;
   const [takeId, setTakeId] = useState<string | null>(() => { const p = useTakes.getState().pending; if (p) useTakes.getState().renderTake(null); return p; });
+  // Video: record or render the picture. Performance: play live and keep it as a take.
+  const [tab, setTab] = useState<'video' | 'performance'>(() => {
+    const perf = useTakes.getState().openOnPerformance;
+    if (perf) useTakes.setState({ openOnPerformance: false });
+    return perf && !external ? 'performance' : 'video';
+  });
+  // Render… on a take while this is open (the Performance tab's list): switch to rendering it.
+  const pendingTake = useTakes(s => s.pending);
+  useEffect(() => {
+    if (!pendingTake) return;
+    setTakeId(pendingTake);
+    setTab('video');
+    useTakes.getState().renderTake(null);
+  }, [pendingTake]);
+  const perf = useTakes(s => s.settings);
+  const rolling = useTakes(s => s.rolling);
   const take = external ? null : takes.find(t => t.id === takeId) ?? null;
   const span = take ? { from: take.from, length: Math.max(1 / fps, take.length) } : { from: 0, length: duration };
 
@@ -400,7 +421,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     const { width: w, height: h, renderAtTime, readPixels: handleReadPixels } = offlineRender;
     // Each frame gets the Play layers laid over it, stepped at the export's frame rate.
     let frameTime = 0, firstFrame = true;
-    const applier = take ? takeApplier(take, offlineRender.setUniform) : null;
+    const applier = take ? takeApplier(take, offlineRender) : null;
+    let frameActs: ReturnType<NonNullable<typeof applier>['apply']> = [];
     const startT = performance.now();
 
     try {
@@ -421,13 +443,13 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         // Throwing here is what actually stops the encode loop on Cancel.
         renderFrame: (t) => {
           if (abortRef.current) throw new Error('cancelled');
-          applier?.apply(t);
+          frameActs = applier?.apply(t) ?? [];
           renderAtTime(t);
           frameTime = t;
         },
         readPixels: (out, width, height) => {
           handleReadPixels(out, width, height);
-          playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame, { transparent, picture, pointer: take ? takePointerAt(take, frameTime) : undefined });
+          playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame, { transparent, picture, pointer: applier?.pointer(frameTime), actions: frameActs });
           firstFrame = false;
         },
         onProgress: (fraction, frame) => {
@@ -481,7 +503,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     abortRef.current = false;
     const { width: w, height: h, renderAtTime, readPixels } = offlineRender;
     const total = Math.max(1, Math.ceil(span.length * fps));
-    const applier = take ? takeApplier(take, offlineRender.setUniform) : null;
+    const applier = take ? takeApplier(take, offlineRender) : null;
     const base = filename || 'shader graph';
     const digits = Math.max(5, String(total).length);
     const pixels = new Uint8Array(w * h * 4);
@@ -498,10 +520,10 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       for (let i = 0; i < total; i++) {
         if (abortRef.current) throw new Error('cancelled');
         const t = span.from + i / fps;
-        applier?.apply(t);
+        const actions = applier?.apply(t) ?? [];
         renderAtTime(t);
         readPixels(pixels, w, h);
-        playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: take ? takePointerAt(take, t) : undefined });
+        playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: applier?.pointer(t), actions });
         const img = fx.createImageData(w, h);
         img.data.set(pixels);
         fx.putImageData(img, 0, 0);
@@ -626,7 +648,15 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const ext = pngSequence ? 'zip' : mode === 'ffmpeg' ? codecExt(transparent ? 'prores4444' : codec) : (current?.format?.ext ?? preferred?.ext ?? 'webm');
   const resetToIdle = () => { setState('idle'); setCaptureProgress(0); setElapsed(0); setFrameCount(0); setErrorMsg(''); setOutputPath(''); };
 
-  const footer = state === 'idle' ? (
+  const footer = state === 'idle' && tab === 'performance' ? (
+    <>
+      <span style={{ flex: 1 }} />
+      <Button variant="ghost" onClick={onClose}>Cancel</Button>
+      <Button variant="primary" onClick={() => { useTakes.getState().begin(); onClose(); }} title="This closes, and a small bar shows the time and Stop">
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start performance
+      </Button>
+    </>
+  ) : state === 'idle' ? (
     <>
       <Button icon="camera" disabled={!canvas || nothingShows} onClick={handleScreenshot} title={transparent ? 'A PNG of this moment with its transparency' : undefined}>Snapshot PNG</Button>
       <span style={{ flex: 1 }} />
@@ -659,7 +689,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   return (
     <Modal
       title="Record"
-      subtitle="Export the preview as video or a still"
+      subtitle={tab === 'performance' ? 'Play live, keep it as a take, render it later' : 'Export the preview as video or a still'}
       icon="record"
       iconColor={tk.status.danger}
       width={480}
@@ -669,8 +699,60 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     >
       <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
+        {!external && state === 'idle' && (
+          <Segmented
+            fill
+            ariaLabel="What to record"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'video', label: 'Video', sub: 'the picture, or a take' },
+              { value: 'performance', label: 'Performance', sub: 'play live, render later' },
+            ]}
+          />
+        )}
+
+        {tab === 'performance' && state === 'idle' && (
+          <>
+            <Help>
+              Play it live (MIDI, keys, the mouse, triggers, layers) for up to 1 minute. Everything you do is kept as keyframes,
+              so you can watch it back and then render it frame by frame: smooth at any size, with no dropped frames.
+            </Help>
+            <Section label="Length" meta={perf.manual ? 'up to 1 minute' : `${perf.seconds} s`}>
+              {!perf.manual && (
+                <div style={{ display: 'flex' }}>
+                  <RulerSlider value={perf.seconds} min={1} max={TAKE_MAX_SECONDS} step={1} integer defaultValue={15} onChange={v => useTakes.getState().setSettings({ seconds: v })} ariaLabel="Length in seconds" />
+                </div>
+              )}
+              <Toggle checked={perf.manual} onChange={v => useTakes.getState().setSettings({ manual: v })} label="Stop by hand instead (up to 1 minute)" />
+              <Toggle checked={perf.countIn} onChange={v => useTakes.getState().setSettings({ countIn: v })} label="Count 3, 2, 1 first" />
+              <Help>
+                Start closes this and runs the clock. A small bar at the bottom shows the time and Stop (<Kbd combo="cmd+." />),
+                and everything else keeps working while you play. When it stops, the take plays back.
+              </Help>
+            </Section>
+            <Section label="Takes" meta={takes.length ? String(takes.length) : undefined}>
+              <TakesList empty="None yet. Takes are saved with the graph and in play files." />
+            </Section>
+            <Section label="Keep the last minute">
+              <Toggle checked={rolling} onChange={v => useTakes.getState().setRolling(v)} label="Always keep the last minute of playing" />
+              <Help>
+                Off unless you turn it on. While the clock runs, the last minute of playing is kept in memory (well under a
+                megabyte), so a good moment can be saved after it happened. Remembered on this device.
+              </Help>
+              {rolling && (
+                <div>
+                  <Button size="sm" icon="save" onClick={() => { const t = useTakes.getState().saveRolling(); if (t) { onClose(); useTakes.getState().replay(t.id); } }} title={`Holding ${Math.round(rollingSeconds())} s now`}>
+                    Save the last minute as a take
+                  </Button>
+                </div>
+              )}
+            </Section>
+          </>
+        )}
+
         {/* Mode — Tauri only */}
-        {inTauri && !external && state === 'idle' && (
+        {inTauri && !external && state === 'idle' && tab === 'video' && (
           <Section label="Mode">
             <Segmented
               fill
@@ -686,7 +768,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
           </Section>
         )}
 
-        {state === 'idle' && (
+        {state === 'idle' && tab === 'video' && (
           <>
             {external && <Help>Recording the website player as it runs, in real time.</Help>}
             {!external && <Section label="Background">
@@ -731,11 +813,11 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                   height={34}
                   value={takeId ?? ''}
                   onChange={v => setTakeId(v || null)}
-                  options={[{ value: '', label: 'None: record live' }, ...takes.map(t => ({ value: t.id, label: `${t.name} · ${formatDuration(t.length)}` }))]}
+                  options={[{ value: '', label: 'None: record live' }, ...takes.map((t: PlayTake) => ({ value: t.id, label: `${t.name} · ${formatDuration(t.length)}` }))]}
                 />
                 {take && (
                   <Help>
-                    Renders {take.name} frame by frame: the clock from {take.from.toFixed(1)}s for {formatDuration(take.length)}, every control, null and the pointer as you played them.
+                    Renders {take.name} frame by frame: the clock from {take.from.toFixed(1)}s for {formatDuration(take.length)}, with every control, MIDI note, mouse move and action as you played them.
                     {mode === 'ffmpeg' ? '' : ' In the browser that’s a PNG sequence (with the song as a WAV); the desktop app renders it straight to video.'}
                   </Help>
                 )}

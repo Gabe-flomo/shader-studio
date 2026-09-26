@@ -48,10 +48,54 @@ class InputBus {
   /** Last frame's scalar values, to tell "a value moved" from "a value was written again". */
   private previous = new Map<string, number>();
   private moved = false;
+  /** Sees every write, bound or not (a take recording the MIDI node's outputs). */
+  private tapFn: InputWriter | null = null;
   private writer: InputWriter = (channelKey, value) => {
+    if (this.tapFn) this.tapFn(channelKey, value);
     const uniform = this.live.get(channelKey) ?? this.params.get(channelKey);
     if (uniform !== undefined) this.result.set(uniform, value);
   };
+
+  /** Watch every channel write (one watcher; null stops). */
+  tap(fn: InputWriter | null): void {
+    this.tapFn = fn;
+  }
+
+  /**
+   * Write a uniform by its name, during a tick (a take playing back an Audio
+   * Input node's amplitude, which the audio engine writes by name too).
+   */
+  writeUniform(name: string, value: InputValue): void {
+    this.result.set(name, value);
+  }
+
+  /** Uniform name a live node channel (`nodeId::note`) resolves to right now. */
+  liveUniform(channelKey: string): string | undefined {
+    return this.live.get(channelKey);
+  }
+
+  // ── The shader's mouse (u_mouse), 0..1 of the picture ─────────────────────
+  private mouse: [number, number] = [0, 0];
+  private mouseHeld: [number, number] | null = null;
+
+  /** The pointer moved over the picture (ShaderCanvas), 0..1 with y up. */
+  setMouse(x: number, y: number): void {
+    this.mouse[0] = x; this.mouse[1] = y;
+  }
+
+  /** Where u_mouse is now, 0..1 of the picture (a take playing back wins). */
+  mouseNow(): [number, number] {
+    return this.mouseHeld ?? this.mouse;
+  }
+
+  /** A take playing back holds u_mouse where the performance had it; null gives it back to the pointer. */
+  setMouseOverride(v: [number, number] | null): void {
+    this.mouseHeld = v;
+  }
+
+  mouseOverride(): [number, number] | null {
+    return this.mouseHeld;
+  }
 
   private wakeListeners = new Set<() => void>();
 

@@ -31,8 +31,7 @@ import { ColourPad } from './ColourPad';
 import { useLiveValues } from './useLiveValues';
 import { PHONE_SIZE, useStage, type StageMode } from './stageStore';
 import { useTakes } from '../../lib/takes';
-import { playOverlay } from '../../play/overlay';
-import { formatDuration } from '../../lib/midiFile';
+import { TakesList } from './TakesList';
 
 export function Stage({ canvas, onRecord }: {
   /** The app's live picture (Full). */
@@ -248,32 +247,24 @@ function ExactNotes({ missing, left }: { missing: string[]; left: { what: string
 }
 
 /**
- * Takes: perform, and every frame's controls, nulls and pointer are noted, to
- * render later frame by frame (Record › Take) at full quality.
+ * Takes: perform (up to a minute) and every input is kept as keyframes, to
+ * watch back and render later frame by frame (see lib/takes.ts, TakesList).
  */
 function TakesPanel({ onRender }: { onRender: () => void }) {
-  const tk = useTokens();
-  const { takes, recording, elapsed, start, stop, remove, renderTake } = useTakes();
+  const phase = useTakes(s => s.phase);
+  const busy = phase === 'recording' || phase === 'countdown';
   return (
     <div style={{ marginBottom: 18 }}>
       {heading('Takes')}
-      <Button size="sm" variant={recording ? 'danger' : 'secondary'} icon={recording ? 'pause' : 'record'} style={{ width: '100%', justifyContent: 'center' }}
-        onClick={() => { if (recording) stop(); else start(() => playOverlay.pointerNow()); }}
-        title={recording ? 'Stop: keep this take' : 'Play it while this records: every control, null and the pointer, frame by frame'}>
-        {recording ? `Stop take · ${formatDuration(elapsed)}` : 'Record a take'}
+      <Button size="sm" variant={busy ? 'danger' : 'secondary'} icon="record" style={{ width: '100%', justifyContent: 'center' }}
+        onClick={() => (busy ? useTakes.getState().stop() : useTakes.getState().begin())}
+        title={busy ? 'Stop and watch it back' : 'Play it for up to a minute: every input is kept, to watch back and render frame by frame'}>
+        {busy ? 'Stop recording' : 'Record a performance'}
       </Button>
       <div style={{ color: alpha('#ffffff', 0.5), fontSize: 11.5, lineHeight: 1.45, margin: '6px 0 8px' }}>
-        {recording ? 'Playing is being noted. ↺ on the clock starts the take over.' : 'Perform it once, then render it frame by frame: smooth at any size, with the song, no dropped frames.'}
+        Perform it once, then render it frame by frame: smooth at any size, with the song, no dropped frames.
       </div>
-      {takes.map(t => (
-        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0' }}>
-          <Icon name="record" size={12} style={{ color: tk.status.danger, flexShrink: 0 }} />
-          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-          <span style={{ color: alpha('#ffffff', 0.5), font: `500 11px ${fontFamily.mono}` }}>{formatDuration(t.length)}</span>
-          <Button size="sm" variant="ghost" onClick={() => { renderTake(t.id); onRender(); }} title="Open Record with this take">Render…</Button>
-          <IconButton icon="trash" label="Delete this take" size="sm" onClick={() => remove(t.id)} />
-        </div>
-      ))}
+      <TakesList onRender={() => onRender()} />
     </div>
   );
 }
