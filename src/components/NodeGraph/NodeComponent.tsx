@@ -365,6 +365,8 @@ interface TooltipProps {
 function SocketTooltip({ lines, side, onMouseEnter, onMouseLeave }: TooltipProps) {
   const tk = useTokens();
   const interactive = !!onMouseEnter;
+  // The outer box starts at the socket dot and pads the gap to the panel, so the pointer
+  // can travel from the dot onto the panel without ever leaving the tooltip.
   return (
     <div
       onMouseEnter={onMouseEnter}
@@ -372,10 +374,16 @@ function SocketTooltip({ lines, side, onMouseEnter, onMouseLeave }: TooltipProps
       onMouseDown={e => e.stopPropagation()}
       style={{
         position: 'absolute',
-        [side === 'left' ? 'left' : 'right']: '22px',
+        [side === 'left' ? 'left' : 'right']: '10px',
         top: '50%',
         transform: 'translateY(-50%)',
         zIndex: 200,
+        [side === 'left' ? 'paddingLeft' : 'paddingRight']: 12,
+        paddingTop: 6, paddingBottom: 6,
+        pointerEvents: interactive ? 'auto' : 'none',
+      }}
+    >
+      <div style={{
         background: tk.bg.panel,
         borderRadius: radius.md,
         padding: '8px 10px',
@@ -383,12 +391,11 @@ function SocketTooltip({ lines, side, onMouseEnter, onMouseLeave }: TooltipProps
         maxWidth: 280,
         font: `11.5px/1.5 ${fontFamily.ui}`,
         color: tk.text.primary,
-        pointerEvents: interactive ? 'auto' : 'none',
         boxShadow: tk.shadow.popover,
         whiteSpace: 'nowrap',
-      }}
-    >
-      {lines.map((line, i) => <div key={i}>{line}</div>)}
+      }}>
+        {lines.map((line, i) => <div key={i}>{line}</div>)}
+      </div>
     </div>
   );
 }
@@ -607,8 +614,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // pointer can travel onto the tooltip and click a "jump to node" link.
   const tipLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdTip = () => { if (tipLeaveTimer.current) { clearTimeout(tipLeaveTimer.current); tipLeaveTimer.current = null; } };
-  const leaveInputSocket = () => { holdTip(); tipLeaveTimer.current = setTimeout(() => setHoveredInput(null), 160); onSocketHover?.(null); };
-  const leaveOutputSocket = () => { holdTip(); tipLeaveTimer.current = setTimeout(() => setHoveredOutput(null), 160); onSocketHover?.(null); };
+  const leaveInputSocket = () => { holdTip(); tipLeaveTimer.current = setTimeout(() => setHoveredInput(null), 280); onSocketHover?.(null); };
+  const leaveOutputSocket = () => { holdTip(); tipLeaveTimer.current = setTimeout(() => setHoveredOutput(null), 280); onSocketHover?.(null); };
   /** Centre the canvas on another node at this level and select it (the tooltip's node names). */
   const jumpToNode = (id: string) => {
     holdTip(); setHoveredInput(null); setHoveredOutput(null);
@@ -3386,9 +3393,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 >
                   {slotName}
                   {isField && (
+                    // A badge, not a button: it sits inside the label, whose click disconnects, so it swallows its own clicks.
                     <span
                       title={FIELD_SOCKET_TIP}
-                      style={{ marginLeft: 5, padding: '0 4px', borderRadius: 4, font: `600 10px ${fontFamily.mono}`, color: tk.kind.expr, background: alpha(tk.kind.expr, 0.14), verticalAlign: 1 }}
+                      onMouseDown={e => e.stopPropagation()}
+                      onMouseUp={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); }}
+                      style={{ marginLeft: 5, padding: '0 4px', borderRadius: 4, font: `600 10px ${fontFamily.mono}`, color: tk.kind.expr, background: alpha(tk.kind.expr, 0.14), verticalAlign: 1, cursor: 'help' }}
                     >ƒ</span>
                   )}
                   {isExternal && <span title="Wired from outside the group" style={{ marginLeft: 5, verticalAlign: -2, display: 'inline-flex' }}><Icon name="lock" size={12} /></span>}

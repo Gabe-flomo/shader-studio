@@ -946,3 +946,55 @@ export function klCompileSketch(code, P) {
   const make = new Function('P', `with (P) {\n${code}\n;\nreturn {\n  setup: typeof setup === 'function' ? setup : null,\n  draw: typeof draw === 'function' ? draw : null,\n  params: typeof params === 'object' && params ? params : {},\n  has: function (k) { try { return eval('typeof ' + k) !== 'undefined' && !(k in P); } catch (e) { return false; } },\n  set: function (k, v) { try { eval(k + ' = v;'); } catch (e) { /* not a plain variable */ } },\n};\n}`);
   return make(P);
 }
+
+/**
+ * A compiled sketch and what the runner keeps between frames. Shared by the
+ * layer kit and the editor's scratch preview, so both run the same thing.
+ */
+export function klSketchCompile(code) {
+  const st = { code, setup: null, draw: null, set: null, has: null, params: {}, vars: null, error: null, state: {}, frame: 0, w: 0, h: 0, ready: false, s: null, pressed: {} };
+  try {
+    const P = klSketchHelpers(() => st.s);
+    const r = klCompileSketch(code, P);
+    st.setup = r.setup; st.draw = r.draw; st.set = r.set; st.has = r.has; st.params = r.params || {};
+    if (!st.draw) st.error = 'The script needs a draw(s) function.';
+  } catch (e) { st.error = 'Compile: ' + ((e && e.message) || e); }
+  return st;
+}
+
+/** A button param was pressed: next frame `s.pressed(key)` is true, `s.params[key]` is the amount, and a handler in params runs. */
+export function klSketchPress(st, key, amount) { st.pressed[key] = typeof amount === 'number' ? amount : 1; }
+
+/**
+ * One frame. `s` is the frame object (ctx, width, height, params, state, frame…).
+ * Drives the declared variables from the params, runs setup on the first frame
+ * or a resize, clears when asked, delivers presses, draws. Returns the error
+ * string (kept in st.error, so the sketch stops until the code changes) or null.
+ */
+export function klSketchStep(st, s, defs, clear) {
+  if (st.error) return st.error;
+  const W = s.width, H = s.height, bx = s.ctx;
+  st.s = s;
+  const pressed = st.pressed; st.pressed = {};
+  s.pressed = k => Object.prototype.hasOwnProperty.call(pressed, k);
+  const list = defs || [];
+  for (const d of list) if (d.kind === 'button') s.params[d.key] = s.pressed(d.key) ? pressed[d.key] : 0;
+  // A declared slider or toggle whose name is also a top-level variable of the sketch drives that variable.
+  if (!st.vars) { st.vars = {}; for (const d of list) st.vars[d.key] = d.kind !== 'button' && !!(st.has && st.has(d.key)); }
+  for (const d of list) if (st.vars[d.key] && st.set) st.set(d.key, d.kind === 'toggle' ? s.params[d.key] >= 0.5 : s.params[d.key]);
+  try {
+    if (!st.ready || st.w !== W || st.h !== H) {
+      st.w = W; st.h = H; st.state = {}; s.state = st.state; st.frame = 0; s.frame = 0;
+      bx.setTransform(1, 0, 0, 1, 0, 0); bx.clearRect(0, 0, W, H);
+      if (st.setup) st.setup(s);
+      st.ready = true;
+    }
+    bx.save(); bx.setTransform(1, 0, 0, 1, 0, 0); bx.globalAlpha = 1; bx.globalCompositeOperation = 'source-over';
+    if (clear) bx.clearRect(0, 0, W, H);
+    for (const k in pressed) { const fn = st.params[k]; if (typeof fn === 'function') fn(s, pressed[k]); }
+    st.draw(s);
+    bx.restore();
+    st.frame++;
+    return null;
+  } catch (e) { st.error = 'Runtime: ' + ((e && e.message) || e); return st.error; }
+}

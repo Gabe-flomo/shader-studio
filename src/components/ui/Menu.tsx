@@ -16,12 +16,14 @@ const MARGIN = 8;
  * Context/popup menu opened at a viewport point. Closes on outside click, Esc, or selecting an
  * item; ↑/↓ + Enter work from the keyboard. Kept inside the viewport.
  */
-export function Menu({ x, y, items, onClose, minWidth = 190 }: {
+export function Menu({ x, y, items, onClose, minWidth = 190, maxWidth = 360 }: {
   x: number;
   y: number;
   items: readonly MenuItem[];
   onClose: () => void;
   minWidth?: number;
+  /** Long hints wrap inside this, so a menu never grows to its longest sentence. */
+  maxWidth?: number;
 }) {
   const tk = useTokens();
   const ref = useRef<HTMLDivElement>(null);
@@ -69,7 +71,7 @@ export function Menu({ x, y, items, onClose, minWidth = 190 }: {
       ref={ref}
       role="menu"
       style={{
-        position: 'fixed', left: pos.left, top: pos.top, zIndex: 9000, minWidth, maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100vh - 16px)', overflowY: 'auto', padding: 4,
+        position: 'fixed', left: pos.left, top: pos.top, zIndex: 9000, minWidth, maxWidth: `min(${maxWidth}px, calc(100vw - 16px))`, maxHeight: 'calc(100vh - 16px)', overflowY: 'auto', padding: 4,
         background: tk.bg.panel, borderRadius: 10, boxShadow: tk.shadow.popover, font: `12.5px ${fontFamily.ui}`,
       }}
     >

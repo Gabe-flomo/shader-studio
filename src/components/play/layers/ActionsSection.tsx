@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { fontFamily, radius } from '../../../theme/tokens';
-import { ACTIONS_FOR, type ActionKind, type PlayAction, type PlayLayer, type PlayRecord, type TriggerSpec } from '../../../types/play';
+import { actionsForLayer, type ActionKind, type PlayAction, type PlayLayer, type PlayRecord, type TriggerSpec } from '../../../types/play';
 import { playEngine } from '../../../lib/playEngine';
 import { playId } from '../../../play/playControls';
 import { Button, IconButton } from '../../ui/Button';
@@ -16,10 +16,10 @@ import { Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { TriggerPicker } from '../TriggerPicker';
-import { ACTION_LABELS } from './help';
+import { actionLabel } from './help';
 
 
-const actionsFor = (l: PlayLayer | undefined): readonly ActionKind[] => (l ? ACTIONS_FOR[l.kind] ?? ACTIONS_FOR.other : ACTIONS_FOR.other);
+const actionsFor = (l: PlayLayer | undefined): readonly ActionKind[] => actionsForLayer(l);
 const defaultAction = (l: PlayLayer): ActionKind => actionsFor(l)[0];
 
 export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: PlayRecord) => PlayRecord) => void }) {
@@ -71,7 +71,7 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
               <span style={label}>Do</span>
-              <Select ariaLabel="Action" value={kinds.includes(a.do) ? a.do : kinds[0]} options={kinds.map(k => ({ value: k, label: ACTION_LABELS[k] }))} onChange={v => update(a.id, { do: v as ActionKind })} height={26} />
+              <Select ariaLabel="Action" value={kinds.includes(a.do) ? a.do : kinds[0]} options={kinds.map(k => ({ value: k, label: actionLabel(k, layer) }))} onChange={v => update(a.id, { do: v as ActionKind })} height={26} />
               <Select ariaLabel="Layer" value={a.layerId} options={play.layers.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const l = play.layers.find(x => x.id === v); update(a.id, { layerId: v, do: l && actionsFor(l).includes(a.do) ? a.do : l ? defaultAction(l) : a.do }); }} height={26} />
               {(a.do === 'burst' || a.do === 'scatter') && (
                 <NumberInput value={a.amount} min={0} max={a.do === 'burst' ? 5000 : 10} step={a.do === 'burst' ? 10 : 0.5} title={a.do === 'burst' ? 'How many particles' : 'How hard'} onCommit={n => update(a.id, { amount: Math.max(0, n) })} style={numStyle} />

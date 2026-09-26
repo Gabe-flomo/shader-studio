@@ -115,7 +115,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         <span ref={addRef} style={{ display: 'inline-flex' }}>
           <Button size="sm" icon="plus" onClick={() => { const r = addRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 280, y: r.bottom + 6 } : null); }}>Add layer</Button>
         </span>
-        {menu && <Menu x={menu.x} y={menu.y} minWidth={280} onClose={() => setMenu(null)} items={KINDS.map(k => ({ label: k.label, hint: k.hint, onSelect: () => add(k.kind) }))} />}
+        {menu && <Menu x={menu.x} y={menu.y} minWidth={280} onClose={() => setMenu(null)} items={KINDS.map(k => ({ label: k.label, hint: k.hint, icon: k.icon, onSelect: () => add(k.kind) }))} />}
       </div>
       <div ref={listRef} style={{ flex: 1, minHeight: play.notes && !top ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {top && <div style={{ margin: '0 -12px' }}>{top}</div>}
@@ -147,6 +147,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             onCreateNull={key => createNull(l.id, key)}
             onMove={dir => move(l.id, dir)}
             onExpose={key => expose(l, key)}
+            onExposeControl={onExpose}
             onDriveNull={key => driveNull(l, key)}
           />
         ))}
@@ -156,7 +157,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   );
 }
 
-function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidden, drawing, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onDriveNull }: {
+function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidden, drawing, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull }: {
   layer: PlayLayer;
   layers: PlayLayer[];
   index: number;
@@ -176,6 +177,7 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
   onCreateNull: (key: string) => void;
   onMove: (dir: -1 | 1) => void;
   onExpose: (key: string) => void;
+  onExposeControl: (control: PlayControl) => void;
   onDriveNull: (key: string) => void;
 }) {
   const tk = useTokens();
@@ -189,7 +191,7 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
   if (revealTick !== seenTick) { setSeenTick(revealTick); if (revealTick) setOpen(true); }
   const commit = () => { setEditing(false); const t = draft.trim(); if (t && t !== l.label) onRename(t); else setDraft(l.label); };
   const set = (p: Record<string, unknown>) => onPatch(x => ({ ...x, ...p } as PlayLayer));
-  const f = makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onDriveNull });
+  const f = makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onExposeControl, onDriveNull });
   const ctx: EditorContext = {
     layers,
     act: (kind, amount = 1) => playOverlay.act({ do: kind, layerId: l.id, amount }),
@@ -213,7 +215,7 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
     case 'brush': body = <BrushEditor f={f} ctx={ctx} />; break;
     case 'bodies': body = <BodiesEditor f={f} ctx={ctx} />; break;
     case 'cloner': body = <ClonerEditor f={f} ctx={ctx} />; break;
-    case 'script': body = <ScriptEditor f={f} />; break;
+    case 'script': body = <ScriptEditor f={f} ctx={ctx} />; break;
   }
 
   return (

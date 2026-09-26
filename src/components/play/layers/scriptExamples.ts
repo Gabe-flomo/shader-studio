@@ -37,13 +37,15 @@ function draw(s) {
 `,
   },
   {
-    name: 'Trail', hint: 'A ribbon that follows the mouse and fades. Clear is off, so each frame draws over the last.', settings: { clear: false, readPicture: false },
+    name: 'Trail', hint: 'A ribbon that follows the mouse and fades. Clear is off, so each frame draws over the last. Wipe is a button.', settings: { clear: false, readPicture: false },
     code: `// Trails: the canvas is kept between frames (Clear is off), so we fade it a little each frame
 // instead of clearing it, then draw the newest segment on top.
 const params = {
   fade:  { value: 0.06, min: 0.005, max: 0.4, step: 0.005, label: 'Fade' },
   width: { value: 14, min: 1, max: 80, label: 'Width' },
   hue:   { value: 200, min: 0, max: 360, step: 1, label: 'Hue' },
+  // A function in params is a button: on the layer, and an action Play can press from a key or a beat.
+  wipe(s) { s.ctx.clearRect(0, 0, s.width, s.height); },
 };
 
 function setup(s) { s.state.last = null; s.state.t = 0; }
@@ -65,12 +67,12 @@ function draw(s) {
 `,
   },
   {
-    name: 'Picture grid', hint: 'Squares sized by the picture’s brightness under them: the script reads the shader.', settings: { clear: true, readPicture: true },
+    name: 'Picture grid', hint: 'Squares sized by the picture’s brightness under them: the script reads the shader. Invert is a toggle.', settings: { clear: true, readPicture: true },
     code: `// Reads the picture: s.picture.brightness(x, y) is 0..1 at a pixel (Picture must be on).
 const params = {
   cells:  { value: 28, min: 4, max: 80, step: 1, label: 'Cells' },
   gain:   { value: 1.2, min: 0.2, max: 3, step: 0.05, label: 'Gain' },
-  invert: { value: 0, min: 0, max: 1, step: 1, label: 'Invert' },
+  invert: { kind: 'toggle', value: false, label: 'Invert' },
 };
 
 function draw(s) {
@@ -80,7 +82,7 @@ function draw(s) {
   for (let y = cell / 2; y < height; y += cell) {
     for (let x = cell / 2; x < width; x += cell) {
       let b = Math.min(1, s.picture.brightness(x, y) * params.gain);
-      if (params.invert > 0.5) b = 1 - b;
+      if (params.invert) b = 1 - b;
       const r = b * cell * 0.5;
       ctx.fillRect(x - r, y - r, r * 2, r * 2);
     }
@@ -127,11 +129,23 @@ export function extractScriptParams(code: string): { ok: true; defs: import('../
   const defs: import('../../../types/playLayers').ScriptParamDef[] = [];
   for (const [key, spec] of Object.entries((raw ?? {}) as Record<string, unknown>)) {
     if (!/^[A-Za-z_]\w{0,30}$/.test(key)) continue;
-    const o = (typeof spec === 'number' ? { value: spec } : (spec ?? {})) as Record<string, unknown>;
-    const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
-    const min = num(o.min, 0), max = num(o.max, Math.max(1, min + 1));
-    const def = { key, label: typeof o.label === 'string' && o.label.trim() ? o.label.trim() : key, value: Math.min(max, Math.max(min, num(o.value, min))), min, max, ...(typeof o.step === 'number' && o.step > 0 ? { step: o.step } : {}), ...(typeof o.hint === 'string' ? { hint: o.hint } : {}) };
-    defs.push(def);
+    // Shorthands: a number is a 0–1 slider, a boolean a toggle, a function a button that runs it when pressed.
+    const o: Record<string, unknown> = typeof spec === 'number' ? { value: spec }
+      : typeof spec === 'boolean' ? { kind: 'toggle', value: spec }
+      : typeof spec === 'function' ? { kind: 'button' }
+      : spec === 'button' || spec === 'toggle' ? { kind: spec }
+      : ((spec && typeof spec === 'object' ? spec : {}) as Record<string, unknown>);
+    const kind = o.kind === 'toggle' || o.kind === 'button' ? o.kind : 'slider';
+    const label = typeof o.label === 'string' && o.label.trim() ? o.label.trim() : key;
+    const hint = typeof o.hint === 'string' ? { hint: o.hint } : {};
+    if (kind === 'slider') {
+      const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+      const min = num(o.min, 0), max = num(o.max, Math.max(1, min + 1));
+      defs.push({ key, label, value: Math.min(max, Math.max(min, num(o.value, min))), min, max, ...(typeof o.step === 'number' && o.step > 0 ? { step: o.step } : {}), ...hint });
+    } else {
+      const on = o.value === true || (typeof o.value === 'number' && o.value >= 0.5);
+      defs.push({ key, label, kind, value: kind === 'toggle' && on ? 1 : 0, min: 0, max: 1, step: 1, ...hint });
+    }
     if (defs.length >= 32) break;
   }
   return { ok: true, defs };

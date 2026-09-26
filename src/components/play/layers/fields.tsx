@@ -8,7 +8,7 @@
 import type { ReactNode } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
-import { layerNumericProps, defaultLayer, layerTarget, type PlayLayer } from '../../../types/play';
+import { layerNumericProps, defaultLayer, layerTarget, type PlayControl, type PlayLayer } from '../../../types/play';
 import { Button } from '../../ui/Button';
 import { PARTICLE_PALETTES, paletteColour } from '../../../play/particle-sim.js';
 import { IconButton } from '../../ui/Button';
@@ -40,6 +40,10 @@ export interface FieldKit {
   pick: (label: string, key: string, layers: ReadonlyArray<{ id: string; label: string }>, empty: string, hint?: string, create?: () => void) => ReactNode;
   palette: (key?: string) => ReactNode;
   note: (text: ReactNode) => ReactNode;
+  /** Which control targets exist already (layer props and actions). */
+  exposedTargets: Set<string>;
+  /** Add a control as given (an action button, a script toggle) to the Play panel. */
+  exposeControl: (control: PlayControl) => void;
 }
 
 export const BLENDS: Choice[] = [
@@ -54,13 +58,14 @@ const COARSE = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer:
 const toHex = (v: RGB) => `#${v.map(c => Math.round(Math.max(0, Math.min(1, c)) * 255).toString(16).padStart(2, '0')).join('')}`;
 const fromHex = (h: string): RGB => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
 
-export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onDriveNull }: {
+export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onExposeControl, onDriveNull }: {
   l: PlayLayer;
   tk: Tokens;
   touch: boolean;
   exposedTargets: Set<string>;
   set: (patch: Record<string, unknown>) => void;
   onExpose: (key: string) => void;
+  onExposeControl: (control: PlayControl) => void;
   /** Make the property a control with a Null on the picture that drives it (its X/Y partner too). */
   onDriveNull?: (key: string) => void;
 }): FieldKit {
@@ -154,6 +159,7 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onDr
   return {
     l, tk, numStyle, get, set: p => set(p as Record<string, unknown>),
     prop, props: (...keys) => keys.map(prop), row, colour, seg, select, toggle, pick, palette, note,
+    exposedTargets, exposeControl: onExposeControl,
   };
 }
 

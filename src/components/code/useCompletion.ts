@@ -3,13 +3,27 @@ import { matchCompletions, type Completion } from './glslReference';
 
 type Field = HTMLTextAreaElement | HTMLInputElement;
 
-/** The identifier being typed right before the caret, unless it follows a `.` (a swizzle). */
-function wordBeforeCaret(value: string, caret: number): { word: string; start: number } | null {
-  const m = /[A-Za-z_][A-Za-z0-9_]*$/.exec(value.slice(0, caret));
-  if (!m) return null;
-  const start = caret - m[0].length;
-  if (start > 0 && value[start - 1] === '.') return null;
-  return { word: m[0], start };
+/** Completions offered after `owner.` (the Script editor's `s.`, `ctx.`, `Math.`); GLSL fields pass none, so a dot is a swizzle there. */
+export type MemberCompletions = Record<string, readonly Completion[]>;
+
+/**
+ * The identifier being typed right before the caret. After a `.`, only when
+ * `members` knows the name before the dot (then the word may be empty: the
+ * popup opens on the dot itself); otherwise a dot means a swizzle, no popup.
+ */
+function wordBeforeCaret(value: string, caret: number, members?: MemberCompletions): { word: string; start: number; owner?: string } | null {
+  const before = value.slice(0, caret);
+  const m = /([A-Za-z_][A-Za-z0-9_]*)?$/.exec(before)!;
+  const word = m[1] ?? '';
+  const start = caret - word.length;
+  if (start > 0 && value[start - 1] === '.') {
+    if (!members) return null;
+    const owner = /([A-Za-z_][A-Za-z0-9_]*)$/.exec(value.slice(0, start - 1))?.[1];
+    if (!owner || !members[owner]) return null;
+    return { word, start, owner };
+  }
+  if (!word) return null;
+  return { word, start };
 }
 
 export interface CompletionState {
@@ -26,7 +40,7 @@ export interface CompletionState {
  * route keydown through `handleKey` first (true = consumed), and `close` on blur. `apply`
  * replaces the typed word and returns the new value and caret for the caller to commit.
  */
-export function useCompletion(completions: readonly Completion[], onApply: (next: string, caret: number) => void) {
+export function useCompletion(completions: readonly Completion[], onApply: (next: string, caret: number) => void, members?: MemberCompletions) {
   const [state, setState] = useState<CompletionState>({ open: false, items: [], index: 0, anchor: 0, word: '' });
 
   const close = useCallback(() => setState(s => (s.open ? { ...s, open: false } : s)), []);
@@ -35,23 +49,23 @@ export function useCompletion(completions: readonly Completion[], onApply: (next
   const update = useCallback((el: Field): number | null => {
     const caret = el.selectionStart ?? el.value.length;
     if (caret !== (el.selectionEnd ?? caret)) { close(); return null; }
-    const w = wordBeforeCaret(el.value, caret);
-    const items = w ? matchCompletions(completions, w.word) : [];
+    const w = wordBeforeCaret(el.value, caret, members);
+    const items = !w ? [] : w.owner ? (w.word ? matchCompletions(members![w.owner], w.word, 8) : members![w.owner].slice(0, 8)) : matchCompletions(completions, w.word);
     if (!w || items.length === 0) { close(); return null; }
     setState({ open: true, items, index: 0, anchor: w.start, word: w.word });
     return w.start;
-  }, [completions, close]);
+  }, [completions, members, close]);
 
   const apply = useCallback((el: Field, item: Completion) => {
     const caret = el.selectionStart ?? el.value.length;
-    const w = wordBeforeCaret(el.value, caret);
+    const w = wordBeforeCaret(el.value, caret, members);
     const start = w ? w.start : caret;
     const next = el.value.slice(0, start) + item.insert + el.value.slice(caret);
     const paren = item.insert.indexOf('(');
     const at = start + (paren >= 0 ? paren + 1 : item.insert.length);
     setState(s => ({ ...s, open: false }));
     onApply(next, at);
-  }, [onApply]);
+  }, [onApply, members]);
 
   /** Returns true when the key was handled by the popup. */
   const handleKey = useCallback((e: React.KeyboardEvent<Field>): boolean => {

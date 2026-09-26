@@ -173,7 +173,14 @@ import { parseLayer, type PlayLayer } from './playLayers';
  *   drop     bodies: drop them again from the top
  *   clear    brush: wipe the strokes
  */
-export type ActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear';
+export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear';
+/** A built-in action, or a button a Script layer declares (`script:<key>`). */
+export type ActionKind = BuiltinActionKind | `script:${string}`;
+
+/** The param key behind a script action kind, or null for a built-in one. */
+export function scriptActionKey(kind: string): string | null {
+  return kind.startsWith('script:') && /^[A-Za-z_]\w{0,30}$/.test(kind.slice(7)) ? kind.slice(7) : null;
+}
 
 export interface PlayAction {
   id: string;
@@ -185,16 +192,23 @@ export interface PlayAction {
   enabled: boolean;
 }
 
-export const ACTION_KINDS: readonly ActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear'];
+export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear'];
 
 /** Which actions make sense for which layer kinds. */
-export const ACTIONS_FOR: Record<string, readonly ActionKind[]> = {
+export const ACTIONS_FOR: Record<string, readonly BuiltinActionKind[]> = {
   particles: ['burst', 'scatter', 'reset', 'freeze', 'toggle', 'show', 'hide'],
   bodies: ['drop', 'scatter', 'reset', 'freeze', 'toggle', 'show', 'hide'],
   text: ['next', 'prev', 'shuffle', 'reset', 'toggle', 'show', 'hide'],
   brush: ['clear', 'toggle', 'show', 'hide'],
   other: ['toggle', 'show', 'hide'],
 };
+
+/** The actions a layer offers: its kind's built-ins, plus the buttons a script declares. */
+export function actionsForLayer(l: PlayLayer | undefined): ActionKind[] {
+  const base: ActionKind[] = [...(l ? ACTIONS_FOR[l.kind] ?? ACTIONS_FOR.other : ACTIONS_FOR.other)];
+  if (l?.kind === 'script') return [...l.paramDefs.filter(d => d.kind === 'button').map(d => `script:${d.key}` as const), ...base];
+  return base;
+}
 
 export const ACTION_TARGET_PREFIX = 'act:';
 
@@ -208,7 +222,7 @@ export function parseActionTarget(target: string): { layerId: string; do: Action
   const rest = target.slice(ACTION_TARGET_PREFIX.length);
   const i = rest.lastIndexOf('::');
   const kind = rest.slice(i + 2);
-  if (i <= 0 || !(ACTION_KINDS as readonly string[]).includes(kind)) return null;
+  if (i <= 0 || !((ACTION_KINDS as readonly string[]).includes(kind) || scriptActionKey(kind))) return null;
   return { layerId: rest.slice(0, i), do: kind as ActionKind };
 }
 

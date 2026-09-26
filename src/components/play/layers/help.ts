@@ -3,7 +3,7 @@
  * field, zone action and action kind does. Shown under the choices and in
  * tooltips.
  */
-import type { ActionKind, ParticleField, ZoneAction } from '../../../types/play';
+import { scriptActionKey, type ActionKind, type BuiltinActionKind, type ParticleField, type PlayLayer, type ZoneAction } from '../../../types/play';
 
 export const FIELD_HELP: Record<ParticleField, { label: string; title: string; body: string }> = {
   flow: { label: 'Flow', title: 'Brightness is a direction', body: 'Each particle reads the brightness under it and turns it into a heading: black points right, and the heading rotates as the picture gets brighter (Turns = full rotations from black to white). At Turns 1, black and white point the same way and mid grey the opposite, so particles skate along bright shapes\' edges and never get inside them.' },
@@ -31,8 +31,16 @@ export const ZONE_HELP: Record<ZoneAction, { label: string; body: string }> = {
   sensor: { label: 'Sensor', body: 'Nothing moves. Map its Fill (how crowded it is) or Hover onto anything, or fire an action when it fills up.' },
 };
 
-export const ACTION_LABELS: Record<ActionKind, string> = {
+export const ACTION_LABELS: Record<BuiltinActionKind, string> = {
   burst: 'Burst particles', scatter: 'Scatter', reset: 'Reset', freeze: 'Freeze / unfreeze',
   next: 'Next line', prev: 'Previous line', shuffle: 'Random line',
   toggle: 'Show / hide', show: 'Show', hide: 'Hide', drop: 'Drop again', clear: 'Clear strokes',
 };
+
+/** The label of an action: a built-in's, or a script button's label (its param label, or the key). */
+export function actionLabel(kind: ActionKind, l?: PlayLayer): string {
+  const key = scriptActionKey(kind);
+  if (key === null) return ACTION_LABELS[kind as BuiltinActionKind] ?? kind;
+  const def = l?.kind === 'script' ? l.paramDefs.find(d => d.key === key) : undefined;
+  return def?.label ?? key;
+}

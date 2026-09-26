@@ -52,8 +52,8 @@ import { GuidesToggle } from './GuidesToggle';
 import { OpenPlayableButton } from './OpenPlayable';
 import { MidiFileCard } from './MidiFileCard';
 import { TriggerPicker } from './TriggerPicker';
-import { ACTIONS_FOR, DEFAULT_DISPLAY, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
-import { ACTION_LABELS } from './layers/help';
+import { DEFAULT_DISPLAY, actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
+import { actionLabel } from './layers/help';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
 
@@ -164,7 +164,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     const at = parseActionTarget(c.target);
     if (at) {
       const l = play.layers.find(x => x.id === at.layerId);
-      return { kind: 'layer', title: l?.label ?? 'a deleted layer', param: ACTION_LABELS[at.do], missing: !l, go: () => { if (l) revealLayerFor(l.id); } };
+      return { kind: 'layer', title: l?.label ?? 'a deleted layer', param: actionLabel(at.do, l), missing: !l, go: () => { if (l) revealLayerFor(l.id); } };
     }
     const lt = parseLayerTarget(c.target);
     if (lt) {
@@ -188,7 +188,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const layerCandidates = useMemo<LayerCandidates[]>(() => play.layers.map(l => ({
     id: l.id, label: l.label,
     props: layerNumericProps(l).map(d => ({ key: d.key, label: d.label, hint: d.hint, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
-    actions: [...(ACTIONS_FOR[l.kind] ?? ACTIONS_FOR.other)],
+    actions: actionsForLayer(l),
   })), [play.layers]);
   // A layer's actions (Drop again, Burst…) as buttons on the panel, which mappings can press.
   const addActionControl = useCallback((layerId: string, kind: ActionKind) => {
@@ -196,7 +196,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       const l = p.layers.find(x => x.id === layerId);
       const target = actionTarget(layerId, kind);
       if (!l || p.controls.some(c => c.target === target)) return p;
-      return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'action', label: `${l.label} · ${ACTION_LABELS[kind]}`, min: 0, max: 1, amount: defaultActionAmount(kind) }] };
+      return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'action', label: `${l.label} · ${actionLabel(kind, l)}`, min: 0, max: 1, amount: defaultActionAmount(kind) }] };
     });
   }, [update]);
   const addLayerControl = useCallback((layerId: string, key: string) => {
@@ -521,7 +521,7 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
   const layerShown = layers.map(l => ({
     ...l,
     props: l.props.filter(pr => (withNull || !taken.has(layerTarget(l.id, pr.key))) && (!q || `${l.label} ${pr.label}`.toLowerCase().includes(q))),
-    actions: withNull ? [] : l.actions.filter(a => !taken.has(actionTarget(l.id, a)) && (!q || `${l.label} ${ACTION_LABELS[a]}`.toLowerCase().includes(q))),
+    actions: withNull ? [] : l.actions.filter(a => !taken.has(actionTarget(l.id, a)) && (!q || `${l.label} ${actionLabel(a, layerById(l.id))}`.toLowerCase().includes(q))),
   })).filter(l => l.props.length + l.actions.length > 0);
   const layerCount = layerShown.reduce((n, l) => n + l.props.length + l.actions.length, 0);
   // While searching every folder with a match is open.
@@ -576,7 +576,7 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
                 {isOpen(`layer:${l.id}`) && l.actions.map(a => (
                   <button key={`a:${a}`} type="button" title="A button on the panel. Map a key, a click, a beat or a note onto it to press it." onClick={() => { onAddAction(l.id, a); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
                     <Icon name="play" size={12} style={{ color: tk.accent.text }} />
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ACTION_LABELS[a]}</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{actionLabel(a, layerById(l.id))}</span>
                     <span style={{ color: tk.text.faint, fontSize: 10.5 }}>button</span>
                   </button>
                 ))}
@@ -785,7 +785,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           {control.kind === 'action' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62 }}>Amount</span>
-              <NumberInput value={control.amount ?? 1} min={0} max={1000} step={source.param === ACTION_LABELS.burst ? 10 : 0.1} title="Burst: how many particles. Scatter: how hard. Others ignore it." onCommit={n => onAmount(Math.max(0, n))} style={{ width: 64, height: 24, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' }} />
+              <NumberInput value={control.amount ?? 1} min={0} max={1000} step={source.param === actionLabel('burst') ? 10 : 0.1} title="Burst: how many particles. Scatter: how hard. Others ignore it." onCommit={n => onAmount(Math.max(0, n))} style={{ width: 64, height: 24, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' }} />
               <span style={{ color: tk.text.faint, fontSize: 11 }}>A mapping presses it each time it rises past the middle of its range.</span>
             </div>
           )}

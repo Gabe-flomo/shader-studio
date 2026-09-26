@@ -38,8 +38,9 @@ the pixel program is.
 Add a **Script** layer in Play. It holds a sketch: a `setup(s)` that runs
 once and a `draw(s)` that runs every frame, drawing on a 2D canvas the size
 of the picture. Apply runs it (or ⌘/Ctrl+Enter); errors show under the code
-and the other layers carry on. Four starters load with one click: Dots,
-Trail, Picture grid, Orbit a null.
+and the other layers carry on. Five starters load with one click: Dots, p5
+sketch, Trail (with a Wipe button), Picture grid (with an Invert toggle),
+Orbit a null. **Open editor** opens the big window described below.
 
 ```js
 const params = {
@@ -66,6 +67,7 @@ function draw(s) {
 | `mouse` | `{ x, y, over, down }` in pixels. |
 | `picture.brightness(x, y)` | 0–1 brightness of the shader at a pixel, when **Picture** is on (it samples the shader at 64×36 each frame). |
 | `null(name)` | A Null layer's position in pixels, by label or id, or `null`. The cheap way to give a script a handle you can drag or map. |
+| `pressed(key)` | True on the frame a button param was pressed (its amount is in `params[key]`). |
 | `random()` | `Math.random`. |
 
 ### p5-style helpers
@@ -86,32 +88,86 @@ The editor's **Reference** section lists all of it with one line each and
 inserts a name at the caret when clicked. (`src/play/kit/layers.js`,
 `klSketchHelpers`; the list in `scriptReference.ts`.)
 
-### Make a variable a slider
+### Controls: sliders, toggles, buttons
 
-Select a top-level variable set to a number (`let speed = 2;`, or double
-click its name) and the editor offers **Make ‘speed’ a slider**. One click
-adds `speed: { value: 2, min: 0, max: 8, step: 1 }` to the params object
-(creating one if the sketch has none), turns a `const` into a `let`, and
-applies. The kit then writes the slider's value into that variable every
-frame before `draw`, so the rest of the sketch keeps saying `speed`. The
-same variable is now a Play control, a null drive or a keyframe target
-like any layer property. (`scriptTools.ts`; the kit's `set(name, value)`
-assigns through a direct `eval` inside the sketch's scope.)
+Every entry in `params` is a control on the layer, with the + that puts it
+on the Play panel. Three kinds:
+
+| Declare | What you get | In the sketch |
+|---|---|---|
+| `speed: { value: 1, min: 0, max: 4, step: 0.05 }` or a bare number | A slider (a bare number is 0–1) | `s.params.speed`, or a top-level `let speed` the slider drives |
+| `glow: true` or `{ kind: 'toggle', value: true, label: 'Glow' }` | A switch; on the Play panel a 0/1 control keys and beats can flip | `s.params.glow` is 0 or 1; a `let glow` is driven as a boolean |
+| `wipe(s, amount) { … }` (a function) or `{ kind: 'button' }` | A button on the layer, and an **action** on the Play panel: a key, a click, a beat or a note presses it | The function runs on the next frame with `s` and the amount; `s.pressed('wipe')` is true that frame; `s.params.wipe` is the amount |
+
+Buttons are what "actions" are for the other layers (Burst, Drop again,
+Clear strokes): they join the same list in Add control and in the Actions
+section, so nothing else is needed to trigger them from a mapping. A toggle
+is the right shape for a binary choice like Invert; a slider with two steps
+would work but reads badly.
+
+### Make a variable a control
+
+Select a top-level variable set to a number (`let speed = 2;`), to
+`true`/`false` (`let invert = false;`), or a function's name (double
+click selects a word) and the editor offers **Make it a slider / toggle /
+button**, and **…and a Play control** to put it on the Play panel in the
+same click. One click adds the entry to the params object (creating one if
+the sketch has none), turns a `const` into a `let`, and applies. The kit
+then writes the control's value into that variable every frame before
+`draw`, so the rest of the sketch keeps saying `speed`. A function goes in
+by reference (`wipe: wipe`), so it is unchanged and now presses.
+(`scriptTools.ts`: `controlCandidate`, `makeControl`; the kit's `set(name,
+value)` assigns through a direct `eval` inside the sketch's scope.)
+
+### The editor
+
+**Open editor** on the layer opens the big window (the Custom Function one,
+for JavaScript): syntax colouring, autocomplete (the helpers, `s.` and
+`ctx.` members, `Math.`, your own variables and functions, the params'
+keys), undo and redo, Tab and auto-indent, bracket wrapping, ⌘/Ctrl+Enter
+to apply. Beside it, four tabs:
+
+- **Run**: a scratch run of the draft, as you type, on its own canvas with
+  the layer's current control values and the mouse over the box; the
+  picture reads as a soft glow and there are no nulls. Buttons the sketch
+  declares are pressable under it. Nothing reaches the picture until Apply.
+- **Reference**: everything the sketch can call, one line each, inserted at
+  the caret on click.
+- **Patterns**: the pieces sketches are made of, ready to insert where the
+  caret is (or at the top of the file): a params block with every kind, a
+  particle system in three functions, bounce and wrap, ease and spring
+  follows, orbit, a noise flow field, a flock in two rules, a grid loop,
+  polygons, trails, gradients, text, mouse and click handling, reading the
+  picture, attaching to a null. Each says whether it belongs at the top or
+  inside `draw`, and its numbers are plain variables so Make a slider works
+  on them. (`scriptSnippets.ts`.)
+- **Controls**: the declared controls as rows (sliders, switches, Press
+  buttons) with their + for the Play panel, and the Canvas settings.
+
+The footer holds **Starters** (the built-in sketches, then the ones you
+saved), **Import** (another script layer in this file, or a saved sketch:
+everything, its functions only, or one function; appended under a
+comment), and **Save as starter** (this sketch, by name, in localStorage:
+`src/play/savedScripts.ts`). On a phone the panel stacks under the editor.
 
 ### Sliders you declare
 
-`params` is read once when the code is applied. Each entry becomes a slider
-on the layer (`p_<key>` in the saved file), a candidate for a Play control,
+`params` is read once when the code is applied. Each entry becomes a
+control on the layer (`p_<key>` in the saved file for sliders and toggles;
+buttons are actions and store nothing), a candidate for a Play control,
 something a null can drive, and a keyframe target, exactly like a built-in
-layer property. A bare number (`speed: 1`) is a 0–1 slider; an object gives
-`value`, `min`, `max`, `step`, `label`, `hint`. Values survive code edits:
-re-declare a slider and it keeps the value it had.
+layer property. An object gives `value`, `min`, `max`, `step`, `label`,
+`hint`, `kind`. Values survive code edits: re-declare a control and it
+keeps the value it had; loading a starter resets them.
 
 ### How it runs
 
-- The code is compiled once per change into its `setup` and `draw` by the
-  kit (`drawScript` in `kit.js`), so it runs in the app and in exported
-  websites alike. Compile errors and runtime errors are reported to the
+- The code is compiled once per change into its `setup` and `draw`
+  (`klSketchCompile` in `layers.js`) and stepped each frame
+  (`klSketchStep`: drives the variables, runs setup on the first frame or a
+  resize, clears, delivers presses, draws). The kit (`drawScript` in
+  `kit.js`) and the editor's scratch run share those two functions, so a
+  sketch runs the same in the app, in the editor and in exported websites. Compile errors and runtime errors are reported to the
   editor through `env.scriptStatus`; a broken script draws nothing until the
   code changes.
 - The script draws into its own canvas, which is composited with the
@@ -124,8 +180,16 @@ re-declare a slider and it keeps the value it had.
 
 ### What it does not do yet
 
-- **No imports.** The sketch is one file. Loading a library (three, a font,
-  a data file) is the plugin step below.
+- **No imports.** The sketch is one file; the p5 vocabulary is built in
+  rather than loaded from a CDN, so exported websites stay self-contained
+  and work offline. Loading a library (three, a font, a data file) is the
+  plugin step below.
+- **No reuse of the built-in layers' code yet.** The particle, bodies and
+  flocking code lives in the kit; the Patterns tab carries small
+  re-writes of the common behaviours (spawn and move, bounce, flock,
+  springs) rather than a way to import the kit's own functions piecemeal.
+  That, and saving a sketch as a layer kind of its own, is `defineLayer`
+  below.
 - **No workers.** The script runs on the main thread inside the frame; an
   infinite loop hangs the page like any script would. Fine for your own
   sketches, not for code from strangers.
@@ -173,6 +237,15 @@ someone to package for.
 - Runtime: `drawScript` in `src/play/kit/kit.js`; status back to the app
   through `KitEnv.scriptStatus` and `src/play/scriptStatus.ts`.
 - Editor and starters: `ScriptEditor` in
-  `src/components/play/layers/editors.tsx`,
-  `src/components/play/layers/scriptExamples.ts`.
-- Tests: `src/play/__tests__/scriptLayer.test.ts`.
+  `src/components/play/layers/editors.tsx`; the big window
+  `ScriptModal.tsx` with `ScriptPreview.tsx` (scratch run),
+  `ScriptControls.tsx` (rows), `scriptCompletions.ts`, `scriptSnippets.ts`,
+  `scriptReference.ts`, `scriptTools.ts`, `scriptExamples.ts`; JavaScript
+  colouring in `src/components/code/jsSyntax.ts`; saved sketches in
+  `src/play/savedScripts.ts`.
+- Script buttons as actions: `ActionKind` includes `script:<key>`
+  (`src/types/play.ts`: `actionsForLayer`, `scriptActionKey`), labelled by
+  `actionLabel` in `layers/help.ts`; the kit queues a press and delivers it
+  on the layer's next frame.
+- Tests: `src/play/__tests__/scriptLayer.test.ts`,
+  `src/play/__tests__/scriptControls.test.ts`.

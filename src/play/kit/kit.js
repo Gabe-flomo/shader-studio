@@ -28,7 +28,7 @@
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments } from './geometry.js';
-import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchHelpers, klCompileSketch } from './layers.js';
+import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress } from './layers.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
@@ -37,6 +37,7 @@ const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, l
 export function createLayerKit() {
   const pool = {};
   const parts = new Map(), bodies = new Map(), brushes = new Map(), springs = new Map(), texts = new Map(), audios = new Map(), masks = new Map(), scripts = new Map();
+  const scriptPresses = new Map(); // layer id → { key: amount }: script buttons pressed since the layer's last frame
   const frozen = new Set(), shown = new Map(), lastVisible = new Map();
   let queue = [];
   let coarse = null, fine = null, camSample = null, camPrev = null, motion = 0;
@@ -255,6 +256,13 @@ export function createLayerKit() {
         case 'burst':
           if (l.kind === 'particles') { if (!pending.has(l.id)) pending.set(l.id, []); pending.get(l.id).push(a); }
           break;
+        default:
+          // A button a script declared: pressed on the layer's next frame.
+          if (l.kind === 'script' && typeof a.do === 'string' && a.do.indexOf('script:') === 0) {
+            let m = scriptPresses.get(l.id); if (!m) { m = {}; scriptPresses.set(l.id, m); }
+            m[a.do.slice(7)] = a.amount == null ? 1 : a.amount;
+          }
+          break;
       }
     }
     queue = [];
@@ -277,16 +285,12 @@ export function createLayerKit() {
     function drawScript(c, l, v) {
       let st = scripts.get(l.id);
       if (!st || st.code !== l.code) {
-        st = { code: l.code, setup: null, draw: null, set: null, has: null, vars: null, error: null, state: {}, frame: 0, w: 0, h: 0, ready: false, s: null };
+        st = klSketchCompile(l.code);
         scripts.set(l.id, st);
-        try {
-          const P = klSketchHelpers(() => st.s);
-          const r = klCompileSketch(l.code, P);
-          st.setup = r.setup; st.draw = r.draw; st.set = r.set; st.has = r.has;
-          if (!st.draw) st.error = 'The script needs a draw(s) function.';
-        } catch (e) { st.error = 'Compile: ' + ((e && e.message) || e); }
         if (env.scriptStatus) env.scriptStatus(l.id, st.error);
       }
+      const presses = scriptPresses.get(l.id);
+      if (presses) { for (const k in presses) klSketchPress(st, k, presses[k]); scriptPresses.delete(l.id); }
       if (st.error) return;
       const buf = klCanvas(pool, 'script_' + l.id, W, H), bx = buf.getContext('2d');
       const params = {};
@@ -305,27 +309,8 @@ export function createLayerKit() {
         null: name => { const n = record.layers.find(x => x.kind === 'null' && (x.id === name || x.label === name)); return n ? { x: env.value(n, 'x') * W, y: (1 - env.value(n, 'y')) * H } : null; },
         random: Math.random,
       };
-      st.s = s; // the helpers read the current frame through this
-      // A declared slider whose name is also a top-level variable of the sketch drives that variable.
-      if (!st.vars) { st.vars = {}; for (const d of l.paramDefs || []) st.vars[d.key] = !!(st.has && st.has(d.key)); }
-      for (const d of l.paramDefs || []) if (st.vars[d.key] && st.set) st.set(d.key, params[d.key]);
-      try {
-        if (!st.ready || st.w !== W || st.h !== H) {
-          st.w = W; st.h = H; st.state = {}; s.state = st.state; st.frame = 0; s.frame = 0;
-          bx.setTransform(1, 0, 0, 1, 0, 0); bx.clearRect(0, 0, W, H);
-          if (st.setup) st.setup(s);
-          st.ready = true;
-        }
-        bx.save(); bx.setTransform(1, 0, 0, 1, 0, 0); bx.globalAlpha = 1; bx.globalCompositeOperation = 'source-over';
-        if (l.clear) bx.clearRect(0, 0, W, H);
-        st.draw(s);
-        bx.restore();
-        st.frame++;
-      } catch (e) {
-        st.error = 'Runtime: ' + ((e && e.message) || e);
-        if (env.scriptStatus) env.scriptStatus(l.id, st.error);
-        return;
-      }
+      const err = klSketchStep(st, s, l.paramDefs || [], l.clear);
+      if (err) { if (env.scriptStatus) env.scriptStatus(l.id, err); return; }
       c.globalAlpha = v('opacity'); c.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
       c.drawImage(buf, 0, 0);
       c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
@@ -653,6 +638,6 @@ export function createLayerKit() {
       return record.layers.some(l => (shown.has(l.id) ? shown.get(l.id) : l.visible) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && l.sequence) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera')));
     },
     /** Forget all state (a new recording starts from scratch). */
-    reset() { parts.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
+    reset() { parts.clear(); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
   };
 }

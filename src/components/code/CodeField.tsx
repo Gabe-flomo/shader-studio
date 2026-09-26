@@ -3,10 +3,10 @@ import { BracketMarks } from './BracketMarks';
 import { useCallback, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
-import { C, C_LIGHT, tokenizeLine } from '../glslSyntax';
+import { C, C_LIGHT, tokenizeLine, type Token } from '../glslSyntax';
 import { CompletionPopup } from './CompletionPopup';
 import type { Completion } from './glslReference';
-import { useCompletion } from './useCompletion';
+import { useCompletion, type MemberCompletions } from './useCompletion';
 
 const FONT_SIZE = 12.5;
 const LINE_H = 20;
@@ -32,8 +32,8 @@ function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').
  * parent's height; otherwise it sizes to `minHeight`–`maxHeight` and scrolls.
  */
 export function CodeField({
-  value, onChange, completions, title = 'GLSL', actions, textareaRef, onKeyDown, onBlur, onFocus, placeholder,
-  ariaLabel, grow = false, minHeight = 120, maxHeight, invalid = false, style,
+  value, onChange, completions, title = 'GLSL', actions, textareaRef, onKeyDown, onBlur, onFocus, onSelect, placeholder,
+  ariaLabel, grow = false, minHeight = 120, maxHeight, invalid = false, style, tokenize = tokenizeLine, members, autoIndent = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -45,6 +45,8 @@ export function CodeField({
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onBlur?: () => void;
   onFocus?: (el: HTMLTextAreaElement) => void;
+  /** The caret or selection moved (click, keys, mouse up): read it from the element. */
+  onSelect?: (el: HTMLTextAreaElement) => void;
   placeholder?: string;
   ariaLabel: string;
   grow?: boolean;
@@ -52,6 +54,12 @@ export function CodeField({
   maxHeight?: number;
   invalid?: boolean;
   style?: CSSProperties;
+  /** How to colour a line; GLSL by default, `tokenizeJsLine` for JavaScript. */
+  tokenize?: (line: string, pal: typeof C) => Token[];
+  /** Completions after `name.` (for JavaScript: `s.`, `ctx.`, `Math.`). */
+  members?: MemberCompletions;
+  /** Enter keeps the line's indent, one level deeper after an opening bracket. */
+  autoIndent?: boolean;
 }) {
   const tk = useTokens();
   const pal = useThemeMode() === 'dark' ? C : C_LIGHT;
@@ -68,10 +76,10 @@ export function CodeField({
     onChange(next);
     requestAnimationFrame(() => { taRef.current?.focus(); taRef.current?.setSelectionRange(caret, caret); });
   }, [onChange]);
-  const ac = useCompletion(completions, onApply);
+  const ac = useCompletion(completions, onApply, members);
 
   const lines = value.split('\n');
-  const html = lines.map(l => tokenizeLine(l, pal).map(t => `<span style="color:${t.color}">${esc(t.text)}</span>`).join('')).join('\n') + '\n';
+  const html = lines.map(l => tokenize(l, pal).map(t => `<span style="color:${t.color}">${esc(t.text)}</span>`).join('')).join('\n') + '\n';
 
   // Popup position: under the start of the word being completed (set when the text changes)
   const [anchorXY, setAnchorXY] = useState<{ x: number; y: number } | null>(null);
@@ -89,7 +97,7 @@ export function CodeField({
   };
 
   const [caret, setCaret] = useState<number | null>(null);
-  const trackCaret = (e: React.SyntheticEvent<HTMLTextAreaElement>) => { const el = e.currentTarget; setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null); };
+  const trackCaret = (e: React.SyntheticEvent<HTMLTextAreaElement>) => { const el = e.currentTarget; setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null); onSelect?.(el); };
   const text: CSSProperties = {
     margin: 0, padding: `${PAD_Y}px ${PAD_X}px`, border: 0, font: `${FONT_SIZE}px/${LINE_H}px ${fontFamily.mono}`,
     whiteSpace: 'pre', tabSize: 2, letterSpacing: 0, boxSizing: 'border-box',
@@ -149,6 +157,20 @@ export function CodeField({
                 const ta = e.currentTarget;
                 const s = ta.selectionStart, end = ta.selectionEnd;
                 onApply(value.slice(0, s) + '  ' + value.slice(end), s + 2);
+                return;
+              }
+              if (autoIndent && e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+                e.preventDefault();
+                const ta = e.currentTarget;
+                const s = ta.selectionStart, end = ta.selectionEnd;
+                const lineStart = value.lastIndexOf('\n', s - 1) + 1;
+                const indent = /^[ \t]*/.exec(value.slice(lineStart, s))?.[0] ?? '';
+                const opens = /[{([]\s*$/.test(value.slice(lineStart, s));
+                const closesNext = /^[ \t]*[}\])]/.test(value.slice(end, end + 12));
+                const ins = '\n' + indent + (opens ? '  ' : '');
+                // Enter between `{` and `}`: the closing bracket goes on its own line under the opening one.
+                const tail = opens && closesNext ? '\n' + indent : '';
+                onApply(value.slice(0, s) + ins + tail + value.slice(end), s + ins.length);
                 return;
               }
               onKeyDown?.(e);

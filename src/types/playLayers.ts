@@ -498,7 +498,9 @@ export interface ClonerLayer extends LayerBase {
 }
 
 /** A slider a script declares: `params = { speed: { value: 1, min: 0, max: 5, step: 0.1, label: 'Speed' } }`. Its value lives on the layer as `p_<key>`. */
-export interface ScriptParamDef { key: string; label: string; value: number; min: number; max: number; step?: number; hint?: string }
+/** What a declared param is on the panel: a slider (the default), an on/off toggle, or a button that presses (an action). */
+export type ScriptParamKind = 'slider' | 'toggle' | 'button';
+export interface ScriptParamDef { key: string; label: string; kind?: ScriptParamKind; value: number; min: number; max: number; step?: number; hint?: string }
 
 /**
  * A layer drawn by JavaScript you write: a `setup(s)` and a `draw(s)` on a 2D
@@ -743,7 +745,7 @@ export function parseLayer(raw: unknown): PlayLayer | null {
 function isScriptParamDef(d: unknown): d is ScriptParamDef {
   if (!d || typeof d !== 'object') return false;
   const o = d as Record<string, unknown>;
-  return typeof o.key === 'string' && /^[A-Za-z_]\w{0,30}$/.test(o.key) && typeof o.label === 'string'
+  return typeof o.key === 'string' && /^[A-Za-z_]\w{0,30}$/.test(o.key) && typeof o.label === 'string' && (o.kind === undefined || o.kind === 'slider' || o.kind === 'toggle' || o.kind === 'button')
     && [o.value, o.min, o.max].every(n => typeof n === 'number' && Number.isFinite(n)) && (o.step === undefined || typeof o.step === 'number');
 }
 
@@ -932,5 +934,13 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
 export function layerNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
   const base = LAYER_NUMERIC_PROPS[l.kind];
   if (l.kind !== 'script') return base;
-  return [...l.paramDefs.map(d => ({ key: `p_${d.key}`, label: d.label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), hint: d.hint ?? `${d.label}: a slider the script declares.` })), ...base];
+  // Buttons are actions, not numbers; toggles are 0/1 numbers.
+  return [...l.paramDefs.filter(d => d.kind !== 'button').map(d => d.kind === 'toggle'
+    ? { key: `p_${d.key}`, label: d.label, min: 0, max: 1, step: 1, hint: d.hint ?? `${d.label}: an on/off toggle the script declares.` }
+    : { key: `p_${d.key}`, label: d.label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), hint: d.hint ?? `${d.label}: a slider the script declares.` }), ...base];
+}
+
+/** The buttons a script declares (a function in params, or `{ kind: 'button' }`): each is an action on the layer. */
+export function scriptButtons(l: PlayLayer): ScriptParamDef[] {
+  return l.kind === 'script' ? l.paramDefs.filter(d => d.kind === 'button') : [];
 }

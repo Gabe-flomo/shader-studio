@@ -14,3 +14,8 @@ export function klDrawCopy(ctx: CanvasRenderingContext2D, copy: ClonerCopy, srcX
 export const KL_SKETCH_NAMES: readonly string[];
 export function klSketchHelpers(get: () => { ctx: CanvasRenderingContext2D; width: number; height: number; mouse: { x: number; y: number; down: boolean }; frame: number; dt: number; time: number }): Record<string, unknown>;
 export function klCompileSketch(code: string, P: Record<string, unknown>): { setup: ((s: unknown) => void) | null; draw: ((s: unknown) => void) | null; params: Record<string, unknown>; has: (k: string) => boolean; set: (k: string, v: number) => void };
+
+export interface KlSketchState { code: string; error: string | null; params: Record<string, unknown>; frame: number; ready: boolean; pressed: Record<string, number>; s: unknown }
+export function klSketchCompile(code: string): KlSketchState;
+export function klSketchPress(st: KlSketchState, key: string, amount?: number): void;
+export function klSketchStep(st: KlSketchState, s: Record<string, unknown>, defs: ReadonlyArray<{ key: string; kind?: string }>, clear: boolean): string | null;
