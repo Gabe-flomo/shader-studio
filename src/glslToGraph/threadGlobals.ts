@@ -67,17 +67,18 @@ export function threadGlobals(source: string): ThreadResult {
     if (!main) break;
     const inFn = (i: number) => fns.some(f => i > f.bodyOpen && i < f.bodyClose);
     // A top-level, non-const, non-uniform declaration of one scalar/vector/matrix.
-    const declRe = new RegExp(`(^|[;}\\n])([ \\t]*)${PRECISION}(${TYPES})\\s+([A-Za-z_]\\w*)(\\s*=\\s*[^;]+)?;`, 'g');
+    const declRe = new RegExp(`(^|[;}\\n])([ \\t]*)${PRECISION}(${TYPES})\\s+([A-Za-z_]\\w*)(\\s*\\[[^\\]]*\\])?(\\s*=\\s*[^;]+)?;`, 'g');
     let done = false;
     for (const m of s.matchAll(declRe)) {
       const at = m.index! + m[1].length;
       if (inFn(at)) continue;
       const before = s.slice(0, at);
       if (/\b(const|uniform|varying|attribute|in|out)\s*$/.test(before.slice(-12))) continue;
-      const type = m[3], name = m[4], init = (m[5] ?? '').trim();
+      const type = m[3], name = m[4], dims = (m[5] ?? '').trim(), init = (m[6] ?? '').trim();
       const word = new RegExp(`(?<![\\w.])${name}\\b`, 'g');
       const assigns = new RegExp(`(?<![\\w.])${name}(\\.[xyzwrgba]+)?\\s*([-+*/]?=(?!=)|\\+\\+|--)|(\\+\\+|--)\\s*${name}\\b`, 'g');
       const readers = fns.filter(f => f.name !== 'main' && word.test(s.slice(f.bodyOpen, f.bodyClose)));
+      if (dims && readers.length) continue; // an array read by helpers: left as it is (arrays don't travel as parameters here)
       if (readers.some(f => assigns.test(s.slice(f.bodyOpen, f.bodyClose)))) continue; // a helper writes it: real shared state
       // Only main uses it: it simply becomes a local of main.
       // Callers of readers need it too, transitively (overloads share a name, so all get it).
@@ -93,6 +94,7 @@ export function threadGlobals(source: string): ThreadResult {
       // the declaration line is blanked, main opens with the local.
       const edits: Array<{ at: number; del: number; text: string }> = [];
       for (const f of fns) {
+        if (!need.size) break; // main-only: nothing to pass along
         for (const c of s.slice(f.bodyOpen, f.bodyClose).matchAll(new RegExp(`(?<![\\w.])(${[...need].join('|')})\\s*\\(`, 'g'))) {
           const open = f.bodyOpen + c.index! + c[0].length - 1;
           const close = matchParen(s, open); if (close < 0) continue;
@@ -103,7 +105,7 @@ export function threadGlobals(source: string): ThreadResult {
       }
       // The header's own `(void)` becomes the one parameter.
       for (const f of fns) if (need.has(f.name) && f.params === 'void') edits.push({ at: f.parenClose - 4, del: 4, text: '' });
-      edits.push({ at: main.bodyOpen + 1, del: 0, text: ` ${type} ${name}${init ? ` ${init}` : ''};` });
+      edits.push({ at: main.bodyOpen + 1, del: 0, text: ` ${type} ${name}${dims}${init ? ` ${init}` : ''};` });
       edits.push({ at: at + m[2].length, del: m[0].length - m[1].length - m[2].length, text: '' });
       edits.sort((a, b) => b.at - a.at);
       let next = code;

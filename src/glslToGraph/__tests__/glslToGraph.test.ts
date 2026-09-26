@@ -194,4 +194,18 @@ describe('inexact nodes are offered with a warning, or kept as code on request',
     expect(r.nodes.length).toBeGreaterThan(0);
     expect(compileGraph({ nodes: r.nodes }).success).toBe(true);
   });
+
+  it('reads arrays as named slots, unrolls a loop that indexes by its counter, and narrows and part-swizzles vectors', () => {
+    const r = glslToGraph('void main(){ vec3 p[3]; p[0] = vec3(0.2, 0.3, 0.4); p[1] = vec3(0.5); p[2] = vec3(0.1, 0.2, 0.9); vec2 s = vec2(0.0); for (int i = 0; i < 3; i++) { s += vec2(p[i]) * float(i) + p[i].zx; } gl_FragColor = vec4(s, p[2].z, 1.0); }');
+    expect(r.report.unsupported).toEqual([]);
+    expect(r.report.notes.some(n => /Loop over i \(3×\) unrolled/.test(n))).toBe(true);
+    expect(r.report.stats.loops).toBe(1);
+    expect(r.nodes.some(n => n.type === 'group')).toBe(false); // unrolled, not an iterated group
+    const c = compileGraph({ nodes: r.nodes });
+    expect(c.errors ?? []).toEqual([]);
+    expect(c.success).toBe(true);
+    // Limits are said plainly
+    expect(glslToGraph('void main(){ float a[3]; int k = int(u_time); a[k] = 1.0; gl_FragColor = vec4(a[0]); }').report.unsupported.some(u => /indexed by a value/.test(u))).toBe(true);
+    expect(glslToGraph('void main(){ float a[2]; gl_FragColor = vec4(a[5]); }').report.unsupported.some(u => /outside the array/.test(u))).toBe(true);
+  });
 });

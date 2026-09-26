@@ -75,6 +75,21 @@ takes the highest rung it can:
 `x++`, `x--`, `++x` and `--x` on a named value are `x += 1.0` (a vector
 counts up on every component, as GLSL does).
 
+**Arrays.** `vec3 planet[3];` is three named slots, `planet_0..2`, each zero
+until assigned; `planet[0] = …` sets one, `planet[1].z` reads one. An index
+has to be known: a literal, a constant, or the counter of a `for` loop, in
+which case the loop is *unrolled* (the body runs once per value with the
+counter pinned) instead of becoming an iterated group, up to 16 times. An
+index that is a computed value, an out-of-range index, and an initialiser
+list are reported as such. A global array that only main() uses moves into
+main like any other global; one that helpers read stays a global (arrays
+don't travel as parameters here).
+
+**Vector constructors and swizzles.** `vec2(v3)` and `vec3(v4)` are the
+leading components, `vec3(v2, f)` and `vec3(f, v2)` a Make Vec3 from the
+parts, and a part of a longer vector (`.xy` of a vec3, `.zx`) is its
+components through the shared Split card into a Make Vec2/3.
+
 1. **A node.** `a * b` → Multiply, `sin(x)` → Sin (freq 1, amp 1), `vec3(r, g, b)`
    → Make Vec3, `p.x` → Split Vec2, `smoothstep(e0, e1, x)` → Smoothstep, `gl_FragCoord`
    → Frag Coord, `u_time` → Time… **Numbers** go two ways. An anonymous one
@@ -142,6 +157,7 @@ The graph is laid out in columns by depth (sources left, Output right).
 | 03 | rings with glow (`abs`) | 20 | 2 | 0 | 3 | identical |
 | 04 | helper function `sdBox` | 18 | 1 | 1 | 3 | identical |
 | 05 | `if` branch + step | 15 | 2 | 0 | 0 | identical |
+| 16 | array of planets, loop indexed by the counter (unrolled), `vec2(vec3)` | 67 | 2 | 0 | 1 | identical |
 | 06 | `for` loop, 4 iterations → iterated group carrying `a` | 16 | 0 | 0 | 5 | identical |
 | 07 | plasma (sqrt) | 49 | 1 | 0 | 15 | identical |
 | 08 | rotation + hash + `discard` | – | – | – | – | **refused: `discard`** (preview still lists 2 regions) |
