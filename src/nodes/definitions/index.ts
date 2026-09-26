@@ -7,6 +7,7 @@ export type { NodeAlias } from './aliases';
 
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { getUserNodeDefinition, getAllUserNodeDefinitions } from '../userNodes/userNodeRegistry';
+import { withInputExpressions } from '../../glsl/inputExpr';
 import { VideoInputNode } from './sources';
 export { VideoInputNode };
 import { MidiInputNode } from './midi';
@@ -639,7 +640,10 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
 /** Built-ins first, then user-published node types (see nodes/userNodes/userNodeRegistry.ts). */
 export function getNodeDefinition(type: string): NodeDefinition | undefined {
   // Built-ins, then user-published nodes, then merged (aliased) types — see ./aliases.ts.
-  return NODE_REGISTRY[type] ?? getUserNodeDefinition(type) ?? (NODE_ALIASES[type] ? NODE_REGISTRY[NODE_ALIASES[type].to] : undefined);
+  const def = NODE_REGISTRY[type] ?? getUserNodeDefinition(type) ?? (NODE_ALIASES[type] ? NODE_REGISTRY[NODE_ALIASES[type].to] : undefined);
+  // Every definition applies input expressions (glsl/inputExpr) before its own
+  // GLSL, so every compile path (top level, groups, iterated groups) gets them.
+  return def ? withInputExpressions(def) : undefined;
 }
 
 /**

@@ -56,7 +56,9 @@ const renameWord = (src: string, from: string, to: string) => src.replace(new Re
 export function translateToStudio(source: string): Translation {
   const dialect = detectDialect(source);
   const notes: string[] = []; const unsupported: string[] = [];
-  let s = source.replace(/\r\n?/g, '\n');
+  // Pastes carry non-breaking spaces and other Unicode blanks (web pages, chat, PDFs); GLSL's lexer rejects them.
+  // Each becomes one ordinary character of the same kind, so line numbers hold.
+  let s = source.replace(/\r\n?/g, '\n').replace(/[\u2028\u2029]/g, '\n').replace(/[\u00A0\u1680\u2000-\u200B\u202F\u205F\u3000\uFEFF]/g, ' ');
   // Lines this reader inserts, in order, each in the coordinates of the text at that moment:
   // `count` lines after line `at`. Removed lines are blanked instead, so numbering holds.
   const inserts: Array<{ at: number; count: number }> = [];
@@ -95,8 +97,14 @@ export function translateToStudio(source: string): Translation {
     if (m) {
       inserts.push({ at: lineAt(m.index), count: 1 });
       // The rest of the line after `{` follows the new declaration; no extra newline, so numbering shifts by exactly one.
-      s = s.slice(0, m.index) + `void main() {\n  vec2 ${m[2]} = gl_FragCoord.xy;` + s.slice(m.index + m[0].length);
-      s = renameWord(s, m[1], 'gl_FragColor');
+      const head = `void main() {\n  vec2 ${m[2]} = gl_FragCoord.xy;`;
+      const bodyStart = m.index + head.indexOf('{'); // the `{` of main
+      s = s.slice(0, m.index) + head + s.slice(m.index + m[0].length);
+      // The out parameter is a name local to mainImage: rename it in that body only (another function
+      // may use the same letter for something else, as `vec2 C` does in many shaders).
+      const bodyEnd = closeOf(s, bodyStart);
+      const end = bodyEnd > 0 ? bodyEnd : s.length;
+      s = s.slice(0, bodyStart) + renameWord(s.slice(bodyStart, end), m[1], 'gl_FragColor') + s.slice(end);
       notes.push('mainImage() read as main()');
     }
     if (renamed.length) notes.push(`${[...new Set(renamed)].join(', ')} → ours`);

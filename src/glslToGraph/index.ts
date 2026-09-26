@@ -875,7 +875,12 @@ function hostToOurs(source: string, report: ConversionReport): { code: string; t
   if (clashes.length) report.notes.push(`Renamed ${clashes.join(', ')}: the app has a built-in helper of that name`);
   // Simple object-like macros (#define PI 3.14159) are expanded; anything else the preprocessor would do is left to fail loudly.
   const macros: Array<[RegExp, string]> = [];
-  s = s.replace(/^[ \t]*#define[ \t]+(\w+)[ \t]+([^\n(]+?)[ \t]*$/gm, (_m, name: string, value: string) => { macros.push([new RegExp(`\\b${name}\\b`, 'g'), `(${value.trim()})`]); return ''; });
+  // A comment after the value is a comment, not part of it (`#define W 2. // wiggles`); function-like macros (`#define F(x)`) are left alone.
+  s = s.replace(/^[ \t]*#define[ \t]+(\w+)(?!\()[ \t]+([^\n]*?)[ \t]*$/gm, (whole, name: string, raw: string) => {
+    const value = raw.replace(/\/\/.*$/, '').replace(/\/\*.*?\*\//g, '').trim();
+    if (!value) return whole; // a flag for #ifdef: the preprocessor's business
+    macros.push([new RegExp(`\\b${name}\\b`, 'g'), `(${value})`]); return '';
+  });
   for (const [re, to] of macros) s = s.replace(re, to);
   if (macros.length) report.notes.push(`${macros.length} #define${macros.length === 1 ? '' : 's'} expanded`);
   // Precision, uniform and varying lines are the host's, not the shader's (the translator adds the ones a paste lacks).

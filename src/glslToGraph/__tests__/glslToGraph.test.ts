@@ -187,4 +187,11 @@ describe('inexact nodes are offered with a warning, or kept as code on request',
     expect(r.nodes.find(n => n.type === 'exprNode')!.params.__importedCode).toBe('block');
     expect(compileGraph({ nodes: r.nodes }).success).toBe(true);
   });
+
+  it('expands #defines without their trailing comments, and leaves flags and function-like macros alone', () => {
+    const r = glslToGraph('#define W 2. // frequency\n#define FLAG\n#define SQ(x) ((x)*(x))\nvoid main(){ vec2 uv = gl_FragCoord.xy / u_resolution.xy; gl_FragColor = vec4(vec3(sin(uv.x * W + u_time)), 1.0); }');
+    expect(r.report.notes.some(n => /1 #define expanded/.test(n))).toBe(true);
+    expect(r.nodes.length).toBeGreaterThan(0);
+    expect(compileGraph({ nodes: r.nodes }).success).toBe(true);
+  });
 });

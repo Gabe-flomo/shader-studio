@@ -28,6 +28,7 @@ export function OptimizeModal({ onClose }: { onClose: () => void }) {
   const [minChain, setMinChain] = useState<'2' | '3' | '4'>('3');
   const [keepSliders, setKeepSliders] = useState(true);
   const [onlySelected, setOnlySelected] = useState(false);
+  const [absorb, setAbsorb] = useState(true);
   const [diff, setDiff] = useState<PairDiff | null>(null);
   const onDiff = useCallback((d: PairDiff | null) => setDiff(d), []);
 
@@ -35,16 +36,17 @@ export function OptimizeModal({ onClose }: { onClose: () => void }) {
     const p = playProtectedIds(play);
     return p;
   }, [play]);
-  const result = useMemo(() => optimizeGraph(nodes, { minChain: Number(minChain), keepSliders, protect, only: onlySelected && selectedIds.length ? new Set(selectedIds) : undefined }), [nodes, minChain, keepSliders, protect, onlySelected, selectedIds]);
+  const result = useMemo(() => optimizeGraph(nodes, { minChain: Number(minChain), keepSliders, absorb, protect, only: onlySelected && selectedIds.length ? new Set(selectedIds) : undefined }), [nodes, minChain, keepSliders, absorb, protect, onlySelected, selectedIds]);
   const before = useMemo(() => compileGraph({ nodes }), [nodes]);
   const after = useMemo(() => compileGraph({ nodes: result.nodes }), [result]);
   const same = diff && !('error' in diff) ? diff.max <= 2 && diff.badPct < 0.1 : null;
   const folds = result.report.folds;
+  const blocks = folds.filter(f => f.kind === 'block'), exprs = folds.filter(f => f.kind === 'expr');
 
   const apply = () => {
     if (!folds.length || !after.success) return;
     setNodesRewritten(result.nodes);
-    toast.success(`${folds.length} ${folds.length === 1 ? 'run' : 'runs'} folded`, { message: `${result.report.before} nodes → ${result.report.after}. Undo brings the cards back.` });
+    toast.success(`${folds.length} ${folds.length === 1 ? 'run' : 'runs'} folded`, { message: `${result.report.before} nodes → ${result.report.after}${exprs.length ? `, ${exprs.length} as input ${exprs.length === 1 ? 'expression' : 'expressions'}` : ''}. Undo brings the cards back.` });
     onClose();
   };
 
@@ -58,7 +60,7 @@ export function OptimizeModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal
       title="Optimise graph"
-      subtitle="Runs of math cards become one Expression Block each; their sliders come along as inputs. The picture stays the same."
+      subtitle="Runs of math cards become one Expression Block each, their sliders coming along as inputs; shorter float runs become an expression on the input that reads them. The picture stays the same."
       icon="spark"
       width={720}
       onClose={onClose}
@@ -78,22 +80,24 @@ export function OptimizeModal({ onClose }: { onClose: () => void }) {
             <Segmented size="sm" ariaLabel="Minimum run length" value={minChain} onChange={setMinChain} options={[{ value: '2', label: '2 cards' }, { value: '3', label: '3 cards' }, { value: '4', label: '4 cards' }]} />
           </div>
           <Toggle checked={keepSliders} onChange={setKeepSliders} label="Keep sliders as block inputs (off bakes the numbers)" />
+          <Toggle checked={absorb} onChange={setAbsorb} label="Absorb shorter float runs into input expressions (their numbers become part of the expression)" />
           <Toggle checked={onlySelected} onChange={setOnlySelected} disabled={selectedIds.length === 0} label={selectedIds.length ? `Only the ${selectedIds.length} selected cards` : 'Only selected cards (select some first)'} />
           <div style={{ display: 'flex', gap: 8 }}>
             {stat(result.report.before, 'cards now')}
             {stat(result.report.after, 'after')}
-            {stat(folds.length, folds.length === 1 ? 'block' : 'blocks')}
+            {stat(blocks.length, blocks.length === 1 ? 'block' : 'blocks')}
+            {stat(exprs.length, exprs.length === 1 ? 'expression' : 'expressions')}
             {stat(folds.reduce((s, f) => s + f.sliders, 0), 'sliders kept')}
           </div>
           {!after.success && <Callout tone="warning" title="The folded graph doesn’t compile" details={(after.errors ?? []).join('\n')}>An optimiser bug most likely; nothing is applied.</Callout>}
           <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
             {folds.map(f => (
-              <div key={f.blockId} style={{ padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field, fontSize: 12 }}>
-                <div style={{ font: `500 11.5px/1.4 ${fontFamily.mono}` }}>{f.label}</div>
-                <div style={{ color: tk.text.muted, fontSize: 11.5, marginTop: 2 }}>{f.nodeIds.length} cards → one block{f.sliders ? ` · ${f.sliders} slider${f.sliders === 1 ? '' : 's'} kept` : ''}{f.scope !== 'graph' ? ` · inside ${f.scope}` : ''}</div>
+              <div key={`${f.blockId}:${f.inputKey ?? ''}`} style={{ padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field, fontSize: 12, borderLeft: `3px solid ${f.kind === 'expr' ? tk.kind.expr : tk.accent.base}` }}>
+                <div style={{ font: `500 11.5px/1.4 ${fontFamily.mono}` }}>{f.kind === 'expr' ? 'ƒ ' : ''}{f.label}</div>
+                <div style={{ color: tk.text.muted, fontSize: 11.5, marginTop: 2 }}>{f.nodeIds.length} {f.nodeIds.length === 1 ? 'card' : 'cards'} → {f.kind === 'expr' ? 'an expression on the input' : 'one block'}{f.sliders ? ` · ${f.sliders} slider${f.sliders === 1 ? '' : 's'} kept` : ''}{f.scope !== 'graph' ? ` · inside ${f.scope}` : ''}</div>
               </div>
             ))}
-            {!folds.length && <div style={{ color: tk.text.faint, fontSize: 12.5, lineHeight: 1.5 }}>No run long enough. Runs stop at sources, constants, colours, blocks and functions, groups, cards two places read, keyframed cards and cards Play controls.</div>}
+            {!folds.length && <div style={{ color: tk.text.faint, fontSize: 12.5, lineHeight: 1.5 }}>No run to fold. Runs stop at sources, constants, colours, blocks and functions, groups, cards two places read, keyframed cards and cards Play controls; an expression needs a float run with one wired input per card.</div>}
           </div>
         </div>
         <div style={{ flexShrink: 0 }}>

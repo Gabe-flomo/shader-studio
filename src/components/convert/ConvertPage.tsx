@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { glslToGraph, normaliseHostShader, type ConversionResult } from '../../glslToGraph';
 import { tidyGlsl } from '../../glsl/format';
-import { optimizeGraph } from '../../optimize/optimizeGraph';
+import { optimizeGraph, type OptimizeReport } from '../../optimize/optimizeGraph';
 import { dialectLabel } from '../../glsl/dialects';
 import { parseGlslError, friendlyGlsl } from '../../compiler/nodeErrors';
 import { compileGraph } from '../../compiler/graphCompiler';
@@ -131,6 +131,15 @@ function wrapOriginal(source: string): { code: string; toSourceLine: (line: numb
 }
 
 const PANE_KEY = 'shader-studio:convert:pane';
+/** One note for the report: what the optimiser did, in its two kinds. */
+function optimisedNote(r: OptimizeReport): string {
+  const blocks = r.folds.filter(f => f.kind === 'block').length, exprs = r.folds.filter(f => f.kind === 'expr').length;
+  const parts = [
+    blocks ? `${blocks} ${blocks === 1 ? 'run' : 'runs'} of math cards folded into ${blocks === 1 ? 'a block' : 'blocks'}` : '',
+    exprs ? `${exprs} short ${exprs === 1 ? 'run' : 'runs'} absorbed into input expressions` : '',
+  ].filter(Boolean);
+  return `Optimised: ${parts.join(', ')} (${r.before} → ${r.after} nodes)`;
+}
 const OPT_KEY = 'shader-studio:convert:optimised';
 
 export function ConvertPage({ onMaterialized, compact = false }: { onMaterialized: () => void; compact?: boolean }) {
@@ -146,11 +155,12 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   useEffect(() => { try { localStorage.setItem(CODE_KEY, code); } catch { /* preference only */ } }, [code]);
 
   const raw: ConversionResult = useMemo(() => glslToGraph(debounced, { asBlock }), [debounced, asBlock]);
-  // Optimised: the converted graph with runs of math cards folded into blocks (the picture is the same; the check proves it).
+  // Optimised: the converted graph with runs of math cards folded into blocks and short float runs absorbed into
+  // input expressions (the picture is the same; the check proves it).
   const [optimised, setOptimised] = useState(() => { try { return localStorage.getItem(OPT_KEY) !== 'off'; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem(OPT_KEY, optimised ? 'on' : 'off'); } catch { /* preference only */ } }, [optimised]);
   const opt = useMemo(() => (optimised && raw.nodes.length ? optimizeGraph(raw.nodes, { minChain: 3, keepSliders: true }) : null), [raw, optimised]);
-  const conv: ConversionResult = useMemo(() => (opt ? { nodes: opt.nodes, report: { ...raw.report, notes: [...raw.report.notes, ...(opt.report.folds.length ? [`Optimised: ${opt.report.folds.length} ${opt.report.folds.length === 1 ? 'run' : 'runs'} of math cards folded into blocks (${opt.report.before} → ${opt.report.after} nodes)`] : [])] } } : raw), [raw, opt]);
+  const conv: ConversionResult = useMemo(() => (opt ? { nodes: opt.nodes, report: { ...raw.report, notes: [...raw.report.notes, ...(opt.report.folds.length ? [optimisedNote(opt.report)] : [])] } } : raw), [raw, opt]);
   const compiled = useMemo(() => (conv.nodes.length ? compileGraph({ nodes: conv.nodes }) : null), [conv]);
   const wrapped = useMemo(() => wrapOriginal(debounced), [debounced]);
   const original = wrapped.code;

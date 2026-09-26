@@ -89,4 +89,15 @@ describe('line map and tidy', () => {
     expect(tidied.code).toContain('    vec2 uv = fragCoord / u_resolution;');
     expect(tidyGlsl(tidied.code).changed).toBe(false);
   });
+
+  it('renames the mainImage out parameter in mainImage only, and reads non-breaking spaces as spaces', () => {
+    // `C` is the out parameter of mainImage and a local vec2 in Z(): only mainImage's C is gl_FragColor.
+    const t = translateToStudio('vec2 Z(vec2 U){\n\u00a0\u00a0vec2 C = U - vec2(0.5);\n  return C / dot(C, C);\n}\nvoid mainImage(out vec4 C, in vec2 U){\n  C = vec4(Z(U), 0.0, 1.0);\n}');
+    expect(t.code).toContain('vec2 C = U - vec2(0.5);');
+    expect(t.code).toContain('return C / dot(C, C);');
+    expect(t.code).toContain('gl_FragColor = vec4(Z(U), 0.0, 1.0);');
+    expect(t.code.match(/gl_FragColor/g)).toHaveLength(1);
+    expect(t.code).not.toMatch(/\u00a0/);
+    expect(t.code).toContain('\n  vec2 C = U - vec2(0.5);');
+  });
 });

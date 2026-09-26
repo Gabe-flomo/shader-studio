@@ -61,9 +61,43 @@ describe('optimizeGraph', () => {
     const r2 = optimizeGraph(chain(), { protect: new Set(['add']) });
     expect(r2.nodes.some(n => n.id === 'add')).toBe(true);
     expect(r2.report.folds.every(fd => !fd.nodeIds.includes('add'))).toBe(true);
-    const r3 = optimizeGraph(chain(), { minChain: 9 });
+    const r3 = optimizeGraph(chain(), { minChain: 9, absorb: false });
     expect(r3.report.folds).toHaveLength(0);
-    expect(r3.nodes).toBe(chain().length === r3.nodes.length ? r3.nodes : r3.nodes);
+    expect(r3.nodes).toHaveLength(chain().length);
+  });
+
+  it('absorbs a short float run into an input expression on the card that reads it', () => {
+    // No block (the run is too short): mul → add → sin become `sin(input * 3.0 + 0.5)` on Float→Vec3's input, wired to Split's x.
+    const { nodes, report } = optimizeGraph(chain(), { minChain: 9 });
+    expect(report.folds).toHaveLength(1);
+    const [fold] = report.folds;
+    expect(fold.kind).toBe('expr');
+    expect(fold.blockId).toBe('f2v');
+    expect(fold.inputKey).toBe('input');
+    expect(fold.nodeIds).toEqual(['sin', 'add', 'mul']);
+    const f2v = nodes.find(n => n.id === 'f2v')!;
+    expect(f2v.params.__inExpr_input).toBe('sin(input * 3.0 + 0.5)');
+    expect(f2v.inputs.input.connection).toEqual({ nodeId: 'split', outputKey: 'x' });
+    expect(nodes.map(n => n.id).sort()).toEqual(['f2v', 'out', 'split', 'uv']);
+    const c = compileGraph({ nodes });
+    expect(c.errors ?? []).toEqual([]);
+    expect(c.fragmentShader).toMatch(/sin\(\(\w+\) \* 3\.0 \+ 0\.5\)/);
+    // Limits: at most absorbMax cards, never a protected card, and a keyframed or two-place-read card stops the walk.
+    const r2 = optimizeGraph(chain(), { minChain: 9, absorbMax: 1 });
+    expect(r2.report.folds[0].nodeIds).toEqual(['sin']);
+    expect(r2.nodes.find(n => n.id === 'f2v')!.inputs.input.connection).toEqual({ nodeId: 'add', outputKey: 'result' });
+    const r3 = optimizeGraph(chain(), { minChain: 9, protect: new Set(['add']) });
+    expect(r3.report.folds[0].nodeIds).toEqual(['sin']);
+    // After the blocks: with the default settings the whole run is one block, and nothing is left to absorb.
+    expect(optimizeGraph(chain()).report.folds.map(fd => fd.kind)).toEqual(['block']);
+  });
+
+  it('composes with an expression the card already has', () => {
+    const g = chain();
+    g[5] = { ...g[5], params: { ...g[5].params, __inExpr_input: 'input * 0.5' } };
+    const { nodes } = optimizeGraph(g, { minChain: 9 });
+    expect(nodes.find(n => n.id === 'f2v')!.params.__inExpr_input).toBe('sin(input * 3.0 + 0.5) * 0.5');
+    expect(compileGraph({ nodes }).success).toBe(true);
   });
 
   it('protects what Play controls point at', () => {

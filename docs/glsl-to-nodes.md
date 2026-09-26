@@ -45,8 +45,14 @@ Shadertoy (`mainImage`, `iTime`, `iResolution` and its components, `iMouse`,
 `resolution`, `mouse`, `surfacePosition`), twigl golf (`FC`, `r`, `t`, `m`,
 `o`; geekest code gets its `main()`), GLSL ES 3.00 (`#version 300 es`, the
 `out vec4`, `in` varyings, `texture()`), and a paste that declares nothing gets
-its precision and uniforms. Then simple `#define NAME value` macros are
-expanded, a `const float PI`/`TAU` of the shader's own is renamed (the compiled
+its precision and uniforms. Two things pastes carry that GLSL rejects are
+handled first: non-breaking spaces and other Unicode blanks (web pages, chat,
+PDFs) become ordinary spaces, and the `mainImage` out parameter is renamed to
+`gl_FragColor` inside `mainImage` only, since shaders often reuse the same
+letter (`vec2 C`) in another function. Then simple `#define NAME value` macros
+are expanded (a `// comment` after the value is not part of it; flags and
+function-like macros are left to the preprocessor), a `const float PI`/`TAU`
+of the shader's own is renamed (the compiled
 shader defines those as macros), and a function named like one of the app's
 always-included helpers (`smin`, `sdBox`, `rot2d`…) is renamed too, or the
 app's version would silently win. Then `main()` is walked statement by
@@ -236,7 +242,7 @@ are offered as the node with a warning, with the option to keep the code
 exactly, per expression; the preview is the real canvas, read-only until
 materialized.
 
-## The optimise-graph pass (first strategy shipped)
+## The optimise-graph pass (two strategies shipped)
 
 A converted graph is faithful, not idiomatic: a chain of Multiply, Add and Sin
 cards where a person would write one expression. `src/optimize/optimizeGraph.ts`
@@ -258,7 +264,24 @@ loop carries and indices, blocks and functions, keyframed or bypassed cards,
 accumulators, cards a Play control targets, cards needing helper functions,
 anything whose GLSL isn't plain declarations, and a card two places read.
 Inside iterated groups the same pass runs with the group's output ports as
-outside readers, so a port that read an exit reads its block.
+outside readers, so a port that read an exit reads its block, and a card a
+group input port feeds is never folded (its GLSL would bake the slider the
+port replaces).
+
+**Absorb into input expressions (shipped).** After the blocks, what is left
+is short: a Multiply by 2 before a radius socket, a Sin before a Mix's blend.
+Each such run (up to three float→float math cards, each with one wired input
+and one reader) becomes an *input expression* on the socket that reads it
+(see `docs/input-expressions.md`): `sin(input * 3.0 + 0.5)` on the socket,
+which is wired straight to what fed the run. The expression is the cards' own
+GLSL composed and tidied (`1.0 *` dropped, redundant parentheses removed by
+precedence, `+ -3.0` as `- 3.0`); the run's numbers become part of it, so
+this strategy is a toggle in the dialog (on by default) for when the numbers
+must stay knobs, and the same protections apply (Play targets, keyframes,
+selection). A card that already has an expression composes: the new one
+becomes its `input`. The Convert page's *Optimised* form applies both
+strategies; the report says how many runs went each way. The pixel harness is
+unchanged at 17 of 17 identical with both strategies on.
 
 **Where it lives.** The Studio toolbar's spark button opens *Optimise graph*:
 minimum run length (2/3/4), keep sliders or bake them, only the selection;
@@ -273,10 +296,10 @@ and the check compares the pasted shader with the optimised graph.
 - **Chains into blocks, tuning.** A run the user selects should fold even when
   short; a block's slider inputs are baked literals today (Expression Block
   behaviour), so a drag recompiles; making them uniforms is a block change.
-- **Input expressions** (a separate idea, noted): a one-line expression on a
-  float input, rooted in `input`, modifying the incoming value while the raw
-  input stays keyframeable. With it, the converter could absorb small
-  arithmetic into the consuming card instead of separate nodes.
+- **Absorb at conversion time.** The converter still emits the cards and the
+  optimiser absorbs them afterwards; emitting the expression directly (a
+  Multiply-by-literal whose only reader is a float socket) would skip the
+  round trip and keep the "as written" form smaller too.
 - **Fan-in into functions.** A subgraph used from several places (the same
   shape of nodes twice) becomes one Custom Function called twice, its
   literals as inputs.

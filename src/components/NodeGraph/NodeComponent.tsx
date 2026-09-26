@@ -31,6 +31,8 @@ import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
 import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
 import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
 import { constantsItems } from '../../nodes/definitions/constants';
+import { canHaveInputExpr, getInputExpr } from '../../glsl/inputExpr';
+import { InputExprPopover } from './InputExprPopover';
 import type { BezierEditorModal as BezierEditorModalT } from './BezierEditorModal';
 import type { TransformVecModal as TransformVecModalT } from './TransformVecModal';
 import type { AssignInitModal as AssignInitModalT } from './AssignInitModal';
@@ -584,6 +586,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const [showVideoInputModal, setShowVideoInputModal] = useState(false);
   const [kfMenu, setKfMenu] = useState<{ x: number; y: number; key: string } | null>(null);
   const [kfModalKey, setKfModalKey] = useState<string | null>(null);
+  // Input expressions: which input's editor is open, the row marks it anchors to, and the hovered row (shows the ƒ mark).
+  const [exprEditKey, setExprEditKey] = useState<string | null>(null);
+  const exprAnchors = useRef<Record<string, HTMLElement | null>>({});
+  const exprAnchorRef = useMemo(() => ({ current: exprEditKey ? exprAnchors.current[exprEditKey] ?? null : null }), [exprEditKey]);
+  const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
   const [kfChipHover, setKfChipHover] = useState(false);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
@@ -2723,6 +2730,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     );
     const inputError = errors?.find(e => e.socket === inputKey);
     if (inputError) lines.push(<span style={{ color: tk.status.danger, fontWeight: 600, whiteSpace: 'normal' }}>{inputError.message}</span>);
+    const inExpr = getInputExpr(node, inputKey);
+    if (inExpr) lines.push(<span style={{ color: tk.kind.expr, whiteSpace: 'normal' }}>ƒ <span style={{ fontFamily: fontFamily.mono }}>{inExpr}</span></span>);
     if (input.connection) {
       // Show what's connected
       const srcNode = nodes.find(n => n.id === input.connection!.nodeId);
@@ -3202,11 +3211,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           );
           const kfBypassed = isKeyframed && isKeyframeBypassed(node, key);
           const socketError = errors?.find(e => e.socket === key);
+          const inExpr = getInputExpr(node, key);
+          const exprEligible = !isExternal && canHaveInputExpr(node, key);
+          const showExprMark = exprEligible && (!!inExpr || hoveredRowKey === key || exprEditKey === key);
 
           return (
             <div
               key={key}
               style={{ display: 'flex', alignItems: 'center', minHeight: isTouchDevice ? 40 : 26, padding: '0 8px 0 0', position: 'relative' }}
+              onMouseEnter={exprEligible ? () => setHoveredRowKey(key) : undefined}
+              onMouseLeave={exprEligible ? () => setHoveredRowKey(k => (k === key ? null : k)) : undefined}
             >
               {/* Socket dot — locked for external inputs */}
               <div
@@ -3368,6 +3382,28 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   {slotName}
                   {isExternal && <span title="Wired from outside the group" style={{ marginLeft: 5, verticalAlign: -2, display: 'inline-flex' }}><Icon name="lock" size={12} /></span>}
                 </span>
+              )}
+              {/* Input expression: a ƒ mark (faint on hover when unset; the expression as a chip when set). Click opens the editor. */}
+              {showExprMark && (
+                <button
+                  type="button"
+                  ref={el => { exprAnchors.current[key] = el; }}
+                  aria-label={inExpr ? `Edit the expression on ${slotName}: ${inExpr}` : `Add an expression on ${slotName}`}
+                  title={inExpr ? `ƒ ${inExpr}\nClick to edit the expression on this input` : 'Add an expression that modifies what arrives here (input * 2.0, input + sin(t)…)'}
+                  onMouseDown={e => e.stopPropagation()}
+                  onMouseUp={e => e.stopPropagation()}
+                  onClick={e => { e.stopPropagation(); setExprEditKey(k => (k === key ? null : key)); }}
+                  style={{
+                    height: 18, maxWidth: inExpr ? 118 : undefined, padding: inExpr ? '0 6px' : '0 4px', marginLeft: 6, borderRadius: 5, border: 0, cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 1, minWidth: 0,
+                    background: inExpr || exprEditKey === key ? alpha(tk.kind.expr, 0.14) : 'transparent',
+                    color: inExpr || exprEditKey === key ? tk.kind.expr : tk.text.faint,
+                    font: `500 10.5px ${fontFamily.mono}`, opacity: socketOpacity,
+                  }}
+                >
+                  <Icon name="fn" size={11} />
+                  {inExpr && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inExpr}</span>}
+                </button>
               )}
               {isConnected && !isExternal && (
                 <span
@@ -4153,6 +4189,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       })()}
       {kfModalKey && (
         <KeyframeEditorModal node={node} socketKey={kfModalKey} onClose={() => setKfModalKey(null)} />
+      )}
+      {exprEditKey && node.inputs[exprEditKey] && (
+        <InputExprPopover node={node} inputKey={exprEditKey} anchorRef={exprAnchorRef} onClose={() => setExprEditKey(null)} />
       )}
 
       {/* ── TransformVec modal ── */}
