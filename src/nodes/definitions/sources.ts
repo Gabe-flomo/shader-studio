@@ -38,8 +38,11 @@ export const UVNode: NodeDefinition = {
   outputs: {
     uv: { type: 'vec2', label: 'UV' },
   },
-  generateGLSL: (node: GraphNode) => {
+  generateGLSL: (node: GraphNode, inputVars) => {
     const outVar = `${node.id}_uv`;
+    // Inside a field function (a chain wired into a field socket) the UV is
+    // the function's position parameter, which is named g_uv.
+    if (inputVars?.__inField === '1') return { code: `    vec2 ${outVar} = g_uv;\n`, outputVars: { uv: outVar } };
     return {
       code: `    vec2 ${outVar} = (vUv - 0.5) * 2.0;\n    ${outVar}.x *= u_resolution.x / u_resolution.y;\n`,
       outputVars: { uv: outVar },

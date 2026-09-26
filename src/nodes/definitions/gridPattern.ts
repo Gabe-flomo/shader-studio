@@ -1,11 +1,19 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, pv3 } from './helpers';
+import { p, pv3, fieldFn } from './helpers';
 
 /**
  * Grid Pattern — the whole "shapes on a grid" recipe in one node.
  *
  * Grid → Circle SDF on the Cell UV → Cell Filter → SDF Fill is the standard
- * chain, and it stays available for anything unusual. This node does the
+ * chain, and it stays available for anything unusual.
+ *
+ * Three ways to choose the shape:
+ *   - the built-in dropdown (nothing wired);
+ *   - one wire: any SDF into the Shape field socket (and/or a colour chain
+ *     into Picture). The chain is compiled as a function and called once per
+ *     cell in the cell's effected coordinates, and for the neighbouring cells
+ *     too when Overflow is on, so shapes can cross cell borders;
+ *   - two nodes: Cell UV → anything → Grid Paint, for full control. This node does the
  * common version of it directly: cut the UV into cells, put one shape in
  * each, choose which cells get one (all, every other column or row, a
  * checkerboard, diagonal stripes, random), and let a point (the mouse, a
@@ -24,9 +32,11 @@ export const GridPatternNode: NodeDefinition = {
   type: 'gridPattern',
   label: 'Grid Pattern',
   category: 'Grid',
-  description: 'Shapes on a grid: which cells get one (all, every other column or row, checker, diagonals, random) and a point that affects the shapes near it (grow, shrink, pull, push, hide, spin). For a shape of your own, take Cell UV (it already carries the pattern’s effects) into any SDF or colour and finish with Grid Paint; with nothing wired, the built-in shape below is drawn. Also outputs the mask, the SDF and the raw grid (Cell ID, Cell Center, Influence, Placed).',
+  description: 'Shapes on a grid: which cells get one (all, every other column or row, checker, diagonals, random) and a point that affects the shapes near it (grow, shrink, pull, push, hide, spin). For a shape of your own, wire any SDF (Circle SDF, Shape SDF…) straight into Shape, or a colour chain into Picture: it is drawn once per cell in that cell’s coordinates, and a Cell node inside the chain gives the cell’s ID for per-cell variation. Or take Cell UV into anything and finish with Grid Paint. With nothing wired, the built-in shape is drawn. Overflow lets shapes cross cell borders. Also outputs the mask, the SDF and the raw grid (Cell ID, Cell Center, Influence, Placed).',
   inputs: {
     uv:         { type: 'vec2',  label: 'UV' },
+    shape:      { type: 'float', label: 'Shape', field: true, hint: 'Wire an SDF (Circle SDF, Shape SDF, a union…): it is drawn in every placed cell, in the cell’s coordinates (−0.5…0.5, with the pattern’s effects). The wired chain is evaluated per cell, so a Cell node inside it varies the shape per cell. Unwired: the built-in shape.' },
+    picture:    { type: 'vec3',  label: 'Picture', field: true, hint: 'Wire a colour chain (Palette, FBM → Palette, a texture): evaluated per cell in the cell’s coordinates. Colours the shape, or fills the whole cell when Shape is unwired.' },
     columns:    { type: 'float', label: 'Columns', hint: 'Cells across; the same count as the Grid node, so the two line up.' },
     size:       { type: 'float', label: 'Size', hint: 'Shape size as a fraction of the cell (0.5 touches the cell edge).' },
     affectPos:  { type: 'vec2',  label: 'Affect Pos', hint: 'The point that affects nearby shapes: wire Mouse UV, or a null from Play. Unwired, it is the centre of the picture.' },
@@ -46,14 +56,14 @@ export const GridPatternNode: NodeDefinition = {
     placed:     { type: 'float', label: 'Placed', hint: '1 where the pattern puts a shape in this cell, 0 where it leaves the cell empty.' },
   },
   defaultParams: {
-    columns: 8.0, shape: 'circle', size: 0.3, rotation: 0.0, jitter: 0.0, antialias: 0.02,
+    columns: 8.0, shape: 'circle', size: 0.3, overflow: 'none', rotation: 0.0, jitter: 0.0, antialias: 0.02,
     pattern: 'all', density: 0.5,
     affect: 'grow', affectRadius: 0.6, affectSoftness: 0.7, affectAmount: 1.0,
     color: [0.95, 0.85, 0.6], background: [0.06, 0.06, 0.09],
   },
   paramDefs: {
     columns:  { label: 'Columns', type: 'float', min: 1, max: 60, step: 1, hint: 'Cells across the width.' },
-    shape:    { label: 'Built-in shape', type: 'select', hint: 'Drawn when no shape of your own comes back through Grid Paint.', options: [
+    shape:    { label: 'Built-in shape', type: 'select', hint: 'Drawn when nothing is wired into Shape (or Picture).', options: [
       { value: 'circle',  label: 'Circle' },
       { value: 'box',     label: 'Square' },
       { value: 'diamond', label: 'Diamond' },
@@ -61,7 +71,12 @@ export const GridPatternNode: NodeDefinition = {
       { value: 'cross',   label: 'Cross' },
       { value: 'triangle', label: 'Triangle' },
     ] },
-    size:     { label: 'Size', type: 'float', min: 0.02, max: 1.0, step: 0.01, hint: 'Fraction of the cell. 0.5 fills the cell edge to edge; above that neighbours touch.' },
+    size:     { label: 'Size', type: 'float', min: 0.02, max: 1.0, step: 0.01, hint: 'Built-in shape only: fraction of the cell. 0.5 fills the cell edge to edge; above that neighbours touch (turn Overflow on so they are not clipped).' },
+    overflow: { label: 'Overflow', type: 'select', options: [
+      { value: 'none',       label: 'Clip at the cell edge' },
+      { value: 'neighbours', label: 'Neighbours (3×3)' },
+      { value: 'far',        label: 'Far (5×5)' },
+    ], hint: 'Draws the shapes of the neighbouring cells too, so a shape that is pulled, pushed, grown or jittered past its cell edge carries on into the next cell instead of being cut off. Pull and Push can then move a shape a whole cell. Costs 9× (Neighbours) or 25× (Far) shape evaluations.' },
     rotation: { label: 'Rotation', type: 'float', min: -3.1416, max: 3.1416, step: 0.01, hint: 'Turns every shape (radians).' },
     jitter:   { label: 'Jitter', type: 'float', min: 0, max: 0.5, step: 0.01, hint: 'Random offset per cell, so the grid stops looking like a grid.' },
     pattern:  { label: 'Pattern', type: 'select', options: [
@@ -128,6 +143,40 @@ float gpPlaced(vec2 id, float pattern, float density) {
     const dens = p(node.params.density, 0.5);
     const col = inputVars.color ?? pv3(node.params.color, [0.95, 0.85, 0.6]);
     const bg = inputVars.background ?? pv3(node.params.background, [0.06, 0.06, 0.09]);
+    // Field sockets: function names, or undefined when unwired (see helpers.fieldFn).
+    const shapeFn = fieldFn(inputVars.shape);
+    const picFn = fieldFn(inputVars.picture);
+    const overflow = String(node.params.overflow ?? 'none');
+    const reach = overflow === 'far' ? 2 : overflow === 'neighbours' ? 1 : 0;
+    const shapeLit = `${shapeIdx < 0 ? 0 : shapeIdx}.0`;
+    const patternLit = `${patternIdx < 0 ? 0 : patternIdx}.0`;
+    // Pull/push stop at the cell edge unless the neighbours are drawn too.
+    const pushK = reach > 0 ? '1.0' : '0.45';
+
+    /** One cell frame's SDF, evaluated in its effected coordinates. */
+    const shapeAt = (rq: string, cid: string, inf: string) =>
+      shapeFn ? `${shapeFn}(${rq}, ${cid}, ${inf}, 0.0)`
+        : picFn ? `sdBox(${rq}, vec2(0.5))`   // a picture alone fills its (effected) cell
+        : `gpShape(${rq}, ${shapeLit}, ${size})`;
+    const colourAt = (rq: string, cid: string, inf: string) => (picFn ? `${picFn}(${rq}, ${cid}, ${inf}, 0.0)` : col);
+    const pictureOnly = !shapeFn && !!picFn;
+    /** The affect point's effect on one frame; `v` names its variables (`${v}q`, `${v}sc`, …). */
+    const effects = (v: string, ind: string): string[] => {
+      const out: string[] = [];
+      if (affect === 'grow') out.push(`${ind}${v}sc = 1.0 + ${v}inf;`);
+      if (affect === 'shrink') out.push(`${ind}${v}sc = max(0.001, 1.0 - ${v}inf);`);
+      if (affect === 'pull' || affect === 'push') {
+        const sgn = affect === 'pull' ? '' : '-';
+        out.push(`${ind}vec2 ${v}dir = ${ap} - ${v}cc; ${v}dir = length(${v}dir) > 1e-4 ? normalize(${v}dir) : vec2(0.0);`);
+        out.push(`${ind}${v}q -= ${sgn}${v}dir * ${v}inf * ${pushK};`);
+      }
+      if (affect === 'hide') out.push(`${ind}${v}on *= 1.0 - min(1.0, ${v}inf);`);
+      if (affect === 'spin') out.push(`${ind}${v}ang += ${v}inf * 3.14159;`);
+      return out;
+    };
+    const rotated = (v: string) => `vec2(cos(${v}ang) * ${v}q.x - sin(${v}ang) * ${v}q.y, sin(${v}ang) * ${v}q.x + cos(${v}ang) * ${v}q.y) / ${v}sc`;
+
+    const h = `${id}_`;
     const lines = [
       `    float ${id}_asp  = u_resolution.x / u_resolution.y;`,
       `    float ${id}_cell = ${id}_asp / ${cols};`,
@@ -137,28 +186,60 @@ float gpPlaced(vec2 id, float pattern, float density) {
       `    vec2  ${id}_q    = fract(${id}_gp) - 0.5 - (gpHash2(${id}_cid) - 0.5) * ${jit};`,
       `    float ${id}_sc   = 1.0;`,
       `    float ${id}_ang  = ${rot};`,
-      `    float ${id}_on   = gpPlaced(${id}_cid, ${patternIdx < 0 ? 0 : patternIdx}.0, ${dens});`,
+      `    float ${id}_on   = gpPlaced(${id}_cid, ${patternLit}, ${dens});`,
       // Influence: 1 at the point, 0 at the radius; softness widens the fade inward. Always an output, whatever Affect does with it.
       `    float ${id}_inf  = smoothstep(${radius}, ${radius} * (1.0 - ${soft}), length(${ap} - ${id}_cc)) * ${amount};`,
-    ];
-    {
-      if (affect === 'grow') lines.push(`    ${id}_sc = 1.0 + ${id}_inf;`);
-      if (affect === 'shrink') lines.push(`    ${id}_sc = max(0.001, 1.0 - ${id}_inf);`);
-      if (affect === 'pull' || affect === 'push') {
-        const sgn = affect === 'pull' ? '' : '-';
-        lines.push(`    vec2 ${id}_dir = ${ap} - ${id}_cc; ${id}_dir = length(${id}_dir) > 1e-4 ? normalize(${id}_dir) : vec2(0.0);`);
-        lines.push(`    ${id}_q -= ${sgn}${id}_dir * ${id}_inf * 0.45;`);
-      }
-      if (affect === 'hide') lines.push(`    ${id}_on *= 1.0 - min(1.0, ${id}_inf);`);
-      if (affect === 'spin') lines.push(`    ${id}_ang += ${id}_inf * 3.14159;`);
-    }
-    lines.push(
+      ...effects(h, '    '),
       // The cell's coordinates with every effect applied: rotated, then scaled so a shape drawn in them grows or shrinks.
-      `    vec2  ${id}_rq   = vec2(cos(${id}_ang) * ${id}_q.x - sin(${id}_ang) * ${id}_q.y, sin(${id}_ang) * ${id}_q.x + cos(${id}_ang) * ${id}_q.y) / ${id}_sc;`,
-      `    float ${id}_d    = mix(10.0, gpShape(${id}_rq, ${shapeIdx < 0 ? 0 : shapeIdx}.0, ${size}), step(0.5, ${id}_on));`,
-      `    float ${id}_mask = (1.0 - smoothstep(-${aa}, ${aa}, ${id}_d)) * ${id}_on;`,
-      `    vec3  ${id}_col  = mix(${bg}, ${col}, ${id}_mask);`,
-    );
+      `    vec2  ${id}_rq   = ${rotated(h)};`,
+    ];
+    if (reach === 0) {
+      lines.push(
+        `    float ${id}_d    = mix(10.0, ${shapeAt(`${id}_rq`, `${id}_cid`, `${id}_inf`)}, step(0.5, ${id}_on));`,
+        pictureOnly
+          ? `    float ${id}_mask = ${id}_on;`
+          : `    float ${id}_mask = (1.0 - smoothstep(-${aa}, ${aa}, ${id}_d)) * ${id}_on;`,
+        `    vec3  ${id}_col  = mix(${bg}, ${colourAt(`${id}_rq`, `${id}_cid`, `${id}_inf`)}, ${id}_mask);`,
+      );
+    } else {
+      // Overflow: also draw the shapes of the neighbouring cells (3×3 or 5×5),
+      // each in its own frame (its jitter, placement, influence and effects),
+      // so a shape pulled, grown or offset past its cell edge continues into
+      // the next cell. Distances combine with min. Colours composite over in
+      // one fixed order (row by row, by cell id), so where two cells' shapes
+      // overlap the same one is on top on both sides of the border; putting
+      // the pixel's own cell last would flip the order at every cell edge
+      // and cut overlapping shapes along it. Distances are scaled back to
+      // cell units so frames of different scales compare.
+      const n = `${id}_n`;
+      const maskOf = (d: string) => (pictureOnly ? `step(${d}, 0.0)` : `(1.0 - smoothstep(-${aa}, ${aa}, ${d}))`);
+      const ind = '            ';
+      lines.push(
+        `    float ${id}_d    = 10.0;`,
+        `    float ${id}_mask = 0.0;`,
+        `    vec3  ${id}_col  = ${bg};`,
+        `    vec2  ${id}_fp   = fract(${id}_gp);`,
+        `    for (int ${id}_j = -${reach}; ${id}_j <= ${reach}; ${id}_j++) {`,
+        `        for (int ${id}_i = -${reach}; ${id}_i <= ${reach}; ${id}_i++) {`,
+        `${ind}vec2  ${n}o   = vec2(float(${id}_i), float(${id}_j));`,
+        `${ind}vec2  ${n}cid = ${id}_cid + ${n}o;`,
+        `${ind}vec2  ${n}cc  = (${n}cid + 0.5) * ${id}_cell;`,
+        `${ind}vec2  ${n}q   = ${id}_fp - 0.5 - ${n}o - (gpHash2(${n}cid) - 0.5) * ${jit};`,
+        `${ind}float ${n}sc  = 1.0;`,
+        `${ind}float ${n}ang = ${rot};`,
+        `${ind}float ${n}on  = gpPlaced(${n}cid, ${patternLit}, ${dens});`,
+        `${ind}float ${n}inf = smoothstep(${radius}, ${radius} * (1.0 - ${soft}), length(${ap} - ${n}cc)) * ${amount};`,
+        ...effects(n, ind),
+        `${ind}vec2  ${n}rq  = ${rotated(n)};`,
+        `${ind}float ${n}d   = mix(10.0, ${shapeAt(`${n}rq`, `${n}cid`, `${n}inf`)} * ${n}sc, step(0.5, ${n}on));`,
+        `${ind}float ${n}m   = ${maskOf(`${n}d`)} * ${n}on;`,
+        `${ind}${id}_d    = min(${id}_d, ${n}d);`,
+        `${ind}${id}_mask = max(${id}_mask, ${n}m);`,
+        `${ind}${id}_col  = mix(${id}_col, ${colourAt(`${n}rq`, `${n}cid`, `${n}inf`)}, ${n}m);`,
+        `        }`,
+        `    }`,
+      );
+    }
     return {
       code: lines.join('\n') + '\n',
       outputVars: {

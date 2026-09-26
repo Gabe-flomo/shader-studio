@@ -119,7 +119,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Layer',   types: ['glowLayer', 'deepGlow'] },
   ],
   Grid: [
-    { label: 'Layout',   types: ['gridPattern', 'gridPaint', 'gridLayout'] },
+    { label: 'Layout',   types: ['gridPattern', 'gridPaint', 'arrayField', 'gridLayout'] },
     { label: 'Motion',   types: ['waveRadius', 'animatedCellCenter'] },
     { label: 'Displace', types: ['neighborDist', 'cellDisplace', 'neighborAttractCircles'] },
     { label: 'Filter',   types: ['cellFilter', 'neighborOffset2d'] },

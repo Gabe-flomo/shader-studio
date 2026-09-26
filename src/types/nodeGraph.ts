@@ -27,6 +27,16 @@ export interface InputSocket extends Socket {
    * from another node — UV, SDF positions, etc.) are not keyframe-eligible.
    */
   axisParams?: string[];
+  /**
+   * Field socket (read from the node DEFINITION, not the instance): this
+   * input receives the wired node's code as a function of position instead
+   * of its value. The socket's `type` is the function's return type (float
+   * for a shape, vec3 for a picture), so ordinary wire checks still apply.
+   * The compiler emits the upstream chain as
+   * `T fieldfn_…(vec2 g_uv, vec2 fieldCell, float fieldInfluence, float fieldIndex)`
+   * and hands the node its NAME in `inputVars[key]`; see docs/field-sockets.md.
+   */
+  field?: boolean;
 }
 
 // Output socket

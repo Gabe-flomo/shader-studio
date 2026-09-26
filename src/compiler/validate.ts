@@ -1,6 +1,7 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { typesCompatible } from '../lib/typesCompatible';
+import { fieldChainProblems, fieldInputKeys } from './fieldSockets';
 
 export interface ValidationResult {
   valid: boolean;
@@ -70,6 +71,16 @@ export function validateGraph(nodes: GraphNode[]): ValidationResult {
           `Node ${node.id} [source:${sourceNode.id}]: type mismatch on input "${inputKey}". ` +
           `Expected ${targetType}, got ${sourceOutputType}`,
         );
+      }
+    }
+  }
+
+  // Field sockets: every node in the chain must be a pure function of position.
+  for (const node of visibleNodes) {
+    const def = getNodeDefinitionFor(node);
+    for (const key of fieldInputKeys(def)) {
+      for (const msg of fieldChainProblems(node, key, nodeMap, getNodeDefinitionFor)) {
+        if (!errors.includes(msg)) errors.push(msg);
       }
     }
   }

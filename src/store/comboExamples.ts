@@ -3,7 +3,9 @@
  * graphBuilder.ts). These show the Grid Pattern → your own shape → Grid
  * Paint flow: Grid Pattern hands out a Cell UV that already carries the
  * pattern and the affect point, anything goes in between, Grid Paint
- * brings the distance or colour back and paints it gated by Placed.
+ * brings the distance or colour back and paints it gated by Placed. And the
+ * one-wire version: a shape wired into a field socket (Grid Pattern's
+ * Shape, the Array node's Shape), with the Cell node for per-cell variation.
  */
 import type { ExampleGraph } from './exampleIndex';
 import { ctl, n, out, play, time, uv } from './graphBuilder';
@@ -16,6 +18,14 @@ export const COMBO_EXAMPLE_INDEX: Record<string, { label: string; description: s
   comboGridPaintPictures: {
     label: 'Combo: Grid Pattern + FBM per cell', play: true,
     description: 'Colour instead of a distance: Cell UV → FBM → Palette into Grid Paint’s Colour with nothing on Distance, so every placed cell shows its own little picture. Random placement at 70 % density; the mouse hides the cells near it.',
+  },
+  comboGridShapeByWire: {
+    label: 'Combo: Grid Pattern + Shape by wire', play: true,
+    description: 'One wire, no Grid Paint: Circle SDF straight into Grid Pattern’s Shape field socket, a Palette into Picture. A Cell node inside the chain hashes each cell’s ID into its own radius and colour. The mouse pulls the circles toward it with Overflow on Neighbours, so a circle dragged past its cell edge carries on into the next cell instead of being cut off.',
+  },
+  comboArrayStars: {
+    label: 'Combo: Array of stars', play: true,
+    description: 'The Array node repeats a Star SDF wired into its Shape field socket twelve times on a ring. A Cell node gives each copy its Index: the stars grow around the ring and a rainbow Palette colours them in order. Turn copies makes every star point away from the centre; Time turns the ring.',
   },
   comboGridPaintGlow: {
     label: 'Combo: Grid Pattern + SDF Glow', play: true,
@@ -78,6 +88,38 @@ export function buildComboExamples(): Record<string, ExampleGraph> {
 **How it is built.** Grid Pattern → Cell UV → Circle SDF → SDF Glow → Grid Paint (Colour) → Tone Map. Placed across from Grid Pattern.
 
 **Try.** Switch SDF Glow to Rings. Set the pattern to Random. Wire Grid Pattern's Influence into SDF Glow's Falloff through a Remap so the mouse also sharpens the lamps.`);
+
+  add('comboGridShapeByWire', [
+    uv(),
+    n('mouse', 'mouse', 40, 420),
+    n('fieldCell', 'cell', 40, 620),
+    n('noiseFloat', 'hash', 300, 620, { mode: 'hash', scale: 1, speed: 0, outMin: 0.16, outMax: 0.4 }, { uv: ['cell', 'cellID'] }),
+    n('circleSDF', 'circ', 560, 520, { radius: 0.3 }, { radius: ['hash', 'value'] }),
+    n('palette', 'pal', 560, 720, { preset: '3', scale: 1 }, { value: ['hash', 'value'] }),
+    n('gridPattern', 'gp', 860, 220, { columns: 8, pattern: 'all', affect: 'pull', affectRadius: 0.9, affectSoftness: 0.8, affectAmount: 0.9, overflow: 'neighbours', background: [0.05, 0.05, 0.08] },
+      { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'], shape: ['circ', 'distance'], picture: ['pal', 'color'] }),
+    out(['gp', 'color'], 1140),
+  ], [ctl('a', 'gp::affectAmount', 'Pull', 0, 2, 0.01), ctl('r', 'gp::affectRadius', 'Mouse radius', 0.1, 3, 0.01), ctl('s', 'hash::outMax', 'Largest radius', 0.1, 0.8, 0.005)],
+  `**What it shows.** A shape of your own on the grid with one wire. Grid Pattern's **Shape** is a field socket (the small ƒ next to its name): it doesn't take Circle SDF's value, it takes Circle SDF's code, and calls it once in every cell, in that cell's coordinates. **Picture** does the same for colour. Inside that chain the **Cell** node is the cell being drawn, so hashing its Cell ID gives every circle its own radius and colour.
+
+**How it is built.** Cell → Noise Float (Hash, Out Min/Max 0.16–0.4) → Circle SDF's Radius → Grid Pattern's Shape. The same hash → Palette → Grid Pattern's Picture. Circle SDF's UV is left empty: inside a field chain an empty UV is the cell's coordinates. Affect is Pull toward the mouse and **Overflow** is Neighbours: each pixel also draws the circles of the eight cells around it, so a circle pulled across a cell border stays whole.
+
+**Try.** Set Overflow back to Clip and pull: the circles are cut at their cell edges. Raise Largest radius past 0.5 so neighbours overlap. Swap Circle SDF for Shape SDF (Heart, Star) without touching anything else.`);
+
+  add('comboArrayStars', [
+    time(40, 420),
+    n('fieldCell', 'cell', 40, 220),
+    n('shapeSDF', 'star', 320, 160, { shape: 'starN', r: 0.06, n_pts: 5, m_pts: 2.5, __inExpr_r: '0.045 + input * 0.009' }, { r: ['cell', 'index'] }),
+    n('palette', 'pal', 320, 400, { preset: '1', scale: 1, __inExpr_value: 'input / 12.0' }, { value: ['cell', 'index'] }),
+    n('arrayField', 'arr', 620, 220, { layout: 'ring', count: 12, radius: 0.62, combine: 'min', turn: true, antialias: 0.004, background: [0.04, 0.04, 0.07], __inExpr_rotation: 'input * 0.2' },
+      { shape: ['star', 'distance'], picture: ['pal', 'color'], rotation: ['time', 'time'] }),
+    out(['arr', 'color'], 900),
+  ], [ctl('r', 'arr::radius', 'Ring radius', 0.1, 1.2, 0.005), ctl('w', 'arr::sweep', 'Sweep', 0.5, 6.2832, 0.01), ctl('s', 'arr::startAngle', 'Start angle', -3.1416, 3.1416, 0.01)],
+  `**What it shows.** The Array node: one shape, N copies. The Star SDF is wired into Array's **Shape** field socket, so Array calls it twelve times, once per copy, in that copy's own coordinates, and combines the twelve distances into one (Union). The **Cell** node inside the star's chain is the copy being drawn: its Index (0 … 11) grows the stars around the ring through an input expression on Radius, and a Palette of the Index colours them in order through **Picture**.
+
+**How it is built.** Cell (Index) → Shape SDF (Star, Radius = 0.045 + index × 0.009) → Array (Ring, 12) Shape. Cell (Index) → Palette → Array Picture. Time → Array Rotation (× 0.2) turns the ring; Turn copies keeps each star pointing outward.
+
+**Try.** Lower Sweep: the stars fan out over an arc from first to last. Switch Layout to Line or Grid. Set Combine to Smooth union and raise Smoothness until the stars melt into one another.`);
 
   return out3;
 }

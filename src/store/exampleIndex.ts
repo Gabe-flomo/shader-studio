@@ -148,7 +148,7 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   ...PLAY_EXAMPLE_INDEX,
   // The Learn folder: the Book of Shaders course as graphs (learnExampleIndex.ts).
   ...LEARN_EXAMPLE_INDEX,
-  // Node Combos built from the definitions (comboExamples.ts): the Grid Pattern → shape → Grid Paint flow.
+  // Node Combos built from the definitions (comboExamples.ts): the Grid Pattern → shape → Grid Paint flow, and field sockets.
   ...COMBO_EXAMPLE_INDEX,
 };
 
@@ -187,5 +187,5 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
   { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },
   { label: "From the Internet",    color: ctp.yellow, keys: ['fcTrippyNoise','fcSolar','fcPillars','fcGradient4','fcGrainGradient','fcTiling','fcTheScreen','fcShield','fcMainFrame','fcAtlantic','fcOrb','fcBitshift'] },
-  { label: "Node Combos",        color: ctp.flamingo, keys: ['comboChaosStars','comboRepeatCellHash','comboTurbulenceGlow','comboBloomDots','comboDomeRepeat','comboVoxelSpheres','comboGridPaintShapes','comboGridPaintPictures','comboGridPaintGlow'] },
+  { label: "Node Combos",        color: ctp.flamingo, keys: ['comboChaosStars','comboRepeatCellHash','comboTurbulenceGlow','comboBloomDots','comboDomeRepeat','comboVoxelSpheres','comboGridPaintShapes','comboGridPaintPictures','comboGridPaintGlow','comboGridShapeByWire','comboArrayStars'] },
 ];

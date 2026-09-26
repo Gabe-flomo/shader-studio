@@ -1,7 +1,8 @@
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { GraphNode, DataType, InputSocket, NodeDefinition, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
-import { f as formatFloat } from '../nodes/definitions/helpers';
+import { f as formatFloat, FIELD_FN_PREFIX } from '../nodes/definitions/helpers';
+import { collectFieldChain, fieldChainProblems, fieldInputKeys, FIELD_IMPURE } from './fieldSockets';
 import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
@@ -515,6 +516,15 @@ export class ShaderAssembler {
   private nodeSlugMap = new Map<string, string>();
   private sortedNodes: GraphNode[];
   private allNodes: GraphNode[];
+  private seedOutputs = new Map<string, Record<string, string>>();
+  // ── Field sockets (see compileFieldFunction) ──
+  /** Top-level node id → the slug its main() copy was compiled under; a field function reuses it so uniform names match. */
+  private topSlugs = new Map<string, string>();
+  /** `${sourceId}::${outputKey}::${returnType}` → field function name. */
+  private fieldFns = new Map<string, string>();
+  private fieldFnNames = new Set<string>();
+  /** > 0 while a field function's body is being compiled. */
+  private fieldDepth = 0;
 
   constructor(sortedNodes: GraphNode[], allNodes: GraphNode[], opts?: ShaderAssemblerOptions) {
     this.sortedNodes = sortedNodes;
@@ -525,7 +535,10 @@ export class ShaderAssembler {
     // of the function being built). resolveInputVars finds them like any
     // other source; topologicalSort ignores connections to unknown ids.
     if (opts?.seedOutputs) {
-      for (const [id, vars] of opts.seedOutputs) this.nodeOutputs.set(id, { ...vars });
+      for (const [id, vars] of opts.seedOutputs) {
+        this.nodeOutputs.set(id, { ...vars });
+        this.seedOutputs.set(id, { ...vars });
+      }
     }
     this.functions.add(GLSL_SMIN);
     this.functions.add(GLSL_SD_BOX);
@@ -612,6 +625,10 @@ export class ShaderAssembler {
 
         const def = getNodeDefinitionFor(node);
         if (!def) return;
+        const inField = this.fieldDepth > 0;
+        if (inField && FIELD_IMPURE[node.type]) {
+          throw new Error(`Node ${node.id}: ${def.label} can't be part of a field chain: ${FIELD_IMPURE[node.type]}.`);
+        }
 
         // Collect GLSL helper this.functions (deduplicated)
         if (def.glslFunction) this.functions.add(def.glslFunction);
@@ -625,8 +642,23 @@ export class ShaderAssembler {
         const inputVars = resolveInputVars(node, this.nodeOutputs, this.nodeMap, fn => this.functions.add(fn));
 
         // Compute slug once per node for all GLSL variable naming (NOT for this.nodeOutputs keys)
-        const nodeSlug = computeNodeSlug(node, this.usedSlugs);
-        this.nodeSlugMap.set(node.id, nodeSlug);
+        // Inside a field function the node keeps the slug of its main() copy, so its
+        // param uniforms (named after the slug) are the same ones and its sliders stay live.
+        const nodeSlug = (inField ? this.topSlugs.get(node.id) : undefined) ?? computeNodeSlug(node, this.usedSlugs);
+        if (!inField) {
+          this.topSlugs.set(node.id, nodeSlug);
+          this.nodeSlugMap.set(node.id, nodeSlug);
+        }
+
+        // Field sockets: a wired one receives the upstream chain as a function
+        // (its name, in inputVars); an unwired one stays undefined.
+        for (const key of fieldInputKeys(def)) {
+          if (node.inputs[key]?.connection && !node.bypassed) inputVars[key] = this.compileFieldFunction(node, key, def.inputs[key].type);
+          else delete inputVars[key];
+        }
+        // Inside a chain, the UV node is the function's position and the Cell node
+        // its cell parameters; outside, the canvas UV and zeros.
+        if (inField && (node.type === 'fieldCell' || node.type === 'uv')) inputVars.__inField = '1';
 
         // Register sampler uniforms using slug so GLSL name matches what generateGLSL emits
         if (node.type === 'textureInput') {
@@ -661,6 +693,69 @@ export class ShaderAssembler {
     if (node.type === 'spaceWarpGroup') { this.compileSpaceWarpGroupNode(node, inputVars, nodeSlug); return; }
     if (node.bypassed) { this.compileBypassNode(node, inputVars, nodeSlug, def); return; }
     this.compileStandardNode(node, inputVars, nodeSlug, def);
+  }
+
+  /**
+   * Compile the chain wired into `consumer`'s field socket `key` as a GLSL
+   * function of position and return its name.
+   *
+   * The chain (the wired node and everything upstream of it) is compiled a
+   * second time, through the ordinary per-node path, into a separate buffer
+   * that becomes the body of
+   *
+   *   T fieldfn_<slug>_<output>(vec2 g_uv, vec2 fieldCell, float fieldInfluence, float fieldIndex)
+   *
+   * Because the parameter is named g_uv, every UV node and every node that
+   * falls back to g_uv for an unwired position is evaluated at the call's
+   * position. Time, the mouse, textures and param uniforms are globals and
+   * keep working; the nodes keep their main() slugs, so the uniform names
+   * are the same ones the sliders write. The main() copies of the chain stay
+   * too (node previews, the code panel and wired chips read them; the GPU
+   * compiler drops what nothing uses). One function per source output and
+   * return type, however many field sockets it feeds.
+   */
+  private compileFieldFunction(consumer: GraphNode, key: string, socketType: DataType): string {
+    const conn = consumer.inputs[key].connection!;
+    const ret = socketType === 'vec2' || socketType === 'vec3' || socketType === 'vec4' ? socketType : 'float';
+    const cacheKey = `${conn.nodeId}::${conn.outputKey}::${ret}`;
+    const cached = this.fieldFns.get(cacheKey);
+    if (cached) return cached;
+
+    const problems = fieldChainProblems(consumer, key, this.nodeMap, getNodeDefinitionFor);
+    if (problems.length) throw new Error(problems[0]);
+    const chainIds = collectFieldChain(conn.nodeId, this.nodeMap);
+    const chain = this.sortedNodes.filter(n => chainIds.has(n.id));
+
+    const savedCode = this.mainCode;
+    const savedOutputs = this.nodeOutputs;
+    this.mainCode = [];
+    this.nodeOutputs = new Map(this.seedOutputs);
+    this.fieldDepth++;
+    let body: string;
+    let srcVar: string | undefined;
+    try {
+      for (const n of chain) this.compileNode(n);
+      body = this.mainCode.join('');
+      srcVar = this.nodeOutputs.get(conn.nodeId)?.[conn.outputKey];
+    } finally {
+      this.mainCode = savedCode;
+      this.nodeOutputs = savedOutputs;
+      this.fieldDepth--;
+    }
+    const label = getNodeDefinitionFor(consumer)?.inputs[key]?.label ?? key;
+    if (!srcVar) throw new Error(`Node ${consumer.id}: the node wired into ${label} has no output "${conn.outputKey}".`);
+
+    const src = this.nodeMap.get(conn.nodeId)!;
+    const srcType = src.outputs[conn.outputKey]?.type ?? getNodeDefinitionFor(src)?.outputs[conn.outputKey]?.type ?? ret;
+    const retExpr = coerce(srcVar, srcType, ret) ?? coerceLossy(srcVar, srcType, ret);
+
+    const base = `${FIELD_FN_PREFIX}${this.topSlugs.get(conn.nodeId) ?? 'n'}_${conn.outputKey.replace(/\W/g, '')}`;
+    let name = base;
+    for (let i = 2; this.fieldFnNames.has(name); i++) name = `${base}_${ret}${i > 2 ? i : ''}`;
+    this.fieldFnNames.add(name);
+    this.functions.add(`${ret} ${name}(vec2 g_uv, vec2 fieldCell, float fieldInfluence, float fieldIndex) {\n${body}    return ${retExpr};\n}`);
+    this.fieldFns.set(cacheKey, name);
+    return name;
   }
 
   private compileGroupNode(node: GraphNode, inputVars: Record<string, string>, nodeSlug: string): void {

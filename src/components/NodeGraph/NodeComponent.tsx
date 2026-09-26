@@ -421,6 +421,8 @@ function getSourceExpr(lines: string[], varMap: ReadonlyMap<string, Record<strin
 }
 
 const EMPTY_NODES: GraphNode[] = [];
+/** Shown on a field socket (definition input with `field: true`). */
+const FIELD_SOCKET_TIP = 'Takes the wired node’s code as a function of position, evaluated per cell or copy. A Cell node in that chain gives the cell’s ID and index.';
 /** Live zoom for drag math — published by NodeGraph, read at each move. */
 const getZoom = () => getView().zoom;
 
@@ -2731,6 +2733,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     );
     const inputError = errors?.find(e => e.socket === inputKey);
     if (inputError) lines.push(<span style={{ color: tk.status.danger, fontWeight: 600, whiteSpace: 'normal' }}>{inputError.message}</span>);
+    if (def.inputs[inputKey]?.field) lines.push(<span style={{ color: tk.kind.expr, whiteSpace: 'normal' }}>ƒ {FIELD_SOCKET_TIP}</span>);
     const inExpr = getInputExpr(node, inputKey);
     if (inExpr) lines.push(<span style={{ color: tk.kind.expr, whiteSpace: 'normal' }}>ƒ <span style={{ fontFamily: fontFamily.mono }}>{inExpr}</span></span>);
     if (input.connection) {
@@ -3213,7 +3216,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           const kfBypassed = isKeyframed && isKeyframeBypassed(node, key);
           const socketError = errors?.find(e => e.socket === key);
           const inExpr = getInputExpr(node, key);
-          const exprEligible = !isExternal && canHaveInputExpr(node, key);
+          const isField = !!def.inputs[key]?.field;
+          const exprEligible = !isExternal && canHaveInputExpr(node, key, def);
           const showExprMark = exprEligible && (!!inExpr || hoveredRowKey === key || exprEditKey === key || isTouchDevice);
 
           return (
@@ -3381,6 +3385,12 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   }}
                 >
                   {slotName}
+                  {isField && (
+                    <span
+                      title={FIELD_SOCKET_TIP}
+                      style={{ marginLeft: 5, padding: '0 4px', borderRadius: 4, font: `600 10px ${fontFamily.mono}`, color: tk.kind.expr, background: alpha(tk.kind.expr, 0.14), verticalAlign: 1 }}
+                    >ƒ</span>
+                  )}
                   {isExternal && <span title="Wired from outside the group" style={{ marginLeft: 5, verticalAlign: -2, display: 'inline-flex' }}><Icon name="lock" size={12} /></span>}
                 </span>
               )}
