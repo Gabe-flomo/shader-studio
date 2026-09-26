@@ -15,6 +15,7 @@ import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
 import { LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS } from './learnExampleIndex';
 import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
+import { GRID_EXAMPLE_INDEX, GRID_EXAMPLE_KEYS } from './gridExamples';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -153,6 +154,8 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   ...COMBO_EXAMPLE_INDEX,
   // The Matrices folder (matrixExamples.ts): combining, undoing, lattices, fractals, corner pin, colour.
   ...MATRIX_EXAMPLE_INDEX,
+  // The numbered Grid tour (gridExamples.ts): every way to build a grid, and the controls over it.
+  ...GRID_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -174,7 +177,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Color & Lighting",  color: ctp.peach, keys: ['neonGlow','colorStopsCycle'] },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel'] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
-  { label: "Grid",              color: ctp.sky, keys: ['gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
+  { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
   { label: "Matrices",          color: ctp.peach, keys: MATRIX_EXAMPLE_KEYS },
   { label: "Halftone",          color: '#a6e3d5', keys: ['cmykNoise','webcamCmyk'] },
   { label: "Rings",             color: ctp.red, keys: ['fractalRings'] },
