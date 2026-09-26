@@ -170,6 +170,7 @@ Feature documentation lives in `docs/`:
 | [`docs/function-discovery.md`](docs/function-discovery.md) | Discover functions: scan the saved GLSL shaders for self-contained functions (by dependency level, return type, parameters), preview, Show in file, save to the Functions library |
 | [`docs/js-layers.md`](docs/js-layers.md) | The Script layer: JavaScript sketches (setup/draw, declared sliders, the picture, nulls) as a Play layer, and the road from it to plugins |
 | [`docs/matrices.md`](docs/matrices.md) | Matrix nodes (combine, invert, determinant, mix, scale/shear/stretch builders, projective Corner Pin, Colour Matrix), Grid Pattern's lattices as basis matrices, and the Matrices example folder |
+| [`docs/present-plan.md`](docs/present-plan.md) | Plan: a Present page for teaching, built from Plays: steps of Markdown + LaTeX text, render and interactive canvases, code snippets and Script layers, exported as a web page or a shareable file |
 | [`docs/constants-node.md`](docs/constants-node.md) | The Constants card: named values, fixed or with sliders, outputs only, Play-controllable |
 | [`docs/playfield-sdk.md`](docs/playfield-sdk.md) | The SDK / add-on idea: layers, mappings and feeds as installable extensions (a write-up, not built) |
 
