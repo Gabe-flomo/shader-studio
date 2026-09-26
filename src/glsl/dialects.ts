@@ -146,7 +146,7 @@ export function translateToStudio(source: string, options: TranslateOptions = {}
     rename(/\biTime\b/g, 'u_time', 'iTime');
     rename(/\biGlobalTime\b/g, 'u_time', 'iGlobalTime');
     rename(/\biTimeDelta\b/g, '(1.0 / 60.0)', 'iTimeDelta (as 1/60)');
-    rename(/\biFrame\b/g, 'floor(u_time * 60.0)', 'iFrame (as time × 60)');
+    rename(/\biFrame\b/g, 'int(u_time * 60.0)', 'iFrame (as an int, time × 60)');
     rename(/\biMouse\.xy\b/g, 'u_mouse', 'iMouse');
     rename(/\biMouse\.zw\b/g, 'vec2(0.0)', 'iMouse');
     rename(/\biMouse\b/g, 'vec4(u_mouse, 0.0, 0.0)', 'iMouse');

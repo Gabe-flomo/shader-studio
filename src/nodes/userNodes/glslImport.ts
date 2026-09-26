@@ -34,7 +34,7 @@ const RENAMES: Array<[RegExp, string]> = [
   [/\biTime\b/g, 'u_time'],
   [/\biGlobalTime\b/g, 'u_time'],
   [/\biTimeDelta\b/g, '(1.0 / 60.0)'],
-  [/\biFrame\b/g, 'floor(u_time * 60.0)'],
+  [/\biFrame\b/g, 'int(u_time * 60.0)'],
   [/\biMouse\.xy\b/g, 'u_mouse'],
   [/\biMouse\b/g, 'vec4(u_mouse, 0.0, 0.0)'],
   [/\biDate\b/g, 'vec4(0.0, 0.0, 0.0, u_time)'],

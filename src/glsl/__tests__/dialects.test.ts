@@ -14,6 +14,13 @@ describe('GLSL dialects', () => {
     expect(t.notes).toEqual([]);
   });
 
+  it('reads iFrame as an int, so int arithmetic on it compiles (min(0, iFrame), iFrame % 2)', () => {
+    const t = translateToStudio('void mainImage(out vec4 O, in vec2 U){ for (int j = 0; j < 8 + min(0, iFrame); j++) {} float f = float(iFrame); O = vec4(f); }');
+    expect(t.code).toContain('min(0, int(u_time * 60.0))');
+    expect(t.code).toContain('float(int(u_time * 60.0))');
+    expect(t.notes.join(' ')).toContain('iFrame');
+  });
+
   it('reads Shadertoy: iTime, iResolution (by component too), iMouse, mainImage', () => {
     const t = translateToStudio('void mainImage(out vec4 fragColor, in vec2 fragCoord){ vec2 uv = fragCoord / iResolution.y; float a = iResolution.x / iResolution.y; vec2 m = iMouse.xy; fragColor = vec4(uv, sin(iTime), 1.0); }');
     expect(t.dialect).toBe('shadertoy');
