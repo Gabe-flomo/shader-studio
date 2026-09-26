@@ -699,3 +699,131 @@ export function klDrawFieldPreview(ctx, samples, cols, rows, W, H, dpr, attracto
   }
   ctx.restore();
 }
+
+// ── Cloner ───────────────────────────────────────────────────────────────────
+// A cloner draws copies of another layer. Positions come from an arrangement
+// (klClonerLayout), each copy then gets its index-based steps, seeded
+// randomness and the effectors' falloffs (klClonerCopies), and kit.js draws
+// the source once into a scratch canvas and blits it per copy (klDrawCopy).
+
+/** A stable 0..1 number per (seed, index, salt). */
+export function klSeeded(seed, i, salt) {
+  let h = (Math.imul(seed | 0, 374761393) ^ Math.imul(i + 1, 668265263) ^ Math.imul(salt + 1, 2246822519)) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/**
+ * Where the copies go, in picture coordinates (0..1 across, 0..1 up), with
+ * their index `i` and 0..1 position `t` along the arrangement. `path` is the
+ * polyline (array of {x, y}) for 'path', `points` the list for 'points'.
+ */
+export function klClonerLayout(l, v, aspect, path, points) {
+  const out = [];
+  const cx = v('x'), cy = v('y');
+  const across = h => h / aspect; // picture heights → across units
+  if (l.arrange === 'grid') {
+    const cols = Math.max(1, Math.round(v('cols'))), rows = Math.max(1, Math.round(v('rows')));
+    const sx = across(v('spacingX')), sy = v('spacingY');
+    const n = cols * rows;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      out.push({ i, t: n > 1 ? i / (n - 1) : 0, x: cx + (c - (cols - 1) / 2) * sx, y: cy + ((rows - 1) / 2 - r) * sy });
+    }
+  } else if (l.arrange === 'ring') {
+    const n = Math.max(1, Math.round(v('count'))), r = v('radius'), sweep = v('sweep'), start = v('startAngle');
+    const full = Math.abs(sweep) >= 359.99;
+    for (let i = 0; i < n; i++) {
+      const t = n > 1 ? i / (full ? n : n - 1) : 0;
+      const a = (start + sweep * t) * Math.PI / 180;
+      out.push({ i, t: n > 1 ? i / (n - 1) : 0, x: cx + across(Math.cos(a) * r), y: cy + Math.sin(a) * r, angle: a * 180 / Math.PI });
+    }
+  } else if (l.arrange === 'line') {
+    const n = Math.max(1, Math.round(v('count'))), x2 = v('x2'), y2 = v('y2');
+    for (let i = 0; i < n; i++) { const t = n > 1 ? i / (n - 1) : 0; out.push({ i, t, x: cx + (x2 - cx) * t, y: cy + (y2 - cy) * t }); }
+  } else if (l.arrange === 'path') {
+    const n = Math.max(1, Math.round(v('count'))), pts = path || [];
+    if (pts.length >= 2) {
+      const seg = [0];
+      for (let k = 1; k < pts.length; k++) seg.push(seg[k - 1] + Math.hypot((pts[k].x - pts[k - 1].x) * aspect, pts[k].y - pts[k - 1].y));
+      const total = seg[seg.length - 1] * Math.max(0.001, Math.min(1, v('spread')));
+      let k = 1;
+      for (let i = 0; i < n; i++) {
+        const t = n > 1 ? i / (n - 1) : 0, d = t * total;
+        while (k < seg.length - 1 && seg[k] < d) k++;
+        const a = pts[k - 1], b = pts[k], span = seg[k] - seg[k - 1] || 1, u = Math.max(0, Math.min(1, (d - seg[k - 1]) / span));
+        out.push({ i, t, x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, angle: Math.atan2((b.y - a.y), (b.x - a.x) * aspect) * 180 / Math.PI });
+      }
+    } else if (pts.length === 1) out.push({ i: 0, t: 0, x: pts[0].x, y: pts[0].y });
+  } else if (l.arrange === 'points') {
+    const list = points || [], n = list.length;
+    for (let i = 0; i < n; i++) out.push({ i, t: n > 1 ? i / (n - 1) : 0, x: list[i].x, y: list[i].y, angle: list[i].angle });
+  }
+  return out;
+}
+
+/**
+ * Per-copy transform: base × steps by index × seeded randomness × effectors.
+ * `effectors` is a list of {x, y, rx, ry} (centre and half sizes in picture
+ * units: rx across, ry up) with the falloff and deltas read from the cloner.
+ * Returns copies {i, t, x, y, scale, rot, alpha, hue, hidden}.
+ */
+export function klClonerCopies(l, v, aspect, layout, effectors) {
+  const seed = Math.round(v('seed'));
+  const jitter = v('jitter'), stepX = v('stepX'), stepY = v('stepY'), stepScale = v('stepScale'), stepRot = v('stepRotation'), stepOpacity = v('stepOpacity'), stepHue = v('stepHue');
+  const randScale = v('randScale'), randRot = v('randRotation'), randOpacity = v('randOpacity'), randHue = v('randHue');
+  const baseScale = v('scale'), baseRot = v('rotation'), baseAlpha = v('opacity');
+  const effRadius = v('effRadius'), effSoft = Math.max(0, Math.min(1, v('effSoftness'))), effPush = v('effPush'), effScale = v('effScale'), effRot = v('effRotate'), effOpacity = v('effOpacity'), effHue = v('effHue'), effHide = v('effHide');
+  const invert = !!l.effInvert;
+  const out = [];
+  for (const p of layout) {
+    const i = p.i;
+    const r = k => klSeeded(seed, i, k) * 2 - 1; // -1..1
+    let x = p.x + (stepX * i) / aspect + (r(1) * jitter) / aspect;
+    let y = p.y + stepY * i + r(2) * jitter;
+    let scale = baseScale * (1 + stepScale * i) * (1 + r(3) * randScale);
+    let rot = baseRot + stepRot * i + r(4) * randRot + (l.face && p.angle !== undefined ? p.angle : 0);
+    let alpha = baseAlpha + stepOpacity * i + r(5) * randOpacity;
+    let hue = stepHue * i + r(6) * randHue;
+    let hidden = false;
+    if (effectors.length) {
+      let w = 0, px = 0, py = 0;
+      for (const e of effectors) {
+        const dx = (x - e.x) * aspect, dy = y - e.y; // picture heights
+        const dist = Math.hypot(dx, dy);
+        // A shape effector counts from its edge (an ellipse of its size); a null from its point.
+        const q = e.rx > 0 || e.ry > 0 ? Math.hypot(dx / Math.max(1e-4, e.rx * aspect), dy / Math.max(1e-4, e.ry)) : Infinity;
+        const d = q === Infinity ? dist : q <= 1 ? 0 : dist * (1 - 1 / q);
+        const soft = Math.max(1e-4, effRadius * effSoft);
+        const wi = d <= effRadius - soft ? 1 : d >= effRadius ? 0 : 1 - (d - (effRadius - soft)) / soft;
+        if (wi > 0) { const len = Math.hypot(dx, dy) || 1; px += (dx / len) * wi; py += (dy / len) * wi; }
+        w += wi;
+      }
+      w = Math.min(1, w);
+      if (invert) w = 1 - w;
+      if (w > 0) {
+        const len = Math.hypot(px, py) || 1;
+        x += ((px / len) * effPush * w) / aspect; y += (py / len) * effPush * w;
+        scale *= 1 + effScale * w; rot += effRot * w; alpha += effOpacity * w; hue += effHue * w;
+        if (effHide > 0 && w >= effHide) hidden = true;
+      }
+    }
+    out.push({ i, t: p.t, x, y, scale: Math.max(0, scale), rot, alpha: Math.max(0, Math.min(1, alpha)), hue, hidden });
+  }
+  return out;
+}
+
+/** Draw one copy: the source's pixels (a scratch canvas) moved from the source's centre to the copy's, scaled, turned, faded and hue-shifted. */
+export function klDrawCopy(ctx, copy, srcX, srcY, W, H, scratch, box) {
+  if (copy.hidden || copy.alpha <= 0 || copy.scale <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = copy.alpha;
+  if (copy.hue && 'filter' in ctx) ctx.filter = 'hue-rotate(' + copy.hue.toFixed(1) + 'deg)';
+  ctx.translate(copy.x * W, (1 - copy.y) * H);
+  ctx.rotate(copy.rot * Math.PI / 180);
+  ctx.scale(copy.scale, copy.scale);
+  ctx.translate(-srcX, -srcY);
+  if (box) ctx.drawImage(scratch, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
+  else ctx.drawImage(scratch, 0, 0, W, H);
+  ctx.restore();
+}

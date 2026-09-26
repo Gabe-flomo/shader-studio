@@ -31,8 +31,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { makeFieldKit } from './layers/fields';
 import {
   AudioEditor, BodiesEditor, BrushEditor, CameraEditor, ContoursEditor, GlyphsEditor, ImageEditor, LensEditor, NullEditor, ParticlesEditor, ShapeEditor, TextEditor,
-  type EditorContext,
-} from './layers/editors';
+  type EditorContext, ClonerEditor } from './layers/editors';
 import { ActionsSection } from './layers/ActionsSection';
 
 const KINDS: { kind: PlayLayerKind; label: string; hint: string; icon: IconName }[] = [
@@ -48,6 +47,7 @@ const KINDS: { kind: PlayLayerKind; label: string; hint: string; icon: IconName 
   { kind: 'contours', label: 'Contours', hint: 'Topographic lines through the picture\'s brightness.', icon: 'loop' },
   { kind: 'lens', label: 'Lens', hint: 'A circle that magnifies, pixelates, blurs or inverts what is under it.', icon: 'search' },
   { kind: 'camera', label: 'Camera', hint: 'Your webcam: as a layer, a mask, or what particles read. Its motion is a source.', icon: 'camera' },
+  { kind: 'cloner', label: 'Cloner', hint: 'Copies of a shape, text, image or null in a grid, ring, line or along a stroke. Vary them by index; nulls and shapes push, grow, turn or hide the copies near them.', icon: 'copy' },
 ];
 const KIND = Object.fromEntries(KINDS.map(k => [k.kind, k])) as Record<PlayLayerKind, (typeof KINDS)[number]>;
 
@@ -211,6 +211,7 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
     case 'lens': body = <LensEditor f={f} ctx={ctx} />; break;
     case 'brush': body = <BrushEditor f={f} ctx={ctx} />; break;
     case 'bodies': body = <BodiesEditor f={f} ctx={ctx} />; break;
+    case 'cloner': body = <ClonerEditor f={f} ctx={ctx} />; break;
   }
 
   return (

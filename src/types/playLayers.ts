@@ -422,10 +422,85 @@ export interface CameraLayer extends LayerBase {
   matte: MatteMode;
 }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer;
+/**
+ * Copies of another layer (a shape, text, image, camera or null), arranged in
+ * a grid, a ring, a line, along a brush stroke or on a particles layer's
+ * points. Each copy has an index; steps and seeded randomness vary the copies
+ * by it, and effectors (nulls or shapes named in `effectors`) move, scale,
+ * turn, fade, tint or hide the copies within their falloff.
+ */
+export interface ClonerLayer extends LayerBase {
+  kind: 'cloner';
+  /** The layer that is copied. */
+  sourceId: string;
+  /** Draw only the copies, not the original. */
+  hideSource: boolean;
+  arrange: 'grid' | 'ring' | 'line' | 'path' | 'points';
+  /** ring · line · path: how many copies. */
+  count: number;
+  cols: number;
+  rows: number;
+  /** grid · ring: the centre; line: the start. */
+  x: number;
+  y: number;
+  /** line: the end. */
+  x2: number;
+  y2: number;
+  /** grid: spacing in picture heights. */
+  spacingX: number;
+  spacingY: number;
+  /** ring: radius in picture heights; start angle and sweep in degrees. */
+  radius: number;
+  startAngle: number;
+  sweep: number;
+  /** ring · path: turn each copy to face along the ring or the stroke. */
+  face: boolean;
+  /** path: the brush layer whose stroke to follow; points: the particles layer whose particles to sit on. */
+  pathId: string;
+  /** path: how much of the stroke is used, 0..1. */
+  spread: number;
+  /** Random offset per copy, in picture heights. */
+  jitter: number;
+  seed: number;
+  // Every copy
+  scale: number;
+  rotation: number;
+  opacity: number;
+  // Per index: copy i gets base + step × i
+  stepX: number;
+  stepY: number;
+  stepScale: number;
+  stepRotation: number;
+  stepOpacity: number;
+  stepHue: number;
+  // Seeded randomness, ± this much
+  randScale: number;
+  randRotation: number;
+  randOpacity: number;
+  randHue: number;
+  // Effectors: nulls or shapes; the falloff and what it does apply to all of them
+  effectors: string[];
+  /** Falloff radius from the null (or the shape's edge), picture heights. */
+  effRadius: number;
+  /** 0 = hard edge, 1 = fades over the whole radius. */
+  effSoftness: number;
+  /** Move copies away from the effector (negative pulls them in), picture heights. */
+  effPush: number;
+  effScale: number;
+  effRotate: number;
+  effOpacity: number;
+  effHue: number;
+  /** Hide a copy when the falloff weight reaches this; 0 = never. */
+  effHide: number;
+  /** Act outside the falloff instead of inside. */
+  effInvert: boolean;
+  blend: BlendMode;
+}
+
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner'];
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -461,6 +536,13 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
   brush: { toShader: true, paint: 'drag', nullId: '', size: 14, colour: 'palette', color: [1, 1, 1], palette: 1, fade: 4, walls: false, opacity: 0.9, blend: 'screen' },
   bodies: { toShader: true, source: 'letters', text: 'PLAY', count: 24, size: 48, gravity: 1, angle: 0, bounce: 0.35, friction: 0.3, font: 'sans', fontUrl: '', colour: 'tint', color: [1, 1, 1], palette: 1, solidPicture: false, threshold: 0.6, scatter: 1, opacity: 1, blend: 'normal' },
   camera: { toShader: true, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], mirror: true, blend: 'normal', matte: 'over' },
+  cloner: {
+    toShader: true, sourceId: '', hideSource: true, arrange: 'grid', count: 12, cols: 5, rows: 3, x: 0.5, y: 0.5, x2: 0.9, y2: 0.5, spacingX: 0.25, spacingY: 0.25,
+    radius: 0.3, startAngle: 0, sweep: 360, face: false, pathId: '', spread: 1, jitter: 0, seed: 1,
+    scale: 0.5, rotation: 0, opacity: 1, stepX: 0, stepY: 0, stepScale: 0, stepRotation: 0, stepOpacity: 0, stepHue: 0,
+    randScale: 0, randRotation: 0, randOpacity: 0, randHue: 0,
+    effectors: [], effRadius: 0.25, effSoftness: 0.6, effPush: 0, effScale: 1, effRotate: 0, effOpacity: 0, effHue: 0, effHide: 0, effInvert: false, blend: 'normal',
+  },
 };
 
 /** A fresh layer of a kind with sensible defaults. */
@@ -480,7 +562,9 @@ type Field =
   | { t: 'str' }
   | { t: 'hex' }
   | { t: 'rgb' }
-  | { t: 'points' };
+  | { t: 'points' }
+  /** A list of layer ids. */
+  | { t: 'ids' };
 
 const BLENDS = ['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken', 'difference', 'exclusion', 'add'] as const;
 const MATTES = ['over', 'reveal', 'luma'] as const;
@@ -545,6 +629,13 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     font: E('sans', 'serif', 'mono'), fontUrl: S, colour: E('tint', 'palette'), color: C, palette: N(0, 9, true), solidPicture: B, threshold: unit, scatter: N(0, 10), opacity: unit, blend: blendF,
   },
   camera: { toShader: B, x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, mirror: B, blend: blendF, matte: matteF },
+  cloner: {
+    toShader: B, sourceId: S, hideSource: B, arrange: E('grid', 'ring', 'line', 'path', 'points'), count: N(1, 400, true), cols: N(1, 40, true), rows: N(1, 40, true),
+    x: N(), y: N(), x2: N(), y2: N(), spacingX: N(0), spacingY: N(0), radius: N(0), startAngle: N(), sweep: N(-360, 360), face: B, pathId: S, spread: unit, jitter: N(0), seed: N(0, 9999, true),
+    scale: N(0), rotation: N(), opacity: unit, stepX: N(), stepY: N(), stepScale: N(), stepRotation: N(), stepOpacity: N(), stepHue: N(),
+    randScale: N(0), randRotation: N(0), randOpacity: N(0), randHue: N(0),
+    effectors: { t: 'ids' }, effRadius: N(0), effSoftness: unit, effPush: N(), effScale: N(), effRotate: N(), effOpacity: N(), effHue: N(), effHide: unit, effInvert: B, blend: blendF,
+  },
 };
 
 function coerce(v: unknown, f: Field, fallback: unknown): unknown {
@@ -564,6 +655,7 @@ function coerce(v: unknown, f: Field, fallback: unknown): unknown {
       return Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every(n => typeof n === 'number' && Number.isFinite(n))
         ? [Math.max(0, Math.min(1, v[0])), Math.max(0, Math.min(1, v[1])), Math.max(0, Math.min(1, v[2]))]
         : fallback;
+    case 'ids': return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string' && s.length > 0) : fallback;
     case 'points':
       return Array.isArray(v) && v.length % 2 === 0 && v.length <= 2000 && v.every(n => typeof n === 'number' && Number.isFinite(n)) ? [...v] : fallback;
   }
@@ -717,5 +809,42 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     X('Centre of the camera image'), Y('Centre of the camera image'),
     { key: 'scale', label: 'Scale', min: 0.05, max: 3, hint: 'Camera image height as a fraction of the picture height.' },
     ROT, OPACITY,
+  ],
+  cloner: [
+    X('The arrangement’s centre (a line’s start)'), Y('The arrangement’s centre (a line’s start)'),
+    { key: 'x2', label: 'End X', min: 0, max: 1, hint: 'Line: where the line ends, across the picture.' },
+    { key: 'y2', label: 'End Y', min: 0, max: 1, hint: 'Line: where the line ends, up the picture.' },
+    { key: 'count', label: 'Count', min: 1, max: 400, step: 1, hint: 'Ring, line and path: how many copies.' },
+    { key: 'cols', label: 'Columns', min: 1, max: 40, step: 1, hint: 'Grid: copies across.' },
+    { key: 'rows', label: 'Rows', min: 1, max: 40, step: 1, hint: 'Grid: copies up.' },
+    { key: 'spacingX', label: 'Spacing X', min: 0, max: 1, hint: 'Grid: distance between columns, in picture heights.' },
+    { key: 'spacingY', label: 'Spacing Y', min: 0, max: 1, hint: 'Grid: distance between rows, in picture heights.' },
+    { key: 'radius', label: 'Radius', min: 0, max: 1, hint: 'Ring: its radius in picture heights.' },
+    { key: 'startAngle', label: 'Start angle', min: -180, max: 180, step: 1, hint: 'Ring: where the first copy sits, degrees (0 = right, 90 = up).' },
+    { key: 'sweep', label: 'Sweep', min: -360, max: 360, step: 1, hint: 'Ring: how far round the copies go. 360 is a full circle; less is an arc.' },
+    { key: 'spread', label: 'Spread', min: 0, max: 1, hint: 'Path: how much of the stroke the copies cover, from its start.' },
+    { key: 'jitter', label: 'Jitter', min: 0, max: 0.5, hint: 'Random offset per copy, in picture heights. Stable for a seed.' },
+    { key: 'seed', label: 'Seed', min: 0, max: 9999, step: 1, hint: 'Which random pattern the jitter and the random amounts use.' },
+    { key: 'scale', label: 'Scale', min: 0, max: 3, hint: 'Every copy’s size, as a multiple of the source.' },
+    ROT,
+    OPACITY,
+    { key: 'stepX', label: 'Step X', min: -0.2, max: 0.2, hint: 'Each copy sits this much further across than the one before (picture heights).' },
+    { key: 'stepY', label: 'Step Y', min: -0.2, max: 0.2, hint: 'Each copy sits this much higher than the one before (picture heights).' },
+    { key: 'stepScale', label: 'Step scale', min: -0.2, max: 0.2, hint: 'Each copy is this fraction bigger than the one before: a staircase of sizes.' },
+    { key: 'stepRotation', label: 'Step turn', min: -45, max: 45, step: 0.5, hint: 'Each copy turns this many degrees more than the one before: a fan or a spiral.' },
+    { key: 'stepOpacity', label: 'Step fade', min: -0.2, max: 0.2, hint: 'Each copy is this much more (or less) solid than the one before.' },
+    { key: 'stepHue', label: 'Step hue', min: -60, max: 60, step: 1, hint: 'Each copy’s colour is turned this many degrees round the hue wheel more than the one before.' },
+    { key: 'randScale', label: 'Random scale', min: 0, max: 1, hint: 'Sizes vary by up to this fraction, per copy, stable for a seed.' },
+    { key: 'randRotation', label: 'Random turn', min: 0, max: 180, step: 1, hint: 'Turns vary by up to this many degrees, per copy.' },
+    { key: 'randOpacity', label: 'Random fade', min: 0, max: 1, hint: 'Opacity varies by up to this much, per copy.' },
+    { key: 'randHue', label: 'Random hue', min: 0, max: 180, step: 1, hint: 'Hue varies by up to this many degrees, per copy.' },
+    { key: 'effRadius', label: 'Falloff', min: 0, max: 1, hint: 'Effectors: how far from the null (or the shape’s edge) they reach, in picture heights.' },
+    { key: 'effSoftness', label: 'Softness', min: 0, max: 1, hint: 'Effectors: 0 is a hard edge at the falloff, 1 fades from the centre out.' },
+    { key: 'effPush', label: 'Push', min: -0.5, max: 0.5, hint: 'Effectors: copies inside the falloff move away from it by up to this much (negative pulls them in).' },
+    { key: 'effScale', label: 'Grow', min: -1, max: 4, hint: 'Effectors: copies inside the falloff grow by up to this fraction (negative shrinks; −1 vanishes).' },
+    { key: 'effRotate', label: 'Turn', min: -360, max: 360, step: 1, hint: 'Effectors: copies inside the falloff turn by up to this many degrees.' },
+    { key: 'effOpacity', label: 'Fade', min: -1, max: 1, hint: 'Effectors: copies inside the falloff become this much more (or less) solid.' },
+    { key: 'effHue', label: 'Hue shift', min: -180, max: 180, step: 1, hint: 'Effectors: copies inside the falloff shift colour by up to this many degrees.' },
+    { key: 'effHide', label: 'Hide at', min: 0, max: 1, hint: 'Effectors: a copy disappears once the falloff weight reaches this. 0 never hides.' },
   ],
 };

@@ -1,14 +1,19 @@
-# A Cloner layer for Play (design)
+# The Cloner layer
 
-The idea: one layer that makes many copies of a thing, arranges them (grid,
-ring, along a path, or on the points of another layer), gives each copy an
-index, and lets the copies' properties vary by that index and by *effectors*:
-falloffs around a null or a shape that scale, move, rotate, tint or hide the
-copies near them. The After Effects / MoGraph "cloner + effector" pattern,
-kept small.
+One layer that makes many copies of a thing, arranges them (grid, ring,
+line, along a brush stroke, or on a particles layer's points), gives each
+copy an index, and lets the copies vary by that index and by *effectors*:
+falloffs around a null or a shape that push, grow, turn, fade, tint or hide
+the copies near them. The After Effects / MoGraph "cloner + effector"
+pattern, kept small.
 
-Nothing here is built yet. This is the shape it would take in Playfield's
-existing pieces, so that most of it is reuse.
+**Built (first version).** Add a Cloner in Play's Layers panel. It lives in
+`src/types/playLayers.ts` (`ClonerLayer`), draws in `src/play/kit/kit.js`
+(`drawCloner`) with the pure parts in `src/play/kit/layers.js`
+(`klClonerLayout`, `klClonerCopies`, `klDrawCopy`), and its editor is
+`ClonerEditor` in `src/components/play/layers/editors.tsx`. Web exports get
+it for free, since they ship the same kit. What follows is the design as
+built; the last section says what is left out.
 
 ## What a copy is
 
@@ -95,8 +100,22 @@ line ends) draggable like the transform handles shapes already have.
 - The layer editor: a Cloner panel with the four sections.
 - `docs/`: this page, kept current.
 
-## What to leave out at first
+## Not in the first version
 
-Nested cloners, per-copy time offsets into keyframes, copies as physics
-bodies, and copies of a cloner. Each is possible later; none is needed for
-the idea to feel good.
+- **On-canvas handles** for the arrangement (grid corner, ring radius, line
+  ends): the sliders and controls do it for now.
+- **Copies as zones.** Copies of a null or a shape are drawn but do not act
+  on particles; the original still does.
+- **Copies of text and image layers use the "over" matte only** (reveal and
+  luma mattes draw the plain layer).
+- **Effectors are one falloff shared by every effector layer** chosen; a
+  second, different falloff means a second cloner.
+- Nested cloners, per-copy time offsets into keyframes, copies as physics
+  bodies. Each is possible later; none is needed for the idea to feel good.
+
+## How a copy is drawn
+
+The source is drawn once per frame, at its own place and with its own driven
+values, into a scratch canvas; each copy blits that canvas moved from the
+source's centre to the copy's, scaled, turned, faded and hue-shifted. Shapes
+and text blit only their bounding box, so a few hundred copies stay cheap.

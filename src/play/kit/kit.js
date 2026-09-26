@@ -28,7 +28,7 @@
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments } from './geometry.js';
-import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush } from './layers.js';
+import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor } from './layers.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
@@ -133,7 +133,10 @@ export function createLayerKit() {
     for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible]) for (const id of [...m.keys()]) if (!ids.has(id)) m.delete(id);
     // A visibility change in the panel wins over an earlier show/hide action.
     for (const l of layers) { if (lastVisible.has(l.id) && lastVisible.get(l.id) !== l.visible) shown.delete(l.id); lastVisible.set(l.id, l.visible); }
-    const isVisible = l => (shown.has(l.id) ? shown.get(l.id) : l.visible);
+    const baseVisible = l => (shown.has(l.id) ? shown.get(l.id) : l.visible);
+    // A cloner that hides its source draws the copies only: the source stays out of the picture (its cloner still reads it).
+    const hiddenBySource = new Set(layers.filter(l => l.kind === 'cloner' && l.hideSource && l.sourceId && baseVisible(l)).map(l => l.sourceId));
+    const isVisible = l => baseVisible(l) && !hiddenBySource.has(l.id);
     const vis = layers.filter(isVisible);
 
     // 1. Nulls that follow something ride a spring; their position is reported back to the host.
@@ -259,6 +262,64 @@ export function createLayerKit() {
     // 5. Draw, bottom to top.
     let lumaReady = false;
     const luma = () => { if (!lumaReady) { lumaReady = klBuildLuma(klCanvas(pool, 'luma', 320, 180), gl); } return lumaReady ? pool.luma : null; };
+    /**
+     * Copies of a source layer. The source is drawn once into a scratch canvas
+     * (its own driven values, at its own place), then blitted per copy with the
+     * copy's transform. Effectors are the nulls and shapes the cloner names.
+     */
+    function drawCloner(c, l, v) {
+      const src = l.sourceId ? layers.find(x => x.id === l.sourceId) : null;
+      if (!src || src.id === l.id || src.kind === 'cloner') return;
+      const vs = k => env.value(src, k);
+      // Where the copies go.
+      let path = null, points = null;
+      if (l.arrange === 'path') { const b = brushes.get(l.pathId); path = b ? b.pts : null; }
+      else if (l.arrange === 'points') {
+        const s = parts.get(l.pathId);
+        if (s && s.sim) { points = []; const sim = s.sim; for (let i = 0; i < sim.count && points.length < 400; i++) if (sim.alive[i]) points.push({ x: sim.x[i], y: sim.y[i] }); }
+      }
+      const layout = klClonerLayout(l, v, aspect, path, points);
+      if (!layout.length) return;
+      // Effectors: a null is a point, a shape counts from its edge.
+      const effectors = [];
+      for (const id of l.effectors || []) {
+        const e = layers.find(x => x.id === id); if (!e) continue;
+        if (e.kind === 'null') { const p = nullPos(record, env, e.id); if (p) effectors.push({ x: p.x, y: p.y, rx: 0, ry: 0 }); }
+        else if (e.kind === 'shape') effectors.push({ x: env.value(e, 'x'), y: env.value(e, 'y'), rx: (env.value(e, 'w') / 2) / aspect, ry: env.value(e, 'h') / 2 });
+      }
+      const copies = klClonerCopies(l, v, aspect, layout, effectors);
+      const sx = vs('x') * W, sy = (1 - vs('y')) * H;
+      c.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
+      if (src.kind === 'null') {
+        for (const cp of copies) if (!cp.hidden && cp.alpha > 0) { c.globalAlpha = cp.alpha; klDrawNull(c, src, cp.x, cp.y, vs('size') * cp.scale, dpr, W, H, 0); }
+        c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+        return;
+      }
+      // The source, once, at its own place, and the box worth blitting.
+      const scratch = klCanvas(pool, 'cloner:' + l.id, W, H), s = scratch.getContext('2d');
+      let box = null;
+      if (src.kind === 'shape') {
+        s.setTransform(1, 0, 0, 1, 0, 0); s.clearRect(0, 0, W, H);
+        klDrawShape(s, src, vs, W, H, dpr, maskShows.get(src.id) || null, false, false);
+        const ext = (Math.hypot(vs('w'), vs('h')) / 2) * H + vs('strokeWidth') * dpr + 4;
+        box = { x: Math.max(0, Math.floor(sx - ext)), y: Math.max(0, Math.floor(sy - ext)), w: 0, h: 0 };
+        box.w = Math.min(W, Math.ceil(sx + ext)) - box.x; box.h = Math.min(H, Math.ceil(sy + ext)) - box.y;
+      } else if (src.kind === 'text' || src.kind === 'image' || src.kind === 'camera') {
+        const img = src.kind === 'image' ? env.image(src.src) : src.kind === 'camera' ? cam : null;
+        if (src.kind !== 'text' && !img) return;
+        klPaintShape(s, src, vs, W, H, img, src.text, null);
+        if (src.kind === 'text') {
+          const size = Math.max(1, vs('size') * H); s.font = src.weight + ' ' + size + 'px ' + klFontFor(src);
+          const lines = String(src.text).split('\n'); let wmax = 0; for (const ln of lines) wmax = Math.max(wmax, s.measureText(ln).width);
+          const ext = Math.hypot(wmax, size * 1.3 * lines.length) / 2 + 4;
+          box = { x: Math.max(0, Math.floor(sx - ext)), y: Math.max(0, Math.floor(sy - ext)), w: 0, h: 0 };
+          box.w = Math.min(W, Math.ceil(sx + ext)) - box.x; box.h = Math.min(H, Math.ceil(sy + ext)) - box.y;
+        }
+      } else return;
+      if (box && (box.w <= 0 || box.h <= 0)) box = null;
+      for (const cp of copies) klDrawCopy(c, cp, sx, sy, W, H, scratch, box);
+      c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    }
     const drawOne = (c, l) => {
       const v = k => env.value(l, k);
       c.save();
@@ -287,6 +348,7 @@ export function createLayerKit() {
           case 'shape':
             klDrawShape(c, l, v, W, H, dpr, maskShows.get(l.id) || null, env.editing, env.selectedId === l.id);
             break;
+          case 'cloner': drawCloner(c, l, v); break;
           case 'particles': drawParticleLayer(c, l, v, env, record, zones, zoneById, pictureFor(l.readFrom, l.detail), pending.get(l.id), W, H, dpr, aspect, time, dt, pointer, gl); break;
           case 'bodies': {
             const sizeH = (v('size') * dpr) / H;

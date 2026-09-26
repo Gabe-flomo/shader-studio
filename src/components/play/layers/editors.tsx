@@ -514,3 +514,64 @@ export function BodiesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
     </>
   );
 }
+
+/** Cloner: copies of a layer, arranged, varied by index, shaped by effectors. */
+export function ClonerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
+  const g = f.get;
+  const arrange = g<string>('arrange');
+  const sources = ctx.layers.filter(x => x.id !== f.l.id && (x.kind === 'shape' || x.kind === 'text' || x.kind === 'image' || x.kind === 'camera' || x.kind === 'null'));
+  const brushes = ctx.layers.filter(x => x.kind === 'brush');
+  const particles = ctx.layers.filter(x => x.kind === 'particles');
+  const effectorLayers = ctx.layers.filter(x => x.id !== f.l.id && (x.kind === 'null' || x.kind === 'shape'));
+  const chosen = g<string[]>('effectors') ?? [];
+  const toggleEffector = (id: string) => f.set({ effectors: chosen.includes(id) ? chosen.filter(x => x !== id) : [...chosen, id] });
+  const chip = (x: { id: string; label: string; kind: string }) => {
+    const on = chosen.includes(x.id);
+    return (
+      <button key={x.id} type="button" onClick={() => toggleEffector(x.id)} title={on ? `${x.label} shapes the copies. Click to stop.` : `Let ${x.label} shape the copies near it.`}
+        style={{ height: 24, padding: '0 9px', borderRadius: 7, border: 0, cursor: 'pointer', background: on ? f.tk.bg.selected : f.tk.bg.field, color: on ? f.tk.accent.text : f.tk.text.secondary, boxShadow: `inset 0 0 0 1px ${on ? f.tk.accent.base : f.tk.border.default}`, font: `500 11.5px Inter, system-ui, sans-serif` }}>
+        {x.kind === 'null' ? '◦ ' : '▢ '}{x.label}
+      </button>
+    );
+  };
+  return (
+    <>
+      <Section kind="cloner" title="Source">
+        {f.pick('Copies of', 'sourceId', sources, 'Add a Shape, Text, Image or Null layer first', 'The layer that is copied. It keeps its own settings; the copies take its look and add their own place, size, turn and fade.')}
+        {f.toggle('Original', 'hideSource', 'Hide the original, draw the copies only')}
+      </Section>
+      <Section kind="cloner" title="Arrangement">
+        {f.seg('Arrange', 'arrange', [
+          { value: 'grid', label: 'Grid' }, { value: 'ring', label: 'Ring' }, { value: 'line', label: 'Line' },
+          { value: 'path', label: 'Path', title: 'Along a Brush layer\'s stroke' }, { value: 'points', label: 'Points', title: 'One copy per particle of a Particles layer' },
+        ], 'Grid: columns and rows around the centre. Ring: around a circle, or an arc. Line: from the start to the end. Path: along a brush stroke. Points: on a particles layer\'s particles.')}
+        {arrange === 'grid' && f.props('cols', 'rows', 'x', 'y', 'spacingX', 'spacingY')}
+        {arrange === 'ring' && <>{f.props('count', 'x', 'y', 'radius', 'startAngle', 'sweep')}{f.toggle('Face', 'face', 'Turn each copy to face along the ring')}</>}
+        {arrange === 'line' && f.props('count', 'x', 'y', 'x2', 'y2')}
+        {arrange === 'path' && <>{f.pick('Stroke', 'pathId', brushes, 'Add a Brush layer and paint a stroke', 'The brush layer whose stroke the copies follow.')}{f.props('count', 'spread')}{f.toggle('Face', 'face', 'Turn each copy to face along the stroke')}</>}
+        {arrange === 'points' && <>{f.pick('Particles', 'pathId', particles, 'Add a Particles layer', 'One copy sits on each of this layer\'s particles (up to 400).')}</>}
+        {f.props('jitter', 'seed')}
+      </Section>
+      <Section kind="cloner" title="Every copy">
+        {f.props('scale', 'rotation', 'opacity')}
+        {f.select('Blend', 'blend', BLENDS, BLEND_HINT)}
+      </Section>
+      <Section kind="cloner" title="By index" hint="Copy i gets the base plus the step times i, so a staircase, a fan, a spiral or a gradient of colour comes from one number each.">
+        {f.props('stepX', 'stepY', 'stepScale', 'stepRotation', 'stepOpacity', 'stepHue')}
+      </Section>
+      <Section kind="cloner" title="Random" hint="Seeded, so the same seed always gives the same pattern; the Seed slider steps through patterns.">
+        {f.props('randScale', 'randRotation', 'randOpacity', 'randHue')}
+      </Section>
+      <Section kind="cloner" title="Effectors" hint="Nulls and shapes that change the copies near them. A null that follows the mouse makes the copies react to it; several add up.">
+        {effectorLayers.length
+          ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '2px 0 6px 68px' }}>{effectorLayers.map(chip)}</div>
+          : f.note('Add a Null or Shape layer to use as an effector.')}
+        {chosen.length > 0 && <>
+          {f.props('effRadius', 'effSoftness', 'effPush', 'effScale', 'effRotate', 'effOpacity', 'effHue', 'effHide')}
+          {f.toggle('Outside', 'effInvert', 'Act on the copies outside the falloff instead')}
+          {f.note('Every slider here can be a control: right-click one, or press +, to drive it from a null, the beat or a knob.')}
+        </>}
+      </Section>
+    </>
+  );
+}
