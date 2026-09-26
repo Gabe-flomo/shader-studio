@@ -1,6 +1,6 @@
 /**
  * ColourPad — a colour control: the base colour to edit, and the live one
- * beside it while mappings drive it. Shared by the Play panel and Present.
+ * beside it while mappings drive it. Shared by the Play panel and the Stage.
  */
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';

@@ -21,7 +21,7 @@ const run = (fn: () => Promise<unknown>) => () => { fn().catch(e => toast.error(
 
 const KIND_LABELS: Record<LibraryKind, string> = {
   graphs: 'Graphs', versions: 'Earlier versions', 'group presets': 'Group presets', functions: 'Functions', expressions: 'Expressions',
-  transforms: 'Transforms', 'keyframe presets': 'Keyframe presets', 'published nodes': 'Published nodes', palettes: 'Palettes', 'glsl shaders': 'GLSL shaders', settings: 'Settings',
+  transforms: 'Transforms', 'keyframe presets': 'Keyframe presets', 'published nodes': 'Published nodes', presentations: 'Presentations', palettes: 'Palettes', 'glsl shaders': 'GLSL shaders', settings: 'Settings',
 };
 const PRESET_KINDS: LibraryKind[] = ['group presets', 'functions', 'expressions', 'transforms', 'keyframe presets'];
 

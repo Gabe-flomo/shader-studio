@@ -12,6 +12,7 @@
  */
 
 import { audioUniformNamesByNode } from '../compiler/audioUniformNames';
+import { forgetMedia, mediaSource, rememberMedia, restoreMedia } from './mediaSources';
 
 interface AudioNodeState {
   buffer: AudioBuffer;
@@ -64,6 +65,9 @@ class AudioEngine {
    */
   async loadAudio(nodeId: string, arrayBuffer: ArrayBuffer, fileName: string): Promise<void> {
     const audioCtx = this.getCtx();
+    // Copied for web exports (see mediaSources.ts) before decoding detaches the buffer; the old file stays if this one fails.
+    const previous = mediaSource(nodeId);
+    rememberMedia(nodeId, 'audio', fileName, '', arrayBuffer);
     let buffer: AudioBuffer;
     try {
       buffer = await audioCtx.decodeAudioData(arrayBuffer);
@@ -73,6 +77,7 @@ class AudioEngine {
       const detail = e instanceof Error && e.message ? e.message : 'unsupported or corrupt audio data';
       const error = new Error(`Could not decode audio "${fileName}": ${detail}`);
       console.error('[audioEngine]', error.message, e);
+      restoreMedia(nodeId, previous);
       throw error;
     }
     const analyser = audioCtx.createAnalyser();
@@ -175,6 +180,7 @@ class AudioEngine {
       state.analyser.disconnect();
     }
     this.nodes.delete(nodeId);
+    forgetMedia(nodeId);
   }
 
   updateFreqParams(nodeId: string, bands: number[], range: number, mode: string): void {
@@ -230,6 +236,11 @@ class AudioEngine {
   // Uniform names come pre-built from setUniformNames, so no strings are
   // allocated here.
   private tickResult = new Map<string, number>();
+
+  /** What the last tick() wrote (uniform name → amplitude), for a take recording it. */
+  lastAmps(): ReadonlyMap<string, number> {
+    return this.tickResult;
+  }
 
   tick(): Map<string, number> {
     const result = this.tickResult;

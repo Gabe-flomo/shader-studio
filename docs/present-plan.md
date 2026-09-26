@@ -1,7 +1,10 @@
 # Present: a page for teaching with Plays
 
-Plan, not built. Written so a later session can pick it up without the
-conversation that led to it. Status: **not started**.
+Written so a later session can pick it up without the conversation that
+led to it. Status: **milestones 1–5 built** (26 Sep 2026), with the
+sandboxed frames from milestone 6; live script blocks, Stage from a step
+and the pop-out window are left. Section 7 says what shipped and where it
+differs from the plan below.
 
 ## 1. The idea
 
@@ -30,11 +33,11 @@ From a survey of the code on `main` at `a1eea06`.
 
 | Piece | Where | What it gives us |
 |---|---|---|
-| **Present mode** (not a page) | `components/play/PresentStage.tsx`, `presentStore.ts`; entered via an early return in `App.tsx` | Shows the *current* graph fullscreen, in a screen or phone frame, with an optional controls panel and Record. **Exact** mode runs the exported page in an iframe. No steps, no text. |
+| **Present mode** (not a page; now the **Stage**) | `components/play/Stage.tsx`, `stageStore.ts` (were `PresentStage.tsx`, `presentStore.ts`); entered via an early return in `App.tsx` | Shows the *current* graph fullscreen, in a screen or phone frame, with an optional controls panel and Record. **Exact** mode runs the exported page in an iframe. No steps, no text. |
 | **Pages** | `components/page.ts` (a union type), `TABS` in `shell/DesktopTopNav.tsx`, `shell/MobileTopBar.tsx`, the three layouts in `App.tsx` | No router. Adding a page means extending the union, adding a tab, and adding a lazy branch in each layout. |
 | **Play records** | `types/play.ts` (`PlayRecord`, `parsePlayRecord`) | Controls, mappings, layers, actions, notes, display. Stored **inside** a saved graph under its `play` key (`saveGraph` → localStorage `shader-studio:<name>`), never on their own. `OpenPlayable.tsx` already lists every saved graph and example that has a Play setup without loading it. |
 | **The editor canvas** | `ShaderCanvas.tsx` | One WebGL renderer bound to the one global graph and the singleton `playEngine` / `inputBus`. **Cannot show a second graph.** |
-| **The standalone player** | `play/runtime/play-runtime.js`, `play/kit/*.js`, `play/exportHtml.ts` | `ShaderStudioPlay.mount(el, bundle)` runs a compiled graph + Play (controls, mappings, layers) in its own WebGL context. **Several can share a page.** It is what "Put it on a website" exports. It cannot run image, video or audio inputs, MIDI node outputs, feedback, echo or GPU particles (`unsupportedFeatures`). |
+| **The standalone player** | `play/runtime/play-runtime.js`, `play/kit/*.js`, `play/exportHtml.ts` | `ShaderStudioPlay.mount(el, bundle)` runs a compiled graph + Play (controls, mappings, layers) in its own WebGL context. **Several can share a page.** It is what "Put it on a website" exports. It runs feedback, echo, GPU particles and image, video and audio inputs (their files carried in the bundle); it cannot run MIDI node outputs (`unsupportedFeatures`). |
 | **Compiler** | `compiler/graphCompiler.ts` | `compileGraph` is pure: any saved graph can be compiled off-screen into a bundle without touching the store. |
 | **Notes rendering** | `components/play/NotesCard.tsx` | A tiny hand-written parser: paragraphs, bullets, `**bold**`, and `[[control:id]]` / `[[layer:id]]` chips. No Markdown or maths library in `package.json`. |
 | **Code display** | `components/code/GlslEditor.tsx`, `glslSyntax.ts`, `CodePanel.tsx` | A custom textarea-over-spans editor and a GLSL-only tokenizer. `nodeSlugMap` maps a node to its lines of the shader. |
@@ -254,18 +257,126 @@ folder (the Book of Shaders as graphs) or the Matrices folder into one.
   presentation mounts with no GLSL errors, and only the visible ones hold a
   WebGL context.
 
-## 6. Questions to settle before building
+## 6. Decisions (settled 26 Sep 2026)
 
-1. **Snapshots or live links?** The plan snapshots sources and offers
-   Refresh. Live links would follow graph edits automatically but could
-   silently break a finished lesson.
-2. **What the runtime can't run.** Plays with image, video or audio inputs,
-   feedback or particles can't render on this page (the editor canvas can
-   only show one graph). A still frame with a note is the v1 answer; the
-   alternative is extending the runtime.
-3. **Naming.** Rename the existing fullscreen Present mode (Stage?) so the
-   page can be *Present*.
-4. **Dependencies.** KaTeX and a Markdown parser are the first libraries of
-   their kind in the app (both lazy-loaded with the page).
-5. **Sharing beyond files.** Is a hosted link wanted eventually? It needs a
-   server and an account story, so it is out of scope until decided.
+1. **Snapshots.** A presentation is an asset of its own: each source is a
+   snapshot, with Refresh to pull the graph's current state on purpose.
+2. **What the runtime can't run: extend the runtime, don't settle for stills.**
+   The page's canvases are play-runtime mounts (the exported web page's
+   runtime), because the app's own canvas can only show the one open graph.
+   That runtime can't yet do image, video or audio inputs, previous-frame
+   feedback, echo or GPU particles. Those gaps are the same ones the website
+   export has, so closing them helps both: textures and video as uploaded
+   assets, a ping-pong framebuffer for feedback and echo, the particle
+   simulation from the app. Until each lands, that canvas shows a still frame
+   and names what's missing.
+3. **Naming.** The fullscreen Present mode becomes **Stage**; the page is
+   *Present*.
+4. **Dependencies.** KaTeX and a Markdown parser, both loaded only when the
+   page opens: approved.
+5. **Hosted links.** Out of scope for now. Sending a link to a Play or a
+   presentation is where this is heading, and it needs a server and an
+   account story first.
+
+## 7. What shipped (26 Sep 2026)
+
+Branch `claude/present-page`, stacked on the milestone branch (#228).
+
+**0. Stage.** The fullscreen Present mode is the **Stage** everywhere a user
+sees it (the Play page's button and header, the Stage's own bar) and in the
+code (`Stage.tsx`, `stageStore.ts`, `useStage().open(mode)`).
+
+**1. Shell and text.** A `present` page (tab on desktop and tablet, the ⋯
+menu on phones), lazy like the others. `types/presentation.ts` has the types
+and `parsePresentation`, the one gate for stored and imported JSON: it drops
+malformed blocks and steps, blocks whose source is gone, interactive controls
+the snapshot no longer has, media that isn't a `data:` URL, and never returns
+zero steps. `present/storage.ts` keeps them under
+`shader-studio-presentation:<name>` (the name is the title); they save
+themselves half a second after each change (no Save button). They are a
+library kind (`presentations/` in Export everything and the backup folder,
+which picks them up like any `shader-studio*` key). The page: Edit (steps
+list with drag to reorder, duplicate, delete with Undo; the step in the
+middle; settings on the right), Slides and Scroll. Text blocks are
+Markdown (`markdown-it`, raw HTML off) with `$…$` / `$$…$$` KaTeX and
+`[[control:id]]` / `[[layer:id]]` refs (`present/markdown.ts`). KaTeX and
+markdown-it load with the page, as their own chunk (`markdown-*.js`, ~360 KB,
+and KaTeX's CSS); the app's main bundle doesn't carry them, and the idle
+preload of page chunks doesn't fetch them either.
+
+**2. Canvases.** Sources are snapshots (`present/snapshot.ts`): the saved
+graph or example is read, migrated like a load (`migrateLoadedNodes`),
+compiled with `compileGraph`, and turned into the web page's input by
+`play/webInput.ts`, which the store's `playWebInput` now also uses, so a
+snapshot builds exactly the page "Put it on a website" would (tested).
+Refresh takes a new one in place and drops controls whose ids are gone.
+Every canvas is a `ShaderStudioPlay.mount` (`present/runtimeHost.ts`
+evaluates the runtime once in the app). Render blocks: shape, width (full,
+half, third), mouse on or off, caption, start time and "hold it there".
+Canvases run only when wanted (the current slide, or on screen with a margin
+in Scroll and Edit) and at most 6 at once (3 on phones); the others show their
+last frame (or the source's still, made off-screen once per source) with a
+Run button.
+
+**3. Interactive blocks.** The chosen controls in the chosen order, with the
+lesson's labels and hints, drawn with the app's ruler sliders and colour pads,
+writing through the runtime's control API; action controls are buttons.
+Mapping badges in words (`present/controls.ts`: "Mouse X", "Key K", "LFO
+0.25 Hz", "MIDI CC 1", "Clock 120 BPM"), lit and LIVE while a mapping drives
+the control; Enable MIDI and Listen appear when a chosen control needs them.
+Chips in the text light their control on hover and, clicked, bring it into
+view and give it a nudge.
+
+**4. Code blocks.** Typed GLSL or JavaScript, a source's whole shader, one
+node's slice (the lines `components/code/nodeSlice.ts` picks, which the code
+panel now uses too: tested equal), or a Script layer's code; highlighted with
+the existing GLSL and Script-editor tokenizers, marked lines, gaps between a
+slice's runs, Copy.
+
+**5. Files and export.** `.present.json` (with `kind`) out and in; imports
+go through `parsePresentation` and are marked `origin: 'imported'`. The web
+page (`present/exportPresentation.ts` + `present/present-page.js`) carries
+the runtime and kit once, each used source's bundle once, the steps as HTML,
+the same visibility and cap rules, the interactive panels and chips, and
+Slides (← →, progress, `#step` in the address) or Scroll. Maths is MathML by
+default; KaTeX's HTML with its woff2 fonts inlined (~360 KB) is the option.
+The dialog lists what the page leaves behind.
+
+**6 (part). Sandboxing.** In an imported presentation, a canvas whose Play has
+Script layers runs the exported page in an `<iframe sandbox="allow-scripts">`
+(no same origin), marked "Sandboxed"; an interactive block's controls are then
+that page's own panel.
+
+**The sample.** "Ray marching, step by step": eight steps from the Learn 3D
+lessons plus the Play course's LFO example, with every block type. Offered on
+the empty page and in the presentations menu (`present/sample.ts`).
+
+### Where it differs from the plan
+
+- `PresentSource.shader` keeps only `nodes` (id, label, slug); the code is
+  `bundle.fragmentShader`, not a second copy. Sources also keep `features`
+  (so `limits` are asked of `unsupportedFeatures` again on every load, and a
+  source stops being a still as soon as the runtime learns to run it) and a
+  `poster`.
+- Steps have an optional `title` and `columns: 1 | 2`; render blocks have
+  `paused`; the presentation has `origin`.
+- The runtime (version 4) gained, for a host that draws its own panel:
+  options `panel`, `pointer`, `startTime`, `paused`, `pauseOffscreen`; per
+  mount `get`, `set`, `fire`, `still`, `hasSound` / `sound`; and page-wide
+  `enableMidi()` and `listen()`. A bare player (no panel) fills its box on
+  phones too.
+- Images, videos and songs exist only in the open graph (lib/mediaSources),
+  so a saved graph's snapshot carries them only when that graph is open in
+  the Studio, as saved, when the snapshot is taken. Otherwise the source card
+  says which files it lacks and how to bring them (open it, Refresh).
+
+### Left
+
+- Live script blocks (edit a Script layer's code in a code block and watch).
+- Open a step's canvas on the Stage; the Tauri pop-out window.
+- Canvases in Present don't offer "Enable camera" (camera layers stay dark);
+  the exported page has no Play sound button for a graph's songs (the app
+  page has one on each canvas).
+- MathML: Chrome draws `\mathbf` as italic (MathML Core has no bold
+  variants); the KaTeX option looks the same everywhere.
+- Hosted links (decision 5).

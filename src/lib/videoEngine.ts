@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { forgetMedia, rememberMedia } from './mediaSources';
 
 /** How long to wait for `loadeddata` before giving up on a video file. */
 const VIDEO_LOAD_TIMEOUT_MS = 20_000;
@@ -69,6 +70,8 @@ class VideoEngine {
         tex.format = THREE.RGBAFormat;
         this.videos.set(nodeId, video);
         this.textures.set(nodeId, tex);
+        // Kept for web exports (see mediaSources.ts).
+        rememberMedia(nodeId, 'video', file.name, file.type, file);
         resolve();
       });
       video.load();
@@ -100,6 +103,7 @@ class VideoEngine {
     this.textures.get(nodeId)?.dispose();
     this.videos.delete(nodeId);
     this.textures.delete(nodeId);
+    forgetMedia(nodeId);
   }
 
   disposeAll() {

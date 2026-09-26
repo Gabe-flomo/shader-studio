@@ -1,6 +1,6 @@
 /**
  * useLiveValues — the live values of driven Play controls (mappings applied),
- * polled at ~30 fps, for the Play panel and Present.
+ * polled at ~30 fps, for the Play panel and the Stage.
  */
 import { useEffect, useState } from 'react';
 import type { PlayRecord } from '../../types/play';

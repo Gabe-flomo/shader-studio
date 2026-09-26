@@ -25,7 +25,7 @@ const PRECISION = '(?:(?:highp|mediump|lowp)\\s+)?';
 const matchBrace = (s: string, open: number): number => { let d = 0; for (let i = open; i < s.length; i++) { if (s[i] === '{') d++; else if (s[i] === '}' && --d === 0) return i; } return -1; };
 const matchParen = (s: string, open: number): number => { let d = 0; for (let i = open; i < s.length; i++) { if (s[i] === '(') d++; else if (s[i] === ')' && --d === 0) return i; } return -1; };
 /** Comments blanked (same length), so names inside them don't count and offsets still line up. */
-function blankComments(s: string): string {
+export function blankComments(s: string): string {
   let out = '';
   for (let i = 0; i < s.length;) {
     const c = s[i], n = s[i + 1];
@@ -51,6 +51,19 @@ function functions(s: string): Fn[] {
     const bodyOpen = parenClose + 1 + after[0].length - 1;
     const bodyClose = matchBrace(s, bodyOpen); if (bodyClose < 0) continue;
     out.push({ name: m[2], headerStart, parenClose, bodyOpen, bodyClose, params: s.slice(parenOpen + 1, parenClose).trim() });
+  }
+  return out;
+}
+
+/** Forward declarations (`float f(vec2 p);`): they have to gain the same parameters as their definitions. */
+function prototypes(s: string): { name: string; parenClose: number; params: string }[] {
+  const out: { name: string; parenClose: number; params: string }[] = [];
+  const re = new RegExp(`(^|[;}\\n])\\s*(?:${TYPES}|void)\\s+([A-Za-z_]\\w*)\\s*\\(`, 'g');
+  for (const m of s.matchAll(re)) {
+    const parenOpen = m.index! + m[0].length - 1;
+    const parenClose = matchParen(s, parenOpen); if (parenClose < 0) continue;
+    if (!/^\s*;/.test(s.slice(parenClose + 1))) continue;
+    out.push({ name: m[2], parenClose, params: s.slice(parenOpen + 1, parenClose).trim() });
   }
   return out;
 }
@@ -129,8 +142,10 @@ export function threadGlobals(source: string): ThreadResult {
         }
         if (need.has(f.name)) edits.push({ at: f.parenClose, del: 0, text: f.params && f.params !== 'void' ? `, ${qual}${type} ${name}` : `${qual}${type} ${name}` });
       }
+      const protos = need.size ? prototypes(s).filter(p => need.has(p.name) && !inFn(p.parenClose)) : [];
+      for (const p of protos) edits.push({ at: p.parenClose, del: 0, text: p.params && p.params !== 'void' ? `, ${qual}${type} ${name}` : `${qual}${type} ${name}` });
       // The header's own `(void)` becomes the one parameter.
-      for (const f of fns) if (need.has(f.name) && f.params === 'void') edits.push({ at: f.parenClose - 4, del: 4, text: '' });
+      for (const f of [...fns, ...protos]) if (need.has(f.name) && f.params === 'void') edits.push({ at: f.parenClose - 4, del: 4, text: '' });
       edits.push({ at: main.bodyOpen + 1, del: 0, text: ` ${type} ${name}${dims}${init ? ` ${init}` : ''};` });
       edits.push({ at: at + m[2].length, del: m[0].length - m[1].length - m[2].length, text: '' });
       edits.sort((a, b) => b.at - a.at);

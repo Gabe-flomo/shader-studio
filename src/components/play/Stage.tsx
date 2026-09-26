@@ -1,6 +1,7 @@
 /**
- * PresentStage — the last step of Play: the picture on its own, the way people
- * will play with it, with nothing to edit.
+ * Stage — the last step of Play: the picture on its own, the way people
+ * will play with it, with nothing to edit. (It used to be called Present; the
+ * Present page now builds step-by-step lessons from several Plays.)
  *
  *   Full   the app's own picture: everything works (songs, MIDI files, every
  *          layer), for playing and recording the visual you want.
@@ -28,19 +29,18 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { AspectPicker } from '../shell/PreviewChrome';
 import { ColourPad } from './ColourPad';
 import { useLiveValues } from './useLiveValues';
-import { PHONE_SIZE, usePresent, type PresentMode } from './presentStore';
+import { PHONE_SIZE, useStage, type StageMode } from './stageStore';
 import { useTakes } from '../../lib/takes';
-import { playOverlay } from '../../play/overlay';
-import { formatDuration } from '../../lib/midiFile';
+import { TakesList } from './TakesList';
 
-export function PresentStage({ canvas, onRecord }: {
+export function Stage({ canvas, onRecord }: {
   /** The app's live picture (Full). */
   canvas: ReactNode;
   /** Open Record for this canvas; null means the app's own picture. */
   onRecord: (source: HTMLCanvasElement | null) => void;
 }) {
   const tk = useTokens();
-  const { mode, device, panel, present, exit, setDevice, togglePanel } = usePresent();
+  const { mode, device, panel, open, exit, setDevice, togglePanel } = useStage();
   const rootRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -64,7 +64,7 @@ export function PresentStage({ canvas, onRecord }: {
   const exact = useMemo(() => {
     if (mode !== 'exact') return null;
     const { input, missing } = useNodeGraphStore.getState().playWebInput(graphName);
-    return { html: buildPlayHtml(input, { ...DEFAULT_EMBED, mode: 'player' }), missing, left: leftBehind(input.play) };
+    return { html: buildPlayHtml(input, { ...DEFAULT_EMBED, mode: 'player' }), missing, left: leftBehind(input.play, input.media) };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, build]);
 
@@ -80,9 +80,9 @@ export function PresentStage({ canvas, onRecord }: {
   return (
     <div ref={rootRef} style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#07070b', color: '#e8e8ef', font: `12.5px ${fontFamily.ui}` }}>
       <div style={bar}>
-        <IconButton icon="close" label="Leave Present (Esc)" onClick={exit} />
+        <IconButton icon="close" label="Leave the Stage (Esc)" onClick={exit} />
         <b style={{ fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{graphName}</b>
-        <Segmented size="sm" ariaLabel="Present mode" value={mode ?? 'full'} onChange={m => present(m as PresentMode)} options={[
+        <Segmented size="sm" ariaLabel="Stage mode" value={mode ?? 'full'} onChange={m => open(m as StageMode)} options={[
           { value: 'full', label: 'Full', title: 'Everything Playfield can do: songs, MIDI files, every layer' },
           { value: 'exact', label: 'Exact', title: 'The website player itself: exactly what a visitor to the exported page gets' },
         ]} />
@@ -117,7 +117,7 @@ export function PresentStage({ canvas, onRecord }: {
         </div>
         {panel && (
           <div style={{ width: 300, flexShrink: 0, overflowY: 'auto', borderLeft: `1px solid ${alpha('#ffffff', 0.08)}`, background: '#101016', padding: '12px 14px 18px' }}>
-            {mode === 'exact' && exact ? <ExactNotes missing={exact.missing} left={exact.left} /> : <PresentControls />}
+            {mode === 'exact' && exact ? <ExactNotes missing={exact.missing} left={exact.left} /> : <StageControls />}
             {mode === 'full' && <TakesPanel onRender={() => onRecord(null)} />}
             <InputLegend />
           </div>
@@ -148,7 +148,7 @@ const heading = (text: string) => (
 );
 
 /** The Play panel's controls, as a visitor has them: sliders, colours and buttons. */
-function PresentControls() {
+function StageControls() {
   const tk = useTokens();
   const play = useNodeGraphStore(s => s.play);
   const nodes = useNodeGraphStore(s => s.nodes);
@@ -247,32 +247,24 @@ function ExactNotes({ missing, left }: { missing: string[]; left: { what: string
 }
 
 /**
- * Takes: perform, and every frame's controls, nulls and pointer are noted, to
- * render later frame by frame (Record › Take) at full quality.
+ * Takes: perform (up to a minute) and every input is kept as keyframes, to
+ * watch back and render later frame by frame (see lib/takes.ts, TakesList).
  */
 function TakesPanel({ onRender }: { onRender: () => void }) {
-  const tk = useTokens();
-  const { takes, recording, elapsed, start, stop, remove, renderTake } = useTakes();
+  const phase = useTakes(s => s.phase);
+  const busy = phase === 'recording' || phase === 'countdown';
   return (
     <div style={{ marginBottom: 18 }}>
       {heading('Takes')}
-      <Button size="sm" variant={recording ? 'danger' : 'secondary'} icon={recording ? 'pause' : 'record'} style={{ width: '100%', justifyContent: 'center' }}
-        onClick={() => { if (recording) stop(); else start(() => playOverlay.pointerNow()); }}
-        title={recording ? 'Stop: keep this take' : 'Play it while this records: every control, null and the pointer, frame by frame'}>
-        {recording ? `Stop take · ${formatDuration(elapsed)}` : 'Record a take'}
+      <Button size="sm" variant={busy ? 'danger' : 'secondary'} icon="record" style={{ width: '100%', justifyContent: 'center' }}
+        onClick={() => (busy ? useTakes.getState().stop() : useTakes.getState().begin())}
+        title={busy ? 'Stop and watch it back' : 'Play it for up to a minute: every input is kept, to watch back and render frame by frame'}>
+        {busy ? 'Stop recording' : 'Record a performance'}
       </Button>
       <div style={{ color: alpha('#ffffff', 0.5), fontSize: 11.5, lineHeight: 1.45, margin: '6px 0 8px' }}>
-        {recording ? 'Playing is being noted. ↺ on the clock starts the take over.' : 'Perform it once, then render it frame by frame: smooth at any size, with the song, no dropped frames.'}
+        Perform it once, then render it frame by frame: smooth at any size, with the song, no dropped frames.
       </div>
-      {takes.map(t => (
-        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0' }}>
-          <Icon name="record" size={12} style={{ color: tk.status.danger, flexShrink: 0 }} />
-          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-          <span style={{ color: alpha('#ffffff', 0.5), font: `500 11px ${fontFamily.mono}` }}>{formatDuration(t.length)}</span>
-          <Button size="sm" variant="ghost" onClick={() => { renderTake(t.id); onRender(); }} title="Open Record with this take">Render…</Button>
-          <IconButton icon="trash" label="Delete this take" size="sm" onClick={() => remove(t.id)} />
-        </div>
-      ))}
+      <TakesList onRender={() => onRender()} />
     </div>
   );
 }

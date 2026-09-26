@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { DEFAULT_EMBED, buildPlaySnippet, leftBehind, type EmbedOptions } from '../../play/exportHtml';
+import { DEFAULT_EMBED, buildPlaySnippet, leftBehind, mediaCarried, type EmbedOptions } from '../../play/exportHtml';
 import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -43,7 +43,8 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   // Built once per open + option change; the snapshot is taken when the dialog opens.
   const { input, missing } = useMemo(() => playWebInput(title), [playWebInput, title]);
   const snippet = useMemo(() => buildPlaySnippet(input, opts), [input, opts]);
-  const left = useMemo(() => leftBehind(input.play), [input]);
+  const left = useMemo(() => leftBehind(input.play, input.media), [input]);
+  const carried = useMemo(() => mediaCarried(input.media), [input]);
   // Show what the reader recognises: the div, then the mount call; the runtime and the piece are elided.
   const preview = useMemo(() => {
     const lines = snippet.trimEnd().split('\n');
@@ -139,7 +140,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
 
       {missing.length > 0 && (
         <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.status.warningText, font: `12px/1.5 ${fontFamily.ui}` }}>
-          This graph uses {missing.join(', ')}, which can’t run outside Playfield. {missing.length === 1 ? 'It' : 'They'} will be blank or frozen in the export.
+          This graph uses {missing.join(', ')}, which the web player can’t run yet. {missing.length === 1 ? 'It stays' : 'They stay'} at rest in the export.
         </div>
       )}
       {left.length > 0 && (
@@ -155,7 +156,20 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
           </div>
         </>
       )}
-      {note(`Comes along: the picture, ${bg ? '' : 'controls, '}mappings and layers${input.play.layers.some(l => l.kind === 'image') ? ', images placed as layers' : ''}. Google Fonts load from Google when the page opens.`)}
+      {carried.length > 0 && (
+        <>
+          {label('In the page')}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {carried.map(x => (
+              <div key={x.what} style={{ display: 'flex', gap: 8, font: `12px/1.45 ${fontFamily.ui}`, color: tk.text.muted }}>
+                <span style={{ flex: 1, minWidth: 0 }}>{x.what}</span>
+                <span style={{ font: `11.5px ${fontFamily.mono}`, color: tk.text.secondary, flexShrink: 0 }}>+{KB(x.bytes)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {note(`Comes along: the picture, ${bg ? '' : 'controls, '}mappings and layers${input.play.layers.some(l => l.kind === 'image') ? ', images placed as layers' : ''}${carried.length ? ', and the files listed above' : ''}. Google Fonts load from Google when the page opens.${input.media?.audio?.some(a => a.src) ? (bg ? ' A background listens to its song silently from the visitor’s first click or key.' : ' The song plays when the visitor clicks Play sound; the picture reacts from then on.') : ''}`)}
       </div>
       <SitePreview snippet={snippet} opts={opts} title={title} site={site} device={device} onSite={setSite} onDevice={setDevice} wide={wide} />
       </div>

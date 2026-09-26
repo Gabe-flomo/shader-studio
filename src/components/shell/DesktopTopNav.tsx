@@ -19,6 +19,7 @@ import { SaveGraphForm, VersionsButton } from './GraphVersions';
 const TABS: { page: Page; label: string }[] = [
   { page: 'studio', label: 'Studio' },
   { page: 'play', label: 'Play' },
+  { page: 'present', label: 'Present' },
   { page: 'fn', label: 'Builder' },
   { page: 'glsl', label: 'GLSL' },
   { page: 'convert', label: 'Convert' },

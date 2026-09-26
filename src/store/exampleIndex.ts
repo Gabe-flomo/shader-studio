@@ -13,6 +13,7 @@ import type { PlayRecord } from '../types/play';
 import { ctp } from '../theme/palette';
 import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
 import { LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS } from './learnExampleIndex';
+import { LEARN3D_EXAMPLE_INDEX, LEARN3D_EXAMPLE_KEYS } from './learn3dExampleIndex';
 import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
 import { GRID_EXAMPLE_INDEX, GRID_EXAMPLE_KEYS } from './gridExamples';
@@ -150,6 +151,8 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   ...PLAY_EXAMPLE_INDEX,
   // The Learn folder: the Book of Shaders course as graphs (learnExampleIndex.ts).
   ...LEARN_EXAMPLE_INDEX,
+  // The Learn 3D folder: ray marching one idea at a time (learn3dExampleIndex.ts).
+  ...LEARN3D_EXAMPLE_INDEX,
   // Node Combos built from the definitions (comboExamples.ts): the Grid Pattern → shape → Grid Paint flow, and field sockets.
   ...COMBO_EXAMPLE_INDEX,
   // The Matrices folder (matrixExamples.ts): combining, undoing, lattices, fractals, corner pin, colour.
@@ -174,6 +177,7 @@ export async function loadExampleGraphs(): Promise<Record<string, ExampleGraph>>
 export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string[] }> = [
   { label: "Play",              color: ctp.pink, keys: PLAY_EXAMPLE_KEYS },
   { label: "Learn",             color: ctp.lavender, keys: LEARN_EXAMPLE_KEYS },
+  { label: "Learn 3D",          color: ctp.lavender, keys: LEARN3D_EXAMPLE_KEYS },
   { label: "Color & Lighting",  color: ctp.peach, keys: ['neonGlow','colorStopsCycle'] },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel'] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },

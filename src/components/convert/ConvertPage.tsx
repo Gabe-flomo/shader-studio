@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { glslToGraph, normaliseHostShader, type ConversionResult } from '../../glslToGraph';
+import { suggestFixups, type Fixup } from '../../glslToGraph/fixups';
 import { tidyGlsl } from '../../glsl/format';
 import { optimizeGraph, type OptimizeReport } from '../../optimize/optimizeGraph';
 import { onHandoff, takeHandoff } from './convertHandoff';
@@ -27,7 +28,7 @@ import { parseGlslError, friendlyGlsl } from '../../compiler/nodeErrors';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { convertFragmentShader } from '../../nodes/userNodes/glslImport';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
-import { estimateNodeHeight } from '../../store/graphLayout';
+import { estimateNodeHeight, layoutByRank } from '../../store/graphLayout';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -40,7 +41,7 @@ import { toast } from '../ui/toastStore';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { PublishNodeModal as PublishNodeModalT } from '../NodeGraph/PublishNodeModal';
 import { NodeGraph } from '../NodeGraph/NodeGraph';
-import { getCardSize, getView } from '../NodeGraph/socketRegistry';
+import { getCardSize, getView, subscribeCardSizes } from '../NodeGraph/socketRegistry';
 import { GlslEditor } from '../code/GlslEditor';
 import { kindOf, labelOf } from './outlineKinds';
 import { RenderPair, type PairDiff } from './RenderPair';
@@ -120,6 +121,12 @@ function showStart(nodes: GraphNode[], canvas: HTMLElement | null): void {
   _setViewCallback({ x: padX - minX * z, y: padY - minY * z }, z);
 }
 
+/** The nodes placed again in the converter's columns, each column in its current top-to-bottom order, spaced by `heightOf`. */
+function relaid(nodes: GraphNode[], heightOf: (n: GraphNode) => number): GraphNode[] {
+  const at = layoutByRank(nodes, { heightOf, order: (a, b) => a.position.y - b.position.y });
+  return nodes.map(n => { const p = at.get(n.id); return p ? { ...n, position: p } : n; });
+}
+
 /** The pasted shader the way the render pair needs it: our uniforms declared once. `toSourceLine` maps a compile error's line back to the paste. */
 function wrapOriginal(source: string): { code: string; toSourceLine: (line: number) => number } {
   const { code: body, toSourceLine } = normaliseHostShader(source);
@@ -153,21 +160,31 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const [selected, setSelected] = useState<string | null>(null);
   const [diff, setDiff] = useState<PairDiff | null>(null);
   const [oneNode, setOneNode] = useState<{ code: string; entry: string; label: string } | null>(null);
+  /** The shader from before the first fix-up applied to it (the check compares with this); null when none was. */
+  const [checkAgainst, setCheckAgainst] = useState<string | null>(null);
   // On a phone the page is one pane at a time: the code, the graph, or the check.
   const [pane, setPane] = useState<'code' | 'graph' | 'check'>('code');
   useEffect(() => { try { localStorage.setItem(CODE_KEY, code); } catch { /* preference only */ } }, [code]);
-  useEffect(() => onHandoff(c => { setCode(c); setSource(c); setAsBlock(new Set()); setSelected(null); setPane('graph'); }), []);
+  useEffect(() => onHandoff(c => { setCode(c); setSource(c); setAsBlock(new Set()); setSelected(null); setCheckAgainst(null); setPane('graph'); }), []);
   const empty = !source.trim();
 
   const raw: ConversionResult = useMemo(() => (source.trim() ? glslToGraph(source, { asBlock }) : EMPTY), [source, asBlock]);
+  // Rewrites that take a refusal away (fix-ups.ts). Applying one puts the rewrite in the editor; the check then
+  // compares the graph with the shader from before the first fix, so a rewrite that changed the picture shows.
+  const fixups = useMemo(() => (raw.report.unsupported.length ? suggestFixups(source, raw.report) : []), [source, raw]);
   // Optimised: the converted graph with runs of math cards folded into blocks and short float runs absorbed into
   // input expressions (the picture is the same; the check proves it).
   const [optimised, setOptimised] = useState(() => { try { return localStorage.getItem(OPT_KEY) !== 'off'; } catch { return true; } });
   useEffect(() => { try { localStorage.setItem(OPT_KEY, optimised ? 'on' : 'off'); } catch { /* preference only */ } }, [optimised]);
-  const opt = useMemo(() => (optimised && raw.nodes.length ? optimizeGraph(raw.nodes, { minChain: 3, keepSliders: true }) : null), [raw, optimised]);
+  const opt = useMemo(() => {
+    if (!optimised || !raw.nodes.length) return null;
+    const o = optimizeGraph(raw.nodes, { minChain: 3, keepSliders: true });
+    // A folded block sits where its last member was and is taller than it: space the columns again.
+    return o.report.folds.length ? { ...o, nodes: relaid(o.nodes, estimateNodeHeight) } : o;
+  }, [raw, optimised]);
   const conv: ConversionResult = useMemo(() => (opt ? { nodes: opt.nodes, report: { ...raw.report, notes: [...raw.report.notes, ...(opt.report.folds.length ? [optimisedNote(opt.report)] : [])] } } : raw), [raw, opt]);
   const compiled = useMemo(() => (conv.nodes.length ? compileGraph({ nodes: conv.nodes }) : null), [conv]);
-  const wrapped = useMemo(() => wrapOriginal(source), [source]);
+  const wrapped = useMemo(() => wrapOriginal(checkAgainst ?? source), [source, checkAgainst]);
   const original = wrapped.code;
   const uniforms = useMemo(() => compiled?.paramUniforms ?? {}, [compiled]);
   const graphFrag = compiled?.success ? compiled.fragmentShader : null;
@@ -186,6 +203,23 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
       return () => clearTimeout(t);
     }
   }, [conv, setScratchNodes]);
+  // The layout above spaced cards by estimated heights; once they have rendered, space them by what they
+  // measure (a code card's height depends on its code), so no card overlaps the one below it.
+  useEffect(() => {
+    if (!conv.nodes.length) return;
+    // Runs again whenever a card's size changes (a card that grows pushes the ones below it down); the layout
+    // depends only on heights, so it settles.
+    const respace = () => {
+      const nodes = useNodeGraphStore.getState().nodes;
+      if (!nodes.length || nodes.some(n => !getCardSize(n.id))) return; // not all rendered yet
+      const next = relaid(nodes, n => getCardSize(n.id)?.h ?? estimateNodeHeight(n));
+      const moved = new Map(next.filter((m, i) => m.position.x !== nodes[i].position.x || m.position.y !== nodes[i].position.y).map(m => [m.id, m.position]));
+      if (moved.size) useNodeGraphStore.getState().setNodePositions(moved);
+    };
+    const off = subscribeCardSizes(respace);
+    const t = setTimeout(respace, 60);
+    return () => { off(); clearTimeout(t); };
+  }, [conv]);
   useEffect(() => () => endScratch(false), [endScratch]);
   // On a phone the canvas mounts when its pane opens: place the view then.
   useEffect(() => {
@@ -200,11 +234,12 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const errorLines = useMemo(() => {
     const m = new Map<number, string>();
     if (report.errorLine) m.set(report.errorLine, report.unsupported.find(u => u.startsWith('Doesn’t parse') || u.startsWith("Doesn't parse"))?.replace(/^Doesn.t parse[^:]*: /, '') ?? 'Doesn’t parse here');
-    if (diff && 'error' in diff && diff.side === 'original') {
+    // (Against the shader from before a fix-up, the lines are that shader's, not the editor's.)
+    if (diff && 'error' in diff && diff.side === 'original' && !checkAgainst) {
       for (const raw of diff.error.split('\n')) { const p = parseGlslError(raw); if (p) { const l = wrapped.toSourceLine(p.line); m.set(l, m.has(l) ? `${m.get(l)} · ${friendlyGlsl(p.text)}` : friendlyGlsl(p.text)); } }
     }
     return m;
-  }, [report, diff, wrapped]);
+  }, [report, diff, wrapped, checkAgainst]);
   const [paneW, setPaneW] = useState(() => { try { return Math.max(280, Math.min(900, Number(localStorage.getItem(PANE_KEY)) || 360)); } catch { return 360; } });
   const startPaneResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -221,7 +256,15 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   };
   const sel = conv.nodes.find(n => n.id === selected) ?? null;
   const toggleBlock = (id: string) => setAsBlock(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const changeCode = (next: string) => { setCode(next); setAsBlock(new Set()); setSelected(null); };
+  /** A hand edit (or a new shader): the check goes back to comparing with what the editor holds. */
+  const changeCode = (next: string) => { setCode(next); setAsBlock(new Set()); setSelected(null); setCheckAgainst(null); };
+  /** A fix-up's rewrite into the editor, remembering the shader from before the first one for the check. */
+  const applyFix = (f: Fixup) => {
+    setCheckAgainst(prev => prev ?? source);
+    setCode(f.code); setAsBlock(new Set()); setSelected(null);
+    toast.success('Fix applied', { message: 'Press Convert to see the graph. The check compares it with your shader from before the fix.' });
+  };
+  const undoFixes = () => { if (checkAgainst === null) return; const c = checkAgainst; changeCode(c); setSource(c); };
   /** Convert what the editor holds now. */
   const run = () => { setSource(code); setAsBlock(new Set()); setSelected(null); if (compact) setPane('graph'); };
   /** A whole new shader (an example, a file, Tidy, Clear): converted straight away. */
@@ -252,8 +295,9 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
     const rect = canvasWrap.current?.getBoundingClientRect(); if (!rect) return null;
     const { pan, zoom } = getView();
     const wx = (clientX - rect.left - pan.x) / zoom, wy = (clientY - rect.top - pan.y) / zoom;
-    for (let i = conv.nodes.length - 1; i >= 0; i--) {
-      const n = conv.nodes[i]; const size = getCardSize(n.id);
+    const nodes = useNodeGraphStore.getState().nodes; // placed as shown (re-spaced once measured)
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i]; const size = getCardSize(n.id);
       const w = size?.w ?? CARD_W, h = size?.h ?? estimateNodeHeight(n);
       if (wx >= n.position.x && wx <= n.position.x + w && wy >= n.position.y && wy <= n.position.y + h) return n.id;
     }
@@ -302,9 +346,14 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: same ? tk.status.success : tk.status.warningText, font: `600 12.5px ${fontFamily.ui}` }}>
               <Icon name={same ? 'check' : 'warning'} size={14} />{same ? 'Same picture' : 'Differs'}
             </div>
-          ) : <span style={{ color: tk.text.faint }}>{graphFrag ? 'Comparing…' : 'Nothing to compare yet'}</span>}
+          ) : <span style={{ color: tk.text.faint }}>{graphFrag ? 'Comparing…' : report.unsupported.length ? 'Not converted: the original shows alone' : 'Nothing to compare yet'}</span>}
           {diff && !('error' in diff) && <div style={{ color: tk.text.muted, font: `500 11px ${fontFamily.mono}`, marginTop: 3 }}>max {diff.max}/255 · {diff.badPct.toFixed(2)}% off</div>}
           <div style={{ color: tk.text.muted, fontSize: 11.5, lineHeight: 1.45, marginTop: 6 }}>{summary}{stale && <span style={{ color: tk.status.warningText }}> · edited since: press Convert</span>}</div>
+          {checkAgainst !== null && (
+            <div style={{ color: tk.text.muted, fontSize: 11.5, lineHeight: 1.45, marginTop: 4 }}>
+              Compared with your shader from before the fix-ups. <button type="button" onClick={undoFixes} style={{ border: 0, padding: 0, background: 'none', color: tk.accent.text, font: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}>Undo the fix-ups</button>
+            </div>
+          )}
         </div>
       </div>
       )}
@@ -315,8 +364,28 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
             {heading('Can’t convert', report.unsupported.length)}
             <Callout tone="warning" title="Not a graph yet">
               <ul style={{ margin: '4px 0 0', paddingLeft: 18, lineHeight: 1.5 }}>{report.unsupported.map(u => <li key={u}>{u}</li>)}</ul>
-              <div style={{ marginTop: 6 }}>Change the shader, or keep it as one node.</div>
+              <div style={{ marginTop: 6 }}>{fixups.length ? 'A fix-up below rewrites the shader so it converts, or keep it as one node.' : 'Change the shader, or keep it as one node.'}</div>
             </Callout>
+          </>
+        )}
+        {fixups.length > 0 && (
+          <>
+            {heading('Fix-ups', fixups.length)}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {fixups.map(f => {
+                const applied = code === f.code;
+                return (
+                  <div key={f.id} style={{ padding: '8px 10px', borderRadius: radius.md, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 650, fontSize: 12.5, flex: 1, minWidth: 0 }}>{f.title}</span>
+                      <Button size="sm" variant={applied ? 'ghost' : 'secondary'} icon="spark" disabled={applied} onClick={() => applyFix(f)} title={applied ? 'In the editor: press Convert' : 'Rewrite the shader in the editor (undoable there); then press Convert'}>{applied ? 'Applied' : 'Apply fix'}</Button>
+                    </div>
+                    <div style={{ color: tk.text.muted, fontSize: 11.5, lineHeight: 1.45, marginTop: 4 }}>{f.why}</div>
+                    {!f.samePicture && <div style={{ color: tk.status.warningText, fontSize: 11.5, marginTop: 4, display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="warning" size={12} />Changes the picture</div>}
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
         {compiled && !compiled.success && (
@@ -358,16 +427,36 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
     </div>
   );
 
-  const editorHead = (
-    <div style={panelHead}>
-      <span style={{ fontWeight: 650, fontSize: 13.5, marginRight: 'auto', whiteSpace: 'nowrap' }}>{compact ? 'Shader' : 'Fragment shader'}</span>
-      <Select ariaLabel="Example shader" value="" height={30} onChange={k => { if (EXAMPLES[k]) load(EXAMPLES[k].code); }}
+  // The editor's tools. A desktop pane narrower than all of them in one row (the default 360 is) puts the title and
+  // Convert on one row and the rest under it, so Convert is never clipped; on a phone Convert sits in the top bar.
+  const tools = (
+    <>
+      <Select ariaLabel="Example shader" value="" height={30} style={{ flexShrink: 0 }} onChange={k => { if (EXAMPLES[k]) load(EXAMPLES[k].code); }}
         options={[{ value: '', label: 'Examples…' }, ...Object.entries(EXAMPLES).map(([k, e]) => ({ value: k, label: e.label }))]} />
       <IconButton icon="import" label="Open a .glsl / .frag file" size="sm" onClick={loadFile} />
       <IconButton icon="copy" label="Copy the whole shader" size="sm" disabled={!code.trim()} onClick={() => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); }} />
+      <span style={{ flex: 1 }} />
       <Button size="sm" variant="ghost" onClick={tidy} disabled={!code.trim()} title="Rewrite the paste as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
       <Button size="sm" variant="ghost" onClick={() => load('')} disabled={!code.trim()} title="Empty the editor">Clear</Button>
+    </>
+  );
+  const title = <span style={{ fontWeight: 650, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{compact ? 'Shader' : 'Fragment shader'}</span>;
+  const oneRow = compact || paneW >= 540;
+  const editorHead = oneRow ? (
+    <div style={panelHead}>
+      {title}
+      <span style={{ width: 4, flexShrink: 0 }} />
+      {tools}
       {!compact && convertButton}
+    </div>
+  ) : (
+    <div style={{ flexShrink: 0, borderBottom: `1px solid ${tk.border.subtle}` }}>
+      <div style={{ ...panelHead, height: 44, borderBottom: 0 }}>
+        {title}
+        <span style={{ flex: 1 }} />
+        {convertButton}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px 8px 12px' }}>{tools}</div>
     </div>
   );
   const editor = <GlslEditor value={code} onChange={changeCode} errorLines={errorLines} placeholder={'Paste a fragment shader: a plain void main() with gl_FragColor, or a Shadertoy mainImage().'} />;

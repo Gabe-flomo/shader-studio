@@ -84,9 +84,12 @@ shortcuts, `PI` / `TWO_PI` / `HALF_PI`, and the live values `width`,
 `height`, `mouseX`, `mouseY`, `mouseIsPressed`, `frameCount`, `deltaTime`,
 `millis()`. Colours take p5's forms (gray, gray + alpha, r g b, r g b a in
 0–255, or any CSS string). A function you define with the same name wins.
-The editor's **Reference** section lists all of it with one line each and
-inserts a name at the caret when clicked. (`src/play/kit/layers.js`,
-`klSketchHelpers`; the list in `scriptReference.ts`.)
+The editor's **Reference** section lists all of it the way the p5
+reference does: each entry opens to its parameters (name, type, meaning),
+what it returns and a short example, and inserts at the caret. Autocomplete
+shows the same signature, parameters and example beside the suggestion.
+(`src/play/kit/layers.js`, `klSketchHelpers`; the list in
+`scriptReference.ts`, which a test checks against the kit's names.)
 
 ### Controls: sliders, toggles, buttons
 
@@ -125,24 +128,35 @@ value)` assigns through a direct `eval` inside the sketch's scope.)
 for JavaScript): syntax colouring, autocomplete (the helpers, `s.` and
 `ctx.` members, `Math.`, your own variables and functions, the params'
 keys), undo and redo, Tab and auto-indent, bracket wrapping, ⌘/Ctrl+Enter
-to apply. Beside it, four tabs:
+to apply. Whatever an insert adds (a reference entry, a pattern, a control)
+flashes in the editor and scrolls into view. Beside it, four tabs:
 
 - **Run**: a scratch run of the draft, as you type, on its own canvas with
   the layer's current control values and the mouse over the box; the
   picture reads as a soft glow and there are no nulls. Buttons the sketch
   declares are pressable under it. Nothing reaches the picture until Apply.
-- **Reference**: everything the sketch can call, one line each, inserted at
-  the caret on click.
-- **Patterns**: the pieces sketches are made of, ready to insert where the
-  caret is (or at the top of the file): a params block with every kind, a
+- **Reference**: everything the sketch can call, grouped, one line each;
+  open an entry for its parameters, return value and an example.
+- **Patterns**: the pieces sketches are made of, ready to insert: a params block with every kind, a
   particle system in three functions, bounce and wrap, ease and spring
   follows, orbit, a noise flow field, a flock in two rules, a grid loop,
   polygons, trails, gradients, text, mouse and click handling, reading the
-  picture, attaching to a null. Each says whether it belongs at the top or
-  inside `draw`, and its numbers are plain variables so Make a slider works
-  on them. (`scriptSnippets.ts`.)
+  picture, attaching to a null. Each says where it belongs and Insert puts
+  it there: top-level code before `setup`/`draw` (after the params and
+  declarations), `setup` and `draw` code at the end of that function (made
+  if the sketch has none; a blank line under the caret inside it wins). A
+  params pattern merges into your params; a pattern's settings (`let
+  radius = 120;`) go to the top once, so Make a slider works on them.
+  **See it used** runs a small complete sketch with the pattern in it,
+  which **Load as the sketch** puts in the editor. (`scriptSnippets.ts`;
+  placement is `placeCode` in `scriptTools.ts`.)
 - **Controls**: the declared controls as rows (sliders, switches, Press
-  buttons) with their + for the Play panel, and the Canvas settings.
+  buttons) with their + for the Play panel; **New control**, which writes
+  a slider, toggle or button into `params` (and a `let` it drives) from a
+  small form, optionally with code that uses it: a loop that runs `count`
+  times, an array kept at `count` items (made in setup, drawn in draw), or
+  an `if` in draw for a toggle or a button press (`addControl`); and the
+  Canvas settings.
 
 The footer holds **Starters** (the built-in sketches, then the ones you
 saved), **Import** (another script layer in this file, or a saved sketch:

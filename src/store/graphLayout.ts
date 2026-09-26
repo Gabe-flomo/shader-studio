@@ -11,7 +11,50 @@ export function estimateNodeHeight(node: GraphNode): number {
     pd => pd.type === 'float' || pd.type === 'select' || pd.type === 'vec3'
   ).length : 0;
   // Header 43px, socket rows 26px, param rows 36px, body padding 12px, footer 37px
-  return 43 + (inputCount + outputCount) * 26 + paramCount * 36 + 12 + 37;
+  return 43 + (inputCount + outputCount) * 26 + paramCount * 36 + 12 + 37 + codeCardExtra(node, inputCount);
+}
+
+/**
+ * What an Expression Block or Custom Function card shows beyond its sockets
+ * (measured on the real cards): the block's line editor (label, the return
+ * row, a 23px row per line) and a 36px row per slider input; the function's
+ * code strip. Without it a converted graph's code cards overlapped the card
+ * below them.
+ */
+function codeCardExtra(node: GraphNode, inputCount: number): number {
+  if (node.type === 'exprNode') {
+    const lines = Array.isArray(node.params.lines) ? node.params.lines.length : 0;
+    const inputs = Array.isArray(node.params.inputs) ? (node.params.inputs as Array<{ type?: string; slider?: unknown }>) : [];
+    const sliders = inputs.filter(i => i.type === 'float' && i.slider != null).length;
+    return (inputCount ? 80 : 67) + lines * 23 + sliders * 36;
+  }
+  if (node.type === 'customFn') {
+    const inputs = Array.isArray(node.params.inputs) ? (node.params.inputs as Array<{ type?: string; slider?: unknown }>) : [];
+    return 13 + inputs.filter(i => i.type === 'float' && i.slider != null).length * 36;
+  }
+  return 0;
+}
+
+/**
+ * Columns by data-flow rank (the Studio's auto layout and the converter's),
+ * each column stacked top to bottom with `gap` between cards. `heightOf`
+ * gives a card's height (measured when it has rendered, estimated before);
+ * `order` sorts a column (by id when omitted).
+ */
+export function layoutByRank(
+  nodes: GraphNode[],
+  opts: { heightOf?: (n: GraphNode) => number; order?: (a: GraphNode, b: GraphNode) => number; startX?: number; startY?: number; colW?: number; gap?: number } = {},
+): Map<string, { x: number; y: number }> {
+  const { heightOf = estimateNodeHeight, order, startX = 40, startY = 60, colW = 440, gap = 32 } = opts;
+  const out = new Map<string, { x: number; y: number }>();
+  for (const { rank, nodes: column } of groupNodesByRank(nodes)) {
+    let y = startY;
+    for (const n of order ? [...column].sort(order) : column) {
+      out.set(n.id, { x: startX + rank * colW, y });
+      y += heightOf(n) + gap;
+    }
+  }
+  return out;
 }
 
 /**

@@ -224,15 +224,76 @@ PSNR ≥ 40 dB counts as "same"; anything else shows the diff.
 | Construct | Today | Plan |
 |---|---|---|
 | `discard` | refused | `if (c) discard;` → alpha 0 through Output (RGBA); a general `discard` stays refused |
-| textures / `iChannelN` | refused | Texture Input node + `texture2D` → its colour/alpha outputs; iChannel slots become upload prompts in the preview |
-| unknown uniforms | refused | become Play controls (a uniform *is* a slider) or Constants entries; the preview asks for a default |
-| global `const`s | done | on the Constants card and in region text |
-| global variables (mutable) | refused | treat as first-assignment locals when only written in main; else region |
-| arrays, structs | refused | region (Custom Function) |
-| loop changing 2+ variables | iterated group (done) | a loop with `break` still needs a region; a "stop when" port on iterated groups would lift that |
-| vec4 arithmetic, `vec3` length/dot/normalize, `abs`, `pow`, `sqrt`, `min/max` on vectors | block | new nodes or type-generic versions of existing ones; an "exact" switch on Divide/Pow/Sqrt |
+| textures / `iChannelN` | read as black (the whole `texture(iChannelN, …)` call, however many parentheses it holds) | Texture Input node + `texture2D` → its colour/alpha outputs; iChannel slots become upload prompts in the preview |
+| unknown uniforms | refused; a **fix-up** makes each a const holding 0 (what WebGL gives an unset uniform), and a sampler black | become Play controls (a uniform *is* a slider) or Constants entries; the preview asks for a default |
+| global `const`s | done (const arrays travel as region text) | on the Constants card and in region text |
+| global variables (mutable) | done when only main() writes them (a parameter of every reader, forward declarations included) | a global a helper writes stays refused |
+| a global array a helper reads (`vec3 palette[7]` filled in main) | refused; a **fix-up** turns one main() fills with fixed values into a function (`vec3 palette(int i)`) | one filled at run time (black hole distortion's `pt[]`): arrays as parameters are legal ES 1.00 but niche |
+| arrays, structs in main | arrays with a fixed size: named slots; structs refused | region (Custom Function) |
+| loop that can't be a group, changing 2+ variables | done: Custom Functions returning the values packed four components at a time (as for out parameters), a block per value | a loop with `break` still needs a region; a "stop when" port on iterated groups would lift that |
+| `while` loop | done: kept as code like a `for` that can't be a group | `do … while` still refused |
+| loop headers `++i`, `i < NAMED_CONST` | read as countable loops (groups) | golf headers (`for(; i++ < 9.;)`) stay code |
+| `int` values | carried as floats in the graph; code kept as text gets them back as `int` (`int n = int(n_in);`), int division and `int(x)` that drops a fraction stay code | `ivec`, bit operations |
+| `uint`, `<<`, `^` (GLSL ES 3.00 integers) | refused; a **fix-up** puts a float hash in a float function built on them (a different random pattern, and it says so) | policy call: the Studio preview is WebGL2 and could run them, Play (WebGL1) can't |
+| `#ifdef` / `#ifndef` / `#if 0` / `#else` / `#endif` | done, against the shader's own `#define`s | `#if` with arithmetic |
+| statement macros (`#define S col += x;`), `\`-continued `#define`s | done: macros expand without added parentheses, as the preprocessor does | |
+| writes to several components (`col.rgb =`, `O.xz +=`, `gl_FragColor.a =`) | done: vec2/vec3 through Split and Make, vec4 through a block | |
+| an assignment or `++` inside an expression (golf: `O = ++h`, `mod(U += T, T)`) | kept inside its block when nothing reads the variable afterwards; **refused** when something does (a block gets its inputs by value, so the write would be lost and the picture silently differ); a **fix-up** gives each write a line of its own | |
+| comma operator | `a = x, b += y;` is two statements; `(x, y)` is y; a comma with writes stays code | |
+| vec4 arithmetic, `vec3` length/dot/normalize, `abs`, `pow`, `sqrt`, `min/max` on vectors, `tanh` on vectors | block | new nodes or type-generic versions of existing ones; an "exact" switch on Divide/Pow/Sqrt |
+| matrix products (`v * mat3(…)`) | block | a Transform node |
 | `.xyx`-style swizzles | block | a general Swizzle node (any pattern, any width) |
 | `mat2(c,-s,s,c) * v` | block | recognise the rotate pattern → Rotate 2D node |
+
+## The user corpus (50 shaders)
+
+`src/glslToGraph/__tests__/corpus/user/` holds the 50 shaders of a GLSL page
+export (2026-09-26): mostly Shadertoy pastes, a quarter of them code golf.
+`userCorpus.test.ts` checks each one converts, optimises and compiles, or is
+refused with its reason. The picture check runs in a browser:
+
+```
+npx tsx tools/g2n-corpus.mts src/glslToGraph/__tests__/corpus/user /tmp/g2n   # the Convert page's path
+node tools/g2n-corpus-check.mjs /tmp/g2n                                      # RenderPair's check, headless Chrome
+```
+
+| | Before | After |
+|---|---|---|
+| Same picture (the page's check as it was, WebGL1) | 17 | – |
+| Same picture (WebGL2, as the app renders) | 21 | **41** |
+| Differs | 2 (moire, oragami: silently wrong) | 3 (a handful of pixels, see below) |
+| Graph doesn't compile / check can't run | 4 | 0 |
+| Refused | 23 | 6 |
+
+Still refused: Fractal anxiety and black hole distortion (a global array
+helpers read), moire, oragami and rosace (a write inside an expression that a
+later line reads), trippy cells (`uint`). Polynomial approximation and the two
+chlandi shaders differ in 0.01–0.08 % of pixels: each adds a
+`fract(sin(dot(…)) * 43758.5)` hash whose last bits land differently once the
+code is split across blocks.
+
+**Fix-ups.** When the converter refuses a shader for a shape better solved by
+rewriting it, the Convert page's check lists a fix-up with an **Apply fix**
+button (`src/glslToGraph/fixups.ts`). Applying it rewrites the shader in the
+editor; you press Convert. From then on the check compares the graph with the
+shader *as it was before the fix-ups*, so a rewrite that changed the picture
+shows as Differs ("Undo the fix-ups" puts the original back). A fix-up is only
+offered when it applies cleanly and the rewrite no longer gets that refusal.
+
+| Fix-up | For | User corpus |
+|---|---|---|
+| Give each write a line of its own | a write inside an expression a later line reads | moire, oragami, rosace: same picture |
+| Make the array a function | a global array helpers read, filled in main() with numbers | Fractal anxiety: same picture |
+| Make the uniforms constants | a uniform with no source node; a sampler | (none in the corpus) |
+| Use a float hash | a float function built on uint / bit operations | trippy cells: converts, a different random pattern (labelled "Changes the picture") |
+
+With them, 45 of the 50 give the same picture as the shader as pasted
+(`tools/g2n-corpus.mts --fixups`); black hole distortion is still refused.
+
+The Convert page's check (`RenderPair`) is WebGL2 with three.js's
+ShaderMaterial prefix, like the app's preview; it was WebGL1, which rejected 13
+of these originals (`fwidth`, loops with a variable bound, ES 3.00 array
+constructors) that run fine in the Studio.
 
 ## The Convert page (shipped)
 

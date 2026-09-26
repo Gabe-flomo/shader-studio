@@ -22,7 +22,11 @@ export function CompletionPopup({ items, index, word, x, y, onPick, onHover }: {
   const tk = useTokens();
   const sel = items[index];
   const kbd = { font: `600 10px ${fontFamily.mono}`, color: tk.text.muted, background: tk.bg.hover, borderRadius: 4, padding: '1px 4px', marginRight: 4 };
-  const left = Math.min(x, window.innerWidth - 540);
+  // A helper with parameters or an example gets a wider description; on a phone it goes under the list.
+  const rich = !!(sel?.args?.length || sel?.example);
+  const docW = rich ? 280 : 200;
+  const stack = window.innerWidth < 320 + docW + 24;
+  const left = stack ? Math.min(x, window.innerWidth - 316) : Math.min(x, window.innerWidth - (316 + docW));
 
   return createPortal(
     <div
@@ -32,7 +36,7 @@ export function CompletionPopup({ items, index, word, x, y, onPick, onHover }: {
       {...portalGuard}
       onMouseDown={e => { e.preventDefault(); e.stopPropagation(); }}
       style={{
-        position: 'fixed', left: Math.max(8, left), top: y, zIndex: 2100, display: 'flex', alignItems: 'flex-start', padding: 4,
+        position: 'fixed', left: Math.max(8, left), top: y, zIndex: 2100, display: 'flex', flexDirection: stack ? 'column' : 'row', alignItems: 'flex-start', padding: 4,
         background: tk.bg.panel, borderRadius: radius.lg, boxShadow: tk.shadow.popover, font: `12px ${fontFamily.ui}`, color: tk.text.primary,
       }}
     >
@@ -70,11 +74,26 @@ export function CompletionPopup({ items, index, word, x, y, onPick, onHover }: {
         </div>
       </div>
       {sel?.doc && (
-        <div style={{ width: 200, marginLeft: 4, padding: '10px 12px', borderRadius: radius.md, background: tk.bg.subtle, color: tk.text.muted, lineHeight: 1.45 }}>
+        <div style={{ width: stack ? 300 : docW, boxSizing: 'border-box', margin: stack ? '4px 0 0' : '0 0 0 4px', padding: '10px 12px', borderRadius: radius.md, background: tk.bg.subtle, color: tk.text.muted, lineHeight: 1.45, overflowWrap: 'anywhere', maxHeight: Math.max(160, window.innerHeight - y - 16), overflowY: 'auto' }}>
           <div style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.primary }}>
-            {sel.name}{sel.detail}{sel.type && sel.kind === 'fn' ? ` → ${sel.type}` : ''}
+            {sel.name}{sel.detail}{sel.type && (sel.kind === 'fn' || rich) ? ` → ${sel.type}` : ''}
           </div>
           <div style={{ marginTop: 4 }}>{sel.doc}</div>
+          {!!sel.args?.length && (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>
+              {sel.args.map(a => (
+                <div key={a.name}>
+                  <span style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{a.name}</span>
+                  <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.faint }}> {a.type}{a.optional ? ', optional' : ''}</span>
+                  <span> · {a.doc}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {sel.returns && <div style={{ marginTop: 6, fontSize: 11.5 }}><b style={{ color: tk.text.secondary, fontWeight: 600 }}>Returns</b> {sel.returns}</div>}
+          {sel.example && (
+            <pre style={{ margin: '8px 0 0', padding: '6px 8px', borderRadius: 6, background: tk.bg.panel, color: tk.text.secondary, font: `500 11px/1.45 ${fontFamily.mono}`, whiteSpace: 'pre-wrap' }}>{sel.example}</pre>
+          )}
         </div>
       )}
     </div>,

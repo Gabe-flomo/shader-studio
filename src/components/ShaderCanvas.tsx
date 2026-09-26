@@ -147,21 +147,40 @@ void main() {
   gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 }`.trim();
 
-// Dithering blit: samples a float RT and adds triangular dither noise before 8-bit quantization
+// Dithering blit: samples a float RT and adds triangular dither noise before 8-bit quantization.
+// highp and a sine-free hash: the old fract(sin(dot(…))) hash, fed pixel
+// coordinates plus a seed that grew every frame, ran out of precision within a
+// second or two of playing: flat on some GPUs, row/column patterns where
+// mediump is half-float. The seed now stays small (ditherSeed).
 const BLIT_FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 uniform sampler2D tInput;
 uniform float u_seed;
 varying vec2 vUv;
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
 void main() {
   vec4 c = texture2D(tInput, vUv);
-  vec2 px = gl_FragCoord.xy + u_seed * 137.0;
+  vec2 px = gl_FragCoord.xy + fract(u_seed * vec2(0.7548777, 0.5698403)) * 512.0;
   float r1 = hash(px);
-  float r2 = hash(px + vec2(0.5, 0.0));
+  float r2 = hash(px + vec2(0.37, 0.71));
   float d = (r1 + r2 - 1.0) / 255.0;
-  gl_FragColor = vec4(clamp(c.rgb + d, 0.0, 1.0), c.a);
+  // Fade the dither out within one step of pure black / white: there the clamp
+  // keeps only one side of the noise, which just sprinkles a faint grain over
+  // a flat background (and brightens it) instead of hiding banding.
+  vec3 amp = clamp(min(c.rgb, 1.0 - c.rgb) * 255.0, 0.0, 1.0);
+  gl_FragColor = vec4(clamp(c.rgb + d * amp, 0.0, 1.0), c.a);
 }`.trim();
+
+/** The dither blit's per-frame seed, kept small so the shader never sees a huge float. */
+const ditherSeed = (n: number): number => (n % 4096) + 0.5;
 
 // Intercept WebGL shader compile errors from Three.js
 // Reading COMPILE_STATUS right after compileShader() blocks until the driver
@@ -662,8 +681,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         },
         setUniform: (name: string, value: number | number[]) => {
           const u = material.uniforms[name];
+          if (!u) return;
+          // A vector uniform (u_mouse) keeps its object: the live loop calls .set on it.
+          const vec = u.value as { fromArray?: (a: number[]) => unknown } | null;
+          if (Array.isArray(value) && vec && typeof vec === 'object' && typeof vec.fromArray === 'function') vec.fromArray(value);
           // As the live loop writes the input bus: a colour as a plain [r, g, b].
-          if (u) u.value = Array.isArray(value) ? [...value] : value;
+          else u.value = Array.isArray(value) ? [...value] : value;
         },
         renderAtTime: (time: number) => {
           material.uniforms.u_time.value = time;
@@ -671,7 +694,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           renderer.render(scene, camera);
           // Blit with dithering into 8-bit readback RT
           blitMat.uniforms.tInput.value = exportRT!.texture;
-          blitMat.uniforms.u_seed.value = time * 100.0;
+          blitMat.uniforms.u_seed.value = ditherSeed(Math.floor(time * 100.0));
           renderer.setRenderTarget(exportReadbackRT);
           renderer.render(blitScene, camera);
           renderer.setRenderTarget(null);
@@ -1040,6 +1063,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         const u = material.uniforms[uName];
         if (u) u.value = v;
       }
+      // A take playing back holds u_mouse where the performance had it (0..1 of the picture).
+      const heldMouse = inputBus.mouseOverride();
+      if (heldMouse) {
+        const mu = material.uniforms.u_mouse.value as THREE.Vector2;
+        const mx = heldMouse[0] * renderer.domElement.width, my = heldMouse[1] * renderer.domElement.height;
+        if (mu.x !== mx || mu.y !== my) { mu.set(mx, my); needsRender = true; }
+      }
       // A knob turned while the clock is paused still has to show; so does a layer a mapping moved.
       if (inputBus.changed() || playEngine.layerChanged()) needsRender = true;
       // Draw live spectrum into any open AudioInputModal canvases
@@ -1092,7 +1122,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           renderer.render(scene, camera);
           if (echoRef.current) captureEcho(writeRT.texture);
           blitMat.uniforms.tInput.value = writeRT.texture;
-          blitMat.uniforms.u_seed.value = frameCount * 1.618;
+          blitMat.uniforms.u_seed.value = ditherSeed(frameCount);
           renderer.setRenderTarget(null);
           renderer.render(blitScene, camera);
           gpuTimer.end();
@@ -1103,7 +1133,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           renderer.render(scene, camera);
           if (echoRef.current) captureEcho(floatRt.texture);
           blitMat.uniforms.tInput.value = floatRt.texture;
-          blitMat.uniforms.u_seed.value = frameCount * 1.618;
+          blitMat.uniforms.u_seed.value = ditherSeed(frameCount);
           renderer.setRenderTarget(null);
           renderer.render(blitScene, camera);
           gpuTimer.end();
@@ -1603,6 +1633,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const y = (e.clientY - rect.top) * renderScale;
       // Update u_mouse uniform (WebGL coords: 0 = bottom-left)
       material.uniforms.u_mouse.value.set(x, rect.height * renderScale - y);
+      // The same place as 0..1 of the picture, for a take recording the performance.
+      if (rect.width > 0 && rect.height > 0) inputBus.setMouse((e.clientX - rect.left) / rect.width, 1 - (e.clientY - rect.top) / rect.height);
       // Track for pixel readback (DOM coords: 0 = top-left)
       mousePosRef.current = { x, y };
       requestRender(); // u_mouse changed, and the pixel readout wants a sample

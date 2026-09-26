@@ -32,7 +32,7 @@ import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPr
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
-const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, lens: 1 };
+const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, lens: 1, script: 1 };
 
 export function createLayerKit() {
   const pool = {};

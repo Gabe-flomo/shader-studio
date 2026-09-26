@@ -35,14 +35,15 @@ import { ctp } from './theme/palette';
 // Record loads with the app, not on demand: on a busy Play page (a mapping refreshing the panel
 // every frame) React never gets idle time to finish a lazily loaded dialog, and Record would do nothing.
 import { ExportModal } from './components/ExportModal';
-import type { PresentStage as PresentStageT } from './components/play/PresentStage';
+import type { Stage as StageT } from './components/play/Stage';
 import type { ConvertPage as ConvertPageT } from './components/convert/ConvertPage';
 import { requestConvert } from './components/convert/convertHandoff';
-import { usePresent } from './components/play/presentStore';
+import { useStage } from './components/play/stageStore';
 import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './components/KeyboardShortcutsModal';
 import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
 import type { GLSLPage as GLSLPageT } from './components/GLSLPage';
 import type { PlayPage as PlayPageT } from './components/play/PlayPage';
+import type { PresentPage as PresentPageT } from './components/present/PresentPage';
 import type { FunctionBuilder as FunctionBuilderT } from './components/FunctionBuilder/FunctionBuilder';
 import type { MobileGraphBrowser as MobileGraphBrowserT, MobileNodeGraphOverlay as MobileNodeGraphOverlayT } from './components/NodeGraph/MobileGraphBrowser';
 import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeGraph/MobileNodeBrowser';
@@ -57,9 +58,10 @@ import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeG
 const KeyboardShortcutsModal = lazyWithSuspense<PropsOf<typeof KeyboardShortcutsModalT>>(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
 const ShortcutsPage          = lazyWithSuspense<PropsOf<typeof ShortcutsPageT>>(() => import('./components/ShortcutsPage').then(m => ({ default: m.ShortcutsPage })));
 const GLSLPage               = lazyWithSuspense<PropsOf<typeof GLSLPageT>>(() => import('./components/GLSLPage').then(m => ({ default: m.GLSLPage })));
-const PresentStage           = lazyWithSuspense<PropsOf<typeof PresentStageT>>(() => import('./components/play/PresentStage').then(m => ({ default: m.PresentStage })));
+const Stage                  = lazyWithSuspense<PropsOf<typeof StageT>>(() => import('./components/play/Stage').then(m => ({ default: m.Stage })));
 const ConvertPage            = lazyWithSuspense<PropsOf<typeof ConvertPageT>>(() => import('./components/convert/ConvertPage').then(m => ({ default: m.ConvertPage })));
 const PlayPage               = lazyWithSuspense<PropsOf<typeof PlayPageT>>(() => import('./components/play/PlayPage').then(m => ({ default: m.PlayPage })));
+const PresentPage            = lazyWithSuspense<PropsOf<typeof PresentPageT>>(() => import('./components/present/PresentPage').then(m => ({ default: m.PresentPage })));
 const FunctionBuilder        = lazyWithSuspense<PropsOf<typeof FunctionBuilderT>>(() => import('./components/FunctionBuilder/FunctionBuilder').then(m => ({ default: m.FunctionBuilder })));
 const MobileGraphBrowser     = lazyWithSuspense<PropsOf<typeof MobileGraphBrowserT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileGraphBrowser })));
 const MobileNodeGraphOverlay = lazyWithSuspense<PropsOf<typeof MobileNodeGraphOverlayT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileNodeGraphOverlay })));
@@ -487,12 +489,18 @@ function App() {
 
   // Export animation modal
   const [showExport, setShowExport]           = useState(false);
+  // Render… on a take, or Record a performance on the Play page (lib/takes.ts).
+  useEffect(() => {
+    const open = () => setShowExport(true);
+    window.addEventListener('open-record', open);
+    return () => window.removeEventListener('open-record', open);
+  }, []);
   // After Materialize on the Convert page: the Studio, with the new graph in view.
   const openStudioFitted = useCallback(() => { setPage('studio'); setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(), 80); }, []);
   const openConvertWith = useCallback((code: string) => { requestConvert(code); setPage('convert'); }, []);
-  // Present › Exact records the website player's canvas instead of the app's.
+  // Stage › Exact records the website player's canvas instead of the app's.
   const [recordSource, setRecordSource]       = useState<HTMLCanvasElement | null>(null);
-  const presentMode = usePresent(s => s.mode);
+  const stageMode = useStage(s => s.mode);
   // Mobile: the record button opens a menu (Record / Reset / Import / Export)
   // instead of jumping straight into the export modal, and a separate
   // Examples button opens a browsable gallery of starter graphs.
@@ -727,12 +735,12 @@ function App() {
   ) : null;
 
   // ══════════════════════════════════════════════════════════════════════════
-  // PRESENT — the Play setup on its own, as people will play with it
+  // STAGE — the Play setup on its own, as people will play with it
   // ══════════════════════════════════════════════════════════════════════════
-  if (presentMode) {
+  if (stageMode) {
     return (
       <ThemeOverrideContext.Provider value="dark">
-        <PresentStage
+        <Stage
           canvas={<ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />}
           onRecord={src => { setRecordSource(src); setShowExport(true); }}
         />
@@ -1028,6 +1036,15 @@ function App() {
     );
   }
 
+  if (mobile && page === 'present') {
+    return (
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+        <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage compact onNavigate={setPage} /></div>
+      </div>
+    );
+  }
+
   if (mobile && page === 'convert') {
     return (
       <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
@@ -1059,6 +1076,7 @@ function App() {
         {page === 'shortcuts' && <ShortcutsPage />}
         {page === 'glsl' && <GLSLPage onConvert={openConvertWith} />}
         {page === 'convert' && <div style={{ flex: 1, position: 'relative', minWidth: 0 }}><ConvertPage onMaterialized={openStudioFitted} /></div>}
+        {page === 'present' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage onNavigate={setPage} /></div>}
 
         <div style={{ display: (page === 'studio' || page === 'play') ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
 
@@ -1157,6 +1175,7 @@ function App() {
       <DesktopTopNav page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
 
       {page === 'shortcuts' && <ShortcutsPage />}
+      {page === 'present' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage onNavigate={setPage} /></div>}
       {page === 'fn' && (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <FunctionBuilder onNavigateToStudio={() => setPage('studio')} />
@@ -1237,7 +1256,7 @@ function App() {
               <PreviewHeader>
                 <AspectPicker />
                 {page === 'play' && <GuidesToggle />}
-                {page === 'play' && <Button size="sm" variant="ghost" icon="play" onClick={() => usePresent.getState().present('full')} title="Present: the picture and its controls on their own, as people will play with it (Full or Exact, phone or screen, fullscreen, Record)">Present</Button>}
+                {page === 'play' && <Button size="sm" variant="ghost" icon="play" onClick={() => useStage.getState().open('full')} title="Stage: the picture and its controls on their own, as people will play with it (Full or Exact, phone or screen, fullscreen, Record)">Stage</Button>}
                 <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
                 <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
               </PreviewHeader>
