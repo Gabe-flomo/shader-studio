@@ -49,6 +49,7 @@ import { useLiveValues } from './useLiveValues';
 import { usePresent } from './presentStore';
 import { SoloButton, SoloStrip } from './Solo';
 import { GuidesToggle } from './GuidesToggle';
+import { OpenPlayableButton } from './OpenPlayable';
 import { MidiFileCard } from './MidiFileCard';
 import { TriggerPicker } from './TriggerPicker';
 import { ACTIONS_FOR, DEFAULT_DISPLAY, LAYER_NUMERIC_PROPS, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
@@ -328,6 +329,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
         extra={(
           <>
+            <OpenPlayableButton compact={compact} />
             <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
             <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
             {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
