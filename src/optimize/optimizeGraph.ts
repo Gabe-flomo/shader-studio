@@ -369,7 +369,7 @@ function absorbList(nodes: GraphNode[], opts: OptimizeOptions & { protect: Reado
     if (taken.has(c.id)) continue;
     for (const [k, s] of Object.entries(c.inputs)) {
       const conn = s.connection;
-      if (!conn || !can.has(conn.nodeId) || taken.has(conn.nodeId) || !canHaveInputExpr(c, k)) continue;
+      if (!conn || !can.has(conn.nodeId) || taken.has(conn.nodeId) || !canHaveInputExpr(c, k, defs.get(c.id))) continue;
       if (outType(conn.nodeId, conn.outputKey) !== 'float') continue;
       // Walk upstream while each card is read only here and passes one float through.
       const chain: Array<{ node: GraphNode; expr: string; up: { nodeId: string; outputKey: string } }> = [];

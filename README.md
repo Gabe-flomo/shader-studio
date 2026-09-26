@@ -165,7 +165,8 @@ Feature documentation lives in `docs/`:
 | [`docs/input-expressions.md`](docs/input-expressions.md) | A one-line expression on a float input (`input * 2.0 + sin(t)`) that leaves the raw input keyframeable; how the optimiser writes them |
 | [`docs/multi-output-nodes.md`](docs/multi-output-nodes.md) | Custom Functions with extra `out`-style outputs, Expression Blocks that expose their variables as sockets |
 | [`docs/cloner-layer.md`](docs/cloner-layer.md) | The Play Cloner layer: copies of a shape, text, image or null in a grid, ring, line, path or on particles, varied by index, shaped by null and shape effectors |
-| [`docs/field-sockets-plan.md`](docs/field-sockets-plan.md) | Plan: sockets that take a node's code as a function of position (a shape by wire into Grid Pattern), grid overflow across cells, and the Array node |
+| [`docs/field-sockets.md`](docs/field-sockets.md) | Field sockets: inputs that take a node's code as a function of position. A shape by wire into Grid Pattern, Overflow across cells, the Array node and the Cell node; how the compiler builds the functions |
+| [`docs/field-sockets-plan.md`](docs/field-sockets-plan.md) | The original plan for field sockets (built; see field-sockets.md): sockets that take a node's code as a function of position (a shape by wire into Grid Pattern), grid overflow across cells, and the Array node |
 | [`docs/function-discovery.md`](docs/function-discovery.md) | Discover functions: scan the saved GLSL shaders for self-contained functions (by dependency level, return type, parameters), preview, Show in file, save to the Functions library |
 | [`docs/constants-node.md`](docs/constants-node.md) | The Constants card: named values, fixed or with sliders, outputs only, Play-controllable |
 | [`docs/playfield-sdk.md`](docs/playfield-sdk.md) | The SDK / add-on idea: layers, mappings and feeds as installable extensions (a write-up, not built) |

@@ -14,6 +14,7 @@
  * path (top level, groups, iterated groups) gets it without knowing.
  */
 import type { GraphNode, NodeDefinition } from '../types/nodeGraph';
+import { FIELD_FN_PREFIX } from '../nodes/definitions/helpers';
 
 export const INPUT_EXPR_PREFIX = '__inExpr_';
 export const inputExprKey = (inputKey: string) => `${INPUT_EXPR_PREFIX}${inputKey}`;
@@ -24,9 +25,14 @@ export function getInputExpr(node: GraphNode, inputKey: string): string | null {
   return typeof v === 'string' && v.trim() ? v.trim() : null;
 }
 
-/** Whether an input can take an expression: a float socket on a card that emits GLSL. */
-export function canHaveInputExpr(node: GraphNode, inputKey: string): boolean {
+/**
+ * Whether an input can take an expression: a float socket on a card that
+ * emits GLSL. A field socket (pass the definition to know) cannot: what
+ * arrives there is a function, not a value.
+ */
+export function canHaveInputExpr(node: GraphNode, inputKey: string, def?: NodeDefinition): boolean {
   const s = node.inputs[inputKey];
+  if (def?.inputs[inputKey]?.field) return false;
   return !!s && s.type === 'float' && !['output', 'vec4Output', 'group', 'loopCarry'].includes(node.type);
 }
 
@@ -109,6 +115,7 @@ export function applyInputExpressions(node: GraphNode, inputVars: Record<string,
     const socket = node.inputs[inputKey];
     if (!socket || socket.type !== 'float') continue;
     let raw = inputVars[inputKey];
+    if (raw?.startsWith(FIELD_FN_PREFIX)) continue; // a field socket: a function name, not a value
     if (raw === undefined) {
       const p = node.params[inputKey];
       if (typeof p === 'number') raw = fmt(p); else if (typeof p === 'string' && p.trim()) raw = p; else continue;

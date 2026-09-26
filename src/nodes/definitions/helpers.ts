@@ -58,3 +58,20 @@ export function zeroFor(type: string): string {
 }
 
 export type NodeRegistry = Record<string, NodeDefinition>;
+
+/**
+ * Field sockets: the compiler names every field function with this prefix
+ * and passes the name in `inputVars[key]`.
+ */
+export const FIELD_FN_PREFIX = 'fieldfn_';
+
+/**
+ * The field function wired into a field socket, or undefined. Anything else
+ * (unwired, or a compile path that does not build field functions yet, such
+ * as the inside of a group, which hands over the plain value) reads as
+ * unwired, so the node falls back to its built-in behaviour instead of
+ * emitting a call to something that is not a function.
+ */
+export function fieldFn(v: string | undefined): string | undefined {
+  return v && v.startsWith(FIELD_FN_PREFIX) && /^\w+$/.test(v) ? v : undefined;
+}

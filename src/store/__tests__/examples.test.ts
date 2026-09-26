@@ -103,4 +103,17 @@ describe('bundled examples', () => {
     }
     expect(bad).toEqual([]);
   });
+
+  it('the field-socket combos compile their shapes as field functions (one per wired socket)', () => {
+    const expected: Record<string, string[]> = {
+      comboGridShapeByWire: ['fieldfn_circ_0_distance', 'fieldfn_pal_0_color'],
+      comboArrayStars: ['fieldfn_shape_0_distance', 'fieldfn_pal_0_color'],
+    };
+    for (const [k, fns] of Object.entries(expected)) {
+      const r = compileGraph({ nodes: resolveNodeAliases(EXAMPLE_GRAPHS[k].nodes, getNodeDefinition) });
+      expect(r.errors ?? [], k).toEqual([]);
+      const defined = [...r.fragmentShader.matchAll(/^(?:float|vec3) (fieldfn_\w+)\(vec2 g_uv,/gm)].map(m => m[1]);
+      expect(defined, k).toEqual(fns);
+    }
+  });
 });

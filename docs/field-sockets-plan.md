@@ -1,7 +1,8 @@
 # Field sockets: a shape by wire, grid overflow, and the Array node
 
 Implementation guide. Written so a fresh session can build this without the
-conversation that led to it. Status: **not started**. Function discovery is
+conversation that led to it. Status: **built**; see `docs/field-sockets.md`
+for how it works and where the implementation differs from this plan. Function discovery is
 being built in a separate session at the same time; see *Coordination* at
 the end before touching shared files.
 

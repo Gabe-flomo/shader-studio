@@ -55,6 +55,7 @@ const TYPE_ABBREV: Record<string, string> = {
   group: 'grp',
   marchLoopInputs: 'mli', marchLoopOutput: 'mlo', marchSceneDist: 'msd',
   // Halftone
+  fieldCell: 'fcell', arrayField: 'arr',
   gridUV: 'guvt', pixelate: 'pxl', dotMask: 'dot', sdfMask: 'sdmk',
   lumaRadius: 'lrad', rgbToCMYK: 'cmyk', cmykHalftone: 'cmykht',
   // Vertex Particles

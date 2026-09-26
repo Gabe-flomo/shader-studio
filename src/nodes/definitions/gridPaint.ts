@@ -16,12 +16,16 @@ import { p, pv3 } from './helpers';
  *     colour, or a per-cell picture wired into Colour).
  *   - Only Colour wired: the whole cell shows the colour.
  *   - Distance is measured in Cell UV units, like Grid Pattern's own.
+ *
+ * The one-wire alternative is Grid Pattern's Shape / Picture field sockets
+ * (docs/field-sockets.md); this node stays for chains that need Grid
+ * Pattern's other outputs or finishing after the shape.
  */
 export const GridPaintNode: NodeDefinition = {
   type: 'gridPaint',
   label: 'Grid Paint',
   category: 'Grid',
-  description: 'Paints a shape of your own on Grid Pattern’s cells. Wire Grid Pattern’s Cell UV into any SDF (or anything that makes a colour), bring the Distance or Colour here, and wire Placed across so the pattern’s empty cells stay empty. Distance wired: its inside is painted with Colour; Colour alone: the whole cell shows it.',
+  description: 'Paints a shape of your own on Grid Pattern’s cells. Wire Grid Pattern’s Cell UV into any SDF (or anything that makes a colour), bring the Distance or Colour here, and wire Placed across so the pattern’s empty cells stay empty. Distance wired: its inside is painted with Colour; Colour alone: the whole cell shows it. For a simple shape you can skip Grid Paint: wire the SDF straight into Grid Pattern’s Shape.',
   inputs: {
     distance:   { type: 'float', label: 'Distance', hint: 'An SDF measured in Cell UV units (Circle SDF, Shape SDF, a Custom Function…). Negative is inside.' },
     color:      { type: 'vec3',  label: 'Colour', hint: 'What the shape is painted with: a flat colour, a Palette, or a picture computed per cell.' },

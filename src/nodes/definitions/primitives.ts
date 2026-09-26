@@ -2,6 +2,9 @@ import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p } from './helpers';
 
 // ─── Legacy standalone nodes (kept for backwards compat) ─────────────────────
+// An unwired UV is the canvas UV, as on every other shape node, so a shape
+// dropped in on its own draws, and one wired into a field socket (Grid
+// Pattern's Shape, Array's Shape) is drawn at the call's position.
 
 export const CircleSDFNode: NodeDefinition = {
   type: 'circleSDF',
@@ -23,7 +26,7 @@ export const CircleSDFNode: NodeDefinition = {
   glslFunction: `float circleSDF(vec2 point, float size) { return length(point) - size; }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar    = `${node.id}_dist`;
-    const posVar    = inputVars.position || 'vec2(0.0)';
+    const posVar    = inputVars.position || 'g_uv';
     const radiusVar = inputVars.radius   || p(node.params.radius, 0.3);
     const px        = p(node.params.posX, 0.0);
     const py        = p(node.params.posY, 0.0);
@@ -59,7 +62,7 @@ export const BoxSDFNode: NodeDefinition = {
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar    = `${node.id}_dist`;
-    const posVar    = inputVars.position   || 'vec2(0.0)';
+    const posVar    = inputVars.position   || 'g_uv';
     const w         = p(node.params.width,  0.5);
     const h         = p(node.params.height, 0.5);
     const dimsVar   = inputVars.dimensions || `vec2(${w}, ${h})`;
@@ -93,7 +96,7 @@ export const RingSDFNode: NodeDefinition = {
   glslFunction: `float ringSDF(vec2 point, float size) { return abs(length(point) - size); }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar    = `${node.id}_dist`;
-    const posVar    = inputVars.position || 'vec2(0.0)';
+    const posVar    = inputVars.position || 'g_uv';
     const radiusVar = inputVars.radius   || p(node.params.radius, 0.3);
     const px        = p(node.params.posX, 0.0);
     const py        = p(node.params.posY, 0.0);

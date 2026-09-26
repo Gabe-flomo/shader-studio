@@ -21,6 +21,8 @@ export { PlayLayersNode } from './playLayers';
 // Grid
 export { GridPatternNode } from './gridPattern';
 export { GridPaintNode } from './gridPaint';
+export { ArrayFieldNode } from './arrayField';
+export { FieldCellNode } from './fieldCell';
 export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
 
 // Grid Field
@@ -171,6 +173,8 @@ import { PlayLayersNode } from './playLayers';
 import { EchoNode } from './echo';
 import { GridPatternNode } from './gridPattern';
 import { GridPaintNode } from './gridPaint';
+import { ArrayFieldNode } from './arrayField';
+import { FieldCellNode } from './fieldCell';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
 import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, GlowFalloffNode, NoisyGridSDFNode } from './gridField';
 import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
@@ -319,6 +323,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gridDensityWarp: GridDensityWarpNode,
   gridPattern: GridPatternNode,
   gridPaint: GridPaintNode,
+  arrayField: ArrayFieldNode,
+  fieldCell: FieldCellNode,
   neighborOffset2d: NeighborOffset2dNode,
   animatedCellCenter: AnimatedCellCenterNode,
   neighborAttractCircles: NeighborAttractCirclesNode,
