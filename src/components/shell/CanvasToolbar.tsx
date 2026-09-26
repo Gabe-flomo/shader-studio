@@ -17,7 +17,7 @@ import { PerfBadge, PerfPanel } from './PerfPanel';
  * current context (opens graph stats), zoom, fit, auto layout, minimap, clear.
  */
 export function CanvasToolbar({
-  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false, readOnly = false,
+  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false, readOnly = false, onOptimize,
 }: {
   nodes: readonly GraphNode[];
   topLevel: boolean;
@@ -39,6 +39,8 @@ export function CanvasToolbar({
   compact?: boolean;
   /** A locked canvas: no auto layout and no clearing, the view tools stay. */
   readOnly?: boolean;
+  /** Open the optimise-graph dialog (runs of math cards → blocks). */
+  onOptimize?: () => void;
 }) {
   const tk = useTokens();
   const selected = useNodeGraphStore(s => s.selectedNodeIds.length);
@@ -113,6 +115,9 @@ export function CanvasToolbar({
       <IconButton icon="minimap" label={showMinimap ? 'Hide minimap' : 'Show minimap'} size="sm" active={showMinimap} onClick={onToggleMinimap} />
       {onToggleOutline && (
         <IconButton icon="layoutGraph" label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} size="sm" active={!!showOutline} onClick={onToggleOutline} />
+      )}
+      {!readOnly && onOptimize && (
+        <IconButton icon="spark" label="Optimise graph: fold runs of math cards into Expression Blocks, sliders kept, picture unchanged" size="sm" onClick={onOptimize} />
       )}
       {!readOnly && (
         <span onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onClearMinimal?.(); }} style={{ display: 'inline-flex' }}>

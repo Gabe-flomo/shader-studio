@@ -236,18 +236,47 @@ are offered as the node with a warning, with the option to keep the code
 exactly, per expression; the preview is the real canvas, read-only until
 materialized.
 
-## Next step: an optimise-graph pass
+## The optimise-graph pass (first strategy shipped)
 
 A converted graph is faithful, not idiomatic: a chain of Multiply, Add and Sin
-cards where a person would write one expression. The plan is a pass over any
-graph (converted or hand-built), behind an **Optimise graph** button with
-strategies to choose from, each a graph → graph rewrite that keeps the render
-identical (the pixel harness proves it):
+cards where a person would write one expression. `src/optimize/optimizeGraph.ts`
+is a pass over any graph (converted or hand-built): a graph → graph rewrite
+that keeps the render identical (the pixel harness proves it: 17 of 17 graphs,
+corpus and pasted, max error 0 before vs after).
 
-- **Chains into blocks.** A run of arithmetic/math cards with one consumer
-  each folds into one Expression Block; the run's slider values become the
-  block's slider inputs, so nothing loses its knob. Threshold: three or more
-  cards, or a run the user selects.
+**Chains into blocks (shipped).** A run of math cards that flows into one
+place folds into one Expression Block. The block's lines are the very GLSL
+those cards emit (each card's `generateGLSL` run with the block's local names,
+one line per card), so the shader is the same text in a different wrapper.
+Every slider a card had becomes a slider input on the block, named
+`card_param`, so nothing loses its knob; what comes into the run from outside
+is a block input. Runs are found downstream first: an *exit* is a foldable
+card read through one output by something that can't join the run, and the
+run grows upstream through cards whose every reader is already in it. Never
+folded: sources and cards with no inputs, Constants and Color cards, groups,
+loop carries and indices, blocks and functions, keyframed or bypassed cards,
+accumulators, cards a Play control targets, cards needing helper functions,
+anything whose GLSL isn't plain declarations, and a card two places read.
+Inside iterated groups the same pass runs with the group's output ports as
+outside readers, so a port that read an exit reads its block.
+
+**Where it lives.** The Studio toolbar's spark button opens *Optimise graph*:
+minimum run length (2/3/4), keep sliders or bake them, only the selection;
+the list of runs; before and after rendered side by side with Same / Differs;
+Apply is one undo step and is disabled when the pictures differ. The Convert
+page has an *As written / Optimised* switch on its banner; Optimised (the
+default) applies the pass to the converted graph before it reaches the canvas,
+and the check compares the pasted shader with the optimised graph.
+
+**Still to do:**
+
+- **Chains into blocks, tuning.** A run the user selects should fold even when
+  short; a block's slider inputs are baked literals today (Expression Block
+  behaviour), so a drag recompiles; making them uniforms is a block change.
+- **Input expressions** (a separate idea, noted): a one-line expression on a
+  float input, rooted in `input`, modifying the incoming value while the raw
+  input stays keyframeable. With it, the converter could absorb small
+  arithmetic into the consuming card instead of separate nodes.
 - **Fan-in into functions.** A subgraph used from several places (the same
   shape of nodes twice) becomes one Custom Function called twice, its
   literals as inputs.

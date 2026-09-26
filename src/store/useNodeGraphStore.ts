@@ -670,6 +670,12 @@ interface NodeGraphState {
   ) => void;
   /** Rewrite a Constants card's entries: params, output sockets, and wires to outputs that went away. One undo step. */
   setConstantsItems: (nodeId: string, items: ConstantsItem[]) => void;
+  /**
+   * Put a rewritten copy of the whole graph in place (the optimiser's result):
+   * one undo step, Play setup and saved identity kept, loose groups pruned of
+   * members that no longer exist.
+   */
+  setNodesRewritten: (nodes: GraphNode[]) => void;
 
   /** Change the vector type of a vectorizable math node (sin, cos, pow, etc.).
    *  Updates params.outputType plus the primary input and output socket types. */
@@ -4295,6 +4301,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
       return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, bypassed: !n.bypassed } : n) };
     });
+    get().compile();
+  },
+
+  setNodesRewritten: (nodes) => {
+    undoManager.push(get().nodes);
+    const ids = new Set(nodes.map(n => n.id));
+    set(st => ({ nodes, looseGroups: st.looseGroups.map(g => ({ ...g, memberIds: g.memberIds.filter(id => ids.has(id)) })).filter(g => g.memberIds.length > 1), selectedNodeId: st.selectedNodeId && ids.has(st.selectedNodeId) ? st.selectedNodeId : null, selectedNodeIds: st.selectedNodeIds.filter(id => ids.has(id)), nodeProbeValues: null }));
     get().compile();
   },
 

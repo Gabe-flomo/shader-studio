@@ -28,6 +28,9 @@ import { SelectionBar } from '../shell/SelectionBar';
 import { GraphOutline } from './GraphOutline';
 import { portalGuard } from '../ui/portalGuard';
 import { removeFromPlay } from '../../play/playDriven';
+import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
+import type { OptimizeModal as OptimizeModalT } from './OptimizeModal';
+const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 
 // ─── Layout constants (must match NodeComponent.tsx CSS) ────────────────────
 const NODE_WIDTH = 360;
@@ -66,6 +69,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
 }) {
   const lockedRef = useRef(locked);
   useEffect(() => { lockedRef.current = locked; }, [locked]);
+  const [showOptimize, setShowOptimize] = useState(false);
   const tc = useCtp();
   const tk = useTokens();
   const ctxBtnStyle = ctxBtnStyleFor(tc);
@@ -1256,8 +1260,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           onClearMinimal={() => useNodeGraphStore.getState().clearToMinimal()}
           compact={compactToolbar}
           readOnly={locked}
+          onOptimize={() => setShowOptimize(true)}
         />
       )}
+      {showOptimize && <OptimizeModal onClose={() => setShowOptimize(false)} />}
       {redesignToolbar && !locked && <SelectionBar top={previewNodeId ? 108 : 66} />}
       {redesignToolbar && showOutline && <GraphOutline nodes={displayNodes} top={previewNodeId ? 132 : 66} onClose={() => setShowOutline(false)} />}
 

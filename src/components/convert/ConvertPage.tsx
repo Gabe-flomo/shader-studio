@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { glslToGraph, normaliseHostShader, type ConversionResult } from '../../glslToGraph';
 import { tidyGlsl } from '../../glsl/format';
+import { optimizeGraph } from '../../optimize/optimizeGraph';
 import { dialectLabel } from '../../glsl/dialects';
 import { parseGlslError, friendlyGlsl } from '../../compiler/nodeErrors';
 import { compileGraph } from '../../compiler/graphCompiler';
@@ -130,6 +131,7 @@ function wrapOriginal(source: string): { code: string; toSourceLine: (line: numb
 }
 
 const PANE_KEY = 'shader-studio:convert:pane';
+const OPT_KEY = 'shader-studio:convert:optimised';
 
 export function ConvertPage({ onMaterialized, compact = false }: { onMaterialized: () => void; compact?: boolean }) {
   const tk = useTokens();
@@ -143,7 +145,12 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const debounced = useDebounced(code, 250);
   useEffect(() => { try { localStorage.setItem(CODE_KEY, code); } catch { /* preference only */ } }, [code]);
 
-  const conv: ConversionResult = useMemo(() => glslToGraph(debounced, { asBlock }), [debounced, asBlock]);
+  const raw: ConversionResult = useMemo(() => glslToGraph(debounced, { asBlock }), [debounced, asBlock]);
+  // Optimised: the converted graph with runs of math cards folded into blocks (the picture is the same; the check proves it).
+  const [optimised, setOptimised] = useState(() => { try { return localStorage.getItem(OPT_KEY) !== 'off'; } catch { return true; } });
+  useEffect(() => { try { localStorage.setItem(OPT_KEY, optimised ? 'on' : 'off'); } catch { /* preference only */ } }, [optimised]);
+  const opt = useMemo(() => (optimised && raw.nodes.length ? optimizeGraph(raw.nodes, { minChain: 3, keepSliders: true }) : null), [raw, optimised]);
+  const conv: ConversionResult = useMemo(() => (opt ? { nodes: opt.nodes, report: { ...raw.report, notes: [...raw.report.notes, ...(opt.report.folds.length ? [`Optimised: ${opt.report.folds.length} ${opt.report.folds.length === 1 ? 'run' : 'runs'} of math cards folded into blocks (${opt.report.before} → ${opt.report.after} nodes)`] : [])] } } : raw), [raw, opt]);
   const compiled = useMemo(() => (conv.nodes.length ? compileGraph({ nodes: conv.nodes }) : null), [conv]);
   const wrapped = useMemo(() => wrapOriginal(debounced), [debounced]);
   const original = wrapped.code;
@@ -338,6 +345,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
         <div style={{ position: 'absolute', top: 66, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 4px 12px', borderRadius: 10, maxWidth: 'calc(100% - 32px)', background: tk.bg.panel, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${alpha(tk.accent.base, 0.35)}`, color: tk.text.secondary, whiteSpace: 'nowrap' }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: tk.accent.base, flexShrink: 0 }} />
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Read-only preview <span style={{ color: tk.text.muted }}>· {summary}</span></span>
+          <Segmented size="sm" ariaLabel="Graph form" value={optimised ? 'opt' : 'raw'} onChange={v => setOptimised(v === 'opt')} options={[{ value: 'raw', label: 'As written' }, { value: 'opt', label: 'Optimised' }]} />
           <Button size="sm" variant="ghost" onClick={keepAsOne} title="The older import: the whole shader as one code node">Keep as one node…</Button>
           <Button size="sm" variant="primary" icon="nodes" disabled={blocked} onClick={materialize} title={blocked ? 'Fix what the check lists first' : 'Keep these nodes as the graph and open the Studio (undoable)'}>Materialize</Button>
         </div>

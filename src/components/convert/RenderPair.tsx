@@ -63,8 +63,11 @@ function draw(side: Side, size: number, time: number, uniforms: Record<string, n
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
-export function RenderPair({ original, graph, uniforms, onDiff, size = 168 }: {
-  original: string; graph: string | null; uniforms: Record<string, number | number[]>; onDiff: (d: PairDiff | null) => void; size?: number;
+export function RenderPair({ original, graph, uniforms, originalUniforms, onDiff, size = 168, labels = ['Original', 'As nodes'] }: {
+  original: string; graph: string | null; uniforms: Record<string, number | number[]>;
+  /** Uniform values for the original side too (when it is a compiled graph rather than a pasted shader). */
+  originalUniforms?: Record<string, number | number[]>;
+  onDiff: (d: PairDiff | null) => void; size?: number; labels?: [string, string];
 }) {
   const tk = useTokens();
   const a = useRef<HTMLCanvasElement>(null), b = useRef<HTMLCanvasElement>(null);
@@ -95,7 +98,7 @@ export function RenderPair({ original, graph, uniforms, onDiff, size = 168 }: {
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
       const t = (now - t0) / 1000;
-      draw(A, size, t, {}); draw(B, size, t, uniforms);
+      draw(A, size, t, originalUniforms ?? {}); draw(B, size, t, uniforms);
       if (now - lastCmp > 500) {
         lastCmp = now;
         A.gl.readPixels(0, 0, size, size, A.gl.RGBA, A.gl.UNSIGNED_BYTE, pa);
@@ -107,14 +110,14 @@ export function RenderPair({ original, graph, uniforms, onDiff, size = 168 }: {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [original, graph, uniforms, size, onDiff]);
+  }, [original, graph, uniforms, originalUniforms, size, onDiff]);
 
   const frame = { width: size, height: size, borderRadius: radius.md, background: '#000', display: 'block' } as const;
   const cap = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginTop: 4 };
   return (
     <div style={{ display: 'flex', gap: 10 }}>
-      <div><canvas ref={a} width={size} height={size} style={frame} /><div style={cap}>Original</div></div>
-      <div><canvas ref={b} width={size} height={size} style={{ ...frame, opacity: graph ? 1 : 0.3 }} /><div style={cap}>As nodes</div></div>
+      <div><canvas ref={a} width={size} height={size} style={frame} /><div style={cap}>{labels[0]}</div></div>
+      <div><canvas ref={b} width={size} height={size} style={{ ...frame, opacity: graph ? 1 : 0.3 }} /><div style={cap}>{labels[1]}</div></div>
     </div>
   );
 }
