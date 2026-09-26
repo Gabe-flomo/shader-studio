@@ -118,7 +118,8 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 }
 
-function bundleOf(input: PlayHtmlInput) {
+/** What ShaderStudioPlay.mount takes for this input (notes left out: the web player never shows them). */
+export function playBundle(input: PlayHtmlInput) {
   const aspect = PREVIEW_ASPECTS.find(a => a.id === input.aspect);
   // Notes are for the author and learners in the app; the website player never shows them.
   const play = { ...input.play };
@@ -166,7 +167,7 @@ export function buildPlayHtml(input: PlayHtmlInput, options: EmbedOptions = DEFA
 </head>
 <body>
 <div id="play"></div>
-<script>window.PLAY_BUNDLE = ${scriptJson(bundleOf(input))};
+<script>window.PLAY_BUNDLE = ${scriptJson(playBundle(input))};
 window.PLAY_OPTIONS = ${scriptJson(runtimeOptions(options))};</script>
 <script>${runtimeScript()}</script>
 </body>
@@ -195,7 +196,7 @@ export function buildPlaySnippet(input: PlayHtmlInput, options: EmbedOptions = D
 <script>
 ${runtimeScript()}
 (function(){var e=document.currentScript.previousElementSibling;${hostFix}
-ShaderStudioPlay.mount(e, ${scriptJson(bundleOf(input))}, ${scriptJson(runtimeOptions(options))});})();
+ShaderStudioPlay.mount(e, ${scriptJson(playBundle(input))}, ${scriptJson(runtimeOptions(options))});})();
 </script>
 `;
 }

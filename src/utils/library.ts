@@ -53,6 +53,7 @@ const KINDS: Array<{ prefix: string; dir: string; scope?: string }> = [
   { prefix: 'shader-studio:tp:', dir: 'transforms' },
   { prefix: 'shader-studio:kfp:', dir: 'keyframe presets' },
   { prefix: 'shader-studio:un:', dir: 'published nodes' },
+  { prefix: 'shader-studio-presentation:', dir: 'presentations' },
 ];
 const NAMED_FILES: Record<string, string> = {
   'shader-studio:palette-presets': 'palettes.json',
@@ -313,11 +314,11 @@ export function importLibrary(s: LibrarySnapshot, kv: KV = localKV): ImportResul
 }
 
 /** Events the lists listen for, so imported things show up without a reload where possible. */
-export const LIBRARY_REFRESH_EVENTS = ['saved-graphs-changed', 'assetbrowser-folders-changed', 'customfn-changed', 'exprpreset-changed', 'transformpreset-changed', 'keyframepreset-changed'];
+export const LIBRARY_REFRESH_EVENTS = ['saved-graphs-changed', 'presentations-changed', 'assetbrowser-folders-changed', 'customfn-changed', 'exprpreset-changed', 'transformpreset-changed', 'keyframepreset-changed'];
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
-export type LibraryKind = 'graphs' | 'versions' | 'group presets' | 'functions' | 'expressions' | 'transforms' | 'keyframe presets' | 'published nodes' | 'palettes' | 'glsl shaders' | 'settings';
+export type LibraryKind = 'graphs' | 'versions' | 'group presets' | 'functions' | 'expressions' | 'transforms' | 'keyframe presets' | 'published nodes' | 'presentations' | 'palettes' | 'glsl shaders' | 'settings';
 
 export interface LibraryStats {
   /** Per kind: how many and how much space (characters, about bytes: saved work is mostly plain text). */
@@ -331,7 +332,7 @@ export interface LibraryStats {
 export const STORAGE_LIMIT = 5 * 1024 * 1024;
 
 export function libraryStats(s: LibrarySnapshot): LibraryStats {
-  const kinds = Object.fromEntries((['graphs', 'versions', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'palettes', 'glsl shaders', 'settings'] as LibraryKind[]).map(k => [k, { count: 0, size: 0 }])) as LibraryStats['kinds'];
+  const kinds = Object.fromEntries((['graphs', 'versions', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'presentations', 'palettes', 'glsl shaders', 'settings'] as LibraryKind[]).map(k => [k, { count: 0, size: 0 }])) as LibraryStats['kinds'];
   let playSetups = 0, total = 0;
   for (const [k, v] of Object.entries(s.items)) {
     const size = k.length + v.length;

@@ -21,7 +21,8 @@ import { Popover } from '../ui/Popover';
 import { Sheet } from '../ui/Sheet';
 import { toast } from '../ui/toastStore';
 
-interface Row { kind: 'saved' | 'example'; id: string; label: string; hint?: string; folder: string }
+export interface PlayableRow { kind: 'saved' | 'example'; id: string; label: string; hint?: string; folder: string }
+type Row = PlayableRow;
 interface Section { key: string; kind: Row['kind']; folder: string; color?: string; rows: Row[] }
 
 const OPEN_KEY = 'shader-studio:play:openFolders';
@@ -81,12 +82,17 @@ function exampleSections(): Section[] {
   return sections;
 }
 
-function PlayableList({ onDone }: { onDone: () => void }) {
+/**
+ * The list itself. Picking a row opens it (loads the graph), or, with `onPick`,
+ * hands the row over instead (the Present page takes a snapshot of it).
+ */
+export function PlayableList({ onDone, onPick, current: currentOverride }: { onDone: () => void; onPick?: (row: PlayableRow) => void; current?: string | null }) {
   const tk = useTokens();
   const getSavedGraphNames = useNodeGraphStore(s => s.getSavedGraphNames);
   const loadSavedGraph = useNodeGraphStore(s => s.loadSavedGraph);
   const loadExampleGraph = useNodeGraphStore(s => s.loadExampleGraph);
-  const current = useNodeGraphStore(s => s.currentGraph?.name ?? null);
+  const openGraph = useNodeGraphStore(s => s.currentGraph?.name ?? null);
+  const current = currentOverride === undefined ? openGraph : currentOverride;
   const [names, setNames] = useState<string[]>(() => getSavedGraphNames());
   useEffect(() => {
     const onChange = () => setNames(getSavedGraphNames());
@@ -113,6 +119,7 @@ function PlayableList({ onDone }: { onDone: () => void }) {
   });
 
   const pick = async (r: Row) => {
+    if (onPick) { onPick(r); onDone(); return; }
     if (r.kind === 'saved') {
       const res = loadSavedGraph(r.id);
       if (!res.ok) { toast.error('Couldn’t open it', { message: res.error }); return; }

@@ -13,7 +13,8 @@ import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord } from '../types/play';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
-import { buildPlayHtml, unsupportedFeatures, type EmbedOptions, type PlayHtmlInput } from '../play/exportHtml';
+import { buildPlayHtml, type EmbedOptions, type PlayHtmlInput } from '../play/exportHtml';
+import { webInputFrom } from '../play/webInput';
 
 /** Top-level `kind` a play file carries, so importing one opens the Play page. */
 export const PLAY_FILE_KIND = 'shader-studio-play';
@@ -147,6 +148,15 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
     }
     return n;
   });
+}
+
+/**
+ * Nodes read from storage or an example, brought up to date the way loading
+ * does (renamed node types, old Expression nodes, params added since). Used to
+ * compile a saved graph off-screen without loading it (Present snapshots).
+ */
+export function migrateLoadedNodes(nodes: GraphNode[]): GraphNode[] {
+  return upgradeExprNodes(resolveNodeAliases(nodes, getNodeDefinition)).map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
 }
 
 /** Convert a label to a filesystem-safe slug. Used by the generic graph-save
@@ -4409,21 +4419,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const v = playEngine.liveValue(c.id);
       if (v !== undefined) live.set(c.id, v);
     }
-    // Uniforms at their current values, with driven ones at their live value.
-    const uniforms: Record<string, number | number[]> = { ...st.paramUniforms };
-    for (const c of st.play.controls) {
-      const v = live.get(c.id);
-      const u = st.paramBindings[c.target.split('::').slice(-2).join('::')];
-      if (v !== undefined && u && !c.target.startsWith('layer:')) uniforms[u] = Array.isArray(v) ? [...v] : v;
-    }
-    const missing = unsupportedFeatures({
-      textureUniforms: st.textureUniforms, videoUniforms: st.videoUniforms, audioUniforms: st.audioUniforms, liveUniforms: st.liveUniforms,
-      isStateful: st.isStateful, particleSystems: st.particleSystems, usesEcho: /\bu_echo0\b/.test(st.fragmentShader), play: st.play,
-    });
-    return {
-      input: { title: title.trim() || 'Playfield', fragmentShader: st.fragmentShader, uniforms, paramBindings: st.paramBindings, play: bakeLayerValues(st.play, live), aspect: st.previewAspect },
-      missing,
-    };
+    return webInputFrom(st, st.play, { title, aspect: st.previewAspect, live });
   },
 
   exportPlayHtml: async (options, title) => {

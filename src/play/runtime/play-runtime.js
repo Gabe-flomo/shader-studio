@@ -3,7 +3,7 @@
  * exports (a full HTML page or a paste-in embed snippet). Plain ES2020, no
  * imports, no framework.
  *
- *   ShaderStudioPlay.mount(element, bundle, options) → { destroy() }
+ *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still() }
  *
  * bundle:  { title, fragmentShader, uniforms, paramBindings, play, aspect }
  * options: {
@@ -13,7 +13,17 @@
  *   markers: boolean,                show null markers (player default true, background false)
  *   stillForReducedMotion: boolean,  honour prefers-reduced-motion with a still frame (default true)
  *   maxDpr: number,                  cap on device pixels per CSS pixel (default 2, background 1.5)
+ *   panel: boolean,                  player: draw the controls panel (default true); the host can draw its own with get/set/fire
+ *   pointer: boolean,                player: the pointer reaches the picture (default true); off, the page scrolls over it
+ *   startTime: number,               seconds on the clock at the start
+ *   paused: boolean,                 start with the clock stopped (a still at startTime)
+ *   pauseOffscreen: boolean,         player: stop drawing while off-screen (a background always does)
  * }
+ *
+ * The control API (for a host drawing its own panel): get(id) → { value, driven }
+ * (the value a mapping gives it while one drives it), set(id, value) as if its
+ * slider or colour moved, fire(id) presses an action control, still() → a PNG
+ * data URL of the picture with its layers.
  *
  * It runs the compiled fragment shader on a WebGL quad, draws the controls,
  * runs the mapping engine (mouse, keys, triggers with envelopes, another
@@ -27,7 +37,7 @@
  */
 (function () {
   'use strict';
-  if (window.ShaderStudioPlay && window.ShaderStudioPlay.version >= 2) return;
+  if (window.ShaderStudioPlay && window.ShaderStudioPlay.version >= 3) return;
 
   const CSS = `
 .ssp{display:flex;width:100%;height:100%;min-height:0;box-sizing:border-box;font:13px/1.4 system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#e6e7ec}
@@ -224,6 +234,9 @@
     const markers = opts.markers == null ? !bg : !!opts.markers;
     const stillForReducedMotion = opts.stillForReducedMotion !== false;
     const maxDpr = opts.maxDpr || (bg ? 1.5 : 2);
+    const showPanel = !bg && opts.panel !== false;
+    const pointerOn = !bg && opts.pointer !== false;
+    const pauseOffscreen = bg || !!opts.pauseOffscreen;
     const play = B.play || { controls: [], mappings: [], layers: [] };
     injectCss();
     listen();
@@ -239,8 +252,9 @@
     stage.append(fitBox);
     root.append(stage);
     const panel = el('div', 'ssp-panel');
-    if (!bg) root.append(panel);
+    if (showPanel) root.append(panel);
     if (bg) { root.style.pointerEvents = 'none'; glCanvas.setAttribute('aria-hidden', 'true'); }
+    if (!bg && !pointerOn) stage.style.touchAction = 'auto';
 
     // WebGL
     const gl = glCanvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: true, premultipliedAlpha: false });
@@ -317,7 +331,7 @@
     const layersById = new Map(play.layers.map(l => [l.id, l]));
     const base = new Map(), live = new Map(), layerLive = new Map(), smooth = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
-    let time = 0, playing = true, lastNow = 0, frame = 0;
+    let time = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0, playing = !opts.paused, lastNow = 0, frame = 0;
     const bindings = B.paramBindings || {};
     const uniformFor = c => bindings[bindingKey(c.target)];
     for (const c of play.controls) {
@@ -458,7 +472,7 @@
     const clampedMouse = (cx, cy) => { const u = toUnit(cx, cy); mouse.x = Math.max(0, Math.min(1, u.x)); mouse.y = Math.max(0, Math.min(1, u.y)); mouse.over = u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1; return u; };
     const listeners = [];
     const on = (target, type, fn, o) => { target.addEventListener(type, fn, o); listeners.push(() => target.removeEventListener(type, fn, o)); };
-    if (!bg) {
+    if (pointerOn) {
       on(stage, 'pointermove', e => {
         const u = clampedMouse(e.clientX, e.clientY);
         if (drag) { const l = layersById.get(drag.id); if (l) { l.x = Math.max(0, Math.min(1, u.x + drag.dx)); l.y = Math.max(0, Math.min(1, u.y + drag.dy)); } }
@@ -477,7 +491,7 @@
       const up = () => { mouse.down = 0; drag = null; releaseZone(); if (pictureDown) { pictureDown = false; release('mouse'); } };
       on(stage, 'pointerup', up); on(stage, 'pointercancel', up);
       on(stage, 'pointerleave', () => { mouse.over = false; });
-    } else {
+    } else if (bg) {
       on(window, 'pointerdown', e => {
         const u = toUnit(e.clientX, e.clientY);
         mouse.down = 1;
@@ -497,7 +511,11 @@
     let camVideo = null;
     const fmt = (v, step) => { const d = step && step >= 1 ? 0 : step && step >= 0.1 ? 1 : step && step >= 0.01 ? 2 : 3; return Number(v).toFixed(d); };
     const hex = c => '#' + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
-    if (!bg) {
+    // A control moved by hand (its slider, its colour, or the host through set()).
+    const setColour = (c, rgb) => { base.set(c.id, rgb); const u = uniformFor(c); if (u && !live.has(c.id)) uniformValues[u] = rgb; needsDraw = true; };
+    const setFloat = (c, v) => { base.set(c.id, v); const lt = layerTarget(c.target); if (lt) { const l = layersById.get(lt.layerId); if (l) l[lt.key] = v; } else { const u = uniformFor(c); if (u && !live.has(c.id)) uniformValues[u] = v; } needsDraw = true; };
+    const fireAction = c => { const at = actTarget(c.target); if (at && K) { K.act({ do: at.do, layerId: at.layerId, amount: c.amount || 1 }); needsDraw = true; } };
+    if (showPanel) {
       const head = el('div', 'ssp-head');
       head.append(el('b', null, B.title || 'Shader Studio'));
       const tools = el('div', 'ssp-tools');
@@ -559,7 +577,7 @@
         if (at) {
           // A button: press it to fire the action.
           const b = el('button', 'ssp-btn', c.label);
-          b.onclick = () => { if (K) { K.act({ do: at.do, layerId: at.layerId, amount: c.amount || 1 }); needsDraw = true; } };
+          b.onclick = () => fireAction(c);
           row.replaceChildren(b);
           panel.append(row);
           continue;
@@ -567,14 +585,14 @@
         if (c.kind === 'color') {
           const input = el('input'); input.type = 'color'; input.className = 'ssp-colour';
           const b = base.get(c.id); if (Array.isArray(b)) input.value = hex(b);
-          input.oninput = () => { const h = input.value; const rgb = [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255]; base.set(c.id, rgb); const u = uniformFor(c); if (u && !live.has(c.id)) uniformValues[u] = rgb; needsDraw = true; };
+          input.oninput = () => { const h = input.value; setColour(c, [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255]); };
           row.append(input);
           readouts.set(c.id, { out, input, kind: 'color' });
         } else {
           const input = el('input'); input.type = 'range'; input.className = 'ssp-range';
           input.min = c.min; input.max = c.max; input.step = c.step || (c.max - c.min) / 400;
           const b = base.get(c.id); if (typeof b === 'number') input.value = b;
-          input.oninput = () => { const v = parseFloat(input.value); base.set(c.id, v); const lt = layerTarget(c.target); if (lt) { const l = layersById.get(lt.layerId); if (l) l[lt.key] = v; } else { const u = uniformFor(c); if (u && !live.has(c.id)) uniformValues[u] = v; } out.textContent = fmt(v, c.step); needsDraw = true; };
+          input.oninput = () => { const v = parseFloat(input.value); setFloat(c, v); out.textContent = fmt(v, c.step); };
           out.textContent = typeof b === 'number' ? fmt(b, c.step) : '';
           row.append(input);
           readouts.set(c.id, { out, input, kind: 'float', step: c.step });
@@ -637,7 +655,7 @@
       raf = requestAnimationFrame(tick);
       const dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
       lastNow = now;
-      if ((bg && !onScreen) || document.hidden) return;
+      if ((pauseOffscreen && !onScreen) || document.hidden) return;
       if (reduced && !needsDraw && frame > 0) return;
       if (playing && !reduced) time += dt;
       frame++;
@@ -679,10 +697,39 @@
       },
       pause() { playing = false; },
       play() { playing = true; },
+      get(id) {
+        const c = controls.get(id);
+        if (!c) return null;
+        const driven = live.has(id);
+        const v = driven ? live.get(id) : base.get(id);
+        return { value: Array.isArray(v) ? v.slice() : v, driven };
+      },
+      set(id, v) {
+        const c = controls.get(id);
+        if (!c) return;
+        if (c.kind === 'color' && Array.isArray(v) && v.length >= 3) setColour(c, [+v[0], +v[1], +v[2]]);
+        else if (typeof v === 'number' && isFinite(v)) setFloat(c, v);
+      },
+      fire(id) { const c = controls.get(id); if (c) fireAction(c); },
+      still() {
+        try {
+          const out = document.createElement('canvas');
+          out.width = glCanvas.width; out.height = glCanvas.height;
+          const x = out.getContext('2d');
+          x.drawImage(glCanvas, 0, 0);
+          x.drawImage(ovCanvas, 0, 0);
+          return out.toDataURL('image/png');
+        } catch (e) { return null; }
+      },
     };
   }
 
-  window.ShaderStudioPlay = { version: 2, mount };
+  // For a host drawing its own panel: what the panel's Enable MIDI and Listen buttons do, for every mount on the page.
+  function enableMidi() {
+    if (!navigator.requestMIDIAccess) return Promise.resolve(false);
+    return navigator.requestMIDIAccess().then(a => { a.inputs.forEach(i => { i.onmidimessage = e => onMidi(e.data); }); return true; }, () => false);
+  }
+  window.ShaderStudioPlay = { version: 3, mount, enableMidi, listen: startLive };
 
   // A full-page export: mount on #play with the page's options (URL params can override).
   if (window.PLAY_BUNDLE && document.getElementById('play')) {

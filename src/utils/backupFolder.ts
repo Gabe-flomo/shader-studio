@@ -38,7 +38,7 @@ const DIR_KEY = 'shader-studio:settings:backupDir';
 const HISTORY_KEEP = 14;
 const DEBOUNCE_MS = 4000;
 /** Top-level entries the readable files use: cleared before rewriting so deleted things don't linger. */
-const READABLE_ROOTS = ['graphs', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'palettes.json', 'glsl shaders.json', 'settings.json'];
+const READABLE_ROOTS = ['graphs', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'presentations', 'palettes.json', 'glsl shaders.json', 'settings.json'];
 const README = `Playfield backup
 
 Playfield keeps this folder up to date with everything you save.

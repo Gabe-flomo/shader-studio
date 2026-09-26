@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { C, C_LIGHT, tokenizeLine } from './glslSyntax';
+import { nodeSlicePrefix } from './code/nodeSlice';
 import { useThemeMode, useTokens } from '../theme/themeStore';
 import { alpha, fontFamily, radius } from '../theme/tokens';
 import { Button, IconButton } from './ui/Button';
@@ -73,7 +74,7 @@ export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap, docked 
   const highlightSlug = highlightNodeId
     ? (nodeSlugMap?.get(highlightNodeId) ?? highlightNodeId)
     : null;
-  const prefix = highlightSlug ? `${highlightSlug}_` : null;
+  const prefix = highlightSlug ? nodeSlicePrefix(highlightSlug) : null;
 
   const lines = code ? code.split('\n') : ['// No shader compiled yet'];
 
