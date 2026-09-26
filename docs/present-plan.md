@@ -254,18 +254,23 @@ folder (the Book of Shaders as graphs) or the Matrices folder into one.
   presentation mounts with no GLSL errors, and only the visible ones hold a
   WebGL context.
 
-## 6. Questions to settle before building
+## 6. Decisions (settled 26 Sep 2026)
 
-1. **Snapshots or live links?** The plan snapshots sources and offers
-   Refresh. Live links would follow graph edits automatically but could
-   silently break a finished lesson.
-2. **What the runtime can't run.** Plays with image, video or audio inputs,
-   feedback or particles can't render on this page (the editor canvas can
-   only show one graph). A still frame with a note is the v1 answer; the
-   alternative is extending the runtime.
-3. **Naming.** Rename the existing fullscreen Present mode (Stage?) so the
-   page can be *Present*.
-4. **Dependencies.** KaTeX and a Markdown parser are the first libraries of
-   their kind in the app (both lazy-loaded with the page).
-5. **Sharing beyond files.** Is a hosted link wanted eventually? It needs a
-   server and an account story, so it is out of scope until decided.
+1. **Snapshots.** A presentation is an asset of its own: each source is a
+   snapshot, with Refresh to pull the graph's current state on purpose.
+2. **What the runtime can't run: extend the runtime, don't settle for stills.**
+   The page's canvases are play-runtime mounts (the exported web page's
+   runtime), because the app's own canvas can only show the one open graph.
+   That runtime can't yet do image, video or audio inputs, previous-frame
+   feedback, echo or GPU particles. Those gaps are the same ones the website
+   export has, so closing them helps both: textures and video as uploaded
+   assets, a ping-pong framebuffer for feedback and echo, the particle
+   simulation from the app. Until each lands, that canvas shows a still frame
+   and names what's missing.
+3. **Naming.** The fullscreen Present mode becomes **Stage**; the page is
+   *Present*.
+4. **Dependencies.** KaTeX and a Markdown parser, both loaded only when the
+   page opens: approved.
+5. **Hosted links.** Out of scope for now. Sending a link to a Play or a
+   presentation is where this is heading, and it needs a server and an
+   account story first.

@@ -65,7 +65,8 @@ function placeScene(topLevel: GraphNode[], position: { x: number; y: number }) {
   const loops = topLevel.filter(n => MARCH_GROUP_TYPES.has(n.type));
   const free = loops.filter(n => !n.inputs.scene?.connection);
   const attach = nearest(free, position);
-  const output = topLevel.find(n => (n.type === 'output' || n.type === 'vec4Output') && !n.inputs.color?.connection) ?? null;
+  // A first 3D scene takes the Output over, even from whatever 2D picture was on it.
+  const output = topLevel.find(n => (n.type === 'output' || n.type === 'vec4Output') && n.inputs.color) ?? null;
   return {
     attachToMarchId: attach?.id ?? null,
     spawnMarch: loops.length === 0,

@@ -61,8 +61,8 @@ export type MarchLoopType = 'marchLoopGroup' | 'giLitMarchGroup';
 
 /**
  * A working 3D scene: March Camera → Scene Group (Sphere) → march loop, laid
- * out left to right from `origin`. The caller adds the nodes and, when the
- * graph's Output is free, wires the loop's Color into it.
+ * out left to right from `origin`. The caller adds the nodes and wires the
+ * loop's Color into the graph's Output.
  */
 export function buildMarchRig(
   nextId: () => string,
@@ -79,9 +79,22 @@ export function buildMarchRig(
   return { camera, scene: sceneGroup, loop };
 }
 
-/** The graph's Output node when its colour input is still free. */
-export function freeOutput(nodes: GraphNode[]): GraphNode | null {
-  return nodes.find(n => (n.type === 'output' || n.type === 'vec4Output') && !n.inputs.color?.connection) ?? null;
+/** The graph's Output node. A new 3D scene takes it over, whatever was wired into it before. */
+export function graphOutput(nodes: GraphNode[]): GraphNode | null {
+  return nodes.find(n => (n.type === 'output' || n.type === 'vec4Output') && n.inputs.color) ?? null;
+}
+
+/** Node types that make a graph a 3D one: once any is at the top level, adding more 3D never asks about the 2D nodes. */
+const THREE_D_TYPES = new Set(['marchLoopGroup', 'giLitMarchGroup', 'marchCamera', 'sceneGroup', 'rayMarch', 'glass3d']);
+
+/**
+ * The 2D nodes a first 3D scene would leave behind: every top-level node but
+ * the Output, when nothing 3D is there yet. Empty when the graph already has
+ * 3D in it or holds nothing but the Output.
+ */
+export function twoDNodesBefore3D(nodes: GraphNode[]): GraphNode[] {
+  if (nodes.some(n => THREE_D_TYPES.has(n.type))) return [];
+  return nodes.filter(n => n.type !== 'output' && n.type !== 'vec4Output');
 }
 
 /**

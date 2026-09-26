@@ -1,7 +1,8 @@
 /**
  * A 3D group added from the palette arrives working: camera → Scene Group
  * (Scene Pos → Sphere → Scene Output) → march loop, loop colour on the Output
- * when it's free. Before this, the Scene Group was empty until opened and the
+ * (a new scene takes it over). The first 3D in a graph with 2D nodes asks
+ * whether to clear them. Before this, the Scene Group was empty until opened and the
  * loop called a scene function that didn't exist.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +15,7 @@ import { useNodeGraphStore } from '../useNodeGraphStore';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { migrateNodeParams } from '../../types/nodeGraph';
+import { useDialogStore } from '../../components/ui/dialogStore';
 
 const outputOnly = (): GraphNode[] => [
   { id: 'out', type: 'output', position: { x: 900, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color' } }, outputs: {}, params: {} },
@@ -81,12 +83,13 @@ describe('adding a 3D group from the palette', () => {
     expect(r.fragmentShader).toMatch(new RegExp(`tanh\\(clamp\\(${acc} \\*`));
   });
 
-  it('leaves a wired Output alone', () => {
+  it('a second loop takes the Output over, without asking', () => {
     const st = useNodeGraphStore.getState();
     st.addNode('marchLoopGroup', { x: 0, y: 0 });
-    const firstLoop = useNodeGraphStore.getState().nodes.find(n => n.type === 'marchLoopGroup')!;
     st.addNode('giLitMarchGroup', { x: 0, y: 600 });
-    expect(useNodeGraphStore.getState().nodes.find(n => n.type === 'output')!.inputs.color.connection?.nodeId).toBe(firstLoop.id);
+    expect(useDialogStore.getState().current).toBeNull();
+    const gi = useNodeGraphStore.getState().nodes.find(n => n.type === 'giLitMarchGroup')!;
+    expect(useNodeGraphStore.getState().nodes.find(n => n.type === 'output')!.inputs.color.connection?.nodeId).toBe(gi.id);
   });
 
   it('a Scene Group added next to a loop with a free Scene input goes into that loop', () => {
@@ -144,5 +147,49 @@ describe('March Loop colours', () => {
     const r = compileGraph({ nodes: wired });
     expect(r.success).toBe(true);
     expect(r.fragmentShader).toMatch(/_bg\s+= \w+_rd;/);
+  });
+});
+
+describe('the first 3D scene in a 2D graph', () => {
+  // UV → Circle SDF → Output: a 2D picture already on the Output.
+  const twoD = (): GraphNode[] => [
+    { id: 'uv', type: 'uv', position: { x: 0, y: 0 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
+    { id: 'out', type: 'output', position: { x: 900, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'uv', outputKey: 'uv' } } }, outputs: {}, params: {} },
+  ];
+  const answer = async (id: string | null) => {
+    const req = useDialogStore.getState().current;
+    expect(req?.kind).toBe('choice');
+    useDialogStore.setState({ current: null });
+    if (req?.kind === 'choice') req.resolve(id);
+    await Promise.resolve();
+  };
+  beforeEach(() => {
+    useNodeGraphStore.setState({ activeGroupId: null, activeGroupPath: [] });
+    useNodeGraphStore.getState().replaceGraph(twoD());
+    useDialogStore.setState({ current: null });
+  });
+
+  it('asks first, and Clear removes the 2D nodes and puts the scene on the Output', async () => {
+    expect(useNodeGraphStore.getState().addNode('marchLoopGroup', { x: 0, y: 0 })).toBeUndefined();
+    expect(useNodeGraphStore.getState().nodes.some(n => n.type === 'marchLoopGroup')).toBe(false);
+    await answer('clear');
+    const nodes = useNodeGraphStore.getState().nodes;
+    expect(nodes.some(n => n.id === 'uv')).toBe(false);
+    const loop = nodes.find(n => n.type === 'marchLoopGroup')!;
+    expect(nodes.find(n => n.type === 'output')!.inputs.color.connection?.nodeId).toBe(loop.id);
+  });
+
+  it('Keep leaves the 2D nodes in the graph, off the Output', async () => {
+    useNodeGraphStore.getState().addNode('volumetricScene', { x: 0, y: 0 });
+    await answer('keep');
+    const nodes = useNodeGraphStore.getState().nodes;
+    expect(nodes.some(n => n.id === 'uv')).toBe(true);
+    expect(nodes.find(n => n.type === 'output')!.inputs.color.connection?.nodeId).not.toBe('uv');
+  });
+
+  it('Cancel adds nothing', async () => {
+    useNodeGraphStore.getState().addNode('sphereSDF3D', { x: 0, y: 0 });
+    await answer(null);
+    expect(useNodeGraphStore.getState().nodes.map(n => n.id)).toEqual(['uv', 'out']);
   });
 });

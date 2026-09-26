@@ -6,7 +6,8 @@ import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyL
 import { askText } from '../components/ui/dialogStore';
 import { toast } from '../components/ui/toastStore';
 import { planSceneGroupAdd, planSmart3DAdd } from '../nodes/smart3d';
-import { buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, freeOutput, instantiateNode } from '../nodes/scene3dDefaults';
+import { askChoice } from '../components/ui/dialogStore';
+import { buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord } from '../types/play';
@@ -323,6 +324,18 @@ function legacySceneReturnWire(sg: { nodes: GraphNode[]; outputNodeId?: string; 
   const { outputNodeId, outputKey } = sg;
   if (!outputNodeId || !outputKey || !sg.nodes.some(n => n.id === outputNodeId)) return {};
   return { connection: { nodeId: outputNodeId, outputKey } };
+}
+
+/** Set while an add re-runs after the "Adding a 3D scene" question, so it isn't asked twice. */
+let skip3DAsk = false;
+
+/** Would adding `type` at the top level build a new 3D scene (camera, loop and Output takeover)? */
+function startsA3DScene(type: string, nodes: GraphNode[]): boolean {
+  if (type === 'marchLoopGroup' || type === 'giLitMarchGroup' || type === 'marchCamera' || type === 'volumetricScene') return true;
+  const def = getNodeDefinition(type);
+  if (!def) return false;
+  const plan = type === 'sceneGroup' ? planSceneGroupAdd(nodes, { x: 0, y: 0 }) : planSmart3DAdd(type, def, nodes, { x: 0, y: 0 });
+  return plan.kind === 'wrap-scene' && plan.spawnMarch;
 }
 
 /** The loop's Color into the Output node's colour input. */
@@ -2856,6 +2869,34 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Only at the top level — not inside a group drill-down.
     // overrideParams guard prevents triggering from programmatic calls.
     if (!get().activeGroupId && !overrideParams) {
+      // ── First 3D in a 2D graph ───────────────────────────────────────────
+      // A 3D scene takes the Output over. When it is the graph's first 3D and
+      // there are 2D nodes, ask whether to clear them (the picture they made is
+      // being replaced) or keep them beside the scene, unwired from the Output.
+      // The add then runs again with the answer; it returns no id this time.
+      if (!skip3DAsk && startsA3DScene(type, get().nodes)) {
+        const twoD = twoDNodesBefore3D(get().nodes);
+        if (twoD.length) {
+          void askChoice('Adding a 3D scene', [
+            { id: 'keep', label: 'Keep 2D nodes' },
+            { id: 'clear', label: 'Clear 2D nodes', variant: 'primary' },
+          ], { message: `The 3D scene takes over the Output, so the 2D picture won't show any more. Clear its ${twoD.length === 1 ? 'node' : `${twoD.length} nodes`}, or keep them in the graph to reuse (they stay unwired from the Output)? Undo brings everything back either way.` })
+            .then(choice => {
+              if (!choice) return;
+              if (choice === 'clear') {
+                undoManager.push(get().nodes);
+                const gone = new Set(twoD.map(n => n.id));
+                set({ nodes: get().nodes.filter(n => !gone.has(n.id)).map(n => ({
+                  ...n,
+                  inputs: Object.fromEntries(Object.entries(n.inputs).map(([k, v]) => [k, v.connection && gone.has(v.connection.nodeId) ? { ...v, connection: undefined } : v])),
+                })) });
+              }
+              skip3DAsk = true;
+              try { get().addNode(type, position); } finally { skip3DAsk = false; }
+            });
+          return undefined;
+        }
+      }
       // ── Smart 3D placement ───────────────────────────────────────────────
       // A shape or 3D transform dropped on the top level goes into a new Scene
       // Group wired to a march loop; a lighting node is wired to the nearest
@@ -2892,7 +2933,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             nodes = wireLoopToOutput(nodes, plan.outputNodeId, rig.loop.id);
             note += ', with a camera and march loop wired to the Output.';
           } else {
-            note += ', with a camera and march loop. Wire the loop\'s Color to your Output.';
+            note += ', with a camera and march loop. Add an Output node and wire the loop\'s Color into it.';
           }
         } else {
           note += isGroup ? '. Wire its Scene into a march loop.' : '. Double-click it to edit the shape.';
@@ -2933,19 +2974,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
       if (type === 'marchLoopGroup' || type === 'giLitMarchGroup' || type === 'marchCamera') {
         // A working scene in one go: March Camera → Scene Group (Sphere) → loop,
-        // with the loop's Color on the Output when the Output is free.
+        // with the loop's Color on the Output (a new scene takes it over).
         undoManager.push(get().nodes);
         const at = type === 'marchCamera'
           ? { camera: position, scene: { x: position.x + 440, y: position.y }, loop: { x: position.x + 880, y: position.y } }
           : { camera: { x: position.x - 880, y: position.y }, scene: { x: position.x - 440, y: position.y }, loop: position };
         const rig = buildMarchRig(() => idGenerator.next(), type === 'giLitMarchGroup' ? 'giLitMarchGroup' : 'marchLoopGroup', at);
         let nodes = [...get().nodes, rig.camera, rig.scene, rig.loop];
-        const output = freeOutput(get().nodes);
+        const output = graphOutput(get().nodes);
         if (output) nodes = wireLoopToOutput(nodes, output.id, rig.loop.id);
         set({ nodes });
         get().compile();
         toast.info('3D scene added', {
-          message: `A camera, a Scene Group with a Sphere inside, and a march loop${output ? ' wired to the Output' : '. Wire the loop\'s Color to your Output to see it'}.`,
+          message: `A camera, a Scene Group with a Sphere inside, and a march loop${output ? ' wired to the Output' : '. Add an Output node and wire the loop\'s Color into it to see it'}.`,
         });
         return type === 'marchCamera' ? rig.camera.id : rig.loop.id;
       }
@@ -2953,14 +2994,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         undoManager.push(get().nodes);
         const rig = buildVolumetricRig(() => idGenerator.next(), position);
         let nodes = [...get().nodes, rig.camera, rig.scene, rig.loop, rig.colour];
-        const output = freeOutput(get().nodes);
+        const output = graphOutput(get().nodes);
         if (output) nodes = nodes.map(n => n.id === output.id
           ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: { nodeId: rig.colour.id, outputKey: 'color' } } } }
           : n);
         set({ nodes });
         get().compile();
         toast.info('Volumetric scene added', {
-          message: `A glowing sphere: the March Loop walks through it adding Volume Glow at every step, and Glow to Color colours the total${output ? '' : '. Wire Glow to Color into your Output to see it'}.`,
+          message: `A glowing sphere: the March Loop walks through it adding Volume Glow at every step, and Glow to Color colours the total${output ? '' : '. Add an Output node and wire Glow to Color into it to see it'}.`,
         });
         return rig.loop.id;
       }
