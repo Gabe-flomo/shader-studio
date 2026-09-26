@@ -1256,18 +1256,9 @@ export class ShaderAssembler {
               accumNodeVarNames[sn.id] = outVars;
             }
 
-            // 2. Open the for loop
-            const loopVar = `${nodeSlug}_i`;
-            this.mainCode.push(`    for (float ${loopVar} = 0.0; ${loopVar} < ${iters}.0; ${loopVar}++) {\n`);
-
-            // Pre-inject loop index for any loopIndex nodes in the subgraph
-            for (const sn of subgraph.nodes) {
-              if (sn.type === 'loopIndex') {
-                const snSlugLoop = subSlugMap.get(sn.id) ?? sn.id;
-                this.nodeOutputs.set(prefix + snSlugLoop, { i: loopVar });
-              }
-            }
-
+            // 1f. Loop Carry and Expression Block carry variables: declared BEFORE the
+            //     loop opens, so they persist across passes (declared inside, every
+            //     pass re-initialised them and nothing carried).
             // Pre-inject LoopCarry nodes — declare carry vars outside loop, inject current value
             const loopCarryNodes = subgraph.nodes.filter(sn => sn.type === 'loopCarry');
             const loopCarryVarNames: Record<string, string> = {};
@@ -1349,6 +1340,18 @@ export class ShaderAssembler {
               }
 
               exprBlockCarryVars.set(sn.id, nodeCarryVars);
+            }
+
+            // 2. Open the for loop
+            const loopVar = `${nodeSlug}_i`;
+            this.mainCode.push(`    for (float ${loopVar} = 0.0; ${loopVar} < ${iters}.0; ${loopVar}++) {\n`);
+
+            // Pre-inject loop index for any loopIndex nodes in the subgraph
+            for (const sn of subgraph.nodes) {
+              if (sn.type === 'loopIndex') {
+                const snSlugLoop = subSlugMap.get(sn.id) ?? sn.id;
+                this.nodeOutputs.set(prefix + snSlugLoop, { i: loopVar });
+              }
             }
 
             // 3. Compile subgraph body.

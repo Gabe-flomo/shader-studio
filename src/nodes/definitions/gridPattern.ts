@@ -1,5 +1,23 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p, pv3, fieldFn } from './helpers';
+import { GLSL_MAT2_INV } from './matrixOps';
+
+/**
+ * Lattices: the cell centres as a basis matrix (columns are the two steps
+ * between neighbouring centres, in cell units, so centres are 1 apart like
+ * the square grid). Cells are the region nearest each centre, except
+ * Triangle, which splits each rhombus of a lattice into two triangles.
+ */
+const LATTICE_BASIS: Record<string, [number, number, number, number]> = {
+  hex:      [1, 0, 0.5, Math.sqrt(3) / 2],
+  brick:    [1, 0, 0.5, 1],
+  diamond:  [Math.SQRT1_2, Math.SQRT1_2, -Math.SQRT1_2, Math.SQRT1_2],
+  triangle: [Math.sqrt(3), 0, Math.sqrt(3) / 2, 1.5],
+};
+const glslNum = (v: number) => (Number.isInteger(v) ? `${v}.0` : `${+v.toFixed(7)}`);
+const mat2Lit = (m: number[]) => `mat2(${m.map(glslNum).join(', ')})`;
+/** Inverse of a column-major [a, b, c, d] mat2. */
+const inv2 = ([a, b, c, d]: number[]) => { const det = a * d - c * b; return [d / det, -b / det, -c / det, a / det]; };
 
 /**
  * Grid Pattern — the whole "shapes on a grid" recipe in one node.
@@ -32,7 +50,7 @@ export const GridPatternNode: NodeDefinition = {
   type: 'gridPattern',
   label: 'Grid Pattern',
   category: 'Grid',
-  description: 'Shapes on a grid: which cells get one (all, every other column or row, checker, diagonals, random) and a point that affects the shapes near it (grow, shrink, pull, push, hide, spin). For a shape of your own, wire any SDF (Circle SDF, Shape SDF…) straight into Shape, or a colour chain into Picture: it is drawn once per cell in that cell’s coordinates, and a Cell node inside the chain gives the cell’s ID for per-cell variation. Or take Cell UV into anything and finish with Grid Paint. With nothing wired, the built-in shape is drawn. Overflow lets shapes cross cell borders. Also outputs the mask, the SDF and the raw grid (Cell ID, Cell Center, Influence, Placed).',
+  description: 'Shapes on a grid: which cells get one (all, every other column or row, checker, diagonals, random) and a point that affects the shapes near it (grow, shrink, pull, push, hide, spin). For a shape of your own, wire any SDF (Circle SDF, Shape SDF…) straight into Shape, or a colour chain into Picture: it is drawn once per cell in that cell’s coordinates, and a Cell node inside the chain gives the cell’s ID for per-cell variation. Or take Cell UV into anything and finish with Grid Paint. With nothing wired, the built-in shape is drawn. Overflow lets shapes cross cell borders. Lattice makes the grid hexagons, bricks, diamonds, triangles, or any basis matrix wired into Basis. Also outputs the mask, the SDF and the raw grid (Cell ID, Cell Center, Influence, Placed).',
   inputs: {
     uv:         { type: 'vec2',  label: 'UV' },
     shape:      { type: 'float', label: 'Shape', field: true, hint: 'Wire an SDF (Circle SDF, Shape SDF, a union…): it is drawn in every placed cell, in the cell’s coordinates (−0.5…0.5, with the pattern’s effects). The wired chain is evaluated per cell, so a Cell node inside it varies the shape per cell. Unwired: the built-in shape.' },
@@ -43,6 +61,7 @@ export const GridPatternNode: NodeDefinition = {
     affectAmount: { type: 'float', label: 'Affect Amount', hint: 'How strongly the point affects shapes inside its radius (0 = not at all).' },
     color:      { type: 'vec3',  label: 'Colour', hint: 'Wire a Palette for per-cell colour, or pick a colour below.' },
     background: { type: 'vec3',  label: 'Background' },
+    basis:      { type: 'mat2',  label: 'Basis', hint: 'Lattice: Custom. A mat2 whose columns are the two steps from one cell centre to its neighbours (Scale, Shear, Stretch and Rotation Matrix, multiplied together). Identity is the square grid.' },
   },
   outputs: {
     color:      { type: 'vec3',  label: 'Color', hint: 'Background with the shapes painted over it.' },
@@ -56,13 +75,21 @@ export const GridPatternNode: NodeDefinition = {
     placed:     { type: 'float', label: 'Placed', hint: '1 where the pattern puts a shape in this cell, 0 where it leaves the cell empty.' },
   },
   defaultParams: {
-    columns: 8.0, shape: 'circle', size: 0.3, overflow: 'none', rotation: 0.0, jitter: 0.0, antialias: 0.02,
+    columns: 8.0, lattice: 'square', shape: 'circle', size: 0.3, overflow: 'none', rotation: 0.0, jitter: 0.0, antialias: 0.02,
     pattern: 'all', density: 0.5,
     affect: 'grow', affectRadius: 0.6, affectSoftness: 0.7, affectAmount: 1.0,
     color: [0.95, 0.85, 0.6], background: [0.06, 0.06, 0.09],
   },
   paramDefs: {
     columns:  { label: 'Columns', type: 'float', min: 1, max: 60, step: 1, hint: 'Cells across the width.' },
+    lattice:  { label: 'Lattice', type: 'select', options: [
+      { value: 'square',   label: 'Square' },
+      { value: 'hex',      label: 'Hexagons' },
+      { value: 'brick',    label: 'Brick (offset rows)' },
+      { value: 'diamond',  label: 'Diamonds (45°)' },
+      { value: 'triangle', label: 'Triangles' },
+      { value: 'custom',   label: 'Custom (Basis input)' },
+    ], hint: 'The shape of the grid itself. Every lattice is a basis matrix: the two steps between neighbouring cell centres. Custom takes that matrix from the Basis input, so matrix nodes can stretch, shear and turn the whole grid.' },
     shape:    { label: 'Built-in shape', type: 'select', hint: 'Drawn when nothing is wired into Shape (or Picture).', options: [
       { value: 'circle',  label: 'Circle' },
       { value: 'box',     label: 'Square' },
@@ -104,6 +131,18 @@ export const GridPatternNode: NodeDefinition = {
     color:      { label: 'Colour',     type: 'vec3color' },
     background: { label: 'Background', type: 'vec3color' },
   },
+  glslFunctions: [GLSL_MAT2_INV, `// Nearest lattice centre (as a lattice index) to gp, for basis B with inverse Bi.
+vec2 gpNearest(vec2 gp, mat2 B, mat2 Bi) {
+    vec2 k0 = floor(Bi * gp + 0.5);
+    vec2 best = k0; float bd = 1e9;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        vec2 k = k0 + vec2(float(i), float(j));
+        vec2 d = gp - B * k;
+        float dd = dot(d, d);
+        if (dd < bd) { bd = dd; best = k; }
+    }
+    return best;
+}`],
   glslFunction: `float gpHash(vec2 c) { return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453123); }
 vec2 gpHash2(vec2 c) { return vec2(gpHash(c), gpHash(c + vec2(19.19, 7.07))); }
 float gpShape(vec2 q, float shape, float s) {
@@ -152,6 +191,12 @@ float gpPlaced(vec2 id, float pattern, float density) {
     const patternLit = `${patternIdx < 0 ? 0 : patternIdx}.0`;
     // Pull/push stop at the cell edge unless the neighbours are drawn too.
     const pushK = reach > 0 ? '1.0' : '0.45';
+    // Lattice: square keeps the plain floor/fract grid; the others work in a basis.
+    const latticeParam = String(node.params.lattice ?? 'square');
+    const lattice = latticeParam === 'custom' || LATTICE_BASIS[latticeParam] ? latticeParam : 'square';
+    const tri = lattice === 'triangle';
+    const basisExpr = lattice === 'custom' ? (inputVars.basis ?? 'mat2(1.0)') : lattice === 'square' ? '' : mat2Lit(LATTICE_BASIS[lattice]);
+    const basisInv = lattice === 'custom' ? `m2Inv(${id}_B)` : lattice === 'square' ? '' : mat2Lit(inv2(LATTICE_BASIS[lattice]));
 
     /** One cell frame's SDF, evaluated in its effected coordinates. */
     const shapeAt = (rq: string, cid: string, inf: string) =>
@@ -177,15 +222,37 @@ float gpPlaced(vec2 id, float pattern, float density) {
     const rotated = (v: string) => `vec2(cos(${v}ang) * ${v}q.x - sin(${v}ang) * ${v}q.y, sin(${v}ang) * ${v}q.x + cos(${v}ang) * ${v}q.y) / ${v}sc`;
 
     const h = `${id}_`;
+    const cellLines = lattice === 'square' ? [
+      `    vec2  ${id}_cid  = floor(${id}_gp);`,
+      `    vec2  ${id}_cc   = (${id}_cid + 0.5) * ${id}_cell;`,
+      `    vec2  ${id}_q    = fract(${id}_gp) - 0.5 - (gpHash2(${id}_cid) - 0.5) * ${jit};`,
+    ] : [
+      // The lattice as a basis matrix B (columns: the steps between neighbouring centres).
+      `    mat2  ${id}_B    = ${basisExpr};`,
+      `    mat2  ${id}_Bi   = ${basisInv};`,
+      ...(tri ? [
+        // Triangles: each rhombus of the lattice holds an up and a down triangle (flip 0 / 1).
+        `    vec2  ${id}_L    = ${id}_Bi * ${id}_gp;`,
+        `    vec2  ${id}_k    = floor(${id}_L);`,
+        `    float ${id}_flip = step(1.0, ${id}_L.x - ${id}_k.x + ${id}_L.y - ${id}_k.y);`,
+        `    vec2  ${id}_cid  = vec2(${id}_k.x * 2.0 + ${id}_flip, ${id}_k.y);`,
+        `    vec2  ${id}_ctr  = ${id}_B * (${id}_k + mix(vec2(0.3333333), vec2(0.6666667), ${id}_flip));`,
+      ] : [
+        `    vec2  ${id}_k    = gpNearest(${id}_gp, ${id}_B, ${id}_Bi);`,
+        `    float ${id}_flip = 0.0;`,
+        `    vec2  ${id}_cid  = ${id}_k;`,
+        `    vec2  ${id}_ctr  = ${id}_B * ${id}_k;`,
+      ]),
+      `    vec2  ${id}_cc   = ${id}_ctr * ${id}_cell;`,
+      `    vec2  ${id}_q    = ${id}_gp - ${id}_ctr - (gpHash2(${id}_cid) - 0.5) * ${jit};`,
+    ];
     const lines = [
       `    float ${id}_asp  = u_resolution.x / u_resolution.y;`,
       `    float ${id}_cell = ${id}_asp / ${cols};`,
       `    vec2  ${id}_gp   = ${uv} / ${id}_cell;`,
-      `    vec2  ${id}_cid  = floor(${id}_gp);`,
-      `    vec2  ${id}_cc   = (${id}_cid + 0.5) * ${id}_cell;`,
-      `    vec2  ${id}_q    = fract(${id}_gp) - 0.5 - (gpHash2(${id}_cid) - 0.5) * ${jit};`,
+      ...cellLines,
       `    float ${id}_sc   = 1.0;`,
-      `    float ${id}_ang  = ${rot};`,
+      `    float ${id}_ang  = ${rot}${lattice === 'square' ? '' : ` + ${id}_flip * 3.14159`};`,
       `    float ${id}_on   = gpPlaced(${id}_cid, ${patternLit}, ${dens});`,
       // Influence: 1 at the point, 0 at the radius; softness widens the fade inward. Always an output, whatever Affect does with it.
       `    float ${id}_inf  = smoothstep(${radius}, ${radius} * (1.0 - ${soft}), length(${ap} - ${id}_cc)) * ${amount};`,
@@ -213,20 +280,37 @@ float gpPlaced(vec2 id, float pattern, float density) {
       // cell units so frames of different scales compare.
       const n = `${id}_n`;
       const maskOf = (d: string) => (pictureOnly ? `step(${d}, 0.0)` : `(1.0 - smoothstep(-${aa}, ${aa}, ${d}))`);
-      const ind = '            ';
+      const ind = tri ? '                ' : '            ';
+      // Where the neighbour's cell is: the square grid steps its id; a lattice steps its lattice index.
+      const frame = lattice === 'square' ? [
+        `${ind}vec2  ${n}cid = ${id}_cid + ${n}o;`,
+        `${ind}vec2  ${n}cc  = (${n}cid + 0.5) * ${id}_cell;`,
+        `${ind}vec2  ${n}q   = ${id}_fp - 0.5 - ${n}o - (gpHash2(${n}cid) - 0.5) * ${jit};`,
+      ] : [
+        ...(tri ? [
+          `${ind}float ${n}flip = float(${id}_t);`,
+          `${ind}vec2  ${n}cid = vec2((${id}_k.x + ${n}o.x) * 2.0 + ${n}flip, ${id}_k.y + ${n}o.y);`,
+          `${ind}vec2  ${n}ctr = ${id}_B * (${id}_k + ${n}o + mix(vec2(0.3333333), vec2(0.6666667), ${n}flip));`,
+        ] : [
+          `${ind}float ${n}flip = 0.0;`,
+          `${ind}vec2  ${n}cid = ${id}_k + ${n}o;`,
+          `${ind}vec2  ${n}ctr = ${id}_B * ${n}cid;`,
+        ]),
+        `${ind}vec2  ${n}cc  = ${n}ctr * ${id}_cell;`,
+        `${ind}vec2  ${n}q   = ${id}_gp - ${n}ctr - (gpHash2(${n}cid) - 0.5) * ${jit};`,
+      ];
       lines.push(
         `    float ${id}_d    = 10.0;`,
         `    float ${id}_mask = 0.0;`,
         `    vec3  ${id}_col  = ${bg};`,
-        `    vec2  ${id}_fp   = fract(${id}_gp);`,
+        ...(lattice === 'square' ? [`    vec2  ${id}_fp   = fract(${id}_gp);`] : []),
         `    for (int ${id}_j = -${reach}; ${id}_j <= ${reach}; ${id}_j++) {`,
         `        for (int ${id}_i = -${reach}; ${id}_i <= ${reach}; ${id}_i++) {`,
+        ...(tri ? [`            for (int ${id}_t = 0; ${id}_t <= 1; ${id}_t++) {`] : []),
         `${ind}vec2  ${n}o   = vec2(float(${id}_i), float(${id}_j));`,
-        `${ind}vec2  ${n}cid = ${id}_cid + ${n}o;`,
-        `${ind}vec2  ${n}cc  = (${n}cid + 0.5) * ${id}_cell;`,
-        `${ind}vec2  ${n}q   = ${id}_fp - 0.5 - ${n}o - (gpHash2(${n}cid) - 0.5) * ${jit};`,
+        ...frame,
         `${ind}float ${n}sc  = 1.0;`,
-        `${ind}float ${n}ang = ${rot};`,
+        `${ind}float ${n}ang = ${rot}${lattice === 'square' ? '' : ` + ${n}flip * 3.14159`};`,
         `${ind}float ${n}on  = gpPlaced(${n}cid, ${patternLit}, ${dens});`,
         `${ind}float ${n}inf = smoothstep(${radius}, ${radius} * (1.0 - ${soft}), length(${ap} - ${n}cc)) * ${amount};`,
         ...effects(n, ind),
@@ -236,6 +320,7 @@ float gpPlaced(vec2 id, float pattern, float density) {
         `${ind}${id}_d    = min(${id}_d, ${n}d);`,
         `${ind}${id}_mask = max(${id}_mask, ${n}m);`,
         `${ind}${id}_col  = mix(${id}_col, ${colourAt(`${n}rq`, `${n}cid`, `${n}inf`)}, ${n}m);`,
+        ...(tri ? [`            }`] : []),
         `        }`,
         `    }`,
       );
