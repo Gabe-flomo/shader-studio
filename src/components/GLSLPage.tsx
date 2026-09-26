@@ -128,6 +128,8 @@ const SHADERS_KEY = 'shader-studio:glsl-shaders';
 
 interface SavedShader { id: string; name: string; code: string; /** Folder in the list; '' or missing = none. */ group?: string; /** What the shader does, in the owner's words. */ note?: string }
 const GROUPS_OPEN_KEY = 'glsl-editor:groups-open';
+/** Which saved shader the editor holds, so the header can name it (and the list can mark it) across reloads. */
+const OPEN_KEY = 'glsl-editor:open-shader';
 const NO_GROUP = '';
 function loadShaders(): SavedShader[] {
   try { return JSON.parse(localStorage.getItem(SHADERS_KEY) ?? '[]'); } catch { return []; }
@@ -165,6 +167,10 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
   const [notingId, setNotingId] = useState<string | null>(null);
   const [noteVal, setNoteVal] = useState('');
   const [filter, setFilter] = useState('');
+  const [openId, setOpenId] = useState<string | null>(() => { try { return localStorage.getItem(OPEN_KEY); } catch { return null; } });
+  const setOpen = (id: string | null) => { setOpenId(id); try { if (id) localStorage.setItem(OPEN_KEY, id); else localStorage.removeItem(OPEN_KEY); } catch { /* preference only */ } };
+  const openShader = openId ? shaders.find(s => s.id === openId) ?? null : null;
+  const openEdited = !!openShader && openShader.code !== code;
   const toggleGroup = (g: string) => setClosedGroups(prev => { const n = new Set(prev); if (n.has(g)) n.delete(g); else n.add(g); try { localStorage.setItem(GROUPS_OPEN_KEY, JSON.stringify([...n])); } catch { /* preference only */ } return n; });
   const moveToGroup = (id: string, group: string) => {
     const next = shaders.map(s => (s.id === id ? { ...s, group: group || undefined } : s));
@@ -217,12 +223,14 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
     const name = saveNameVal.trim();
     if (!name) return;
     const existing = shaders.find(s => s.name === name);
+    const id = existing?.id ?? `sh_${Date.now()}`;
     const next: SavedShader[] = existing
       ? shaders.map(s => s.id === existing.id ? { ...s, code } : s)
-      : [...shaders, { id: `sh_${Date.now()}`, name, code }];
+      : [...shaders, { id, name, code }];
     // Only reflect the save in the list once it's actually in storage.
     if (!persistShaders(next).ok) return;
     setShaders(next);
+    setOpen(id);
     setShowSaveInput(false);
     setSaveNameVal('');
   };
@@ -230,12 +238,14 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
   const loadShader = (s: SavedShader) => {
     editorRef.current?.replaceAll(s.code);
     editorRef.current?.focus();
+    setOpen(s.id);
   };
 
   const deleteShader = (id: string) => {
     const next = shaders.filter(s => s.id !== id);
     if (!persistShaders(next).ok) return;
     setShaders(next);
+    if (openId === id) setOpen(null);
   };
 
   const commitNote = (id: string) => {
@@ -320,7 +330,10 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
       {/* ── Editor pane ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, minWidth: 0 }}>
         <div style={{ ...panelHead, padding: '0 12px 0 16px' }}>
-          <span style={{ fontWeight: 650, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>Fragment shader</span>
+          <span title={openShader ? `${openShader.name}${openEdited ? ' · edited since it was saved' : ' · saved'}` : 'An unsaved shader: Save gives it a name'} style={{ fontWeight: 650, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{openShader ? openShader.name : 'Fragment shader'}</span>
+            {openEdited && <span aria-label="Edited since it was saved" style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.warning, flexShrink: 0 }} />}
+          </span>
           {translation.dialect !== 'studio' && (
             <span
               title={[...translation.notes, ...translation.unsupported.map(u => `⚠ ${u}`)].join('\n')}
@@ -348,9 +361,9 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           <Button size="sm" variant="ghost" onClick={tidy} title="Rewrite the text as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
           {onConvert && <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)} title="Open this shader on the Convert page and see the nodes it would become">Convert</Button>}
           <IconButton icon="copy" label="Copy the whole shader" size="sm" onClick={() => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); }} />
-          <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => setCode(nodeGraphShader || BOILERPLATE)} />
-          <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => setCode(BOILERPLATE)} />
-          <IconButton icon="trash" label="Clear the editor" size="sm" onClick={() => setCode('')} />
+          <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => { setCode(nodeGraphShader || BOILERPLATE); setOpen(null); }} />
+          <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => { setCode(BOILERPLATE); setOpen(null); }} />
+          <IconButton icon="trash" label="Clear the editor" size="sm" onClick={() => { setCode(''); setOpen(null); }} />
           {!sideOpen && <IconButton icon="popout" label="Show saved shaders and functions" size="sm" onClick={() => setShowPanel(true)} />}
         </div>
 
@@ -460,7 +473,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
                   <SavedShaderCard
                     key={s.id}
                     shader={s}
-                    open={s.code === code}
+                    open={s.id === openId}
                     renaming={renamingId === s.id}
                     renameVal={renameVal}
                     onRenameChange={setRenameVal}

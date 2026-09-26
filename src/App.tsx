@@ -1235,7 +1235,7 @@ function App() {
           <ThemeOverrideContext.Provider value="dark">
             <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
               <PreviewHeader>
-                {page === 'play' && <AspectPicker />}
+                <AspectPicker />
                 {page === 'play' && <GuidesToggle />}
                 {page === 'play' && <Button size="sm" variant="ghost" icon="play" onClick={() => usePresent.getState().present('full')} title="Present: the picture and its controls on their own, as people will play with it (Full or Exact, phone or screen, fullscreen, Record)">Present</Button>}
                 <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
