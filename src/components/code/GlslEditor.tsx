@@ -6,7 +6,9 @@
  * inserts at the caret or replaces the whole file with history kept.
  */
 import { BRACKET_PAIRS, selectTokenOnDoubleClick } from './editKeys';
-import { useCallback, useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
+import { BracketMarks } from './BracketMarks';
+import { monoCharWidth } from './brackets';
+import { useCallback, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import { tokenizeLine, C, C_LIGHT } from '../glslSyntax';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily } from '../../theme/tokens';
@@ -199,6 +201,11 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
   }, [onChange, pushHistory]);
 
   const lines = value.split('\n');
+  // Bracket marks: the pair at the caret, and every unmatched bracket.
+  const [caret, setCaret] = useState<number | null>(null);
+  const trackCaret = (e: React.SyntheticEvent<HTMLTextAreaElement>) => { const el = e.currentTarget; setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null); };
+  const editorCharW = monoCharWidth(`${EDITOR_FONT_SIZE} ${EDITOR_FONT}`, parseFloat(EDITOR_FONT_SIZE) * 0.6);
+  const editorLineH = parseFloat(EDITOR_FONT_SIZE) * parseFloat(EDITOR_LINE_HEIGHT);
 
   return (
     <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
@@ -233,6 +240,7 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
               ))}
             </div>
           ))}
+          <BracketMarks text={value} caret={caret} charW={editorCharW} lineH={editorLineH} padX={12} padY={10} fontSize={parseFloat(EDITOR_FONT_SIZE)} />
         </div>
         {/* The messages, over the failing lines (the textarea is transparent, so these sit on it). */}
         <div aria-hidden="true" style={{ position: 'absolute', inset: 0, padding: EDITOR_PADDING, fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT, fontFamily: EDITOR_FONT, pointerEvents: 'none', overflow: 'hidden', zIndex: 2 }} ref={messageRef}>
@@ -253,6 +261,10 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onDoubleClick={selectTokenOnDoubleClick}
+          onSelect={trackCaret}
+          onKeyUp={trackCaret}
+          onClick={trackCaret}
+          onBlur={() => setCaret(null)}
           onScroll={syncScroll}
           placeholder={placeholder}
           autoFocus={autoFocus}

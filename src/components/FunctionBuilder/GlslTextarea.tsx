@@ -1,4 +1,7 @@
 import { selectTokenOnDoubleClick, wrapSelection } from '../code/editKeys';
+import { BracketMarks } from '../code/BracketMarks';
+import { monoCharWidth } from '../code/brackets';
+import { useState } from 'react';
 import React, { useRef, useCallback, useEffect } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
@@ -52,10 +55,14 @@ export function GlslTextarea({ value, onChange, onKeyDown, onFocus, hasError }: 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef      = useRef<HTMLPreElement>(null);
 
+  const marksRef = useRef<HTMLDivElement>(null);
+  const [caret, setCaret] = useState<number | null>(null);
+  const trackCaret = (e: React.SyntheticEvent<HTMLTextAreaElement>) => { const el = e.currentTarget; setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null); };
   const syncScroll = useCallback(() => {
     if (!textareaRef.current || !preRef.current) return;
     preRef.current.scrollTop  = textareaRef.current.scrollTop;
     preRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    if (marksRef.current) { marksRef.current.scrollTop = textareaRef.current.scrollTop; marksRef.current.scrollLeft = textareaRef.current.scrollLeft; }
   }, []);
 
   // Auto-resize: set textarea height to its exact scroll height so the
@@ -91,6 +98,10 @@ export function GlslTextarea({ value, onChange, onKeyDown, onFocus, hasError }: 
           zIndex:         1,
         }}
       />
+      {/* Bracket marks: the pair at the caret, every unmatched bracket */}
+      <div ref={marksRef} aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
+        <BracketMarks text={value} caret={caret} charW={monoCharWidth(`13px ${fontFamily.mono}`, 7.8)} lineH={13 * 1.6} padX={14} padY={12} fontSize={13} />
+      </div>
       {/* Editable layer — transparent text, coloured caret */}
       <textarea
         ref={textareaRef}
@@ -104,6 +115,10 @@ export function GlslTextarea({ value, onChange, onKeyDown, onFocus, hasError }: 
           onKeyDown?.(e);
         }}
         onFocus={e => onFocus?.(e.currentTarget)}
+        onSelect={trackCaret}
+        onKeyUp={trackCaret}
+        onClick={trackCaret}
+        onBlur={() => setCaret(null)}
         onScroll={syncScroll}
         style={{
           ...SHARED,

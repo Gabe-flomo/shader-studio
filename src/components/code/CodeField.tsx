@@ -1,4 +1,5 @@
 import { selectTokenOnDoubleClick, wrapSelection } from './editKeys';
+import { BracketMarks } from './BracketMarks';
 import { useCallback, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -87,6 +88,8 @@ export function CodeField({
     });
   };
 
+  const [caret, setCaret] = useState<number | null>(null);
+  const trackCaret = (e: React.SyntheticEvent<HTMLTextAreaElement>) => { const el = e.currentTarget; setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null); };
   const text: CSSProperties = {
     margin: 0, padding: `${PAD_Y}px ${PAD_X}px`, border: 0, font: `${FONT_SIZE}px/${LINE_H}px ${fontFamily.mono}`,
     whiteSpace: 'pre', tabSize: 2, letterSpacing: 0, boxSizing: 'border-box',
@@ -121,6 +124,7 @@ export function CodeField({
         {/* As wide as the longest line, so the textarea never scrolls on its own */}
         <div style={{ position: 'relative', flex: '1 0 auto' }}>
           <pre aria-hidden dangerouslySetInnerHTML={{ __html: html }} style={{ ...text, color: tk.text.primary, minWidth: '100%', width: 'max-content', pointerEvents: 'none' }} />
+          <BracketMarks text={value} caret={caret} charW={charWidth()} lineH={LINE_H} padX={PAD_X} padY={PAD_Y} fontSize={FONT_SIZE} />
           {!value && placeholder && (
             <pre aria-hidden style={{ ...text, position: 'absolute', inset: 0, color: tk.text.faint, pointerEvents: 'none' }}>{placeholder}</pre>
           )}
@@ -149,9 +153,11 @@ export function CodeField({
               }
               onKeyDown?.(e);
             }}
-            onClick={ac.close}
+            onClick={e => { ac.close(); trackCaret(e); }}
+            onSelect={trackCaret}
+            onKeyUp={trackCaret}
             onFocus={e => { setFocused(true); onFocus?.(e.currentTarget); }}
-            onBlur={() => { setFocused(false); ac.close(); onBlur?.(); }}
+            onBlur={() => { setFocused(false); ac.close(); setCaret(null); onBlur?.(); }}
             style={{
               ...text, position: 'absolute', inset: 0, width: '100%', height: '100%', resize: 'none', outline: 'none', overflow: 'hidden',
               background: 'transparent', color: 'transparent', caretColor: tk.accent.base,
@@ -216,6 +222,8 @@ export function CodeInput({
   };
 
   const text: CSSProperties = { font: `500 ${FONT_SIZE}px ${fontFamily.mono}`, whiteSpace: 'pre', letterSpacing: 0 };
+  const [caret, setCaret] = useState<number | null>(null);
+  const trackCaret = (e: React.SyntheticEvent<HTMLInputElement>) => { const el = e.currentTarget; setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null); };
   return (
     <span style={{
       position: 'relative', height, minWidth: 0, display: 'flex', alignItems: 'center', padding: '0 10px', borderRadius: radius.control,
@@ -224,9 +232,11 @@ export function CodeInput({
     }}>
       {/* Highlight layer under a transparent input */}
       <span aria-hidden style={{ ...text, position: 'absolute', left: 10, right: 10, overflow: 'hidden', pointerEvents: 'none' }}>
-        <span style={{ display: 'inline-block', transform: `translateX(${-scrollX}px)` }}>{value
+        <span style={{ display: 'inline-block', position: 'relative', transform: `translateX(${-scrollX}px)` }}>{value
           ? tokenizeLine(value, pal).map((t, i) => <span key={i} style={{ color: t.color }}>{t.text}</span>)
-          : <span style={{ color: tk.text.faint }}>{placeholder}</span>}</span>
+          : <span style={{ color: tk.text.faint }}>{placeholder}</span>}
+          <BracketMarks text={value} caret={caret} charW={charWidth()} lineH={Math.round(FONT_SIZE * 1.4)} padY={-Math.round(FONT_SIZE * 0.2)} fontSize={FONT_SIZE} />
+        </span>
       </span>
       <input
         ref={setRefs}
@@ -247,11 +257,11 @@ export function CodeInput({
           onKeyDown?.(e);
         }}
         onScroll={e => setScrollX(e.currentTarget.scrollLeft)}
-        onKeyUp={e => setScrollX(e.currentTarget.scrollLeft)}
-        onSelect={e => setScrollX(e.currentTarget.scrollLeft)}
+        onKeyUp={e => { setScrollX(e.currentTarget.scrollLeft); trackCaret(e); }}
+        onSelect={e => { setScrollX(e.currentTarget.scrollLeft); trackCaret(e); }}
         onFocus={e => { setFocused(true); onFocus?.(e.currentTarget); }}
         onBlur={() => { setFocused(false); ac.close(); onBlur?.(); }}
-        onClick={ac.close}
+        onClick={e => { ac.close(); trackCaret(e); }}
         style={{ ...text, position: 'relative', flex: 1, minWidth: 0, padding: 0, border: 0, outline: 'none', background: 'transparent', color: 'transparent', caretColor: tk.accent.base }}
       />
       {ac.state.open && anchorXY && (
