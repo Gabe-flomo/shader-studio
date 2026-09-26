@@ -13,6 +13,12 @@
  *   mouse     the shader's u_mouse (the Mouse node)
  *   pointer   the pointer over the layers (Script layers, particles, brushes)
  *   events    actions that fired (bursts, drops, Next line, script buttons)
+ *   audio frames  what audio layers drew (their sound's waveform or spectrum),
+ *             only while one is showing (takeAudio.ts)
+ *
+ * A take also keeps a seed. Recording starts the layers over with it, and so
+ * do playing back and rendering, so every random choice the layers make
+ * (unseeded particles, Script layers' random(), bodies' scatter) repeats.
  *
  * On stop each track keeps only the keys it needs (takePlayback.ts) and the
  * take is saved with the graph's Play record. Playing it back mutes live
@@ -31,6 +37,9 @@ import { readControlValue } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
 import { layerTarget, parseActionTarget, parseLayerTarget, TAKE_MAX_SECONDS, TAKES_MAX, type ActionKind, type PlayRecord, type PlayTake, type TakeTrack } from '../types/play';
 import { encodeKeys, takeEventsBetween, takeMouseAt, takePointerAt, takeSize, trackAt } from './takePlayback';
+import { AUDIO_GAP, AudioFrameBuffer, audioNeeds, audioSourceOf, takeAudioAt, takeAudioFor } from './takeAudio';
+import { liveAudio } from './liveAudio';
+import { layerAudio } from './layerAudio';
 import { toast } from '../components/ui/toastStore';
 
 export { takeEventsBetween, takeMouseAt, takePointerAt, takeValuesAt, type Take } from './takePlayback';
@@ -64,11 +73,15 @@ export class TakeCapture {
 
   private play: PlayRecord;
   private keep: number;
+  private seed: number;
+  private audio = new Map<string, AudioFrameBuffer>();
+  private audioKept = -Infinity;
 
-  /** `keep`: seconds to hold (the rolling buffer); older samples are dropped. */
-  constructor(play: PlayRecord, keep = Infinity) {
+  /** `keep`: seconds to hold (the rolling buffer); older samples are dropped. `seed`: the layers' (0: one is made on save). */
+  constructor(play: PlayRecord, keep = Infinity, seed = 0) {
     this.play = play;
     this.keep = keep;
+    this.seed = seed;
     this.offAct = playOverlay.onAct(a => this.pending.push({ do: a.do, layerId: a.layerId, amount: a.amount }));
   }
 
@@ -80,6 +93,7 @@ export class TakeCapture {
 
   private reset(): void {
     this.tracks.clear(); this.events = []; this.first = null; this.last = -Infinity; this.kept = -Infinity;
+    this.audio.clear(); this.audioKept = -Infinity;
   }
 
   private push(kind: TakeTrack['kind'], id: string, label: string, t: number, v: number | number[], extra: Partial<TakeTrack> = {}): void {
@@ -132,7 +146,22 @@ export class TakeCapture {
     this.push('pointer', 'y', 'Pointer y', time, p.y);
     this.push('pointer', 'over', 'Pointer over', time, p.over ? 1 : 0, { step: true });
     this.push('pointer', 'down', 'Pointer down', time, p.down ? 1 : 0, { step: true });
+    this.sampleAudio(time, play);
     if (this.keep < Infinity && time - this.lastTrim > 2) { this.lastTrim = time; this.trim(time - this.keep); }
+  }
+
+  /** Audio layers' sound, about 30 frames a second, while one is showing. */
+  private sampleAudio(time: number, play: PlayRecord): void {
+    if (time - this.audioKept < AUDIO_GAP) return;
+    const needs = audioNeeds(play);
+    if (!needs.size) return;
+    this.audioKept = time;
+    for (const [source, n] of needs) {
+      const key = `${source}\u0000${n.wave ? 1 : 0}${n.freq ? 1 : 0}`;
+      let buf = this.audio.get(key);
+      if (!buf) { buf = new AudioFrameBuffer(source, n.wave, n.freq); this.audio.set(key, buf); }
+      buf.push(time, source === 'live' ? liveAudio.raw() : layerAudio.raw(source));
+    }
   }
 
   private flushEvents(time: number): void {
@@ -148,6 +177,7 @@ export class TakeCapture {
       if (i > 0) { tr.t.splice(0, i); tr.v.splice(0, i * tr.meta.width); }
     }
     this.events = this.events.filter(e => e.t >= from);
+    for (const a of this.audio.values()) a.trim(from);
     if (this.first !== null && this.first < from) this.first = from;
   }
 
@@ -162,7 +192,8 @@ export class TakeCapture {
     const length = Math.min(cap, this.last - from);
     if (length < 0.1) return null;
     const raw = [...this.tracks.values()];
-    const build = (precision: number, stride = 1): PlayTake => ({
+    const seed = this.seed || newSeed();
+    const build = (precision: number, stride = 1, audioStride = 1): PlayTake => ({
       id: `take-${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`,
       name, from, length,
       tracks: raw.map(tr => {
@@ -180,16 +211,28 @@ export class TakeCapture {
         return { ...tr.meta, keys: encodeKeys(times, values, tr.meta.width, tr.meta.step, precision) };
       }),
       events: this.events.filter(e => e.t >= from && e.t <= from + length).map(e => ({ t: e.t - from, ...e.a })),
+      seed,
+      ...this.audioTracks(from, length, audioStride),
     });
-    // Over budget (a lot of noise-driven controls): loosen the tolerance, then thin to 30, 15… per second.
+    // Over budget (a lot of noise-driven controls, a long audio layer): loosen the tolerance and
+    // thin the audio frames to 15 a second, then thin everything to 30, 15… per second; last, drop the audio.
     let take = build(1);
-    for (const [p, stride] of [[4, 1], [16, 1], [16, 2], [16, 4], [16, 8], [16, 16]]) {
+    for (const [p, stride, audioStride] of [[4, 1, 1], [4, 1, 2], [16, 1, 2], [16, 2, 2], [16, 2, 4], [16, 4, 4], [16, 8, 8], [16, 16, 16], [16, 16, Infinity]]) {
       if (takeSize(take) <= TAKE_BUDGET) break;
-      take = build(p, stride);
+      take = build(p, stride, audioStride);
     }
     return take;
   }
+
+  private audioTracks(from: number, length: number, stride: number): Pick<PlayTake, 'audioFrames'> {
+    if (!Number.isFinite(stride)) return {};
+    const out = [...this.audio.values()].map(a => a.toTrack(from, length, stride)).filter(t => t !== null);
+    return out.length ? { audioFrames: out } : {};
+  }
 }
+
+/** A seed for a take's layers: 1..999999. */
+export function newSeed(): number { return 1 + Math.floor(Math.random() * 999999); }
 
 // ── Playing a take back (the live preview and offline frames) ─────────────
 
@@ -251,9 +294,20 @@ export function takeApplier(take: PlayTake, handle: { setUniform: (name: string,
       return acts;
     },
     pointer: (time: number) => takePointerAt(take, time),
+    /** Audio layers' sound at `time`, from the take's audio frames. */
+    audio: (time: number) => takeAudioFor(take, time),
+    /** The layers' seed, for a render that starts them over. */
+    seed: take.seed ?? 0,
     release() { releaseLayers(layerKeys); },
   };
 }
+
+/** A jump forward bigger than this (s) is a seek: the layers run through the skipped time. */
+const SEEK_JUMP = 0.25;
+/** Fast-forward steps: at least this long (s)… */
+const FF_STEP = 1 / 30;
+/** …and at most this many for one seek, so a scrub stays responsive (the layers' step caps at 0.1 s). */
+const FF_MAX_STEPS = 400;
 
 /** The live preview playing a take back: an input source that writes after the Play engine. */
 class Replay implements InputSource {
@@ -261,10 +315,13 @@ class Replay implements InputSource {
   private layerKeys = new Set<string>();
   private detach: () => void;
   readonly take: PlayTake;
+  private audioTime = 0;
   constructor(take: PlayTake) {
     this.take = take;
     playEngine.setMuted(true);
-    playOverlay.setReplaying(true);
+    playOverlay.setReplaying(true, take.seed ?? 0);
+    // Audio layers hear the take's sound at the frame being drawn.
+    playOverlay.setReplayAudio(take.audioFrames?.length ? l => takeAudioAt(take, this.audioTime, audioSourceOf(l)) : null);
     this.detach = inputBus.addSource(this);
   }
   wantsTick() { return true; }
@@ -272,8 +329,15 @@ class Replay implements InputSource {
   position(): number { return Number.isFinite(this.lastTime) ? this.lastTime - this.take.from : 0; }
   tickInputs(_dt: number, time: number, write: InputWriter): void {
     const take = this.take;
-    // Sent back (a scrub, Play from the top): the layers start over from there.
-    if (time < this.lastTime - 1e-6) { playOverlay.resetLayers(); this.lastTime = time - take.from < 0.02 ? -Infinity : time; }
+    // Sent back (a scrub, Play from the top): the layers start over from the take's start and run
+    // up to here, so a burst from before this point is there as it was. Sent forward: they run
+    // through the skipped time instead of firing everything at once.
+    if (time < this.lastTime - 1e-6) {
+      playOverlay.resetLayers();
+      this.lastTime = -Infinity;
+      if (time - take.from >= 0.02) this.fastForward(take.from, time);
+    } else if (Number.isFinite(this.lastTime) && time - this.lastTime > SEEK_JUMP) this.fastForward(this.lastTime, time);
+    this.audioTime = time;
     applyTake(take, time, {
       show: (id, v) => playEngine.showLive(id, v),
       param: (key, v) => write(paramChannelKey(key), v),
@@ -290,6 +354,29 @@ class Replay implements InputSource {
       queueMicrotask(() => { if (replay === this) { useNodeGraphStore.getState().setTimePlaying(false); useTakes.setState({ replayPlaying: false }); } });
     }
   }
+  /**
+   * Run the layers from clock `from` up to (not including) `to`, off screen, at
+   * a coarse step: the take's layer values, pointer, sound and actions at each
+   * step, as if it had played through. `lastTime` ends at the last step.
+   */
+  private fastForward(from: number, to: number): void {
+    const take = this.take;
+    const span = to - from;
+    if (span <= 0) return;
+    const step = Math.max(FF_STEP, span / FF_MAX_STEPS);
+    const noop = () => {};
+    let t = from, prev = this.lastTime;
+    while (t < to - 1e-6) {
+      applyTake(take, t, { param: noop, bus: noop, audio: noop, layerKeys: this.layerKeys });
+      this.audioTime = t;
+      const acts = takeEventsBetween(take, prev, t);
+      playOverlay.stepLayers(t, Number.isFinite(prev) ? t - prev : step, takePointerAt(take, t), acts);
+      prev = t;
+      t += step;
+    }
+    this.lastTime = prev;
+  }
+
   end(): void {
     this.detach();
     releaseLayers(this.layerKeys);
@@ -433,7 +520,10 @@ export const useTakes = create<TakeState>((set, get) => ({
     const go = () => {
       clearInterval(countTimer);
       capture?.dispose();
-      capture = new TakeCapture(useNodeGraphStore.getState().play);
+      // The layers start over with the take's seed: played back and rendered, they run the same way.
+      const seed = newSeed();
+      playOverlay.startSeeded(seed);
+      capture = new TakeCapture(useNodeGraphStore.getState().play, Infinity, seed);
       stopping = false;
       syncRecorder();
       useNodeGraphStore.getState().setTimePlaying(true);

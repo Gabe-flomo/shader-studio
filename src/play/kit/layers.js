@@ -877,6 +877,10 @@ function klValueNoise(x, y, z, seed) {
 export function klSketchHelpers(get) {
   const st = { fill: '#ffffff', stroke: null, doFill: true, doStroke: false, weight: 1, textSize: 16, textFont: 'sans-serif', align: 'left', baseline: 'alphabetic', shape: null, noiseSeed: 0 };
   const ctx = () => get().ctx;
+  // The frame's random source (seeded while a take records, plays back or renders), else Math.random.
+  const rnd = () => { const s = get(); return s && typeof s.random === 'function' ? s.random() : Math.random(); };
+  // Math.random inside the sketch goes to the same source: `Math` in the sketch's scope is this one.
+  const SketchMath = Object.create(Math, { random: { value: rnd } });
   const paint = (path, closeIt) => {
     const c = ctx();
     if (closeIt !== false && path) c.closePath();
@@ -923,7 +927,8 @@ export function klSketchHelpers(get) {
     norm: (v, a, b) => (v - a) / (b - a || 1),
     radians: d => (d * Math.PI) / 180,
     degrees: r => (r * 180) / Math.PI,
-    random: (a, b) => { if (Array.isArray(a)) return a[Math.floor(Math.random() * a.length)]; if (a === undefined) return Math.random(); if (b === undefined) return Math.random() * a; return a + Math.random() * (b - a); },
+    random: (a, b) => { if (Array.isArray(a)) return a[Math.floor(rnd() * a.length)]; if (a === undefined) return rnd(); if (b === undefined) return rnd() * a; return a + rnd() * (b - a); },
+    Math: SketchMath,
     noise: (x, y, z) => klValueNoise(x || 0, y || 0, z || 0, st.noiseSeed),
     noiseSeed: n => { st.noiseSeed = n || 0; },
     floor: Math.floor, ceil: Math.ceil, round: Math.round, abs: Math.abs, min: Math.min, max: Math.max, sqrt: Math.sqrt, pow: Math.pow, sin: Math.sin, cos: Math.cos, tan: Math.tan, atan2: Math.atan2,

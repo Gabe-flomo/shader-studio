@@ -28,6 +28,7 @@ export interface ParticleEnv {
 export const PARTICLE_PALETTES: Array<{ name: string; a: number[]; b: number[]; c: number[]; d: number[] }>;
 export function noise3(x: number, y: number, z: number): number;
 export function seededRandom(seed: number): () => number;
+export function stringSeed(text: string, mix?: number): number;
 export function paletteColour(index: number, t: number): [number, number, number];
 export function paletteCssAt(index: number, t: number): string;
 export function brightnessAt(sample: Uint8ClampedArray, sw: number, sh: number, x: number, y: number): number;

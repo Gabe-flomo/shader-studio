@@ -526,7 +526,11 @@ function App() {
   const shaderCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const offlineRenderRef = useRef<OfflineRenderHandle | null>(null);
   const handleCanvasReady = useCallback((c: HTMLCanvasElement) => { shaderCanvasRef.current = c; }, []);
-  const handleRegisterOfflineRender = useCallback((handle: OfflineRenderHandle) => { offlineRenderRef.current = handle; }, []);
+  const handleRegisterOfflineRender = useCallback((handle: OfflineRenderHandle) => {
+    offlineRenderRef.current = handle;
+    // Dev-only, like window.__shaderStudio: scripted checks render offline frames through it.
+    if (import.meta.env.DEV) (window as unknown as { __shaderStudioOffline?: OfflineRenderHandle }).__shaderStudioOffline = handle;
+  }, []);
 
   const [showHistogram, setShowHistogram] = useState(false);
   const [histData, setHistData]           = useState<HistogramData | null>(null);

@@ -19,12 +19,14 @@ import { playEngine } from '../lib/playEngine';
 import { liveAudio } from '../lib/liveAudio';
 import { layerAudio } from '../lib/layerAudio';
 import { cameraInput } from '../lib/cameraInput';
-import { createLayerKit, type KitEnv, type KitPointer, type LayerKit } from './kit/kit.js';
+import { createLayerKit, type KitAudio, type KitEnv, type KitPointer, type LayerKit } from './kit/kit.js';
 import { setScriptStatus } from './scriptStatus';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
 
 type KitAction = { do: ActionKind; layerId: string; amount: number };
+/** An audio layer's sound from a take: a frame, null (the input was off), or undefined (not recorded: the live sound). */
+export type TakeAudioSource = (l: PlayLayer) => KitAudio | null | undefined;
 
 export type LayerWriter = (layerId: string, patch: Partial<PlayLayer>) => void;
 export type { ShaderTap } from './kit/kit.js';
@@ -64,7 +66,10 @@ class PlayOverlay {
   private actListeners = new Set<(a: KitAction) => void>();
   /** Set while a take plays back: the pointer it recorded, and live actions are ignored. */
   private replayPointer: KitPointer | null = null;
+  private replayAudio: TakeAudioSource | null = null;
   private replaying = false;
+  /** The layers' random seed (a take recording or playing back); 0 = Math.random. */
+  private seed = 0;
 
   private fire(a: KitAction): void {
     if (this.replaying) return;
@@ -81,16 +86,47 @@ class PlayOverlay {
    * take puts them. Starting or ending clears the layers' state (particles,
    * bodies, strokes), as a render of the take starts from nothing.
    */
-  setReplaying(on: boolean): void {
+  setReplaying(on: boolean, seed = 0): void {
     this.replaying = on;
-    if (!on) this.replayPointer = null;
-    this.kit.reset();
+    if (!on) { this.replayPointer = null; this.replayAudio = null; }
+    this.seed = on ? seed : 0;
+    this.kit.reset(this.seed);
   }
   setReplayPointer(p: KitPointer | null): void { this.replayPointer = p; }
+  /** The take's audio frames for audio layers (null: the live sound). */
+  setReplayAudio(fn: TakeAudioSource | null): void { this.replayAudio = fn; }
   /** An action from the take playing back. */
   replayAct(a: KitAction): void { this.kit.act(a); }
-  /** Start the layers over (a take scrubbed backwards). */
-  resetLayers(): void { this.kit.reset(); }
+  /** Start the layers over (a take scrubbed backwards), with the take's seed. */
+  resetLayers(): void { this.kit.reset(this.seed); }
+  /**
+   * A take starts recording: the layers start over with its seed, so every
+   * random choice they make (unseeded particles, Script layers' random(),
+   * bodies' scatter) comes out the same when it plays back or renders.
+   */
+  startSeeded(seed: number): void { this.seed = seed; this.kit.reset(seed); }
+
+  private lastGl: HTMLCanvasElement | null = null;
+  private stepCanvas: HTMLCanvasElement | null = null;
+  /**
+   * Run the layers one step without showing it: a take being scrubbed runs
+   * them forward from its start to where it was sent, so bursts and strokes
+   * from before that point are there. Drawn off screen, at the overlay's size
+   * (a Script layer starts over when its size changes).
+   */
+  stepLayers(time: number, dt: number, pointer: KitPointer | null, actions: readonly KitAction[]): void {
+    const gl = this.lastGl, canvas = this.canvas;
+    if (!gl || !canvas) return;
+    const W = canvas.width, H = canvas.height;
+    const off = this.stepCanvas ?? (this.stepCanvas = document.createElement('canvas'));
+    if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }
+    const ctx = off.getContext('2d');
+    if (!ctx) return;
+    for (const a of actions) this.kit.act(a);
+    const env = this.env(gl, W, H, Math.min(2, window.devicePixelRatio || 1), time, dt, true);
+    if (pointer) env.pointer = pointer;
+    this.kit.frame(ctx, this.record, env);
+  }
 
   setCanvas(el: HTMLCanvasElement | null): void {
     this.canvas = el;
@@ -385,7 +421,12 @@ class PlayOverlay {
       hidden: this.record.display?.picture === false,
       backdrop: this.record.display?.backdrop ?? [0, 0, 0],
       audio: needsAudio ? liveAudio.raw() : null,
-      audioFor: l => ((l as { input?: string }).input === 'file' ? layerAudio.raw(l.id) : needsAudio ? liveAudio.raw() : null),
+      audioFor: l => {
+        // A take playing back: the sound it recorded, where it has it.
+        const fromTake = this.replayAudio?.(l);
+        if (fromTake !== undefined) return fromTake;
+        return (l as { input?: string }).input === 'file' ? layerAudio.raw(l.id) : needsAudio ? liveAudio.raw() : null;
+      },
       camera: cameraInput.element(),
       image: src => this.image(src),
       sensor: forExport ? () => {} : (k, v) => playEngine.setSensor(k, v),
@@ -398,6 +439,7 @@ class PlayOverlay {
   draw(gl: HTMLCanvasElement, time: number, dt: number): void {
     const canvas = this.canvas, ctx = this.ctx;
     if (!canvas || !ctx) return;
+    this.lastGl = gl;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const W = Math.max(1, Math.round(gl.clientWidth * dpr)), H = Math.max(1, Math.round(gl.clientHeight * dpr));
     if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
@@ -467,12 +509,13 @@ class PlayOverlay {
    *           composites like Screen/Add
    *   'drop'  left out: only the layers, over nothing
    */
-  compositePixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean, opts: { transparent?: boolean; picture?: TransparentPicture; pointer?: KitPointer | null; actions?: readonly KitAction[] } = {}): void {
+  compositePixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean, opts: { transparent?: boolean; picture?: TransparentPicture; pointer?: KitPointer | null; actions?: readonly KitAction[]; seed?: number; audio?: TakeAudioSource | null } = {}): void {
     // The Play page's "Layers only" hides the picture as well: transparent, that means none.
     const dropPicture = !!opts.transparent && (opts.picture === 'drop' || this.record.display?.picture === false);
     const luma = !!opts.transparent && opts.picture === 'luma' && !dropPicture;
     if (!this.hasLayers()) { if (dropPicture) rgba.fill(0); else if (luma) lumaKey(rgba); return; }
-    if (first || !this.exportKit) this.exportKit = createLayerKit();
+    // A take's seed: the render's random choices are the ones made when it played back.
+    if (first || !this.exportKit) { this.exportKit = createLayerKit(); this.exportKit.reset(opts.seed ?? 0); }
     // A take's actions that fired by this frame (bursts, Next line, script buttons).
     for (const a of opts.actions ?? []) this.exportKit.act(a);
     const pic = this.exportPicture ?? (this.exportPicture = document.createElement('canvas'));
@@ -484,6 +527,12 @@ class PlayOverlay {
     const dpr = Math.max(1, height / Math.max(1, this.canvas?.clientHeight || height));
     const env = this.env(pic, width, height, dpr, time, dt, true);
     if (opts.pointer) env.pointer = opts.pointer; // a take's pointer, frame by frame
+    const takeAudio = opts.audio;
+    if (takeAudio) {
+      // A take's audio frames for its audio layers (the live sound where it has none).
+      const live = env.audioFor;
+      env.audioFor = l => { const a = takeAudio(l); return a !== undefined ? a : live ? live(l) : env.audio; };
+    }
     if (opts.transparent) { env.transparent = true; if (dropPicture) env.hidden = true; }
     this.exportKit.frame(ox, this.record, env);
     if (dropPicture) { rgba.set(ox.getImageData(0, 0, width, height).data); return; }
