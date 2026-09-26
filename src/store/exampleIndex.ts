@@ -12,6 +12,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 import { ctp } from '../theme/palette';
 import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
+import { LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS } from './learnExampleIndex';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -144,6 +145,8 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   comboBlurDirectional: { label: "Combo: Wave Texture + Blur H/V", description: "A sharp Wave Texture through Gaussian Blur set to Horizontal only, Kawase quality (the four diagonal taps from Intel's fast-blur article): the separable Blur X pass from the blur articles, on its own a streak. Switch Direction to Vertical or Both on the card to compare. Both passes plus threshold and screen in one node: Combo: Grid + SDF Fill + Bloom." },
   // The Play folder: one numbered example per Play technique (playExampleIndex.ts).
   ...PLAY_EXAMPLE_INDEX,
+  // The Learn folder: the Book of Shaders course as graphs (learnExampleIndex.ts).
+  ...LEARN_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -161,6 +164,7 @@ export async function loadExampleGraphs(): Promise<Record<string, ExampleGraph>>
 // the two surfaces never drift.
 export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string[] }> = [
   { label: "Play",              color: ctp.pink, keys: PLAY_EXAMPLE_KEYS },
+  { label: "Learn",             color: ctp.lavender, keys: LEARN_EXAMPLE_KEYS },
   { label: "Color & Lighting",  color: ctp.peach, keys: ['neonGlow','colorStopsCycle'] },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel'] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },

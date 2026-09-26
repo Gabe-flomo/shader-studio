@@ -23,7 +23,7 @@ The node system covers:
 - **Effects** — iterative accumulation loops, domain transformations, gravitational lensing
 - **Output** — vec3 and vec4 color outputs
 
-The **Learn** page is a full interactive guide covering the math behind every node category, with copyable code blocks, step-by-step build instructions, and "Open in Studio" buttons that load pre-built example graphs.
+The **Learn** folder in Examples is a Book of Shaders-style course in graphs: 18 numbered examples from a single colour to a first ray march, each with notes on the Play page that say what it shows, how it is built and what to try.
 
 ---
 
