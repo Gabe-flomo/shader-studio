@@ -146,7 +146,7 @@
     if (LAYOUT === 'slides') {
       steps.forEach(function (s, k) { s.hidden = k !== current; });
       document.querySelector('.pp-stage').scrollTop = 0;
-      if (history.replaceState) history.replaceState(null, '', '#' + (current + 1));
+      try { history.replaceState(null, '', '#' + (current + 1)); } catch (e) { /* a page in a frame without its own address */ }
     } else {
       steps[current].scrollIntoView({ behavior: 'smooth', block: 'start' });
     }

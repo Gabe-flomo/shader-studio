@@ -166,6 +166,7 @@ function InteractiveSettings({ block, compact }: { block: InteractiveBlock; comp
                 <button type="button" title="Add a chip for it to the text" onClick={() => set({ markdown: `${block.markdown.replace(/\s+$/, '')}${block.markdown.trim() ? ' ' : ''}[[control:${c.id}]]` })}
                   style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'pointer', color: on ? tk.text.primary : tk.text.muted, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {on?.c.label || c.label}
+                  {on?.c.label && on.c.label !== c.label && <span style={{ color: tk.text.faint, fontWeight: 500 }}> · {c.label}</span>}
                 </button>
                 {on && <IconButton size="sm" icon="chevU" label="Earlier" disabled={on.i === 0} onClick={() => move(on.i, -1)} />}
                 {on && <IconButton size="sm" icon="chevD" label="Later" disabled={on.i === block.controls.length - 1} onClick={() => move(on.i, 1)} />}

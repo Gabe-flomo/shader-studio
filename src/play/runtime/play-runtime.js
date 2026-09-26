@@ -74,7 +74,7 @@
 .ssp-colour{width:100%;height:30px;border:0;padding:0;background:none;border-radius:6px;cursor:pointer}
 .ssp-empty{color:#9a9da8;margin-top:10px}
 .ssp-error{position:absolute;inset:auto 12px 12px 12px;padding:10px 12px;border-radius:8px;background:#3a1216;color:#ffb4b4;font-size:12px}
-@media (max-width:720px){.ssp:not(.ssp-bg){flex-direction:column}.ssp:not(.ssp-bg) .ssp-stage{flex:0 0 56%}.ssp-panel{width:auto;flex:1;border-left:0;border-top:1px solid #26272f}}
+@media (max-width:720px){.ssp:not(.ssp-bg){flex-direction:column}.ssp:not(.ssp-bg):not(.ssp-bare) .ssp-stage{flex:0 0 56%}.ssp-panel{width:auto;flex:1;border-left:0;border-top:1px solid #26272f}}
 `;
 
   function injectCss() {
@@ -361,7 +361,7 @@ void main() {
     stage.append(fitBox);
     root.append(stage);
     const panel = el('div', 'ssp-panel');
-    if (showPanel) root.append(panel);
+    if (showPanel) root.append(panel); else if (!bg) root.classList.add('ssp-bare');
     if (bg) { root.style.pointerEvents = 'none'; glCanvas.setAttribute('aria-hidden', 'true'); }
     if (!bg && !pointerOn) stage.style.touchAction = 'auto';
 
@@ -1073,7 +1073,7 @@ void main() {
         const lose = gl.getExtension('WEBGL_lose_context');
         if (lose) lose.loseContext();
         root.innerHTML = '';
-        root.classList.remove('ssp', 'ssp-bg');
+        root.classList.remove('ssp', 'ssp-bg', 'ssp-bare');
       },
       pause() { setPlaying(false); },
       play() { setPlaying(true); },

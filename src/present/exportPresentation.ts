@@ -69,7 +69,7 @@ function canvasHtml(id: string, s: PresentSource | undefined, aspect: number, po
   const limits = sourceLimits(s);
   const still = limits.length > 0;
   const poster = s.poster ? ` style="background-image:url(${s.poster})"` : '';
-  return `<div class="pp-canvas" id="c-${esc(id)}" data-source="${esc(s.id)}" data-pointer="${pointer ? 1 : 0}"${start ? ` data-start="${start}"` : ''}${paused ? ' data-paused="1"' : ''}${still ? ' data-still="1"' : ''} style="aspect-ratio:${aspect}"><div class="pp-host"${poster}></div>${still ? `<div class="pp-note">Still frame: the web player can’t run ${esc(limits.join(', '))} yet.</div>` : '<div class="pp-note pp-wait">Paused to keep the page light: other canvases are running.</div>'}</div>`;
+  return `<div class="pp-canvas" id="c-${esc(id)}" data-source="${esc(s.id)}" data-pointer="${pointer ? 1 : 0}"${start ? ` data-start="${start}"` : ''}${paused ? ' data-paused="1"' : ''}${still ? ' data-still="1"' : ''} style="aspect-ratio:${aspect};--ar:${aspect}"><div class="pp-host"${poster}></div>${still ? `<div class="pp-note">Still frame: the web player can’t run ${esc(limits.join(', '))} yet.</div>` : '<div class="pp-note pp-wait">Paused to keep the page light: other canvases are running.</div>'}</div>`;
 }
 
 function interactiveHtml(b: Extract<Block, { type: 'interactive' }>, s: PresentSource | undefined, render: Render, math: MarkdownOptions['math']): string {
@@ -117,7 +117,7 @@ function blockHtml(b: Block, sources: ReadonlyMap<string, PresentSource>, render
 }
 
 const PAGE_CSS = `
-*{box-sizing:border-box}html,body{margin:0}
+*{box-sizing:border-box}html,body{margin:0}[hidden]{display:none!important}
 body{background:#eef0f4;color:#3a3d47;font:16px/1.62 system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
 .pp-md{overflow-wrap:break-word;min-width:0}.pp-md>:first-child{margin-top:0}.pp-md>:last-child{margin-bottom:0}
 .pp-md p,.pp-md ul,.pp-md ol,.pp-md pre,.pp-md blockquote,.pp-md table{margin:0 0 .8em}
@@ -141,6 +141,7 @@ figure{margin:0}
 .pp-render{display:flex;flex-direction:column;align-items:center;gap:8px}.pp-render>*{width:var(--w);max-width:100%;min-width:min(200px,100%)}
 .pp-render figcaption{color:#6b6f7a;font-size:13.5px;text-align:center}
 .pp-canvas{position:relative;width:100%;border-radius:12px;overflow:hidden;background:#0d0d12}
+.slides .pp-canvas{max-width:calc(64vh * var(--ar,1.78));margin:0 auto}
 .pp-host{position:absolute;inset:0;background-size:cover;background-position:center}
 .pp-note{position:absolute;left:10px;right:10px;bottom:10px;padding:7px 10px;border-radius:8px;background:#0b0b10c7;color:#e8e8ef;font:500 12.5px/1.35 system-ui,sans-serif}
 .pp-wait{display:none}.pp-waiting .pp-wait{display:block}

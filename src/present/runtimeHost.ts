@@ -62,7 +62,7 @@ export function mountPlay(el: HTMLElement, input: PlayHtmlInput, opts: PlayMount
   const m = playRuntime().mount(el, playBundle(input), { mode: 'player', fit: 'cover', ...opts });
   return {
     ...m,
-    destroy() { try { m.destroy(); } finally { el.innerHTML = ''; el.classList.remove('ssp', 'ssp-bg'); } },
+    destroy() { try { m.destroy(); } finally { el.innerHTML = ''; el.classList.remove('ssp', 'ssp-bg', 'ssp-bare'); } },
   };
 }
 

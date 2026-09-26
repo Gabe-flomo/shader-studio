@@ -10,7 +10,7 @@
  *   Code         highlighted GLSL or JavaScript, typed or quoted from a source.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Block, CodeBlock, InteractiveBlock, PresentSource, RenderBlock, TextBlock } from '../../types/presentation';
+import { aspectRatio, type Block, type CodeBlock, type InteractiveBlock, type PresentSource, type RenderBlock, type TextBlock } from '../../types/presentation';
 import { baseValue, mappingsByControl } from '../../present/controls';
 import { resolveCode } from '../../present/code';
 import { playRuntime, type PlayMount } from '../../present/runtimeHost';
@@ -155,7 +155,9 @@ function RenderBlockView({ block, ctx }: { block: RenderBlock; ctx: BlockContext
   return (
     <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
       <div style={{ width: `${pct}%`, minWidth: ctx.compact ? 0 : 200, maxWidth: '100%' }}>
-        <PlayCanvas slotId={block.id} source={ctx.sources.get(block.source)} aspect={block.aspect} pointer={block.pointer} startTime={block.startTime} paused={block.paused} active={ctx.active} sandbox={ctx.sandbox} />
+        {/* On a slide the picture fits the screen's height too. */}
+        <PlayCanvas slotId={block.id} source={ctx.sources.get(block.source)} aspect={block.aspect} pointer={block.pointer} startTime={block.startTime} paused={block.paused} active={ctx.active} sandbox={ctx.sandbox}
+          style={ctx.large ? { maxWidth: `calc(64vh * ${aspectRatio(block.aspect)})`, margin: '0 auto' } : undefined} />
       </div>
       {block.caption && <figcaption style={{ width: `${pct}%`, maxWidth: '100%', color: tk.text.muted, font: `500 13px/1.45 ${fontFamily.ui}`, textAlign: 'center' }}>{block.caption}</figcaption>}
     </figure>
