@@ -2308,7 +2308,10 @@ export function MobileGraphBrowser() {
     const extraParamEntries: Array<[string, ParamDef]> = Object.entries(def?.paramDefs ?? {})
       .filter((entry): entry is [string, ParamDef] => {
         const [key, pd] = entry;
-        return !(key in node.inputs) && (pd.type === 'vec3' || pd.type === 'vec3color' || pd.type === 'bool') && paramVisible(node, pd);
+        // A colour whose same-named socket is unwired (a March Loop's Background / Albedo,
+        // Glow to Color's Tint) still needs its picker; a wire there wins, so then it hides.
+        const colourWithFreeSocket = pd.type === 'vec3color' && key in node.inputs && !node.inputs[key]?.connection;
+        return (colourWithFreeSocket || !(key in node.inputs)) && (pd.type === 'vec3' || pd.type === 'vec3color' || pd.type === 'bool') && paramVisible(node, pd);
       });
     const outputEntries = Object.entries(node.outputs);
     const hasInputs = inputEntries.length > 0 || extraParamEntries.length > 0;

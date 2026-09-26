@@ -10,6 +10,7 @@ import { midiOutputKeys, midiUniformName, liveChannelKey } from '../lib/midiOutp
 import { audioUniformName } from './audioUniformNames';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
+import { loopColour } from '../nodes/definitions/scene3d';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -139,6 +140,26 @@ function explicitSceneReturn(subgraph: SubgraphData, slugOf: (id: string) => str
   if (!sg.outputNodeId || !sg.outputKey) return undefined;
   return nodeOutputs.get(slugOf(sg.outputNodeId))?.[sg.outputKey];
 }
+
+/**
+ * Scene Output is the Scene Group's return: when its Distance input is wired,
+ * that value is what the scene function returns, whatever else the subgraph
+ * computes or exposes as extra outputs. Unwired (older graphs, where it was
+ * added later as a marker), the rules above still decide.
+ */
+function sceneOutputReturn(subgraph: SubgraphData, slugOf: (id: string) => string, nodeOutputs: Map<string, Record<string, string>>): string | undefined {
+  const out = subgraph.nodes.find(n => n.type === 'sceneOutput' && n.inputs.dist?.connection);
+  return out ? nodeOutputs.get(slugOf(out.id))?.dist : undefined;
+}
+
+/** A scene function name, or '' when there is none (unwired, or an empty Scene Group's MISSING_SCENE). */
+function liveSceneFn(name: string | undefined): string {
+  return name && name !== 'MISSING_SCENE' && name !== 'MISSING_SCENE_FN' ? name : '';
+}
+
+/** What a march loop calls when no scene is wired: every ray misses. */
+const NO_SCENE_FN = 'mapScene_none';
+const NO_SCENE_GLSL = `float ${NO_SCENE_FN}(vec3 p) {\n    return 1e4;\n}`;
 
 // ── Shared literal formatter ──────────────────────────────────────────────────
 
@@ -1679,7 +1700,9 @@ export class ShaderAssembler {
               if (srcOut?.[port.fromOutputKey]) sgLastFloatVar = srcOut[port.fromOutputKey];
             }
           }
-          sgLastFloatVar = explicitSceneReturn(subgraph, id => sgPrefix + (sgSubSlugMap.get(id) ?? id), this.nodeOutputs) ?? sgLastFloatVar;
+          const sgSlugOf = (id: string) => sgPrefix + (sgSubSlugMap.get(id) ?? id);
+          sgLastFloatVar = sceneOutputReturn(subgraph, sgSlugOf, this.nodeOutputs)
+            ?? explicitSceneReturn(subgraph, sgSlugOf, this.nodeOutputs) ?? sgLastFloatVar;
 
           // Emit the GLSL function — with extra params for any external variable references
           const fnBody = sceneFnLines.join('');
@@ -1711,12 +1734,8 @@ export class ShaderAssembler {
           const mlVolumetric = !!node.params.volumetric;
           const mlPassthrough = fmtP(node.params.passthrough, 0.1);
           const mlJitter     = fmtP(node.params.jitter, 0.0);
-          const bgr  = fmtP(node.params.bgR,      0.0);
-          const bgg  = fmtP(node.params.bgG,      0.0);
-          const bgb  = fmtP(node.params.bgB,      0.0);
-          const albr = fmtP(node.params.albedoR,  0.6);
-          const albg = fmtP(node.params.albedoG,  0.7);
-          const albb = fmtP(node.params.albedoB,  0.9);
+          const mlBg     = loopColour(node, 'bg', inputVars.bg, [0.0, 0.0, 0.0]);
+          const mlAlbedo = loopColour(node, 'albedo', inputVars.albedo, [0.6, 0.7, 0.9]);
 
           // Determine if subgraph uses new-style anchor (marchLoopInputs) vs legacy separate nodes
           const mlInputsNodeRaw = subgraph?.nodes.find(n => n.type === 'marchLoopInputs') ?? null;
@@ -2126,7 +2145,9 @@ export class ShaderAssembler {
                       if (srcOut?.[port.fromOutputKey]) sgLastFloatVar = srcOut[port.fromOutputKey];
                     }
                   }
-                  sgLastFloatVar = explicitSceneReturn(sgSubgraph, id => sgInnerPrefix + (sgInnerSlugMap.get(id) ?? id), this.nodeOutputs) ?? sgLastFloatVar;
+                  const sgInnerSlugOf = (id: string) => sgInnerPrefix + (sgInnerSlugMap.get(id) ?? id);
+                  sgLastFloatVar = sceneOutputReturn(sgSubgraph, sgInnerSlugOf, this.nodeOutputs)
+                    ?? explicitSceneReturn(sgSubgraph, sgInnerSlugOf, this.nodeOutputs) ?? sgLastFloatVar;
 
                   // Emit the GLSL scene function — with extra params for external var references
                   const sgFnBody = sceneFnLines.join('');
@@ -2193,7 +2214,7 @@ export class ShaderAssembler {
                   }
                   // Special case: marchSceneDist inside inline group → emit real scene function call
                   if (gn.type === 'marchSceneDist') {
-                    const resolvedSceneFn2 = sceneFnName || inputVars.scene || '';
+                    const resolvedSceneFn2 = liveSceneFn(sceneFnName || inputVars.scene);
                     if (!resolvedSceneFn2) {
                       const fbResult2 = gDef.generateGLSL(gn, gnInputVars);
                       bodyLines.push(fbResult2.code);
@@ -2282,7 +2303,7 @@ export class ShaderAssembler {
 
               // ── marchSceneDist: emit a direct call to the scene SDF function ────────
               if (sn.type === 'marchSceneDist') {
-                const resolvedSceneFn = sceneFnName || inputVars.scene || '';
+                const resolvedSceneFn = liveSceneFn(sceneFnName || inputVars.scene);
                 if (!resolvedSceneFn) {
                   // No scene connected — fall back to node's own generateGLSL (length(p)-1.0)
                   const fbResult = snDef.generateGLSL(snEffective, snInputVars);
@@ -2363,9 +2384,12 @@ export class ShaderAssembler {
             warpBodyFn = warpFnName;
           }
 
-          // Resolve the scene function: body SceneGroup takes priority, then external scene wire
-          const mlSceneFn = sceneFnName || inputVars.scene || 'MISSING_SCENE_FN';
-          const mlHasScene = mlSceneFn !== 'MISSING_SCENE_FN';
+          // Resolve the scene function: body Scene Group first, then the wired scene.
+          // Nothing live (unwired, or an empty group's MISSING_SCENE): every ray misses.
+          const mlWiredScene = liveSceneFn(sceneFnName || inputVars.scene);
+          const mlHasScene = !!mlWiredScene;
+          if (!mlHasScene) this.functions.add(NO_SCENE_GLSL);
+          const mlSceneFn = mlHasScene ? mlWiredScene : NO_SCENE_FN;
 
           // ── Emit the march loop into main ──────────────────────────────────────
           const mlExtraArgsList = mlExtraInputs.map(ex => {
@@ -2449,10 +2473,10 @@ export class ShaderAssembler {
             `    float ${nodeSlug}_dist   = ${nodeSlug}_t;\n`,
             `    float ${nodeSlug}_depth  = clamp(${nodeSlug}_t / ${mlMaxDist}, 0.0, 1.0);\n`,
             `    vec3  ${nodeSlug}_normal = ${nodeSlug}_n * ${nodeSlug}_hit;\n`,
-            `    vec3  ${nodeSlug}_bg     = vec3(${bgr}, ${bgg}, ${bgb});\n`,
+            `    vec3  ${nodeSlug}_bg     = ${mlBg};\n`,
             `    vec3  ${nodeSlug}_ld     = normalize(vec3(1.5, 2.0, 1.0));\n`,
             `    float ${nodeSlug}_diff   = max(0.0, dot(${nodeSlug}_n, ${nodeSlug}_ld));\n`,
-            `    vec3  ${nodeSlug}_alb    = vec3(${albr}, ${albg}, ${albb});\n`,
+            `    vec3  ${nodeSlug}_alb    = ${mlAlbedo};\n`,
             `    vec3  ${nodeSlug}_color  = ${nodeSlug}_hit > 0.5 ? ${nodeSlug}_alb * (0.15 + 0.85 * ${nodeSlug}_diff) : ${nodeSlug}_bg;\n`,
           ].join('');
 
@@ -2497,12 +2521,12 @@ export class ShaderAssembler {
           const mlVolumetric = !!node.params.volumetric;
           const mlPassthrough = fmtP(node.params.passthrough, 0.1);
           const mlJitter     = fmtP(node.params.jitter, 0.0);
-          const albedoVar     = inputVars.albedo     || `vec3(${fmtP(node.params.albedoR, 0.7)}, ${fmtP(node.params.albedoG, 0.7)}, ${fmtP(node.params.albedoB, 0.7)})`;
+          const albedoVar     = loopColour(node, 'albedo', inputVars.albedo, [0.7, 0.7, 0.7]);
           const lightDirVar   = inputVars.lightDir   || `vec3(${fmtP(node.params.lightX, 1.5)}, ${fmtP(node.params.lightY, 3.0)}, ${fmtP(node.params.lightZ, 1.0)})`;
           const lightColorVar = inputVars.lightColor || `vec3(${fmtP(node.params.lightR, 1.0)}, ${fmtP(node.params.lightG, 0.95)}, ${fmtP(node.params.lightB, 0.85)})`;
           const skyTopVar     = inputVars.skyTop     || `vec3(${fmtP(node.params.skyTopR, 0.2)}, ${fmtP(node.params.skyTopG, 0.45)}, ${fmtP(node.params.skyTopB, 0.8)})`;
           const skyBotVar     = inputVars.skyBot     || `vec3(${fmtP(node.params.skyBotR, 0.55)}, ${fmtP(node.params.skyBotG, 0.5)}, ${fmtP(node.params.skyBotB, 0.4)})`;
-          const bgVar         = inputVars.bg         || `vec3(${fmtP(node.params.bgR, 0.0)}, ${fmtP(node.params.bgG, 0.0)}, ${fmtP(node.params.bgB, 0.0)})`;
+          const bgVar         = loopColour(node, 'bg', inputVars.bg, [0.0, 0.0, 0.0]);
 
           const mlInputsNodeRaw = subgraph?.nodes.find(n => n.type === 'marchLoopInputs') ?? null;
           const mlHasNewStyle = !!mlInputsNodeRaw;
@@ -2873,7 +2897,9 @@ export class ShaderAssembler {
                       if (srcOut?.[port.fromOutputKey]) sgLastFloatVar = srcOut[port.fromOutputKey];
                     }
                   }
-                  sgLastFloatVar = explicitSceneReturn(sgSubgraph, id => sgInnerPrefix + (sgInnerSlugMap.get(id) ?? id), this.nodeOutputs) ?? sgLastFloatVar;
+                  const sgInnerSlugOf = (id: string) => sgInnerPrefix + (sgInnerSlugMap.get(id) ?? id);
+                  sgLastFloatVar = sceneOutputReturn(sgSubgraph, sgInnerSlugOf, this.nodeOutputs)
+                    ?? explicitSceneReturn(sgSubgraph, sgInnerSlugOf, this.nodeOutputs) ?? sgLastFloatVar;
 
                   const sgFnBody = sceneFnLines.join('');
                   const sgInlineExtraDecls = sgInlineExtraParams.map(v => `${v.type} ${v.name}`).join(', ');
@@ -2935,7 +2961,7 @@ export class ShaderAssembler {
                     }
                   }
                   if (gn.type === 'marchSceneDist') {
-                    const resolvedSceneFn2 = sceneFnName || inputVars.scene || '';
+                    const resolvedSceneFn2 = liveSceneFn(sceneFnName || inputVars.scene);
                     if (!resolvedSceneFn2) {
                       const fbResult2 = gDef.generateGLSL(gn, gnInputVars);
                       bodyLines.push(fbResult2.code);
@@ -3020,7 +3046,7 @@ export class ShaderAssembler {
               }
 
               if (sn.type === 'marchSceneDist') {
-                const resolvedSceneFn = sceneFnName || inputVars.scene || '';
+                const resolvedSceneFn = liveSceneFn(sceneFnName || inputVars.scene);
                 if (!resolvedSceneFn) {
                   const fbResult = snDef.generateGLSL(snEffective, snInputVars);
                   bodyLines.push(fbResult.code);
@@ -3095,8 +3121,12 @@ export class ShaderAssembler {
             warpBodyFn = warpFnName;
           }
 
-          const mlSceneFn = sceneFnName || inputVars.scene || 'MISSING_SCENE_FN';
-          const mlHasScene = mlSceneFn !== 'MISSING_SCENE_FN';
+          // Body Scene Group first, then the wired scene. An empty Scene Group
+          // hands over MISSING_SCENE; either way, with no scene every ray misses.
+          const mlWiredScene = liveSceneFn(sceneFnName || inputVars.scene);
+          const mlHasScene = !!mlWiredScene;
+          if (!mlHasScene) this.functions.add(NO_SCENE_GLSL);
+          const mlSceneFn = mlHasScene ? mlWiredScene : NO_SCENE_FN;
 
           const mlExtraArgsList = mlExtraInputs.map(ex => {
             const v = inputVars[ex.key];

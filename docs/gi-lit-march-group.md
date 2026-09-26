@@ -14,7 +14,7 @@ Scene Group  → scene
 GI Lit March Group → color → Output
 ```
 
-Double-click the node to enter its body subgraph, then place SDF primitives connected through a Scene Group (same workflow as MarchLoopGroup). The lighting is handled automatically; you only build the geometry.
+Adding it from the palette brings the whole setup: a March Camera, a Scene Group with a Sphere inside (Scene Pos → Sphere → Scene Output), and the loop, with its Color on the Output when the Output is free. Edit the shapes inside the Scene Group; the lighting is handled automatically. Double-click the loop itself to edit its body (same workflow as a March Loop Group).
 
 ---
 
@@ -43,14 +43,14 @@ All passes hit the same scene function, so they automatically pick up geometry b
 | `ro` | vec3 | Ray origin — connect from March Camera |
 | `rd` | vec3 | Ray direction — connect from March Camera |
 | `scene` | scene3d | Scene SDF function — connect from Scene Group |
-| `albedo` | vec3 | Base surface color. Overrides the parameter sliders when wired |
-| `lightDir` | vec3 | Directional light direction. Overrides the X/Y/Z sliders |
-| `lightColor` | vec3 | Directional light color. Overrides the R/G/B sliders |
+| `albedo` | vec3 | Base surface color. Overrides the Albedo colour on the card when wired |
+| `lightDir` | vec3 | Directional light direction |
+| `lightColor` | vec3 | Directional light color |
 | `skyTop` | vec3 | Sky horizon/zenith color for IBL dome |
 | `skyBot` | vec3 | Ground/nadir color for IBL dome |
-| `bg` | vec3 | Background color shown for rays that miss the scene |
+| `bg` | vec3 | Background color shown for rays that miss the scene. Overrides the Background colour on the card when wired |
 
-All vec3 inputs are optional — each falls back to its corresponding parameter sliders when unconnected.
+All vec3 inputs are optional. Albedo and Background fall back to the colour pickers on the card; the light and sky inputs fall back to the built-in defaults listed under Parameters (saved params, no controls on the card).
 
 ---
 
@@ -91,11 +91,14 @@ Use the individual outputs to build custom compositing: e.g. multiply `ao` onto 
 
 | Param | Default | Range | Description |
 |---|---|---|---|
-| Albedo R/G/B | 0.7 | 0–1 | Base surface color |
+| Albedo | (0.7, 0.7, 0.7) | colour | Base surface color (colour picker; the `albedo` socket overrides it) |
+| Background | black | colour | Colour for rays that miss (colour picker; the `bg` socket overrides it) |
 | Metallic | 0.0 | 0–1 | 0 = dielectric, 1 = metallic (specular tinted by albedo) |
 | Roughness | 0.5 | 0–1 | 0 = mirror-sharp specular, 1 = fully diffuse |
 
 ### Light
+
+Direction and colour have no controls on the card: wire `lightDir` / `lightColor` to change them.
 
 | Param | Default | Description |
 |---|---|---|
@@ -104,6 +107,8 @@ Use the individual outputs to build custom compositing: e.g. multiply `ao` onto 
 | Light Strength | 1.0 | Multiplier on direct light contribution |
 
 ### Sky dome
+
+No controls on the card: wire `skyTop` / `skyBot` to change these.
 
 | Param | Default | Description |
 |---|---|---|

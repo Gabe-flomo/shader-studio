@@ -1402,12 +1402,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.65,
-          bgG: 0.75,
-          bgB: 0.85,
-          albedoR: 0.5,
-          albedoG: 0.5,
-          albedoB: 0.55,
+          bg: [0.65, 0.75, 0.85],
+          albedo: [0.5, 0.5, 0.55],
           subgraph: {
             nodes: [
               {
@@ -1642,12 +1638,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.02,
-          bgG: 0.02,
-          bgB: 0.05,
-          albedoR: 0.8,
-          albedoG: 0.5,
-          albedoB: 0.9,
+          bg: [0.02, 0.02, 0.05],
+          albedo: [0.8, 0.5, 0.9],
           subgraph: {
             nodes: [
               {
@@ -1918,12 +1910,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.65,
-          bgG: 0.75,
-          bgB: 0.85,
-          albedoR: 0.5,
-          albedoG: 0.5,
-          albedoB: 0.55,
+          bg: [0.65, 0.75, 0.85],
+          albedo: [0.5, 0.5, 0.55],
           subgraph: {
             nodes: [
               {
@@ -2501,12 +2489,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.06,
-          bgG: 0.06,
-          bgB: 0.1,
-          albedoR: 0.6,
-          albedoG: 0.7,
-          albedoB: 0.9,
+          bg: [0.06, 0.06, 0.1],
+          albedo: [0.6, 0.7, 0.9],
           subgraph: {
             nodes: [
               {
@@ -2648,9 +2632,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           maxSteps: 80,
           maxDist: 100,
           stepScale: 1,
-          bgR: 0,
-          bgG: 0,
-          bgB: 0,
+          bg: [0, 0, 0],
           subgraph: {
             nodes: [
               {
@@ -2881,12 +2863,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           maxSteps: 80,
           maxDist: 20,
           stepScale: 1,
-          bgR: 0,
-          bgG: 0,
-          bgB: 0.02,
-          albedoR: 0.9,
-          albedoG: 0.6,
-          albedoB: 0.3,
+          bg: [0, 0, 0.02],
+          albedo: [0.9, 0.6, 0.3],
           subgraph: {
             nodes: [
               {
@@ -3024,12 +3002,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           maxSteps: 80,
           maxDist: 20,
           stepScale: 1,
-          bgR: 0.02,
-          bgG: 0.02,
-          bgB: 0.06,
-          albedoR: 0.8,
-          albedoG: 0.4,
-          albedoB: 0.9,
+          bg: [0.02, 0.02, 0.06],
+          albedo: [0.8, 0.4, 0.9],
           subgraph: {
             nodes: [
               {
@@ -3209,12 +3183,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.03,
-          bgG: 0.03,
-          bgB: 0.06,
-          albedoR: 0.3,
-          albedoG: 0.7,
-          albedoB: 0.9,
+          bg: [0.03, 0.03, 0.06],
+          albedo: [0.3, 0.7, 0.9],
           subgraph: {
             nodes: [
               {
@@ -3375,12 +3345,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.05,
-          bgG: 0.04,
-          bgB: 0.08,
-          albedoR: 0.7,
-          albedoG: 0.65,
-          albedoB: 0.5,
+          bg: [0.05, 0.04, 0.08],
+          albedo: [0.7, 0.65, 0.5],
           subgraph: {
             nodes: [
               {
@@ -3523,12 +3489,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           maxSteps: 96,
           maxDist: 10,
           stepScale: 1,
-          bgR: 0.02,
-          bgG: 0.02,
-          bgB: 0.08,
-          albedoR: 0.9,
-          albedoG: 0.5,
-          albedoB: 0.3,
+          bg: [0.02, 0.02, 0.08],
+          albedo: [0.9, 0.5, 0.3],
           subgraph: {
             nodes: [
               {
@@ -3663,12 +3625,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           stepScale: 1,
           volumetric: true,
           passthrough: 0.1,
-          bgR: 0,
-          bgG: 0,
-          bgB: 0,
-          albedoR: 0.3,
-          albedoG: 0.5,
-          albedoB: 1,
+          bg: [0, 0, 0],
+          albedo: [0.3, 0.5, 1],
           subgraph: {
             nodes: [
               {
@@ -3915,12 +3873,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           stepScale: 1,
           volumetric: true,
           passthrough: 0.12,
-          bgR: 0,
-          bgG: 0,
-          bgB: 0,
-          albedoR: 0.5,
-          albedoG: 0.5,
-          albedoB: 0.5,
+          bg: [0, 0, 0],
+          albedo: [0.5, 0.5, 0.5],
           subgraph: {
             nodes: [
               {
@@ -4248,12 +4202,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.06,
-          bgG: 0.06,
-          bgB: 0.1,
-          albedoR: 0.8,
-          albedoG: 0.85,
-          albedoB: 1,
+          bg: [0.06, 0.06, 0.1],
+          albedo: [0.8, 0.85, 1],
           subgraph: { nodes: [], inputPorts: [], outputPorts: [] },
         },
       },
@@ -4392,12 +4342,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0,
-          bgG: 0,
-          bgB: 0,
-          albedoR: 0.15,
-          albedoG: 0.2,
-          albedoB: 0.35,
+          bg: [0, 0, 0],
+          albedo: [0.15, 0.2, 0.35],
           subgraph: {
             nodes: [
               {
@@ -4598,12 +4544,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.04,
-          bgG: 0.04,
-          bgB: 0.08,
-          albedoR: 0.2,
-          albedoG: 0.2,
-          albedoB: 0.3,
+          bg: [0.04, 0.04, 0.08],
+          albedo: [0.2, 0.2, 0.3],
           subgraph: { nodes: [], inputPorts: [], outputPorts: [] },
         },
       },
@@ -4842,12 +4784,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.03,
-          bgG: 0.03,
-          bgB: 0.05,
-          albedoR: 0.88,
-          albedoG: 0.9,
-          albedoB: 0.96,
+          bg: [0.03, 0.03, 0.05],
+          albedo: [0.88, 0.9, 0.96],
           subgraph: { nodes: [], inputPorts: [], outputPorts: [] },
         },
       },
@@ -5033,12 +4971,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.04,
-          bgG: 0.05,
-          bgB: 0.14,
-          albedoR: 0.2,
-          albedoG: 0.2,
-          albedoB: 0.3,
+          bg: [0.04, 0.05, 0.14],
+          albedo: [0.2, 0.2, 0.3],
           subgraph: { nodes: [], inputPorts: [], outputPorts: [] },
         },
       },
@@ -5248,12 +5182,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0.04,
-          bgG: 0.05,
-          bgB: 0.14,
-          albedoR: 0.2,
-          albedoG: 0.2,
-          albedoB: 0.3,
+          bg: [0.04, 0.05, 0.14],
+          albedo: [0.2, 0.2, 0.3],
           subgraph: { nodes: [], inputPorts: [], outputPorts: [] },
         },
       },
@@ -5478,9 +5408,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           maxSteps: 80,
           maxDist: 20,
           stepScale: 1,
-          albedoR: 0.9,
-          albedoG: 0.85,
-          albedoB: 0.75,
+          albedo: [0.9, 0.85, 0.75],
           metallic: 0,
           roughness: 0.45,
           lightX: 2,
@@ -5648,9 +5576,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           maxSteps: 96,
           maxDist: 15,
           stepScale: 0.85,
-          albedoR: 0.75,
-          albedoG: 0.72,
-          albedoB: 0.68,
+          albedo: [0.75, 0.72, 0.68],
           metallic: 0.1,
           roughness: 0.65,
           lightX: 2.2,
@@ -7007,12 +6933,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0,
-          bgG: 0,
-          bgB: 0,
-          albedoR: 0.6,
-          albedoG: 0.7,
-          albedoB: 0.9,
+          bg: [0, 0, 0],
+          albedo: [0.6, 0.7, 0.9],
           subgraph: {
             nodes: [
               {
@@ -7467,12 +7389,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: true,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0,
-          bgG: 0,
-          bgB: 0,
-          albedoR: 0.6,
-          albedoG: 0.7,
-          albedoB: 0.9,
+          bg: [0, 0, 0],
+          albedo: [0.6, 0.7, 0.9],
           subgraph: {
             nodes: [
               {
@@ -7661,12 +7579,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           volumetric: false,
           passthrough: 0.1,
           jitter: 0,
-          bgR: 0,
-          bgG: 0,
-          bgB: 0,
-          albedoR: 0.6,
-          albedoG: 0.7,
-          albedoB: 0.9,
+          bg: [0, 0, 0],
+          albedo: [0.6, 0.7, 0.9],
           subgraph: {
             nodes: [
               {
@@ -9943,9 +9857,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           stepScale: 1,
           volumetric: true,
           passthrough: 0,
-          bgR: 0,
-          bgG: 0,
-          bgB: 0,
+          bg: [0, 0, 0],
           subgraph: {
             nodes: [
               {
@@ -10198,9 +10110,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           stepScale: 1,
           volumetric: true,
           passthrough: 0,
-          bgR: 0,
-          bgG: 0,
-          bgB: 0,
+          bg: [0, 0, 0],
           subgraph: {
             nodes: [
               {
@@ -11603,7 +11513,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
         params: {
           maxSteps: 128, maxDist: 40, stepScale: 0.8, volumetric: false, passthrough: 0.1, jitter: 0,
-          bgR: 0.55, bgG: 0.66, bgB: 0.82, albedoR: 0.95, albedoG: 0.95, albedoB: 0.95,
+          bg: [0.55, 0.66, 0.82], albedo: [0.95, 0.95, 0.95],
           subgraph: {
             nodes: [
               { id: 'vt_mli', type: 'marchLoopInputs', position: { x: 80, y: 160 }, inputs: {}, outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' }, marchPos: { type: 'vec3', label: 'March Pos' }, marchDist: { type: 'float', label: 'March Dist' } }, params: { extraInputs: [] } },
@@ -11757,7 +11667,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
         params: {
           maxSteps: 128, maxDist: 30, stepScale: 0.6, volumetric: false, passthrough: 0.1, jitter: 0,
-          bgR: 0.06, bgG: 0.05, bgB: 0.09, albedoR: 0.95, albedoG: 0.95, albedoB: 0.95,
+          bg: [0.06, 0.05, 0.09], albedo: [0.95, 0.95, 0.95],
           subgraph: {
             nodes: [
               { id: 'vs_mli', type: 'marchLoopInputs', position: { x: 80, y: 160 }, inputs: {}, outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' }, marchPos: { type: 'vec3', label: 'March Pos' }, marchDist: { type: 'float', label: 'March Dist' } }, params: { extraInputs: [] } },
