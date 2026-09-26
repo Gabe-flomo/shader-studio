@@ -6,6 +6,12 @@
  * both are read back and compared; `onDiff` gets the max error (0..255) or
  * the compile error of either side.
  *
+ * The contexts are WebGL2 with the prefix three.js puts on a ShaderMaterial
+ * (`#version 300 es`, gl_FragColor and texture2D mapped to their ES 3.00
+ * forms), so a shader is judged the way the app's preview renders it: fwidth,
+ * loops with a variable bound and the like compile here as they do there.
+ * WebGL1 only where WebGL2 isn't available.
+ *
  * Each canvas keeps one context for its whole life and only swaps programs
  * when a shader changes: a canvas has a single context, so losing it on
  * every change (as this once did) left both pictures black from the second
@@ -18,15 +24,22 @@ import { fontFamily, radius } from '../../theme/tokens';
 export type PairDiff = { max: number; mean: number; badPct: number } | { error: string; side: 'original' | 'graph' };
 
 const VS = 'attribute vec2 p; varying vec2 vUv; void main(){ vUv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }';
+const VS2 = '#version 300 es\nin vec2 p; out vec2 vUv; void main(){ vUv = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }';
+/** What three.js puts before a ShaderMaterial's fragment shader (WebGLProgram, not a RawShaderMaterial). */
+const ES3_PREFIX = ['#version 300 es', 'precision highp float;', 'precision highp int;', '#define varying in', 'layout(location = 0) out highp vec4 pc_fragColor;', '#define gl_FragColor pc_fragColor', '#define texture2D texture', '#define textureCube texture', '#define texture2DLodEXT textureLod', '#define textureCubeLodEXT textureLod', ''].join('\n');
+/** The prefix's lines come before line 1 of the shader: error lines are given back in the shader's own numbering. */
+const PREFIX_LINES = ES3_PREFIX.split('\n').length - 1;
 
-interface Side { gl: WebGLRenderingContext; prog: WebGLProgram | null; error: string | null; locs: Map<string, WebGLUniformLocation | null> }
+interface Side { gl: WebGLRenderingContext | WebGL2RenderingContext; es3: boolean; prog: WebGLProgram | null; error: string | null; locs: Map<string, WebGLUniformLocation | null> }
 
 function context(canvas: HTMLCanvasElement): Side | null {
-  const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false });
+  const opts: WebGLContextAttributes = { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false };
+  const gl2 = canvas.getContext('webgl2', opts);
+  const gl = gl2 ?? canvas.getContext('webgl', opts);
   if (!gl) return null;
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   gl.disable(gl.DITHER);
-  return { gl, prog: null, error: null, locs: new Map() };
+  return { gl, es3: !!gl2, prog: null, error: null, locs: new Map() };
 }
 
 /** Compile `frag` into the side's program, replacing the previous one; null clears it. */
@@ -38,14 +51,18 @@ function program(side: Side, frag: string | null): void {
   const compile = (type: number, src: string) => { const s = gl.createShader(type)!; gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { const log = gl.getShaderInfoLog(s) ?? 'shader error'; gl.deleteShader(s); throw new Error(log); } return s; };
   try {
     const prog = gl.createProgram()!;
-    const vs = compile(gl.VERTEX_SHADER, VS), fs = compile(gl.FRAGMENT_SHADER, frag);
+    const vs = compile(gl.VERTEX_SHADER, side.es3 ? VS2 : VS), fs = compile(gl.FRAGMENT_SHADER, side.es3 ? ES3_PREFIX + frag : frag);
     gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
     gl.deleteShader(vs); gl.deleteShader(fs);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { const log = gl.getProgramInfoLog(prog) ?? 'link error'; gl.deleteProgram(prog); throw new Error(log); }
     gl.useProgram(prog);
     const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     side.prog = prog;
-  } catch (e) { side.error = String((e as Error).message).split('\u0000').join('').trim(); }
+  } catch (e) {
+    const msg = String((e as Error).message).split('\u0000').join('').trim();
+    // `ERROR: 0:12:` counts the prefix's lines too.
+    side.error = side.es3 ? msg.replace(/\b0:(\d+):/g, (_m, l: string) => `0:${Math.max(1, Number(l) - PREFIX_LINES)}:`) : msg;
+  }
 }
 
 function draw(side: Side, size: number, time: number, uniforms: Record<string, number | number[]>): void {

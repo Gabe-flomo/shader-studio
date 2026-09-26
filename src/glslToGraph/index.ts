@@ -34,7 +34,11 @@ import { ALWAYS_HELPERS_GLSL } from '../compiler/shaderAssembler';
 type T = 'float' | 'vec2' | 'vec3' | 'vec4';
 interface Ref { nodeId: string; outputKey: string; type: T; /** A literal's value and, when it initialised a variable, that name. */ lit?: number; name?: string }
 /** A value in flight: a node output, or a float literal not yet spent on a slider. */
-interface Val { ref?: Ref; lit?: number; type: T; ast: Ast; /** The variable a literal initialised, so its slider can carry the name. */ name?: string }
+interface Val {
+  ref?: Ref; lit?: number; type: T; ast: Ast;
+  /** The variable a literal initialised, so its slider can carry the name. */ name?: string;
+  /** An `int` in the shader. The graph carries it as a float (the same number); code kept as text gets it back as an int. */ int?: boolean;
+}
 type Ast = Record<string, unknown> & { type: string };
 interface UserFn { name: string; ret: string; params: { name: string; type: string; qual: 'in' | 'out' | 'inout' }[]; source: string; body: string; /** Every definition under this name (overloads), this one included. */ overloads: UserFn[] }
 interface ConstDecl { name: string; type: string; init: Ast | undefined; text: string }
@@ -79,14 +83,17 @@ const SOURCES: Record<string, { type: string; out: string; t: T; name: string }>
   gl_FragCoord: { type: 'fragCoord', out: 'coord', t: 'vec2', name: 'fragCoord' },
   u_resolution: { type: 'resolution', out: 'res', t: 'vec2', name: 'resolution' },
   u_time: { type: 'time', out: 'time', t: 'float', name: 'time' },
-  u_mouse: { type: 'mouse', out: 'uv', t: 'vec2', name: 'mouse' },
+  // u_mouse is in pixels, like gl_FragCoord: the Mouse node's Pixels output, not its centred UV.
+  u_mouse: { type: 'mouse', out: 'px', t: 'vec2', name: 'mouse' },
   // vUv (0..1 both ways) has no node of its own: it's fragCoord / resolution, built on demand (see srcRef).
   vUv: { type: 'divide', out: 'result', t: 'vec2', name: 'screenUV' },
 };
 const VEC_T: Record<number, T> = { 1: 'float', 2: 'vec2', 3: 'vec3', 4: 'vec4' };
 const N_OF: Record<T, number> = { float: 1, vec2: 2, vec3: 3, vec4: 4 };
 /** Built-ins that return their (widest vector) argument's type. */
-const SAME_T = new Set(['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'exp', 'exp2', 'log', 'log2', 'sqrt', 'inversesqrt', 'abs', 'sign', 'floor', 'ceil', 'fract', 'mod', 'min', 'max', 'clamp', 'mix', 'step', 'smoothstep', 'pow', 'normalize', 'reflect', 'refract', 'faceforward', 'dFdx', 'dFdy', 'fwidth']);
+const SAME_T = new Set(['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh', 'exp', 'exp2', 'log', 'log2', 'sqrt', 'inversesqrt', 'abs', 'sign', 'floor', 'ceil', 'fract', 'round', 'roundEven', 'trunc', 'mod', 'min', 'max', 'clamp', 'mix', 'step', 'smoothstep', 'pow', 'normalize', 'reflect', 'refract', 'faceforward', 'dFdx', 'dFdy', 'fwidth', 'radians', 'degrees']);
+/** Built-ins that give back an int when every argument is one (GLSL ES 3.00 has int overloads). */
+const INT_SAME = new Set(['abs', 'sign', 'min', 'max', 'clamp']);
 const FLOAT_T = new Set(['length', 'distance', 'dot', 'determinant']);
 /** Polymorphic nodes: the sockets that take the card's chosen type (the rest stay float). */
 const POLY: Record<string, string[]> = {
@@ -157,7 +164,11 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       for (const d of ((decl.declarations as Ast[] | undefined) ?? [])) {
         const n = (d.identifier as Ast).identifier as string;
         if (isUniform) uniforms.set(n, ty);
-        else if (isConst) consts.push({ name: n, type: ty, init: d.initializer as Ast | undefined, text: `const ${ty} ${n} = ${generate(d.initializer as never)};` });
+        else if (isConst) {
+          // An array keeps its brackets (`const vec3 nbs[] = vec3[8](…)`); it is text for regions only.
+          const dims = ((d.quantifier as Ast[] | undefined) ?? []).map(q => `[${q.expression ? generate(q.expression as never).trim() : ''}]`).join('');
+          consts.push({ name: n, type: ty, init: dims ? undefined : d.initializer as Ast | undefined, text: `const ${ty} ${n}${dims} = ${generate(d.initializer as never)};` });
+        }
         else globals.add(n);
       }
       if (decl.type === 'precision') continue;
@@ -321,15 +332,18 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       case 'binary': {
         const op = (a.operator as Ast).literal as string;
         if (['<', '>', '<=', '>=', '==', '!=', '&&', '||'].includes(op)) return 'float';
+        if (op === ',') return typeOf(a.right as Ast, env);
         const l = typeOf(a.left as Ast, env), r = typeOf(a.right as Ast, env);
         if ((l as string).startsWith('mat')) return r; // mat * vec is a vec
         if ((r as string).startsWith('mat')) return l;
         return N_OF[l] >= N_OF[r] ? l : r;
       }
       case 'ternary': return typeOf(a.right as Ast, env);
+      case 'assignment': return typeOf(a.left as Ast, env);
       case 'postfix': {
         const pf = a.postfix as Ast;
         if (pf.type === 'field_selection') { const sw = (pf.selection as Ast).identifier as string; return VEC_T[sw.length] ?? 'float'; }
+        if (incLit(pf) === '++' || incLit(pf) === '--') return typeOf(a.expression as Ast, env);
         throw new Unmapped(`postfix ${pf.type}`);
       }
       case 'function_call': {
@@ -341,10 +355,34 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         if (FLOAT_T.has(name)) return 'float';
         if (SAME_T.has(name)) { let t: T = 'float'; for (const x of args) { const at = typeOf(x, env); if (N_OF[at] > N_OF[t]) t = at; } return t; }
         const f = fns.get(name);
-        if (f) { const o = overloadFor(f, args, env); if (o.ret in N_OF || o.ret.startsWith('mat')) return o.ret as T; throw new Unsupported(`Function ${name} returns ${o.ret}`); }
+        if (f) { const o = overloadFor(f, args, env); if (o.ret in N_OF || o.ret.startsWith('mat')) return o.ret as T; if (o.ret === 'int' || o.ret === 'bool') return 'float'; throw new Unsupported(`Function ${name} returns ${o.ret}`); }
         throw new Unmapped(`built-in ${name}`);
       }
       default: throw new Unmapped(`expression ${a.type}`);
+    }
+  }
+  /** Is this expression an `int` in the shader (so code kept as text has to say float(…) to hand it on)? */
+  function isIntExpr(a: Ast, env: Env): boolean {
+    switch (a.type) {
+      case 'int_constant': return true;
+      case 'identifier': return !!env.get(a.identifier as string)?.int;
+      case 'group': case 'unary': return isIntExpr(a.expression as Ast, env);
+      case 'binary': {
+        const op = (a.operator as Ast).literal as string;
+        return ['+', '-', '*', '/', '%'].includes(op) && isIntExpr(a.left as Ast, env) && isIntExpr(a.right as Ast, env);
+      }
+      case 'ternary': return isIntExpr(a.right as Ast, env);
+      case 'assignment': return isIntExpr(a.left as Ast, env);
+      case 'postfix': { const pf = a.postfix as Ast; return pf.type !== 'field_selection' && pf.type !== 'quantifier' && isIntExpr(a.expression as Ast, env); }
+      case 'function_call': {
+        const c = calleeOf(a.identifier as Ast);
+        if (c.ctor) return c.name === 'int';
+        const f = fns.get(c.name);
+        const args = (a.args as Ast[] | undefined ?? []).filter(x => x.type !== 'literal');
+        if (f) return overloadFor(f, args, env).ret === 'int';
+        return INT_SAME.has(c.name) && args.length > 0 && args.every(x => isIntExpr(x, env));
+      }
+      default: return false;
     }
   }
 
@@ -428,7 +466,13 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
 
   function binary(a: Ast, env: Env): Val {
     const op = (a.operator as Ast).literal as string;
+    // `a, b` is b; the left side only counts for what it writes, which is code's business.
+    if (op === ',') { const w: string[] = []; writesIn(a.left, w); if (!w.length) return { ...build(a.right as Ast, env), ast: a }; throw new Unmapped('the comma operator'); }
+    // `7 / 2` between ints is 3: a Divide node would give 3.5.
+    if (op === '/' && isIntExpr(a, env)) throw new Unmapped('integer division');
     const L = build(a.left as Ast, env), R = build(a.right as Ast, env);
+    // A matrix (`v * m`, `m * v`) has no node: code.
+    if (!(L.type in N_OF) || !(R.type in N_OF)) throw new Unmapped('matrix arithmetic');
     if (anon(L) && anon(R)) {
       const f = { '+': L.lit + R.lit, '-': L.lit - R.lit, '*': L.lit * R.lit, '/': L.lit / R.lit }[op];
       if (f !== undefined) return { lit: f, type: 'float', ast: a };
@@ -459,7 +503,15 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     if (callee.ctor) {
       const tk = callee.name;
       const vs = args.map(x => build(x, env));
-      if (tk === 'float' || tk === 'int') { if (vs.length === 1 && vs[0].type === 'float') return { ...vs[0], ast: a }; throw new Unmapped(`${tk}() of a vector`); }
+      if (tk === 'float' || tk === 'bool') { if (vs.length === 1 && vs[0].type === 'float') return { ...vs[0], int: undefined, ast: a }; throw new Unmapped(`${tk}() of a vector`); }
+      if (tk === 'int') {
+        if (vs.length !== 1 || vs[0].type !== 'float') throw new Unmapped('int() of a vector');
+        if (anon(vs[0])) return { lit: Math.trunc(vs[0].lit), type: 'float', int: true, ast: a };
+        // int() drops the fraction: the same number only when there is none (an int already, floor, ceil…).
+        const whole = isIntExpr(args[0], env) || (args[0].type === 'function_call' && ['floor', 'ceil', 'round', 'trunc', 'roundEven'].includes(calleeOf(args[0].identifier as Ast).name));
+        if (!whole) throw new Unmapped('int() drops the fraction');
+        return { ...vs[0], int: true, ast: a };
+      }
       if (tk === 'vec2' && vs.length === 2 && vs.every(v => v.type === 'float')) return typed('makeVec2', {}, { x: asRef(vs[0]), y: asRef(vs[1]) }, 'xy', 'vec2');
       // Three numbers in 0..1 are a colour: the picker card, not three sliders.
       if (tk === 'vec3' && vs.length === 3 && vs.every(v => v.lit !== undefined && v.lit >= 0 && v.lit <= 1)) return { ref: ref(mk('colorPicker', { color: vs.map(v => v.lit) }, {}), 'rgb', 'vec3'), type: 'vec3', ast: a };
@@ -529,31 +581,43 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     if (n.type === 'postfix') { freeNames(n.expression, out, inCall); return; }
     for (const [k, v] of Object.entries(n)) if (k !== 'type' && k !== 'whitespace') freeNames(v, out, inCall);
   }
-  function inputsFor(a0: Ast, env: Env, extra: Record<string, Ref> = {}): { inputs: { name: string; type: T }[]; wires: Record<string, Ref>; code: string } {
+  /**
+   * What code kept as text reads: an input per live variable and source. An `int` travels
+   * as a float input (`n_in`) and `ints` declares it back (`int n = int(n_in);`) for the code.
+   */
+  function inputsFor(a0: Ast, env: Env, extra: Record<string, Ref> = {}): { inputs: { name: string; type: T }[]; wires: Record<string, Ref>; code: string; ints: { name: string; from: string }[] } {
     const a = deArrayDeep(a0, env) as Ast; // `p[0]` is the name p_0 in code that is kept as text
     const names = new Set<string>(); freeNames(a, names);
-    const inputs: { name: string; type: T }[] = []; const wires: Record<string, Ref> = {};
+    const inputs: { name: string; type: T }[] = []; const wires: Record<string, Ref> = {}; const ints: { name: string; from: string }[] = [];
     let code = generate(a as never);
     for (const n of names) {
-      if (env.has(n)) { const v = env.get(n)!; inputs.push({ name: n, type: v.type }); wires[n] = asRef(v); }
+      if (env.has(n) && env.get(n)!.int) { const v = env.get(n)!; inputs.push({ name: `${n}_in`, type: v.type }); wires[`${n}_in`] = asRef(v); ints.push({ name: n, from: `${n}_in` }); }
+      else if (env.has(n)) { const v = env.get(n)!; inputs.push({ name: n, type: v.type }); wires[n] = asRef(v); }
       else if (SOURCES[n]) { const s = SOURCES[n]; inputs.push({ name: s.name, type: s.t }); wires[s.name] = srcRef(n); code = code.replace(new RegExp(`\\b${n}\\b`, 'g'), s.name); }
       else if (fns.has(n)) { /* a call: handled by the caller (region) */ }
       else throw new Unsupported(`Unknown identifier ${n}`);
     }
     for (const [k, r] of Object.entries(extra)) { inputs.push({ name: k, type: r.type }); wires[k] = r; }
-    return { inputs, wires, code };
+    return { inputs, wires, code, ints };
   }
-  function block(a: Ast, env: Env, why: string, extra: Record<string, Ref> = {}, codeOverride?: string, tOverride?: T): Val {
-    const t = tOverride ?? typeOf(a, env);
-    const { inputs, wires, code } = inputsFor(a, env, extra);
-    const expr = codeOverride ?? code;
-    const n = mk('exprNode', { __importedCode: 'block', inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, lines: [], result: expr, expr }, wires,
+  /** The type a kept expression gives: its own, or (a built-in the table doesn't know) the type its statement declares. */
+  function typeOrHint(a: Ast, env: Env, hint?: T): T {
+    try { return typeOf(a, env); } catch (e) { if (e instanceof Unmapped && hint) return hint; throw e; }
+  }
+  function block(a: Ast, env: Env, why: string, extra: Record<string, Ref> = {}, codeOverride?: string, tOverride?: T, hint?: T): Val {
+    refuseLiveWrites(a, env);
+    const t = tOverride ?? typeOrHint(a, env, hint);
+    const { inputs, wires, code, ints } = inputsFor(a, env, extra);
+    const comma = a.type === 'binary' && (a.operator as Ast).literal === ',';
+    const expr = codeOverride ?? (isIntExpr(a, env) ? `float(${code})` : comma ? `(${code})` : code);
+    const lines = ints.map(i => ({ lhs: `int ${i.name}`, op: '=', rhs: `int(${i.from})` }));
+    const n = mk('exprNode', { __importedCode: 'block', inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, lines, result: expr, expr }, wires,
       { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
     report.blocks.push({ code: expr, why });
     return { ref: ref(n, 'result', t), type: t, ast: a };
   }
-  /** Rung 1 with rung 2 as the net: an expression, one way or another. */
-  function expr(a0: Ast, env: Env): Val {
+  /** Rung 1 with rung 2 as the net: an expression, one way or another. `hint` is the type its statement declares. */
+  function expr(a0: Ast, env: Env, hint?: T): Val {
     try { return build(a0, env); }
     catch (e) {
       if (!(e instanceof Unmapped)) throw e;
@@ -561,10 +625,87 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       const a = deArrayDeep(a0, env) as Ast;
       if ((globalThis as { __g2nDebug?: boolean }).__g2nDebug) report.notes.push(`[debug] ${generate(a as never)} → ${e.why}`);
       // A user-function call inside: a region instead, so its code comes along.
-      const names = new Set<string>(); freeNames(a, names);
       const calls = new Set<string>(); collectCalls(a, calls);
-      if ([...calls].some(c => fns.has(c))) return region(a, env, e.why);
-      return block(a, env, e.why);
+      if ([...calls].some(c => fns.has(c))) return region(a, env, e.why, undefined, undefined, hint);
+      return block(a, env, e.why, {}, undefined, undefined, hint);
+    }
+  }
+
+  // ── Writes inside an expression (`O += P - O` where P holds `U += T`, `O = ++h`) ──
+  /**
+   * Code kept as text gets its inputs by value, so a write inside it stays inside it. That is
+   * only the shader's meaning when nothing reads the variable afterwards; otherwise the
+   * picture would silently differ, so the shader is refused with the reason instead.
+   */
+  const frames: { rest: Ast[]; loop?: Ast }[] = [];
+  let current: Ast | null = null;
+  function writesIn(a: unknown, out: string[]): void {
+    if (Array.isArray(a)) { for (const x of a) writesIn(x, out); return; }
+    if (!a || typeof a !== 'object') return;
+    const n = a as Ast;
+    const base = (t: Ast): string => (t.type === 'identifier' ? t.identifier as string : t.type === 'postfix' ? base(t.expression as Ast) : '?');
+    if (n.type === 'assignment') out.push(base(n.left as Ast));
+    if (n.type === 'unary' && ['++', '--'].includes((n.operator as Ast)?.literal as string)) out.push(base(n.expression as Ast));
+    if (n.type === 'postfix' && ['++', '--'].includes(incLit(n.postfix as Ast))) out.push(base(n.expression as Ast));
+    for (const [k, v] of Object.entries(n)) if (k !== 'type') writesIn(v, out);
+  }
+  function countOf(a: unknown, name: string): number {
+    if (Array.isArray(a)) return a.reduce((s: number, x) => s + countOf(x, name), 0);
+    if (!a || typeof a !== 'object') return 0;
+    const n = a as Ast;
+    return (n.type === 'identifier' && n.identifier === name ? 1 : 0) + Object.entries(n).reduce((s, [k, v]) => s + (k === 'type' ? 0 : countOf(v, name)), 0);
+  }
+  function contains(a: unknown, node: unknown): boolean {
+    if (a === node) return true;
+    if (!a || typeof a !== 'object') return false;
+    return Object.entries(a as Ast).some(([k, v]) => k !== 'type' && v && typeof v === 'object' && contains(v, node));
+  }
+  /** `x = …` that doesn't read x: whatever x held before is gone. */
+  const overwrites = (st: Ast, x: string): boolean => {
+    const e = st.type === 'expression_statement' ? st.expression as Ast : null;
+    return !!e && e.type === 'assignment' && (e.operator as Ast).literal === '=' && (e.left as Ast).type === 'identifier' && (e.left as Ast).identifier === x && !mentions(e.right, x);
+  };
+  /** In evaluation order, is x first written whole (`x = …` not reading x) or first read? */
+  function firstUse(a: unknown, x: string): 'write' | 'read' | null {
+    if (Array.isArray(a)) { for (const y of a) { const r = firstUse(y, x); if (r) return r; } return null; }
+    if (!a || typeof a !== 'object') return null;
+    const n = a as Ast;
+    if (n.type === 'identifier') return n.identifier === x ? 'read' : null;
+    if (n.type === 'assignment') {
+      const r = firstUse(n.right, x); if (r) return r;
+      const l = n.left as Ast;
+      if (l.type === 'identifier' && l.identifier === x) return (n.operator as Ast).literal === '=' ? 'write' : 'read';
+      return firstUse(l, x);
+    }
+    for (const [k, v] of Object.entries(n)) { if (k === 'type') continue; const r = firstUse(v, x); if (r) return r; }
+    return null;
+  }
+  /** Nothing reads x after the statement being converted (before writing it whole). */
+  function deadAfter(x: string, a: Ast, env: Env): boolean {
+    if (!env.has(x) || !current) return false;
+    if (countOf(current, x) > countOf(a, x)) return false; // read elsewhere in the same statement
+    for (let k = frames.length - 1; k >= 0; k--) {
+      const f = frames[k];
+      if (f.loop) {
+        // The next time round: the header, then the body from the top.
+        const L = f.loop;
+        if (mentions([L.condition, L.operation], x)) return false;
+        const body = (L.body as Ast).type === 'compound_statement' ? (L.body as Ast).statements as Ast[] : [L.body as Ast];
+        for (const st of body) {
+          if (contains(st, current)) { if (countOf(st, x) > countOf(current, x) || firstUse(a, x) !== 'write') return false; break; }
+          if (overwrites(st, x)) break;
+          if (mentions(st, x)) return false;
+        }
+        continue;
+      }
+      for (const st of f.rest) { if (overwrites(st, x)) return true; if (mentions(st, x)) return false; }
+    }
+    return true;
+  }
+  function refuseLiveWrites(a: Ast, env: Env): void {
+    const targets: string[] = []; writesIn(a, targets);
+    for (const x of new Set(targets)) {
+      if (!deadAfter(x, a, env)) throw new Unsupported(`${x === '?' ? 'A variable' : x} changes inside an expression (${generate(a as never).replace(/\s+/g, ' ').trim().slice(0, 60)}) and is read afterwards; a graph can’t carry that write. Give the change a line of its own.`);
     }
   }
   function collectCalls(a: unknown, out: Set<string>): void {
@@ -604,15 +745,10 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     const outs = fn.params.map((p, i) => ({ p, arg: args[i] })).filter(x => x.p.qual !== 'in');
     for (const o of outs) if (!o.arg || o.arg.type !== 'identifier' || !env.has(o.arg.identifier as string)) throw new Unsupported(`${fn.name}(): the ${o.p.qual} argument ${o.arg ? generate(o.arg as never) : '?'} must be a variable`);
     const outNames = new Set(outs.map(o => o.arg.identifier as string));
-    type Product = { name: string; type: T };
     const products: Product[] = [];
     if (fn.ret !== 'void') { if (!(fn.ret in N_OF)) throw new Unmapped(`${fn.name}() returns a ${fn.ret}`); products.push({ name: 'ret_', type: fn.ret as T }); }
     for (const o of outs) { if (!(o.p.type in N_OF)) throw new Unmapped(`${fn.name}(): ${o.p.qual} ${o.p.type} ${o.p.name}`); products.push({ name: o.arg.identifier as string, type: o.p.type as T }); }
-    // Pack into groups of at most four components, in order.
-    const groups: Product[][] = []; let cur: Product[] = []; let sum = 0;
-    for (const p of products) { if (sum + N_OF[p.type] > 4) { groups.push(cur); cur = []; sum = 0; } cur.push(p); sum += N_OF[p.type]; }
-    if (cur.length) groups.push(cur);
-    // Inputs: what the call reads (out arguments excluded; inout ones come in under another name).
+    // Inputs: what the call reads (out arguments excluded; inout ones and ints come in under another name).
     const names = new Set<string>(); freeNames(a, names);
     const inputs: { name: string; type: T }[] = []; const wires: Record<string, Ref> = {}; const prelude: string[] = [];
     let code = generate(a as never);
@@ -623,42 +759,26 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         if (o.p.qual === 'inout') { const v = env.get(n)!; inputs.push({ name: `${n}_in`, type: v.type }); wires[`${n}_in`] = asRef(v); prelude.push(`${t} ${n} = ${n}_in;`); }
         else prelude.push(`${t} ${n} = ${t === 'float' ? '0.0' : `${t}(0.0)`};`);
       }
+      else if (env.has(n) && env.get(n)!.int) { const v = env.get(n)!; inputs.push({ name: `${n}_in`, type: v.type }); wires[`${n}_in`] = asRef(v); prelude.push(`int ${n} = int(${n}_in);`); }
       else if (env.has(n)) { const v = env.get(n)!; inputs.push({ name: n, type: v.type }); wires[n] = asRef(v); }
       else if (SOURCES[n]) { const s = SOURCES[n]; inputs.push({ name: s.name, type: s.t }); wires[s.name] = srcRef(n); code = code.replace(new RegExp(`\\b${n}\\b`, 'g'), s.name); }
       else if (!fns.has(n)) throw new Unsupported(`Unknown identifier ${n}`);
     }
-    const helpers = helpersFor(a);
     const callLine = fn.ret === 'void' ? `${code};` : `${fn.ret} ret_ = ${code};`;
-    const results = new Map<string, Val>();
-    groups.forEach((g, gi) => {
-      const total = g.reduce((s, p) => s + N_OF[p.type], 0);
-      const outT = VEC_T[total];
-      const ret = g.length === 1 ? g[0].name : `${outT}(${g.map(p => p.name).join(', ')})`;
-      const body = `${prelude.join('\n')}\n${callLine}\nreturn ${ret};`;
-      const label = `${fn.name}${groups.length > 1 ? ` (${gi + 1}/${groups.length})` : ''}`;
-      const n = mk('customFn', { __importedCode: 'region', label, inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: outT, body, glslFunctions: helpers }, { ...wires },
-        { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: outT as DataType, label: 'Result' } } });
-      const packed: Val = { ref: ref(n, 'result', outT), type: outT, ast: a };
-      if (g.length === 1) { results.set(g[0].name, packed); return; }
-      let off = 0;
-      for (const p of g) {
-        const sw = 'xyzw'.slice(off, off + N_OF[p.type]); off += N_OF[p.type];
-        const ex = mk('exprNode', { __importedCode: 'block', inputs: [{ name: 'v', type: outT, slider: null }], outputType: p.type, lines: [], result: `v.${sw}`, expr: `v.${sw}` }, { v: packed.ref },
-          { inputs: { v: { type: outT as DataType, label: 'v' } }, outputs: { result: { type: p.type as DataType, label: 'Result' } } });
-        results.set(p.name, { ref: ref(ex, 'result', p.type), type: p.type, ast: a });
-      }
-    });
+    const results = packed(products, ret => `${prelude.join('\n')}\n${callLine}\nreturn ${ret};`, inputs, wires, helpersFor(a), fn.name, a);
     report.regions.push({ code: generate(a as never), why: `call to ${fn.name}() with ${[...outNames].join(', ')} as out argument${outNames.size === 1 ? '' : 's'}` });
     for (const o of outs) env.set(o.arg.identifier as string, { ...results.get(o.arg.identifier as string)!, name: o.arg.identifier as string });
     return results.get('ret_') ?? null;
   }
 
   // ── Rung 3: a Custom Function node for a region ────────────────────────────
-  function region(a: Ast, env: Env, why: string, stmtCode?: string, outVar?: string): Val {
-    const t = typeOf(a, env);
-    const { inputs, wires, code } = inputsFor(a, env);
+  function region(a: Ast, env: Env, why: string, stmtCode?: string, outVar?: string, hint?: T): Val {
+    refuseLiveWrites(a, env);
+    const t = typeOrHint(a, env, hint);
+    const { inputs, wires, code, ints } = inputsFor(a, env);
     const helpers = helpersFor(a);
-    const body = stmtCode ? `${stmtCode}\n  return ${outVar};` : `return ${code};`;
+    const prelude = ints.map(i => `int ${i.name} = int(${i.from});\n`).join('');
+    const body = prelude + (stmtCode ? `${stmtCode}\n  return ${outVar};` : `return ${isIntExpr(a, env) ? `float(${code})` : code};`);
     const n = mk('customFn', { __importedCode: 'region', label: why.replace(/^call to /, '').replace(/\(\)$/, '') || 'Region', inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, body, glslFunctions: helpers }, { ...wires },
       { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
     report.regions.push({ code: stmtCode ?? code, why });
@@ -667,30 +787,78 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
 
   // ── Statements ─────────────────────────────────────────────────────────────
   let output: GraphNode | null = null;
-  function withComponent(v: Val, i: number, nv: Val): Val {
+  /** A small block over values already made (no source expression of its own): `expr` reads the inputs by name. */
+  function codeNode(ins: { name: string; val: Val }[], t: T, code: string, why: string): Val {
+    const n = mk('exprNode', { __importedCode: 'block', inputs: ins.map(i => ({ name: i.name, type: i.val.type, slider: null })), outputType: t, lines: [], result: code, expr: code }, Object.fromEntries(ins.map(i => [i.name, asRef(i.val)])),
+      { inputs: Object.fromEntries(ins.map(i => [i.name, { type: i.val.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
+    report.blocks.push({ code, why });
+    return { ref: ref(n, 'result', t), type: t, ast: { type: 'made' } };
+  }
+  /**
+   * `v.<mask> = nv`: v with those components replaced. A vec2 or vec3 is split and made
+   * again; a vec4 (there is no Make Vec4 node) is a block, `vec4(v.x, nv, v.z, v.w)`.
+   */
+  function withMask(v: Val, sw: string, nv: Val): Val {
     const n = N_OF[v.type];
-    if (n < 2 || n > 3) throw new Unmapped(`component write on a ${v.type}`);
-    const split = mk(`splitVec${n}`, {}, { v: asRef(v) });
-    const comps = ['x', 'y', 'z'].slice(0, n).map((c, k) => (k === i ? asRef(nv) : ref(split, c, 'float')));
-    return n === 2 ? typed('makeVec2', {}, { x: comps[0], y: comps[1] }, 'xy', 'vec2') : typed('makeVec3', {}, { r: comps[0], g: comps[1], b: comps[2] }, 'rgb', 'vec3');
+    const idx = [...sw].map(c => 'xyzwrgbastpq'.indexOf(c) % 4);
+    if (!n || n < 2 || idx.some(i => i < 0 || i >= n) || new Set(idx).size !== idx.length || N_OF[nv.type] !== idx.length) throw new Unmapped(`component write .${sw} on a ${v.type}`);
+    const comps = 'xyzw';
+    if (n <= 3) {
+      const split = mk(`splitVec${n}`, {}, { v: asRef(v) });
+      const nsplit = idx.length > 1 ? mk(`splitVec${idx.length}`, {}, { v: asRef(nv) }) : null;
+      const part = (k: number): Ref => { const j = idx.indexOf(k); return j < 0 ? ref(split, comps[k], 'float') : nsplit ? ref(nsplit, comps[j], 'float') : asRef(nv); };
+      return n === 2 ? typed('makeVec2', {}, { x: part(0), y: part(1) }, 'xy', 'vec2') : typed('makeVec3', {}, { r: part(0), g: part(1), b: part(2) }, 'rgb', 'vec3');
+    }
+    const parts = [0, 1, 2, 3].map(k => { const j = idx.indexOf(k); return j < 0 ? `v.${comps[k]}` : idx.length === 1 ? 'x' : `x.${comps[j]}`; });
+    return codeNode([{ name: 'v', val: v }, { name: 'x', val: nv }], 'vec4', `vec4(${parts.join(', ')})`, `a write to .${sw} of a vec4`);
+  }
+  /** Is this name the shader's output (gl_FragColor, or the out parameter when it isn't kept as a local)? */
+  const isOutput = (name: string, env: Env) => name === 'gl_FragColor' || (name === 'fragColor' && !env.has('fragColor'));
+  /** The colour written so far, as a vec4 (for `gl_FragColor.a = …` or `gl_FragColor *= …` after it). */
+  function outputValue(): Val {
+    const c = output?.inputs.color?.connection;
+    if (!output || !c) throw new Unsupported('gl_FragColor is read before it is written');
+    const t = (output.type === 'output' ? 'vec3' : 'vec4') as T;
+    const v: Val = { ref: { nodeId: c.nodeId, outputKey: c.outputKey, type: t }, type: t, ast: { type: 'made' } };
+    return t === 'vec4' ? v : codeNode([{ name: 'rgb', val: v }], 'vec4', 'vec4(rgb, 1.0)', 'the colour so far, with alpha 1');
+  }
+  /** The last write wins: a second write replaces the Output node. */
+  function setOutput(n: GraphNode): void {
+    if (output) { const i = nodes.indexOf(output); if (i >= 0) nodes.splice(i, 1); }
+    output = n;
   }
   const ops: Record<string, string> = { '+=': '+', '-=': '-', '*=': '*', '/=': '/' };
   function assign(left0: Ast, opTok: string, right: Ast, env: Env): void {
     const left = deArray(left0, env);
-    const rhsAst: Ast = opTok === '=' ? right : { type: 'binary', operator: { type: 'literal', literal: ops[opTok] }, left, right } as Ast;
+    // `x *= a - b` is `x * (a - b)`: the right side keeps its own parentheses when it is text again.
+    const rhsAst: Ast = opTok === '=' ? right : { type: 'binary', operator: { type: 'literal', literal: ops[opTok], whitespace: '' }, left, right: { type: 'group', lp: { type: 'literal', literal: '(', whitespace: '' }, expression: right, rp: { type: 'literal', literal: ')', whitespace: '' } } } as Ast;
     if (!ops[opTok] && opTok !== '=') throw new Unmapped(`assignment ${opTok}`);
+    if (loopCtx && writesOutput(left, env)) throw new Unsupported('gl_FragColor written inside a loop');
     if (left.type === 'identifier') {
       const name = left.identifier as string;
-      if (name === 'gl_FragColor' || name === 'fragColor') { output = finish(right, env); return; }
-      { const v = expr(rhsAst, env); env.set(name, v.lit !== undefined ? { ...v, name: v.name ?? name } : v); }
+      if (isOutput(name, env)) {
+        if (opTok === '=') { setOutput(finish(right, env)); return; }
+        // `gl_FragColor *= x`: the colour so far, as a value for the expression (under a name code may declare).
+        const inner: Env = new Map(env); inner.set('fragColor_', outputValue());
+        setOutput(mk('vec4Output', {}, { color: asRef(expr(renameId(rhsAst, name, 'fragColor_'), inner, 'vec4')) }));
+        return;
+      }
+      const prev = env.get(name);
+      { const v = expr(rhsAst, env, prev?.type); const w = prev?.int ? { ...v, int: true } : v; env.set(name, w.lit !== undefined ? { ...w, name: w.name ?? name } : w); }
       return;
     }
     if (left.type === 'postfix' && (left.postfix as Ast).type === 'field_selection' && (left.expression as Ast).type === 'identifier') {
       const name = (left.expression as Ast).identifier as string; const sw = ((left.postfix as Ast).selection as Ast).identifier as string;
-      if (sw.length === 1 && env.has(name)) { const i = 'xyzwrgba'.indexOf(sw) % 4; env.set(name, withComponent(env.get(name)!, i, expr(rhsAst, env))); return; }
+      if (env.has(name) && !isOutput(name, env)) { env.set(name, withMask(env.get(name)!, sw, expr(rhsAst, env, VEC_T[sw.length]))); return; }
+      if (isOutput(name, env)) {
+        const inner: Env = new Map(env); inner.set('fragColor_', outputValue());
+        setOutput(mk('vec4Output', {}, { color: asRef(withMask(inner.get('fragColor_')!, sw, expr(renameId(rhsAst, name, 'fragColor_'), inner, VEC_T[sw.length]))) }));
+        return;
+      }
     }
     throw new Unmapped(`assignment to ${generate(left as never)}`);
   }
+  const writesOutput = (left: Ast, env: Env): boolean => left.type === 'identifier' ? isOutput(left.identifier as string, env) : left.type === 'postfix' ? writesOutput(left.expression as Ast, env) : false;
   function finish(right: Ast, env: Env): GraphNode {
     // gl_FragColor = vec4(rgb, 1.0) | vec4(r, g, b, 1.0) | vec4(x) → Output; anything else → Output (RGBA).
     if (right.type === 'function_call' && (right.identifier as Ast).type === 'type_specifier' && tokenOf(right.identifier as Ast) === 'vec4') {
@@ -714,7 +882,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
    * ports by position as carries, so the carry init ports go first, in the
    * output ports' order: that pairing then names the same carries.
    */
-  function loopGroup(s: Ast, env: Env, name: string, start: number, step: number, count: number): void {
+  function loopGroup(s: Ast, env: Env, name: string, start: number, step: number, count: number, intCounter: boolean): void {
     const assigned = new Set<string>(); assignedNames(s.body, assigned);
     const carried = [...assigned].filter(n => env.has(n) && n !== name);
     // The carries' starting values, as nodes in the scope outside the loop.
@@ -731,21 +899,21 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         const c = mk('loopCarry', { dataType: t }, { init: portRef(ctx, inits.get(v)!, v) },
           { inputs: { init: { type: t as DataType, label: 'Init' }, next: { type: t as DataType, label: 'Next' } }, outputs: { value: { type: t as DataType, label: 'Value' } } });
         carries.set(v, c);
-        innerEnv.set(v, { ref: ref(c, 'value', t), type: t, ast: { type: 'carry' } });
+        innerEnv.set(v, { ref: ref(c, 'value', t), type: t, ast: { type: 'carry' }, int: env.get(v)!.int });
       }
       // Outer variables the body only reads: through ports (a literal travels as itself).
       const used = new Set<string>(); freeNames(s.body, used);
       for (const [k, v] of env) {
         if (carries.has(k) || !used.has(k)) continue;
-        innerEnv.set(k, v.ref ? { ref: portRef(ctx, v.ref, k), type: v.type, ast: v.ast } : v);
+        innerEnv.set(k, v.ref ? { ref: portRef(ctx, v.ref, k), type: v.type, ast: v.ast, int: v.int } : v);
       }
       // The loop variable: the group's index, scaled and offset when the loop doesn't count 0, 1, 2…
       const idx = mk('loopIndex', {}, {});
       let iv: Val = { ref: ref(idx, 'i', 'float'), type: 'float', ast: { type: 'loopvar' } };
       if (step !== 1) iv = typed('multiply', { b: step }, { a: asRef(iv) }, 'result', 'float');
       if (start !== 0) iv = typed('add', { b: start }, { a: asRef(iv) }, 'result', 'float');
-      innerEnv.set(name, iv);
-      stmt(s.body as Ast, innerEnv);
+      innerEnv.set(name, { ...iv, int: intCounter });
+      inLoop(s, () => stmt(s.body as Ast, innerEnv));
       for (const [v, c] of carries) { const nx = asRef(innerEnv.get(v)!); c.inputs.next.connection = { nodeId: nx.nodeId, outputKey: nx.outputKey }; }
     } finally { sink = savedSink; loopCtx = savedCtx; }
     // The group's terminals draw a wire to a port's first reader.
@@ -788,28 +956,67 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     if (types.includes(n.type)) return true;
     return Object.entries(n).some(([k, v]) => k !== 'type' && hasAny(v, types));
   }
-  /** A loop that can't be a group: a Custom Function running it, when it changes one live variable. */
+  /**
+   * Code that produces several values (a call's out arguments, the variables a loop changes)
+   * as Custom Function nodes: the values packed into one vector when they fit in four
+   * components, else into several regions that each run the code again, and a block per
+   * value pulling it back out. An `int` comes back as a float (the same number).
+   */
+  type Product = { name: string; type: T; int?: boolean };
+  function packed(products: Product[], bodyFor: (ret: string) => string, inputs: { name: string; type: T }[], wires: Record<string, Ref>, helpers: string, label: string, a: Ast): Map<string, Val> {
+    const groups: Product[][] = []; let cur: Product[] = []; let sum = 0;
+    for (const p of products) { if (sum + N_OF[p.type] > 4) { groups.push(cur); cur = []; sum = 0; } cur.push(p); sum += N_OF[p.type]; }
+    if (cur.length) groups.push(cur);
+    const results = new Map<string, Val>();
+    groups.forEach((g, gi) => {
+      const total = g.reduce((s, p) => s + N_OF[p.type], 0);
+      const outT = VEC_T[total];
+      const val = (p: Product) => (p.int ? `float(${p.name})` : p.name);
+      const ret = g.length === 1 ? val(g[0]) : `${outT}(${g.map(val).join(', ')})`;
+      const n = mk('customFn', { __importedCode: 'region', label: `${label}${groups.length > 1 ? ` (${gi + 1}/${groups.length})` : ''}`, inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: outT, body: bodyFor(ret), glslFunctions: helpers }, { ...wires },
+        { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: outT as DataType, label: 'Result' } } });
+      const whole: Val = { ref: ref(n, 'result', outT), type: outT, ast: a };
+      if (g.length === 1) { results.set(g[0].name, { ...whole, int: g[0].int }); return; }
+      let off = 0;
+      for (const p of g) {
+        const sw = 'xyzw'.slice(off, off + N_OF[p.type]); off += N_OF[p.type];
+        const ex = mk('exprNode', { __importedCode: 'block', inputs: [{ name: 'v', type: outT, slider: null }], outputType: p.type, lines: [], result: `v.${sw}`, expr: `v.${sw}` }, { v: whole.ref },
+          { inputs: { v: { type: outT as DataType, label: 'v' } }, outputs: { result: { type: p.type as DataType, label: 'Result' } } });
+        results.set(p.name, { ref: ref(ex, 'result', p.type), type: p.type, ast: a, int: p.int });
+      }
+    });
+    return results;
+  }
+  /**
+   * A loop that can't be a group: Custom Function nodes running it, returning the
+   * variables it changes (packed, see `packed`). Its header counts: golf loops write
+   * in their update clause (`for (…; …; O = mix(…))`).
+   */
   function loopRegion(s: Ast, env: Env, loopVar: string | undefined): void {
-    const assigned = new Set<string>(); assignedNames(s.body, assigned);
-    const live = [...assigned].filter(n => env.has(n));
-    if (live.length !== 1) throw new Unsupported(`a loop the converter can't unroll that changes ${live.length ? live.join(', ') : 'nothing live'} (one variable is supported)`);
-    const out = live[0]; const outT = env.get(out)!.type;
+    const assigned = new Set<string>(); assignedNames([s.body, s.operation, s.condition], assigned);
+    const live = [...assigned].filter(n => env.has(n) && n !== loopVar);
+    const kind = s.type === 'while_statement' ? 'while loop' : 'loop';
+    const local0 = new Set<string>(); declaredNames(s, local0);
+    const elsewhere = [...assigned].filter(n => !env.has(n) && !local0.has(n) && n !== loopVar);
+    if (elsewhere.length) throw new Unsupported(`a ${kind} the converter can’t unroll that writes ${elsewhere.join(', ')}`);
+    if (!live.length) { report.notes.push(`A ${kind} that changes nothing outside itself was left out`); return; }
+    for (const n of live) if (!(env.get(n)!.type in N_OF)) throw new Unsupported(`a ${kind} the converter can’t unroll that changes the matrix ${n}`);
     const names = new Set<string>(); freeNames(s, names);
     const local = new Set<string>(); declaredNames(s, local);
     const inputs: { name: string; type: T }[] = []; const wires: Record<string, Ref> = {}; const prelude: string[] = [];
     let code = generate(s as never);
     for (const n of names) {
       if (n === loopVar || local.has(n)) continue;
-      if (env.has(n)) { const v = env.get(n)!; inputs.push({ name: `${n}_in`, type: v.type }); wires[`${n}_in`] = asRef(v); prelude.push(`${v.type} ${n} = ${n}_in;`); }
+      if (env.has(n)) {
+        const v = env.get(n)!; inputs.push({ name: `${n}_in`, type: v.type }); wires[`${n}_in`] = asRef(v);
+        prelude.push(v.int ? `int ${n} = int(${n}_in);` : `${v.type} ${n} = ${n}_in;`);
+      }
       else if (SOURCES[n]) { const so = SOURCES[n]; inputs.push({ name: so.name, type: so.t }); wires[so.name] = srcRef(n); code = code.replace(new RegExp(`\\b${n}\\b`, 'g'), so.name); }
       else if (!fns.has(n)) throw new Unsupported(`Unknown identifier ${n}`);
     }
-    const helpers = helpersFor(s);
-    const body = `${prelude.join('\n')}\n${code}\nreturn ${out};`;
-    const n = mk('customFn', { __importedCode: 'region', label: `loop → ${out}`, inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: outT, body, glslFunctions: helpers }, wires,
-      { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: outT as DataType, label: 'Result' } } });
-    report.regions.push({ code, why: `a loop the converter can’t unroll (it changes ${out})` });
-    env.set(out, { ref: ref(n, 'result', outT), type: outT, ast: s });
+    const results = packed(live.map(n => ({ name: n, type: env.get(n)!.type, int: env.get(n)!.int })), ret => `${prelude.join('\n')}\n${code}\nreturn ${ret};`, inputs, wires, helpersFor(s), `loop → ${live.join(', ')}`, s);
+    report.regions.push({ code, why: `a ${kind} the converter can’t unroll (it changes ${live.join(', ')})` });
+    for (const n of live) env.set(n, results.get(n)!);
   }
   function declaredNames(a: unknown, out: Set<string>): void {
     if (Array.isArray(a)) { for (const x of a) declaredNames(x, out); return; }
@@ -823,10 +1030,24 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     if (!a || typeof a !== 'object') return;
     const n = a as Ast;
     if (n.type === 'assignment') { const l = n.left as Ast; if (l.type === 'identifier') out.add(l.identifier as string); else if (l.type === 'postfix' && (l.expression as Ast).type === 'identifier') out.add((l.expression as Ast).identifier as string); }
-    if (n.type === 'postfix' && ['++', '--'].includes((n.postfix as Ast)?.literal as string) && (n.expression as Ast).type === 'identifier') out.add((n.expression as Ast).identifier as string);
+    if (n.type === 'postfix' && ['++', '--'].includes(incLit(n.postfix as Ast)) && (n.expression as Ast).type === 'identifier') out.add((n.expression as Ast).identifier as string);
+    if (n.type === 'unary' && ['++', '--'].includes((n.operator as Ast)?.literal as string) && (n.expression as Ast).type === 'identifier') out.add((n.expression as Ast).identifier as string);
     for (const [k, v] of Object.entries(n)) if (k !== 'type') assignedNames(v, out);
   }
-  function stmts(list: Ast[], env: Env): void { for (const s of list) stmt(s, env); }
+  /** Statements in order, each knowing what follows it (for `deadAfter`). */
+  function stmts(list: Ast[], env: Env): void {
+    list.forEach((s, i) => {
+      const saved = current; frames.push({ rest: list.slice(i + 1) }); current = s;
+      try { stmt(s, env); } finally { frames.pop(); current = saved; }
+    });
+  }
+  /** The body of a loop, run with the loop on the frame stack (its next round reads what the body wrote). */
+  function inLoop<R>(s: Ast, run: () => R): R {
+    const body = s.body as Ast, saved = current;
+    frames.push({ rest: [], loop: s });
+    if (body.type !== 'compound_statement') current = body; // a one-statement body: that statement is what's being converted
+    try { return run(); } finally { frames.pop(); current = saved; }
+  }
   function stmt(s: Ast, env: Env): void {
     switch (s.type) {
       case 'declaration_statement': {
@@ -842,17 +1063,26 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
             if (size === null && sizeAst?.type === 'identifier') { const v = env.get(sizeAst.identifier as string); if (v?.lit !== undefined) size = v.lit; }
             if (size === null || !Number.isInteger(size) || size < 1 || size > 64) throw new Unsupported(`array ${name}: its size must be a number up to 64`);
             if (d.initializer) throw new Unsupported(`array ${name}: an initialiser list isn't supported yet (assign the entries one by one)`);
-            for (let k = 0; k < size; k++) env.set(`${name}_${k}`, { lit: ty === 'float' || ty === 'int' ? 0 : undefined, type: (ty in N_OF ? ty : 'float') as T, ast: { type: 'zero' } });
+            for (let k = 0; k < size; k++) env.set(`${name}_${k}`, { lit: ty === 'float' || ty === 'int' ? 0 : undefined, type: (ty in N_OF ? ty : 'float') as T, ast: { type: 'zero' }, int: ty === 'int' || undefined });
             continue;
           }
+          const isInt = ty === 'int' || undefined;
           // A number keeps the first name it was given: `float k = SIZE;` reads SIZE's constant, not a second one.
-          if (d.initializer) { const v = expr(d.initializer as Ast, env); env.set(name, v.lit !== undefined ? { ...v, name: v.name ?? name } : v); }
-          else env.set(name, { lit: ty === 'float' || ty === 'int' ? 0 : undefined, type: (ty in N_OF ? ty : 'float') as T, ast: { type: 'zero' } });
+          if (d.initializer) { const v = { ...expr(d.initializer as Ast, env, (ty in N_OF ? ty : undefined) as T | undefined), int: isInt }; env.set(name, v.lit !== undefined ? { ...v, name: v.name ?? name } : v); }
+          else env.set(name, { lit: ty === 'float' || ty === 'int' ? 0 : undefined, type: (ty in N_OF ? ty : 'float') as T, ast: { type: 'zero' }, int: isInt });
         }
         return;
       }
       case 'expression_statement': {
         const e = s.expression as Ast;
+        if (!e) return; // `;` on its own (a macro that already ended in one, or `;;`)
+        // `a = x, b += y;` is two statements.
+        if (e.type === 'binary' && (e.operator as Ast).literal === ',') {
+          stmt({ type: 'expression_statement', expression: e.left } as Ast, env);
+          stmt({ type: 'expression_statement', expression: e.right } as Ast, env);
+          return;
+        }
+        if (e.type === 'group') { stmt({ type: 'expression_statement', expression: e.expression } as Ast, env); return; }
         if (e.type === 'assignment') { assign(e.left as Ast, (e.operator as Ast).literal as string, e.right as Ast, env); return; }
         if (e.type === 'function_call') {
           const c = calleeOf(e.identifier as Ast); const u = c.ctor ? undefined : fns.get(c.name);
@@ -865,7 +1095,11 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
           return null;
         };
         const inc = incOf(e);
-        if (inc) { assign(inc.target, inc.op === '++' ? '+=' : '-=', { type: 'float_constant', token: '1.0' } as Ast, env); return; }
+        if (inc) {
+          const intTarget = inc.target.type === 'identifier' && !!env.get(inc.target.identifier as string)?.int;
+          assign(inc.target, inc.op === '++' ? '+=' : '-=', (intTarget ? { type: 'int_constant', token: '1', whitespace: '' } : { type: 'float_constant', token: '1.0', whitespace: '' }) as Ast, env);
+          return;
+        }
         throw new Unmapped(`statement ${e.type}`);
       }
       case 'compound_statement': stmts(s.statements as Ast[], env); return;
@@ -889,19 +1123,34 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         const init = s.init as Ast, cond = s.condition as Ast, upd = s.operation as Ast;
         const decl = ((init?.type === 'declarator_list' ? init : init?.declaration as Ast)?.declarations) as Ast[] | undefined;
         const v = decl?.[0]; const name = (v?.identifier as Ast)?.identifier as string | undefined;
-        const start = v?.initializer ? litOf(v.initializer as Ast) : null;
+        const intCounter = tokenOf((((init?.type === 'declarator_list' ? init : init?.declaration as Ast)?.specified_type as Ast)?.specifier as Ast)) === 'int';
+        // A bound may be a number or a name holding one (`i < STEPS` with `const int STEPS = 8`).
+        const known = (x: Ast | undefined): number | null => {
+          if (!x) return null;
+          const l = litOf(x); if (l !== null) return l;
+          if (x.type === 'identifier') { const w = env.get(x.identifier as string); if (w && w.lit !== undefined && w.ref === undefined) return w.lit; }
+          if (x.type === 'group') return known(x.expression as Ast);
+          return null;
+        };
+        const start = v?.initializer ? known(v.initializer as Ast) : null;
         const condOp = cond?.type === 'binary' ? (cond.operator as Ast).literal as string : null;
-        const end = cond?.type === 'binary' ? litOf(cond.right as Ast) : null;
-        const step = upd?.type === 'postfix' && ((upd.postfix as Ast)?.literal === '++') ? 1 : upd?.type === 'assignment' && (upd.operator as Ast).literal === '+=' ? litOf(upd.right as Ast) : null;
-        if (name && start !== null && end !== null && step && (condOp === '<' || condOp === '<=')) {
+        const end = cond?.type === 'binary' && (cond.left as Ast).type === 'identifier' && (cond.left as Ast).identifier === name ? known(cond.right as Ast) : null;
+        const inc = (upd?.type === 'postfix' && incLit(upd.postfix as Ast) === '++') || (upd?.type === 'unary' && (upd.operator as Ast)?.literal === '++');
+        const incTarget = inc ? (upd.expression as Ast) : upd?.type === 'assignment' ? (upd.left as Ast) : null;
+        const step = !incTarget || incTarget.type !== 'identifier' || incTarget.identifier !== name ? null : inc ? 1 : (upd.operator as Ast).literal === '+=' ? known(upd.right as Ast) : null;
+        // The body mustn't change the counter itself.
+        const bodyWrites = new Set<string>(); if (name) assignedNames(s.body, bodyWrites);
+        if (name && start !== null && end !== null && step && step > 0 && (condOp === '<' || condOp === '<=') && !bodyWrites.has(name)) {
           const count = Math.floor(((condOp === '<' ? end - 1e-9 : end) - start) / step) + 1;
           // A body that reads `arr[i]` needs i as a number: run the body once per value instead of an iterated group.
           if (count >= 1 && count <= 16 && indexesBy(s.body, name)) {
-            for (let k = 0; k < count; k++) {
-              const val = start + k * step;
-              env.set(name, { lit: val, type: 'float', ast: { type: 'float_constant', token: `${val}.0` } });
-              stmt(s.body as Ast, env);
-            }
+            inLoop(s, () => {
+              for (let k = 0; k < count; k++) {
+                const val = start + k * step;
+                env.set(name, { lit: val, type: 'float', ast: { type: 'float_constant', token: `${val}.0` }, int: intCounter || undefined });
+                stmt(s.body as Ast, env);
+              }
+            });
             env.delete(name);
             report.notes.push(`Loop over ${name} (${count}×) unrolled: it indexes an array by ${name}`);
             report.stats.loops++;
@@ -909,11 +1158,15 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
           }
           // An iterated group runs up to 16 times and has no early exit; a loop inside a loop stays code.
           const exits = hasAny(s.body, ['break_statement', 'continue_statement', 'return_statement', 'discard_statement']);
-          if (count >= 1 && count <= 16 && !exits && !loopCtx) { loopGroup(s, env, name, start, step, count); return; }
+          if (count >= 1 && count <= 16 && !exits && !loopCtx) { loopGroup(s, env, name, start, step, count, intCounter); return; }
         }
         return loopRegion(s, env, name);
       }
-      case 'return_statement': case 'discard_statement': case 'break_statement': case 'continue_statement': case 'while_statement': case 'do_statement': case 'switch_statement':
+      case 'while_statement': {
+        if (hasAny(s.body, ['return_statement', 'discard_statement'])) throw new Unsupported('while in main() with a return or discard inside');
+        return loopRegion(s, env, undefined);
+      }
+      case 'return_statement': case 'discard_statement': case 'break_statement': case 'continue_statement': case 'do_statement': case 'switch_statement':
         throw new Unsupported(`${s.type.replace('_statement', '')} in main()`);
       default: throw new Unmapped(`statement ${s.type ?? JSON.stringify(s).slice(0, 120)}`);
     }
@@ -926,7 +1179,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     // (regions also get their text). One a graph can't hold (a matrix) stays text-only.
     for (const c of consts) {
       if (!c.init) continue;
-      try { const v = expr(c.init, env); env.set(c.name, v.lit !== undefined ? { ...v, name: v.name ?? c.name } : v); }
+      try { const v = { ...expr(c.init, env), int: c.type === 'int' || undefined }; env.set(c.name, v.lit !== undefined ? { ...v, name: v.name ?? c.name } : v); }
       catch (e) { if (!(e instanceof Unsupported || e instanceof Unmapped)) throw e; }
     }
     stmts(((main!.body as Ast).statements as Ast[]), env);
@@ -951,20 +1204,66 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
  */
 interface MacroDef { name: string; params: string[] | null; body: string }
 const MACRO_LINE = /^[ \t]*#define[ \t]+(\w+)(\(([^)]*)\))?(?:[ \t]+([^\n]*?))?[ \t]*$/gm;
-function collectMacros(src: string): { stripped: string; defs: MacroDef[] } {
-  const defs: MacroDef[] = [];
-  const stripped = src.replace(MACRO_LINE, (whole, name: string, paren: string | undefined, params: string | undefined, raw: string | undefined) => {
+/** The #defines, taken out of the text (their lines blanked). A bare flag is a define with an empty body, as in the preprocessor; `flags` counts those. */
+function collectMacros(src: string): { stripped: string; defs: MacroDef[]; flags: number } {
+  const defs: MacroDef[] = []; let flags = 0;
+  const stripped = src.replace(MACRO_LINE, (_whole, name: string, paren: string | undefined, params: string | undefined, raw: string | undefined) => {
     const body = (raw ?? '').replace(/\/\/.*$/, '').replace(/\/\*.*?\*\//g, '').trim();
-    if (!body && !paren) return whole; // a flag for #ifdef: the preprocessor's business
+    if (!body && !paren) flags++;
     defs.push({ name, params: paren ? params!.split(',').map(p => p.trim()).filter(Boolean) : null, body });
     return '';
   });
-  return { stripped, defs };
+  return { stripped, defs, flags };
 }
-/** Expand macros until nothing changes (bounded); a call's arguments split at top-level commas. */
+/**
+ * `#ifdef` / `#ifndef` / `#if 0|1` / `#if defined(X)` / `#elif` / `#else` / `#endif`, decided
+ * the way the preprocessor would: a name counts as defined from its #define line on (until
+ * an #undef), and only in a branch that is on. The directive lines and the lines of
+ * branches that are off are blanked, so line numbers still point into the paste.
+ */
+export function resolveConditionals(src: string): string {
+  if (!/^[ \t]*#[ \t]*(if|ifdef|ifndef)\b/m.test(src)) return src;
+  const defined = new Set<string>();
+  const lines = src.split('\n');
+  // Each open #if: is its current branch on, has one of its branches been on, was the #if itself in an on branch.
+  const stack: { on: boolean; taken: boolean; outer: boolean }[] = [];
+  const active = () => stack.every(f => f.on);
+  const test = (expr: string): boolean => {
+    const e = expr.replace(/defined\s*\(\s*(\w+)\s*\)|defined\s+(\w+)/g, (_m, a: string | undefined, b: string | undefined) => (defined.has((a ?? b)!) ? '1' : '0')).trim();
+    if (/^!\s*[01]$/.test(e)) return e.endsWith('0');
+    const n = Number(e);
+    return Number.isFinite(n) ? n !== 0 : false;
+  };
+  const word = (rest: string) => rest.trim().split(/\s+/)[0];
+  for (let k = 0; k < lines.length; k++) {
+    const L = lines[k]; let m: RegExpExecArray | null;
+    if ((m = /^[ \t]*#[ \t]*(ifdef|ifndef|if)\b(.*)$/.exec(L))) {
+      const outer = active();
+      const on = outer && (m[1] === 'ifdef' ? defined.has(word(m[2])) : m[1] === 'ifndef' ? !defined.has(word(m[2])) : test(m[2]));
+      stack.push({ on, taken: on, outer }); lines[k] = ''; continue;
+    }
+    if ((m = /^[ \t]*#[ \t]*elif\b(.*)$/.exec(L)) && stack.length) {
+      const f = stack[stack.length - 1]; f.on = f.outer && !f.taken && test(m[1]); f.taken ||= f.on; lines[k] = ''; continue;
+    }
+    if (/^[ \t]*#[ \t]*else\b/.test(L) && stack.length) { const f = stack[stack.length - 1]; f.on = f.outer && !f.taken; f.taken = true; lines[k] = ''; continue; }
+    if (/^[ \t]*#[ \t]*endif\b/.test(L) && stack.length) { stack.pop(); lines[k] = ''; continue; }
+    if (!active()) { lines[k] = ''; continue; }
+    if ((m = /^[ \t]*#[ \t]*define[ \t]+(\w+)/.exec(L))) defined.add(m[1]);
+    else if ((m = /^[ \t]*#[ \t]*undef[ \t]+(\w+)/.exec(L))) { defined.delete(m[1]); lines[k] = ''; }
+  }
+  return lines.join('\n');
+}
+/**
+ * Expand macros until nothing changes (bounded); a call's arguments split at top-level commas.
+ * No parentheses are added, as in the C preprocessor: a statement macro (`#define S col += x;`)
+ * has to stay a statement. A space goes in where the text would otherwise run into its
+ * neighbour and make another token (`-N` with N = -1. is `- -1.`, not `--1.`).
+ */
 function expandMacros(src: string, defs: MacroDef[]): string {
   const byName = new Map(defs.map(d => [d.name, d]));
   const subst = (body: string, params: string[], args: string[]) => body.replace(/\b([A-Za-z_]\w*)\b/g, (w, id: string) => { const i = params.indexOf(id); return i >= 0 ? (args[i] ?? '') : w; });
+  const glue = (a: string, b: string) => !!a && !!b && ((/[\w.]/.test(a) && /[\w.]/.test(b)) || (/[-+*/=<>&|!^%]/.test(a) && /[-+*/=<>&|!^%]/.test(b)));
+  const put = (out: string, text: string, next: string) => `${glue(out.slice(-1), text[0] ?? '') ? ' ' : ''}${text}${glue(text.slice(-1), next) ? ' ' : ''}`;
   let s = src;
   for (let pass = 0; pass < 24; pass++) {
     let out = '', changed = false, i = 0;
@@ -974,7 +1273,7 @@ function expandMacros(src: string, defs: MacroDef[]): string {
       let j = i + 1; while (j < s.length && /\w/.test(s[j])) j++;
       const id = s.slice(i, j); const d = byName.get(id);
       if (!d) { out += id; i = j; continue; }
-      if (!d.params) { out += `(${d.body})`; i = j; changed = true; continue; }
+      if (!d.params) { out += put(out, d.body, s[j] ?? ''); i = j; changed = true; continue; }
       let k = j; while (k < s.length && /\s/.test(s[k])) k++;
       if (s[k] !== '(') { out += id; i = j; continue; }
       // Arguments to the matching `)`, split at depth 0.
@@ -982,7 +1281,7 @@ function expandMacros(src: string, defs: MacroDef[]): string {
       for (; p < s.length && depth > 0; p++) { const ch = s[p]; if (ch === '(') depth++; else if (ch === ')') { depth--; if (depth === 0) break; } if (ch === ',' && depth === 1) { args.push(cur); cur = ''; continue; } cur += ch; }
       if (depth !== 0) { out += id; i = j; continue; }
       args.push(cur);
-      out += `(${subst(d.body, d.params, args.map(a => a.trim()))})`;
+      out += put(out, subst(d.body, d.params, args.map(a => a.trim())), s[p + 1] ?? '');
       i = p + 1; changed = true;
     }
     s = out;
@@ -1007,19 +1306,21 @@ function hostToOurs(source: string, report: ConversionReport): { code: string; t
   const clashes = [...own].filter(n => BUILTIN_HELPER_NAMES.has(n));
   for (const n of clashes) s = s.replace(new RegExp(`\\b${n}\\b`, 'g'), `${n}_`);
   if (clashes.length) report.notes.push(`Renamed ${clashes.join(', ')}: the app has a built-in helper of that name`);
-  // Simple object-like macros (#define PI 3.14159) are expanded; anything else the preprocessor would do is left to fail loudly.
-  // Object-like (`#define PI 3.14`) and function-like (`#define K(U) smoothstep(.2, .0, length(U))`) macros
-  // are expanded the way the preprocessor would: arguments substituted, the result rescanned, so a macro
-  // may use another. A comment after the value is a comment, not part of it; a bare flag stays for #ifdef.
+  // #ifdef and friends are decided first, then object-like (`#define PI 3.14`) and function-like
+  // (`#define K(U) smoothstep(.2, .0, length(U))`) macros are expanded the way the preprocessor would:
+  // arguments substituted, the result rescanned, so a macro may use another, and no parentheses added.
+  // A comment after the value is a comment, not part of it; a bare flag expands to nothing.
   // Comments go (newlines kept, so lines still map): a commented-out #define or a name in prose is not code.
   s = stripComments(s);
   // Integer features of GLSL ES 3.00 (uint, uvec, bit shifts, `U` and hex literals) have no ES 1.00 form:
   // the shader can't run here at all, so say so instead of failing on a stray token.
   if (ES3_INTEGER.test(s)) report.unsupported.push(ES3_INTEGER_NOTE);
+  s = resolveConditionals(s);
   const macros = collectMacros(s);
   s = macros.stripped;
   if (macros.defs.length) s = expandMacros(s, macros.defs);
-  if (macros.defs.length) report.notes.push(`${macros.defs.length} #define${macros.defs.length === 1 ? '' : 's'} expanded`);
+  const expanded = macros.defs.length - macros.flags;
+  if (expanded) report.notes.push(`${expanded} #define${expanded === 1 ? '' : 's'} expanded`);
   // A global that main() assigns and helpers read travels as a parameter instead (threadGlobals.ts).
   const th = threadGlobals(s);
   s = th.code;
@@ -1032,6 +1333,24 @@ function hostToOurs(source: string, report: ConversionReport): { code: string; t
 
 /** The functions the compiled shader always defines; a user function of the same name is renamed on the way in. */
 const BUILTIN_HELPER_NAMES = new Set([...ALWAYS_HELPERS_GLSL().matchAll(/\b(?:float|vec[234]|mat[234]|int|bool|void)\s+([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]));
+
+/** A copy of the tree with one identifier renamed. */
+function renameId(a: Ast, from: string, to: string): Ast {
+  const walk = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(walk);
+    if (!x || typeof x !== 'object') return x;
+    const n = x as Ast;
+    if (n.type === 'identifier' && n.identifier === from) return { ...n, identifier: to };
+    return Object.fromEntries(Object.entries(n).map(([k, v]) => [k, k === 'type' ? v : walk(v)]));
+  };
+  return walk(a) as Ast;
+}
+
+/** A postfix's `++` / `--` (the parser files it a few ways), or ''. */
+function incLit(pf: Ast | undefined): string {
+  if (!pf) return '';
+  return ((pf.operator as Ast | undefined)?.literal as string | undefined) ?? (pf.literal as string | undefined) ?? '';
+}
 
 function tokenOf(spec: Ast | undefined): string {
   if (!spec) return '';

@@ -90,12 +90,13 @@ export const MouseNode: NodeDefinition = {
   type: 'mouse',
   label: 'Mouse',
   category: 'Sources',
-  description: 'Mouse position in the same centered UV space as the UV node (aspect-corrected, origin = center). Returns vec2 UV, X float, and Y float.',
+  description: 'Mouse position in the same centered UV space as the UV node (aspect-corrected, origin = center). Returns vec2 UV, X float, and Y float, and the position in pixels (the space of Pixel Coordinates).',
   inputs: {},
   outputs: {
     uv: { type: 'vec2',  label: 'Mouse UV' },
     x:  { type: 'float', label: 'X'        },
     y:  { type: 'float', label: 'Y'        },
+    px: { type: 'vec2',  label: 'Pixels'   },
   },
   generateGLSL: (node: GraphNode) => {
     const id = node.id;
@@ -106,8 +107,9 @@ export const MouseNode: NodeDefinition = {
         `    vec2 ${id}_uv = (u_mouse / u_resolution.y - vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5) * 2.0;\n`,
         `    float ${id}_x = ${id}_uv.x;\n`,
         `    float ${id}_y = ${id}_uv.y;\n`,
+        `    vec2 ${id}_px = u_mouse;\n`,
       ].join(''),
-      outputVars: { uv: `${id}_uv`, x: `${id}_x`, y: `${id}_y` },
+      outputVars: { uv: `${id}_uv`, x: `${id}_x`, y: `${id}_y`, px: `${id}_px` },
     };
   },
 };
