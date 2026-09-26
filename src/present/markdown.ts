@@ -33,9 +33,76 @@ const optsOf = (env: unknown): MarkdownOptions => (env as Env | undefined)?.opts
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 
+// ── MathML that Chrome draws right ──────────────────────────────────────────
+//
+// MathML Core (what Chrome implements) dropped the mathvariant values other
+// than "normal": KaTeX writes \mathbf{p} as <mi mathvariant="bold">p</mi>,
+// which Chrome draws as a plain italic p. The fix MathML Core asks for is the
+// letter itself: Unicode has bold, script, double-struck… alphabets (𝐩, ℝ, 𝓛).
+// And ‖p‖ comes out as ∥ (U+2225, "parallel to"), a relation that gets a
+// thick space either side: it becomes the fence ‖ (U+2016) with no spacing.
+
+/** Where each style's capital A, small a, digit 0, capital Alpha and small alpha start (0: none). */
+const MATH_ALPHABETS: Record<string, [number, number, number, number, number]> = {
+  'bold': [0x1d400, 0x1d41a, 0x1d7ce, 0x1d6a8, 0x1d6c2],
+  'italic': [0x1d434, 0x1d44e, 0, 0x1d6e2, 0x1d6fc],
+  'bold-italic': [0x1d468, 0x1d482, 0, 0x1d71c, 0x1d736],
+  'script': [0x1d49c, 0x1d4b6, 0, 0, 0],
+  'bold-script': [0x1d4d0, 0x1d4ea, 0, 0, 0],
+  'fraktur': [0x1d504, 0x1d51e, 0, 0, 0],
+  'double-struck': [0x1d538, 0x1d552, 0x1d7d8, 0, 0],
+  'bold-fraktur': [0x1d56c, 0x1d586, 0, 0, 0],
+  'sans-serif': [0x1d5a0, 0x1d5ba, 0x1d7e2, 0, 0],
+  'bold-sans-serif': [0x1d5d4, 0x1d5ee, 0x1d7ec, 0x1d756, 0x1d770],
+  'sans-serif-italic': [0x1d608, 0x1d622, 0, 0, 0],
+  'sans-serif-bold-italic': [0x1d63c, 0x1d656, 0, 0x1d790, 0x1d7aa],
+  'monospace': [0x1d670, 0x1d68a, 0x1d7f6, 0, 0],
+};
+/** Letters Unicode had already, so the math alphabets leave holes where they'd be. */
+const MATH_HOLES: Record<string, Record<string, string>> = {
+  'italic': { h: 'ℎ' },
+  'script': { B: 'ℬ', E: 'ℰ', F: 'ℱ', H: 'ℋ', I: 'ℐ', L: 'ℒ', M: 'ℳ', R: 'ℛ', e: 'ℯ', g: 'ℊ', o: 'ℴ' },
+  'fraktur': { C: 'ℭ', H: 'ℌ', I: 'ℑ', R: 'ℜ', Z: 'ℨ' },
+  'double-struck': { C: 'ℂ', H: 'ℍ', N: 'ℕ', P: 'ℙ', Q: 'ℚ', R: 'ℝ', Z: 'ℤ' },
+};
+
+function mathLetters(text: string, variant: string): string | null {
+  const a = MATH_ALPHABETS[variant];
+  if (!a) return null;
+  let out = '';
+  for (const ch of text) {
+    const c = ch.codePointAt(0)!;
+    const hole = MATH_HOLES[variant]?.[ch];
+    if (hole) out += hole;
+    else if (c >= 0x41 && c <= 0x5a) out += String.fromCodePoint(a[0] + c - 0x41);
+    else if (c >= 0x61 && c <= 0x7a) out += String.fromCodePoint(a[1] + c - 0x61);
+    else if (c >= 0x30 && c <= 0x39 && a[2]) out += String.fromCodePoint(a[2] + c - 0x30);
+    else if (c >= 0x391 && c <= 0x3a9 && c !== 0x3a2 && a[3]) out += String.fromCodePoint(a[3] + c - 0x391);
+    else if (c >= 0x3b1 && c <= 0x3c9 && a[4]) out += String.fromCodePoint(a[4] + c - 0x3b1);
+    else out += ch;
+  }
+  return out;
+}
+
+/** KaTeX's MathML, rewritten for MathML Core: styled letters as Unicode math letters, ‖ as a fence. */
+export function mathmlForCore(html: string): string {
+  return html
+    .replace(/<(mi|mn|mo|mtext)([^>]*?) mathvariant="([a-z-]+)"([^>]*)>([^<]*)<\/\1>/g, (m, tag: string, pre: string, variant: string, post: string, text: string) => {
+      if (variant === 'normal') return m;
+      const letters = mathLetters(text, variant);
+      if (letters === null || letters === text) return m;
+      // A single math letter in <mi> is already its own style; "normal" keeps Chrome from italicising it again.
+      return `<${tag}${pre}${tag === 'mi' ? ' mathvariant="normal"' : ''}${post}>${letters}</${tag}>`;
+    })
+    // \| and \lVert (not \parallel, which is a plain <mo>∥</mo> and rightly a relation).
+    .replace(/<mo stretchy="false">∥<\/mo>|<mi mathvariant="normal">∥<\/mi>/g, '<mo lspace="0em" rspace="0em" stretchy="false">‖</mo>')
+    .replace(/<mo fence="true">∥<\/mo>/g, '<mo fence="true" lspace="0em" rspace="0em">‖</mo>');
+}
+
 function renderMath(tex: string, display: boolean, opts: MarkdownOptions): string {
   try {
-    return katex.renderToString(tex, { displayMode: display, throwOnError: false, output: opts.math === 'mathml' ? 'mathml' : 'htmlAndMathml', strict: 'ignore', trust: false });
+    const html = katex.renderToString(tex, { displayMode: display, throwOnError: false, output: opts.math === 'mathml' ? 'mathml' : 'htmlAndMathml', strict: 'ignore', trust: false });
+    return opts.math === 'mathml' ? mathmlForCore(html) : html;
   } catch {
     return `<code class="pp-math-error">${escapeHtml(tex)}</code>`;
   }

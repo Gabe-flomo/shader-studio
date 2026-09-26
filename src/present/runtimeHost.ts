@@ -23,6 +23,8 @@ export interface PlayMountOptions {
   paused?: boolean;
   pauseOffscreen?: boolean;
   maxDpr?: number;
+  /** Each Script layer's state after it compiles or runs: null when fine, else what broke. */
+  onScript?: (layerId: string, error: string | null) => void;
 }
 
 export interface PlayMount {
@@ -35,6 +37,9 @@ export interface PlayMount {
   still?(): string | null;
   hasSound?: boolean;
   sound?(audible: boolean): void;
+  usesCamera?: boolean;
+  /** Replace one Script layer's code in this mount only. */
+  setScript?(layerId: string, code: string): void;
 }
 
 interface PlayRuntime {
@@ -42,6 +47,9 @@ interface PlayRuntime {
   mount(el: HTMLElement, bundle: unknown, opts: PlayMountOptions): PlayMount;
   enableMidi?(): Promise<boolean>;
   listen?(): Promise<string>;
+  /** The camera for every mount on the page: 'on', 'blocked' or 'unsupported'. */
+  enableCamera?(): Promise<'on' | 'blocked' | 'unsupported'>;
+  stopCamera?(): void;
 }
 
 declare global {
@@ -50,7 +58,7 @@ declare global {
 
 /** The runtime, evaluated on first use. */
 export function playRuntime(): PlayRuntime {
-  if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 4) {
+  if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 5) {
     // The same text the web export inlines: the kit first, then the player.
     new Function(`${kitScript()}\n${runtimeSource}`)();
   }
@@ -117,3 +125,18 @@ export async function renderPoster(input: PlayHtmlInput, time = 1.5, width = 480
     host.remove();
   }
 }
+
+// ── The camera, once for the page ───────────────────────────────────────────
+
+interface CameraState { status: 'off' | 'asking' | 'on' | 'blocked' | 'unsupported'; enable(): Promise<void>; stop(): void }
+/** Browsers ask for the camera after a click; once it's on, every canvas with a camera layer sees it. */
+export const useCamera = create<CameraState>((set, get) => ({
+  status: 'off',
+  enable: async () => {
+    if (get().status === 'on' || get().status === 'asking') return;
+    set({ status: 'asking' });
+    const r = (await playRuntime().enableCamera?.()) ?? 'unsupported';
+    set({ status: r });
+  },
+  stop: () => { if (get().status === 'off') return; window.ShaderStudioPlay?.stopCamera?.(); set({ status: 'off' }); },
+}));

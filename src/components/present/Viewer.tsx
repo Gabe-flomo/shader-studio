@@ -3,7 +3,8 @@
  *
  *   Slides  one step fills the page, for teaching in the room: ← / → (and
  *           Space, Page Up / Down, Home, End), a progress bar you can click,
- *           fullscreen. Only this step's canvases run.
+ *           fullscreen, and Stage (this step's first canvas on the Stage).
+ *           Only this step's canvases run.
  *   Scroll  every step on one page, for reading alone: canvases run while
  *           they're on screen, a progress bar along the top, ← / → jump
  *           between steps.
@@ -17,6 +18,7 @@ import { IconButton } from '../ui/Button';
 import type { BlockContext } from './Blocks';
 import { StepView } from './StepView';
 import { usePresentation } from './presentationStore';
+import { openOnStage } from './stageHandoff';
 
 const typing = (t: EventTarget | null) => t instanceof HTMLElement && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
 
@@ -36,8 +38,8 @@ function useNavKeys(go: (d: number | 'first' | 'last') => void, onExit: () => vo
 }
 
 /** The bar under the slides: back, progress (click to jump), where you are, next. */
-function NavBar({ index, total, titles, onGo, fullscreen, onFullscreen, floating }: {
-  index: number; total: number; titles: string[]; onGo: (i: number) => void; fullscreen?: boolean; onFullscreen?: () => void; floating?: boolean;
+function NavBar({ index, total, titles, onGo, fullscreen, onFullscreen, onStage, floating }: {
+  index: number; total: number; titles: string[]; onGo: (i: number) => void; fullscreen?: boolean; onFullscreen?: () => void; onStage?: () => void; floating?: boolean;
 }) {
   const tk = useTokens();
   return (
@@ -60,6 +62,7 @@ function NavBar({ index, total, titles, onGo, fullscreen, onFullscreen, floating
       )}
       <span style={{ color: tk.text.muted, font: `600 12px ${fontFamily.mono}`, whiteSpace: 'nowrap', minWidth: 44, textAlign: 'center' }}>{index + 1} / {total}</span>
       <IconButton icon="chevR" label="Next step (→)" disabled={index >= total - 1} onClick={() => onGo(index + 1)} />
+      {onStage && <IconButton icon="popout" label="Open this step’s picture on the Stage" onClick={onStage} />}
       {onFullscreen && <IconButton icon="fit" label={fullscreen ? 'Leave fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />}
     </div>
   );
@@ -86,6 +89,10 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
   const step = doc?.steps[index];
   if (!doc || !step) return null;
   const full: BlockContext = { ...ctx, editing: false, active: true, large: !ctx.compact };
+  // The step's first canvas, for the Stage button.
+  const first = step.blocks.find(b => (b.type === 'render' || b.type === 'interactive') && ctx.sources.has(b.source));
+  const firstSource = first && (first.type === 'render' || first.type === 'interactive') ? ctx.sources.get(first.source) : undefined;
+  const onStage = firstSource ? () => openOnStage(doc, firstSource, step) : undefined;
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: tk.bg.app }}>
       <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -96,7 +103,7 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
           <StepView step={step} index={index} total={total} ctx={full} />
         </div>
       </div>
-      <NavBar index={index} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={i => setStep(i)} fullscreen={fs} onFullscreen={ctx.compact ? undefined : toggleFs} />
+      <NavBar index={index} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={i => setStep(i)} fullscreen={fs} onFullscreen={ctx.compact ? undefined : toggleFs} onStage={onStage} />
     </div>
   );
 }

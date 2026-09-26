@@ -27,7 +27,17 @@
  * (the value a mapping gives it while one drives it), set(id, value) as if its
  * slider or colour moved, fire(id) presses an action control, still() → a PNG
  * data URL of the picture with its layers; hasSound / sound(on) play the graph's
- * songs (what the panel's Play sound button does).
+ * songs (what the panel's Play sound button does); usesCamera says whether a
+ * layer reads the camera (ShaderStudioPlay.enableCamera() lights it for every
+ * mount on the page); setScript(layerId, code) replaces one Script layer's
+ * code in this mount only (it re-runs on the next frame), and the
+ * onScript(layerId, error) option hears whether each Script layer compiled
+ * and ran (error null) or what broke.
+ *
+ * A full-page export built with the option host: true also takes
+ * { ssp: 'script', layerId, code } messages from the page that framed it and
+ * posts { ssp: 'scriptStatus', layerId, error } back, so a host can live-edit
+ * a Script layer across a sandboxed frame.
  *
  * It runs the compiled fragment shader on a WebGL quad, draws the controls,
  * runs the mapping engine (mouse, keys, triggers with envelopes, another
@@ -47,7 +57,7 @@
  */
 (function () {
   'use strict';
-  if (window.ShaderStudioPlay && window.ShaderStudioPlay.version >= 4) return;
+  if (window.ShaderStudioPlay && window.ShaderStudioPlay.version >= 5) return;
 
   const CSS = `
 .ssp{display:flex;width:100%;height:100%;min-height:0;box-sizing:border-box;font:13px/1.4 system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#e6e7ec}
@@ -250,6 +260,7 @@ void main() {
     live: { status: 'off', ctx: null, source: null, analyser: null, freq: null, wave: null, sr: 48000, frame: -1, v: { level: 0, bass: 0, lowmid: 0, highmid: 0, treble: 0 }, gates: new Set(), clock: 0 },
     instances: new Set(),
     listening: false,
+    camera: null, cameraStream: null,
   };
   function press(key, vel) { shared.presses.set(key, (shared.presses.get(key) || 0) + 1); shared.held.set(key, (shared.held.get(key) || 0) + 1); shared.velocities.set(key, vel == null ? 1 : vel); }
   function release(key) { const n = (shared.held.get(key) || 0) - 1; if (n > 0) shared.held.set(key, n); else shared.held.delete(key); }
@@ -346,7 +357,11 @@ void main() {
     const showPanel = !bg && opts.panel !== false;
     const pointerOn = !bg && opts.pointer !== false;
     const pauseOffscreen = bg || !!opts.pauseOffscreen;
-    const play = B.play || { controls: [], mappings: [], layers: [] };
+    // The layers are this mount's own copies: dragging a null or replacing a script never reaches the bundle.
+    const play0 = B.play || { controls: [], mappings: [], layers: [] };
+    const play = Object.assign({}, play0, { layers: (play0.layers || []).map(l => Object.assign({}, l)) });
+    const onScript = typeof opts.onScript === 'function' ? opts.onScript : null;
+    const scriptErrors = new Map();
     injectCss();
     listen();
 
@@ -974,7 +989,8 @@ void main() {
         gl: glCanvas, W, H, dpr, time, dt, value, pointer, markers, editing: false, hidden,
         backdrop: play.display ? play.display.backdrop : [0, 0, 0],
         audio: L.status === 'on' ? { wave: L.wave, freq: L.freq, sampleRate: L.sr } : null,
-        camera: camVideo, image: img,
+        camera: camVideo || shared.camera, image: img,
+        scriptStatus: (id, err) => { const e = err || null; if (scriptErrors.get(id) === e) return; scriptErrors.set(id, e); if (onScript) { try { onScript(id, e); } catch (x) { /* the host's problem */ } } },
         sensor: (k, v) => sensors.set(k, v),
         override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },
         shaderTap: layersTap || undefined,
@@ -1094,6 +1110,13 @@ void main() {
       // The graph's own songs (Audio Input files): heard or silent. Browsers want a click first.
       hasSound: songs.length > 0,
       sound(audible) { startSongs(!!audible); },
+      usesCamera,
+      // Replace one Script layer's code in this mount: it compiles and starts over on the next frame.
+      setScript(layerId, code) {
+        const l = layersById.get(layerId);
+        if (!l || l.kind !== 'script' || typeof code !== 'string' || l.code === code) return;
+        l.code = code; needsDraw = true;
+      },
       still() {
         try {
           const out = document.createElement('canvas');
@@ -1112,8 +1135,23 @@ void main() {
     if (!navigator.requestMIDIAccess) return Promise.resolve(false);
     return navigator.requestMIDIAccess().then(a => { a.inputs.forEach(i => { i.onmidimessage = e => onMidi(e.data); }); return true; }, () => false);
   }
+  // The camera, once for the page: every mount with a camera layer reads it. Browsers ask first, after a click.
+  function enableCamera() {
+    if (shared.camera) return Promise.resolve('on');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.resolve('unsupported');
+    return navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then(stream => {
+      const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.autoplay = true; v.srcObject = stream;
+      v.play().catch(() => {});
+      shared.camera = v; shared.cameraStream = stream;
+      return 'on';
+    }, () => 'blocked');
+  }
+  function stopCamera() {
+    if (shared.cameraStream) shared.cameraStream.getTracks().forEach(t => t.stop());
+    shared.camera = null; shared.cameraStream = null;
+  }
   // internals: the pure GPU and audio helpers, for tests.
-  window.ShaderStudioPlay = { version: 4, mount, enableMidi, listen: startLive, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex } };
+  window.ShaderStudioPlay = { version: 5, mount, enableMidi, listen: startLive, enableCamera, stopCamera, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex } };
 
   // A full-page export: mount on #play with the page's options (URL params can override).
   if (window.PLAY_BUNDLE && document.getElementById('play')) {
@@ -1122,6 +1160,17 @@ void main() {
     if (q.get('panel') === '0' || q.get('mode') === 'background') o.mode = 'background';
     if (q.get('mode') === 'player') o.mode = 'player';
     if (q.get('fit') === 'cover' || q.get('fit') === 'contain') o.fit = q.get('fit');
-    mount(document.getElementById('play'), window.PLAY_BUNDLE, o);
+    // host: the page that framed this one may live-edit its Script layers (see the top of this file).
+    const host = o.host === true && window.parent !== window;
+    if (host) o.onScript = (layerId, error) => window.parent.postMessage({ ssp: 'scriptStatus', layerId, error }, '*');
+    const m = mount(document.getElementById('play'), window.PLAY_BUNDLE, o);
+    if (host) {
+      window.addEventListener('message', e => {
+        const d = e.data;
+        if (e.source !== window.parent || !d || d.ssp !== 'script' || typeof d.layerId !== 'string' || typeof d.code !== 'string') return;
+        if (m.setScript) m.setScript(d.layerId, d.code);
+      });
+      window.parent.postMessage({ ssp: 'ready' }, '*');
+    }
   }
 })();

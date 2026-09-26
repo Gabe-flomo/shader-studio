@@ -3,7 +3,7 @@
  * interactive block always spans both; phones always use one). In Edit it
  * also has the bar that adds blocks.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { newBlock, type BlockType, type PresentSource, type Step } from '../../types/presentation';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -18,6 +18,7 @@ export function StepView({ step, index, ctx, total }: { step: Step; index: numbe
   const tk = useTokens();
   const patchStep = usePresentation(s => s.patchStep);
   const cols = ctx.compact ? 1 : step.columns;
+  const stepCtx = useMemo(() => ({ ...ctx, step }), [ctx, step]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: ctx.large ? 26 : 22 }}>
       <header style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
@@ -39,7 +40,7 @@ export function StepView({ step, index, ctx, total }: { step: Step; index: numbe
         <div className="pp-step-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, alignItems: cols === 2 && ctx.large ? 'center' : 'start' }}>
           {step.blocks.map(b => (
             <div key={b.id} style={{ gridColumn: b.type === 'interactive' || cols === 1 ? '1 / -1' : undefined, minWidth: 0 }}>
-              <BlockView block={b} ctx={ctx} />
+              <BlockView block={b} ctx={stepCtx} />
             </div>
           ))}
         </div>

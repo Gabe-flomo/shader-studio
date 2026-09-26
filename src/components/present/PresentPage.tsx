@@ -37,6 +37,7 @@ import { usePosters } from './usePosters';
 import { ExportDialog } from './ExportDialog';
 import { exportPresentationFile, importPresentationFile } from './presentationFiles';
 import type { BlockContext } from './Blocks';
+import { useCamera } from '../../present/runtimeHost';
 
 function usePresentationList(): PresentationEntry[] {
   const [list, setList] = useState(listPresentations);
@@ -81,6 +82,8 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
     if (list[0]) st.open(list[0].name);
   }, [list]);
   usePosters();
+  // The camera stays on only while the page is open (it's turned on for the page, not per canvas).
+  useEffect(() => () => useCamera.getState().stop(), []);
 
   const css = useMemo(() => presentCss(tk), [tk]);
   const ctx: Omit<BlockContext, 'active' | 'editing' | 'large'> = useMemo(() => ({
