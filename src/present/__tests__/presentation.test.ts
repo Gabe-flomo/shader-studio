@@ -104,7 +104,8 @@ describe('snapshots', () => {
 
   it('asks the runtime what it can’t run each time', () => {
     expect(sourceLimits(light)).toEqual([]);
-    expect(sourceLimits({ ...light, features: { ...light.features!, isStateful: true } })).toContain('the previous-frame feedback');
+    expect(sourceLimits({ ...light, features: { ...light.features!, isStateful: true } })).toEqual([]);
+    expect(sourceLimits({ ...light, features: { ...light.features!, liveUniforms: { u_midi: 'n1' } } })).toContain('MIDI Input node outputs');
   });
 
   it('snapshots a saved graph without loading it, and Refresh keeps the id', async () => {

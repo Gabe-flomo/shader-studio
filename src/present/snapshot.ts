@@ -7,12 +7,12 @@
  * later edit of the graph changes nothing until Refresh takes a new one.
  */
 import { compileGraph } from '../compiler/graphCompiler';
-import { migrateLoadedNodes } from '../store/useNodeGraphStore';
 import { EXAMPLE_INDEX, loadExampleGraphs } from '../store/exampleIndex';
 import { nodeLabelOf } from '../play/paramDrivers';
 import { nodeSlicePrefix } from '../components/code/nodeSlice';
 import { webInputFrom, type CompiledForWeb } from '../play/webInput';
-import { unsupportedFeatures } from '../play/exportHtml';
+import { unsupportedFeatures, type GraphFeatures, type PlayMedia } from '../play/exportHtml';
+import { migrateLoadedNodes, useNodeGraphStore } from '../store/useNodeGraphStore';
 import { parsePlayRecord, type PlayRecord } from '../types/play';
 import { newId, type PresentSource, type SourceFeatures, type SourceNode, type SourceOrigin } from '../types/presentation';
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
@@ -46,16 +46,35 @@ export function featuresOf(c: CompiledForWeb): SourceFeatures {
 export function sourceLimits(s: PresentSource): string[] {
   if (!s.features) return s.limits;
   const f = s.features;
-  return unsupportedFeatures({ ...f, particleSystems: new Array(f.particleSystems).fill(null), play: s.bundle.play });
+  // Everything the snapshot knows, whatever the runtime's list asks about.
+  const features = { ...f, particleSystems: new Array(f.particleSystems).fill(null), play: s.bundle.play };
+  return unsupportedFeatures(features as GraphFeatures & typeof features);
+}
+
+/**
+ * Inputs whose files the snapshot doesn't have: images, videos and songs live
+ * in the open graph only, so a Play copied without being open in the Studio
+ * shows those inputs blank. Open it (with its files loaded) and Refresh.
+ */
+export function missingMedia(s: PresentSource): string[] {
+  const f = s.features;
+  if (!f) return [];
+  const m = s.bundle.media;
+  const out: string[] = [];
+  const noImage = Object.keys(f.textureUniforms).filter(u => !m?.textures?.[u]?.src).length;
+  const noVideo = Object.keys(f.videoUniforms).filter(u => !m?.videos?.[u]?.src).length;
+  if (noImage) out.push(noImage === 1 ? 'an image' : `${noImage} images`);
+  if (noVideo) out.push(noVideo === 1 ? 'a video' : `${noVideo} videos`);
+  return out;
 }
 
 /** Compile `nodes` + `play` into a source. Pure apart from the id and the clock. */
-export function snapshotFromGraph(nodes: GraphNode[], play: PlayRecord, meta: { title: string; from: SourceOrigin; id?: string; aspect?: PreviewAspect; now?: number }): SnapshotResult {
+export function snapshotFromGraph(nodes: GraphNode[], play: PlayRecord, meta: { title: string; from: SourceOrigin; id?: string; aspect?: PreviewAspect; now?: number; media?: PlayMedia }): SnapshotResult {
   let result;
   try { result = compileGraph({ nodes }); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   if (!result.success || !result.fragmentShader) return { ok: false, error: result.errors?.join('; ') || 'The graph did not compile' };
   const compiled: CompiledForWeb = { ...result, particleSystems: result.particleSystems ?? [] };
-  const { input, missing } = webInputFrom(compiled, play, { title: meta.title, aspect: meta.aspect ?? 'free' });
+  const { input, missing } = webInputFrom(compiled, play, { title: meta.title, aspect: meta.aspect ?? 'free', media: meta.media ?? { textures: {}, videos: {}, audio: [] } });
   const byId = allNodes(nodes);
   const shaderNodes: SourceNode[] = [];
   for (const [id, slug] of result.nodeSlugMap ?? []) {
@@ -79,7 +98,10 @@ export function snapshotSaved(name: string, id?: string): SnapshotResult {
   if (!parsed || !Array.isArray(parsed.nodes)) return { ok: false, error: `No saved graph named “${name}”` };
   const nodes = migrateLoadedNodes(parsed.nodes as GraphNode[]);
   const savedAt = typeof parsed.savedAt === 'number' ? parsed.savedAt : 0;
-  return snapshotFromGraph(nodes, parsePlayRecord(parsed.play), { title: name, from: { kind: 'saved', name, savedAt }, id });
+  // The graph's image, video and song files exist only while it's open: take them when it is, as saved.
+  const st = useNodeGraphStore.getState();
+  const media = st.currentGraph?.name === name && !st.graphDirty ? st.playWebInput(name).input.media : undefined;
+  return snapshotFromGraph(nodes, parsePlayRecord(parsed.play), { title: name, from: { kind: 'saved', name, savedAt }, id, media });
 }
 
 /** A bundled example (its chunk loads on first use). */

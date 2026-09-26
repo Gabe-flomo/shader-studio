@@ -33,6 +33,8 @@ export interface PlayMount {
   set?(id: string, value: number | number[]): void;
   fire?(id: string): void;
   still?(): string | null;
+  hasSound?: boolean;
+  sound?(audible: boolean): void;
 }
 
 interface PlayRuntime {
@@ -48,7 +50,7 @@ declare global {
 
 /** The runtime, evaluated on first use. */
 export function playRuntime(): PlayRuntime {
-  if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 3) {
+  if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 4) {
     // The same text the web export inlines: the kit first, then the player.
     new Function(`${kitScript()}\n${runtimeSource}`)();
   }

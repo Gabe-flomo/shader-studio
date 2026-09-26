@@ -13,7 +13,7 @@
  */
 import { parsePlayRecord, type PlayRecord } from './play';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
-import type { PlayHtmlInput } from '../play/exportHtml';
+import type { PlayHtmlInput, PlayMedia, PlayMediaFile, PlayPasses } from '../play/exportHtml';
 
 export const PRESENTATION_FILE_KIND = 'shader-studio-presentation';
 export const PRESENTATION_VERSION = 1 as const;
@@ -214,13 +214,69 @@ function parseUniforms(v: unknown): Record<string, number | number[]> {
   return out;
 }
 
+function parsePasses(v: unknown): PlayPasses | undefined {
+  if (!isObj(v)) return undefined;
+  const e = isObj(v.echo) ? v.echo : null;
+  const echo = e && num(e.copies) && num(e.delay) ? { copies: Math.max(1, Math.min(16, Math.round(num(e.copies)!))), delay: Math.max(1, Math.min(600, Math.round(num(e.delay)!))) } : null;
+  const particles: PlayPasses['particles'] = [];
+  if (Array.isArray(v.particles)) for (const p of v.particles.slice(0, 16)) {
+    if (!isObj(p) || typeof p.vertexShader !== 'string' || typeof p.fragmentShader !== 'string') continue;
+    particles.push({ vertexShader: p.vertexShader, fragmentShader: p.fragmentShader, count: Math.max(1, Math.min(4_000_000, Math.round(num(p.count) ?? 1))), shape: Math.round(num(p.shape) ?? 0) });
+  }
+  return { stateful: v.stateful === true, echo, particles };
+}
+
+/** A media file: only data URLs of images, video and audio travel (never a link to somewhere else). */
+function parseFile(v: unknown, kind: 'image' | 'video' | 'audio'): PlayMediaFile | null {
+  if (!isObj(v)) return null;
+  const src = typeof v.src === 'string' && new RegExp(`^data:${kind}/[\\w.+-]+;base64,[A-Za-z0-9+/=]+$`).test(v.src) ? v.src : null;
+  const f: PlayMediaFile = { label: str(v.label, 200) ?? '', name: str(v.name, 200) ?? '', src, bytes: Math.max(0, num(v.bytes) ?? 0) };
+  if ('scaledTo' in v) f.scaledTo = num(v.scaledTo);
+  return f;
+}
+
+function parseMedia(v: unknown): PlayMedia | undefined {
+  if (!isObj(v)) return undefined;
+  const out: PlayMedia = {};
+  if (isObj(v.textures)) {
+    out.textures = {};
+    for (const [k, x] of Object.entries(v.textures)) { const f = parseFile(x, 'image'); if (f) out.textures[k] = f; }
+  }
+  if (isObj(v.videos)) {
+    out.videos = {};
+    for (const [k, x] of Object.entries(v.videos)) {
+      const f = parseFile(x, 'video');
+      if (f && isObj(x)) out.videos[k] = { ...f, loop: x.loop !== false, speed: Math.max(0.05, Math.min(8, num(x.speed) ?? 1)) };
+    }
+  }
+  if (Array.isArray(v.audio)) {
+    out.audio = [];
+    for (const x of v.audio.slice(0, 16)) {
+      const f = parseFile(x, 'audio');
+      if (!f || !isObj(x) || typeof x.id !== 'string') continue;
+      out.audio.push({
+        ...f, id: x.id.slice(0, 100),
+        uniforms: Array.isArray(x.uniforms) ? x.uniforms.map(u => (typeof u === 'string' ? u.slice(0, 100) : '')) : [],
+        bands: Array.isArray(x.bands) ? x.bands.map(b => num(b) ?? 0) : [],
+        range: num(x.range) ?? 200, mode: x.mode === 'full' ? 'full' : 'band',
+      });
+    }
+  }
+  return out;
+}
+
 function parseBundle(v: unknown): PlayHtmlInput | null {
   if (!isObj(v)) return null;
   const fragmentShader = typeof v.fragmentShader === 'string' && v.fragmentShader.length > 0 && v.fragmentShader.length < 2_000_000 ? v.fragmentShader : null;
   if (!fragmentShader) return null;
   const aspect = PREVIEW_ASPECTS.some(a => a.id === v.aspect) ? v.aspect as PreviewAspect : 'free';
   const play: PlayRecord = parsePlayRecord(v.play);
-  return { title: str(v.title, 200) ?? 'Play', fragmentShader, uniforms: parseUniforms(v.uniforms), paramBindings: stringRecord(v.paramBindings), play, aspect };
+  const out: PlayHtmlInput = { title: str(v.title, 200) ?? 'Play', fragmentShader, uniforms: parseUniforms(v.uniforms), paramBindings: stringRecord(v.paramBindings), play, aspect };
+  const passes = parsePasses(v.passes);
+  if (passes) out.passes = passes;
+  const media = parseMedia(v.media);
+  if (media) out.media = media;
+  return out;
 }
 
 function parseFeatures(v: unknown): SourceFeatures | undefined {
