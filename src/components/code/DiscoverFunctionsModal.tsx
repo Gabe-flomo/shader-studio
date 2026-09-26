@@ -13,6 +13,9 @@
  */
 import { useMemo, useState } from 'react';
 import { discoverFunctions, toCustomFnPreset, bundleText, type DiscoveredFn, type DiscoverFilter } from '../../glsl/discover';
+import { inferParamRoles, inferReturnRole, ROLE_INFO, type ParamRole } from '../../glsl/roles';
+import { previewShaderFor, defaultBinding, bindingsFor, BINDING_LABEL, type Binding, type BindingKind } from '../../glsl/previewShader';
+import { MiniShader } from './MiniShader';
 import { saveCustomFnPreset } from '../../store/useNodeGraphStore';
 import { tokenizeLine, C, C_LIGHT } from '../glslSyntax';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
@@ -27,18 +30,20 @@ import { toast } from '../ui/toastStore';
 
 export interface DiscoverSourceShader { id: string; name: string; code: string; group?: string; note?: string }
 
-type ScopeMode = 'all' | 'folders' | 'search';
+type ScopeMode = 'file' | 'all' | 'folders' | 'search';
 type LevelMode = 'self' | 'one' | 'any';
 const RETURN_TYPES = ['float', 'vec2', 'vec3', 'vec4'] as const;
 const PARAM_TYPES = ['float', 'vec2', 'vec3', 'vec4', 'int', 'bool', 'mat2', 'mat3'] as const;
 
 const toggleIn = <T,>(set: Set<T>, v: T): Set<T> => { const n = new Set(set); if (n.has(v)) n.delete(v); else n.add(v); return n; };
 
-export function DiscoverFunctionsModal({ sources, onClose, onShowInFile }: {
+export function DiscoverFunctionsModal({ sources, onClose, onShowInFile, currentId }: {
   sources: DiscoverSourceShader[];
   onClose: () => void;
-  /** Open the shader in the editor with the function selected. */
-  onShowInFile?: (sourceId: string, fn: DiscoveredFn) => void;
+  /** Open the shader in the editor with a span selected (a function, or one of its call sites). */
+  onShowInFile?: (sourceId: string, range: { start: number; end: number }) => void;
+  /** The file open in the editor, when there is one: the “This file” scope. */
+  currentId?: string;
 }) {
   const tk = useTokens();
   const mode = useThemeMode();
@@ -47,10 +52,11 @@ export function DiscoverFunctionsModal({ sources, onClose, onShowInFile }: {
 
   // ── Scope ──
   const folders = useMemo(() => [...new Set(sources.map(s => s.group).filter((g): g is string => !!g))].sort((a, b) => a.localeCompare(b)), [sources]);
-  const [scope, setScope] = useState<ScopeMode>('all');
+  const [scope, setScope] = useState<ScopeMode>(currentId && sources.some(s => s.id === currentId) ? 'file' : 'all');
   const [pickedFolders, setPickedFolders] = useState<Set<string>>(new Set());
   const [terms, setTerms] = useState('');
   const scoped = useMemo(() => {
+    if (scope === 'file') return sources.filter(s => s.id === currentId);
     if (scope === 'folders') return sources.filter(s => s.group && pickedFolders.has(s.group));
     if (scope === 'search') {
       const words = terms.split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
@@ -58,7 +64,7 @@ export function DiscoverFunctionsModal({ sources, onClose, onShowInFile }: {
       return sources.filter(s => words.some(w => s.name.toLowerCase().includes(w) || (s.note ?? '').toLowerCase().includes(w) || (s.group ?? '').toLowerCase().includes(w) || s.code.toLowerCase().includes(w)));
     }
     return sources;
-  }, [sources, scope, pickedFolders, terms]);
+  }, [sources, scope, pickedFolders, terms, currentId]);
 
   // ── Filters ──
   const [level, setLevel] = useState<LevelMode>('one');
@@ -87,6 +93,15 @@ export function DiscoverFunctionsModal({ sources, onClose, onShowInFile }: {
   const shownSelected = result.matches.filter(f => selected.has(f.id));
   const defaultComment = (f: DiscoveredFn) => `Found in “${f.sourceName}”, lines ${f.startLine}–${f.endLine}${f.dependencies.length ? ` · with ${f.dependencies.map(d => d.name).join(', ')}` : ''}`;
   const [saving, setSaving] = useState(false);
+
+  // ── Roles, bindings and the live preview of the chosen function ──
+  const roles = useMemo<ParamRole[]>(() => (active ? inferParamRoles(active) : []), [active]);
+  const ret = useMemo(() => (active ? inferReturnRole(active) : null), [active]);
+  const [bindingOverrides, setBindingOverrides] = useState<Record<string, Binding[]>>({});
+  const bindings = useMemo<Binding[]>(() => active ? (bindingOverrides[active.id] ?? roles.map(defaultBinding)) : [], [active, roles, bindingOverrides]);
+  const setBinding = (i: number, b: Binding) => { if (!active) return; const next = [...bindings]; next[i] = b; setBindingOverrides(m => ({ ...m, [active.id]: next })); };
+  const preview = useMemo(() => (active && ret ? previewShaderFor(active, roles, ret, bindings) : null), [active, roles, ret, bindings]);
+  const [showUses, setShowUses] = useState(false);
 
   const save = async () => {
     if (!shownSelected.length || saving) return;
@@ -132,7 +147,7 @@ export function DiscoverFunctionsModal({ sources, onClose, onShowInFile }: {
         {/* ── Scope and filters ── */}
         <div style={{ width: narrow ? 'auto' : 236, flexShrink: 0, overflowY: 'auto', padding: '4px 14px 14px', borderRight: narrow ? 'none' : `1px solid ${tk.border.subtle}`, borderBottom: narrow ? `1px solid ${tk.border.subtle}` : 'none', maxHeight: narrow ? '45%' : 'none' }}>
           <div style={caps}>Scope</div>
-          <Segmented fill size="sm" ariaLabel="Scope" value={scope} onChange={setScope} options={[{ value: 'all', label: 'All' }, { value: 'folders', label: 'Folders' }, { value: 'search', label: 'Search' }]} />
+          <Segmented fill size="sm" ariaLabel="Scope" value={scope} onChange={setScope} options={[...(currentId ? [{ value: 'file' as const, label: 'This file' }] : []), { value: 'all' as const, label: 'All' }, { value: 'folders' as const, label: 'Folders' }, { value: 'search' as const, label: 'Search' }]} />
           {scope === 'folders' && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
               {folders.length === 0 && <span style={{ fontSize: 11.5, color: tk.text.faint }}>No folders yet: group shaders in the list to make some.</span>}
@@ -209,19 +224,69 @@ export function DiscoverFunctionsModal({ sources, onClose, onShowInFile }: {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 4px', flexWrap: 'wrap' }}>
                 <Field aria-label="Name in the library" value={names[active.id] ?? active.name} height={26} mono onChange={e => setNames(m => ({ ...m, [active.id]: e.target.value }))} style={{ width: 180 }} />
                 {badge(active.returnType, tk.text.muted)}
-                <span style={{ fontSize: 11, color: tk.text.faint, flex: 1, minWidth: 120 }}>{levelLabel(active)}{active.dependencies.length ? ` · brings ${active.dependencies.map(d => d.name).join(', ')}` : ''}{active.defines.length ? ` · ${active.defines.length} #define${active.defines.length > 1 ? 's' : ''}` : ''} · {active.sourceName}, lines {active.startLine}–{active.endLine}</span>
-                {onShowInFile && <Button size="sm" variant="ghost" icon="code" onClick={() => onShowInFile(active.sourceId, active)}>Show in file</Button>}
+                <span style={{ fontSize: 11, color: tk.text.faint, flex: 1, minWidth: 120 }}>{ret && ret.role !== 'unknown' ? `returns a ${ROLE_INFO[ret.role].label} · ` : ''}{levelLabel(active)}{active.dependencies.length ? ` · brings ${active.dependencies.map(d => d.name).join(', ')}` : ''}{active.defines.length ? ` · ${active.defines.length} #define${active.defines.length > 1 ? 's' : ''}` : ''} · {active.sourceName}, lines {active.startLine}–{active.endLine}</span>
+                {active.callSites.length > 0 && <Button size="sm" variant={showUses ? undefined : 'ghost'} icon="search" onClick={() => setShowUses(v => !v)}>{`Used ${active.callSites.length}×`}</Button>}
+                {onShowInFile && <Button size="sm" variant="ghost" icon="code" onClick={() => onShowInFile(active.sourceId, { start: active.start, end: active.end })}>Show in file</Button>}
                 <Button size="sm" variant={selected.has(active.id) ? 'ghost' : undefined} icon={selected.has(active.id) ? 'check' : 'plus'} onClick={() => setSelected(s => toggleIn(s, active.id))}>{selected.has(active.id) ? 'Kept' : 'Keep'}</Button>
               </div>
               <div style={{ padding: '0 12px 6px' }}>
                 <Field aria-label="Comment" placeholder={defaultComment(active)} value={comments[active.id] ?? ''} height={26} onChange={e => setComments(m => ({ ...m, [active.id]: e.target.value }))} />
               </div>
               {!active.selfContained && <div style={{ margin: '0 12px 6px', fontSize: 11, color: tk.status.warning }}>Reads {active.globals.join(', ')} from its shader, so it can’t be saved as a library function as it is.</div>}
-              <pre style={{ flex: 1, minHeight: 0, overflow: 'auto', margin: 0, padding: '8px 12px', background: tk.bg.field, font: `12px/1.55 ${fontFamily.mono}`, color: tk.text.primary, whiteSpace: 'pre', tabSize: 4 }}>
-                {previewCode.split('\n').map((line, i) => (
-                  <div key={i} style={{ minHeight: '1.55em' }}>{tokenizeLine(line, pal).map((t, j) => <span key={j} style={{ color: t.color }}>{t.text}</span>)}</div>
-                ))}
-              </pre>
+              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: narrow ? 'column' : 'row', gap: 0 }}>
+                <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  {showUses && (
+                    <div style={{ flexShrink: 0, maxHeight: 110, overflowY: 'auto', borderBottom: `1px solid ${tk.border.subtle}`, padding: '4px 12px 6px' }}>
+                      <div style={{ ...caps, margin: '4px 0 4px' }}>Used in {active.sourceName}</div>
+                      {active.callSites.slice(0, 12).map((c, i) => (
+                        <button key={i} type="button" onClick={() => onShowInFile?.(active.sourceId, { start: c.start, end: c.end })} title={onShowInFile ? 'Show this call in the file' : undefined}
+                          style={{ display: 'flex', gap: 8, width: '100%', textAlign: 'left', border: 0, background: 'transparent', cursor: onShowInFile ? 'pointer' : 'default', padding: '2px 0', font: `11px ${fontFamily.mono}`, color: tk.text.secondary }}>
+                          <span style={{ color: tk.text.faint, minWidth: 34 }}>{c.line}</span>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{c.text}</span>
+                          <span style={{ color: tk.text.faint, flexShrink: 0 }}>in {c.inFn}</span>
+                        </button>
+                      ))}
+                      {active.callSites.length > 12 && <div style={{ fontSize: 10.5, color: tk.text.faint }}>and {active.callSites.length - 12} more</div>}
+                    </div>
+                  )}
+                  <pre style={{ flex: 1, minHeight: 0, overflow: 'auto', margin: 0, padding: '8px 12px', background: tk.bg.field, font: `12px/1.55 ${fontFamily.mono}`, color: tk.text.primary, whiteSpace: 'pre', tabSize: 4 }}>
+                    {previewCode.split('\n').map((line, i) => (
+                      <div key={i} style={{ minHeight: '1.55em' }}>{tokenizeLine(line, pal).map((t, j) => <span key={j} style={{ color: t.color }}>{t.text}</span>)}</div>
+                    ))}
+                  </pre>
+                </div>
+                <div style={{ width: narrow ? 'auto' : 212, flexShrink: 0, borderLeft: narrow ? 'none' : `1px solid ${tk.border.subtle}`, padding: '8px 10px', overflowY: 'auto', display: 'flex', flexDirection: narrow ? 'row' : 'column', gap: 8, alignItems: narrow ? 'flex-start' : 'stretch' }}>
+                  <MiniShader source={preview?.ok ? preview.source : null} size={narrow ? 120 : 190} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1 }}>
+                    {preview && !preview.ok && <div style={{ fontSize: 10.5, lineHeight: 1.4, color: tk.text.faint }}>{preview.error}</div>}
+                    {roles.map((r, i) => (
+                      <div key={r.name} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11 }} title={r.because.length ? `${ROLE_INFO[r.role].hint}\n${r.because.join(' · ')}` : ROLE_INFO[r.role].hint}>
+                          <span style={{ font: `600 11px ${fontFamily.mono}`, color: tk.text.primary }}>{r.type} {r.name}</span>
+                          <span style={{ color: r.confidence > 0.4 ? tk.kind.expr : tk.text.faint }}>{ROLE_INFO[r.role].label}{r.confidence > 0.4 ? '' : '?'}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <select
+                            aria-label={`Feed ${r.name} with`} value={bindings[i]?.kind ?? 'const'}
+                            onChange={e => setBinding(i, { kind: e.target.value as BindingKind, value: bindings[i]?.value?.length ? bindings[i].value : [0.5] })}
+                            style={{ flex: 1, minWidth: 0, height: 24, borderRadius: radius.sm, border: 0, background: tk.bg.field, color: tk.text.secondary, font: `500 11px ${fontFamily.ui}`, padding: '0 4px' }}
+                          >
+                            {bindingsFor(r.type).map(k => <option key={k} value={k}>{BINDING_LABEL[k]}</option>)}
+                          </select>
+                          {bindings[i]?.kind === 'const' && (
+                            <input
+                              aria-label={`Value for ${r.name}`} value={(bindings[i].value ?? []).join(', ')}
+                              onChange={e => setBinding(i, { kind: 'const', value: e.target.value.split(',').map(x => Number(x.trim())).filter(n => Number.isFinite(n)) })}
+                              style={{ width: r.type === 'float' ? 52 : 92, height: 24, borderRadius: radius.sm, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}`, padding: '0 6px' }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {active.params.length === 0 && <div style={{ fontSize: 10.5, color: tk.text.faint }}>No parameters: the preview calls it as it is.</div>}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
           {!active && result.matches.length === 0 && <div style={{ flexShrink: 0, padding: 12, fontSize: 11.5, color: tk.text.faint, borderTop: `1px solid ${tk.border.subtle}`, lineHeight: 1.5 }}>Self-contained functions (level 0) are the safest to keep: a hash, a rotation, a palette. A level-1 function brings its helpers with it, so noise() arrives together with the hash() it calls.</div>}

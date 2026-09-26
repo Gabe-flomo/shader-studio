@@ -48,7 +48,11 @@ export interface DiscoveredFn {
   defines: string[];
   /** True when nothing outside the function (and its dependencies) is needed. */
   selfContained: boolean;
+  /** Where the file calls it (outside its own body): the line, the call's span, and the argument expressions. */
+  callSites: CallSite[];
 }
+
+export interface CallSite { line: number; start: number; end: number; text: string; args: string[]; /** The function the call sits in, or 'top level'. */ inFn: string }
 
 export interface DiscoverSource { id: string; name: string; code: string }
 
@@ -159,6 +163,13 @@ function fileDefines(blanked: string, code: string): Map<string, string> {
   return out;
 }
 
+function splitArgs(text: string): string[] {
+  const out: string[] = []; let depth = 0, cur = '';
+  for (const c of text) { if (c === '(' || c === '[') depth++; else if (c === ')' || c === ']') depth--; if (c === ',' && depth === 0) { out.push(cur.trim()); cur = ''; } else cur += c; }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
 const identifiers = (body: string): Set<string> => new Set([...body.matchAll(/(?<![\w.])([A-Za-z_]\w*)/g)].map(m => m[1]));
 
 /** The named defines plus any define their values mention, in file order. */
@@ -197,9 +208,22 @@ export function discoverInSource(src: DiscoverSource): DiscoveredFn[] {
       name: r.name, returnType: r.returnType, params: r.params,
       signature: `${r.returnType} ${r.name}(${r.params.map(p => `${p.qualifier === 'in' ? '' : `${p.qualifier} `}${p.type} ${p.name}`).join(', ')})`,
       text: r.text, start: r.start, end: r.end, startLine: lineOf(src.code, r.start), endLine: lineOf(src.code, r.end - 1),
-      calls, dependencies: [], level: recursive ? -1 : 0, globals: used, defines: defs, selfContained: used.length === 0,
+      calls, dependencies: [], level: recursive ? -1 : 0, globals: used, defines: defs, selfContained: used.length === 0, callSites: [],
     };
   });
+  // Call sites: every `name(` in the blanked text that is not a definition header and not inside the function's own body.
+  for (const f of fns) {
+    const re = new RegExp(`(?<![\\w.])${f.name}\\s*\\(`, 'g');
+    for (const m of blanked.matchAll(re)) {
+      const at = m.index!;
+      if (raws.some(r => r.name === f.name && at >= r.start && at < r.bodyOpen)) continue; // its own (or an overload's) header
+      if (at > f.start && at < f.end) continue; // recursion, already marked
+      const open = at + m[0].length - 1, close = matchParen(blanked, open); if (close < 0) continue;
+      const home = raws.find(r => at > r.bodyOpen && at < r.end);
+      const lineStart = src.code.lastIndexOf('\n', at) + 1, lineEnd = (i => (i < 0 ? src.code.length : i))(src.code.indexOf('\n', close));
+      f.callSites.push({ line: lineOf(src.code, at), start: at, end: close + 1, text: src.code.slice(lineStart, lineEnd).trim(), args: splitArgs(blanked.slice(open + 1, close)), inFn: home?.name ?? 'top level' });
+    }
+  }
   // Levels and closures. Overloads share a name, so a call pulls in every definition of that name.
   const index = new Map<string, DiscoveredFn[]>();
   for (const f of fns) index.set(f.name, [...(index.get(f.name) ?? []), f]);
