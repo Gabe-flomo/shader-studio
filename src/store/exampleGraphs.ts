@@ -5,6 +5,7 @@ import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_GRAPHS } from './playExamples';
 import { buildLearnExamples } from './learnExamples';
 import { buildComboExamples } from './comboExamples';
+import { buildMatrixExamples } from './matrixExamples';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { defaultLayer, type PlayLayer, type PlayLayerKind } from '../types/play';
 
@@ -11951,4 +11952,4 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 };
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
-Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildComboExamples());
+Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildComboExamples(), buildMatrixExamples());

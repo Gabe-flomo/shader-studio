@@ -236,6 +236,7 @@ import { GroupNode } from './group';
 import { ScopeNode } from './utility';
 import { PrintFloatNode, PrintTextNode } from './text';
 import { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode, RotationMatrixNode } from './matrix';
+import { Mat2MulNode, Mat3MulNode, Mat2InverseNode, Mat3InverseNode, Mat2MixNode, Mat3MixNode, ScaleMatrixNode, ShearMatrixNode, StretchMatrixNode, Mat3MulPointNode, CornerPinNode, ColorMatrixNode } from './matrixOps';
 import { LFONode, BPMSyncNode } from './animations';
 import {
   AddNode, SubtractNode, MultiplyNode, DivideNode,
@@ -376,6 +377,18 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   chaosLayers: ChaosLayersNode,
   normalToColor: NormalToColorNode,
   rotationMatrix: RotationMatrixNode,
+  mat2Mul: Mat2MulNode,
+  mat3Mul: Mat3MulNode,
+  mat2Inverse: Mat2InverseNode,
+  mat3Inverse: Mat3InverseNode,
+  mat2Mix: Mat2MixNode,
+  mat3Mix: Mat3MixNode,
+  scaleMatrix: ScaleMatrixNode,
+  shearMatrix: ShearMatrixNode,
+  stretchMatrix: StretchMatrixNode,
+  mat3MulPoint: Mat3MulPointNode,
+  cornerPin: CornerPinNode,
+  colorMatrix: ColorMatrixNode,
   volumeGlow: VolumeGlowNode,
   toneMap: ToneMapNode,
   grain: GrainNode,

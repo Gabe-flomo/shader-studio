@@ -169,6 +169,7 @@ Feature documentation lives in `docs/`:
 | [`docs/field-sockets-plan.md`](docs/field-sockets-plan.md) | The original plan for field sockets (built; see field-sockets.md): sockets that take a node's code as a function of position (a shape by wire into Grid Pattern), grid overflow across cells, and the Array node |
 | [`docs/function-discovery.md`](docs/function-discovery.md) | Discover functions: scan the saved GLSL shaders for self-contained functions (by dependency level, return type, parameters), preview, Show in file, save to the Functions library |
 | [`docs/js-layers.md`](docs/js-layers.md) | The Script layer: JavaScript sketches (setup/draw, declared sliders, the picture, nulls) as a Play layer, and the road from it to plugins |
+| [`docs/matrices.md`](docs/matrices.md) | Matrix nodes (combine, invert, determinant, mix, scale/shear/stretch builders, projective Corner Pin, Colour Matrix), Grid Pattern's lattices as basis matrices, and the Matrices example folder |
 | [`docs/constants-node.md`](docs/constants-node.md) | The Constants card: named values, fixed or with sliders, outputs only, Play-controllable |
 | [`docs/playfield-sdk.md`](docs/playfield-sdk.md) | The SDK / add-on idea: layers, mappings and feeds as installable extensions (a write-up, not built) |
 

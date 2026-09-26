@@ -66,7 +66,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
   Color: [
     { label: 'Build',   types: ['colorPicker', 'colorize', 'makeVec3'] },
     { label: 'Palette', types: ['palette', 'stopPalette', 'gradient', 'colorRamp', 'blackbody'] },
-    { label: 'Adjust',  types: ['invert', 'colorSaturation', 'posterize', 'hueRange', 'brightnessContrast'] },
+    { label: 'Adjust',  types: ['invert', 'colorSaturation', 'posterize', 'hueRange', 'brightnessContrast', 'colorMatrix'] },
     { label: 'Convert', types: ['hsv', 'normalToColor'] },
     { label: 'Blend',   types: ['blendModes', 'oklabMix'] },
   ],
@@ -111,7 +111,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Basic',   types: ['uvTransform2d', 'rotate2d', 'shear', 'perspective2d', 'fract', 'displace'] },
     { label: 'Repeat',  types: ['infiniteRepeatSpace', 'limitedRepeat2D', 'mirroredRepeat2D', 'angularRepeat2D', 'kaleidoSpace', 'grid'] },
     { label: 'Warp',    types: ['uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'turbulence', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
-    { label: 'Map',     types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace'] },
+    { label: 'Map',     types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'cornerPin'] },
     { label: 'Pattern', types: ['waveTexture', 'magicTexture', 'chaosLayers'] },
   ],
   Combiners: [
