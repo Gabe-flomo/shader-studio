@@ -8,6 +8,7 @@
 import { useCallback, useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
 import { tokenizeLine, C, C_LIGHT } from '../glslSyntax';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
+import { alpha, fontFamily } from '../../theme/tokens';
 
 export interface GlslEditorHandle {
   insertAtCursor: (text: string) => void;
@@ -30,13 +31,15 @@ const BRACKET_PAIRS: Record<string, [string, string]> = {
   "'": ["'", "'"],
 };
 
-export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', placeholder, autoFocus }: {
+export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', placeholder, autoFocus, errorLines }: {
   value: string;
   onChange: (code: string) => void;
   ref?: Ref<GlslEditorHandle>;
   ariaLabel?: string;
   placeholder?: string;
   autoFocus?: boolean;
+  /** Lines (1-based) with a problem, and what it is: tinted in the editor, the message on hover and in the gutter. */
+  errorLines?: Map<number, string>;
 }) {
   const tk = useTokens();
   const mode = useThemeMode();
@@ -45,6 +48,7 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const lineNumRef   = useRef<HTMLDivElement>(null);
+  const messageRef   = useRef<HTMLDivElement>(null);
 
   // ── Undo / redo stack ──────────────────────────────────────────────────────
   const undoStack = useRef<string[]>([value]);
@@ -77,6 +81,7 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
       highlightRef.current.scrollTop  = ta.scrollTop;
       highlightRef.current.scrollLeft = ta.scrollLeft;
     }
+    if (messageRef.current) messageRef.current.scrollTop = ta.scrollTop;
     if (lineNumRef.current) lineNumRef.current.scrollTop = ta.scrollTop;
   }, []);
 
@@ -214,7 +219,7 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
           userSelect: 'none', pointerEvents: 'none',
         }}
       >
-        {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
+        {lines.map((_, i) => <div key={i} style={errorLines?.has(i + 1) ? { color: tk.status.danger, fontWeight: 700 } : undefined}>{i + 1}</div>)}
       </div>
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         {/* Syntax-highlighted background */}
@@ -229,12 +234,23 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
           }}
         >
           {lines.map((line, i) => (
-            <div key={i} style={{ minHeight: `calc(${EDITOR_LINE_HEIGHT} * ${EDITOR_FONT_SIZE})` }}>
+            <div key={i} style={{ minHeight: `calc(${EDITOR_LINE_HEIGHT} * ${EDITOR_FONT_SIZE})`, ...(errorLines?.has(i + 1) ? { background: alpha(tk.status.danger, 0.16), boxShadow: `inset 3px 0 0 ${tk.status.danger}`, margin: '0 -12px', padding: '0 12px' } : {}) }}>
               {tokenizeLine(line || ' ', pal).map((tok, j) => (
                 <span key={j} style={{ color: tok.color }}>{tok.text}</span>
               ))}
             </div>
           ))}
+        </div>
+        {/* The messages, over the failing lines (the textarea is transparent, so these sit on it). */}
+        <div aria-hidden="true" style={{ position: 'absolute', inset: 0, padding: EDITOR_PADDING, fontSize: EDITOR_FONT_SIZE, lineHeight: EDITOR_LINE_HEIGHT, fontFamily: EDITOR_FONT, pointerEvents: 'none', overflow: 'hidden', zIndex: 2 }} ref={messageRef}>
+          {errorLines && lines.map((_, i) => {
+            const msg = errorLines.get(i + 1);
+            return (
+              <div key={i} style={{ minHeight: `calc(${EDITOR_LINE_HEIGHT} * ${EDITOR_FONT_SIZE})`, display: 'flex', justifyContent: 'flex-end' }}>
+                {msg && <span style={{ alignSelf: 'center', maxWidth: '60%', padding: '0 8px', borderRadius: 6, background: tk.status.danger, color: '#fff', font: `600 10.5px ${fontFamily.ui}`, lineHeight: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'auto' }} title={msg}>{msg}</span>}
+              </div>
+            );
+          })}
         </div>
         {/* Transparent textarea on top */}
         <textarea

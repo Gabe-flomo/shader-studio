@@ -4,6 +4,9 @@ import { safeSetItem } from '../utils/fileIO';
 import type { FileResult } from '../utils/fileIO';
 import { GlslEditor, type GlslEditorHandle } from './code/GlslEditor';
 import { translateToStudio, dialectLabel } from '../glsl/dialects';
+import { tidyGlsl } from '../glsl/format';
+import { toast } from './ui/toastStore';
+import { glslErrorLines } from '../compiler/nodeErrors';
 import { NodePalette } from './NodeGraph/NodePalette';
 import { useTokens } from '../theme/themeStore';
 import { alpha, fontFamily, radius } from '../theme/tokens';
@@ -164,6 +167,19 @@ export function GLSLPage() {
   useEffect(() => () => { setRawGlslShader(null); }, [setRawGlslShader]);
 
   const insertAtCursor = (text: string) => editorRef.current?.insertAtCursor(text);
+  const glslErrorSource = useNodeGraphStore(s => s.glslErrorSource);
+  // The driver's error lines, on the lines of the text as typed (through the translation's line map).
+  const errorLines = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const [i, msgs] of glslErrorLines(translation.code, glslErrorSource, glslErrors)) { const l = translation.toSourceLine(i + 1); m.set(l, m.has(l) ? `${m.get(l)} · ${msgs.join(' · ')}` : msgs.join(' · ')); }
+    return m;
+  }, [translation, glslErrorSource, glslErrors]);
+  const tidy = () => {
+    const t = tidyGlsl(code);
+    if (!t.changed) { toast.info('Already tidy'); return; }
+    editorRef.current?.replaceAll(t.code);
+    toast.success(t.dialect === 'studio' ? 'Tidied' : `Tidied, read as ${dialectLabel(t.dialect)}`, { message: [...t.notes, ...t.unsupported].join(' · ') || 'Indentation and spacing made regular.' });
+  };
 
   // ── Shader save / load ────────────────────────────────────────────────────
   const commitSave = () => {
@@ -291,13 +307,14 @@ export function GLSLPage() {
           ) : (
             <Button size="sm" variant="primary" icon="plus" onClick={() => { setShowSaveInput(true); setSaveNameVal(''); }}>Save</Button>
           )}
+          <Button size="sm" variant="ghost" onClick={tidy} title="Rewrite the text as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
           <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => setCode(nodeGraphShader || BOILERPLATE)} />
           <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => setCode(BOILERPLATE)} />
           {!sideOpen && <IconButton icon="popout" label="Show saved shaders and functions" size="sm" onClick={() => setShowPanel(true)} />}
         </div>
 
         {/* Code area */}
-        <GlslEditor ref={editorRef} value={code} onChange={setCode} ariaLabel="Fragment shader source" />
+        <GlslEditor ref={editorRef} value={code} onChange={setCode} ariaLabel="Fragment shader source" errorLines={errorLines} />
 
         {/* Compile errors */}
         {glslErrors.length > 0 && (

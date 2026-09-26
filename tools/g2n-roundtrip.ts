@@ -42,7 +42,7 @@ for (const f of readdirSync(dir).filter(f => f.endsWith('.frag')).sort()) {
   if (rep.notes.length) lines.push(`    notes: ${rep.notes.join(' | ')}`);
   rows.push(lines.join('\n'));
   writeFileSync(join(out, `${name}.graph.json`), JSON.stringify({ nodes: r.nodes, report: r.report }, null, 1));
-  writeFileSync(join(out, `${name}.orig.frag`), wrapOriginal(normaliseHostShader(src), c.vertexShader).fragment);
+  writeFileSync(join(out, `${name}.orig.frag`), wrapOriginal(normaliseHostShader(src).code, c.vertexShader).fragment);
   writeFileSync(join(out, `${name}.graph.frag`), c.fragmentShader);
   writeFileSync(join(out, `${name}.vert`), c.vertexShader);
   // Sliders are live uniforms: the render needs their values, as the app sets them.

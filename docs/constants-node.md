@@ -14,6 +14,11 @@ once more.
 **No inputs.** Nothing upstream can rewrite an entry; that's the point. To
 compute a value, use a node.
 
+**Why the app's helpers don't get in the way.** The compiled shader carries a
+few helpers of its own (`smin`, `sdBox`, `rot2d`…) so node code can call them;
+unused ones are pruned from the final shader, and a pasted function of the same
+name is renamed on the way in, so both can exist.
+
 **Where it comes from.** Add one from Sources, or paste a shader on the
 Convert page: the shader's `const`s and any variable initialised with a number
 (`float ang = 5.0;`) arrive as fixed entries under their own names, wired to

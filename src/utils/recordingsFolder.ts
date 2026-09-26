@@ -54,7 +54,7 @@ export async function resetRecordings(): Promise<void> {
 
 async function defaultDesktopDir(): Promise<string> {
   const { videoDir, homeDir, join } = await import('@tauri-apps/api/path');
-  try { return await join(await videoDir(), 'Shader Studio'); } catch { return join(await homeDir(), 'Shader Studio Recordings'); }
+  try { return await join(await videoDir(), 'Playfield'); } catch { return join(await homeDir(), 'Playfield Recordings'); }
 }
 
 /** Where recordings go, in words: a path, a folder name, "Downloads" or "Ask each time". */

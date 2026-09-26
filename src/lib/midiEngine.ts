@@ -301,7 +301,7 @@ export class MidiEngine implements InputSource {
         ?? (document as unknown as { featurePolicy?: { allowsFeature(f: string): boolean } }).featurePolicy)
       : undefined;
     const allowed = policy ? policy.allowsFeature('midi') : true;
-    if (embedded && (!allowed || this.webMidiStatus === 'denied')) return 'This page is running inside another site (like a preview on claude.ai), and that site doesn\'t allow MIDI. Open Shader Studio in its own tab or the desktop app to use a controller.';
+    if (embedded && (!allowed || this.webMidiStatus === 'denied')) return 'This page is running inside another site (like a preview on claude.ai), and that site doesn\'t allow MIDI. Open Playfield in its own tab or the desktop app to use a controller.';
     if (this.webMidiStatus === 'denied') return 'The browser refused MIDI access. Allow MIDI for this site (the icon left of the address bar), then press Connect.';
     if (this.busyNames.length) return `Couldn't open ${this.busyNames.join(', ')}: another app is probably using it (on Windows only one app can hold a MIDI device). Turn it off in Ableton's MIDI preferences or close the app, then press Connect.`;
     return null;

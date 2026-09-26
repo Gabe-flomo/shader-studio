@@ -201,7 +201,13 @@ PSNR ≥ 40 dB counts as "same"; anything else shows the diff.
 
 - **Left: the shader**, in the GLSL page's editor (line numbers, colouring,
   Tab/Enter/bracket handling, its own undo; `GlslEditor` is now shared by both
-  pages). Paste a file, open one, or pick an example. Under it, **the check**:
+  pages). Paste a file, open one, or pick an example; **Tidy** rewrites a paste
+  as Shader Studio GLSL (the dialect translated, indentation made regular) and
+  **Clear** empties it. The pane's right edge drags wider. A shader that
+  doesn't parse, or that WebGL rejects, has the failing line marked in the
+  editor with the message (through the translation's line map, so the mark
+  lands on the pasted line, not the translated one; the GLSL page does the
+  same for driver errors). Under it, **the check**:
   the original and the converted graph rendered on one clock (two small WebGL
   canvases with the same uniforms and time) with a **Same picture / Differs**
   badge (max error and % of pixels off), then what can't convert, the inexact
@@ -229,6 +235,32 @@ Decisions taken with you: badges on imported code (yes); inexact expressions
 are offered as the node with a warning, with the option to keep the code
 exactly, per expression; the preview is the real canvas, read-only until
 materialized.
+
+## Next step: an optimise-graph pass
+
+A converted graph is faithful, not idiomatic: a chain of Multiply, Add and Sin
+cards where a person would write one expression. The plan is a pass over any
+graph (converted or hand-built), behind an **Optimise graph** button with
+strategies to choose from, each a graph → graph rewrite that keeps the render
+identical (the pixel harness proves it):
+
+- **Chains into blocks.** A run of arithmetic/math cards with one consumer
+  each folds into one Expression Block; the run's slider values become the
+  block's slider inputs, so nothing loses its knob. Threshold: three or more
+  cards, or a run the user selects.
+- **Fan-in into functions.** A subgraph used from several places (the same
+  shape of nodes twice) becomes one Custom Function called twice, its
+  literals as inputs.
+- **Named constants stay.** Constants-card entries are never folded into a
+  block; a block reads them as inputs, so the card stays the place to change
+  them.
+- **Undo as one step, preview before applying** (the Convert page's canvas and
+  check are the right place: show the optimised graph read-only, Same
+  picture, Materialize).
+
+The converter's own literal rules (anonymous numbers fold into sliders, named
+ones go on the Constants card) are the first two strategies applied at
+conversion time; the pass generalises them to graphs of any origin.
 
 ## Product plan
 

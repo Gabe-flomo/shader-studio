@@ -1,6 +1,6 @@
 /**
  * backupFolder.ts — a folder outside the browser that always holds a copy of
- * everything Shader Studio keeps (library.ts), so clearing the browser's data
+ * everything Playfield keeps (library.ts), so clearing the browser's data
  * or reinstalling loses nothing.
  *
  *   - Desktop app: on by default, in Documents/Shader Studio (or the app's
@@ -13,7 +13,7 @@
  * What's written: library.json (the whole library, what Restore reads), a
  * dated copy of it in history/ once a day (the last 14 kept), README.txt, and
  * the same things as readable files in folders (graphs/<folder>/<name>.json…).
- * It's rewritten a few seconds after anything is saved. If Shader Studio's
+ * It's rewritten a few seconds after anything is saved. If Playfield's
  * own storage is ever empty while the folder isn't (cleared site data, a new
  * machine), nothing is overwritten: Restore is offered instead.
  */
@@ -29,7 +29,7 @@ export interface BackupStatus {
   /** The browser needs a click to allow the folder again this visit. */
   needsPermission: boolean;
   lastBackup: number | null;
-  /** The folder has a library while Shader Studio's storage is empty. */
+  /** The folder has a library while Playfield's storage is empty. */
   canRestore: boolean;
   error: string | null;
 }
@@ -39,9 +39,9 @@ const HISTORY_KEEP = 14;
 const DEBOUNCE_MS = 4000;
 /** Top-level entries the readable files use: cleared before rewriting so deleted things don't linger. */
 const READABLE_ROOTS = ['graphs', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'palettes.json', 'glsl shaders.json', 'settings.json'];
-const README = `Shader Studio backup
+const README = `Playfield backup
 
-Shader Studio keeps this folder up to date with everything you save.
+Playfield keeps this folder up to date with everything you save.
 
 library.json      everything, exactly: Preferences → Library → Restore reads it
 history/          a copy of library.json per day, the last ${HISTORY_KEEP} days
@@ -237,7 +237,7 @@ function offerRestore(): void {
     if (!lib) return;
     const d = describeSnapshot(lib);
     toast.info('Your backup folder has your library', {
-      message: `${d.graphs} graphs and ${d.presets} presets from ${new Date(lib.savedAt).toLocaleString()}, but Shader Studio’s storage here is empty.`,
+      message: `${d.graphs} graphs and ${d.presets} presets from ${new Date(lib.savedAt).toLocaleString()}, but Playfield’s storage here is empty.`,
       action: { label: 'Restore', onClick: () => { void restoreFromFolder(); } },
       sticky: true,
     });
@@ -249,7 +249,7 @@ function offerRestore(): void {
 async function defaultDesktopDir(): Promise<string> {
   const { documentDir, appDataDir, join } = await import('@tauri-apps/api/path');
   try {
-    const d = await join(await documentDir(), 'Shader Studio');
+    const d = await join(await documentDir(), 'Playfield');
     const fs = await import('@tauri-apps/plugin-fs');
     await fs.mkdir(d, { recursive: true });
     return d;

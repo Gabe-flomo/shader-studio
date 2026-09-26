@@ -33,7 +33,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const hasNulls = useNodeGraphStore(s => s.play.layers.some(l => l.kind === 'null'));
   const usesOsc = useNodeGraphStore(s => s.play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')));
   const needsGesture = useNodeGraphStore(s => s.play.mappings.some(m => m.enabled && (m.source.kind === 'midi' || m.source.kind === 'live' || (m.source.kind === 'trigger' && (m.source.trigger.on === 'note' || m.source.trigger.on === 'audio')))));
-  const [title, setTitle] = useState('Shader Studio');
+  const [title, setTitle] = useState('Playfield');
   const [site, setSite] = useState<MockSite>('landing');
   const [device, setDevice] = useState<'desktop' | 'phone'>('desktop');
   const wide = useWide();
@@ -50,7 +50,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
     let mountAt = -1;
     for (let i = lines.length - 1; i >= 0; i--) if (lines[i].includes('ShaderStudioPlay.mount(e,')) { mountAt = i; break; }
     const mount = mountAt >= 0 ? lines[mountAt].replace(/mount\(e, \{.*\}, \{/, 'mount(e, {…your piece…}, {') : '';
-    return [lines[0], lines[1], '<script>', `  /* Shader Studio runtime, ${KB(snippet.length)} with your piece */`, '  ' + mount.trim(), '</script>'].join('\n');
+    return [lines[0], lines[1], '<script>', `  /* Playfield runtime, ${KB(snippet.length)} with your piece */`, '  ' + mount.trim(), '</script>'].join('\n');
   }, [snippet]);
 
   const copy = async () => {
@@ -139,7 +139,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
 
       {missing.length > 0 && (
         <div style={{ marginTop: 12, padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.status.warningText, font: `12px/1.5 ${fontFamily.ui}` }}>
-          This graph uses {missing.join(', ')}, which can’t run outside Shader Studio. {missing.length === 1 ? 'It' : 'They'} will be blank or frozen in the export.
+          This graph uses {missing.join(', ')}, which can’t run outside Playfield. {missing.length === 1 ? 'It' : 'They'} will be blank or frozen in the export.
         </div>
       )}
       {left.length > 0 && (

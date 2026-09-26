@@ -27,7 +27,7 @@ const SAMPLE = {
 };
 
 describe('library export', () => {
-  it('takes only what Shader Studio owns', () => {
+  it('takes only what Playfield owns', () => {
     const s = takeSnapshot(memKV(SAMPLE));
     expect(Object.keys(s.items)).not.toContain('someone-elses-key');
     expect(describeSnapshot(s)).toEqual({ graphs: 2, presets: 2, nodes: 1, other: 4 });

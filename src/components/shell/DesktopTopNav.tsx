@@ -62,7 +62,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         <span style={{ width: 26, height: 26, borderRadius: radius.md, background: tk.ink.base, color: tk.ink.text, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="presets" size={13} />
         </span>
-        {!compact && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em' }}>Shader Studio</span>}
+        {!compact && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em' }}>Playfield</span>}
       </div>
 
       <div role="tablist" style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover }}>

@@ -19,6 +19,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { glslToGraph, normaliseHostShader, type ConversionResult } from '../../glslToGraph';
+import { tidyGlsl } from '../../glsl/format';
+import { dialectLabel } from '../../glsl/dialects';
+import { parseGlslError, friendlyGlsl } from '../../compiler/nodeErrors';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { convertFragmentShader } from '../../nodes/userNodes/glslImport';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
@@ -118,13 +121,15 @@ function showStart(nodes: GraphNode[], canvas: HTMLElement | null): void {
   _setViewCallback({ x: padX - minX * z, y: padY - minY * z }, z);
 }
 
-/** The pasted shader the way the render pair needs it: our uniforms declared once. */
-function wrapOriginal(source: string): string {
-  const body = normaliseHostShader(source);
+/** The pasted shader the way the render pair needs it: our uniforms declared once. `toSourceLine` maps a compile error's line back to the paste. */
+function wrapOriginal(source: string): { code: string; toSourceLine: (line: number) => number } {
+  const { code: body, toSourceLine } = normaliseHostShader(source);
   const declared = (n: string) => new RegExp(`uniform\\s+\\w+\\s+${n}\\b`).test(body);
   const head = ['precision highp float;', 'varying vec2 vUv;', ...(declared('u_resolution') ? [] : ['uniform vec2 u_resolution;']), ...(declared('u_time') ? [] : ['uniform float u_time;']), ...(declared('u_mouse') ? [] : ['uniform vec2 u_mouse;'])];
-  return `${head.join('\n')}\n${body}`;
+  return { code: `${head.join('\n')}\n${body}`, toSourceLine: (line: number) => toSourceLine(Math.max(1, line - head.length)) };
 }
+
+const PANE_KEY = 'shader-studio:convert:pane';
 
 export function ConvertPage({ onMaterialized, compact = false }: { onMaterialized: () => void; compact?: boolean }) {
   const tk = useTokens();
@@ -140,7 +145,8 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
 
   const conv: ConversionResult = useMemo(() => glslToGraph(debounced, { asBlock }), [debounced, asBlock]);
   const compiled = useMemo(() => (conv.nodes.length ? compileGraph({ nodes: conv.nodes }) : null), [conv]);
-  const original = useMemo(() => wrapOriginal(debounced), [debounced]);
+  const wrapped = useMemo(() => wrapOriginal(debounced), [debounced]);
+  const original = wrapped.code;
   const uniforms = useMemo(() => compiled?.paramUniforms ?? {}, [compiled]);
   const graphFrag = compiled?.success ? compiled.fragmentShader : null;
   const onDiff = useCallback((d: PairDiff | null) => setDiff(d), []);
@@ -162,6 +168,29 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
 
   const { report } = conv;
   const blocked = report.unsupported.length > 0 || !compiled?.success;
+  // Where the paste went wrong, on its own lines: the parser's stop, or the original's compile errors.
+  const errorLines = useMemo(() => {
+    const m = new Map<number, string>();
+    if (report.errorLine) m.set(report.errorLine, report.unsupported.find(u => u.startsWith('Doesn’t parse') || u.startsWith("Doesn't parse"))?.replace(/^Doesn.t parse[^:]*: /, '') ?? 'Doesn’t parse here');
+    if (diff && 'error' in diff && diff.side === 'original') {
+      for (const raw of diff.error.split('\n')) { const p = parseGlslError(raw); if (p) { const l = wrapped.toSourceLine(p.line); m.set(l, m.has(l) ? `${m.get(l)} · ${friendlyGlsl(p.text)}` : friendlyGlsl(p.text)); } }
+    }
+    return m;
+  }, [report, diff, wrapped]);
+  const [paneW, setPaneW] = useState(() => { try { return Math.max(280, Math.min(900, Number(localStorage.getItem(PANE_KEY)) || 360)); } catch { return 360; } });
+  const startPaneResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX, startW = paneW;
+    const onMove = (ev: MouseEvent) => setPaneW(Math.max(280, Math.min(900, startW + ev.clientX - startX)));
+    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); setPaneW(w => { try { localStorage.setItem(PANE_KEY, String(w)); } catch { /* preference only */ } return w; }); };
+    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+  };
+  const tidy = () => {
+    const t = tidyGlsl(code);
+    if (!t.changed) { toast.info('Already tidy'); return; }
+    changeCode(t.code);
+    toast.success(t.dialect === 'studio' ? 'Tidied' : `Tidied, read as ${dialectLabel(t.dialect)}`, { message: [...t.notes, ...t.unsupported].join(' · ') || 'Indentation and spacing made regular.' });
+  };
   const sel = conv.nodes.find(n => n.id === selected) ?? null;
   const toggleBlock = (id: string) => setAsBlock(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const changeCode = (next: string) => { setCode(next); setAsBlock(new Set()); setSelected(null); };
@@ -288,16 +317,18 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: compact ? 'column' : 'row', background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }}>
       {/* Left: the shader, as the GLSL page shows it */}
-      <div style={{ width: compact ? undefined : 360, height: compact ? '42%' : undefined, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: compact ? undefined : `1px solid ${tk.border.default}`, borderBottom: compact ? `1px solid ${tk.border.default}` : undefined, minWidth: 0 }}>
+      <div style={{ width: compact ? undefined : paneW, height: compact ? '42%' : undefined, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: compact ? undefined : `1px solid ${tk.border.default}`, borderBottom: compact ? `1px solid ${tk.border.default}` : undefined, minWidth: 0, position: 'relative' }}>
         <div style={panelHead}>
           <span style={{ fontWeight: 650, fontSize: 13.5, marginRight: 'auto', whiteSpace: 'nowrap' }}>Fragment shader</span>
           <Select ariaLabel="Example shader" value="" height={30} onChange={k => { if (EXAMPLES[k]) changeCode(EXAMPLES[k].code); }}
             options={[{ value: '', label: 'Examples…' }, ...Object.entries(EXAMPLES).map(([k, e]) => ({ value: k, label: e.label }))]} />
           <IconButton icon="import" label="Open a .glsl / .frag file" size="sm" onClick={loadFile} />
+          <Button size="sm" variant="ghost" onClick={tidy} disabled={!code.trim()} title="Rewrite the paste as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
           <Button size="sm" variant="ghost" onClick={() => changeCode('')} disabled={!code.trim()} title="Empty the editor">Clear</Button>
         </div>
-        <GlslEditor value={code} onChange={changeCode} placeholder={'Paste a fragment shader: a plain void main() with gl_FragColor, or a Shadertoy mainImage().'} />
+        <GlslEditor value={code} onChange={changeCode} errorLines={errorLines} placeholder={'Paste a fragment shader: a plain void main() with gl_FragColor, or a Shadertoy mainImage().'} />
         {!compact && check}
+        {!compact && <div onMouseDown={startPaneResize} title="Drag to resize" style={{ position: 'absolute', top: 0, bottom: 0, right: -3, width: 6, cursor: 'col-resize', zIndex: 5 }} />}
       </div>
 
       {/* Centre: the Studio canvas, read-only */}

@@ -18,7 +18,7 @@ export function isChunkLoadError(e: unknown): boolean {
 export function reportStaleBuild(): void {
   if (shown) return;
   shown = true;
-  toast.warning('Shader Studio was updated', {
+  toast.warning('Playfield was updated', {
     message: 'This tab is still running the previous version, so part of it couldn’t load. Save your graph if it has unsaved changes, then reload.',
     action: { label: 'Reload', onClick: () => location.reload() },
     sticky: true,

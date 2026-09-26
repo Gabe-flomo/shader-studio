@@ -1,5 +1,5 @@
 /**
- * library.ts — everything Shader Studio keeps in this browser, as one thing
+ * library.ts — everything Playfield keeps in this browser, as one thing
  * to export, back up and bring back.
  *
  * A snapshot is every stored key the app owns (saved graphs and their
@@ -40,7 +40,7 @@ export interface LibrarySnapshot {
   items: Record<string, string>;
 }
 
-/** Keys Shader Studio stores without its prefix. */
+/** Keys Playfield stores without its prefix. */
 const EXTRA_KEYS = new Set(['nodepalette_favorites', 'fn_builder_groups_v1', 'fn_builder_saved_fns_v1', 'assetbrowser_folders', 'codePanel_height']);
 const GRAPH_PREFIX = 'shader-studio:';
 const VERSIONS_PREFIX = 'shader-studio-versions:';
@@ -154,10 +154,10 @@ export function readableFiles(s: LibrarySnapshot): Record<string, string> {
 const README = `Shader Studio library
 
 library.json is the whole library: import this ZIP (or just library.json) in
-Shader Studio (Preferences → Library → Import) to bring everything back.
+Playfield (Preferences → Library → Import) to bring everything back.
 
 The folders are the same things as separate files, to look through or to
-share one at a time: a graph file opens with Import in Shader Studio.
+share one at a time: a graph file opens with Import in Playfield.
 `;
 
 export function libraryZipName(at = new Date()): string {
@@ -211,7 +211,7 @@ export function readLibrary(bytes: Uint8Array): LibrarySnapshot {
     else if (/(^|\/)presets\//.test(path) && typeof v.id === 'string') items[`shader-studio:gp:${v.id}`] = text;
     else if (/(^|\/)functions\//.test(path) && typeof v.id === 'string') items[`shader-studio:cfp:${v.id}`] = text;
   }
-  if (Object.keys(items).length === 0) throw new Error('No Shader Studio graphs or presets in that ZIP');
+  if (Object.keys(items).length === 0) throw new Error('No Playfield graphs or presets in that ZIP');
   return { kind: LIBRARY_KIND, version: 1, savedAt: 0, items };
 }
 

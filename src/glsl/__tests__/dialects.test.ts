@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { detectDialect, translateToStudio } from '../dialects';
 
 describe('GLSL dialects', () => {
-  it('leaves a Shader Studio / Book of Shaders shader alone', () => {
+  it('leaves a Playfield / Book of Shaders shader alone', () => {
     const src = 'precision mediump float;\nuniform float u_time;\nuniform vec2 u_resolution;\nvoid main(){ gl_FragColor = vec4(vec3(sin(u_time)), 1.0); }';
     const t = translateToStudio(src);
     expect(t.dialect).toBe('studio');
@@ -68,5 +68,25 @@ describe('GLSL dialects', () => {
     expect(detectDialect('#version 300 es\nout vec4 c; void main(){}')).toBe('es300');
     expect(detectDialect('uniform vec2 resolution; void main(){}')).toBe('glslsandbox');
     expect(detectDialect('o = vec4(FC.xy / r, 0., 1.);')).toBe('twigl');
+  });
+});
+
+describe('line map and tidy', () => {
+  it('maps a translated line back to the pasted line through inserted and blanked lines', async () => {
+    const src = 'float f(float x) { return x; }\nvoid mainImage(out vec4 fragColor, in vec2 fragCoord){\n  vec2 uv = fragCoord / iResolution.xy;\n  fragColor = vec4(uv, sin(iTime), 1.0);\n}';
+    const t = translateToStudio(src);
+    const lines = t.code.split('\n');
+    const at = (needle: string) => lines.findIndex(l => l.includes(needle)) + 1;
+    expect(t.toSourceLine(at('float f(float x)'))).toBe(1);
+    expect(t.toSourceLine(at('void main()'))).toBe(2);
+    expect(t.toSourceLine(at('vec2 fragCoord = gl_FragCoord.xy'))).toBe(2); // an inserted line points at the line before it
+    expect(t.toSourceLine(at('vec2 uv = fragCoord'))).toBe(3);
+    expect(t.toSourceLine(at('gl_FragColor = vec4(uv'))).toBe(4);
+    const { reindent, tidyGlsl } = await import('../format');
+    expect(reindent('void main(){\nfloat a=1.0;\n  if(a>0.0){\n a=2.0;\n}\n}\n\n\n')).toBe('void main(){\n    float a=1.0;\n    if(a>0.0){\n        a=2.0;\n    }\n}\n');
+    const tidied = tidyGlsl(src);
+    expect(tidied.changed).toBe(true);
+    expect(tidied.code).toContain('    vec2 uv = fragCoord / u_resolution;');
+    expect(tidyGlsl(tidied.code).changed).toBe(false);
   });
 });

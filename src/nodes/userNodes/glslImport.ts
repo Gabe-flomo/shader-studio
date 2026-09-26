@@ -7,7 +7,7 @@
  * UV → node → Output. Its helpers ride along untouched; only the entry is
  * rewritten (fragColor/gl_FragColor become a returned value, fragCoord is
  * derived from the graph's UV) and Shadertoy's uniforms are mapped onto
- * Shader Studio's (u_time, u_resolution, u_mouse). Anything that can't be
+ * Playfield's (u_time, u_resolution, u_mouse). Anything that can't be
  * mapped (iChannel textures, iFrame…) is reported so the user can fix it in
  * the publish dialog before the node is created.
  */
@@ -106,7 +106,7 @@ export function convertFragmentShader(source: string, opts: { label?: string } =
   const notes: string[] = [];
   let src = stripDirectives(source);
 
-  // Uniforms. The ones Shader Studio has (time, resolution, mouse — under any of the usual names)
+  // Uniforms. The ones Playfield has (time, resolution, mouse — under any of the usual names)
   // are dropped and renamed. Every other float / vec / int / bool uniform becomes an INPUT of the
   // node: a global the entry sets from a socket, so you can wire Mouse, Time or a slider into it.
   // Arrays and samplers can't be sockets; they become plain globals / black and are reported.
@@ -141,7 +141,7 @@ export function convertFragmentShader(source: string, opts: { label?: string } =
     notes.push('iChannel textures were replaced by black; add an image slot in the dialog and sample it instead.');
     src = src.replace(/\btexture(?:2D)?\s*\(\s*iChannel\d\s*,[^)]*\)/g, 'vec4(0.0)').replace(/\btextureLod\s*\(\s*iChannel\d\s*,[^)]*\)/g, 'vec4(0.0)');
   }
-  if (aliased.length) notes.push(`Mapped to Shader Studio's built-ins: ${aliased.join('; ')}.`);
+  if (aliased.length) notes.push(`Mapped to Playfield's built-ins: ${aliased.join('; ')}.`);
   if (socketUniforms.length) notes.push(`Uniforms that became inputs on the node: ${socketUniforms.map(u => `${u.name} (${u.type})`).join(', ')}. Wire Mouse, Time or a slider into them; unwired they are 0.`);
   if (arrays.length) notes.push(`Uniform arrays can't be sockets and start at zero: ${arrays.join(', ')}. Fill them in the code if the shader needs them.`);
   if (samplers.length) notes.push(`Texture reads from ${samplers.join(', ')} were replaced by black; add an image slot in the dialog and sample it instead.`);

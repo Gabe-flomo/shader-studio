@@ -122,7 +122,7 @@ export function resetUserNodesForTests(): void {
 
 // ── Sharing ───────────────────────────────────────────────────────────────────
 // A node definition is self-contained GLSL plus metadata, so a file exported
-// from one project works in any other copy of Shader Studio. The source
+// from one project works in any other copy of Playfield. The source
 // subgraph travels with it so the recipient can open and re-publish it.
 
 export function exportUserNodes(ids?: string[]): UserNodeExport {

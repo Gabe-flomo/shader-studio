@@ -32,14 +32,14 @@ function push(map: Map<string, NodeError[]>, nodeId: string, err: NodeError) {
 }
 
 /** "ERROR: 0:123: 'foo' : undeclared identifier" → { line: 123, text: "'foo' : undeclared identifier" } */
-function parseGlslError(raw: string): { line: number; text: string } | null {
+export function parseGlslError(raw: string): { line: number; text: string } | null {
   const m = raw.match(/^(?:ERROR|WARNING):\s*\d+:(\d+):\s*(.*)$/);
   if (!m) return null;
   return { line: Number(m[1]), text: m[2].trim() };
 }
 
 /** Plain-language version of a driver message, keeping the offending token */
-function friendlyGlsl(text: string): string {
+export function friendlyGlsl(text: string): string {
   const m = text.match(/^'([^']*)'\s*:\s*(.*)$/);
   if (!m) return text;
   const [, token, what] = m;

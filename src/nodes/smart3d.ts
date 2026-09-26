@@ -1,7 +1,7 @@
 /**
  * smart3d.ts — where a 3D node belongs when it's added at the top level.
  *
- * Shader Studio's 3D pipeline has a fixed shape: SDF nodes live *inside* a
+ * Playfield's 3D pipeline has a fixed shape: SDF nodes live *inside* a
  * Scene Group (Scene Pos → shapes → Scene Output), a March Camera feeds a
  * March Loop Group that ray-marches the scene, and lighting nodes read the
  * loop's outputs (hit position, normal, hit mask…). A Sphere dropped on the

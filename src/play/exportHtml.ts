@@ -130,7 +130,7 @@ function bundleOf(input: PlayHtmlInput) {
     paramBindings: input.paramBindings,
     play,
     aspect: aspect ? { id: aspect.id, ratio: aspect.ratio } : { id: 'free', ratio: null },
-    generatedBy: 'Shader Studio',
+    generatedBy: 'Playfield',
   };
 }
 
@@ -190,7 +190,7 @@ export function buildPlaySnippet(input: PlayHtmlInput, options: EmbedOptions = D
   const hostFix = bg && options.placement === 'section'
     ? "var h=e.parentElement;if(h){var cs=getComputedStyle(h);if(cs.position==='static')h.style.position='relative';h.style.isolation='isolate';}"
     : '';
-  return `<!-- Shader Studio · ${escapeHtml(input.title)} (${bg ? `background, ${options.placement === 'page' ? 'whole page' : 'fills its section'}` : 'player with controls'}) -->
+  return `<!-- Playfield · ${escapeHtml(input.title)} (${bg ? `background, ${options.placement === 'page' ? 'whole page' : 'fills its section'}` : 'player with controls'}) -->
 <div data-shader-studio style="${style}"></div>
 <script>
 ${runtimeScript()}

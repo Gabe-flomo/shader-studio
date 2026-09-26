@@ -23,7 +23,7 @@ import { toast } from '../ui/toastStore';
  * the mic and MIDI unless that site allows them, without asking. Say so rather than "no camera".
  */
 const EMBEDDED = typeof window !== 'undefined' && window.self !== window.top;
-const EMBEDDED_HINT = 'This page is running inside another site, which does not allow the camera, the microphone or MIDI. Open Shader Studio in its own tab (or the desktop app) to use them.';
+const EMBEDDED_HINT = 'This page is running inside another site, which does not allow the camera, the microphone or MIDI. Open Playfield in its own tab (or the desktop app) to use them.';
 
 export function OscStatusChip() {
   const tk = useTokens();

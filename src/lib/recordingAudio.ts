@@ -1,7 +1,7 @@
 /**
  * recordingAudio.ts — the sound that goes into a recording.
  *
- * Only songs already in Shader Studio: a song loaded into a Play audio layer
+ * Only songs already in Playfield: a song loaded into a Play audio layer
  * (it follows the graph clock), and an Audio Input node's file while it
  * plays. Never the microphone: live input is for performing, and what a
  * recording animates should be baked in, not coming in while it records.

@@ -148,7 +148,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const [pictureChoice, setPicture] = useState<TransparentPicture | null>(null);
   const picture: TransparentPicture = pictureChoice === 'own' && !ownAlpha ? 'luma' : pictureChoice ?? (ownAlpha ? 'own' : 'luma');
   const nothingShows = transparent && picture === 'drop' && !layersOn;
-  // Sound: only songs already in Shader Studio, never the microphone.
+  // Sound: only songs already in Playfield, never the microphone.
   const tracks = external ? [] : recordingTracks(play, nodes);
   const [withAudio, setWithAudio] = useState(true);
   const sound = withAudio && tracks.length > 0;

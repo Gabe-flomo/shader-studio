@@ -1,4 +1,6 @@
-# Shader Studio
+# Playfield
+
+_Formerly Shader Studio: the name changed, the app and its files did not. Saved graphs, libraries and folders keep working._
 
 A node-based visual GLSL shader editor. Build fragment shaders by connecting nodes in a graph — no code required. Every connection compiles to optimized WebGL in real time.
 

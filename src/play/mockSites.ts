@@ -70,7 +70,7 @@ body.bgpage .hero{background:transparent}
     <div class="card panel"><h3>Kind</h3><p class="muted">Shows a still frame to anyone who prefers reduced motion.</p></div>
   </section>
 </div>
-<footer class="panel">© Lumen Studio · Made with Shader Studio</footer>`,
+<footer class="panel">© Lumen Studio · Made with Playfield</footer>`,
   };
 }
 
@@ -141,7 +141,7 @@ body.bgpage .tile{background:rgba(20,20,28,.45)}
 export function buildMockSite(site: MockSite, snippet: string, options: Pick<EmbedOptions, 'mode' | 'placement'>, title: string): string {
   const where: 'page' | 'hero' | 'inline' = options.mode === 'player' ? 'inline' : options.placement === 'page' ? 'page' : 'hero';
   const slot = (w: 'hero' | 'inline') => (w === where ? snippet : '');
-  const t = (site === 'blog' ? blog : site === 'portfolio' ? portfolio : landing)(slot, title || 'Shader Studio');
+  const t = (site === 'blog' ? blog : site === 'portfolio' ? portfolio : landing)(slot, title || 'Playfield');
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)} · preview</title>

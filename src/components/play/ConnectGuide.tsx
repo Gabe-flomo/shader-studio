@@ -91,7 +91,7 @@ function Note({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' 
 function InShaderStudio({ children }: { children: ReactNode }) {
   return (
     <>
-      <H>In Shader Studio</H>
+      <H>In Playfield</H>
       <Steps>{children}</Steps>
     </>
   );
@@ -125,7 +125,7 @@ function Which({ onPick }: { onPick: (t: Topic) => void }) {
 function AbletonMidi({ os }: { os: Platform }) {
   return (
     <>
-      <P>Ableton sends MIDI to a <B>virtual MIDI port</B>, a cable that exists only in software. Shader Studio listens to that port. Nothing needs to be plugged in.</P>
+      <P>Ableton sends MIDI to a <B>virtual MIDI port</B>, a cable that exists only in software. Playfield listens to that port. Nothing needs to be plugged in.</P>
       <H>1 · Make the virtual port</H>
       {os === 'mac' ? (
         <Steps>
@@ -144,12 +144,12 @@ function AbletonMidi({ os }: { os: Platform }) {
         <li>Ableton → <B>Settings</B> (Preferences in older versions) → <B>Link, Tempo &amp; MIDI</B>.</li>
         <li>Under <B>MIDI Ports</B>, find <B>Out: {os === 'mac' ? 'IAC Driver (Bus 1)' : 'loopMIDI Port'}</B> and switch <B>Track</B> on.</li>
         <li>Make a <B>MIDI track</B>. In its I/O section set <B>MIDI To</B> to <B>{os === 'mac' ? 'IAC Driver (Bus 1)' : 'loopMIDI Port'}</B> and the channel to <B>Ch. 1</B>.</li>
-        <li>Put a MIDI clip on it and press play: its notes now go to Shader Studio. To play live through Ableton, record-arm the track (or set Monitor to In).</li>
+        <li>Put a MIDI clip on it and press play: its notes now go to Playfield. To play live through Ableton, record-arm the track (or set Monitor to In).</li>
         <li><B>Knobs:</B> in the clip, open <B>Envelopes</B>, pick <B>MIDI Ctrl</B> and a controller (e.g. 1-Modulation), and draw a curve. That sends CC 1.</li>
       </Steps>
       <Note>A track sending to the virtual port has no instrument, so it's silent. To hear the part as well, make a second MIDI track with an instrument, set its <B>MIDI From</B> to the first track and its Monitor to <B>In</B>.</Note>
       <InShaderStudio>
-        <li>Open Shader Studio in <B>Chrome or Edge</B>. Safari has no Web MIDI. Firefox asks you to install a site permission first.</li>
+        <li>Open Playfield in <B>Chrome or Edge</B>. Safari has no Web MIDI. Firefox asks you to install a site permission first.</li>
         <li>Play page → Mappings → <B>Learn</B>, then play a note or move the CC in Ableton. The browser asks to use MIDI devices: allow.</li>
         <li>A note gives a velocity source. For a hit that fades, choose source <B>Trigger</B>, then <B>On: MIDI note</B>, press the row's Learn and hit the note, and pick <B>Envelope</B>.</li>
         <li>Keep tempo in step with a <B>Clock</B> source (or Trigger → Beat) at Ableton's BPM. MIDI clock sync isn't supported yet.</li>
@@ -162,7 +162,7 @@ function AbletonOsc({ os }: { os: Platform }) {
   return (
     <>
       <P>OSC sends plain numbers over the network, so any knob in Live can drive any control at full resolution.</P>
-      <H>1 · Let Shader Studio listen</H>
+      <H>1 · Let Playfield listen</H>
       {isDesktopApp ? (
         <Steps>
           <li>In the desktop app there's nothing to install. On an OSC mapping row, click <B>Start listening</B>. The app now takes OSC on <B>UDP port 9000</B>.</li>
@@ -203,7 +203,7 @@ function AbletonOsc({ os }: { os: Platform }) {
 function AbletonAudio({ os }: { os: Platform }) {
   return (
     <>
-      <P>To make the visuals react to the <B>sound</B> itself, send Ableton's output into a <B>virtual audio cable</B> and let Shader Studio listen to it like a microphone. Shader Studio only analyses it and never plays it, so there's no echo.</P>
+      <P>To make the visuals react to the <B>sound</B> itself, send Ableton's output into a <B>virtual audio cable</B> and let Playfield listen to it like a microphone. Playfield only analyses it and never plays it, so there's no echo.</P>
       <H>1 · Install a virtual audio cable</H>
       {os === 'mac' ? (
         <Steps>
@@ -245,7 +245,7 @@ function Controller({ os }: { os: Platform }) {
     <>
       <P>Any class-compliant USB MIDI controller (keys, pads, knob boxes) works directly. You don't need Ableton.</P>
       <InShaderStudio>
-        <li>Plug the controller in, then open Shader Studio in <B>Chrome or Edge</B>.</li>
+        <li>Plug the controller in, then open Playfield in <B>Chrome or Edge</B>.</li>
         <li>Play page → Mappings → <B>Learn</B>, then turn a knob or hit a pad. Allow MIDI when the browser asks.</li>
         <li>Knobs give CC sources, keys give velocity, the wheel gives pitch bend. For pads, use <B>Trigger</B> → <B>On: MIDI note</B> with an <B>Envelope</B>, <B>Toggle</B> or <B>Step</B>.</li>
         <li>No controller handy? Add a <B>MIDI Input</B> node in the Studio and turn on its keyboard stand-in: two octaves on your QWERTY keys.</li>

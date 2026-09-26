@@ -785,7 +785,7 @@ interface NodeGraphState {
   openUserNodeSource: (id: string, position?: { x: number; y: number }) => string | null;
   /** Save one node type (or all of them) as a shareable .json file. */
   exportUserNodes: (ids?: string[]) => Promise<FileResult>;
-  /** Pick a .json exported from any Shader Studio and register the node types in it. */
+  /** Pick a .json exported from any Playfield and register the node types in it. */
   importUserNodesFromFile: () => Promise<FileResult & { imported?: string[]; replaced?: string[] }>;
 }
 
@@ -4560,7 +4560,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       isStateful: st.isStateful, particleSystems: st.particleSystems, usesEcho: /\bu_echo0\b/.test(st.fragmentShader), play: st.play,
     });
     return {
-      input: { title: title.trim() || 'Shader Studio', fragmentShader: st.fragmentShader, uniforms, paramBindings: st.paramBindings, play: bakeLayerValues(st.play, live), aspect: st.previewAspect },
+      input: { title: title.trim() || 'Playfield', fragmentShader: st.fragmentShader, uniforms, paramBindings: st.paramBindings, play: bakeLayerValues(st.play, live), aspect: st.previewAspect },
       missing,
     };
   },
@@ -4933,7 +4933,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     try {
       const parsed = JSON.parse(json) as { kind?: unknown; nodes?: unknown; looseGroups?: unknown; play?: unknown; layout?: unknown } | null;
       if (!parsed || typeof parsed !== 'object') throw new Error('file does not contain a JSON object');
-      if (!Array.isArray(parsed.nodes)) throw new Error('missing "nodes" array — is this a Shader Studio graph file?');
+      if (!Array.isArray(parsed.nodes)) throw new Error('missing "nodes" array — is this a Playfield graph file?');
       looseGroups = parsed.looseGroups;
       play = parsePlayRecord(parsed.play);
       isPlayFile = parsed.kind === PLAY_FILE_KIND;

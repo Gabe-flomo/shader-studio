@@ -1,5 +1,5 @@
 /**
- * LibraryPanel — everything Shader Studio keeps in this browser, at a glance:
+ * LibraryPanel — everything Playfield keeps in this browser, at a glance:
  * how many graphs, versions, presets and published nodes, how much room they
  * take against the browser's limit, export/import of all of it, the backup
  * folder that keeps a copy outside the browser (utils/backupFolder.ts), and
@@ -107,7 +107,7 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
         </>
       ) : st.needsPermission ? (
         <>
-          <span style={note}>The browser asks again on each visit before Shader Studio can write to “{st.folder}”.</span>
+          <span style={note}>The browser asks again on each visit before Playfield can write to “{st.folder}”.</span>
           <div style={row}>
             <Button size="sm" variant="primary" icon="folder" onClick={run(reconnectBackupFolder)}>Allow “{st.folder}” again</Button>
             <Button size="sm" variant="ghost" onClick={run(stopBrowserBackups)}>Stop backing up</Button>
@@ -121,13 +121,13 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
           </div>
           <div style={row}>
             <Button size="sm" icon="save" onClick={run(() => backupNow(true))}>Back up now</Button>
-            <Button size="sm" icon="import" onClick={run(restoreFromFolder)} title="Add what's in the folder's library.json back into Shader Studio (never overwrites)">Restore from it</Button>
+            <Button size="sm" icon="import" onClick={run(restoreFromFolder)} title="Add what's in the folder's library.json back into Playfield (never overwrites)">Restore from it</Button>
             <Button size="sm" variant="ghost" icon="folder" onClick={run(chooseBackupFolder)}>Change…</Button>
             <Button size="sm" variant="ghost" icon="reset" onClick={run(resetBackupFolder)} title={st.support === 'desktop' ? 'Back to Documents/Shader Studio' : 'Forget this folder'}>{st.support === 'desktop' ? 'Default' : 'Stop'}</Button>
           </div>
         </>
       )}
-      {st.canRestore && <span style={{ ...note, color: tk.status.warningText }}>Shader Studio’s storage is empty but the folder has your library: Restore from it.</span>}
+      {st.canRestore && <span style={{ ...note, color: tk.status.warningText }}>Playfield’s storage is empty but the folder has your library: Restore from it.</span>}
       {st.error && <span style={{ ...note, color: tk.status.danger }}>Couldn’t write the backup: {st.error}</span>}
 
       <span style={{ ...label, marginTop: 8 }}>Save recordings to</span>

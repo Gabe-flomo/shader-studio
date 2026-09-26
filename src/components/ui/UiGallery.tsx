@@ -152,7 +152,7 @@ function Column({ mode }: { mode: ThemeMode }) {
         <div style={row}>
           <Button onClick={e => setMenu({ x: e.clientX, y: e.clientY })}>Open menu</Button>
           <Button onClick={() => setModal(true)}>Open modal</Button>
-          <Button onClick={() => toast.error("Couldn't import “glow.json”", { message: "It isn't a Shader Studio graph file.", details: 'SyntaxError: Unexpected token < in JSON at position 0', action: { label: 'Choose another file', onClick: () => {} } })}>Error toast</Button>
+          <Button onClick={() => toast.error("Couldn't import “glow.json”", { message: "It isn't a Playfield graph file.", details: 'SyntaxError: Unexpected token < in JSON at position 0', action: { label: 'Choose another file', onClick: () => {} } })}>Error toast</Button>
           <Button onClick={() => toast.success('Exported shader-graph.json')}>Success toast</Button>
         </div>
       </Section>

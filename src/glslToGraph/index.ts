@@ -62,6 +62,8 @@ export interface ConversionReport {
   regions: { code: string; why: string }[];
   /** Why the shader can't be a graph at all (empty when it can). */
   unsupported: string[];
+  /** When the shader doesn't parse: the line of the paste the parser stopped at. */
+  errorLine?: number;
   stats: { nodes: number; blocks: number; regions: number; sliders: number; loops: number };
 }
 
@@ -115,10 +117,15 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   const id = (p: string) => `${p}_${++seq}`;
 
   // Shadertoy and other hosts: their entry point and uniform names become ours before parsing.
-  const src = hostToOurs(source, report);
+  const { code: src, toSourceLine } = hostToOurs(source, report);
   let ast: { program: Ast[] };
   try { ast = parser.parse(src, { quiet: true }) as unknown as { program: Ast[] }; }
-  catch (e) { report.unsupported.push(`Doesn't parse: ${(e as Error).message.split('\n')[0]}`); return { nodes, report }; }
+  catch (e) {
+    const loc = (e as { location?: { start?: { line?: number } } }).location?.start?.line;
+    if (loc) report.errorLine = toSourceLine(loc);
+    report.unsupported.push(`Doesn't parse${loc ? ` (line ${report.errorLine})` : ''}: ${(e as Error).message.split('\n')[0]}`);
+    return { nodes, report };
+  }
 
   // ── The program's functions, uniforms, globals ─────────────────────────────
   const fns = new Map<string, UserFn>();
@@ -850,9 +857,9 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
  * `mainImage(out vec4 fragColor, in vec2 fragCoord)` becomes main(), iTime and
  * friends become u_time…, so a pasted Shadertoy shader converts like our own.
  */
-export function normaliseHostShader(source: string): string { return hostToOurs(source, { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0, loops: 0 } }); }
+export function normaliseHostShader(source: string): { code: string; toSourceLine: (line: number) => number } { return hostToOurs(source, { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0, loops: 0 } }); }
 
-function hostToOurs(source: string, report: ConversionReport): string {
+function hostToOurs(source: string, report: ConversionReport): { code: string; toSourceLine: (line: number) => number } {
   // Another host's names (Shadertoy, GLSL Sandbox, twigl, ES 3.00) become ours first.
   const tr = translateToStudio(source);
   let s = tr.code;
@@ -872,8 +879,9 @@ function hostToOurs(source: string, report: ConversionReport): string {
   for (const [re, to] of macros) s = s.replace(re, to);
   if (macros.length) report.notes.push(`${macros.length} #define${macros.length === 1 ? '' : 's'} expanded`);
   // Precision, uniform and varying lines are the host's, not the shader's (the translator adds the ones a paste lacks).
-  s = s.replace(/^\s*precision\s+\w+\s+float\s*;\s*$/gm, '').replace(/^\s*varying\s+vec2\s+vUv\s*;\s*$/gm, '');
-  return s;
+  // Lines are blanked, not removed, so an error's line number still points into the paste.
+  s = s.replace(/^[ \t]*precision\s+\w+\s+float\s*;[ \t]*$/gm, '').replace(/^[ \t]*varying\s+vec2\s+vUv\s*;[ \t]*$/gm, '');
+  return { code: s, toSourceLine: tr.toSourceLine };
 }
 
 /** The functions the compiled shader always defines; a user function of the same name is renamed on the way in. */

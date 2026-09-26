@@ -49,7 +49,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
     }}>
       <button
         type="button"
-        aria-label={page === 'studio' ? 'Shader Studio' : 'Back to the Studio'}
+        aria-label={page === 'studio' ? 'Playfield' : 'Back to the Studio'}
         onClick={() => onPageChange('studio')}
         style={{
           width: 28, height: 28, padding: 0, border: 0, borderRadius: radius.md, cursor: 'pointer',

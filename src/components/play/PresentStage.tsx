@@ -44,7 +44,7 @@ export function PresentStage({ canvas, onRecord }: {
   const rootRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
-  const graphName = useNodeGraphStore(s => s.currentGraph?.name) ?? 'Shader Studio';
+  const graphName = useNodeGraphStore(s => s.currentGraph?.name) ?? 'Playfield';
 
   // Esc leaves (the browser's own Esc leaves fullscreen first).
   useEffect(() => {
@@ -83,7 +83,7 @@ export function PresentStage({ canvas, onRecord }: {
         <IconButton icon="close" label="Leave Present (Esc)" onClick={exit} />
         <b style={{ fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{graphName}</b>
         <Segmented size="sm" ariaLabel="Present mode" value={mode ?? 'full'} onChange={m => present(m as PresentMode)} options={[
-          { value: 'full', label: 'Full', title: 'Everything Shader Studio can do: songs, MIDI files, every layer' },
+          { value: 'full', label: 'Full', title: 'Everything Playfield can do: songs, MIDI files, every layer' },
           { value: 'exact', label: 'Exact', title: 'The website player itself: exactly what a visitor to the exported page gets' },
         ]} />
         <span style={{ flex: 1 }} />

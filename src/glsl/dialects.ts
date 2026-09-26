@@ -2,7 +2,7 @@
  * GLSL dialects — a pasted fragment shader written for another host, read as
  * one of ours. Each host names the same few things differently: the time,
  * the resolution, the mouse, the pixel, the output. This translates those
- * names (and the entry point) to Shader Studio's, and says what it did, so
+ * names (and the entry point) to Playfield's, and says what it did, so
  * the GLSL page compiles the paste as-is and the converter reads it the same
  * way. Nothing here understands the shader: it's renaming, plus a wrapper
  * where the host provided one implicitly.
@@ -21,13 +21,15 @@ export type Dialect = 'studio' | 'shadertoy' | 'glslsandbox' | 'twigl' | 'es300'
 export interface Translation {
   code: string;
   dialect: Dialect;
+  /** The pasted line a line of `code` came from (1-based both ways): inserted lines map to the line before them. */
+  toSourceLine: (line: number) => number;
   /** One line per thing renamed or wrapped, for the UI. */
   notes: string[];
   /** Things the host had that we don't (textures, buffers): the shader may not run as intended. */
   unsupported: string[];
 }
 
-const DIALECT_LABEL: Record<Dialect, string> = { studio: 'Shader Studio', shadertoy: 'Shadertoy', glslsandbox: 'GLSL Sandbox', twigl: 'twigl', es300: 'GLSL ES 3.00' };
+const DIALECT_LABEL: Record<Dialect, string> = { studio: 'Playfield', shadertoy: 'Shadertoy', glslsandbox: 'GLSL Sandbox', twigl: 'twigl', es300: 'GLSL ES 3.00' };
 export const dialectLabel = (d: Dialect) => DIALECT_LABEL[d];
 
 const has = (src: string, re: RegExp) => re.test(src);
@@ -55,11 +57,15 @@ export function translateToStudio(source: string): Translation {
   const dialect = detectDialect(source);
   const notes: string[] = []; const unsupported: string[] = [];
   let s = source.replace(/\r\n?/g, '\n');
+  // Lines this reader inserts, in order, each in the coordinates of the text at that moment:
+  // `count` lines after line `at`. Removed lines are blanked instead, so numbering holds.
+  const inserts: Array<{ at: number; count: number }> = [];
+  const lineAt = (offset: number) => s.slice(0, offset).split('\n').length;
 
   // ── GLSL ES 3.00 → 1.00 surface syntax ────────────────────────────────────
   if (has(s, /^\s*#version\s+300\s+es/m) || (dialect === 'es300')) {
-    s = s.replace(/^\s*#version[^\n]*\n?/m, '');
-    const out = /^\s*(?:layout\s*\([^)]*\)\s*)?out\s+(?:highp\s+|mediump\s+|lowp\s+)?vec4\s+(\w+)\s*;[^\n]*\n?/m.exec(s);
+    s = s.replace(/^[ \t]*#version[^\n]*/m, '');
+    const out = /^[ \t]*(?:layout\s*\([^)]*\)\s*)?out\s+(?:highp\s+|mediump\s+|lowp\s+)?vec4\s+(\w+)\s*;[^\n]*/m.exec(s);
     if (out) { s = s.replace(out[0], ''); s = renameWord(s, out[1], 'gl_FragColor'); notes.push(`out vec4 ${out[1]} → gl_FragColor`); }
     s = s.replace(/^(\s*)in\s+(?=(?:highp|mediump|lowp)?\s*(?:float|vec[234])\s+\w+\s*;)/gm, '$1varying ');
     if (has(s, /\btexture\s*\(/)) { s = s.replace(/\btexture\s*\(/g, 'texture2D('); notes.push('texture() → texture2D()'); }
@@ -87,7 +93,9 @@ export function translateToStudio(source: string): Translation {
     }
     const m = /void\s+mainImage\s*\(\s*out\s+vec4\s+(\w+)\s*,\s*(?:in\s+)?vec2\s+(\w+)\s*\)\s*\{/.exec(s);
     if (m) {
-      s = s.slice(0, m.index) + `void main() {\n  vec2 ${m[2]} = gl_FragCoord.xy;\n` + s.slice(m.index + m[0].length);
+      inserts.push({ at: lineAt(m.index), count: 1 });
+      // The rest of the line after `{` follows the new declaration; no extra newline, so numbering shifts by exactly one.
+      s = s.slice(0, m.index) + `void main() {\n  vec2 ${m[2]} = gl_FragCoord.xy;` + s.slice(m.index + m[0].length);
       s = renameWord(s, m[1], 'gl_FragColor');
       notes.push('mainImage() read as main()');
     }
@@ -97,13 +105,13 @@ export function translateToStudio(source: string): Translation {
   // ── GLSL Sandbox ──────────────────────────────────────────────────────────
   if (dialect === 'glslsandbox') {
     const drop = (name: string, to: string) => {
-      const decl = new RegExp(`^\\s*uniform\\s+(?:highp\\s+|mediump\\s+|lowp\\s+)?\\w+\\s+${name}\\s*;[^\\n]*\\n?`, 'm');
+      const decl = new RegExp(`^[ \\t]*uniform\\s+(?:highp\\s+|mediump\\s+|lowp\\s+)?\\w+\\s+${name}\\s*;[^\\n]*`, 'm');
       if (decl.test(s)) { s = s.replace(decl, ''); s = renameWord(s, name, to); return true; }
       return false;
     };
     const done = [drop('time', 'u_time') && 'time', drop('resolution', 'u_resolution') && 'resolution', drop('mouse', 'u_mouse') && 'mouse'].filter(Boolean);
     if (has(s, /varying\s+vec2\s+surfacePosition\s*;/)) {
-      s = s.replace(/^\s*varying\s+vec2\s+surfacePosition\s*;[^\n]*\n?/m, '');
+      s = s.replace(/^[ \t]*varying\s+vec2\s+surfacePosition\s*;[^\n]*/m, '');
       s = renameWord(s, 'surfacePosition', '(gl_FragCoord.xy / u_resolution * 2.0 - 1.0)');
       done.push('surfacePosition');
     }
@@ -118,11 +126,15 @@ export function translateToStudio(source: string): Translation {
     if (main) {
       const close = closeOf(s, main.index + main[0].length - 1);
       if (close > 0) {
+        const mainLine = lineAt(main.index), closeLine = lineAt(close);
         s = s.slice(0, main.index + main[0].length) + '\n' + prelude + s.slice(main.index + main[0].length, close) + '\n  gl_FragColor = o;\n' + s.slice(close);
+        inserts.push({ at: mainLine, count: 5 }, { at: closeLine - 1 + 5, count: 1 });
         notes.push('twigl geeker: r, t, m, FC, o declared; o written to gl_FragColor');
       }
     } else {
+      const bodyLines = s.split('\n').length;
       s = `void main() {\n${prelude}${s}\n  gl_FragColor = o;\n}\n`;
+      inserts.push({ at: 0, count: 6 }, { at: 6 + bodyLines, count: 2 });
       notes.push('twigl geekest: wrapped in main() with r, t, m, FC, o');
     }
     if (has(s, /\b(?:snoise|fsnoise|fsnoiseDigits|hsv)\s*\(/)) unsupported.push('twigl’s built-in noise helpers (snoise, fsnoise, hsv) aren’t provided');
@@ -136,9 +148,15 @@ export function translateToStudio(source: string): Translation {
   if (has(s, /\bvUv\b/) && !has(s, /varying\s+vec2\s+vUv\s*;/)) head.push('varying vec2 vUv;');
   if (head.length) {
     // After any leading #directives / precision the shader has, so #version-style lines stay first.
-    const lead = /^(?:\s*(?:#[^\n]*|precision\s+[^\n]*;)\n)*/.exec(s)?.[0] ?? '';
+    const lead = /^(?:[ \t]*(?:#[^\n]*|precision\s+[^\n]*;)?\n)*/.exec(s)?.[0] ?? '';
+    inserts.push({ at: lead.split('\n').length - 1, count: head.length });
     s = lead + head.join('\n') + '\n' + s.slice(lead.length);
   }
   if (!has(s, /\bvoid\s+main\s*\(/)) unsupported.push('No main() (and no entry point this reader knows)');
-  return { code: s, dialect, notes, unsupported };
+  const toSourceLine = (line: number) => {
+    let l = line;
+    for (let i = inserts.length - 1; i >= 0; i--) { const { at, count } = inserts[i]; if (l > at + count) l -= count; else if (l > at) l = Math.max(1, at); }
+    return Math.max(1, l);
+  };
+  return { code: s, dialect, notes, unsupported, toSourceLine };
 }
