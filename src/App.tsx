@@ -36,6 +36,7 @@ import { ctp } from './theme/palette';
 // every frame) React never gets idle time to finish a lazily loaded dialog, and Record would do nothing.
 import { ExportModal } from './components/ExportModal';
 import type { PresentStage as PresentStageT } from './components/play/PresentStage';
+import type { ConvertPage as ConvertPageT } from './components/convert/ConvertPage';
 import { usePresent } from './components/play/presentStore';
 import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './components/KeyboardShortcutsModal';
 import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
@@ -56,6 +57,7 @@ const KeyboardShortcutsModal = lazyWithSuspense<PropsOf<typeof KeyboardShortcuts
 const ShortcutsPage          = lazyWithSuspense<PropsOf<typeof ShortcutsPageT>>(() => import('./components/ShortcutsPage').then(m => ({ default: m.ShortcutsPage })));
 const GLSLPage               = lazyWithSuspense<PropsOf<typeof GLSLPageT>>(() => import('./components/GLSLPage').then(m => ({ default: m.GLSLPage })));
 const PresentStage           = lazyWithSuspense<PropsOf<typeof PresentStageT>>(() => import('./components/play/PresentStage').then(m => ({ default: m.PresentStage })));
+const ConvertPage            = lazyWithSuspense<PropsOf<typeof ConvertPageT>>(() => import('./components/convert/ConvertPage').then(m => ({ default: m.ConvertPage })));
 const PlayPage               = lazyWithSuspense<PropsOf<typeof PlayPageT>>(() => import('./components/play/PlayPage').then(m => ({ default: m.PlayPage })));
 const FunctionBuilder        = lazyWithSuspense<PropsOf<typeof FunctionBuilderT>>(() => import('./components/FunctionBuilder/FunctionBuilder').then(m => ({ default: m.FunctionBuilder })));
 const MobileGraphBrowser     = lazyWithSuspense<PropsOf<typeof MobileGraphBrowserT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileGraphBrowser })));
@@ -481,6 +483,8 @@ function App() {
 
   // Export animation modal
   const [showExport, setShowExport]           = useState(false);
+  // After Materialize on the Convert page: the Studio, with the new graph in view.
+  const openStudioFitted = useCallback(() => { setPage('studio'); setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(), 80); }, []);
   // Present › Exact records the website player's canvas instead of the app's.
   const [recordSource, setRecordSource]       = useState<HTMLCanvasElement | null>(null);
   const presentMode = usePresent(s => s.mode);
@@ -1019,6 +1023,15 @@ function App() {
     );
   }
 
+  if (mobile && page === 'convert') {
+    return (
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+        <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}><ConvertPage compact onMaterialized={openStudioFitted} /></div>
+      </div>
+    );
+  }
+
   if (mobile && page === 'glsl') {
     return (
       <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
@@ -1143,7 +1156,7 @@ function App() {
         </div>
       )}
 
-      <div style={{ display: (page === 'studio' || page === 'glsl' || page === 'play') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined as undefined }}>
+      <div style={{ display: (page === 'studio' || page === 'glsl' || page === 'play' || page === 'convert') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined as undefined }}>
 
         {/* Left: Node Palette — hidden on GLSL page */}
         {page === 'studio' && paletteBaseW > 0 && (
@@ -1196,6 +1209,7 @@ function App() {
             </div>
           )}
           {page === 'glsl' && <GLSLPage />}
+          {page === 'convert' && <ConvertPage onMaterialized={openStudioFitted} />}
         </div>
 
         {/* Resize Divider — hidden when preview is floated, and on Play (the picture fills the space) */}

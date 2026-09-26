@@ -1,6 +1,6 @@
 # GLSL → node graph: research, prototype, plan
 
-*Status: working prototype in `src/glslToGraph/`, not yet in the UI. Written 2026-09-26.*
+*Status: converter in `src/glslToGraph/`, and a first UI: the **Convert** tab (`src/components/convert/`). Written 2026-09-26.*
 
 ## The question
 
@@ -154,6 +154,24 @@ PSNR ≥ 40 dB counts as "same"; anything else shows the diff.
 | vec4 arithmetic, `vec3` length/dot/normalize, `abs`, `pow`, `sqrt`, `min/max` on vectors | block | new nodes or type-generic versions of existing ones; an "exact" switch on Divide/Pow/Sqrt |
 | `.xyx`-style swizzles | block | a general Swizzle node (any pattern, any width) |
 | `mat2(c,-s,s,c) * v` | block | recognise the rotate pattern → Rotate 2D node |
+
+## The Convert page (first prototype, shipped)
+
+`Convert` in the top nav. Paste a shader (or open a file, or pick an example);
+the outline in the middle shows the nodes it would become, in the converter's
+columns, with kept code marked `EXPR` / `FN` (dashed) and inexact nodes marked
+`≈`. Click a box for its details. On the right, the original and the converted
+graph render on one clock with a **Same picture / Differs** badge (max error
+and % of pixels off), then the report: what can't convert, the warned nodes
+(each a switch between *Node ≈* and *Expression Block*), kept expressions,
+kept functions, notes. **Materialize** replaces the current graph (undoable)
+and opens the Studio with the graph in view; kept code carries a `FROM CODE`
+badge on its card, inexact nodes an `≈` badge with the reason on hover.
+**Keep as one node…** is the older import (the whole shader as one code node).
+
+Decisions taken with you: badges on imported code (yes); inexact expressions
+are offered as the node with a warning, with the option to keep the code
+exactly, per expression.
 
 ## Product plan
 

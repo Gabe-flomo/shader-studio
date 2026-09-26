@@ -31,8 +31,24 @@ interface Val { ref?: Ref; lit?: number; type: T; ast: Ast }
 type Ast = Record<string, unknown> & { type: string };
 interface UserFn { name: string; ret: string; params: { name: string; type: string }[]; source: string; body: string }
 
+export interface ConversionOptions {
+  /** Warned expressions (by `ConversionWarning.id`) to keep as Expression Blocks instead of the inexact node. */
+  asBlock?: ReadonlySet<string>;
+}
+
+/** A node that isn't quite GLSL: offered with a warning, and the choice to keep the code instead. */
+export interface ConversionWarning {
+  /** Stable across re-conversions of the same source: the expression's text plus its occurrence. */
+  id: string;
+  code: string;
+  why: string;
+  /** The node it became (absent when kept as a block). */
+  nodeId?: string;
+}
+
 export interface ConversionReport {
   notes: string[];
+  warnings: ConversionWarning[];
   /** Sub-expressions that became Expression Blocks, with why. */
   blocks: { code: string; why: string }[];
   /** Statement regions that became Custom Function nodes. */
@@ -65,11 +81,22 @@ const POLY: Record<string, string[]> = {
   add: ['a', 'b', 'result'], subtract: ['a', 'b', 'result'], multiply: ['a', 'b', 'result'], divide: ['a', 'b', 'result'],
   sin: ['input', 'output'], cos: ['input', 'output'], tan: ['input', 'output'], exp: ['input', 'output'], negate: ['input', 'output'],
   floor: ['input', 'output'], fractRaw: ['input', 'output'], clamp: ['input', 'result'], mix: ['a', 'b', 'result'],
-  smoothstep: ['value', 'result'], mod: ['input', 'output'], sign: ['value', 'result'],
+  smoothstep: ['value', 'result'], mod: ['input', 'output'], sign: ['value', 'result'], sqrt: ['input', 'output'],
 };
 
-export function glslToGraph(source: string): ConversionResult {
-  const report: ConversionReport = { notes: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0 } };
+export function glslToGraph(source: string, options: ConversionOptions = {}): ConversionResult {
+  const report: ConversionReport = { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0 } };
+  const seen = new Map<string, number>();
+  /** An inexact mapping: the node with a warning, unless the user asked for the code. Returns the warning to attach, or null for "make a block". */
+  const inexact = (a: Ast, why: string): ConversionWarning | null => {
+    const code = generate(a as never).replace(/\s+/g, ' ').trim();
+    const k = (seen.get(code) ?? 0) + 1; seen.set(code, k);
+    const w: ConversionWarning = { id: `${code}#${k}`, code, why };
+    report.warnings.push(w);
+    if (options.asBlock?.has(w.id)) return null;
+    return w;
+  };
+  const warned = (v: Val, w: ConversionWarning): Val => { const n = nodes.find(x => x.id === v.ref?.nodeId); if (n) { n.params.__importWarning = w.why; w.nodeId = n.id; } return v; };
   const nodes: GraphNode[] = [];
   let seq = 0;
   const id = (p: string) => `${p}_${++seq}`;
@@ -265,7 +292,11 @@ export function glslToGraph(source: string): ConversionResult {
     const resId = sourceRefs.get('u_resolution')?.nodeId;
     const fromRes = (r?: Ref) => !!r && (r.nodeId === resId || nodes.find(n => n.id === r.nodeId)?.inputs.v?.connection?.nodeId === resId);
     const positive = (R.lit !== undefined && R.lit > 0) || fromRes(R.ref);
-    if (kind === 'divide' && !positive) throw new Unmapped('a / b with a divisor that may be ≤ 0 (the Divide node guards it)');
+    if (kind === 'divide' && !positive) {
+      const w = inexact(a, 'The Divide node guards its divisor with max(b, 0.0001): the same as GLSL only while b stays positive');
+      if (!w) throw new Unmapped('a / b kept as code (your choice)');
+      return warned(typed(kind, {}, { a: asRef(L), b: asRef(R) }, 'result', t), w);
+    }
     if (R.lit !== undefined) { report.stats.sliders++; return typed(kind, { b: R.lit }, { a: asRef(L) }, 'result', t); }
     if (L.lit !== undefined && (kind === 'add' || kind === 'multiply')) { report.stats.sliders++; return typed(kind, { b: L.lit }, { a: asRef(R) }, 'result', t); }
     return typed(kind, {}, { a: asRef(L), b: asRef(R) }, 'result', t);
@@ -311,8 +342,16 @@ export function glslToGraph(source: string): ConversionResult {
       case 'step': if (vs.length === 2 && allF) return typed('step', {}, { edge: asRef(vs[0]), x: asRef(vs[1]) }, 'result', 'float'); break;
       case 'mod': if (vs.length === 2 && vs[1].type === 'float') return typed('mod', vs[1].lit !== undefined ? { period: vs[1].lit } : {}, { input: asRef(vs[0]), ...(vs[1].lit === undefined ? { period: asRef(vs[1]) } : {}) }, 'output', vs[0].type); break;
       case 'atan': if (vs.length === 2 && allF) return typed('atan2', {}, { y: asRef(vs[0]), x: asRef(vs[1]) }, 'angle', 'float'); break;
-      case 'pow': if (vs.length === 2) throw new Unmapped('pow (the Pow node clamps a negative base)'); break;
-      case 'sqrt': throw new Unmapped('sqrt (the Sqrt node clamps a negative input)');
+      case 'pow': if (vs.length === 2 && allF) {
+        const w = inexact(a, 'The Pow node clamps its base to ≥ 0 (GLSL leaves a negative base undefined)');
+        if (!w) throw new Unmapped('pow kept as code (your choice)');
+        return warned(typed('pow', vs[1].lit !== undefined ? { exponent: vs[1].lit } : {}, { base: asRef(vs[0]), ...(vs[1].lit === undefined ? { exponent: asRef(vs[1]) } : {}) }, 'result', 'float'), w);
+      } break;
+      case 'sqrt': {
+        const w = inexact(a, 'The Sqrt node clamps its input to ≥ 0 (GLSL leaves a negative input undefined)');
+        if (!w) throw new Unmapped('sqrt kept as code (your choice)');
+        return warned(one('sqrt', {}, 'input', 'output'), w);
+      }
     }
     throw new Unmapped(`${name}(${vs.map(v => v.type).join(', ')})`);
   }
@@ -344,7 +383,7 @@ export function glslToGraph(source: string): ConversionResult {
     const t = tOverride ?? typeOf(a, env);
     const { inputs, wires, code } = inputsFor(a, env, extra);
     const expr = codeOverride ?? code;
-    const n = mk('exprNode', { inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, lines: [], result: expr, expr }, wires,
+    const n = mk('exprNode', { __importedCode: 'block', inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, lines: [], result: expr, expr }, wires,
       { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
     report.blocks.push({ code: expr, why });
     return { ref: ref(n, 'result', t), type: t, ast: a };
@@ -390,7 +429,7 @@ export function glslToGraph(source: string): ConversionResult {
     const { inputs, wires, code } = inputsFor(a, env);
     const helpers = helpersFor(a);
     const body = stmtCode ? `${stmtCode}\n  return ${outVar};` : `return ${code};`;
-    const n = mk('customFn', { label: why.replace(/^call to /, '').replace(/\(\)$/, '') || 'Region', inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, body, glslFunctions: helpers }, wires,
+    const n = mk('customFn', { __importedCode: 'region', label: why.replace(/^call to /, '').replace(/\(\)$/, '') || 'Region', inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, body, glslFunctions: helpers }, wires,
       { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
     report.regions.push({ code: stmtCode ?? code, why });
     return { ref: ref(n, 'result', t), type: t, ast: a };
@@ -453,7 +492,7 @@ export function glslToGraph(source: string): ConversionResult {
     }
     const helpers = helpersFor(s);
     const body = `${prelude.join('\n')}\n${code}\nreturn ${out};`;
-    const n = mk('customFn', { label: `loop → ${out}`, inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: outT, body, glslFunctions: helpers }, wires,
+    const n = mk('customFn', { __importedCode: 'region', label: `loop → ${out}`, inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: outT, body, glslFunctions: helpers }, wires,
       { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: outT as DataType, label: 'Result' } } });
     report.regions.push({ code, why: `a loop the converter can’t unroll (it changes ${out})` });
     env.set(out, { ref: ref(n, 'result', outT), type: outT, ast: s });
@@ -552,7 +591,7 @@ export function glslToGraph(source: string): ConversionResult {
  * `mainImage(out vec4 fragColor, in vec2 fragCoord)` becomes main(), iTime and
  * friends become u_time…, so a pasted Shadertoy shader converts like our own.
  */
-export function normaliseHostShader(source: string): string { return hostToOurs(source, { notes: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0 } }); }
+export function normaliseHostShader(source: string): string { return hostToOurs(source, { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0 } }); }
 
 function hostToOurs(source: string, report: ConversionReport): string {
   let s = source;

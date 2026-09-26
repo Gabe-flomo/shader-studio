@@ -21,6 +21,7 @@ const TABS: { page: Page; label: string }[] = [
   { page: 'play', label: 'Play' },
   { page: 'fn', label: 'Builder' },
   { page: 'glsl', label: 'GLSL' },
+  { page: 'convert', label: 'Convert' },
   { page: 'shortcuts', label: 'Keys' },
 ];
 

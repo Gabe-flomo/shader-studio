@@ -73,7 +73,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
           />
         </span>
       ) : (
-        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : 'Builder'}</span>
+        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : page === 'convert' ? 'Convert' : 'Builder'}</span>
       )}
       <span style={{ flex: 1 }} />
       <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 36, height: 40 }} />
@@ -108,6 +108,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             'separator',
             { label: 'Import a graph', icon: 'import', onSelect: async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); } },
             { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
+            { label: 'Convert GLSL to nodes', icon: 'nodes', hint: 'Paste a shader, preview the nodes it becomes, make it real', onSelect: () => onPageChange('convert') },
             { label: 'Export this graph', icon: 'export', onSelect: async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); } },
             { label: 'Library…', icon: 'folder', hint: 'What’s saved, export and import, backup and recordings', onSelect: () => setLibrary(true) },
             { label: 'Export everything', icon: 'export', hint: 'Every graph, preset and setting as one ZIP', onSelect: () => { void exportEverything(); } },

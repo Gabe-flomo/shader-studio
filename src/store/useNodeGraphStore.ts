@@ -681,6 +681,8 @@ interface NodeGraphState {
   redo: () => void;
   compile: () => void;
   loadExampleGraph: (name?: string) => Promise<void>;
+  /** Put a graph built elsewhere (the GLSL → nodes converter) in place of the current one, undoably. */
+  replaceGraph: (nodes: GraphNode[]) => void;
   /** Empty the canvas down to UV → Output (the trash button's right-click) */
   clearToMinimal: () => void;
   autoLayout: () => void;
@@ -4642,6 +4644,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // An example is not a saved project: saving it asks for a name.
     set({ currentGraph: null, graphDirty: false });
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
+  },
+
+  replaceGraph: (rawNodes) => {
+    undoManager.push(get().nodes);
+    const nodes = rawNodes.map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
+    idGenerator.syncFromGraph(nodes);
+    set(st => ({ nodes, looseGroups: [], play: emptyPlayRecord(), previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
+    get().compile();
+    set({ currentGraph: null, graphDirty: true });
   },
 
   setPreviewNodeId: (id) => {

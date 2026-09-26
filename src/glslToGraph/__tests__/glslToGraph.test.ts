@@ -50,3 +50,25 @@ describe('GLSL → node graph', () => {
     expect(String(fn.params.glslFunctions)).toMatch(/float fbm/);
   });
 });
+
+describe('inexact nodes are offered with a warning, or kept as code on request', () => {
+  const src = 'void main(){ vec2 uv = gl_FragCoord.xy / u_resolution.xy; float k = uv.x - 0.5; float v = 0.1 / k; gl_FragColor = vec4(vec3(v), 1.0); }';
+  it('warns and marks the node', () => {
+    const r = glslToGraph(src);
+    expect(r.report.warnings).toHaveLength(1);
+    expect(r.report.warnings[0].why).toMatch(/Divide node guards/);
+    const n = r.nodes.find(x => x.id === r.report.warnings[0].nodeId)!;
+    expect(n.type).toBe('divide');
+    expect(n.params.__importWarning).toBeTruthy();
+    expect(r.report.blocks).toHaveLength(0);
+  });
+  it('becomes a block when asked, keeping the same warning id', () => {
+    const first = glslToGraph(src);
+    const r = glslToGraph(src, { asBlock: new Set([first.report.warnings[0].id]) });
+    expect(r.report.warnings[0].id).toBe(first.report.warnings[0].id);
+    expect(r.report.warnings[0].nodeId).toBeUndefined();
+    expect(r.report.blocks.map(b => b.code)).toEqual(['0.1 / k']);
+    expect(r.nodes.find(n => n.type === 'exprNode')!.params.__importedCode).toBe('block');
+    expect(compileGraph({ nodes: r.nodes }).success).toBe(true);
+  });
+});

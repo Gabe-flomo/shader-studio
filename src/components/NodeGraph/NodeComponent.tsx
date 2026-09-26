@@ -2915,6 +2915,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         )}
         {def.deprecated && <CardBadge tone="muted">DEPRECATED</CardBadge>}
         {isBypassed && <CardBadge>BYPASS</CardBadge>}
+        {/* From the GLSL → nodes converter: code it kept as code, or a node that isn't quite the GLSL it stands for */}
+        {!!node.params.__importedCode && <span title="From imported GLSL: the converter kept this part as code. Open it to keep refactoring by hand."><CardBadge tone="muted">FROM CODE</CardBadge></span>}
+        {typeof node.params.__importWarning === 'string' && <span title={`From imported GLSL, not quite the same: ${node.params.__importWarning}`}><CardBadge>≈</CardBadge></span>}
         {showNodeTooltip && <div ref={nodeTooltipRef}><NodeTooltip def={def} node={node} allNodes={nodes} /></div>}
         <div style={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }} onDoubleClick={e => e.stopPropagation()}>
           {!['output', 'vec4Output', 'uv', 'time', 'mouse', 'constant'].includes(node.type) && (
