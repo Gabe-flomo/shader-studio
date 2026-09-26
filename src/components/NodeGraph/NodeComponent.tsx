@@ -2159,9 +2159,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
             {/* MarchLoopGroup: render definition-based inputs */}
             {isMarchLoopGroup && (() => {
-              const MLG_FIXED_INPUTS = new Set(['ro', 'rd', 'scene', 'uv', 'time']);
+              // The definition's own sockets are fixed; anything else was added by the user and can be renamed.
+              const fixedInputs = def?.inputs ?? {};
               return Object.entries(node.inputs).map(([key, input]) => {
-                const isExtraInput = !MLG_FIXED_INPUTS.has(key) && !key.startsWith('ps_');
+                const isExtraInput = !(key in fixedInputs) && !key.startsWith('ps_');
                 return (
                   <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '4px', height: isTouchDevice ? 40 : 30 }}>
                     <div
@@ -2550,11 +2551,15 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           );
         })}
 
-        {/* MarchLoopGroup outer params — maxSteps, maxDist, stepScale, bg, albedo */}
+        {/* MarchLoopGroup outer params — background and albedo colours, maxSteps, maxDist, stepScale… */}
         {isMarchLoopGroup && !collapsed && (() => {
           const outerDef = getNodeDefinitionFor(node);
           const outerParamDefs = outerDef?.paramDefs ?? {};
-          const outerEntries = Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'float' || pd.type === 'bool');
+          // Colours first: they are what people reach for; the march tuning follows.
+          const outerEntries = [
+            ...Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'vec3color'),
+            ...Object.entries(outerParamDefs).filter(([, pd]) => pd.type === 'float' || pd.type === 'bool'),
+          ];
           if (outerEntries.length === 0) return null;
           const hidden = node.params.__marchSettingsHidden === true;
           return (
@@ -2569,6 +2574,24 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 <Icon name={hidden ? 'chevR' : 'chevD'} size={12} />
               </button>
               {!hidden && outerEntries.map(([paramKey, paramDef]) => {
+                if (paramDef.type === 'vec3color') {
+                  // Same-named vec3 socket (Background, Albedo): a wire there wins over the swatch.
+                  const wire = node.inputs[paramKey]?.connection;
+                  return (
+                    <div key={paramKey} data-param-key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>
+                      <ParamLabel muted={!!wire} title={paramDef.hint}>{paramDef.label}</ParamLabel>
+                      {wire ? (
+                        <WiredChip source={wire} expr={getSourceExpr(shaderLines, nodeOutputVarMap, wire.nodeId, wire.outputKey)} />
+                      ) : (
+                        <ColorSwatch
+                          label={paramDef.label}
+                          value={toRgb(node.params[paramKey] ?? (def.defaultParams as Record<string, unknown> | undefined)?.[paramKey])}
+                          onChange={rgb => updateNodeParams(node.id, { [paramKey]: rgb }, { immediate: true })}
+                        />
+                      )}
+                    </div>
+                  );
+                }
                 if (paramDef.type === 'bool') {
                   return (
                     <div key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>

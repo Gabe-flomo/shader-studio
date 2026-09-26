@@ -269,7 +269,7 @@ export function buildLearnExamples(base: Record<string, ExampleGraph>): Record<s
       ...LEARN_EXAMPLE_INDEX.learnRaymarch, counter: hello.counter, nodes: hello.nodes,
       play: play([], `**What it shows.** Everything so far was flat: a colour per (x, y). Ray marching adds depth without any geometry. **March Camera** turns each pixel into a ray (an origin and a direction). The **Scene Group** describes the world as a 3D distance field, exactly like the 2D SDFs but with a vec3 position. The **March Loop Group** walks the ray forward by the scene distance until it is close enough to call it a hit, and reports the hit's position, normal and depth. The normal is painted as colour, the standard first look at any surface.
 
-**How it is built.** March Camera → March Loop Group, with the Scene Group wired into its Scene input; inside the Scene Group a Sphere 3D on the Scene Pos. Open the group to see the sphere; add a Box 3D and a Union and the scene grows. The 3D folders take it from here: lighting, shadows, repetition, glass.
+**How it is built.** March Camera → March Loop Group, with the Scene Group wired into its Scene input; inside the Scene Group a Sphere 3D on the Scene Pos. Open the group to see the sphere; add a Box 3D and a Union, wire the Union into Scene Output (whatever reaches Scene Output is the scene), and the scene grows. The 3D folders take it from here: lighting, shadows, repetition, glass.
 
 **Try.** Change the camera's angle and distance on the March Camera card. Replace Normal to Color with Multi-Light and the sphere is lit.`),
     };

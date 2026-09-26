@@ -60,24 +60,36 @@ function nearest(nodes: GraphNode[], to: { x: number; y: number }): GraphNode | 
   return best;
 }
 
+/** Where a new Scene Group goes: into a free loop, or with a new camera + loop when there is none. */
+function placeScene(topLevel: GraphNode[], position: { x: number; y: number }) {
+  const loops = topLevel.filter(n => MARCH_GROUP_TYPES.has(n.type));
+  const free = loops.filter(n => !n.inputs.scene?.connection);
+  const attach = nearest(free, position);
+  const output = topLevel.find(n => (n.type === 'output' || n.type === 'vec4Output') && !n.inputs.color?.connection) ?? null;
+  return {
+    attachToMarchId: attach?.id ?? null,
+    spawnMarch: loops.length === 0,
+    outputNodeId: loops.length === 0 ? (output?.id ?? null) : null,
+  };
+}
+
+/**
+ * A Scene Group added from the palette arrives with a Sphere inside (see
+ * scene3dDefaults.ts) and is placed like a wrapped shape: wired into the
+ * nearest loop with a free Scene input, or given a camera + loop when the
+ * graph has none.
+ */
+export function planSceneGroupAdd(topLevel: GraphNode[], position: { x: number; y: number }): Extract<Smart3DPlan, { kind: 'wrap-scene' }> {
+  return { kind: 'wrap-scene', posInput: 'pos', distOutput: 'dist', ...placeScene(topLevel, position) };
+}
+
 export function planSmart3DAdd(type: string, def: NodeDefinition, topLevel: GraphNode[], position: { x: number; y: number }): Smart3DPlan {
   if (MARCH_GROUP_TYPES.has(type) || type === 'sceneGroup' || type === 'spaceWarpGroup') return { kind: 'none' };
 
   if (SCENE_SPACE_CATEGORIES.has(def.category)) {
     const posInput = def.inputs.pos ? 'pos' : def.inputs.p ? 'p' : null;
     const distOutput = def.outputs.dist?.type === 'float' ? 'dist' : null;
-    const loops = topLevel.filter(n => MARCH_GROUP_TYPES.has(n.type));
-    const free = loops.filter(n => !n.inputs.scene?.connection);
-    const attach = nearest(free, position);
-    const output = topLevel.find(n => (n.type === 'output' || n.type === 'vec4Output') && !n.inputs.color?.connection) ?? null;
-    return {
-      kind: 'wrap-scene',
-      posInput,
-      distOutput,
-      attachToMarchId: attach?.id ?? null,
-      spawnMarch: loops.length === 0,
-      outputNodeId: loops.length === 0 ? (output?.id ?? null) : null,
-    };
+    return { kind: 'wrap-scene', posInput, distOutput, ...placeScene(topLevel, position) };
   }
 
   if (def.category === LIGHTING_CATEGORY) {
