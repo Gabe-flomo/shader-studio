@@ -18,6 +18,8 @@ export interface GlslEditorHandle {
   /** Replace the whole file, as loading a shader does: a new history entry, caret at the start. */
   replaceAll: (code: string) => void;
   focus: () => void;
+  /** Select a span of the file and scroll it into view (Show in file). */
+  selectRange: (start: number, end: number) => void;
 }
 
 // Shared font/padding so the overlay lines up with the textarea exactly.
@@ -128,6 +130,15 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
     insertAtCursor,
     replaceAll: (code: string) => { setSel(0); onChange(code); pushNow(code); },
     focus: () => textareaRef.current?.focus(),
+    selectRange: (start: number, end: number) => {
+      const ta = textareaRef.current; if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(start, end);
+      const line = ta.value.slice(0, start).split('\n').length;
+      const lh = parseFloat(getComputedStyle(ta).lineHeight) || 19.2;
+      ta.scrollTop = Math.max(0, (line - 3) * lh);
+      ta.dispatchEvent(new Event('scroll')); // keeps the highlight and line-number layers in step
+    },
   }), [insertAtCursor, onChange]);
 
   // ── Keyboard handler ──────────────────────────────────────────────────────

@@ -17,6 +17,8 @@ import { Field } from './ui/Field';
 import { Icon } from './ui/Icon';
 import { Menu } from './ui/Menu';
 import { shaderFacts, type ShaderFacts } from '../glsl/shaderFacts';
+import { DiscoverFunctionsModal } from './code/DiscoverFunctionsModal';
+import type { DiscoveredFn } from '../glsl/discover';
 
 // ── Boilerplate ───────────────────────────────────────────────────────────────
 
@@ -167,6 +169,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
   const [notingId, setNotingId] = useState<string | null>(null);
   const [noteVal, setNoteVal] = useState('');
   const [filter, setFilter] = useState('');
+  const [discoverOpen, setDiscoverOpen] = useState(false);
   const [openId, setOpenId] = useState<string | null>(() => { try { return localStorage.getItem(OPEN_KEY); } catch { return null; } });
   const setOpen = (id: string | null) => { setOpenId(id); try { if (id) localStorage.setItem(OPEN_KEY, id); else localStorage.removeItem(OPEN_KEY); } catch { /* preference only */ } };
   const openShader = openId ? shaders.find(s => s.id === openId) ?? null : null;
@@ -246,6 +249,18 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
     if (!persistShaders(next).ok) return;
     setShaders(next);
     if (openId === id) setOpen(null);
+  };
+
+  /** Saved shaders plus, when the editor holds something unsaved, the editor itself. */
+  const discoverSources = () => {
+    const list = shaders.map(s => ({ id: s.id, name: s.name, code: s.code, group: s.group, note: s.note }));
+    if (code.trim() && !(openShader && openShader.code === code)) list.unshift({ id: '__editor', name: openShader ? `${openShader.name} (edited)` : 'Current editor', code, group: undefined, note: undefined });
+    return list;
+  };
+  const showInFile = (sourceId: string, fn: DiscoveredFn) => {
+    if (sourceId !== '__editor') { const s = shaders.find(x => x.id === sourceId); if (!s) return; loadShader(s); }
+    setDiscoverOpen(false);
+    requestAnimationFrame(() => requestAnimationFrame(() => editorRef.current?.selectRange(fn.start, fn.end)));
   };
 
   const commitNote = (id: string) => {
@@ -361,6 +376,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           <Button size="sm" variant="ghost" onClick={tidy} title="Rewrite the text as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
           {onConvert && <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)} title="Open this shader on the Convert page and see the nodes it would become">Convert</Button>}
           <IconButton icon="copy" label="Copy the whole shader" size="sm" onClick={() => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); }} />
+          <IconButton icon="search" label="Discover functions in the saved shaders" size="sm" onClick={() => setDiscoverOpen(true)} />
           <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => { setCode(nodeGraphShader || BOILERPLATE); setOpen(null); }} />
           <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => { setCode(BOILERPLATE); setOpen(null); }} />
           <IconButton icon="trash" label="Clear the editor" size="sm" onClick={() => { setCode(''); setOpen(null); }} />
@@ -381,6 +397,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
       </div>
 
       {/* ── Side panel: saved shaders / functions reference ─────────── */}
+      {discoverOpen && <DiscoverFunctionsModal sources={discoverSources()} onClose={() => setDiscoverOpen(false)} onShowInFile={showInFile} />}
       {groupMenu && (
         <Menu
           x={groupMenu.x} y={groupMenu.y} onClose={() => setGroupMenu(null)}
