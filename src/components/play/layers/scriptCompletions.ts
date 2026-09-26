@@ -5,7 +5,7 @@
  */
 import type { Completion } from '../../code/glslReference';
 import type { MemberCompletions } from '../../code/useCompletion';
-import { SCRIPT_REFERENCE } from './scriptReference';
+import { SCRIPT_REFERENCE, refSignature, type RefItem } from './scriptReference';
 import { declaredParams } from './scriptTools';
 
 const KEYWORDS = ['const', 'let', 'function', 'return', 'if', 'else', 'for', 'while', 'break', 'continue', 'true', 'false', 'null', 'undefined', 'new', 'typeof', 'of', 'in'];
@@ -30,13 +30,14 @@ const CTX: Array<[string, string, string?]> = [
 ];
 const MATH = ['abs', 'sin', 'cos', 'tan', 'atan2', 'sqrt', 'pow', 'hypot', 'floor', 'ceil', 'round', 'min', 'max', 'random', 'sign', 'exp', 'log', 'PI'];
 
-const refToCompletion = (name: string, doc: string, insert?: string): Completion => {
-  const paren = name.indexOf('(');
-  const bare = paren >= 0 ? name.slice(0, paren) : name;
-  return paren >= 0
-    ? { kind: 'fn', name: bare, detail: name.slice(paren), doc, insert: insert ?? `${bare}()` }
-    : { kind: 'const', name: bare, doc, insert: insert ?? bare };
-};
+/** A reference entry as a completion: signature, return type, parameters and example go to the popup's description. */
+export function refToCompletion(it: RefItem, name = it.name): Completion {
+  const more = { doc: it.doc, args: it.args, returns: it.returns, example: it.example };
+  if (!it.args) return { kind: 'const', name, type: it.type, insert: name, ...more };
+  // An entry's own one-line insert (`circle(x, y, 20)`), else empty parens; blocks (setup, push/pop) are the Reference tab's.
+  const insert = it.insert && !it.insert.includes('\n') ? it.insert.slice(it.name.length - name.length) : `${name}()`;
+  return { kind: 'fn', name, detail: refSignature(it), type: it.type === 'nothing' ? undefined : it.type, insert, ...more };
+}
 
 let cachedStatic: { all: Completion[]; members: MemberCompletions } | null = null;
 function staticCompletions() {
@@ -44,10 +45,9 @@ function staticCompletions() {
   const all: Completion[] = [];
   const sMembers: Completion[] = [];
   for (const g of SCRIPT_REFERENCE) for (const it of g.items) {
-    if (it.name.startsWith('s.')) { const rest = it.name.slice(2); sMembers.push(refToCompletion(rest, it.doc, rest.replace(/\(.*\)$/, m => m === '()' ? '()' : m))); }
-    else all.push(refToCompletion(it.name, it.doc, it.insert && !it.insert.includes('\n') ? it.insert : undefined));
+    if (it.name.startsWith('s.')) sMembers.push(refToCompletion(it, it.name.slice(2)));
+    else all.push(refToCompletion(it));
   }
-  sMembers.push({ kind: 'fn', name: 'pressed', detail: '(key)', doc: 'True on the frame a button param was pressed.', insert: "pressed('')" });
   for (const k of KEYWORDS) all.push({ kind: 'keyword', name: k, insert: k });
   const ctx: Completion[] = CTX.map(([name, doc, insert]) => (insert ? { kind: 'fn', name, detail: insert.slice(name.length), doc, insert } : { kind: 'const', name, doc, insert: name }));
   const math: Completion[] = MATH.map(n => (n === 'PI' ? { kind: 'const', name: n, doc: 'π.', insert: n } : { kind: 'fn', name: n, detail: '()', doc: `Math.${n}.`, insert: `${n}()` }));

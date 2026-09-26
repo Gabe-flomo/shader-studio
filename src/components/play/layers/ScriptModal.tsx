@@ -2,14 +2,16 @@
  * ScriptModal — the Script layer's big editor, like the Custom Function
  * window: a highlighted JavaScript editor with autocomplete, undo and
  * auto-indent; beside it a scratch run of the draft, the reference, a library
- * of patterns to insert, and the sketch's controls. The selection offers to
+ * of patterns to insert (each placed where it belongs, with an example to
+ * run), and the sketch's controls with a builder for new ones. Whatever an
+ * insert adds flashes in the editor. The selection offers to
  * turn a variable into a slider, toggle or button (and a Play control in one
  * go). Starters, your saved sketches and other script layers can be loaded
  * or imported from the footer.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTokens } from '../../../theme/themeStore';
-import { fontFamily, radius } from '../../../theme/tokens';
+import { fontFamily } from '../../../theme/tokens';
 import type { ActionKind } from '../../../types/play';
 import type { ScriptLayer, ScriptParamDef } from '../../../types/playLayers';
 import { Button, IconButton } from '../../ui/Button';
@@ -22,6 +24,7 @@ import { toast } from '../../ui/toastStore';
 import { askText } from '../../ui/dialogStore';
 import { CodeField } from '../../code/CodeField';
 import { tokenizeJsLine } from '../../code/jsSyntax';
+import { changedLines } from '../../code/lineDiff';
 import { insertSnippet } from '../../code/useCompletion';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS } from '../../../utils/graphImportPlan';
@@ -33,22 +36,12 @@ import { ScriptPreview } from './ScriptPreview';
 import type { ApplyOptions } from './scriptApply';
 import { scriptCompletions } from './scriptCompletions';
 import { SCRIPT_EXAMPLES, extractScriptParams } from './scriptExamples';
-import { SCRIPT_REFERENCE } from './scriptReference';
-import { SCRIPT_SNIPPETS, SNIPPET_GROUPS } from './scriptSnippets';
-import { controlCandidate, makeControl, type ControlKind } from './scriptTools';
+import { ScriptControlBuilder, ScriptPatternList, ScriptReferenceList } from './ScriptPanels';
+import type { ScriptSnippet } from './scriptSnippets';
+import { controlCandidate, makeControl, placeCode, type ControlKind } from './scriptTools';
 
 type Tab = 'preview' | 'reference' | 'patterns' | 'controls';
 const KIND_WORD: Record<ControlKind, string> = { slider: 'slider', toggle: 'toggle', button: 'button' };
-
-function Chip({ label, title, onClick }: { label: ReactNode; title?: string; onClick: () => void }) {
-  const tk = useTokens();
-  return (
-    <button type="button" title={title} onMouseDown={e => e.preventDefault()} onClick={onClick}
-      style={{ height: 26, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', border: 0, borderRadius: 7, cursor: 'pointer', background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, whiteSpace: 'nowrap', flexShrink: 0 }}>
-      {label}
-    </button>
-  );
-}
 
 function useNarrow(px: number) {
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < px);
@@ -101,7 +94,15 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
   };
   const commit = (code: string, caret?: number) => {
     setDraft(code); pushNow(code);
-    if (caret !== undefined) requestAnimationFrame(() => { taRef.current?.focus(); taRef.current?.setSelectionRange(caret, caret); });
+    if (caret !== undefined) requestAnimationFrame(() => { taRef.current?.focus({ preventScroll: true }); taRef.current?.setSelectionRange(caret, caret); });
+  };
+  // An insert: commit it, flash the lines it added and scroll them into view; the caret goes to the end of the last one.
+  const [flash, setFlash] = useState<{ lines: Array<[number, number]>; key: number } | null>(null);
+  const edit = (code: string, caret?: number) => {
+    const lines = changedLines(draft, code);
+    if (lines.length) setFlash(f => ({ lines, key: (f?.key ?? 0) + 1 }));
+    const endOf = (line: number) => { let at = -1; for (let i = 0; i <= line; i++) at = code.indexOf('\n', at + 1); return at < 0 ? code.length : at; };
+    commit(code, caret ?? (lines.length ? endOf(lines[lines.length - 1][1]) : undefined));
   };
   const undo = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; pushNow(draft); } if (idx.current > 0) { idx.current--; setDraft(hist.current[idx.current]); bump(); } };
   const redo = () => { if (idx.current < hist.current.length - 1) { idx.current++; setDraft(hist.current[idx.current]); bump(); } };
@@ -127,7 +128,7 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
   const insertAtCaret = (text: string) => {
     const el = taRef.current;
     const at = el ? el.selectionStart : draft.length, end = el ? el.selectionEnd : draft.length;
-    if (!text.includes('\n')) { const r = insertSnippet(draft, at, end, text); commit(r.next, r.caret); return; }
+    if (!text.includes('\n')) { const r = insertSnippet(draft, at, end, text); edit(r.next, r.caret); return; }
     // A block: on its own lines, at the caret's indent.
     const lineStart = draft.lastIndexOf('\n', at - 1) + 1;
     const prefix = draft.slice(lineStart, at);
@@ -135,16 +136,17 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
     let ins = text.replace(/\n(?=.)/g, `\n${indent}`);
     if (prefix.trim()) ins = `\n${indent}${ins}`;
     const next = draft.slice(0, at) + ins + draft.slice(end);
-    commit(next, at + ins.length);
+    edit(next, at + ins.length);
   };
-  const insertPattern = (sn: { where: string; code: string }) => {
+  // A pattern goes where it belongs (top, setup or draw); the caret counts only when the editor has focus.
+  const insertPattern = (sn: ScriptSnippet) => {
     const el = taRef.current;
-    if (sn.where === 'top' && el && el.selectionStart === 0) commit(sn.code + '\n' + draft, sn.code.length + 1);
-    else insertAtCaret(sn.code);
+    const caret = el && document.activeElement === el && el.selectionStart === el.selectionEnd ? el.selectionStart : undefined;
+    edit(placeCode(draft, sn.where, sn.code, caret));
   };
   const appendBlock = (title: string, text: string) => {
     const next = `${draft.replace(/\s*$/, '')}\n\n// ── ${title} ──\n${text.trim()}\n`;
-    commit(next, next.length);
+    edit(next, next.length);
   };
   const pendingExpose = useRef<string | null>(null);
   useEffect(() => {
@@ -158,12 +160,20 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
     if (!candidate) return;
     const r = makeControl(draft, candidate.name);
     if (!r) return;
-    commit(r.code);
+    edit(r.code);
     const startAt = candidate.kind === 'slider' ? { [candidate.name]: candidate.value as number } : candidate.kind === 'toggle' ? { [candidate.name]: candidate.value ? 1 : 0 } : undefined;
     if (apply(r.code, { startAt }) && alsoControl) pendingExpose.current = candidate.name;
     setSelected('');
   };
   const loadCode = (code: string, settings?: { clear: boolean; readPicture: boolean }) => { commit(code, 0); apply(code, settings ? { settings } : undefined); };
+  const loadExample = (sn: ScriptSnippet) => {
+    loadCode(sn.example, { clear: sn.settings?.clear ?? true, readPicture: sn.settings?.readPicture ?? false });
+    toast.info(`Loaded “${sn.name}”`, { message: 'Undo (⌘Z) brings your sketch back.' });
+  };
+  const addNewControl = (code: string, key: string, startAt: number | undefined, toPanel: boolean) => {
+    edit(code);
+    if (apply(code, { startAt: startAt === undefined ? undefined : { [key]: startAt } }) && toPanel) pendingExpose.current = key;
+  };
 
   const openMenu = (e: React.MouseEvent, items: MenuItem[]) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ x: r.left, y: r.top - 6 - Math.min(400, items.length * 34), items }); };
   const startersMenu = (): MenuItem[] => [
@@ -202,7 +212,7 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
   };
 
   const heading = (t: string) => <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>{t}</span>;
-  const q = filter.trim().toLowerCase();
+  const sideWidth = narrow ? Math.min(360, window.innerWidth - 32) : 360;
 
   const side = (
     <div style={{ width: narrow ? '100%' : 360, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, background: tk.bg.subtle, borderLeft: narrow ? 'none' : `1px solid ${tk.border.subtle}`, borderTop: narrow ? `1px solid ${tk.border.subtle}` : 'none' }}>
@@ -215,52 +225,22 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {tab === 'preview' && (
           <>
-            <ScriptPreview code={previewCode} defs={draftDefs} values={values} clear={l.clear} ratio={ratio} width={narrow ? Math.min(336, window.innerWidth - 56) : 336} />
+            <ScriptPreview code={previewCode} defs={draftDefs} values={values} clear={l.clear} ratio={ratio} width={sideWidth - 24} />
             <span style={{ fontSize: 11.5, lineHeight: 1.45, color: tk.text.muted }}>
               The draft runs here on its own, as you type, with the layer’s current control values and the mouse over this box. The picture reads as a soft glow in the middle and there are no nulls. <b>Apply</b> puts it on the picture.
             </span>
           </>
         )}
-        {tab === 'reference' && SCRIPT_REFERENCE.map(group => {
-          const rows = q ? group.items.filter(it => `${it.name} ${it.doc}`.toLowerCase().includes(q)) : group.items;
-          if (!rows.length) return null;
-          return (
-            <div key={group.title} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {heading(group.title)}
-              {rows.map(it => (
-                <div key={it.name} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                  <Chip label={it.name} title="Insert at the caret" onClick={() => insertAtCaret(it.insert ?? it.name)} />
-                  <span style={{ fontSize: 11.5, lineHeight: 1.35, color: tk.text.muted }}>{it.doc}</span>
-                </div>
-              ))}
-            </div>
-          );
-        })}
-        {tab === 'patterns' && SNIPPET_GROUPS.map(g => {
-          const rows = SCRIPT_SNIPPETS.filter(sn => sn.group === g && (!q || `${sn.name} ${sn.doc}`.toLowerCase().includes(q)));
-          if (!rows.length) return null;
-          return (
-            <div key={g} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {heading(g)}
-              {rows.map(sn => (
-                <div key={sn.name} style={{ padding: '8px 10px', borderRadius: radius.md, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <b style={{ flex: 1, fontSize: 12.5 }}>{sn.name}</b>
-                    <span style={{ font: `600 10px ${fontFamily.ui}`, color: tk.text.faint, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{sn.where === 'top' ? 'top of file' : `in ${sn.where}`}</span>
-                    <Button size="sm" icon="plus" onMouseDown={e => e.preventDefault()} onClick={() => insertPattern(sn)}>Insert</Button>
-                  </div>
-                  <span style={{ fontSize: 11.5, lineHeight: 1.4, color: tk.text.muted }}>{sn.doc}</span>
-                </div>
-              ))}
-            </div>
-          );
-        })}
+        {tab === 'reference' && <ScriptReferenceList query={filter} onInsert={insertAtCaret} />}
+        {tab === 'patterns' && <ScriptPatternList query={filter} previewWidth={sideWidth - 44} onInsert={insertPattern} onLoad={loadExample} />}
         {tab === 'controls' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {heading('Declared by the sketch')}
             {(l.paramDefs ?? []).length === 0 && <span style={{ fontSize: 11.5, lineHeight: 1.45, color: tk.text.muted }}>None yet. Declare a params object, or select a variable in the code and turn it into one.</span>}
             <ScriptControls f={f} l={l} act={act} />
-            <div style={{ marginTop: 8 }}>{heading('Canvas')}</div>
+            <div style={{ margin: '10px 0 4px' }}>{heading('New control')}</div>
+            <ScriptControlBuilder draft={draft} onAdd={addNewControl} />
+            <div style={{ marginTop: 10 }}>{heading('Canvas')}</div>
             {f.toggle('Clear', 'clear', 'Clear every frame', 'Off keeps what was drawn, for trails.')}
             {f.toggle('Picture', 'readPicture', 'Read the picture', 'Samples the shader each frame for s.picture.brightness(x, y).')}
             {f.props('opacity')}
@@ -336,6 +316,7 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
             textareaRef={el => { taRef.current = el; }}
             onSelect={el => setSelected(el.value.slice(el.selectionStart, el.selectionEnd))}
             onKeyDown={onKeyDown}
+            flash={flash}
             invalid={!!error}
             actions={<span style={{ fontSize: 11, color: tk.text.faint }}>Tab · 2 spaces · ⌘↵ applies</span>}
           />

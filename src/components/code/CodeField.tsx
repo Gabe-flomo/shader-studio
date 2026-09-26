@@ -1,8 +1,8 @@
 import { selectTokenOnDoubleClick, wrapSelection } from './editKeys';
 import { BracketMarks } from './BracketMarks';
-import { useCallback, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
-import { fontFamily, radius } from '../../theme/tokens';
+import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { C, C_LIGHT, tokenizeLine, type Token } from '../glslSyntax';
 import { CompletionPopup } from './CompletionPopup';
 import type { Completion } from './glslReference';
@@ -23,6 +23,23 @@ function charWidth(): number {
   return charWidthCache || FONT_SIZE * 0.6;
 }
 
+/** Bands over lines that were just inserted: on at once, fading after a moment. Remount (new key) to flash again. */
+function FlashBands({ lines }: { lines: ReadonlyArray<[number, number]> }) {
+  const tk = useTokens();
+  const [on, setOn] = useState(true);
+  useEffect(() => { const t = setTimeout(() => setOn(false), 1400); return () => clearTimeout(t); }, []);
+  return (
+    <>
+      {lines.map(([a, b]) => (
+        <span key={a} aria-hidden data-flash style={{
+          position: 'absolute', left: 0, right: 0, top: PAD_Y + a * LINE_H, height: (b - a + 1) * LINE_H, pointerEvents: 'none',
+          background: alpha(tk.accent.base, 0.18), boxShadow: `inset 3px 0 0 ${tk.accent.base}`, opacity: on ? 1 : 0, transition: 'opacity 1s ease',
+        }} />
+      ))}
+    </>
+  );
+}
+
 function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
 /**
@@ -33,7 +50,7 @@ function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').
  */
 export function CodeField({
   value, onChange, completions, title = 'GLSL', actions, textareaRef, onKeyDown, onBlur, onFocus, onSelect, placeholder,
-  ariaLabel, grow = false, minHeight = 120, maxHeight, invalid = false, style, tokenize = tokenizeLine, members, autoIndent = false,
+  ariaLabel, grow = false, minHeight = 120, maxHeight, invalid = false, style, tokenize = tokenizeLine, members, autoIndent = false, flash,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -60,6 +77,8 @@ export function CodeField({
   members?: MemberCompletions;
   /** Enter keeps the line's indent, one level deeper after an opening bracket. */
   autoIndent?: boolean;
+  /** Lines to flash and scroll into view (runs of [first, last] line indexes); a new `key` flashes again. */
+  flash?: { lines: ReadonlyArray<[number, number]>; key: number } | null;
 }) {
   const tk = useTokens();
   const pal = useThemeMode() === 'dark' ? C : C_LIGHT;
@@ -77,6 +96,23 @@ export function CodeField({
     requestAnimationFrame(() => { taRef.current?.focus(); taRef.current?.setSelectionRange(caret, caret); });
   }, [onChange]);
   const ac = useCompletion(completions, onApply, members);
+
+  // Bring flashed lines into view: all of them centred when they fit, else the biggest run (the last of equals).
+  const flashKey = flash?.key;
+  useEffect(() => {
+    const sc = scrollRef.current;
+    if (!sc || !flash?.lines.length) return;
+    let first = flash.lines[0][0], last = flash.lines[flash.lines.length - 1][1];
+    if ((last - first + 1) * LINE_H > sc.clientHeight - 2 * LINE_H) {
+      const big = flash.lines.reduce((a, b) => (b[1] - b[0] >= a[1] - a[0] ? b : a));
+      [first, last] = big;
+    }
+    const top = PAD_Y + first * LINE_H, bottom = PAD_Y + (last + 1) * LINE_H;
+    if (top >= sc.scrollTop && bottom <= sc.scrollTop + sc.clientHeight) return;
+    const room = sc.clientHeight - (bottom - top);
+    sc.scrollTo({ top: Math.max(0, room > 2 * LINE_H ? top - room / 2 : top - LINE_H), left: 0, behavior: 'smooth' });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once per flash
+  }, [flashKey]);
 
   const lines = value.split('\n');
   const html = lines.map(l => tokenize(l, pal).map(t => `<span style="color:${t.color}">${esc(t.text)}</span>`).join('')).join('\n') + '\n';
@@ -125,12 +161,13 @@ export function CodeField({
         <div aria-hidden style={{
           width: GUTTER, flexShrink: 0, padding: `${PAD_Y}px 8px ${PAD_Y}px 0`, boxSizing: 'border-box', textAlign: 'right',
           font: `${FONT_SIZE - 1.5}px/${LINE_H}px ${fontFamily.mono}`, color: tk.text.disabled, userSelect: 'none',
-          position: 'sticky', left: 0, background: tk.bg.panel,
+          position: 'sticky', left: 0, zIndex: 1, background: tk.bg.panel,
         }}>
           {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
         </div>
         {/* As wide as the longest line, so the textarea never scrolls on its own */}
         <div style={{ position: 'relative', flex: '1 0 auto' }}>
+          {flash && flash.lines.length > 0 && <FlashBands key={flash.key} lines={flash.lines} />}
           <pre aria-hidden dangerouslySetInnerHTML={{ __html: html }} style={{ ...text, color: tk.text.primary, minWidth: '100%', width: 'max-content', pointerEvents: 'none' }} />
           <BracketMarks text={value} caret={caret} charW={charWidth()} lineH={LINE_H} padX={PAD_X} padY={PAD_Y} fontSize={FONT_SIZE} />
           {!value && placeholder && (
