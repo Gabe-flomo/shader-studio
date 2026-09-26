@@ -64,6 +64,14 @@ export function seededRandom(seed) {
   return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
+/** A seed (1..999999) from text: a layer's or a node's id, mixed with a session seed. Same text, same seed. */
+export function stringSeed(text, mix = 0) {
+  let h = (2166136261 ^ (mix | 0)) >>> 0;
+  const s = String(text);
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0;
+  return (h % 999999) + 1;
+}
+
 // ── Palettes: a + b·cos(2π(c·t + d)), from the author's sketch ──────────────
 export const PARTICLE_PALETTES = [
   { name: 'Ocean dusk', a: [0.5, 0.5, 0.5], b: [0.1, 0.4, 0.5], c: [1, 1, 1], d: [0, 0.1, 0.2] },

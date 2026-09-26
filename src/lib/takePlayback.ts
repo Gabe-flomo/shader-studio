@@ -178,5 +178,6 @@ export function takeEventsBetween(take: PlayTake, after: number, upTo: number): 
 export function takeSize(take: PlayTake): number {
   let n = 0;
   for (const t of take.tracks) n += t.keys.length + t.id.length + (t.target?.length ?? 0) + t.label.length + 40;
+  for (const a of take.audioFrames ?? []) n += a.times.length + a.data.length + a.source.length + 60;
   return n + take.events.length * 60;
 }

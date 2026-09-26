@@ -17,13 +17,21 @@ import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick, hasTimeTickListeners } from '../lib/timeTick';
 import { GpuTimer } from '../lib/gpuTimer';
+import { OfflineHistory } from '../lib/offlineHistory';
+import { seededRandom, stringSeed } from '../play/particle-sim.js';
 import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
 import { getBreakpoint, isMobile } from '../hooks/useBreakpoint';
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
 
 // ── GPU particle geometry initialization by shape ─────────────────────────────
-function buildParticleGeometry(count: number, shape: number): { positions: Float32Array; normDists: Float32Array } {
+/**
+ * Where each particle starts. Seeded from the node's id, so the cloud is the
+ * same every time the graph opens: a render (or a take) shows the particles
+ * where they were when it was played.
+ */
+function buildParticleGeometry(count: number, shape: number, seedKey: string): { positions: Float32Array; normDists: Float32Array } {
+  const R = seededRandom(stringSeed(seedKey));
   const positions = new Float32Array(count * 3);
   const normDists = new Float32Array(count);
 
@@ -31,8 +39,8 @@ function buildParticleGeometry(count: number, shape: number): { positions: Float
     let x = 0, y = 0, z = 0, nd = 1;
     switch (shape) {
       case 0: { // Sphere — on surface
-        const theta = Math.random() * Math.PI * 2;
-        const phi   = Math.acos(2 * Math.random() - 1);
+        const theta = R() * Math.PI * 2;
+        const phi   = Math.acos(2 * R() - 1);
         x = Math.sin(phi) * Math.cos(theta);
         y = Math.sin(phi) * Math.sin(theta);
         z = Math.cos(phi);
@@ -40,29 +48,29 @@ function buildParticleGeometry(count: number, shape: number): { positions: Float
         break;
       }
       case 1: { // Ball — uniform in volume
-        const theta = Math.random() * Math.PI * 2;
-        const phi   = Math.acos(2 * Math.random() - 1);
-        const r     = Math.cbrt(Math.random());
+        const theta = R() * Math.PI * 2;
+        const phi   = Math.acos(2 * R() - 1);
+        const r     = Math.cbrt(R());
         x = r * Math.sin(phi) * Math.cos(theta); y = r * Math.sin(phi) * Math.sin(theta); z = r * Math.cos(phi);
         nd = r;
         break;
       }
       case 2: { // Box — uniform in [-1,1]³
-        x = Math.random() * 2 - 1; y = Math.random() * 2 - 1; z = Math.random() * 2 - 1;
+        x = R() * 2 - 1; y = R() * 2 - 1; z = R() * 2 - 1;
         nd = Math.min(1, Math.sqrt(x * x + y * y + z * z) / Math.sqrt(3));
         break;
       }
       case 3: { // Disk — flat in XZ, uniform area
-        const angle = Math.random() * Math.PI * 2;
-        const r     = Math.sqrt(Math.random());
+        const angle = R() * Math.PI * 2;
+        const r     = Math.sqrt(R());
         x = r * Math.cos(angle); z = r * Math.sin(angle); y = 0;
         nd = r;
         break;
       }
       case 4: { // Ring — thin ring in XZ at radius ≈1
-        const angle = Math.random() * Math.PI * 2;
-        const r     = 0.85 + Math.random() * 0.3;
-        x = r * Math.cos(angle); z = r * Math.sin(angle); y = (Math.random() - 0.5) * 0.1;
+        const angle = R() * Math.PI * 2;
+        const r     = 0.85 + R() * 0.3;
+        x = r * Math.cos(angle); z = r * Math.sin(angle); y = (R() - 0.5) * 0.1;
         nd = Math.min(r, 1);
         break;
       }
@@ -83,8 +91,15 @@ function buildParticleGeometry(count: number, shape: number): { positions: Float
 
 /** Handle returned to ExportModal for offline frame rendering + pixel readback */
 export interface OfflineRenderHandle {
-  /** Render the shader at an exact time value into the dedicated export RT */
-  renderAtTime: (time: number) => void;
+  /**
+   * Render the shader at an exact time value into the dedicated export RT,
+   * with the passes the live preview runs too: feedback (Previous Frame),
+   * the Echo ring and GPU particle nodes. `dt` is the render's frame step
+   * (1 / fps) and `first` starts a render: the feedback and echo history
+   * start over there (see lib/offlineHistory.ts). Without options a frame
+   * stands alone (a still).
+   */
+  renderAtTime: (time: number, opts?: { dt?: number; first?: boolean }) => void;
   /** Read pixels from the last renderAtTime call into `out` (RGBA, top-down) */
   readPixels: (out: Uint8Array, width: number, height: number) => void;
   /** Set a uniform before the next renderAtTime (a take's recorded slider values). Unknown names are ignored. */
@@ -653,8 +668,33 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           });
           exportW = w;
           exportH = h;
+          history.reset();
         }
       };
+
+      // Feedback and echo for offline frames: targets of their own, so the live preview's history is untouched.
+      const history = new OfflineHistory<THREE.WebGLRenderTarget>({
+        create: () => {
+          const r = new THREE.WebGLRenderTarget(exportW || 1, exportH || 1, { type: RT_TYPE, format: THREE.RGBAFormat, depthBuffer: false });
+          renderer.setRenderTarget(r); renderer.clear(); renderer.setRenderTarget(null);
+          return r;
+        },
+        dispose: r => r.dispose(),
+        draw: (t, into, prev, echoes) => {
+          material.uniforms.u_time.value = t;
+          if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = prev ? prev.texture : null;
+          for (let i = 0; i < 6; i++) { const u = material.uniforms[`u_echo${i}`]; if (u) u.value = echoes[i]?.texture ?? null; }
+          renderer.setRenderTarget(into);
+          renderer.render(scene, camera);
+        },
+        copy: (from, into) => {
+          blitMat.uniforms.tInput.value = from.texture;
+          blitMat.uniforms.u_seed.value = 0;
+          renderer.setRenderTarget(into);
+          renderer.render(blitScene, camera);
+        },
+      });
+      let offlineStarted = false;
 
       const handle: OfflineRenderHandle = {
         get width()  { ensureRT(); return exportW; },
@@ -665,6 +705,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           exportRT?.dispose(); exportRT = null;
           exportReadbackRT?.dispose(); exportReadbackRT = null;
           exportW = 0; exportH = 0;
+          history.reset();
           renderScale = scale;
           exportSize = null;
           applySize();
@@ -674,6 +715,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           exportRT?.dispose(); exportRT = null;
           exportReadbackRT?.dispose(); exportReadbackRT = null;
           exportW = 0; exportH = 0;
+          history.reset();
           exportSize = size ? { width: Math.max(1, Math.round(size.width)), height: Math.max(1, Math.round(size.height)) } : null;
           renderScale = 1;
           applySize();
@@ -687,17 +729,48 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (Array.isArray(value) && vec && typeof vec === 'object' && typeof vec.fromArray === 'function') vec.fromArray(value);
           // As the live loop writes the input bus: a colour as a plain [r, g, b].
           else u.value = Array.isArray(value) ? [...value] : value;
+          // GPU particle nodes read the same sliders.
+          for (const [, points] of gpuParticlesRef.current) {
+            const pu = (points.material as THREE.ShaderMaterial).uniforms[name];
+            if (pu && !(pu.value && typeof pu.value === 'object' && !Array.isArray(pu.value))) pu.value = Array.isArray(value) ? [...value] : value;
+          }
         },
-        renderAtTime: (time: number) => {
-          material.uniforms.u_time.value = time;
-          renderer.setRenderTarget(exportRT);
-          renderer.render(scene, camera);
+        renderAtTime: (time: number, opts?: { dt?: number; first?: boolean }) => {
+          ensureRT();
+          const u = material.uniforms;
+          // The live loop's own history stays as it was: put its uniforms back after.
+          const keep = ['u_time', 'u_prevFrame', ...Array.from({ length: 6 }, (_, i) => `u_echo${i}`)].map(k => [k, u[k]?.value] as const);
+          const feedback = isStatefulRef.current && !!u.u_prevFrame;
+          const echo = echoRef.current;
+          let picture: THREE.WebGLRenderTarget;
+          if (feedback || echo) {
+            // A still (no options) stands alone: its history is warmed up from scratch.
+            const first = !opts || !!opts.first || !offlineStarted;
+            picture = history.frame(time, { dt: opts?.dt ?? 1 / 60, first, feedback, echo });
+            offlineStarted = !!opts;
+          } else {
+            u.u_time.value = time;
+            renderer.setRenderTarget(exportRT);
+            renderer.render(scene, camera);
+            picture = exportRT!;
+          }
           // Blit with dithering into 8-bit readback RT
-          blitMat.uniforms.tInput.value = exportRT!.texture;
+          blitMat.uniforms.tInput.value = picture.texture;
           blitMat.uniforms.u_seed.value = ditherSeed(Math.floor(time * 100.0));
           renderer.setRenderTarget(exportReadbackRT);
           renderer.render(blitScene, camera);
+          // GPU particle nodes, added over the picture as the live preview draws them.
+          if (gpuParticlesRef.current.size > 0) {
+            for (const [, points] of gpuParticlesRef.current) {
+              const pu = (points.material as THREE.ShaderMaterial).uniforms;
+              if (pu.u_time) pu.u_time.value = time;
+            }
+            renderer.autoClear = false;
+            renderer.render(particleScene, perspCamera);
+            renderer.autoClear = true;
+          }
           renderer.setRenderTarget(null);
+          for (const [k, v] of keep) if (u[k]) u[k].value = v;
         },
         readPixels: (out: Uint8Array, width: number, height: number) => {
           if (!exportReadbackRT) return;
@@ -719,7 +792,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
 
       // Clean up RTs when renderer is torn down
       const origDispose = renderer.dispose.bind(renderer);
-      renderer.dispose = () => { exportRT?.dispose(); exportReadbackRT?.dispose(); origDispose(); };
+      renderer.dispose = () => { exportRT?.dispose(); exportReadbackRT?.dispose(); history.reset(); origDispose(); };
     }
 
     // Render target for pixel readback — sized with the canvas, resized in ResizeObserver
@@ -1935,7 +2008,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         existing.delete(nodeId);
       }
 
-      const { positions, normDists } = buildParticleGeometry(count, shape);
+      const { positions, normDists } = buildParticleGeometry(count, shape, nodeId);
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position',    new THREE.BufferAttribute(positions, 3, false));
       geo.setAttribute('a_normDist',  new THREE.BufferAttribute(normDists, 1, false));

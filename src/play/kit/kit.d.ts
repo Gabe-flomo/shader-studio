@@ -37,7 +37,8 @@ export interface LayerKit {
   act(a: { do: ActionKind; layerId: string; amount: number }): void;
   shapeAt(record: PlayRecord, x: number, y: number, aspect: number, value: (layer: PlayLayer, key: string) => number): string | null;
   isAnimated(record: PlayRecord): boolean;
-  reset(): void;
+  /** Forget all state; `seed` makes the layers' random choices repeatable (a take). */
+  reset(seed?: number): void;
 }
 
 export function createLayerKit(): LayerKit;

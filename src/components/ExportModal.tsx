@@ -178,6 +178,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const perf = useTakes(s => s.settings);
   const rolling = useTakes(s => s.rolling);
   const take = external ? null : takes.find(t => t.id === takeId) ?? null;
+  // A take keeps no camera or video frames (too big): its render shows what they show while it renders.
+  const liveFeeds = !!take && (nodes.some(n => n.type === 'videoInput') || play.layers.some(l => l.visible && (l.kind === 'camera' || (l as { readFrom?: string }).readFrom === 'camera')));
   const span = take ? { from: take.from, length: Math.max(1 / fps, take.length) } : { from: 0, length: duration };
 
   const [state, setState]                       = useState<RecordState>('idle');
@@ -420,7 +422,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     // These are fixed at registration time — immune to live canvas resizes.
     const { width: w, height: h, renderAtTime, readPixels: handleReadPixels } = offlineRender;
     // Each frame gets the Play layers laid over it, stepped at the export's frame rate.
-    let frameTime = 0, firstFrame = true;
+    let frameTime = 0, firstFrame = true, firstRender = true;
     const applier = take ? takeApplier(take, offlineRender) : null;
     let frameActs: ReturnType<NonNullable<typeof applier>['apply']> = [];
     const startT = performance.now();
@@ -444,12 +446,13 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         renderFrame: (t) => {
           if (abortRef.current) throw new Error('cancelled');
           frameActs = applier?.apply(t) ?? [];
-          renderAtTime(t);
+          renderAtTime(t, { dt: 1 / fps, first: firstRender });
+          firstRender = false;
           frameTime = t;
         },
         readPixels: (out, width, height) => {
           handleReadPixels(out, width, height);
-          playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame, { transparent, picture, pointer: applier?.pointer(frameTime), actions: frameActs });
+          playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame, { transparent, picture, pointer: applier?.pointer(frameTime), actions: frameActs, seed: applier?.seed, audio: applier?.audio(frameTime) });
           firstFrame = false;
         },
         onProgress: (fraction, frame) => {
@@ -521,9 +524,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         if (abortRef.current) throw new Error('cancelled');
         const t = span.from + i / fps;
         const actions = applier?.apply(t) ?? [];
-        renderAtTime(t);
+        renderAtTime(t, { dt: 1 / fps, first: i === 0 });
         readPixels(pixels, w, h);
-        playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: applier?.pointer(t), actions });
+        playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: applier?.pointer(t), actions, seed: applier?.seed, audio: applier?.audio(t) });
         const img = fx.createImageData(w, h);
         img.data.set(pixels);
         fx.putImageData(img, 0, 0);
@@ -801,7 +804,6 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                   {' '}{mode === 'ffmpeg'
                     ? 'Saved as ProRes 4444 (.mov), which keeps the alpha.'
                     : 'Saved as a PNG sequence in a .zip, rendered frame by frame (exact timing). In After Effects: File › Import, pick the first PNG and tick PNG Sequence.'}
-                  {' '}Frame-by-frame rendering leaves out GPU particle nodes and feedback trails; Play layers, particles included, are in.
                 </Help>
               ))}
             </Section>}
@@ -820,6 +822,11 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                     Renders {take.name} frame by frame: the clock from {take.from.toFixed(1)}s for {formatDuration(take.length)}, with every control, MIDI note, mouse move and action as you played them.
                     {mode === 'ffmpeg' ? '' : ' In the browser that’s a PNG sequence (with the song as a WAV); the desktop app renders it straight to video.'}
                   </Help>
+                )}
+                {liveFeeds && (
+                  <Callout tone="warning" title="Camera and video are live, not recorded">
+                    A take doesn’t keep camera or video frames. The render uses whatever the camera or video shows while it renders, not what it showed when you played.
+                  </Callout>
                 )}
               </Section>
             )}

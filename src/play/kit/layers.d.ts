@@ -12,7 +12,7 @@ export function klClonerCopies(l: unknown, v: (key: string) => number, aspect: n
 export function klDrawCopy(ctx: CanvasRenderingContext2D, copy: ClonerCopy, srcX: number, srcY: number, W: number, H: number, scratch: CanvasImageSource, box: { x: number; y: number; w: number; h: number } | null): void;
 
 export const KL_SKETCH_NAMES: readonly string[];
-export function klSketchHelpers(get: () => { ctx: CanvasRenderingContext2D; width: number; height: number; mouse: { x: number; y: number; down: boolean }; frame: number; dt: number; time: number }): Record<string, unknown>;
+export function klSketchHelpers(get: () => { ctx: CanvasRenderingContext2D; width: number; height: number; mouse: { x: number; y: number; down: boolean }; frame: number; dt: number; time: number; random?: () => number }): Record<string, unknown>;
 export function klCompileSketch(code: string, P: Record<string, unknown>): { setup: ((s: unknown) => void) | null; draw: ((s: unknown) => void) | null; params: Record<string, unknown>; has: (k: string) => boolean; set: (k: string, v: number) => void };
 
 export interface KlSketchState { code: string; error: string | null; params: Record<string, unknown>; frame: number; ready: boolean; pressed: Record<string, number>; s: unknown }

@@ -307,6 +307,24 @@ export interface TakeTrack {
 /** An action that fired (a burst, Next line, a script button…), `t` seconds into the take. */
 export interface TakeEvent { t: number; do: ActionKind; layerId: string; amount: number }
 
+/**
+ * What an audio layer's sound looked like during a take (see lib/takeAudio.ts):
+ * analyser frames, about 30 a second, only while an audio layer was showing.
+ */
+export interface TakeAudioTrack {
+  /** 'live' (the audio input) or the id of an audio layer playing its own song. */
+  source: string;
+  /** The frames hold the waveform, the spectrum (log bands), or both. */
+  wave: boolean;
+  freq: boolean;
+  /** Points / bands per frame. */
+  bins: number;
+  /** Frame times: whole milliseconds since the previous frame, comma separated. */
+  times: string;
+  /** The frames, base64: 1 + bins × (wave + freq) bytes each (the first is 1 while the input was on). */
+  data: string;
+}
+
 export interface PlayTake {
   id: string;
   name: string;
@@ -315,6 +333,14 @@ export interface PlayTake {
   length: number;
   tracks: TakeTrack[];
   events: TakeEvent[];
+  /**
+   * The layers' random seed while it was played: unseeded particles, Script
+   * layers' random(), bodies' scatter. Playing it back and rendering it start
+   * the layers over with it, so they come out the same every time.
+   */
+  seed?: number;
+  /** Audio layers' sound, frame by frame (absent: none was showing). */
+  audioFrames?: TakeAudioTrack[];
 }
 
 /** A performance runs up to a minute. */
@@ -637,6 +663,22 @@ export function parseTake(raw: unknown): PlayTake | null {
     if (x.step === true) track.step = true;
     tracks.push(track);
   }
+  const audioFrames: TakeAudioTrack[] = [];
+  for (const a of Array.isArray(t.audioFrames) ? t.audioFrames.slice(0, 16) : []) {
+    if (!a || typeof a !== 'object') continue;
+    const x = a as Record<string, unknown>;
+    const bins = num(x.bins);
+    if (typeof x.source !== 'string' || !x.source || bins === null || bins < 1 || bins > 256 || bins !== Math.round(bins)) continue;
+    if (typeof x.times !== 'string' || !/^\d*(,\d+)*$/.test(x.times) || typeof x.data !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(x.data)) continue;
+    const wave = x.wave === true, freq = x.freq === true;
+    if (!wave && !freq) continue;
+    // Every frame has its bytes: base64 of frames × (1 + bins × parts).
+    const frames = x.times ? x.times.split(',').length : 0;
+    const bytes = Math.floor((x.data.length * 3) / 4) - (x.data.endsWith('==') ? 2 : x.data.endsWith('=') ? 1 : 0);
+    if (bytes !== frames * (1 + bins * ((wave ? 1 : 0) + (freq ? 1 : 0)))) continue;
+    chars += x.times.length + x.data.length;
+    audioFrames.push({ source: x.source.slice(0, 80), wave, freq, bins, times: x.times, data: x.data });
+  }
   if (chars > TAKE_MAX_CHARS) return null;
   const events: TakeEvent[] = [];
   for (const e of Array.isArray(t.events) ? t.events.slice(0, 5000) : []) {
@@ -652,6 +694,8 @@ export function parseTake(raw: unknown): PlayTake | null {
     id: t.id.slice(0, 80),
     name: typeof t.name === 'string' && t.name.trim() ? t.name.slice(0, 80) : 'Take',
     from, length, tracks, events,
+    ...(num(t.seed) !== null && (t.seed as number) > 0 ? { seed: Math.round(t.seed as number) } : {}),
+    ...(audioFrames.length ? { audioFrames } : {}),
   };
 }
 

@@ -26,7 +26,7 @@
  * sequences) between frames, keyed by layer id. Actions (burst, next line…)
  * are queued with kit.act() and applied on the next frame.
  */
-import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
+import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, stringSeed, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments } from './geometry.js';
 import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress } from './layers.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
@@ -56,9 +56,16 @@ export function createLayerKit() {
     } catch (e) { return null; }
   }
 
-  function randFor(id, seed) {
-    const s = parts.get(id);
-    return s && s.seedUsed === seed ? s.rand : seededRandom(seed);
+  // A session seed (a take recording, playing back or rendering): every random choice the layers
+  // make comes from a source seeded by it and the layer, so the same take runs the same way. 0 = Math.random.
+  let sessionSeed = 0;
+  const rngs = new Map();
+  function rngFor(id, salt) {
+    if (!sessionSeed) return Math.random;
+    const k = id + '|' + salt;
+    let r = rngs.get(k);
+    if (!r) { r = seededRandom(stringSeed(k, sessionSeed)); rngs.set(k, r); }
+    return r;
   }
 
   function textState(l, time) {
@@ -73,7 +80,7 @@ export function createLayerKit() {
   }
   function stepText(l, dir, time) {
     const t = textState(l, time), n = Math.max(1, String(l.text).split('\n').length);
-    if (dir === 'shuffle') { let k = Math.floor(Math.random() * n); if (n > 1 && k === t.index) k = (k + 1) % n; t.index = k; }
+    if (dir === 'shuffle') { let k = Math.floor(rngFor(l.id, 'text')() * n); if (n > 1 && k === t.index) k = (k + 1) % n; t.index = k; }
     else if (dir === 'reset') t.index = 0;
     else t.index = (t.index + (dir === 'prev' ? n - 1 : 1)) % n;
     t.changedAt = time;
@@ -242,15 +249,15 @@ export function createLayerKit() {
         case 'freeze': if (frozen.has(l.id)) frozen.delete(l.id); else frozen.add(l.id); { const b = bodies.get(l.id); if (b) b.st.frozen = frozen.has(l.id); } break;
         case 'next': case 'prev': case 'shuffle': if (l.kind === 'text') stepText(l, a.do, time); break;
         case 'clear': if (l.kind === 'brush') brushState(l.id).pts = []; break;
-        case 'drop': { const b = bodies.get(l.id); if (b) bdDrop(b.st, l, aspect, (env.value(l, 'size') * dpr) / H, Math.random); break; }
+        case 'drop': { const b = bodies.get(l.id); if (b) bdDrop(b.st, l, aspect, (env.value(l, 'size') * dpr) / H, rngFor(l.id, 'bodies')); break; }
         case 'reset':
           if (l.kind === 'text') stepText(l, 'reset', time);
           else if (l.kind === 'brush') brushState(l.id).pts = [];
-          else if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) bdDrop(b.st, l, aspect, (env.value(l, 'size') * dpr) / H, Math.random); }
+          else if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) bdDrop(b.st, l, aspect, (env.value(l, 'size') * dpr) / H, rngFor(l.id, 'bodies')); }
           else if (l.kind === 'particles') { if (!pending.has(l.id)) pending.set(l.id, []); pending.get(l.id).push(a); }
           break;
         case 'scatter':
-          if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) bdScatter(b.st, (a.amount || 1) * env.value(l, 'scatter'), Math.random); }
+          if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) bdScatter(b.st, (a.amount || 1) * env.value(l, 'scatter'), rngFor(l.id, 'bodies')); }
           else if (l.kind === 'particles') { if (!pending.has(l.id)) pending.set(l.id, []); pending.get(l.id).push(a); }
           break;
         case 'burst':
@@ -307,7 +314,7 @@ export function createLayerKit() {
           },
         },
         null: name => { const n = record.layers.find(x => x.kind === 'null' && (x.id === name || x.label === name)); return n ? { x: env.value(n, 'x') * W, y: (1 - env.value(n, 'y')) * H } : null; },
-        random: Math.random,
+        random: rngFor(l.id, 'script'),
       };
       const err = klSketchStep(st, s, l.paramDefs || [], l.clear);
       if (err) { if (env.scriptStatus) env.scriptStatus(l.id, err); return; }
@@ -404,7 +411,7 @@ export function createLayerKit() {
             const sizeH = (v('size') * dpr) / H;
             const key = l.source + '|' + l.text + '|' + l.count;
             let b = bodies.get(l.id);
-            if (!b || b.key !== key) { b = { key, st: bdCreate(l, aspect, sizeH, Math.random) }; bodies.set(l.id, b); }
+            if (!b || b.key !== key) { b = { key, st: bdCreate(l, aspect, sizeH, rngFor(l.id, 'bodies')) }; bodies.set(l.id, b); }
             b.st.frozen = frozen.has(l.id);
             const walls = zones.filter(z => !z.affects || z.affects === l.id);
             const solid = l.solidPicture && coarse ? geoFieldFromBrightness(coarse, KIT_COARSE_W, KIT_COARSE_H, v('threshold')) : null;
@@ -573,7 +580,8 @@ export function createLayerKit() {
     let s = parts.get(l.id);
     const dead = l.emit === 'burst';
     if (!s || s.seedUsed !== l.seed || s.emit !== l.emit) {
-      const rand = seededRandom(l.seed);
+      // Its own seed wins; unseeded, it follows the session's (a take) or Math.random.
+      const rand = l.seed ? seededRandom(l.seed) : rngFor(l.id, 'particles');
       s = { sim: createParticles(l.count, rand, dead), trail: s ? s.trail : null, rand, seedUsed: l.seed, emit: l.emit };
       parts.set(l.id, s);
     } else if (s.sim.count !== l.count) s.sim = resizeParticles(s.sim, l.count, s.rand, dead);
@@ -637,7 +645,10 @@ export function createLayerKit() {
     isAnimated(record) {
       return record.layers.some(l => (shown.has(l.id) ? shown.get(l.id) : l.visible) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && l.sequence) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera')));
     },
-    /** Forget all state (a new recording starts from scratch). */
-    reset() { parts.clear(); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
+    /**
+     * Forget all state (a new recording starts from scratch). `seed` (a take's)
+     * makes every random choice after this repeatable; none or 0 is Math.random.
+     */
+    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); parts.clear(); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
   };
 }
