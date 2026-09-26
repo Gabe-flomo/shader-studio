@@ -32,6 +32,7 @@ import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
 import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
 import { constantsItems } from '../../nodes/definitions/constants';
 import { canHaveInputExpr, getInputExpr } from '../../glsl/inputExpr';
+import { selectTokenOnDoubleClick, wrapOnKeyDown } from '../code/editKeys';
 import { InputExprPopover } from './InputExprPopover';
 import type { BezierEditorModal as BezierEditorModalT } from './BezierEditorModal';
 import type { TransformVecModal as TransformVecModalT } from './TransformVecModal';
@@ -3213,7 +3214,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           const socketError = errors?.find(e => e.socket === key);
           const inExpr = getInputExpr(node, key);
           const exprEligible = !isExternal && canHaveInputExpr(node, key);
-          const showExprMark = exprEligible && (!!inExpr || hoveredRowKey === key || exprEditKey === key);
+          const showExprMark = exprEligible && (!!inExpr || hoveredRowKey === key || exprEditKey === key || isTouchDevice);
 
           return (
             <div
@@ -3392,6 +3393,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   title={inExpr ? `ƒ ${inExpr}\nClick to edit the expression on this input` : 'Add an expression that modifies what arrives here (input * 2.0, input + sin(t)…)'}
                   onMouseDown={e => e.stopPropagation()}
                   onMouseUp={e => e.stopPropagation()}
+                  onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); setExprEditKey(k => (k === key ? null : key)); }}
                   onClick={e => { e.stopPropagation(); setExprEditKey(k => (k === key ? null : key)); }}
                   style={{
                     height: 18, maxWidth: inExpr ? 118 : undefined, padding: inExpr ? '0 6px' : '0 4px', marginLeft: 6, borderRadius: 5, border: 0, cursor: 'pointer',
@@ -3471,6 +3473,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   <input
                     type="text"
                     value={line.lhs}
+                    onDoubleClick={selectTokenOnDoubleClick}
+                    onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { lines: lines.map((l, j) => j === i ? { ...l, lhs: v } : l) }))}
                     onChange={e => {
                       const next = lines.map((l, j) => j === i ? { ...l, lhs: e.target.value } : l);
                       updateNodeParams(node.id, { lines: next });
@@ -3493,6 +3497,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   <input
                     type="text"
                     value={line.rhs}
+                    onDoubleClick={selectTokenOnDoubleClick}
+                    onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { lines: lines.map((l, j) => j === i ? { ...l, rhs: v } : l) }))}
                     onChange={e => {
                       const next = lines.map((l, j) => j === i ? { ...l, rhs: e.target.value } : l);
                       updateNodeParams(node.id, { lines: next });
@@ -3523,6 +3529,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 <input
                   type="text"
                   value={result}
+                  onDoubleClick={selectTokenOnDoubleClick}
+                  onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { result: v }))}
                   onChange={e => updateNodeParams(node.id, { result: e.target.value })}
                   placeholder="p"
                   style={{ ...inputStyle, flex: 1, color: tc.blue, border: `1px solid ${tc.surface1}` }}
@@ -3577,6 +3585,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                       type="text"
                       value={val}
                       spellCheck={false}
+                      onDoubleClick={selectTokenOnDoubleClick}
+                      onKeyDown={wrapOnKeyDown(v => updateNodeParams(node.id, { [pk]: v }))}
                       onChange={e => updateNodeParams(node.id, { [pk]: e.target.value })}
                       style={{
                         flex: 1, background: tc.crust, border: `1px solid ${tc.surface0}88`,

@@ -37,6 +37,7 @@ import { ctp } from './theme/palette';
 import { ExportModal } from './components/ExportModal';
 import type { PresentStage as PresentStageT } from './components/play/PresentStage';
 import type { ConvertPage as ConvertPageT } from './components/convert/ConvertPage';
+import { requestConvert } from './components/convert/convertHandoff';
 import { usePresent } from './components/play/presentStore';
 import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './components/KeyboardShortcutsModal';
 import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
@@ -488,6 +489,7 @@ function App() {
   const [showExport, setShowExport]           = useState(false);
   // After Materialize on the Convert page: the Studio, with the new graph in view.
   const openStudioFitted = useCallback(() => { setPage('studio'); setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(), 80); }, []);
+  const openConvertWith = useCallback((code: string) => { requestConvert(code); setPage('convert'); }, []);
   // Present › Exact records the website player's canvas instead of the app's.
   const [recordSource, setRecordSource]       = useState<HTMLCanvasElement | null>(null);
   const presentMode = usePresent(s => s.mode);
@@ -1039,7 +1041,7 @@ function App() {
     return (
       <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
-        <GLSLPage />
+        <GLSLPage onConvert={openConvertWith} />
       </div>
     );
   }
@@ -1054,7 +1056,7 @@ function App() {
         <DesktopTopNav compact page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
 
         {page === 'shortcuts' && <ShortcutsPage />}
-        {page === 'glsl' && <GLSLPage />}
+        {page === 'glsl' && <GLSLPage onConvert={openConvertWith} />}
         {page === 'convert' && <div style={{ flex: 1, position: 'relative', minWidth: 0 }}><ConvertPage onMaterialized={openStudioFitted} /></div>}
 
         <div style={{ display: (page === 'studio' || page === 'play') ? 'flex' : 'none', flex: 1, overflow: 'hidden' }}>
@@ -1212,7 +1214,7 @@ function App() {
                 )}
             </div>
           )}
-          {page === 'glsl' && <GLSLPage />}
+          {page === 'glsl' && <GLSLPage onConvert={openConvertWith} />}
           {page === 'convert' && <ConvertPage onMaterialized={openStudioFitted} />}
         </div>
 

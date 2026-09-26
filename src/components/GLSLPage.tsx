@@ -138,7 +138,7 @@ function persistShaders(list: SavedShader[]): FileResult {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function GLSLPage() {
+export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) {
   const tk = useTokens();
   const setRawGlslShader = useNodeGraphStore(s => s.setRawGlslShader);
   const nodeGraphShader  = useNodeGraphStore(s => s.fragmentShader);
@@ -308,6 +308,7 @@ export function GLSLPage() {
             <Button size="sm" variant="primary" icon="plus" onClick={() => { setShowSaveInput(true); setSaveNameVal(''); }}>Save</Button>
           )}
           <Button size="sm" variant="ghost" onClick={tidy} title="Rewrite the text as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
+          {onConvert && <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)} title="Open this shader on the Convert page and see the nodes it would become">Convert</Button>}
           <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => setCode(nodeGraphShader || BOILERPLATE)} />
           <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => setCode(BOILERPLATE)} />
           {!sideOpen && <IconButton icon="popout" label="Show saved shaders and functions" size="sm" onClick={() => setShowPanel(true)} />}

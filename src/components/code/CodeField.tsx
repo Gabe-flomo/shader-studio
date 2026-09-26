@@ -1,3 +1,4 @@
+import { selectTokenOnDoubleClick, wrapSelection } from './editKeys';
 import { useCallback, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -134,8 +135,11 @@ export function CodeField({
             autoCapitalize="off"
             autoCorrect="off"
             onChange={e => { onChange(e.target.value); placePopup(e.target.value, ac.update(e.target)); }}
+            onDoubleClick={selectTokenOnDoubleClick}
             onKeyDown={e => {
               if (ac.handleKey(e)) return;
+              const w = wrapSelection(e.key, value, e.currentTarget.selectionStart, e.currentTarget.selectionEnd);
+              if (w) { e.preventDefault(); const ta = e.currentTarget; onChange(w.text); requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(w.start, w.end); }); return; }
               if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey) {
                 e.preventDefault();
                 const ta = e.currentTarget;
@@ -235,7 +239,13 @@ export function CodeInput({
         autoCapitalize="off"
         autoCorrect="off"
         onChange={e => { onChange(e.target.value); placePopup(e.target, ac.update(e.target)); }}
-        onKeyDown={e => { if (!ac.handleKey(e)) onKeyDown?.(e); }}
+        onDoubleClick={selectTokenOnDoubleClick}
+        onKeyDown={e => {
+          if (ac.handleKey(e)) return;
+          const w = wrapSelection(e.key, value, e.currentTarget.selectionStart ?? 0, e.currentTarget.selectionEnd ?? 0);
+          if (w) { e.preventDefault(); const el = e.currentTarget; onChange(w.text); requestAnimationFrame(() => { el.focus(); el.setSelectionRange(w.start, w.end); }); return; }
+          onKeyDown?.(e);
+        }}
         onScroll={e => setScrollX(e.currentTarget.scrollLeft)}
         onKeyUp={e => setScrollX(e.currentTarget.scrollLeft)}
         onSelect={e => setScrollX(e.currentTarget.scrollLeft)}

@@ -21,6 +21,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { glslToGraph, normaliseHostShader, type ConversionResult } from '../../glslToGraph';
 import { tidyGlsl } from '../../glsl/format';
 import { optimizeGraph, type OptimizeReport } from '../../optimize/optimizeGraph';
+import { onHandoff, takeHandoff } from './convertHandoff';
 import { dialectLabel } from '../../glsl/dialects';
 import { parseGlslError, friendlyGlsl } from '../../compiler/nodeErrors';
 import { compileGraph } from '../../compiler/graphCompiler';
@@ -99,11 +100,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 }` },
 };
 
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
-  useEffect(() => { const id = setTimeout(() => setV(value), ms); return () => clearTimeout(id); }, [value, ms]);
-  return v;
-}
+/** Nothing pasted yet: no nodes, and nothing to complain about. */
+const EMPTY: ConversionResult = { nodes: [], report: { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0, loops: 0 } } };
 
 /**
  * Where the canvas starts: the whole graph when it fits at a readable zoom,
@@ -146,15 +144,22 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const tk = useTokens();
   const setScratchNodes = useNodeGraphStore(s => s.setScratchNodes);
   const endScratch = useNodeGraphStore(s => s.endScratch);
-  const [code, setCode] = useState(() => { try { return localStorage.getItem(CODE_KEY) || EXAMPLES.circle.code; } catch { return EXAMPLES.circle.code; } });
+  // `code` is the editor's text; `source` is what was last converted. Convert runs on the button
+  // (or ⌘↵), not on every keystroke, so a half-typed edit never flashes errors or a broken graph.
+  const [code, setCode] = useState(() => { const h = takeHandoff(); if (h !== null) return h; try { return localStorage.getItem(CODE_KEY) || EXAMPLES.circle.code; } catch { return EXAMPLES.circle.code; } });
+  const [source, setSource] = useState(code);
+  const stale = code !== source;
   const [asBlock, setAsBlock] = useState<Set<string>>(() => new Set());
   const [selected, setSelected] = useState<string | null>(null);
   const [diff, setDiff] = useState<PairDiff | null>(null);
   const [oneNode, setOneNode] = useState<{ code: string; entry: string; label: string } | null>(null);
-  const debounced = useDebounced(code, 250);
+  // On a phone the page is one pane at a time: the code, the graph, or the check.
+  const [pane, setPane] = useState<'code' | 'graph' | 'check'>('code');
   useEffect(() => { try { localStorage.setItem(CODE_KEY, code); } catch { /* preference only */ } }, [code]);
+  useEffect(() => onHandoff(c => { setCode(c); setSource(c); setAsBlock(new Set()); setSelected(null); setPane('graph'); }), []);
+  const empty = !source.trim();
 
-  const raw: ConversionResult = useMemo(() => glslToGraph(debounced, { asBlock }), [debounced, asBlock]);
+  const raw: ConversionResult = useMemo(() => (source.trim() ? glslToGraph(source, { asBlock }) : EMPTY), [source, asBlock]);
   // Optimised: the converted graph with runs of math cards folded into blocks and short float runs absorbed into
   // input expressions (the picture is the same; the check proves it).
   const [optimised, setOptimised] = useState(() => { try { return localStorage.getItem(OPT_KEY) !== 'off'; } catch { return true; } });
@@ -162,7 +167,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const opt = useMemo(() => (optimised && raw.nodes.length ? optimizeGraph(raw.nodes, { minChain: 3, keepSliders: true }) : null), [raw, optimised]);
   const conv: ConversionResult = useMemo(() => (opt ? { nodes: opt.nodes, report: { ...raw.report, notes: [...raw.report.notes, ...(opt.report.folds.length ? [optimisedNote(opt.report)] : [])] } } : raw), [raw, opt]);
   const compiled = useMemo(() => (conv.nodes.length ? compileGraph({ nodes: conv.nodes }) : null), [conv]);
-  const wrapped = useMemo(() => wrapOriginal(debounced), [debounced]);
+  const wrapped = useMemo(() => wrapOriginal(source), [source]);
   const original = wrapped.code;
   const uniforms = useMemo(() => compiled?.paramUniforms ?? {}, [compiled]);
   const graphFrag = compiled?.success ? compiled.fragmentShader : null;
@@ -182,6 +187,12 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
     }
   }, [conv, setScratchNodes]);
   useEffect(() => () => endScratch(false), [endScratch]);
+  // On a phone the canvas mounts when its pane opens: place the view then.
+  useEffect(() => {
+    if (!compact || pane !== 'graph') return;
+    const t = setTimeout(() => showStart(conv.nodes, canvasWrap.current), 120);
+    return () => clearTimeout(t);
+  }, [compact, pane, conv]);
 
   const { report } = conv;
   const blocked = report.unsupported.length > 0 || !compiled?.success;
@@ -205,12 +216,17 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const tidy = () => {
     const t = tidyGlsl(code);
     if (!t.changed) { toast.info('Already tidy'); return; }
-    changeCode(t.code);
+    load(t.code);
     toast.success(t.dialect === 'studio' ? 'Tidied' : `Tidied, read as ${dialectLabel(t.dialect)}`, { message: [...t.notes, ...t.unsupported].join(' · ') || 'Indentation and spacing made regular.' });
   };
   const sel = conv.nodes.find(n => n.id === selected) ?? null;
   const toggleBlock = (id: string) => setAsBlock(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const changeCode = (next: string) => { setCode(next); setAsBlock(new Set()); setSelected(null); };
+  /** Convert what the editor holds now. */
+  const run = () => { setSource(code); setAsBlock(new Set()); setSelected(null); if (compact) setPane('graph'); };
+  /** A whole new shader (an example, a file, Tidy, Clear): converted straight away. */
+  const load = (next: string) => { changeCode(next); setSource(next); };
+  const onPaneKey = (e: React.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(); } };
 
   const materialize = () => {
     if (blocked) return;
@@ -226,7 +242,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   };
   const loadFile = () => {
     const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.glsl,.frag,.fs,.txt' });
-    input.onchange = async () => { const f = input.files?.[0]; if (f) changeCode(await f.text()); };
+    input.onchange = async () => { const f = input.files?.[0]; if (f) load(await f.text()); };
     input.click();
   };
 
@@ -265,8 +281,18 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
     warnedCount ? `${warnedCount} ≈` : null,
   ].filter(Boolean).join(' · ');
 
+  const formSwitch = <Segmented size="sm" ariaLabel="Graph form" value={optimised ? 'opt' : 'raw'} onChange={v => setOptimised(v === 'opt')} options={[{ value: 'raw', label: 'As written' }, { value: 'opt', label: 'Optimised' }]} />;
+  const convertButton = (
+    <Button size="sm" variant={stale ? 'primary' : 'secondary'} icon="spark" onClick={run} disabled={!stale && (empty || !code.trim())} title={stale ? 'Convert the shader as it is now (⌘↵ / Ctrl+Enter)' : 'Converted. Edit the shader and press again to run it'}>Convert</Button>
+  );
   const check = (
-    <div style={{ borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, flexShrink: 0, maxHeight: compact ? undefined : '46%', display: 'flex', flexDirection: 'column' }}>
+    <div style={compact
+      ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle }
+      : { borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, flexShrink: 0, maxHeight: '46%', display: 'flex', flexDirection: 'column' }}>
+      {compact && <div style={{ padding: '10px 14px 0', display: 'flex', gap: 8, alignItems: 'center' }}>{formSwitch}</div>}
+      {empty ? (
+        <div style={{ padding: '14px', color: tk.text.faint, lineHeight: 1.5 }}>Paste a fragment shader, or pick an example, and press Convert. The check compares the original with the graph here.</div>
+      ) : (
       <div style={{ padding: '10px 14px 0', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         <RenderPair original={original} graph={graphFrag} uniforms={uniforms} onDiff={onDiff} size={84} />
         <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
@@ -278,9 +304,10 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
             </div>
           ) : <span style={{ color: tk.text.faint }}>{graphFrag ? 'Comparing…' : 'Nothing to compare yet'}</span>}
           {diff && !('error' in diff) && <div style={{ color: tk.text.muted, font: `500 11px ${fontFamily.mono}`, marginTop: 3 }}>max {diff.max}/255 · {diff.badPct.toFixed(2)}% off</div>}
-          <div style={{ color: tk.text.muted, fontSize: 11.5, lineHeight: 1.45, marginTop: 6 }}>{summary}</div>
+          <div style={{ color: tk.text.muted, fontSize: 11.5, lineHeight: 1.45, marginTop: 6 }}>{summary}{stale && <span style={{ color: tk.status.warningText }}> · edited since: press Convert</span>}</div>
         </div>
       </div>
+      )}
       <div style={{ overflowY: 'auto', padding: '0 14px 14px', minHeight: 0 }}>
         {diff && 'error' in diff && <div style={{ marginTop: 10 }}><Callout tone="warning" title="WebGL rejected the shader" details={diff.error}>The details show its message.</Callout></div>}
         {report.unsupported.length > 0 && (
@@ -331,48 +358,81 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
     </div>
   );
 
-  return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: compact ? 'column' : 'row', background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }}>
-      {/* Left: the shader, as the GLSL page shows it */}
-      <div style={{ width: compact ? undefined : paneW, height: compact ? '42%' : undefined, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: compact ? undefined : `1px solid ${tk.border.default}`, borderBottom: compact ? `1px solid ${tk.border.default}` : undefined, minWidth: 0, position: 'relative' }}>
-        <div style={panelHead}>
-          <span style={{ fontWeight: 650, fontSize: 13.5, marginRight: 'auto', whiteSpace: 'nowrap' }}>Fragment shader</span>
-          <Select ariaLabel="Example shader" value="" height={30} onChange={k => { if (EXAMPLES[k]) changeCode(EXAMPLES[k].code); }}
-            options={[{ value: '', label: 'Examples…' }, ...Object.entries(EXAMPLES).map(([k, e]) => ({ value: k, label: e.label }))]} />
-          <IconButton icon="import" label="Open a .glsl / .frag file" size="sm" onClick={loadFile} />
-          <Button size="sm" variant="ghost" onClick={tidy} disabled={!code.trim()} title="Rewrite the paste as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
-          <Button size="sm" variant="ghost" onClick={() => changeCode('')} disabled={!code.trim()} title="Empty the editor">Clear</Button>
+  const editorHead = (
+    <div style={panelHead}>
+      <span style={{ fontWeight: 650, fontSize: 13.5, marginRight: 'auto', whiteSpace: 'nowrap' }}>{compact ? 'Shader' : 'Fragment shader'}</span>
+      <Select ariaLabel="Example shader" value="" height={30} onChange={k => { if (EXAMPLES[k]) load(EXAMPLES[k].code); }}
+        options={[{ value: '', label: 'Examples…' }, ...Object.entries(EXAMPLES).map(([k, e]) => ({ value: k, label: e.label }))]} />
+      <IconButton icon="import" label="Open a .glsl / .frag file" size="sm" onClick={loadFile} />
+      <Button size="sm" variant="ghost" onClick={tidy} disabled={!code.trim()} title="Rewrite the paste as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
+      <Button size="sm" variant="ghost" onClick={() => load('')} disabled={!code.trim()} title="Empty the editor">Clear</Button>
+      {!compact && convertButton}
+    </div>
+  );
+  const editor = <GlslEditor value={code} onChange={changeCode} errorLines={errorLines} placeholder={'Paste a fragment shader: a plain void main() with gl_FragColor, or a Shadertoy mainImage().'} />;
+  const canvas = (
+    <div ref={canvasWrap} style={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative' }}
+      onMouseDownCapture={e => { press.current = { x: e.clientX, y: e.clientY }; }} onClick={onCanvasClick}>
+      <NodeGraph redesignToolbar locked />
+      <div style={{ position: 'absolute', top: 66, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', alignItems: 'center', gap: 8, padding: compact ? '6px 12px' : '4px 4px 4px 12px', borderRadius: 10, maxWidth: 'calc(100% - 32px)', background: tk.bg.panel, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${alpha(tk.accent.base, 0.35)}`, color: tk.text.secondary, whiteSpace: 'nowrap' }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: stale ? tk.status.warning : tk.accent.base, flexShrink: 0 }} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Read-only preview <span style={{ color: tk.text.muted }}>· {summary}</span>{stale && <span style={{ color: tk.status.warningText }}> · edited: press Convert</span>}</span>
+        {!compact && formSwitch}
+        {!compact && <Button size="sm" variant="ghost" onClick={keepAsOne} title="The older import: the whole shader as one code node">Keep as one node…</Button>}
+        {!compact && <Button size="sm" variant="primary" icon="nodes" disabled={blocked} onClick={materialize} title={blocked ? 'Fix what the check lists first' : 'Keep these nodes as the graph and open the Studio (undoable)'}>Materialize</Button>}
+      </div>
+      {conv.nodes.length === 0 && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <div style={{ maxWidth: 380, padding: '14px 18px', borderRadius: radius.lg, background: tk.bg.panel, boxShadow: tk.shadow.float, color: tk.text.muted, textAlign: 'center', lineHeight: 1.5 }}>
+            {report.unsupported.length ? 'This shader can’t become a graph yet; the check says why. You can still keep it as one node.' : empty ? 'Paste a shader and press Convert to see the nodes it would become.' : 'Nothing to show for this shader.'}
+          </div>
         </div>
-        <GlslEditor value={code} onChange={changeCode} errorLines={errorLines} placeholder={'Paste a fragment shader: a plain void main() with gl_FragColor, or a Shadertoy mainImage().'} />
-        {!compact && check}
-        {!compact && <div onMouseDown={startPaneResize} title="Drag to resize" style={{ position: 'absolute', top: 0, bottom: 0, right: -3, width: 6, cursor: 'col-resize', zIndex: 5 }} />}
+      )}
+      {sel && (
+        <div style={{ position: 'absolute', left: 16, bottom: 16, zIndex: 20, width: 340, maxWidth: 'calc(100% - 32px)', maxHeight: '55%', overflowY: 'auto', padding: '10px 12px', borderRadius: radius.lg, background: tk.bg.panel, boxShadow: tk.shadow.float }} onClick={e => e.stopPropagation()} onMouseDownCapture={e => e.stopPropagation()}>
+          <Detail node={sel} nodes={conv.nodes} report={report} asBlock={asBlock} onToggleBlock={toggleBlock} onClose={() => { setSelected(null); useNodeGraphStore.getState().setSelectedNodeId(null); }} />
+        </div>
+      )}
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }} onKeyDownCapture={onPaneKey}>
+        <div style={{ height: 48, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', borderBottom: `1px solid ${tk.border.subtle}` }}>
+          <Segmented size="sm" ariaLabel="Convert view" value={pane} onChange={setPane} options={[{ value: 'code', label: 'Code' }, { value: 'graph', label: conv.nodes.length ? `Graph · ${conv.nodes.length}` : 'Graph' }, { value: 'check', label: blocked && !empty ? 'Check !' : 'Check' }]} />
+          <span style={{ flex: 1 }} />
+          {convertButton}
+        </div>
+        {/* The code pane stays mounted (its undo history and scroll survive a look at the graph). */}
+        <div style={{ flex: 1, minHeight: 0, display: pane === 'code' ? 'flex' : 'none', flexDirection: 'column', position: 'relative' }}>
+          {editorHead}
+          {editor}
+        </div>
+        {pane === 'graph' && canvas}
+        {pane === 'check' && check}
+        <div style={{ height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderTop: `1px solid ${tk.border.subtle}` }}>
+          <Button size="sm" variant="ghost" onClick={keepAsOne} disabled={!code.trim()} title="The older import: the whole shader as one code node">Keep as one node…</Button>
+          <span style={{ flex: 1 }} />
+          <Button size="sm" variant="primary" icon="nodes" disabled={blocked || empty} onClick={materialize} title={blocked ? 'Fix what the check lists first' : 'Keep these nodes as the graph and open the Studio (undoable)'}>Materialize</Button>
+        </div>
+        {oneNode && <PublishNodeModal source={{ kind: 'code', code: oneNode.code, entry: oneNode.entry, label: oneNode.label }} onClose={() => setOneNode(null)} />}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'row', background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }}>
+      {/* Left: the shader, as the GLSL page shows it */}
+      <div style={{ width: paneW, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, minWidth: 0, position: 'relative' }} onKeyDownCapture={onPaneKey}>
+        {editorHead}
+        {editor}
+        {check}
+        <div onMouseDown={startPaneResize} title="Drag to resize" style={{ position: 'absolute', top: 0, bottom: 0, right: -3, width: 6, cursor: 'col-resize', zIndex: 5 }} />
       </div>
 
       {/* Centre: the Studio canvas, read-only */}
-      <div ref={canvasWrap} style={{ flex: 1, minWidth: 0, minHeight: compact ? 300 : 0, position: 'relative' }}
-        onMouseDownCapture={e => { press.current = { x: e.clientX, y: e.clientY }; }} onClick={onCanvasClick}>
-        <NodeGraph redesignToolbar locked />
-        <div style={{ position: 'absolute', top: 66, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px 4px 12px', borderRadius: 10, maxWidth: 'calc(100% - 32px)', background: tk.bg.panel, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${alpha(tk.accent.base, 0.35)}`, color: tk.text.secondary, whiteSpace: 'nowrap' }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: tk.accent.base, flexShrink: 0 }} />
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Read-only preview <span style={{ color: tk.text.muted }}>· {summary}</span></span>
-          <Segmented size="sm" ariaLabel="Graph form" value={optimised ? 'opt' : 'raw'} onChange={v => setOptimised(v === 'opt')} options={[{ value: 'raw', label: 'As written' }, { value: 'opt', label: 'Optimised' }]} />
-          <Button size="sm" variant="ghost" onClick={keepAsOne} title="The older import: the whole shader as one code node">Keep as one node…</Button>
-          <Button size="sm" variant="primary" icon="nodes" disabled={blocked} onClick={materialize} title={blocked ? 'Fix what the check lists first' : 'Keep these nodes as the graph and open the Studio (undoable)'}>Materialize</Button>
-        </div>
-        {conv.nodes.length === 0 && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ maxWidth: 380, padding: '14px 18px', borderRadius: radius.lg, background: tk.bg.panel, boxShadow: tk.shadow.float, color: tk.text.muted, textAlign: 'center', lineHeight: 1.5 }}>
-              {report.unsupported.length ? 'This shader can’t become a graph yet; the check under the editor says why. You can still keep it as one node.' : 'Paste a shader to see the nodes it would become.'}
-            </div>
-          </div>
-        )}
-        {sel && (
-          <div style={{ position: 'absolute', left: 16, bottom: 16, zIndex: 20, width: 340, maxWidth: 'calc(100% - 32px)', maxHeight: '55%', overflowY: 'auto', padding: '10px 12px', borderRadius: radius.lg, background: tk.bg.panel, boxShadow: tk.shadow.float }} onClick={e => e.stopPropagation()} onMouseDownCapture={e => e.stopPropagation()}>
-            <Detail node={sel} nodes={conv.nodes} report={report} asBlock={asBlock} onToggleBlock={toggleBlock} onClose={() => { setSelected(null); useNodeGraphStore.getState().setSelectedNodeId(null); }} />
-          </div>
-        )}
-      </div>
-      {compact && check}
+      {canvas}
 
       {oneNode && <PublishNodeModal source={{ kind: 'code', code: oneNode.code, entry: oneNode.entry, label: oneNode.label }} onClose={() => setOneNode(null)} />}
     </div>

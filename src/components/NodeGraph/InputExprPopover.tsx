@@ -61,7 +61,7 @@ export function InputExprPopover({ node, inputKey, anchorRef, onClose }: {
   };
 
   return (
-    <Popover anchorRef={anchorRef} onClose={onClose} width={360} padding={12}>
+    <Popover anchorRef={anchorRef} onClose={onClose} width={Math.min(360, (typeof window !== 'undefined' ? window.innerWidth : 360) - 24)} padding={12}>
       <div onMouseDown={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: radius.sm, background: alpha(tk.kind.expr, 0.14), color: tk.kind.expr }}><Icon name="fn" size={13} /></span>

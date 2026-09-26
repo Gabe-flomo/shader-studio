@@ -1,3 +1,4 @@
+import { selectTokenOnDoubleClick, wrapSelection } from '../code/editKeys';
 import React, { useRef, useCallback, useEffect } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
@@ -96,7 +97,12 @@ export function GlslTextarea({ value, onChange, onKeyDown, onFocus, hasError }: 
         value={value}
         spellCheck={false}
         onChange={e => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
+        onDoubleClick={selectTokenOnDoubleClick}
+        onKeyDown={e => {
+          const w = wrapSelection(e.key, e.currentTarget.value, e.currentTarget.selectionStart, e.currentTarget.selectionEnd);
+          if (w) { e.preventDefault(); const ta = e.currentTarget; onChange(w.text); requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(w.start, w.end); }); return; }
+          onKeyDown?.(e);
+        }}
         onFocus={e => onFocus?.(e.currentTarget)}
         onScroll={syncScroll}
         style={{

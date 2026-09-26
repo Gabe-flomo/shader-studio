@@ -25,6 +25,7 @@ import { GROUP_PORT_SENTINEL, type GraphNode, type InputSocket, type DataType, t
 import { getNodeDefinition } from '../nodes/definitions';
 import { groupNodesByRank, estimateNodeHeight } from '../store/graphLayout';
 import { translateToStudio, dialectLabel } from '../glsl/dialects';
+import { threadGlobals } from './threadGlobals';
 import type { ConstantsItem } from '../nodes/definitions/constants';
 import { ALWAYS_HELPERS_GLSL } from '../compiler/shaderAssembler';
 
@@ -787,7 +788,14 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
           const c = calleeOf(e.identifier as Ast); const u = c.ctor ? undefined : fns.get(c.name);
           if (u) { const o = overloadFor(u, (e.args as Ast[] | undefined ?? []).filter(x => x.type !== 'literal'), env); if (o.params.some(p => p.qual !== 'in')) { outCall(e, env, o); return; } }
         }
-        if (e.type === 'postfix' && ['++', '--'].includes(((e.postfix as Ast).operator as Ast)?.literal as string ?? (e.postfix as Ast).type)) throw new Unmapped('increment');
+        // x++ / x-- / ++x / --x on a named value: x += 1.0 (a float or a vector, Add broadcasts).
+        const incOf = (n: Ast): { target: Ast; op: string } | null => {
+          if (n.type === 'postfix') { const pf = n.postfix as Ast; const lit = ((pf.operator as Ast)?.literal as string | undefined) ?? (pf.literal as string | undefined) ?? pf.type; if (lit === '++' || lit === '--') return { target: n.expression as Ast, op: lit }; }
+          if (n.type === 'unary') { const lit = (n.operator as Ast)?.literal as string | undefined; if (lit === '++' || lit === '--') return { target: n.expression as Ast, op: lit }; }
+          return null;
+        };
+        const inc = incOf(e);
+        if (inc) { assign(inc.target, inc.op === '++' ? '+=' : '-=', { type: 'float_constant', token: '1.0' } as Ast, env); return; }
         throw new Unmapped(`statement ${e.type}`);
       }
       case 'compound_statement': stmts(s.statements as Ast[], env); return;
@@ -795,8 +803,10 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         const cond = s.condition as Ast;
         const thenEnv = new Map(env), elseEnv = new Map(env);
         stmt(s.body as Ast, thenEnv);
-        const els = s.else as Ast | undefined;
-        if (els && (els as Ast).type !== 'literal') stmt((els as Ast).type === 'keyword' ? (s.elseBody as Ast) : els, elseEnv);
+        // The parser gives `else` as a node, or as [keyword, statement] on some shapes.
+        const rawElse = s.else as Ast | Ast[] | undefined;
+        const els = Array.isArray(rawElse) ? rawElse.filter(x => x.type !== 'keyword' && x.type !== 'literal').pop() : rawElse;
+        if (els && els.type !== 'literal') stmt(els.type === 'keyword' ? (s.elseBody as Ast) : els, elseEnv);
         const changed = new Set<string>([...thenEnv.keys(), ...elseEnv.keys()].filter(k => thenEnv.get(k) !== env.get(k) || elseEnv.get(k) !== env.get(k)));
         for (const k of changed) {
           if (!env.has(k)) continue; // a temp local to the branch
@@ -823,7 +833,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       }
       case 'return_statement': case 'discard_statement': case 'break_statement': case 'continue_statement': case 'while_statement': case 'do_statement': case 'switch_statement':
         throw new Unsupported(`${s.type.replace('_statement', '')} in main()`);
-      default: throw new Unmapped(`statement ${s.type}`);
+      default: throw new Unmapped(`statement ${s.type ?? JSON.stringify(s).slice(0, 120)}`);
     }
   }
 
@@ -857,14 +867,59 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
  * `mainImage(out vec4 fragColor, in vec2 fragCoord)` becomes main(), iTime and
  * friends become u_time…, so a pasted Shadertoy shader converts like our own.
  */
+interface MacroDef { name: string; params: string[] | null; body: string }
+const MACRO_LINE = /^[ \t]*#define[ \t]+(\w+)(\(([^)]*)\))?(?:[ \t]+([^\n]*?))?[ \t]*$/gm;
+function collectMacros(src: string): { stripped: string; defs: MacroDef[] } {
+  const defs: MacroDef[] = [];
+  const stripped = src.replace(MACRO_LINE, (whole, name: string, paren: string | undefined, params: string | undefined, raw: string | undefined) => {
+    const body = (raw ?? '').replace(/\/\/.*$/, '').replace(/\/\*.*?\*\//g, '').trim();
+    if (!body && !paren) return whole; // a flag for #ifdef: the preprocessor's business
+    defs.push({ name, params: paren ? params!.split(',').map(p => p.trim()).filter(Boolean) : null, body });
+    return '';
+  });
+  return { stripped, defs };
+}
+/** Expand macros until nothing changes (bounded); a call's arguments split at top-level commas. */
+function expandMacros(src: string, defs: MacroDef[]): string {
+  const byName = new Map(defs.map(d => [d.name, d]));
+  const subst = (body: string, params: string[], args: string[]) => body.replace(/\b([A-Za-z_]\w*)\b/g, (w, id: string) => { const i = params.indexOf(id); return i >= 0 ? (args[i] ?? '') : w; });
+  let s = src;
+  for (let pass = 0; pass < 24; pass++) {
+    let out = '', changed = false, i = 0;
+    while (i < s.length) {
+      const c = s[i];
+      if (!/[A-Za-z_]/.test(c) || (i > 0 && /[\w.]/.test(s[i - 1]))) { out += c; i++; continue; }
+      let j = i + 1; while (j < s.length && /\w/.test(s[j])) j++;
+      const id = s.slice(i, j); const d = byName.get(id);
+      if (!d) { out += id; i = j; continue; }
+      if (!d.params) { out += `(${d.body})`; i = j; changed = true; continue; }
+      let k = j; while (k < s.length && /\s/.test(s[k])) k++;
+      if (s[k] !== '(') { out += id; i = j; continue; }
+      // Arguments to the matching `)`, split at depth 0.
+      let depth = 1, p = k + 1; const args: string[] = []; let cur = '';
+      for (; p < s.length && depth > 0; p++) { const ch = s[p]; if (ch === '(') depth++; else if (ch === ')') { depth--; if (depth === 0) break; } if (ch === ',' && depth === 1) { args.push(cur); cur = ''; continue; } cur += ch; }
+      if (depth !== 0) { out += id; i = j; continue; }
+      args.push(cur);
+      out += `(${subst(d.body, d.params, args.map(a => a.trim()))})`;
+      i = p + 1; changed = true;
+    }
+    s = out;
+    if (!changed) break;
+  }
+  return s;
+}
+
 export function normaliseHostShader(source: string): { code: string; toSourceLine: (line: number) => number } { return hostToOurs(source, { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0, loops: 0 } }); }
 
 function hostToOurs(source: string, report: ConversionReport): { code: string; toSourceLine: (line: number) => number } {
   // Another host's names (Shadertoy, GLSL Sandbox, twigl, ES 3.00) become ours first.
-  const tr = translateToStudio(source);
-  let s = tr.code;
+  const tr = translateToStudio(source, { lowerReturns: true });
   if (tr.dialect !== 'studio') report.notes.push(`Read as ${dialectLabel(tr.dialect)}: ${tr.notes.join('; ')}`);
   for (const u of tr.unsupported) report.notes.push(u);
+  // A global that main() assigns and helpers read travels as a parameter instead (threadGlobals.ts).
+  const th = threadGlobals(tr.code);
+  let s = th.code;
+  report.notes.push(...th.notes);
   // The compiled shader defines PI and TAU as macros; a shader's own constant of that name would be a macro clash.
   for (const name of ['PI', 'TAU']) if (new RegExp(`\\b(?:const\\s+)?(?:float|int)\\s+${name}\\s*=`).test(s)) s = s.replace(new RegExp(`(?<![\\w.])${name}\\b`, 'g'), `${name}_`);
   // A function named like one of the app's always-included helpers (smin, fbm, rot2d…) would lose to it: rename ours.
@@ -874,15 +929,15 @@ function hostToOurs(source: string, report: ConversionReport): { code: string; t
   for (const n of clashes) s = s.replace(new RegExp(`\\b${n}\\b`, 'g'), `${n}_`);
   if (clashes.length) report.notes.push(`Renamed ${clashes.join(', ')}: the app has a built-in helper of that name`);
   // Simple object-like macros (#define PI 3.14159) are expanded; anything else the preprocessor would do is left to fail loudly.
-  const macros: Array<[RegExp, string]> = [];
-  // A comment after the value is a comment, not part of it (`#define W 2. // wiggles`); function-like macros (`#define F(x)`) are left alone.
-  s = s.replace(/^[ \t]*#define[ \t]+(\w+)(?!\()[ \t]+([^\n]*?)[ \t]*$/gm, (whole, name: string, raw: string) => {
-    const value = raw.replace(/\/\/.*$/, '').replace(/\/\*.*?\*\//g, '').trim();
-    if (!value) return whole; // a flag for #ifdef: the preprocessor's business
-    macros.push([new RegExp(`\\b${name}\\b`, 'g'), `(${value})`]); return '';
-  });
-  for (const [re, to] of macros) s = s.replace(re, to);
-  if (macros.length) report.notes.push(`${macros.length} #define${macros.length === 1 ? '' : 's'} expanded`);
+  // Object-like (`#define PI 3.14`) and function-like (`#define K(U) smoothstep(.2, .0, length(U))`) macros
+  // are expanded the way the preprocessor would: arguments substituted, the result rescanned, so a macro
+  // may use another. A comment after the value is a comment, not part of it; a bare flag stays for #ifdef.
+  // Comments go (newlines kept, so lines still map): a commented-out #define or a name in prose is not code.
+  s = s.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' ')).replace(/\/\/[^\n]*/g, '');
+  const macros = collectMacros(s);
+  s = macros.stripped;
+  if (macros.defs.length) s = expandMacros(s, macros.defs);
+  if (macros.defs.length) report.notes.push(`${macros.defs.length} #define${macros.defs.length === 1 ? '' : 's'} expanded`);
   // Precision, uniform and varying lines are the host's, not the shader's (the translator adds the ones a paste lacks).
   // Lines are blanked, not removed, so an error's line number still points into the paste.
   s = s.replace(/^[ \t]*precision\s+\w+\s+float\s*;[ \t]*$/gm, '').replace(/^[ \t]*varying\s+vec2\s+vUv\s*;[ \t]*$/gm, '');

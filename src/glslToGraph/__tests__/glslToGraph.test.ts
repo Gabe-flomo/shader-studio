@@ -188,9 +188,9 @@ describe('inexact nodes are offered with a warning, or kept as code on request',
     expect(compileGraph({ nodes: r.nodes }).success).toBe(true);
   });
 
-  it('expands #defines without their trailing comments, and leaves flags and function-like macros alone', () => {
-    const r = glslToGraph('#define W 2. // frequency\n#define FLAG\n#define SQ(x) ((x)*(x))\nvoid main(){ vec2 uv = gl_FragCoord.xy / u_resolution.xy; gl_FragColor = vec4(vec3(sin(uv.x * W + u_time)), 1.0); }');
-    expect(r.report.notes.some(n => /1 #define expanded/.test(n))).toBe(true);
+  it('expands #defines without their trailing comments, function-like ones with arguments, and leaves flags alone', () => {
+    const r = glslToGraph('#define W 2. // frequency\n#define FLAG\n#define SQ(x) ((x)*(x))\n#define N(U,T) (U + (T).x)\nvoid main(){ vec2 uv = gl_FragCoord.xy / u_resolution.xy; gl_FragColor = vec4(vec3(sin(N(SQ(uv.x), vec2(W, 0.0)) + u_time)), 1.0); }');
+    expect(r.report.notes.some(n => /3 #defines expanded/.test(n))).toBe(true);
     expect(r.nodes.length).toBeGreaterThan(0);
     expect(compileGraph({ nodes: r.nodes }).success).toBe(true);
   });

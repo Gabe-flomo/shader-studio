@@ -53,7 +53,17 @@ function closeOf(src: string, open: number): number {
 /** Whole-word rename, leaving member accesses (`.time`) alone. */
 const renameWord = (src: string, from: string, to: string) => src.replace(new RegExp(`(?<![\\w.])${from}\\b`, 'g'), to);
 
-export function translateToStudio(source: string): Translation {
+export interface TranslateOptions {
+  /**
+   * Lower an early `return;` in a Shadertoy mainImage to straight-line math
+   * (the converter wants no control flow): each return snapshots the colour
+   * and a flag, the rest of main still runs, and the output picks the first
+   * snapshot taken. The GLSL page compiles the return as is.
+   */
+  lowerReturns?: boolean;
+}
+
+export function translateToStudio(source: string, options: TranslateOptions = {}): Translation {
   const dialect = detectDialect(source);
   const notes: string[] = []; const unsupported: string[] = [];
   // Pastes carry non-breaking spaces and other Unicode blanks (web pages, chat, PDFs); GLSL's lexer rejects them.
@@ -104,7 +114,29 @@ export function translateToStudio(source: string): Translation {
       // may use the same letter for something else, as `vec2 C` does in many shaders).
       const bodyEnd = closeOf(s, bodyStart);
       const end = bodyEnd > 0 ? bodyEnd : s.length;
-      s = s.slice(0, bodyStart) + renameWord(s.slice(bodyStart, end), m[1], 'gl_FragColor') + s.slice(end);
+      const body = s.slice(bodyStart, end);
+      const outName = m[1];
+      // Read as well as written (`O *= 0.`, `O++`, `col = O`), or an early `return;`: the out
+      // parameter is a local, written to gl_FragColor at every exit. Only assigned: just rename it.
+      const uses = [...body.matchAll(new RegExp(`(?<![\\w.])${outName}\\b(\\.[xyzwrgba]+)?\\s*(=(?!=)|)`, 'g'))];
+      const onlyAssigned = uses.every(u => u[2] === '=') && !/\breturn\b/.test(body);
+      if (onlyAssigned) {
+        s = s.slice(0, bodyStart) + renameWord(body, outName, 'gl_FragColor') + s.slice(end);
+      } else if (options.lowerReturns) {
+        // Each `return;` becomes a snapshot (first one taken wins, without a branch: the snapshot only
+        // moves while its flag is still 0), and the end of main picks the snapshot or the live colour.
+        let k = 0;
+        const flushed = body.replace(/\breturn\s*;/g, () => { const i = k++; return `{ earlyOut${i} = mix(${outName}, earlyOut${i}, earlyTook${i}); earlyTook${i} = 1.0; }`; });
+        const decls = Array.from({ length: k }, (_, i) => ` vec4 earlyOut${i} = vec4(0.0); float earlyTook${i} = 0.0;`).join('');
+        let pick = outName;
+        for (let i = k - 1; i >= 0; i--) pick = `mix(${pick}, earlyOut${i}, earlyTook${i})`;
+        s = s.slice(0, bodyStart) + `{ vec4 ${outName} = vec4(0.0);${decls}` + flushed.slice(1) + (bodyEnd > 0 ? ` gl_FragColor = ${pick}; ` : '') + s.slice(end);
+        notes.push(`${outName} kept as a local (it is read back), written to gl_FragColor${k ? `; ${k} early return${k === 1 ? '' : 's'} lowered to a pick at the end` : ''}`);
+      } else {
+        const flushed = body.replace(/\breturn\s*;/g, `{ gl_FragColor = ${outName}; return; }`);
+        s = s.slice(0, bodyStart) + `{ vec4 ${outName} = vec4(0.0);` + flushed.slice(1) + (bodyEnd > 0 ? ` gl_FragColor = ${outName}; ` : '') + s.slice(end);
+        notes.push(`${outName} kept as a local (it is read back), written to gl_FragColor`);
+      }
       notes.push('mainImage() read as main()');
     }
     if (renamed.length) notes.push(`${[...new Set(renamed)].join(', ')} → ours`);

@@ -9,7 +9,8 @@ expression is a layer on top, applied exactly where the card reads the input.
 ## Using it
 
 Hover an input row on a card and a faint **ƒ** appears at the right of the
-label (float inputs only; not on the Output card or a group's ports). Click it
+label (float inputs only; not on the Output card or a group's ports); on a
+touch screen it is always there, since there is no hover. Click it
 for the editor: one line, the names it may use as chips (click inserts), a
 check as you type, Enter or **Done** applies, **Remove** clears. When an
 expression is set, the row shows it as a purple chip; click the chip to edit,

@@ -49,9 +49,21 @@ its precision and uniforms. Two things pastes carry that GLSL rejects are
 handled first: non-breaking spaces and other Unicode blanks (web pages, chat,
 PDFs) become ordinary spaces, and the `mainImage` out parameter is renamed to
 `gl_FragColor` inside `mainImage` only, since shaders often reuse the same
-letter (`vec2 C`) in another function. Then simple `#define NAME value` macros
-are expanded (a `// comment` after the value is not part of it; flags and
-function-like macros are left to the preprocessor), a `const float PI`/`TAU`
+letter (`vec2 C`) in another function. A shader that reads its out parameter
+back (`O *= 0.`, `O++`, `vec4 Od = O`) keeps it as a local initialised to
+zero and writes `gl_FragColor` at the end; for the converter an early
+`return;` in main is lowered to straight-line math (each return snapshots the
+colour and a flag, the end picks the first snapshot taken), since a graph has
+no early exit, while the GLSL page compiles the return as is. A mutable
+global that main() assigns and helpers read (`vec2 mouse;` set from `iMouse`,
+read in `Z()`) becomes a trailing parameter of every function that reads it
+or calls a reader, passed at each call, with the declaration moved into main
+(`src/glslToGraph/threadGlobals.ts`); a global a helper writes is real shared
+state and is still reported. Comments are dropped, then `#define` macros are
+expanded the way the preprocessor would, object-like and function-like
+(`#define K(U) smoothstep(.2, .0, length(U))`: arguments substituted, the
+result rescanned so a macro may use another; a `// comment` after the value
+is not part of it; a bare flag stays for `#ifdef`), a `const float PI`/`TAU`
 of the shader's own is renamed (the compiled
 shader defines those as macros), and a function named like one of the app's
 always-included helpers (`smin`, `sdBox`, `rot2d`…) is renamed too, or the
@@ -59,6 +71,9 @@ app's version would silently win. Then `main()` is walked statement by
 statement, keeping an environment of *variable name → value in flight*, where
 a value is either a node output or a number not yet spent. Each expression
 takes the highest rung it can:
+
+`x++`, `x--`, `++x` and `--x` on a named value are `x += 1.0` (a vector
+counts up on every component, as GLSL does).
 
 1. **A node.** `a * b` → Multiply, `sin(x)` → Sin (freq 1, amp 1), `vec3(r, g, b)`
    → Make Vec3, `p.x` → Split Vec2, `smoothstep(e0, e1, x)` → Smoothstep, `gl_FragCoord`
@@ -313,6 +328,22 @@ and the check compares the pasted shader with the optimised graph.
 The converter's own literal rules (anonymous numbers fold into sliders, named
 ones go on the Constants card) are the first two strategies applied at
 conversion time; the pass generalises them to graphs of any origin.
+
+## The Convert page today
+
+Conversion runs when you press **Convert** (or ⌘↵ / Ctrl+Enter in the
+editor), not on every keystroke: a half-typed edit never flashes errors or a
+broken graph. The button is filled while the text differs from what was last
+converted, and the banner and the check say "edited: press Convert". Picking
+an example, opening a file, Tidy and Clear convert straight away. An empty
+editor shows no errors, just the hint. The GLSL page has a **Convert** button
+that hands its current text to this page and runs it.
+
+On a phone the page is one pane at a time, Code / Graph / Check, chosen on
+the top bar, with Convert beside them and Keep as one node / Materialize on a
+bottom bar; the graph fills the screen instead of stacking under the editor
+and the check, and the code pane stays mounted so its undo history survives a
+look at the graph.
 
 ## Product plan
 

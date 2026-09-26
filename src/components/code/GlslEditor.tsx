@@ -5,6 +5,7 @@
  * its own undo history. Controlled by `value`/`onChange`; the `ref` handle
  * inserts at the caret or replaces the whole file with history kept.
  */
+import { BRACKET_PAIRS, selectTokenOnDoubleClick } from './editKeys';
 import { useCallback, useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
 import { tokenizeLine, C, C_LIGHT } from '../glslSyntax';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
@@ -22,14 +23,6 @@ export const EDITOR_FONT = "'Fira Code', 'JetBrains Mono', 'Cascadia Code', 'Con
 const EDITOR_FONT_SIZE = '12px';
 const EDITOR_LINE_HEIGHT = '1.6';
 const EDITOR_PADDING = '10px 12px';
-
-const BRACKET_PAIRS: Record<string, [string, string]> = {
-  '(': ['(', ')'],
-  '[': ['[', ']'],
-  '{': ['{', '}'],
-  '"': ['"', '"'],
-  "'": ["'", "'"],
-};
 
 export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', placeholder, autoFocus, errorLines }: {
   value: string;
@@ -173,7 +166,7 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
       return;
     }
     // Enter → auto-indent, one level deeper after an opening brace
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { // ⌘↵ / Ctrl+Enter is the page's (Convert): let it through
       e.preventDefault();
       const lineStart = code.lastIndexOf('\n', start - 1) + 1;
       const line      = code.slice(lineStart, start);
@@ -259,6 +252,7 @@ export function GlslEditor({ value, onChange, ref, ariaLabel = 'GLSL source', pl
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onDoubleClick={selectTokenOnDoubleClick}
           onScroll={syncScroll}
           placeholder={placeholder}
           autoFocus={autoFocus}
