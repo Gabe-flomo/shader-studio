@@ -47,6 +47,7 @@ function program(side: Side, frag: string | null): void {
   const { gl } = side;
   if (side.prog) { gl.deleteProgram(side.prog); side.prog = null; }
   side.locs.clear(); side.error = null;
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); // no leftover picture from the previous shader
   if (!frag) return;
   const compile = (type: number, src: string) => { const s = gl.createShader(type)!; gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { const log = gl.getShaderInfoLog(s) ?? 'shader error'; gl.deleteShader(s); throw new Error(log); } return s; };
   try {
@@ -101,14 +102,24 @@ export function RenderPair({ original, graph, uniforms, originalUniforms, onDiff
     };
   }, []);
 
-  // Programs follow the shaders; the frame loop restarts with them.
+  // Programs follow the shaders; the frame loop restarts with them. Each side draws whenever it compiled, so the
+  // original still renders when there is no graph (a refused shader) or the graph doesn't compile; the pixels are
+  // compared only when both render. A side that can't render says so over its canvas instead of staying black.
+  // (Written straight to the notes over the canvases: they follow the compile, which happens here.)
+  const noteA = useRef<HTMLDivElement>(null), noteB = useRef<HTMLDivElement>(null);
+  const say = (el: HTMLDivElement | null, text: string | null) => { if (el) { el.textContent = text ?? ''; el.style.display = text ? 'flex' : 'none'; } };
   useEffect(() => {
     const { A, B } = sides.current;
-    if (!A || !B) { onDiff({ error: 'WebGL isn’t available here', side: 'original' }); return; }
+    if (!A || !B) { onDiff({ error: 'WebGL isn’t available here', side: 'original' }); say(noteA.current, 'No WebGL here'); say(noteB.current, 'No WebGL here'); return; }
     program(A, original); program(B, graph);
-    if (A.error) { onDiff({ error: A.error, side: 'original' }); return; }
-    if (B.error) { onDiff({ error: B.error, side: 'graph' }); return; }
-    if (!graph) { onDiff(null); return; }
+    say(noteA.current, A.error ? 'Doesn’t compile here' : null);
+    say(noteB.current, B.error ? 'Doesn’t compile' : graph ? null : 'No graph');
+    if (b.current) b.current.style.opacity = graph && !B.error ? '1' : '0.3';
+    if (A.error) onDiff({ error: A.error, side: 'original' });
+    else if (B.error) onDiff({ error: B.error, side: 'graph' });
+    else if (!graph) onDiff(null);
+    const compare = !A.error && !B.error && !!graph;
+    if (!A.prog && !B.prog) return;
     const t0 = performance.now();
     let raf = 0, lastCmp = 0;
     const pa = new Uint8Array(size * size * 4), pb = new Uint8Array(size * size * 4);
@@ -116,7 +127,7 @@ export function RenderPair({ original, graph, uniforms, originalUniforms, onDiff
       raf = requestAnimationFrame(tick);
       const t = (now - t0) / 1000;
       draw(A, size, t, originalUniforms ?? {}); draw(B, size, t, uniforms);
-      if (now - lastCmp > 500) {
+      if (compare && now - lastCmp > 500) {
         lastCmp = now;
         A.gl.readPixels(0, 0, size, size, A.gl.RGBA, A.gl.UNSIGNED_BYTE, pa);
         B.gl.readPixels(0, 0, size, size, B.gl.RGBA, B.gl.UNSIGNED_BYTE, pb);
@@ -131,10 +142,13 @@ export function RenderPair({ original, graph, uniforms, originalUniforms, onDiff
 
   const frame = { width: size, height: size, borderRadius: radius.md, background: '#000', display: 'block' } as const;
   const cap = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginTop: 4 };
+  const note = (ref: React.RefObject<HTMLDivElement | null>) => (
+    <div ref={ref} style={{ position: 'absolute', inset: 0, display: 'none', alignItems: 'center', justifyContent: 'center', padding: 6, textAlign: 'center', color: '#fff', font: `600 10.5px/1.3 ${fontFamily.ui}`, pointerEvents: 'none' }} />
+  );
   return (
     <div style={{ display: 'flex', gap: 10 }}>
-      <div><canvas ref={a} width={size} height={size} style={frame} /><div style={cap}>{labels[0]}</div></div>
-      <div><canvas ref={b} width={size} height={size} style={{ ...frame, opacity: graph ? 1 : 0.3 }} /><div style={cap}>{labels[1]}</div></div>
+      <div><div style={{ position: 'relative' }}><canvas ref={a} width={size} height={size} style={frame} />{note(noteA)}</div><div style={cap}>{labels[0]}</div></div>
+      <div><div style={{ position: 'relative' }}><canvas ref={b} width={size} height={size} style={frame} />{note(noteB)}</div><div style={cap}>{labels[1]}</div></div>
     </div>
   );
 }

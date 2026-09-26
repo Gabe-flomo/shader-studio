@@ -74,7 +74,8 @@ import type { FileResult } from '../utils/fileIO';
 import { BLANK_GRAPH, DEFAULT_EXAMPLE, loadExampleGraphs } from './exampleIndex';
 import { archiveCurrent, deleteHistory, readVersion } from './graphVersions';
 import type { ExampleGraph } from './exampleIndex';
-import { groupNodesByRank, estimateNodeHeight } from './graphLayout';
+import { layoutByRank, estimateNodeHeight } from './graphLayout';
+import { getCardSize } from '../components/NodeGraph/socketRegistry';
 import { constantsItems, constantsOutputs, paramKeysOf, paramsFor, type ConstantsItem } from '../nodes/definitions/constants';
 import { typesCompatible } from '../lib/typesCompatible';
 import { audioEngine } from '../lib/audioEngine';
@@ -744,6 +745,8 @@ interface NodeGraphState {
   /** Empty the canvas down to UV → Output (the trash button's right-click) */
   clearToMinimal: () => void;
   autoLayout: () => void;
+  /** Move top-level cards to new places (no undo entry, no recompile): for layouts the Convert page redoes once its cards are measured. */
+  setNodePositions: (positions: Map<string, { x: number; y: number }>) => void;
   /** `source` is the shader the errors were reported against (their line numbers point into it) */
   setGlslErrors: (errors: string[], source?: string | null) => void;
   setGlContextLost: (lost: boolean) => void;
@@ -4420,16 +4423,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
      *  ranks, so a node lands in the same column here as it does in that
      *  grid's row) on any array of nodes and return a position map. */
     function computeLayout(layoutNodes: import('../types/nodeGraph').GraphNode[]): Map<string, { x: number; y: number }> {
-      const ranked = groupNodesByRank(layoutNodes);
-      const newPositions: Map<string, { x: number; y: number }> = new Map();
-      for (const { rank, nodes: rankNodes } of ranked) {
-        let y = START_Y;
-        for (const node of rankNodes) {
-          newPositions.set(node.id, { x: START_X + rank * 440, y }); // 360px cards + 80px for wires
-          y += estimateNodeHeight(node) + 32;
-        }
-      }
-      return newPositions;
+      // 360px cards + 80px for wires; a card's height as it rendered (code cards run tall), estimated before it has.
+      return layoutByRank(layoutNodes, { startX: START_X, startY: START_Y, colW: 440, gap: 32, heightOf: n => getCardSize(n.id)?.h ?? estimateNodeHeight(n) });
     }
 
     const activeGroupId = state.activeGroupId;
@@ -4470,6 +4465,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         })),
       }));
     }
+  },
+
+  setNodePositions: (positions) => {
+    if (!positions.size) return;
+    set(st => ({ nodes: st.nodes.map(n => { const p = positions.get(n.id); return p && (p.x !== n.position.x || p.y !== n.position.y) ? { ...n, position: p } : n; }) }));
   },
 
   clearToMinimal: () => {
