@@ -23,7 +23,7 @@
 import { parser, generate } from '@shaderfrog/glsl-parser';
 import { GROUP_PORT_SENTINEL, type GraphNode, type InputSocket, type DataType, type GroupInputPort, type GroupOutputPort } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
-import { groupNodesByRank, estimateNodeHeight } from '../store/graphLayout';
+import { layoutByRank } from '../store/graphLayout';
 import { translateToStudio, dialectLabel } from '../glsl/dialects';
 import { threadGlobals } from './threadGlobals';
 import { stripComments } from '../glsl/comments';
@@ -1388,22 +1388,15 @@ function prune(list: GraphNode[], keep: Set<string>): void {
   }
 }
 
-/** Columns by depth (sources left, Output right), rows in creation order. */
 /**
  * Columns by data-flow depth, the same ranks the Studio's auto layout uses,
  * spaced for real cards (360 wide, heights estimated the way the Studio does,
- * plus the code a block or function shows on its card). Nodes are created in
+ * code cards included). The Convert page re-spaces them once the cards have
+ * been measured. Nodes are created in
  * program order, so a column reads top to bottom as the shader did.
  */
 function layout(nodes: GraphNode[]): void {
   const order = new Map(nodes.map((n, i) => [n.id, i]));
-  for (const { rank, nodes: column } of groupNodesByRank(nodes)) {
-    let y = 60;
-    for (const n of [...column].sort((a, b) => order.get(a.id)! - order.get(b.id)!)) {
-      n.position = { x: 40 + rank * 440, y };
-      const codeLines = n.type === 'exprNode' ? String(n.params.expr ?? '').split('\n').length + ((n.params.lines as string[] | undefined)?.length ?? 0)
-        : n.type === 'customFn' ? String(n.params.body ?? '').split('\n').length : 0;
-      y += estimateNodeHeight(n) + codeLines * 18 + 32;
-    }
-  }
+  const at = layoutByRank(nodes, { order: (a, b) => order.get(a.id)! - order.get(b.id)! });
+  for (const n of nodes) n.position = at.get(n.id) ?? n.position;
 }
