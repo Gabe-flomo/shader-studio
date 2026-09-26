@@ -168,7 +168,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   const withConsts = (helpers: string) => [constText, helpers].filter(Boolean).join('\n\n');
   for (const [u, ty] of uniforms) if (!SOURCES[u] && !['sampler2D', 'samplerCube'].includes(ty)) report.unsupported.push(`Uniform ${ty} ${u} has no source node (only time, resolution, mouse, fragCoord are known)`);
   for (const [u, ty] of uniforms) if (['sampler2D', 'samplerCube'].includes(ty)) report.unsupported.push(`Texture ${u}: textures can't be imported yet`);
-  if (globals.size) report.unsupported.push(`Global variables (${[...globals].join(', ')}) aren't supported yet`);
+  if (globals.size) report.unsupported.push(`Global ${[...globals].join(', ')}: a global array (or struct) that a function reads can't be passed along yet. Give the function what it needs as a parameter, or keep the shader as one node.`);
   const main = ast.program.find(st => st.type === 'function' && (((st.prototype as Ast).header as Ast).name as Ast).identifier === 'main');
   if (!main) report.unsupported.push('No main()');
   if (report.unsupported.length) return { nodes, report };

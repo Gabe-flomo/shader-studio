@@ -58,8 +58,10 @@ no early exit, while the GLSL page compiles the return as is. A mutable
 global that main() assigns and helpers read (`vec2 mouse;` set from `iMouse`,
 read in `Z()`) becomes a trailing parameter of every function that reads it
 or calls a reader, passed at each call, with the declaration moved into main
-(`src/glslToGraph/threadGlobals.ts`); a global a helper writes is real shared
-state and is still reported. Comments are dropped, then `#define` macros are
+(`src/glslToGraph/threadGlobals.ts`); several names on one line
+(`mat2 m, n, nn;`) are split first; a global a helper *writes* travels as an
+`inout` parameter, which keeps its call-by-call meaning. What is still
+reported: a global array (or struct) that a function reads. Comments are dropped, then `#define` macros are
 expanded the way the preprocessor would, object-like and function-like
 (`#define K(U) smoothstep(.2, .0, length(U))`: arguments substituted, the
 result rescanned so a macro may use another; a `// comment` after the value

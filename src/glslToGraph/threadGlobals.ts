@@ -57,9 +57,33 @@ function functions(s: string): Fn[] {
 
 export interface ThreadResult { code: string; notes: string[] }
 
+/** `float a, b = 1.0;` at the top level becomes one declaration per name, on the same line. */
+function splitDeclarators(code: string): string {
+  const s = blankComments(code);
+  const fns = functions(s);
+  const inFn = (i: number) => fns.some(f => i > f.bodyOpen && i < f.bodyClose);
+  const re = new RegExp(`(^|[;}\\n])([ \\t]*)((?:const\\s+)?${PRECISION}(?:${TYPES})\\s+)([^;{}]*,[^;{}]*);`, 'g');
+  const edits: Array<{ at: number; del: number; text: string }> = [];
+  for (const m of s.matchAll(re)) {
+    const at = m.index! + m[1].length;
+    if (inFn(at) || /\b(uniform|varying|attribute|in|out)\s*$/.test(s.slice(Math.max(0, at - 12), at))) continue;
+    // Split at top-level commas only (an initialiser may hold vec2(1.0, 2.0)).
+    const list = m[4]; const parts: string[] = []; let depth = 0, cur = '';
+    for (const c of list) { if (c === '(' || c === '[') depth++; else if (c === ')' || c === ']') depth--; if (c === ',' && depth === 0) { parts.push(cur); cur = ''; } else cur += c; }
+    parts.push(cur);
+    if (parts.length < 2) continue;
+    const head = m[3];
+    edits.push({ at: at + m[2].length, del: m[0].length - m[1].length - m[2].length, text: parts.map(x => `${head}${x.trim()};`).join(' ') });
+  }
+  edits.sort((a, b) => b.at - a.at);
+  let out = code;
+  for (const e of edits) out = out.slice(0, e.at) + e.text + out.slice(e.at + e.del);
+  return out;
+}
+
 export function threadGlobals(source: string): ThreadResult {
   const notes: string[] = [];
-  let code = source;
+  let code = splitDeclarators(source);
   for (let round = 0; round < 16; round++) {
     const s = blankComments(code);
     const fns = functions(s);
@@ -79,7 +103,9 @@ export function threadGlobals(source: string): ThreadResult {
       const assigns = new RegExp(`(?<![\\w.])${name}(\\.[xyzwrgba]+)?\\s*([-+*/]?=(?!=)|\\+\\+|--)|(\\+\\+|--)\\s*${name}\\b`, 'g');
       const readers = fns.filter(f => f.name !== 'main' && word.test(s.slice(f.bodyOpen, f.bodyClose)));
       if (dims && readers.length) continue; // an array read by helpers: left as it is (arrays don't travel as parameters here)
-      if (readers.some(f => assigns.test(s.slice(f.bodyOpen, f.bodyClose)))) continue; // a helper writes it: real shared state
+      // A helper that writes it needs the value back out: the parameter is `inout`, which keeps the shared-state meaning call by call.
+      const written = readers.some(f => { assigns.lastIndex = 0; return assigns.test(s.slice(f.bodyOpen, f.bodyClose)); });
+      const qual = written ? 'inout ' : '';
       // Only main uses it: it simply becomes a local of main.
       // Callers of readers need it too, transitively (overloads share a name, so all get it).
       const need = new Set(readers.map(f => f.name));
@@ -101,7 +127,7 @@ export function threadGlobals(source: string): ThreadResult {
           const empty = !s.slice(open + 1, close).trim();
           edits.push({ at: close, del: 0, text: empty ? name : `, ${name}` });
         }
-        if (need.has(f.name)) edits.push({ at: f.parenClose, del: 0, text: f.params && f.params !== 'void' ? `, ${type} ${name}` : `${type} ${name}` });
+        if (need.has(f.name)) edits.push({ at: f.parenClose, del: 0, text: f.params && f.params !== 'void' ? `, ${qual}${type} ${name}` : `${qual}${type} ${name}` });
       }
       // The header's own `(void)` becomes the one parameter.
       for (const f of fns) if (need.has(f.name) && f.params === 'void') edits.push({ at: f.parenClose - 4, del: 4, text: '' });
@@ -111,7 +137,7 @@ export function threadGlobals(source: string): ThreadResult {
       let next = code;
       for (const e of edits) next = next.slice(0, e.at) + e.text + next.slice(e.at + e.del);
       code = next;
-      notes.push(need.size ? `Global ${name} passed to ${[...need].join(', ')} as a parameter` : `Global ${name} made a local of main()`);
+      notes.push(need.size ? `Global ${name} passed to ${[...need].join(', ')} as ${written ? 'an inout' : 'a'} parameter` : `Global ${name} made a local of main()`);
       done = true;
       break; // offsets changed: rescan
     }

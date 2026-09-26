@@ -714,7 +714,7 @@ export const ExprBlockNode: NodeDefinition = {
     const dynamicInputs = node.params.inputs as Array<{ name: string; type: string; slider: unknown; carry?: boolean }> | undefined;
 
     // Type-appropriate zero for the output type — used as fallback value
-    const outDefault = outType === 'float' ? '0.0' : outType === 'vec2' ? 'vec2(0.0)' : outType === 'vec4' ? 'vec4(0.0)' : 'vec3(0.0)';
+    const outDefault = outType === 'float' ? '0.0' : /^(vec[234]|mat[234]|int|bool)$/.test(outType) ? `${outType}(0.0)` : 'vec3(0.0)';
 
     if (Array.isArray(dynamicInputs)) {
       // New format: handles empty array (inputs:[]) and populated arrays

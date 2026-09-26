@@ -35,9 +35,16 @@ describe('threadGlobals', () => {
     expect(code).toContain('// set in main');
   });
 
-  it('leaves a global a helper writes alone, and makes one only main uses a local of main', () => {
+  it('passes a global a helper writes as an inout parameter, splits several names on one line, and makes a main-only one a local', () => {
     const shared = 'float acc = 0.0;\nvoid bump() { acc += 1.0; }\nvoid main() { bump(); gl_FragColor = vec4(acc); }';
-    expect(threadGlobals(shared)).toEqual({ code: shared, notes: [] });
+    const t0 = threadGlobals(shared);
+    expect(t0.notes).toEqual(['Global acc passed to bump as an inout parameter']);
+    expect(t0.code).toBe('\nvoid bump(inout float acc) { acc += 1.0; }\nvoid main() { float acc = 0.0; bump(acc); gl_FragColor = vec4(acc); }');
+    const multi = 'mat2 m,n,nn;\nvec2 f(vec2 p) { return m * n * nn * p; }\nvoid main() { m = mat2(1.0); n = m; nn = n; gl_FragColor = vec4(f(vec2(1.0)), 0.0, 1.0); }';
+    const t1 = threadGlobals(multi);
+    expect(t1.code).toContain('vec2 f(vec2 p, mat2 m, mat2 n, mat2 nn)');
+    expect(t1.code).toContain('f(vec2(1.0), m, n, nn)');
+    expect(t1.code).toMatch(/void main\(\) \{( mat2 (m|n|nn);){3}/);
     const local = 'float a;\nvoid main() { a = 1.0; gl_FragColor = vec4(a); }';
     const t = threadGlobals(local);
     expect(t.notes).toEqual(['Global a made a local of main()']);
