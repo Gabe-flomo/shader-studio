@@ -65,3 +65,20 @@ export const PLAY_EXAMPLE_KEYS: string[] = ROWS.map(r => r[0]);
 export const PLAY_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = Object.fromEntries(
   ROWS.map(([key, title, description], i) => [key, { label: `${num(i)} · ${title}`, description, play: true as const }]),
 );
+
+/** The Play folder in topics, for browsers that show it in subfolders. Every key lands in exactly one. */
+const GROUP_STARTS: Array<[string, string]> = [
+  ['Controls and mappings', 'playControls'],
+  ['Inputs', 'playKeys'],
+  ['Nulls', 'playNull'],
+  ['Layers', 'playTextMattes'],
+  ['Particles', 'playFlow'],
+  ['Shapes and zones', 'playWalls'],
+  ['Bigger pieces', 'particleGlow'],
+];
+export const PLAY_EXAMPLE_GROUPS: Array<{ label: string; keys: string[] }> = GROUP_STARTS.map(([label, first], i) => {
+  const from = PLAY_EXAMPLE_KEYS.indexOf(first);
+  const next = GROUP_STARTS[i + 1];
+  const to = next ? PLAY_EXAMPLE_KEYS.indexOf(next[1]) : PLAY_EXAMPLE_KEYS.length;
+  return { label, keys: PLAY_EXAMPLE_KEYS.slice(from, to) };
+});

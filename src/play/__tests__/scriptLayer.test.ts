@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { defaultLayer, parseLayer, layerNumericProps, LAYER_NUMERIC_PROPS, DEFAULT_SCRIPT_PARAMS, type ScriptLayer } from '../../types/playLayers';
 import { extractScriptParams, SCRIPT_EXAMPLES } from '../../components/play/layers/scriptExamples';
 import { setScriptStatus, scriptStatusVersion } from '../scriptStatus';
+import { createLayerKit } from '../kit/kit.js';
+import { emptyPlayRecord, type PlayRecord } from '../../types/play';
 
 describe('script layer', () => {
   it('starts with the starter sketch and its three sliders', () => {
@@ -148,5 +150,14 @@ describe('make a slider', () => {
     expect(b.code).toContain('  count: { value: 60, min: 0, max: 240, step: 1 },\n};');
     expect(sliderCandidate(b.code, 'count')).toBeNull(); // already a slider
     expect(extractScriptParams(b.code).ok).toBe(true);
+  });
+});
+
+describe('script layer on the canvas', () => {
+  it('counts as animated, so the canvas keeps drawing it between input events', () => {
+    const kit = createLayerKit() as { isAnimated: (r: PlayRecord) => boolean };
+    const rec = emptyPlayRecord();
+    rec.layers = [defaultLayer('script', 's1', 'Script')];
+    expect(kit.isAnimated(rec)).toBe(true);
   });
 });
