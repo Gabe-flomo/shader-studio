@@ -47,6 +47,7 @@ import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
 import { ColourPad } from './ColourPad';
 import { useLiveValues } from './useLiveValues';
 import { usePresent } from './presentStore';
+import { useTakes } from '../../lib/takes';
 import { SoloButton, SoloStrip } from './Solo';
 import { GuidesToggle } from './GuidesToggle';
 import { OpenPlayableButton } from './OpenPlayable';
@@ -334,6 +335,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
             {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
             <IconButton icon="code" label="Put it on a website: a player with controls, or the picture as a background, as a snippet or a page" onClick={() => setEmbedOpen(true)} />
+            <IconButton icon="record" label="Record a performance: play for up to a minute, watch it back, render it frame by frame" onClick={() => useTakes.getState().openPerformance()} />
             <IconButton icon="play" label="Present: the picture and its controls on their own, as people will play with it" onClick={() => usePresent.getState().present('full')} />
             <AddControlButton compact={compact} candidates={candidates} layers={layerCandidates} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
           </>

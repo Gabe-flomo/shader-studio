@@ -558,9 +558,33 @@ class PlayEngine implements InputSource {
     }
   }
 
+  /**
+   * A take playing back: live input changes nothing (the take writes every
+   * value), and presses made meanwhile don't fire when it ends.
+   */
+  private muted = false;
+  setMuted(on: boolean): void {
+    if (on === this.muted) return;
+    this.muted = on;
+    // Back live: every control gets its slider's value (or its mapping's) again.
+    if (!on) for (const id of this.controls.keys()) this.restoreOnce.add(id);
+    inputBus.wake();
+  }
+
+  /** A take playing back shows its values on the panel's readouts (muted, nothing else writes them). */
+  showLive(controlId: string, value: ControlValue): void {
+    if (this.muted) this.live.set(controlId, value);
+  }
+
   tickInputs(dt: number, time: number, write: InputWriter): void {
     this.time = time;
     this.frame++;
+    if (this.muted) {
+      for (const a of this.record.actions ?? []) {
+        if (a.enabled) this.actionSeen.set(a.id, a.trigger.on === 'beat' ? beatAt(a.trigger.bpm, a.trigger.beats, time).count : this.presses.get(triggerKey(a.trigger)) ?? 0);
+      }
+      return;
+    }
     this.tickAudioTriggers();
     this.tickZoneTriggers();
     this.tickActions();

@@ -13,7 +13,7 @@
  * zone trigger. Everything else passes through. Module singleton, no React.
  */
 
-import type { PlayLayer, PlayRecord } from '../types/play';
+import type { ActionKind, PlayLayer, PlayRecord } from '../types/play';
 import { emptyPlayRecord } from '../types/play';
 import { playEngine } from '../lib/playEngine';
 import { liveAudio } from '../lib/liveAudio';
@@ -23,6 +23,8 @@ import { createLayerKit, type KitEnv, type KitPointer, type LayerKit } from './k
 import { setScriptStatus } from './scriptStatus';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
+
+type KitAction = { do: ActionKind; layerId: string; amount: number };
 
 export type LayerWriter = (layerId: string, patch: Partial<PlayLayer>) => void;
 export type { ShaderTap } from './kit/kit.js';
@@ -54,8 +56,41 @@ class PlayOverlay {
   private shaderTap: ((tap: ShaderTap) => void) | null = null;
 
   constructor() {
-    playEngine.onAction(a => this.kit.act({ do: a.do, layerId: a.layerId, amount: a.amount }));
+    playEngine.onAction(a => this.fire({ do: a.do, layerId: a.layerId, amount: a.amount }));
   }
+
+  // ── Actions, and a take playing back ───────────────────────────────────────
+
+  private actListeners = new Set<(a: KitAction) => void>();
+  /** Set while a take plays back: the pointer it recorded, and live actions are ignored. */
+  private replayPointer: KitPointer | null = null;
+  private replaying = false;
+
+  private fire(a: KitAction): void {
+    if (this.replaying) return;
+    this.kit.act(a);
+    for (const cb of this.actListeners) cb(a);
+  }
+
+  /** Every action that fires on the live picture (a take records them). Returns an unsubscribe. */
+  onAct(cb: (a: KitAction) => void): () => void { this.actListeners.add(cb); return () => { this.actListeners.delete(cb); }; }
+
+  /**
+   * A take plays back (true) or ends (false): its pointer drives the layers,
+   * actions come only from `replayAct`, and following nulls stay where the
+   * take puts them. Starting or ending clears the layers' state (particles,
+   * bodies, strokes), as a render of the take starts from nothing.
+   */
+  setReplaying(on: boolean): void {
+    this.replaying = on;
+    if (!on) this.replayPointer = null;
+    this.kit.reset();
+  }
+  setReplayPointer(p: KitPointer | null): void { this.replayPointer = p; }
+  /** An action from the take playing back. */
+  replayAct(a: KitAction): void { this.kit.act(a); }
+  /** Start the layers over (a take scrubbed backwards). */
+  resetLayers(): void { this.kit.reset(); }
 
   setCanvas(el: HTMLCanvasElement | null): void {
     this.canvas = el;
@@ -65,7 +100,7 @@ class PlayOverlay {
   setRecord(record: PlayRecord): void { this.record = record; }
 
   /** Fire an action now (the panel's Burst / Drop / Next / Clear buttons). */
-  act(a: { do: import('../types/play').ActionKind; layerId: string; amount: number }): void { this.kit.act(a); }
+  act(a: KitAction): void { this.fire(a); }
 
   /** Where drags and drawn shapes go (the store's setPlay). */
   setWriter(fn: LayerWriter | null): void { this.writer = fn; }
@@ -343,7 +378,7 @@ class PlayOverlay {
     return {
       gl, W, H, dpr, time, dt,
       value: (l, k) => playEngine.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]),
-      pointer: this.pointer,
+      pointer: this.replayPointer ?? this.pointer,
       markers: !forExport && this.guides,
       editing: this.editing && !forExport && this.guides,
       selectedId: this.selectedId,
@@ -354,7 +389,7 @@ class PlayOverlay {
       camera: cameraInput.element(),
       image: src => this.image(src),
       sensor: forExport ? () => {} : (k, v) => playEngine.setSensor(k, v),
-      override: forExport ? () => {} : (id, k, v) => playEngine.setOverride(id, k, v),
+      override: forExport || this.replaying ? () => {} : (id, k, v) => playEngine.setOverride(id, k, v),
       shaderTap: forExport ? undefined : this.shaderTap ?? undefined,
       scriptStatus: forExport ? undefined : setScriptStatus,
     };
@@ -432,12 +467,14 @@ class PlayOverlay {
    *           composites like Screen/Add
    *   'drop'  left out: only the layers, over nothing
    */
-  compositePixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean, opts: { transparent?: boolean; picture?: TransparentPicture; pointer?: KitPointer } = {}): void {
+  compositePixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean, opts: { transparent?: boolean; picture?: TransparentPicture; pointer?: KitPointer | null; actions?: readonly KitAction[] } = {}): void {
     // The Play page's "Layers only" hides the picture as well: transparent, that means none.
     const dropPicture = !!opts.transparent && (opts.picture === 'drop' || this.record.display?.picture === false);
     const luma = !!opts.transparent && opts.picture === 'luma' && !dropPicture;
     if (!this.hasLayers()) { if (dropPicture) rgba.fill(0); else if (luma) lumaKey(rgba); return; }
     if (first || !this.exportKit) this.exportKit = createLayerKit();
+    // A take's actions that fired by this frame (bursts, Next line, script buttons).
+    for (const a of opts.actions ?? []) this.exportKit.act(a);
     const pic = this.exportPicture ?? (this.exportPicture = document.createElement('canvas'));
     const out = this.exportCanvas ?? (this.exportCanvas = document.createElement('canvas'));
     for (const c of [pic, out]) if (c.width !== width || c.height !== height) { c.width = width; c.height = height; }

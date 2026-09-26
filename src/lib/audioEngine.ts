@@ -231,6 +231,11 @@ class AudioEngine {
   // allocated here.
   private tickResult = new Map<string, number>();
 
+  /** What the last tick() wrote (uniform name → amplitude), for a take recording it. */
+  lastAmps(): ReadonlyMap<string, number> {
+    return this.tickResult;
+  }
+
   tick(): Map<string, number> {
     const result = this.tickResult;
     result.clear();

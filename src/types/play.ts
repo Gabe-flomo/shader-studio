@@ -268,7 +268,61 @@ export interface PlayRecord {
   display?: PlayDisplay;
   /** A MIDI file that plays on the graph clock as if a controller sent it. Absent = none. */
   midiFile?: PlayMidiFile;
+  /** Recorded performances (see lib/takes.ts), oldest first. Absent = none. */
+  takes?: PlayTake[];
 }
+
+// ── Takes: a performance recorded as keyframes ──────────────────────────────
+
+/**
+ * What a take track plays back into:
+ *   control  a Play control (a slider, a colour, a layer property, a null's x/y)
+ *   bus      a live node output the input bus writes (MIDI Input's note, gate, CCs…)
+ *   audio    an Audio Input node's amplitude uniform
+ *   mouse    the shader's u_mouse (the Mouse node), 0..1 of the picture
+ *   pointer  the pointer over the layers (x, y, over, down), which Script layers,
+ *            particles and brushes read
+ */
+export type TakeTrackKind = 'control' | 'bus' | 'audio' | 'mouse' | 'pointer';
+
+export interface TakeTrack {
+  kind: TakeTrackKind;
+  /** control: the control id; bus: the channel key; audio: the uniform name; mouse / pointer: x, y, over or down. */
+  id: string;
+  /** control only: what it drives (a param path or a layer property). */
+  target?: string;
+  label: string;
+  /** Values per key: 1, or 3 for a colour. */
+  width: 1 | 3;
+  /** Held from key to key (a press, a hover) instead of blended. */
+  step?: boolean;
+  /**
+   * The keyframes as text, `gap,value[,g,b]` repeated: the gap is whole
+   * milliseconds since the previous key (the first from the take's start).
+   * Text, not a number array, so a pretty-printed file stays one line per track.
+   */
+  keys: string;
+}
+
+/** An action that fired (a burst, Next line, a script button…), `t` seconds into the take. */
+export interface TakeEvent { t: number; do: ActionKind; layerId: string; amount: number }
+
+export interface PlayTake {
+  id: string;
+  name: string;
+  /** Graph-clock time the take starts at, and how long it runs (s). */
+  from: number;
+  length: number;
+  tracks: TakeTrack[];
+  events: TakeEvent[];
+}
+
+/** A performance runs up to a minute. */
+export const TAKE_MAX_SECONDS = 60;
+/** Takes a record keeps; recording another drops the oldest. */
+export const TAKES_MAX = 12;
+/** Largest take a record keeps, in characters of keyframe text (a busy minute is well under this). */
+export const TAKE_MAX_CHARS = 600_000;
 
 /** A .mid file carried in the record (base64), so it saves with the graph and in play files. */
 export interface PlayMidiFile {
@@ -547,7 +601,58 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   if (disp && typeof disp === 'object' && (disp.picture === false || disp.backdrop !== undefined)) {
     out.display = { picture: disp.picture !== false, backdrop: rgb(disp.backdrop, DEFAULT_DISPLAY.backdrop) };
   }
+  if (Array.isArray(r.takes)) {
+    const seenT = new Set<string>();
+    const takes: PlayTake[] = [];
+    for (const t of r.takes.slice(-TAKES_MAX)) {
+      const parsed = parseTake(t);
+      if (parsed && !seenT.has(parsed.id)) { seenT.add(parsed.id); takes.push(parsed); }
+    }
+    if (takes.length) out.takes = takes;
+  }
   return out;
+}
+
+const TAKE_TRACK_KINDS: ReadonlySet<string> = new Set<TakeTrackKind>(['control', 'bus', 'audio', 'mouse', 'pointer']);
+const KEYS_TEXT = /^-?[0-9.e+-]*(,-?[0-9.e+-]+)*$/;
+
+/** One take, or null when it is malformed or too big. Tracks and events that don't parse are dropped. */
+export function parseTake(raw: unknown): PlayTake | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const t = raw as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const from = num(t.from), length = num(t.length);
+  if (typeof t.id !== 'string' || !t.id || from === null || length === null || length <= 0 || length > TAKE_MAX_SECONDS + 1) return null;
+  const tracks: TakeTrack[] = [];
+  let chars = 0;
+  for (const k of Array.isArray(t.tracks) ? t.tracks.slice(0, 400) : []) {
+    if (!k || typeof k !== 'object') continue;
+    const x = k as Record<string, unknown>;
+    if (typeof x.kind !== 'string' || !TAKE_TRACK_KINDS.has(x.kind) || typeof x.id !== 'string' || !x.id || typeof x.keys !== 'string' || !KEYS_TEXT.test(x.keys)) continue;
+    const width = x.width === 3 ? 3 : 1;
+    if (x.keys.split(',').length % (width + 1) !== 0) continue;
+    chars += x.keys.length;
+    const track: TakeTrack = { kind: x.kind as TakeTrackKind, id: x.id.slice(0, 200), label: typeof x.label === 'string' ? x.label.slice(0, 120) : x.id.slice(0, 120), width, keys: x.keys };
+    if (x.kind === 'control') { if (typeof x.target !== 'string' || !x.target) continue; track.target = x.target.slice(0, 400); }
+    if (x.step === true) track.step = true;
+    tracks.push(track);
+  }
+  if (chars > TAKE_MAX_CHARS) return null;
+  const events: TakeEvent[] = [];
+  for (const e of Array.isArray(t.events) ? t.events.slice(0, 5000) : []) {
+    if (!e || typeof e !== 'object') continue;
+    const x = e as Record<string, unknown>;
+    const at = num(x.t), amount = num(x.amount);
+    if (at === null || at < 0 || at > length + 1 || typeof x.do !== 'string' || typeof x.layerId !== 'string') continue;
+    if (!(ACTION_KINDS as readonly string[]).includes(x.do) && !scriptActionKey(x.do)) continue;
+    events.push({ t: at, do: x.do as ActionKind, layerId: x.layerId, amount: amount ?? 1 });
+  }
+  events.sort((a, b) => a.t - b.t);
+  return {
+    id: t.id.slice(0, 80),
+    name: typeof t.name === 'string' && t.name.trim() ? t.name.slice(0, 80) : 'Take',
+    from, length, tracks, events,
+  };
 }
 
 
@@ -559,5 +664,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.actions?.length && !play.notes && !play.midiFile && (play.display?.picture ?? true));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && (play.display?.picture ?? true));
 }
