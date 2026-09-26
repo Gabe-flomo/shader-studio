@@ -29,14 +29,14 @@ export const ToneMapNode: NodeDefinition = {
   type: 'toneMap',
   label: 'Tone Map',
   category: 'Color Grading',
-  description: 'Apply tone mapping to a vec3 color. ACES, Hable, Unreal, Tanh, Reinhard2, Lottes, Uchimura, AgX.',
+  description: 'Apply tone mapping to a vec3 color. ACES, Hable, Unreal, Tanh, Reinhard2, Lottes, Uchimura, AgX, or OkLab: a roll-off on perceptual lightness that keeps hues where they are instead of drifting toward yellow or white.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
   },
-  defaultParams: { mode: 'aces' },
+  defaultParams: { mode: 'aces', oklabKnee: 0.6, oklabHighlights: 0.6 },
   paramDefs: {
     mode: {
       label: 'Mode', type: 'select',
@@ -50,8 +50,11 @@ export const ToneMapNode: NodeDefinition = {
         { value: 'lottes',     label: 'Lottes'     },
         { value: 'uchimura',   label: 'Uchimura'   },
         { value: 'agx',        label: 'AgX'        },
+        { value: 'oklab',      label: 'OkLab (hue-preserving)' },
       ],
     },
+    oklabKnee:       { label: 'Knee',       type: 'float', min: 0.2, max: 0.95, step: 0.01, showWhen: { param: 'mode', value: 'oklab' }, hint: 'Lightness below the knee is left alone; above it rolls off smoothly toward white.' },
+    oklabHighlights: { label: 'Highlights', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'mode', value: 'oklab' }, hint: 'How much very bright colours lose chroma on the way to white. 0 keeps them fully saturated (and lets them clip), 1 fades them to white.' },
   },
   glslFunction: `vec3 toneACES(vec3 c) {
   return clamp((c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14), 0.0, 1.0);
@@ -105,6 +108,33 @@ vec3 toneAgX(vec3 c) {
   c = (log2(c) - log2(0.000061)) / (log2(256.0) - log2(0.000061));
   c = clamp(c, 0.0, 1.0);
   return clamp(c*(c*(c*(1.67*c - 4.0)+4.33)), 0.0, 1.0);
+}
+// OkLab: compress perceptual lightness L with a soft shoulder above the knee, scale chroma with it so the hue
+// and its saturation ratio hold, then ease chroma out near white so the result stays inside the gamut.
+vec3 toneOkLab(vec3 c, float knee, float hl) {
+  const mat3 kCONEtoLMS = mat3(0.4121656120, 0.2118591070, 0.0883097947,
+                               0.5362752080, 0.6807189584, 0.2818474174,
+                               0.0514575653, 0.1074065790, 0.6302613616);
+  const mat3 kLMStoCONE = mat3(4.0767245293, -1.2681437731, -0.0041119885,
+                               -3.3072168827, 2.6093323231, -0.7034763098,
+                               0.2307590544, -0.3411344290, 1.7068625689);
+  const mat3 kLMStoLab = mat3(0.2104542553, 1.9779984951, 0.0259040371,
+                              0.7936177850, -2.4285922050, 0.7827717662,
+                              -0.0040720468, 0.4505937099, -0.8086757660);
+  const mat3 kLabToLMS = mat3(1.0, 1.0, 1.0,
+                              0.3963377774, -0.1055613458, -0.0894841775,
+                              0.2158037573, -0.0638541728, -1.2914855480);
+  vec3 lms = pow(max(kCONEtoLMS * max(c, 0.0), 0.0), vec3(1.0 / 3.0));
+  vec3 lab = kLMStoLab * lms;
+  float L = lab.x;
+  float k = clamp(knee, 0.05, 0.98);
+  float x = max(L - k, 0.0) / (1.0 - k);
+  float e2 = exp(-2.0 * min(x, 20.0));
+  float Lc = L <= k ? L : k + (1.0 - k) * (1.0 - e2) / (1.0 + e2); // tanh, spelled out for GLSL ES 1.00
+  float ratio = L > 1e-4 ? Lc / L : 1.0;
+  vec2 ab = lab.yz * ratio * (1.0 - hl * smoothstep(0.7, 1.0, Lc));
+  vec3 lms2 = kLabToLMS * vec3(Lc, ab);
+  return clamp(kLMStoCONE * (lms2 * lms2 * lms2), 0.0, 1.0);
 }`,
   generateGLSL: (node: GraphNode, inputVars) => {
     const colorVar = inputVars.color ?? 'vec3(0.0)';
@@ -113,8 +143,14 @@ vec3 toneAgX(vec3 c) {
       aces: 'toneACES', hable: 'toneHable', unreal: 'toneUnreal', tanh: 'toneTanh', tanh2: 'toneTanhSq',
       reinhard2: 'toneReinhard2', lottes: 'toneLottes', uchimura: 'toneUchimura', agx: 'toneAgX',
     };
-    const fn = fnMap[mode] ?? 'toneACES';
     const outVar = `${node.id}_color`;
+    if (mode === 'oklab') {
+      return {
+        code: `    vec3 ${outVar} = toneOkLab(${colorVar}, ${p(node.params.oklabKnee, 0.6)}, ${p(node.params.oklabHighlights, 0.6)});\n`,
+        outputVars: { color: outVar },
+      };
+    }
+    const fn = fnMap[mode] ?? 'toneACES';
     return {
       code: `    vec3 ${outVar} = ${fn}(${colorVar});\n`,
       outputVars: { color: outVar },
