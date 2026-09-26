@@ -50,6 +50,26 @@ function closeOf(src: string, open: number): number {
   return -1;
 }
 
+/**
+ * Every `texture(iChannelN, …)` call (texture2D, textureLod too) as `vec4(0.0)`, to its
+ * matching `)`: the coordinates may hold calls of their own (`texture(iChannel0, uv + vec2(t, 0.)).x`).
+ * Newlines inside a call stay, so line numbers still point into the paste.
+ */
+export function blackTextures(src: string, sampler = 'iChannel\\d'): string {
+  let s = src;
+  const re = new RegExp(`\\btexture(?:2D|Lod)?\\s*\\(\\s*${sampler}\\s*,`, 'g');
+  for (let m = re.exec(s); m; m = re.exec(s)) {
+    const open = s.indexOf('(', m.index);
+    let d = 0, i = open;
+    for (; i < s.length; i++) { if (s[i] === '(') d++; else if (s[i] === ')' && --d === 0) break; }
+    if (i >= s.length) break;
+    const call = s.slice(m.index, i + 1);
+    s = s.slice(0, m.index) + 'vec4(0.0)' + '\n'.repeat(call.split('\n').length - 1) + s.slice(i + 1);
+    re.lastIndex = m.index;
+  }
+  return s;
+}
+
 /** Whole-word rename, leaving member accesses (`.time`) alone. */
 const renameWord = (src: string, from: string, to: string) => src.replace(new RegExp(`(?<![\\w.])${from}\\b`, 'g'), to);
 
@@ -152,7 +172,7 @@ export function translateToStudio(source: string, options: TranslateOptions = {}
     rename(/\biMouse\b/g, 'vec4(u_mouse, 0.0, 0.0)', 'iMouse');
     rename(/\biDate\b/g, 'vec4(0.0)', 'iDate (as zero)');
     if (has(s, /\biChannel\d\b/)) {
-      s = s.replace(/\btexture(?:2D|Lod)?\s*\(\s*iChannel\d\s*,[^;]*?\)(?=\s*[;.),*+\-/])/g, 'vec4(0.0)').replace(/\biChannelResolution\b/g, 'vec3[4](vec3(1.0), vec3(1.0), vec3(1.0), vec3(1.0))');
+      s = blackTextures(s).replace(/\biChannelResolution\b/g, 'vec3[4](vec3(1.0), vec3(1.0), vec3(1.0), vec3(1.0))');
       unsupported.push('iChannel textures read as black (no texture inputs yet)');
     }
     const m = /void\s+mainImage\s*\(\s*out\s+vec4\s+(\w+)\s*,\s*(?:in\s+)?vec2\s+(\w+)\s*\)\s*\{/.exec(s);

@@ -12,6 +12,7 @@
  * the publish dialog before the node is created.
  */
 import { parseCodeSource } from './codeSource';
+import { blackTextures } from '../../glsl/dialects';
 
 export interface GlslImportResult {
   ok: true;
@@ -134,12 +135,10 @@ export function convertFragmentShader(source: string, opts: { label?: string } =
   });
   for (const [from, to] of renameLater) src = renameIdent(src, from, to);
   for (const [re, to] of RENAMES) src = src.replace(re, to);
-  for (const name of samplers) {
-    src = src.replace(new RegExp(`\\b(?:texture2D|texture|textureLod)\\s*\\(\\s*${name}\\s*,[^;]*?\\)(?=\\s*[;.),*+\\-/])`, 'g'), 'vec4(0.0)');
-  }
+  for (const name of samplers) src = blackTextures(src, name);
   if (/\biChannel\d\b/.test(src)) {
     notes.push('iChannel textures were replaced by black; add an image slot in the dialog and sample it instead.');
-    src = src.replace(/\btexture(?:2D)?\s*\(\s*iChannel\d\s*,[^)]*\)/g, 'vec4(0.0)').replace(/\btextureLod\s*\(\s*iChannel\d\s*,[^)]*\)/g, 'vec4(0.0)');
+    src = blackTextures(src);
   }
   if (aliased.length) notes.push(`Mapped to Playfield's built-ins: ${aliased.join('; ')}.`);
   if (socketUniforms.length) notes.push(`Uniforms that became inputs on the node: ${socketUniforms.map(u => `${u.name} (${u.type})`).join(', ')}. Wire Mouse, Time or a slider into them; unwired they are 0.`);
