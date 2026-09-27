@@ -18,6 +18,7 @@
  * edits) in Exact, and says so; Full isn't offered, since the app's picture
  * is the open graph, not the snapshot.
  */
+import { APP_HEIGHT } from '../../lib/viewport';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { controlExists, readControlValue, targetParts } from '../../play/playControls';
@@ -98,7 +99,7 @@ export function Stage({ canvas, onRecord }: {
 
   const bar = { height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderBottom: `1px solid ${alpha('#ffffff', 0.08)}`, background: '#101016', color: '#e8e8ef' } as const;
   return (
-    <div ref={rootRef} style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#07070b', color: '#e8e8ef', font: `12.5px ${fontFamily.ui}` }}>
+    <div ref={rootRef} style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', background: '#07070b', color: '#e8e8ef', font: `12.5px ${fontFamily.ui}` }}>
       <div style={bar}>
         <IconButton icon="close" label="Leave the Stage (Esc)" onClick={exit} />
         <b style={{ fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: narrow ? 120 : 220, minWidth: 0 }}>{graphName}</b>

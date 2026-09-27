@@ -18,7 +18,7 @@ import { MobileIconSegment } from './components/shell/MobileIconSegment';
 import { Button, IconButton } from './components/ui/Button';
 import { ThemeOverrideContext, useTokens } from './theme/themeStore';
 import { AspectPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader } from './components/shell/PreviewChrome';
-import { canvasFrameRef as canvasFrame, isFullscreenKey, isTyping, toggleFullscreenTarget } from './lib/fullscreen';
+import { canvasFrameRef as canvasFrame, exitFullscreen, isFullscreenKey, isTyping, toggleFullscreenTarget, useFullscreen } from './lib/fullscreen';
 import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
 import { PlaySplitArea, SplitButton } from './components/play/PlaySplitArea';
@@ -35,9 +35,12 @@ import { useNodeGraphStore, EXAMPLE_INDEX, EXAMPLE_FOLDERS, PLAY_SETUP_TOAST } f
 import { toast, useToastStore } from './components/ui/toastStore';
 import { OPEN_WHATS_NEW, openWhatsNew, takeUpdateAnnouncement, useWhatsNewUnread } from './changelog/releaseNotes';
 import { audioEngine } from './lib/audioEngine';
-import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
+import { useBreakpoint, isMobile, isTablet, isDesktop, usePhoneLayout } from './hooks/useBreakpoint';
+import { APP_HEIGHT } from './lib/viewport';
+import { rotateShowsFullscreen, useRotateFullscreen } from './lib/rotateFullscreen';
+import { PhoneFullscreenChrome } from './components/shell/PhoneFullscreen';
 import { SplitHandle } from './components/shell/PhoneSplit';
-import { PLAY_SPLIT, STUDIO_SPLIT, usePhoneSplit } from './components/shell/splitSize';
+import { PLAY_SPLIT, PLAY_SPLIT_LANDSCAPE, STUDIO_SPLIT, STUDIO_SPLIT_LANDSCAPE, usePhoneSplit } from './components/shell/splitSize';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useTimeHotkeys } from './hooks/useTimeHotkeys';
 import { useCtp, type CtpPalette } from './theme/nodePalette';
@@ -435,6 +438,9 @@ function App() {
   const bp = useBreakpoint();
   const mobile = isMobile(bp);
   const tablet = isTablet(bp);
+  // Phones: which way it's held. Sideways, the picture sits beside its panel (and on Play can
+  // take the whole screen: lib/rotateFullscreen.ts); the desktop layout never appears.
+  const { landscape } = usePhoneLayout();
   const breakpointRef = useRef(bp);
   breakpointRef.current = bp;
   void isDesktop; // used implicitly via breakpoint branching
@@ -531,8 +537,13 @@ function App() {
   // Phones: how much of the screen (in vh) the picture gets above the graph (Studio) or the
   // panels (Play), set by dragging the seam between them and remembered per page on this
   // device. The Studio's canvas stays square by capping its width to the same vh value.
-  const studioSplit = usePhoneSplit(STUDIO_SPLIT);
-  const playSplit = usePhoneSplit(PLAY_SPLIT);
+  const studioSplitPortrait = usePhoneSplit(STUDIO_SPLIT);
+  const playSplitPortrait = usePhoneSplit(PLAY_SPLIT);
+  // Sideways: the picture's width in vw, remembered separately.
+  const studioSplitLandscape = usePhoneSplit(STUDIO_SPLIT_LANDSCAPE);
+  const playSplitLandscape = usePhoneSplit(PLAY_SPLIT_LANDSCAPE);
+  const studioSplit = landscape ? studioSplitLandscape : studioSplitPortrait;
+  const playSplit = landscape ? playSplitLandscape : playSplitPortrait;
   const mobileCanvasVh = studioSplit.vh;
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
@@ -551,6 +562,26 @@ function App() {
   // Stage › Exact records the website player's canvas instead of the app's.
   const [recordSource, setRecordSource]       = useState<HTMLCanvasElement | null>(null);
   const stageMode = useStage(s => s.mode);
+  // Rotate to full screen (phones): turned sideways on Play (or the Studio, with "always"), the
+  // picture alone fills the screen; turned back, the layout returns. Leaving it by hand while
+  // still sideways keeps it off until the next turn.
+  const rotateSetting = useRotateFullscreen(s => s.setting);
+  const [rotateDismissed, setRotateDismissed] = useState(false);
+  useEffect(() => { if (!landscape) setRotateDismissed(false); }, [landscape]);
+  const rotateFull = rotateShowsFullscreen({ setting: rotateSetting, page, phone: mobile, landscape, dismissed: rotateDismissed }) && !stageMode;
+  const canvasFull = useFullscreen(s => s.target === 'canvas');
+  const rotateEntered = useRef(false);
+  useEffect(() => {
+    if (rotateFull) {
+      if (canvasFull) return;
+      if (rotateEntered.current) { rotateEntered.current = false; setRotateDismissed(true); return; }
+      rotateEntered.current = true;
+      void toggleFullscreenTarget('canvas');
+    } else if (rotateEntered.current) {
+      rotateEntered.current = false;
+      if (canvasFull) void exitFullscreen();
+    }
+  }, [rotateFull, canvasFull]);
   // Mobile: the record button opens a menu (Record / Reset / Import / Export)
   // instead of jumping straight into the export modal, and a separate
   // Examples button opens a browsable gallery of starter graphs.
@@ -876,29 +907,31 @@ function App() {
     const showGraphPane  = mobileLayout !== 'canvas' && mobileLayout !== 'code';
     const showCodePane   = mobileLayout === 'code';
     return (
-      <div style={{ width: '100vw', height: '100dvh', position: 'relative', overflow: 'hidden', background: tc.crust, touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: '100vw', height: APP_HEIGHT, position: 'relative', overflow: 'hidden', background: tc.crust, touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} onClear={() => setShowMobileResetConfirm(true)} />
 
-        {/* Split content: canvas pane (top) + drill-down graph browser (bottom) */}
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* Split content: canvas pane + drill-down graph browser — stacked upright, side by side sideways */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: landscape ? 'row' : 'column' }}>
           {showCanvasPane && (
             <div style={{
               position: 'relative',
               flex: mobileLayout === 'canvas' ? 1 : '0 0 auto',
-              height: mobileLayout === 'canvas' ? undefined : `${mobileCanvasVh}vh`,
-              minHeight: 0,
+              ...(mobileLayout === 'canvas' ? {} : landscape ? { width: `${mobileCanvasVh}vw` } : { height: `${mobileCanvasVh}vh` }),
+              minHeight: 0, minWidth: 0,
               background: tk.bg.render,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               overflow: 'hidden',
             }}>
               <div style={{
                 position: 'relative',
-                width: mobileLayout === 'canvas' ? '100%' : `min(100%, ${mobileCanvasVh}vh)`,
-                height: mobileLayout === 'canvas' ? '100%' : `min(100%, ${mobileCanvasVh}vh)`,
+                ...(mobileLayout === 'canvas' ? { width: '100%', height: '100%' }
+                  : landscape ? { height: '100%', aspectRatio: '1 / 1', maxWidth: '100%' }
+                  : { width: `min(100%, ${mobileCanvasVh}vh)`, height: `min(100%, ${mobileCanvasVh}vh)` }),
               }} ref={canvasFrame}>
                 <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
                 <AudioMasterVolumeWidget />
+                <PhoneFullscreenChrome showEnter={landscape} />
               </div>
 
               {/* Pixel color info / param hint, pinned to the canvas pane */}
@@ -918,11 +951,11 @@ function App() {
               aspect ratio. Only shown in split mode — canvas-only/graph-only
               already give one pane the full remaining space. */}
           {showCanvasPane && showGraphPane && (
-            <SplitHandle split={studioSplit} label="Resize the preview" />
+            <SplitHandle split={studioSplit} label="Resize the preview" vertical={landscape} />
           )}
 
           {showGraphPane && (
-            <div style={{ flex: 1, minHeight: 0, borderTop: showCanvasPane ? `1px solid ${tc.surface0}` : undefined }}>
+            <div style={{ flex: 1, minHeight: 0, minWidth: 0, [landscape ? 'borderLeft' : 'borderTop']: showCanvasPane ? `1px solid ${tc.surface0}` : undefined }}>
               <MobileGraphBrowser />
             </div>
           )}
@@ -1095,20 +1128,28 @@ function App() {
   // MOBILE PLAY PAGE — the picture on top, the control panel under it
   // ══════════════════════════════════════════════════════════════════════════
 
+  // Upright: the picture on top, the panel under it. Sideways: the picture on the left, the panel
+  // on the right (one tree either way, so turning the phone keeps the canvas, sheets and tabs).
   if (mobile && page === 'play') {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+      <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
-        <ThemeOverrideContext.Provider value="dark">
-          <div style={{ position: 'relative', height: `${playSplit.vh}vh`, flexShrink: 0, background: tk.bg.render, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            <div ref={canvasFrame} style={{ position: 'relative', width: `min(100vw, ${playSplit.vh}vh)`, height: '100%' }}>
-              <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: landscape ? 'row' : 'column' }}>
+          <ThemeOverrideContext.Provider value="dark">
+            <div style={{
+              position: 'relative', flexShrink: 0, background: tk.bg.render, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+              ...(landscape ? { width: `${playSplit.vh}vw`, minWidth: 0 } : { height: `${playSplit.vh}vh` }),
+            }}>
+              <div ref={canvasFrame} style={{ position: 'relative', width: landscape ? '100%' : `min(100vw, ${playSplit.vh}vh)`, height: '100%' }}>
+                <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
+                <PhoneFullscreenChrome showEnter={landscape} />
+              </div>
             </div>
+          </ThemeOverrideContext.Provider>
+          <SplitHandle split={playSplit} label="Resize the picture" vertical={landscape} />
+          <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: 'relative' }}>
+            <PlayPage compact />
           </div>
-        </ThemeOverrideContext.Provider>
-        <SplitHandle split={playSplit} label="Resize the picture" />
-        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-          <PlayPage compact />
         </div>
         {showExport && <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />}
       </div>
@@ -1121,7 +1162,7 @@ function App() {
 
   if (mobile && page === 'shortcuts') {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+      <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
         <ShortcutsPage />
       </div>
@@ -1130,7 +1171,7 @@ function App() {
 
   if (mobile && page === 'files') {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+      <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><FilesPage compact onNavigate={setPage} /></div>
       </div>
@@ -1139,7 +1180,7 @@ function App() {
 
   if (mobile && page === 'present') {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+      <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage compact onNavigate={setPage} /></div>
       </div>
@@ -1148,7 +1189,7 @@ function App() {
 
   if (mobile && page === 'convert') {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+      <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}><ConvertPage compact onMaterialized={openStudioFitted} /></div>
       </div>
@@ -1157,7 +1198,7 @@ function App() {
 
   if (mobile && page === 'glsl') {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+      <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
         {/* Bounded, so the page's own panes scroll instead of the whole screen growing */}
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><GLSLPage onConvert={openConvertWith} /></div>
@@ -1171,7 +1212,7 @@ function App() {
   // ══════════════════════════════════════════════════════════════════════════
   if (tablet) {
     return (
-      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+      <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <DesktopTopNav compact page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
 
         {page === 'shortcuts' && <ShortcutsPage />}
@@ -1280,7 +1321,7 @@ function App() {
   const effectivePaletteW = paletteBaseW === 0 ? 0 : paletteCollapsed ? 28 : paletteBaseW;
 
   return (
-    <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+    <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
       <DesktopTopNav page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
 
       {page === 'shortcuts' && <ShortcutsPage />}

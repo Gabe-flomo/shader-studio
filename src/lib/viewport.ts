@@ -126,7 +126,10 @@ export const RECHECK_MS = 250;
  * after RECHECK_MS (once per burst). A rotation also scrolls back to 0,0.
  * Returns a stop function. `win` is injectable for the tests.
  */
-export function watchViewport(win: ViewportEvents, measure: () => void, timers: { setTimeout: (fn: () => void, ms: number) => unknown; clearTimeout: (t: unknown) => void } = globalThis): () => void {
+export interface ViewportTimers { setTimeout: (fn: () => void, ms: number) => unknown; clearTimeout: (t: unknown) => void }
+const realTimers: ViewportTimers = { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: t => clearTimeout(t as ReturnType<typeof setTimeout>) };
+
+export function watchViewport(win: ViewportEvents, measure: () => void, timers: ViewportTimers = realTimers): () => void {
   let recheck: unknown = null;
   const fresh = () => {
     measure();
