@@ -1,7 +1,7 @@
 /**
- * The History panel: the undo history as a timeline of named steps (Changes), and every notice
- * the app has shown this session (Activity). Lives in the sidebar's History tab on desktop and
- * in the Browse sheet on a phone.
+ * The History panel: the undo history as a timeline of named steps (Changes), every notice
+ * the app has shown this session (Activity), and the release notes (What's new). Lives in the
+ * sidebar's History tab on desktop and in the Browse sheet on a phone.
  */
 import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { useNodeGraphStore, undoManager } from '../../store/useNodeGraphStore';
@@ -15,8 +15,10 @@ import { Icon } from '../ui/Icon';
 import { toneStyle } from '../ui/tone';
 import { toast } from '../ui/toastStore';
 import { ACTIVITY_CAP, actionAvailable, useActivityStore, useUnseenActivity, type ActivityEntry, type ActivityKind } from '../ui/activityStore';
+import { OPEN_WHATS_NEW, takePendingOpen, unreadReleases, useWhatsNew, useWhatsNewUnread } from '../../changelog/releaseNotes';
+import { WhatsNewView } from './WhatsNewView';
 
-export type HistoryView = 'changes' | 'activity';
+export type HistoryView = 'changes' | 'activity' | 'whatsnew';
 
 let lastView: HistoryView = 'changes';
 
@@ -63,11 +65,28 @@ export function HistoryPanel({ compact = false, onShowOnCanvas }: {
   /** After "Show on canvas" (the phone closes its sheet). */
   onShowOnCanvas?: () => void;
 }) {
-  const [view, setViewState] = useState<HistoryView>(lastView);
+  // Release notes this device hasn't seen (or "What's new" on the Updated notice) open What's new first.
+  const [view, setViewState] = useState<HistoryView>(() => (takePendingOpen() || unreadReleases(useWhatsNew.getState().seen).length > 0 ? 'whatsnew' : lastView));
   const setView = (v: HistoryView) => { lastView = v; setViewState(v); };
   const unseen = useUnseenActivity();
+  const unreadRelease = useWhatsNewUnread();
+  useEffect(() => {
+    const open = () => { takePendingOpen(); lastView = 'whatsnew'; setViewState('whatsnew'); };
+    window.addEventListener(OPEN_WHATS_NEW, open);
+    return () => window.removeEventListener(OPEN_WHATS_NEW, open);
+  }, []);
+  // A narrow sidebar can't fit three worded segments: What's new becomes its icon.
+  const [width, setWidth] = useState(Infinity);
+  const [root, setRoot] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!root || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setWidth(root.clientWidth));
+    ro.observe(root);
+    return () => ro.disconnect();
+  }, [root]);
+  const narrow = !compact && width < (unseen.count > 0 && view !== 'activity' ? 258 : 236);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+    <div ref={setRoot} style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
       <Segmented
         fill
         ariaLabel="History"
@@ -76,11 +95,26 @@ export function HistoryPanel({ compact = false, onShowOnCanvas }: {
         options={[
           { value: 'changes', label: 'Changes' },
           { value: 'activity', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>Activity{unseen.count > 0 && view !== 'activity' && <CountBadge count={unseen.count} error={unseen.error} />}</span> },
+          {
+            value: 'whatsnew', title: 'What’s new: the release notes',
+            label: (
+              <span aria-label={narrow ? 'What’s new' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                {narrow ? <Icon name="spark" size={13} /> : 'What’s new'}
+                {unreadRelease && view !== 'whatsnew' && <UnreadDot />}
+              </span>
+            ),
+          },
         ]}
       />
-      {view === 'changes' ? <ChangesView compact={compact} onShowOnCanvas={onShowOnCanvas} /> : <ActivityView compact={compact} />}
+      {view === 'changes' ? <ChangesView compact={compact} onShowOnCanvas={onShowOnCanvas} /> : view === 'activity' ? <ActivityView compact={compact} /> : <WhatsNewView compact={compact} />}
     </div>
   );
+}
+
+/** The dot for release notes not seen yet (What's new segment, History rail icon, Browse button). */
+export function UnreadDot({ style, label = 'New release notes' }: { style?: CSSProperties; label?: string }) {
+  const tk = useTokens();
+  return <span {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })} style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: tk.accent.base, ...style }} />;
 }
 
 /** The small count pill (rail icon, segment, Browse button). */
