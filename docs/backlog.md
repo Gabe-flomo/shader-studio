@@ -35,6 +35,8 @@ Done: condition triggers on any value ("When a value…", proximity is its dista
 
 ## MIDI
 
+Built: knob lock, note ranges and the pad grid (Push, Launchpad, learned grids; the Pad Grid node; lighting the pads over Web MIDI out). See `midi.md`. Still to do: the desktop app's native MIDI bridge (WKWebView has no Web MIDI).
+
 - **Knob lock:** touch a knob; it shows as the active input; **Lock** binds that CC and channel to the mapping. Several knobs can be locked.
 - **Note range:** press a key for the low end and another for the high end. Only notes inside the range count; **Reset to full range** undoes it.
 - **Grid controllers (Push, Launchpad):** read the pad's column and row (known layouts, or "learn the grid" by tapping corners) plus velocity and pressure. An offset and scale line the pads up with a grid shader's cells, so hitting a pad triggers or resizes the matching cell (a per-cell array or data texture). Later: light the pads back over MIDI out.

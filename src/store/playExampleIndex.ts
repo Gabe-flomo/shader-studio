@@ -20,6 +20,7 @@ const ROWS: Array<[string, string, string]> = [
   ['playLiveAudio', 'Live audio (mic or DAW)', 'Listen to a mic or a virtual cable: bands drive controls, and hits fire triggers.'],
   ['playAudioReaders', 'Audio readers', 'Dots on the live spectrum: a kick drives a pulse, hi-hats fire sparks, a voice shifts the colour.'],
   ['playMidi', 'MIDI controller', 'Knobs (CC), notes and velocity from any MIDI keyboard or controller.'],
+  ['playPadGrid', 'Pad grid (Push, Launchpad)', 'A grid controller\'s pads light and grow the matching cells of a grid shader; click them without one.'],
   ['playOsc', 'OSC (Ableton, TouchOSC)', 'Open Sound Control messages from Ableton, TouchOSC or any OSC app.'],
   ['playTilt', 'Phone tilt', 'Tilt a phone to steer: device orientation as sources.'],
   ['playNull', 'Nulls: a point you drag', 'A null is a point on the picture whose position is a source.'],
