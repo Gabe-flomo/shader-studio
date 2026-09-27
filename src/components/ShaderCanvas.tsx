@@ -33,7 +33,7 @@ import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
 import { seededRandom, stringSeed } from '../play/particle-sim.js';
 import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
-import { getBreakpoint, isMobile } from '../hooks/useBreakpoint';
+import { viewportSnapshot } from '../lib/viewport';
 import { onRebuild } from '../lib/rebuild';
 import { buildPreviewUniforms } from './previewUniforms';
 import { DataTextureBinder } from '../data/dataTextures';
@@ -456,7 +456,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Phones keep 'low-power' for battery.
     const renderer = new THREE.WebGLRenderer({
       antialias: false,
-      powerPreference: isMobile(getBreakpoint(window.innerWidth)) ? 'low-power' : 'high-performance',
+      powerPreference: viewportSnapshot().breakpoint === 'mobile' ? 'low-power' : 'high-performance',
     });
     renderer.setSize(1, 1);
     // Drawing buffer = CSS size × renderScale. Normally 1; raised only while
