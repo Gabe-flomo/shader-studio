@@ -24,6 +24,7 @@ const ROWS: Array<[string, string, string]> = [
   ['playNull', 'Nulls: a point you drag', 'A null is a point on the picture whose position is a source.'],
   ['playSpringNull', 'Following nulls (springs)', 'Nulls that chase the mouse or each other on a spring, with lag and wobble.'],
   ['playNullDistance', 'Distance between nulls', 'A sensor: how far apart two nulls are, as a source.'],
+  ['playProximity', 'Proximity: fire when close', 'Two nulls come close: a burst once, then a trail of sparks every 3 frames while they stay.'],
   ['playTextMattes', 'Text: over, reveal, luma', 'Three ways text meets the picture.'],
   ['playLayersOnly', 'Picture: layers only', 'Hide the shader and show it only through the layers.'],
   ['playTextSequence', 'Text sequences', 'One line at a time, stepped by keys or a timer, with transitions.'],
@@ -65,6 +66,7 @@ const ROWS: Array<[string, string, string]> = [
   ['handFingertips', 'Hands: fingertips move particles', 'Nulls follow your fingertips: particles flow from your index finger into your thumb.'],
   ['handPinch', 'Hands: pinch, point and fist', 'Pinch drives a slider, a fist fires a burst, pointing toggles a setting.'],
   ['handTwoHands', 'Hands: two at once', 'How far apart your hands are zooms the picture; their heights mix the colour.'],
+  ['handProximity', 'Hands: touch a shape', 'A fingertip near a circle steps the text to its next line and flashes the glow.'],
   ['playTake', 'A recorded take', 'Ships with an 8-second performance: watch it back and Render it without playing.'],
   // Bigger pieces that put several techniques together (their graphs live in exampleGraphs.ts).
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],

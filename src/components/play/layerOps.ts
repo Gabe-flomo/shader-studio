@@ -5,7 +5,7 @@
  * draw order, make a null for a property that follows one, and make a null
  * that drives a control.
  */
-import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource } from '../../types/play';
+import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type TriggerSpec } from '../../types/play';
 import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
 import { resetKindLayer } from '../../play/layerKinds';
 
@@ -19,11 +19,18 @@ export function removeLayer(p: PlayRecord, id: string): PlayRecord {
     controls,
     mappings: p.mappings.filter(m => ids.has(m.controlId)
       && !((m.source.kind === 'null' || m.source.kind === 'sensor') && m.source.layerId === id)
-      && !(m.source.kind === 'trigger' && m.source.trigger.on === 'zone' && m.source.trigger.layerId === id)),
+      && !(m.source.kind === 'trigger' && triggerReads(m.source.trigger, id)))
+      // A distance to the removed layer has nothing to measure to: it asks for another.
+      .map(m => (m.source.kind === 'sensor' && m.source.otherId === id ? { ...m, source: { ...m.source, otherId: '' } } : m)),
   };
-  const actions = (p.actions ?? []).filter(a => a.layerId !== id && !(a.trigger.on === 'zone' && a.trigger.layerId === id));
+  const actions = (p.actions ?? []).filter(a => a.layerId !== id && !triggerReads(a.trigger, id));
   if (actions.length) out.actions = actions; else delete out.actions;
   return out;
+}
+
+/** Does a trigger read this layer (a shape trigger on it, a proximity trigger from or to it)? */
+function triggerReads(t: TriggerSpec, id: string): boolean {
+  return (t.on === 'zone' && t.layerId === id) || (t.on === 'proximity' && (t.a === id || t.b === id));
 }
 
 /** A copy right above the original (drawn on top), nudged so it can be told apart on the picture. */

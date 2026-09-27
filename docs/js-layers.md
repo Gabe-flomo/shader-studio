@@ -67,6 +67,7 @@ function draw(s) {
 | `mouse` | `{ x, y, over, down }` in pixels. |
 | `picture.brightness(x, y)` | 0–1 brightness of the shader at a pixel, when **Picture** is on (it samples the shader at 64×36 each frame). |
 | `null(name)` | A Null layer's position in pixels, by label or id, or `null`. The cheap way to give a script a handle you can drag or map. |
+| `anchor` | `{ x, y }` in pixels: where this layer is for proximity triggers and distance sensors. Set it to whatever moves (`s.anchor = { x: ball.x, y: ball.y }`); it keeps its value between frames. Unset, the layer counts as the picture's centre. |
 | `pressed(key)` | True on the frame a button param was pressed (its amount is in `params[key]`). |
 | `random()` | `Math.random`. |
 

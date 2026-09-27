@@ -1,8 +1,9 @@
 /**
  * ActionsSection — "When this happens, do that to a layer": a key, a beat, a
- * MIDI note, an audio hit, an OSC message or a shape (clicked, entered,
- * filled) bursts particles, steps a text to its next line, drops bodies,
- * clears the brush or shows and hides a layer. Stored in the record's
+ * MIDI note, an audio hit, an OSC message, a shape (clicked, entered,
+ * filled), a hand gesture or two things coming close bursts particles, steps
+ * a text to its next line, drops bodies, clears the brush or shows and hides
+ * a layer, once or over and over while it lasts. Stored in the record's
  * `actions`; the engine fires them, the layer kit carries them out.
  */
 import { useEffect, useRef, useState } from 'react';
@@ -15,7 +16,8 @@ import { Button, IconButton } from '../../ui/Button';
 import { Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { NumberInput } from '../../NodeGraph/NumberInput';
-import { TriggerPicker } from '../TriggerPicker';
+import { FirePicker, TriggerPicker } from '../TriggerPicker';
+import { withFire } from '../../../play/playSources';
 import { actionLabel } from './help';
 
 
@@ -40,9 +42,11 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
     cancel.current?.();
     if (learning === id) { setLearning(null); return; }
     setLearning(id);
-    cancel.current = playEngine.startLearnTrigger((trigger: TriggerSpec) => { update(id, { trigger }); setLearning(null); cancel.current = null; });
+    // Learn picks what fires it; how it fires (once, every frame…) stays.
+    const was = actions.find(a => a.id === id)?.trigger.fire;
+    cancel.current = playEngine.startLearnTrigger((trigger: TriggerSpec) => { update(id, { trigger: withFire(trigger, was) }); setLearning(null); cancel.current = null; });
   };
-  const shapes = play.layers.filter(l => l.kind === 'shape').map(l => ({ id: l.id, label: l.label }));
+  const layerRefs = play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind }));
   const numStyle: React.CSSProperties = { width: 52, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' };
   const label: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 38, flexShrink: 0 };
   return (
@@ -65,9 +69,13 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
           <div key={a.id} style={{ marginTop: 6, padding: '8px 10px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${learning === a.id ? tk.accent.base : tk.border.default}`, opacity: a.enabled ? 1 : 0.55 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <span style={label}>When</span>
-              <TriggerPicker trigger={a.trigger} shapes={shapes} numStyle={numStyle} onChange={trigger => update(a.id, { trigger })} />
+              <TriggerPicker trigger={a.trigger} layers={layerRefs} numStyle={numStyle} onChange={trigger => update(a.id, { trigger })} />
               <span style={{ flex: 1 }} />
               <IconButton icon="spark" label={learning === a.id ? 'Listening… press a key, play a note, click the picture' : 'Learn: the next key, note, click or OSC message'} size="sm" active={learning === a.id} onClick={() => learn(a.id)} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 6 }}>
+              <span style={{ ...label, lineHeight: '26px' }}>Fires</span>
+              <FirePicker trigger={a.trigger} what={a.do} numStyle={numStyle} onChange={trigger => update(a.id, { trigger })} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
               <span style={label}>Do</span>

@@ -219,9 +219,11 @@ export function createLayerKit() {
       }
       const z = geoCompile(spec, aspect);
       // Rough share of the picture it covers, for the fill sensor.
-      let inside = 0;
-      for (let gy = 0; gy < 12; gy++) for (let gx = 0; gx < 20; gx++) if (z.dist((gx + 0.5) / 20, (gy + 0.5) / 12) < 0) inside++;
+      let inside = 0, sx = 0, sy = 0;
+      for (let gy = 0; gy < 12; gy++) for (let gx = 0; gx < 20; gx++) if (z.dist((gx + 0.5) / 20, (gy + 0.5) / 12) < 0) { inside++; sx += (gx + 0.5) / 20; sy += (gy + 0.5) / 12; }
       z.area = inside / 240;
+      // The bright parts' centre is this shape's anchor (proximity, distance).
+      if (l.shape === 'picture') { report(env, l.id + '::ax', inside ? sx / inside : NaN); report(env, l.id + '::ay', inside ? sy / inside : NaN); }
       zones.push(z); zoneById.set(l.id, z);
     }
     // Nulls with a particle role are small round zones that move with the null.
@@ -328,8 +330,14 @@ export function createLayerKit() {
         },
         null: name => { const n = record.layers.find(x => x.kind === 'null' && (x.id === name || x.label === name)); return n ? { x: env.value(n, 'x') * W, y: (1 - env.value(n, 'y')) * H } : null; },
         random: rngFor(l.id, 'script'),
+        // Where proximity triggers and distance sensors measure this layer from, in pixels. Kept between frames.
+        anchor: st.anchor || null,
       };
       const err = klSketchStep(st, s, l.paramDefs || [], l.clear);
+      const an = s.anchor;
+      st.anchor = an && typeof an === 'object' && isFinite(an.x) && isFinite(an.y) ? { x: +an.x, y: +an.y } : null;
+      report(env, l.id + '::ax', st.anchor ? st.anchor.x / W : 0.5);
+      report(env, l.id + '::ay', st.anchor ? 1 - st.anchor.y / H : 0.5);
       if (err) { if (env.scriptStatus) env.scriptStatus(l.id, err); return null; }
       return buf;
     }
@@ -353,6 +361,10 @@ export function createLayerKit() {
         if (s && s.sim) { points = []; const sim = s.sim; for (let i = 0; i < sim.count && points.length < 400; i++) if (sim.alive[i]) points.push({ x: sim.x[i], y: sim.y[i] }); }
       }
       const layout = klClonerLayout(l, v, aspect, path, points);
+      if (l.arrange === 'path' || l.arrange === 'points') {
+        let cx = 0, cy = 0; for (const p of layout) { cx += p.x; cy += p.y; }
+        report(env, l.id + '::ax', layout.length ? cx / layout.length : NaN); report(env, l.id + '::ay', layout.length ? cy / layout.length : NaN);
+      }
       if (!layout.length) return;
       // Effectors: a null is a point, a shape counts from its edge.
       const effectors = [];
@@ -544,12 +556,20 @@ export function createLayerKit() {
         const sim = p.sim, maxV = Math.max(1e-6, env.value(l, 'speed') * 0.18);
         let sp = 0, n = 0, mx = 0, my = 0, mxx = 0, myy = 0;
         for (let i = 0; i < sim.count; i++) { if (!sim.alive[i]) continue; n++; sp += Math.hypot(sim.vx[i], sim.vy[i]); const X = sim.x[i] * aspect, Y = sim.y[i]; mx += X; my += Y; mxx += X * X; myy += Y * Y; }
+        report(env, l.id + '::ax', n ? mx / n / aspect : NaN); report(env, l.id + '::ay', n ? my / n : NaN);
         if (n) {
           mx /= n; my /= n;
           report(env, l.id + '::speed', Math.min(1, sp / n / maxV));
           report(env, l.id + '::spread', Math.min(1, Math.sqrt(Math.max(0, mxx / n - mx * mx + myy / n - my * my)) / (0.29 * Math.hypot(aspect, 1))));
         } else { report(env, l.id + '::speed', 0); report(env, l.id + '::spread', 0); }
       } else if (l.kind === 'camera') report(env, l.id + '::motion', cam ? motion : 0);
+      else if (l.kind === 'bodies' || l.kind === 'brush') {
+        // Anchors: the centroid of the bodies, or of the strokes on the picture.
+        let cx = 0, cy = 0, n = 0;
+        if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) for (const o of b.st.bodies) { cx += o.x / aspect; cy += o.y; n++; } }
+        else { const b = brushes.get(l.id); if (b) for (const p of b.pts) { cx += p.x; cy += p.y; n++; } }
+        report(env, l.id + '::ax', n ? cx / n : NaN); report(env, l.id + '::ay', n ? cy / n : NaN);
+      }
     }
 
     // 7. Null markers on top of everything, and the tracked hands' skeleton (a setup aid) with them.

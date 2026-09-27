@@ -75,6 +75,8 @@ export const SCRIPT_REFERENCE: RefGroup[] = [
       'const b = s.picture.brightness(mouseX, mouseY);\ncircle(mouseX, mouseY, 10 + b * 50);', { returns: '0 (black) to 1 (white).' }),
     fn('s.null', [['name', 'string', 'The Null layer’s label (or id).']], '{ x, y } | null', 'Where a Null layer is, in pixels. Nulls are handles you can drag, keyframe or map, so this is how a sketch follows something you move.',
       'const c = s.null(\'Sun\') || { x: width / 2, y: height / 2 };\ncircle(c.x, c.y, 30);', { returns: 'The null’s position, or null when there is no null by that name.', insert: "s.null('Sun')" }),
+    val('s.anchor', '{ x, y } | null', 'Where this layer is, in pixels, for proximity triggers and distance sensors (On: Proximity, Layer sensor → Distance). Set it to the thing that moves; unset, the layer counts as the picture’s centre. It keeps its value between frames.',
+      's.state.x = (s.state.x || 0) + 2;\ncircle(s.state.x, height / 2, 20);\ns.anchor = { x: s.state.x, y: height / 2 };', { insert: 's.anchor = { x: width / 2, y: height / 2 }' }),
     fn('s.pressed', [['key', 'string', 'A button’s key in params.']], 'boolean', 'Whether a button was pressed this frame (from the panel, a key, a beat or a note). True for one frame; the amount is in s.params[key].',
       "if (s.pressed('burst')) s.state.dots = [];", { returns: 'true on the frame it was pressed.', insert: "s.pressed('')" }),
     fn('s.random', [], 'number', 'Math.random: a number from 0 up to (not including) 1.', 'const r = s.random();', { returns: '0 ≤ r < 1.' }),

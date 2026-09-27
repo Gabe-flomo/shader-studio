@@ -42,7 +42,35 @@ export type MidiSignal = 'note' | 'velocity' | 'gate' | 'bend' | 'cc';
 /** What fires a trigger source. `note: -1` is any note. */
 export type LiveAudioBand = 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
 
-export type TriggerSpec =
+/**
+ * When a trigger fires, for triggers that are held (a key down, a hand
+ * gesture, two things close together). Absent = `once`, the behaviour every
+ * trigger had before modes existed.
+ *   once     on the edge: the key goes down, the gesture starts, A comes close to B
+ *   held     every frame while it is held or true
+ *   every    while held: at the start, then every `every` frames or seconds
+ *   release  when it lets go: the key comes up, the gesture ends, A moves away again
+ */
+export type FireMode = 'once' | 'held' | 'every' | 'release';
+export interface FireSpec { mode: FireMode; every: number; unit: 'frames' | 'seconds' }
+export const DEFAULT_FIRE: FireSpec = { mode: 'once', every: 3, unit: 'frames' };
+
+/**
+ * A point on the picture a proximity trigger or a distance sensor measures
+ * from: a layer's id (its centre, see geoAnchor in play/kit/geometry.js) or a
+ * tracked hand's landmark, `hand:<side>:<point>`.
+ */
+export type AnchorRef = string;
+export const HAND_ANCHOR_PREFIX = 'hand:';
+export function handAnchor(side: HandSide, point: number): AnchorRef { return `${HAND_ANCHOR_PREFIX}${side}:${point}`; }
+/** The hand and landmark of a `hand:<side>:<point>` anchor, or null for a layer anchor. */
+export function parseHandAnchor(ref: string): { side: HandSide; point: number } | null {
+  const m = /^hand:(left|right|any):(\d{1,2})$/.exec(ref);
+  return m && Number(m[2]) <= 20 ? { side: m[1] as HandSide, point: Number(m[2]) } : null;
+}
+
+export type TriggerSpec = TriggerOn & { fire?: FireSpec };
+export type TriggerOn =
   /** A live-audio band crossing `threshold` (0..1) upward: a kick, a snare, a loud moment. */
   | { on: 'audio'; band: LiveAudioBand; threshold: number }
   | { on: 'key'; code: string }
@@ -56,7 +84,13 @@ export type TriggerSpec =
    */
   | { on: 'zone'; layerId: string; event: 'click' | 'enter' | 'fill'; threshold: number }
   /** A hand gesture seen by hand tracking (docs/hand-tracking.md): fires when it starts, held while it lasts. */
-  | { on: 'hand'; side: HandSide; gesture: HandGesture };
+  | { on: 'hand'; side: HandSide; gesture: HandGesture }
+  /**
+   * Two things on the picture closer than (or farther than) `distance`, in
+   * picture heights between their centres. Once open, it closes only past
+   * `distance ± margin`, so a hand hovering at the edge doesn't flicker.
+   */
+  | { on: 'proximity'; a: AnchorRef; b: AnchorRef; when: 'closer' | 'farther'; distance: number; margin: number };
 
 // ── Hands (hand tracking, docs/hand-tracking.md) ────────────────────────────
 
@@ -93,9 +127,15 @@ export const DEFAULT_HANDS: PlayHands = { smoothing: 0.5, overlay: true, colour:
 
 /** Does a setup read hands anywhere: a hand source, a gesture trigger (mapping or action), or a null following a hand? */
 export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'>): boolean {
-  return play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && m.source.trigger.on === 'hand'))
-    || (play.actions ?? []).some(a => a.trigger.on === 'hand')
+  return play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
+    || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId)))
+    || (play.actions ?? []).some(a => triggerUsesHands(a.trigger))
     || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
+}
+
+/** A gesture trigger, or a proximity trigger measuring from a hand. */
+export function triggerUsesHands(t: TriggerSpec): boolean {
+  return t.on === 'hand' || (t.on === 'proximity' && (!!parseHandAnchor(t.a) || !!parseHandAnchor(t.b)));
 }
 
 /**
@@ -157,19 +197,23 @@ export type PlaySource =
    *   speed     particles: how fast they move on average (vs their Speed)
    *   spread    particles: how spread out they are (0 = in a clump, 1 = everywhere)
    *   motion    camera: how much is moving in front of it
-   *   distance  null: how far it is from another null (`otherId`), 1 = a picture height or more
+   *   distance  any positioned layer: how far its centre is from another anchor (`otherId`: a layer or a hand point), 1 = a picture height or more
    */
   | { kind: 'sensor'; layerId: string; read: SensorRead; otherId: string }
   /** A tracked hand (see HandRead). Every field is always present; the ones a read doesn't use are ignored. */
   | { kind: 'hand'; side: HandSide; read: HandRead; point: number; axis: 'x' | 'y' | 'z'; gesture: HandGesture };
 
+/** Layer kinds with a centre on the picture: what proximity triggers and distance sensors can measure from. */
+export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner'];
+
 export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
-  shape: ['fill', 'hover'],
-  particles: ['speed', 'spread'],
-  camera: ['motion'],
+  shape: ['fill', 'hover', 'distance'],
+  particles: ['speed', 'spread', 'distance'],
+  camera: ['motion', 'distance'],
   null: ['distance'],
-  audio: ['level', 'bass', 'lowmid', 'highmid', 'treble'],
+  audio: ['level', 'bass', 'lowmid', 'highmid', 'treble', 'distance'],
+  text: ['distance'], image: ['distance'], lens: ['distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['distance'],
 };
 
 export type PlayCurve = 'linear' | 'exp' | 'log' | 'custom';
@@ -404,6 +448,8 @@ export interface PlayTake {
 
 /** A performance runs up to a minute. */
 export const TAKE_MAX_SECONDS = 60;
+/** Events a take keeps: an action firing every frame at 120 fps for the whole minute. */
+export const TAKE_MAX_EVENTS = 7200;
 /** Takes a record keeps; recording another drops the oldest. */
 export const TAKES_MAX = 12;
 /** Largest take a record keeps, in characters of keyframe text (a busy minute is well under this). */
@@ -461,7 +507,7 @@ function str(v: unknown): string | null {
 
 const LIVE_BANDS_SET: ReadonlySet<string> = new Set<LiveAudioBand>(['level', 'bass', 'lowmid', 'highmid', 'treble']);
 
-function parseTrigger(raw: unknown): TriggerSpec | null {
+function parseTriggerOn(raw: unknown): TriggerOn | null {
   if (!raw || typeof raw !== 'object') return null;
   const t = raw as Record<string, unknown>;
   switch (t.on) {
@@ -477,8 +523,34 @@ function parseTrigger(raw: unknown): TriggerSpec | null {
       return layerId ? { on: 'zone', layerId, event, threshold: Math.max(0.01, Math.min(0.99, num(t.threshold, 0.5))) } : null;
     }
     case 'hand': return { on: 'hand', side: handSide(t.side), gesture: handGesture(t.gesture) };
+    case 'proximity': {
+      const a = str(t.a), b = str(t.b);
+      if (!a || !b) return null;
+      return {
+        on: 'proximity', a, b, when: t.when === 'farther' ? 'farther' : 'closer',
+        distance: Math.max(0, Math.min(4, num(t.distance, 0.15))), margin: Math.max(0, Math.min(1, num(t.margin, 0.03))),
+      };
+    }
     default: return null;
   }
+}
+
+/** A trigger with its firing mode: the mode is kept only when it isn't the default (so old files save unchanged). */
+function parseTrigger(raw: unknown): TriggerSpec | null {
+  const t = parseTriggerOn(raw);
+  if (!t) return null;
+  const fire = parseFire((raw as Record<string, unknown>).fire);
+  return fire ? { ...t, fire } : t;
+}
+
+function parseFire(v: unknown): FireSpec | null {
+  if (!v || typeof v !== 'object') return null;
+  const f = v as Record<string, unknown>;
+  const mode = f.mode === 'held' || f.mode === 'every' || f.mode === 'release' ? f.mode : null;
+  if (!mode) return null;
+  const unit = f.unit === 'seconds' ? 'seconds' : 'frames';
+  const every = unit === 'frames' ? Math.max(1, Math.min(600, Math.round(num(f.every, 3)))) : Math.max(0.01, Math.min(60, num(f.every, 0.25)));
+  return { mode, every, unit };
 }
 
 const HAND_READS: ReadonlySet<string> = new Set<HandRead>(['point', 'palm', 'pinch', 'open', 'roll', 'size', 'present', 'spread', 'gesture']);
@@ -686,7 +758,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   const keptIds = new Set(keptControls.map(c => c.id));
   // A trigger or sensor on a layer needs that layer too.
   const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId);
-  const triggerOk = (t: TriggerSpec) => t.on !== 'zone' || layerIds.has(t.layerId);
+  const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref);
+  const triggerOk = (t: TriggerSpec) => t.on === 'zone' ? layerIds.has(t.layerId) : t.on === 'proximity' ? anchorOk(t.a) && anchorOk(t.b) : true;
   const keptMappings = mappings.filter(m => keptIds.has(m.controlId)
     && (m.source.kind !== 'control' || keptIds.has(m.source.controlId))
     && layerOk(m.source)
@@ -774,7 +847,8 @@ export function parseTake(raw: unknown): PlayTake | null {
   }
   if (chars > TAKE_MAX_CHARS) return null;
   const events: TakeEvent[] = [];
-  for (const e of Array.isArray(t.events) ? t.events.slice(0, 5000) : []) {
+  // Repeating actions (every few frames while held) can fire thousands of times in a minute.
+  for (const e of Array.isArray(t.events) ? t.events.slice(0, TAKE_MAX_EVENTS) : []) {
     if (!e || typeof e !== 'object') continue;
     const x = e as Record<string, unknown>;
     const at = num(x.t), amount = num(x.amount);
