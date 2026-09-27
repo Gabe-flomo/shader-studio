@@ -23,15 +23,17 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * Whether a ZIP should take the videos along: 'all' (none to ask about, or
  * a yes), 'none' (leave them out), or null (the export was called off).
  */
-export async function askVideosInZip(ask: typeof askChoice = askChoice, limit = VIDEO_ZIP_ASK): Promise<'all' | 'none' | null> {
+export async function askVideosInZip(ask: typeof askChoice = askChoice, limit = VIDEO_ZIP_ASK, ids?: readonly string[]): Promise<'all' | 'none' | null> {
   let list: Awaited<ReturnType<typeof listVideos>>;
   try { list = await listVideos(); } catch { return 'all'; }
+  // Only these (the ones a .playfile's Video layers use).
+  if (ids) { const want = new Set(ids); list = list.filter(v => want.has(v.id)); }
   const bytes = list.reduce((n, v) => n + v.bytes, 0);
   if (bytes <= limit) return 'all';
   const id = await ask(`Include ${plural(list.length, 'video')} (${formatSize(bytes)})?`, [
     { id: 'none', label: 'Leave them out', variant: 'ghost' },
     { id: 'all', label: 'Include them', variant: 'primary' },
-  ], { message: 'The Video layers’ files make the ZIP big. Left out, those layers ask for their files after an import elsewhere.' });
+  ], { message: `The Video layers’ files make the ${ids ? 'file' : 'ZIP'} big. Left out, those layers ask for their files after an import elsewhere.` });
   return id === 'all' || id === 'none' ? id : null;
 }
 

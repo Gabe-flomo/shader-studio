@@ -196,7 +196,7 @@ export async function buildBundle(kv: MutableKV, inv: Inventory, ids: Iterable<s
   if (depCount) {
     const kinds = new Map<string, number>();
     for (const d of deps) kinds.set(d.kind, (kinds.get(d.kind) ?? 0) + 1);
-    const words: Record<string, [string, string]> = { presentation: ['linked presentation', 'linked presentations'], node: ['published node', 'published nodes'], graph: ['graph', 'graphs'], function: ['custom function', 'custom functions'], layerKind: ['layer kind', 'layer kinds'], background: ['background image', 'background images'], script: ['script', 'scripts'] };
+    const words: Record<string, [string, string]> = { video: ['video', 'videos'], presentation: ['linked presentation', 'linked presentations'], node: ['published node', 'published nodes'], graph: ['graph', 'graphs'], function: ['custom function', 'custom functions'], layerKind: ['layer kind', 'layer kinds'], background: ['background image', 'background images'], script: ['script', 'scripts'] };
     notes.push(`Came along: ${[...kinds].map(([k, c]) => plural(c, words[k]?.[0] ?? k, words[k]?.[1])).join(', ')}.`);
   }
   if (skippedNodes) notes.push(`${plural(skippedNodes, 'published node')} left out: making node packs is part of Pro.`);
@@ -217,4 +217,71 @@ function extFor(type: string): string {
   if (t.includes('avif')) return '.avif';
   if (t.includes('svg')) return '.svg';
   return '.bin';
+}
+
+// ── Videos ──────────────────────────────────────────────────────────────────
+// A Video layer names its file by `videoId` (the videos library, lib/backgroundLibrary.ts).
+// Graphs, Play setups, presentations and library snapshots that use one carry the file
+// as a `video` item, so the layer finds it after an import elsewhere.
+
+/** Every video id the graph, Play, presentation and library items name (also inside a library snapshot's escaped JSON). */
+export function videoIdsIn(items: readonly WriteItem[]): string[] {
+  const out = new Set<string>();
+  const re = /\\?"videoId\\?"\s*:\s*\\?"([^"\\]{1,200})\\?"/g;
+  for (const it of items) {
+    if (it.kind !== 'graph' && it.kind !== 'play' && it.kind !== 'presentation' && it.kind !== 'library') continue;
+    const text = typeof it.data === 'string' ? it.data : '';
+    if (!text.includes('videoId')) continue;
+    for (const m of text.matchAll(re)) out.add(m[1]);
+  }
+  return [...out];
+}
+
+interface VideosManifestLike { videos?: Array<{ id?: unknown; name?: unknown; file?: unknown; type?: unknown; createdAt?: unknown; width?: unknown; height?: unknown; duration?: unknown }> }
+
+/**
+ * The videos library's ZIP files (`videoZipFiles`: `backgrounds/videos.json` and
+ * `backgrounds/videos/…`) as `video` items: the file, with its id, type and size
+ * in `meta` so the import puts it back under the same id.
+ */
+export function videoItemsFrom(files: Record<string, Uint8Array>, dependency = true): WriteItem[] {
+  const raw = files['backgrounds/videos.json'];
+  if (!raw) return [];
+  let m: VideosManifestLike;
+  try { m = JSON.parse(new TextDecoder().decode(raw)) as VideosManifestLike; } catch { return []; }
+  const out: WriteItem[] = [];
+  const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : undefined);
+  for (const v of m.videos ?? []) {
+    if (typeof v.id !== 'string' || typeof v.file !== 'string') continue;
+    const data = files[`backgrounds/${v.file}`];
+    if (!data) continue;
+    const ext = /\.[a-z0-9]{2,4}$/i.exec(v.file)?.[0] ?? '.mp4';
+    out.push({
+      kind: 'video', name: typeof v.name === 'string' && v.name ? v.name : v.id, data, ext,
+      meta: {
+        id: v.id, type: typeof v.type === 'string' ? v.type : '', ...(dependency ? { dependency: true } : {}),
+        ...(num(v.createdAt) !== undefined ? { createdAt: num(v.createdAt) } : {}),
+        ...(num(v.width) !== undefined && num(v.height) !== undefined ? { width: num(v.width), height: num(v.height) } : {}),
+        ...(num(v.duration) !== undefined ? { duration: num(v.duration) } : {}),
+      },
+    });
+  }
+  return out;
+}
+
+/** A `video` item back as the files `importVideoFiles` reads (the manifest and the file). */
+export function videoFilesFor(item: { name: string; path: string; data: Uint8Array; meta?: Record<string, unknown> }): Record<string, Uint8Array> {
+  const m = item.meta ?? {};
+  const id = typeof m.id === 'string' ? m.id : '';
+  const file = `videos/${item.path.split('/').pop() ?? 'video.mp4'}`;
+  const entry = {
+    id, name: item.name, file, type: typeof m.type === 'string' ? m.type : '', bytes: item.data.length,
+    createdAt: typeof m.createdAt === 'number' ? m.createdAt : Date.now(),
+    ...(typeof m.width === 'number' ? { width: m.width } : {}), ...(typeof m.height === 'number' ? { height: m.height } : {}),
+    ...(typeof m.duration === 'number' ? { duration: m.duration } : {}),
+  };
+  return {
+    'backgrounds/videos.json': new TextEncoder().encode(JSON.stringify({ kind: 'shader-studio-videos', version: 1, videos: [entry] })),
+    [`backgrounds/${file}`]: item.data,
+  };
 }

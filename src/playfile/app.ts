@@ -17,11 +17,13 @@ import { listExternal, filesSources } from '../files/sources';
 import '../files/backgroundsSource';
 import { installMerge, installSources, type Profile } from '../files/profileZip';
 import { getAllUserNodes, getUserNode, makeUserNodeId, registerUserNode } from '../nodes/userNodes/userNodeRegistry';
-import { addImage, getImage, listImages } from '../lib/backgroundLibrary';
+import { addImage, getImage, hasVideo, importVideoFiles, listImages, videoZipFiles } from '../lib/backgroundLibrary';
+import { recordInstalledPack } from '../nodePacks/installed';
 import { archiveCurrent } from '../store/graphVersions';
 import { parsePresentation } from '../types/presentation';
 import { PRESENTATION_KEY_PREFIX } from '../utils/library';
-import { buildBundle, type BundleOptions } from './bundle';
+import { buildBundle, videoIdsIn, videoItemsFrom, type BundleOptions } from './bundle';
+import type { WriteItem } from './writer';
 import { applyImport, planImport, type ImportEnv, type ImportPlan, type ImportSummary, type Pick } from './importer';
 import { isPlayfile, readPlayfile, type PlayfileContents } from './reader';
 import { authorName, authorSigner, existingAuthorKey, trustAuthor, type Signer } from './signing';
@@ -65,6 +67,9 @@ export function appImportEnv(): ImportEnv {
     addBackground: async (bytes, type, name) => { await addImage(new Blob([bytes.slice().buffer], { type }), { name }); },
     installProfile: async (profile: Profile) => installSources(profile, 'merge', installMerge(profile, localMutableKV)),
     sources: filesSources(),
+    hasVideo,
+    addVideos: importVideoFiles,
+    recordPack: recordInstalledPack,
   };
 }
 
@@ -117,7 +122,7 @@ export async function runImport(plan: ImportPlan, picks: Record<string, Pick>, o
 // ── Writing ────────────────────────────────────────────────────────────────
 
 /** Sign with this author's key: always for a node pack (made on first use), otherwise only when a key already exists. */
-async function signerFor(pack: boolean): Promise<Signer | null> {
+export async function signerFor(pack: boolean): Promise<Signer | null> {
   try {
     if (pack) return await authorSigner();
     return (await existingAuthorKey()) ? await authorSigner() : null;
@@ -143,7 +148,7 @@ async function inventoryWith(overlay?: Record<string, string>): Promise<{ kv: Mu
   return { kv, inv: await buildInventory(kv, { external: await listExternal() }) };
 }
 
-const bundleEnv = {
+export const appBundleEnv = {
   presentationFile: async (_name: string, stored: string) => {
     const [{ withEmbeddedAssets }, { presentationFileJson }] = await Promise.all([import('../present/presentAssets'), import('../present/exportPresentation')]);
     const p = parsePresentation(JSON.parse(stored));
@@ -171,8 +176,12 @@ export interface ExportOptions extends BundleOptions {
 export async function exportPlayfile(ids: string[], opts: ExportOptions): Promise<FileResult> {
   try {
     const { kv, inv } = await inventoryWith(opts.overlay);
-    const bundle = await buildBundle(kv, inv, ids, { canPack: can('nodes.pack'), ...opts }, bundleEnv);
+    const bundle = await buildBundle(kv, inv, ids, { canPack: can('nodes.pack'), ...opts }, appBundleEnv);
     if (!bundle.items.length) return { ok: false, error: bundle.notes.join(' ') || 'Nothing to export.' };
+    const videos = await videosFor(bundle.items);
+    if (videos === null) return { ok: false, error: 'Cancelled', cancelled: true };
+    bundle.items.push(...videos.items);
+    if (videos.note) bundle.notes.push(videos.note);
     const signer = await signerFor(!!opts.pack);
     const { bytes, manifest } = await writePlayfile(bundle.items, { author: opts.author ?? currentAuthorName(), signer });
     const res = await saveBinaryFile(bytes, playfileName(opts.fileName), PLAYFILE_MIME);
@@ -185,6 +194,26 @@ export async function exportPlayfile(ids: string[], opts: ExportOptions): Promis
     return { ok: false, error: errorMessage(e) };
   }
 }
+
+/**
+ * The videos the items' Video layers use, as `video` items (the videos library's
+ * files). Past 200 MB in all it asks first, like a library ZIP; null when the
+ * export was called off.
+ */
+export async function videosFor(items: readonly WriteItem[]): Promise<{ items: WriteItem[]; note?: string } | null> {
+  const ids = videoIdsIn(items);
+  if (!ids.length) return { items: [] };
+  try {
+    const { askVideosInZip } = await import('../utils/libraryVideos');
+    const choice = await askVideosInZip(undefined, undefined, ids);
+    if (choice === null) return null;
+    if (choice === 'none') return { items: [], note: `${plural(ids.length, 'video')} left out: the Video layers ask for their files after an import.` };
+    const out = videoItemsFrom(await videoZipFiles(ids));
+    const missing = ids.length - out.length;
+    return { items: out, note: missing > 0 ? `${plural(missing, 'video')} this device doesn’t have couldn’t go in.` : undefined };
+  } catch { return { items: [] }; }
+}
+
 
 /** The open graph (or its Play setup) as a .playfile, with what it uses. */
 export async function exportCurrentGraph(asPlay: boolean, opts: { linked?: boolean } = {}): Promise<FileResult> {

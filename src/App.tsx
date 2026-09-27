@@ -55,7 +55,7 @@ import type { FilesPage as FilesPageT } from './components/files/FilesPage';
 import type { GLSLPage as GLSLPageT } from './components/GLSLPage';
 import type { PlayPage as PlayPageT } from './components/play/PlayPage';
 import type { PresentPage as PresentPageT } from './components/present/PresentPage';
-import type { FunctionBuilder as FunctionBuilderT } from './components/FunctionBuilder/FunctionBuilder';
+import type { BuilderPage as BuilderPageT } from './components/nodePacks/BuilderShell';
 import type { MobileGraphBrowser as MobileGraphBrowserT, MobileNodeGraphOverlay as MobileNodeGraphOverlayT } from './components/NodeGraph/MobileGraphBrowser';
 import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeGraph/MobileNodeBrowser';
 import type { HistoryPanel as HistoryPanelT } from './components/history/HistoryPanel';
@@ -76,7 +76,8 @@ const Stage                  = lazyWithSuspense<PropsOf<typeof StageT>>(() => im
 const ConvertPage            = lazyWithSuspense<PropsOf<typeof ConvertPageT>>(() => import('./components/convert/ConvertPage').then(m => ({ default: m.ConvertPage })));
 const PlayPage               = lazyWithSuspense<PropsOf<typeof PlayPageT>>(() => import('./components/play/PlayPage').then(m => ({ default: m.PlayPage })));
 const PresentPage            = lazyWithSuspense<PropsOf<typeof PresentPageT>>(() => import('./components/present/PresentPage').then(m => ({ default: m.PresentPage })));
-const FunctionBuilder        = lazyWithSuspense<PropsOf<typeof FunctionBuilderT>>(() => import('./components/FunctionBuilder/FunctionBuilder').then(m => ({ default: m.FunctionBuilder })));
+// The Builder page: the Function Builder and the node pack workspace (it can pop out into a floating window).
+const BuilderPage            = lazyWithSuspense<PropsOf<typeof BuilderPageT>>(() => import('./components/nodePacks/BuilderShell').then(m => ({ default: m.BuilderPage })));
 const MobileGraphBrowser     = lazyWithSuspense<PropsOf<typeof MobileGraphBrowserT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileGraphBrowser })));
 const MobileNodeGraphOverlay = lazyWithSuspense<PropsOf<typeof MobileNodeGraphOverlayT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileNodeGraphOverlay })));
 const MobileNodeBrowser      = lazyWithSuspense<PropsOf<typeof MobileNodeBrowserT>>(() => import('./components/NodeGraph/MobileNodeBrowser').then(m => ({ default: m.MobileNodeBrowser })));
@@ -492,7 +493,11 @@ function App() {
   useEffect(() => {
     return useFunctionBuilder.subscribe((s) => {
       if (s.requestNavToBuilder) {
-        setPage('fn');
+        // Popped out: the window shows it over this page instead.
+        void import('./components/nodePacks/builderWindow').then(({ useBuilderWindow, popOutBuilder }) => {
+          if (useBuilderWindow.getState().popped) popOutBuilder('functions');
+          else { useBuilderWindow.setState({ tab: 'functions' }); setPage('fn'); }
+        });
         useFunctionBuilder.getState().clearNavRequest();
       }
     });
@@ -1263,7 +1268,7 @@ function App() {
       {page === 'present' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage onNavigate={setPage} /></div>}
       {page === 'fn' && (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <FunctionBuilder onNavigateToStudio={() => setPage('studio')} />
+          <BuilderPage onNavigateToStudio={() => setPage('studio')} />
         </div>
       )}
 

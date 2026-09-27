@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { scoreNodeDef } from '../../nodes/searchNodes';
 import { createPortal } from 'react-dom';
+import { InstalledPackCard, PackGlyphSmall } from '../nodePacks/InstalledPackCard';
+import { packForCategory } from '../../nodePacks/installed';
 import { getAllCategories, getNodesByCategory, getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
 import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
@@ -571,14 +573,16 @@ export function NodeBrowser({
             </div>
           );
         })}
-        {/* Any categories not covered by sections */}
+        {/* Any categories not covered by sections (My Nodes, node packs by name) */}
         {categories.filter(cat => !CATEGORY_ORDER.includes(cat)).map(cat => {
           const n = getNodesByCategory(cat).filter(d => !HIDDEN_NODES.has(d.type)).length;
           if (n === 0) return null;
+          const pack = packForCategory(cat);
           return (
             <CategoryRow
               key={cat}
               cat={cat}
+              icon={pack ? <PackGlyphSmall pack={pack} /> : undefined}
               count={n}
               onClick={() => { setPath([cat]); setPreviewType(null); }}
             />
@@ -607,6 +611,7 @@ export function NodeBrowser({
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {crumb(cat, rawNodes.length)}
+        {!isGlsl && <InstalledPackCard category={cat} />}
         {groups ? (
           groups.map(group => {
             const groupNodes = rawNodes.filter(d => group.types.includes(d.type));

@@ -31,15 +31,18 @@ import { currentAuthorName, exportNodePack, openPlayfileBytes, runImport, usePla
 import { existingAuthorKey, setAuthorName, trustedFor } from '../../playfile/signing';
 import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
 import type { IconName } from '../ui/iconPaths';
+import type { PackInfo } from '../../nodePacks/types';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const isContainerName = (n: string) => /\.(playfile|playfield|play)$/i.test(n);
 
 const KIND_ICONS: Record<ItemKind, IconName> = {
-  graph: 'graphs', play: 'play', presentation: 'slides', nodes: 'nodes', glsl: 'code', background: 'overlay', library: 'presets', profile: 'folder',
+  graph: 'graphs', play: 'play', presentation: 'slides', nodes: 'nodes', glsl: 'code', background: 'overlay', library: 'presets', profile: 'folder', video: 'camera',
 };
-const KIND_ORDER: ItemKind[] = ['graph', 'play', 'presentation', 'nodes', 'glsl', 'background', 'library', 'profile'];
+const KIND_ORDER: ItemKind[] = ['graph', 'play', 'presentation', 'nodes', 'glsl', 'background', 'video', 'library', 'profile'];
+/** A node pack leads with its nodes; its graphs are the examples. */
+const PACK_ORDER: ItemKind[] = ['nodes', 'graph', 'play', 'presentation', 'glsl', 'background', 'video', 'library', 'profile'];
 
 function FormatMenu() {
   const { at, items, title } = useFormatMenu();
@@ -137,7 +140,7 @@ function ImportDialog({ open, onClose }: { open: OpenImport; onClose: () => void
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<ImportSummary | null>(null);
   const sealedCount = plan.rows.filter(r => r.sealed).length;
-  const byKind = useMemo(() => KIND_ORDER.map(k => [k, plan.rows.filter(r => r.kind === k)] as const).filter(([, rows]) => rows.length), [plan.rows]);
+  const byKind = useMemo(() => (plan.packs?.length ? PACK_ORDER : KIND_ORDER).map(k => [k, plan.rows.filter(r => r.kind === k)] as const).filter(([, rows]) => rows.length), [plan.rows, plan.packs]);
   const chosen = plan.rows.filter(r => picks[r.id]?.include && r.status !== 'unreadable' && r.status !== 'needs-pro' && r.status !== 'same');
   const setPick = (id: string, p: Partial<Pick>) => setPicks(s => ({ ...s, [id]: { ...s[id], ...p } }));
 
@@ -157,6 +160,9 @@ function ImportDialog({ open, onClose }: { open: OpenImport; onClose: () => void
         footer={<Button variant="primary" onClick={onClose}>Done</Button>}>
         <div style={{ padding: '16px 20px 18px', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12.5, color: tk.text.secondary, lineHeight: 1.5 }}>
           <span>{summaryLine(done)}</span>
+          {done.packs?.map(p => (
+            <span key={p.id}>Node pack “{p.name}” v{p.version}: its {plural(p.nodeIds.length, 'node')} {p.nodeIds.length === 1 ? 'is' : 'are'} in the node list under “{p.category}”{p.examples?.length ? `, with ${plural(p.examples.length, 'example graph')} to open from there` : ''}.</span>
+          ))}
           {done.renamed.length > 0 && <span>Came in under a new name: {done.renamed.map(r => `${r.from} → ${r.to}`).join(', ')}.</span>}
           {done.failed.map(f => <span key={f.name} style={{ color: tk.status.danger }}>“{f.name}” didn’t come in: {f.error}</span>)}
         </div>
@@ -192,13 +198,14 @@ function ImportDialog({ open, onClose }: { open: OpenImport; onClose: () => void
       <div style={{ padding: compact ? '12px 14px 16px' : '14px 20px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {signatureBox}
         {sig.state === 'signed' && !trusted && <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: tk.text.secondary, cursor: 'pointer' }}><Toggle checked={trust} onChange={setTrust} />Remember this author’s key as trusted</label>}
+        {plan.packs?.map(p => <PackBanner key={p.path} info={p.info} />)}
         {sealedCount > 0 && <Banner tone="accent" icon="lock" title={`Sealed node pack · ${plural(sealedCount, 'node type')}`}>They run as nodes; their code stays encrypted and isn’t shown, and they can only be shared sealed.</Banner>}
         <div style={{ display: 'flex', flexDirection: 'column', borderRadius: radius.md, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden' }}>
           {byKind.map(([kind, rows], gi) => (
             <div key={kind} style={{ borderTop: gi ? `1px solid ${tk.border.subtle}` : 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: tk.bg.subtle, font: `600 12px ${fontFamily.ui}`, color: tk.text.primary }}>
                 <Icon name={KIND_ICONS[kind]} size={14} style={{ color: tk.text.muted }} />
-                {rows.length === 1 ? KIND_LAYOUT[kind].label : KIND_LAYOUT[kind].plural}
+                {kind === 'nodes' ? (rows.length === 1 ? 'Node type' : 'Node types') : rows.length === 1 ? KIND_LAYOUT[kind].label : KIND_LAYOUT[kind].plural}
                 <span style={{ fontWeight: 400, color: tk.text.muted }}>· {rows.length}</span>
               </div>
               {rows.map(r => {
@@ -232,6 +239,35 @@ function ImportDialog({ open, onClose }: { open: OpenImport; onClose: () => void
         {[...contents.notes, ...contents.skipped.filter(s => !s.reason.includes('isn’t something')).map(s => `“${s.item.name}” was left out: ${s.reason}.`)].map(n => <span key={n} style={{ fontSize: 12, color: tk.status.warningText, lineHeight: 1.45 }}>{n}</span>)}
       </div>
     </Modal>
+  );
+}
+
+/** A node pack's own description: name, version, author, what it's for, its licence and notes. */
+function PackBanner({ info }: { info: PackInfo }) {
+  const tk = useTokens();
+  const [more, setMore] = useState(false);
+  const c = info.color ?? tk.kind.fn;
+  const extra = [info.licence ? 'licence' : '', info.notes?.length ? plural(info.notes.length, 'note') : ''].filter(Boolean);
+  return (
+    <div style={{ display: 'flex', gap: 10, padding: '10px 12px', borderRadius: radius.md, background: alpha(c, 0.08), boxShadow: `inset 0 0 0 1px ${alpha(c, 0.25)}` }}>
+      <span style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: c, color: '#fff', font: `700 14px ${fontFamily.ui}` }}>{info.icon || info.name.slice(0, 1).toUpperCase()}</span>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
+        <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, font: `650 12.5px ${fontFamily.ui}`, color: tk.text.primary }}>
+          Node pack “{info.name}”<Pill tone="muted">v{info.version}</Pill>
+        </span>
+        <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.secondary, overflowWrap: 'anywhere' }}>
+          {info.description || 'Its nodes are listed under its name in the node list.'}
+          {info.examples?.length ? ` Examples: ${info.examples.join(', ')}.` : ''}
+        </span>
+        {extra.length > 0 && (
+          <button type="button" onClick={() => setMore(m => !m)} style={{ alignSelf: 'flex-start', border: 0, padding: 0, background: 'none', cursor: 'pointer', color: tk.accent.text, font: `500 11.5px ${fontFamily.ui}` }}>
+            {more ? 'Hide' : 'Show'} the {extra.join(' and ')}
+          </button>
+        )}
+        {more && info.licence && <pre style={{ margin: 0, maxHeight: 140, overflow: 'auto', whiteSpace: 'pre-wrap', font: `11px/1.45 ${fontFamily.mono}`, color: tk.text.secondary, background: tk.bg.field, borderRadius: 6, padding: '6px 8px' }}>{info.licence}</pre>}
+        {more && info.notes?.map(n => <pre key={n.name} style={{ margin: 0, maxHeight: 180, overflow: 'auto', whiteSpace: 'pre-wrap', font: `11.5px/1.45 ${fontFamily.ui}`, color: tk.text.secondary, background: tk.bg.field, borderRadius: 6, padding: '6px 8px' }}><b>{n.name}</b>{'\n'}{n.text}</pre>)}
+      </span>
+    </div>
   );
 }
 

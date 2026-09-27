@@ -29,9 +29,10 @@ export const MANIFEST_PATH = 'manifest.json';
  *   background    an image for the backgrounds library
  *   library       a Library snapshot (presets, functions, scripts, settings…), merged in
  *   profile       a whole profile ZIP (Files → Download everything), installed with Install
+ *   video         a Video layer's file (mp4, webm, mov…), kept in the videos library under its id
  */
-export type ItemKind = 'graph' | 'play' | 'presentation' | 'nodes' | 'glsl' | 'background' | 'library' | 'profile';
-export const ITEM_KINDS: readonly ItemKind[] = ['graph', 'play', 'presentation', 'nodes', 'glsl', 'background', 'library', 'profile'];
+export type ItemKind = 'graph' | 'play' | 'presentation' | 'nodes' | 'glsl' | 'background' | 'library' | 'profile' | 'video';
+export const ITEM_KINDS: readonly ItemKind[] = ['graph', 'play', 'presentation', 'nodes', 'glsl', 'background', 'library', 'profile', 'video'];
 export const isItemKind = (k: unknown): k is ItemKind => typeof k === 'string' && (ITEM_KINDS as readonly string[]).includes(k);
 
 /** Where each kind's files go inside the ZIP, and the extension they get. */
@@ -44,6 +45,7 @@ export const KIND_LAYOUT: Record<ItemKind, { dir: string; ext: string; label: st
   background: { dir: 'backgrounds', ext: '', label: 'Background image', plural: 'Background images' },
   library: { dir: 'library', ext: '.library.json', label: 'Presets and settings', plural: 'Presets and settings' },
   profile: { dir: 'profile', ext: '.zip', label: 'Whole profile', plural: 'Whole profiles' },
+  video: { dir: 'videos', ext: '', label: 'Video', plural: 'Videos' },
 };
 
 export interface ManifestItem {
