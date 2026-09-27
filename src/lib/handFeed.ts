@@ -120,7 +120,7 @@ class HandFeed {
     return this.starting;
   }
 
-  /** Stop tracking (the camera stays on for any Camera layer; its chip stops it). */
+  /** Stop tracking. The camera turns off too unless a layer still uses it (lib/cameraKeeper.ts). */
   stop(): void {
     this.tracker?.stop();
     this.tracker = null;
