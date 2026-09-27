@@ -371,6 +371,13 @@ export async function resetBackupFolder(): Promise<void> {
   } else await stopBrowserBackups();
 }
 
+/** A workspace folder took over (workspace/workspace.ts): stop writing backups, keep the chosen folder. */
+export function stopBackups(): void {
+  target = null;
+  window.clearTimeout(timer);
+  set({ folder: null, needsPermission: false });
+}
+
 export async function stopBrowserBackups(): Promise<void> {
   target = null; handle = null;
   await idb('readwrite', s => s.delete('folder'));

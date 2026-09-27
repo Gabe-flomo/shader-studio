@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
 mod data_fetch;
+mod workspace;
 mod osc_listener;
 
 // ── FFmpeg session state ──────────────────────────────────────────────────────
@@ -241,6 +242,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(FfmpegState(Mutex::new(None)))
         .manage(OscState(Mutex::new(None)))
+        .manage(workspace::WatchState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             start_ffmpeg_encode,
             send_frame_rgba,
@@ -252,6 +254,15 @@ pub fn run() {
             data_fetch::kaggle_account,
             data_fetch::kaggle_save,
             data_fetch::kaggle_forget,
+            workspace::ws_probe,
+            workspace::ws_create_root,
+            workspace::ws_list,
+            workspace::ws_read,
+            workspace::ws_write,
+            workspace::ws_remove,
+            workspace::ws_watch,
+            workspace::ws_unwatch,
+            workspace::ws_reveal,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

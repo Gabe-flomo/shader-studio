@@ -8,7 +8,7 @@
  * Tick things anywhere (a whole section or folder too) to download or remove
  * them together.
  */
-import { useCallback, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
@@ -35,16 +35,24 @@ import { DownloadDialog, InstallDialog, RemoveDialog } from './FilesDialogs';
 import { deleteFolderKeepItems, downloadEverything, removeWithUndo, syncApp, type RemoveConfirm, type SaveTarget } from './filesActions';
 import { Check, IconTile } from './fileUi';
 import { capsLabel } from './fileUiShared';
+import { WorkspaceBanner, WorkspaceEntry, WorkspaceView } from '../workspace/WorkspacePanel';
+import { OPEN_WORKSPACE_VIEW, takeWorkspaceViewRequest } from '../workspace/workspaceUi';
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-type View = 'browse' | 'cleanup';
+type View = 'browse' | 'cleanup' | 'workspace';
 
 export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: (p: Page) => void }) {
   const tk = useTokens();
   const { inv, building, estimate } = useFilesInventory();
-  const [view, setView] = useState<View>('browse');
+  const [view, setView] = useState<View>(() => (takeWorkspaceViewRequest() ? 'workspace' : 'browse'));
+  // The top bar's workspace indicator asks for the Workspace view.
+  useEffect(() => {
+    const go = () => { takeWorkspaceViewRequest(); setView('workspace'); };
+    window.addEventListener(OPEN_WORKSPACE_VIEW, go);
+    return () => window.removeEventListener(OPEN_WORKSPACE_VIEW, go);
+  }, []);
   // Where you are, as the path down to it: when the thing itself goes (removed, renamed), you land on its nearest surviving parent.
   const [trail, setTrail] = useState<string[]>(compact ? [] : ['section:graphs']);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['section:graphs']));
@@ -200,6 +208,9 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
       </>} />
   ) : null;
   const cleanup = <CleanUpView inv={inv} compact={compact} onShow={open} onRemove={remove} />;
+  const workspace = <WorkspaceView compact={compact} />;
+  const banner = view !== 'workspace' && <WorkspaceBanner compact={compact} onOpen={() => setView('workspace')} />;
+  const crumb = (label: string) => [{ id: view, label, kind: 'section' as const, section: 'graphs' as const, size: 0 }];
 
   // With something ticked, the bar at the top becomes the selection's: what's ticked, its size, and what to do with it.
   const selectionBar = selection && (
@@ -233,14 +244,15 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         {/* The top bar already says Files: this bar appears once you're inside something, or have ticked something. */}
         {(!atRoot || selection) && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, height: 44, padding: '0 6px 0 4px', background: selection ? tk.bg.selected : tk.bg.panel, borderBottom: `1px solid ${tk.border.default}` }}>
           {selectionBar ?? <>
-          <IconButton icon="chevL" label="Back" tooltip={false} onClick={() => { if (view === 'cleanup') setView('browse'); else open(path.length > 1 ? path[path.length - 2].id : null); }} />
+          <IconButton icon="chevL" label="Back" tooltip={false} onClick={() => { if (view !== 'browse') setView('browse'); else open(path.length > 1 ? path[path.length - 2].id : null); }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Breadcrumbs path={view === 'cleanup' ? [{ id: 'cleanup', label: 'Clean up', kind: 'section', section: 'graphs', size: 0 }] : path} onOpen={open} compact />
+            <Breadcrumbs path={view === 'cleanup' ? crumb('Clean up') : view === 'workspace' ? crumb('Workspace folder') : path} onOpen={open} compact />
           </div>
           </>}
         </div>}
+        {banner}
         <div ref={scroller} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          {view === 'cleanup' ? cleanup : node ? nodeView : (
+          {view === 'cleanup' ? cleanup : view === 'workspace' ? workspace : node ? nodeView : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 12px 40px' }}>
               <div style={{ padding: '14px 14px 12px', borderRadius: radius.lg, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
                 <SpaceMeter inv={inv} estimate={estimate} compact onCleanUp={() => setView('cleanup')} />
@@ -250,6 +262,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
                 <Button variant="primary" icon="export" onClick={() => everything('download')}>Download all</Button>
               </div>
               <CleanUpEntry count={cleanupCount} onClick={() => setView('cleanup')} />
+              <WorkspaceEntry active={false} dense={false} onClick={() => setView('workspace')} />
               <span style={{ ...capsLabel(tk), padding: '4px 4px 0' }}>Everything saved</span>
               <div style={{ borderRadius: radius.lg, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden' }}>
                 {inv.sections.map((s, i) => <SectionRow key={s.id} node={s} first={i === 0} state={checkState(s.id)} onCheck={on => onCheck(s.id, on)} onOpen={() => open(s.id)} />)}
@@ -271,6 +284,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         </div>
         <div style={{ padding: '10px 10px 4px' }}>
           <CleanUpEntry count={cleanupCount} active={view === 'cleanup'} onClick={() => setView('cleanup')} dense />
+          <WorkspaceEntry active={view === 'workspace'} onClick={() => setView('workspace')} />
         </div>
         <div style={{ ...capsLabel(tk), padding: '12px 18px 6px' }}>Everything saved</div>
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 10px 16px' }}>
@@ -282,16 +296,17 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         <div style={{ height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: selection ? '0 16px 0 10px' : '0 16px 0 20px', borderBottom: `1px solid ${tk.border.default}`, background: selection ? tk.bg.selected : tk.bg.panel }}>
           {selectionBar ?? <>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {view === 'cleanup'
-              ? <Breadcrumbs path={[{ id: 'cleanup', label: 'Clean up', kind: 'section', section: 'graphs', size: 0 }]} onOpen={open} />
+            {view === 'cleanup' ? <Breadcrumbs path={crumb('Clean up')} onOpen={open} />
+              : view === 'workspace' ? <Breadcrumbs path={crumb('Workspace folder')} onOpen={open} />
               : <Breadcrumbs path={path} onOpen={open} />}
           </div>
           <Button size="sm" icon="import" onClick={() => { void startInstall(); }} title="Open a profile or partial ZIP: see what’s inside, then merge it or replace everything">Install…</Button>
           <Button size="sm" variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.right - 260, r.bottom + 4); }} title="One ZIP of everything saved here, with a manifest">Download everything</Button>
           </>}
         </div>
+        {banner}
         <div ref={scroller} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          {view === 'cleanup' ? cleanup : nodeView}
+          {view === 'cleanup' ? cleanup : view === 'workspace' ? workspace : nodeView}
         </div>
       </main>
       {dialogs}

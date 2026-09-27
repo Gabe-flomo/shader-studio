@@ -61,6 +61,7 @@ if (import.meta.env.DEV && location.hash === '#ui') {
   root.render(<><App /><Toaster /><BackgroundsHost /><DialogHost /><PerformanceBar /></>)
   // Songs stop when the graph that owns them is closed or they're deleted.
   void import('./lib/audioSync').then(m => m.startAudioSync())
-  // The backup folder (desktop app; a picked folder in Chrome/Edge) starts once the app is up.
-  window.setTimeout(() => { void import('./utils/backupFolder').then(m => m.startBackups()) }, 1500)
+  // The workspace folder (desktop app; a picked folder in Chrome/Edge) starts once the app is up;
+  // without one, the old backup folder keeps its copy.
+  window.setTimeout(() => { void import('./workspace/workspace').then(m => m.startWorkspace()) }, 1500)
 }
