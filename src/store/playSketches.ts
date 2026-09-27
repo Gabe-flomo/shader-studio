@@ -366,3 +366,54 @@ function draw(s) {
   sparks = sparks.filter(p => p.age < 1);
 }
 `;
+
+/** A CPU toy: Background → Colour, so no shader runs; ink trails on a flat colour. */
+export const SKETCH_INK = `// No shader here: the Play page's Background is Colour, so the graph is
+// paused and this sketch is all that runs, on a flat colour. A CPU toy.
+// Walkers follow a drifting noise field and leave ink. "Clear each frame"
+// is off, so every frame draws over the last; erasing a little of the
+// canvas each frame turns the strokes into fading trails.
+const params = {
+  count:   { value: 1200, min: 50, max: 4000, step: 10, label: 'Walkers' },
+  swirl:   { value: 2.4, min: 0.5, max: 8, step: 0.1, label: 'Swirl size' },
+  speed:   { value: 0.14, min: 0.02, max: 0.6, step: 0.01, label: 'Speed' },
+  fade:    { value: 0.05, min: 0, max: 0.3, step: 0.005, label: 'Fade' },
+  hue:     { value: 190, min: 0, max: 360, step: 1, label: 'Hue' },
+};
+let walkers = [];
+
+function spawn(s) {
+  return { x: Math.random() * s.width, y: Math.random() * s.height, life: 2 + Math.random() * 5, age: 0 };
+}
+
+function setup(s) { walkers = []; }
+
+function draw(s) {
+  const { ctx, width, height, dt, time, params, mouse } = s;
+  // 1. Fade: erase a little of every pixel (the same amount a second at any frame rate).
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = 'rgba(0, 0, 0, ' + (1 - Math.pow(1 - params.fade, dt * 60)) + ')';
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = 'source-over';
+  while (walkers.length < params.count) { const w = spawn(s); w.age = Math.random() * w.life; walkers.push(w); }
+  walkers.length = params.count;
+  // 2. Move each walker along the field and draw the step it took.
+  const k = params.swirl / height, step = params.speed * height * dt;
+  ctx.lineWidth = height * 0.0018; ctx.lineCap = 'round';
+  for (const w of walkers) {
+    let a = noise(w.x * k, w.y * k, time * 0.08) * Math.PI * 4;
+    // The mouse pushes walkers away within a fifth of the height.
+    if (mouse.over) {
+      const dx = w.x - mouse.x, dy = w.y - mouse.y, d = Math.hypot(dx, dy), r = height * 0.2;
+      if (d < r) a = lerp(a, Math.atan2(dy, dx), 1 - d / r);
+    }
+    const nx = w.x + Math.cos(a) * step, ny = w.y + Math.sin(a) * step;
+    const t = w.age / w.life;
+    ctx.strokeStyle = 'hsl(' + (params.hue + (a * 12) % 60) + ' 80% ' + (58 + 20 * Math.sin(t * Math.PI)) + '% / ' + Math.sin(t * Math.PI) + ')';
+    ctx.beginPath(); ctx.moveTo(w.x, w.y); ctx.lineTo(nx, ny); ctx.stroke();
+    w.x = nx; w.y = ny; w.age += dt;
+    // 3. A walker that is old or off the canvas starts again somewhere new.
+    if (w.age > w.life || w.x < 0 || w.y < 0 || w.x > width || w.y > height) Object.assign(w, spawn(s));
+  }
+}
+`;

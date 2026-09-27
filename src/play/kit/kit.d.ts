@@ -1,4 +1,6 @@
 import type { PlayLayer, PlayRecord, ActionKind } from '../../types/play';
+import type { KitBackground } from './layers.js';
+export type { KitBackground } from './layers.js';
 
 export interface KitPointer { x: number; y: number; over: boolean; down: boolean }
 export interface KitAudio { wave: Float32Array | null; freq: Float32Array | null; sampleRate: number }
@@ -16,6 +18,8 @@ export interface KitEnv {
   /** Exporting with a transparent background: don't paint the backdrop. */
   transparent?: boolean;
   backdrop: [number, number, number];
+  /** An image, a video or a colour in place of the shader: painted under the layers, and what they read as the picture (`gl` is then ignored). */
+  background?: KitBackground | null;
   audio: KitAudio | null;
   /** An audio layer's sound: a song loaded into it, or the live input. Falls back to `audio`. */
   audioFor?: (l: PlayLayer) => KitAudio | null;

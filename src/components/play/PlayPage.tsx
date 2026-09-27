@@ -53,7 +53,9 @@ import { GuidesToggle } from './GuidesToggle';
 import { OpenPlayableButton } from './OpenPlayable';
 import { MidiFileCard } from './MidiFileCard';
 import { TriggerPicker } from './TriggerPicker';
-import { DEFAULT_DISPLAY, actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
+import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind } from '../../types/play';
+import { playBackground } from '../../play/background';
+import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
@@ -115,6 +117,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     playEngine.setPerforming(true);
     return () => { playEngine.setPerforming(false); usePlayUi.getState().clearSolo(); };
   }, []);
+  // An image, video or colour background replaces the shader while this page shows (the Studio keeps the graph).
+  useEffect(() => playBackground.claim(), []);
   // H shows or hides the picture's guides, unless a mapping listens to H.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -349,7 +353,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           <GuidesToggle onPanel />
         </div>
       )}
-      {!compact && <PictureRow play={play} onChange={update} />}
+      {!compact && <BackgroundRow play={play} onChange={update} />}
       {tab === 'controls' && <div style={{ flex: 1, minHeight: play.notes && !compact ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {compact && (
           // Phones: everything scrolls together under the picture, notes first.
@@ -360,7 +364,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
               <AspectPicker onPanel />
               <GuidesToggle onPanel />
             </div>
-            <PictureRow play={play} onChange={update} />
+            <BackgroundRow play={play} onChange={update} />
           </div>
         )}
         {(() => {
@@ -605,39 +609,6 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
 }
 
 // ── Control row ──────────────────────────────────────────────────────────────
-
-/**
- * Show the shader, or only the layers on a backdrop colour. The shader keeps
- * rendering underneath, so reveal mattes, masks and particles still read it:
- * text with a Reveal matte then shows the picture inside the letters only.
- */
-function PictureRow({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: PlayRecord) => PlayRecord) => void }) {
-  const tk = useTokens();
-  const d = play.display ?? DEFAULT_DISPLAY;
-  const hex = `#${d.backdrop.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('')}`;
-  const setDisplay = (patch: Partial<PlayDisplay>) => onChange(p => {
-    const next = { ...(p.display ?? DEFAULT_DISPLAY), ...patch };
-    const isDefault = next.picture && next.backdrop.every((v, i) => v === DEFAULT_DISPLAY.backdrop[i]);
-    if (isDefault) { const rest = { ...p }; delete rest.display; return rest; }
-    return { ...p, display: next };
-  });
-  return (
-    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel }}>
-      <Tooltip label="Picture" description="Layers only hides the shader and shows the layers on a backdrop. The shader still runs underneath: text or images with a Reveal matte, and particles with Mask on, show it only inside themselves.">
-        <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'help' }}>Picture</span>
-      </Tooltip>
-      <Segmented size="sm" ariaLabel="Picture" value={d.picture ? 'shown' : 'hidden'} options={[
-        { value: 'shown', label: 'Shown', title: 'The shader, with the layers on top' },
-        { value: 'hidden', label: 'Layers only', title: 'Hide the shader; layers can still reveal it' },
-      ]} onChange={v => setDisplay({ picture: v === 'shown' })} />
-      {!d.picture && (
-        <label title="Backdrop colour" style={{ position: 'relative', width: 36, height: 22, borderRadius: radius.md, background: hex, boxShadow: `inset 0 0 0 1px ${alpha('#888', 0.5)}`, cursor: 'pointer' }}>
-          <input type="color" aria-label="Backdrop colour" value={hex} onChange={e => { const h = e.target.value; setDisplay({ backdrop: [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255] }); }} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
-        </label>
-      )}
-    </div>
-  );
-}
 
 /** Where a control's value lives: a layer's property or a node's param. */
 interface ControlSource { kind: 'layer' | 'node'; title: string; param: string; within?: string; missing: boolean; go: () => void }

@@ -15,7 +15,7 @@ import { kindOf, type LayerKindDef } from '../../types/layerKinds';
 import { addKindLayer, addableKinds, kindHint, useInstalledKinds } from '../../play/layerKinds';
 import type { MenuItem } from '../ui/Menu';
 import { fontFamily, radius } from '../../theme/tokens';
-import { layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
+import { layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { playId } from '../../play/playControls';
 import { addNullFor, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, moveLayer, removeLayer, renameLayer, resetLayer } from './layerOps';
 import { toast } from '../ui/toastStore';
@@ -158,7 +158,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             count={play.layers.length}
             touch={touch}
             selected={selected === l.id}
-            pictureHidden={play.display?.picture === false}
+            pictureHidden={isPictureHidden(play.display)}
             drawing={drawing?.layerId === l.id ? drawing.mode : null}
             exposedTargets={exposedTargets}
             onSelect={() => setSelected(l.id)}

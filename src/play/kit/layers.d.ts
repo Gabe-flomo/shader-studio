@@ -19,3 +19,8 @@ export interface KlSketchState { code: string; error: string | null; params: Rec
 export function klSketchCompile(code: string): KlSketchState;
 export function klSketchPress(st: KlSketchState, key: string, amount?: number): void;
 export function klSketchStep(st: KlSketchState, s: Record<string, unknown>, defs: ReadonlyArray<{ key: string; kind?: string }>, clear: boolean): string | null;
+
+/** What stands in for the shader under the layers: an image or video (null while loading) with its fit, on a colour. */
+export interface KitBackground { el: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | null; fit: 'cover' | 'contain' | 'stretch'; colour: [number, number, number] }
+export function klFitRect(fit: string, w: number, h: number, W: number, H: number): { x: number; y: number; w: number; h: number };
+export function klPaintBackground(c: HTMLCanvasElement, bg: KitBackground, W: number, H: number, cache?: boolean): HTMLCanvasElement;

@@ -44,7 +44,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const { input, missing } = useMemo(() => playWebInput(title), [playWebInput, title]);
   const snippet = useMemo(() => buildPlaySnippet(input, opts), [input, opts]);
   const left = useMemo(() => leftBehind(input.play, input.media), [input]);
-  const carried = useMemo(() => mediaCarried(input.media), [input]);
+  const carried = useMemo(() => mediaCarried(input.media, input.play), [input]);
   // Show what the reader recognises: the div, then the mount call; the runtime and the piece are elided.
   const preview = useMemo(() => {
     const lines = snippet.trimEnd().split('\n');

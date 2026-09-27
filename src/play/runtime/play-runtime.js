@@ -9,6 +9,9 @@
  *   passes: { stateful, echo: { copies, delay } | null, particles: [{ vertexShader, fragmentShader, count, shape }] }
  *   media:  { textures: { uniform: { src } }, videos: { uniform: { src, loop, speed } },
  *             audio: [{ id, src, uniforms, bands, range, mode }] }   (src: a data URL, or null)
+ *   play.display.source 'image' | 'video' | 'colour': that background (display.image,
+ *             display.video, display.backdrop) in place of the shader, which then never
+ *             compiles or draws; the layers read the background as the picture
  * options: {
  *   mode: 'player' | 'background',   player shows the controls; background is the picture only
  *   fit: 'contain' | 'cover',        contain keeps the exported shape (letterbox); cover fills the box
@@ -164,6 +167,14 @@
     // WebGL1: fwidth and friends are an extension there.
     if (!vertex && /\b(dFdx|dFdy|fwidth)\b/.test(src) && !/#extension\s+GL_OES_standard_derivatives/.test(src) && derivatives()) return '#extension GL_OES_standard_derivatives : enable\n' + src;
     return src;
+  }
+  // With an image, a video or a colour background the graph's shader is never compiled: this stands in, and never draws.
+  const BG_ONLY_FRAG = 'precision mediump float;\nvoid main(){ gl_FragColor = vec4(0.0); }';
+  /** Where a video background is at `time` seconds (types/play.ts videoTimeAt). */
+  function videoTimeAt(time, duration, rate, loop) {
+    if (!(duration > 0) || !isFinite(duration)) return 0;
+    const t = Math.max(0, time) * (rate > 0 ? rate : 1);
+    return loop ? t % duration : Math.min(t, Math.max(0, duration - 0.001));
   }
   // The app's dithering blit (ShaderCanvas BLIT_FRAG): a float target to 8 bits without banding.
   const BLIT_FRAG = `#ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -360,6 +371,11 @@ void main() {
     // The layers are this mount's own copies: dragging a null or replacing a script never reaches the bundle.
     const play0 = B.play || { controls: [], mappings: [], layers: [] };
     const play = Object.assign({}, play0, { layers: (play0.layers || []).map(l => Object.assign({}, l)) });
+    // Play's background: an image, a video or a colour in place of the shader. Then the graph never
+    // compiles or draws here; the layer kit paints the background and reads it as the picture.
+    const bgDisp = play.display || {};
+    const bgSource = bgDisp.source === 'image' || bgDisp.source === 'video' || bgDisp.source === 'colour' ? bgDisp.source : 'shader';
+    const bgOnly = bgSource !== 'shader';
     const onScript = typeof opts.onScript === 'function' ? opts.onScript : null;
     const scriptErrors = new Map();
     injectCss();
@@ -388,8 +404,8 @@ void main() {
     const gl2 = !!gl;
     if (!gl) gl = glCanvas.getContext('webgl', ctxOpts);
     if (!gl) { stage.append(el('div', 'ssp-error', 'WebGL is not available in this browser.')); return { destroy() {} }; }
-    const passes = B.passes || {};
-    const media = B.media || {};
+    const passes = bgOnly ? {} : B.passes || {};
+    const media = bgOnly ? { audio: (B.media || {}).audio } : B.media || {};
     const stateful = !!passes.stateful;
     const echoCfg = passes.echo && passes.echo.copies > 0 ? passes.echo : null;
     const particleDefs = passes.particles || [];
@@ -409,7 +425,7 @@ void main() {
     let program, blitProgram = null;
     const particles = [];
     try {
-      program = link(VS, B.fragmentShader);
+      program = link(VS, bgOnly ? BG_ONLY_FRAG : B.fragmentShader);
       if (stateful || echoCfg) blitProgram = link(VS, BLIT_FRAG);
       for (const ps of particleDefs) particles.push(Object.assign({ program: link(particleVertex(ps.vertexShader), ps.fragmentShader) }, ps));
     } catch (e) { stage.append(el('div', 'ssp-error', 'The shader did not compile here: ' + e.message)); return { destroy() {} }; }
@@ -539,6 +555,41 @@ void main() {
       e.addEventListener('seeked', () => { needsDraw = true; });
       v.el = e;
     }
+    // The background's image or video (a colour needs neither). The video follows the page's clock, as in the app.
+    let bgEl = null, bgVideo = null, bgMuted = true;
+    const bgVid = bgDisp.video || {};
+    if (bgSource === 'image' && bgDisp.image && bgDisp.image.src) {
+      bgEl = new Image(); bgEl.onload = () => { needsDraw = true; }; bgEl.src = bgDisp.image.src;
+    } else if (bgSource === 'video' && bgVid.src) {
+      const e = document.createElement('video');
+      e.muted = true; e.loop = bgVid.loop !== false; e.playsInline = true; e.preload = 'auto';
+      e.setAttribute('playsinline', ''); e.setAttribute('muted', '');
+      const url = dataToBlobUrl(bgVid.src); if (url !== bgVid.src) blobUrls.push(url);
+      e.src = url;
+      e.addEventListener('loadeddata', () => { needsDraw = true; });
+      e.addEventListener('seeked', () => { needsDraw = true; });
+      bgEl = bgVideo = e;
+      // Sound only after the visitor has clicked (browsers block it before): until then it plays muted.
+      bgMuted = bgVid.muted !== false;
+    }
+    const background = bgOnly ? { el: bgEl, fit: bgDisp.fit === 'contain' || bgDisp.fit === 'stretch' ? bgDisp.fit : 'cover', colour: bgDisp.backdrop || [0, 0, 0] } : null;
+    const followBackground = run => {
+      const v = bgVideo;
+      if (!v || v.readyState < 1) return;
+      const rate = bgVid.rate > 0 ? bgVid.rate : 1, loop = bgVid.loop !== false;
+      if (v.playbackRate !== rate) v.playbackRate = rate;
+      const target = videoTimeAt(time, v.duration, rate, loop), d = v.duration, diff = Math.abs(v.currentTime - target);
+      // Without a known length it just plays (videos recorded in a browser can say Infinity).
+      const known = isFinite(d) && d > 0;
+      const off = !known ? 0 : loop ? Math.min(diff, d - diff) : diff;
+      if (run && (loop || !known || target < d - 0.01)) {
+        if (v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); }
+        if (off > 0.3 && !v.seeking) v.currentTime = target;
+      } else {
+        if (!v.paused) v.pause();
+        if (off > 0.02 && !v.seeking) v.currentTime = target;
+      }
+    };
     const uploadVideos = () => {
       for (const v of videos) {
         const e = v.el;
@@ -579,7 +630,7 @@ void main() {
       gl.disableVertexAttribArray(1);
     };
     // The graph's Layers node: the layers' colour and distance field, uploaded after each frame's layers are drawn.
-    const usesLayersNode = /\bu_layers(Field)?\b/.test(B.fragmentShader);
+    const usesLayersNode = !bgOnly && /\bu_layers(Field)?\b/.test(B.fragmentShader);
     let layersTap = null, layersColourTex = null, layersFieldTex = null, layersFieldSize = [0, 0];
     if (usesLayersNode) {
       const mk = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0])); return t; };
@@ -820,6 +871,7 @@ void main() {
     const clampedMouse = (cx, cy) => { const u = toUnit(cx, cy); mouse.x = Math.max(0, Math.min(1, u.x)); mouse.y = Math.max(0, Math.min(1, u.y)); mouse.over = u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1; return u; };
     const listeners = [];
     const on = (target, type, fn, o) => { target.addEventListener(type, fn, o); listeners.push(() => target.removeEventListener(type, fn, o)); };
+    if (bgVideo && !bgMuted) on(window, 'pointerdown', () => { bgVideo.muted = false; }, true);
     if (pointerOn) {
       on(stage, 'pointermove', e => {
         const u = clampedMouse(e.clientX, e.clientY);
@@ -976,7 +1028,8 @@ void main() {
     const octx = ovCanvas.getContext('2d');
     const images = new Map();
     const img = src => { if (!src) return null; let i = images.get(src); if (!i) { i = new Image(); i.onload = () => { needsDraw = true; }; i.src = src; images.set(src, i); } return i.complete && i.naturalWidth ? i : null; };
-    const hidden = !!(play.display && play.display.picture === false);
+    // Layers only covers the picture with the backdrop (a colour background is the backdrop already).
+    const hidden = !!(play.display && play.display.picture === false && bgSource !== 'colour');
     const audioLayer = play.layers.some(l => l.kind === 'audio' && l.visible);
     const pointer = { x: 0.5, y: 0.5, over: false, down: false };
     function drawLayers(dt) {
@@ -988,6 +1041,7 @@ void main() {
       K.frame(octx, play, {
         gl: glCanvas, W, H, dpr, time, dt, value, pointer, markers, editing: false, hidden,
         backdrop: play.display ? play.display.backdrop : [0, 0, 0],
+        background,
         audio: L.status === 'on' ? { wave: L.wave, freq: L.freq, sampleRate: L.sr } : null,
         camera: camVideo || shared.camera, image: img,
         scriptStatus: (id, err) => { const e = err || null; if (scriptErrors.get(id) === e) return; scriptErrors.set(id, e); if (onScript) { try { onScript(id, e); } catch (x) { /* the host's problem */ } } },
@@ -1053,6 +1107,7 @@ void main() {
       const dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
       lastNow = now;
       runVideos(playing && !reduced && !document.hidden && !(pauseOffscreen && !onScreen));
+      followBackground(playing && !reduced && !document.hidden && !(pauseOffscreen && !onScreen));
       if ((pauseOffscreen && !onScreen) || document.hidden) return;
       if (reduced && !needsDraw && frame > 0) return;
       if (playing && !reduced) time += dt;
@@ -1064,13 +1119,15 @@ void main() {
       // Feedback and echo change with every frame drawn, so while paused they draw only when something changes (as in the app).
       if (!playing && (stateful || echoCfg) && !needsDraw && !moved && frame > 1) { refreshPanel(now); return; }
       needsDraw = false;
-      uploadVideos();
-      // Reduced motion's still frame of a feedback graph is the picture after its first 1.5 s
-      // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
-      if (reduced && stateful && frame === 1) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
-      drawPicture();
-      if (particles.length) drawParticles();
-      if (play.layers.length || hidden || usesLayersNode) drawLayers(dt);
+      if (!bgOnly) {
+        uploadVideos();
+        // Reduced motion's still frame of a feedback graph is the picture after its first 1.5 s
+        // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
+        if (reduced && stateful && frame === 1) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
+        drawPicture();
+        if (particles.length) drawParticles();
+      }
+      if (play.layers.length || hidden || usesLayersNode || bgOnly) drawLayers(dt);
       refreshPanel(now);
     }
     raf = requestAnimationFrame(tick);
@@ -1084,6 +1141,7 @@ void main() {
         for (const off of listeners) off();
         shared.instances.delete(inst);
         for (const v of videos) if (v.el) { v.el.pause(); v.el.removeAttribute('src'); v.el.load(); }
+        if (bgVideo) { bgVideo.pause(); bgVideo.removeAttribute('src'); bgVideo.load(); }
         for (const u of blobUrls) URL.revokeObjectURL(u);
         if (song.ctx) song.ctx.close();
         const lose = gl.getExtension('WEBGL_lose_context');

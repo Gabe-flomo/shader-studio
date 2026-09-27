@@ -13,7 +13,9 @@ import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
-import { SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
+import { SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
+// An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
+import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 import {
   defaultLayer, type ActionKind, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
@@ -503,10 +505,10 @@ A little smoothing turns the jumps into glides.
       layer('particles', 'dust', 'Dust', { count: 900, field: 'noise', speed: 0.8, size: 2.5, trail: 0.5, reveal: true }),
     ],
     display: { picture: false, backdrop: [0.03, 0.03, 0.05] },
-    notes: `**What it shows.** Picture → **Layers only** covers the shader with a backdrop colour, but it keeps rendering underneath. A Reveal matte and particles with **Mask** on show it only where they are.
+    notes: `**What it shows.** Background → **Layers only** covers the shader with a backdrop colour, but it keeps rendering underneath. A Reveal matte and particles with **Mask** on show it only where they are.
 
 **Try this.**
-• Switch Picture back to Shown to see what's underneath.
+• Turn Layers only off (under Background) to see what's underneath.
 • Change the backdrop colour.
 • Turn Mask off on the particles.`,
   })),
@@ -593,7 +595,7 @@ A little smoothing turns the jumps into glides.
     notes: `**What it shows.** Contour lines join points of equal brightness, like a map's height lines. **Flow** drifts the levels so lines crawl up and down the slopes.
 
 **Try this.**
-• Set Picture back to Shown to see what they trace.
+• Turn Layers only off (under Background) to see what they trace.
 • Try 4 levels, or 30.
 • Set Flow to 0 to hold them still.`,
   })),
@@ -744,7 +746,7 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
 
 **Try this.**
 • Set Trail to 1 so the painting never fades.
-• Switch Picture to Shown.
+• Turn Layers only off (under Background).
 • Change the particles' field.`,
   })),
 
@@ -930,10 +932,10 @@ Actions use them like keys, and they work on websites too (a background can reac
     display: { picture: false, backdrop: [0.02, 0.02, 0.035] },
     notes: `**What it shows.** \`s.picture.brightness(x, y)\` reads the shader under a pixel, 0 (black) to 1 (white). The layer's **Picture** switch turns it on; the kit samples the shader at 64 × 36 each frame.
 
-**How it's built.** Each dot throws darts: a random spot is kept with a chance equal to its brightness (raised to Contrast), so bright parts collect more dots. Dots live a second or two, then land somewhere new, so the stipple follows the drifting FBM underneath. The picture itself is hidden (Picture → Layers only).
+**How it's built.** Each dot throws darts: a random spot is kept with a chance equal to its brightness (raised to Contrast), so bright parts collect more dots. Dots live a second or two, then land somewhere new, so the stipple follows the drifting FBM underneath. The picture itself is hidden (Background → Layers only).
 
 **Try this.**
-• Switch Picture back to Shown to see what is being read.
+• Turn Layers only off (under Background) to see what is being read.
 • Raise Contrast for starker darks; lower it toward 0.5 for an even dust.
 • Turn the layer's Picture switch off: every spot reads 0 and the dots scatter evenly.`,
   })),
@@ -1006,6 +1008,38 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Drag Glow falloff down for a wide haze, up for a tight tube.
 • In the editor, draw a filled circle: the glow hugs its outline.
 • Turn "Seen by the Layers node" off on the layer: the lines stay, the glow goes.`,
+  })),
+
+  // ─ Backgrounds: an image, a video or a colour instead of the shader ─
+  ex('bgColourSketch', glowGraph({ radius: 0.1 }), play({
+    layers: [scriptLayer('ink', 'Ink', SKETCH_INK, { clear: false })],
+    controls: [ctl('walkers', 'layer:ink::p_count', 'Ink · Walkers', 50, 4000, 10), ctl('swirl', 'layer:ink::p_swirl', 'Ink · Swirl size', 0.5, 8), ctl('fade', 'layer:ink::p_fade', 'Ink · Fade', 0, 0.3), ctl('hue', 'layer:ink::p_hue', 'Ink · Hue', 0, 360, 1)],
+    mappings: [map('hueDrift', 'hue', S.lfo('triangle', 0.02), 170, 330)],
+    display: { picture: true, backdrop: [0.05, 0.05, 0.08], source: 'colour' },
+    notes: `**What it shows.** **Background → Colour**: no shader at all. The graph is paused on this page (the Studio still shows the glow), and the only thing running is a Script layer on a flat colour: a sketch in plain JavaScript, a CPU toy.
+
+**How it's built.** Ink's walkers follow \`noise(x, y, time)\` and draw one short step each frame. "Clear each frame" is off, so the steps pile up; the sketch erases a little of the canvas every frame, which turns them into trails. An LFO drifts the hue.
+
+**Try this.**
+• Move over the picture: the walkers part around the pointer.
+• Pick another colour next to Background.
+• Switch Background to **Shader**: the same ink over the glow, and the graph runs again.`,
+  })),
+  ex('bgPhotoFlow', glowGraph({ radius: 0.1 }), play({
+    layers: [
+      layer('particles', 'wind', 'Wind', { count: 1400, field: 'flow', turns: 1, speed: 0.7, size: 1.3, trail: 0.75, colour: 'palette', palette: 3, paletteBy: 'heading', blend: 'screen', detail: 'fine' }),
+    ],
+    controls: [ctl('turns', 'layer:wind::turns', 'Wind · Turns', 0, 4), ctl('dir', 'layer:wind::angle', 'Wind · Direction', -180, 180, 1), ctl('speed', 'layer:wind::speed', 'Wind · Speed', 0, 2)],
+    mappings: [map('turn', 'dir', S.lfo('triangle', 0.015), -60, 60)],
+    display: { picture: true, backdrop: [0, 0, 0], source: 'image', image: { name: 'Ridges at dusk.jpg', src: RIDGES_AT_DUSK } },
+    notes: `**What it shows.** **Background → Image**: a photo instead of the shader. Everything that reads the picture reads the photo: here a **Flow** particle field turns its brightness into headings, so the particles stream along the ridges and circle the sun.
+
+**How it's built.** The picture is a still (made for this example), kept in the setup, so saves, play files and web pages carry it. The graph is paused on this page. The particles read the photo at 128 × 72 (Detail: fine); an LFO slowly turns the whole field.
+
+**Try this.**
+• Drag Turns: at 0 every particle heads the same way; higher, they wrap around the light.
+• Background → **Replace** with your own photo, or pick **Video** for a moving picture.
+• Turn **Layers only** on: the photo hides, the particles keep following it.`,
   })),
 
   // ─ Recording ─

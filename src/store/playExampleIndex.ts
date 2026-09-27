@@ -61,6 +61,8 @@ const ROWS: Array<[string, string, string]> = [
   ['scriptParticles', 'Script: particles in plain JS', 'Spawn, move, draw, die: a spark fountain in forty lines.'],
   ['scriptP5', 'Script: a p5 sketch, pasted in', 'p5 vocabulary as plain names; its variables become sliders.'],
   ['scriptGlow', 'Script: the shader glows around it', 'The Layers node reads the sketch back, and SDF Glow turns its lines to neon.'],
+  ['bgColourSketch', 'Background: a colour, no shader', 'Background → Colour: the graph pauses and a Script layer runs alone on a flat colour, a CPU toy.'],
+  ['bgPhotoFlow', 'Background: particles over a photo', 'Background → Image: a photo instead of the shader, and a flow field of particles reading it.'],
   ['playTake', 'A recorded take', 'Ships with an 8-second performance: watch it back and Render it without playing.'],
   // Bigger pieces that put several techniques together (their graphs live in exampleGraphs.ts).
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],
@@ -85,6 +87,7 @@ const GROUP_STARTS: Array<[string, string]> = [
   ['Particles', 'playFlow'],
   ['Shapes and zones', 'playWalls'],
   ['Scripts', 'scriptFirst'],
+  ['Backgrounds', 'bgColourSketch'],
   ['Recording', 'playTake'],
   ['Bigger pieces', 'particleGlow'],
 ];

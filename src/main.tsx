@@ -13,6 +13,7 @@ import { getNodeDefinition } from './nodes/definitions'
 import { watchForStaleBuild } from './lib/staleBuild'
 import { takeApplier, useTakes } from './lib/takes'
 import { playOverlay } from './play/overlay'
+import { playBackground } from './play/background'
 
 const root = createRoot(document.getElementById('root')!)
 watchForStaleBuild()
@@ -22,7 +23,7 @@ watchForStaleBuild()
 if (import.meta.env.DEV) {
   const w = window as unknown as { __shaderStudio?: unknown; __shaderStudioDev?: unknown }
   w.__shaderStudio = useNodeGraphStore
-  w.__shaderStudioDev = { compileGraph, nodePreviewRenderer, loadExampleGraphs, resolveNodeAliases, getNodeDefinition, useTakes, takeApplier, playOverlay }
+  w.__shaderStudioDev = { compileGraph, nodePreviewRenderer, loadExampleGraphs, resolveNodeAliases, getNodeDefinition, useTakes, takeApplier, playOverlay, playBackground }
 }
 
 // Dev-only component gallery for the redesign primitives: open the app with #ui.

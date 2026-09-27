@@ -20,6 +20,8 @@ import { liveAudio } from '../lib/liveAudio';
 import { layerAudio } from '../lib/layerAudio';
 import { cameraInput } from '../lib/cameraInput';
 import { createLayerKit, type KitAudio, type KitEnv, type KitPointer, type LayerKit } from './kit/kit.js';
+import { klPaintBackground } from './kit/layers.js';
+import { playBackground } from './background';
 import { setScriptStatus } from './scriptStatus';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
@@ -124,6 +126,7 @@ class PlayOverlay {
     if (!ctx) return;
     for (const a of actions) this.kit.act(a);
     const env = this.env(gl, W, H, Math.min(2, window.devicePixelRatio || 1), time, dt, true);
+    env.background = playBackground.kitBackground();
     if (pointer) env.pointer = pointer;
     this.kit.frame(ctx, this.record, env);
   }
@@ -133,7 +136,7 @@ class PlayOverlay {
     this.ctx = el ? el.getContext('2d') : null;
   }
 
-  setRecord(record: PlayRecord): void { this.record = record; }
+  setRecord(record: PlayRecord): void { this.record = record; playBackground.setDisplay(record.display); }
 
   /** Fire an action now (the panel's Burst / Drop / Next / Clear buttons). */
   act(a: KitAction): void { this.fire(a); }
@@ -150,7 +153,8 @@ class PlayOverlay {
   /** The graph's Layers node reads what the layers draw: receive it after every frame (null = off). */
   setShaderTap(fn: ((tap: ShaderTap) => void) | null): void { this.shaderTap = fn; }
 
-  hasLayers(): boolean { return this.record.layers.some(l => l.visible) || this.record.display?.picture === false; }
+  /** Is there anything on the overlay: a visible layer, Layers only, or a background in place of the shader? */
+  hasLayers(): boolean { return this.record.layers.some(l => l.visible) || playBackground.hidden() || playBackground.active(); }
 
   /** Anything moving on its own keeps the render loop running. */
   isAnimated(): boolean { return this.kit.isAnimated(this.record) || !!this.drawing; }
@@ -418,8 +422,10 @@ class PlayOverlay {
       markers: !forExport && this.guides,
       editing: this.editing && !forExport && this.guides,
       selectedId: this.selectedId,
-      hidden: this.record.display?.picture === false,
+      hidden: playBackground.hidden(),
       backdrop: this.record.display?.backdrop ?? [0, 0, 0],
+      // An offline frame gets its background painted in by compositePixels (the video seeked to the frame).
+      background: forExport ? null : playBackground.kitBackground(),
       audio: needsAudio ? liveAudio.raw() : null,
       audioFor: l => {
         // A take playing back: the sound it recorded, where it has it.
@@ -431,7 +437,8 @@ class PlayOverlay {
       image: src => this.image(src),
       sensor: forExport ? () => {} : (k, v) => playEngine.setSensor(k, v),
       override: forExport || this.replaying ? () => {} : (id, k, v) => playEngine.setOverride(id, k, v),
-      shaderTap: forExport ? undefined : this.shaderTap ?? undefined,
+      // The graph's Layers node can't read the layers while the graph isn't running.
+      shaderTap: forExport || playBackground.active() ? undefined : this.shaderTap ?? undefined,
       scriptStatus: forExport ? undefined : setScriptStatus,
     };
   }
@@ -522,7 +529,14 @@ class PlayOverlay {
     const out = this.exportCanvas ?? (this.exportCanvas = document.createElement('canvas'));
     for (const c of [pic, out]) if (c.width !== width || c.height !== height) { c.width = width; c.height = height; }
     const px = pic.getContext('2d', { willReadFrequently: true })!;
-    const img = px.createImageData(width, height); img.data.set(rgba); px.putImageData(img, 0, 0);
+    const img = px.createImageData(width, height);
+    const bg = playBackground.kitBackground();
+    if (bg) {
+      // An image, a video (seeked to this frame by the caller) or a colour is the picture: the frame the GPU read back (if any) is ignored.
+      klPaintBackground(pic, bg, width, height);
+      rgba.set(px.getImageData(0, 0, width, height).data);
+    }
+    img.data.set(rgba); px.putImageData(img, 0, 0);
     const ox = out.getContext('2d')!;
     const dpr = Math.max(1, height / Math.max(1, this.canvas?.clientHeight || height));
     const env = this.env(pic, width, height, dpr, time, dt, true);
