@@ -52,7 +52,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   // A 3D Script layer brings three.js along: the snippet is rebuilt once it has loaded.
   const threeReady = useThreeSource(playUses3D(input.play));
   const snippet = useMemo(() => buildPlaySnippet(input, opts), [input, opts, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
-  const left = useMemo(() => leftBehind(input.play, input.media, { hands: withHands }), [input, withHands]);
+  const left = useMemo(() => leftBehind(input.play, input.media, { hands: withHands, graphs: input.backgroundGraphs ?? {} }), [input, withHands]);
   const carried = useMemo(() => { const t = threeCarried(input.play); return [...(t ? [t] : []), ...mediaCarried(input.media, withHands ? 'pending' : undefined, input.play)]; }, [input, withHands, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
   // Show what the reader recognises: the div, then the mount call; the runtime and the piece are elided.
   const preview = useMemo(() => {

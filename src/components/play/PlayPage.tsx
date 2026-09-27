@@ -768,7 +768,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           {control.kind === 'action' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62 }}>Amount</span>
-              <NumberInput value={control.amount ?? 1} min={0} max={1000} step={source.param === actionLabel('burst') ? 10 : 0.1} title="Burst: how many particles. Scatter: how hard. Others ignore it." onCommit={n => onAmount(Math.max(0, n))} style={{ width: 64, height: 24, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' }} />
+              <NumberInput value={control.amount ?? 1} min={0} max={1000} step={source.param === actionLabel('burst') ? 10 : 0.1} title="Burst: how many particles. Scatter: how hard. Go to: which background, from 1. Others ignore it." onCommit={n => onAmount(Math.max(0, n))} style={{ width: 64, height: 24, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' }} />
               <span style={{ color: tk.text.faint, fontSize: 11 }}>A mapping presses it each time it rises past the middle of its range.</span>
             </div>
           )}

@@ -44,7 +44,7 @@ export function graphFeatures(c: CompiledForWeb, play: PlayRecord): GraphFeature
  * now (control id → value): driven uniforms and layer values are baked at them.
  * `media` is the graph's input files, when they're loaded (the open graph).
  */
-export function webInputFrom(c: CompiledForWeb, play: PlayRecord, opts: { title: string; aspect: PreviewAspect; live?: ReadonlyMap<string, number | number[]>; media?: PlayMedia }): { input: PlayHtmlInput; missing: string[] } {
+export function webInputFrom(c: CompiledForWeb, play: PlayRecord, opts: { title: string; aspect: PreviewAspect; live?: ReadonlyMap<string, number | number[]>; media?: PlayMedia; backgroundGraphs?: PlayHtmlInput['backgroundGraphs'] }): { input: PlayHtmlInput; missing: string[] } {
   const live = opts.live ?? new Map<string, number | number[]>();
   // Uniforms at their current values, with driven ones at their live value.
   const uniforms: Record<string, number | number[]> = { ...c.paramUniforms };
@@ -62,5 +62,6 @@ export function webInputFrom(c: CompiledForWeb, play: PlayRecord, opts: { title:
     },
   };
   if (opts.media) input.media = opts.media;
+  if (opts.backgroundGraphs && Object.keys(opts.backgroundGraphs).length) input.backgroundGraphs = opts.backgroundGraphs;
   return { input, missing: unsupportedFeatures(graphFeatures(c, play)) };
 }

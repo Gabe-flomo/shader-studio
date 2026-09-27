@@ -1,18 +1,26 @@
 /**
- * BackgroundRow — what the Play picture is under the layers: the shader, an
- * image, a video or a flat colour (PlayDisplay, types/play.ts). Anything but
- * the shader stops the graph on the Play page (play/background.ts): the
- * layers draw over the background and read it as the picture.
+ * BackgroundRow — what the Play picture is under the layers.
  *
- * "Layers only" stays what it was: the picture (shader, image or video) is
- * covered by the backdrop colour but still runs, so Reveal mattes and
- * particles with Mask show it inside themselves. Old files' Layers only is
- * the shader's.
+ * With no Background layer, this setting decides: the shader or a flat colour
+ * (PlayDisplay, types/play.ts), as it always has. Choosing a graph, an image
+ * or a video here adds a Background layer (types/playLayers.ts) with it as the
+ * first source, so more can queue behind it. While the setup has a Background
+ * layer the row says so and links to it; deleting the layer hands the picture
+ * back to this setting. Anything but the shader stops the graph on the Play
+ * page (play/background.ts): the layers draw over the background and read it
+ * as the picture.
+ *
+ * Setups from before the Background layer keep their image or video here and
+ * still play it (their Replace, Fit and video options stay). "Layers only"
+ * stays what it was: the picture is covered by the backdrop colour but still
+ * runs, so Reveal mattes and particles with Mask show it inside themselves.
  */
 import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { BACKGROUND_IMAGE_MAX, BACKGROUND_IMAGE_SIDE, BACKGROUND_RATES, BACKGROUND_VIDEO_KEEP, DEFAULT_DISPLAY, backgroundSource, isDefaultDisplay, type BackgroundFit, type BackgroundSource, type PlayDisplay, type PlayRecord } from '../../types/play';
+import { BACKGROUND_RATES, BACKGROUND_VIDEO_KEEP, DEFAULT_DISPLAY, backgroundLayerOf, backgroundSource, isDefaultDisplay, type BackgroundFit, type BackgroundItem, type PlayDisplay, type PlayRecord } from '../../types/play';
 import { playBackground } from '../../play/background';
+import { useShowing } from './useQueueShowing';
+import { addBackground, newSourceId } from '../../play/backgroundQueue';
 import { mediaType } from '../../lib/mediaSources';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -22,9 +30,9 @@ import { Icon } from '../ui/Icon';
 import { Select } from '../ui/Select';
 import { Tooltip } from '../ui/Tooltip';
 import { toast } from '../ui/toastStore';
-
-const MB = 1024 * 1024;
-const sizeText = (bytes: number) => (bytes >= MB ? `${(bytes / MB).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+import { usePlayUi } from './playUi';
+import { GraphSourcePicker } from './GraphSourcePicker';
+import { IMAGE_ACCEPT, VIDEO_ACCEPT, baseName, imageSource, loadBackgroundImage, readDataUrl, sizeText, videoSource } from './backgroundFiles';
 
 const FITS: { value: BackgroundFit; label: string }[] = [
   { value: 'cover', label: 'Fill (crop)' },
@@ -32,52 +40,7 @@ const FITS: { value: BackgroundFit; label: string }[] = [
   { value: 'stretch', label: 'Stretch' },
 ];
 
-/** A picked image as a data URL: at most BACKGROUND_IMAGE_SIDE on its longest side (SVGs drawn at that size), JPEG unless it has transparency. */
-function loadBackgroundImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
-      const w0 = img.naturalWidth || BACKGROUND_IMAGE_SIDE, h0 = img.naturalHeight || BACKGROUND_IMAGE_SIDE;
-      const encode = (side: number) => {
-        const k = isSvg ? side / Math.max(w0, h0) : Math.min(1, side / Math.max(w0, h0));
-        const c = document.createElement('canvas');
-        c.width = Math.max(1, Math.round(w0 * k)); c.height = Math.max(1, Math.round(h0 * k));
-        const x = c.getContext('2d');
-        if (!x) return '';
-        x.drawImage(img, 0, 0, c.width, c.height);
-        // Transparency only matters for PNG, WebP and SVG; photos go as JPEG.
-        const png = (isSvg || file.type === 'image/png' || file.type === 'image/webp') && hasAlpha(x, c.width, c.height);
-        return png ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.88);
-      };
-      let src = encode(BACKGROUND_IMAGE_SIDE);
-      if (src.length > BACKGROUND_IMAGE_MAX) src = encode(1280);
-      if (!src || src.length > BACKGROUND_IMAGE_MAX) reject(new Error('The image is too big to keep, even scaled down.'));
-      else resolve(src);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('This browser can’t read that image.')); };
-    img.src = url;
-  });
-}
-
-function hasAlpha(x: CanvasRenderingContext2D, w: number, h: number): boolean {
-  try {
-    const d = x.getImageData(0, 0, w, h).data;
-    for (let i = 3; i < d.length; i += 16) if (d[i] < 255) return true;
-  } catch { /* unreadable: keep it as PNG */ return true; }
-  return false;
-}
-
-function readDataUrl(file: File, mime: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => (typeof r.result === 'string' ? resolve(r.result.replace(/^data:[^;,]*;/, `data:${mime};`)) : reject(new Error('Couldn’t read the file.')));
-    r.onerror = () => reject(r.error ?? new Error('Couldn’t read the file.'));
-    r.readAsDataURL(file);
-  });
-}
+type HeaderChoice = 'shader' | 'graph' | 'image' | 'video' | 'colour';
 
 const hexOf = (c: readonly number[]) => `#${c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('')}`;
 const fromHex = (h: string): [number, number, number] => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
@@ -93,12 +56,18 @@ const subscribe = (cb: () => void) => playBackground.onChange(cb);
 export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: PlayRecord) => PlayRecord) => void }) {
   const tk = useTokens();
   useBackgroundTick();
+  const layer = backgroundLayerOf(play);
   const d = play.display ?? DEFAULT_DISPLAY;
   const source = backgroundSource(d);
   const hasLayersNode = useNodeGraphStore(s => s.nodes.some(n => n.type === 'playLayers'));
   const imageInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
+  const segRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const showing = useShowing();
+  /** A file picked for the header's own (older) image or video, not for a new Background layer. */
+  const legacyPick = useRef(false);
 
   const setDisplay = (patch: Partial<PlayDisplay>) => onChange(p => {
     const next: PlayDisplay = { ...(p.display ?? DEFAULT_DISPLAY), ...patch };
@@ -108,15 +77,56 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
     return { ...p, display: next };
   });
 
+  /**
+   * The header's rule: an image, a video or a graph becomes the first source of
+   * a new Background layer. An image or video this setup kept here from before
+   * moves into it; the header's shader or colour stay, for when the layer goes.
+   */
+  const startLayer = (first: BackgroundItem) => {
+    const id = { v: '' };
+    onChange(p => {
+      const r = addBackground(p, [first]);
+      id.v = r.id;
+      const disp = r.play.display ? { ...r.play.display } : undefined;
+      if (disp) {
+        if (first.kind === 'image') delete disp.image;
+        if (first.kind === 'video') delete disp.video;
+        if (disp.source === 'image' || disp.source === 'video') delete disp.source;
+      }
+      const next = { ...r.play };
+      if (disp && !isDefaultDisplay(disp)) next.display = disp; else delete next.display;
+      return next;
+    });
+    toast.success('Added a Background layer', { message: `“${first.name}” is its first source. Queue more there, and step through them with keys, beats or notes.` });
+    if (id.v) usePlayUi.getState().reveal(id.v);
+  };
+
+  const choose = (v: HeaderChoice) => {
+    if (v === 'shader' || v === 'colour') { setDisplay({ source: v }); return; }
+    if (v === 'graph') { setPicking(true); return; }
+    // A picture this setup already kept moves into the layer; otherwise pick a file.
+    if (v === 'image' && d.image) { startLayer({ id: newSourceId(), kind: 'image', name: baseName(d.image.name), src: d.image.src }); return; }
+    if (v === 'video' && d.video && (d.video.src || playBackground.hasSessionVideo(d.video.name, d.video.bytes))) {
+      const vd = d.video;
+      startLayer({ id: newSourceId(), kind: 'video', name: vd.name, src: vd.src, bytes: vd.bytes, loop: vd.loop, muted: vd.muted, rate: vd.rate });
+      return;
+    }
+    legacyPick.current = false;
+    (v === 'image' ? imageInput : videoInput).current?.click();
+  };
+
   const pickImage = async (file: File) => {
     setBusy(true);
-    try { setDisplay({ source: 'image', image: { name: file.name.slice(0, 120), src: await loadBackgroundImage(file) } }); }
-    catch (e) { toast.error('Couldn’t use that image', { message: e instanceof Error ? e.message : String(e) }); }
-    finally { setBusy(false); }
+    try {
+      if (legacyPick.current) setDisplay({ source: 'image', image: { name: file.name.slice(0, 120), src: await loadBackgroundImage(file) } });
+      else startLayer(await imageSource(file));
+    } catch (e) { toast.error('Couldn’t use that image', { message: e instanceof Error ? e.message : String(e) }); }
+    finally { setBusy(false); legacyPick.current = false; }
   };
   const pickVideo = async (file: File) => {
     setBusy(true);
     try {
+      if (!legacyPick.current) { startLayer(await videoSource(file)); return; }
       const prev = d.video;
       const opts = { loop: prev?.loop ?? true, muted: prev?.muted ?? true, rate: prev?.rate ?? 1 };
       if (file.size <= BACKGROUND_VIDEO_KEEP) {
@@ -128,8 +138,9 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
         setDisplay({ source: 'video', video: { name: file.name.slice(0, 120), src: '', bytes: file.size, ...opts } });
       }
     } catch (e) { toast.error('Couldn’t use that video', { message: e instanceof Error ? e.message : String(e) }); }
-    finally { setBusy(false); }
+    finally { setBusy(false); legacyPick.current = false; }
   };
+  const replaceLegacy = (kind: 'image' | 'video') => { legacyPick.current = true; (kind === 'image' ? imageInput : videoInput).current?.click(); };
 
   const label = (text: string) => <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{text}</span>;
   const swatch = (title: string, value: readonly number[], set: (c: [number, number, number]) => void) => (
@@ -143,7 +154,41 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
       <span style={{ minWidth: 0 }}>{text}</span>
     </div>
   );
+  const inputs = (
+    <>
+      <input ref={imageInput} type="file" accept={IMAGE_ACCEPT} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void pickImage(f); }} />
+      <input ref={videoInput} type="file" accept={VIDEO_ACCEPT} style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void pickVideo(f); }} />
+    </>
+  );
+  const rowStyle: React.CSSProperties = { flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 12px 8px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel };
 
+  // ── A Background layer decides ────────────────────────────────────────────
+  if (layer) {
+    const n = layer.sources.length;
+    const shown = layer.sources.find(s => s.id === showing?.toId);
+    const what = !layer.visible ? 'hidden: its colour shows' : n === 0 ? 'no sources yet' : `${n} source${n === 1 ? '' : 's'}${shown ? ` · showing “${shown.name}”` : ''}`;
+    return (
+      <div style={rowStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <Tooltip label="Background" description="A Background layer decides what is under the layers: a queue of sources, one at a time. Delete the layer to use this setting (Shader, Colour) again.">
+            <span style={{ cursor: 'help' }}>{label('Background')}</span>
+          </Tooltip>
+          <button
+            type="button" onClick={() => usePlayUi.getState().reveal(layer.id)} title="Open the Background layer"
+            style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, height: 26, padding: '0 10px 0 8px', borderRadius: radius.md, border: 0, cursor: 'pointer', background: alpha(tk.accent.base, 0.1), color: tk.text.primary, textAlign: 'left' }}
+          >
+            <Icon name="slides" size={14} style={{ color: tk.accent.base, flexShrink: 0 }} />
+            <span style={{ font: `600 12px ${fontFamily.ui}`, flexShrink: 0 }}>{layer.label}</span>
+            <span style={{ font: `11.5px ${fontFamily.ui}`, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{what}</span>
+            <span style={{ flex: 1 }} />
+            <Icon name="chevR" size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── This setting decides ──────────────────────────────────────────────────
   const video = d.video;
   const vEl = source === 'video' ? playBackground.videoElement() : null;
   const videoMissing = source === 'video' && !!video && !video.src && !playBackground.hasSessionVideo(video.name, video.bytes);
@@ -157,20 +202,23 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
         : null;
 
   return (
-    <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 12px 8px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel }}>
-      <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg,.png,.jpg,.jpeg,.webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void pickImage(f); }} />
-      <input ref={videoInput} type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.m4v,.webm,.mov" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void pickVideo(f); }} />
+    <div style={rowStyle}>
+      {inputs}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <Tooltip label="Background" description="What the layers draw over. Shader is the graph. Image, Video and Colour replace it on the Play page: the graph stops running here (the Studio still shows it), and everything that reads the picture — Script layers, glyphs, contours, particles, mattes, picture shapes — reads the background instead.">
+        <Tooltip label="Background" description="What the layers draw over. Shader is the graph; Colour a flat colour. Graph…, Image… and Video… add a Background layer with it as the first source: queue more there and step through them. Anything but the shader pauses the graph on the Play page (the Studio still runs it), and everything that reads the picture reads the background instead.">
           <span style={{ cursor: 'help' }}>{label('Background')}</span>
         </Tooltip>
-        <Segmented<BackgroundSource> size="sm" ariaLabel="Background" value={source} onChange={v => setDisplay({ source: v })} options={[
-          { value: 'shader', label: 'Shader', title: 'The graph’s picture' },
-          { value: 'image', label: 'Image', title: 'A picture file (PNG, JPG, WebP or SVG) instead of the shader' },
-          { value: 'video', label: 'Video', title: 'A video file (MP4, WebM or MOV) instead of the shader' },
-          { value: 'colour', label: 'Colour', title: 'A flat colour: no picture at all, only the layers (a CPU sketch)' },
-        ]} />
+        <div ref={segRef} style={{ display: 'inline-flex' }}>
+          <Segmented<HeaderChoice> size="sm" ariaLabel="Background" value={source} onChange={choose} options={[
+            { value: 'shader', label: 'Shader', title: 'The graph’s picture' },
+            { value: 'graph', label: 'Graph…', title: 'Another graph (a saved one or an example): adds a Background layer' },
+            { value: 'image', label: 'Image…', title: 'A picture file (PNG, JPG, WebP or SVG): adds a Background layer' },
+            { value: 'video', label: 'Video…', title: 'A video file (MP4, WebM or MOV): adds a Background layer' },
+            { value: 'colour', label: 'Colour', title: 'A flat colour: no picture at all, only the layers (a CPU sketch)' },
+          ]} />
+        </div>
         {backdropUse && swatch(backdropUse, d.backdrop, c => setDisplay({ backdrop: c }))}
+        {busy && <span style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}` }}>Loading…</span>}
       </div>
 
       {(source === 'image' || source === 'video' || showToggle) && (
@@ -178,11 +226,11 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
           {source === 'image' && (
             <>
               {d.image && <img src={d.image.src} alt="" title={d.image.name} style={{ width: 40, height: 24, objectFit: 'cover', borderRadius: 5, boxShadow: `inset 0 0 0 1px ${alpha('#000', 0.12)}`, flexShrink: 0 }} />}
-              <Button size="sm" icon="import" disabled={busy} onClick={() => imageInput.current?.click()}>{busy ? 'Loading…' : d.image ? 'Replace' : 'Choose image'}</Button>
+              <Button size="sm" icon="import" disabled={busy} onClick={() => replaceLegacy('image')}>{busy ? 'Loading…' : d.image ? 'Replace' : 'Choose image'}</Button>
             </>
           )}
           {source === 'video' && (
-            <Button size="sm" icon="import" disabled={busy} onClick={() => videoInput.current?.click()}>{busy ? 'Loading…' : !video ? 'Choose video' : videoMissing ? 'Load it again' : 'Replace'}</Button>
+            <Button size="sm" icon="import" disabled={busy} onClick={() => replaceLegacy('video')}>{busy ? 'Loading…' : !video ? 'Choose video' : videoMissing ? 'Load it again' : 'Replace'}</Button>
           )}
           {(source === 'image' ? !!d.image : source === 'video' ? !!video && !videoMissing : false) && (
             <Select ariaLabel="Fit" height={26} value={d.fit ?? 'cover'} options={FITS} onChange={v => setDisplay({ fit: v as BackgroundFit })} style={{ fontSize: 12 }} />
@@ -208,6 +256,7 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
       {videoMissing && note(`“${video!.name}” (${sizeText(video!.bytes)}) was too big to save. Load it again to use it.`, 'warning')}
       {videoError && note('This browser can’t play that video. Try an MP4 (H.264) or a WebM.', 'warning')}
       {source !== 'shader' && note(<>The graph is paused on Play: only the {source === 'colour' ? 'colour' : source} and the layers are drawn. The Studio still runs the graph.{hasLayersNode ? ' Its Layers node gets nothing from here while the graph is paused.' : ''}</>)}
+      {picking && <GraphSourcePicker anchorRef={segRef} title="Show a graph" onClose={() => setPicking(false)} onPick={item => startLayer(item)} />}
     </div>
   );
 }

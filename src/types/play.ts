@@ -243,10 +243,10 @@ export interface PlayMapping {
 export type {
   BlendMode, MatteMode, NullLayer, TextLayer, ImageLayer, ParticlesLayer, ParticleField, ParticleShape, ParticleModulator,
   ShapeLayer, ZoneAction, AudioLayer, GlyphsLayer, ContoursLayer, LensLayer, BrushLayer, BodiesLayer, CameraLayer,
-  PlayLayer, PlayLayerKind, LayerNumericProp,
+  PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind,
 } from './playLayers';
-export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer } from './playLayers';
-import { parseLayer, type PlayLayer } from './playLayers';
+export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot } from './playLayers';
+import { parseLayer, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 import { parseSourceCredit, type SourceCredit } from './credit';
 
@@ -262,8 +262,9 @@ import { parseSourceCredit, type SourceCredit } from './credit';
  *   toggle / show / hide    any layer's visibility
  *   drop     bodies: drop them again from the top
  *   clear    brush: wipe the strokes
+ *   next / prev / shuffle / goto   background: another source (goto: the `amount`th, 1 = the first)
  */
-export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear';
+export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto';
 /** A built-in action, or a button a Script layer declares (`script:<key>`). */
 export type ActionKind = BuiltinActionKind | `script:${string}`;
 
@@ -282,7 +283,7 @@ export interface PlayAction {
   enabled: boolean;
 }
 
-export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear'];
+export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear', 'goto'];
 
 /** Which actions make sense for which layer kinds. */
 export const ACTIONS_FOR: Record<string, readonly BuiltinActionKind[]> = {
@@ -290,8 +291,28 @@ export const ACTIONS_FOR: Record<string, readonly BuiltinActionKind[]> = {
   bodies: ['drop', 'scatter', 'reset', 'freeze', 'toggle', 'show', 'hide'],
   text: ['next', 'prev', 'shuffle', 'reset', 'toggle', 'show', 'hide'],
   brush: ['clear', 'toggle', 'show', 'hide'],
+  // Change background: the next, previous, a random or the Nth source; Reset goes back to what Index says.
+  background: ['next', 'prev', 'shuffle', 'goto', 'reset', 'toggle', 'show', 'hide'],
   other: ['toggle', 'show', 'hide'],
 };
+
+/** The Background layer, when the setup has one (it is always the first layer). */
+export function backgroundLayerOf(play: Pick<PlayRecord, 'layers'> | undefined): BackgroundLayer | undefined {
+  const l = play?.layers[0];
+  return l && l.kind === 'background' ? l : undefined;
+}
+
+/**
+ * At most one Background layer, and first (drawn at the bottom): the first
+ * one found moves to the front, any others are dropped.
+ */
+export function normaliseBackgroundLayer(layers: PlayLayer[]): PlayLayer[] {
+  const i = layers.findIndex(l => l.kind === 'background');
+  if (i < 0) return layers;
+  const bg = layers[i];
+  const rest = layers.filter(l => l.kind !== 'background');
+  return i === 0 && rest.length === layers.length - 1 ? layers : [bg, ...rest];
+}
 
 /** The actions a layer offers: its kind's built-ins, plus the buttons a script declares. */
 export function actionsForLayer(l: PlayLayer | undefined): ActionKind[] {
@@ -316,7 +337,7 @@ export function parseActionTarget(target: string): { layerId: string; do: Action
   return { layerId: rest.slice(0, i), do: kind as ActionKind };
 }
 
-/** A new action's default amount: Burst throws a handful, everything else is 1. */
+/** A new action's default amount: Burst throws a handful, everything else is 1 (Go to: the first source). */
 export const defaultActionAmount = (kind: ActionKind) => (kind === 'burst' ? 60 : 1);
 
 export const LAYER_TARGET_PREFIX = 'layer:';
@@ -508,17 +529,7 @@ export const MIDI_FILE_MAX = 2_000_000;
 
 export const DEFAULT_DISPLAY: PlayDisplay = { picture: true, backdrop: [0, 0, 0] };
 
-/** The longest side a background image is kept at. */
-export const BACKGROUND_IMAGE_SIDE = 2048;
-/** Largest background image a record keeps (data URL characters, about 3 MB of file). */
-export const BACKGROUND_IMAGE_MAX = 4_200_000;
-/**
- * Largest background video a record keeps (file bytes). Bigger ones play for
- * this session only: saves live in browser storage, which holds a few MB.
- */
-export const BACKGROUND_VIDEO_KEEP = 2.5 * 1024 * 1024;
-/** Data URL characters for BACKGROUND_VIDEO_KEEP bytes (base64 is 4/3 the size), with room for the header. */
-const BACKGROUND_VIDEO_MAX = Math.ceil((BACKGROUND_VIDEO_KEEP * 4) / 3) + 100;
+export { BACKGROUND_IMAGE_SIDE, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_KEEP } from './playLayers';
 export const BACKGROUND_RATES = [0.25, 0.5, 1, 1.5, 2] as const;
 
 /** What is under the layers: the display's source, the shader when there is no display. */
@@ -544,8 +555,6 @@ export function videoTimeAt(time: number, duration: number, rate: number, loop: 
   return loop ? t % duration : Math.min(t, Math.max(0, duration - 0.001));
 }
 
-const DATA_IMAGE = /^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/]+=*$/;
-const DATA_VIDEO = /^data:video\/(mp4|webm|quicktime|ogg|x-m4v);base64,[A-Za-z0-9+/]+=*$/;
 
 /**
  * The display settings from a file, or undefined when they are the defaults.
@@ -858,7 +867,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   }
   // Layers made from a kind take its code; a kind the file lacks leaves a plain Script layer with the code it kept.
   const layerKinds = parseLayerKinds(r.layerKinds);
-  layers = syncLayerKinds(layers, layerKinds);
+  layers = normaliseBackgroundLayer(syncLayerKinds(layers, layerKinds));
   // Controls on a layer property need that layer; mappings reading a null need that null.
   const layerIds = new Set(layers.map(l => l.id));
   const keptControls = controls.filter(c => { const lt = parseLayerTarget(c.target) ?? parseActionTarget(c.target); return !lt || layerIds.has(lt.layerId); });

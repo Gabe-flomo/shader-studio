@@ -11,6 +11,7 @@ import { EXAMPLE_INDEX, loadExampleGraphs } from '../store/exampleIndex';
 import { nodeLabelOf } from '../play/paramDrivers';
 import { nodeSlicePrefix } from '../components/code/nodeSlice';
 import { webInputFrom, type CompiledForWeb } from '../play/webInput';
+import { preloadQueueExamples, queueGraphsForWeb } from '../play/queueGraphs';
 import { unsupportedFeatures, type GraphFeatures, type PlayMedia } from '../play/exportHtml';
 import { migrateLoadedNodes, migrateLoadedPlay, useNodeGraphStore } from '../store/useNodeGraphStore';
 import { parsePlayRecord, type PlayRecord } from '../types/play';
@@ -77,7 +78,7 @@ export function snapshotFromGraph(nodes: GraphNode[], play: PlayRecord, meta: { 
   try { result = compileGraph({ nodes }); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   if (!result.success || !result.fragmentShader) return { ok: false, error: result.errors?.join('; ') || 'The graph did not compile' };
   const compiled: CompiledForWeb = { ...result, particleSystems: result.particleSystems ?? [] };
-  const { input, missing } = webInputFrom(compiled, play, { title: meta.title, aspect: meta.aspect ?? 'free', media: meta.media ?? { textures: {}, videos: {}, audio: [] } });
+  const { input, missing } = webInputFrom(compiled, play, { title: meta.title, aspect: meta.aspect ?? 'free', media: meta.media ?? { textures: {}, videos: {}, audio: [] }, backgroundGraphs: queueGraphsForWeb(play).graphs });
   const byId = allNodes(nodes);
   const shaderNodes: SourceNode[] = [];
   for (const [id, slug] of result.nodeSlugMap ?? []) {
@@ -113,6 +114,8 @@ export async function snapshotExample(key: string, id?: string): Promise<Snapsho
   try { all = await loadExampleGraphs(); } catch (e) { return { ok: false, error: `Couldn’t load the examples: ${e instanceof Error ? e.message : String(e)}` }; }
   const g = all[key];
   if (!g) return { ok: false, error: `No example “${key}”` };
+  // Its Background layer's example graphs compile from the same chunk.
+  await preloadQueueExamples();
   const title = EXAMPLE_INDEX[key]?.label ?? g.label;
   return snapshotFromGraph(migrateLoadedNodes(g.nodes), migrateLoadedPlay(parsePlayRecord(g.play ?? null), g.nodes), { title, from: { kind: 'example', key }, id });
 }

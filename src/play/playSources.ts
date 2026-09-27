@@ -317,9 +317,10 @@ export function fireLabel(t: TriggerSpec): string {
 const REPEAT_HINTS: Record<string, string> = {
   toggle: 'A toggle fired every frame flickers on and off. Use Once, or Every N with a longer gap.',
   freeze: 'Freeze flips between frozen and moving each time it fires, so repeating it stutters. Use Once.',
-  next: 'Each fire moves to another line, so repeating it races through them. Every N seconds reads better.',
-  prev: 'Each fire moves to another line, so repeating it races through them. Every N seconds reads better.',
-  shuffle: 'Each fire picks another line, so repeating it flickers. Every N seconds reads better.',
+  next: 'Each fire moves on (another line, another background), so repeating it races through them and cuts crossfades short. Every N seconds reads better.',
+  prev: 'Each fire moves back (another line, another background), so repeating it races through them and cuts crossfades short. Every N seconds reads better.',
+  shuffle: 'Each fire picks another line or background, so repeating it flickers. Every N seconds reads better.',
+  // goto: repeating Go to N shows the same source again, which changes nothing.
   drop: 'Each fire drops the bodies from the top again, so repeating it keeps them in the air.',
   reset: 'Each fire starts the layer over, so repeating it holds it at the start.',
   'mode:toggle': 'A toggle fired every frame flickers between its two values. Use Once, or Every N with a longer gap.',

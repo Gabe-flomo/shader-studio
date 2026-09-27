@@ -50,13 +50,16 @@ export function resetLayer(p: PlayRecord, id: string): PlayRecord {
   return {
     ...p,
     // A layer of a saved kind goes back to that kind's code and values, not to the starter sketch.
-    layers: p.layers.map(l => (l.id === id ? resetKindLayer(p, l) ?? { ...defaultLayer(l.kind, l.id, l.label), visible: l.visible } as PlayLayer : l)),
+    // A Background layer keeps its queue: the sources are what it is, not a setting.
+    layers: p.layers.map(l => (l.id === id ? resetKindLayer(p, l) ?? { ...defaultLayer(l.kind, l.id, l.label), visible: l.visible, ...(l.kind === 'background' ? { sources: l.sources } : {}) } as PlayLayer : l)),
   };
 }
 
 export function moveLayer(p: PlayRecord, id: string, dir: -1 | 1): PlayRecord {
   const i = p.layers.findIndex(l => l.id === id), j = i + dir;
   if (i < 0 || j < 0 || j >= p.layers.length) return p;
+  // The Background layer stays at the bottom.
+  if (p.layers[i].kind === 'background' || p.layers[j].kind === 'background') return p;
   const layers = [...p.layers];
   [layers[i], layers[j]] = [layers[j], layers[i]];
   return { ...p, layers };
@@ -87,6 +90,14 @@ export function layerMenuItems({ onDuplicate, onReset, onRemove }: { onDuplicate
     { label: 'Duplicate', hint: 'A copy on top, slightly offset', onSelect: onDuplicate },
     { label: 'Reset to defaults', hint: 'Every setting back to new; the name, controls and mappings stay', onSelect: onReset },
     { label: 'Delete', hint: 'With the controls and mappings that use it', onSelect: onRemove, danger: true },
+  ];
+}
+
+/** The Background layer's menu: no Duplicate (there is only one). */
+export function backgroundMenuItems({ onReset, onRemove }: { onReset: () => void; onRemove: () => void }) {
+  return [
+    { label: 'Reset settings', hint: 'Index, placement and transition back to new; the queue, controls and mappings stay', onSelect: onReset },
+    { label: 'Delete', hint: 'The header’s Background setting decides again', onSelect: onRemove, danger: true },
   ];
 }
 

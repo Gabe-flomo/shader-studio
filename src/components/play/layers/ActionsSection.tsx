@@ -79,10 +79,16 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
               <span style={label}>Do</span>
-              <Select ariaLabel="Action" value={kinds.includes(a.do) ? a.do : kinds[0]} options={kinds.map(k => ({ value: k, label: actionLabel(k, layer) }))} onChange={v => update(a.id, { do: v as ActionKind })} height={26} />
+              <Select ariaLabel="Action" value={kinds.includes(a.do) ? a.do : kinds[0]} options={kinds.map(k => ({ value: k, label: actionLabel(k, layer) }))} onChange={v => update(a.id, { do: v as ActionKind, ...(v === 'goto' ? { amount: 1 } : {}) })} height={26} />
               <Select ariaLabel="Layer" value={a.layerId} options={play.layers.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const l = play.layers.find(x => x.id === v); update(a.id, { layerId: v, do: l && actionsFor(l).includes(a.do) ? a.do : l ? defaultAction(l) : a.do }); }} height={26} />
               {(a.do === 'burst' || a.do === 'scatter') && (
                 <NumberInput value={a.amount} min={0} max={a.do === 'burst' ? 5000 : 10} step={a.do === 'burst' ? 10 : 0.5} title={a.do === 'burst' ? 'How many particles' : 'How hard'} onCommit={n => update(a.id, { amount: Math.max(0, n) })} style={numStyle} />
+              )}
+              {a.do === 'goto' && layer?.kind === 'background' && (
+                // Go to N: which source, counting from 1 (the queue's numbers).
+                <Select ariaLabel="Which source" value={String(Math.max(1, Math.round(a.amount)))} height={26}
+                  options={(layer.sources.length ? layer.sources : [{ id: '', name: 'the first' }]).map((s, i) => ({ value: String(i + 1), label: `${i + 1} · ${s.name}` }))}
+                  onChange={v => update(a.id, { amount: Number(v) })} />
               )}
               <span style={{ flex: 1 }} />
               <Toggle checked={a.enabled} onChange={enabled => update(a.id, { enabled })} />

@@ -39,6 +39,7 @@ import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPr
 import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 import { hdDraw } from './hands.js';
+import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
 const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, lens: 1, script: 1 };
@@ -97,6 +98,80 @@ export function createLayerKit() {
 
   function brushState(id) { let b = brushes.get(id); if (!b) { b = { pts: [], stroke: 0, was: false }; brushes.set(id, b); } return b; }
 
+  // ── Background layer (queue.js): the queue's state, its sketches, and the last plan ──
+  const bqStates = new Map(), bqSketches = new Map();
+  let bqLast = null;
+  const BQ_ACTS = { next: 1, prev: 1, shuffle: 1, goto: 1, reset: 1 };
+  /**
+   * The Background layer's plan (null without one). Carries out the Change
+   * background actions queued since the last call, then says what shows now.
+   * The host asks before it draws (to render graph sources first); the frame
+   * asks again and gets the same answer.
+   */
+  function background(record, env) {
+    const l = record.layers[0];
+    if (!l || l.kind !== 'background') { bqLast = null; return null; }
+    let st = bqStates.get(l.id);
+    if (!st) { st = bqState(); bqStates.set(l.id, st); }
+    const value = k => env.value(l, k);
+    if (queue.length) {
+      const rest = [];
+      for (const a of queue) {
+        if (a.layerId !== l.id) { rest.push(a); continue; }
+        if (BQ_ACTS[a.do]) bqAct(st, l, value, a, rngFor(l.id, 'background'));
+        else if (a.do === 'toggle') shown.set(l.id, !(shown.has(l.id) ? shown.get(l.id) : l.visible));
+        else if (a.do === 'show') shown.set(l.id, true);
+        else if (a.do === 'hide') shown.set(l.id, false);
+      }
+      queue = rest;
+    }
+    if (lastVisible.has(l.id) && lastVisible.get(l.id) !== l.visible) shown.delete(l.id);
+    lastVisible.set(l.id, l.visible);
+    const visible = shown.has(l.id) ? shown.get(l.id) : l.visible;
+    bqLast = bqPlan(st, l, value, env.time, visible, !!env.allowDirect);
+    return bqLast;
+  }
+  /** A sketch source, one step a frame into a canvas the size of the picture (only while it shows). */
+  function bqSketch(item, W, H, dpr, time, dt, pointer, env) {
+    let st = bqSketches.get(item.id);
+    const mode = item.mode === '3d' ? '3d' : '2d', three = env.three || null;
+    // A 3D sketch waits for three.js, as a 3D Script layer does.
+    if (mode === '3d' && !three && !st) return null;
+    if (!st || st.code !== (item.code || '') || st.mode !== mode || (mode === '3d' && st.three !== three)) {
+      klSketchDispose(st);
+      st = klSketchCompile(item.code || '', { mode, three });
+      st.three = three;
+      bqSketches.set(item.id, st);
+      if (env.scriptStatus) env.scriptStatus('bg:' + item.id, st.error);
+    }
+    const buf = klCanvas(pool, 'bqs_' + item.id, W, H);
+    if (st.steppedAt === frameNo) return st.error ? null : buf;
+    st.steppedAt = frameNo;
+    if (st.error) return null;
+    const params = {};
+    for (const k in st.params) { const d = st.params[k]; params[k] = d && typeof d === 'object' && typeof d.value === 'number' ? d.value : typeof d === 'number' ? d : 0; }
+    const s = {
+      ctx: buf.getContext('2d'), width: W, height: H, dpr, time, dt, frame: st.frame, params, state: st.state,
+      mouse: { x: pointer.x * W, y: (1 - pointer.y) * H, over: !!pointer.over, down: !!pointer.down },
+      picture: { brightness: () => 0 },
+      null: () => null,
+      random: rngFor('bg:' + item.id, 'script'),
+    };
+    const err = klSketchStep(st, s, [], true);
+    if (err) { if (env.scriptStatus) env.scriptStatus('bg:' + item.id, err); return null; }
+    return buf;
+  }
+  /** What a source shows this frame: { el, w, h, full } (full = it is the picture's size), or null. */
+  function bqFrameOf(item, env, W, H, dpr, time, dt, pointer) {
+    switch (item.kind) {
+      case 'image': { const im = item.src ? env.image(item.src) : null; return im ? { el: im, w: im.naturalWidth || im.width, h: im.naturalHeight || im.height } : null; }
+      case 'video': { const v = env.video ? env.video(item) : null; return v && v.readyState >= 2 && v.videoWidth > 0 ? { el: v, w: v.videoWidth, h: v.videoHeight } : null; }
+      case 'script': { const b = bqSketch(item, W, H, dpr, time, dt, pointer, env); return b ? { el: b, w: W, h: H, full: true } : null; }
+      case 'graph': { const g = env.graphFrame ? env.graphFrame(item) : null; const el = g || (item.graph === 'this' ? env.gl : null); return el ? { el, w: W, h: H, full: true } : null; }
+      default: return null;
+    }
+  }
+
   /** The null a layer points at, where it is now. */
   function nullPos(record, env, id) {
     const n = id && record.layers.find(l => l.id === id);
@@ -142,17 +217,25 @@ export function createLayerKit() {
     frameNo++;
     const W = env.W, H = env.H, dpr = env.dpr || 1, time = env.time, dt = Math.min(0.1, Math.max(0, env.dt));
     const aspect = W / H, pointer = env.pointer || { x: 0.5, y: 0.5, over: false, down: false };
-    // An image, a video or a colour in place of the shader: it is the picture every layer reads.
-    const gl = env.background ? klPaintBackground(klCanvas(pool, 'background', W, H), env.background, W, H, true) : env.gl;
+    // A Background layer: its queue is the picture every layer reads (painted here, unless the
+    // host drew its one graph straight to the GL canvas). Else Play's image, video or colour in
+    // place of the shader, else the shader.
+    const bq = background(record, env);
+    const gl = bq
+      ? (bq.direct ? env.gl : bqCompose(klCanvas(pool, 'bgq', W, H), bq, W, H, item => bqFrameOf(item, env, W, H, dpr, time, dt, pointer)))
+      : env.background ? klPaintBackground(klCanvas(pool, 'background', W, H), env.background, W, H, true) : env.gl;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, W, H);
     // A transparent export keeps the backdrop out: only the layers, over nothing.
-    if (env.hidden && !env.transparent) { ctx.fillStyle = klCss(env.backdrop || [0, 0, 0]); ctx.fillRect(0, 0, W, H); }
+    if (bq) { if (!bq.direct && !env.transparent) ctx.drawImage(gl, 0, 0); }
+    else if (env.hidden && !env.transparent) { ctx.fillStyle = klCss(env.backdrop || [0, 0, 0]); ctx.fillRect(0, 0, W, H); }
     else if (env.background && !env.transparent) ctx.drawImage(gl, 0, 0);
     const layers = record.layers;
     const ids = new Set(layers.map(l => l.id));
-    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
+    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
+    // Sketch sources that left the queue (or whose layer did) stop keeping state.
+    if (bqSketches.size) { const inQueue = new Set(bq ? record.layers[0].sources.map(s => s.id) : []); for (const id of [...bqSketches.keys()]) if (!inQueue.has(id)) { klSketchDispose(bqSketches.get(id)); bqSketches.delete(id); } }
     // A visibility change in the panel wins over an earlier show/hide action.
     for (const l of layers) { if (lastVisible.has(l.id) && lastVisible.get(l.id) !== l.visible) shown.delete(l.id); lastVisible.set(l.id, l.visible); }
     const baseVisible = l => (shown.has(l.id) ? shown.get(l.id) : l.visible);
@@ -443,6 +526,7 @@ export function createLayerKit() {
       try {
         switch (l.kind) {
           case 'null': break; // markers are drawn last, above everything
+          case 'background': break; // painted first, under everything (see the top of frame)
           case 'text': case 'image': case 'camera': {
             const opacity = v('opacity');
             if (opacity <= 0) break;
@@ -713,12 +797,15 @@ export function createLayerKit() {
     },
     /** Does anything need a new frame every tick (particles, bodies, a following null…)? */
     isAnimated(record) {
+      // A crossfade under way, or a sketch showing in the background.
+      if (bqLast && record.layers[0] && record.layers[0].id === bqLast.layerId && (bqLast.fading || bqLast.items.some(i => i.item.kind === 'script'))) return true;
       return record.layers.some(l => (shown.has(l.id) ? shown.get(l.id) : l.visible) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && l.sequence) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera')));
     },
     /**
      * Forget all state (a new recording starts from scratch). `seed` (a take's)
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
-    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
+    background,
+    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
   };
 }

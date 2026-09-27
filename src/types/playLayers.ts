@@ -538,10 +538,152 @@ export interface ScriptLayer extends LayerBase {
   [param: `p_${string}`]: number;
 }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer;
+// ── Background (a queue of pictures under every layer) ──────────────────────
+
+/** The longest side a background image is kept at. */
+export const BACKGROUND_IMAGE_SIDE = 2048;
+/** Largest background image a record keeps (data URL characters, about 3 MB of file). */
+export const BACKGROUND_IMAGE_MAX = 4_200_000;
+/**
+ * Largest background video a record keeps (file bytes). Bigger ones play for
+ * this session only: saves live in browser storage, which holds a few MB.
+ */
+export const BACKGROUND_VIDEO_KEEP = 2.5 * 1024 * 1024;
+/** Data URL characters for BACKGROUND_VIDEO_KEEP bytes (base64 is 4/3 the size), with room for the header. */
+export const BACKGROUND_VIDEO_MAX = Math.ceil((BACKGROUND_VIDEO_KEEP * 4) / 3) + 100;
+export const DATA_IMAGE = /^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/]+=*$/;
+export const DATA_VIDEO = /^data:video\/(mp4|webm|quicktime|ogg|x-m4v);base64,[A-Za-z0-9+/]+=*$/;
+/** Sources a Background layer holds at most. */
+export const BACKGROUND_QUEUE_MAX = 24;
+/** Largest copy of a saved graph a source keeps (JSON characters). */
+export const BACKGROUND_GRAPH_MAX = 600_000;
+
+/**
+ * What a Background source is:
+ *   graph   a graph rendered live as a shader: this graph, a bundled example or a saved graph
+ *   script  a JavaScript sketch (setup / draw on a 2D canvas the size of the picture)
+ *   image   a still picture (a data URL)
+ *   video   a video file (a data URL, or '' when too big to keep: this session only)
+ *   colour  a flat colour
+ */
+export type BackgroundItemKind = 'graph' | 'script' | 'image' | 'video' | 'colour';
+export const BACKGROUND_ITEM_KINDS: readonly BackgroundItemKind[] = ['graph', 'script', 'image', 'video', 'colour'];
+
+/** One source in a Background layer's queue. Only the fields its kind uses are set. */
+export interface BackgroundItem {
+  id: string;
+  kind: BackgroundItemKind;
+  name: string;
+  /** graph: `this` (the open graph), `example:<key>` (a bundled example) or `saved:<name>` (a saved graph, copied into `nodes`). */
+  graph?: string;
+  /** graph from a saved graph: its nodes as they were when it was added, so the setup carries it anywhere. */
+  nodes?: unknown[];
+  /** script: the sketch, and whether it draws in 2D or 3D (a 3D Script, on WebGL). */
+  code?: string;
+  mode?: '2d' | '3d';
+  /** image, video: the file as a data URL (a video too big to keep has '' and plays this session only). */
+  src?: string;
+  /** video: its size in bytes, and how it plays. */
+  bytes?: number;
+  loop?: boolean;
+  muted?: boolean;
+  rate?: number;
+  /** colour: the colour. */
+  colour?: RGB;
+}
+
+/**
+ * The picture under every other layer: a queue of sources (graphs, sketches,
+ * images, videos, colours), one showing at a time. `index` picks it (a number
+ * a control or any mapping can drive), `offset` rotates the queue, and the
+ * Change background actions step through it. The background itself can be
+ * moved, scaled and turned, and changes cut or crossfade. Only the showing
+ * source runs (and the outgoing one during a crossfade). At most one per
+ * setup, always first in `layers` (drawn at the bottom).
+ */
+export interface BackgroundLayer extends LayerBase {
+  kind: 'background';
+  sources: BackgroundItem[];
+  /** Which source shows, 0 = the first (rounded; the Next and Previous actions count on from it). */
+  index: number;
+  /** Rotates the queue: index i shows source i + offset (wrapping round). */
+  offset: number;
+  /** Where the background's centre sits (0..1, y up), its size (1 = as fitted) and its turn in degrees. */
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  /** How an image or video meets the picture: fill (crop), fit inside, or stretch. */
+  fit: 'cover' | 'contain' | 'stretch';
+  /** Under everything: the bars around a fitted picture, a source still loading. */
+  colour: RGB;
+  transition: 'cut' | 'fade';
+  /** Crossfade length in seconds. */
+  duration: number;
+}
+
+/** A queue position: index + actions' steps + offset, wrapped into the queue (-1 when it is empty). */
+export function queueSlot(index: number, step: number, offset: number, n: number): number {
+  if (!(n > 0)) return -1;
+  const k = Math.round(Number.isFinite(index) ? index : 0) + Math.round(step) + Math.round(Number.isFinite(offset) ? offset : 0);
+  return ((k % n) + n) % n;
+}
+
+function parseBackgroundItem(raw: unknown): BackgroundItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const id = typeof r.id === 'string' && r.id ? r.id.slice(0, 80) : null;
+  const kind = BACKGROUND_ITEM_KINDS.includes(r.kind as BackgroundItemKind) ? r.kind as BackgroundItemKind : null;
+  if (!id || !kind) return null;
+  const name = typeof r.name === 'string' && r.name.trim() ? r.name.slice(0, 120) : kind === 'graph' ? 'Graph' : kind === 'script' ? 'Sketch' : kind === 'image' ? 'Image' : kind === 'video' ? 'Video' : 'Colour';
+  const out: BackgroundItem = { id, kind, name };
+  switch (kind) {
+    case 'graph': {
+      const g = typeof r.graph === 'string' ? r.graph : '';
+      if (g === 'this') out.graph = 'this';
+      else if (/^example:[A-Za-z0-9_.-]{1,120}$/.test(g)) out.graph = g;
+      else if (/^saved:.{1,200}$/.test(g) && Array.isArray(r.nodes) && r.nodes.length && JSON.stringify(r.nodes).length <= BACKGROUND_GRAPH_MAX) { out.graph = g; out.nodes = r.nodes as unknown[]; }
+      else return null;
+      break;
+    }
+    case 'script': out.code = typeof r.code === 'string' ? r.code.slice(0, 200_000) : ''; if (r.mode === '3d') out.mode = '3d'; break;
+    case 'image': if (typeof r.src !== 'string' || r.src.length > BACKGROUND_IMAGE_MAX || !DATA_IMAGE.test(r.src)) return null; out.src = r.src; break;
+    case 'video': {
+      out.src = typeof r.src === 'string' && r.src.length <= BACKGROUND_VIDEO_MAX && DATA_VIDEO.test(r.src) ? r.src : '';
+      out.bytes = typeof r.bytes === 'number' && Number.isFinite(r.bytes) && r.bytes > 0 ? Math.round(r.bytes) : 0;
+      out.loop = r.loop !== false; out.muted = r.muted !== false;
+      out.rate = typeof r.rate === 'number' && Number.isFinite(r.rate) ? Math.max(0.1, Math.min(4, r.rate)) : 1;
+      break;
+    }
+    case 'colour': {
+      const c = r.colour;
+      out.colour = Array.isArray(c) && c.length >= 3 && c.slice(0, 3).every(n => typeof n === 'number' && Number.isFinite(n))
+        ? [Math.max(0, Math.min(1, c[0])), Math.max(0, Math.min(1, c[1])), Math.max(0, Math.min(1, c[2]))] : [0, 0, 0];
+      break;
+    }
+  }
+  return out;
+}
+
+/** A queue from a file: sources that don't parse are dropped, ids stay unique, at most BACKGROUND_QUEUE_MAX. */
+export function parseBackgroundItems(v: unknown): BackgroundItem[] {
+  if (!Array.isArray(v)) return [];
+  const seen = new Set<string>();
+  const out: BackgroundItem[] = [];
+  for (const raw of v) {
+    const it = parseBackgroundItem(raw);
+    if (!it || seen.has(it.id)) continue;
+    seen.add(it.id);
+    out.push(it);
+    if (out.length >= BACKGROUND_QUEUE_MAX) break;
+  }
+  return out;
+}
+
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background'];
 
 /** The starter sketch a new Script layer holds. */
 export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
@@ -664,6 +806,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     effectors: [], effRadius: 0.25, effSoftness: 0.6, effPush: 0, effScale: 1, effRotate: 0, effOpacity: 0, effHue: 0, effHide: 0, effInvert: false, blend: 'normal',
   },
   script: { toShader: true, mode: '2d', code: DEFAULT_SCRIPT, paramDefs: DEFAULT_SCRIPT_PARAMS, clear: true, readPicture: false, opacity: 1, blend: 'normal', p_count: 24, p_size: 18, p_speed: 1 },
+  background: { toShader: false, sources: [], index: 0, offset: 0, x: 0.5, y: 0.5, scale: 1, rotation: 0, fit: 'cover', colour: [0, 0, 0], transition: 'fade', duration: 0.8 },
 };
 
 /** A fresh layer of a kind with sensible defaults. */
@@ -686,7 +829,9 @@ type Field =
   | { t: 'points' }
   | { t: 'params' }
   /** A list of layer ids. */
-  | { t: 'ids' };
+  | { t: 'ids' }
+  /** A Background layer's queue. */
+  | { t: 'queue' };
 
 const BLENDS = ['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken', 'difference', 'exclusion', 'add'] as const;
 const MATTES = ['over', 'reveal', 'luma'] as const;
@@ -759,6 +904,10 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     effectors: { t: 'ids' }, effRadius: N(0), effSoftness: unit, effPush: N(), effScale: N(), effRotate: N(), effOpacity: N(), effHue: N(), effHide: unit, effInvert: B, blend: blendF,
   },
   script: { toShader: B, mode: E('2d', '3d'), code: S, paramDefs: { t: 'params' }, clear: B, readPicture: B, opacity: unit, blend: blendF },
+  background: {
+    toShader: B, sources: { t: 'queue' }, index: N(0, 999), offset: N(-999, 999), x: N(), y: N(), scale: N(0.01, 20), rotation: N(),
+    fit: E('cover', 'contain', 'stretch'), colour: C, transition: E('cut', 'fade'), duration: N(0, 30),
+  },
 };
 
 function coerce(v: unknown, f: Field, fallback: unknown): unknown {
@@ -783,6 +932,7 @@ function coerce(v: unknown, f: Field, fallback: unknown): unknown {
       return Array.isArray(v) && v.length % 2 === 0 && v.length <= 2000 && v.every(n => typeof n === 'number' && Number.isFinite(n)) ? [...v] : fallback;
     case 'params':
       return Array.isArray(v) ? v.filter(isScriptParamDef).slice(0, 32).map(d => ({ ...d })) : fallback;
+    case 'queue': return parseBackgroundItems(v);
   }
 }
 
@@ -985,6 +1135,14 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'effHide', label: 'Hide at', min: 0, max: 1, hint: 'Effectors: a copy disappears once the falloff weight reaches this. 0 never hides.' },
   ],
   script: [OPACITY],
+  background: [
+    { key: 'index', label: 'Index', min: 0, max: 1, step: 1, hint: 'Which source shows: 0 is the first in the queue. Make it a control and map anything onto it (a MIDI knob, keys, an LFO, a hand). Next and Previous count on from here.' },
+    { key: 'offset', label: 'Offset', min: 0, max: 1, step: 1, hint: 'Rotates the queue: with Offset 1, index 0 shows the second source, and the last wraps round to the first.' },
+    X('The background’s centre'), Y('The background’s centre'),
+    { key: 'scale', label: 'Scale', min: 0.1, max: 4, hint: 'Size of the background: 1 fills the picture as fitted. Over 1 zooms in; under 1 shows the colour around it.' },
+    ROT,
+    { key: 'duration', label: 'Fade (s)', min: 0, max: 5, step: 0.05, hint: 'Crossfade: how long one source takes to fade into the next.' },
+  ],
 };
 
 /**
@@ -995,6 +1153,8 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
  */
 export function layerNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
   const base = LAYER_NUMERIC_PROPS[l.kind];
+  // Index and Offset run over the queue: a slider from the first source to the last.
+  if (l.kind === 'background') { const last = Math.max(1, l.sources.length - 1); return base.map(d => d.key === 'index' || d.key === 'offset' ? { ...d, max: last } : d); }
   if (l.kind !== 'script') return base;
   // Buttons are actions, not numbers; toggles are 0/1 numbers.
   return [...l.paramDefs.filter(d => d.kind !== 'button').map(d => d.kind === 'toggle'
