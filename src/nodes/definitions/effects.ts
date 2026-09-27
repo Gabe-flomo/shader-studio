@@ -240,6 +240,8 @@ export const LightNode: NodeDefinition = {
   label: 'SDF Glow', aliases: ['Light', 'Make Light', 'Glow from Distance', 'ring light'],
   description: 'Turns a distance field into light. Glow is the classic exp(-falloff · d); Haze has a fatter tail; Bounded stops at a set radius; Ring adds concentric rings; Simple is 1/d. `Inner` lights the inside of the shape from the edge inward — add it to Glow for a neon tube. The `Tinted` output is the glow times `Tint`, so a coloured glow is one node — it replaces the SDF Glow → Palette → Multiply chain.',
   category: 'Effects',
+  // Three outputs, but its glow is the classic += accumulator in a loop.
+  assignable: true,
   inputs: {
     distance:   { type: 'float', label: 'Distance'   },
     brightness: { type: 'float', label: 'Brightness' },
@@ -1061,6 +1063,8 @@ export const FloatWarpNode: NodeDefinition = {
   type: 'floatWarp',
   label: 'Float Warp',
   category: 'Effects',
+  // A code card: the expression says how it combines.
+  assignable: false,
   description: 'Transform a single float with a one-line GLSL expression. Use "value" for the input. Wire a, b, c for extra params. Intensity blends between the original value (0) and the expression result (1). Great for time remapping, oscillation, ping-pong, etc.',
   inputs: {
     value:     { type: 'float', label: 'Value' },

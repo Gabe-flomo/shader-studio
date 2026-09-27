@@ -75,7 +75,9 @@ declares each value param as a float paramDef (`knobParamDefs`), which is all
 the uniform patcher, keyframes, Play candidates and group overrides need; the
 binder reads what the patcher left in the param (a uniform name, a keyframe
 call, or a number on a card that stays baked). Removing the expression, or a
-knob, clears its value and keyframes. A Play control on a knob that was
+knob, clears its value and keyframes. Removing a knob in the editor freezes it
+first: the line keeps the value the knob had right then (its slider, keyframes
+or Play mapping) as a number, so the input doesn't change. A Play control on a knob that was
 removed shows as missing, like any control whose param went away. Old
 expressions have no knob list and compile exactly as before.
 

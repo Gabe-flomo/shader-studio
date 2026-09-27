@@ -5,14 +5,22 @@
  */
 type Listener = (time: number) => void;
 const listeners = new Set<Listener>();
+let lastTime: number | null = null;
 
 export function subscribeTimeTick(cb: Listener): () => void {
   listeners.add(cb);
   return () => { listeners.delete(cb); };
 }
 
+/** Record the clock (every frame) and tell whoever follows it. */
 export function emitTimeTick(time: number): void {
+  lastTime = time;
   for (const cb of listeners) cb(time);
+}
+
+/** The preview clock as of the last frame, or null before the first one. */
+export function clockNow(): number | null {
+  return lastTime;
 }
 
 export function hasTimeTickListeners(): boolean {

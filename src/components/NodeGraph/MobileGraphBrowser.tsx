@@ -16,6 +16,7 @@ import { toast } from '../ui/toastStore';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore, getActiveNodes, getActiveLooseGroups } from '../../store/useNodeGraphStore';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
+import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { GROUP_PORT_SENTINEL } from '../../types/nodeGraph';
 import type { GraphNode, DataType, LooseGroup, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
@@ -1422,6 +1423,8 @@ export function MobileGraphBrowser() {
     const parentScope = getActiveNodes(topLevelNodes, activeGroupPath.slice(0, -1)) ?? topLevelNodes;
     return parentScope.find(n => n.id === activeGroupId);
   }, [topLevelNodes, activeGroupPath, activeGroupId]);
+  // Carry / assign are about iterations: only inside a group that repeats.
+  const nodeInLoop = !!parentGroupNode && typeof parentGroupNode.params?.iterations === 'number' && (parentGroupNode.params.iterations as number) > 1;
   const activeGroupInputPorts = (parentGroupNode?.params?.subgraph as { inputPorts?: import('../../types/nodeGraph').GroupInputPort[] } | undefined)?.inputPorts ?? [];
   const addGroupInputWithSource = useNodeGraphStore(s => s.addGroupInputWithSource);
   const exposeGroupOutput = useNodeGraphStore(s => s.exposeGroupOutput);
@@ -2959,7 +2962,7 @@ export function MobileGraphBrowser() {
             <div style={{ ...tabGroupStyle(tc), marginBottom: 8 }}>
               <button style={smallTabBtnStyle(tc, infoTab === 'info')} onClick={() => setInfoTab('info')}>Info</button>
               <button style={smallTabBtnStyle(tc, infoTab === 'comment')} onClick={() => setInfoTab('comment')}>Comment</button>
-              {!ASSIGN_OP_EXCLUDED.has(node.type) && (
+              {!ASSIGN_OP_EXCLUDED.has(node.type) && (isAssignable(node) || !!legacyAssignOp(node) || nodeInLoop) && (
                 <button style={smallTabBtnStyle(tc, infoTab === 'assign')} onClick={() => setInfoTab('assign')}>Assign</button>
               )}
             </div>
@@ -3020,12 +3023,20 @@ export function MobileGraphBrowser() {
             )}
             {infoTab === 'assign' && !ASSIGN_OP_EXCLUDED.has(node.type) && (() => {
               const assignOp = node.assignOp ?? '=';
-              const isInsideLoop = !!parentGroupNode && typeof parentGroupNode.params?.iterations === 'number' && (parentGroupNode.params.iterations as number) > 1;
+              const isInsideLoop = nodeInLoop;
+              const legacyOp = legacyAssignOp(node);
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '11px', color: tc.subtext0 }}>Operator</span>
-                    <select
+                    {(isAssignable(node) || legacyOp) && <span style={{ fontSize: '11px', color: tc.subtext0 }}>Operator</span>}
+                    {legacyOp && (
+                      <button
+                        onClick={() => setNodeAssignOp(node.id, '=')}
+                        title={`Accumulates with ${legacyOp} (set in an older version). This card no longer offers the operator. Tap to reset to =.`}
+                        style={{ background: tc.surface0, border: `1px solid ${tc.blue}88`, color: tc.blue, borderRadius: '6px', padding: '4px 8px', fontSize: '12px', fontFamily: 'monospace' }}
+                      >{legacyOp} · Reset to =</button>
+                    )}
+                    {isAssignable(node) && <select
                       value={assignOp}
                       onChange={e => setNodeAssignOp(node.id, e.target.value as GraphNode['assignOp'])}
                       title="Declare an accumulator and combine this node's output (+= -= *= /=) instead of overwriting it"
@@ -3041,7 +3052,7 @@ export function MobileGraphBrowser() {
                       <option value="-=">-=</option>
                       <option value="*=">*=</option>
                       <option value="/=">/=</option>
-                    </select>
+                    </select>}
                     {isInsideLoop && (
                       <button
                         onClick={() => toggleNodeCarryMode(node.id)}

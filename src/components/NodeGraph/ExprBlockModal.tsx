@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
+import { setInputSlider } from '../../nodes/sliderFreeze';
+import { nowParamValue } from '../../lib/nowValue';
 import { useNodeGraphStore, saveExprPreset } from '../../store/useNodeGraphStore';
 import { useFunctionBuilder } from '../FunctionBuilder/useFunctionBuilder';
 import type { FnDef } from '../FunctionBuilder/useFunctionBuilder';
@@ -163,12 +165,11 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
     setInputs(customInputs.map((inp, i) => i === idx ? { ...inp, type, slider: type !== 'float' ? null : inp.slider } : inp));
   const toggleCarry = (idx: number) => setInputs(customInputs.map((c, i) => i === idx ? { ...c, carry: !c.carry } : c));
 
+  // Off freezes the input at the value it has right now (slider, keyframes or Play); on picks up from there.
   const toggleSlider = (idx: number) => {
     const inp = customInputs[idx];
-    const newSlider = inp.slider ? null : { min: 0, max: 1 };
-    const extraParams: Record<string, unknown> = {};
-    if (newSlider && typeof node.params[inp.name] !== 'number') extraParams[inp.name] = 0.5;
-    setInputs(customInputs.map((c, i) => i === idx ? { ...c, slider: newSlider } : c), extraParams);
+    const { inputs: next, params } = setInputSlider(node, customInputs, idx, !inp.slider, inp.slider ? nowParamValue(node, inp.name) : 0);
+    setInputs(next, params);
   };
 
   const updateSliderRange = (idx: number, field: 'min' | 'max', val: number) => {

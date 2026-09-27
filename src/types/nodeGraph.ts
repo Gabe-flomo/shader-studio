@@ -165,6 +165,13 @@ export interface NodeDefinition {
   paramDefsFor?: (node: GraphNode) => Record<string, ParamDef>;
 
   /**
+   * Whether the card offers the assign operator (= += -= *= /=) in its header.
+   * Unset: single-output cards outside Sources / Output / Utility / Functions /
+   * Loops / 3D Scene / Grid do. See nodes/assignable.ts.
+   */
+  assignable?: boolean;
+
+  /**
    * When true the node is auto-added to its parent container (SceneGroup, etc.)
    * and cannot be deleted by the user.  Visually indicated with a lock icon.
    */
