@@ -18,6 +18,7 @@ const ROWS: Array<[string, string, string]> = [
   ['playTriggerModes', 'Triggers: toggle, step, random', 'Besides envelopes, a trigger can toggle, walk through steps, or pick a random value.'],
   ['playBeat', 'Beats', 'A beat trigger fires on its own at a tempo: a metronome for envelopes, steps and actions.'],
   ['playLiveAudio', 'Live audio (mic or DAW)', 'Listen to a mic or a virtual cable: bands drive controls, and hits fire triggers.'],
+  ['playAudioReaders', 'Audio readers', 'Dots on the live spectrum: a kick drives a pulse, hi-hats fire sparks, a voice shifts the colour.'],
   ['playMidi', 'MIDI controller', 'Knobs (CC), notes and velocity from any MIDI keyboard or controller.'],
   ['playOsc', 'OSC (Ableton, TouchOSC)', 'Open Sound Control messages from Ableton, TouchOSC or any OSC app.'],
   ['playTilt', 'Phone tilt', 'Tilt a phone to steer: device orientation as sources.'],

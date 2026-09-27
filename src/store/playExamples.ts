@@ -17,7 +17,7 @@ import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_
 // An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 import {
-  defaultLayer, handAnchor, type ActionKind, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
+  defaultLayer, handAnchor, type ActionKind, type AudioReader, type PlayAudioReaders, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
 } from '../types/play';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
@@ -86,20 +86,26 @@ const T = {
   hand: (side: HandSide, gesture: HandGesture): TriggerSpec => ({ on: 'hand', side, gesture }),
   /** A and B (layer ids, or handAnchor refs) closer than `distance` picture heights. */
   near: (a: string, b: string, distance: number, margin = 0.03): TriggerSpec => ({ on: 'proximity', a, b, when: 'closer', distance, margin }),
+  /** An audio reader going above `threshold`, letting go `hysteresis` below it. */
+  reader: (readerId: string, threshold: number, hysteresis = 0.1): TriggerSpec => ({ on: 'reader', readerId, threshold, hysteresis }),
 };
+/** An audio reader: a dot on the spectrum at `hz`, `width` octaves wide. */
+const reader = (id: string, name: string, hz: number, width: number, gain: number, attack: number, release: number, colour: [number, number, number]): AudioReader =>
+  ({ id, name, hz, width, gain, attack, release, colour });
 /** The same trigger, firing by a mode other than Once. */
 const firing = (t: TriggerSpec, fire: FireSpec): TriggerSpec => ({ ...t, fire });
 const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string, amount = 1): PlayAction => ({ id, trigger, do: kind, layerId, amount, enabled: true });
 /** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
 const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
-function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; notes: string }): PlayRecord {
+function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; notes: string }): PlayRecord {
   const out: PlayRecord = { version: 1, controls: p.controls ?? [], mappings: p.mappings ?? [], layers: p.layers ?? [] };
   if (p.groups?.length) out.groups = p.groups;
   if (p.actions?.length) out.actions = p.actions;
   out.notes = p.notes;
   if (p.display) out.display = p.display;
   if (p.takes?.length) out.takes = p.takes;
+  if (p.audioReaders) out.audioReaders = p.audioReaders;
   return out;
 }
 
@@ -427,6 +433,38 @@ A little smoothing turns the jumps into glides.
 • Press **Listen** in a mapping (the browser asks for the mic once), then play music.
 • To use Ableton, see Mappings → ⓘ → Ableton · Audio (BlackHole or VB-Cable).
 • Raise the hit threshold if it fires too often.`,
+  })),
+  ex('playAudioReaders', glowGraph({ radius: 0.12, falloff: 14, tint: [0.3, 0.55, 1] }), play({
+    audioReaders: {
+      input: '',
+      readers: [
+        reader('kick', 'Kick', 60, 0.5, 25, 2, 160, [1, 0.45, 0.4]),
+        reader('hat', 'Hi-hat', 8000, 1, 50, 1, 60, [0.35, 0.82, 0.98]),
+        reader('voice', 'Voice', 700, 1.5, 28, 40, 300, [0.62, 0.52, 1]),
+      ],
+    },
+    layers: [
+      layer('null', 'centre', 'Centre', { x: 0.5, y: 0.5, size: 10, visible: false }),
+      layer('particles', 'sparks', 'Sparks', { count: 900, emit: 'burst', spawn: 'null', nullId: 'centre', spawnRadius: 0.05, field: 'noise', noiseScale: 2, speed: 1.3, life: 0.9, fade: 0.7, size: 2.4, sizeJitter: 0.6, colour: 'palette', palette: 1, paletteBy: 'age', trail: 0.5, blend: 'screen' }),
+    ],
+    controls: [ctl('radius', 'circ::radius', 'Pulse (kick)', 0.05, 0.4), colourCtl('tint', 'glow::tint', 'Colour (voice)')],
+    mappings: [
+      map('pulse', 'radius', { kind: 'reader', readerId: 'kick' }, 0.08, 0.24, { smoothMs: 20 }),
+      map('colour', 'tint', { kind: 'reader', readerId: 'voice' }, 0.25, 1, { channel: 0, smoothMs: 60 }),
+    ],
+    actions: [act('hats', T.reader('hat', 0.55, 0.2), 'burst', 'sparks', 36)],
+    notes: `**What it shows.** Audio readers are dots you place on the live spectrum. Each reads the loudness of one frequency band as 0–1, so you can pick out one instrument: a kick near 60 Hz, hi-hats near 8 kHz, a voice in between. Each reader is a source and a trigger.
+
+**How it's built.** Three readers (open them with **Spectrum**, in any Live audio mapping or on the Live audio chip):
+• **Kick**, 60 Hz, half an octave wide: drives the glow's Pulse.
+• **Voice**, 700 Hz, an octave and a half wide, slow to rise and fall: pushes the colour's red channel, from blue toward pink.
+• **Hi-hat**, 8 kHz: an action bursts sparks each time it crosses 0.55 (**On: Audio reader crosses**).
+
+**Try this.**
+• Open **Spectrum** and press **Play test loop** (no mic needed), or **Listen** and play any music.
+• Drag a dot sideways to retune it, up or down to change how loud reads as full. Watch its column fill.
+• Click the spectrum to add a reader, then pick it as a mapping's source (**Reader · name**).
+• On a mapping, press Learn (✦) and play a sound: it picks the band or reader that moved most.`,
   })),
   ex('playMidi', glowGraph(), play({
     controls: [ctl('radius', 'circ::radius', 'Radius (CC 1, mod wheel)', 0.05, 0.7), ctl('x', 'circ::posX', 'X (note)', -1, 1), ctl('flash', 'glow::brightness', 'Flash (note on)', 2, 20)],

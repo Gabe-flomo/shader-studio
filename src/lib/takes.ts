@@ -10,6 +10,7 @@
  *             triggers, envelopes, LFOs applied), layer properties and nulls
  *   bus       the MIDI Input node's outputs, as the input bus wrote them
  *   audio     Audio Input nodes' amplitudes
+ *   reader    audio readers' levels (the Audio readers panel shows them back)
  *   mouse     the shader's u_mouse (the Mouse node)
  *   pointer   the pointer over the layers (Script layers, particles, brushes)
  *   events    actions that fired (bursts, drops, Next line, script buttons)
@@ -41,6 +42,7 @@ import { layerTarget, parseActionTarget, parseLayerTarget, TAKE_MAX_SECONDS, TAK
 import { encodeKeys, takeEventsBetween, takeMouseAt, takePointerAt, takeSize, trackAt } from './takePlayback';
 import { AUDIO_GAP, AudioFrameBuffer, audioNeeds, audioSourceOf, takeAudioAt, takeAudioFor } from './takeAudio';
 import { liveAudio } from './liveAudio';
+import { audioReaderBank } from './audioReaderBank';
 import { layerAudio } from './layerAudio';
 import { toast } from '../components/ui/toastStore';
 import { streamHub } from '../data/streams/streamHub';
@@ -145,6 +147,7 @@ export class TakeCapture {
     }
     for (const [key, v] of busNow) this.push('bus', key, key.split('::').pop() ?? key, time, v);
     for (const [name, v] of audioEngine.lastAmps()) this.push('audio', name, name, time, v);
+    for (const r of this.play.audioReaders?.readers ?? []) this.push('reader', r.id, `Reader · ${r.name}`, time, audioReaderBank.value(r.id) ?? 0);
     const m = inputBus.mouseNow();
     this.push('mouse', 'x', 'Mouse x', time, m[0]);
     this.push('mouse', 'y', 'Mouse y', time, m[1]);
@@ -260,6 +263,8 @@ function applyTake(take: PlayTake, time: number, out: {
   param: (bindingKey: string, v: number | number[]) => void;
   bus: (channelKey: string, v: number) => void;
   audio: (uniform: string, v: number) => void;
+  /** An audio reader's recorded level (the live preview shows it on the readers panel). */
+  reader?: (readerId: string, v: number) => void;
   layerKeys: Set<string>;
 }): void {
   const s = time - take.from;
@@ -272,6 +277,7 @@ function applyTake(take: PlayTake, time: number, out: {
       else out.param(bindingKeyOf(tr.target), v);
     } else if (tr.kind === 'bus') out.bus(tr.id, num(trackAt(tr, s)));
     else if (tr.kind === 'audio') out.audio(tr.id, num(trackAt(tr, s)));
+    else if (tr.kind === 'reader') out.reader?.(tr.id, num(trackAt(tr, s)));
   }
 }
 
@@ -362,6 +368,7 @@ class Replay implements InputSource {
       param: (key, v) => write(paramChannelKey(key), v),
       bus: (key, v) => write(key, v),
       audio: (name, v) => inputBus.writeUniform(name, v),
+      reader: (id, v) => audioReaderBank.setPlayback(id, v),
       layerKeys: this.layerKeys,
     });
     inputBus.setMouseOverride(takeMouseAt(take, time));
@@ -401,6 +408,7 @@ class Replay implements InputSource {
     releaseLayers(this.layerKeys);
     if (this.data.active) streamHub.setMuted(false);
     inputBus.setMouseOverride(null);
+    audioReaderBank.clearPlayback();
     playOverlay.setReplaying(false);
     playEngine.setMuted(false);
   }

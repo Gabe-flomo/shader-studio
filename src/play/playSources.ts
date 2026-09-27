@@ -8,9 +8,32 @@ import { ANCHOR_KINDS, DEFAULT_FIRE, handAnchor, parseHandAnchor } from '../type
 import { HD_POINT_NAMES } from './kit/hands.js';
 import { datasetStore } from '../data/datasetStore';
 import { DATA_ROW_COLUMN } from '../types/play';
+import { audioReaderBank } from '../lib/audioReaderBank';
+import { readerLabel } from './audioReaders';
 
 export type HandSourceType = `hand:${HandRead}`;
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'data' | HandSourceType;
+/** `reader:<id>`: one audio reader. */
+export type ReaderSourceType = `reader:${string}`;
+export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'data' | HandSourceType | ReaderSourceType;
+/** Not a source: the picker's entry that opens the Audio readers panel. */
+export const OPEN_READERS = 'readers:open';
+
+/**
+ * The drop-down's list for a setup: the fixed list, with the setup's audio
+ * readers ("Reader · Kick") and "Spectrum readers…" (which opens the panel)
+ * under Live audio, after its bands.
+ */
+export function sourceOptions(readers: ReadonlyArray<{ id: string; name: string }>): { value: string; label: string; group?: string }[] {
+  const out: { value: string; label: string; group?: string }[] = [];
+  for (const o of SOURCE_TYPES) {
+    out.push(o);
+    if (o.value === 'live') {
+      for (const r of readers) out.push({ value: `reader:${r.id}`, label: readerLabel(r.name), group: 'Live audio' });
+      out.push({ value: OPEN_READERS, label: 'Spectrum readers…', group: 'Live audio' });
+    }
+  }
+  return out;
+}
 
 /** In the order the drop-down shows them: what everyone has first, MIDI hardware last, then hand tracking under its own heading. */
 export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[] = [
@@ -26,7 +49,7 @@ export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[
   { value: 'lfo', label: 'LFO' },
   { value: 'noise', label: 'Noise' },
   { value: 'clock', label: 'Clock (BPM)' },
-  { value: 'live', label: 'Live audio in (mic, Ableton…)' },
+  { value: 'live', label: 'Band (bass, treble…)', group: 'Live audio' },
   { value: 'audio', label: 'Audio Input node band' },
   { value: 'tilt', label: 'Phone tilt' },
   { value: 'gamepad', label: 'Gamepad' },
@@ -134,12 +157,14 @@ export function sourceType(s: PlaySource): SourceType {
   if (s.kind === 'midi') return `midi:${s.signal}` as SourceType;
   if (s.kind === 'mouse') return `mouse:${s.axis}` as SourceType;
   if (s.kind === 'hand') return `hand:${s.read}`;
+  if (s.kind === 'reader') return `reader:${s.readerId}`;
   return s.kind;
 }
 
 /** `otherControlId` is the first control a new control source may point at (not the mapping's own target); `nullId` the first null layer; `sensor` the first layer that measures something. */
 export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId = '', nullId = '', sensor: { layerId: string; read: SensorRead } | null = null, dataset = ''): PlaySource {
   if (t.startsWith('hand:')) return handSource(t.slice(5) as HandRead, prev);
+  if (t.startsWith('reader:')) return { kind: 'reader', readerId: t.slice(7) };
   const channel = prev.kind === 'midi' ? prev.channel : 0;
   switch (t) {
     case 'midi:cc': return { kind: 'midi', signal: 'cc', channel, cc: prev.kind === 'midi' && prev.cc !== undefined ? prev.cc : 1 };
@@ -180,6 +205,7 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'noise') return `Noise ${s.type}${s.type === 'random' ? '' : ` ${s.rate}/s`}`;
   if (s.kind === 'osc') return `OSC ${s.address}`;
   if (s.kind === 'live') return `Live ${LIVE_BAND_LABELS[s.band]}`;
+  if (s.kind === 'reader') return readerLabel(audioReaderBank.name(s.readerId));
   if (s.kind === 'trigger') return `${s.mode === 'envelope' ? 'Env' : s.mode === 'toggle' ? 'Toggle' : s.mode === 'step' ? 'Step' : 'Random'} · ${triggerLabel(s.trigger, layers)}`;
   if (s.kind === 'clock') return `${s.bpm} bpm · ${s.beats} beat${s.beats === 1 ? '' : 's'}`;
   if (s.kind === 'audio') return `Audio band ${s.band + 1}`;
@@ -238,6 +264,7 @@ export function triggerLabel(t: TriggerSpec, layers: ReadonlyArray<{ id: string;
     case 'zone': return t.event === 'click' ? 'Click on shape' : t.event === 'enter' ? 'Pointer enters shape' : `Shape fills to ${Math.round(t.threshold * 100)}%`;
     case 'hand': return `${SIDE_NAMES[t.side]} · ${HAND_GESTURE_LABELS[t.gesture]}`;
     case 'proximity': return `${anchorLabel(t.a, layers)} ${t.when === 'closer' ? 'near' : 'away from'} ${anchorLabel(t.b, layers)}`;
+    case 'reader': return `${audioReaderBank.name(t.readerId) ?? 'Reader'} crosses ${Math.round(t.threshold * 100)}%`;
   }
 }
 
@@ -287,12 +314,12 @@ export function releaseLabel(t: TriggerSpec): string {
 }
 
 export function fireModes(t: TriggerSpec): { value: FireMode; label: string; title: string }[] {
-  const held = t.on === 'proximity' ? 'while close' : t.on === 'beat' ? 'on each beat’s first quarter' : 'while held';
+  const held = t.on === 'proximity' ? 'while close' : t.on === 'beat' ? 'on each beat’s first quarter' : t.on === 'reader' || t.on === 'audio' ? 'while it stays above the threshold' : 'while held';
   return [
-    { value: 'once', label: 'Once', title: t.on === 'proximity' ? 'When A comes close to B (or goes far, for Farther than)' : 'When it starts: the key goes down, the gesture begins' },
+    { value: 'once', label: 'Once', title: t.on === 'proximity' ? 'When A comes close to B (or goes far, for Farther than)' : t.on === 'reader' || t.on === 'audio' ? 'When the level goes above the threshold' : 'When it starts: the key goes down, the gesture begins' },
     { value: 'held', label: 'Continuously', title: `Every frame ${held}` },
     { value: 'every', label: 'Every N', title: `At the start, then every few frames or seconds ${held}` },
-    { value: 'release', label: releaseLabel(t), title: t.on === 'proximity' ? 'When A moves away again' : 'When it lets go: the key comes up, the gesture ends' },
+    { value: 'release', label: releaseLabel(t), title: t.on === 'proximity' ? 'When A moves away again' : t.on === 'reader' || t.on === 'audio' ? 'When the level falls back below the threshold (less the hysteresis)' : 'When it lets go: the key comes up, the gesture ends' },
   ];
 }
 
@@ -370,6 +397,7 @@ export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
   { value: 'mouse', label: 'Click on the picture' },
   { value: 'beat', label: 'Beat' },
   { value: 'audio', label: 'Audio hit (live input)' },
+  { value: 'reader', label: 'Audio reader crosses' },
   { value: 'note', label: 'MIDI note' },
   { value: 'osc', label: 'OSC message' },
   { value: 'zone', label: 'Shape (click, enter, fill)' },
@@ -382,11 +410,11 @@ export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
  * replaces (its firing mode always). `layers` supplies a new shape trigger's
  * shape and a new proximity trigger's two layers.
  */
-export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: ReadonlyArray<{ id: string; kind: string }> = []): TriggerSpec {
-  return withFire(triggerOnFromKind(on, prev, layers), prev.fire);
+export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: ReadonlyArray<{ id: string; kind: string }> = [], readerId = ''): TriggerSpec {
+  return withFire(triggerOnFromKind(on, prev, layers, readerId), prev.fire);
 }
 
-function triggerOnFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: ReadonlyArray<{ id: string; kind: string }>): TriggerSpec {
+function triggerOnFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: ReadonlyArray<{ id: string; kind: string }>, readerId: string): TriggerSpec {
   const shapeId = layers.find(l => l.kind === 'shape')?.id ?? '';
   switch (on) {
     case 'key': return { on: 'key', code: prev.on === 'key' ? prev.code : 'Space' };
@@ -397,6 +425,7 @@ function triggerOnFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: Rea
     case 'audio': return { on: 'audio', band: prev.on === 'audio' ? prev.band : 'bass', threshold: prev.on === 'audio' ? prev.threshold : 0.6 };
     case 'zone': return { on: 'zone', layerId: prev.on === 'zone' ? prev.layerId : shapeId, event: prev.on === 'zone' ? prev.event : 'click', threshold: prev.on === 'zone' ? prev.threshold : 0.5 };
     case 'hand': return { on: 'hand', side: prev.on === 'hand' ? prev.side : 'right', gesture: prev.on === 'hand' ? prev.gesture : 'pinch' };
+    case 'reader': return prev.on === 'reader' ? prev : { on: 'reader', readerId, threshold: prev.on === 'audio' ? prev.threshold : 0.6, hysteresis: 0.1 };
     case 'proximity': {
       if (prev.on === 'proximity') return prev;
       // Nulls first (the usual pair), then anything with a centre; a hand when there is only one layer.

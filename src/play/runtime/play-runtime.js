@@ -140,7 +140,7 @@
     return x;
   }
   function triggerKey(t) {
-    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; }
+    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; }
     return '';
   }
   // Firing modes (once, held, every N frames or seconds, on release): how many times a trigger fires this frame.
@@ -380,6 +380,34 @@ void main() {
     const binHz = L.sr / 2 / L.freq.length;
     for (const b in LIVE) { const a = Math.max(1, Math.floor(LIVE[b][0] / binHz)), z = Math.min(L.freq.length - 1, Math.ceil(LIVE[b][1] / binHz)); let sum = 0; for (let i = a; i <= z; i++) sum += Math.max(-100, L.freq[i]); L.v[b] = dbUnit(sum / (z - a + 1)); }
   }
+
+  // Audio readers: a band around a frequency as 0..1, smoothed. Mirrors src/play/audioReaders.ts.
+  const READER_REF_DB = -10, READER_RANGE_DB = 40;
+  function readerBandDb(freq, sr, lo, hi) {
+    const n = freq.length, binHz = sr / 2 / n;
+    if (n < 2) return -160;
+    const a = Math.max(0.5, Math.min(lo, hi) / binHz), b = Math.min(n - 0.5, Math.max(lo, hi) / binHz);
+    if (b <= a) return -160;
+    let w = 0, p = 0;
+    for (let k = Math.max(1, Math.floor(a + 0.5)); k <= Math.min(n - 1, Math.floor(b + 0.5)); k++) {
+      const o = Math.min(b, k + 0.5) - Math.max(a, k - 0.5);
+      if (o <= 0) continue;
+      const db = freq[k];
+      p += o * Math.pow(10, (isFinite(db) ? Math.max(-160, db) : -160) / 10); w += o;
+    }
+    return w > 0 ? 10 * Math.log10(Math.max(1e-16, p / w)) : -160;
+  }
+  function readerRead(r, freq, sr) {
+    const half = Math.pow(2, Math.max(0.05, Math.min(4, r.width)) / 2);
+    const top = READER_REF_DB - r.gain;
+    return Math.max(0, Math.min(1, (readerBandDb(freq, sr, r.hz / half, r.hz * half) - (top - READER_RANGE_DB)) / READER_RANGE_DB));
+  }
+  function readerSmooth(prev, target, dt, attack, rel) {
+    const tau = target > prev ? attack : rel;
+    if (tau <= 0 || dt <= 0) return tau <= 0 ? target : prev;
+    return prev + (target - prev) * (1 - Math.exp(-(dt * 1000) / tau));
+  }
+  function readerGate(open, v, threshold, hysteresis) { return open ? v > threshold - hysteresis : v >= threshold; }
 
   function listen() {
     if (shared.listening) return;
@@ -992,6 +1020,7 @@ void main() {
         case 'midi': { const ch = shared.midi[Math.max(0, Math.min(16, s.channel))]; switch (s.signal) { case 'note': return ch.seenNote ? ch.note / 127 : null; case 'velocity': return ch.seenNote ? ch.vel / 127 : null; case 'gate': return ch.seenNote ? (ch.held.size ? 1 : 0) : null; case 'bend': return ch.seenBend ? (ch.bend + 1) / 2 : null; case 'cc': { const n = (s.cc || 1) & 127; return ch.seenCc[n] ? ch.cc[n] / 127 : null; } } return null; }
         case 'audio': { const a = audioById.get(s.nodeId); if (!a || !a.an) return null; const v = a.levels[s.band]; return v === undefined ? null : v; }
         case 'live': { if (shared.live.status !== 'on') return null; updateLive(); return Math.max(0, Math.min(1, shared.live.v[s.band] * s.gain)); }
+        case 'reader': { updateReaders(); return readers.ok && readers.levels.has(s.readerId) ? readers.levels.get(s.readerId) : null; }
         case 'osc': { const a = shared.osc.get(s.address); if (!a) return null; const raw = a[s.arg]; const v = typeof raw === 'number' ? raw : typeof raw === 'boolean' ? (raw ? 1 : 0) : null; return v === null ? null : Math.max(0, Math.min(1, (v - s.min) / (s.max - s.min))); }
         case 'null': { const l = layersById.get(s.layerId); if (!l) return null; return Math.max(0, Math.min(1, layerValue(l.id, s.axis, l[s.axis]))); }
         case 'hand': return handSt ? HK.read(handSt, s.side, s.read, s.point, s.axis, s.gesture) : null;
@@ -1050,14 +1079,44 @@ void main() {
       return stepTrigger(st, s, f.slot.count, inp.gate, dt, vel);
     }
     const colourBuf = new Map();
+    // Audio readers: read from the live input, or from an Audio Input node's song (`input` is its id), once a frame.
+    const readers = { cfg: play.audioReaders || null, levels: new Map(), ok: false, at: 0, gates: new Set() };
+    function updateReaders() {
+      const R = readers;
+      if (!R.cfg || !R.cfg.readers.length) return;
+      const now = performance.now();
+      if (now - R.at < 4) return;
+      const dt = R.at ? Math.min(0.1, (now - R.at) / 1000) : 1 / 60;
+      R.at = now;
+      let freq = null, sr = 48000;
+      const a = R.cfg.input ? audioById.get(R.cfg.input) : null;
+      if (a && a.an) { a.an.getFloatFrequencyData(a.freq); freq = a.freq; sr = a.an.context.sampleRate; }
+      else if ((!R.cfg.input || !a) && shared.live.status === 'on') { updateLive(); freq = shared.live.freq; sr = shared.live.sr; }
+      R.ok = !!freq;
+      if (!freq) { R.levels.clear(); return; }
+      for (const r of R.cfg.readers) R.levels.set(r.id, readerSmooth(R.levels.get(r.id) || 0, readerRead(r, freq, sr), dt, r.attack, r.release));
+    }
+    // Audio hits (a band over its threshold; lets go below 80% of it) and reader triggers (lets go below threshold − hysteresis), for mappings and actions.
     function tickAudioTriggers() {
-      if (shared.live.status !== 'on') return;
-      updateLive();
-      for (const m of play.mappings) {
-        if (!m.enabled || m.source.kind !== 'trigger' || m.source.trigger.on !== 'audio') continue;
-        const t = m.source.trigger, k = triggerKey(t), v = shared.live.v[t.band] || 0, open = shared.live.gates.has(k);
-        if (!open && v >= t.threshold) { shared.live.gates.add(k); press(k, v); }
-        else if (open && v < t.threshold * 0.8) { shared.live.gates.delete(k); release(k); }
+      const on = shared.live.status === 'on';
+      if (on) updateLive();
+      updateReaders();
+      const seen = new Set();
+      for (const t of allTriggers) {
+        if (t.on !== 'audio' && t.on !== 'reader') continue;
+        const k = triggerKey(t);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        if (t.on === 'audio') {
+          if (!on) continue;
+          const v = shared.live.v[t.band] || 0, open = shared.live.gates.has(k);
+          if (!open && v >= t.threshold) { shared.live.gates.add(k); press(k, v); }
+          else if (open && v < t.threshold * 0.8) { shared.live.gates.delete(k); release(k); }
+        } else {
+          const v = readers.levels.get(t.readerId) || 0, open = readers.gates.has(k), g = readerGate(open, v, t.threshold, t.hysteresis);
+          if (g && !open) { readers.gates.add(k); press(k, v); }
+          else if (!g && open) { readers.gates.delete(k); release(k); }
+        }
       }
     }
     // Shape enter / fill triggers: a sensor crossing its threshold is a press (80% hysteresis).
@@ -1259,8 +1318,11 @@ void main() {
     const usesMidi = play.mappings.some(m => m.source.kind === 'midi' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'));
     const usesOsc = play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc'));
     const usesTilt = play.mappings.some(m => m.source.kind === 'tilt');
+    // Readers on the live input (or on a node whose song stayed out of the page, which listens to the input instead) need it too.
+    const readerNode = readers.cfg && readers.cfg.input ? audioById.get(readers.cfg.input) : null;
+    const readersLive = !!(readers.cfg && readers.cfg.readers.length) && (!readers.cfg.input || !readerNode || !readerNode.src);
     const usesLive = play.mappings.some(m => m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio'))
-      || actions.some(a => a.trigger.on === 'audio') || play.layers.some(l => l.kind === 'audio' && l.visible) || audioNodes.some(a => !a.src);
+      || actions.some(a => a.trigger.on === 'audio') || play.layers.some(l => l.kind === 'audio' && l.visible) || audioNodes.some(a => !a.src) || readersLive;
     const matteIds = new Set(play.layers.map(l => (l.trackMatte ? l.trackMatte.id : '')));
     const usesCamera = play.layers.some(l => (l.visible || matteIds.has(l.id)) && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
     let camVideo = null;
@@ -1704,7 +1766,7 @@ void main() {
     shared.camera = null; shared.cameraStream = null;
   }
   // internals: the pure GPU and audio helpers, for tests.
-  window.ShaderStudioPlay = { version: 7, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex } };
+  window.ShaderStudioPlay = { version: 7, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex, readerBandDb, readerRead, readerSmooth, readerGate, triggerKey } };
 
   // A full-page export: mount on #play with the page's options (URL params can override).
   if (window.PLAY_BUNDLE && document.getElementById('play')) {
