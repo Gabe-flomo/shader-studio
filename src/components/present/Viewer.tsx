@@ -9,12 +9,15 @@
  *           they're on screen, a progress bar along the top, ← / → jump
  *           between steps.
  *
- * Esc goes back to Edit.
+ * Both have Full screen (the button, F, or ⌘⇧F): the presentation alone,
+ * its controls fading after a moment without the mouse; arrows still step,
+ * Esc leaves full screen, then goes back to Edit.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
+import { isFullscreenKey, isTyping, toggleFullscreenTarget, useFullscreen } from '../../lib/fullscreen';
 import type { BlockContext } from './Blocks';
 import { StepView } from './StepView';
 import { usePresentation } from './presentationStore';
@@ -34,11 +37,45 @@ function useNavKeys(go: (d: number | 'first' | 'last') => void, onExit: () => vo
       else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) { e.preventDefault(); go(-1); }
       else if (e.key === 'Home') { e.preventDefault(); go('first'); }
       else if (e.key === 'End') { e.preventDefault(); go('last'); }
-      else if (e.key === 'Escape' && !document.fullscreenElement) onExit();
+      else if (e.key === 'Escape' && !document.fullscreenElement && !useFullscreen.getState().target) onExit();
+    };
+    // F alone: full screen. On the document while capturing, so the app's own F (fit the graph) doesn't see it.
+    const onF = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || !isFullscreenKey(e, { typing: isTyping(e.target), plainF: true })) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void toggleFullscreenTarget('present');
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onF, true);
+    return () => { window.removeEventListener('keydown', onKey); document.removeEventListener('keydown', onF, true); };
   }, [go, onExit]);
+}
+
+/** True after `ms` without the pointer or a key, while `active`: full screen's controls fade then. */
+function useIdle(active: boolean, ms = 2500): boolean {
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    let t = window.setTimeout(() => setIdle(true), ms);
+    const wake = () => { setIdle(false); window.clearTimeout(t); t = window.setTimeout(() => setIdle(true), ms); };
+    window.addEventListener('pointermove', wake);
+    window.addEventListener('pointerdown', wake);
+    window.addEventListener('keydown', wake);
+    return () => { window.clearTimeout(t); setIdle(false); window.removeEventListener('pointermove', wake); window.removeEventListener('pointerdown', wake); window.removeEventListener('keydown', wake); };
+  }, [active, ms]);
+  return active && idle;
+}
+
+/** The nav bar over the picture in full screen, fading while nothing moves. */
+function FloatingControls({ hidden, children }: { hidden: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{
+      position: 'absolute', bottom: 18, left: '50%', transform: `translate(-50%, ${hidden ? 12 : 0}px)`, zIndex: 3,
+      opacity: hidden ? 0 : 1, pointerEvents: hidden ? 'none' : undefined, transition: 'opacity .35s ease, transform .35s ease',
+    }}>{children}</div>
+  );
 }
 
 /** The bar under the slides: back, progress (click to jump), where you are, next. */
@@ -67,12 +104,12 @@ function NavBar({ index, total, titles, onGo, fullscreen, onFullscreen, onStage,
       <span style={{ color: tk.text.muted, font: `600 12px ${fontFamily.mono}`, whiteSpace: 'nowrap', minWidth: 44, textAlign: 'center' }}>{index + 1} / {total}</span>
       <IconButton icon="chevR" label="Next step (→)" disabled={index >= total - 1} onClick={() => onGo(index + 1)} />
       {onStage && <IconButton icon="popout" label="Open this step’s picture on the Stage" onClick={onStage} />}
-      {onFullscreen && <IconButton icon="fit" label={fullscreen ? 'Leave fullscreen' : 'Fullscreen'} active={fullscreen} onClick={onFullscreen} />}
+      {onFullscreen && <IconButton icon="fit" label={fullscreen ? 'Leave full screen' : 'Full screen'} shortcut={fullscreen ? 'escape' : 'f'} active={fullscreen} onClick={onFullscreen} />}
     </div>
   );
 }
 
-export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' | 'editing' | 'large'>; rootRef: React.RefObject<HTMLElement | null> }) {
+export function SlidesView({ ctx }: { ctx: Omit<BlockContext, 'active' | 'editing' | 'large'> }) {
   const doc = usePresentation(s => s.doc);
   const index = usePresentation(s => s.step);
   const setStep = usePresentation(s => s.setStep);
@@ -86,9 +123,9 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
   const exit = useMemo(() => () => setMode('edit'), [setMode]);
   useNavKeys(go, exit);
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }); }, [index]);
-  const [fs, setFs] = useState(!!document.fullscreenElement);
-  useEffect(() => { const on = () => setFs(!!document.fullscreenElement); document.addEventListener('fullscreenchange', on); return () => document.removeEventListener('fullscreenchange', on); }, []);
-  const toggleFs = () => { if (document.fullscreenElement) void document.exitFullscreen(); else void rootRef.current?.requestFullscreen?.().catch(() => {}); };
+  const fs = useFullscreen(s => s.target === 'present');
+  const idle = useIdle(fs);
+  const toggleFs = () => { void toggleFullscreenTarget('present'); };
   const step = doc?.steps[index];
   const look = useStepLook(step);
   const pageBg = usePageBackground(true);
@@ -100,7 +137,7 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
   const firstSource = first && (first.type === 'render' || first.type === 'interactive') ? ctx.sources.get(first.source) : undefined;
   const onStage = firstSource ? () => openOnStage(doc, firstSource, step) : undefined;
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', ...pageBg }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative', cursor: fs && idle ? 'none' : undefined, ...pageBg }}>
       <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
         {/* Keyed by step: the next background fades in over the last. */}
         <Backdrop key={step.id} look={look} column={column} style={{ animation: 'pp-fade .35s ease-out' }} />
@@ -113,7 +150,9 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
           </div>
         </div>
       </div>
-      <ThemeScope><NavBar index={index} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={i => setStep(i)} fullscreen={fs} onFullscreen={ctx.compact ? undefined : toggleFs} onStage={onStage} /></ThemeScope>
+      {fs
+        ? <FloatingControls hidden={idle}><ThemeScope><NavBar floating index={index} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={i => setStep(i)} fullscreen onFullscreen={toggleFs} /></ThemeScope></FloatingControls>
+        : <ThemeScope><NavBar index={index} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={i => setStep(i)} fullscreen={false} onFullscreen={toggleFs} onStage={onStage} /></ThemeScope>}
     </div>
   );
 }
@@ -161,6 +200,8 @@ export function ScrollView({ ctx }: { ctx: Omit<BlockContext, 'active' | 'editin
   }, [current, total]);
   const exit = useMemo(() => () => { usePresentation.getState().setStep(current); setMode('edit'); }, [current, setMode]);
   useNavKeys(go, exit);
+  const fs = useFullscreen(s => s.target === 'present');
+  const idle = useIdle(fs);
   if (!doc) return null;
   const c: BlockContext = { ...ctx, editing: false, active: true, large: false };
   return (
@@ -175,9 +216,9 @@ export function ScrollView({ ctx }: { ctx: Omit<BlockContext, 'active' | 'editin
             sectionRef={el => { if (el) sections.current.set(i, el); else sections.current.delete(i); }} />
         ))}
       </div>
-      <div style={{ position: 'absolute', bottom: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 3 }}>
-        <ThemeScope><NavBar floating index={current} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={jump} /></ThemeScope>
-      </div>
+      <FloatingControls hidden={fs && idle}>
+        <ThemeScope><NavBar floating index={current} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={jump} fullscreen={fs} onFullscreen={() => { void toggleFullscreenTarget('present'); }} /></ThemeScope>
+      </FloatingControls>
     </div>
   );
 }

@@ -17,7 +17,8 @@ import { MobilePreviewPill } from './components/shell/MobilePreviewPill';
 import { MobileIconSegment } from './components/shell/MobileIconSegment';
 import { Button, IconButton } from './components/ui/Button';
 import { ThemeOverrideContext, useTokens } from './theme/themeStore';
-import { AspectPicker, PreviewFooter, PreviewHeader } from './components/shell/PreviewChrome';
+import { AspectPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader } from './components/shell/PreviewChrome';
+import { canvasFrameRef as canvasFrame, isFullscreenKey, isTyping, toggleFullscreenTarget } from './lib/fullscreen';
 import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
 import { PlaySplitArea, SplitButton } from './components/play/PlaySplitArea';
@@ -641,6 +642,7 @@ function App() {
     export:         unlessScratch(() => offerGraphExport(null)),
     import:         unlessScratch(() => { void importAnyFile(setPage); }),
     fitView:        () => _fitViewCallback?.(),
+    fullscreen:     () => { if (page === 'present') void toggleFullscreenTarget('present'); else if (page === 'studio' || page === 'play') void toggleFullscreenTarget('canvas'); },
     toggleCode:     () => setShowCode(v => !v),
     toggleRecord:   () => setShowExport(v => !v),
     rebuild:        () => { void rebuildWithToast(); },
@@ -682,7 +684,7 @@ function App() {
     filterUVOutputs:() => setNodeHighlightFilter('uv-out'),
     shortcuts:      () => setPage(p => p === 'shortcuts' ? 'studio' : 'shortcuts'),
     playSplit:      () => { const sp = usePlaySplit.getState(); if (sp.available) sp.toggle(); },
-  }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll, setPage]);
+  }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll, setPage, page]);
 
   const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);
   const holdHandlers = useMemo(() => ({
@@ -691,6 +693,21 @@ function App() {
   }), [HOLD_FILTER_IDS, setNodeHighlightFilter]);
 
   useShortcuts(shortcutHandlers, holdHandlers);
+  // Full screen: F alone on Play (the Studio's F fits the graph; Present handles its own); ⌘⇧F is the shortcut above.
+  // On the document, in the capture phase: after the Play's own key mappings and the MIDI keyboard (on window, which
+  // stop the key when they use it), before the app's shortcuts (window, bubbling).
+  useEffect(() => {
+    if (page !== 'play') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || !isFullscreenKey(e, { typing: isTyping(e.target), plainF: true })) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void toggleFullscreenTarget('canvas');
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [page]);
   useTimeHotkeys();
 
 
@@ -879,7 +896,7 @@ function App() {
                 position: 'relative',
                 width: mobileLayout === 'canvas' ? '100%' : `min(100%, ${mobileCanvasVh}vh)`,
                 height: mobileLayout === 'canvas' ? '100%' : `min(100%, ${mobileCanvasVh}vh)`,
-              }}>
+              }} ref={canvasFrame}>
                 <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
                 <AudioMasterVolumeWidget />
               </div>
@@ -1084,7 +1101,7 @@ function App() {
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
         <ThemeOverrideContext.Provider value="dark">
           <div style={{ position: 'relative', height: `${playSplit.vh}vh`, flexShrink: 0, background: tk.bg.render, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            <div style={{ position: 'relative', width: `min(100vw, ${playSplit.vh}vh)`, height: '100%' }}>
+            <div ref={canvasFrame} style={{ position: 'relative', width: `min(100vw, ${playSplit.vh}vh)`, height: '100%' }}>
               <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
             </div>
           </div>
@@ -1233,7 +1250,7 @@ function App() {
           {/* Right: Preview */}
           <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <PlaySplitArea active={page === 'play'}>
-              <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
+              <div ref={canvasFrame} style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
             </PlaySplitArea>
             <div style={{ background: tc.mantle, borderTop: `1px solid ${tc.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: tc.surface2, minHeight: '28px', flexShrink: 0 }}>
               <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for color · click node to probe" />
@@ -1348,6 +1365,7 @@ function App() {
             <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
               <PreviewHeader>
                 <AspectPicker />
+                <CanvasFullscreenButton plainF={page === 'play'} />
                 {page === 'play' && <GuidesToggle />}
                 {page === 'play' && <SplitButton />}
                 {page === 'play' && <Button size="sm" variant="ghost" icon="play" onClick={() => useStage.getState().open('full')} title="Stage: the picture and its controls on their own, as people will play with it (Full or Exact, phone or screen, fullscreen, Record)">Stage</Button>}
@@ -1355,7 +1373,7 @@ function App() {
                 <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
               </PreviewHeader>
               <PlaySplitArea active={page === 'play'}>
-                <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+                <div ref={canvasFrame} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                   <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
                   {showHistogram && histData && <HistogramOverlay data={histData} />}
                 </div>
@@ -1387,7 +1405,7 @@ function App() {
                 </span>
               </PreviewHeader>
             </div>
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+            <div ref={canvasFrame} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
               <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
               {showHistogram && histData && <HistogramOverlay data={histData} />}
             </div>

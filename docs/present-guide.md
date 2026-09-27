@@ -27,9 +27,82 @@ or is deleted.
   teach shaders: *Shaders from zero* (The Book of Shaders through the Learn
   folder), ray marching, matrices, playing a shader and sketching over one.
   Opening a sample builds it fresh from the bundled examples.
-- Add blocks to a step (Text, Render, Interactive, Code). The first time a
+- Add blocks to a step (Text, Render, Interactive, Code; see Code blocks below). The first time a
   block needs a picture it asks you to choose a Play: a saved graph or an
   example with a Play setup. That takes a snapshot into the presentation.
+
+## Code blocks
+
+**Code** in the add bar (or, on an empty step, the links under *Or start
+with code*) opens **Add code**. Nothing goes in until you press **Insert**.
+Four ways in, one kind of block out:
+
+- **Write your own**: an editor with GLSL highlighting and completion, a few
+  starting points (a curve, a shape, colour from position, Book of Shaders
+  style) and the preview as you type. JavaScript can be typed too (shown as
+  code, no preview).
+- **Functions**: your Functions library (with its thumbnails) and every
+  function Function Discovery finds in your saved GLSL shaders. Search, filter
+  by where it's from and what it returns. It comes with the helpers it needs,
+  and the block says where it was found.
+- **A node’s code**: search any node type by name or browse by category. You
+  see its helper functions, its lines in `main()` with its default settings
+  (UV and Time wired, so they read as they do in a graph), its inputs and
+  outputs with their types and hints, its settings, and a short *how it
+  works*. Insert all of it or parts: the helpers, the lines, the inputs and
+  outputs as a comment; *how it works* can become the caption.
+- **From a shader**: a Play in this presentation (or **+ Play** to add one, or
+  the graph open in the Studio). Pick the whole shader, its declarations,
+  `main()`, one node's lines (a loop comes whole), or one function (with the
+  functions it calls). A Play's Script layers are listed too.
+
+Picked code names where it came from in the block's header, with a line of
+credit under it (and a Book of Shaders link when its Play has one). The
+settings panel's **Replace…** opens the same chooser for a block you have.
+
+### Live previews
+
+A GLSL block can show what it does beside it, like The Book of Shaders
+(settings panel → **Preview**, on by default for picked code that can draw):
+
+- **Plot**: a float function of x (`float f(float x)`, or `f(x, t)` with the
+  time), or a float variable, drawn as a graph with axes. Set the axes in the
+  settings. It moves when the code reads the time.
+- **Field**: the result as colour. Floats are grey (negative values blue, like
+  a distance), `vec3`/`vec4` are themselves, and a `vec2` is red/green, a
+  warped **Grid** or **Arrows**.
+- **Show** picks what to draw: any function returning a float or a vector,
+  or any variable the lines declare. `uv` runs −1 to 1 like the Studio, or 0
+  to 1 like The Book of Shaders.
+- Any snippet runs: lines from `main()`, functions, a node's code, or a whole
+  shader (Shadertoy's `mainImage` too). The names lessons use are given when
+  the code doesn't declare them (`uv`, `st`, `g_uv`, `x`, `t`, `time`,
+  `fragCoord`, `mouse`); the app's helpers (`valueNoise`, `rotate`…) and a
+  source shader's own functions are brought in; a variable from lines not
+  shown gets a stand-in, and the preview says which.
+- **Sliders** appear for the numbers worth moving: uniforms, float `const`s and
+  `#define`s, a function's extra float parameters, and names nothing
+  declares. The author's slider values are kept with the block.
+- Readers can edit the code in the block (**TRY IT**; **Reset** goes back) and
+  the preview follows a moment after they stop typing. Their edits and slider
+  moves aren't saved. Compile errors show in the preview's place, with the
+  block's own line numbers.
+- **Exported pages** show each preview as a still picture beside the code (the
+  export notes say so); editing and sliders work in Playfield.
+
+## Full screen
+
+- **Present**: the full screen button in Slides (the bar under the slide) and
+  Scroll (the floating bar), **F**, or **⌘⇧F** (Ctrl+Shift+F), which from Edit
+  opens Slides first. Only the presentation shows; its controls fade after a
+  moment without the mouse. The arrow keys still step; **Esc** leaves.
+- **The picture**: the full screen button beside the canvas shapes in the
+  preview's header (Studio and Play) and in the Play page's Canvas row. **F**
+  on the Play page, **⌘⇧F** anywhere (in the Studio F still fits the graph).
+  **Esc** leaves.
+- In the desktop app, where the web view can't make one element full screen,
+  the window goes full screen with the picture or presentation filling it, and
+  comes back on Esc.
 
 ## Saving
 

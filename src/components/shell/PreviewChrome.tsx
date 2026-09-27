@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { toggleFullscreenTarget, useFullscreen } from '../../lib/fullscreen';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -54,6 +55,24 @@ export function AspectPicker({ onPanel = false }: { onPanel?: boolean } = {}) {
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Full screen for the picture alone (the preview's frame registers itself
+ * as the 'canvas' target). F on Play, ⌘⇧F anywhere; Esc leaves.
+ */
+export function CanvasFullscreenButton({ onPanel = false, plainF = false }: { onPanel?: boolean; plainF?: boolean }) {
+  const on = useFullscreen(s => s.target === 'canvas');
+  const [combo] = useState(() => loadShortcutMap().fullscreen);
+  return (
+    <IconButton
+      icon="fit" size="sm" active={on}
+      label={on ? 'Leave full screen' : 'Full screen: the picture on its own'}
+      shortcut={on ? 'escape' : plainF ? 'f' : combo}
+      style={onPanel ? undefined : { marginRight: 4 }}
+      onClick={() => { void toggleFullscreenTarget('canvas'); }}
+    />
   );
 }
 
