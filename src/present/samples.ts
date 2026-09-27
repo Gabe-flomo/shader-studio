@@ -3,7 +3,8 @@
  * groups. Learn the app (teachingSamples.ts): the Studio, a first Play, field
  * sockets, the Convert page, making a lesson. Topics: the Book of Shaders path
  * (teachingSamples.ts), ray marching (sample.ts), matrices, playing a shader,
- * and sketching over a shader with Script layers. Each is built from bundled
+ * sketching over a shader with Script layers, and finishing the picture
+ * (grading, lens, film and time effects). Each is built from bundled
  * examples, so a sample is always in step with the examples it quotes.
  */
 import { buildSamplePresentation, SAMPLE_TITLE } from './sample';
@@ -239,6 +240,97 @@ The code is live: change the colour line, or add a sideways kick to \`p.vx\`, an
   return presentation(SKETCHING_TITLE, keys, src, steps, now);
 }
 
+// ── Finishing: grade, lens and time ─────────────────────────────────────────
+
+export const FINISHING_TITLE = 'Finishing: grade, lens and time';
+
+const LENS_GLSL = `// The Finish pass bends where the picture is read, before anything reads it.
+vec2 v = (q - 0.5) * vec2(aspect, 1.0);            // from the middle, square pixels
+float r2 = dot(v, v) / (0.25 * (aspect * aspect + 1.0)); // 1 at the corners
+float f = 1.0 + k * 0.35 * r2 + edges * 0.2 * r2 * r2; // r' = r (1 + k r²), plus a little r⁴ at the edges
+float fc = 1.0 + k * 0.35 + edges * 0.2;            // the same at a corner
+float fill = mix(1.0, max(fc, 1.0), fit);           // zoom so a barrel keeps the frame full
+q = v * f / fill / vec2(aspect, 1.0) + 0.5;`;
+
+export async function buildFinishingPresentation(now = Date.now()): Promise<Presentation> {
+  const keys = ['finishGrade', 'finishLooks', 'finishScreen', 'finishHalation', 'finishTime'] as const;
+  const src = await sources(keys);
+  const { text, render, interactive, glsl } = blocks(src);
+  const steps: Step[] = [
+    step('Grading the whole picture', [
+      interactive('finishGrade', String.raw`The **Finish** tab on the Play page works on the final frame: the shader and every layer together, the way a colourist grades a film after it's shot. The title here is a layer, and it's graded with everything else.
+
+**Exposure** is in stops, applied to light rather than to screen values: a pixel's linear light $L$ becomes
+
+$$L' = L \cdot 2^{e}$$
+
+so +1 doubles it. Try [[control:exposure]], [[control:contrast]], [[control:temp]] (the mouse's left-right drives it too) and [[control:sat]].`, [
+        ['exposure', 'Exposure'], ['contrast', 'Contrast'], ['temp', 'Temperature'], ['sat', 'Saturation'],
+      ]),
+    ]),
+    step('Curves', [
+      interactive('finishLooks', String.raw`A curve sends each brightness $x$ to $f(x)$. Pull its middle up and the mid-tones brighten; an S shape adds contrast. The RGB curve runs first, then each channel's own:
+
+$$r' = f_r\big(f_{\text{rgb}}(r)\big)$$
+
+The line through your points is a monotone cubic, so it never bulges past them. Each change is baked into a 256 × 2 lookup texture, so a curve costs one texture read per pixel. Hue curves work the same way along the colour wheel: raise one colour's saturation, or turn it into its neighbour. Fade the whole grade with [[control:amount]].`, [
+        ['amount', 'Grade amount'],
+      ]),
+    ]),
+    step('Colour wheels and split toning', [
+      interactive('finishLooks', String.raw`The three **colour wheels** push the shadows, mid-tones and highlights toward a hue. Their levels are **lift**, **gamma** and **gain**:
+
+$$x' = \big(g \cdot (x + l\,(1 - x))\big)^{1/\gamma}$$
+
+Lift moves the blacks, gain the whites, gamma the middle. **Split toning** is gentler: one tint for the highlights, another for the shadows. Try [[control:hiHue]] and [[control:shHue]] with their amounts, and the [[control:liftL]] and [[control:gainL]] levels.`, [
+        ['liftL', 'Shadows level'], ['gainL', 'Highlights level'], ['hiHue', 'Highlights hue'], ['hiSat', 'Highlights amount'], ['shHue', 'Shadows hue'], ['shSat', 'Shadows amount'],
+      ]),
+    ]),
+    step('Looks are starting points', [
+      render('finishLooks', 'Teal & orange: a look is just the grade’s own controls, set'),
+      text(`A **Look** fills in the Grade's controls: Teal & orange, Bleach bypass, Faded print, Cross-process, Mono with toned shadows, Warm film, Day for night. Nothing is hidden: pick one and every slider, wheel and curve it moved is there to change.
+
+When a grade feels right, save it with the disk button on the Grade card. It joins the Looks list on this device.`),
+    ], 2),
+    step('Lens and screen', [
+      interactive('finishScreen', String.raw`Some effects bend the picture before anything reads it. **Lens distortion** moves each point along its distance $r$ from the middle,
+
+$$r' = r\,(1 + k\,r^2)$$
+
+a barrel when $k > 0$, a pincushion below, with a zoom that keeps the frame filled. The **CRT** curves the glass, adds scanlines and the RGB shadow mask of the Studio's CRT Mask node. Try [[control:curve]] and [[control:scan]].`, [
+        ['curve', 'CRT curvature'], ['scan', 'Scanlines'],
+      ]),
+      glsl(LENS_GLSL, 'Lens distortion in the Finish pass', [[4, 4]]),
+    ]),
+    step('Grain, bloom and halation', [
+      interactive('finishHalation', `**Halation** is film's red halo. Light strong enough to pass through the film bounces off its back and exposes it again from behind, reaching the red layer first. So:
+
+• only very bright light does it: the lamps glow, the paper card (0.90) doesn't;
+• the halo goes red, then orange, then white as the light gets stronger;
+• the brightest sources look bigger than they are;
+• a colour with no red in it, like the teal patch, gets no red halo.
+
+A screen picture stops at white, so [[control:head]] guesses how much brighter the clipped parts really were. Push [[control:paper]] to 1.00 and the card clips and halates like a lamp. Try [[control:amount]], [[control:thr]], [[control:warm]] and [[control:grow]].`, [
+        ['amount', 'Amount'], ['thr', 'Threshold'], ['head', 'Highlight headroom'], ['warm', 'Warmth'], ['grow', 'Growth'], ['paper', 'Paper white'],
+      ]),
+      text(`**Bloom** is the softer cousin: every bright part glows, in its own colour. **Film grain** follows brightness the way film does, strongest in the mid-tones. Both, with halation, read a few small blurred copies of the frame, so they stay cheap.`),
+    ]),
+    step('Camera shake', [
+      interactive('finishScreen', `**Camera shake** moves, rolls and zooms the whole frame on smooth noise, zoomed just enough that the edges never show; **gate weave** adds the sideways drift and frame-to-frame jitter of film in a projector. Like every Finish number it's a control: here a key drives it. Click the picture, then tap and hold **Space** for [[control:shake]].`, [
+        ['shake', 'Camera shake (Space)'], ['bloom', 'Bloom'], ['grain', 'Grain'],
+      ]),
+    ]),
+    step('Time displacement', [
+      interactive('finishTime', `**Time displacement** keeps the last frames and shows each part of the picture from a different one. With a slit-scan map, the bottom is now and the top is [[control:back]] frames ago, so anything moving shears and smears. Turn [[control:dir]], or speed the comet up with [[control:speed]].
+
+Other maps choose the frame by brightness, by drifting noise, by distance from a centre, or by where a layer is. Renders fill the frames in order, so a render comes out the same every time.`, [
+        ['back', 'Frames back'], ['dir', 'Direction'], ['speed', 'Comet speed'],
+      ]),
+    ]),
+  ];
+  return presentation(FINISHING_TITLE, keys, src, steps, now);
+}
+
 // ── The list the Present page offers ────────────────────────────────────────
 
 export const SAMPLE_PRESENTATIONS: SamplePresentation[] = [
@@ -254,6 +346,7 @@ export const SAMPLE_PRESENTATIONS: SamplePresentation[] = [
   { title: MATRICES_TITLE, group: 'topic', hint: 'Built from the Matrices folder', still: 'matrixFoldFractal', build: buildMatricesPresentation },
   { title: PLAYING_TITLE, group: 'topic', hint: 'Controls, mappings, LFOs, keys, nulls, layers', still: 'playGlowText', build: buildPlayingPresentation },
   { title: SKETCHING_TITLE, group: 'topic', hint: 'Script layers, with live code', still: 'scriptGlow', build: buildSketchingPresentation },
+  { title: FINISHING_TITLE, group: 'topic', hint: 'The Finish stack: grading, curves, lens, CRT, halation, shake, time', still: 'finishGrade', build: buildFinishingPresentation },
 ];
 
 /** The groups the menus show the samples in, in order. */

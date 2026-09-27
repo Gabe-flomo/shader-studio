@@ -345,6 +345,7 @@ import { parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, D
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 import { parseSourceCredit, type SourceCredit } from './credit';
 import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
+import { finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
 export type { LayerGroup } from './layerGroups';
 
 // ── Actions (a trigger does something to a layer) ─────────────────────────────
@@ -454,6 +455,18 @@ export function parseLayerTarget(target: string): { layerId: string; key: string
   const i = rest.lastIndexOf('::');
   if (i <= 0) return null;
   return { layerId: rest.slice(0, i), key: rest.slice(i + 2) };
+}
+
+/**
+ * A target the mapping engine drives outside the graph: a layer property, or
+ * a Finish effect's number (its id as finishPropId gives it). Null for a graph
+ * target or an action.
+ */
+export function parsePropTarget(target: string): { layerId: string; key: string } | null {
+  const lt = parseLayerTarget(target);
+  if (lt) return lt;
+  const ft = parseFinishTarget(target);
+  return ft ? { layerId: finishPropId(ft.effectId), key: ft.key } : null;
 }
 
 /**
@@ -574,6 +587,11 @@ export interface PlayRecord {
   hands?: PlayHands;
   /** Audio readers: dots on the live spectrum, each a source and a trigger. Absent = none. */
   audioReaders?: PlayAudioReaders;
+  /**
+   * The Finish stack (types/playFinish.ts): grading, lens and film effects
+   * and time displacement over the final picture. Absent = none.
+   */
+  finish?: PlayFinish;
 }
 
 // ── Takes: a performance recorded as keyframes ──────────────────────────────
@@ -1119,7 +1137,15 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   layers = repairMattes(normaliseBackgroundLayer(syncLayerKinds(layers, layerKinds)));
   // Controls on a layer property need that layer; mappings reading a null need that null.
   const layerIds = new Set(layers.map(l => l.id));
-  const keptControls = controls.filter(c => { const lt = parseLayerTarget(c.target) ?? parseActionTarget(c.target); return !lt || layerIds.has(lt.layerId); });
+  // Controls on a Finish effect's number need that effect.
+  const finish = parseFinish(r.finish);
+  const effectIds = new Set(finish?.effects.map(e => e.id) ?? []);
+  const keptControls = controls.filter(c => {
+    const ft = parseFinishTarget(c.target);
+    if (ft) return effectIds.has(ft.effectId);
+    const lt = parseLayerTarget(c.target) ?? parseActionTarget(c.target);
+    return !lt || layerIds.has(lt.layerId);
+  });
   const keptIds = new Set(keptControls.map(c => c.id));
   // A trigger or sensor on a layer needs that layer too.
   const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId);
@@ -1164,6 +1190,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   const hands = parseHands(r.hands);
   if (hands) out.hands = hands;
   if (audioReaders) out.audioReaders = audioReaders;
+  if (finish) out.finish = finish;
   if (Array.isArray(r.takes)) {
     const seenT = new Set<string>();
     const takes: PlayTake[] = [];
@@ -1248,5 +1275,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && (!play.display || isDefaultDisplay(play.display)));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish));
 }

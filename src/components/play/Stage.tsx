@@ -26,6 +26,7 @@ import { leftBehind } from '../../play/exportHtml';
 import { stagePageHtml } from '../../present/liveScript';
 import { playUses3D, useThreeSource } from '../../play/threeSource';
 import { parseLayerTarget, type PlayControl, type PlayRecord } from '../../types/play';
+import { parseFinishTarget, patchFinishEffect } from '../../types/playFinish';
 import { playEngine } from '../../lib/playEngine';
 import { playBackground } from '../../play/background';
 import { useTokens } from '../../theme/themeStore';
@@ -187,6 +188,8 @@ function StageControls() {
   const live = useLiveValues(play);
   const driven = new Set(play.mappings.filter(m => m.enabled).map(m => m.controlId));
   const write = (c: PlayControl, value: number | number[]) => {
+    const ft = parseFinishTarget(c.target);
+    if (ft) { if (typeof value === 'number') setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, ft.effectId, { [ft.key]: value }) })); return; }
     const lt = parseLayerTarget(c.target);
     if (lt) {
       if (typeof value === 'number') setPlay(p => ({ ...p, layers: p.layers.map(l => (l.id === lt.layerId ? { ...l, [lt.key]: value } as typeof l : l)) }));

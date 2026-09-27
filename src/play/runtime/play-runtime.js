@@ -77,7 +77,7 @@
  */
 (function () {
   'use strict';
-  if (window.ShaderStudioPlay && window.ShaderStudioPlay.version >= 6) return;
+  if (window.ShaderStudioPlay && window.ShaderStudioPlay.version >= 8) return;
 
   const CSS = `
 .ssp{display:flex;width:100%;height:100%;min-height:0;box-sizing:border-box;font:13px/1.4 system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#e6e7ec}
@@ -200,7 +200,13 @@
     if (st.stage === 'sustain' && level === 0) st.stage = 'idle';
     return st.value;
   }
-  function layerTarget(t) { if (!t.startsWith('layer:')) return null; const r = t.slice(6); const i = r.lastIndexOf('::'); return i > 0 ? { layerId: r.slice(0, i), key: r.slice(i + 2) } : null; }
+  // A layer property (layer:<id>::<key>), or a Finish effect's number (finish:<effectId>::<key>, kept under the id 'finish:<effectId>').
+  function layerTarget(t) {
+    const fin = t.startsWith('finish:');
+    if (!fin && !t.startsWith('layer:')) return null;
+    const r = t.slice(fin ? 7 : 6); const i = r.lastIndexOf('::');
+    return i > 0 ? { layerId: (fin ? 'finish:' : '') + r.slice(0, i), key: r.slice(i + 2) } : null;
+  }
   // An action control (a button): `act:<layerId>::<action>`.
   function actTarget(t) { if (!t.startsWith('act:')) return null; const r = t.slice(4); const i = r.lastIndexOf('::'); return i > 0 ? { layerId: r.slice(0, i), do: r.slice(i + 2) } : null; }
   function bindingKey(t) { return t.split('::').slice(-2).join('::'); }
@@ -468,6 +474,17 @@ void main() {
     const ovCanvas = el('canvas', 'ssp-overlay');
     const fitBox = el('div', 'ssp-fit');
     fitBox.append(glCanvas, ovCanvas);
+    // The Finish stack (the kit's finish.js): its own WebGL2 canvas over both, and the markers above it.
+    const FK = typeof SSKit !== 'undefined' && SSKit.finish ? SSKit.finish : null;
+    const finishOn = !!(FK && FK.active(play0.finish));
+    let finishR = null, fnCanvas = null, guideCanvas = null;
+    if (finishOn) {
+      fnCanvas = el('canvas', 'ssp-overlay'); fnCanvas.style.display = 'none';
+      guideCanvas = el('canvas', 'ssp-overlay');
+      fitBox.append(fnCanvas, guideCanvas);
+      finishR = FK.create(fnCanvas);
+      if (!finishR.ok) finishR = null;
+    }
     stage.append(fitBox);
     root.append(stage);
     const panel = el('div', 'ssp-panel');
@@ -1068,6 +1085,9 @@ void main() {
     // Mapping engine
     const controls = new Map(play.controls.map(c => [c.id, c]));
     const layersById = new Map(play.layers.map(l => [l.id, l]));
+    // The Finish stack's effects are this mount's own copies too; their numbers are driven like layer properties.
+    const finish = play.finish && Array.isArray(play.finish.effects) ? { on: play.finish.on !== false, effects: play.finish.effects.map(e => Object.assign({}, e)) } : null;
+    if (finish) for (const e of finish.effects) layersById.set('finish:' + e.id, e);
     const base = new Map(), live = new Map(), layerLive = new Map(), smooth = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0, playing = !opts.paused, lastNow = 0, frame = 0;
@@ -1553,8 +1573,13 @@ void main() {
       const L = shared.live;
       if (audioLayer && L.status === 'on') updateLive();
       pointer.x = mouse.x; pointer.y = mouse.y; pointer.over = mouse.over; pointer.down = !!mouse.down;
+      let guides = null;
+      if (finishR && guideCanvas) {
+        if (guideCanvas.width !== W || guideCanvas.height !== H) { guideCanvas.width = W; guideCanvas.height = H; }
+        guides = guideCanvas.getContext('2d'); guides.clearRect(0, 0, W, H);
+      }
       K.frame(octx, play, {
-        gl: glCanvas, W, H, dpr, time, dt, value, pointer, markers, editing: false, hidden,
+        gl: glCanvas, W, H, dpr, time, dt, value, pointer, markers, editing: false, hidden, guides, alphaLayers: finishMap(),
         backdrop: play.display ? play.display.backdrop : [0, 0, 0],
         background,
         graphFrame: item => qFrames.get(item.id) || null,
@@ -1676,7 +1701,23 @@ void main() {
         drawQueueGraph(e);
         if (!qPlan.direct) captureQueue(item.id);
       }
-      if (play.layers.length || hidden || usesLayersNode || bgOnly) drawLayers(dt);
+      const layered = !!(play.layers.length || hidden || usesLayersNode || bgOnly);
+      if (layered) drawLayers(dt);
+      if (finishR) {
+        const ok = finishR.draw({
+          finish, value: (e, k) => layerValue('finish:' + e.id, k, e[k]), picture: glCanvas, layers: layered ? ovCanvas : null,
+          layerAlpha: id => (K ? K.layerCanvas(id) : null), width: glCanvas.width, height: glCanvas.height, time, first: frame <= 1,
+        });
+        fnCanvas.style.display = ok ? 'block' : 'none';
+        finishDrew = ok;
+      }
+    }
+    // The layer the time map reads (Time displacement's Layer map), drawn alone by the kit.
+    let finishDrew = false;
+    function finishMap() {
+      if (!finishR) return null;
+      const t = finish.effects.find(e => e.kind === 'time' && e.enabled);
+      return t && t.map === 'layer' && t.layerId ? [t.layerId] : null;
     }
     raf = requestAnimationFrame(tick);
     // The picture and its layers with both canvases, as one 2D canvas (read in the same task as the draw).
@@ -1684,6 +1725,7 @@ void main() {
       const out = document.createElement('canvas');
       out.width = glCanvas.width; out.height = glCanvas.height;
       const x = out.getContext('2d');
+      if (finishR && finishDrew) { x.drawImage(fnCanvas, 0, 0, out.width, out.height); return out; }
       x.drawImage(glCanvas, 0, 0);
       x.drawImage(ovCanvas, 0, 0);
       return out;
@@ -1705,6 +1747,7 @@ void main() {
         if (vSound.ctx) vSound.ctx.close();
         for (const u of blobUrls) URL.revokeObjectURL(u);
         if (song.ctx) song.ctx.close();
+        if (finishR) finishR.dispose();
         const lose = gl.getExtension('WEBGL_lose_context');
         if (lose) lose.loseContext();
         root.innerHTML = '';
@@ -1727,6 +1770,7 @@ void main() {
         const fdt = o.dt > 0 ? o.dt : 1 / 60;
         const steps = Array.isArray(o.steps) ? o.steps : [];
         if (K) K.reset(o.seed > 0 ? o.seed : 1);
+        if (finishR) finishR.reset();
         dropTargets(); frame = 0; smooth.clear(); trig.clear(); actLevel.clear(); overrides.clear();
         for (const at of steps) { time = Math.max(0, +at || 0); frame++; tickMappings(fdt); paint(fdt, false); }
         time = Math.max(0, +t || 0); frame++; tickMappings(fdt); paint(fdt, false);
@@ -1905,7 +1949,7 @@ void main() {
     shared.camera = null; shared.cameraStream = null;
   }
   // internals: the pure GPU and audio helpers, for tests.
-  window.ShaderStudioPlay = { version: 7, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex, readerBandDb, readerRead, readerSmooth, readerGate, triggerKey } };
+  window.ShaderStudioPlay = { version: 8, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex, readerBandDb, readerRead, readerSmooth, readerGate, triggerKey } };
 
   // A full-page export: mount on #play with the page's options (URL params can override).
   if (window.PLAY_BUNDLE && document.getElementById('play')) {

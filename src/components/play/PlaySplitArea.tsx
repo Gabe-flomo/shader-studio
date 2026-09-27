@@ -154,6 +154,8 @@ function SplitPanel() {
   const nLayers = useNodeGraphStore(s => s.play.layers.length);
   const nMappings = useNodeGraphStore(s => s.play.mappings.length);
   const layersOk = useCan('play.layers');
+  const nFinish = useNodeGraphStore(s => s.play.finish?.effects.length ?? 0);
+  const finishOk = useCan('play.finish');
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // The body's width decides whether the section lays out wide.
@@ -181,6 +183,7 @@ function SplitPanel() {
             options={[
               { value: 'controls', label: `Controls${nControls ? ` · ${nControls}` : ''}` },
               { value: 'layers', label: `Layers${nLayers ? ` · ${nLayers}` : ''}${layersOk ? '' : ' · Pro'}` },
+              { value: 'finish', label: `Finish${nFinish ? ` · ${nFinish}` : ''}${finishOk ? '' : ' · Pro'}` },
               { value: 'mappings', label: `Mappings${nMappings ? ` · ${nMappings}` : ''}` },
             ]}
           />
