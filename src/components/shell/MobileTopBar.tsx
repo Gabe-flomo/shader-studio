@@ -15,6 +15,7 @@ import { isPlayRecordEmpty } from '../../types/play';
 import { exportEverything, importEverything } from '../../utils/libraryActions';
 import { Modal } from '../ui/Modal';
 import { LibraryPanel } from './LibraryPanel';
+import { HandsLive } from '../play/HandsChip';
 
 /**
  * Phone top bar (Mobile board): the Studio | Play | Present switch (other pages: the logo, back
@@ -83,6 +84,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
       <span style={{ flex: 1 }} />
       {/* The graph's own actions; Present has its own file actions in its header. */}
       {page !== 'present' && page !== 'files' && <>
+        <HandsLive compact />
         <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 34, height: 40 }} />
         <IconButton icon="redo" label="Redo" tooltip={false} onClick={redo} style={{ width: 34, height: 40 }} />
         <span style={{ width: 1, height: 20, flexShrink: 0, background: tk.border.default, margin: '0 1px' }} />
