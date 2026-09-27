@@ -3,6 +3,7 @@ import './index.css'
 import App from './App.tsx'
 import { Toaster } from './components/ui/Toaster'
 import { DialogHost } from './components/ui/DialogHost'
+import { BackgroundsHost } from './components/backgrounds/BackgroundsHost'
 import { PerformanceBar } from './components/PerformanceBar'
 import { useNodeGraphStore } from './store/useNodeGraphStore'
 import { compileGraph } from './compiler/graphCompiler'
@@ -57,7 +58,7 @@ if (import.meta.env.DEV) {
 if (import.meta.env.DEV && location.hash === '#ui') {
   import('./components/ui/UiGallery').then(({ UiGallery }) => root.render(<UiGallery />))
 } else {
-  root.render(<><App /><Toaster /><DialogHost /><PerformanceBar /></>)
+  root.render(<><App /><Toaster /><BackgroundsHost /><DialogHost /><PerformanceBar /></>)
   // Songs stop when the graph that owns them is closed or they're deleted.
   void import('./lib/audioSync').then(m => m.startAudioSync())
   // The backup folder (desktop app; a picked folder in Chrome/Edge) starts once the app is up.

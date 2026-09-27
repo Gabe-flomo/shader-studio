@@ -3,7 +3,7 @@
  * exports (a full HTML page or a paste-in embed snippet). Plain ES2020, no
  * imports, no framework.
  *
- *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still() }
+ *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still(), renderAt(t, o) }
  *
  * bundle:  { title, fragmentShader, uniforms, paramBindings, play, aspect, passes?, media? }
  *   passes: { stateful, echo: { copies, delay } | null, particles: [{ vertexShader, fragmentShader, count, shape }] }
@@ -31,6 +31,8 @@
  *   startTime: number,               seconds on the clock at the start
  *   paused: boolean,                 start with the clock stopped (a still at startTime)
  *   pauseOffscreen: boolean,         player: stop drawing while off-screen (a background always does)
+ *   pixelSize: { w, h },             draw exactly this many pixels, however big the box is on screen
+ *                                    (the capture window: 1920 × 1080 shown scaled down)
  * }
  *
  * The control API (for a host drawing its own panel): get(id) → { value, driven }
@@ -781,7 +783,9 @@ void main() {
       // Sound only after the visitor has clicked (browsers block it before): until then it plays muted.
       bgMuted = bgVid.muted !== false;
     }
-    const background = bgOnly && !queueLayer ? { el: bgEl, fit: bgDisp.fit === 'contain' || bgDisp.fit === 'stretch' ? bgDisp.fit : 'cover', colour: bgDisp.backdrop || [0, 0, 0] } : null;
+    // A colour background can be a gradient or a palette's bands (types/play.ts activeFill); the kit paints it.
+    const bgFill = bgSource === 'colour' && (bgDisp.colourMode === 'gradient' || bgDisp.colourMode === 'palette') && bgDisp.fill && Array.isArray(bgDisp.fill.stops) && bgDisp.fill.stops.length ? bgDisp.fill : null;
+    const background = bgOnly && !queueLayer ? { el: bgEl, fit: bgDisp.fit === 'contain' || bgDisp.fit === 'stretch' ? bgDisp.fit : 'cover', colour: bgDisp.backdrop || [0, 0, 0], fill: bgFill } : null;
     const followBackground = run => { if (bgVideo) followVideo(bgVideo, bgVid.rate, bgVid.loop !== false, run); };
     // Keep a video on the page's clock (as the app's play/background.ts).
     const followVideo = (v, rateIn, loop, run) => {
@@ -932,13 +936,16 @@ void main() {
     // Size: contain letterboxes to the exported shape; cover fills the box.
     const ratio = fit === 'contain' && B.aspect && B.aspect.ratio ? B.aspect.ratio : null;
     let needsDraw = true;
+    // pixelSize: a drawing buffer of exactly that many pixels, whatever the box's size on screen
+    // (a capture at 1920 × 1080 shown scaled down); the box is then measured untransformed.
+    const pixelSize = opts.pixelSize && opts.pixelSize.w > 0 && opts.pixelSize.h > 0 ? opts.pixelSize : null;
     const layout = () => {
-      const r = stage.getBoundingClientRect();
+      const r = pixelSize ? { width: stage.clientWidth, height: stage.clientHeight } : stage.getBoundingClientRect();
       let w = r.width, h = r.height;
       if (ratio && w > 0 && h > 0) { if (w / h > ratio) w = h * ratio; else h = w / ratio; }
       fitBox.style.width = w + 'px'; fitBox.style.height = h + 'px';
       const dpr = Math.min(maxDpr, window.devicePixelRatio || 1);
-      const W = Math.max(1, Math.round(w * dpr)), H = Math.max(1, Math.round(h * dpr));
+      const W = pixelSize ? Math.round(pixelSize.w) : Math.max(1, Math.round(w * dpr)), H = pixelSize ? Math.round(pixelSize.h) : Math.max(1, Math.round(h * dpr));
       if (glCanvas.width !== W || glCanvas.height !== H) { glCanvas.width = W; glCanvas.height = H; ovCanvas.width = W; ovCanvas.height = H; needsDraw = true; dropTargets(); }
     };
     const ro = new ResizeObserver(layout);
@@ -1468,11 +1475,14 @@ void main() {
       }
       gl.activeTexture(gl.TEXTURE0);
     }
+    // Held by renderAt: the picture stays what it drew until play() lets the clock run again.
+    let held = false;
     function tick(now) {
       if (!alive) return;
       raf = requestAnimationFrame(tick);
       const dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
       lastNow = now;
+      if (held) return;
       const running = playing && !reduced && !document.hidden && !(pauseOffscreen && !onScreen);
       runVideos(running);
       followBackground(running);
@@ -1486,6 +1496,11 @@ void main() {
       const moved = tickMappings(dt);
       // Feedback and echo change with every frame drawn, so while paused they draw only when something changes (as in the app).
       if (!playing && (stateful || echoCfg) && !needsDraw && !moved && frame > 1) { refreshPanel(now); return; }
+      paint(dt, running);
+      refreshPanel(now);
+    }
+    // The picture and the layers at `time` (the mappings already ticked).
+    function paint(dt, running) {
       needsDraw = false;
       // A Background layer: what shows now (its actions carried out), before anything is drawn.
       const qPlan = queueLayer && K ? K.background(play, { time, value, allowDirect: true }) : null;
@@ -1495,7 +1510,7 @@ void main() {
         uploadVideos();
         // Reduced motion's still frame of a feedback graph is the picture after its first 1.5 s
         // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
-        if (reduced && stateful && frame === 1) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
+        if (reduced && stateful && frame === 1 && !held) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
         drawPicture();
         if (particles.length) drawParticles();
         if (qPlan && !qPlan.direct) { const self = qPlan.items.find(i => i.item.kind === 'graph' && i.item.graph === 'this'); if (self) captureQueue(self.item.id); }
@@ -1508,9 +1523,17 @@ void main() {
         if (!qPlan.direct) captureQueue(item.id);
       }
       if (play.layers.length || hidden || usesLayersNode || bgOnly) drawLayers(dt);
-      refreshPanel(now);
     }
     raf = requestAnimationFrame(tick);
+    // The picture and its layers with both canvases, as one 2D canvas (read in the same task as the draw).
+    const composite = () => {
+      const out = document.createElement('canvas');
+      out.width = glCanvas.width; out.height = glCanvas.height;
+      const x = out.getContext('2d');
+      x.drawImage(glCanvas, 0, 0);
+      x.drawImage(ovCanvas, 0, 0);
+      return out;
+    };
 
     return {
       destroy() {
@@ -1532,7 +1555,27 @@ void main() {
         root.classList.remove('ssp', 'ssp-bg', 'ssp-bare');
       },
       pause() { setPlaying(false); },
-      play() { setPlaying(true); },
+      play() { held = false; setPlaying(true); },
+      /**
+       * Draw the frame at `t` seconds, the same every time: the clock stops and
+       * the picture holds until play(). The layers and feedback start over
+       * (the layers' random choices seeded by `seed`, default 1) and are
+       * stepped through `steps` (clock times, fixed `dt` apart, from
+       * lib/backgroundLibrary.ts captureSteps) first, so simulations arrive
+       * where they would be. With `capture`, returns the picture and its
+       * layers as one canvas; else null.
+       */
+      renderAt(t, o) {
+        o = o || {};
+        held = true; setPlaying(false);
+        const fdt = o.dt > 0 ? o.dt : 1 / 60;
+        const steps = Array.isArray(o.steps) ? o.steps : [];
+        if (K) K.reset(o.seed > 0 ? o.seed : 1);
+        dropTargets(); frame = 0; smooth.clear(); trig.clear(); actLevel.clear(); overrides.clear();
+        for (const at of steps) { time = Math.max(0, +at || 0); frame++; tickMappings(fdt); paint(fdt, false); }
+        time = Math.max(0, +t || 0); frame++; tickMappings(fdt); paint(fdt, false);
+        return o.capture ? composite() : null;
+      },
       get(id) {
         const c = controls.get(id);
         if (!c) return null;
@@ -1558,14 +1601,7 @@ void main() {
         l.code = code; needsDraw = true;
       },
       still() {
-        try {
-          const out = document.createElement('canvas');
-          out.width = glCanvas.width; out.height = glCanvas.height;
-          const x = out.getContext('2d');
-          x.drawImage(glCanvas, 0, 0);
-          x.drawImage(ovCanvas, 0, 0);
-          return out.toDataURL('image/png');
-        } catch (e) { return null; }
+        try { return composite().toDataURL('image/png'); } catch (e) { return null; }
       },
     };
   }
@@ -1668,7 +1704,7 @@ void main() {
     shared.camera = null; shared.cameraStream = null;
   }
   // internals: the pure GPU and audio helpers, for tests.
-  window.ShaderStudioPlay = { version: 6, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex } };
+  window.ShaderStudioPlay = { version: 7, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex } };
 
   // A full-page export: mount on #play with the page's options (URL params can override).
   if (window.PLAY_BUNDLE && document.getElementById('play')) {

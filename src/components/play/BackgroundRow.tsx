@@ -10,14 +10,28 @@
  * page (play/background.ts): the layers draw over the background and read it
  * as the picture.
  *
+ * Colour is flat (Solid), a Gradient built here from up to 8 stops (angle,
+ * Smooth or Bands; "Save as palette" keeps it in the library), or a library
+ * Palette (PlayDisplay.colourMode and .fill): the kit paints it, and
+ * everything that reads the picture reads it. Image… takes a picture from
+ * the library's backgrounds or a file.
+ *
  * Setups from before the Background layer keep their image or video here and
  * still play it (their Replace, Fit and video options stay). "Layers only"
  * stays what it was: the picture is covered by the backdrop colour but still
  * runs, so Reveal mattes and particles with Mask show it inside themselves.
  */
 import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Menu } from '../ui/Menu';
+import { Popover } from '../ui/Popover';
+import { Sheet } from '../ui/Sheet';
+import { FillEditor, type EditableFill } from '../backgrounds/FillEditor';
+import { openBackgrounds } from '../backgrounds/backgroundsUi';
+import { imageMenuItems, pickLibraryImage } from '../backgrounds/libraryImage';
+import { usePalettes } from '../backgrounds/useBackgrounds';
+import { freePaletteName, getPalette, paletteCss, paletteFill, savePalette, PALETTE_PRESETS } from '../../lib/backgroundLibrary';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { BACKGROUND_RATES, BACKGROUND_VIDEO_KEEP, DEFAULT_DISPLAY, backgroundLayerOf, backgroundSource, isDefaultDisplay, type BackgroundFit, type BackgroundItem, type PlayDisplay, type PlayRecord } from '../../types/play';
+import { BACKGROUND_RATES, BACKGROUND_VIDEO_KEEP, DEFAULT_DISPLAY, PLAY_FILL_STOPS_MAX, backgroundLayerOf, backgroundSource, fitStops, isDefaultDisplay, type BackgroundFill, type BackgroundFit, type BackgroundItem, type PlayDisplay, type PlayRecord } from '../../types/play';
 import { playBackground } from '../../play/background';
 import { useShowing } from './useQueueShowing';
 import { addBackground, newSourceId } from '../../play/backgroundQueue';
@@ -30,6 +44,7 @@ import { Icon } from '../ui/Icon';
 import { Select } from '../ui/Select';
 import { Tooltip } from '../ui/Tooltip';
 import { toast } from '../ui/toastStore';
+import { askText } from '../ui/dialogStore';
 import { usePlayUi } from './playUi';
 import { GraphSourcePicker } from './GraphSourcePicker';
 import { IMAGE_ACCEPT, VIDEO_ACCEPT, baseName, imageSource, loadBackgroundImage, readDataUrl, sizeText, videoSource } from './backgroundFiles';
@@ -41,6 +56,11 @@ const FITS: { value: BackgroundFit; label: string }[] = [
 ];
 
 type HeaderChoice = 'shader' | 'graph' | 'image' | 'video' | 'colour';
+type ColourChoice = 'solid' | 'gradient' | 'palette';
+
+const narrowScreen = () => typeof window !== 'undefined' && window.innerWidth < 640;
+
+
 
 const hexOf = (c: readonly number[]) => `#${c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('')}`;
 const fromHex = (h: string): [number, number, number] => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
@@ -65,6 +85,10 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
   const segRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [imageMenu, setImageMenu] = useState<{ x: number; y: number; legacy: boolean } | null>(null);
+  const [editingFill, setEditingFill] = useState(false);
+  const fillRef = useRef<HTMLButtonElement>(null);
+  const palettes = usePalettes();
   const showing = useShowing();
   /** A file picked for the header's own (older) image or video, not for a new Background layer. */
   const legacyPick = useRef(false);
@@ -112,7 +136,49 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
       return;
     }
     legacyPick.current = false;
-    (v === 'image' ? imageInput : videoInput).current?.click();
+    if (v === 'image') { askImage(false); return; }
+    videoInput.current?.click();
+  };
+
+  /** Image…: a menu, library or file. */
+  const askImage = (legacy: boolean) => {
+    const r = segRef.current?.getBoundingClientRect();
+    setImageMenu({ x: r ? r.left : 16, y: r ? r.bottom + 4 : 80, legacy });
+  };
+  const imageFromLibrary = async (legacy: boolean) => {
+    const item = await pickLibraryImage();
+    if (!item) return;
+    if (legacy) setDisplay({ source: 'image', image: { name: item.name, src: item.src!, ...(item.libraryId ? { libraryId: item.libraryId } : {}) } });
+    else startLayer(item);
+  };
+
+  // ── Colour: solid, gradient or palette ────────────────────────────────────
+  const colourChoice: ColourChoice = d.colourMode ?? 'solid';
+  const fill: BackgroundFill = d.fill ?? paletteFill(PALETTE_PRESETS[0]);
+  const setFill = (f: EditableFill, mode: 'gradient' | 'palette' = 'gradient') => {
+    const next: BackgroundFill = { style: f.style, stops: fitStops(f.stops, PLAY_FILL_STOPS_MAX), angle: f.angle };
+    if (mode === 'palette' && d.fill?.paletteId) { next.paletteId = d.fill.paletteId; if (d.fill.name) next.name = d.fill.name; }
+    setDisplay({ colourMode: mode, fill: next });
+  };
+  const chooseColour = (c: ColourChoice) => {
+    if (c === 'solid') { setDisplay({ colourMode: undefined }); return; }
+    if (c === 'gradient') { setDisplay({ colourMode: 'gradient', fill: d.fill ?? { ...paletteFill(PALETTE_PRESETS[0]), paletteId: undefined, name: undefined } }); return; }
+    // Palette: keep the one picked before, else the first preset.
+    const keep = d.fill?.paletteId && getPalette(d.fill.paletteId);
+    setDisplay({ colourMode: 'palette', fill: keep ? { ...paletteFill(keep), angle: d.fill!.angle } : paletteFill(PALETTE_PRESETS[0]) });
+  };
+  const pickPalette = (id: string) => {
+    const p = getPalette(id);
+    if (p) setDisplay({ colourMode: 'palette', fill: paletteFill(p) });
+  };
+  const saveAsPalette = async () => {
+    const n = await askText('Save as palette', { label: 'Name', initial: freePaletteName(fill.name ?? 'My gradient'), confirmLabel: 'Save' });
+    if (!n) return;
+    try {
+      const p = savePalette({ name: n, stops: fill.stops, style: fill.style, angle: fill.angle });
+      setDisplay({ colourMode: d.colourMode, fill: { ...fill, paletteId: p.id, name: p.name } });
+      toast.success(`Saved “${p.name}”`, { message: 'In the Library’s backgrounds, under Palettes: pick it here with Palette, or in any setup.' });
+    } catch (e) { toast.error('Couldn’t save the palette', { message: e instanceof Error ? e.message : String(e) }); }
   };
 
   const pickImage = async (file: File) => {
@@ -140,7 +206,10 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
     } catch (e) { toast.error('Couldn’t use that video', { message: e instanceof Error ? e.message : String(e) }); }
     finally { setBusy(false); legacyPick.current = false; }
   };
-  const replaceLegacy = (kind: 'image' | 'video') => { legacyPick.current = true; (kind === 'image' ? imageInput : videoInput).current?.click(); };
+  const replaceLegacy = (kind: 'image' | 'video') => {
+    if (kind === 'image') { askImage(true); return; }
+    legacyPick.current = true; videoInput.current?.click();
+  };
 
   const label = (text: string) => <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{text}</span>;
   const swatch = (title: string, value: readonly number[], set: (c: [number, number, number]) => void) => (
@@ -196,7 +265,7 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
   const showToggle = source !== 'colour';
   const layersOnly = !d.picture && source !== 'colour';
   // The backdrop colour matters for Colour, Layers only, and the bars around a fitted image or video.
-  const backdropUse = source === 'colour' ? 'Background colour'
+  const backdropUse = source === 'colour' ? (colourChoice === 'solid' ? 'Background colour' : null)
     : layersOnly ? 'Backdrop colour (covers the picture)'
       : (source === 'image' || source === 'video') && d.fit === 'contain' ? 'Colour around the picture'
         : null;
@@ -220,6 +289,47 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
         {backdropUse && swatch(backdropUse, d.backdrop, c => setDisplay({ backdrop: c }))}
         {busy && <span style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}` }}>Loading…</span>}
       </div>
+
+      {source === 'colour' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+          <Segmented<ColourChoice> size="sm" ariaLabel="Colour" value={colourChoice} onChange={chooseColour} options={[
+            { value: 'solid', label: 'Solid', title: 'One flat colour' },
+            { value: 'gradient', label: 'Gradient', title: `Colours blending across the picture: up to ${PLAY_FILL_STOPS_MAX} stops, at any angle` },
+            { value: 'palette', label: 'Palette', title: 'A palette from the library (built in, or one you saved)' },
+          ]} />
+          {colourChoice === 'gradient' && (
+            <>
+              <button ref={fillRef} type="button" onClick={() => setEditingFill(o => !o)} aria-expanded={editingFill} title="Edit the gradient"
+                style={{ width: 56, height: 24, flexShrink: 0, borderRadius: radius.md, border: 0, padding: 0, cursor: 'pointer', background: paletteCss(fill), boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.14)}${editingFill ? `, 0 0 0 2px ${tk.accent.base}` : ''}` }} />
+              <Button size="sm" icon="edit" onClick={() => setEditingFill(o => !o)}>Edit</Button>
+              <Button size="sm" variant="ghost" icon="save" onClick={() => void saveAsPalette()} title="Keep these colours in the Library, to use in other setups">Save as palette</Button>
+            </>
+          )}
+          {colourChoice === 'palette' && (
+            <>
+              <div role="listbox" aria-label="Palettes" style={{ display: 'flex', gap: 5, overflowX: 'auto', flex: '1 1 160px', minWidth: 0, padding: '2px 2px 3px' }}>
+                {[...palettes.filter(p => !p.preset), ...palettes.filter(p => p.preset)].slice(0, 24).map(p => {
+                  const on = d.fill?.paletteId === p.id;
+                  return (
+                    <button key={p.id} type="button" role="option" aria-selected={on} title={p.name} onClick={() => pickPalette(p.id)}
+                      style={{ width: 34, height: 22, flexShrink: 0, borderRadius: 6, border: 0, padding: 0, cursor: 'pointer', background: paletteCss(p, 90), boxShadow: on ? `0 0 0 2px ${tk.bg.panel}, 0 0 0 3.5px ${tk.accent.base}` : `inset 0 0 0 1px ${alpha('#000000', 0.14)}` }} />
+                  );
+                })}
+              </div>
+              <Button size="sm" variant="ghost" onClick={async () => { const pk = await openBackgrounds({ pick: 'palette', title: 'Choose a palette' }); if (pk?.kind === 'palette') setDisplay({ colourMode: 'palette', fill: paletteFill(pk.palette) }); }}>More…</Button>
+              <span title={d.fill?.name} style={{ color: tk.text.muted, font: `500 11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120 }}>{d.fill?.name ?? ''}</span>
+              <Button size="sm" variant="ghost" icon="edit" title="Change its colours and angle here (as a gradient)" onClick={() => { setDisplay({ colourMode: 'gradient' }); setEditingFill(true); }}>Edit as gradient</Button>
+            </>
+          )}
+          {editingFill && colourChoice === 'gradient' && (narrowScreen()
+            ? <Sheet title="Gradient" onClose={() => setEditingFill(false)} maxHeight="80dvh"><div style={{ padding: '4px 0 12px' }}><FillEditor fill={fill} onChange={f => setFill(f)} compact /></div></Sheet>
+            : (
+              <Popover anchorRef={fillRef} onClose={() => setEditingFill(false)} align="start" width={380} padding={14}>
+                <FillEditor fill={fill} onChange={f => setFill(f)} />
+              </Popover>
+            ))}
+        </div>
+      )}
 
       {(source === 'image' || source === 'video' || showToggle) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
@@ -256,6 +366,13 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
       {videoMissing && note(`“${video!.name}” (${sizeText(video!.bytes)}) was too big to save. Load it again to use it.`, 'warning')}
       {videoError && note('This browser can’t play that video. Try an MP4 (H.264) or a WebM.', 'warning')}
       {source !== 'shader' && note(<>The graph is paused on Play: only the {source === 'colour' ? 'colour' : source} and the layers are drawn. The Studio still runs the graph.{hasLayersNode ? ' Its Layers node gets nothing from here while the graph is paused.' : ''}</>)}
+      {imageMenu && (
+        <Menu x={imageMenu.x} y={imageMenu.y} minWidth={240} onClose={() => setImageMenu(null)}
+          items={imageMenuItems(
+            () => { const legacy = imageMenu.legacy; setImageMenu(null); void imageFromLibrary(legacy); },
+            () => { legacyPick.current = imageMenu.legacy; setImageMenu(null); imageInput.current?.click(); },
+          )} />
+      )}
       {picking && <GraphSourcePicker anchorRef={segRef} title="Show a graph" onClose={() => setPicking(false)} onPick={item => startLayer(item)} />}
     </div>
   );

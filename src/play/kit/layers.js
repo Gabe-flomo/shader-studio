@@ -214,11 +214,87 @@ export function klFitRect(fit, w, h, W, H) {
   return { x: (W - dw) / 2, y: (H - dh) / 2, w: dw, h: dh };
 }
 
+// ── Fills: a gradient or a palette's bands in place of the flat colour ──────
+//
+// fill = { style: 'gradient' | 'bands', stops: [{ pos: 0..1, color: [r, g, b] }], angle }
+// The angle is CSS's: 0 runs bottom to top, 90 left to right, 180 (the default)
+// top to bottom; the line is long enough that its ends reach the corners.
+// 'gradient' blends between stops; 'bands' holds each stop's colour from its
+// position up to the next one (hard edges). Colours blend in sRGB, as a canvas does.
+
+/** A fill's stops, sorted and clamped (at least one). */
+export function klFillStops(fill) {
+  const raw = fill && Array.isArray(fill.stops) ? fill.stops : [];
+  const out = [];
+  for (const s of raw) {
+    if (!s || !Array.isArray(s.color)) continue;
+    const pos = typeof s.pos === 'number' && isFinite(s.pos) ? Math.max(0, Math.min(1, s.pos)) : 0;
+    out.push({ pos, color: [0, 1, 2].map(i => Math.max(0, Math.min(1, +s.color[i] || 0))) });
+  }
+  out.sort((a, b) => a.pos - b.pos);
+  return out.length ? out : [{ pos: 0, color: [0, 0, 0] }];
+}
+
+/** Where a pixel (u, v: 0..1 from the top left) falls along a fill's line (0..1), on a picture `aspect` wide per unit high. */
+export function klFillT(angle, u, v, aspect) {
+  const a = ((typeof angle === 'number' && isFinite(angle) ? angle : 180) * Math.PI) / 180;
+  const W = aspect > 0 ? aspect : 1, H = 1;
+  const sx = Math.sin(a), sy = -Math.cos(a);
+  const len = Math.abs(W * sx) + Math.abs(H * sy) || 1;
+  const t = 0.5 + ((u - 0.5) * W * sx + (v - 0.5) * H * sy) / len;
+  return Math.max(0, Math.min(1, t));
+}
+
+/** A fill's colour at `t` (0..1 along its line). */
+export function klFillColourAt(fill, t) {
+  const stops = klFillStops(fill);
+  if (t <= stops[0].pos) return stops[0].color.slice();
+  if (fill && fill.style === 'bands') {
+    let c = stops[0].color;
+    for (const s of stops) if (s.pos <= t) c = s.color;
+    return c.slice();
+  }
+  for (let i = 1; i < stops.length; i++) {
+    const a = stops[i - 1], b = stops[i];
+    if (t <= b.pos) {
+      const k = b.pos > a.pos ? (t - a.pos) / (b.pos - a.pos) : 1;
+      return [0, 1, 2].map(j => a.color[j] + (b.color[j] - a.color[j]) * k);
+    }
+  }
+  return stops[stops.length - 1].color.slice();
+}
+
+/** A fill's colour at a pixel (u, v: 0..1 from the top left) of a picture `aspect` wide per unit high. */
+export function klFillAt(fill, u, v, aspect) {
+  return klFillColourAt(fill, klFillT(fill && fill.angle, u, v, aspect));
+}
+
+/** Paint a fill over the whole of a W×H context. */
+export function klPaintFill(x, fill, W, H) {
+  const stops = klFillStops(fill);
+  const a = ((typeof fill.angle === 'number' && isFinite(fill.angle) ? fill.angle : 180) * Math.PI) / 180;
+  const sx = Math.sin(a), sy = -Math.cos(a);
+  const half = (Math.abs(W * sx) + Math.abs(H * sy)) / 2 || 1;
+  const g = x.createLinearGradient(W / 2 - sx * half, H / 2 - sy * half, W / 2 + sx * half, H / 2 + sy * half);
+  if (fill.style === 'bands') {
+    for (let i = 0; i < stops.length; i++) {
+      const from = i === 0 ? 0 : stops[i].pos, to = i + 1 < stops.length ? stops[i + 1].pos : 1;
+      g.addColorStop(from, klCss(stops[i].color));
+      g.addColorStop(Math.max(from, to), klCss(stops[i].color));
+    }
+  } else {
+    for (const s of stops) g.addColorStop(s.pos, klCss(s.color));
+  }
+  x.fillStyle = g;
+  x.fillRect(0, 0, W, H);
+}
+
 /**
- * Paint a background into canvas `c` (W×H): the colour, then the image or
- * video frame with its fit. `bg` is { el, fit, colour } (el may be null or
- * not ready yet: the colour alone). A still image is painted again only when
- * something about it changes. Returns the canvas.
+ * Paint a background into canvas `c` (W×H): the colour (or `fill`, a gradient
+ * or bands), then the image or video frame with its fit. `bg` is
+ * { el, fit, colour, fill? } (el may be null or not ready yet: the colour or
+ * fill alone). A still picture is painted again only when something about it
+ * changes. Returns the canvas.
  */
 export function klPaintBackground(c, bg, W, H, cache) {
   if (c.width !== W || c.height !== H) { c.width = W; c.height = H; c._bgKey = ''; }
@@ -228,12 +304,14 @@ export function klPaintBackground(c, bg, W, H, cache) {
   const h = !el ? 0 : isVideo ? el.videoHeight : el.naturalHeight || el.height;
   const ready = !!el && w > 0 && h > 0 && (!isVideo || el.readyState >= 2);
   const col = bg.colour || [0, 0, 0];
-  const key = isVideo || !cache ? '' : [ready ? el.src : '', bg.fit, col.join(','), W, H].join('|');
+  const fill = bg.fill && Array.isArray(bg.fill.stops) && bg.fill.stops.length ? bg.fill : null;
+  const key = isVideo || !cache ? '' : [ready ? el.src : '', bg.fit, col.join(','), fill ? JSON.stringify(fill) : '', W, H].join('|');
   if (key && c._bgKey === key) return c;
   const x = c.getContext('2d');
   x.setTransform(1, 0, 0, 1, 0, 0);
   x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
-  x.fillStyle = klCss(col); x.fillRect(0, 0, W, H);
+  if (fill) klPaintFill(x, fill, W, H);
+  else { x.fillStyle = klCss(col); x.fillRect(0, 0, W, H); }
   if (ready) {
     const r = klFitRect(bg.fit, w, h, W, H);
     x.imageSmoothingQuality = 'high';

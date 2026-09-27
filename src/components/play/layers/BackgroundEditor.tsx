@@ -33,6 +33,7 @@ import type { EditorContext } from './editors';
 import type { FieldKit } from './fields';
 import { Section } from './Section';
 import { useShowing } from '../useQueueShowing';
+import { pickLibraryImage } from '../../backgrounds/libraryImage';
 
 type Tokens = FieldKit['tk'];
 /** A touch screen: HTML drag and drop doesn't work there, so reordering is in each source's menu. */
@@ -122,7 +123,13 @@ export function BackgroundEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }
 
   const add = (items: BackgroundItem[]) => { if (!items.length) return; change(p => addSources(p, items)); setOpen(items[items.length - 1].id); };
   // A replacement keeps the source's place (and its id, so actions and takes still find it); the name follows the new file or graph.
-  const replace = (id: string, item: BackgroundItem) => change(p => updateSource(p, id, { name: item.name, graph: item.graph, nodes: item.nodes, src: item.src, bytes: item.bytes, loop: item.loop, muted: item.muted, rate: item.rate }));
+  const replace = (id: string, item: BackgroundItem) => change(p => updateSource(p, id, { name: item.name, graph: item.graph, nodes: item.nodes, src: item.src, libraryId: item.libraryId, bytes: item.bytes, loop: item.loop, muted: item.muted, rate: item.rate }));
+  /** An image background from the library: added to the queue, or in place of `replaceId`. */
+  const fromLibrary = async (replaceId?: string) => {
+    const item = await pickLibraryImage();
+    if (!item) return;
+    if (replaceId) replace(replaceId, item); else add([item]);
+  };
   const pickFile = async (file: File) => {
     const want = fileFor.current;
     fileFor.current = null;
@@ -145,7 +152,8 @@ export function BackgroundEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }
     { label: 'Another graph…', icon: 'graphs', hint: 'One of your saved graphs, or an example', onSelect: () => setPicker({}) },
     { label: 'Sketch', icon: 'code', hint: 'JavaScript on a 2D canvas', onSelect: () => add([{ id: newSourceId(), kind: 'script', name: 'Sketch', code: DEFAULT_BACKGROUND_SKETCH }]) },
     { label: '3D sketch', icon: 'cube', hint: 'p5-style 3D on WebGL', onSelect: () => add([{ id: newSourceId(), kind: 'script', name: '3D sketch', code: DEFAULT_SCRIPT_3D, mode: '3d' }]) },
-    { label: 'Image…', icon: 'overlay', hint: 'PNG, JPG, WebP or SVG', onSelect: () => askFile('image') },
+    { label: 'Image from your backgrounds…', icon: 'overlay', hint: 'Captured from a graph, or imported, in the Library', onSelect: () => { void fromLibrary(); } },
+    { label: 'Image file…', icon: 'import', hint: 'PNG, JPG, WebP or SVG', onSelect: () => askFile('image') },
     { label: 'Video…', icon: 'play', hint: 'MP4, WebM or MOV', onSelect: () => askFile('video') },
     { label: 'Colour', icon: 'eye', hint: 'A flat colour', onSelect: () => add([{ id: newSourceId(), kind: 'colour', name: 'Colour', colour: [0.08, 0.08, 0.12] }]) },
   ];
@@ -231,7 +239,7 @@ export function BackgroundEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }
                     {!isOn && !isOut && <IconButton icon="play" label={`Show now (Go to ${i + 1})`} size="sm" onClick={() => goTo(i)} />}
                     <IconButton icon="more" label="Rename, duplicate, move, remove" size="sm" tooltip={false} onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ x: r.right - 200, y: r.bottom + 4, items: rowMenu(it, i) }); }} />
                   </div>
-                  {expanded && <SourceSettings it={it} tk={tk} busy={busy} onSet={patch => set(it.id, patch)} onFile={kind => askFile(kind, it.id)} onGraph={() => setPicker({ replace: it.id })} />}
+                  {expanded && <SourceSettings it={it} tk={tk} busy={busy} onSet={patch => set(it.id, patch)} onFile={kind => askFile(kind, it.id)} onLibrary={() => { void fromLibrary(it.id); }} onGraph={() => setPicker({ replace: it.id })} />}
                 </div>
               </div>
             );
@@ -278,12 +286,13 @@ export function BackgroundEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }
 
 // ── One source's settings ────────────────────────────────────────────────────
 
-function SourceSettings({ it, tk, busy, onSet, onFile, onGraph }: {
+function SourceSettings({ it, tk, busy, onSet, onFile, onLibrary, onGraph }: {
   it: BackgroundItem;
   tk: Tokens;
   busy: boolean;
   onSet: (patch: Partial<BackgroundItem>) => void;
   onFile: (kind: 'image' | 'video') => void;
+  onLibrary: () => void;
   onGraph: () => void;
 }) {
   const row = (label: string, children: ReactNode) => (
@@ -323,7 +332,17 @@ function SourceSettings({ it, tk, busy, onSet, onFile, onGraph }: {
     }
     case 'script': body = <ScriptSource it={it} tk={tk} onSet={onSet} note={note} />; break;
     case 'image':
-      body = row('File', <Button size="sm" icon="import" disabled={busy} onClick={() => onFile('image')}>{busy ? 'Loading…' : 'Replace image'}</Button>);
+      body = (
+        <>
+          {row('Image', (
+            <>
+              <Button size="sm" icon="overlay" disabled={busy} onClick={onLibrary}>From your backgrounds…</Button>
+              <Button size="sm" variant="ghost" icon="import" disabled={busy} onClick={() => onFile('image')}>{busy ? 'Loading…' : 'Replace with a file'}</Button>
+            </>
+          ))}
+          {it.libraryId && note('From the Library’s image backgrounds. A copy is kept in this setup, so it works when shared.')}
+        </>
+      );
       break;
     case 'video': {
       const missing = playBackground.queueVideoMissing(it);
