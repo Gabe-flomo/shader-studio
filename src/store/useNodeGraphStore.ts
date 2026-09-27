@@ -63,6 +63,13 @@ function datasetsField(datasets: DatasetsRecord): { datasets?: DatasetsRecord } 
   return isDatasetsEmpty(datasets) ? {} : { datasets };
 }
 
+/** A graph was opened (a saved one, or an example): the linked-presentation watcher (App) hears it. */
+export const GRAPH_OPENED = 'graph-opened';
+export type GraphOpened = { kind: 'saved'; name: string } | { kind: 'example'; key: string };
+function announceGraphOpened(detail: GraphOpened): void {
+  try { window.dispatchEvent(new CustomEvent<GraphOpened>(GRAPH_OPENED, { detail })); } catch { /* no window in tests */ }
+}
+
 function announcePlay(play: PlayRecord, openPlay: () => void): void {
   if (isPlayRecordEmpty(play)) return;
   const c = play.controls.length, m = play.mappings.length;
@@ -107,6 +114,7 @@ import { UndoManager } from './managers/UndoManager';
 import { nodeName, nodesPhrase } from './historyLabels';
 import { PresetManager } from './managers/PresetManager';
 import { CompilationService } from './managers/CompilationService';
+import { GRAPH_LINK_FIELD, graphDeleted, linkedPresentationsOf } from '../present/links';
 
 // ── Legacy ExprNode → ExprBlockNode migration ─────────────────────────────────
 // ExprNode (type: 'expr') is removed from the registry.  Any saved graph that
@@ -4730,6 +4738,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   loadExampleGraph: async (name?: string) => {
     const example = name ?? DEFAULT_EXAMPLE;
+    let loadedKey = example;
     // The blank starter is bundled with the app; every other example lives in
     // a lazily loaded chunk (see exampleIndex.ts).
     let graph: ExampleGraph | undefined = example === 'blank' ? BLANK_GRAPH : undefined;
@@ -4737,6 +4746,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       try {
         const all = await loadExampleGraphs();
         graph = all[example] ?? all[DEFAULT_EXAMPLE];
+        if (!all[example]) loadedKey = DEFAULT_EXAMPLE;
       } catch (e) {
         console.error('[loadExampleGraph] could not load the example graphs chunk', e);
         return;
@@ -4762,6 +4772,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // An example is not a saved project: saving it asks for a name.
     set({ currentGraph: null, graphDirty: false });
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
+    if (example !== 'blank') announceGraphOpened({ kind: 'example', key: loadedKey });
   },
 
   replaceGraph: (rawNodes) => {
@@ -4887,7 +4898,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // The version this replaces goes into the project's history first.
     const version = archiveCurrent(name);
     const noteField = note?.trim() ? { note: note.trim().slice(0, 300) } : {};
-    const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now(), version, ...noteField });
+    // Its links to presentations belong to the graph, not to a version: a new version keeps them.
+    const linked = linkedPresentationsOf(name);
+    const linkField = linked.length ? { [GRAPH_LINK_FIELD]: linked } : {};
+    const payload = JSON.stringify({ nodes, looseGroups, ...playField, layout: LAYOUT_VERSION, savedAt: Date.now(), version, ...noteField, ...linkField });
     // localStorage is the primary store; a quota failure here means nothing
     // was saved, so stop before the (optional) disk mirror.
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
@@ -4967,10 +4981,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
     set({ currentGraph: { name, version, latest: version === latestVersion }, graphDirty: false });
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
+    announceGraphOpened({ kind: 'saved', name });
     return { ok: true };
   },
 
   deleteSavedGraph: (name) => {
+    // Its presentations stay; they just stop pointing at it.
+    graphDeleted(name);
     localStorage.removeItem(`shader-studio:${name}`);
     deleteHistory(name);
     if (get().currentGraph?.name === name) set({ currentGraph: null });

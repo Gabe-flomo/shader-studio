@@ -140,6 +140,12 @@ export interface Presentation {
   images?: PresentImage[];
   /** The chosen fonts' faces, embedded. */
   fonts?: EmbeddedFontFace[];
+  /**
+   * Saved graphs this presentation is linked to, by name (present/links.ts
+   * keeps both sides in step; the graphs carry `linkedPresentations`).
+   * Absent: none.
+   */
+  linkedGraphs?: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -491,6 +497,10 @@ export function parsePresentation(raw: unknown): Presentation | null {
     updatedAt: num(raw.updatedAt) ?? now,
   };
   if (raw.origin === 'imported') out.origin = 'imported';
+  if (Array.isArray(raw.linkedGraphs)) {
+    const linked = [...new Set(raw.linkedGraphs.filter((x): x is string => typeof x === 'string' && !!x.trim()))].slice(0, 32);
+    if (linked.length) out.linkedGraphs = linked;
+  }
   const style = parseStyle(raw.style, imageIds);
   if (style) out.style = style;
   // Images nothing uses, and faces of fonts no role uses, aren't kept.

@@ -25,6 +25,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { LIBRARY_FILE, LIBRARY_KIND, libraryZipName, mergeJson, PRESENTATION_FOLDER_SCOPE, PRESENTATION_KEY_PREFIX, readableFiles, readLibrary, type LibrarySnapshot } from '../utils/library';
 import { parsePresentation } from '../types/presentation';
+import { fixImportedLinks } from '../present/links';
 import { APP_VERSION } from './appVersion';
 import {
   buildInventory, FOLDERS_KEY, GRAPH_PREFIX, hashText, isGraphEntry, isOwnedKey, itemsOf, NODE_PREFIX, parseJson, PRESET_PREFIXES, PRIVATE_KEYS,
@@ -298,6 +299,9 @@ function planMerge(snapshot: LibrarySnapshot, kv: MutableKV): Plan {
   const get = (k: string) => (written.has(k) ? written.get(k)! : kv.get(k));
   const set = (k: string, v: string) => { written.set(k, v); ops.push({ set: [k, v] }); };
   const inc = snapshot.items;
+  // Every graph and presentation of the import → its name here, and the ones written (for their links).
+  const graphNames = new Map<string, string>(), presNames = new Map<string, string>();
+  const wrote = { graphs: [] as string[], presentations: [] as string[] };
 
   for (const [key, value] of Object.entries(inc)) {
     if (!isOwnedKey(key) || PRIVATE_KEYS.has(key) || key.startsWith(VERSIONS_PREFIX) || key === FOLDERS_KEY) continue;
@@ -309,11 +313,12 @@ function planMerge(snapshot: LibrarySnapshot, kv: MutableKV): Plan {
       const row: InstallRow = { section: 'graphs', label: name, kind: 'graph', size: key.length + value.length + (inc[VERSIONS_PREFIX + name]?.length ?? 0), status: 'new' };
       const hist = inc[VERSIONS_PREFIX + name];
       const h = graphHash(value);
-      if (mine == null) { set(key, value); if (hist && get(VERSIONS_PREFIX + name) == null) set(VERSIONS_PREFIX + name, hist); }
-      else if (graphHash(mine) === h || earlierCopy(name, n => get(GRAPH_PREFIX + n), v => graphHash(v) === h)) row.status = 'same';
+      if (mine == null) { set(key, value); if (hist && get(VERSIONS_PREFIX + name) == null) set(VERSIONS_PREFIX + name, hist); graphNames.set(name, name); wrote.graphs.push(name); }
+      else if (graphHash(mine) === h || earlierCopy(name, n => get(GRAPH_PREFIX + n), v => graphHash(v) === h)) { row.status = 'same'; graphNames.set(name, name); }
       else {
         const to = freeName(name, n => get(GRAPH_PREFIX + n) != null);
         set(GRAPH_PREFIX + to, value);
+        graphNames.set(name, to); wrote.graphs.push(to);
         if (hist) set(VERSIONS_PREFIX + to, hist);
         remap.push({ scope: 'graphs', from: name, to });
         Object.assign(row, { status: 'rename', as: to });
@@ -332,12 +337,13 @@ function planMerge(snapshot: LibrarySnapshot, kv: MutableKV): Plan {
       // Kept as stored (the app parses it again on load); only the imported mark and the title are added.
       const stored = { ...obj(parsed), title: name, ...(p.origin ? { origin: p.origin } : {}) };
       const text = JSON.stringify(stored) === value ? value : JSON.stringify(stored);
-      if (mine == null) set(key, text);
-      else if (sameContent(parsePresentation(parseJson(mine)), p, ['title', 'updatedAt', 'createdAt', 'origin'])
-        || earlierCopy(name, n => get(PRESENTATION_KEY_PREFIX + n), v => sameContent(parsePresentation(parseJson(v)), p, ['title', 'updatedAt', 'createdAt', 'origin']))) row.status = 'same';
+      if (mine == null) { set(key, text); presNames.set(name, name); wrote.presentations.push(name); }
+      else if (sameContent(parsePresentation(parseJson(mine)), p, ['title', 'updatedAt', 'createdAt', 'origin', 'linkedGraphs'])
+        || earlierCopy(name, n => get(PRESENTATION_KEY_PREFIX + n), v => sameContent(parsePresentation(parseJson(v)), p, ['title', 'updatedAt', 'createdAt', 'origin', 'linkedGraphs']))) { row.status = 'same'; presNames.set(name, name); }
       else {
         const to = freeName(name, n => get(PRESENTATION_KEY_PREFIX + n) != null);
         set(PRESENTATION_KEY_PREFIX + to, JSON.stringify({ ...stored, title: to }));
+        presNames.set(name, to); wrote.presentations.push(to);
         remap.push({ scope: PRESENTATION_FOLDER_SCOPE, from: name, to });
         Object.assign(row, { status: 'rename', as: to });
       }
@@ -410,6 +416,9 @@ function planMerge(snapshot: LibrarySnapshot, kv: MutableKV): Plan {
     }
     rows.push(row);
   }
+
+  // Graphs and presentations linked to each other stay linked under their names here.
+  fixImportedLinks({ get, set }, graphNames, presNames, wrote);
 
   // Folders: theirs join yours; renamed things keep their folder.
   const theirs = obj(parseJson(inc[FOLDERS_KEY]));

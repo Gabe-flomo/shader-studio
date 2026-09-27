@@ -25,7 +25,8 @@ import { usePlaySplit } from './components/play/playSplit';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './components/shell/rebuildAction';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
-import type { Page } from './components/page';
+import { NAVIGATE_EVENT, type Page } from './components/page';
+import { useLinkedPresentationWatcher } from './components/shell/linkedPresentationWatcher';
 import { can, openProSheet, requireFeature } from './lib/plan';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useShallow } from 'zustand/react/shallow';
@@ -478,6 +479,14 @@ function App() {
     window.addEventListener('open-files-page', go);
     return () => window.removeEventListener('open-files-page', go);
   }, [setPage]);
+  // Anything else that needs a page shown (a linked presentation's "Open", say).
+  useEffect(() => {
+    const go = (e: Event) => { const p = (e as CustomEvent<Page>).detail; if (p) setPage(p); };
+    window.addEventListener(NAVIGATE_EVENT, go);
+    return () => window.removeEventListener(NAVIGATE_EVENT, go);
+  }, [setPage]);
+  // A graph with a linked presentation: offer it, open it too, or nothing (the setting in the Library).
+  useLinkedPresentationWatcher();
 
   // Navigate to Function Builder when an ExprBlock requests it
   useEffect(() => {

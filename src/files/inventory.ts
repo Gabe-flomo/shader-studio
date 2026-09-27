@@ -13,6 +13,7 @@
  * plus the lists of any external stores (IndexedDB sources, see sources.ts).
  */
 import { isLibraryKey, PRESENTATION_FOLDER_SCOPE, PRESENTATION_KEY_PREFIX, type KV } from '../utils/library';
+import { GRAPH_LINK_FIELD, normalizeLinks, PRESENTATION_LINK_FIELD } from '../present/links';
 
 export type SectionId = 'graphs' | 'presentations' | 'glsl' | 'functions' | 'presets' | 'nodes' | 'scripts' | 'backgrounds' | 'settings';
 
@@ -89,6 +90,8 @@ export interface FileNode {
   private?: boolean;
   /** A small picture of it (an image background's thumbnail), as a data URL. */
   thumb?: string;
+  /** A graph's linked presentations, or a presentation's linked graphs, by name (present/links.ts). */
+  linked?: string[];
 }
 
 export interface Inventory {
@@ -466,6 +469,10 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
       }
     }
   }
+  // Links between graphs and presentations (present/links.ts), where the other side is still here.
+  const presNames = new Set(presentations.map(p => p.name));
+  for (const g of graphs) { const l = normalizeLinks(g.parsed[GRAPH_LINK_FIELD]).filter(n => presNames.has(n)); if (l.length) g.node.linked = l; }
+  for (const p of presentations) { const l = normalizeLinks(p.parsed[PRESENTATION_LINK_FIELD]).filter(n => graphByName.has(n)); if (l.length) p.node.linked = l; }
 
   // ── Sections ──
   const sectionNode = (id: SectionId, children: FileNode[]): FileNode => {
@@ -771,7 +778,7 @@ function presentationNode(name: string, key: string, raw: string, p: Obj | undef
     id, section: 'presentations', kind: 'presentation', label: name,
     detail: [plural(steps.length, 'step'), plural(sources.length, 'Play')].join(' · '),
     size: key.length + raw.length, modified: num(p?.updatedAt), ref: { t: 'key', key }, membership: { scope: PRESENTATION_FOLDER_SCOPE, id: name },
-    hash: hashText(contentOf(p, ['title', 'updatedAt', 'createdAt', 'origin'])),
+    hash: hashText(contentOf(p, ['title', 'updatedAt', 'createdAt', 'origin', 'linkedGraphs'])),
     children: children.length ? children : undefined,
   };
 }

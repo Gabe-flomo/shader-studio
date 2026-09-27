@@ -23,6 +23,7 @@ import { originText } from './sourceActions';
 import { usePresentation } from './presentationStore';
 import { useMarkdownModule } from './useMarkdown';
 import { Row, Section } from './InspectorParts';
+import { LinkedGraphsSection } from './LinkedGraphs';
 import { PresentationStyleSettings, StepBackgroundSettings } from './StyleSettings';
 
 function TextArea({ value, onChange, rows = 8, mono = true, placeholder }: { value: string; onChange: (v: string) => void; rows?: number; mono?: boolean; placeholder?: string }) {
@@ -256,6 +257,7 @@ function StepSettings({ navigate, compact }: { navigate: (p: Page) => void; comp
         {doc.sources.length === 0 && <div style={{ color: tk.text.muted, font: `500 12px/1.5 ${fontFamily.ui}` }}>The Plays this presentation shows. Each is a copy taken when it’s added, so editing the graph later changes nothing here until you Refresh it.</div>}
         {doc.sources.map(s => <SourceCard key={s.id} s={s} navigate={navigate} compact={compact} />)}
       </Section>
+      <LinkedGraphsSection />
     </>
   );
 }

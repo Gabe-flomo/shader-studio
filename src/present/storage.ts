@@ -8,6 +8,7 @@ import { safeSetItem, type FileResult } from '../utils/fileIO';
 import { freePresentationName, PRESENTATION_FOLDER_SCOPE, PRESENTATION_KEY_PREFIX } from '../utils/library';
 import { getFolderForItem, moveItemsToFolder, removeItemsFromFolders } from '../utils/assetFolders';
 import { parsePresentation, type Presentation } from '../types/presentation';
+import { presentationDeleted, presentationRenamed, reconcilePresentation } from './links';
 
 export const PRESENTATION_PREFIX = PRESENTATION_KEY_PREFIX;
 /** Fired on window whenever the saved list changes. */
@@ -65,6 +66,8 @@ export interface DeletedPresentation { name: string; value: string; folder: stri
 export function deletePresentation(name: string): DeletedPresentation | null {
   let value: string | null = null;
   const folder = getFolderForItem(PRESENTATION_FOLDER_SCOPE, name);
+  // Its graphs stay; they just stop pointing at it.
+  presentationDeleted(name);
   try { value = localStorage.getItem(PRESENTATION_PREFIX + name); localStorage.removeItem(PRESENTATION_PREFIX + name); } catch { /* nothing to do */ }
   if (folder) removeItemsFromFolders(PRESENTATION_FOLDER_SCOPE, [name]);
   changed();
@@ -78,6 +81,8 @@ export function restorePresentation(d: DeletedPresentation): string {
   if (name !== d.name) { try { value = JSON.stringify({ ...JSON.parse(d.value), title: name }); } catch { /* keep as it was */ } }
   safeSetItem(PRESENTATION_PREFIX + name, value, `presentation "${name}"`);
   if (d.folder) moveItemsToFolder(PRESENTATION_FOLDER_SCOPE, [name], d.folder);
+  // Its links come back where the graphs are still here.
+  reconcilePresentation(name);
   changed();
   return name;
 }
@@ -91,6 +96,7 @@ export function renamePresentation(from: string, to: string): boolean {
   const r = savePresentation(to, { ...p, title: to });
   if (!r.ok) return false;
   try { localStorage.removeItem(PRESENTATION_PREFIX + from); } catch { /* kept under both */ }
+  presentationRenamed(from, to);
   const folder = getFolderForItem(PRESENTATION_FOLDER_SCOPE, from);
   if (folder) { removeItemsFromFolders(PRESENTATION_FOLDER_SCOPE, [from]); moveItemsToFolder(PRESENTATION_FOLDER_SCOPE, [to], folder); }
   changed();

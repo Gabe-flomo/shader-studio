@@ -26,6 +26,9 @@ import { PRESENTATION_FOLDER_SCOPE } from '../../utils/library';
 import { loadPresentation, renamePresentation, type PresentationEntry } from '../../present/storage';
 import { usePresentation } from './presentationStore';
 import { deleteWithUndo, exportPresentationFile, importPresentationFile } from './presentationFiles';
+import { announcePresentationOpened } from './linkActions';
+import { LinkBadge } from '../shell/GraphLinks';
+import { usePresentationLinks } from '../shell/linkHooks';
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -49,6 +52,7 @@ function Row({ entry, current, compact, onOpen, onMenu }: { entry: PresentationE
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   const menuRef = useRef<HTMLSpanElement>(null);
+  const linked = usePresentationLinks(entry.name);
   return (
     <div
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -63,6 +67,7 @@ function Row({ entry, current, compact, onOpen, onMenu }: { entry: PresentationE
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', font: `600 13px ${fontFamily.ui}` }}>{entry.name}</span>
             {current && <span style={{ flexShrink: 0, padding: '1px 6px', borderRadius: radius.sm, background: alpha(tk.accent.base, 0.16), color: tk.accent.text, font: `600 10.5px ${fontFamily.ui}` }}>Open</span>}
+            <LinkBadge partners={linked} kind="graph" compact={compact} />
           </span>
           <span style={{ color: tk.text.muted, font: `500 11.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {plural(entry.steps, 'step')} · {plural(entry.sources, 'Play')}{entry.updatedAt ? ` · ${whenSaved(entry.updatedAt)}` : ''}
@@ -92,6 +97,7 @@ export function PresentationsDialog({ list, compact, onClose, onNew }: { list: P
   const open = (name: string) => {
     if (!usePresentation.getState().open(name)) { toast.error(`Couldn’t open “${name}”`, { message: 'It isn’t readable.' }); return; }
     onClose();
+    announcePresentationOpened(name);
   };
   const byName = useMemo(() => new Map(list.map(e => [e.name, e])), [list]);
   const items = useMemo(() => list.map(e => ({ id: e.name, label: e.name })), [list]);
