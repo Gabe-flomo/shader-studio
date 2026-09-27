@@ -13,7 +13,8 @@ import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
-import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIREFLIES, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
+import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIREFLIES, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE, SKETCH_HALATION, SKETCH_ORBIT } from './playSketches';
+import { GRADE_LOOKS, applyLook, newFinishEffect, type FinishEffect, type FinishKind, type PlayFinish } from '../types/playFinish';
 // An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 import {
@@ -98,7 +99,7 @@ const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string
 /** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
 const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
-function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; notes: string }): PlayRecord {
+function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; notes: string }): PlayRecord {
   const out: PlayRecord = { version: 1, controls: p.controls ?? [], mappings: p.mappings ?? [], layers: p.layers ?? [] };
   if (p.groups?.length) out.groups = p.groups;
   if (p.actions?.length) out.actions = p.actions;
@@ -106,7 +107,16 @@ function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayC
   if (p.display) out.display = p.display;
   if (p.takes?.length) out.takes = p.takes;
   if (p.audioReaders) out.audioReaders = p.audioReaders;
+  if (p.finish) out.finish = p.finish;
   return out;
+}
+/** A Finish effect at its defaults (every number filled in, as the parser keeps it), with `over` on top. Its id is its kind. */
+function fx(kind: FinishKind, over: Partial<FinishEffect> = {}): FinishEffect {
+  return { ...newFinishEffect(kind, kind), ...over };
+}
+/** A grade set to one of the built-in looks, then `over`. */
+function lookFx(lookId: string, over: Partial<FinishEffect> = {}): FinishEffect {
+  return { ...applyLook(newFinishEffect('grade', 'grade'), GRADE_LOOKS.find(l => l.id === lookId)!), ...over };
 }
 
 // ── Graphs ───────────────────────────────────────────────────────────────────
@@ -1406,6 +1416,120 @@ Distance reads only while both hands are in view, so the rings hold their size w
 • Record (the red dot) → **Performance** → Takes → ▶ on Figure of eight to watch it back.
 • Press **Render…** on it: it renders frame by frame, smooth at any size, with no dropped frames.
 • Record your own: Start, move the mouse and tap Space, then Stop. It plays back and joins the list.`,
+  })),
+
+  // ─ Finish: grading, lens, film and time over the whole picture ─
+  ex('finishGrade', fbmGraph({ scale: 2.2, preset: '2' }), play({
+    layers: [layer('text', 'title', 'Title', { text: 'GOLDEN HOUR', y: 0.5, size: 0.14 })],
+    finish: {
+      on: true,
+      effects: [
+        fx('grade', { contrast: 0.2, temperature: 0.35, vibrance: 0.25 }),
+        fx('lens', { distortion: 0.3 }),
+        fx('chroma', { amount: 0.4 }),
+        fx('vignette', { amount: 0.5 }),
+      ],
+    },
+    controls: [
+      ctl('exposure', 'finish:grade::exposure', 'Grade · Exposure', -2, 2),
+      ctl('contrast', 'finish:grade::contrast', 'Grade · Contrast', -1, 1),
+      ctl('temp', 'finish:grade::temperature', 'Grade · Temperature', -1, 1),
+      ctl('sat', 'finish:grade::saturation', 'Grade · Saturation', -1, 1),
+      ctl('lens', 'finish:lens::distortion', 'Lens distortion · Distortion', -1, 1),
+    ],
+    mappings: [map('warm', 'temp', S.mouse('x'), -0.7, 0.7, { smoothMs: 120 })],
+    notes: `**What it shows.** The **Finish** tab works on the final picture: the shader and every layer at once, like a colourist's grade and a lens on the camera. The title is a layer, and it is graded, bent and fringed with everything else.
+
+**How it's built.** Four effects, top to bottom: a **Grade** (warmer, more contrast, more vibrance), **Lens distortion** (a barrel, zoomed so the edges stay filled), **Chromatic aberration** (red and blue part at the corners) and a **Vignette**. Their numbers can be controls like any slider (the + beside each one), so here mouse X drives the grade's Temperature.
+
+**Try this.**
+• Move the mouse left and right: the picture cools and warms.
+• Finish → **Before / after**, then drag the divider on the picture.
+• Push Lens distortion below 0 for a pincushion; in the Grade, open Curves and pull the middle of the RGB curve up.`,
+  })),
+  ex('finishLooks', fbmGraph({ scale: 3, preset: '4' }), play({
+    layers: [layer('text', 'title', 'Title', { text: 'LOOKS', y: 0.5, size: 0.2 })],
+    finish: { on: true, effects: [lookFx('teal-orange'), fx('grain', { amount: 0.2 })] },
+    controls: [
+      ctl('liftL', 'finish:grade::liftL', 'Grade · Shadows level', -1, 1),
+      ctl('gainL', 'finish:grade::gainL', 'Grade · Highlights level', -1, 1),
+      ctl('hiHue', 'finish:grade::splitHiHue', 'Grade · Highlights hue', 0, 360, 1),
+      ctl('hiSat', 'finish:grade::splitHiSat', 'Grade · Highlights amount', 0, 1),
+      ctl('shHue', 'finish:grade::splitShHue', 'Grade · Shadows hue', 0, 360, 1),
+      ctl('shSat', 'finish:grade::splitShSat', 'Grade · Shadows amount', 0, 1),
+      ctl('amount', 'finish:grade::amount', 'Grade · Amount', 0, 1),
+    ],
+    notes: `**What it shows.** A **Look** is a starting point: picking one sets the Grade's own controls, curves included, and you carry on from there. This is **Teal & orange**: warm highlights over cool shadows, from split toning, the colour wheels and a gentle S curve.
+
+**How it's built.** Finish → Grade → Look → Teal & orange, then Film grain on top. The split-toning hues and amounts, the wheels' levels and the grade's Amount are controls.
+
+**Try this.**
+• Drag Grade · Amount from 1 to 0 and back: the whole look fades in and out.
+• In the Grade, pick another Look (Bleach bypass, Faded print, Cross-process, Mono with toned shadows) and see which controls it moved.
+• Make a grade you like and save it with the disk button: it joins the Looks list on this device.`,
+  })),
+  ex('finishScreen', glowGraph({ radius: 0.22, falloff: 6, tint: [0.3, 0.9, 1] }), play({
+    layers: [layer('text', 'title', 'Title', { text: 'PLAYFIELD TV', y: 0.2, size: 0.1 })],
+    finish: {
+      on: true,
+      effects: [fx('shake', { amount: 0.08, weave: 0.4 }), fx('crt', { curvature: 0.35 }), fx('bloom', { amount: 0.8, threshold: 0.55 }), fx('grain', { amount: 0.25 }), fx('flicker', { amount: 0.15 })],
+    },
+    controls: [
+      ctl('curve', 'finish:crt::curvature', 'CRT · Curvature', 0, 1),
+      ctl('scan', 'finish:crt::scanlines', 'CRT · Scanlines', 0, 1),
+      ctl('bloom', 'finish:bloom::amount', 'Bloom · Amount', 0, 2),
+      ctl('grain', 'finish:grain::amount', 'Film grain · Amount', 0, 1),
+      ctl('shake', 'finish:shake::amount', 'Camera shake · Amount (Space)', 0, 1),
+    ],
+    mappings: [map('hit', 'shake', S.trig(T.key('Space'), 'envelope', { attack: 10, decay: 500, sustain: 0.2, release: 400 }), 0.08, 0.9)],
+    notes: `**What it shows.** Screen and film effects over the whole frame: a **CRT** (curved glass, an RGB shadow mask, scanlines and phosphor glow), **Bloom**, **Film grain**, **Flicker** and **Camera shake** with film gate weave.
+
+**How it's built.** The CRT's mask is the Studio's **CRT Mask** node, the same GLSL. Bloom and the CRT's glow share one small blurred copy of the frame, so they cost a few tiny passes. Space fires an envelope into Camera shake · Amount.
+
+**Try this.**
+• Tap and hold **Space**: the camera jolts, then settles.
+• Drag CRT · Curvature to 1, and Scanlines down to 0.
+• Map a live audio band onto Camera shake · Amount (Mappings → Add → Live audio) and the picture shakes on the kick.`,
+  })),
+  ex('finishHalation', glowGraph({ radius: 0.1 }), play({
+    layers: [scriptLayer('scene', 'Test scene', SKETCH_HALATION)],
+    display: { picture: true, backdrop: [0.05, 0.05, 0.06], source: 'colour' },
+    finish: { on: true, effects: [fx('halation', { amount: 0.8, reach: 0.55, threshold: 0.5, headroom: 6, warmth: 0.5, growth: 0.4 })] },
+    controls: [
+      ctl('amount', 'finish:halation::amount', 'Halation · Amount', 0, 2),
+      ctl('reach', 'finish:halation::reach', 'Halation · Reach', 0, 1),
+      ctl('thr', 'finish:halation::threshold', 'Halation · Threshold', -1, 4),
+      ctl('head', 'finish:halation::headroom', 'Halation · Highlight headroom', 1, 16),
+      ctl('warm', 'finish:halation::warmth', 'Halation · Warmth', 0, 1),
+      ctl('grow', 'finish:halation::growth', 'Halation · Growth', 0, 1),
+      ctl('paper', 'layer:scene::p_paper', 'Test scene · Paper white', 0.5, 1),
+    ],
+    notes: `**What it shows.** Film **halation**: a red-to-white halo around very bright light. Light strong enough to go right through the film bounces off its back and exposes it again from behind, reaching the red layer first. So the halo is red, then orange as the green layer joins, then white as the light gets stronger, and the brightest sources look bigger than they are.
+
+**How it's built.** A Script layer draws a test scene: a grey ramp, a paper-white card, a teal patch and a row of small lamps that clip. The Finish stack turns the picture back into light (linear), guesses how much brighter than white the clipped parts were (**Highlight headroom**), and lets only light above **Threshold** halate: red from the red channel, green from the green, and a tight white bloom from the strongest.
+
+**Try this.**
+• The lamps glow red-orange and grow; the paper (0.90) stays clean; the teal patch makes no red halo; the ramp starts to glow only at its very end.
+• Raise Test scene · Paper white to 1.00: now the card clips too and halates like a lamp. An 8-bit picture can't tell a clipped card from a light, so keep paper below clipping, as a camera would.
+• Try Warmth, Growth and Headroom, or the Subtle, Classic cine and Strong presets on the Halation card.`,
+  })),
+  ex('finishTime', fbmGraph({ scale: 2.5, timeScale: 0.5, preset: '4' }), play({
+    layers: [scriptLayer('comet', 'Comet', SKETCH_ORBIT)],
+    finish: { on: true, effects: [fx('time', { amount: 30, angle: 90 })] },
+    controls: [
+      ctl('back', 'finish:time::amount', 'Time displacement · Frames back', 0, 31),
+      ctl('dir', 'finish:time::angle', 'Time displacement · Direction', 0, 360, 1),
+      ctl('speed', 'layer:comet::p_speed', 'Comet · Speed', 0, 3),
+    ],
+    mappings: [map('mouseBack', 'back', S.mouse('y'), 8, 31, { smoothMs: 150 })],
+    notes: `**What it shows.** **Time displacement**: each part of the picture shows a different moment. The bottom is now and the top is up to 30 frames ago, so the drifting shader shears and the comet and the bar smear into slit-scan shapes.
+
+**How it's built.** The Finish stack keeps the last frames (32 of them, reduced, by default) and reads each pixel from the frame its **map** points at: slit-scan, brightness, noise, radial, or a layer's alpha. The comet is a Script layer moving with the clock, so a render moves the same way; renders fill the frames in order, so they come out the same every time.
+
+**Try this.**
+• Move the mouse up and down: Frames back follows it.
+• Turn Direction to 0 for a sideways scan, or pick another Map on the Time displacement card (Brightness, Noise, Radial, or a layer).
+• Set Quality to High for 64 frames of history.`,
   })),
 ];
 

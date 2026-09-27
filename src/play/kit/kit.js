@@ -34,6 +34,9 @@
  *   three      three.js (three-slim.js) for 3D Script layers, or null
  *   data(ref)  a dataset by id or name: { id, name, result } (its frozen result,
  *              Normalize applied), or null (optional)
+ *   guides     a 2D context the size of the overlay: null markers and the hands' skeleton go there
+ *              instead of `ctx` (optional; the Finish stack keeps them out of the finished picture)
+ *   alphaLayers  ids of layers to draw alone as well (even hidden), for kit.layerCanvas(id) (optional)
  *
  * The kit keeps per-layer state (particles, bodies, strokes, springs, text
  * sequences) between frames, keyed by layer id. Actions (burst, next line…)
@@ -58,6 +61,8 @@ export function createLayerKit() {
   const scriptPresses = new Map(); // layer id → { key: amount }: script buttons pressed since the layer's last frame
   // Path shapes: each one's geometry last frame (for picking on the picture) and its fade (On lost: Fade).
   const paths = new Map(), pathFades = new Map();
+  // Layers drawn alone this frame for the host (env.alphaLayers), by id.
+  const alphaCanvases = new Map();
   const frozen = new Set(), shown = new Map(), lastVisible = new Map();
   // Data layers: each one's stepping, and per dataset the current row of the first Data layer showing it (for s.data()).
   const dStates = new Map(), dsCurrent = new Map();
@@ -272,6 +277,9 @@ export function createLayerKit() {
     // Track mattes: a layer used as another's matte runs (and is drawn into a canvas of its own) even while it is hidden.
     const byId = new Map(layers.map(l => [l.id, l]));
     const matteSources = kmMatteSources(layers, isVisible);
+    // Layers the host wants drawn alone (the Finish stack's time map reads one's alpha): run and drawn like a matte, even hidden.
+    const alphaIds = env.alphaLayers && env.alphaLayers.length ? env.alphaLayers.filter(id => byId.has(id)) : null;
+    if (alphaIds) for (const id of alphaIds) matteSources.add(id);
     const live = matteSources.size ? layers.filter(l => isVisible(l) || matteSources.has(l.id)) : vis;
 
     // 1. Nulls that follow something ride a spring; their position is reported back to the host.
@@ -856,9 +864,15 @@ export function createLayerKit() {
       }
     }
 
+    // The layers drawn alone for the host (see alphaLayers).
+    alphaCanvases.clear();
+    if (alphaIds) for (const id of alphaIds) { const c = renderLayer(byId.get(id)); if (c) alphaCanvases.set(id, c); }
+
     // 7. Null markers on top of everything, and the tracked hands' skeleton (a setup aid) when the host asks for it.
-    if (env.hands) hdDraw(ctx, env.hands.state, W, H, dpr, env.hands.colour);
-    if (env.markers) for (const l of vis) if (l.kind === 'null') klDrawNull(ctx, l, env.value(l, 'x'), env.value(l, 'y'), env.value(l, 'size'), dpr, W, H, l.role && l.role !== 'none' ? env.value(l, 'radius') * H : 0);
+    // With `guides` (a context of the same size) they go there instead, above whatever the host lays over the layers.
+    const gx = env.guides || ctx;
+    if (env.hands) hdDraw(gx, env.hands.state, W, H, dpr, env.hands.colour);
+    if (env.markers) for (const l of vis) if (l.kind === 'null') klDrawNull(gx, l, env.value(l, 'x'), env.value(l, 'y'), env.value(l, 'size'), dpr, W, H, l.role && l.role !== 'none' ? env.value(l, 'radius') * H : 0);
 
     // 8. Let go of the canvases of layers that no longer draw on their own or have masks.
     for (const k in pool) {
@@ -978,6 +992,8 @@ export function createLayerKit() {
       }
       return null;
     },
+    /** A layer drawn alone on the last frame (it was in env.alphaLayers), or null. */
+    layerCanvas(id) { return alphaCanvases.get(id) || null; },
     /** Does anything need a new frame every tick (particles, bodies, a following null…)? */
     isAnimated(record) {
       // A crossfade under way, or a sketch showing in the background.

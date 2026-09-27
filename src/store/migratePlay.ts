@@ -14,7 +14,7 @@
 
 import type { GraphNode, NodeDefinition, SubgraphData } from '../types/nodeGraph';
 import { savedSchemaVersion } from '../types/nodeGraph';
-import { parseActionTarget, parseLayerTarget, type PlayRecord } from '../types/play';
+import { parseActionTarget, parsePropTarget, type PlayRecord } from '../types/play';
 
 type Convert = (value: number) => number;
 
@@ -43,7 +43,7 @@ export function migratePlayRecord(
 ): PlayRecord {
   const converters = new Map<string, Convert>();
   for (const c of play.controls) {
-    if (c.kind !== 'float' || parseLayerTarget(c.target) || parseActionTarget(c.target)) continue;
+    if (c.kind !== 'float' || parsePropTarget(c.target) || parseActionTarget(c.target)) continue;
     const parts = c.target.split('::');
     if (parts.length < 2) continue;
     const node = nodeAt(savedNodes, parts.slice(0, -1));

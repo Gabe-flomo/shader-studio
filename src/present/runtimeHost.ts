@@ -68,7 +68,7 @@ declare global {
 
 /** The runtime, evaluated on first use. */
 export function playRuntime(): PlayRuntime {
-  if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 7) {
+  if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 8) {
     // The same text the web export inlines: the kit first, then the player.
     new Function(`${kitScript()}\n${runtimeSource}`)();
   }

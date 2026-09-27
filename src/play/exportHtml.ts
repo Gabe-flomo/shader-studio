@@ -32,6 +32,8 @@ import queueSource from './kit/queue.js?raw';
 import mattesSource from './kit/mattes.js?raw';
 import dataSource from './kit/data.js?raw';
 import kitSource from './kit/kit.js?raw';
+import finishGlslSource from './kit/finishGlsl.js?raw';
+import finishSource from './kit/finish.js?raw';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { BACKGROUND_VIDEO_KEEP, backgroundLayerOf, usesHands, type PlayRecord } from '../types/play';
 import type { HandAssets } from './handExport';
@@ -324,10 +326,10 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, dataSource, kitSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, dataSource, kitSource, finishGlslSource, finishSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn } };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn }, finish: { create: fnCreate, active: fnActive } };\n})();\n`;
 }
 
 /**

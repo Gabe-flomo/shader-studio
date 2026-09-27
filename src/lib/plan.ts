@@ -45,6 +45,7 @@ export const FEATURES = {
   'play.layers': { plan: 'pro', label: 'Play layers (shapes, particles, text, camera…), their actions and groups' },
   'play.sources': { plan: 'pro', label: 'Every Play source: MIDI, OSC, hands, LFOs, noise, clocks, sensors, data, gamepads, tilt' },
   'play.backgrounds': { plan: 'pro', label: 'Play backgrounds (images, video, gradients) and the background queue' },
+  'play.finish': { plan: 'pro', label: 'The Finish stack: colour grading, lens, CRT and film effects, camera shake and time displacement over the whole picture' },
   'play.takes': { plan: 'pro', label: 'Recording performances as takes and rendering them frame by frame' },
   'play.midiFile': { plan: 'pro', label: 'Playing a MIDI file into Play' },
   convert: { plan: 'pro', label: 'Convert: GLSL into nodes' },

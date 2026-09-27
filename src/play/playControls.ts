@@ -14,6 +14,7 @@
 import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
 import { layerNumericProps, parseActionTarget, parseLayerTarget } from '../types/play';
+import { finishParam, parseFinishTarget, readFinishValue } from '../types/playFinish';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDrivers';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
@@ -185,6 +186,12 @@ export function findTargetNode(nodes: GraphNode[], target: string): GraphNode | 
  * built-in description.
  */
 export function controlHelp(nodes: GraphNode[], target: string, play?: PlayRecord): { hint?: string; comment?: string } {
+  const ft = parseFinishTarget(target);
+  if (ft) {
+    const e = play?.finish?.effects.find(x => x.id === ft.effectId);
+    const hint = e ? finishParam(e.kind, ft.key)?.hint : undefined;
+    return hint ? { hint } : {};
+  }
   const lt = parseLayerTarget(target);
   if (lt) {
     const layer = play?.layers.find(l => l.id === lt.layerId);
@@ -212,6 +219,7 @@ export function readLayerValue(play: PlayRecord | undefined, target: string): nu
 /** The control's current value: a graph param (a group override wins over the inner node's own value) or a layer property. */
 export function readControlValue(nodes: GraphNode[], target: string, play?: PlayRecord): number | number[] | undefined {
   if (parseLayerTarget(target)) return readLayerValue(play, target);
+  if (parseFinishTarget(target)) return readFinishValue(play?.finish, target);
   if (parseActionTarget(target)) return undefined;
   // "group::…::node::param": an outer group's override of the rest of the path wins (that's what its
   // card's slider sets), then the next group's, then the node's own value.
@@ -248,14 +256,17 @@ export function readBaseValues(nodes: GraphNode[], play: PlayRecord): Map<string
 
 /** A copy of `play` with driven layer properties written into their layers (for a play file export). */
 export function bakeLayerValues(play: PlayRecord, values: Map<string, number | number[]>): PlayRecord {
-  let layers = play.layers;
+  let layers = play.layers, finish = play.finish;
   for (const c of play.controls) {
-    const lt = parseLayerTarget(c.target);
     const v = values.get(c.id);
-    if (!lt || typeof v !== 'number') continue;
+    if (typeof v !== 'number') continue;
+    const ft = parseFinishTarget(c.target);
+    if (ft && finish) { finish = { ...finish, effects: finish.effects.map(e => (e.id === ft.effectId ? { ...e, [ft.key]: v } : e)) }; continue; }
+    const lt = parseLayerTarget(c.target);
+    if (!lt) continue;
     layers = layers.map(l => l.id === lt.layerId ? { ...l, [lt.key]: v } as typeof l : l);
   }
-  return layers === play.layers ? play : { ...play, layers };
+  return layers === play.layers && finish === play.finish ? play : { ...play, layers, ...(finish ? { finish } : {}) };
 }
 
 /**
@@ -268,7 +279,7 @@ export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: 
   let out = nodes;
   for (const c of play.controls) {
     const v = values.get(c.id);
-    if (v === undefined || parseLayerTarget(c.target) || parseActionTarget(c.target)) continue;
+    if (v === undefined || parseLayerTarget(c.target) || parseActionTarget(c.target) || parseFinishTarget(c.target)) continue;
     const value = Array.isArray(v) ? [v[0], v[1], v[2]] : v;
     const parts = c.target.split('::');
     const key = parts[parts.length - 1];
@@ -303,7 +314,7 @@ export type TargetFate =
  * control can be pointed at the new path (group::…::node::param).
  */
 export function locateTarget(nodes: GraphNode[], target: string): TargetFate {
-  if (parseLayerTarget(target) || parseActionTarget(target)) return { status: 'ok' };
+  if (parseLayerTarget(target) || parseActionTarget(target) || parseFinishTarget(target)) return { status: 'ok' };
   if (readControlValue(nodes, target) !== undefined) return { status: 'ok' };
   const parts = target.split('::');
   const nodeId = parts[parts.length - 2], key = parts[parts.length - 1];
