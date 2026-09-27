@@ -28,6 +28,14 @@ import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRec
 import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parseLayerTarget } from '../types/play';
 import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
+import { handFeed } from './handFeed';
+import { hdAge, hdCreate, hdGate, hdPlacement, hdPoint, hdRead, hdUpdate, type HdState } from '../play/kit/hands.js';
+import { DEFAULT_HANDS, usesHands, type HandGesture, type HandSide } from '../types/play';
+
+/** Gestures Learn listens for (coming into view and leaving are picked by hand, not learned). */
+const LEARN_GESTURES: readonly HandGesture[] = ['pinch', 'pinchMiddle', 'pinchRing', 'pinchPinky', 'fist', 'open', 'point'];
+/** How far a landmark has to move (0..1 of the picture) before Learn takes it. */
+const HAND_LEARN_MOVE = 0.12;
 
 /** Sensor reads that are an audio layer's bands. */
 const AUDIO_READS: ReadonlySet<string> = new Set(['level', 'bass', 'lowmid', 'highmid', 'treble']);
@@ -155,6 +163,16 @@ class PlayEngine implements InputSource {
   /** Action controls: the last mapped level, so a rise through 0.5 fires once. */
   private actionLevel = new Map<string, number>();
 
+  // ── Hands (hand tracking): landmarks from handFeed, read as sources, gestures and null targets ──
+  private hands: HdState = hdCreate();
+  private handSeq = -1;
+  private handsBound = false;
+  /** Gesture triggers whose gate is open (a press was counted, the release is still to come). */
+  private handGates = new Set<string>();
+  /** Learn: where each landmark was when the hand was first seen, and which gestures were already held. */
+  private handLearnFrom: Map<string, number> | null = null;
+  private handLearnHeld: Set<string> | null = null;
+
   private press(key: string, velocity = 1): void {
     this.presses.set(key, (this.presses.get(key) ?? 0) + 1);
     this.held.set(key, (this.held.get(key) ?? 0) + 1);
@@ -273,6 +291,7 @@ class PlayEngine implements InputSource {
     this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse');
     this.tiltIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'tilt');
     this.gamepadIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'gamepad');
+    this.handsBound = usesHands(record);
     this.triggerKeysBound = new Set(this.allTriggers().map(triggerKey));
     this.oscIsBound = record.mappings.some(m => m.enabled && (m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')))
       || (record.actions ?? []).some(a => a.enabled && a.trigger.on === 'osc');
@@ -422,6 +441,86 @@ class PlayEngine implements InputSource {
     }
   }
 
+  // ── Hands ─────────────────────────────────────────────────────────────────
+
+  /** Take in the tracker's newest frame (placed where the Camera layer shows the camera), and let go of hands gone too long. */
+  private updateHands(): void {
+    const { frame, seq } = handFeed.frame();
+    if (frame && seq !== this.handSeq) {
+      this.handSeq = seq;
+      const settings = this.record.hands ?? DEFAULT_HANDS;
+      const camAspect = frame.w > 0 && frame.h > 0 ? frame.w / frame.h : 16 / 9;
+      const place = hdPlacement(this.record, (l, k) => this.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]), camAspect, this.aspect, settings.mirror);
+      hdUpdate(this.hands, frame, { picAspect: this.aspect, place, smoothing: settings.smoothing });
+    }
+    hdAge(this.hands, typeof performance !== 'undefined' ? performance.now() : Date.now());
+  }
+
+  /** The hands as the engine sees them now (the overlay draws the skeleton from this). */
+  handState(): HdState { return this.hands; }
+
+  /** A landmark on the picture for a null following a hand, or null while that hand is out of view. */
+  handPoint(side: HandSide, point: number): { x: number; y: number } | null {
+    return hdPoint(this.hands, side, point);
+  }
+
+  /** Gesture triggers: a gesture starting is a press, ending is the release (hands.js keeps the hysteresis). */
+  private tickHandTriggers(): void {
+    for (const t of this.allTriggers()) {
+      if (t.on !== 'hand') continue;
+      const key = triggerKey(t);
+      const on = hdGate(this.hands, t.side, t.gesture);
+      const open = this.handGates.has(key);
+      if (on && !open) { this.handGates.add(key); this.press(key); }
+      else if (!on && open) { this.handGates.delete(key); this.release(key); }
+    }
+  }
+
+  /**
+   * Learn with hands. A source: the landmark and axis that moved furthest
+   * since the hand was first seen (past HAND_LEARN_MOVE). A trigger: the
+   * first gesture that starts (one already held when Learn began has to be
+   * let go and made again).
+   */
+  private learnHands(): void {
+    const h = this.hands;
+    if (this.learnTriggerCb) {
+      const held = new Set<string>();
+      for (const side of ['right', 'left'] as const) for (const g of LEARN_GESTURES) if (hdGate(h, side, g)) held.add(`${side}:${g}`);
+      const before = this.handLearnHeld;
+      this.handLearnHeld = held;
+      if (!before) return;
+      for (const k of held) {
+        if (before.has(k)) continue;
+        const [side, gesture] = k.split(':') as [HandSide, HandGesture];
+        this.finishLearnTrigger({ on: 'hand', side, gesture });
+        return;
+      }
+      return;
+    }
+    if (!this.learnCb) return;
+    const from = this.handLearnFrom ?? (this.handLearnFrom = new Map());
+    let best = '', bestMove = HAND_LEARN_MOVE;
+    for (const side of ['right', 'left'] as const) {
+      const hand = h[side];
+      if (!hand.present) continue;
+      for (let i = 0; i < 21; i++) {
+        for (const axis of ['x', 'y'] as const) {
+          const key = `${side}:${i}:${axis}`;
+          const v = hand.pts[i * 3 + (axis === 'y' ? 1 : 0)];
+          const start = from.get(key);
+          if (start === undefined) { from.set(key, v); continue; }
+          // Fingertips win a near tie: moving a finger moves its whole chain a little.
+          const move = Math.abs(v - start) * (i % 4 === 0 && i > 0 ? 1.1 : 1);
+          if (move > bestMove) { bestMove = move; best = key; }
+        }
+      }
+    }
+    if (!best) return;
+    const [side, point, axis] = best.split(':');
+    this.finishLearn({ kind: 'hand', side: side as HandSide, read: 'point', point: Number(point), axis: axis as 'x' | 'y', gesture: 'pinch' });
+  }
+
   /**
    * Raw unit reading of a source right now, or null while the source has never
    * produced one (a knob nobody has touched yet): such a mapping leaves its
@@ -490,6 +589,8 @@ class PlayEngine implements InputSource {
         if (AUDIO_READS.has(source.read)) return this.audioBand(source.layerId, source.read as LiveBand);
         return this.sensors.get(`${source.layerId}::${source.read}`) ?? null;
       }
+      case 'hand':
+        return hdRead(this.hands, source.side, source.read, source.point, source.axis, source.gesture);
       case 'null': {
         const base = this.layerBase(source.layerId, source.axis);
         if (base === null) return null;
@@ -566,6 +667,8 @@ class PlayEngine implements InputSource {
   setMuted(on: boolean): void {
     if (on === this.muted) return;
     this.muted = on;
+    // The take has every hand-driven value: the tracker rests meanwhile instead of fighting it.
+    handFeed.setPaused(on);
     // Back live: every control gets its slider's value (or its mapping's) again.
     if (!on) for (const id of this.controls.keys()) this.restoreOnce.add(id);
     inputBus.wake();
@@ -584,6 +687,11 @@ class PlayEngine implements InputSource {
         if (a.enabled) this.actionSeen.set(a.id, a.trigger.on === 'beat' ? beatAt(a.trigger.bpm, a.trigger.beats, time).count : this.presses.get(triggerKey(a.trigger)) ?? 0);
       }
       return;
+    }
+    if (this.handsBound || handFeed.isOn() || this.hands.live) {
+      this.updateHands();
+      this.tickHandTriggers();
+      if (this.learnCb || this.learnTriggerCb) this.learnHands();
     }
     this.tickAudioTriggers();
     this.tickZoneTriggers();
@@ -759,12 +867,14 @@ class PlayEngine implements InputSource {
 
   /** Actions and layer-property mappings run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.record.controls.some(c => c.kind === 'action' || parseLayerTarget(c.target) !== null);
+    return !!this.record.actions?.length || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parseLayerTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
   isAnimating(): boolean {
     if ((this.record.actions ?? []).some(a => a.enabled && a.trigger.on === 'beat')) return true;
+    // Tracking hands: landmarks arrive about 30 times a second, and smoothing and springs ease between them.
+    if (handFeed.isOn() && !handFeed.isPaused()) return true;
     return this.record.mappings.some(m => m.enabled && (
       m.source.kind === 'noise' ||
       ((m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio')) && liveAudio.isOn()) ||
@@ -826,6 +936,8 @@ class PlayEngine implements InputSource {
     this.learnOffOsc = null;
     this.learnCb = null;
     this.learnTriggerCb = null;
+    this.handLearnFrom = null;
+    this.handLearnHeld = null;
   }
 
   private finishLearn(source: PlaySource): void {

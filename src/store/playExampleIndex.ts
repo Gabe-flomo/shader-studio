@@ -61,6 +61,9 @@ const ROWS: Array<[string, string, string]> = [
   ['scriptParticles', 'Script: particles in plain JS', 'Spawn, move, draw, die: a spark fountain in forty lines.'],
   ['scriptP5', 'Script: a p5 sketch, pasted in', 'p5 vocabulary as plain names; its variables become sliders.'],
   ['scriptGlow', 'Script: the shader glows around it', 'The Layers node reads the sketch back, and SDF Glow turns its lines to neon.'],
+  ['handFingertips', 'Hands: fingertips move particles', 'Nulls follow your fingertips: particles flow from your index finger into your thumb.'],
+  ['handPinch', 'Hands: pinch, point and fist', 'Pinch drives a slider, a fist fires a burst, pointing toggles a setting.'],
+  ['handTwoHands', 'Hands: two at once', 'How far apart your hands are zooms the picture; their heights mix the colour.'],
   ['playTake', 'A recorded take', 'Ships with an 8-second performance: watch it back and Render it without playing.'],
   // Bigger pieces that put several techniques together (their graphs live in exampleGraphs.ts).
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],
@@ -85,6 +88,7 @@ const GROUP_STARTS: Array<[string, string]> = [
   ['Particles', 'playFlow'],
   ['Shapes and zones', 'playWalls'],
   ['Scripts', 'scriptFirst'],
+  ['Hands', 'handFingertips'],
   ['Recording', 'playTake'],
   ['Bigger pieces', 'particleGlow'],
 ];

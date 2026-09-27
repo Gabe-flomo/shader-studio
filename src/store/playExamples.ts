@@ -15,7 +15,7 @@ import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
 import { SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
 import {
-  defaultLayer, type ActionKind, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
+  defaultLayer, type ActionKind, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
 } from '../types/play';
 
@@ -57,6 +57,10 @@ const S = {
   tilt: (axis: 'beta' | 'gamma' | 'alpha'): PlaySource => ({ kind: 'tilt', axis }),
   nul: (layerId: string, axis: 'x' | 'y'): PlaySource => ({ kind: 'null', layerId, axis }),
   sensor: (layerId: string, read: SensorRead, otherId = ''): PlaySource => ({ kind: 'sensor', layerId, read, otherId }),
+  /** A hand source: the right hand, index tip X unless `o` says otherwise. */
+  hand: (read: HandRead, o: { side?: HandSide; point?: number; axis?: 'x' | 'y' | 'z'; gesture?: HandGesture }): PlaySource => ({
+    kind: 'hand', side: o.side ?? 'right', read, point: o.point ?? 8, axis: o.axis ?? 'x', gesture: o.gesture ?? 'fist',
+  }),
   trig: (trigger: TriggerSpec, mode: TriggerMode = 'envelope', o: { attack?: number; decay?: number; sustain?: number; release?: number; steps?: number; velocity?: boolean } = {}): PlaySource => ({
     kind: 'trigger', trigger, mode, attack: o.attack ?? 10, decay: o.decay ?? 200, sustain: o.sustain ?? 0.5, release: o.release ?? 400, steps: o.steps ?? 4, velocity: o.velocity ?? false,
   }),
@@ -69,6 +73,7 @@ const T = {
   note: (note = -1): TriggerSpec => ({ on: 'note', channel: 0, note }),
   osc: (address: string): TriggerSpec => ({ on: 'osc', address }),
   zone: (layerId: string, event: 'click' | 'enter' | 'fill', threshold = 0.5): TriggerSpec => ({ on: 'zone', layerId, event, threshold }),
+  hand: (side: HandSide, gesture: HandGesture): TriggerSpec => ({ on: 'hand', side, gesture }),
 };
 const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string, amount = 1): PlayAction => ({ id, trigger, do: kind, layerId, amount, enabled: true });
 
@@ -1006,6 +1011,79 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Drag Glow falloff down for a wide haze, up for a tight tube.
 • In the editor, draw a filled circle: the glow hugs its outline.
 • Turn "Seen by the Layers node" off on the layer: the lines stay, the glow goes.`,
+  })),
+
+  // ─ Hands ─
+  ex('handFingertips', quietGraph(), play({
+    layers: [
+      layer('camera', 'cam', 'Camera', { opacity: 0.22 }),
+      layer('null', 'index', 'Index tip', { follow: 'hand', handSide: 'right', handPoint: 8, spring: 0.8, wobble: 0.15, color: '#ffb86b', role: 'emitter', radius: 0.03, strength: 1.2 }),
+      layer('null', 'thumb', 'Thumb tip', { follow: 'hand', handSide: 'right', handPoint: 4, spring: 0.8, wobble: 0.15, role: 'absorber', radius: 0.03, strength: 4 }),
+      layer('null', 'left', 'Left index', { follow: 'hand', handSide: 'left', handPoint: 8, x: 0.25, spring: 0.6, wobble: 0.3, color: '#7ee0b0', role: 'vortex', radius: 0.08, strength: 1.5 }),
+      layer('particles', 'field', 'Field lines', { count: 700, field: 'none', speed: 0.5, steer: 0.2, edges: 'respawn', size: 1.3, trail: 0.85, colour: 'palette', palette: 1, paletteBy: 'age', life: 0, blend: 'screen' }),
+    ],
+    notes: `**What it shows.** Nulls can follow a tracked hand: a fingertip, a knuckle, the wrist. Whatever reads a null reads it then, so particle roles, sensors, Script layers and mappings all follow your fingers.
+
+**How it's built.** Three nulls set to Follows → **A hand**: Index tip (your right index finger) is an **Emitter**, Thumb tip an **Absorber**, and Left index a **Vortex**. Particles flow from your index finger into your thumb, so pinching squeezes the field lines together. The Camera layer is faint, so you can see your hands under the dots.
+
+**Try this.**
+• Press **Enable hand tracking** on the picture (the browser asks for the camera once). Everything runs on this computer.
+• Pinch slowly, then spread your fingers.
+• Bring your left hand in to stir the particles.
+• In Layers, pick another Point for a null (the wrist, the pinky tip), or raise its Wobble.
+• Hide the Camera layer: tracking goes on without it.`,
+  })),
+  ex('handPinch', glowGraph({ radius: 0.2, falloff: 10, tint: [1, 0.55, 0.25] }), play({
+    layers: [
+      layer('null', 'palm', 'Palm', { follow: 'hand', handSide: 'right', handPoint: 9, spring: 0.7, wobble: 0.2, size: 0 }),
+      layer('particles', 'sparks', 'Sparks', { count: 1500, emit: 'burst', spawn: 'null', nullId: 'palm', spawnRadius: 0.03, field: 'none', speed: 1.4, life: 1.1, fade: 0.6, size: 2.2, sizeJitter: 0.6, colour: 'palette', palette: 3, paletteBy: 'age', trail: 0.4, blend: 'screen' }),
+    ],
+    controls: [
+      ctl('radius', 'circ::radius', 'Radius (pinch)', 0.03, 0.45),
+      ctl('x', 'circ::posX', 'Glow X (palm)', -1.78, 1.78), ctl('y', 'circ::posY', 'Glow Y (palm)', -1, 1),
+      ctl('falloff', 'glow::brightness', 'Falloff (point)', 3, 30),
+    ],
+    mappings: [
+      map('pinch', 'radius', S.hand('pinch', { point: 8 }), 0.03, 0.45, { smoothMs: 60 }),
+      map('px', 'x', S.hand('palm', { axis: 'x' }), -1.78, 1.78, { smoothMs: 40 }),
+      map('py', 'y', S.hand('palm', { axis: 'y' }), -1, 1, { smoothMs: 40 }),
+      map('point', 'falloff', S.trig(T.hand('right', 'point'), 'toggle'), 10, 3),
+    ],
+    actions: [act('fist', T.hand('right', 'fist'), 'burst', 'sparks', 220)],
+    notes: `**What it shows.** Hand readings are sources like any knob, and gestures are triggers like any key.
+• **Pinch**: thumb to index, 0 touching and 1 spread, sized to your hand so it reads the same near the camera and far from it.
+• **Palm centre** X and Y put the glow where your hand is.
+• A **fist** fires the Burst action; **pointing** toggles the glow's softness.
+
+**How it's built.** Three mappings from the Hands group of sources (Right · Pinch, Right · Palm X, Right · Palm Y), a Trigger mapping with On: Hand gesture → Point (Toggle), and an action with the same trigger kind → Fist → Burst. The sparks are born at a hidden null that follows your palm. Gestures have hysteresis: holding a fist fires once, and it fires again only after you open your hand.
+
+**Try this.**
+• Press **Enable hand tracking** on the picture, then pinch.
+• Make a fist, open it, make it again.
+• Point with your index finger to toggle the softness.
+• In Mappings, press **Learn** on a row and move one finger: the landmark that moved most becomes its source.`,
+  })),
+  ex('handTwoHands', glowGraph({ mode: 'ring', ringFreq: 8, falloff: 6, radius: 0.3, tint: [0.5, 0.6, 1] }), play({
+    controls: [ctl('radius', 'circ::radius', 'Radius (hands apart)', 0.03, 1.2), colourCtl('tint', 'glow::tint', 'Tint (hand heights)'), ctl('falloff', 'glow::brightness', 'Falloff (right hand open)', 2, 20)],
+    mappings: [
+      map('apart', 'radius', S.hand('spread', {}), 0.03, 1.2, { smoothMs: 100 }),
+      map('red', 'tint', S.hand('palm', { side: 'left', axis: 'y' }), 0.1, 1, { channel: 0, smoothMs: 120 }),
+      map('blue', 'tint', S.hand('palm', { side: 'right', axis: 'y' }), 0.1, 1, { channel: 2, smoothMs: 120 }),
+      map('open', 'falloff', S.hand('open', {}), 20, 2, { smoothMs: 120 }),
+    ],
+    notes: `**What it shows.** Two hands at once. **Distance between the hands** is a source (1 is a picture width apart), and each hand has its own readings, so one hand can steer colour while the other shapes the picture.
+
+**How it's built.**
+• Hands apart → the rings' radius: pull your hands apart to zoom out.
+• Left palm height → the tint's red; right palm height → its blue.
+• Right hand's openness → the falloff: a fist sharpens the rings, an open hand softens them.
+Distance reads only while both hands are in view, so the rings hold their size when one hand drops out.
+
+**Try this.**
+• Press **Enable hand tracking** on the picture and hold up both hands.
+• Raise one hand and lower the other.
+• In the Hands settings (Mappings → the sliders button beside Hands), raise **Smoothing** for slower, steadier moves.
+• Record a take: hand-driven values record like any others and render frame by frame.`,
   })),
 
   // ─ Recording ─

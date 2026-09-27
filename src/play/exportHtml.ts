@@ -26,8 +26,10 @@ import particleSource from './particle-sim.js?raw';
 import geometrySource from './kit/geometry.js?raw';
 import layersSource from './kit/layers.js?raw';
 import bodiesSource from './kit/bodies.js?raw';
+import handsSource from './kit/hands.js?raw';
 import kitSource from './kit/kit.js?raw';
-import type { PlayRecord } from '../types/play';
+import { usesHands, type PlayRecord } from '../types/play';
+import type { HandAssets } from './handExport';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
 
 export interface PlayHtmlInput {
@@ -43,6 +45,8 @@ export interface PlayHtmlInput {
   passes?: PlayPasses;
   /** The files the graph's inputs read. */
   media?: PlayMedia;
+  /** Hand tracking's files (play/handExport.ts), when the author chose to include them. */
+  handAssets?: HandAssets;
 }
 
 /** What ShaderCanvas runs around the fragment shader, from the compile. */
@@ -137,8 +141,9 @@ export function playUsesCamera(play: PlayRecord): boolean {
  * player only) and the notes. Images placed as layers are data URLs and do
  * travel, as do the graph's images and small videos and songs.
  */
-export function leftBehind(play: PlayRecord, media?: PlayMedia): LeftBehind[] {
+export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: boolean } = {}): LeftBehind[] {
   const out: LeftBehind[] = [];
+  if (usesHands(play) && !opts.hands) out.push({ what: 'Hand tracking', why: `It needs MediaPipe and its hand model (about ${sizeText(HAND_BYTES)}), which stay out of the page unless you tick Include hand tracking. Without them, hand mappings, gestures and nulls that follow a hand stay at rest.` });
   for (const v of Object.values(media?.videos ?? {})) {
     if (!v.src && v.bytes > 0) out.push({ what: `The video “${v.name}” (${sizeText(v.bytes)}) in ${v.label}`, why: `Videos over ${sizeText(VIDEO_LIMIT)} stay out of the page to keep it light, so that input shows black there. Trim or compress it under ${sizeText(VIDEO_LIMIT)} to bring it along.` });
   }
@@ -158,13 +163,17 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia): LeftBehind[] {
   return out;
 }
 
+/** What hand tracking adds to a page (play/handExport.ts: MediaPipe and the model, gzipped, then base64), measured. */
+export const HAND_BYTES = 12.2 * 1024 * 1024;
+
 /** Mirrors lib/mediaSources.ts EMBED_LIMIT (this module stays free of browser-only imports). */
 const VIDEO_LIMIT = 4 * 1024 * 1024;
 const AUDIO_LIMIT = 6 * 1024 * 1024;
 
 /** Each image, video and song the page carries, and what it adds to the page's size. */
-export function mediaCarried(media?: PlayMedia): { what: string; bytes: number }[] {
+export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending'): { what: string; bytes: number }[] {
   const out: { what: string; bytes: number }[] = [];
+  if (hands) out.push({ what: 'Hand tracking (MediaPipe and its hand model)', bytes: hands === 'pending' ? HAND_BYTES : hands.bundle.length + hands.loader.length + hands.wasm.length + hands.model.length });
   for (const t of Object.values(media?.textures ?? {})) if (t.src) out.push({ what: `Image in ${t.label}${t.scaledTo ? ` (scaled to ${t.scaledTo} px)` : ''}`, bytes: t.src.length });
   for (const v of Object.values(media?.videos ?? {})) if (v.src) out.push({ what: `Video “${v.name}” in ${v.label}`, bytes: v.src.length });
   for (const a of media?.audio ?? []) if (a.src) out.push({ what: `Song “${a.name}” in ${a.label}`, bytes: a.src.length });
@@ -210,6 +219,7 @@ export function playBundle(input: PlayHtmlInput) {
     aspect: aspect ? { id: aspect.id, ratio: aspect.ratio } : { id: 'free', ratio: null },
     ...(input.passes && (input.passes.stateful || input.passes.echo || input.passes.particles.length) ? { passes: input.passes } : {}),
     ...(input.media ? { media: runtimeMedia(input.media) } : {}),
+    ...(input.handAssets && usesHands(input.play) ? { hands: input.handAssets } : {}),
     generatedBy: 'Playfield',
   };
 }
@@ -225,10 +235,10 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, layersSource, bodiesSource, kitSource];
+export const KIT_SOURCES = [particleSource, geometrySource, layersSource, bodiesSource, handsSource, kitSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement } };\n})();\n`;
 }
 
 const runtimeScript = () => (kitScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');

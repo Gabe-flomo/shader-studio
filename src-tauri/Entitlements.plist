@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- A signed build with the hardened runtime needs this to open the camera (Camera layers, hand tracking). -->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.device.camera</key>
+  <true/>
+</dict>
+</plist>

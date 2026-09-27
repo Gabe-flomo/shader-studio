@@ -11,6 +11,7 @@ import { midiEngine } from '../lib/midiEngine';
 import { layerAudio } from '../lib/layerAudio';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
+import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
 import { layersUniforms, setLayersTap } from '../play/layersTexture';
 import { videoEngine } from '../lib/videoEngine';
@@ -2095,6 +2096,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       >
         {/* Play layers (nulls, text, images, particles) draw here, over the WebGL canvas. */}
         <canvas ref={overlayRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+        {/* A setup that follows hands: Enable, on the picture (browsers need a click to open the camera). */}
+        <HandsPill />
       </div>
     </div>
   );

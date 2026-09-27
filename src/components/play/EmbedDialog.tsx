@@ -13,7 +13,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { DEFAULT_EMBED, buildPlaySnippet, leftBehind, mediaCarried, type EmbedOptions } from '../../play/exportHtml';
+import { DEFAULT_EMBED, HAND_BYTES, buildPlaySnippet, leftBehind, mediaCarried, type EmbedOptions } from '../../play/exportHtml';
+import { usesHands } from '../../types/play';
 import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -33,6 +34,11 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const hasNulls = useNodeGraphStore(s => s.play.layers.some(l => l.kind === 'null'));
   const usesOsc = useNodeGraphStore(s => s.play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')));
   const needsGesture = useNodeGraphStore(s => s.play.mappings.some(m => m.enabled && (m.source.kind === 'midi' || m.source.kind === 'live' || (m.source.kind === 'trigger' && (m.source.trigger.on === 'note' || m.source.trigger.on === 'audio')))));
+  const hands = useNodeGraphStore(s => usesHands(s.play));
+  // Hand tracking's files are big (MediaPipe and the model): only in the page when asked for.
+  const [includeHands, setIncludeHands] = useState(false);
+  const [packing, setPacking] = useState(false);
+  const withHands = hands && includeHands;
   const [title, setTitle] = useState('Playfield');
   const [site, setSite] = useState<MockSite>('landing');
   const [device, setDevice] = useState<'desktop' | 'phone'>('desktop');
@@ -43,8 +49,8 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   // Built once per open + option change; the snapshot is taken when the dialog opens.
   const { input, missing } = useMemo(() => playWebInput(title), [playWebInput, title]);
   const snippet = useMemo(() => buildPlaySnippet(input, opts), [input, opts]);
-  const left = useMemo(() => leftBehind(input.play, input.media), [input]);
-  const carried = useMemo(() => mediaCarried(input.media), [input]);
+  const left = useMemo(() => leftBehind(input.play, input.media, { hands: withHands }), [input, withHands]);
+  const carried = useMemo(() => mediaCarried(input.media, withHands ? 'pending' : undefined), [input, withHands]);
   // Show what the reader recognises: the div, then the mount call; the runtime and the piece are elided.
   const preview = useMemo(() => {
     const lines = snippet.trimEnd().split('\n');
@@ -54,11 +60,27 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
     return [lines[0], lines[1], '<script>', `  /* Playfield runtime, ${KB(snippet.length)} with your piece */`, '  ' + mount.trim(), '</script>'].join('\n');
   }, [snippet]);
 
+  /** The snippet to copy: with hand tracking's files packed in when asked for (the preview never carries them). */
+  const fullSnippet = async () => {
+    if (!withHands) return snippet;
+    setPacking(true);
+    try {
+      const { loadHandAssets } = await import('../../play/handExport');
+      return buildPlaySnippet({ ...input, handAssets: await loadHandAssets() }, opts);
+    } finally { setPacking(false); }
+  };
   const copy = async () => {
-    try { await navigator.clipboard.writeText(snippet); toast.success('Embed snippet copied', { message: bg ? 'Paste it inside the section you want it behind.' : 'Paste it where the player should go.' }); }
+    let text: string;
+    try { text = await fullSnippet(); } catch { toast.error('Couldn’t pack hand tracking', { message: 'Its files didn’t load. Try again, or copy without hand tracking.' }); return; }
+    try { await navigator.clipboard.writeText(text); toast.success('Embed snippet copied', { message: bg ? 'Paste it inside the section you want it behind.' : 'Paste it where the player should go.' }); }
     catch { toast.error('Couldn’t copy', { message: 'Your browser blocked the clipboard. Download the page instead.' }); }
   };
-  const download = async () => { if (reportFileResult(await exportPlayHtml(opts, title), { failTitle: 'Couldn’t export the page', success: 'Web page exported' })) onClose(); };
+  const download = async () => {
+    setPacking(withHands);
+    try { if (reportFileResult(await exportPlayHtml(opts, title, { hands: withHands }), { failTitle: 'Couldn’t export the page', success: 'Web page exported' })) onClose(); }
+    catch { toast.error('Couldn’t pack hand tracking', { message: 'Its files didn’t load. Try again, or export without hand tracking.' }); }
+    finally { setPacking(false); }
+  };
 
   const label = (text: string) => <div style={{ color: tk.text.faint, font: `600 10.5px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', margin: '14px 0 6px' }}>{text}</div>;
   const note = (text: string) => <div style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}`, marginTop: 6 }}>{text}</div>;
@@ -74,8 +96,8 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
       footer={(
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', width: '100%' }}>
           <Button variant="ghost" onClick={onClose}>Close</Button>
-          <Button icon="export" onClick={download}>Download page</Button>
-          <Button variant="primary" icon="copy" onClick={copy}>Copy snippet</Button>
+          <Button icon="export" disabled={packing} onClick={download}>{packing ? 'Packing…' : 'Download page'}</Button>
+          <Button variant="primary" icon="copy" disabled={packing} onClick={copy}>Copy snippet</Button>
         </div>
       )}
     >
@@ -125,10 +147,20 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
         </>
       )}
 
+      {hands && (
+        <>
+          {label('Hand tracking')}
+          <Toggle checked={includeHands} onChange={setIncludeHands} label={`Include hand tracking (+${(HAND_BYTES / 1024 / 1024).toFixed(1)} MB)`} />
+          {note(includeHands
+            ? `The page carries MediaPipe and its hand model, so it tracks hands offline, on the visitor’s device. ${bg ? 'A background has no Enable button: your page can call ShaderStudioPlay.enableHands() from a click of its own.' : 'Visitors click Enable hands; the browser asks for the camera once.'} The preview here leaves them out.`
+            : 'This setup follows hands. Without these files the page leaves hand mappings, gestures and hand-following nulls at rest.')}
+        </>
+      )}
+
       {label('Title')}
       <Field value={title} onChange={e => setTitle(e.target.value)} height={32} placeholder="Shown on the player and as the page title" />
 
-      {label(`Snippet · ${KB(snippet.length)}`)}
+      {label(`Snippet · ${KB(snippet.length)}${withHands ? ` + ${(HAND_BYTES / 1024 / 1024).toFixed(1)} MB hand tracking` : ''}`)}
       <pre style={{ margin: 0, maxHeight: 120, overflow: 'auto', padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field, color: tk.text.secondary, font: `11px/1.5 ${fontFamily.mono}`, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
         {preview}
       </pre>

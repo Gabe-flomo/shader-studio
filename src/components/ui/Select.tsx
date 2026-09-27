@@ -3,7 +3,8 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from './Icon';
 
-export interface SelectOption { value: string; label: string }
+/** `group`: options in a row with the same group sit under one heading (an <optgroup>). */
+export interface SelectOption { value: string; label: string; group?: string }
 
 /**
  * Dropdown: a native <select> sits transparently over the styled face (as in TypeSelect), so
@@ -38,8 +39,21 @@ export function Select({
         onChange={e => onChange(e.target.value)}
         style={{ position: 'absolute', inset: 0, width: '100%', opacity: 0, cursor: 'pointer', font: 'inherit' }}
       >
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {groupOptions(options).map((g, i) => g.group
+          ? <optgroup key={`g${i}`} label={g.group}>{g.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>
+          : g.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>))}
       </select>
     </span>
   );
+}
+
+/** Runs of options that share a group (ungrouped options make runs of their own). */
+function groupOptions(options: readonly SelectOption[]): { group?: string; options: SelectOption[] }[] {
+  const out: { group?: string; options: SelectOption[] }[] = [];
+  for (const o of options) {
+    const last = out[out.length - 1];
+    if (last && last.group === o.group) last.options.push(o);
+    else out.push({ group: o.group, options: [o] });
+  }
+  return out;
 }
