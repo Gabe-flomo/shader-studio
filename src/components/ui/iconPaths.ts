@@ -69,6 +69,7 @@ export const ICONS = {
   text: { sw: 1.5, body: "<path d='M3.5 4.5V3h9v1.5M8 3v10M6 13h4'/>" },
   slides: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='8.5' rx='1.5'/><path d='M8 11v2.5M5.5 13.5h5'/>" },
   scroll: { sw: 1.5, body: "<rect x='3' y='1.8' width='10' height='12.4' rx='1.5'/><path d='M5.5 5h5M5.5 8h5M5.5 11h3'/>" },
+  book: { sw: 1.4, body: "<path d='M8 4.3C6.6 3.2 4.6 2.8 2 2.9v9.5c2.6-.1 4.6.3 6 1.4 1.4-1.1 3.4-1.5 6-1.4V2.9c-2.6-.1-4.6.3-6 1.4z'/><path d='M8 4.3v9.5'/>" },
   sliders: { sw: 1.5, body: "<path d='M2.5 4.5h11M2.5 11.5h11'/><circle cx='6' cy='4.5' r='1.6' fill='currentColor'/><circle cx='10.5' cy='11.5' r='1.6' fill='currentColor'/>" },
 } satisfies Record<string, IconDef>;
 
