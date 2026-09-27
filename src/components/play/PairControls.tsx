@@ -250,7 +250,7 @@ export function PairMappingRow({ mapping: m, play, sourceSections, renderSourceO
             { value: 'value', label: 'One value', title: 'Any source (a knob, an LFO…) sent to A, B or both' },
           ]} onChange={kind => {
             if (kind === m.source.kind) return;
-            onUpdate(kind === 'position' ? { source: { kind: 'position', anchor: 'mouse' }, swap: undefined } : { source: { kind: 'value', source: { kind: 'mouse', axis: 'x' } } });
+            onUpdate(kind === 'position' ? { source: { kind: 'position', anchor: 'mouse' }, swap: undefined, affect: 'both' } : { source: { kind: 'value', source: { kind: 'mouse', axis: 'x' } } });
           }} />
           {m.source.kind === 'position' && <DistanceAnchorPicker value={m.source.anchor} layers={layerRefs} ariaLabel="Position from" onChange={anchor => onUpdate({ source: { kind: 'position', anchor } })} />}
           {value && <GroupedPicker ariaLabel="Source" value={sourceType(value)} sections={sourceSections} height={26} style={{ flex: 1, minWidth: 120 }} width={300} searchPlaceholder="Search sources"

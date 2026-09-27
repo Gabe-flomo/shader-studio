@@ -1282,9 +1282,12 @@ void main() {
     const HK = typeof SSKit !== 'undefined' && SSKit.hands ? SSKit.hands : null;
     const handSt = HK ? HK.create() : null;
     const handSettings = Object.assign({ smoothing: 0.5, overlay: true, colour: [0.35, 1, 0.75], mirror: true }, play.hands || {});
-    const trigHands = t => t.on === 'hand' || (t.on === 'proximity' && (!!handAnchorOf(t.a) || !!handAnchorOf(t.b)));
+    // A condition on a distance to or from a hand point reads hands too.
+    const condHands = c => { if (!c || typeof c.value !== 'string' || c.value.indexOf('dist:') !== 0) return false; const i = c.value.indexOf('|'); return i > 0 && (!!handAnchorOf(c.value.slice(5, i)) || !!handAnchorOf(c.value.slice(i + 1))); };
+    const trigHands = t => t.on === 'hand' || (t.on === 'proximity' && (!!handAnchorOf(t.a) || !!handAnchorOf(t.b))) || (t.on === 'value' && condHands(t));
     const usesHands = play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && trigHands(m.source.trigger)) || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!handAnchorOf(m.source.otherId || '')))
-      || actions.some(a => trigHands(a.trigger)) || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
+      || actions.some(a => trigHands(a.trigger)) || play.layers.some(l => l.kind === 'null' && l.follow === 'hand')
+      || pairMappings.some(m => (m.source.kind === 'position' ? !!handAnchorOf(m.source.anchor) : m.source.source.kind === 'hand' || (m.source.source.kind === 'trigger' && trigHands(m.source.source.trigger))) || condHands(m.a.when) || condHands(m.b.when));
     if (usesHands && B.hands) { shared.hands.assets = B.hands; if (!shared.hands.options) shared.hands.options = HK.options(play.hands); }
     const handGates = new Set();
     let handSeq = -1;
