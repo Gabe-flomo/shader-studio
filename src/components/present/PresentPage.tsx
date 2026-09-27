@@ -26,7 +26,8 @@ import { Sheet } from '../ui/Sheet';
 import { askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import type { Page } from '../page';
-import { listPresentations, lastPresentation, PRESENTATIONS_CHANGED, type PresentationEntry } from '../../present/storage';
+import { listPresentations, lastPresentation, savePresentation, PRESENTATIONS_CHANGED, type PresentationEntry } from '../../present/storage';
+import { internStoredPresentations } from '../../present/presentAssets';
 import { FIRST_SAMPLE, SAMPLE_GROUPS, SAMPLE_PRESENTATIONS, type SamplePresentation } from '../../present/samples';
 import { usePresentation, type PresentMode } from './presentationStore';
 import { Inspector } from './Inspector';
@@ -42,7 +43,7 @@ import { PresentationsDialog } from './PresentationsDialog';
 import { whenSaved } from '../../store/graphVersions';
 import type { BlockContext } from './Blocks';
 import { useCamera } from '../../present/runtimeHost';
-import { Backdrop } from './Backdrop';
+import { Backdrop, MissingImageNote } from './Backdrop';
 import { COLUMN, lookVars, usePresentFonts, useStepLook, useTypeVars } from './presentLook';
 
 function usePresentationList(): PresentationEntry[] {
@@ -81,6 +82,8 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
 
   // Markdown and KaTeX: fetched now that the page is open.
   useEffect(() => { void loadMarkdown(); }, []);
+  // Saved presentations that still carry embedded pictures or font files (from before, or restored from a ZIP) move them into the library.
+  useEffect(() => { void internStoredPresentations(savePresentation); }, []);
   // Open the last presentation (or the newest) when there's none open.
   useEffect(() => {
     if (usePresentation.getState().doc) return;
@@ -277,6 +280,7 @@ function EditDesktop({ ctx, onNavigate }: { ctx: Omit<BlockContext, 'active' | '
         <Backdrop look={look} column={COLUMN.edit} />
         <main ref={scroller} onClick={() => select(null)} style={{ flex: 1, minWidth: 0, overflowY: 'auto', position: 'relative', zIndex: 1, ...lookVars(look) }}>
           <div style={{ maxWidth: 1040, margin: '0 auto', padding: '48px 48px 120px' }}>
+            <MissingImageNote look={look} />
             <StepView step={step} index={index} total={doc.steps.length} ctx={{ ...ctx, editing: true, active: true, large: false }} />
           </div>
         </main>
@@ -304,6 +308,7 @@ function EditPhone({ ctx, onNavigate }: { ctx: Omit<BlockContext, 'active' | 'ed
       <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
         <Backdrop look={look} column={COLUMN.edit} />
         <main onClick={() => select(null)} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '22px 16px 96px', position: 'relative', zIndex: 1, ...lookVars(look) }}>
+          <MissingImageNote look={look} />
           <StepView step={step} index={index} total={doc.steps.length} ctx={{ ...ctx, editing: true, active: true, large: false }} />
         </main>
       </div>

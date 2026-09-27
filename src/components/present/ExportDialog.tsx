@@ -3,7 +3,9 @@
  * maths as MathML or KaTeX's HTML) or as a `.present.json` file, with what
  * the page leaves behind.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { withEmbeddedAssets } from '../../present/presentAssets';
+import type { Presentation } from '../../types/presentation';
 import { buildPresentationHtml, exportNotes } from '../../present/exportPresentation';
 import { saveTextFile } from '../../utils/fileIO';
 import { useTokens } from '../../theme/themeStore';
@@ -43,23 +45,33 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [layout, setLayout] = useState<'slides' | 'scroll'>('slides');
   const [math, setMath] = useState<'mathml' | 'html'>('mathml');
   const [busy, setBusy] = useState(false);
-  const notes = useMemo(() => (doc ? exportNotes(doc) : []), [doc]);
+  // The pictures and fonts, fetched from the library and the font cache and embedded (each once).
+  const [prepared, setPrepared] = useState<{ for: Presentation; doc: Presentation } | null>(null);
+  useEffect(() => {
+    if (!doc) return;
+    let live = true;
+    withEmbeddedAssets(doc).then(r => { if (live) setPrepared({ for: doc, doc: r.doc }); }, () => { if (live) setPrepared({ for: doc, doc }); });
+    return () => { live = false; };
+  }, [doc]);
+  const ready = prepared && prepared.for === doc ? prepared.doc : null;
+  const notes = useMemo(() => (ready ? exportNotes(ready) : doc ? exportNotes({ ...doc, images: [], fonts: [] }) : []), [ready, doc]);
   const kept = useMemo(() => {
-    if (!doc) return null;
-    const b = styleBytes(doc);
-    const families = [...new Set((doc.fonts ?? []).map(f => f.family))];
-    const images = doc.images?.length ?? 0;
+    if (!ready) return null;
+    const b = styleBytes(ready);
+    const families = [...new Set((ready.fonts ?? []).map(f => f.family))];
+    const images = (ready.images ?? []).filter(i => i.src).length;
     if (!b.total) return null;
     const parts = [images ? `${images} image background${images === 1 ? '' : 's'}` : '', families.length ? `the fonts ${families.join(', ')}` : ''].filter(Boolean);
-    return { text: `It carries ${parts.join(' and ')}: ${sizeLabel(b.total)}.`, heavy: b.total > STYLE_WARN_BYTES };
-  }, [doc]);
+    return { text: `It carries ${parts.join(' and ') || 'previews of its pictures'}: ${sizeLabel(b.total)}.`, heavy: b.total > STYLE_WARN_BYTES };
+  }, [ready]);
   if (!doc) return null;
   const save = async () => {
     setBusy(true);
     try {
       const md = await loadMarkdown();
       const katexCss = math === 'html' ? await katexCssInline() : undefined;
-      const html = buildPresentationHtml(doc, md.renderMarkdown, { layout, math, katexCss });
+      const full = ready ?? (await withEmbeddedAssets(doc)).doc;
+      const html = buildPresentationHtml(full, md.renderMarkdown, { layout, math, katexCss });
       const r = await saveTextFile(html, `${fileBase(doc.title)}${layout === 'scroll' ? '' : '-slides'}.html`, 'text/html');
       reportFileResult(r, { failTitle: 'Couldn’t save the page', success: `Saved the page (${Math.round(html.length / 1024)} KB)` });
       if (r.ok) onClose();
@@ -76,7 +88,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       footer={<>
         <Button variant="ghost" icon="export" onClick={() => { void exportPresentationFile(); onClose(); }} title="The presentation with every Play in it, to open in Playfield anywhere">Presentation file</Button>
         <span style={{ flex: 1 }} />
-        <Button variant="primary" icon="code" disabled={busy} onClick={save}>{busy ? 'Building…' : 'Save the web page'}</Button>
+        <Button variant="primary" icon="code" disabled={busy || !ready} onClick={save}>{busy ? 'Building…' : !ready ? 'Gathering pictures…' : 'Save the web page'}</Button>
       </>}
     >
       <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>

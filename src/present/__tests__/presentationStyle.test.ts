@@ -181,7 +181,7 @@ describe('Google Fonts, embedded', () => {
       expect(f.src).toMatch(/^data:font\/woff2;base64,/);
       expect(f.weight).toBe('400 700');
     }
-    expect(atob(faces.find(f => f.unicodeRange?.startsWith('U+0000'))!.src.split(',')[1])).toBe('font:https://fonts.gstatic.com/s/inter/latin.woff2');
+    expect(atob(faces.find(f => f.unicodeRange?.startsWith('U+0000'))!.src!.split(',')[1])).toBe('font:https://fonts.gstatic.com/s/inter/latin.woff2');
   });
 
   it('falls back to the regular face when Google refuses the weights, and throws when it has nothing', async () => {

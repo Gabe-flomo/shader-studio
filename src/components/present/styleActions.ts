@@ -1,62 +1,47 @@
 /**
  * styleActions — changing how the open presentation looks (the Style panel's
  * side): step and default backgrounds, image backgrounds from the library, a
- * file or a capture (embedded once, with their average colour measured),
+ * file or a capture (referenced, with a tiny preview and their average colour),
  * and typography, whose fonts are fetched from Google Fonts once when chosen
- * and embedded (googleFonts.ts).
+ * and kept in the font cache (googleFonts.ts, lib/fontCache.ts).
  */
-import { embedImage, importImageFile } from '../../lib/backgroundLibrary';
+import { importImageFile } from '../../lib/backgroundLibrary';
+import { referenceTo } from '../../present/presentAssets';
+import { openBackgrounds } from '../backgrounds/backgroundsUi';
 import { fetchFontFaces, findFont, nearestWeight } from '../../present/googleFonts';
-import { newId, type Presentation } from '../../types/presentation';
+import { putFace } from '../../lib/fontCache';
+import type { Presentation } from '../../types/presentation';
 import {
-  faceCovers, neededFonts, usedImages, type EmbeddedFontFace, type FontRole, type FontRoleName, type PresentBackground, type PresentImage, type PresentTypography, type RGB,
+  faceCovers, neededFonts, usedImages, type EmbeddedFontFace, type FontRole, type FontRoleName, type PresentBackground, type PresentImage, type PresentTypography,
 } from '../../types/presentationStyle';
 import { toast } from '../ui/toastStore';
 import { usePresentation } from './presentationStore';
 
-/** An image background in a presentation: at most this on its long side, and this many characters. */
-const EMBED = { maxSide: 1920, maxChars: 1_600_000 };
-
-/** The average colour of a picture (a data or object URL), 0..1; undefined when it can't be read. */
-export async function imageAverage(src: string): Promise<RGB | undefined> {
-  try {
-    const img = new Image();
-    img.decoding = 'async';
-    img.src = src;
-    await img.decode();
-    const c = document.createElement('canvas');
-    c.width = 16; c.height = 16;
-    const x = c.getContext('2d', { willReadFrequently: true });
-    if (!x) return undefined;
-    x.drawImage(img, 0, 0, 16, 16);
-    const d = x.getImageData(0, 0, 16, 16).data;
-    const acc = [0, 0, 0];
-    for (let i = 0; i < d.length; i += 4) for (let j = 0; j < 3; j++) acc[j] += d[i + j];
-    const n = d.length / 4;
-    return acc.map(v => Math.round((v / n / 255) * 1000) / 1000) as RGB;
-  } catch { return undefined; }
+/** A library image background as the presentation's image: a reference (the picture stays in the library). Null when it's gone. */
+export function presentImageFromLibrary(libraryId: string): Promise<PresentImage | null> {
+  return referenceTo(libraryId);
 }
 
-/** A library image background, embedded for the presentation. Null when it's gone. */
-export async function presentImageFromLibrary(libraryId: string): Promise<PresentImage | null> {
-  const e = await embedImage(libraryId, EMBED);
-  if (!e) return null;
-  const img: PresentImage = { id: newId('i'), name: e.name, src: e.src, libraryId: e.libraryId };
-  const avg = await imageAverage(e.src);
-  if (avg) img.avg = avg;
-  return img;
-}
-
-/** A picture file: kept in the library's Image backgrounds too (so other setups can use it), and embedded. */
+/** A picture file: kept in the library's Image backgrounds (so other setups can use it), and referenced. */
 export async function presentImageFromFile(file: File): Promise<PresentImage | null> {
   const meta = await importImageFile(file);
-  return presentImageFromLibrary(meta.id);
+  return referenceTo(meta.id);
+}
+
+/** Point an image the library doesn't have (any more) at a picture picked from it; its fit, position and effects stay. */
+export async function relinkImage(imageId: string): Promise<void> {
+  const p = await openBackgrounds({ pick: 'image', title: 'Relink the image background' });
+  if (p?.kind !== 'image') return;
+  const img = await referenceTo(p.image.id);
+  if (!img) { toast.error('That image background is gone'); return; }
+  usePresentation.getState().update(doc => ({ ...doc, images: (doc.images ?? []).map(i => (i.id === imageId ? { ...img, id: imageId } : i)) }));
+  toast.success(`Relinked to “${img.name}”`);
 }
 
 /** Put an image in the presentation (the same library image or picture is kept once); returns its id there. */
 export function withImage(p: Presentation, img: PresentImage): { doc: Presentation; id: string } {
   const list = p.images ?? [];
-  const same = list.find(i => (img.libraryId && i.libraryId === img.libraryId) || i.src === img.src);
+  const same = list.find(i => (img.libraryId && i.libraryId === img.libraryId) || (!!img.src && i.src === img.src));
   if (same) return { doc: { ...p, images: list.map(i => (i.id === same.id ? { ...img, id: same.id } : i)) }, id: same.id };
   return { doc: { ...p, images: [...list, img] }, id: img.id };
 }
@@ -160,7 +145,9 @@ export async function chooseFont(role: FontRoleName, choice: FontRole | null): P
       for (const m of missing) {
         setBusy(m.family);
         const got = await fetchFontFaces(m.family, m.weights);
-        faces = [...faces.filter(f => f.family !== m.family), ...got];
+        // The files go to the font cache; the presentation lists the faces (exports embed them again).
+        await Promise.all(got.map(g => putFace(g)));
+        faces = [...faces.filter(f => f.family !== m.family), ...got.map(({ src: _s, ...f }) => { void _s; return f; })];
       }
     } catch (e) {
       toast.error('Couldn’t download the font', { message: `${e instanceof Error ? e.message : String(e)} Fonts come from Google Fonts: check the connection and try again.` });

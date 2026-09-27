@@ -61,6 +61,14 @@ export function exportNotes(p: Presentation): ExportNote[] {
     if (limits.length) out.push({ what: `“${s.title}” is a still`, why: `The web player can’t run ${limits.join(', ')} yet.` });
     for (const l of leftBehind(s.bundle.play, undefined, { graphs: s.bundle.backgroundGraphs ?? {}, datasets: s.bundle.datasets })) if (!/notes/i.test(l.what)) out.push({ what: `${l.what} in “${s.title}”`, why: l.why });
   }
+  // Pictures and fonts embedding couldn't find (withEmbeddedAssets leaves them without src).
+  const shown = usedImages(p.style, p.steps);
+  for (const img of p.images ?? []) {
+    if (shown.has(img.id) && !img.src) out.push({ what: `The image background “${img.name}”`, why: 'It isn’t in this browser’s image backgrounds, so the page shows its small preview, blurred. Relink it in the step’s background settings.' });
+  }
+  for (const family of new Set((p.fonts ?? []).filter(f => !f.src).map(f => f.family))) {
+    out.push({ what: `The font ${family}`, why: 'It isn’t in this browser’s font cache and couldn’t be downloaded, so the page uses the system font.' });
+  }
   return out;
 }
 
@@ -264,16 +272,19 @@ export function styleSheet(p: Presentation, layout: 'slides' | 'scroll'): { css:
     const bg = look.bg;
     if (!bg) return '';
     const img = bg.kind === 'image' && bg.image ? images.get(bg.image) : undefined;
+    // A picture that couldn't be embedded (not in the library) shows its preview, blurred all over.
+    const picture = img?.src ?? img?.thumb;
     let imageClass: string | undefined;
-    if (img) {
+    if (img && picture) {
       imageClass = cls.get(img.id);
       if (!imageClass) {
         imageClass = `pp-img${cls.size + 1}`;
         cls.set(img.id, imageClass);
-        rules.push(`.${imageClass}{background-image:url("${img.src}")}`);
+        rules.push(`.${imageClass}{background-image:url("${picture}")}`);
       }
     }
-    const layers = backdropLayers(bg, { imageClass, matte: img?.avg, tone: look.tone, column: EXPORT_COLUMN[layout] });
+    const shown = img && !img.src ? { ...bg, blur: Math.max(bg.blur ?? 0, 0.6), falloff: 0 } : bg;
+    const layers = backdropLayers(shown, { imageClass, matte: img?.avg, tone: look.tone, column: EXPORT_COLUMN[layout] });
     if (!layers.length) return '';
     const html = `<div class="pp-bg" aria-hidden="true">${layers.map(l => `<i class="pp-l-${l.name}${imageClass && (l.name === 'base' || l.name === 'blur') ? ` ${imageClass}` : ''}" style="${esc(declsToCss(l.decls))}"></i>`).join('')}</div>`;
     return layout === 'scroll' ? `<div class="pp-bgwrap">${html}</div>` : html;

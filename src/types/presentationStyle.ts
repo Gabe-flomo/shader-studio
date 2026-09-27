@@ -5,9 +5,14 @@
  * Fonts, embedded; size, line height, text colours).
  *
  *   Presentation.style       { background?, typography? }
- *   Presentation.images      the image backgrounds, each once (data URLs, with
- *                            the library id kept for relinking)
- *   Presentation.fonts       the chosen fonts' faces (woff2 data URLs), each once
+ *   Presentation.images      the image backgrounds, each once. Saved in this
+ *                            browser they're references to the backgrounds
+ *                            library (IndexedDB) with a tiny blurred preview
+ *                            (`thumb`, a few KB); exports and downloaded files
+ *                            carry the full picture in `src` (present/presentAssets.ts)
+ *   Presentation.fonts       the chosen fonts' faces. Saved here without their
+ *                            files (those are in lib/fontCache.ts); exports and
+ *                            files embed them in `src`
  *   Step.background          absent: the presentation's; { kind: 'none' }: none
  *
  * A background is flat (kind plus every kind's settings), so switching kinds
@@ -49,10 +54,17 @@ export interface PresentBackground {
 export interface PresentImage {
   id: string;
   name: string;
-  /** A data URL (JPEG, PNG or WebP). */
-  src: string;
-  /** The library's image background it came from (relinkUrl uses the full-size copy when it's here). */
+  /**
+   * The picture as a data URL (JPEG, PNG or WebP): only in exported pages,
+   * downloaded files, and until an imported one is moved into the library.
+   */
+  src?: string;
+  /** The library's image background it is: where the picture comes from in the app. */
   libraryId?: string;
+  width?: number;
+  height?: number;
+  /** A tiny preview (a JPEG data URL of a few KB), shown blurred while the picture loads or when it's missing. */
+  thumb?: string;
   /** Its average colour, 0..1: decides the text colour over it. */
   avg?: RGB;
 }
@@ -88,8 +100,8 @@ export interface EmbeddedFontFace {
   weight: string;
   style: 'normal' | 'italic';
   unicodeRange?: string;
-  /** data:font/woff2;base64,… (or woff / ttf). */
-  src: string;
+  /** data:font/woff2;base64,… (or woff / ttf): in exports and files; saved here the file is in the font cache. */
+  src?: string;
 }
 
 // ── Limits and defaults ─────────────────────────────────────────────────────
@@ -105,6 +117,8 @@ export const STYLE_WARN_BYTES = 10 * 1024 * 1024;
 export const PRESENT_IMAGE_MAX = 4_200_000;
 const MAX_FONT_FACES = 48;
 const MAX_FONT_SRC = 1_500_000;
+/** A preview's size at most, in characters. */
+export const THUMB_MAX = 24_000;
 
 /** What a new image background starts with: soft enough to read over, still clearly the picture. */
 export const IMAGE_EFFECTS = { blur: 0.35, falloff: 0.65, shade: 0.3, vignette: 0.2 } as const;
@@ -150,9 +164,16 @@ export function parseImages(v: unknown): PresentImage[] {
   if (!Array.isArray(v)) return out;
   for (const x of v.slice(0, 200)) {
     if (!isObj(x) || !idOk(x.id) || seen.has(x.id)) continue;
-    if (typeof x.src !== 'string' || x.src.length > PRESENT_IMAGE_MAX || !DATA_IMAGE.test(x.src)) continue;
-    const img: PresentImage = { id: x.id, name: typeof x.name === 'string' ? x.name.slice(0, 200) : 'Image', src: x.src };
-    if (typeof x.libraryId === 'string' && x.libraryId && x.libraryId.length <= 80) img.libraryId = x.libraryId;
+    const src = typeof x.src === 'string' && x.src.length <= PRESENT_IMAGE_MAX && DATA_IMAGE.test(x.src) ? x.src : undefined;
+    const libraryId = typeof x.libraryId === 'string' && x.libraryId && x.libraryId.length <= 80 ? x.libraryId : undefined;
+    // A picture, or a library image to find it in.
+    if (!src && !libraryId) continue;
+    const img: PresentImage = { id: x.id, name: typeof x.name === 'string' ? x.name.slice(0, 200) : 'Image' };
+    if (src) img.src = src;
+    if (libraryId) img.libraryId = libraryId;
+    const w = num(x.width), h = num(x.height);
+    if (w && h && w > 0 && h > 0) { img.width = Math.round(w); img.height = Math.round(h); }
+    if (typeof x.thumb === 'string' && x.thumb.length <= THUMB_MAX && DATA_IMAGE.test(x.thumb)) img.thumb = x.thumb;
     const avg = rgb(x.avg);
     if (avg) img.avg = avg;
     seen.add(x.id);
@@ -187,9 +208,11 @@ export function parseFontFaces(v: unknown): EmbeddedFontFace[] {
   if (!Array.isArray(v)) return out;
   for (const x of v.slice(0, MAX_FONT_FACES)) {
     if (!isObj(x) || typeof x.family !== 'string' || !FAMILY.test(x.family)) continue;
-    if (typeof x.src !== 'string' || x.src.length > MAX_FONT_SRC || !DATA_FONT.test(x.src)) continue;
+    // No file is fine (it's in the font cache); a file that isn't a font isn't.
+    if (x.src !== undefined && (typeof x.src !== 'string' || x.src.length > MAX_FONT_SRC || !DATA_FONT.test(x.src))) continue;
     const weight = typeof x.weight === 'string' && /^\d{3,4}( \d{3,4})?$/.test(x.weight) ? x.weight : '400';
-    const face: EmbeddedFontFace = { family: x.family, weight, style: x.style === 'italic' ? 'italic' : 'normal', src: x.src };
+    const face: EmbeddedFontFace = { family: x.family, weight, style: x.style === 'italic' ? 'italic' : 'normal' };
+    if (typeof x.src === 'string') face.src = x.src;
     if (typeof x.unicodeRange === 'string' && /^[U+0-9A-Fa-f?, -]{1,2000}$/.test(x.unicodeRange)) face.unicodeRange = x.unicodeRange;
     out.push(face);
   }
@@ -368,15 +391,16 @@ export function faceCovers(face: Pick<EmbeddedFontFace, 'weight'>, w: number): b
   return b === undefined ? a === w : w >= a && w <= b;
 }
 
-/** The @font-face rules for embedded faces, each once. */
+/** The @font-face rules for faces with files (data or object URLs), each once. */
 export function fontFaceCss(faces: readonly EmbeddedFontFace[]): string {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const f of faces) {
+    if (!f.src) continue;
     const key = `${f.family}|${f.weight}|${f.style}|${f.unicodeRange ?? ''}|${f.src.length}|${f.src.slice(-40)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const fmt = /^data:font\/woff2|font-woff2/.test(f.src) ? 'woff2' : /^data:font\/woff|font-woff/.test(f.src) ? 'woff' : /^data:font\/otf/.test(f.src) ? 'opentype' : 'truetype';
+    const fmt = /^blob:/.test(f.src) ? 'woff2' : /^data:font\/woff2|font-woff2/.test(f.src) ? 'woff2' : /^data:font\/woff|font-woff/.test(f.src) ? 'woff' : /^data:font\/otf/.test(f.src) ? 'opentype' : 'truetype';
     out.push(`@font-face{font-family:"${f.family}";font-style:${f.style};font-weight:${f.weight};font-display:swap;src:url(${f.src}) format("${fmt}")${f.unicodeRange ? `;unicode-range:${f.unicodeRange}` : ''}}`);
   }
   return out.join('\n');
@@ -384,10 +408,10 @@ export function fontFaceCss(faces: readonly EmbeddedFontFace[]): string {
 
 // ── Size ────────────────────────────────────────────────────────────────────
 
-/** What the embedded images and fonts weigh (characters of their data URLs, which is what files and pages carry). */
+/** What the embedded images and fonts weigh (characters of their data URLs, which is what files and pages carry; previews included). */
 export function styleBytes(p: { images?: readonly PresentImage[]; fonts?: readonly EmbeddedFontFace[] }): { images: number; fonts: number; total: number } {
-  const images = (p.images ?? []).reduce((n, i) => n + i.src.length, 0);
-  const fonts = (p.fonts ?? []).reduce((n, f) => n + f.src.length, 0);
+  const images = (p.images ?? []).reduce((n, i) => n + (i.src?.length ?? 0) + (i.thumb?.length ?? 0), 0);
+  const fonts = (p.fonts ?? []).reduce((n, f) => n + (f.src?.length ?? 0), 0);
   return { images, fonts, total: images + fonts };
 }
 

@@ -34,18 +34,18 @@ import { usePalettes } from '../backgrounds/useBackgrounds';
 import { freePaletteName, paletteCss, paletteFill, savePalette, PALETTE_PRESETS } from '../../lib/backgroundLibrary';
 import { PLAY_FILL_STOPS_MAX, fitStops } from '../../types/play';
 import {
-  DARK_BELOW, IMAGE_EFFECTS, LINE_HEIGHT_RANGE, luminance, SCALE_RANGE, STYLE_WARN_BYTES, DEFAULT_LINE_HEIGHT, fontStack, resolveBackground, sizeLabel, stepLook, styleBytes,
+  DARK_BELOW, IMAGE_EFFECTS, LINE_HEIGHT_RANGE, luminance, SCALE_RANGE, DEFAULT_LINE_HEIGHT, fontStack, resolveBackground, sizeLabel, stepLook, styleBytes,
   type FontCategory, type FontRole, type FontRoleName, type PresentBackground, type PresentImage, type RGB,
 } from '../../types/presentationStyle';
 import { FONT_CATEGORIES, GOOGLE_FONTS, findFont, nearestWeight, previewCssUrl, type GoogleFont } from '../../present/googleFonts';
 import { IMAGE_ACCEPT } from '../play/backgroundFiles';
 import { paperStyle } from './paper';
 import { Backdrop } from './Backdrop';
-import { lookVars, useImageMap, useStepLook, useTypeVars } from './presentLook';
+import { lookVars, useImageMap, useLibraryImage, useStepLook, useTypeVars } from './presentLook';
 import { Row, Section } from './InspectorParts';
 import { usePresentation } from './presentationStore';
 import {
-  applyImage, chooseFont, fontBusy, onFontBusy, patchTypography, presentImageFromFile, presentImageFromLibrary, setDefaultBackground, setStepBackground,
+  applyImage, chooseFont, relinkImage, fontBusy, onFontBusy, patchTypography, presentImageFromFile, presentImageFromLibrary, setDefaultBackground, setStepBackground,
 } from './styleActions';
 
 type Kind = 'default' | PresentBackground['kind'];
@@ -64,7 +64,7 @@ function Swatch({ bg, images, style }: { bg: PresentBackground | null; images: R
   if (bg.kind === 'colour' && bg.colour) return <span style={{ ...base, background: `rgb(${bg.colour.map(c => Math.round(c * 255)).join(' ')})` }} />;
   if (bg.kind === 'fill' && bg.fill) return <span style={{ ...base, background: paletteCss(bg.fill) }} />;
   const img = bg.image ? images.get(bg.image) : undefined;
-  if (bg.kind === 'image' && img) return <span style={{ ...base, backgroundImage: `url("${img.src}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />;
+  if (bg.kind === 'image' && img && (img.thumb || img.src)) return <span style={{ ...base, backgroundImage: `url("${img.thumb ?? img.src}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />;
   return <span style={{ ...base, background: tk.bg.field, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: tk.text.faint }}><Icon name="overlay" size={14} /></span>;
 }
 
@@ -205,6 +205,7 @@ function BackgroundEditor({ value, inherited, forStep, compact, lightText, onCha
     { label: 'Capture from a graph…', icon: 'camera', hint: 'A still of any graph at the moment you choose', onSelect: () => void capture() },
   ];
   const img = bg?.kind === 'image' && bg.image ? images.get(bg.image) : undefined;
+  const pic = useLibraryImage(img);
   const shadeLabel = lightText === false ? 'Lighten' : 'Darken';
 
   return (
@@ -244,9 +245,16 @@ function BackgroundEditor({ value, inherited, forStep, compact, lightText, onCha
 
       {kind === 'image' && (
         <div ref={imageMenuAnchor} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {img && pic.missing && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 10px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.1), color: tk.status.warningText, font: `500 12px/1.45 ${fontFamily.ui}` }}>
+              <Icon name="warning" size={13} style={{ flexShrink: 0, marginTop: 2, color: tk.status.warning }} />
+              <span style={{ flex: 1 }}>This picture isn’t in this browser’s image backgrounds (deleted, or made on another machine), so its small preview shows. Exports leave it out.</span>
+              <Button size="sm" onClick={() => void relinkImage(img.id)}>Relink…</Button>
+            </div>
+          )}
           {img ? (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ width: 96, aspectRatio: '16 / 9', flexShrink: 0, borderRadius: radius.md, backgroundImage: `url("${img.src}")`, backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.12)}` }} />
+              <span style={{ width: 96, aspectRatio: '16 / 9', flexShrink: 0, borderRadius: radius.md, backgroundImage: pic.url ? `url("${pic.url}")` : undefined, backgroundColor: tk.bg.field, backgroundSize: 'cover', backgroundPosition: 'center', filter: pic.missing ? 'blur(3px)' : undefined, boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.12)}` }} />
               <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span title={img.name} style={{ color: tk.text.primary, font: `600 12px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{img.name}</span>
                 <Button size="sm" icon="import" disabled={busy} style={{ alignSelf: 'flex-start' }}
@@ -477,17 +485,12 @@ export function PresentationStyleSettings({ compact }: { compact: boolean }) {
           <span style={{ color: tk.text.faint, font: `500 11.5px/1.4 ${fontFamily.ui}` }}>Automatic: light text on dark backgrounds, dark text on light ones.</span>
         </div>
       </Section>
-      <Section title="Kept in the presentation">
+      <Section title="Where it's kept">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, color: tk.text.secondary, font: `500 12px/1.5 ${fontFamily.ui}` }}>
-          <span>Images: {bytes.images ? `${sizeLabel(bytes.images)} (${doc.images?.length ?? 0})` : 'none'}</span>
-          <span>Fonts: {bytes.fonts ? `${sizeLabel(bytes.fonts)} (${[...new Set((doc.fonts ?? []).map(f => f.family))].join(', ')})` : 'none'}</span>
+          <span>Images: {doc.images?.length ? `${doc.images.length} in the Library’s image backgrounds; the presentation keeps small previews (${sizeLabel(bytes.images)})` : 'none'}</span>
+          <span>Fonts: {doc.fonts?.length ? `${[...new Set(doc.fonts.map(f => f.family))].join(', ')}, in this browser’s font cache` : 'the system’s'}</span>
+          <span style={{ color: tk.text.faint }}>Exported pages and downloaded files carry the full pictures and fonts, so they work anywhere.</span>
         </div>
-        {bytes.total > STYLE_WARN_BYTES && (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', color: tk.status.warningText, font: `500 12px/1.45 ${fontFamily.ui}` }}>
-            <Icon name="warning" size={13} style={{ flexShrink: 0, marginTop: 2, color: tk.status.warning }} />
-            <span>Over {sizeLabel(STYLE_WARN_BYTES)} of images and fonts: saving in this browser may fail, and files and pages get slow to open. Use fewer image backgrounds.</span>
-          </div>
-        )}
       </Section>
     </>
   );
