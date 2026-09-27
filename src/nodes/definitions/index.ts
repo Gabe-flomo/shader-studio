@@ -12,6 +12,8 @@ import { VideoInputNode } from './sources';
 export { VideoInputNode };
 import { MidiInputNode } from './midi';
 export { MidiInputNode };
+import { DataNode } from './data';
+export { DataNode };
 
 // Sources
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
@@ -282,6 +284,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   audioInput: AudioInputNode,
   videoInput: VideoInputNode,
   midiInput: MidiInputNode,
+  data: DataNode,
   playLayers: PlayLayersNode,
   // Transforms
   fract: FractNode,

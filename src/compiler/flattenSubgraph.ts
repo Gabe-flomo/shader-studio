@@ -25,6 +25,7 @@
  * functions as helpers — definitions never nest.
  */
 
+import { MAX_GROUP_ITERATIONS } from '../nodes/definitions/group';
 import type { DataType, GraphNode, InputSocket, OutputSocket, SubgraphData } from '../types/nodeGraph';
 import type { UserNodeParam, UserNodePort } from '../types/userNode';
 import { ShaderAssembler } from './shaderAssembler';
@@ -203,7 +204,7 @@ export function flattenSubgraphToFunction(spec: FlattenSpec): FlattenResult {
   // for nested groups) as overrides before calling generateGLSL.
   const params: Record<string, unknown> = {
     subgraph,
-    iterations: Math.max(1, Math.min(16, Math.round(spec.iterations ?? 1))),
+    iterations: Math.max(1, Math.min(MAX_GROUP_ITERATIONS, Math.round(spec.iterations ?? 1))),
   };
   for (const prm of spec.params) params[prm.sourcePath] = `p_${prm.key}`;
 

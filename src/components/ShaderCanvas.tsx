@@ -27,6 +27,7 @@ import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, regis
 import { getBreakpoint, isMobile } from '../hooks/useBreakpoint';
 import { onRebuild } from '../lib/rebuild';
 import { buildPreviewUniforms } from './previewUniforms';
+import { DataTextureBinder } from '../data/dataTextures';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './shell/rebuildAction';
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
@@ -361,6 +362,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   // Installed by the boot effect: compiles (vs, fs) off to the side and swaps it in. Resolves false if superseded.
   const swapShaderRef = useRef<((vs: string, fs: string) => Promise<boolean>) | null>(null);
+  /** The Data nodes' textures (src/data/dataTextures.ts): bound per compile, refilled when a dataset changes. */
+  const dataTexRef = useRef<DataTextureBinder | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const particleSceneRef  = useRef<THREE.Scene | null>(null);
   const perspCameraRef    = useRef<THREE.PerspectiveCamera | null>(null);
@@ -571,6 +574,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       uniforms: initialUniforms,
     });
     materialRef.current = material;
+    const dataTextures = new DataTextureBinder(material.uniforms, () => requestRenderRef.current());
+    dataTextures.bind(activeFs || '');
+    dataTexRef.current = dataTextures;
 
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
@@ -1528,6 +1534,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
                 pm.uniforms.u_time.value = material.uniforms.u_time.value;
                 pm.uniforms.u_resolution.value = material.uniforms.u_resolution.value;
                 pm.uniforms.u_mouse.value = material.uniforms.u_mouse.value;
+                // Data nodes' textures and row counts, so a probed Data output reads real rows
+                for (const [k, u] of Object.entries(material.uniforms)) {
+                  if (!k.startsWith('u_ds_')) continue;
+                  if (pm.uniforms[k]) pm.uniforms[k].value = u.value; else pm.uniforms[k] = { value: u.value };
+                }
 
                 // Render into the isolated probe scene (never touches the main scene)
                 probeMesh.material = pm;
@@ -2028,6 +2039,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       floatRt.dispose();
       histRt.dispose();
       blitGeo.dispose();
+      dataTextures.dispose();
+      if (dataTexRef.current === dataTextures) dataTexRef.current = null;
       blitMat.dispose();
       probeRT.dispose();
       probeGeo.dispose();
@@ -2152,6 +2165,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         mat.uniforms[name] = { value };
       }
     }
+    // Data nodes' textures and row counts, as this shader declares them
+    dataTexRef.current?.bind(activeFragmentShader);
     // Always keep the font texture bound after recompile
     if (!mat.uniforms.u_fontTexture) mat.uniforms.u_fontTexture = { value: FONT_TEXTURE };
     else mat.uniforms.u_fontTexture.value = FONT_TEXTURE;

@@ -46,6 +46,9 @@ const BezierEditorModal   = lazyWithSuspense<PropsOf<typeof BezierEditorModalT>>
 const TransformVecModal   = lazyWithSuspense<PropsOf<typeof TransformVecModalT>>(() => import('./TransformVecModal').then(m => ({ default: m.TransformVecModal })));
 const AssignInitModal     = lazyWithSuspense<PropsOf<typeof AssignInitModalT>>(() => import('./AssignInitModal').then(m => ({ default: m.AssignInitModal })));
 const KeyframeEditorModal = lazyWithSuspense<PropsOf<typeof KeyframeEditorModalT>>(() => import('./KeyframeEditorModal').then(m => ({ default: m.KeyframeEditorModal })));
+import type { DataEditor as DataEditorT } from '../data/DataEditor';
+const DataEditor          = lazyWithSuspense<PropsOf<typeof DataEditorT>>(() => import('../data/DataEditor').then(m => ({ default: m.DataEditor })));
+import { DataCardBody } from '../data/DataCardBody';
 import type { PublishNodeModal as PublishNodeModalT } from './PublishNodeModal';
 const PublishNodeModal    = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('./PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 import { AudioInputModal } from './AudioInputModal';
@@ -93,6 +96,7 @@ import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSo
 import { driveKey, playDrivenMap } from '../../play/playDriven';
 import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
+import { MAX_GROUP_ITERATIONS } from '../../nodes/definitions/group';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -158,7 +162,7 @@ function hzToSlider(hz: number): number {
   return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
 }
 
-const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'midiInput']);
+const SKIP_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'midiInput', 'data']);
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['lfo']);
 // Node types with always-visible built-in visualizations (skip the 👁 in-card panel for these)
@@ -594,6 +598,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const [showCustomFnModal, setShowCustomFnModal] = useState(false);
   const [showAudioInputModal, setShowAudioInputModal] = useState(false);
   const [showVideoInputModal, setShowVideoInputModal] = useState(false);
+  const [showDataEditor, setShowDataEditor] = useState(false);
   const [kfMenu, setKfMenu] = useState<{ x: number; y: number; key: string } | null>(null);
   const [kfModalKey, setKfModalKey] = useState<string | null>(null);
   // Input expressions: which input's editor is open, the row marks it anchors to, and the hovered row (shows the ƒ mark).
@@ -2144,9 +2149,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               integer
               value={groupIters}
               min={1}
-              max={16}
+              max={MAX_GROUP_ITERATIONS}
               defaultValue={1}
-              onChange={v => updateNodeParams(node.id, { iterations: Math.max(1, Math.min(16, Math.round(v))) }, { immediate: true })}
+              onChange={v => updateNodeParams(node.id, { iterations: Math.max(1, Math.min(MAX_GROUP_ITERATIONS, Math.round(v))) }, { immediate: true })}
               ariaLabel="Iterations"
               touch={isTouchDevice}
             />
@@ -3037,6 +3042,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           )}
           {node.type === 'customFn' && (
             <CardButton icon="fn" tint="fn" on={showCustomFnModal} label="Open the Custom Function editor" onClick={() => setShowCustomFnModal(v => !v)} />
+          )}
+          {node.type === 'data' && (
+            <CardButton icon="grid" on={showDataEditor} label="Open the data editor: import, notebook, outputs" onClick={() => setShowDataEditor(v => !v)} />
           )}
           {node.type === 'customFn' && (
             <CardButton icon="spark" tint="fn" label="Publish as a node type (this function becomes a reusable node)" onClick={() => {
@@ -4109,6 +4117,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
         {/* ── Palette tools: presets, paste, copy / convert ── */}
         {!collapsed && (node.type === 'palette' || node.type === 'stopPalette') && <PaletteTools node={node} />}
+        {/* ── Data: the dataset, its size and the way into the editor ── */}
+        {!collapsed && node.type === 'data' && <DataCardBody node={node} touch={isTouchDevice} onOpen={() => setShowDataEditor(true)} />}
 
         {/* ── CustomFn / ExprNode slider params (hidden when collapsed) ── */}
         {!collapsed && (node.type === 'customFn' || node.type === 'exprNode') && (() => {
@@ -4305,6 +4315,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {showTransformVecModal && node.type === 'transformVec' && (
         <TransformVecModal node={node} onClose={() => setShowTransformVecModal(false)} />
       )}
+
+      {/* ── Data editor ── */}
+      {showDataEditor && node.type === 'data' && <DataEditor node={node} onClose={() => setShowDataEditor(false)} />}
 
       {/* ── CustomFn modal ── */}
       {showCustomFnModal && node.type === 'customFn' && (

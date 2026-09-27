@@ -214,6 +214,14 @@ export interface NodeDefinition {
    * Use this when an input is renamed so that saved connections survive the rename.
    */
   migrateInputKeys?: Record<string, string>;
+
+  /**
+   * For a node whose sockets follow its params (the Data node): the node with
+   * its sockets rebuilt from its params. Applied after every load migration,
+   * so the definition's default sockets are never backfilled onto a node set
+   * up differently.
+   */
+  syncSockets?: (node: GraphNode) => GraphNode;
 }
 
 // ── Helper: run migrations on a node's params ─────────────────────────────────
@@ -229,6 +237,15 @@ export function migrateNodeParams(
 ): GraphNode {
   const def = getDef(node.type);
   if (!def) return node;
+  const migrated = migrateNodeParamsOf(node, def, getDef);
+  return def.syncSockets ? def.syncSockets(migrated) : migrated;
+}
+
+function migrateNodeParamsOf(
+  node: GraphNode,
+  def: NodeDefinition,
+  getDef: (type: string) => NodeDefinition | undefined,
+): GraphNode {
 
   let result = node;
 

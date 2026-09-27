@@ -119,6 +119,8 @@ export const DEFAULT_EMBED: EmbedOptions = { mode: 'player', placement: 'section
 
 export interface GraphFeatures {
   liveUniforms: Record<string, string>;
+  /** The shader reads a Data node's textures (src/data/dataGlsl.ts). */
+  usesData?: boolean;
 }
 
 /**
@@ -129,6 +131,8 @@ export interface GraphFeatures {
 export function unsupportedFeatures(f: GraphFeatures): string[] {
   const out: string[] = [];
   if (Object.keys(f.liveUniforms).length) out.push('MIDI Input node outputs');
+  // Datasets stay in the app for now: the page's Data nodes read zeros (docs/data-layer-plan.md, milestone 3).
+  if (f.usesData) out.push('Data node values');
   return out;
 }
 

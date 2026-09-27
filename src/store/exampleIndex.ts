@@ -11,12 +11,14 @@
 import type { GraphNode } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 import type { SourceCredit } from '../types/credit';
+import type { DatasetsRecord } from '../data/types';
 import { ctp } from '../theme/palette';
 import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
 import { LEARN_COLOR_KEYS, LEARN_CURVES_KEYS, LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS, LEARN_GRID_KEYS, LEARN_MOVED_INDEX } from './learnExampleIndex';
 import { LEARN3D_EXAMPLE_INDEX, LEARN3D_EXAMPLE_KEYS } from './learn3dExampleIndex';
 import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
+import { DATA_EXAMPLE_INDEX, DATA_EXAMPLE_KEYS } from './dataExampleIndex';
 import { GRID_EXAMPLE_INDEX, GRID_EXAMPLE_KEYS } from './gridExamples';
 import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleIndex';
 
@@ -28,6 +30,8 @@ export type ExampleGraph = {
   play?: PlayRecord;
   /** Where it comes from (a book chapter, an article): shown under its name in the lists. */
   source?: SourceCredit;
+  /** Datasets the graph's Data nodes read (src/data/types.ts), loaded with it. */
+  datasets?: DatasetsRecord;
 };
 
 /** What an example list shows for one example, without loading it. */
@@ -175,6 +179,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...COMBO_EXAMPLE_INDEX,
   // The Matrices folder (matrixExamples.ts): combining, undoing, lattices, fractals, corner pin, colour.
   ...MATRIX_EXAMPLE_INDEX,
+  // The Data folder (dataExamples.ts): graphs that read a bundled dataset through the Data node.
+  ...DATA_EXAMPLE_INDEX,
   // The numbered Grid tour (gridExamples.ts): every way to build a grid, and the controls over it.
   ...GRID_EXAMPLE_INDEX,
   // The Convert folder (convertExampleIndex.ts, graphs in convertExamples.ts): what the Convert page makes of its Soft circle, as written and optimised.
@@ -204,6 +210,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
   { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
   { label: "Matrices",          color: ctp.peach, keys: MATRIX_EXAMPLE_KEYS },
+  { label: "Data",              color: ctp.teal, keys: DATA_EXAMPLE_KEYS },
   { label: "Halftone",          color: '#a6e3d5', keys: ['cmykNoise','webcamCmyk'] },
   { label: "Rings",             color: ctp.red, keys: ['fractalRings'] },
   { label: "Iterated Groups",   color: ctp.green, keys: ['groupCarryRings','groupCarryFBM','groupCarryDomainWarp','publishAndKeyframes'] },
