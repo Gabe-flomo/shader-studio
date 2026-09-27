@@ -10,6 +10,7 @@ import { MobileTopBar } from './components/shell/MobileTopBar';
 import { fontFamily } from './theme/tokens';
 import { Icon } from './components/ui/Icon';
 import { Sheet } from './components/ui/Sheet';
+import { CreditTag } from './components/ui/Credit';
 import { Segmented } from './components/ui/Choice';
 import { MobilePreviewPill } from './components/shell/MobilePreviewPill';
 import { MobileIconSegment } from './components/shell/MobileIconSegment';
@@ -969,6 +970,7 @@ function App() {
                             {EXAMPLE_INDEX[k].description && (
                               <span style={{ fontSize: 11.5, fontWeight: 400, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{EXAMPLE_INDEX[k].description}</span>
                             )}
+                            {EXAMPLE_INDEX[k].source && <CreditTag source={EXAMPLE_INDEX[k].source} style={{ marginTop: 2 }} />}
                           </span>
                           <Icon name="chevR" size={14} style={{ color: tk.text.disabled }} />
                         </button>

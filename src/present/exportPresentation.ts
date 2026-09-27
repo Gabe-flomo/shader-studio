@@ -15,6 +15,9 @@
  * app's highlighting): the edit runs in that step's canvases of the source.
  * Canvases whose Play reads the camera get Enable camera, and ones with the
  * graph's own songs get Play sound, over the picture.
+ *
+ * A canvas whose source credits where it comes from (a Learn lesson's
+ * chapter of The Book of Shaders) has that as a linked line under it.
  */
 import runtimeSource from '../play/runtime/play-runtime.js?raw';
 import pageSource from './present-page.js?raw';
@@ -27,6 +30,7 @@ import { baseValue, mappingsByControl } from './controls';
 import { sourceLimits } from './snapshot';
 import { aspectRatio, PRESENTATION_FILE_KIND, type Block, type Presentation, type PresentSource } from '../types/presentation';
 import type { MarkdownOptions } from './markdown';
+import { creditPlace, creditSentence } from '../types/credit';
 
 export interface PresentationHtmlOptions {
   layout: 'slides' | 'scroll';
@@ -89,6 +93,17 @@ function canvasHtml(id: string, s: PresentSource | undefined, aspect: number, po
   return `<div class="pp-canvas" id="c-${esc(id)}" data-source="${esc(s.id)}" data-pointer="${pointer ? 1 : 0}"${start ? ` data-start="${start}"` : ''}${paused ? ' data-paused="1"' : ''}${still ? ' data-still="1"' : ''} style="aspect-ratio:${aspect};--ar:${aspect}"><div class="pp-host"${poster}></div>${overs}${still ? `<div class="pp-note">Still frame: the web player can’t run ${esc(limits.join(', '))} yet.</div>` : '<div class="pp-note pp-wait">Paused to keep the page light: other canvases are running.</div>'}</div>`;
 }
 
+/** The app's book icon (ui/iconPaths.ts), inline. */
+const BOOK_SVG = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="#3a6ff7" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4.3C6.6 3.2 4.6 2.8 2 2.9v9.5c2.6-.1 4.6.3 6 1.4 1.4-1.1 3.4-1.5 6-1.4V2.9c-2.6-.1-4.6.3-6 1.4z"/><path d="M8 4.3v9.5"/></svg>';
+
+/** "From The Book of Shaders, Ch. 5 · Shaping functions · Step and Smoothstep", linked; empty when the source credits nothing. */
+export function creditHtml(s: PresentSource | undefined): string {
+  const c = s?.bundle.play.source;
+  if (!c) return '';
+  const place = creditPlace(c);
+  return `<p class="pp-credit">${BOOK_SVG}From <a href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" title="${esc(creditSentence(c))}">${esc(c.title)}</a>${place.length ? `, ${esc(place.join(' · '))}` : ''}</p>`;
+}
+
 function interactiveHtml(b: Extract<Block, { type: 'interactive' }>, s: PresentSource | undefined, render: Render, math: MarkdownOptions['math']): string {
   if (!s) return '<div class="pp-note">This block’s source was removed.</div>';
   const play = s.bundle.play;
@@ -114,7 +129,8 @@ function interactiveHtml(b: Extract<Block, { type: 'interactive' }>, s: PresentS
   }).join('');
   const enable = `${needs.has('midi') ? '<button type="button" class="pp-btn pp-enable-midi">Enable MIDI</button>' : ''}${needs.has('audio') ? '<button type="button" class="pp-btn pp-listen">Listen</button>' : ''}`;
   const text = b.markdown.trim() ? `<div class="pp-md">${render(b.markdown, { math, controls: labels, layers })}</div>` : '';
-  const canvas = canvasHtml(b.id, s, aspectRatio(b.aspect), b.pointer);
+  const credit = creditHtml(s);
+  const canvas = credit ? `<figure class="pp-pic">${canvasHtml(b.id, s, aspectRatio(b.aspect), b.pointer)}${credit}</figure>` : canvasHtml(b.id, s, aspectRatio(b.aspect), b.pointer);
   const panel = `<div class="pp-controls">${rows}${enable ? `<div class="pp-enable">${enable}</div>` : ''}</div>`;
   return b.layout === 'stacked'
     ? `<div class="pp-inter pp-stacked">${text}${canvas}${panel}</div>`
@@ -126,7 +142,8 @@ function blockHtml(b: Block, sources: ReadonlyMap<string, PresentSource>, render
     case 'text': return b.markdown.trim() ? `<div class="pp-md">${render(b.markdown, { math })}</div>` : '';
     case 'render': {
       const w = b.width === 'half' ? 50 : b.width === 'third' ? 33.333 : 100;
-      return `<figure class="pp-render" style="--w:${w}%">${canvasHtml(b.id, sources.get(b.source), aspectRatio(b.aspect), b.pointer, b.startTime, b.paused)}${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ''}</figure>`;
+      const s = sources.get(b.source);
+      return `<figure class="pp-render" style="--w:${w}%">${canvasHtml(b.id, s, aspectRatio(b.aspect), b.pointer, b.startTime, b.paused)}${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ''}${creditHtml(s)}</figure>`;
     }
     case 'interactive': return interactiveHtml(b, sources.get(b.source), render, math);
     case 'code': return codeHtml(b, sources);
@@ -157,6 +174,10 @@ body{background:#eef0f4;color:#3a3d47;font:16px/1.62 system-ui,-apple-system,"Se
 figure{margin:0}
 .pp-render{display:flex;flex-direction:column;align-items:center;gap:8px}.pp-render>*{width:var(--w);max-width:100%;min-width:min(200px,100%)}
 .pp-render figcaption{color:#6b6f7a;font-size:13.5px;text-align:center}
+.pp-credit{margin:0;color:#9a9da8;font:500 12.5px/1.45 system-ui,sans-serif}.pp-render .pp-credit{text-align:center;margin-top:-4px}
+.pp-credit svg{vertical-align:-1px;margin-right:6px}
+.pp-credit a{color:#2f5fe0;font-weight:600;text-decoration:none}.pp-credit a:hover{text-decoration:underline}
+.pp-pic{display:flex;flex-direction:column;gap:8px;min-width:0}
 .pp-canvas{position:relative;width:100%;border-radius:12px;overflow:hidden;background:#0d0d12}
 .slides .pp-render .pp-canvas{max-width:calc(56vh * var(--ar,1.78));margin:0 auto}
 .pp-host{position:absolute;inset:0;background-size:cover;background-position:center}

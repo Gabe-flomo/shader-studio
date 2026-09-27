@@ -160,6 +160,7 @@ export type {
 export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer } from './playLayers';
 import { parseLayer, type PlayLayer } from './playLayers';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
+import { parseSourceCredit, type SourceCredit } from './credit';
 
 // ── Actions (a trigger does something to a layer) ─────────────────────────────
 
@@ -271,6 +272,11 @@ export interface PlayRecord {
    * "• " are bullets, **bold** is bold. Travels with the play file.
    */
   notes?: string;
+  /**
+   * Where the setup comes from (a book chapter, an article), shown linked on
+   * the Notes card and under a presentation's canvas. Absent = our own.
+   */
+  source?: SourceCredit;
   /** Absent means the defaults (picture shown). */
   display?: PlayDisplay;
   /** A MIDI file that plays on the graph clock as if a controller sent it. Absent = none. */
@@ -626,6 +632,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     if (actions.length) out.actions = actions;
   }
   if (typeof r.notes === 'string' && r.notes.trim()) out.notes = r.notes.slice(0, 8000);
+  const credit = parseSourceCredit(r.source);
+  if (credit) out.source = credit;
   const mf = r.midiFile as Partial<PlayMidiFile> | undefined;
   if (mf && typeof mf === 'object' && typeof mf.data === 'string' && mf.data.length > 0 && mf.data.length <= MIDI_FILE_MAX && /^[A-Za-z0-9+/=]+$/.test(mf.data)) {
     out.midiFile = {

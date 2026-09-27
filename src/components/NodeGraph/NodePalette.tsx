@@ -34,6 +34,8 @@ import { openTextFile } from '../../utils/fileIO';
 import { convertFragmentShader } from '../../nodes/userNodes/glslImport';
 import { spawnPoint } from './spawnPoint';
 import { LibraryCard } from '../shell/LibraryPanel';
+import { CreditTag } from '../ui/Credit';
+import { creditSentence, type SourceCredit } from '../../types/credit';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes';
@@ -57,8 +59,10 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint, tag, extra, thumb }: {
+function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint, tag, extra, thumb, source }: {
   label: string; icon: IconName; color: string;
+  /** Where an example comes from: a small credit line under the name. */
+  source?: SourceCredit;
   /** Drawn in place of the icon (a saved function's rendered thumbnail). */
   thumb?: React.ReactNode;
   /** One line shown in the row's tooltip (an example's description) */
@@ -87,7 +91,7 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        height: 32, display: 'flex', alignItems: 'center', gap: 9, padding: '0 4px 0 8px', borderRadius: radius.md,
+        minHeight: 32, display: 'flex', alignItems: 'center', gap: 9, padding: source ? '4px 4px 4px 8px' : '0 4px 0 8px', borderRadius: radius.md,
         background: selected ? tk.bg.selected : hovered ? tk.bg.hover : 'transparent',
       }}
     >
@@ -100,10 +104,11 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
         aria-expanded={preview !== undefined ? selected : undefined}
         title={hint ? `${label} — ${hint}` : onDoubleClick ? `${label} · double-click to add` : label}
         style={{
-          flex: 1, minWidth: 0, height: '100%', border: 0, background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer',
+          flex: 1, minWidth: 0, height: source ? undefined : 32, alignSelf: 'stretch', border: 0, background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer',
           color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          ...(source ? { display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 } : {}),
         }}
-      >{label}</button>
+      >{source ? <><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><CreditTag source={source} size={10.5} compact /></> : label}</button>
       {tag && (
         <span title={`Loads with a Play setup`} style={{ height: 18, padding: '0 6px', borderRadius: 5, display: 'inline-flex', alignItems: 'center', flexShrink: 0, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.02em' }}>{tag}</span>
       )}
@@ -387,7 +392,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               const hits = EXAMPLE_FOLDERS.flatMap(f => f.keys.filter(k => EXAMPLE_INDEX[k]).map(k => ({ k, folder: f.label })))
                 .filter(({ k, folder }) => {
                   const e = EXAMPLE_INDEX[k];
-                  const hay = `${e.label} ${e.description ?? ''} ${folder}`.toLowerCase();
+                  const hay = `${e.label} ${e.description ?? ''} ${folder} ${e.source ? creditSentence(e.source) : ''}`.toLowerCase();
                   return words.every(w => hay.includes(w));
                 })
                 .sort((a, b) => {
@@ -406,7 +411,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                   </div>
                   <div style={{ paddingLeft: 14, display: 'flex', flexDirection: 'column', gap: 1 }}>
                     {hits.slice(0, 15).map(({ k, folder }) => (
-                      <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success}
+                      <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success} source={EXAMPLE_INDEX[k].source}
                         hint={`${folder}${EXAMPLE_INDEX[k].description ? ` · ${EXAMPLE_INDEX[k].description}` : ''}`}
                         onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }} />
                     ))}
@@ -437,7 +442,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                           {folder.keys.filter(k => EXAMPLE_INDEX[k])
                             .sort((a, b) => EXAMPLE_INDEX[a].label.localeCompare(EXAMPLE_INDEX[b].label))
                             .map(k => (
-                              <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success} hint={EXAMPLE_INDEX[k].description} tag={EXAMPLE_INDEX[k].play ? 'Play' : undefined}
+                              <ItemRow key={k} label={EXAMPLE_INDEX[k].label} icon="graphs" color={tk.status.success} hint={EXAMPLE_INDEX[k].description} source={EXAMPLE_INDEX[k].source} tag={EXAMPLE_INDEX[k].play ? 'Play' : undefined}
                                 onClick={() => { loadExampleGraph(k); onNodeAdded?.(); }} />
                             ))}
                         </div>

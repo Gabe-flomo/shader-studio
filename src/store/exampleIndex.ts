@@ -10,6 +10,7 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
+import type { SourceCredit } from '../types/credit';
 import { ctp } from '../theme/palette';
 import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
 import { LEARN_COLOR_KEYS, LEARN_CURVES_KEYS, LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS, LEARN_GRID_KEYS, LEARN_MOVED_INDEX } from './learnExampleIndex';
@@ -24,7 +25,21 @@ export type ExampleGraph = {
   description?: string;
   /** A ready-made Play setup (controls + mappings) that loads with the graph. */
   play?: PlayRecord;
+  /** Where it comes from (a book chapter, an article): shown under its name in the lists. */
+  source?: SourceCredit;
 };
+
+/** What an example list shows for one example, without loading it. */
+export type ExampleIndexEntry = {
+  label: string; description?: string;
+  /** Loads with a Play setup */
+  play?: boolean;
+  /** Where it comes from, shown as a credit line under the name. */
+  source?: SourceCredit;
+};
+
+/** One of Xor's GM Shaders articles (mini.gmshaders.com), credited where an example follows it. */
+const xor = (title: string, slug: string): SourceCredit => ({ title, author: 'Xor', url: `https://mini.gmshaders.com/p/${slug}` });
 
 // A brand-new graph used to be just UV -> Output with nothing wired — a
 // black screen with no hint of what to do next. A minimal UV -> Circle SDF
@@ -66,7 +81,7 @@ export const BLANK_GRAPH: ExampleGraph = {
   };
 
 /** Key → label for every bundled example (generated from exampleGraphs.ts). */
-export const EXAMPLE_INDEX: Record<string, { label: string; description?: string; /** Loads with a Play setup */ play?: boolean }> = {
+export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   blank: { label: BLANK_GRAPH.label },
   fractalRings: { label: "Fractal Rings" },
   raymarchSpheres: { label: "Raymarch Spheres" },
@@ -122,7 +137,7 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   publishAndKeyframes: { label: "Publish a Node + Keyframes", description: "An iterated group (3 passes: rotate, tile, circle) is a node in waiting — select it and press ✦ Publish as node to make it one, with Iterations as a slider. SDF Glow's Falloff has a keyframe track (see the Keys tab): 6 → 40 over three seconds, looping." },
   volumeGlowDemo: { label: "Volumetric: Volume Glow", description: "The volumetric loop in two nodes: inside the March Loop Group, Scene Distance → Volume Glow accumulates with +=; after it, Glow to Color turns the sum into a tinted, tanh-limited colour. Shell hollows the sphere into a glowing skin." },
   normalColorDemo: { label: "3D: Normal to Color", description: "The March Loop Group's Normal output goes straight into Normal to Color (−1…1 → 0…1), the standard way to check a surface. Swap the mode to Abs to see the axes folded." },
-  crtTv: { label: "CRT TV", description: "CRT Screen bows the tube and snaps the picture to shadow-mask cells; the picture is FBM through a Palette; CRT Mask then lays the staggered RGB grille, pulse and scanlines over it, darkened by the screen's Vignette. After Xor's GM Shaders Mini: CRT." },
+  crtTv: { label: "CRT TV", source: xor("GM Shaders Mini: CRT", "gm-shaders-mini-crt"), description: "CRT Screen bows the tube and snaps the picture to shadow-mask cells; the picture is FBM through a Palette; CRT Mask then lays the staggered RGB grille, pulse and scanlines over it, darkened by the screen's Vignette. After Xor's GM Shaders Mini: CRT." },
   lensBarrel: { label: "Lens Distortion", description: "Lens Distortion bows a grid of boxes: positive k1 is barrel, negative pincushion, and k2 with the opposite sign gives the moustache curve of a wide zoom. Zoom crops the stretched border." },
   neonGlow: { label: "Neon Tube", description: "One SDF Glow makes a neon sign: the Tinted output is the outer halo, the Inner output lights the inside from the edge inward, and adding them gives the tube. Switch Mode to Haze or Bounded to compare falloffs. After the FragCoord Glow article." },
   fcSolar: { label: "Web: Solar", description: "After \"solar\", a community shader from the web (author credit to follow). Circle SDF \u2192 1/max(\u2212d, 10d) glow, dimmed by a per-pixel flicker and slow pulse, tinted, Tone Map Tanh\u00b2 for the golfed-shader roll-off." },
@@ -138,10 +153,10 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   fcBitshift: { label: "Web: Bitshift", description: "After \"bitshift\", a community shader from the web (author credit to follow). Split \u2192 two Quantize (1/32) \u2192 Make Vec2 snaps the UV to a coarse grid; one expression for the tan() ripple; \u00d7\u00bc then Posterize (4 levels) reproduces floor(x)/4." },
   fcTrippyNoise: { label: "Web: Trippy Noise", description: "After \"trippy noise\", a community shader from the web (author credit to follow). Rotate 2D \u2192 |uv| \u2192 Polar angle drives a second Rotate; three Noise Floats (value noise, offset \u00b10.333) \u2192 Smoothstep \u2192 RGB tints summed; Vignette, lift, a Texture Input screened in through Blend Modes (an empty image slot changes nothing), and Bloom replaces the threshold \u2192 blur X \u2192 blur Y \u2192 screen passes." },
   comboRepeatCellHash: { label: "Combo: Repeat + Cell ID + Hash", description: "Infinite Repeat (Stagger 0.5) tiles the UV; its Cell ID feeds a Hash Noise Float \u2192 Palette so every brick gets its own colour; Circle SDF on the Cell UV \u2192 SDF Fill. The standard repeat-and-vary recipe. Infinite Repeat again, tiling a 3D dome: Combo: Dome + Repeat + Height." },
-  comboTurbulenceGlow: { label: "Combo: Turbulence + SDF + Glow", description: "Turbulence (Xor's sine loop) warps the UV before a Circle SDF; SDF Glow in Simple mode with a Palette tint turns the wobbling distance into light. Swap the SDF for FBM or a Grid to see the warp on anything. The same loop in 3D, warping a plane: Web: Atlantic (Turbulence 3D); the glow-to-colour half again: Combo: Chaos Layers + Glow to Color." },
-  comboBloomDots: { label: "Combo: Grid + SDF Fill + Bloom", description: "Grid \u2192 Circle SDF on the Cell UV \u2192 SDF Fill draws bright dots coloured by Cell ID; Bloom (Luma select, Layered kernel \u2014 Xor's bloom article) thresholds, blurs and screens the highlights: the whole threshold \u2192 Blur X \u2192 Blur Y \u2192 screen pass chain in one node. Bloom on a full picture: Web: Trippy Noise; the blur half on its own: Combo: Wave Texture + Blur H/V." },
+  comboTurbulenceGlow: { label: "Combo: Turbulence + SDF + Glow", source: xor("Turbulence", "turbulence"), description: "Turbulence (Xor's sine loop) warps the UV before a Circle SDF; SDF Glow in Simple mode with a Palette tint turns the wobbling distance into light. Swap the SDF for FBM or a Grid to see the warp on anything. The same loop in 3D, warping a plane: Web: Atlantic (Turbulence 3D); the glow-to-colour half again: Combo: Chaos Layers + Glow to Color." },
+  comboBloomDots: { label: "Combo: Grid + SDF Fill + Bloom", source: xor("GM Shaders Mini: Bloom", "gm-shaders-mini-bloom"), description: "Grid \u2192 Circle SDF on the Cell UV \u2192 SDF Fill draws bright dots coloured by Cell ID; Bloom (Luma select, Layered kernel \u2014 Xor's bloom article) thresholds, blurs and screens the highlights: the whole threshold \u2192 Blur X \u2192 Blur Y \u2192 screen pass chain in one node. Bloom on a full picture: Web: Trippy Noise; the blur half on its own: Combo: Wave Texture + Blur H/V." },
   comboDomeRepeat: { label: "Combo: Dome + Repeat + Height", description: "Spherical in Dome mode bulges the plane like a hemisphere; Infinite Repeat tiles a Box SDF over it; the Height output shades the dome and masks everything outside the unit circle. Dome mode where it came from: Web: Shield; the Repeat + Cell ID half: Combo: Repeat + Cell ID + Hash." },
-  comboChaosStars: { label: "Combo: Chaos Layers + Glow to Color", description: "Chaos Layers (Xor's Efficient Chaos: five golden-angle rotated, shifted, scaled cell grids with parallax) makes a starfield; Glow to Color tints the summed light and its Layer output colours near stars warmer via a Palette. Another float-glow-to-colour chain: Combo: Turbulence + SDF + Glow." },
+  comboChaosStars: { label: "Combo: Chaos Layers + Glow to Color", source: xor("Efficient Chaos", "chaos"), description: "Chaos Layers (Xor's Efficient Chaos: five golden-angle rotated, shifted, scaled cell grids with parallax) makes a starfield; Glow to Color tints the summed light and its Layer output colours near stars warmer via a Palette. Another float-glow-to-colour chain: Combo: Turbulence + SDF + Glow." },
   colorStopsCycle: { label: "Color: Stops Palette + Colorize", description: "Stops Palette builds a palette from five colour stops (Loop, Smooth) and cycles it with Time on Angle offset; the angle around the centre (Vec2 \u2192 Angle, Scale 1/2\u03c0) runs the stops once around the ring, and Loop makes the join seamless. A ring's SDF Glow is the field, and Colorize paints it with the palette: Colour \u00d7 Field, the job Scale Color used to do. Change a stop's swatch or the Wrap mode to see the cycle change." },
   midiGlowKeys: { label: "MIDI: Keys to Glow", description: "MIDI Input turns a controller into floats \u2014 or the computer keyboard: turn on the keyboard stand-in on the card and play the A\u2013K row. Velocity sets the circle's Radius (Multiply + Add), Gate brightens the SDF Glow while a key is held (Multiply on the Tinted output), Note picks the Palette colour, and CC 1 (the mod wheel) drives Turbulence strength on the UV. The same shape as the Audio Input examples: an outside signal in, floats out, everything else is ordinary nodes." },
   voxelTerrain: { label: "3D: Voxel Terrain", description: "Voxelize snaps the ray position to a 0.5 grid inside the Scene Group; Box 3D on its Cell Pos is one cube per cell and an Expression Block decides which cells are solid from the Cell ID (a wave plus a hash gives the height), and, for empty cells, steps exactly to where the ray leaves the cell (the camera's Ray Dir is wired into the Scene Group as a port) — a voxel traversal inside an ordinary march. Outside, the March Loop Group's Hit Pos goes through a second Voxelize whose Cell ID drives a Palette, so every cube has its own colour; Mix by Hit keeps the sky plain." },

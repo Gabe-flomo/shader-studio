@@ -3,9 +3,10 @@
  * (https://thebookofshaders.com/, Patricio Gonzalez Vivo and Jen Lowe) as
  * graphs, chapter by chapter and in the Book's order, one idea per lesson.
  * Each has a one-line description in the examples list and notes on the Play
- * page that say what it shows, how it is built and what to try, and credit
- * the chapter it follows. The notes are our own words; the ideas are the
- * Book's.
+ * page that say what it shows, how it is built and what to try. The chapter
+ * and section it follows is its Play record's `source` (from the index),
+ * shown as a linked credit on the Notes card and in the examples lists. The
+ * notes are our own words; the ideas are the Book's.
  *
  * Also here: the earlier Learn lessons that teach something the Book doesn't
  * (a Bezier shaper, SDF nodes, cosine palettes, the Grid nodes). They keep
@@ -90,10 +91,6 @@ const BLUE: RGB = [0.45, 0.7, 1.0];
 const RED: RGB = [1.0, 0.35, 0.35];
 const CREAM: RGB = [0.97, 0.9, 0.78];
 
-/** The credit line every Book lesson ends with. */
-const book = (ch: number, title: string) =>
-  `\n\n**Source.** The Book of Shaders by Patricio Gonzalez Vivo and Jen Lowe, chapter ${ch}, ${title}: https://thebookofshaders.com/${String(ch).padStart(2, '0')}/`;
-
 // ── Lessons ─────────────────────────────────────────────────────────────────
 
 type Lesson = { key: string; nodes: GraphNode[]; controls: PlayControl[]; notes: string };
@@ -109,7 +106,7 @@ lesson('learnColour', [
 
 **How it is built.** Output is the shader's \`gl_FragColor\`. Anything that produces a vec3 (three numbers: red, green, blue, each 0–1) can be wired into it. Open the GLSL tab to see the two lines it compiles to.
 
-**Try.** Click the swatch and pick another colour; the shader recompiles nothing, the number just changes. Next: give each pixel a different answer.${book(2, 'Hello world')}`);
+**Try.** Click the swatch and pick another colour; the shader recompiles nothing, the number just changes. Next: give each pixel a different answer.`);
 
 lesson('learnTime', [
   time(40, 220),
@@ -121,7 +118,7 @@ lesson('learnTime', [
 
 **How it is built.** OkLab Mix blends in a perceptual colour space, so the halfway colour stays bright instead of going grey (compare the plain Mix node). Nothing here depends on position yet, so the whole screen changes together.
 
-**Try.** Raise Speed until the pulse is a flicker, then lower it until you can barely see it move. Give red, green and blue their own Sin at different speeds (Make Vec3) and the colour wanders.${book(3, 'Uniforms')}`);
+**Try.** Raise Speed until the pulse is a flicker, then lower it until you can barely see it move. Give red, green and blue their own Sin at different speeds (Make Vec3) and the colour wanders.`);
 
 lesson('learnUV', [
   ...stNodes(),
@@ -132,7 +129,7 @@ lesson('learnUV', [
 
 **How it is built.** Pixel Coordinates ÷ Resolution (a Divide switched to vec2) → Split Vec2 → Make Vec3 → Output. The shaping lessons that come next plot their curves in this same \`st\`. Later lessons mostly use the **UV** node instead: the same idea, but centred on the middle of the screen, running −1…1 up the screen and corrected for the screen's shape so circles stay round.
 
-**Try.** Raise Blue. Swap the two wires into Make Vec3. Use the **Mouse** node's Pixels output divided by Resolution in place of st: now the whole screen takes the mouse's colour, because the mouse is a uniform too.${book(3, 'Uniforms')}`);
+**Try.** Raise Blue. Swap the two wires into Make Vec3. Use the **Mouse** node's Pixels output divided by Resolution in place of st: now the whole screen takes the mouse's colour, because the mouse is a uniform too.`);
 
 // ── Shaping functions (chapter 5) ───────────────────────────────────────────
 
@@ -147,7 +144,7 @@ lesson('learnPlot', [
 
 **How it is built.** st (from the UV lesson) → Split Vec2. The function is Multiply then Add on x. **Compare** in ≈ mode asks "is this y (almost) the function's value?" and answers 1 on the curve: that is the Book's \`plot()\`. Colorize paints the line over the gradient. Every lesson in this chapter reuses this frame and only swaps the function.
 
-**Try.** Tilt the line with Slope, lift it with Offset. At slope 0 the gradient is flat: every pixel gets the same value. Put any node between x and Add (a Sin, a Pow) and the plot draws it.${book(5, 'Shaping functions')}`);
+**Try.** Tilt the line with Slope, lift it with Offset. At slope 0 the gradient is flat: every pixel gets the same value. Put any node between x and Add (a Sin, a Pow) and the plot draws it.`);
 
 lesson('learnPow', [
   ...plotFrame(),
@@ -161,7 +158,7 @@ lesson('learnPow', [
 
 **How it is built.** The plot frame from the previous lesson with Pow as the function, plus a second line for √x. The gradient behind shows the green curve's values.
 
-**Try.** Slide the exponent to 0.5: the green line lands on the blue one. 1 gives back y = x. Swap Pow for **Exp**, **Square Root** or **Round Up** and watch the shape change; the Book lists these as the everyday bending tools.${book(5, 'Shaping functions')}`);
+**Try.** Slide the exponent to 0.5: the green line lands on the blue one. 1 gives back y = x. Swap Pow for **Exp**, **Square Root** or **Round Up** and watch the shape change; the Book lists these as the everyday bending tools.`);
 
 lesson('learnStep', [
   ...plotFrame(),
@@ -175,7 +172,7 @@ lesson('learnStep', [
 
 **How it is built.** The plot frame with two functions, each drawn as its own line. The vertical part of the step isn't drawn: the plot only marks where y equals the value, and at the jump there is no value in between.
 
-**Try.** Bring Smooth from and Smooth to close together: smoothstep turns into a step with a soft edge, which is how the next chapters anti-alias shapes. Subtract a second smoothstep that starts a little later and you get a bump.${book(5, 'Shaping functions')}`);
+**Try.** Bring Smooth from and Smooth to close together: smoothstep turns into a step with a soft edge, which is how the next chapters anti-alias shapes. Subtract a second smoothstep that starts a little later and you get a bump.`);
 
 lesson('learnSinCos', [
   ...plotFrame(),
@@ -196,7 +193,7 @@ lesson('learnSinCos', [
 
 **How it is built.** x + Time × speed is the input; one Frequency and one Amplitude Constant feed both waves; + 0.5 centres them on the screen. The Sin node computes amp × sin(input × freq).
 
-**Try.** Frequency 6.28 (2π) fits exactly one wave across. Amplitude 0 flattens both lines. Speed 0 freezes them; a negative speed runs them backwards. Wire the Sin output into Abs and the lower halves flip up into bounces.${book(5, 'Shaping functions')}`);
+**Try.** Frequency 6.28 (2π) fits exactly one wave across. Amplitude 0 flattens both lines. Speed 0 freezes them; a negative speed runs them backwards. Wire the Sin output into Abs and the lower halves flip up into bounces.`);
 
 lesson('learnFractFloor', [
   ...plotFrame(),
@@ -213,7 +210,7 @@ lesson('learnFractFloor', [
 
 **How it is built.** x × Count, then Fract (scalar) and Floor side by side; Divide scales the staircase back into 0…1.
 
-**Try.** Change Count. Swap Floor for **Round Up** (ceil) or **Round**. The same chapter's other small helpers are all nodes too: **Modulo** (fract with any period), **Abs**, **Sign**, **Clamp**, **Min** and **Max**; put one on x and plot it. The Patterns chapter uses Fract on the whole UV.${book(5, 'Shaping functions')}`);
+**Try.** Change Count. Swap Floor for **Round Up** (ceil) or **Round**. The same chapter's other small helpers are all nodes too: **Modulo** (fract with any period), **Abs**, **Sign**, **Clamp**, **Min** and **Max**; put one on x and plot it. The Patterns chapter uses Fract on the whole UV.`);
 
 lesson('learnShapers', [
   ...plotFrame(),
@@ -229,7 +226,7 @@ lesson('learnShapers', [
 
 **How it is built.** The plot frame with two functions. Exp Sigmoid is a node from the **Shapers** category, which holds Levin's set (Exp Ease, Exp Seat, Logistic Sigmoid, Circle Seat and Sigmoid, Elliptic Sigmoid, Bezier). The impulse is an **Expression Block** with x and k as inputs, since there's no node for it: any formula from Quilez's page can go in one the same way.
 
-**Try.** Sharpness 0 is almost y = x; 1 is almost a step. Raise k and the impulse peaks earlier. Swap Exp Sigmoid for Exp Seat or Circle Seat. In the Expression Block, try Quilez's cubic pulse: 1 − smoothstep(0, 0.1, abs(x − 0.5)).${book(5, 'Shaping functions')}`);
+**Try.** Sharpness 0 is almost y = x; 1 is almost a step. Raise k and the impulse peaks earlier. Swap Exp Sigmoid for Exp Seat or Circle Seat. In the Expression Block, try Quilez's cubic pulse: 1 − smoothstep(0, 0.1, abs(x − 0.5)).`);
 
 // ── Colours (chapter 6) ─────────────────────────────────────────────────────
 
@@ -252,7 +249,7 @@ lesson('learnGradient', [
 
 **How it is built.** Two Colour nodes split into channels; three Mix nodes, one per channel, each blended by its own curve of x (Smoothstep, a half Sin, Pow); Make Vec3 puts the channels back together; the plot lines are drawn over it.
 
-**Try.** Move each channel's slider and watch its line and the colour change together. Pick two new colours on the Colour nodes: a sunset, a sea. For the plain version, wire one float into all three Mix nodes: every channel moves in step.${book(6, 'Colors')}`);
+**Try.** Move each channel's slider and watch its line and the colour change together. Pick two new colours on the Colour nodes: a sunset, a sea. For the plain version, wire one float into all three Mix nodes: every channel moves in step.`);
 
 lesson('learnHSB', [
   ...stNodes(),
@@ -265,7 +262,7 @@ lesson('learnHSB', [
 
 **How it is built.** st → Split Vec2 → Make Vec3 (x as hue, a Saturation slider, y as brightness) → **RGB ↔ HSV** set to HSV → RGB, which does the conversion.
 
-**Try.** Lower Saturation to see the colours drain to grey. Shift the hue. Wire Time × 0.1 into the Add and the rainbow scrolls.${book(6, 'Colors')}`);
+**Try.** Lower Saturation to see the colours drain to grey. Shift the hue. Wire Time × 0.1 into the Add and the rainbow scrolls.`);
 
 lesson('learnColorWheel', [
   uv(),
@@ -282,7 +279,7 @@ lesson('learnColorWheel', [
 
 **How it is built.** UV → **Polar Space** (Angle already runs 0…1 once round; Radius is the distance) → Make Vec3 → RGB ↔ HSV. Time is added to the angle to spin it. A Smoothstep on the radius masks everything past the rim.
 
-**Try.** Spin it the other way. Lower Brightness. Put a shaping function (Pow, Exp Ease) on the angle before the Add: some hues take up more of the wheel and others squeeze together.${book(6, 'Colors')}`);
+**Try.** Spin it the other way. Lower Brightness. Put a shaping function (Pow, Exp Ease) on the angle before the Add: some hues take up more of the wheel and others squeeze together.`);
 
 // ── Shapes (chapter 7) ──────────────────────────────────────────────────────
 
@@ -303,7 +300,7 @@ lesson('learnRect', [
 
 **How it is built.** Smoothstep switched to vec2 tests x and y against the margin in one node (the bottom-left edges). 1 − st measures from the other corner, and the same test gives the top-right edges. Multiply them, then multiply x by y. Smoothstep instead of Step lets the edge be soft.
 
-**Try.** Raise Edge softness for a blurred rectangle, lower it to 0.001 for a crisp one. Give the two Smoothsteps different margins for a rectangle off-centre. The Book's exercise: several of these, coloured, make a Mondrian.${book(7, 'Shapes')}`);
+**Try.** Raise Edge softness for a blurred rectangle, lower it to 0.001 for a crisp one. Give the two Smoothsteps different margins for a rectangle off-centre. The Book's exercise: several of these, coloured, make a Mondrian.`);
 
 lesson('learnCircle', [
   uv(),
@@ -317,7 +314,7 @@ lesson('learnCircle', [
 
 **How it is built.** UV → **Length** (the distance from the centre; the Book's \`distance()\`, since the UV node already puts 0 in the middle) → **Compare** (<) with the Radius → Colorize paints the circle over the cone.
 
-**Try.** Raise Edge blur until the circle is a soft spot. Wire Time → Sin (amp 0.1) → Add 0.5 into the Radius and the circle beats. Swap Length for **Dot** of the UV with itself (x² + y²) and square the radius: the same circle without a square root, a saving the Book points out.${book(7, 'Shapes')}`);
+**Try.** Raise Edge blur until the circle is a soft spot. Wire Time → Sin (amp 0.1) → Add 0.5 into the Radius and the circle beats. Swap Length for **Dot** of the UV with itself (x² + y²) and square the radius: the same circle without a square root, a saving the Book points out.`);
 
 lesson('learnDistanceField', [
   uv(),
@@ -332,7 +329,7 @@ lesson('learnDistanceField', [
 
 **How it is built.** UV → **Box SDF** (the Book builds it from abs, max and length; the node does the same maths) → × Rings → Fract (scalar) → Colorize. Compare ≈ 0 finds the outline.
 
-**Try.** Change the box and watch every ring follow. Set Rings to 1. Replace Box SDF with Circle SDF, or put a **Min** of two SDFs in its place: the rings flow around both shapes, which is how shapes are combined (see Combining shapes).${book(7, 'Shapes')}`);
+**Try.** Change the box and watch every ring follow. Set Rings to 1. Replace Box SDF with Circle SDF, or put a **Min** of two SDFs in its place: the rings flow around both shapes, which is how shapes are combined (see Combining shapes).`);
 
 lesson('learnPolar', [
   uv(),
@@ -350,7 +347,7 @@ lesson('learnPolar', [
 
 **How it is built.** UV → **Polar Space** → angle × Frequency → Cos → Abs → × depth + size = the edge radius f. Compare radius < f fills the shape. The background shows f itself as faint rays.
 
-**Try.** Frequency 1 gives two petals, 6 a daisy. Depth 0 is a plain circle. Swap Abs for a Smoothstep (from −0.5 to 1) of the Cos: the Book's gear-like shape. Wire Time into the angle (an Add before the Multiply) and the flower turns.${book(7, 'Shapes')}`);
+**Try.** Frequency 1 gives two petals, 6 a daisy. Depth 0 is a plain circle. Swap Abs for a Smoothstep (from −0.5 to 1) of the Cos: the Book's gear-like shape. Wire Time into the angle (an Add before the Multiply) and the flower turns.`);
 
 lesson('learnPolygon', [
   uv(),
@@ -371,7 +368,7 @@ lesson('learnPolygon', [
 
 **How it is built.** An **Expression Block** holds the Book's three lines: the angle, the slice size 2π / n, and cos(nearest slice centre − angle) × length. A Constant sets n; Compare against Size fills the shape; Fract of the field × 8 draws the rings.
 
-**Try.** Sides 3, 4, 6, 12. Past 12 it is nearly a circle. Put **Rotate 2D** (angle from Time) on the UV before the block to spin it. The **Shape SDF** node has exact polygons, stars and many more shapes ready-made.${book(7, 'Shapes')}`);
+**Try.** Sides 3, 4, 6, 12. Past 12 it is nearly a circle. Put **Rotate 2D** (angle from Time) on the UV before the block to spin it. The **Shape SDF** node has exact polygons, stars and many more shapes ready-made.`);
 
 lesson('learnCombine', [
   uv(),
@@ -387,7 +384,7 @@ lesson('learnCombine', [
 
 **How it is built.** Time → Sin → Make Vec2 gives the circle an offset that swings left and right. Box SDF and Circle SDF both read the same UV; Union takes both distances and SDF Fill paints the result. Intersect and Subtract sit next to Union in the SDF category.
 
-**Try.** Set Smoothness to 0 for a hard join: that is exactly min(). Swap Union for Subtract and the circle bites out of the box.${book(7, 'Shapes')}`);
+**Try.** Set Smoothness to 0 for a hard join: that is exactly min(). Swap Union for Subtract and the circle bites out of the box.`);
 
 // ── Matrices (chapter 8) ────────────────────────────────────────────────────
 
@@ -407,7 +404,7 @@ lesson('learnTranslate', [
 
 **How it is built.** Time × speed → Angle → Vec2 gives (cos t, sin t); × Distance scales it; UV − that (Subtract switched to vec2) is the moved space. **Shape SDF** (Cross) draws in it, and a Compare + Colorize paints it.
 
-**Try.** Speed 0 and a Distance: the cross parks off-centre. Wire only the Sin of Time into a Make Vec2's y to make it bob up and down like a buoy (one of the Book's exercises).${book(8, '2D Matrices')}`);
+**Try.** Speed 0 and a Distance: the cross parks off-centre. Wire only the Sin of Time into a Make Vec2's y to make it bob up and down like a buoy (one of the Book's exercises).`);
 
 lesson('learnRotate', [
   uv(),
@@ -422,7 +419,7 @@ lesson('learnRotate', [
 
 **How it is built.** Time × speed is the angle → **Rotation Matrix** → **Mat2 × Vec2** on the UV → Shape SDF (Cross) → paint. Because the UV node puts (0, 0) in the middle of the screen, the cross turns round its own centre; the Book, working in 0…1 st, first subtracts 0.5 to get the same effect.
 
-**Try.** Put the Translate lesson's Subtract *before* the matrix: the cross spins in place away from the centre. Put it *after*: the cross orbits instead. The order of transforms matters.${book(8, '2D Matrices')}`);
+**Try.** Put the Translate lesson's Subtract *before* the matrix: the cross spins in place away from the centre. Put it *after*: the cross orbits instead. The order of transforms matters.`);
 
 lesson('learnScale', [
   uv(),
@@ -438,7 +435,7 @@ lesson('learnScale', [
 
 **How it is built.** Time → Sin → + 1 is the scale → Scale Matrix (the same value for x and y) → Mat2 × Vec2 on the UV → Cross → paint.
 
-**Try.** Pulse 0 stops it. Wire a separate Sin into the matrix's Y and the cross squashes and stretches. Chain the Rotation lesson's matrix after this one (Mat2 × Vec2 twice), then swap their order.${book(8, '2D Matrices')}`);
+**Try.** Pulse 0 stops it. Wire a separate Sin into the matrix's Y and the cross squashes and stretches. Chain the Rotation lesson's matrix after this one (Mat2 × Vec2 twice), then swap their order.`);
 
 lesson('learnTransform', [
   uv(),
@@ -452,7 +449,7 @@ lesson('learnTransform', [
 
 **How it is built.** Time × 0.4 is the angle in radians. Inside, the node builds one 2×2 matrix from the rotation and the scale and applies it round a pivot, then the translation. Everything downstream of it, however much you add, is transformed together.
 
-**Try.** Change Scale x alone: the space stretches, so the box squashes. Put the transform *after* the Tiling lesson's Tile node and every tile turns on its own. The Matrices folder goes further: shears, inverses, lattices.${book(8, '2D Matrices')}`);
+**Try.** Change Scale x alone: the space stretches, so the box squashes. Put the transform *after* the Tiling lesson's Tile node and every tile turns on its own. The Matrices folder goes further: shears, inverses, lattices.`);
 
 lesson('learnYUV', [
   uv(),
@@ -469,7 +466,7 @@ lesson('learnYUV', [
 
 **How it is built.** UV × spread → Split → Make Vec3 (Y from a slider, U and V from x and y) → **Mat3 × Vec3** with a **Matrix Const** holding the YUV → RGB numbers → Output.
 
-**Try.** Move Y from dark to light: the colours stay, the brightness changes. Raise the spread until the corners clip. The Colour Matrix node builds other colour matrices (hue rotation, saturation); the Matrices folder has one.${book(8, '2D Matrices')}`);
+**Try.** Move Y from dark to light: the colours stay, the brightness changes. Raise the spread until the corners clip. The Colour Matrix node builds other colour matrices (hue rotation, saturation); the Matrices folder has one.`);
 
 // ── Patterns (chapter 9) ────────────────────────────────────────────────────
 
@@ -483,7 +480,7 @@ lesson('learnTiling', [
 
 **How it is built.** UV → Tile → Circle SDF → SDF Fill. The circle has no idea it is repeated. Anything placed between Tile and the shape happens inside each tile (next lesson).
 
-**Try.** More tiles, smaller radius. Replace the circle with the Rectangle or Polar lesson's shape. Tile count 1.5 shows that tiles are cut wherever the screen ends.${book(9, 'Patterns')}`);
+**Try.** More tiles, smaller radius. Replace the circle with the Rectangle or Polar lesson's shape. Tile count 1.5 shows that tiles are cut wherever the screen ends.`);
 
 lesson('learnTileRotate', [
   uv(),
@@ -499,7 +496,7 @@ lesson('learnTileRotate', [
 
 **How it is built.** UV → Tile → Mat2 × Vec2 with a Rotation Matrix (angle = Time × speed) → Box SDF → paint. When the squares grow past the tile's half width they get clipped at the tile border and start to form a lattice.
 
-**Try.** Square size 0.5 and a slow spin: the gaps between the squares become the pattern. Move the Mat2 × Vec2 before the Tile node and compare. Add a Scale Matrix too.${book(9, 'Patterns')}`);
+**Try.** Square size 0.5 and a slow spin: the gaps between the squares become the pattern. Move the Mat2 × Vec2 before the Tile node and compare. Add a Scale Matrix too.`);
 
 lesson('learnBricks', [
   uv(),
@@ -519,7 +516,7 @@ lesson('learnBricks', [
 
 **How it is built.** UV × a Scale Matrix (bricks wider than tall) → Split → y → Mod 2 → Step 1 → × Offset → added to x → Make Vec2 → Fract (vec2) → Box SDF centred in the tile → paint, with the mortar as the background.
 
-**Try.** Row offset 0 is a plain grid, 1 looks the same as 0 (a whole brick). Wire Time × 0.3 into the Multiply's B in place of the slider and the odd rows slide along forever. Do the same on x for columns.${book(9, 'Patterns')}`);
+**Try.** Row offset 0 is a plain grid, 1 looks the same as 0 (a whole brick). Wire Time × 0.3 into the Multiply's B in place of the slider and the odd rows slide along forever. Do the same on x for columns.`);
 
 lesson('learnTruchet', [
   uv(),
@@ -540,7 +537,7 @@ lesson('learnTruchet', [
 
 **How it is built.** **Grid** gives each cell its coordinates and its ID. Mod 2 of the ID's x and y (x + 2y) numbers the cells 0–3 in every 2×2 block; × π/2 is the cell's rotation; Rotate 2D turns the Cell UV; Step(x, y) draws the triangle.
 
-**Try.** Slide Turn per index: 0 lines all triangles up, π/2 is the classic pattern, other angles break the tiles apart. The **Truchet Tiles** node draws the other famous tile, quarter circles, turned at random (random is the next chapter).${book(9, 'Patterns')}`);
+**Try.** Slide Turn per index: 0 lines all triangles up, π/2 is the classic pattern, other angles break the tiles apart. The **Truchet Tiles** node draws the other famous tile, quarter circles, turned at random (random is the next chapter).`);
 
 // ── Random (chapter 10) ─────────────────────────────────────────────────────
 
@@ -555,7 +552,7 @@ lesson('learnRandom', [
 
 **How it is built.** The plot frame with Sin (amp = the multiplier) → Fract (scalar).
 
-**Try.** Sweep Multiplier from 1 upwards slowly and watch order turn into noise. At huge values the result depends on the GPU's precision, one reason the Hash mode of Noise Float uses a better recipe.${book(10, 'Random')}`);
+**Try.** Sweep Multiplier from 1 upwards slowly and watch order turn into noise. At huge values the result depends on the GPU's precision, one reason the Hash mode of Noise Float uses a better recipe.`);
 
 lesson('learnRandomGrid', [
   uv(),
@@ -568,7 +565,7 @@ lesson('learnRandomGrid', [
 
 **How it is built.** UV × Cells → Floor (vec2) → **Noise Float** in Hash mode → Colorize.
 
-**Try.** Cells 300 and the cells are nearly pixels: static. Cells 3: a few big tiles. Put the grey through Step (threshold 0.5) for a black-and-white random pattern, or through a Palette.${book(10, 'Random')}`);
+**Try.** Cells 300 and the cells are nearly pixels: static. Cells 3: a few big tiles. Put the grey through Step (threshold 0.5) for a black-and-white random pattern, or through a Palette.`);
 
 lesson('learnMaze', [
   uv(),
@@ -589,7 +586,7 @@ lesson('learnMaze', [
 
 **How it is built.** **Grid** → Cell ID → Noise Float (Hash) → Step 0.5 is the coin → Remap to −1 or +1. In the Cell UV, |±x − y| is zero along one diagonal or the other; Compare against the Width draws it.
 
-**Try.** Chance 0 or 1: every coin lands the same way and the maze becomes stripes. 0.3 biases the maze into long runs. Replace the diagonal with the Truchet lesson's triangle for random Truchet tiles.${book(10, 'Random')}`);
+**Try.** Chance 0 or 1: every coin lands the same way and the maze becomes stripes. 0.3 biases the maze into long runs. Replace the diagonal with the Truchet lesson's triangle for random Truchet tiles.`);
 
 // ── Noise (chapter 11) ──────────────────────────────────────────────────────
 
@@ -614,7 +611,7 @@ lesson('learnNoise1D', [
 
 **How it is built.** x × Scale → Floor and Fract. Two Hash Noise Floats read the random value at i and i + 1. Smoothstep eases the fraction, and a Mix blends between plain and eased so you can compare. The last Mix is the noise.
 
-**Try.** Slide Smooth from 1 to 0 and watch the corners appear at every whole number. Raise Scale for busier noise. Wire the noise into a circle's radius (Circle lesson) to make it wobble organically.${book(11, 'Noise')}`);
+**Try.** Slide Smooth from 1 to 0 and watch the corners appear at every whole number. Raise Scale for busier noise. Wire the noise into a circle's radius (Circle lesson) to make it wobble organically.`);
 
 lesson('learnNoise', [
   uv(),
@@ -626,7 +623,7 @@ lesson('learnNoise', [
 
 **How it is built.** UV → Noise Float → Colorize (background where the noise is 0, colour where it is 1). Scale is how many grid cells fit across; Speed how fast it moves. Switch Mode to Hash to see the random values it is built from, one per cell.
 
-**Try.** Scale 1 for one big blob, 16 for grain. Switch Mode between Smooth and Perlin and compare the shapes. Wire the noise into a circle's radius, a UV Transform angle, or a Palette.${book(11, 'Noise')}`);
+**Try.** Scale 1 for one big blob, 16 for grain. Switch Mode between Smooth and Perlin and compare the shapes. Wire the noise into a circle's radius, a UV Transform angle, or a Palette.`);
 
 lesson('learnWood', [
   uv(),
@@ -644,7 +641,7 @@ lesson('learnWood', [
 
 **How it is built.** UV × Scale → Noise Float → × Twist is an angle → **Rotate 2D** turns each point by its own angle → x → Sin → Abs → Smoothstep → Colorize in two browns.
 
-**Try.** Twist 0 shows the plain stripes. Push Twist up for knots. Swap Rotate 2D for an Add of the noise to x only: a different, wavier grain. The Book's other example, splatter, is Noise Float → Smoothstep with close edges.${book(11, 'Noise')}`);
+**Try.** Twist 0 shows the plain stripes. Push Twist up for knots. Swap Rotate 2D for an Add of the noise to x only: a different, wavier grain. The Book's other example, splatter, is Noise Float → Smoothstep with close edges.`);
 
 // ── Cellular noise (chapter 12) ─────────────────────────────────────────────
 
@@ -670,7 +667,7 @@ lesson('learnCellDistance', [
 
 **How it is built.** Four Circle SDFs with radius 0 measure the distance to three fixed points and the mouse; three **Min** nodes keep the smallest. Colorize shows the distance; a Sin → Abs → Step of it draws contour rings; a Remap near 0 puts a dot on each point.
 
-**Try.** Move point A with its sliders and watch the cell boundaries shift. Add a fifth point (another Circle SDF and Min). With hundreds of points this gets slow, which is what the next lesson solves.${book(12, 'Cellular noise')}`);
+**Try.** Move point A with its sliders and watch the cell boundaries shift. Add a fifth point (another Circle SDF and Min). With hundreds of points this gets slow, which is what the next lesson solves.`);
 
 lesson('learnVoronoi', [
   uv(),
@@ -683,7 +680,7 @@ lesson('learnVoronoi', [
 
 **How it is built.** UV → **Voronoi** (Distance out) → Colorize, plus a Remap near 0 for the points themselves.
 
-**Try.** Randomness 0 puts every point at its tile's centre: the cells become a square grid. Raise it slowly and the grid dissolves. Put the distance through a Step for cracked tiles, or into a Palette. Wire Time into the Voronoi's Time and raise Speed to drift it.${book(12, 'Cellular noise')}`);
+**Try.** Randomness 0 puts every point at its tile's centre: the cells become a square grid. Raise it slowly and the grid dissolves. Put the distance through a Step for cracked tiles, or into a Palette. Wire Time into the Voronoi's Time and raise Speed to drift it.`);
 
 // ── Fractal Brownian motion (chapter 13) ────────────────────────────────────
 
@@ -699,7 +696,7 @@ lesson('learnOctaves', [
 
 **How it is built.** The plot frame: x (with Time drifting it) → **Fractal Noise (FBM)**, which runs six octaves. Gain is how much each octave's height shrinks; Lacunarity how much its frequency grows.
 
-**Try.** Gain 0 leaves only the first octave: smooth hills. 0.5 is the natural look; 0.8 is jagged rock. Lacunarity near 1 stacks octaves of almost the same size; 3 or 4 spreads them far apart.${book(13, 'Fractal Brownian Motion')}`);
+**Try.** Gain 0 leaves only the first octave: smooth hills. 0.5 is the natural look; 0.8 is jagged rock. Lacunarity near 1 stacks octaves of almost the same size; 3 or 4 spreads them far apart.`);
 
 lesson('learnFBM', [
   uv(),
@@ -711,7 +708,7 @@ lesson('learnFBM', [
 
 **How it is built.** Fractal Noise (FBM) is a loop of noise inside one node. Palette colours the height. The Matrices folder's *Rotated noise octaves* builds the loop by hand, turning each octave so the grid underneath doesn't line up.
 
-**Try.** Gain 0.3 for smooth hills, 0.7 for rough rock. Scale up for detail. Feed the FBM value into an SDF's radius to make a wobbly shape.${book(13, 'Fractal Brownian Motion')}`);
+**Try.** Gain 0.3 for smooth hills, 0.7 for rough rock. Scale up for detail. Feed the FBM value into an SDF's radius to make a wobbly shape.`);
 
 lesson('learnTurbulence', [
   uv(),
@@ -731,7 +728,7 @@ lesson('learnTurbulence', [
 
 **How it is built.** FBM by hand so the abs can go inside: four Perlin Noise Floats at 1, 2, 4 and 8 times the frequency, each through Abs, summed by Weighted Average with halving weights. Remap turns it upside down; Pow sharpens the ridges.
 
-**Try.** Ridge sharpness 1 is soft, 8 leaves only thin veins. Set Finest octave to 0 to see what the last layer adds. Take the Abs nodes out (wire Value instead of Signed) and it is plain FBM again.${book(13, 'Fractal Brownian Motion')}`);
+**Try.** Ridge sharpness 1 is soft, 8 leaves only thin veins. Set Finest octave to 0 to see what the last layer adds. Take the Abs nodes out (wire Value instead of Signed) and it is plain FBM again.`);
 
 lesson('learnWarp', [
   uv(),
@@ -744,7 +741,7 @@ lesson('learnWarp', [
 
 **How it is built.** Domain Warp takes the UV and returns a displaced UV (its Offset output is the displacement alone). FBM reads the warped UV, Palette colours it. Two warps in a row go further still.
 
-**Try.** Strength 0 to see the un-warped FBM, then raise it. Warp a Grid or a Tile instead of noise and the cells bend.${book(13, 'Fractal Brownian Motion')}`);
+**Try.** Strength 0 to see the un-warped FBM, then raise it. Warp a Grid or a Tile instead of noise and the cells bend.`);
 
 // ── Fractals (chapter 14, not yet written in the Book) ──────────────────────
 
@@ -759,7 +756,7 @@ lesson('learnFractal', [
 
 **How it is built.** UV → **Mandelbrot / Julia** → Output. The node runs the loop and colours it with a cosine palette. The UV is shrunk by 2^−zoom before the node reads it, so each step of Zoom doubles the magnification, here into the "seahorse valley" on the set's edge.
 
-**Try.** Zoom out to 0 to see the whole set, then back in slowly: the valley, then seahorses and spirals, then tiny copies of the whole set. Switch Mode to Julia and wire the Mouse into C Pos: every mouse position is a different Julia set. The Book's chapter on fractals isn't written yet; the next lesson builds a fractal from nodes instead.${book(14, 'Fractals (not yet written)')}`);
+**Try.** Zoom out to 0 to see the whole set, then back in slowly: the valley, then seahorses and spirals, then tiny copies of the whole set. Switch Mode to Julia and wire the Mouse into C Pos: every mouse position is a different Julia set. The Book's chapter on fractals isn't written yet; the next lesson builds a fractal from nodes instead.`);
 
 lesson('learnLoop', [
   uv(40, 260),
@@ -784,7 +781,7 @@ lesson('learnLoop', [
 
 **How it is built.** Inside the group: Loop Carry (vec2) → Tile → Length → + Index × 0.3 → Palette. The Palette node's assignment is set to **+=** in its header, so instead of the last pass winning, all four colours add up; Add Colors × 0.25 averages them and Tone Map rounds off the peaks. In GLSL: \`vec2 c = uv; for (i…) { c = fract(c*1.5)-0.5; col += palette(length(c)+i*0.3); }\`. The ⟳ carry-mode button on a node is a shortcut for the same wiring when a node feeds itself.
 
-**Try.** Raise Iterations on the group to 6. Change Fold scale. Swap Tile for Rotate 2D and the carry becomes an accumulated rotation.${book(14, 'Fractals (not yet written)')}`);
+**Try.** Raise Iterations on the group to 6. Change Fold scale. Swap Tile for Rotate 2D and the carry becomes an accumulated rotation.`);
 
 // ── Moved: earlier Learn lessons that teach something the Book doesn't ─────
 // Same keys, graphs and notes as before; they now live in Curves & Shapes,
@@ -900,7 +897,9 @@ export function buildLearnExamples(base: Record<string, ExampleGraph>): Record<s
   for (const l of L) {
     const index = LEARN_EXAMPLE_INDEX[l.key] ?? LEARN_MOVED_INDEX[l.key];
     if (!index) throw new Error(`learnExamples: ${l.key} is not in the index`);
-    out[l.key] = { ...index, counter: 40, nodes: l.nodes, play: play(l.controls, l.notes) };
+    const record = play(l.controls, l.notes);
+    if ('source' in index && index.source) record.source = index.source;
+    out[l.key] = { ...index, counter: 40, nodes: l.nodes, play: record };
   }
   const hello = base.rayMarchOutputs3D;
   if (hello) {
