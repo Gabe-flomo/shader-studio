@@ -113,24 +113,83 @@ Today there are several: `.present.json`, play files, library ZIPs, graph JSON,
   `.playfield` packs) that open in Shader Studio. A marketplace for node packs
   could follow. Both are out of scope for the first version.
 
-## 7. Decisions to settle before building
+## 7. Decisions (27 Sep 2026)
 
-1. **Payment and licences:** Lemon Squeezy (simplest, handles tax, has licence
-   keys and activations), Paddle, or Stripe with Keygen?
-2. **Price model:** a one-time purchase (with a year of updates?) or a
-   subscription? Price?
-3. **What's Free:** Present, the GLSL page, Builder and website export (see
-   the table). Is Free a permanent tier, or should Pro also have a trial (for
-   example 14 days)?
-4. **Activations:** 5 per licence, extra activations sold in packs? Should
-   the browser version count as an activation (it's per browser profile), or
-   should the browser always require being signed in?
-5. **The browser version:** is it Free-only, or can Pro sign in there too
-   (online check each session)?
-6. **Sealed node packs:** is minify + encrypt + signature, with the honest
-   limit above, enough?
+1. **Payments and licences: Lemon Squeezy** (merchant of record, licence keys,
+   activation limits).
+2. **Price:** a **one-time purchase of $128**, or a **subscription of $8 a
+   month**. Both unlock the same Pro.
+3. **Free:** Studio, **Present**, the **GLSL page**, the **Function Builder**,
+   Learn and the examples. Play is limited (controls with mouse, keyboard and
+   audio mappings, no layers). Video export goes up to 1080p.
+4. **Pro only:**
+   - all of Play;
+   - Convert;
+   - 2K and 4K export;
+   - **website export**;
+   - Download everything and Install a profile;
+   - **turning Custom Functions, Expression Blocks and groups into published
+     nodes**, and **making node packs**.
+5. **File formats:**
+   - Graphs, groups, presentations, GLSL and the rest can still be exported as
+     readable JSON, and anyone can share or sell those.
+   - **Nodes are only exported as `.playfield` node packs**: signed, and
+     optionally sealed. Importing packs works on Free.
+6. **Sealed packs:** signature plus encryption at rest, and a little beyond
+   "good enough"; see section 9 for how far protection can go.
+7. **Still open:** does the browser version count as an activation or sign in
+   each session? A trial for Pro?
 
-## 8. Milestones (after the decisions)
+## 9. How far protection can go
+
+The layers, cheapest first. Each raises the effort a cracker needs; none
+makes it impossible for software that runs on the buyer's machine.
+
+1. **Signed licence tokens** (the plan above): someone can't forge a licence,
+   but they can patch the check out of the app.
+2. **The check in Rust, not JavaScript (desktop):** the Tauri side verifies the
+   token and hands the web side only a yes or no plus a per-licence key. Patching
+   a compiled, signed and notarized binary is much harder than editing
+   JavaScript in the developer tools.
+3. **Encrypted Pro code:** the Pro-only parts of the app (Play layers, Convert,
+   the exporters, pack sealing) ship encrypted and are decrypted by the Rust
+   side with a key it releases only for a valid licence. Flipping a flag
+   doesn't unlock anything; the Pro code simply isn't readable without a
+   licence. This is the biggest practical step up.
+4. **Obfuscating the web bundle and integrity checks** (the app refuses to run
+   if its files were modified): modest, and easy to overdo.
+5. **Periodic online checks** (say every 7–30 days): stronger against shared
+   licences, but it weakens "works offline". The plan keeps a long grace
+   period.
+
+Suggested: 1 + 2 + 3 for the desktop app. The browser version signs in and
+checks online each session, and gets its Pro code from the server only after
+sign-in.
+
+## 10. Protecting the work itself (not legal advice)
+
+- **The repository is public today** (github.com/Gabe-flomo/shader-studio,
+  with no licence file). Anyone can read and copy the source right now.
+  Making it **private** is the single most important step. Note: GitHub Pages
+  from a private repository needs a paid GitHub plan, or the app moves to its
+  own host, which was planned anyway.
+- **Copyright** is automatic from the moment the code is written; no filing is
+  needed to own it. **Registering** with the US Copyright Office (online,
+  around $45–65 per work) is what lets you sue for statutory damages and
+  attorney's fees. It's worth doing for the app's code before launch.
+- **Add a proprietary licence** (a `LICENSE` file stating "All rights
+  reserved" and an end-user licence agreement shown at sign-up), plus a
+  copyright notice in the app's About screen and the site footer.
+- **Trademark the name** you ship under (the USPTO charges roughly $250–350 per
+  class). Search first: "Shader Studio" and "Playfield" are common words and may
+  already be taken for software.
+- **Ideas can't be protected by copyright**, only the code and assets. A
+  patent is the only thing that covers an idea, and it's rarely worth the cost
+  for an app like this. Being first, good and cared for is the real moat.
+- A short consultation with a software or IP lawyer before launch is
+  worthwhile for the licence agreement and the trademark search.
+
+## 8. Milestones
 
 1. **Licence layer:** provider integration, the signed token, offline check,
    activation and deactivation, the account page link, a Settings → Plan
