@@ -23,8 +23,8 @@ export function CodeView({ code, caption, maxHeight = 460 }: { code: ResolvedCod
   const width = String(code.rows.reduce((m, r) => ('n' in r ? Math.max(m, r.n) : m), 1)).length;
   const tokenize = code.language === 'js' ? tokenizeJsLine : tokenizeLine;
   return (
-    <figure style={{ margin: 0, borderRadius: radius.lg, border: `1px solid ${tk.border.default}`, background: tk.bg.subtle, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel }}>
+    <figure style={{ margin: 0, borderRadius: `var(--pp-radius, ${radius.lg}px)`, border: `1px solid ${tk.border.default}`, background: `var(--pp-code-bg, ${tk.bg.subtle})`, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: `var(--pp-surface, ${tk.bg.panel})` }}>
         <span style={{ font: `650 10.5px ${fontFamily.mono}`, letterSpacing: '0.04em', color: tk.text.faint, textTransform: 'uppercase' }}>{code.language === 'js' ? 'JS' : 'GLSL'}</span>
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tk.text.muted, font: `500 12px ${fontFamily.ui}` }}>{code.from}</span>
         {!code.problem && <Button size="sm" variant="ghost" icon={copied ? 'check' : 'copy'} onClick={copy} style={{ height: 26 }}>{copied ? 'Copied' : 'Copy'}</Button>}

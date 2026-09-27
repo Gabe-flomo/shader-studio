@@ -29,6 +29,7 @@
  * typography sets its own. Pure: parsing, the look of a step, sizes.
  */
 import { PLAY_FILL_STOPS_MAX, parseFill, fitStops, type BackgroundFill } from './play';
+import { parseTheme, type PresentTheme } from './presentTheme';
 
 export type RGB = [number, number, number];
 export type BackgroundKind = 'none' | 'colour' | 'fill' | 'image';
@@ -91,6 +92,8 @@ export interface PresentTypography {
 export interface PresentStyle {
   background?: PresentBackground;
   typography?: PresentTypography;
+  /** The page's theme (presentTheme.ts); absent: Classic, the look presentations always had. */
+  theme?: PresentTheme;
 }
 
 /** One @font-face of an embedded font. */
@@ -194,7 +197,8 @@ export function parseTypography(v: unknown): PresentTypography | undefined {
   const out: PresentTypography = {};
   for (const r of ['heading', 'body', 'code'] as const) { const x = parseRole(v[r]); if (x) out[r] = x; }
   const scale = num(v.scale);
-  if (scale !== null && scale !== 1) out.scale = Math.max(SCALE_RANGE[0], Math.min(SCALE_RANGE[1], scale));
+  // 1 is kept: under a theme with its own size it means 100 %.
+  if (scale !== null) out.scale = Math.max(SCALE_RANGE[0], Math.min(SCALE_RANGE[1], scale));
   const lh = num(v.lineHeight);
   if (lh !== null) out.lineHeight = Math.max(LINE_HEIGHT_RANGE[0], Math.min(LINE_HEIGHT_RANGE[1], lh));
   const hc = rgb(v.headingColour), bc = rgb(v.bodyColour);
@@ -226,6 +230,8 @@ export function parseStyle(v: unknown, images: ReadonlySet<string>): PresentStyl
   if (bg) out.background = bg;
   const t = parseTypography(v.typography);
   if (t) out.typography = t;
+  const theme = parseTheme(v.theme);
+  if (theme) out.theme = theme;
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -335,7 +341,7 @@ export function stepLook(style: PresentStyle | undefined, images: ReadonlyMap<st
 export function textVars(text: TextColours | null): Record<string, string> {
   if (!text) return {};
   return {
-    '--pp-heading': text.heading, '--pp-body': text.body, '--pp-muted': text.muted, '--pp-accent': text.accent,
+    '--pp-heading': text.heading, '--pp-body': text.body, '--pp-muted': text.muted, '--pp-accent': text.accent, '--pp-link': text.accent,
     '--pp-wash': text.wash, '--pp-rule': text.rule, '--pp-shadow': text.shadow || 'none',
   };
 }
@@ -362,7 +368,7 @@ export function typeVars(t: PresentTypography | undefined): Record<string, strin
   if (t.heading) { out['--pp-font-heading'] = fontStack(t.heading); out['--pp-hw'] = String(t.heading.weight); }
   if (t.body) out['--pp-font-body'] = fontStack(t.body);
   if (t.code) out['--pp-font-code'] = fontStack(t.code);
-  if (t.scale && t.scale !== 1) out['--pp-scale'] = String(Number(t.scale.toFixed(3)));
+  if (t.scale) out['--pp-scale'] = String(Number(t.scale.toFixed(3)));
   if (t.lineHeight) out['--pp-lh'] = String(Number(t.lineHeight.toFixed(3)));
   return out;
 }

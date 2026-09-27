@@ -7,6 +7,7 @@
  * up and are flipped here.
  */
 import { paletteCssAt, paletteColour } from '../particle-sim.js';
+import { klParseFontUrl } from './fonts.js';
 import { K3_SKETCH_NAMES, k3Create, k3Helpers, k3Setup, k3Begin, k3End, k3Dispose } from './sketch3d.js';
 
 export const KL_BLEND = {
@@ -18,35 +19,11 @@ export const KL_FONTS = { sans: 'Inter, system-ui, -apple-system, "Segoe UI", He
 // ── Web fonts ────────────────────────────────────────────────────────────────
 // A text layer's fontUrl can be a Google Fonts link (css2?family=…, a
 // specimen page, a pasted <link> or @import), a bare family name, or a
-// .woff2/.woff/.ttf/.otf file. Only those load: nothing else is fetched.
+// .woff2/.woff/.ttf/.otf file (parsed by klParseFontUrl, fonts.js). Only
+// those load: nothing else is fetched.
 
 const klFontSeen = new Map();
 let klFontGen = 0;
-
-/** { family, css } for a Google Fonts source, { family, file } for a font file, or null. */
-const klDecode = x => { try { return decodeURIComponent(x); } catch (e) { return x; } };
-
-export function klParseFontUrl(input) {
-  let u = String(input || '').trim();
-  if (!u) return null;
-  const href = /href\s*=\s*["']([^"']+)["']/i.exec(u) || /url\(\s*["']?([^"')]+)["']?\s*\)/i.exec(u);
-  if (href) u = href[1];
-  u = u.replace(/&amp;/g, '&');
-  if (/^https:\/\/[^\s]+\.(woff2?|ttf|otf)(\?[^\s]*)?$/i.test(u)) {
-    const name = klDecode(u.split('/').pop().split('?')[0].replace(/\.[a-z0-9]+$/i, '')).replace(/[^\w -]/g, '');
-    return { family: 'SS ' + (name || 'Font'), file: u };
-  }
-  const spec = /^https:\/\/fonts\.google\.com\/specimen\/([^/?#]+)/i.exec(u);
-  if (spec) u = klDecode(spec[1].replace(/\+/g, ' '));
-  if (/^https:\/\/fonts\.googleapis\.com\/css2?\?/i.test(u)) {
-    const fam = /[?&]family=([^&:]+)/.exec(u);
-    return fam ? { family: klDecode(fam[1].replace(/\+/g, ' ')).replace(/["\\]/g, ''), css: u } : null;
-  }
-  if (/^[A-Za-z0-9][A-Za-z0-9 ]{0,60}$/.test(u)) {
-    return { family: u.replace(/\s+/g, ' '), css: 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(u.replace(/\s+/g, ' ')).replace(/%20/g, '+') + '&display=swap' };
-  }
-  return null;
-}
 
 /** Bumped whenever a web font finishes loading, so cached text redraws in it. */
 export function klFontGeneration() { return klFontGen; }

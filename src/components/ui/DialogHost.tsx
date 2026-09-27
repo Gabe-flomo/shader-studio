@@ -34,7 +34,7 @@ function TextDialog({ req }: { req: TextRequest }) {
         value={value}
         onChange={e => setValue(e.target.value)}
         onFocus={e => e.currentTarget.select()}
-        onKeyDown={e => { if (e.key === 'Enter' && value.trim()) done(value); }}
+        onKeyDown={e => { if (e.key === 'Enter' && value.trim()) { e.preventDefault(); done(value); } }}
       />
       </div>
     </Modal>

@@ -5,7 +5,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { dragHandle, handleAt, handlePoints, insideBounds, patchFor, type Bounds } from '../transform';
-import { klGlyphList, klParseFontUrl } from '../kit/layers.js';
+import { klGlyphList } from '../kit/layers.js';
+import { klParseFontUrl } from '../kit/fonts.js';
 import { addNullFor, driveWithNull, duplicateLayer, pairedKey, renameLayer, resetLayer } from '../../components/play/layerOps';
 import { defaultLayer, emptyPlayRecord, type PlayLayer } from '../../types/play';
 import { applySolo } from '../../components/play/playUi';

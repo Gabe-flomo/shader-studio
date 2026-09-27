@@ -8,12 +8,14 @@
 import { importImageFile } from '../../lib/backgroundLibrary';
 import { referenceTo } from '../../present/presentAssets';
 import { openBackgrounds } from '../backgrounds/backgroundsUi';
-import { fetchFontFaces, findFont, nearestWeight } from '../../present/googleFonts';
+import { fetchFontFaces, findFont, nearestWeight, parseFontLink } from '../../present/googleFonts';
 import { putFace } from '../../lib/fontCache';
 import type { Presentation } from '../../types/presentation';
 import {
-  faceCovers, neededFonts, usedImages, type EmbeddedFontFace, type FontRole, type FontRoleName, type PresentBackground, type PresentImage, type PresentTypography,
+  faceCovers, neededFonts, usedImages, type EmbeddedFontFace, type FontRole, type FontRoleName, type PresentBackground, type PresentImage, type PresentTypography, type RGB,
 } from '../../types/presentationStyle';
+import { isPlainClassic, resetTheme, type PresentTheme, type ThemeColourKey, type ThemeId } from '../../types/presentTheme';
+import type { UserTheme } from '../../present/userThemes';
 import { toast } from '../ui/toastStore';
 import { usePresentation } from './presentationStore';
 
@@ -113,6 +115,8 @@ export function missingFonts(t: PresentTypography | undefined, faces: readonly E
   for (const [family, need] of neededFonts(t)) {
     const own = faces.filter(f => f.family === family && f.style === 'normal');
     const font = findFont(family);
+    // A family from a link (outside the list) came with the weights Google has: those are what it has.
+    if (!font && own.length) continue;
     // A weight the family doesn't have is stood in for by its nearest (the browser picks it the same way).
     const missing = [...need.weights].filter(w => { const at = font ? nearestWeight(font, w) : w; return !own.some(f => faceCovers(f, at)); });
     if (!own.length || missing.length) out.push({ family, weights: [...need.weights] });
@@ -128,16 +132,57 @@ export function onFontBusy(cb: () => void): () => void { busyListeners.add(cb); 
 function setBusy(f: string | null) { busyFamily = f; for (const cb of busyListeners) cb(); }
 
 /**
- * Use a font for a role (null: the system font). The family is downloaded
- * from Google Fonts once, at the weights the roles need, and embedded; if it
- * can't be, nothing changes and a toast says why.
+ * Use a font for a role (null: the theme's). The family is downloaded from
+ * Google Fonts once, at the weights the roles need, and embedded; if it can't
+ * be, nothing changes and a toast says why.
  */
 export async function chooseFont(role: FontRoleName, choice: FontRole | null): Promise<boolean> {
+  return applyTypography(t => {
+    const next: PresentTypography = { ...t };
+    if (choice) next[role] = choice; else delete next[role];
+    return next;
+  });
+}
+
+/**
+ * A font from a pasted Google Fonts link or family name (parseFontLink) for a
+ * role. A heading takes the link's weight nearest bold; a family outside the
+ * list is asked for at the weights it's needed in. Null (with a toast) when
+ * the text isn't one, or the font couldn't be downloaded.
+ */
+export async function chooseFontByLink(role: FontRoleName, input: string): Promise<FontRole | null> {
+  const link = parseFontLink(input);
+  if (!link) {
+    toast.error('That isn’t a Google Fonts link or family name', { message: 'Paste a fonts.google.com page, a fonts.googleapis.com/css2 link, or a name like “Space Grotesk”.' });
+    return null;
+  }
+  const known = findFont(link.family);
+  const offered = link.weights.length ? link.weights : known?.weights ?? [400, 700];
+  const want = link.category === 'serif' || link.category === 'display' ? 600 : 700;
+  // A tie goes to the heavier (a headline wants weight).
+  const weight = role === 'heading' ? nearestWeight({ weights: offered }, want + 1) : 400;
+  const choice: FontRole = { family: link.family, category: link.category, weight };
+  return (await chooseFont(role, choice)) ? usePresentation.getState().doc?.style?.typography?.[role] ?? choice : null;
+}
+
+/** Each weight (in 100s) some face covers. */
+function coveredWeights(faces: readonly EmbeddedFontFace[]): number[] {
+  const out = new Set<number>();
+  for (const f of faces) for (let w = 100; w <= 900; w += 100) if (faceCovers(f, w)) out.add(w);
+  return [...out];
+}
+
+/**
+ * Change the typography, downloading the fonts it now needs (once, into the
+ * font cache; the presentation lists their faces). A heading in a family that
+ * came without its weight (outside the list, Google sent only regular) takes
+ * the nearest it has. False, and nothing changes, when a download fails.
+ */
+export async function applyTypography(change: (t: PresentTypography) => PresentTypography): Promise<boolean> {
   const st = usePresentation.getState();
   const doc = st.doc;
   if (!doc) return false;
-  const t: PresentTypography = { ...doc.style?.typography };
-  if (choice) t[role] = choice; else delete t[role];
+  const t = change({ ...doc.style?.typography });
   const missing = missingFonts(t, doc.fonts ?? []);
   let faces = doc.fonts ?? [];
   if (missing.length) {
@@ -156,8 +201,14 @@ export async function chooseFont(role: FontRoleName, choice: FontRole | null): P
   }
   // The presentation may have changed while the font downloaded: apply to what it is now.
   usePresentation.getState().update(p => {
-    const now: PresentTypography = { ...p.style?.typography };
-    if (choice) now[role] = choice; else delete now[role];
+    const now = change({ ...p.style?.typography });
+    for (const role of ['heading', 'body', 'code'] as const) {
+      const r = now[role];
+      if (!r || findFont(r.family)) continue;
+      const has = coveredWeights(faces.filter(f => f.family === r.family && f.style === 'normal'));
+      if (has.length && !has.includes(r.weight)) now[role] = { ...r, weight: nearestWeight({ weights: has }, r.weight) };
+    }
+    for (const k of Object.keys(now) as Array<keyof PresentTypography>) if (now[k] === undefined) delete now[k];
     const style = { ...p.style };
     if (Object.keys(now).length) style.typography = now; else delete style.typography;
     const next: Presentation = { ...p, style };
@@ -166,4 +217,57 @@ export async function chooseFont(role: FontRoleName, choice: FontRole | null): P
     return withFontsFor(next, merged);
   });
   return true;
+}
+
+// ── Theme ───────────────────────────────────────────────────────────────────
+
+/** Change the theme (undefined, or Classic with nothing changed: no theme, the page as it always was). */
+export function setTheme(change: (t: PresentTheme) => PresentTheme | undefined): void {
+  usePresentation.getState().update(p => {
+    const t = change(p.style?.theme ?? { id: 'classic' });
+    const style = { ...p.style };
+    if (t && !isPlainClassic(t)) style.theme = t; else delete style.theme;
+    const next: Presentation = { ...p, style };
+    if (!Object.keys(style).length) delete next.style;
+    return next;
+  });
+}
+
+/** Choose a built-in theme: its look, fresh (settings changed on the last one are dropped; fonts chosen by hand stay). */
+export function pickTheme(id: ThemeId): void {
+  setTheme(() => ({ id }));
+}
+
+type ThemePatch = Partial<Pick<PresentTheme, 'mode' | 'radius' | 'column' | 'spacing'>> & { colours?: Partial<Record<ThemeColourKey, RGB | undefined>> };
+
+/** Change some of the theme's settings (undefined: back to the theme's). */
+export function patchTheme(patch: ThemePatch): void {
+  setTheme(t => {
+    const next: PresentTheme = { ...t };
+    delete next.saved;
+    for (const k of ['mode', 'radius', 'column', 'spacing'] as const) {
+      if (!(k in patch)) continue;
+      const v = patch[k];
+      if (v === undefined) delete next[k]; else (next as unknown as Record<string, unknown>)[k] = v;
+    }
+    if (patch.colours) {
+      const c = { ...t.colours };
+      for (const [k, v] of Object.entries(patch.colours) as Array<[ThemeColourKey, RGB | undefined]>) { if (v) c[k] = v; else delete c[k]; }
+      if (Object.keys(c).length) next.colours = c; else delete next.colours;
+    }
+    return next;
+  });
+}
+
+/** Back to the theme as it comes: its settings, and the fonts, size and colours set by hand. */
+export async function resetAllToTheme(): Promise<void> {
+  setTheme(t => resetTheme(t));
+  await applyTypography(() => ({}));
+}
+
+/** Apply one of your saved themes: its theme and typography (fonts downloaded when needed). */
+export async function applyUserTheme(u: UserTheme): Promise<boolean> {
+  const ok = await applyTypography(() => ({ ...u.typography }));
+  if (ok) setTheme(() => ({ ...u.theme, saved: { id: u.id, name: u.name } }));
+  return ok;
 }
