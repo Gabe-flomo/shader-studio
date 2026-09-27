@@ -7,7 +7,8 @@
 import { useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { constantsItems, rangeFor, type ConstantsItem, type ConstantsItemType } from '../../nodes/definitions/constants';
+import { nowSources } from '../../lib/nowValue';
+import { constantsItems, liveItemValue, setItemLive, type ConstantsItem, type ConstantsItemType } from '../../nodes/definitions/constants';
 import { NumberInput } from './NumberInput';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -31,7 +32,10 @@ const slug = (label: string, taken: Set<string>): string => {
 export function ConstantsModal({ node, onClose }: { node: GraphNode; onClose: () => void }) {
   const tk = useTokens();
   const setConstantsItems = useNodeGraphStore(s => s.setConstantsItems);
-  const [items, setItems] = useState<ConstantsItem[]>(() => constantsItems(node).map(it => ({ ...it, value: Array.isArray(it.value) ? [...it.value] : it.value })));
+  // A live entry's value is where its slider is now (the card moves params, not items).
+  const [items, setItems] = useState<ConstantsItem[]>(() => constantsItems(node).map(it => { const v = liveItemValue(node, it); return { ...it, value: Array.isArray(v) ? [...v] : v }; }));
+  /** Turning a live entry fixed freezes it at the value it has right now (slider, keyframes or Play). */
+  const setLive = (i: number, on: boolean) => setItems(list => setItemLive(node, list, i, on, nowSources()));
   const update = (i: number, patch: Partial<ConstantsItem>) => setItems(list => list.map((it, k) => (k === i ? { ...it, ...patch } : it)));
   const retype = (i: number, type: ConstantsItemType) => {
     const it = items[i]; const n = COUNT[type];
@@ -71,7 +75,7 @@ export function ConstantsModal({ node, onClose }: { node: GraphNode; onClose: ()
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) 104px minmax(214px, 1.3fr) auto 28px', gap: '8px 10px', alignItems: 'center' }}>
         <span style={cell}>Name</span><span style={cell}>Type</span><span style={cell}>Value</span><span style={cell}>Live</span><span />
         {items.map((it, i) => (
-          <RowFragment key={i} it={it} onLabel={l => rename(i, l)} onType={t => retype(i, t)} onValue={v => update(i, { value: v })} onSlider={on => update(i, { slider: on, ...(on && it.type === 'float' && it.min === undefined ? rangeFor(it.value as number) : {}) })} onRemove={() => setItems(items.filter((_, k) => k !== i))} />
+          <RowFragment key={i} it={it} onLabel={l => rename(i, l)} onType={t => retype(i, t)} onValue={v => update(i, { value: v })} onSlider={on => setLive(i, on)} onRemove={() => setItems(items.filter((_, k) => k !== i))} />
         ))}
       </div>
       {items.length === 0 && <div style={{ color: tk.text.faint, padding: '10px 0 2px' }}>No values yet. Add one.</div>}

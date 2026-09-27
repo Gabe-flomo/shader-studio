@@ -20,7 +20,7 @@ import { applyGroupVisibility } from '../types/layerGroups';
 import { layersUniforms, setLayersTap } from '../play/layersTexture';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
-import { emitTimeTick, hasTimeTickListeners } from '../lib/timeTick';
+import { emitTimeTick } from '../lib/timeTick';
 import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
 import { seededRandom, stringSeed } from '../play/particle-sim.js';
@@ -1239,7 +1239,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       material.uniforms.u_time.value = elapsed;
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
       // cheap, and throttling it made the readout visibly choppy once frames were throttled.
-      if (hasTimeTickListeners()) emitTimeTick(elapsed);
+      // Always emitted: it also records the clock for clockNow() (freezing a keyframed slider).
+      emitTimeTick(elapsed);
 
       // ── GPU particle tick: just keep u_time in sync ────────────────────────
       for (const [, points] of gpuParticlesRef.current) {

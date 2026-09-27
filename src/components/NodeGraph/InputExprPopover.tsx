@@ -14,10 +14,11 @@
  */
 import { useMemo, useRef, useState, type RefObject } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { nowParamValue } from '../../lib/nowValue';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 import {
-  getInputExpr, getInputKnobs, inputExprPatch, inputExprVariables, knobCandidates, knobParamKey, knobValue, knobVariables,
+  freezeKnobInExpr, getInputExpr, getInputKnobs, inputExprPatch, inputExprVariables, knobCandidates, knobParamKey, knobValue, knobVariables,
   nextKnobName, validateInputExpr, type InputKnob,
 } from '../../glsl/inputExpr';
 import { CodeInput } from '../code/CodeField';
@@ -102,10 +103,11 @@ export function InputExprPopover({ node, inputKey, anchorRef, onClose, sheet = f
     // An applied knob is live: its slider on the card moves too (a uniform write, no recompile).
     if (applied.some(k => k.name === name)) updateNodeParams(node.id, { [knobParamKey(inputKey, name)]: v });
   };
+  /** Removing a knob freezes it: the line keeps the value it has right now (slider, keyframes or Play) as a number. */
   const dropKnob = (name: string) => {
     setKnobs(ks => ks.filter(k => k.name !== name));
-    // Take it out of the line too, where it stands alone as a factor; otherwise the check points at it.
-    setDraft(d => d.replace(new RegExp(`\\s*\\*\\s*\\b${name}\\b(?!\\s*\\()`), '').replace(new RegExp(`\\b${name}\\b\\s*\\*\\s*`), ''));
+    const v = applied.some(k => k.name === name) ? nowParamValue(node, knobParamKey(inputKey, name), values[name] ?? 1) : values[name] ?? 1;
+    setDraft(d => freezeKnobInExpr(d, name, v));
   };
 
   const unknownIsKnobbable = !!check && !check.ok && candidates.length > 0 && /isn.t available here$/.test(check.error ?? '');

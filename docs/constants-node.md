@@ -9,7 +9,8 @@ changed only in the card's editor (the `#` button, or double-click the fixed
 rows). Turn its *live* switch on and it becomes a value you can slide on the
 card, keyframe, and hand to Play as a control; the shader then reads it as a
 uniform, so dragging never recompiles. Turn it off again and it's a constant
-once more.
+once more, fixed at the value it has right then: where its slider is, or where
+its keyframes or a Play mapping have it.
 
 **No inputs.** Nothing upstream can rewrite an entry; that's the point. To
 compute a value, use a node.

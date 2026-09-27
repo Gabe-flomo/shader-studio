@@ -183,6 +183,22 @@ export function knobVariables(knobs: readonly InputKnob[]): InputExprVariable[] 
 }
 
 /**
+ * Removing a knob freezes it: every use of `name` in the expression (not a
+ * call of a function by that name, nor a field like `.x`) becomes the value it
+ * had, as a number, so what arrives at the input doesn't change.
+ */
+export function freezeKnobInExpr(expr: string, name: string, value: number): string {
+  return expr.replace(new RegExp(`(?<![\\w.])${name}\\b(?!\\s*\\()`, 'g'), numberLiteral(value));
+}
+
+/** A number for an expression: 0.35, 2.0, (-1.25). Six decimals are kept. */
+export function numberLiteral(v: number): string {
+  const r = Math.round(v * 1e6) / 1e6;
+  const s = Number.isInteger(r) ? `${Math.abs(r)}.0` : String(Math.abs(r));
+  return r < 0 ? `(-${s})` : s;
+}
+
+/**
  * The params patch that sets an input's expression and its knobs in one
  * step (one undo step): the expression; the knob list, keeping only knobs the
  * expression mentions; each kept knob's value (its current one, else

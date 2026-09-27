@@ -8,6 +8,7 @@
  */
 import type { NodeDefinition, GraphNode, ParamDef, OutputSocket, DataType } from '../../types/nodeGraph';
 import { p, pv3 } from './helpers';
+import { currentParamValue, currentVectorValue, type CurrentValueSources } from '../../lib/currentValue';
 
 export type ConstantsItemType = 'float' | 'vec2' | 'vec3' | 'color';
 export interface ConstantsItem {
@@ -64,6 +65,43 @@ export function paramsFor(items: ConstantsItem[]): Record<string, unknown> {
     else out[it.key] = it.value;
   }
   return out;
+}
+
+/**
+ * A live entry's value as the card has it: its params (the slider moves those,
+ * not `items`), or, given `src`, what keyframes or a Play mapping hold it at
+ * right now. A fixed entry's value is its own.
+ */
+export function liveItemValue(node: GraphNode, it: ConstantsItem, src?: CurrentValueSources): number | number[] {
+  if (!it.slider) return it.value;
+  const none: CurrentValueSources = { time: 0 };
+  if (it.type === 'color') return currentVectorValue(node, it.key, src ?? none, it.value as number[]);
+  if (it.type === 'float') {
+    if (!src) { const v = node.params[it.key]; return typeof v === 'number' && Number.isFinite(v) ? v : it.value; }
+    return currentParamValue(node, it.key, src, it.value as number);
+  }
+  return paramKeysOf(it).map((k, i) => {
+    const fb = (it.value as number[])[i];
+    if (!src) { const v = node.params[k]; return typeof v === 'number' && Number.isFinite(v) ? v : fb; }
+    return currentParamValue(node, k, src, fb);
+  });
+}
+
+/**
+ * The editor's Live switch on entry `i` of its working list. Off freezes the
+ * entry at the value it has right now (`src`: keyframes, a Play mapping, else
+ * its slider), so the picture doesn't jump; on gives it a slider from there.
+ */
+export function setItemLive(node: GraphNode, items: ConstantsItem[], i: number, on: boolean, src: CurrentValueSources): ConstantsItem[] {
+  const it = items[i];
+  if (!it) return items;
+  let patch: Partial<ConstantsItem>;
+  if (on) patch = { slider: true, ...(it.type === 'float' && it.min === undefined ? rangeFor(it.value as number) : {}) };
+  else {
+    const was = constantsItems(node).find(o => o.key === it.key && o.type === it.type && o.slider);
+    patch = { slider: false, ...(was ? { value: liveItemValue(node, was, src) } : {}) };
+  }
+  return items.map((x, k) => (k === i ? { ...x, ...patch } : x));
 }
 
 /** Live entries as param definitions; fixed entries have none (they're baked, and not offered to sliders, keyframes or Play). */

@@ -14,6 +14,7 @@ import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { loopColour } from '../nodes/definitions/scene3d';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
+import { frozenValueOf } from '../nodes/sliderFreeze';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
   getAxisKeyframeConfig, generateVectorKeyframeGLSL, socketHasVectorKeyframes, VECTOR_AXES,
@@ -239,6 +240,10 @@ export function resolveInputVars(
       const cfInp = cfInputs.find(c => c.name === inputKey);
       if (cfInp?.slider != null) {
         inputVars[inputKey] = formatGlslLiteral(node.params[inputKey] as number, 'float');
+      } else {
+        // A slider turned off is frozen at the value it had (nodes/sliderFreeze.ts).
+        const frozen = frozenValueOf(node, inputKey);
+        if (frozen !== undefined) inputVars[inputKey] = formatGlslLiteral(frozen, 'float');
       }
     } else if (input.defaultValue !== undefined) {
       inputVars[inputKey] = formatGlslLiteral(input.defaultValue as number | number[], input.type);
@@ -318,6 +323,8 @@ function resolveInputFallback(
     const cfInputs = (node.params.inputs as Array<{ name: string; slider?: unknown }>) ?? [];
     const cfInp = cfInputs.find(c => c.name === inputKey);
     if (cfInp?.slider != null) return formatGlslLiteral(node.params[inputKey] as number, 'float');
+    const frozen = frozenValueOf(node, inputKey);
+    if (frozen !== undefined) return formatGlslLiteral(frozen, 'float');
   }
   if (inp.defaultValue !== undefined) return formatGlslLiteral(inp.defaultValue as number | number[], inp.type);
   if (inp.type === 'vec2' && (inputKey === 'uv' || inputKey === 'p' || inputKey === 'uv2')) return 'g_uv';

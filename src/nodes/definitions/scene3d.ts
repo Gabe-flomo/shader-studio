@@ -411,6 +411,8 @@ export const MarchSceneDistNode: NodeDefinition = {
  */
 export const VolumeGlowNode: NodeDefinition = {
   type: 'volumeGlow', label: 'Volume Glow', category: '3D Scene',
+  // Summed per march step with +=.
+  assignable: true,
   aliases: ['Volumetric Glow', 'Density'],
   description: 'Inside a March Loop Group: turns the scene distance at this step into a glow contribution, `density / (1 + falloff × max(d, 0))`, finite at d = 0 so it is safe to accumulate with `+=`. `Shell` hollows the shape so only a skin of the given thickness glows. Use with Scene Distance before it and Glow to Color after the loop. Replaces the Abs → Max → Divide chain.',
   inputs: {

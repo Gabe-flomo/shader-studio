@@ -1,5 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
+import { setInputSlider } from '../../nodes/sliderFreeze';
+import { nowParamValue } from '../../lib/nowValue';
 import { useNodeGraphStore, saveCustomFnPreset } from '../../store/useNodeGraphStore';
 import { NumberInput } from './NumberInput';
 import { TYPE_COLORS } from './typeColors';
@@ -170,16 +172,11 @@ export function CustomFnModal({ node, onClose }: Props) {
     updateNodeSockets(node.id, next, outputType, extraOutputs);
   };
 
+  // Off freezes the input at the value it has right now (slider, keyframes or Play); on picks up from there.
   const toggleSlider = (idx: number) => {
     const inp = customInputs[idx];
-    const newSlider = inp.slider ? null : { min: 0, max: 1 };
-    // Initialize param value to midpoint when enabling
-    const extraParams: Record<string, unknown> = {};
-    if (newSlider && typeof node.params[inp.name] !== 'number') {
-      extraParams[inp.name] = 0.5;
-    }
-    const next = customInputs.map((c, i) => i === idx ? { ...c, slider: newSlider } : c);
-    updateNodeParams(node.id, { inputs: next, ...extraParams });
+    const { inputs: next, params } = setInputSlider(node, customInputs, idx, !inp.slider, inp.slider ? nowParamValue(node, inp.name) : 0);
+    updateNodeParams(node.id, { inputs: next, ...params });
     updateNodeSockets(node.id, next, outputType, extraOutputs);
   };
 

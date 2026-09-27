@@ -60,6 +60,8 @@ The neutral initializer (`vec3(0.0)`, `float(1.0)`, etc.) is chosen automaticall
 
 When a node is inside an iterated group, a small dropdown appears in the node header. It shows the current operator (`=`, `+=`, `-=`, `*=`, `/=`). Changing it updates the generated GLSL immediately.
 
+Only cards that make one value from their inputs offer the dropdown: math, colour, shapes, lights (SDF Glow and Volume Glow included). Expression Blocks, Custom Functions and Float Warp don't (write the accumulation in the expression), nor do cards with several outputs (Grid, Grid Pattern, Mandelbrot…), sources, outputs, groups and loop plumbing. The rule lives in `src/nodes/assignable.ts`; a definition can override it with `assignable`. A graph saved with an operator on a card that no longer offers one keeps it and compiles exactly as before: the header shows it as a `+=` badge, and clicking the badge resets it to `=`.
+
 ### Quick reference
 
 | Operator | Neutral init | Effect |

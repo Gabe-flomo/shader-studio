@@ -22,6 +22,8 @@ import { TYPE_COLORS } from './typeColors';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
+import { frozenValueOf } from '../../nodes/sliderFreeze';
+import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 // Editors that only open on demand load in their own chunks (type-only imports
@@ -570,6 +572,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const def = getNodeDefinitionFor(node);
   const isBypassed = !!node.bypassed;
   const assignOp = node.assignOp ?? '=';
+  const assignable = isAssignable(node);
+  const legacyOp = legacyAssignOp(node);
   const isCarry = !!node.carryMode;
   const [collapsed, setCollapsed] = useState(false);
   const [showCode, setShowCode] = useState(false);
@@ -3066,8 +3070,25 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               label={isCarry ? 'Carry is on: the output feeds back in each iteration' : 'Carry: feed the output back in each iteration (e.g. UV folding)'}
               onClick={() => toggleCarryMode(node.id)} />
           )}
-          {/* assignOp — declare an accumulator and combine this node's output */}
-          {!['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && (
+          {/* assignOp — declare an accumulator and combine this node's output (nodes/assignable.ts says which cards offer it) */}
+          {legacyOp && (
+            <button
+              type="button"
+              aria-label={`Accumulates with ${legacyOp}. Reset to =`}
+              title={`This card accumulates with ${legacyOp} (set in an older version). Cards like this one no longer offer the operator: write it in an expression instead. Click to reset to =.`}
+              onMouseDown={e => e.stopPropagation()}
+              onClick={() => setNodeAssignOp(node.id, '=')}
+              style={{
+                height: 24, margin: '0 1px', padding: '0 6px', borderRadius: 7, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                font: `600 12px ${fontFamily.mono}`,
+                border: `1px solid ${alpha(tk.accent.base, 0.4)}`, background: tk.bg.selected, color: tk.accent.text,
+              }}
+            >
+              {legacyOp}<Icon name="close" size={10} />
+            </button>
+          )}
+          {assignable && (
             <select
               aria-label="Assign operator"
               onMouseDown={e => e.stopPropagation()}
@@ -3297,6 +3318,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             input.type === 'float' ? socketHasKeyframes(node, key) : socketHasVectorKeyframes(node, key, vectorAxes ?? [])
           );
           const kfBypassed = isKeyframed && isKeyframeBypassed(node, key);
+          const frozenHere = node.type === 'exprNode' || node.type === 'customFn' ? frozenValueOf(node, key) : undefined;
           const socketError = errors?.find(e => e.socket === key);
           const inExpr = getInputExpr(node, key);
           const isField = !!def.inputs[key]?.field;
@@ -3482,6 +3504,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                     >ƒ</span>
                   )}
                   {isExternal && <span title="Wired from outside the group" style={{ marginLeft: 5, verticalAlign: -2, display: 'inline-flex' }}><Icon name="lock" size={12} /></span>}
+                  {frozenHere !== undefined && !isConnected && (
+                    <span title="Slider off: fixed at this value. Turn the slider back on in the editor to change it." style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3, color: tk.text.muted, font: `500 11px ${fontFamily.mono}` }}>
+                      <Icon name="lock" size={10} />{+frozenHere.toFixed(4)}
+                    </span>
+                  )}
                 </span>
               )}
               {/* Input expression: a ƒ mark (faint on hover when unset; the expression as a chip when set). Click opens the editor. */}
