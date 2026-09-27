@@ -11,15 +11,32 @@
 import type { GraphNode } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
+import { extractScriptParams } from '../components/play/layers/scriptExamples';
+import { encodeKeys } from '../lib/takePlayback';
+import { SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
 import {
   defaultLayer, type ActionKind, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
-  type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type SensorRead, type TriggerMode, type TriggerSpec,
+  type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
 } from '../types/play';
 
 // ── Record helpers ───────────────────────────────────────────────────────────
 
 function layer<K extends PlayLayerKind>(kind: K, id: string, label: string, over: Partial<Extract<PlayLayer, { kind: K }>> = {}): PlayLayer {
   return { ...defaultLayer(kind, id, label), ...over } as PlayLayer;
+}
+/**
+ * A Script layer holding `code`: the sliders, toggles and buttons it declares
+ * are read from the code the way Apply reads them, and each starts at its
+ * declared value (or `values`).
+ */
+function scriptLayer(id: string, label: string, code: string, over: { clear?: boolean; readPicture?: boolean; blend?: string; opacity?: number; toShader?: boolean; values?: Record<string, number> } = {}): PlayLayer {
+  const r = extractScriptParams(code);
+  if (!r.ok) throw new Error(`playExamples: script ${id}: ${r.error}`);
+  const { values = {}, ...rest } = over;
+  const base = Object.fromEntries(Object.entries(defaultLayer('script', id, label)).filter(([k]) => !k.startsWith('p_')));
+  const out: Record<string, unknown> = { ...base, code, paramDefs: r.defs, ...rest };
+  for (const d of r.defs) if (d.kind !== 'button') out[`p_${d.key}`] = values[d.key] ?? d.value;
+  return out as unknown as PlayLayer;
 }
 const ctl = (id: string, target: string, label: string, min: number, max: number, step?: number): PlayControl =>
   ({ id, target, kind: 'float', label, min, max, ...(step ? { step } : {}) });
@@ -55,11 +72,12 @@ const T = {
 };
 const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string, amount = 1): PlayAction => ({ id, trigger, do: kind, layerId, amount, enabled: true });
 
-function play(p: { layers?: PlayLayer[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; notes: string }): PlayRecord {
+function play(p: { layers?: PlayLayer[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; notes: string }): PlayRecord {
   const out: PlayRecord = { version: 1, controls: p.controls ?? [], mappings: p.mappings ?? [], layers: p.layers ?? [] };
   if (p.actions?.length) out.actions = p.actions;
   out.notes = p.notes;
   if (p.display) out.display = p.display;
+  if (p.takes?.length) out.takes = p.takes;
   return out;
 }
 
@@ -98,6 +116,20 @@ function glowGraph(o: { radius?: number; posX?: number; posY?: number; falloff?:
     glowNode('circ', 'distance', o),
     ...toneOut('glow', 'tinted', 1320),
   ];
+}
+
+/** The glowing circle with an expression on its Radius that has two knobs, `wob` and `speed` (glsl/inputExpr). */
+function exprKnobGraph(): GraphNode[] {
+  const nodes = glowGraph({ radius: 0.28, falloff: 12, tint: [0.55, 0.45, 1] });
+  const circ = nodes.find(n => n.id === 'circ')!;
+  circ.params = {
+    ...circ.params,
+    __inExpr_radius: 'input * (1.0 + wob * sin(t * speed))',
+    __inKnobs_radius: [{ name: 'wob', min: 0, max: 0.5 }, { name: 'speed', min: 0, max: 20 }],
+    knob_radius_wob: 0.2,
+    knob_radius_speed: 6,
+  };
+  return nodes;
 }
 
 /** A slowly drifting FBM landscape: a picture with plenty of light and dark for layers to read. */
@@ -146,6 +178,53 @@ const quietGraph = () => glowGraph({ radius: 0.05, falloff: 30, tint: [0.25, 0.3
 
 // A star, as an SVG data URL, for the image example.
 const STAR_SVG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><polygon points="100,8 124,74 194,74 138,116 160,186 100,144 40,186 62,116 6,74 76,74" fill="#fff"/></svg>');
+
+// ── A recorded take, built instead of performed ──────────────────────────────
+
+/**
+ * An 8-second performance for the recorded-take example: the Lead null flies
+ * a figure of eight (the comet and the glow ride it), the radius swells on
+ * four hits, each hit presses the comet's Sparkle, and the tint drifts from
+ * amber through rose to blue. Sampled at 60 per second and stored the way a
+ * recording is (takePlayback's encodeKeys keeps only the keys it needs).
+ */
+function builtTake(): PlayTake {
+  const LENGTH = 8, RATE = 60, HITS = [1.4, 3.1, 4.9, 6.6];
+  const times: number[] = [];
+  for (let i = 0; i <= LENGTH * RATE; i++) times.push(i / RATE);
+  // The path in picture units (0–1 across and up), eased in and out so it starts and ends still.
+  const path = times.map(t => {
+    const u = (t / LENGTH) * Math.PI * 2;
+    const calm = Math.min(1, t / 0.6, (LENGTH - t) / 0.6);
+    return { x: 0.5 + calm * 0.3 * Math.sin(u), y: 0.5 + calm * 0.2 * Math.sin(2 * u) };
+  });
+  const hit = (t: number) => HITS.reduce((a, h) => a + (t < h ? Math.exp(-(((t - h) / 0.05) ** 2)) : Math.exp(-(t - h) / 0.35)), 0);
+  const tint = (t: number): number[] => {
+    const stops = [[1, 0.55, 0.25], [1, 0.35, 0.55], [0.4, 0.6, 1], [1, 0.55, 0.25]];
+    const f = (t / LENGTH) * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(f)), k = f - i;
+    return stops[i].map((c, j) => c + (stops[i + 1][j] - c) * (k * k * (3 - 2 * k)));
+  };
+  const track = (kind: TakeTrack['kind'], id: string, label: string, values: number[], o: { target?: string; width?: 1 | 3; step?: boolean } = {}): TakeTrack => ({
+    kind, id, label, width: o.width ?? 1, ...(o.target ? { target: o.target } : {}), ...(o.step ? { step: true } : {}),
+    keys: encodeKeys(o.step ? [0, LENGTH] : times, values, o.width ?? 1, o.step),
+  });
+  return {
+    id: 'take-figure-eight', name: 'Figure of eight', from: 0, length: LENGTH, seed: 4242,
+    tracks: [
+      track('control', 'x', 'Glow X', path.map(p => -1.78 + p.x * 3.56), { target: 'circ::posX' }),
+      track('control', 'y', 'Glow Y', path.map(p => -1 + p.y * 2), { target: 'circ::posY' }),
+      track('control', 'radius', 'Radius (Space)', times.map(t => 0.1 + 0.14 * Math.min(1, hit(t))), { target: 'circ::radius' }),
+      track('control', 'tint', 'Tint', times.flatMap(tint), { target: 'glow::tint', width: 3 }),
+      track('control', 'null:lead:x', 'Lead x', path.map(p => p.x), { target: 'layer:lead::x' }),
+      track('control', 'null:lead:y', 'Lead y', path.map(p => p.y), { target: 'layer:lead::y' }),
+      track('pointer', 'x', 'Pointer x', path.map(p => p.x)),
+      track('pointer', 'y', 'Pointer y', path.map(p => p.y)),
+      track('pointer', 'over', 'Pointer over', [1, 1], { step: true }),
+      track('pointer', 'down', 'Pointer down', [0, 0], { step: true }),
+    ],
+    events: HITS.map(t => ({ t, do: 'script:sparkle' as const, layerId: 'comet', amount: 1 })),
+  };
+}
 
 type Ex = { key: string; nodes: GraphNode[]; play: PlayRecord };
 const ex = (key: string, nodes: GraphNode[], p: PlayRecord): Ex => ({ key, nodes, play: p });
@@ -240,6 +319,18 @@ const LIST: Ex[] = [
 • Drag Radius and watch Falloff follow (its slider is locked while driven).
 • Map an LFO onto Radius: now both move.
 • Chain a third control from Falloff.`,
+  })),
+  ex('playExprKnob', exprKnobGraph(), play({
+    controls: [ctl('wob', 'circ::knob_radius_wob', 'Wobble (knob)', 0, 0.5), ctl('speed', 'circ::knob_radius_speed', 'Speed (knob)', 0, 20)],
+    mappings: [map('swell', 'wob', S.lfo('sine', 0.12), 0, 0.35, { smoothMs: 60 })],
+    notes: `**What it shows.** A knob is a slider inside an input expression. Circle SDF's Radius has the expression **input * (1.0 + wob * sin(t * speed))**, and wob and speed are its knobs: sliders under the expression on the card, and Play controls here.
+
+**How it's built.** In the Studio, the ƒ chip on Radius opens the expression. Typing a new name offers "Make it a knob"; "Add a knob" puts one in at the cursor. On the Play page, Wobble has a slow LFO mapped onto it, so the wobble swells and fades; Speed is free.
+
+**Try this.**
+• Drag Speed: the wobble quickens with no recompile (a knob is a uniform).
+• Map Mouse X onto Speed, or a MIDI knob onto Wobble.
+• In the Studio, right-click a knob's slider for Play, or ◆ to keyframe it.`,
   })),
   ex('playColour', glowGraph({ tint: [0.3, 0.5, 1] }), play({
     controls: [colourCtl('tint', 'glow::tint', 'Tint')],
@@ -806,6 +897,138 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Drag on the picture to write with the pen.
 • Open the Studio to see the graph: UV → Layers → SDF Glow → Tone Map.
 • Turn "Seen by the Layers node" off on a layer to leave it out.`,
+  })),
+
+  // ─ Scripts ─
+  ex('scriptFirst', glowGraph({ radius: 0.08, falloff: 14, tint: [0.35, 0.55, 1] }), play({
+    layers: [scriptLayer('ring', 'Ring', SKETCH_FIRST)],
+    controls: [ctl('count', 'layer:ring::p_count', 'Ring · Dots', 3, 60, 1), ctl('size', 'layer:ring::p_radius', 'Ring · Ring size', 0.05, 0.48), ctl('spin', 'layer:ring::p_spin', 'Ring · Spin', -2, 2)],
+    notes: `**What it shows.** A **Script** layer is a small JavaScript sketch drawn over the shader: \`setup(s)\` runs once, \`draw(s)\` every frame, on a canvas the size of the picture (\`s.ctx\`). Every entry in \`params\` becomes a slider on the layer.
+
+**How it's built.** The glow is an ordinary graph. The ring is the Ring layer's code: \`s.state.angle\` keeps the spin between frames, \`dt\` makes it frame-rate proof, and sizes are fractions of \`height\`. Three of its sliders were made Play controls with the + in Layers.
+
+**Try this.**
+• Drag Dots, Ring size and Spin.
+• Layers → Ring → **Open editor**: change the \`hsl(…)\` line and press ⌘/Ctrl+Enter.
+• Map an LFO onto Ring size: the sketch breathes on its own.`,
+  })),
+  ex('scriptMouse', glowGraph({ radius: 0.04, falloff: 30, tint: [0.3, 0.35, 0.6] }), play({
+    layers: [scriptLayer('chain', 'Chain', SKETCH_MOUSE)],
+    controls: [ctl('len', 'layer:chain::p_length', 'Chain · Length', 5, 120, 1), ctl('follow', 'layer:chain::p_follow', 'Chain · Follow', 0.02, 0.6)],
+    notes: `**What it shows.** \`s.mouse\` is the pointer over the picture in pixels: \`x\`, \`y\` (y down, like any canvas), \`over\` (is it on the picture) and \`down\` (is the button held).
+
+**How it's built.** The head eases toward the mouse, and the sketch keeps a list of where it has been: each bead sits where the head was a few frames ago, so the chain follows its path. \`ease(k, dt)\` turns "a fraction per frame" into the same speed at 30 or 120 frames a second. Away from the picture the head wanders on its own, so it never sits still.
+
+**Try this.**
+• Move over the picture; hold the button to swell the beads.
+• Lower Follow for a lazier chain.
+• In the editor, draw a line from each bead to \`mouse.x, mouse.y\`.`,
+  })),
+  ex('scriptPicture', fbmGraph({ scale: 1.8, timeScale: 0.06, preset: '6' }), play({
+    layers: [scriptLayer('stipple', 'Stipple', SKETCH_PICTURE, { readPicture: true })],
+    controls: [ctl('dots', 'layer:stipple::p_count', 'Stipple · Dots', 200, 10000, 100), ctl('contrast', 'layer:stipple::p_contrast', 'Stipple · Contrast', 0.5, 6)],
+    display: { picture: false, backdrop: [0.02, 0.02, 0.035] },
+    notes: `**What it shows.** \`s.picture.brightness(x, y)\` reads the shader under a pixel, 0 (black) to 1 (white). The layer's **Picture** switch turns it on; the kit samples the shader at 64 × 36 each frame.
+
+**How it's built.** Each dot throws darts: a random spot is kept with a chance equal to its brightness (raised to Contrast), so bright parts collect more dots. Dots live a second or two, then land somewhere new, so the stipple follows the drifting FBM underneath. The picture itself is hidden (Picture → Layers only).
+
+**Try this.**
+• Switch Picture back to Shown to see what is being read.
+• Raise Contrast for starker darks; lower it toward 0.5 for an even dust.
+• Turn the layer's Picture switch off: every spot reads 0 and the dots scatter evenly.`,
+  })),
+  ex('scriptNulls', glowGraph({ radius: 0.03, falloff: 30, tint: [0.3, 0.3, 0.55] }), play({
+    layers: [
+      layer('null', 'a', 'A', { x: 0.2, y: 0.45, color: '#ffb86b' }),
+      layer('null', 'b', 'B', { x: 0.8, y: 0.55 }),
+      layer('null', 'pull', 'Pull', { x: 0.5, y: 0.75, follow: 'mouse', spring: 0.35, wobble: 0.75, size: 6, color: '#f5c2e7' }),
+      scriptLayer('string', 'String', SKETCH_NULLS),
+    ],
+    controls: [ctl('by', 'layer:b::y', 'B · Y', 0, 1), ctl('bend', 'layer:string::p_bend', 'String · Bend', 0, 2)],
+    mappings: [map('sway', 'by', S.lfo('sine', 0.12), 0.3, 0.7)],
+    notes: `**What it shows.** \`s.null('A')\` gives the Null layer labelled A (or with id A) in pixels, or \`null\` when there is none. Nulls are the cheap way to give a sketch handles you can drag, map, or let follow the mouse.
+
+**How it's built.** The string is a curve from A to B whose control point is pushed toward Pull, so at Bend 1 it passes through Pull. Pull follows the mouse on a wobbly spring; an LFO sways B up and down through its Y control.
+
+**Try this.**
+• Drag A and B; move the mouse to pluck the string.
+• Turn Pull's Wobble up to 1 in Layers.
+• Rename a null: the sketch looks it up by label, so the string lets go.`,
+  })),
+  ex('scriptButtons', glowGraph({ radius: 0.08, falloff: 12, tint: [1, 0.45, 0.6] }), play({
+    layers: [scriptLayer('rings', 'Rings', SKETCH_BUTTONS)],
+    controls: [ctl('radius', 'circ::radius', 'Glow (on the beat)', 0.04, 0.3), ctl('life', 'layer:rings::p_life', 'Rings · Ring life', 0.2, 4)],
+    mappings: [map('kick', 'radius', S.trig(T.beat(116, 1), 'envelope', { attack: 5, decay: 260, sustain: 0, release: 80 }), 0.06, 0.2)],
+    actions: [act('beat', T.beat(116, 1), 'script:kick', 'rings', 1), act('space', T.key('Space'), 'script:kick', 'rings', 1.6), act('rev', T.key('KeyR'), 'script:reverse', 'rings')],
+    notes: `**What it shows.** A sketch can declare **buttons**. \`kick: { kind: 'button' }\` makes one: \`s.pressed('kick')\` is true on the frame it fires and \`s.params.kick\` is the amount. A function in \`params\` (\`reverse(s) { … }\`) is a button that runs itself. Buttons are **actions** on the Play panel, so keys, beats, clicks, notes and shapes can press them.
+
+**How it's built.** Three actions (bottom of the Layers tab): a Beat at 116 BPM presses Kick every beat, Space presses it at 1.6 (bigger rings), R presses Reverse. The glow's radius has a mapping from the same beat, so light and rings land together.
+
+**Try this.**
+• Press Space and R.
+• Change the beat action's trigger to a MIDI note or an Audio hit.
+• Press Kick and Reverse on the layer in Layers.`,
+  })),
+  ex('scriptParticles', quietGraph(), play({
+    layers: [scriptLayer('sparks', 'Fountain', SKETCH_PARTICLES)],
+    controls: [ctl('rate', 'layer:sparks::p_rate', 'Fountain · Per second', 0, 1500, 10), ctl('gravity', 'layer:sparks::p_gravity', 'Fountain · Gravity', -1, 3), ctl('spread', 'layer:sparks::p_spread', 'Fountain · Spread', 0, 1.5)],
+    notes: `**What it shows.** A particle system is an array of objects and four steps every frame: **spawn**, **move**, **draw**, **die**. The built-in Particles layer does far more, but a sketch is where your own rules go.
+
+**How it's built.** \`owed\` carries fractions of a particle, so Per second is exact at any frame rate. Gravity adds to each velocity; the floor flips it at half speed. Drawing with \`'lighter'\` adds overlapping sparks toward white. The emitter follows the mouse over the picture.
+
+**Try this.**
+• Move over the picture; set Gravity below 0 for rising embers.
+• In the editor, add \`p.vx += (Math.random() - 0.5) * height * dt;\` in the move step for a flicker.
+• Colour by speed instead of age.`,
+  })),
+  ex('scriptP5', fbmGraph({ scale: 1.4, timeScale: 0.04, preset: '4' }), play({
+    layers: [scriptLayer('ridges', 'Ridges', SKETCH_P5)],
+    controls: [ctl('rows', 'layer:ridges::p_rows', 'Ridges · Rows', 8, 80, 1), ctl('peak', 'layer:ridges::p_peak', 'Ridges · Peak height', 0, 0.4)],
+    mappings: [map('breathe', 'peak', S.lfo('sine', 0.07), 0.08, 0.2)],
+    notes: `**What it shows.** Most p5.js sketches run as they are: \`background\`, \`stroke\`, \`fill\`, \`noise\`, \`beginShape\`, \`vertex\`, \`width\`, \`frameCount\` and the rest are built in as plain names. Drop \`createCanvas\`; the canvas is the picture.
+
+**How it's built.** The classic ridge-lines sketch. \`params\` declares Rows and Peak height, and because the sketch also has top-level \`let rows\` and \`let peak\`, the layer writes the slider values into those variables before each draw, so the p5 code never mentions \`s\`. The one other change is \`clear()\` where p5 had \`background(0)\`, so the FBM shows around the ridges; each ridge is filled black, so it hides the ones behind it. An LFO breathes the peaks.
+
+**Try this.**
+• Put \`background(0)\` back in place of \`clear()\` to see the sketch alone.
+• In the editor, double-click a number (like the 0.02 in \`noise\`), make it a variable, and use **Make it a slider**.
+• Paste a p5 sketch of your own and press Apply.`,
+  })),
+  ex('scriptGlow', layersGlowGraph({ falloff: 60, tint: [0.35, 0.7, 1] }), play({
+    layers: [scriptLayer('rose', 'Rose', SKETCH_GLOW)],
+    controls: [ctl('falloff', 'glow::brightness', 'Glow falloff', 10, 100), colourCtl('tint', 'glow::tint', 'Glow tint'), ctl('petals', 'layer:rose::p_petals', 'Rose · Petals', 2, 12, 1), ctl('depth', 'layer:rose::p_depth', 'Rose · Depth', 0, 1)],
+    mappings: [map('depth', 'depth', S.lfo('sine', 0.05), 0.3, 0.8)],
+    notes: `**What it shows.** What a sketch draws can go back into the shader. The **Layers** node gives the graph the layers' colour, alpha and a signed **distance** to them; SDF Glow on that distance turns thin white lines into neon.
+
+**How it's built.** UV → Layers → SDF Glow → Tone Map → Output. The Rose layer draws two rose curves, 2 pixels wide, and has **Seen by the Layers node** on (the default). An LFO sweeps the petals' depth.
+
+**Try this.**
+• Drag Glow falloff down for a wide haze, up for a tight tube.
+• In the editor, draw a filled circle: the glow hugs its outline.
+• Turn "Seen by the Layers node" off on the layer: the lines stay, the glow goes.`,
+  })),
+
+  // ─ Recording ─
+  ex('playTake', glowGraph({ radius: 0.1, falloff: 10 }), play({
+    layers: [
+      layer('null', 'lead', 'Lead', { x: 0.5, y: 0.5, follow: 'mouse', spring: 0.5, wobble: 0.35, size: 0 }),
+      scriptLayer('comet', 'Comet', SKETCH_COMET),
+    ],
+    controls: [ctl('x', 'circ::posX', 'Glow X', -1.8, 1.8), ctl('y', 'circ::posY', 'Glow Y', -1, 1), ctl('radius', 'circ::radius', 'Radius (Space)', 0.05, 0.3), colourCtl('tint', 'glow::tint', 'Tint')],
+    mappings: [
+      map('nx', 'x', S.nul('lead', 'x'), -1.78, 1.78), map('ny', 'y', S.nul('lead', 'y'), -1, 1),
+      map('hit', 'radius', S.trig(T.key('Space'), 'envelope', { attack: 30, decay: 350, sustain: 0, release: 200 }), 0.1, 0.24),
+    ],
+    actions: [act('sparkle', T.key('Space'), 'script:sparkle', 'comet'), act('sparkleS', T.key('KeyS'), 'script:sparkle', 'comet')],
+    takes: [builtTake()],
+    notes: `**What it shows.** A **take** is a performance kept as keyframes: every control, null, the pointer and each action that fired, frame by frame. This one ships with the example, so you can watch it and render it without playing first.
+
+**How it's built.** Live, the Lead null chases the mouse on a spring; the glow and the Comet sketch ride it; Space swells the glow and presses the comet's Sparkle. The take "Figure of eight" is 8 seconds of that, built in code instead of performed.
+
+**Try this.**
+• Record (the red dot) → **Performance** → Takes → ▶ on Figure of eight to watch it back.
+• Press **Render…** on it: it renders frame by frame, smooth at any size, with no dropped frames.
+• Record your own: Start, move the mouse and tap Space, then Stop. It plays back and joins the list.`,
   })),
 ];
 

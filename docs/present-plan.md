@@ -428,6 +428,43 @@ fence ‖ with no spacing; `\parallel` stays a relation. Checked in Chrome on
 the sample: 𝐩, 𝐨, 𝐝 upright bold, ‖𝐩‖ tight. MathML stays the default; the
 KaTeX HTML option is unchanged.
 
+### Presentations as files (branch `claude/presentation-files`)
+
+Presentations are their own kind of file, like GLSL shaders, decoupled from
+graphs. How to use all of this: [present-guide.md](present-guide.md).
+
+- **Present page**: a visible save state beside the title (Saving… / ✓ Saved
+  2 min ago / Not saved; a tick on phones); the title menu has the five most
+  recent, All presentations…, New, Import, the sample, Rename, Save a copy…,
+  Download (.present.json), Export as a web page and Delete (with Undo, no
+  confirm). An **Open** button (folder icon on phones) opens the list: search,
+  folders (scope `presentations` in the shared folder store), a still from the
+  first source, steps · Plays · last changed, and per row Open, Download, Make
+  a copy, Rename, Move to a folder (a menu, so it works without drag on
+  phones) and Delete with Undo; New, Import… and Download all at the top.
+- **Library**: presentations are a tile in the Library's numbers, a
+  Download… → Only presentations set, and in Export everything as
+  `presentations/<folder>/<name>.present.json` (the downloadable file format,
+  kind first, imported mark dropped) next to `library.json`. The backup folder
+  writes the same files. Import checks each through `parsePresentation`,
+  leaves out unreadable ones, names a clash “Name (2)”, “(3)”… (and skips one
+  that's already here under either name), carries folder membership across a
+  rename, and marks presentations with Script layers as imported (sandboxed).
+  A lone `.present.json`, or a ZIP of loose ones, also imports as a library.
+- **Top bar Import** (and its shortcut, and the phone ⋯ → Import a file)
+  reads the file's `kind`: a presentation opens on the Present page, a
+  `library.json` merges, anything else is a graph as before
+  (`components/shell/importAnyFile.ts`).
+- **Phones**: Present joins the top bar's Studio · Play · Present switch; the
+  logo button (back to the Studio) shows only on the other pages, so the bar
+  fits a 360 px screen. On Present the graph's undo/redo/save/load step aside
+  for the page's own file actions.
+- **Sources**: the card says so when a saved graph a source was copied from is
+  gone (the copy still works; Refresh and Open are off), and the missing-files
+  note now counts songs (Audio Input nodes) as well as images and videos.
+- Saved-name clashes (Duplicate, import, restore after Undo) are “Name (2)”
+  everywhere, not “Name 2”.
+
 ### Left
 
 - The Tauri pop-out window for a presentation (needs a Rust toolchain, not

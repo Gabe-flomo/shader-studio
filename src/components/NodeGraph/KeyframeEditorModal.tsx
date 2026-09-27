@@ -1025,7 +1025,7 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
   const hasNextSegment = selectedKf !== null && (selectedKf < keyframes.length - 1 || mode === 'interpolate');
 
   const nodeLabel = typeof node.params.label === 'string' && node.params.label ? node.params.label : (getNodeDefinitionFor(node)?.label ?? node.type);
-  const socketLabel = node.inputs[socketKey]?.label ?? socketKey;
+  const socketLabel = node.inputs[socketKey]?.label ?? getNodeDefinitionFor(node)?.paramDefs?.[socketKey]?.label ?? socketKey;
   const hint =
     toolMode === 'add' ? 'Click empty space to add a key · drag a key to move it'
     : toolMode === 'delete' ? 'Click a key to delete it'

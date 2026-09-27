@@ -17,9 +17,10 @@ import { toast } from '../ui/toastStore';
 import { PlayableList, type PlayableRow } from '../play/OpenPlayable';
 import type { Page } from '../page';
 import { usePresentation } from './presentationStore';
-import { addSourceFrom, openSourceGraph, originText } from './sourceActions';
+import { addSourceFrom, openSourceGraph, originText, useSourceGraphExists } from './sourceActions';
 
 const NO_SOURCES: PresentSource[] = [];
+const joinAnd = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 export function Poster({ source, size = 44 }: { source: PresentSource | undefined; size?: number }) {
   const tk = useTokens();
@@ -87,6 +88,7 @@ export function SourceCard({ s, navigate, compact = false }: { s: PresentSource;
   const used = usePresentation(st => st.doc?.steps.some(step => step.blocks.some(b => blockSources(b).includes(s.id))) ?? false);
   const limits = sourceLimits(s);
   const noFiles = missingMedia(s);
+  const graphHere = useSourceGraphExists(s);
   const [busy, setBusy] = useState(false);
   const refresh = async () => {
     setBusy(true);
@@ -112,16 +114,24 @@ export function SourceCard({ s, navigate, compact = false }: { s: PresentSource;
           <span>Shown as a still: the web player can’t run {limits.join(', ')} yet.</span>
         </div>
       )}
+      {!graphHere && (
+        <div style={{ display: 'flex', gap: 6, color: tk.text.muted, font: `500 11.5px/1.4 ${fontFamily.ui}` }}>
+          <Icon name="info" size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>The graph “{s.from.kind === 'saved' ? s.from.name : s.title}” isn’t saved here any more. This copy has everything the presentation needs; Refresh and Open need the graph.</span>
+        </div>
+      )}
       {noFiles.length > 0 && (
         <div style={{ display: 'flex', gap: 6, color: tk.status.warningText, font: `500 11.5px/1.4 ${fontFamily.ui}` }}>
           <Icon name="warning" size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>Without {noFiles.join(' and ')}: files stay with the graph open in the Studio. Open it there with its files loaded, then Refresh.</span>
+          <span>{graphHere
+            ? <>Without {joinAnd(noFiles)}: a graph’s files are only at hand while it’s open in the Studio. Open it there, load its files, save it, then Refresh.</>
+            : <>Without {joinAnd(noFiles)}: the copy was taken while the graph’s files weren’t loaded, and the graph isn’t here to take them from.</>}</span>
         </div>
       )}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Button size="sm" icon="reset" disabled={busy} onClick={refresh} title="Take a new snapshot of the graph as it is now. Blocks keep their controls where the ids still exist.">{busy ? 'Refreshing…' : 'Refresh'}</Button>
-        <Button size="sm" variant="ghost" onClick={() => void openSourceGraph(s, 'studio', navigate)} title="Open its graph in the Studio to edit it (then Refresh here)">Studio</Button>
-        {!compact && <Button size="sm" variant="ghost" onClick={() => void openSourceGraph(s, 'play', navigate)} title="Open it on the Play page">Play</Button>}
+        <Button size="sm" icon="reset" disabled={busy || !graphHere} onClick={refresh} title="Take a new snapshot of the graph as it is now. Blocks keep their controls where the ids still exist.">{busy ? 'Refreshing…' : 'Refresh'}</Button>
+        <Button size="sm" variant="ghost" disabled={!graphHere} onClick={() => void openSourceGraph(s, 'studio', navigate)} title="Open its graph in the Studio to edit it (then Refresh here)">Studio</Button>
+        {!compact && <Button size="sm" variant="ghost" disabled={!graphHere} onClick={() => void openSourceGraph(s, 'play', navigate)} title="Open it on the Play page">Play</Button>}
         <span style={{ flex: 1 }} />
         <IconButton size="sm" icon="trash" tone="danger" label={used ? 'Used by a block: remove those blocks first' : 'Remove this source'} disabled={used} onClick={() => removeSource(s.id)} />
       </div>

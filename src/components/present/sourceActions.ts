@@ -1,7 +1,8 @@
 /** Taking a snapshot into the open presentation, saying where a source came from, and opening its graph. */
 import { snapshotExample, snapshotSaved } from '../../present/snapshot';
 import type { PresentSource } from '../../types/presentation';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useEffect, useState } from 'react';
+import { SAVED_GRAPHS_CHANGED, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { askConfirm } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import type { PlayableRow } from '../play/OpenPlayable';
@@ -18,6 +19,23 @@ export async function addSourceFrom(row: PlayableRow): Promise<PresentSource | n
   if (!r.ok) { toast.error(`Couldn’t take a snapshot of “${row.label}”`, { message: r.error }); return null; }
   usePresentation.getState().addSource(r.source);
   return r.source;
+}
+
+/** Whether a source's graph is still saved here (an example always is). The source itself never needs it. */
+export function sourceGraphExists(s: PresentSource): boolean {
+  if (s.from.kind !== 'saved') return true;
+  try { return localStorage.getItem(`shader-studio:${s.from.name}`) !== null; } catch { return true; }
+}
+
+/** sourceGraphExists, kept current as graphs are saved, renamed and deleted. */
+export function useSourceGraphExists(s: PresentSource): boolean {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const on = () => bump(n => n + 1);
+    window.addEventListener(SAVED_GRAPHS_CHANGED, on);
+    return () => window.removeEventListener(SAVED_GRAPHS_CHANGED, on);
+  }, []);
+  return sourceGraphExists(s);
 }
 
 export function originText(s: PresentSource): string {

@@ -1,5 +1,13 @@
-import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
+import type { NodeDefinition, GraphNode, ParamDef } from '../../types/nodeGraph';
 import { p, zeroFor } from './helpers';
+
+/**
+ * The "exact" switch of the guarded math nodes (Divide, Pow, Square Root). Off, the node guards
+ * its input so a drag never lands on inf or NaN; on, it is the plain GLSL call. The GLSL → nodes
+ * converter turns it on, so a converted shader renders exactly as the code did.
+ */
+const exactDef = (hint: string): ParamDef => ({ label: 'Exact', type: 'bool', hint });
+const isExact = (node: GraphNode) => node.params.exact === true;
 
 /** A scalar param broadcast to the node's vector type (`vec3(u_p_x_b)`), or the scalar itself for floats. */
 function bcast(t: string, expr: string): string {
@@ -10,6 +18,10 @@ function bcast(t: string, expr: string): string {
 // Returns 'float'|'vec2'|'vec3' from params, defaulting to 'float'.
 function ot(node: GraphNode): string {
   return (typeof node.params.outputType === 'string' ? node.params.outputType : 'float');
+}
+/** The vector type of a node that takes any vector (Length, Dot, Normalize): vec2 unless the card says otherwise. */
+function vt(node: GraphNode): string {
+  return (typeof node.params.outputType === 'string' ? node.params.outputType : 'vec2');
 }
 
 export const AddNode: NodeDefinition = {
@@ -61,14 +73,17 @@ export const DivideNode: NodeDefinition = {
   type: 'divide', label: 'Divide', category: 'Math', subcategory: 'Arithmetic', description: 'Divide a by b (a / b).',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
-  defaultParams: { b: 1.0 },
-  paramDefs: { b: { label: 'B (divisor)', type: 'float', min: 0.0001, max: 10, step: 0.001 } },
+  defaultParams: { b: 1.0, exact: false },
+  paramDefs: {
+    b: { label: 'B (divisor)', type: 'float', min: 0.0001, max: 10, step: 0.001 },
+    exact: exactDef('Off: divides by max(b, 0.0001), so a divisor at zero or below never gives inf. On: plain a / b, as GLSL does (a negative divisor flips the sign).'),
+  },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node);
     const o = `${node.id}_result`;
     const a = inputVars.a || zeroFor(t);
     const b = inputVars.b || bcast(t, p(node.params.b, 1.0));
-    return { code: `    ${t} ${o} = ${a} / max(${b}, ${bcast(t, '0.0001')});\n`, outputVars: { result: o } };
+    return { code: `    ${t} ${o} = ${a} / ${isExact(node) ? b : `max(${b}, ${bcast(t, '0.0001')})`};\n`, outputVars: { result: o } };
   },
 };
 
@@ -149,15 +164,18 @@ export const PowNode: NodeDefinition = {
   type: 'pow', label: 'Pow', category: 'Math', subcategory: 'Arithmetic', description: 'base ^ exponent.',
   inputs: { base: { type: 'float', label: 'Base' }, exponent: { type: 'float', label: 'Exponent' } },
   outputs: { result: { type: 'float', label: 'Result' } },
-  defaultParams: { exponent: 1.2 },
-  paramDefs: { exponent: { label: 'Exponent', type: 'float', min: 0, max: 10, step: 0.01 } },
+  defaultParams: { exponent: 1.2, exact: false },
+  paramDefs: {
+    exponent: { label: 'Exponent', type: 'float', min: 0, max: 10, step: 0.01 },
+    exact: exactDef('Off: the base is clamped to 0 or more first. On: plain pow(base, exponent), as GLSL does (a negative base is undefined there).'),
+  },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_result`;
     const e = inputVars.exponent || p(node.params.exponent, 1.2);
     // pow() requires both args to be the same genType — broadcast scalar exponent when vectorized
     const ecast = t !== 'float' ? `${t}(${e})` : e;
     const base  = inputVars.base || (t === 'float' ? '1.0' : `${t}(1.0)`);
-    return { code: `    ${t} ${o} = pow(max(${base}, 0.0), ${ecast});\n`, outputVars: { result: o } };
+    return { code: `    ${t} ${o} = pow(${isExact(node) ? base : `max(${base}, 0.0)`}, ${ecast});\n`, outputVars: { result: o } };
   },
 };
 
@@ -171,50 +189,51 @@ export const NegateNode: NodeDefinition = {
 };
 
 export const LengthNode: NodeDefinition = {
-  type: 'length', label: 'Length', category: 'Math', subcategory: 'Vector Ops', description: 'Distance from a vec2 to the origin, multiplied by scale.',
+  type: 'length', label: 'Length', category: 'Math', subcategory: 'Vector Ops', description: 'Distance from a vector to the origin, multiplied by scale. Pick the vector type on the card (vec2 by default).',
   inputs: { input: { type: 'vec2', label: 'Input' }, scale: { type: 'float', label: 'Scale' } },
   outputs: { output: { type: 'float', label: 'Output' } },
-  defaultParams: { scale: 1.0 },
+  defaultParams: { scale: 1.0, outputType: 'vec2' },
   paramDefs: { scale: { label: 'Scale', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_output`;
     const s = inputVars.scale || p(node.params.scale, 1.0);
-    return { code: `    float ${o} = length(${inputVars.input || 'vec2(0.0)'}) * ${s};\n`, outputVars: { output: o } };
+    const t = vt(node);
+    return { code: `    float ${o} = length(${inputVars.input || zeroFor(t)}) * ${s};\n`, outputVars: { output: o } };
   },
 };
 
 
 
 export const TanhNode: NodeDefinition = {
-  type: 'tanh', label: 'Tanh', category: 'Math', subcategory: 'Trigonometry', description: 'Hyperbolic tangent.',
+  type: 'tanh', label: 'Tanh', category: 'Math', subcategory: 'Trigonometry', description: 'Hyperbolic tangent. Works on floats and vectors (component-wise).',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = tanh(${inputVars.input || '0.0'});\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = tanh(${inputVars.input || zeroFor(t)});\n`, outputVars: { output: o } };
   },
 };
 
 export const MinMathNode: NodeDefinition = {
-  type: 'minMath', label: 'Min', category: 'Math', subcategory: 'Comparison', description: 'Minimum of two floats.',
+  type: 'minMath', label: 'Min', category: 'Math', subcategory: 'Comparison', description: 'Minimum of two values. Works on floats and vectors (component-wise); an unwired B is a number for every component.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 0.0 },
   paramDefs: { b: { label: 'B', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
-    return { code: `    float ${o} = min(${inputVars.a || '0.0'}, ${inputVars.b || p(node.params.b, 0.0)});\n`, outputVars: { result: o } };
+    const t = ot(node), o = `${node.id}_result`;
+    return { code: `    ${t} ${o} = min(${inputVars.a || zeroFor(t)}, ${inputVars.b || p(node.params.b, 0.0)});\n`, outputVars: { result: o } };
   },
 };
 
 export const MaxNode: NodeDefinition = {
-  type: 'max', label: 'Max', category: 'Math', subcategory: 'Comparison', description: 'Maximum of two floats.',
+  type: 'max', label: 'Max', category: 'Math', subcategory: 'Comparison', description: 'Maximum of two values. Works on floats and vectors (component-wise); an unwired B is a number for every component.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 0.0 },
   paramDefs: { b: { label: 'B', type: 'float', min: -10, max: 10, step: 0.01 } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
-    return { code: `    float ${o} = max(${inputVars.a || '0.0'}, ${inputVars.b || p(node.params.b, 0.0)});\n`, outputVars: { result: o } };
+    const t = ot(node), o = `${node.id}_result`;
+    return { code: `    ${t} ${o} = max(${inputVars.a || zeroFor(t)}, ${inputVars.b || p(node.params.b, 0.0)});\n`, outputVars: { result: o } };
   },
 };
 
@@ -315,8 +334,8 @@ export const CeilNode: NodeDefinition = {
   type: 'ceil', label: 'Round Up', aliases: ['Ceil'], category: 'Math', subcategory: 'Rounding', description: 'Round up to nearest integer.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_output`;
-    return { code: `    float ${o} = ceil(${inputVars.input || '0.0'});\n`, outputVars: { output: o } };
+    const t = ot(node), o = `${node.id}_output`;
+    return { code: `    ${t} ${o} = ceil(${inputVars.input || zeroFor(t)});\n`, outputVars: { output: o } };
   },
 };
 
@@ -332,9 +351,12 @@ export const FloorNode: NodeDefinition = {
 export const SqrtNode: NodeDefinition = {
   type: 'sqrt', label: 'Square Root', aliases: ['Sqrt'], category: 'Math', subcategory: 'Arithmetic', description: 'Square root.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
+  defaultParams: { exact: false },
+  paramDefs: { exact: exactDef('Off: the input is clamped to 0 or more first. On: plain sqrt(x), as GLSL does (a negative input is undefined there).') },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
-    return { code: `    ${t} ${o} = sqrt(max(${inputVars.input || zeroFor(t)}, 0.0));\n`, outputVars: { output: o } };
+    const x = inputVars.input || zeroFor(t);
+    return { code: `    ${t} ${o} = sqrt(${isExact(node) ? x : `max(${x}, 0.0)`});\n`, outputVars: { output: o } };
   },
 };
 
@@ -376,12 +398,13 @@ export const QuantizeNode: NodeDefinition = {
 };
 
 export const DotNode: NodeDefinition = {
-  type: 'dot', label: 'Dot', category: 'Math', subcategory: 'Vector Ops', description: 'Dot product of two vec2 inputs.',
+  type: 'dot', label: 'Dot', category: 'Math', subcategory: 'Vector Ops', description: 'Dot product of two vectors. Pick the vector type on the card (vec2 by default).',
   inputs: { a: { type: 'vec2', label: 'A' }, b: { type: 'vec2', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
+  defaultParams: { outputType: 'vec2' },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
-    return { code: `    float ${o} = dot(${inputVars.a || 'vec2(0.0)'}, ${inputVars.b || 'vec2(0.0)'});\n`, outputVars: { result: o } };
+    const t = vt(node), o = `${node.id}_result`;
+    return { code: `    float ${o} = dot(${inputVars.a || zeroFor(t)}, ${inputVars.b || zeroFor(t)});\n`, outputVars: { result: o } };
   },
 };
 
@@ -443,6 +466,59 @@ export const SplitVec4Node: NodeDefinition = {
   },
 };
 
+export const MakeVec4Node: NodeDefinition = {
+  type: 'makeVec4', label: 'Make Vec4', category: 'Math', subcategory: 'Vector Build/Split', description: 'Build a vec4 from four float values (a colour with alpha, or four numbers carried together).',
+  inputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' }, z: { type: 'float', label: 'Z' }, w: { type: 'float', label: 'W' } },
+  outputs: { xyzw: { type: 'vec4', label: 'XYZW' } },
+  defaultParams: { x: 0.0, y: 0.0, z: 0.0, w: 1.0 },
+  paramDefs: {
+    x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01 }, y: { label: 'Y', type: 'float', min: -2, max: 2, step: 0.01 },
+    z: { label: 'Z', type: 'float', min: -2, max: 2, step: 0.01 }, w: { label: 'W', type: 'float', min: -2, max: 2, step: 0.01 },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const o = `${node.id}_xyzw`;
+    const c = (['x', 'y', 'z', 'w'] as const).map((k, i) => inputVars[k] || p(node.params[k], i === 3 ? 1.0 : 0.0));
+    return { code: `    vec4 ${o} = vec4(${c.join(', ')});\n`, outputVars: { xyzw: o } };
+  },
+};
+
+/** A swizzle pattern's letters as component indices (xyzw, rgba or stpq), or null when it isn't one. */
+export function swizzleIndices(pattern: string): number[] | null {
+  if (!/^([xyzw]{1,4}|[rgba]{1,4}|[stpq]{1,4})$/.test(pattern)) return null;
+  return [...pattern].map(c => 'xyzwrgbastpq'.indexOf(c) % 4);
+}
+const WIDTH_T = ['float', 'vec2', 'vec3', 'vec4'] as const;
+const IN_N: Record<string, number> = { vec2: 2, vec3: 3, vec4: 4 };
+/** A Swizzle card's socket types, from its params: the input is `inputType`, the output as wide as the pattern. */
+export function swizzleTypes(node: GraphNode): { input: string; output: string } {
+  const input = typeof node.params.inputType === 'string' && IN_N[node.params.inputType] ? node.params.inputType : 'vec3';
+  const idx = swizzleIndices(String(node.params.pattern ?? ''));
+  // A pattern that isn't one, or reaches past the input (.z of a vec2), passes the input through.
+  return { input, output: idx && idx.every(i => i < IN_N[input]) ? WIDTH_T[idx.length - 1] : input };
+}
+
+export const SwizzleNode: NodeDefinition = {
+  type: 'swizzle', label: 'Swizzle', aliases: ['Components', 'Reorder'], category: 'Math', subcategory: 'Vector Build/Split',
+  description: 'Any pattern of a vector’s components, as GLSL writes it: .xyx, .zwxy, .bgr, .yy… One to four letters from xyzw (or rgba), each at most as far as the input reaches. The output is as wide as the pattern.',
+  inputs: { input: { type: 'vec3', label: 'Input' } },
+  outputs: { output: { type: 'vec3', label: 'Output' } },
+  defaultParams: { inputType: 'vec3', pattern: 'xyx' },
+  paramDefs: {
+    inputType: { label: 'Input', type: 'select', options: [{ value: 'vec2', label: 'vec2' }, { value: 'vec3', label: 'vec3' }, { value: 'vec4', label: 'vec4' }] },
+    pattern: { label: 'Pattern', type: 'string', hint: 'One to four of x y z w (or r g b a): .xyx, .zwxy, .bgr…' },
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const { input, output } = swizzleTypes(node);
+    const o = `${node.id}_output`;
+    const idx = swizzleIndices(String(node.params.pattern ?? ''));
+    const n = IN_N[input];
+    const v = inputVars.input || zeroFor(input);
+    // A pattern that reaches past the input (.z of a vec2) or isn't one: the input unchanged, rather than a shader that won't compile.
+    const expr = idx && idx.every(i => i < n) ? `(${v}).${idx.map(i => 'xyzw'[i]).join('')}` : v;
+    return { code: `    ${output} ${o} = ${expr};\n`, outputVars: { output: o } };
+  },
+};
+
 export const MakeVec3Node: NodeDefinition = {
   type: 'makeVec3', label: 'Make Vec3', category: 'Math', subcategory: 'Vector Build/Split', description: 'Build a vec3 color from three float values.',
   inputs: { r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } },
@@ -494,11 +570,13 @@ export const SmoothstepNode: NodeDefinition = {
 
 
 export const NormalizeVec2Node: NodeDefinition = {
-  type: 'normalizeVec2', label: 'Normalize Vec2', category: 'Math', subcategory: 'Vector Ops', description: 'Normalize a vec2 to unit length.',
-  inputs: { v: { type: 'vec2', label: 'Vec2' } }, outputs: { result: { type: 'vec2', label: 'Result' } },
+  type: 'normalizeVec2', label: 'Normalize', aliases: ['Normalize Vec2'], category: 'Math', subcategory: 'Vector Ops', description: 'Scale a vector to unit length. Pick the vector type on the card (vec2 by default).',
+  inputs: { v: { type: 'vec2', label: 'Vector' } }, outputs: { result: { type: 'vec2', label: 'Result' } },
+  defaultParams: { outputType: 'vec2' },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const o = `${node.id}_result`;
-    return { code: `    vec2 ${o} = normalize(${inputVars.v || 'vec2(1.0, 0.0)'});\n`, outputVars: { result: o } };
+    const t = vt(node), o = `${node.id}_result`;
+    const unit = t === 'vec2' ? 'vec2(1.0, 0.0)' : t === 'vec3' ? 'vec3(1.0, 0.0, 0.0)' : t === 'vec4' ? 'vec4(1.0, 0.0, 0.0, 0.0)' : '1.0';
+    return { code: `    ${t} ${o} = normalize(${inputVars.v || unit});\n`, outputVars: { result: o } };
   },
 };
 
@@ -729,11 +807,11 @@ export const StepNode: NodeDefinition = {
   defaultParams: { edge: 0.5 },
   paramDefs: { edge: { label: 'Threshold', type: 'float', min: -2.0, max: 2.0, step: 0.01, hint: 'Output is 0 below the threshold and 1 at or above it.' } },
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id   = node.id;
+    const t    = ot(node), id = node.id;
     const edge = inputVars.edge || p(node.params.edge, 0.5);
-    const x    = inputVars.x   || '0.0';
+    const x    = inputVars.x   || zeroFor(t);
     return {
-      code: `    float ${id}_result = step(${edge}, ${x});\n`,
+      code: `    ${t} ${id}_result = step(${edge}, ${x});\n`,
       outputVars: { result: `${id}_result` },
     };
   },
@@ -1067,9 +1145,22 @@ export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryO
   smoothstep: { primaryInput: 'value', primaryOutput: 'result' },
   clamp:      { primaryInput: 'input', primaryOutput: 'result' },
   mod:        { primaryInput: 'input', primaryOutput: 'output' },
+  abs:        { primaryInput: 'input', primaryOutput: 'output' },
+  ceil:       { primaryInput: 'input', primaryOutput: 'output' },
+  tanh:       { primaryInput: 'input', primaryOutput: 'output' },
+  minMath:    { primaryInput: 'a', primaryOutput: 'result' },
+  max:        { primaryInput: 'a', primaryOutput: 'result' },
+  step:       { primaryInput: 'x', primaryOutput: 'result' },
+  // Any vector in, a float out: the type is the input's (vec2 when the card doesn't say).
+  length:        { primaryInput: 'input', primaryOutput: '' },
+  dot:           { primaryInput: 'a', primaryOutput: '', alsoInputs: ['b'] },
+  normalizeVec2: { primaryInput: 'v', primaryOutput: 'result' },
   // Constant: the pills pick float / vec2 / vec3 / vec4 and the card shows 1–4 sliders.
   constant:   { primaryInput: 'value', primaryOutput: 'value' },
 };
 
 /** Node types whose type pills also offer vec4. */
-export const VEC4_CAPABLE_NODES = new Set(['constant']);
+export const VEC4_CAPABLE_NODES = new Set([
+  'constant', 'add', 'subtract', 'multiply', 'divide', 'mix', 'sin', 'cos', 'exp', 'pow', 'negate', 'floor', 'sqrt', 'round', 'fractRaw',
+  'sign', 'smoothstep', 'clamp', 'mod', 'abs', 'ceil', 'tanh', 'minMath', 'max', 'step', 'length', 'dot', 'normalizeVec2',
+]);

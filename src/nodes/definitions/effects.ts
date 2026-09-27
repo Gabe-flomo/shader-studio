@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, pv3 } from './helpers';
+import { f, p, pv3, zeroFor } from './helpers';
 import { PALETTE_GLSL_FN } from './color';
 
 
@@ -8,7 +8,7 @@ export const AbsNode: NodeDefinition = {
   label: 'Abs',
   category: 'Math',
   subcategory: 'Arithmetic',
-  description: 'Absolute value of a float',
+  description: 'Absolute value. Works on floats and vectors (component-wise).',
   inputs: {
     input: { type: 'float', label: 'Input' },
   },
@@ -16,10 +16,11 @@ export const AbsNode: NodeDefinition = {
     output: { type: 'float', label: 'Output' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
+    const t = typeof node.params.outputType === 'string' ? node.params.outputType : 'float';
     const outVar = `${node.id}_output`;
-    const inVar = inputVars.input || '0.0';
+    const inVar = inputVars.input || zeroFor(t);
     return {
-      code: `    float ${outVar} = abs(${inVar});\n`,
+      code: `    ${t} ${outVar} = abs(${inVar});\n`,
       outputVars: { output: outVar },
     };
   },

@@ -21,11 +21,11 @@ import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { Sheet } from '../ui/Sheet';
-import { askConfirm, askText } from '../ui/dialogStore';
+import { askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import type { Page } from '../page';
 import { listPresentations, lastPresentation, PRESENTATIONS_CHANGED, type PresentationEntry } from '../../present/storage';
-import { buildSamplePresentation, SAMPLE_TITLE } from '../../present/sample';
+import { SAMPLE_PRESENTATIONS, type SamplePresentation } from '../../present/samples';
 import { usePresentation, type PresentMode } from './presentationStore';
 import { Inspector } from './Inspector';
 import { StepsList, StepsStrip } from './StepsList';
@@ -35,7 +35,9 @@ import { loadMarkdown } from './useMarkdown';
 import { presentCss } from './presentCss';
 import { usePosters } from './usePosters';
 import { ExportDialog } from './ExportDialog';
-import { exportPresentationFile, importPresentationFile } from './presentationFiles';
+import { deleteWithUndo, exportPresentationFile, importPresentationFile, saveCopy } from './presentationFiles';
+import { PresentationsDialog } from './PresentationsDialog';
+import { whenSaved } from '../../store/graphVersions';
 import type { BlockContext } from './Blocks';
 import { useCamera } from '../../present/runtimeHost';
 
@@ -49,9 +51,9 @@ function usePresentationList(): PresentationEntry[] {
   return list;
 }
 
-async function openSample(): Promise<void> {
+async function openSample(sample: SamplePresentation): Promise<void> {
   try {
-    const doc = await buildSamplePresentation();
+    const doc = await sample.build();
     usePresentation.getState().adopt(doc);
   } catch (e) {
     toast.error('Couldn’t build the sample', { message: e instanceof Error ? e.message : String(e) });
@@ -70,6 +72,7 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
   const list = usePresentationList();
   const rootRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
 
   // Markdown and KaTeX: fetched now that the page is open.
   useEffect(() => { void loadMarkdown(); }, []);
@@ -95,42 +98,49 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
   return (
     <div ref={rootRef} style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: tk.bg.app, color: tk.text.primary, font: `13px ${fontFamily.ui}` }}>
       <style>{css}</style>
-      <Header compact={compact} list={list} onExport={() => setExporting(true)} />
+      <Header compact={compact} list={list} onExport={() => setExporting(true)} onBrowse={() => setBrowsing(true)} />
       {!doc ? <EmptyState compact={compact} /> : mode === 'slides' ? <SlidesView ctx={ctx} rootRef={rootRef} /> : mode === 'scroll' ? <ScrollView ctx={ctx} /> : compact ? <EditPhone ctx={ctx} onNavigate={onNavigate} /> : <EditDesktop ctx={ctx} onNavigate={onNavigate} />}
       {exporting && doc && <ExportDialog onClose={() => setExporting(false)} />}
+      {browsing && <PresentationsDialog list={list} compact={compact} onClose={() => setBrowsing(false)} onNew={() => void newPresentation()} />}
     </div>
   );
 }
 
 // ── Header ──────────────────────────────────────────────────────────────────
 
-function Header({ compact, list, onExport }: { compact: boolean; list: PresentationEntry[]; onExport: () => void }) {
+function Header({ compact, list, onExport, onBrowse }: { compact: boolean; list: PresentationEntry[]; onExport: () => void; onBrowse: () => void }) {
   const tk = useTokens();
   const name = usePresentation(s => s.name);
   const doc = usePresentation(s => s.doc);
   const mode = usePresentation(s => s.mode);
-  const status = usePresentation(s => s.status);
   const setMode = usePresentation(s => s.setMode);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const titleRef = useRef<HTMLButtonElement>(null);
 
+  const others = list.filter(p => p.name !== name).slice(0, 5);
   const items: MenuItem[] = [
-    ...list.slice(0, 12).map(p => ({ label: p.name, icon: p.name === name ? 'check' as const : 'slides' as const, hint: `${p.steps} step${p.steps === 1 ? '' : 's'}`, onSelect: () => { usePresentation.getState().open(p.name); } })),
-    ...(list.length ? ['separator' as const] : []),
+    ...(others.length ? [
+      ...others.map(p => ({ label: p.name, icon: 'slides' as const, hint: `${p.steps} step${p.steps === 1 ? '' : 's'}${p.updatedAt ? ` · ${whenSaved(p.updatedAt)}` : ''}`, onSelect: () => { usePresentation.getState().open(p.name); } })),
+    ] : []),
+    { label: list.length ? `All presentations (${list.length})…` : 'All presentations…', icon: 'folder', hint: 'Search, folders, download, delete', onSelect: onBrowse },
+    'separator',
     { label: 'New presentation…', icon: 'plus', onSelect: () => void newPresentation() },
-    { label: `Sample: ${SAMPLE_TITLE}`, icon: 'spark', hint: 'Built from the Learn 3D lessons', onSelect: () => void openSample() },
-    { label: 'Import a presentation file…', icon: 'import', onSelect: () => void importPresentationFile() },
+    { label: 'Import a .present.json file…', icon: 'import', onSelect: () => void importPresentationFile() },
+    ...SAMPLE_PRESENTATIONS.map(sample => ({ label: `Sample: ${sample.title}`, icon: 'spark' as const, hint: sample.hint, onSelect: () => void openSample(sample) })),
     ...(doc ? [
       'separator' as const,
       { label: 'Rename…', icon: 'edit' as const, onSelect: async () => {
         const t = await askText('Rename presentation', { label: 'Title', initial: name ?? '', confirmLabel: 'Rename' });
         if (t && !usePresentation.getState().rename(t)) toast.error('That name is taken', { message: `There's already a presentation called “${t}”.` });
       } },
-      { label: 'Duplicate', icon: 'copy' as const, onSelect: () => { const d = usePresentation.getState().doc; if (d) usePresentation.getState().adopt(structuredClone(d)); } },
-      { label: 'Export as a file…', icon: 'export' as const, hint: 'A .present.json others can open, with every Play in it', onSelect: () => void exportPresentationFile() },
-      { label: 'Delete…', icon: 'trash' as const, danger: true, onSelect: async () => {
-        if (await askConfirm(`Delete “${name}”?`, { message: 'The presentation goes; the graphs it was built from stay.', confirmLabel: 'Delete', danger: true })) usePresentation.getState().remove();
+      { label: 'Save a copy…', icon: 'copy' as const, hint: 'Under a new name; the copy opens', onSelect: async () => {
+        const t = await askText('Save a copy', { label: 'Title of the copy', initial: `${name ?? doc.title} copy`, confirmLabel: 'Save the copy' });
+        if (t) { const n = saveCopy(t); if (n) toast.success(`Saved a copy: “${n}”`, { message: 'The copy is open now.' }); }
       } },
+      { label: 'Download', icon: 'export' as const, hint: 'A .present.json file with every Play in it, to open in Playfield anywhere', onSelect: () => void exportPresentationFile() },
+      { label: 'Export as a web page…', icon: 'code' as const, hint: 'One HTML file, slides or one long page', onSelect: onExport },
+      'separator' as const,
+      { label: 'Delete', icon: 'trash' as const, danger: true, hint: 'You can undo it for a few seconds', onSelect: () => { if (name) deleteWithUndo(name); } },
     ] : []),
   ];
   const modeLabel = (icon: 'edit' | 'slides' | 'scroll', text: string) => (
@@ -142,27 +152,52 @@ function Header({ compact, list, onExport }: { compact: boolean; list: Presentat
     { value: 'scroll', label: modeLabel('scroll', 'Scroll'), title: 'Everything on one page, for reading alone' },
   ];
   return (
-    <div style={{ height: compact ? 48 : 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: compact ? 6 : 12, padding: compact ? '0 8px 0 12px' : '0 14px 0 16px', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}` }}>
+    <div style={{ height: compact ? 48 : 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: compact ? 4 : 10, padding: compact ? '0 6px 0 8px' : '0 14px 0 16px', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}` }}>
       <button
-        ref={titleRef} type="button"
+        ref={titleRef} type="button" aria-haspopup="menu" title="Presentation: open, new, import, rename, copy, download, delete"
         onClick={() => { const r = titleRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.left, y: r.bottom + 6 } : null); }}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: compact ? '46vw' : 380, height: 34, padding: '0 8px 0 6px', border: 0, borderRadius: radius.control, background: menu ? tk.bg.hover : 'transparent', cursor: 'pointer', color: tk.text.primary }}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexShrink: 1, maxWidth: compact ? undefined : 380, height: 34, padding: compact ? '0 4px' : '0 8px 0 6px', border: 0, borderRadius: radius.control, background: menu ? tk.bg.hover : 'transparent', cursor: 'pointer', color: tk.text.primary }}
       >
-        <span style={{ width: 24, height: 24, borderRadius: radius.sm, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: alpha(tk.accent.base, 0.14), color: tk.accent.base }}><Icon name="slides" size={14} /></span>
+        {!compact && <span style={{ width: 24, height: 24, borderRadius: radius.sm, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: alpha(tk.accent.base, 0.14), color: tk.accent.base }}><Icon name="slides" size={14} /></span>}
         <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', font: `650 13.5px ${fontFamily.ui}` }}>{doc?.title ?? 'Presentations'}</span>
         <Icon name="chevD" size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
       </button>
-      {doc && !compact && (
-        <span title={status === 'failed' ? 'The last change couldn’t be saved' : 'Changes save themselves'} style={{ color: status === 'failed' ? tk.status.danger : tk.text.faint, font: `500 11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
-          {status === 'pending' ? 'Saving…' : status === 'failed' ? 'Not saved' : 'Saved'}
-        </span>
-      )}
+      {doc && <SaveStatus compact={compact} />}
       <span style={{ flex: 1 }} />
+      {!compact && <Button size="sm" variant="ghost" icon="folder" onClick={onBrowse} title="Every presentation saved here: open, search, folders, download, delete">Open</Button>}
+      {compact && <IconButton icon="folder" label="Presentations" tooltip={false} onClick={onBrowse} style={{ width: 34, height: 36 }} />}
       {doc && <Segmented size={compact ? 'sm' : 'md'} ariaLabel="View" value={mode} onChange={setMode} options={modes} />}
       {doc && !compact && <Button size="sm" icon="export" onClick={onExport} title="A web page (slides or scroll) or a presentation file">Export</Button>}
-      {doc && compact && <IconButton icon="export" label="Export" onClick={onExport} />}
-      {menu && <Menu x={menu.x} y={menu.y} minWidth={260} items={items} onClose={() => setMenu(null)} />}
+      {doc && compact && <IconButton icon="export" label="Export" tooltip={false} onClick={onExport} style={{ width: 34, height: 36 }} />}
+      {menu && <Menu x={menu.x} y={menu.y} minWidth={270} items={items} onClose={() => setMenu(null)} />}
     </div>
+  );
+}
+
+/** Saved, saving or not saved: always in sight, since there's no Save button (changes save themselves). */
+function SaveStatus({ compact }: { compact: boolean }) {
+  const tk = useTokens();
+  const status = usePresentation(s => s.status);
+  const savedAt = usePresentation(s => s.savedAt);
+  const [, tick] = useState(0);
+  useEffect(() => { const id = window.setInterval(() => tick(n => n + 1), 30000); return () => window.clearInterval(id); }, []);
+  const when = savedAt ? whenSaved(savedAt) : '';
+  const text = status === 'pending' ? 'Saving…' : status === 'failed' ? 'Not saved' : when === 'just now' || !when ? 'Saved' : `Saved ${when}`;
+  const title = status === 'failed' ? 'The last change couldn’t be saved: the browser’s storage may be full (see Library)' : 'Changes save themselves in this browser half a second after you make them';
+  const colour = status === 'failed' ? tk.status.danger : tk.text.faint;
+  if (compact) {
+    return (
+      <span role="status" aria-label={text} title={title} style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 18, color: status === 'failed' ? tk.status.danger : status === 'pending' ? tk.text.faint : tk.status.success }}>
+        {status === 'failed' ? <Icon name="warning" size={14} /> : status === 'pending' ? <span style={{ width: 6, height: 6, borderRadius: '50%', background: tk.text.faint }} /> : <Icon name="check" size={14} />}
+      </span>
+    );
+  }
+  return (
+    <span role="status" title={title} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: colour, font: `500 11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
+      {status === 'saved' && <Icon name="check" size={12} style={{ color: tk.status.success }} />}
+      {status === 'failed' && <Icon name="warning" size={12} />}
+      {text}
+    </span>
   );
 }
 
@@ -170,7 +205,9 @@ function Header({ compact, list, onExport }: { compact: boolean; list: Presentat
 
 function EmptyState({ compact }: { compact: boolean }) {
   const tk = useTokens();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [first, ...more] = SAMPLE_PRESENTATIONS;
+  const open = async (sample: SamplePresentation) => { setBusy(sample.title); await openSample(sample); setBusy(null); };
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ maxWidth: 520, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
@@ -180,9 +217,19 @@ function EmptyState({ compact }: { compact: boolean }) {
           Build a lesson step by step: text with maths, the pictures your graphs make, sliders to try, and the code behind them. Show it as slides in the room or as one page to read, or export it as a web page.
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
-          <Button variant="primary" icon="spark" disabled={busy} onClick={async () => { setBusy(true); await openSample(); setBusy(false); }}>{busy ? 'Building it…' : `Open the sample: ${SAMPLE_TITLE}`}</Button>
+          <Button variant="primary" icon="spark" disabled={!!busy} onClick={() => void open(first)}>{busy === first.title ? 'Building it…' : `Open the sample: ${first.title}`}</Button>
           <Button icon="plus" onClick={() => void newPresentation()}>New presentation</Button>
           <Button variant="ghost" icon="import" onClick={() => void importPresentationFile()}>Import a file</Button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <span style={{ color: tk.text.faint, font: `600 11px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>More samples</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {more.map(sample => (
+              <Button key={sample.title} size="sm" variant="ghost" icon="slides" disabled={!!busy} title={sample.hint} onClick={() => void open(sample)}>
+                {busy === sample.title ? 'Building it…' : sample.title}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

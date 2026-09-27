@@ -5,10 +5,11 @@
  * pattern and the affect point, anything goes in between, Grid Paint
  * brings the distance or colour back and paints it gated by Placed. And the
  * one-wire version: a shape wired into a field socket (Grid Pattern's
- * Shape, the Array node's Shape), with the Cell node for per-cell variation.
+ * Shape, the Array node's Shape), with the Cell node for per-cell variation,
+ * including a shape built inside a Group.
  */
 import type { ExampleGraph } from './exampleIndex';
-import { ctl, n, out, play, time, uv } from './graphBuilder';
+import { ctl, group, n, out, play, port, time, uv } from './graphBuilder';
 
 export const COMBO_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   comboGridPaintShapes: {
@@ -26,6 +27,14 @@ export const COMBO_EXAMPLE_INDEX: Record<string, { label: string; description: s
   comboArrayStars: {
     label: 'Combo: Array of stars', play: true,
     description: 'The Array node repeats a Star SDF wired into its Shape field socket twelve times on a ring. A Cell node gives each copy its Index: the stars grow around the ring and a rainbow Palette colours them in order. Turn copies makes every star point away from the centre; Time turns the ring.',
+  },
+  comboGridGroupFlower: {
+    label: 'Combo: Grid Pattern + grouped flower', play: true,
+    description: 'A Group as the shape: a Flower group (an Array of petals around a centre, sized and coloured by a hash of the Cell ID) has two outputs, Distance into Grid Pattern’s Shape and Colour into Picture. The whole group is compiled as the field function, so every cell grows its own flower with its own number of petals. The mouse spins the flowers near it.',
+  },
+  comboArrayGroupMoons: {
+    label: 'Combo: Array of grouped moons', play: true,
+    description: 'A shape that crosses a group boundary: the Cell node’s Index, remapped, goes into a Moon group’s Cut input port, where it sizes the circle cut out of a disc. The group is wired into Array’s Shape, so the eight copies around the ring go from a nearly full moon with a small bite out of its edge to a thin crescent.',
   },
   comboGridPaintGlow: {
     label: 'Combo: Grid Pattern + SDF Glow', play: true,
@@ -120,6 +129,60 @@ export function buildComboExamples(): Record<string, ExampleGraph> {
 **How it is built.** Cell (Index) → Shape SDF (Star, Radius = 0.045 + index × 0.009) → Array (Ring, 12) Shape. Cell (Index) → Palette → Array Picture. Time → Array Rotation (× 0.2) turns the ring; Turn copies keeps each star pointing outward.
 
 **Try.** Lower Sweep: the stars fan out over an arc from first to last. Switch Layout to Line or Grid. Set Combine to Smooth union and raise Smoothness until the stars melt into one another.`);
+
+  add('comboGridGroupFlower', [
+    uv(),
+    n('mouse', 'mouse', 40, 420),
+    group('flower', 360, 520, {
+      label: 'Flower', iterations: 1, inputs: [],
+      outputs: [
+        { key: 'd', type: 'float', label: 'Distance', from: ['bloom', 'dist'] },
+        { key: 'c', type: 'vec3', label: 'Colour', from: ['pal', 'color'] },
+      ],
+      nodes: [
+        n('fieldCell', 'cell', 40, 220),
+        n('noiseFloat', 'hash', 300, 220, { mode: 'hash', scale: 1, speed: 0 }, { uv: ['cell', 'cellID'] }),
+        n('circleSDF', 'petal', 300, 40, { radius: 0.1 }),
+        n('arrayField', 'petals', 560, 40, { layout: 'ring', radius: 0.22, combine: 'smin', smoothK: 0.03, turn: true, __inExpr_count: '5.0 + floor(input * 4.0)' }, { shape: ['petal', 'distance'], count: ['hash', 'value'] }),
+        n('circleSDF', 'centre', 560, 260, { radius: 0.1 }),
+        n('sdfUnion', 'bloom', 820, 120, { k: 0.02 }, { a: ['petals', 'distance'], b: ['centre', 'distance'] }),
+        n('palette', 'pal', 560, 420, { preset: '1', scale: 1 }, { value: ['hash', 'value'] }),
+      ],
+    }),
+    n('gridPattern', 'gp', 700, 220, { columns: 4, pattern: 'all', affect: 'spin', affectRadius: 0.9, affectSoftness: 0.8, affectAmount: 1.5, background: [0.05, 0.06, 0.05] },
+      { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'], shape: ['flower', 'd'], picture: ['flower', 'c'] }),
+    out(['gp', 'color'], 1000),
+  ], [ctl('j', 'gp::jitter', 'Jitter', 0, 1, 0.01), ctl('r', 'gp::affectRadius', 'Mouse radius', 0.1, 3, 0.01), ctl('a', 'gp::affectAmount', 'Spin', 0, 6.2832, 0.01)],
+  `**What it shows.** A Group can be the shape in a field socket. The Flower group builds a flower from an Array of petals and a centre circle, and has two outputs: its Distance goes into Grid Pattern's **Shape** and its Colour into **Picture**. Both are field sockets, so Grid Pattern calls the group's code once per cell, in that cell's coordinates. Inside the group a **Cell** node hashes the cell's ID into a number that picks the petal count (5 to 8) and the palette colour, so no two neighbours need match.
+
+**How it is built.** Open the Flower group: Cell → Noise Float (Hash) → Array's Count (5 + 4 × hash) and → Palette. Circle SDF (petal) → Array (Ring, Smooth union) → Union with a centre Circle SDF → the group's Distance output. The Array inside the group is a field socket too, so the flower is a field function that calls another one.
+
+**Try.** Raise Jitter to scatter the flowers. Open the group and raise the petal radius until the petals merge, or set the Array's Combine to Max. Everything you change inside the group shows in every cell.`);
+
+  add('comboArrayGroupMoons', [
+    time(40, 420),
+    n('fieldCell', 'cell', 40, 220),
+    n('remap', 'phase', 300, 220, { inMin: 0, inMax: 7, outMin: 0.03, outMax: 0.2 }, { value: ['cell', 'index'] }),
+    group('moon', 560, 220, {
+      label: 'Moon', iterations: 1,
+      inputs: [{ key: 'cut', type: 'float', label: 'Cut', from: ['phase', 'result'] }],
+      outputs: [{ key: 'd', type: 'float', label: 'Distance', from: ['crescent', 'dist'] }],
+      nodes: [
+        n('circleSDF', 'disc', 40, 40, { radius: 0.13 }),
+        n('circleSDF', 'cutter', 40, 240, { posX: 0.12, posY: 0.0 }, { radius: port('cut') }),
+        n('sdfSubtract', 'crescent', 300, 120, { k: 0.0 }, { a: ['disc', 'distance'], b: ['cutter', 'distance'] }),
+      ],
+    }),
+    n('palette', 'pal', 560, 460, { preset: '5', scale: 1, __inExpr_value: 'input / 8.0' }, { value: ['cell', 'index'] }),
+    n('arrayField', 'arr', 840, 220, { layout: 'ring', count: 8, radius: 0.6, combine: 'min', turn: true, antialias: 0.004, background: [0.02, 0.02, 0.05], __inExpr_rotation: 'input * 0.15' },
+      { shape: ['moon', 'd'], picture: ['pal', 'color'], rotation: ['time', 'time'] }),
+    out(['arr', 'color'], 1120),
+  ], [ctl('r', 'arr::radius', 'Ring radius', 0.1, 1.2, 0.005), ctl('t', 'phase::outMax', 'Largest cut', 0.03, 0.3, 0.005), ctl('w', 'arr::sweep', 'Sweep', 0.5, 6.2832, 0.01)],
+  `**What it shows.** A field chain that crosses into a group through one of its ports. The Moon group cuts one circle out of another; how big the cut is comes in through its **Cut** input port. Outside the group, the **Cell** node's Index goes through a Remap into Cut, and the group goes into Array's **Shape**. The whole chain, Cell → Remap → through the port → the group, is compiled as one field function, so each of the eight copies gets its own Index and its own cut: nearly full at one end of the ring, a thin crescent at the other.
+
+**How it is built.** Cell (Index) → Remap (0–7 → 0.03–0.2) → Moon's Cut port → the cutter Circle SDF's Radius inside the group. Disc − cutter (Subtract) → the group's Distance → Array (Ring, 8, Turn copies) Shape. Cell (Index) → Palette → Picture.
+
+**Try.** Raise Largest cut until the last moons disappear. Open the group and move the cutter off the disc's edge. Change Array's Count to 16 and the Remap's In Max to 15.`);
 
   return out3;
 }

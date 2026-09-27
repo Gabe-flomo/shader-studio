@@ -382,6 +382,8 @@ function StatusReadout({ swatchSize, probeGap, emptyText, swatchTitle }: { swatc
 }
 
 // While the Convert page has a scratch graph on the canvas, nothing may edit, save or load it.
+import { importAnyFile } from './components/shell/importAnyFile';
+
 const unlessScratch = (fn: () => void) => () => { if (!useNodeGraphStore.getState().scratch) fn(); };
 
 function App() {
@@ -394,7 +396,7 @@ function App() {
   // readouts live in StatusReadout / CanvasHintOverlay above.
   const {
     loadExampleGraph, compilationErrors, glslErrors, fragmentShader,
-    exportGraph, importGraphFromFile,
+    exportGraph,
     addNode, setNodeHighlightFilter, _fitViewCallback, undo,
     selectedNodeId,
     groupNodes, deselectAll,
@@ -404,7 +406,7 @@ function App() {
     mobileNodeOverlayOpen, setMobileNodeOverlayOpen,
   } = useNodeGraphStore(useShallow(s => ({
     loadExampleGraph: s.loadExampleGraph, compilationErrors: s.compilationErrors, glslErrors: s.glslErrors, fragmentShader: s.fragmentShader,
-    exportGraph: s.exportGraph, importGraphFromFile: s.importGraphFromFile,
+    exportGraph: s.exportGraph,
     addNode: s.addNode, setNodeHighlightFilter: s.setNodeHighlightFilter, _fitViewCallback: s._fitViewCallback, undo: s.undo,
     selectedNodeId: s.selectedNodeId,
     groupNodes: s.groupNodes, deselectAll: s.deselectAll,
@@ -552,7 +554,7 @@ function App() {
   const shortcutHandlers = useMemo(() => ({
     undo:           unlessScratch(() => undo()),
     export:         unlessScratch(() => exportGraph()),
-    import:         unlessScratch(() => importGraphFromFile()),
+    import:         unlessScratch(() => { void importAnyFile(setPage); }),
     fitView:        () => _fitViewCallback?.(),
     toggleCode:     () => setShowCode(v => !v),
     toggleRecord:   () => setShowExport(v => !v),
@@ -593,7 +595,7 @@ function App() {
     filterUVInputs: () => setNodeHighlightFilter('uv-in'),
     filterUVOutputs:() => setNodeHighlightFilter('uv-out'),
     shortcuts:      () => setPage(p => p === 'shortcuts' ? 'studio' : 'shortcuts'),
-  }), [undo, addRandomNode, exportGraph, importGraphFromFile, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll]);
+  }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll]);
 
   const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);
   const holdHandlers = useMemo(() => ({
