@@ -1074,6 +1074,12 @@ class PlayEngine implements InputSource {
     return { ua, ub, axis: st?.swap.axis ?? 'a', a: st?.a, b: st?.b };
   }
 
+  /** Start every axis swap on A again (the editor's button; a rewind does it too). */
+  resetSwaps(): void {
+    for (const st of this.pairState.values()) st.swap = sgSwapNew();
+    inputBus.wake();
+  }
+
   /** Is a pair mapping axis's condition met now (for the editor)? */
   pairCondOpen(mappingId: string, axis: 'a' | 'b'): boolean {
     const st = this.pairState.get(mappingId);

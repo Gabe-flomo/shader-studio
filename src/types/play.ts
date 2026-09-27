@@ -974,7 +974,8 @@ function parseTriggerOn(raw: unknown): TriggerOn | null {
       const c = parseCondition(t);
       return c ? { on: 'value', ...c } : null;
     }
-    case 'signal': { const signal = str(t.signal); return signal ? { on: 'signal', signal: signal.slice(0, 80) } : null; }
+    // An empty signal (none picked yet) is kept: it never fires, and the row survives a reload.
+    case 'signal': return typeof t.signal === 'string' ? { on: 'signal', signal: t.signal.slice(0, 80) } : null;
     default: return null;
   }
 }
@@ -1079,8 +1080,8 @@ function parseAction(raw: unknown): PlayAction | null {
   const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION) ? (a.do as ActionKind) : null;
   if (kind === SIGNAL_ACTION) {
     // Send a signal: no layer, a signal instead.
-    const signal = str(a.signal);
-    return id && trigger && signal ? { id, trigger, do: kind, layerId: '', amount: 1, enabled: a.enabled !== false, signal: signal.slice(0, 80) } : null;
+    const signal = typeof a.signal === 'string' ? a.signal : null;
+    return id && trigger && signal !== null ? { id, trigger, do: kind, layerId: '', amount: 1, enabled: a.enabled !== false, signal: signal.slice(0, 80) } : null;
   }
   if (!id || !layerId || !trigger || !kind) return null;
   return { id, trigger, do: kind, layerId, amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
