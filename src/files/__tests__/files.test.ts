@@ -82,7 +82,7 @@ describe('inventory', () => {
     expect(labels(node(i, 'section:functions').children)).toEqual(['Custom function presets', 'Function Builder']);
     expect(labels(node(i, 'section:functions/custom').children)).toEqual(['Patterns']);
     expect(labels(node(i, 'section:scripts').children)).toEqual(['Saved sketches', 'Layer kinds']);
-    expect(labels(node(i, 'section:settings').children)).toEqual(['Preferences', 'Folders', 'Learned parameter roles', 'Sign-ins']);
+    expect(labels(node(i, 'section:settings').children)).toEqual(['Folders', 'Learned parameter roles', 'Sign-ins', 'App settings']);
   });
 
   it('nests a graph: versions, and its Play setup with takes, datasets, layer kinds and media', async () => {
