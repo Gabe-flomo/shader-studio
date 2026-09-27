@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { discoverInSource, discoverFunctions, bundleText, toCustomFnPreset } from '../discover';
 
+const corpus = import.meta.glob('../../glslToGraph/__tests__/corpus/user/*.glsl', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const user = (name: string) => corpus[`../../glslToGraph/__tests__/corpus/user/${name}.glsl`];
+
 const SRC = `#define PI 3.14159
 #define TAU (2.0 * PI)
 #define SQ(x) ((x)*(x))
@@ -101,5 +104,76 @@ describe('function discovery', () => {
     }
     expect(toCustomFnPreset(by('split')).ok).toBe(false);
     expect(toCustomFnPreset(by('sampleIt')).ok).toBe(false);
+  });
+
+  it('carries the const globals a function (or a dependency, or another const) uses, in file order', () => {
+    expect(by('wobble').consts).toEqual(['const float K = 2.0;']);
+    expect(by('hash').consts).toEqual([]);
+    const code = `const float A = 1.0, B = 2.0;
+const vec2 OFF = vec2(A, 0.0);
+const float UNUSED = 9.0;
+#define S (C * 2.0)
+const float C = 3.0;
+float f(vec2 p) { return p.x + OFF.y; }
+float g(vec2 p) { return f(p) * S; }
+float h(float B) { return B; }`;
+    const fs = discoverInSource({ id: 'c', name: 'C', code });
+    const [f, g, h] = fs;
+    expect(f.consts).toEqual(['const float A = 1.0, B = 2.0;', 'const vec2 OFF = vec2(A, 0.0);']);
+    expect(g.consts).toEqual(['const float A = 1.0, B = 2.0;', 'const vec2 OFF = vec2(A, 0.0);', 'const float C = 3.0;']);
+    expect(g.selfContained).toBe(true);
+    expect(bundleText(g)).toBe(['#define S (C * 2.0)', 'const float A = 1.0, B = 2.0;', 'const vec2 OFF = vec2(A, 0.0);', 'const float C = 3.0;', f.text, g.text].join('\n\n'));
+    expect(h.consts).toEqual([]); // B is its parameter
+  });
+
+  it('bundles simplex3d with F3 and G3, and noise3d with its rotation matrices (haltone nose)', () => {
+    const code = user('haltone nose');
+    const all = discoverInSource({ id: 'h', name: 'haltone nose', code });
+    const simplex = all.find(f => f.name === 'simplex3d')!;
+    expect(simplex.consts.map(c => c.match(/const \w+ (\w+)/)![1])).toEqual(['F3', 'G3']);
+    expect(simplex.selfContained).toBe(true);
+    const noise = all.find(f => f.name === 'noise3d')!;
+    expect(noise.consts.map(c => c.match(/const \w+ (\w+)/)![1])).toEqual(['F3', 'G3', 'rot1', 'rot2']);
+    const p = toCustomFnPreset(noise);
+    expect(p.ok).toBe(true);
+    if (p.ok) {
+      const t = p.data.glslFunctions;
+      expect(t.indexOf('const float F3')).toBeLessThan(t.indexOf('const float G3'));
+      expect(t.indexOf('const mat3 rot2')).toBeLessThan(t.indexOf('vec3 random3'));
+      expect(t.indexOf('vec3 random3')).toBeLessThan(t.indexOf('float simplex3d'));
+    }
+  });
+
+  it('translates undeclared Shadertoy uniforms to the Studio names in the bundle (dipole magnet)', () => {
+    const code = user('dipole magnet');
+    const field = discoverInSource({ id: 'd', name: 'dipole magnet', code }).find(f => f.name === 'magneticField')!;
+    expect(field.shadertoy).toEqual(['iTime']);
+    expect(field.selfContained).toBe(true);
+    const p = toCustomFnPreset(field);
+    expect(p.ok).toBe(true);
+    if (p.ok) {
+      expect(p.data.glslFunctions).not.toMatch(/\biTime\b/);
+      expect(p.data.glslFunctions).toContain('u_time * 0.5');
+    }
+    expect(field.text).toContain('iTime'); // the source text itself is untouched
+  });
+
+  it('rewrites each Shadertoy uniform, through dependencies and defines; textures and declared ones stay globals', () => {
+    const code = `#define T iTime
+float a(vec2 p) { return p.x / iResolution.x + iResolution.y + T; }
+vec2 b(vec2 p) { return p + iMouse.xy + iResolution.xy + vec2(float(iFrame)); }
+float c(vec2 p) { return a(p) + b(p).x; }
+vec4 tex(vec2 uv) { return texture(iChannel0, uv); }`;
+    const [a, b, c, tex] = discoverInSource({ id: 's', name: 'S', code });
+    expect(a.shadertoy).toEqual(['iResolution', 'iTime']);
+    expect(bundleText(a)).toBe('#define T u_time\n\nfloat a(vec2 p) { return p.x / u_resolution.x + u_resolution.y + T; }');
+    expect(bundleText(b)).toBe('vec2 b(vec2 p) { return p + u_mouse + u_resolution + vec2(float(int(u_time * 60.0))); }');
+    expect(c.shadertoy).toEqual(['iFrame', 'iMouse', 'iResolution', 'iTime']);
+    expect(bundleText(c)).not.toMatch(/\bi[A-Z]/);
+    expect(tex.globals).toEqual(['iChannel0']);
+    expect(tex.selfContained).toBe(false);
+    const declared = discoverInSource({ id: 'u', name: 'U', code: 'uniform float iTime;\nfloat w(float x) { return x * iTime; }' })[0];
+    expect(declared.globals).toEqual(['iTime']);
+    expect(declared.shadertoy).toEqual([]);
   });
 });

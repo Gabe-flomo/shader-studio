@@ -12,13 +12,17 @@
  * A function that reads a global the file declares (a uniform other than the
  * Studio ones, a mutable global, a varying) is not self-contained: it needs
  * state the library can't carry, so it is marked and, by default, left out.
- * Object-like #defines it uses (PI, TAU, a tuning constant) are collected so
- * they can travel with it.
+ * Object-like #defines and const globals it uses (PI, TAU, a tuning constant,
+ * a rotation matrix) are collected so they can travel with it. Shadertoy
+ * uniforms (iTime, iResolution, iMouse…) that a paste reads without declaring
+ * are translated to the Studio names in the bundled text; the iChannel ones
+ * have no Studio counterpart and count as globals.
  *
  * Text in, plain data out; the modal does the choosing and the saving.
  */
 
 import type { DataType } from '../types/nodeGraph';
+import { SHADERTOY_RENAMES } from './dialects';
 
 export interface DiscoveredParam { type: string; name: string; qualifier: 'in' | 'out' | 'inout' }
 
@@ -46,6 +50,10 @@ export interface DiscoveredFn {
   globals: string[];
   /** `#define NAME value` lines the body (or a dependency's) uses, ready to prepend. */
   defines: string[];
+  /** Top-level `const` declarations the body (or a dependency, a define, another const) uses, in file order. */
+  consts: string[];
+  /** Undeclared Shadertoy uniforms read (iTime, iResolution…), which bundleText translates to the Studio names. */
+  shadertoy: string[];
   /** True when nothing outside the function (and its dependencies) is needed. */
   selfContained: boolean;
   /** Where the file calls it (outside its own body): the line, the call's span, and the argument expressions. */
@@ -163,6 +171,25 @@ function fileDefines(blanked: string, code: string): Map<string, string> {
   return out;
 }
 
+/** Top-level const declarations: name → the statement and its (blanked) text. One statement may declare several names. */
+function fileConsts(blanked: string, code: string, fns: RawFn[]): Map<string, { text: string; blanked: string }> {
+  const inFn = (i: number) => fns.some(f => i > f.bodyOpen && i < f.end);
+  const out = new Map<string, { text: string; blanked: string }>();
+  const re = new RegExp(`(^|[;}\\n])[ \\t]*const\\s+(?:(?:highp|mediump|lowp)\\s+)?(?:${TYPE_RE})\\s+([^;{}]*);`, 'g');
+  for (const m of blanked.matchAll(re)) {
+    const at = m.index! + m[1].length + (m[0].slice(m[1].length).match(/^[ \t]*/)?.[0].length ?? 0);
+    if (inFn(at)) continue;
+    const end = m.index! + m[0].length;
+    const decl = { text: code.slice(at, end).trim(), blanked: blanked.slice(at, end) };
+    for (const d of splitArgs(m[2])) { const nm = d.match(/^([A-Za-z_]\w*)/)?.[1]; if (nm) out.set(nm, decl); }
+  }
+  return out;
+}
+
+/** Shadertoy uniforms bundleText can translate, and the ones it can't (textures). */
+const SHADERTOY_TRANSLATED = new Set(['iResolution', 'iTime', 'iGlobalTime', 'iTimeDelta', 'iFrame', 'iMouse', 'iDate']);
+const SHADERTOY_UNTRANSLATED = /^(iChannel\d|iChannelResolution|iChannelTime|iSampleRate)$/;
+
 function splitArgs(text: string): string[] {
   const out: string[] = []; let depth = 0, cur = '';
   for (const c of text) { if (c === '(' || c === '[') depth++; else if (c === ')' || c === ']') depth--; if (c === ',' && depth === 0) { out.push(cur.trim()); cur = ''; } else cur += c; }
@@ -185,12 +212,29 @@ function defineClosure(names: string[], defines: Map<string, string>): string[] 
   return [...defines.keys()].filter(n => need.has(n)).map(n => defines.get(n)!);
 }
 
+/** The const statements the named consts need (their initializers may name other consts), in file order. */
+function constClosure(names: Iterable<string>, consts: Map<string, { text: string; blanked: string }>): Set<{ text: string; blanked: string }> {
+  const need = new Set<{ text: string; blanked: string }>();
+  const visit = (n: string) => {
+    const c = consts.get(n);
+    if (!c || need.has(c)) return;
+    need.add(c);
+    for (const id of identifiers(c.blanked)) visit(id);
+  };
+  for (const n of names) visit(n);
+  return need;
+}
+
 /** Every function in one source, analysed. */
 export function discoverInSource(src: DiscoverSource): DiscoveredFn[] {
   const blanked = blankComments(src.code);
   const raws = rawFunctions(src.code, blanked);
   const globals = fileGlobals(blanked, raws);
   const defines = fileDefines(blanked, src.code);
+  const consts = fileConsts(blanked, src.code, raws);
+  const constOrder = [...new Set(consts.values())];
+  // Shadertoy uniforms the file declares itself are ordinary globals (already in `globals`).
+  const isShadertoy = (n: string) => !globals.has(n) && !consts.has(n) && (SHADERTOY_TRANSLATED.has(n) || SHADERTOY_UNTRANSLATED.test(n));
   const byName = new Map<string, RawFn[]>();
   for (const r of raws) byName.set(r.name, [...(byName.get(r.name) ?? []), r]);
   const counts = new Map<string, number>();
@@ -201,14 +245,25 @@ export function discoverInSource(src: DiscoverSource): DiscoveredFn[] {
     const called = [...new Set([...body.matchAll(/(?<![\w.])([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]))];
     const recursive = called.includes(r.name);
     const calls = called.filter(n => n !== r.name && byName.has(n));
-    const used = [...ids].filter(n => globals.has(n) && !r.params.some(p => p.name === n)).sort();
-    const defs = defineClosure([...ids].filter(n => defines.has(n)), defines);
+    const isParam = (n: string) => r.params.some(p => p.name === n);
+    // Defines and consts can name each other (`#define S (C * 2.0)`): grow both until nothing new turns up.
+    // Names reached through a define's value count as read, too (`#define T iTime`).
+    let reach = new Set([...ids].filter(n => !isParam(n)));
+    let cs = new Set<{ text: string; blanked: string }>(), defs: string[] = [];
+    for (let size = -1; size !== reach.size;) {
+      size = reach.size;
+      cs = constClosure(reach, consts);
+      defs = defineClosure([...reach].filter(n => defines.has(n)), defines);
+      reach = new Set([...reach, ...[...cs].flatMap(c => [...identifiers(c.blanked)]), ...defs.flatMap(d => [...identifiers(d.replace(/^[ \t]*#\s*define\s+\w+/, ''))])]);
+    }
+    const used = [...reach].filter(n => (globals.has(n) || (isShadertoy(n) && SHADERTOY_UNTRANSLATED.test(n))) && !isParam(n)).sort();
+    const shadertoy = [...reach].filter(n => isShadertoy(n) && SHADERTOY_TRANSLATED.has(n) && !isParam(n)).sort();
     return {
       id: `${src.id}:${r.name}#${ordinal}`, sourceId: src.id, sourceName: src.name,
       name: r.name, returnType: r.returnType, params: r.params,
       signature: `${r.returnType} ${r.name}(${r.params.map(p => `${p.qualifier === 'in' ? '' : `${p.qualifier} `}${p.type} ${p.name}`).join(', ')})`,
       text: r.text, start: r.start, end: r.end, startLine: lineOf(src.code, r.start), endLine: lineOf(src.code, r.end - 1),
-      calls, dependencies: [], level: recursive ? -1 : 0, globals: used, defines: defs, selfContained: used.length === 0, callSites: [],
+      calls, dependencies: [], level: recursive ? -1 : 0, globals: used, defines: defs, consts: constOrder.filter(c => cs.has(c)).map(c => c.text), shadertoy, selfContained: used.length === 0, callSites: [],
     };
   });
   // Call sites: every `name(` in the blanked text that is not a definition header and not inside the function's own body.
@@ -246,6 +301,8 @@ export function discoverInSource(src: DiscoverSource): DiscoveredFn[] {
     f.globals = [...allGlobals].sort();
     f.selfContained = f.globals.length === 0 && f.level >= 0;
     f.defines = [...defines.values()].filter(line => f.defines.includes(line) || f.dependencies.some(d => d.defines.includes(line)));
+    f.consts = constOrder.map(c => c.text).filter(t => f.consts.includes(t) || f.dependencies.some(d => d.consts.includes(t)));
+    f.shadertoy = [...new Set([...f.shadertoy, ...f.dependencies.flatMap(d => d.shadertoy)])].sort();
   }
   return fns;
 }
@@ -288,9 +345,13 @@ export function discoverFunctions(sources: DiscoverSource[], filter: DiscoverFil
   return { matches, total: all.length, duplicates };
 }
 
-/** The function with everything it needs, in order: defines, dependencies, then itself. */
+/**
+ * The function with everything it needs, in order: defines, consts, dependencies,
+ * then itself. Shadertoy uniforms it reads are rewritten to the Studio names.
+ */
 export function bundleText(f: DiscoveredFn): string {
-  return [...f.defines, ...f.dependencies.map(d => d.text), f.text].join('\n\n');
+  const text = [...f.defines, ...f.consts, ...f.dependencies.map(d => d.text), f.text].join('\n\n');
+  return f.shadertoy.length ? SHADERTOY_RENAMES.reduce((s, [re, to]) => s.replace(re, to), text) : text;
 }
 
 /**
