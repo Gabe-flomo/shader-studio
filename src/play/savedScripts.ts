@@ -30,6 +30,9 @@ function write(next: SavedScript[]) {
 
 export function listSavedScripts(): SavedScript[] { return read(); }
 
+/** Read the list again from storage (after the Files page changed it). */
+export function reloadSavedScripts(): void { cache = null; for (const l of listeners) l(); }
+
 /** Save (or overwrite, by name) a sketch as a starter. Returns the entry. */
 export function saveScript(name: string, code: string, settings: { clear: boolean; readPicture: boolean; mode?: '2d' | '3d' }): SavedScript {
   const trimmed = name.trim() || 'Untitled sketch';

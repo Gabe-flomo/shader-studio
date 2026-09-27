@@ -26,6 +26,7 @@ const TABS: { page: Page; label: string }[] = [
   { page: 'glsl', label: 'GLSL' },
   { page: 'convert', label: 'Convert' },
   { page: 'shortcuts', label: 'Keys' },
+  { page: 'files', label: 'Files' },
 ];
 
 /**

@@ -340,7 +340,7 @@ export function renameTransformPreset(id: string, newLabel: string): void {
 
 // ── Group preset helpers ───────────────────────────────────────────────────────
 
-function loadGroupPresets(): GroupPreset[] {
+export function loadGroupPresets(): GroupPreset[] {
   return groupPresetManager.load()
     .filter(p => !!p.subgraph)
     // Presets saved before a node merge still reference the old type keys.
