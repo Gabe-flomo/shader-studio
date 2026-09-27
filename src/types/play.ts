@@ -428,7 +428,8 @@ function parseAction(raw: unknown): PlayAction | null {
   const a = raw as Record<string, unknown>;
   const id = str(a.id), layerId = str(a.layerId);
   const trigger = parseTrigger(a.trigger);
-  const kind = typeof a.do === 'string' && (ACTION_KINDS as readonly string[]).includes(a.do) ? (a.do as ActionKind) : null;
+  // A built-in action, or a button a Script layer declares (`script:<key>`).
+  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || scriptActionKey(a.do)) ? (a.do as ActionKind) : null;
   if (!id || !layerId || !trigger || !kind) return null;
   return { id, trigger, do: kind, layerId, amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
 }

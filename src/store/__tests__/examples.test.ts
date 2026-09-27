@@ -7,6 +7,8 @@ import { PLAY_EXAMPLE_KEYS } from '../playExampleIndex';
 import type { GraphNode } from '../../types/nodeGraph';
 import { parseActionTarget, parseLayerTarget, parsePlayRecord } from '../../types/play';
 import { collectPlayCandidates } from '../../play/playControls';
+import { klSketchCompile, klSketchPress, klSketchStep } from '../../play/kit/layers.js';
+import { takeEventsBetween, takePointerAt, takeValuesAt } from '../../lib/takePlayback';
 
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} });
 
@@ -118,5 +120,46 @@ describe('bundled examples', () => {
       const defined = [...r.fragmentShader.matchAll(/^(?:float|vec3) (fieldfn_\w+)\(vec2 g_uv,/gm)].map(m => m[1]);
       expect(defined, k).toEqual(fns);
     }
+  });
+
+  it('every Script layer compiles and draws frames without an error, pressing each of its buttons', () => {
+    const ctx = new Proxy({}, { get: (_t, k) => (k === 'canvas' ? {} : () => undefined), set: () => true }) as unknown as CanvasRenderingContext2D;
+    let count = 0;
+    for (const k of keys) {
+      for (const l of EXAMPLE_GRAPHS[k].play?.layers ?? []) {
+        if (l.kind !== 'script') continue;
+        count++;
+        const st = klSketchCompile(l.code);
+        expect(st.error, `${k}/${l.id}`).toBeNull();
+        const values = l as unknown as Record<string, number>;
+        for (let f = 0; f < 90; f++) {
+          if (f === 30) for (const d of l.paramDefs) if (d.kind === 'button') klSketchPress(st, d.key, 1);
+          const params: Record<string, number> = {};
+          for (const d of l.paramDefs) params[d.key] = values[`p_${d.key}`] ?? d.value;
+          const s = {
+            ctx, width: 640, height: 360, dpr: 1, time: f / 60, dt: 1 / 60, frame: f, params, state: (st as unknown as { state: object }).state,
+            mouse: { x: 320 + f, y: 180, over: f > 45, down: f > 60 }, picture: { brightness: (x: number) => x / 640 },
+            null: (name: string) => (name === 'B' ? null : { x: 100 + f, y: 120 }), random: Math.random,
+          };
+          expect(klSketchStep(st, s, l.paramDefs, l.clear), `${k}/${l.id} frame ${f}`).toBeNull();
+        }
+      }
+    }
+    expect(count).toBeGreaterThanOrEqual(9);
+  });
+
+  it('the recorded-take example ships a take that plays back its controls, pointer and presses', () => {
+    const take = EXAMPLE_GRAPHS.playTake.play?.takes?.[0];
+    expect(take).toBeDefined();
+    if (!take) return;
+    expect(take.length).toBe(8);
+    const controls = new Set(EXAMPLE_GRAPHS.playTake.play!.controls.map(c => c.target));
+    for (const tr of take.tracks) if (tr.kind === 'control' && !tr.target!.startsWith('layer:')) expect(controls, tr.id).toContain(tr.target);
+    // The figure of eight starts still in the middle and is off to one side a quarter of the way in.
+    expect(takePointerAt(take, 0)).toMatchObject({ x: 0.5, y: 0.5, over: true, down: false });
+    expect(takePointerAt(take, 2)!.x).toBeCloseTo(0.8, 2);
+    const at = takeValuesAt(take, 1.4);
+    expect(at.get('radius') as number).toBeGreaterThan(0.2);
+    expect(takeEventsBetween(take, -Infinity, 8).map(e => e.do)).toEqual(['script:sparkle', 'script:sparkle', 'script:sparkle', 'script:sparkle']);
   });
 });

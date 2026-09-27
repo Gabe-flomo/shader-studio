@@ -25,7 +25,7 @@ import { askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import type { Page } from '../page';
 import { listPresentations, lastPresentation, PRESENTATIONS_CHANGED, type PresentationEntry } from '../../present/storage';
-import { buildSamplePresentation, SAMPLE_TITLE } from '../../present/sample';
+import { SAMPLE_PRESENTATIONS, type SamplePresentation } from '../../present/samples';
 import { usePresentation, type PresentMode } from './presentationStore';
 import { Inspector } from './Inspector';
 import { StepsList, StepsStrip } from './StepsList';
@@ -51,9 +51,9 @@ function usePresentationList(): PresentationEntry[] {
   return list;
 }
 
-async function openSample(): Promise<void> {
+async function openSample(sample: SamplePresentation): Promise<void> {
   try {
-    const doc = await buildSamplePresentation();
+    const doc = await sample.build();
     usePresentation.getState().adopt(doc);
   } catch (e) {
     toast.error('Couldn’t build the sample', { message: e instanceof Error ? e.message : String(e) });
@@ -126,7 +126,7 @@ function Header({ compact, list, onExport, onBrowse }: { compact: boolean; list:
     'separator',
     { label: 'New presentation…', icon: 'plus', onSelect: () => void newPresentation() },
     { label: 'Import a .present.json file…', icon: 'import', onSelect: () => void importPresentationFile() },
-    { label: `Sample: ${SAMPLE_TITLE}`, icon: 'spark', hint: 'Built from the Learn 3D lessons', onSelect: () => void openSample() },
+    ...SAMPLE_PRESENTATIONS.map(sample => ({ label: `Sample: ${sample.title}`, icon: 'spark' as const, hint: sample.hint, onSelect: () => void openSample(sample) })),
     ...(doc ? [
       'separator' as const,
       { label: 'Rename…', icon: 'edit' as const, onSelect: async () => {
@@ -205,7 +205,9 @@ function SaveStatus({ compact }: { compact: boolean }) {
 
 function EmptyState({ compact }: { compact: boolean }) {
   const tk = useTokens();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [first, ...more] = SAMPLE_PRESENTATIONS;
+  const open = async (sample: SamplePresentation) => { setBusy(sample.title); await openSample(sample); setBusy(null); };
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ maxWidth: 520, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
@@ -215,9 +217,19 @@ function EmptyState({ compact }: { compact: boolean }) {
           Build a lesson step by step: text with maths, the pictures your graphs make, sliders to try, and the code behind them. Show it as slides in the room or as one page to read, or export it as a web page.
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
-          <Button variant="primary" icon="spark" disabled={busy} onClick={async () => { setBusy(true); await openSample(); setBusy(false); }}>{busy ? 'Building it…' : `Open the sample: ${SAMPLE_TITLE}`}</Button>
+          <Button variant="primary" icon="spark" disabled={!!busy} onClick={() => void open(first)}>{busy === first.title ? 'Building it…' : `Open the sample: ${first.title}`}</Button>
           <Button icon="plus" onClick={() => void newPresentation()}>New presentation</Button>
           <Button variant="ghost" icon="import" onClick={() => void importPresentationFile()}>Import a file</Button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <span style={{ color: tk.text.faint, font: `600 11px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>More samples</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {more.map(sample => (
+              <Button key={sample.title} size="sm" variant="ghost" icon="slides" disabled={!!busy} title={sample.hint} onClick={() => void open(sample)}>
+                {busy === sample.title ? 'Building it…' : sample.title}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
