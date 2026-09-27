@@ -41,6 +41,7 @@ import { useSampleStills } from './useSampleStills';
 import { ExportDialog } from './ExportDialog';
 import { deleteWithUndo, exportPresentationFile, importPresentationFile, saveCopy } from './presentationFiles';
 import { PresentationsDialog } from './PresentationsDialog';
+import { announcePresentationOpened } from './linkActions';
 import { whenSaved } from '../../store/graphVersions';
 import type { BlockContext } from './Blocks';
 import { useCamera } from '../../present/runtimeHost';
@@ -132,7 +133,7 @@ function Header({ compact, list, onExport, onBrowse }: { compact: boolean; list:
   const others = list.filter(p => p.name !== name).slice(0, 5);
   const items: MenuItem[] = [
     ...(others.length ? [
-      ...others.map(p => ({ label: p.name, icon: 'slides' as const, hint: `${p.steps} step${p.steps === 1 ? '' : 's'}${p.updatedAt ? ` · ${whenSaved(p.updatedAt)}` : ''}`, onSelect: () => { usePresentation.getState().open(p.name); } })),
+      ...others.map(p => ({ label: p.name, icon: 'slides' as const, hint: `${p.steps} step${p.steps === 1 ? '' : 's'}${p.updatedAt ? ` · ${whenSaved(p.updatedAt)}` : ''}`, onSelect: () => { if (usePresentation.getState().open(p.name)) announcePresentationOpened(p.name); } })),
     ] : []),
     { label: list.length ? `All presentations (${list.length})…` : 'All presentations…', icon: 'folder', hint: 'Search, folders, download, delete', onSelect: onBrowse },
     'separator',

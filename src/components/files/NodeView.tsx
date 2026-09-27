@@ -13,6 +13,7 @@ import { countLeaves, type FileNode, type Inventory } from '../../files/inventor
 import { ownerId as ownerOf } from '../../files/cleanup';
 import { Check, IconTile, Size, SizeBar } from './fileUi';
 import { capsLabel, KIND_LABELS, when } from './fileUiShared';
+import { LinkBadge } from '../shell/GraphLinks';
 
 
 export type CheckState = 'on' | 'off' | 'mixed' | 'inherited';
@@ -149,6 +150,7 @@ function ItemRow({ node, max, first, compact, state, onCheck, onOpen, onMenu }: 
           {node.unused && <Tag colour={tk.status.warningText} bg={alpha(tk.status.warning, 0.14)} title={node.unused}>Not used</Tag>}
           {!node.unused && used > 0 && !compact && <Tag colour={breaks ? tk.accent.text : tk.text.muted} bg={breaks ? alpha(tk.accent.base, 0.1) : tk.bg.field} title={node.usedBy!.map(u => `${u.label}${u.where ? ` (${u.where})` : ''}`).join('\n')}>Used by {used}</Tag>}
           {node.private && <Tag colour={tk.text.muted} bg={tk.bg.field}>Never downloaded</Tag>}
+          {node.linked && <LinkBadge partners={node.linked} kind={node.kind === 'presentation' ? 'graph' : 'presentation'} compact={compact} />}
         </span>
         {sub && <span style={{ fontSize: 11.5, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span>}
       </div>
@@ -184,6 +186,7 @@ function Relations({ inv, node, onOpen, compact }: { inv: Inventory; node: FileN
   const facts: Array<[string, ReactNode]> = [
     ...(owner ? [['Part of', owner.label] as [string, ReactNode]] : []),
     ...(folder?.kind === 'folder' ? [['Folder', folder.label] as [string, ReactNode]] : []),
+    ...(node.linked?.length ? [['Linked to', node.linked.map(n => `“${n}”`).join(', ')] as [string, ReactNode]] : []),
     ...(where ? [['Stored as', <code key="k" style={{ font: `500 11.5px ${fontFamily.mono}`, color: tk.text.secondary, overflowWrap: 'anywhere' }}>{where}</code>] as [string, ReactNode]] : []),
   ];
   const card = { borderRadius: radius.lg, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, background: tk.bg.panel, padding: compact ? '12px 12px' : '14px 16px' };

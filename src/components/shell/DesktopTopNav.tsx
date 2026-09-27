@@ -22,6 +22,7 @@ import { HandsLive } from '../play/HandsChip';
 import { reportFileResult, reportGlslImport } from './reportFileResult';
 import { importAnyFile } from './importAnyFile';
 import { SaveGraphForm, VersionsButton } from './GraphVersions';
+import { GraphLinkBadge } from './GraphLinks';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
 
 const TABS: { page: Page; label: string }[] = [
@@ -304,6 +305,7 @@ function LoadRow({ name, indent = false, hasPlay = false, onLoad, onDelete, onOp
         onClick={onLoad}
         style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
       >{name}</button>
+      <GraphLinkBadge graph={name} compact />
       {hasPlay && <span title="Loads with a Play setup" style={{ height: 18, padding: '0 6px', borderRadius: 5, display: 'inline-flex', alignItems: 'center', background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10px ${fontFamily.ui}` }}>Play</span>}
       <VersionsButton name={name} onOpened={onOpened} />
       {hover && <IconButton icon="trash" label={`Delete “${name}”`} size="sm" tone="danger" tooltip={false} onClick={onDelete} />}

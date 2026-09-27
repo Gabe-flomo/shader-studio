@@ -2,6 +2,7 @@ import { ProBadgeFor } from '../account/ProSheet';
 import { useCan } from '../../lib/plan';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SaveGraphForm, VersionsButton } from '../shell/GraphVersions';
+import { GraphLinkBadge } from '../shell/GraphLinks';
 import { useNodeGraphStore, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
 import { NODE_REGISTRY, getNodeDefinitionFor } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
@@ -496,7 +497,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               renderItem={(item) => (
                 <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')} tag={savedGraphHasPlay(item.id) ? 'Play' : undefined}
                   selected={currentGraph?.name === item.id}
-                  extra={<VersionsButton name={item.id} onOpened={() => onNodeAdded?.()} />}
+                  extra={<><GraphLinkBadge graph={item.id} compact /><VersionsButton name={item.id} onOpened={() => onNodeAdded?.()} /></>}
                   onClick={() => { if (reportFileResult(loadSavedGraph(item.id), { failTitle: `Couldn’t open “${item.label}”` })) onNodeAdded?.(); }}
                   onDelete={() => { deleteSavedGraph(item.id); refreshSavedNames(); }} />
               )}

@@ -19,6 +19,7 @@
  */
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { PRESENTATION_FILE_KIND, parsePresentation, type Presentation } from '../types/presentation';
+import { fixImportedLinks } from '../present/links';
 
 export const LIBRARY_KIND = 'shader-studio-library';
 export const LIBRARY_FILE = 'library.json';
@@ -326,7 +327,7 @@ export function freePresentationName(name: string, kv: Pick<KV, 'get'>): string 
 /** The same presentation, whatever its title, save time or imported mark. */
 function samePresentation(mine: Presentation | null, theirs: Presentation): boolean {
   if (!mine) return false;
-  const strip = (x: object) => JSON.stringify({ ...x, title: '', updatedAt: 0, origin: undefined });
+  const strip = (x: object) => JSON.stringify({ ...x, title: '', updatedAt: 0, origin: undefined, linkedGraphs: undefined });
   return strip(mine) === strip(theirs);
 }
 
@@ -341,25 +342,29 @@ export function importLibrary(s: LibrarySnapshot, kv: KV = localKV): ImportResul
   };
   const renamedTo = new Map<string, string>();
   const presRenamedTo = new Map<string, string>();
+  // Every graph and presentation of the import → its name here, and the ones written (for their links).
+  const graphNames = new Map<string, string>(), presNames = new Map<string, string>();
+  const wrote = { graphs: [] as string[], presentations: [] as string[] };
   for (const [k, v] of Object.entries(s.items)) {
     if (!isLibraryKey(k) || k.startsWith(VERSIONS_PREFIX) || k === 'assetbrowser_folders') continue;
     const mine = kv.get(k);
     if (k.startsWith(PRESENTATION_KEY_PREFIX)) {
-      if (mine === v) { r.same++; continue; }
       const name = k.slice(PRESENTATION_KEY_PREFIX.length);
+      if (mine === v) { r.same++; presNames.set(name, name); continue; }
       const p = parsePresentation(parse(v));
       if (!p) { r.skipped++; continue; }
       // Script layers from a library are code from somewhere else: they run in a sandboxed frame.
       if (p.sources.some(src => src.bundle.play.layers.some(l => l.kind === 'script'))) p.origin = 'imported';
-      if (mine == null) { kv.set(k, JSON.stringify({ ...p, title: name })); r.added++; continue; }
+      if (mine == null) { kv.set(k, JSON.stringify({ ...p, title: name })); r.added++; presNames.set(name, name); wrote.presentations.push(name); continue; }
       // Already here under this name, or as an earlier import's "(2)", "(3)"…
       const same = (key: string) => samePresentation(parsePresentation(parse(kv.get(key))), p);
       let dup = same(k);
       for (let i = 2; !dup && kv.get(`${k} (${i})`) != null; i++) dup = same(`${k} (${i})`);
-      if (dup) { r.same++; continue; }
+      if (dup) { r.same++; presNames.set(name, name); continue; }
       const n = freePresentationName(name, kv);
       kv.set(PRESENTATION_KEY_PREFIX + n, JSON.stringify({ ...p, title: n }));
       presRenamedTo.set(name, n);
+      presNames.set(name, n); wrote.presentations.push(n);
       r.renamedPresentations.push(n);
       continue;
     }
@@ -370,7 +375,8 @@ export function importLibrary(s: LibrarySnapshot, kv: KV = localKV): ImportResul
         const hist = s.items[VERSIONS_PREFIX + name];
         if (hist && !has(VERSIONS_PREFIX + name)) kv.set(VERSIONS_PREFIX + name, hist);
         r.added++;
-      } else if (mine === v) r.same++;
+        graphNames.set(name, name); wrote.graphs.push(name);
+      } else if (mine === v) { r.same++; graphNames.set(name, name); }
       else {
         const n = free(name);
         kv.set(GRAPH_PREFIX + n, v);
@@ -378,6 +384,7 @@ export function importLibrary(s: LibrarySnapshot, kv: KV = localKV): ImportResul
         if (hist) kv.set(VERSIONS_PREFIX + n, hist);
         renamedTo.set(name, n);
         r.renamed.push(n);
+        graphNames.set(name, n); wrote.graphs.push(n);
       }
       continue;
     }
@@ -404,6 +411,8 @@ export function importLibrary(s: LibrarySnapshot, kv: KV = localKV): ImportResul
     const merged = mergeJson(parse(kv.get('assetbrowser_folders')) ?? {}, theirFolders);
     kv.set('assetbrowser_folders', JSON.stringify(merged));
   }
+  // Graphs and presentations linked to each other stay linked under their names here.
+  fixImportedLinks(kv, graphNames, presNames, wrote);
   return r;
 }
 
