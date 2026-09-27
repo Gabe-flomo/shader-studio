@@ -59,8 +59,12 @@ describe('gate on or off', () => {
     expect(gateEnabled(one, { VITE_GATE: 'off' })).toBe(false);
     expect(gateEnabled(one, { VITE_GATE: ' OFF ' })).toBe(false);
   });
-  it('ships with no users (the gate is off until the owner adds some)', () => {
-    expect(GATE_USERS).toEqual([]);
+  it('ships only hashed users (never a plaintext password)', () => {
+    for (const u of GATE_USERS) {
+      expect(Object.keys(u).sort()).toEqual(['hash', 'iterations', 'plan', 'salt', 'username']);
+      expect(u.hash.length).toBeGreaterThan(20);
+      expect(u.iterations).toBeGreaterThanOrEqual(100_000);
+    }
   });
   it('keeps only well-formed entries', () => {
     expect(parseGateUsers({ users: [...one, { username: 'b', plan: 'gold', salt: 'x', hash: 'y' }, { plan: 'pro' }, null] })).toHaveLength(1);
