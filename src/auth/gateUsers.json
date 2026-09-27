@@ -1,3 +1,18 @@
 {
-  "users": []
+  "users": [
+    {
+      "username": "gabe-free",
+      "plan": "free",
+      "salt": "wm80xsH1GHlVQ2sjTJ7b8A==",
+      "hash": "8xicA6JeZSqWeR9XbeaRqo8YyVHNKpLLsUW6JKodavk=",
+      "iterations": 150000
+    },
+    {
+      "username": "gabe-pro",
+      "plan": "pro",
+      "salt": "KQzsE12lopCCSQUzFuYpdw==",
+      "hash": "lvYk6zkK1fP8IXtF+x6+kKkvjXLBY1TbpTSHMcmPzh4=",
+      "iterations": 150000
+    }
+  ]
 }
