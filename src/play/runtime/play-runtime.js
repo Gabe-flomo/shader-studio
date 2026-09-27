@@ -131,9 +131,40 @@
     return x;
   }
   function triggerKey(t) {
-    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; }
+    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; }
     return '';
   }
+  // Firing modes (once, held, every N frames or seconds, on release): how many times a trigger fires this frame.
+  function stepFire(st, fire, presses, gate, dt) {
+    const fresh = Math.max(0, presses - st.seen); st.seen = presses;
+    const was = st.held; st.held = gate;
+    const mode = fire && fire.mode ? fire.mode : 'once';
+    if (mode === 'once') return fresh;
+    if (mode === 'release') return Math.max(0, (was ? 1 : 0) + fresh - (gate ? 1 : 0));
+    if (mode === 'held') return gate || fresh > 0 ? 1 : 0;
+    if (fresh > 0) { st.since = 0; return 1; }
+    if (!gate) { st.since = 0; return 0; }
+    st.since += fire.unit === 'frames' ? 1 : dt;
+    const period = fire.unit === 'frames' ? Math.max(1, Math.round(fire.every)) : Math.max(0.01, fire.every);
+    if (st.since < period - 1e-6) return 0;
+    const n = Math.floor((st.since + 1e-6) / period); st.since -= n * period;
+    return n;
+  }
+  // A firing-mode slot per action or trigger mapping; a changed mode starts from "nothing yet".
+  function fireSlot(map, id, t, presses, gate) {
+    const mode = t.fire && t.fire.mode ? t.fire.mode : 'once';
+    const slot = map.get(id);
+    if (slot && slot.mode === mode) return { slot, fresh: false };
+    const made = { mode, st: { seen: presses, held: gate, since: 0 }, count: 0 };
+    map.set(id, made);
+    return { slot: made, fresh: true };
+  }
+  function proximityGate(open, d, when, distance, margin) {
+    if (d === null) return false;
+    if (when === 'closer') return open ? d <= distance + margin : d < distance;
+    return open ? d >= distance - margin : d > distance;
+  }
+  function handAnchorOf(ref) { const m = /^hand:(left|right|any):(\d{1,2})$/.exec(ref); return m && +m[2] <= 20 ? { side: m[1], point: +m[2] } : null; }
   function beatAt(bpm, beats, time) {
     const period = (60 / Math.max(1, bpm)) * Math.max(0.0625, beats);
     const count = Math.floor(time / period) + 1;
@@ -721,9 +752,8 @@ void main() {
         case 'hand': return handSt ? HK.read(handSt, s.side, s.read, s.point, s.axis, s.gesture) : null;
         case 'sensor': {
           if (s.read === 'distance') {
-            const a = layersById.get(s.layerId), b = layersById.get(s.otherId);
-            if (!a || !b) return null;
-            return Math.min(1, Math.hypot((value(a, 'x') - value(b, 'x')) * glCanvas.width / Math.max(1, glCanvas.height), value(a, 'y') - value(b, 'y')));
+            const d = s.otherId ? anchorGap(s.layerId, s.otherId) : null;
+            return d === null ? null : Math.min(1, d);
           }
           const v = sensors.get(s.layerId + '::' + s.read);
           return v === undefined ? null : v;
@@ -732,14 +762,36 @@ void main() {
         default: return null;
       }
     }
+    // Where an anchor is (a layer's centre, or a hand's landmark), 0..1 with y up, and how far apart two are in picture heights.
+    const anchorLookup = id => { const l = layersById.get(id); return l ? { layer: l, value: k => value(l, k) } : null; };
+    const reported = k => sensors.get(k);
+    function anchorAt(ref) {
+      const h = handAnchorOf(ref);
+      if (h) return handSt && usesHands ? HK.point(handSt, h.side, h.point) : null;
+      const l = layersById.get(ref);
+      return l && typeof SSKit !== 'undefined' && SSKit.anchor ? SSKit.anchor(l, k => value(l, k), glCanvas.width / Math.max(1, glCanvas.height), reported, anchorLookup) : null;
+    }
+    function anchorGap(a, b) {
+      const pa = anchorAt(a), pb = anchorAt(b);
+      return pa && pb ? Math.hypot((pa.x - pb.x) * glCanvas.width / Math.max(1, glCanvas.height), pa.y - pb.y) : null;
+    }
+    function triggerInput(t) {
+      if (t.on === 'beat') { const b = beatAt(t.bpm, t.beats, time); return { presses: b.count, gate: b.gate }; }
+      const k = triggerKey(t);
+      return { presses: shared.presses.get(k) || 0, gate: (shared.held.get(k) || 0) > 0 };
+    }
+    const mappingFire = new Map(), actionFire = new Map();
     function readTrigger(m, dt) {
       const s = m.source, t = s.trigger;
-      let presses, gate, vel = 1;
-      if (t.on === 'beat') { const b = beatAt(t.bpm, t.beats, time); presses = b.count; gate = b.gate; }
-      else { const k = triggerKey(t); presses = shared.presses.get(k) || 0; gate = (shared.held.get(k) || 0) > 0; if (s.velocity) vel = shared.velocities.get(k) || 1; }
+      const inp = triggerInput(t);
+      const vel = s.velocity && t.on !== 'beat' ? shared.velocities.get(triggerKey(t)) || 1 : 1;
+      // The firing mode turns presses into fires; the envelope, toggle or step counts those.
+      const f = fireSlot(mappingFire, m.id, t, inp.presses, inp.gate);
       let st = trig.get(m.id);
-      if (!st) { st = { seen: presses, value: 0, stage: 'idle', peak: 1, index: -1 }; trig.set(m.id, st); }
-      return stepTrigger(st, s, presses, gate, dt, vel);
+      if (!st) { st = { seen: 0, value: 0, stage: 'idle', peak: 1, index: -1 }; trig.set(m.id, st); }
+      if (f.fresh) st.seen = 0;
+      else f.slot.count += Math.min(4, stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt));
+      return stepTrigger(st, s, f.slot.count, inp.gate, dt, vel);
     }
     const colourBuf = new Map();
     function tickAudioTriggers() {
@@ -753,7 +805,16 @@ void main() {
       }
     }
     // Shape enter / fill triggers: a sensor crossing its threshold is a press (80% hysteresis).
-    const zoneGates = new Set(), actionSeen = new Map();
+    const zoneGates = new Set(), proxGates = new Set();
+    // Proximity: A and B closer (or farther) than the distance is a press; past the margin it lets go.
+    function tickProximityTriggers() {
+      for (const t of allTriggers) {
+        if (t.on !== 'proximity') continue;
+        const k = triggerKey(t), open = proxGates.has(k), on = proximityGate(open, anchorGap(t.a, t.b), t.when, t.distance, t.margin);
+        if (on && !open) { proxGates.add(k); press(k); }
+        else if (!on && open) { proxGates.delete(k); release(k); }
+      }
+    }
     function tickZoneTriggers() {
       for (const t of allTriggers) {
         if (t.on !== 'zone' || t.event === 'click') continue;
@@ -766,8 +827,9 @@ void main() {
     const HK = typeof SSKit !== 'undefined' && SSKit.hands ? SSKit.hands : null;
     const handSt = HK ? HK.create() : null;
     const handSettings = Object.assign({ smoothing: 0.5, overlay: true, colour: [0.35, 1, 0.75], mirror: true }, play.hands || {});
-    const usesHands = play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && m.source.trigger.on === 'hand'))
-      || actions.some(a => a.trigger.on === 'hand') || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
+    const trigHands = t => t.on === 'hand' || (t.on === 'proximity' && (!!handAnchorOf(t.a) || !!handAnchorOf(t.b)));
+    const usesHands = play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && trigHands(m.source.trigger)) || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!handAnchorOf(m.source.otherId || '')))
+      || actions.some(a => trigHands(a.trigger)) || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
     if (usesHands && B.hands) shared.hands.assets = B.hands;
     const handGates = new Set();
     let handSeq = -1;
@@ -787,21 +849,22 @@ void main() {
         else if (!on && open) { handGates.delete(k); release(k); }
       }
     }
-    // Actions (burst, next line, drop…): once per new press of their trigger.
-    function tickActions() {
+    // Actions (burst, next line, drop…): by their trigger's mode, once per press unless it says every frame, every N or on release.
+    function tickActions(dt) {
       for (const a of actions) {
-        const presses = a.trigger.on === 'beat' ? beatAt(a.trigger.bpm, a.trigger.beats, time).count : shared.presses.get(triggerKey(a.trigger)) || 0;
-        const seen = actionSeen.get(a.id);
-        actionSeen.set(a.id, presses);
-        if (seen === undefined || presses <= seen || !K) continue;
-        for (let i = 0; i < Math.min(4, presses - seen); i++) K.act(a);
+        const inp = triggerInput(a.trigger);
+        const f = fireSlot(actionFire, a.id, a.trigger, inp.presses, inp.gate);
+        if (f.fresh || !K) continue;
+        const n = Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, dt));
+        for (let i = 0; i < n; i++) K.act(a);
       }
     }
     function tickMappings(dt) {
       tickHands();
       tickAudioTriggers();
       tickZoneTriggers();
-      tickActions();
+      tickProximityTriggers();
+      tickActions(dt);
       const driven = new Set();
       let moved = false;
       for (const m of play.mappings) {

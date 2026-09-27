@@ -1,32 +1,48 @@
 /**
  * TriggerPicker — what fires a trigger: a key, a click, a beat, an audio hit,
- * a MIDI note, an OSC message or a shape (clicked, entered, filled). Used by
- * trigger mappings and by actions. Keys, notes, OSC addresses and clicks are
- * usually set with Learn; the fields here fine-tune them.
+ * a MIDI note, an OSC message, a shape (clicked, entered, filled), a hand
+ * gesture, or two things coming close (proximity). Used by trigger mappings
+ * and by actions. Keys, notes, OSC addresses and clicks are usually set with
+ * Learn; the fields here fine-tune them.
+ *
+ * FirePicker is the row under it: when the trigger fires (once, every frame
+ * while held, every N frames or seconds, on release), with a hint when the
+ * thing it fires doesn't like being repeated.
  */
+import { useEffect, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
-import { fontFamily } from '../../theme/tokens';
-import type { HandGesture, LiveAudioBand, TriggerSpec } from '../../types/play';
-import { CHANNELS, HAND_GESTURE_OPTIONS, HAND_SIDES, LIVE_BAND_OPTIONS, TRIGGER_KINDS, keyName, triggerFromKind, triggerLabel } from '../../play/playSources';
+import { alpha, fontFamily, radius } from '../../theme/tokens';
+import type { ActionKind, FireMode, HandGesture, LiveAudioBand, TriggerMode, TriggerSpec } from '../../types/play';
+import { parseHandAnchor } from '../../types/play';
+import {
+  CHANNELS, HAND_GESTURE_OPTIONS, HAND_POINT_OPTIONS, HAND_SIDES, LIVE_BAND_OPTIONS, TRIGGER_KINDS,
+  anchorChoice, anchorOptions, anchorPick, fireModes, fireOf, keyName, repeatHint, triggerFromKind, triggerLabel, withFire,
+} from '../../play/playSources';
+import { playEngine } from '../../lib/playEngine';
 import { Segmented } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Select } from '../ui/Select';
+import { Icon } from '../ui/Icon';
+import { RulerSlider } from '../ui/RulerSlider';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { LiveAudioChip, OscStatusChip } from './chips';
 import { HandsChip } from './HandsChip';
 
-export function TriggerPicker({ trigger: t, shapes, numStyle, onChange }: {
+export interface TriggerLayerRef { id: string; label: string; kind: string }
+
+export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
   trigger: TriggerSpec;
-  /** Shape layers a shape trigger can use. */
-  shapes: ReadonlyArray<{ id: string; label: string }>;
+  /** The setup's layers: shapes for a shape trigger, anything with a centre for proximity. */
+  layers: ReadonlyArray<TriggerLayerRef>;
   numStyle: React.CSSProperties;
   onChange: (t: TriggerSpec) => void;
 }) {
   const tk = useTokens();
   const hint = (text: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{text}</span>;
+  const shapes = layers.filter(l => l.kind === 'shape');
   return (
     <>
-      <Select ariaLabel="Trigger" value={t.on} options={TRIGGER_KINDS} onChange={v => onChange(triggerFromKind(v as TriggerSpec['on'], t, shapes[0]?.id ?? ''))} height={26} />
+      <Select ariaLabel="Trigger" value={t.on} options={TRIGGER_KINDS} onChange={v => onChange(triggerFromKind(v as TriggerSpec['on'], t, layers))} height={26} />
       {t.on === 'key' && <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(t.code)}</span>}
       {t.on === 'note' && <>
         <NumberInput value={t.note} min={-1} max={127} step={1} title="Note number, -1 for any note" onCommit={n => onChange({ ...t, note: Math.max(-1, Math.min(127, Math.round(n))) })} style={{ ...numStyle, width: 44 }} />
@@ -66,7 +82,170 @@ export function TriggerPicker({ trigger: t, shapes, numStyle, onChange }: {
         {hint('or Learn and make it')}
         <HandsChip settings={false} />
       </>}
+      {t.on === 'proximity' && <ProximityFields trigger={t} layers={layers} onChange={onChange} />}
       {(t.on === 'key' || t.on === 'note' || t.on === 'osc' || t.on === 'mouse') && hint(`${triggerLabel(t)} · Learn to change`)}
     </>
+  );
+}
+
+/** A or B: a layer, or a hand and the point on it. */
+export function AnchorPicker({ value, layers, exclude, ariaLabel, onChange }: {
+  value: string;
+  layers: ReadonlyArray<TriggerLayerRef>;
+  /** The other end, left out of the list (a thing is never near itself). */
+  exclude?: string;
+  ariaLabel: string;
+  onChange: (ref: string) => void;
+}) {
+  const hand = parseHandAnchor(value);
+  const options = anchorOptions(layers, exclude);
+  const pick = anchorPick(value);
+  const known = options.some(o => o.value === pick);
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, minWidth: 0, flexWrap: 'wrap' }}>
+      <Select ariaLabel={ariaLabel} value={known ? pick : ''} options={known ? options : [{ value: '', label: 'Pick one' }, ...options]} onChange={v => onChange(anchorChoice(v, value))} height={26} style={{ maxWidth: 170 }} />
+      {hand && <Select ariaLabel={`${ariaLabel}: point on the hand`} value={`${hand.point}`} options={HAND_POINT_OPTIONS} onChange={v => onChange(`hand:${hand.side}:${parseInt(v, 10) || 0}`)} height={26} style={{ maxWidth: 150 }} />}
+    </span>
+  );
+}
+
+/** How far apart two anchors are now (picture heights) and whether the trigger is open, polled while shown. */
+function useProximityNow(t: Extract<TriggerSpec, { on: 'proximity' }>): { d: number | null; on: boolean } {
+  const [now, setNow] = useState<{ d: number | null; on: boolean }>({ d: null, on: false });
+  useEffect(() => {
+    let raf = 0, last = 0;
+    const tick = (ms: number) => {
+      raf = requestAnimationFrame(tick);
+      if (ms - last < 66) return;
+      last = ms;
+      const d = playEngine.anchorGap(t.a, t.b);
+      const on = playEngine.isHeld(t);
+      const r = d === null ? null : Math.round(d * 100) / 100;
+      setNow(p => (p.d === r && p.on === on ? p : { d: r, on }));
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [t]);
+  return now;
+}
+
+const PROX_MAX = 1;
+
+function ProximityFields({ trigger: t, layers, onChange }: {
+  trigger: Extract<TriggerSpec, { on: 'proximity' }>;
+  layers: ReadonlyArray<TriggerLayerRef>;
+  onChange: (t: TriggerSpec) => void;
+}) {
+  const tk = useTokens();
+  const now = useProximityNow(t);
+  const usesHand = !!parseHandAnchor(t.a) || !!parseHandAnchor(t.b);
+  const cap: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 58, flexShrink: 0 };
+  const line: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 };
+  // The meter: the whole track is 0 … PROX_MAX picture heights; the band is where it fires (and the margin it holds through).
+  const pct = (d: number) => `${(Math.max(0, Math.min(PROX_MAX, d)) / PROX_MAX) * 100}%`;
+  const closer = t.when === 'closer';
+  const bandFrom = closer ? 0 : t.distance, bandTo = closer ? t.distance : PROX_MAX;
+  const holdFrom = closer ? t.distance : Math.max(0, t.distance - t.margin), holdTo = closer ? t.distance + t.margin : t.distance;
+  const state = now.d === null ? (usesHand ? 'Hand not in view' : 'Not on the picture yet') : now.on ? (closer ? 'Close: firing' : 'Far: firing') : (closer ? 'Apart' : 'Close');
+  return (
+    // `order` puts the block after the row's Learn button, on its own line.
+    <div style={{ order: 1, flexBasis: '100%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2, padding: '8px 10px', borderRadius: radius.md, background: alpha(tk.text.primary, 0.03), boxShadow: `inset 0 0 0 1px ${tk.border.subtle}` }}>
+      <div style={line}>
+        <span style={cap}>From</span>
+        <AnchorPicker value={t.a} layers={layers} exclude={t.b} ariaLabel="From (A)" onChange={a => onChange({ ...t, a })} />
+      </div>
+      <div style={line}>
+        <span style={cap}>To</span>
+        <AnchorPicker value={t.b} layers={layers} exclude={t.a} ariaLabel="To (B)" onChange={b => onChange({ ...t, b })} />
+        {usesHand && <HandsChip settings={false} />}
+      </div>
+      <div style={line}>
+        <span style={cap}>While</span>
+        <Segmented size="sm" ariaLabel="Closer or farther" value={t.when} options={[
+          { value: 'closer', label: 'Closer than', title: 'While their centres are nearer than the distance' },
+          { value: 'farther', label: 'Farther than', title: 'While their centres are further apart than the distance' },
+        ]} onChange={when => onChange({ ...t, when })} />
+      </div>
+      <div style={{ ...line, flexWrap: 'nowrap' }}>
+        <span style={cap} title="In picture heights: 1 is the height of the picture">Distance</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <RulerSlider ariaLabel="Distance, in picture heights" value={t.distance} min={0} max={PROX_MAX} step={0.01} defaultValue={0.15} onChange={distance => onChange({ ...t, distance })} />
+        </div>
+      </div>
+      <div style={{ ...line, flexWrap: 'nowrap' }}>
+        <span style={cap}>Now</span>
+        <div
+          role="meter" aria-label="Distance now" aria-valuemin={0} aria-valuemax={PROX_MAX} aria-valuenow={now.d ?? undefined}
+          title="The shaded part is where it fires; the lighter strip is the margin it holds through before letting go"
+          style={{ position: 'relative', flex: 1, minWidth: 60, height: 8, borderRadius: 4, background: tk.bg.field }}
+        >
+          <span style={{ position: 'absolute', top: 0, bottom: 0, left: pct(bandFrom), width: `calc(${pct(bandTo)} - ${pct(bandFrom)})`, borderRadius: 4, background: alpha(tk.accent.base, 0.28) }} />
+          <span style={{ position: 'absolute', top: 0, bottom: 0, left: pct(holdFrom), width: `calc(${pct(holdTo)} - ${pct(holdFrom)})`, background: alpha(tk.accent.base, 0.12) }} />
+          {now.d !== null && <span style={{
+            position: 'absolute', top: '50%', left: pct(now.d), width: 12, height: 12, marginLeft: -6, marginTop: -6, borderRadius: 6,
+            background: now.on ? tk.accent.base : tk.bg.panel, boxShadow: `0 0 0 1.5px ${now.on ? tk.accent.base : tk.text.muted}`, transition: 'left 60ms linear',
+          }} />}
+        </div>
+        <span style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, width: 34, textAlign: 'right', flexShrink: 0 }}>{now.d === null ? '–' : now.d.toFixed(2)}</span>
+      </div>
+      <div style={{ ...line, justifyContent: 'space-between' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: now.on ? tk.accent.text : tk.text.muted, font: `500 11.5px ${fontFamily.ui}` }}>
+          <span style={{ width: 7, height: 7, borderRadius: 4, background: now.on ? tk.accent.base : tk.text.disabled }} />
+          {state}
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }} title="It lets go only this much past the distance, so it doesn't flicker at the edge">Margin</span>
+          <NumberInput value={t.margin} min={0} max={1} step={0.01} title="How far past the distance it has to go to let go (picture heights)" onCommit={n => onChange({ ...t, margin: Math.max(0, Math.min(1, n)) })} style={{ width: 44, height: 22, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}`, textAlign: 'center' }} />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * When the trigger fires: once (the default), every frame while it's held,
+ * every N frames or seconds while it's held, or when it lets go. `what` is
+ * the thing it fires (an action kind, or a trigger mapping's mode), for the
+ * hint when repeating it would flicker.
+ */
+export function FirePicker({ trigger: t, what, numStyle, onChange }: {
+  trigger: TriggerSpec;
+  what: ActionKind | `mode:${TriggerMode}`;
+  numStyle: React.CSSProperties;
+  onChange: (t: TriggerSpec) => void;
+}) {
+  const tk = useTokens();
+  const f = fireOf(t);
+  const set = (patch: Partial<typeof f>) => onChange(withFire(t, { ...f, ...patch }));
+  const warn = repeatHint(what, t.fire);
+  // One wrapping box beside the row's label, so N and its unit (and the hint) line up under the modes.
+  return (
+    <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <Segmented size="sm" ariaLabel="When it fires" value={f.mode} options={fireModes(t)} onChange={(mode: FireMode) => set({ mode })} />
+      {f.mode === 'every' && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <NumberInput
+            value={f.every} min={f.unit === 'frames' ? 1 : 0.01} max={f.unit === 'frames' ? 600 : 60} step={f.unit === 'frames' ? 1 : 0.05}
+            title={f.unit === 'frames' ? 'Fire every this many frames while it is held' : 'Fire every this many seconds while it is held'}
+            onCommit={n => set({ every: f.unit === 'frames' ? Math.max(1, Math.min(600, Math.round(n))) : Math.max(0.01, Math.min(60, n)) })}
+            style={{ ...numStyle, width: 44 }}
+          />
+          <Segmented size="sm" ariaLabel="Unit" value={f.unit} options={[
+            { value: 'frames', label: 'frames', title: 'Tied to the frame rate: exact in a render' },
+            { value: 'seconds', label: 'seconds', title: 'The same rhythm at any frame rate' },
+          ]} onChange={unit => {
+            if (unit === f.unit) return;
+            // Keep about the same rhythm at 60 frames a second.
+            set({ unit, every: unit === 'frames' ? Math.max(1, Math.round(f.every * 60)) : Math.max(0.01, Math.round((f.every / 60) * 100) / 100) });
+          }} />
+        </span>
+      )}
+      {warn && (
+        <div role="note" style={{ flexBasis: '100%', display: 'flex', gap: 6, alignItems: 'flex-start', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.status.warningText, font: `11.5px/1.4 ${fontFamily.ui}` }}>
+          <Icon name="alert" size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>{warn}</span>
+        </div>
+      )}
+    </span>
   );
 }

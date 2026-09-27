@@ -15,7 +15,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
-import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_POINT_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, SOURCE_TYPES, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
+import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_POINT_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, SOURCE_TYPES, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import { SENSOR_READS_FOR, type SensorRead } from '../../types/play';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
@@ -55,7 +55,7 @@ import { SoloButton, SoloStrip } from './Solo';
 import { GuidesToggle } from './GuidesToggle';
 import { OpenPlayableButton } from './OpenPlayable';
 import { MidiFileCard } from './MidiFileCard';
-import { TriggerPicker } from './TriggerPicker';
+import { AnchorPicker, FirePicker, TriggerPicker, type TriggerLayerRef } from './TriggerPicker';
 import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind } from '../../types/play';
 import { playBackground } from '../../play/background';
 import { BackgroundRow } from './BackgroundRow';
@@ -829,7 +829,8 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
     if (row?.source.kind === 'trigger') {
       const src = row.source;
       return playEngine.startLearnTrigger(trigger => {
-        onUpdate(row.id, { source: { ...src, trigger } });
+        // Learn picks what fires it; how it fires (once, every frame…) stays.
+        onUpdate(row.id, { source: { ...src, trigger: withFire(trigger, src.trigger.fire) } });
         setLearnFor(null);
       });
     }
@@ -1186,7 +1187,7 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
         <LiveAudioChip />
       </>);
     case 'trigger':
-      return <TriggerOptions source={source} shapes={layerRefs.filter(l => l.kind === 'shape')} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />;
+      return <TriggerOptions source={source} layers={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />;
     case 'hand':
       return (
         <>
@@ -1205,17 +1206,16 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
       );
     case 'sensor': {
       const sensing = layerRefs.filter(l => SENSOR_READS_FOR[l.kind]);
-      if (!sensing.length) return row(hint('Add a Shape, Particles, Camera or Null layer first'));
+      if (!sensing.length) return row(hint('Add a layer first: a shape, particles, a null…'));
       const layer = layerRefs.find(l => l.id === source.layerId);
       const reads = layer ? SENSOR_READS_FOR[layer.kind] ?? [] : [];
-      const nulls = layerRefs.filter(l => l.kind === 'null' && l.id !== source.layerId);
       return (
         <>
           {row(<>
             <Select ariaLabel="Sensor layer" value={source.layerId} options={sensing.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const k = layerRefs.find(l => l.id === v)?.kind ?? ''; const r = SENSOR_READS_FOR[k] ?? []; onChange({ ...source, layerId: v, read: r.includes(source.read) ? source.read : r[0] ?? 'fill' }); }} height={26} />
             {reads.length > 1 && <Segmented size="sm" ariaLabel="Reads" value={source.read} options={reads.map(r => ({ value: r, label: SENSOR_LABELS[r], title: SENSOR_HINTS[r] }))} onChange={v => onChange({ ...source, read: v })} />}
             {reads.length === 1 && hint(SENSOR_LABELS[reads[0]])}
-            {source.read === 'distance' && (nulls.length ? <>{hint('to')}<Select ariaLabel="Other null" value={source.otherId} options={[{ value: '', label: 'Pick a null' }, ...nulls.map(l => ({ value: l.id, label: l.label }))]} onChange={v => onChange({ ...source, otherId: v })} height={26} /></> : hint('Add a second null'))}
+            {source.read === 'distance' && <>{hint('to')}<AnchorPicker value={source.otherId} layers={layerRefs} exclude={source.layerId} ariaLabel="Distance to" onChange={otherId => onChange({ ...source, otherId })} /></>}
           </>)}
           <div style={{ margin: '-2px 0 6px 60px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{SENSOR_HINTS[source.read]}</div>
         </>
@@ -1227,16 +1227,16 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
 }
 
 /** Where a trigger fires from and what it does. */
-function TriggerOptions({ source, shapes, numStyle, labelStyle, onChange }: {
+function TriggerOptions({ source, layers, numStyle, labelStyle, onChange }: {
   source: Extract<PlaySource, { kind: 'trigger' }>;
-  shapes: ReadonlyArray<{ id: string; label: string }>;
+  layers: ReadonlyArray<TriggerLayerRef>;
   numStyle: React.CSSProperties;
   labelStyle: React.CSSProperties;
   onChange: (source: PlaySource) => void;
 }) {
-  const row = (label: string, children: ReactNode) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-      <span style={labelStyle}>{label}</span>
+  const row = (label: string, children: ReactNode, top = false) => (
+    <div style={{ display: 'flex', alignItems: top ? 'flex-start' : 'center', gap: 6, marginBottom: 6, flexWrap: top ? 'nowrap' : 'wrap' }}>
+      <span style={top ? { ...labelStyle, lineHeight: '26px' } : labelStyle}>{label}</span>
       {children}
     </div>
   );
@@ -1244,7 +1244,8 @@ function TriggerOptions({ source, shapes, numStyle, labelStyle, onChange }: {
   const setT = (trigger: TriggerSpec) => onChange({ ...source, trigger });
   return (
     <>
-      {row('On', <TriggerPicker trigger={t} shapes={shapes} numStyle={numStyle} onChange={setT} />)}
+      {row('On', <TriggerPicker trigger={t} layers={layers} numStyle={numStyle} onChange={setT} />)}
+      {row('Fires', <FirePicker trigger={t} what={`mode:${source.mode}`} numStyle={numStyle} onChange={setT} />, true)}
       {row('Does', <Segmented size="sm" ariaLabel="Trigger mode" value={source.mode} options={TRIGGER_MODES} onChange={v => onChange({ ...source, mode: v })} />)}
       {source.mode === 'envelope' && (
         <>

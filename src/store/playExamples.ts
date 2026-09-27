@@ -17,7 +17,7 @@ import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_
 // An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 import {
-  defaultLayer, type ActionKind, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
+  defaultLayer, handAnchor, type ActionKind, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
 } from '../types/play';
 
@@ -76,7 +76,11 @@ const T = {
   osc: (address: string): TriggerSpec => ({ on: 'osc', address }),
   zone: (layerId: string, event: 'click' | 'enter' | 'fill', threshold = 0.5): TriggerSpec => ({ on: 'zone', layerId, event, threshold }),
   hand: (side: HandSide, gesture: HandGesture): TriggerSpec => ({ on: 'hand', side, gesture }),
+  /** A and B (layer ids, or handAnchor refs) closer than `distance` picture heights. */
+  near: (a: string, b: string, distance: number, margin = 0.03): TriggerSpec => ({ on: 'proximity', a, b, when: 'closer', distance, margin }),
 };
+/** The same trigger, firing by a mode other than Once. */
+const firing = (t: TriggerSpec, fire: FireSpec): TriggerSpec => ({ ...t, fire });
 const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string, amount = 1): PlayAction => ({ id, trigger, do: kind, layerId, amount, enabled: true });
 
 function play(p: { layers?: PlayLayer[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; notes: string }): PlayRecord {
@@ -487,6 +491,32 @@ A little smoothing turns the jumps into glides.
 **Try this.**
 • Drag A and B apart and together: the glow grows and softens.
 • Make one of them follow the mouse (Layers → A → Follows: Mouse).`,
+  })),
+  ex('playProximity', glowGraph({ radius: 0.08, falloff: 14, tint: [1, 0.6, 0.3] }), play({
+    layers: [
+      layer('null', 'target', 'Target', { x: 0.5, y: 0.5, size: 12, color: '#ffb86b' }),
+      layer('null', 'cursor', 'Cursor', { x: 0.25, y: 0.5, follow: 'mouse', spring: 0.6, wobble: 0.25 }),
+      layer('particles', 'pop', 'Pop', { count: 1200, emit: 'burst', spawn: 'null', nullId: 'target', spawnRadius: 0.02, field: 'none', speed: 1.4, life: 1.1, fade: 0.6, size: 2.4, sizeJitter: 0.6, colour: 'palette', palette: 3, paletteBy: 'age', trail: 0.4, blend: 'screen' }),
+      layer('particles', 'sparks', 'Sparks', { count: 900, emit: 'burst', spawn: 'null', nullId: 'cursor', spawnRadius: 0.01, field: 'noise', noiseScale: 2, speed: 0.35, life: 0.7, fade: 0.8, size: 1.6, colour: 'palette', palette: 1, paletteBy: 'age', trail: 0.6, blend: 'screen' }),
+    ],
+    controls: [ctl('radius', 'circ::radius', 'Radius (closeness)', 0.04, 0.3)],
+    mappings: [map('close', 'radius', S.sensor('cursor', 'distance', 'target'), 0.3, 0.04, { smoothMs: 80 })],
+    actions: [
+      act('pop', T.near('cursor', 'target', 0.18), 'burst', 'pop', 220),
+      act('trail', firing(T.near('cursor', 'target', 0.18), { mode: 'every', every: 3, unit: 'frames' }), 'burst', 'sparks', 6),
+    ],
+    notes: `**What it shows.** **On: Proximity** is a trigger that fires when two things come close: nulls, shapes, text, images, particles, a Script layer, a fingertip. With a **firing mode** a trigger can fire once or keep firing while it lasts.
+
+**How it's built.** Cursor follows the mouse on a spring; Target sits in the middle of the glow. Both actions use Proximity, Cursor closer than 0.18 to Target:
+• **Once** bursts 220 particles from Target as you arrive.
+• **Every 3 frames** bursts 6 sparks from Cursor for as long as you stay, so it leaves a trail.
+The glow's Radius reads the same distance as a sensor (Layer sensor → Cursor → Distance to Target).
+
+**Try this.**
+• Move the mouse onto the glow, circle inside it, then leave.
+• In Layers → Actions, open the Proximity trigger: the meter shows the distance now, and the shaded part is where it fires.
+• Set the sparks' Fires to **Continuously**, or to **Every 0.1 sec**.
+• Change Once to **On exit**: the burst comes when you leave.`,
   })),
   ex('playTextMattes', fbmGraph(), play({
     layers: [
@@ -1156,6 +1186,25 @@ Distance reads only while both hands are in view, so the rings hold their size w
 • Raise one hand and lower the other.
 • In the Hands settings (Mappings → the sliders button beside Hands), raise **Smoothing** for slower, steadier moves.
 • Record a take: hand-driven values record like any others and render frame by frame.`,
+  })),
+  ex('handProximity', glowGraph({ radius: 0.24, falloff: 18, tint: [0.45, 0.8, 1] }), play({
+    layers: [
+      layer('camera', 'cam', 'Camera', { opacity: 0.22 }),
+      layer('shape', 'button', 'Button', { shape: 'circle', x: 0.5, y: 0.5, w: 0.24, h: 0.24, action: 'none', fill: [0.45, 0.8, 1], stroke: [0.45, 0.8, 1], fillOpacity: 0.18, strokeWidth: 2 }),
+      layer('text', 'words', 'Words', { text: 'TOUCH THE CIRCLE\nAGAIN\nONE MORE\nWELL DONE', x: 0.5, y: 0.14, size: 0.06, sequence: true, transition: 'rise' }),
+    ],
+    controls: [ctl('glow', 'glow::brightness', 'Falloff (touch)', 4, 30)],
+    mappings: [map('flash', 'glow', S.trig(T.near(handAnchor('any', 8), 'button', 0.1), 'envelope', { attack: 20, decay: 300, sustain: 0.4, release: 400 }), 18, 5)],
+    actions: [act('step', T.near(handAnchor('any', 8), 'button', 0.1), 'next', 'words')],
+    notes: `**What it shows.** Proximity with a hand: a fingertip coming close to a shape is a trigger, like a key press.
+
+**How it's built.** The action's trigger is **On: Proximity**, from **Either hand · Index tip** to the Button shape, closer than 0.1 (a tenth of the picture's height). It fires **Once** as your fingertip arrives and steps the Words to the next line. A Trigger mapping with the same proximity plays an envelope on the glow, so it flares while you touch. The margin (0.03) means your finger has to move a little further away before it can fire again, so a shaky hand at the edge doesn't flicker.
+
+**Try this.**
+• Press **Enable hand tracking** on the picture, then touch the circle with your index finger.
+• In Layers → Actions, watch the distance meter as you move.
+• Pick another point on the hand (the thumb tip, the palm) or another shape.
+• Set Fires to **Every 0.5 sec** and hold your finger on the circle.`,
   })),
 
   // ─ Recording ─

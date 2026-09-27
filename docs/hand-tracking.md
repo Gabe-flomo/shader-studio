@@ -52,6 +52,8 @@ Each picks **Right**, **Left** or **Either** (your right hand while it is in vie
 
 **On: Hand gesture** is a trigger like a key: it plays an envelope, a toggle, a step or a random value in a Trigger mapping, and fires actions (burst, next line, drop…) and action buttons.
 
+**On: Proximity** can measure from a point on a hand: pick **Right hand**, **Left hand** or **Either hand** in From or To, then the point (Index tip, Thumb tip, the palm…). A fingertip coming close to a shape then fires like a key press; the example **Hands: touch a shape** steps a line of text each time you touch a circle. **Layer sensor → Distance** reads the same distance as a source.
+
 | Gesture | Is |
 |---|---|
 | Pinch, Middle pinch, Ring pinch, Pinky pinch | The thumb tip against that fingertip. Only the nearest fingertip starts a pinch, and not while the hand is a fist. |
@@ -65,7 +67,7 @@ Every gesture has **hysteresis**: it starts past one threshold and ends only pas
 
 ## Nulls that follow a hand
 
-A null's **Follows** can be **A hand**: pick the hand and the point (a fingertip, the wrist…). It chases that landmark on its Spring and Wobble like any following null, and waits where it was when the hand leaves. Everything that reads nulls reads it unchanged: particle roles (emitter, absorber, attract, repel, vortex), sensors (distance between nulls), Script layers' `s.null()`, Cloner effectors, brushes, lenses and mappings.
+A null's **Follows** can be **A hand**: pick the hand and the point (a fingertip, the wrist…). It chases that landmark on its Spring and Wobble like any following null, and waits where it was when the hand leaves. Everything that reads nulls reads it unchanged: particle roles (emitter, absorber, attract, repel, vortex), sensors (distance to another layer or a hand point), Script layers' `s.null()`, Cloner effectors, brushes, lenses and mappings.
 
 ## Recording
 
