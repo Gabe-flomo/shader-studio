@@ -1,6 +1,7 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p, pv3, fieldFn } from './helpers';
 import { GLSL_MAT2_INV } from './matrixOps';
+import { columnsExpr, gridColumnsMigration } from './gridColumns';
 
 /**
  * Lattices: the cell centres as a basis matrix (columns are the two steps
@@ -43,8 +44,9 @@ const inv2 = ([a, b, c, d]: number[]) => { const det = a * d - c * b; return [d 
  * rest of the Grid family: Neighbor Dist on its Cell ID, SDF Glow on its
  * Distance, Palette on its Influence.
  *
- * The cell maths is the same as the Grid node's (cell size = aspect ÷
- * Columns), so a Grid with the same Columns lines up with it exactly.
+ * The cell maths is the same as the Grid node's (cell size = 2 × aspect ÷
+ * Columns, the UV being 2 × aspect wide), so a Grid with the same Columns
+ * lines up with it exactly.
  */
 export const GridPatternNode: NodeDefinition = {
   type: 'gridPattern',
@@ -74,14 +76,17 @@ export const GridPatternNode: NodeDefinition = {
     cellCenter: { type: 'vec2',  label: 'Cell Center', hint: 'The cell’s centre in UV space.' },
     placed:     { type: 'float', label: 'Placed', hint: '1 where the pattern puts a shape in this cell, 0 where it leaves the cell empty.' },
   },
+  // _schemaVersion: new nodes are made in the current Columns units (see gridColumns.ts).
   defaultParams: {
+    _schemaVersion: 2,
     columns: 8.0, lattice: 'square', shape: 'circle', size: 0.3, overflow: 'none', rotation: 0.0, jitter: 0.0, antialias: 0.02,
     pattern: 'all', density: 0.5,
     affect: 'grow', affectRadius: 0.6, affectSoftness: 0.7, affectAmount: 1.0,
     color: [0.95, 0.85, 0.6], background: [0.06, 0.06, 0.09],
   },
+  ...gridColumnsMigration(8),
   paramDefs: {
-    columns:  { label: 'Columns', type: 'float', min: 1, max: 60, step: 1, hint: 'Cells across the width.' },
+    columns:  { label: 'Columns', type: 'float', min: 1, max: 120, step: 1, hint: 'Cells across the width.' },
     lattice:  { label: 'Lattice', type: 'select', options: [
       { value: 'square',   label: 'Square' },
       { value: 'hex',      label: 'Hexagons' },
@@ -167,7 +172,7 @@ float gpPlaced(vec2 id, float pattern, float density) {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const uv = inputVars.uv ?? 'g_uv';
-    const cols = inputVars.columns ?? p(node.params.columns, 8.0);
+    const cols = columnsExpr(node, inputVars.columns, 8.0);
     const size = inputVars.size ?? p(node.params.size, 0.3);
     const shapeIdx = ['circle', 'box', 'diamond', 'ring', 'cross', 'triangle'].indexOf(String(node.params.shape ?? 'circle'));
     const patternIdx = ['all', 'columns', 'rows', 'checker', 'diagonal', 'random'].indexOf(String(node.params.pattern ?? 'all'));
@@ -248,7 +253,8 @@ float gpPlaced(vec2 id, float pattern, float density) {
     ];
     const lines = [
       `    float ${id}_asp  = u_resolution.x / u_resolution.y;`,
-      `    float ${id}_cell = ${id}_asp / ${cols};`,
+      // The UV runs from -aspect to +aspect across, so the width is 2 * aspect.
+      `    float ${id}_cell = 2.0 * ${id}_asp / ${cols};`,
       `    vec2  ${id}_gp   = ${uv} / ${id}_cell;`,
       ...cellLines,
       `    float ${id}_sc   = 1.0;`,

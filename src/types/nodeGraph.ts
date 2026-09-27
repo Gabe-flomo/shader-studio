@@ -191,12 +191,22 @@ export interface NodeDefinition {
    *
    * @param params      - The raw params from the saved graph
    * @param fromVersion - The schema version stored with the saved node (0 if absent)
+   * @param node        - The saved node (its inputs say what is wired)
    * @returns The migrated params (may be the same object mutated in-place)
    */
   migrateParams?: (
     params: Record<string, unknown>,
     fromVersion: number,
+    node?: GraphNode,
   ) => Record<string, unknown>;
+
+  /**
+   * Migrate one value of a param that is kept outside the node: a group's
+   * override of it, a Play control's min / max / step, a mapping's output
+   * range, a recorded take. Same versions as migrateParams. Return the value
+   * unchanged when the param's meaning didn't change.
+   */
+  migrateParamValue?: (paramKey: string, value: unknown, fromVersion: number) => unknown;
 
   /**
    * Rename stale input socket keys from old definitions.
@@ -226,6 +236,11 @@ export function migrateNodeParams(
   if (result.params?.subgraph) {
     const sg = result.params.subgraph as SubgraphData;
     if (Array.isArray(sg.nodes)) {
+      // The group's overrides of inner params (`innerId::key`, or
+      // `innerGroupId::innerId::key` for a nested group) follow their node's
+      // migration. Read the versions before the recursion stamps them.
+      const overrides = migrateOverrideValues(result.params, sg.nodes, getDef);
+      if (overrides !== result.params) result = { ...result, params: overrides };
       let migratedInner = sg.nodes.map(n => migrateNodeParams(n, getDef));
 
       // Repair a group input port whose internal wiring predates
@@ -307,9 +322,46 @@ export function migrateNodeParams(
     return result;
   }
 
-  const migratedParams = def.migrateParams({ ...result.params }, savedVersion);
+  const migratedParams = def.migrateParams({ ...result.params }, savedVersion, result);
   migratedParams._schemaVersion = currentVersion;
   return { ...result, params: migratedParams };
+}
+
+/** The saved schema version of a node, as migrateNodeParams reads it (0 when absent). */
+export function savedSchemaVersion(node: GraphNode): number {
+  const v = node.params?._schemaVersion;
+  return typeof v === 'number' ? v : 0;
+}
+
+/**
+ * `params` with each numeric override of an inner node's param migrated by
+ * that node's migrateParamValue. Keys are the path below the group: `id::key`,
+ * or `groupId::id::key` for a node in a nested group.
+ */
+function migrateOverrideValues(
+  params: Record<string, unknown>,
+  inner: GraphNode[],
+  getDef: (type: string) => NodeDefinition | undefined,
+): Record<string, unknown> {
+  let out = params;
+  const visit = (nodes: GraphNode[], prefix: string) => {
+    for (const n of nodes) {
+      const def = getDef(n.type);
+      const from = savedSchemaVersion(n);
+      if (def?.migrateParamValue && from < (def.version ?? 1)) {
+        const head = `${prefix}${n.id}::`;
+        for (const key of Object.keys(out)) {
+          if (!key.startsWith(head) || key.slice(head.length).includes('::')) continue;
+          const next = def.migrateParamValue(key.slice(head.length), out[key], from);
+          if (next !== out[key]) out = { ...out, [key]: next };
+        }
+      }
+      const sub = (n.params?.subgraph as SubgraphData | undefined)?.nodes;
+      if (Array.isArray(sub)) visit(sub, `${prefix}${n.id}::`);
+    }
+  };
+  visit(inner, '');
+  return out;
 }
 
 // The entire graph

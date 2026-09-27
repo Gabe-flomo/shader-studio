@@ -9,6 +9,10 @@
  * [[layer:<id>]] / [[control:<id>]] is a link (noteRefs.ts): drag a layer or
  * a control onto the card to add one, click it to go there. An https://
  * address becomes a link that opens in a new tab.
+ *
+ * A setup that comes from somewhere (a Learn lesson's chapter of The Book of
+ * Shaders) shows that as a linked credit line under the header, open or
+ * closed, so the notes themselves don't need a source line.
  */
 import { useState, type ReactNode } from 'react';
 import { NOTE_REF_RE, NOTE_REF_TYPE, type NoteRefKind } from './noteRefs';
@@ -16,6 +20,9 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
+import { CreditLink } from '../ui/Credit';
+import { openExternal } from '../../utils/openExternal';
+import type { SourceCredit } from '../../types/credit';
 
 const OPEN_KEY = 'shader-studio:play:notesOpen';
 
@@ -27,10 +34,10 @@ export interface NoteTargets {
 
 type Chip = (kind: NoteRefKind, id: string, key: string) => ReactNode;
 
-/** Plain text with any https:// address made a link that opens in a new tab (the Learn notes credit their source this way). */
+/** Plain text with any https:// address made a link that opens in a new tab. */
 function withUrls(text: string, key: string): ReactNode[] {
   return text.split(/(https:\/\/[^\s)]*[^\s).,;:])/g).filter(Boolean).map((s, j) => s.startsWith('https://')
-    ? <a key={`${key}:${j}`} href={s} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{s.replace(/^https:\/\//, '')}</a>
+    ? <a key={`${key}:${j}`} href={s} target="_blank" rel="noopener noreferrer" onClick={e => openExternal(s, e)} style={{ color: 'inherit', textDecoration: 'underline' }}>{s.replace(/^https:\/\//, '')}</a>
     : s);
 }
 
@@ -76,8 +83,10 @@ function parseNotes(notes: string): Block[] {
   return blocks;
 }
 
-export function NotesCard({ notes, title, editing, targets, onEdit, onChange, onOpen }: {
+export function NotesCard({ notes, title, source, editing, targets, onEdit, onChange, onOpen }: {
   notes: string;
+  /** Where the setup comes from: a linked credit line under the header. */
+  source?: SourceCredit;
   /** Shown in the header: the example's name, when there is one. */
   title?: string;
   editing: boolean;
@@ -154,6 +163,7 @@ export function NotesCard({ notes, title, editing, targets, onEdit, onChange, on
             : <IconButton icon="edit" label="Edit these notes (they're saved with the graph and in play files)" onClick={startEdit} />}
         </span>
       </div>
+      {source && <CreditLink source={source} style={{ margin: '0 10px 8px', flexShrink: 0 }} />}
       {editing ? (
         <div style={{ minHeight: 0, overflowY: 'auto', padding: '0 10px 10px' }}>
           <textarea

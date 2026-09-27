@@ -20,8 +20,10 @@ import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { Sheet } from '../ui/Sheet';
 import { toast } from '../ui/toastStore';
+import { CreditTag } from '../ui/Credit';
+import { creditSentence, type SourceCredit } from '../../types/credit';
 
-export interface PlayableRow { kind: 'saved' | 'example'; id: string; label: string; hint?: string; folder: string }
+export interface PlayableRow { kind: 'saved' | 'example'; id: string; label: string; hint?: string; folder: string; source?: SourceCredit }
 type Row = PlayableRow;
 interface Section { key: string; kind: Row['kind']; folder: string; color?: string; rows: Row[] }
 
@@ -76,7 +78,7 @@ function exampleSections(): Section[] {
     ? PLAY_EXAMPLE_GROUPS.map(g => ({ ...f, label: `Play · ${g.label}`, keys: g.keys }))
     : [f]);
   for (const f of folders) {
-    const rows = f.keys.filter(k => EXAMPLE_INDEX[k]?.play).map(k => ({ kind: 'example' as const, id: k, label: EXAMPLE_INDEX[k].label, hint: EXAMPLE_INDEX[k].description, folder: f.label }));
+    const rows = f.keys.filter(k => EXAMPLE_INDEX[k]?.play).map(k => ({ kind: 'example' as const, id: k, label: EXAMPLE_INDEX[k].label, hint: EXAMPLE_INDEX[k].description, folder: f.label, source: EXAMPLE_INDEX[k].source }));
     if (rows.length) sections.push({ key: `example:${f.label}`, kind: 'example', folder: f.label, color: f.color, rows });
   }
   return sections;
@@ -105,7 +107,7 @@ export function PlayableList({ onDone, onPick, current: currentOverride }: { onD
   const sections = useMemo(() => {
     const w = q.trim().toLowerCase();
     if (!w) return all;
-    return all.map(s => ({ ...s, rows: s.rows.filter(r => `${r.label} ${r.hint ?? ''} ${r.folder}`.toLowerCase().includes(w)) })).filter(s => s.rows.length);
+    return all.map(s => ({ ...s, rows: s.rows.filter(r => `${r.label} ${r.hint ?? ''} ${r.folder} ${r.source ? creditSentence(r.source) : ''}`.toLowerCase().includes(w)) })).filter(s => s.rows.length);
   }, [all, q]);
   // Saved folders start open, example folders closed; the folder holding the open graph is always open.
   const [open, setOpen] = useState<Set<string>>(() => loadOpen() ?? new Set(all.filter(s => s.kind === 'saved').map(s => s.key)));
@@ -172,6 +174,7 @@ export function PlayableList({ onDone, onPick, current: currentOverride }: { onD
                     <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}{isCurrent && <span style={{ color: tk.text.faint, fontWeight: 400 }}> · open</span>}</span>
                       {r.hint && <span style={{ fontSize: 11, fontWeight: 400, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.hint}</span>}
+                      {r.source && <CreditTag source={r.source} size={10.5} style={{ marginTop: 1 }} />}
                     </span>
                   </button>
                 );

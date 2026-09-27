@@ -12,7 +12,7 @@ import { nodeLabelOf } from '../play/paramDrivers';
 import { nodeSlicePrefix } from '../components/code/nodeSlice';
 import { webInputFrom, type CompiledForWeb } from '../play/webInput';
 import { unsupportedFeatures, type GraphFeatures, type PlayMedia } from '../play/exportHtml';
-import { migrateLoadedNodes, useNodeGraphStore } from '../store/useNodeGraphStore';
+import { migrateLoadedNodes, migrateLoadedPlay, useNodeGraphStore } from '../store/useNodeGraphStore';
 import { parsePlayRecord, type PlayRecord } from '../types/play';
 import { newId, type PresentSource, type SourceFeatures, type SourceNode, type SourceOrigin } from '../types/presentation';
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
@@ -104,7 +104,7 @@ export function snapshotSaved(name: string, id?: string): SnapshotResult {
   // The graph's image, video and song files exist only while it's open: take them when it is, as saved.
   const st = useNodeGraphStore.getState();
   const media = st.currentGraph?.name === name && !st.graphDirty ? st.playWebInput(name).input.media : undefined;
-  return snapshotFromGraph(nodes, parsePlayRecord(parsed.play), { title: name, from: { kind: 'saved', name, savedAt }, id, media });
+  return snapshotFromGraph(nodes, migrateLoadedPlay(parsePlayRecord(parsed.play), parsed.nodes as GraphNode[]), { title: name, from: { kind: 'saved', name, savedAt }, id, media });
 }
 
 /** A bundled example (its chunk loads on first use). */
@@ -114,7 +114,7 @@ export async function snapshotExample(key: string, id?: string): Promise<Snapsho
   const g = all[key];
   if (!g) return { ok: false, error: `No example “${key}”` };
   const title = EXAMPLE_INDEX[key]?.label ?? g.label;
-  return snapshotFromGraph(migrateLoadedNodes(g.nodes), g.play ? parsePlayRecord(g.play) : parsePlayRecord(null), { title, from: { kind: 'example', key }, id });
+  return snapshotFromGraph(migrateLoadedNodes(g.nodes), migrateLoadedPlay(parsePlayRecord(g.play ?? null), g.nodes), { title, from: { kind: 'example', key }, id });
 }
 
 /** A new copy of a source from where it came from, keeping its id (Refresh from graph). */
