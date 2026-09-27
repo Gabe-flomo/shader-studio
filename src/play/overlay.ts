@@ -14,7 +14,7 @@
  */
 
 import type { ActionKind, PlayLayer, PlayRecord } from '../types/play';
-import { emptyPlayRecord } from '../types/play';
+import { DEFAULT_HANDS, emptyPlayRecord } from '../types/play';
 import { playEngine } from '../lib/playEngine';
 import { liveAudio } from '../lib/liveAudio';
 import { layerAudio } from '../lib/layerAudio';
@@ -437,10 +437,22 @@ class PlayOverlay {
       image: src => this.image(src),
       sensor: forExport ? () => {} : (k, v) => playEngine.setSensor(k, v),
       override: forExport || this.replaying ? () => {} : (id, k, v) => playEngine.setOverride(id, k, v),
+      // Hands: live only. A take playing back or rendering puts following nulls where it recorded them.
+      hand: forExport || this.replaying ? undefined : (side, point) => playEngine.handPoint(side as 'left' | 'right' | 'any', point),
+      hands: this.handsOverlay(forExport),
       // The graph's Layers node can't read the layers while the graph isn't running.
       shaderTap: forExport || playBackground.active() ? undefined : this.shaderTap ?? undefined,
       scriptStatus: forExport ? undefined : setScriptStatus,
     };
+  }
+
+  /** The hands' skeleton over the picture: live, with guides showing and the setup's Show hands on. */
+  private handsOverlay(forExport: boolean): KitEnv['hands'] {
+    if (forExport || this.replaying || !this.guides) return null;
+    const st = playEngine.handState();
+    if (!st.live) return null;
+    const h = this.record.hands ?? DEFAULT_HANDS;
+    return h.overlay ? { state: st, colour: h.colour } : null;
   }
 
   draw(gl: HTMLCanvasElement, time: number, dt: number): void {

@@ -178,7 +178,7 @@ describe('web export', () => {
     expect(b.play.display?.image?.src).toBe(PNG);
     expect(b.play.display?.video).toBeUndefined();
     expect(buildPlayHtml(inp)).toContain(PNG);
-    expect(mediaCarried(undefined, inp.play)).toEqual([{ what: 'Background image “sky.png”', bytes: PNG.length }]);
+    expect(mediaCarried(undefined, undefined, inp.play)).toEqual([{ what: 'Background image “sky.png”', bytes: PNG.length }]);
     expect(leftBehind(inp.play)).toEqual([]);
   });
 
@@ -191,6 +191,6 @@ describe('web export', () => {
     expect(left).toHaveLength(1);
     expect(left[0].what).toContain('long.mov');
     expect(left[0].why).toMatch(/backdrop colour instead/);
-    expect(mediaCarried(undefined, big.play)).toEqual([]);
+    expect(mediaCarried(undefined, undefined, big.play)).toEqual([]);
   });
 });

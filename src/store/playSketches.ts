@@ -417,3 +417,111 @@ function draw(s) {
   }
 }
 `;
+
+/** 3D on the 2D canvas: rotate, project, sort, shade. No WebGL, no libraries. */
+export const SKETCH_3D = `// 3D on a 2D canvas, the way Processing did it before WebGL: rotate each
+// point in JavaScript, divide by depth for perspective, then paint the faces
+// from the back to the front (the painter's algorithm), each one shaded by
+// how much it faces the light. The shader behind shows through the gaps.
+// Drag on the picture to turn the shape; let go and it keeps spinning.
+const params = {
+  shape: { value: 0, min: 0, max: 2, step: 1, label: 'Shape (torus, ball, cube)' },
+  size:  { value: 0.27, min: 0.1, max: 0.6, step: 0.01, label: 'Size' },
+  spin:  { value: 0.5, min: -2, max: 2, step: 0.05, label: 'Spin' },
+  lens:  { value: 2.6, min: 1.4, max: 8, step: 0.1, label: 'Lens (lower = wider)' },
+  hue:   { value: 205, min: 0, max: 360, step: 1, label: 'Hue' },
+  wire:  { kind: 'toggle', value: false, label: 'Wireframe' },
+};
+
+// ── Meshes: a list of points [x, y, z] and faces (indexes into the points) ──
+function torus(R, r, nu, nv) {
+  const pts = [], faces = [];
+  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+    const u = i / nu * Math.PI * 2, v = j / nv * Math.PI * 2;
+    pts.push([(R + r * Math.cos(v)) * Math.cos(u), r * Math.sin(v), (R + r * Math.cos(v)) * Math.sin(u)]);
+  }
+  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+    const a = i * nv + j, b = ((i + 1) % nu) * nv + j, c = ((i + 1) % nu) * nv + (j + 1) % nv, d = i * nv + (j + 1) % nv;
+    faces.push([a, b, c, d]);
+  }
+  return { pts, faces };
+}
+function ball(n) { // a sphere in latitude/longitude quads
+  const pts = [], faces = [];
+  for (let i = 0; i <= n; i++) for (let j = 0; j < n * 2; j++) {
+    const th = i / n * Math.PI, ph = j / (n * 2) * Math.PI * 2;
+    pts.push([Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph)]);
+  }
+  for (let i = 0; i < n; i++) for (let j = 0; j < n * 2; j++) {
+    const w = n * 2, a = i * w + j, b = i * w + (j + 1) % w;
+    faces.push([a, b, b + w, a + w]);
+  }
+  return { pts, faces };
+}
+function cube() {
+  const pts = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]].map(p => p.map(c => c * 0.62));
+  const faces = [[0,3,2,1],[4,5,6,7],[0,1,5,4],[2,3,7,6],[1,2,6,5],[0,4,7,3]];
+  return { pts, faces };
+}
+
+function setup(s) {
+  s.state.meshes = [torus(0.72, 0.3, 36, 16), ball(14), cube()];
+  s.state.rx = 0.5; s.state.ry = 0;       // the shape's current turn
+  s.state.vx = 0; s.state.vy = 0;         // how fast a drag left it turning
+  s.state.last = null;
+}
+
+function draw(s) {
+  const { ctx, width, height, dt, mouse, params } = s;
+  const st = s.state;
+  // Drag to turn; the spin (and the drag's leftover speed) keeps it moving.
+  if (mouse.down && st.last) { st.vy = (mouse.x - st.last.x) / height * 4 / Math.max(dt, 1e-3) * 0.02; st.vx = (mouse.y - st.last.y) / height * 4 / Math.max(dt, 1e-3) * 0.02; }
+  st.last = mouse.down ? { x: mouse.x, y: mouse.y } : null;
+  st.vx *= Math.pow(0.05, dt); st.vy *= Math.pow(0.05, dt);
+  st.ry += (params.spin + st.vy) * dt; st.rx += (params.spin * 0.37 + st.vx) * dt;
+
+  const mesh = st.meshes[Math.round(params.shape)];
+  const cx = Math.cos(st.rx), sx = Math.sin(st.rx), cy = Math.cos(st.ry), sy = Math.sin(st.ry);
+  const scale = params.size * height, lens = params.lens;
+  // Turn every point (around y, then x) and project it onto the canvas.
+  const view = mesh.pts.map(([x, y, z]) => {
+    const x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
+    const y2 = y * cx - z1 * sx, z2 = y * sx + z1 * cx;
+    const k = lens / (lens + z2); // perspective: farther points shrink
+    return { x: x1, y: y2, z: z2, px: width / 2 + x1 * k * scale, py: height / 2 - y2 * k * scale };
+  });
+
+  // Each face: its normal (for light and for hiding the back) and its depth (for sorting).
+  const light = [-0.45, 0.6, -0.66];
+  const drawn = [];
+  for (const f of mesh.faces) {
+    const a = view[f[0]], b = view[f[1]], c = view[f[2]];
+    const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const len = Math.hypot(nx, ny, nz) || 1; nx /= len; ny /= len; nz /= len;
+    const cam = [-a.x, -a.y, -lens - a.z]; // towards the camera
+    if (!params.wire && nx * cam[0] + ny * cam[1] + nz * cam[2] <= 0) continue; // facing away: hidden
+    const lit = Math.max(0, nx * light[0] + ny * light[1] + nz * light[2]);
+    const depth = f.reduce((sum, i) => sum + view[i].z, 0) / f.length;
+    drawn.push({ f, lit, depth });
+  }
+  drawn.sort((p, q) => q.depth - p.depth); // farthest first, so near faces paint over them
+
+  ctx.lineJoin = 'round';
+  for (const { f, lit, depth } of drawn) {
+    ctx.beginPath();
+    f.forEach((i, n) => (n ? ctx.lineTo(view[i].px, view[i].py) : ctx.moveTo(view[i].px, view[i].py)));
+    ctx.closePath();
+    if (params.wire) {
+      ctx.strokeStyle = 'hsla(' + params.hue + ' 90% 75% / ' + (0.25 + 0.5 * (1 - (depth + 1) / 2)) + ')';
+      ctx.lineWidth = height * 0.0022;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = 'hsl(' + params.hue + ' 70% ' + (14 + lit * 62) + '%)';
+      ctx.strokeStyle = 'hsla(' + params.hue + ' 90% 80% / 0.18)'; // a faint edge keeps facets readable
+      ctx.lineWidth = 1;
+      ctx.fill(); ctx.stroke();
+    }
+  }
+}
+`;

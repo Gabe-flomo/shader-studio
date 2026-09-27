@@ -12,8 +12,9 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { accentColor } from '../../theme/categories';
 import { kindOf, type LayerKindDef } from '../../types/layerKinds';
-import { addKindLayer, addableKinds, kindHint, useInstalledKinds } from '../../play/layerKinds';
-import type { MenuItem } from '../ui/Menu';
+import { addKindLayer, kindHint } from '../../play/layerKinds';
+import { AddLayerMenu } from './layers/AddLayerMenu';
+import { BUILTIN_LAYER } from './layers/addLayerCatalog';
 import { fontFamily, radius } from '../../theme/tokens';
 import { layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { playId } from '../../play/playControls';
@@ -38,23 +39,7 @@ import {
   type EditorContext, ClonerEditor, ScriptEditor } from './layers/editors';
 import { ActionsSection } from './layers/ActionsSection';
 
-const KINDS: { kind: PlayLayerKind; label: string; hint: string; icon: IconName }[] = [
-  { kind: 'particles', label: 'Particles', hint: 'Flow along the picture, flock, swarm nulls and shapes, burst on the beat.', icon: 'spark' },
-  { kind: 'shape', label: 'Shape', hint: 'Boxes, circles, lines or drawn outlines: to see, and as walls, emitters, portals, sensors.', icon: 'layoutCanvas' },
-  { kind: 'null', label: 'Null', hint: 'A point to drag or animate. Drives mappings, follows things, emits or absorbs particles.', icon: 'grip' },
-  { kind: 'text', label: 'Text', hint: 'Words over the picture or the picture inside them. Can step through lines.', icon: 'edit' },
-  { kind: 'image', label: 'Image', hint: 'A picture of your own, blended or matted.', icon: 'overlay' },
-  { kind: 'bodies', label: 'Bodies', hint: 'Letters, circles or boxes that fall, bounce and pile up.', icon: 'dice' },
-  { kind: 'brush', label: 'Brush', hint: 'Paint on the picture with the mouse. Strokes fade and can be walls.', icon: 'curve' },
-  { kind: 'audio', label: 'Audio', hint: 'Live sound as a waveform, bars, a ring or a blob.', icon: 'wave' },
-  { kind: 'glyphs', label: 'Glyphs', hint: 'The picture as ASCII, halftone dots, squares or lines.', icon: 'hash' },
-  { kind: 'contours', label: 'Contours', hint: 'Topographic lines through the picture\'s brightness.', icon: 'loop' },
-  { kind: 'lens', label: 'Lens', hint: 'A circle that magnifies, pixelates, blurs or inverts what is under it.', icon: 'search' },
-  { kind: 'camera', label: 'Camera', hint: 'Your webcam: as a layer, a mask, or what particles read. Its motion is a source.', icon: 'camera' },
-  { kind: 'cloner', label: 'Cloner', hint: 'Copies of a shape, text, image or null in a grid, ring, line or along a stroke. Vary them by index; nulls and shapes push, grow, turn or hide the copies near them.', icon: 'copy' },
-  { kind: 'script', label: 'Script', hint: 'Draw with JavaScript: a setup and a draw function on a 2D canvas over the picture, with sliders you declare. Reads the picture, the mouse and nulls.', icon: 'code' },
-];
-const KIND = Object.fromEntries(KINDS.map(k => [k.kind, k])) as Record<PlayLayerKind, (typeof KINDS)[number]>;
+const KIND = BUILTIN_LAYER;
 
 export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, top }: {
   play: PlayRecord;
@@ -69,7 +54,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
 }) {
   const tk = useTokens();
   const addRef = useRef<HTMLSpanElement>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState(false);
   const selected = usePlayUi(s => s.selected), setSelected = usePlayUi(s => s.select), revealTick = usePlayUi(s => s.revealTick);
   const [drawing, setDrawing] = useState<ShapeDrawing | null>(null);
   useEffect(() => { playOverlay.setEditing(true, selected); }, [selected]);
@@ -78,23 +63,10 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   // A layer clicked on the picture is selected here too.
   useEffect(() => playOverlay.onSelect(id => usePlayUi.getState().reveal(id)), []);
 
-  const installed = useInstalledKinds();
-  const mode = useThemeMode();
   const addKind = (k: LayerKindDef) => {
     const id = playId('layer');
     onChange(p => addKindLayer(p, k, id));
     setSelected(id);
-  };
-  // The built-in kinds, then sketches saved as kinds: this file's, then the rest of your list.
-  const addItems = (): MenuItem[] => {
-    const items: MenuItem[] = KINDS.map(k => ({ label: k.label, hint: k.hint, icon: k.icon, onSelect: () => add(k.kind) }));
-    const extra = addableKinds(play, installed);
-    if (extra.length) items.push('separator', ...extra.map(({ def, inFile }) => ({
-      label: def.name, icon: def.icon, iconColor: accentColor(def.colour, mode),
-      hint: `${kindHint(def.hint, def.paramDefs.length)}${inFile ? '' : ' · from your list'}`,
-      onSelect: () => addKind(def),
-    })));
-    return items;
   };
   const add = (kind: PlayLayerKind) => {
     const n = play.layers.filter(l => l.kind === kind).length + 1;
@@ -135,9 +107,9 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         {play.layers.length > 0 && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}` }}>{play.layers.length}</span>}
         <span style={{ flex: 1 }} />
         <span ref={addRef} style={{ display: 'inline-flex' }}>
-          <Button size="sm" icon="plus" onClick={() => { const r = addRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 280, y: r.bottom + 6 } : null); }}>Add layer</Button>
+          <Button size="sm" icon="plus" aria-expanded={menu} onClick={() => setMenu(m => !m)}>Add layer</Button>
         </span>
-        {menu && <Menu x={menu.x} y={menu.y} minWidth={280} onClose={() => setMenu(null)} items={addItems()} />}
+        {menu && <AddLayerMenu play={play} touch={touch} anchorRef={addRef} onAdd={add} onAddKind={addKind} onChange={onChange} onClose={() => setMenu(false)} />}
       </div>
       <div ref={listRef} style={{ flex: 1, minHeight: play.notes && !top ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {top && <div style={{ margin: '0 -12px' }}>{top}</div>}

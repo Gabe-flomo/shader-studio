@@ -15,7 +15,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
-import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, SENSOR_HINTS, SENSOR_LABELS, SOURCE_TYPES, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
+import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_POINT_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, SOURCE_TYPES, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import { SENSOR_READS_FOR, type SensorRead } from '../../types/play';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
@@ -44,6 +44,9 @@ import { toast } from '../ui/toastStore';
 import { usePlayUi, type PanelSize } from './playUi';
 import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
+import { HandsChip } from './HandsChip';
+import { handFeed } from '../../lib/handFeed';
+import { usesHands, type HandGesture } from '../../types/play';
 import { ColourPad } from './ColourPad';
 import { useLiveValues } from './useLiveValues';
 import { useStage } from './stageStore';
@@ -115,7 +118,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // Mouse and keyboard sources listen only while this page shows. Solo is for this page only.
   useEffect(() => {
     playEngine.setPerforming(true);
-    return () => { playEngine.setPerforming(false); usePlayUi.getState().clearSolo(); };
+    usePlayUi.getState().setPerforming(true);
+    return () => { playEngine.setPerforming(false); usePlayUi.getState().setPerforming(false); usePlayUi.getState().clearSolo(); };
   }, []);
   // An image, video or colour background replaces the shader while this page shows (the Studio keeps the graph).
   useEffect(() => playBackground.claim(), []);
@@ -845,6 +849,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
   }, [learnFor]);
 
   const noControls = play.controls.length === 0;
+  const learnTrigger = !!learnFor && learnFor !== 'new' && play.mappings.find(m => m.id === learnFor)?.source.kind === 'trigger';
   const midi = midiEngine.webMidi();
   // Collapsed rows show one line: source → control, the meter and the switch. UI state only.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
@@ -893,9 +898,17 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               <MidiStatusChip />
             </div>
           )}
+          {(usesHands(play) || (learnFor && handFeed.getStatus() !== 'unsupported')) && (
+            <div style={{ margin: '4px 0 6px', padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field }}>
+              <HandsChip />
+            </div>
+          )}
           {learnFor && (
             <div style={{ margin: '6px 0 2px', padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 12px ${fontFamily.ui}` }}>
-              Move a knob, hit a note or press a key… <span style={{ fontWeight: 500, opacity: 0.8 }}>Esc to cancel</span>
+              {learnTrigger
+                ? <>Press a key, hit a note{handFeed.isOn() ? ' or make a hand gesture' : ''}… </>
+                : <>Move a knob, hit a note, press a key{handFeed.isOn() ? ' or move a finger' : ''}… </>}
+              <span style={{ fontWeight: 500, opacity: 0.8 }}>Esc to cancel</span>
             </div>
           )}
           <SoloStrip kind="mapping" total={play.mappings.length} />
@@ -1174,6 +1187,22 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
       </>);
     case 'trigger':
       return <TriggerOptions source={source} shapes={layerRefs.filter(l => l.kind === 'shape')} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />;
+    case 'hand':
+      return (
+        <>
+          {row(<>
+            {source.read !== 'spread' && <Segmented size="sm" ariaLabel="Which hand" value={source.side} options={HAND_SIDES} onChange={side => onChange({ ...source, side })} />}
+            {source.read === 'point' && <>
+              <Select ariaLabel="Point on the hand" value={`${source.point}`} options={HAND_POINT_OPTIONS} onChange={v => onChange({ ...source, point: parseInt(v, 10) || 0 })} height={26} style={{ flex: 1, minWidth: 110 }} />
+              <Segmented size="sm" ariaLabel="Axis" value={source.axis} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z', title: 'Toward the camera (from the wrist)' }]} onChange={axis => onChange({ ...source, axis })} />
+            </>}
+            {source.read === 'palm' && <Segmented size="sm" ariaLabel="Axis" value={source.axis === 'y' ? 'y' : 'x'} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }]} onChange={axis => onChange({ ...source, axis })} />}
+            {source.read === 'pinch' && <Select ariaLabel="Finger the thumb pinches" value={`${source.point}`} options={PINCH_FINGERS} onChange={v => onChange({ ...source, point: parseInt(v, 10) || 8 })} height={26} />}
+            {source.read === 'gesture' && <Select ariaLabel="Gesture" value={source.gesture} options={HAND_GESTURE_OPTIONS} onChange={v => onChange({ ...source, gesture: v as HandGesture })} height={26} />}
+          </>)}
+          <div style={{ margin: '-2px 0 6px 60px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{HAND_READ_HINTS[source.read]}</div>
+        </>
+      );
     case 'sensor': {
       const sensing = layerRefs.filter(l => SENSOR_READS_FOR[l.kind]);
       if (!sensing.length) return row(hint('Add a Shape, Particles, Camera or Null layer first'));

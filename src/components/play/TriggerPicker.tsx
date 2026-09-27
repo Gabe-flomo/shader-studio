@@ -6,13 +6,14 @@
  */
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
-import type { LiveAudioBand, TriggerSpec } from '../../types/play';
-import { CHANNELS, LIVE_BAND_OPTIONS, TRIGGER_KINDS, keyName, triggerFromKind, triggerLabel } from '../../play/playSources';
+import type { HandGesture, LiveAudioBand, TriggerSpec } from '../../types/play';
+import { CHANNELS, HAND_GESTURE_OPTIONS, HAND_SIDES, LIVE_BAND_OPTIONS, TRIGGER_KINDS, keyName, triggerFromKind, triggerLabel } from '../../play/playSources';
 import { Segmented } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { LiveAudioChip, OscStatusChip } from './chips';
+import { HandsChip } from './HandsChip';
 
 export function TriggerPicker({ trigger: t, shapes, numStyle, onChange }: {
   trigger: TriggerSpec;
@@ -59,6 +60,12 @@ export function TriggerPicker({ trigger: t, shapes, numStyle, onChange }: {
           {hint('level')}
         </>}
       </>)}
+      {t.on === 'hand' && <>
+        <Segmented size="sm" ariaLabel="Which hand" value={t.side} options={HAND_SIDES} onChange={side => onChange({ ...t, side })} />
+        <Select ariaLabel="Gesture" value={t.gesture} options={HAND_GESTURE_OPTIONS} onChange={v => onChange({ ...t, gesture: v as HandGesture })} height={26} />
+        {hint('or Learn and make it')}
+        <HandsChip settings={false} />
+      </>}
       {(t.on === 'key' || t.on === 'note' || t.on === 'osc' || t.on === 'mouse') && hint(`${triggerLabel(t)} · Learn to change`)}
     </>
   );

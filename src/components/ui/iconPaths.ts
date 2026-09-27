@@ -32,6 +32,7 @@ export const ICONS = {
   wave: { sw: 1.5, body: "<path d='M1.5 12.5h13'/><path d='M2 12c1.5 0 1.8-6 3.2-6s1.6 4 3 4 1.4-7.5 3-7.5 1.5 9.5 3 9.5'/>" },
   popout: { sw: 1.5, body: "<rect x='2' y='4' width='9' height='9.5' rx='1.8'/><path d='M8.5 2h5.5v5.5M14 2l-5.5 5.5'/>" },
   reset: { sw: 1.5, body: "<path d='M3.2 8a4.8 4.8 0 1 0 1.4-3.4'/><path d='M3.2 3v2.6h2.6'/>" },
+  history: { sw: 1.5, body: "<path d='M2.9 8a5.1 5.1 0 1 0 1.5-3.6'/><path d='M2.9 2.6v2.8h2.8'/><path d='M8 5.3V8l1.9 1.3'/>" },
   copy: { sw: 1.5, body: "<rect x='5.5' y='5.5' width='8' height='8' rx='1.8'/><path d='M10.5 5.5V4.3c0-1-.8-1.8-1.8-1.8H4.3c-1 0-1.8.8-1.8 1.8v4.4c0 1 .8 1.8 1.8 1.8h1.2'/>" },
   close: { sw: 1.5, body: "<path d='M4.5 4.5l7 7M11.5 4.5l-7 7'/>" },
   edit: { sw: 1.5, body: "<path d='M10.4 2.9l2.7 2.7-7.6 7.6-3.2.5.5-3.2z'/>" },
@@ -46,6 +47,7 @@ export const ICONS = {
   info: { sw: 1.4, body: "<circle cx='8' cy='8' r='6'/><path d='M8 7.3V11'/><circle cx='8' cy='5' r='0.5' fill='currentColor'/>" },
   lock: { sw: 1.4, body: "<rect x='3.5' y='7' width='9' height='6.5' rx='1.5'/><path d='M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7'/>" },
   warning: { sw: 1.4, body: "<path d='M8 2.2L14 13H2L8 2.2Z'/><path d='M8 6.5v3'/><circle cx='8' cy='11.2' r='0.4' fill='currentColor'/>" },
+  rebuild: { sw: 1.5, body: "<path d='M13 6.5A5.2 5.2 0 0 0 3.6 5'/><path d='M3 2.8v2.6h2.6'/><path d='M3 9.5a5.2 5.2 0 0 0 9.4 1.5'/><path d='M13 13.2v-2.6h-2.6'/>" },
   resetParams: { sw: 1.4, body: "<path d='M3.2 8a4.8 4.8 0 1 0 1.4-3.4'/><path d='M3.2 3v2.6h2.6'/>" },
   pause: { sw: 0, body: "<rect x='4' y='3' width='3' height='10' rx='1'/><rect x='9' y='3' width='3' height='10' rx='1'/>", fill: true },
   play: { sw: 0, body: "<path d='M5 3.5v9l7-4.5z'/>", fill: true },
@@ -70,6 +72,7 @@ export const ICONS = {
   slides: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='8.5' rx='1.5'/><path d='M8 11v2.5M5.5 13.5h5'/>" },
   scroll: { sw: 1.5, body: "<rect x='3' y='1.8' width='10' height='12.4' rx='1.5'/><path d='M5.5 5h5M5.5 8h5M5.5 11h3'/>" },
   book: { sw: 1.4, body: "<path d='M8 4.3C6.6 3.2 4.6 2.8 2 2.9v9.5c2.6-.1 4.6.3 6 1.4 1.4-1.1 3.4-1.5 6-1.4V2.9c-2.6-.1-4.6.3-6 1.4z'/><path d='M8 4.3v9.5'/>" },
+  hand: { sw: 1.4, body: "<path d='M5.2 8.6V3.9a1 1 0 0 1 2 0v3.5M7.2 7.2V2.8a1 1 0 0 1 2 0v4.4M9.2 7.2V3.6a1 1 0 0 1 2 0v4M11.2 7.8V5.4a1 1 0 0 1 2 0v4.2c0 2.6-2 4.8-4.6 4.8-1.6 0-2.8-.7-3.7-2L3 10a1 1 0 0 1 1.5-1.3l.7.8'/>" },
   sliders: { sw: 1.5, body: "<path d='M2.5 4.5h11M2.5 11.5h11'/><circle cx='6' cy='4.5' r='1.6' fill='currentColor'/><circle cx='10.5' cy='11.5' r='1.6' fill='currentColor'/>" },
 } satisfies Record<string, IconDef>;
 

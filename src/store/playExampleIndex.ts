@@ -54,6 +54,7 @@ const ROWS: Array<[string, string, string]> = [
   ['playPictureShape', 'The picture as a shape', 'The bright parts of the shader become solid.'],
   ['playGlowText', 'Glowing text and strokes', 'The Layers node: SDF Glow on whatever the layers draw.'],
   ['scriptFirst', 'Script: a first sketch', 'A JavaScript sketch over the shader: setup and draw, with sliders it declares.'],
+  ['script3D', 'Script: 3D on a 2D canvas', 'A lit torus, ball or cube turning over SDF Glow, projected and sorted in plain JavaScript.'],
   ['scriptMouse', 'Script: the mouse', 'A chain of beads chases s.mouse; hold the button to swell it.'],
   ['scriptPicture', 'Script: reading the picture', 'Dots land where the shader is bright: s.picture.brightness makes a stipple.'],
   ['scriptNulls', 'Script: nulls as handles', 'A string between two nulls, plucked by a third that follows the mouse.'],
@@ -63,6 +64,9 @@ const ROWS: Array<[string, string, string]> = [
   ['scriptGlow', 'Script: the shader glows around it', 'The Layers node reads the sketch back, and SDF Glow turns its lines to neon.'],
   ['bgColourSketch', 'Background: a colour, no shader', 'Background → Colour: the graph pauses and a Script layer runs alone on a flat colour, a CPU toy.'],
   ['bgPhotoFlow', 'Background: particles over a photo', 'Background → Image: a photo instead of the shader, and a flow field of particles reading it.'],
+  ['handFingertips', 'Hands: fingertips move particles', 'Nulls follow your fingertips: particles flow from your index finger into your thumb.'],
+  ['handPinch', 'Hands: pinch, point and fist', 'Pinch drives a slider, a fist fires a burst, pointing toggles a setting.'],
+  ['handTwoHands', 'Hands: two at once', 'How far apart your hands are zooms the picture; their heights mix the colour.'],
   ['playTake', 'A recorded take', 'Ships with an 8-second performance: watch it back and Render it without playing.'],
   // Bigger pieces that put several techniques together (their graphs live in exampleGraphs.ts).
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],
@@ -88,6 +92,7 @@ const GROUP_STARTS: Array<[string, string]> = [
   ['Shapes and zones', 'playWalls'],
   ['Scripts', 'scriptFirst'],
   ['Backgrounds', 'bgColourSketch'],
+  ['Hands', 'handFingertips'],
   ['Recording', 'playTake'],
   ['Bigger pieces', 'particleGlow'],
 ];

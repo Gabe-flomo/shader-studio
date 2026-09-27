@@ -54,7 +54,49 @@ export type TriggerSpec =
    * A shape layer: `click` a press on it, `enter` the pointer moving onto it,
    * `fill` particles filling it past `threshold` (0..1, see the sensor source).
    */
-  | { on: 'zone'; layerId: string; event: 'click' | 'enter' | 'fill'; threshold: number };
+  | { on: 'zone'; layerId: string; event: 'click' | 'enter' | 'fill'; threshold: number }
+  /** A hand gesture seen by hand tracking (docs/hand-tracking.md): fires when it starts, held while it lasts. */
+  | { on: 'hand'; side: HandSide; gesture: HandGesture };
+
+// ── Hands (hand tracking, docs/hand-tracking.md) ────────────────────────────
+
+/** The performer's own hand. `any`: the right hand when it is in view, else the left (for gestures: either). */
+export type HandSide = 'left' | 'right' | 'any';
+/**
+ * What a hand source reads, 0..1:
+ *   point    a landmark's X, Y or Z (`point` 0..20, `axis`)
+ *   palm     the palm centre's X or Y
+ *   pinch    thumb tip to a fingertip (`point` 8, 12, 16 or 20): 0 touching, 1 spread
+ *   open     0 a fist, 1 an open hand
+ *   roll     the hand's turn: 0.5 upright
+ *   size     how big the hand looks (near the camera = 1)
+ *   present  1 while the hand is in view
+ *   spread   the distance between the two hands (1 = a picture width)
+ *   gesture  1 while `gesture` is held (a gate)
+ */
+export type HandRead = 'point' | 'palm' | 'pinch' | 'open' | 'roll' | 'size' | 'present' | 'spread' | 'gesture';
+/** Pinches (each finger against the thumb), a fist, an open palm, pointing, and the hand coming into or leaving view. */
+export type HandGesture = 'pinch' | 'pinchMiddle' | 'pinchRing' | 'pinchPinky' | 'fist' | 'open' | 'point' | 'appear' | 'leave';
+export const HAND_GESTURES: readonly HandGesture[] = ['pinch', 'pinchMiddle', 'pinchRing', 'pinchPinky', 'fist', 'open', 'point', 'appear', 'leave'];
+
+/** Hand tracking's settings for a setup. Absent = the defaults. */
+export interface PlayHands {
+  /** 0 raw landmarks … 1 very smooth (and a little late). */
+  smoothing: number;
+  /** Draw the hands' skeleton over the picture while guides are showing. */
+  overlay: boolean;
+  colour: [number, number, number];
+  /** Selfie view: your right hand moves right on the picture. A Camera layer's own Mirror wins when there is one. */
+  mirror: boolean;
+}
+export const DEFAULT_HANDS: PlayHands = { smoothing: 0.5, overlay: true, colour: [0.35, 1, 0.75], mirror: true };
+
+/** Does a setup read hands anywhere: a hand source, a gesture trigger (mapping or action), or a null following a hand? */
+export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'>): boolean {
+  return play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && m.source.trigger.on === 'hand'))
+    || (play.actions ?? []).some(a => a.trigger.on === 'hand')
+    || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
+}
 
 /**
  * What a trigger does each time it fires.
@@ -117,7 +159,9 @@ export type PlaySource =
    *   motion    camera: how much is moving in front of it
    *   distance  null: how far it is from another null (`otherId`), 1 = a picture height or more
    */
-  | { kind: 'sensor'; layerId: string; read: SensorRead; otherId: string };
+  | { kind: 'sensor'; layerId: string; read: SensorRead; otherId: string }
+  /** A tracked hand (see HandRead). Every field is always present; the ones a read doesn't use are ignored. */
+  | { kind: 'hand'; side: HandSide; read: HandRead; point: number; axis: 'x' | 'y' | 'z'; gesture: HandGesture };
 
 export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
@@ -321,6 +365,8 @@ export interface PlayRecord {
   midiFile?: PlayMidiFile;
   /** Recorded performances (see lib/takes.ts), oldest first. Absent = none. */
   takes?: PlayTake[];
+  /** Hand tracking settings (smoothing, the skeleton overlay). Absent = DEFAULT_HANDS. */
+  hands?: PlayHands;
 }
 
 // ── Takes: a performance recorded as keyframes ──────────────────────────────
@@ -537,8 +583,24 @@ function parseTrigger(raw: unknown): TriggerSpec | null {
       const event = t.event === 'enter' || t.event === 'fill' ? t.event : 'click';
       return layerId ? { on: 'zone', layerId, event, threshold: Math.max(0.01, Math.min(0.99, num(t.threshold, 0.5))) } : null;
     }
+    case 'hand': return { on: 'hand', side: handSide(t.side), gesture: handGesture(t.gesture) };
     default: return null;
   }
+}
+
+const HAND_READS: ReadonlySet<string> = new Set<HandRead>(['point', 'palm', 'pinch', 'open', 'roll', 'size', 'present', 'spread', 'gesture']);
+function handSide(v: unknown): HandSide { return v === 'left' || v === 'any' ? v : 'right'; }
+function handGesture(v: unknown): HandGesture { return typeof v === 'string' && (HAND_GESTURES as readonly string[]).includes(v) ? (v as HandGesture) : 'pinch'; }
+
+function parseHands(v: unknown): PlayHands | null {
+  if (!v || typeof v !== 'object') return null;
+  const h = v as Record<string, unknown>;
+  return {
+    smoothing: Math.max(0, Math.min(1, num(h.smoothing, DEFAULT_HANDS.smoothing))),
+    overlay: h.overlay !== false,
+    colour: rgb(h.colour, DEFAULT_HANDS.colour),
+    mirror: h.mirror !== false,
+  };
 }
 
 const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble']);
@@ -616,6 +678,15 @@ function parseSource(raw: unknown): PlaySource | null {
       const layerId = str(s.layerId);
       const read = SENSOR_READS.has(s.read as string) ? (s.read as SensorRead) : null;
       return layerId && read ? { kind: 'sensor', layerId, read, otherId: str(s.otherId) ?? '' } : null;
+    }
+    case 'hand': {
+      const read = HAND_READS.has(s.read as string) ? (s.read as HandRead) : 'point';
+      return {
+        kind: 'hand', side: handSide(s.side), read,
+        point: Math.max(0, Math.min(20, Math.round(num(s.point, 8)))),
+        axis: s.axis === 'y' || s.axis === 'z' ? s.axis : 'x',
+        gesture: handGesture(s.gesture),
+      };
     }
     case 'trigger': {
       const trigger = parseTrigger(s.trigger);
@@ -752,6 +823,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   }
   const disp = parseDisplay(r.display);
   if (disp) out.display = disp;
+  const hands = parseHands(r.hands);
+  if (hands) out.hands = hands;
   if (Array.isArray(r.takes)) {
     const seenT = new Set<string>();
     const takes: PlayTake[] = [];
@@ -833,5 +906,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && (!play.display || isDefaultDisplay(play.display)));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && !play.hands && (!play.display || isDefaultDisplay(play.display)));
 }
