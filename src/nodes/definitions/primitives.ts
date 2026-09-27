@@ -252,8 +252,8 @@ float sdStar5(vec2 p, float r, float rf) {
   p.x = abs(p.x);
   p.y -= r;
   vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);
-  float h = clamp(dot(p, ba) / dot(ba, ba), -r, 0.0);
-  return length(p - ba * h) * sign(p.x * ba.y - p.y * ba.x);
+  float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+  return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
 }
 float sdStarN(in vec2 p, in float r, in float nf, in float m) {
   float an = 3.141593 / nf;
