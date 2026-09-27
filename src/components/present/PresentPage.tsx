@@ -13,6 +13,7 @@
  * Phones get one column: the steps as a strip of numbers, settings in a
  * sheet. Markdown and KaTeX load with this page, not with the app.
  */
+import { openBackgrounds, openCapture } from '../backgrounds/backgroundsUi';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { paperStyle } from './paper';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
@@ -128,6 +129,10 @@ function Header({ compact, list, onExport, onBrowse }: { compact: boolean; list:
     'separator',
     { label: 'New presentation…', icon: 'plus', onSelect: () => void newPresentation() },
     { label: 'Import a .present.json file…', icon: 'import', onSelect: () => void importPresentationFile() },
+    'separator',
+    { heading: 'Backgrounds' },
+    { label: 'Capture a background…', icon: 'camera', hint: 'A still from any graph at the moment you choose, 1920 × 1080 or up to 4K, kept in the Library', onSelect: () => { void openCapture({ aspect: 16 / 9 }); } },
+    { label: 'Your backgrounds…', icon: 'overlay', hint: 'Image backgrounds and palettes in the Library', onSelect: () => { void openBackgrounds(); } },
     // The samples, under a heading per group.
     ...SAMPLE_GROUPS.flatMap(g => [
       'separator' as const,

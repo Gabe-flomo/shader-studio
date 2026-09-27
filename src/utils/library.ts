@@ -61,8 +61,11 @@ const KINDS: Array<{ prefix: string; dir: string; scope?: string }> = [
   { prefix: 'shader-studio:un:', dir: 'published nodes' },
   { prefix: PRESENTATION_KEY_PREFIX, dir: 'presentations', scope: PRESENTATION_FOLDER_SCOPE },
 ];
+/** Background palettes (lib/backgroundLibrary.ts PALETTES_KEY); their images travel as files beside library.json. */
+export const BACKGROUND_PALETTES_KEY = 'shader-studio-backgrounds:palettes';
 const NAMED_FILES: Record<string, string> = {
   'shader-studio:palette-presets': 'palettes.json',
+  [BACKGROUND_PALETTES_KEY]: 'background palettes.json',
   'shader-studio:glsl-shaders': 'glsl shaders.json',
 };
 
@@ -195,6 +198,8 @@ Playfield (Preferences → Library → Import) to bring everything back.
 The folders are the same things as separate files, to look through or to
 share one at a time: a graph file opens with Import in Playfield, and a
 .present.json file (under presentations/) opens on the Present page.
+Image backgrounds are picture files under backgrounds/images/ (their names,
+folders and where they were captured from are in backgrounds/images.json).
 `;
 
 export function libraryZipName(at = new Date(), what = 'library'): string {
@@ -202,13 +207,18 @@ export function libraryZipName(at = new Date(), what = 'library'): string {
   return `Shader Studio ${what} ${d}.zip`;
 }
 
-/** The export ZIP: `<root>/library.json`, `<root>/README.txt` and the readable files. */
-export function buildLibraryZip(s: LibrarySnapshot, root = libraryZipName(new Date(s.savedAt)).replace(/\.zip$/, '')): Uint8Array {
+/**
+ * The export ZIP: `<root>/library.json`, `<root>/README.txt` and the readable
+ * files, plus `extra` binary files (the image backgrounds: backgroundZipFiles
+ * in lib/backgroundLibrary.ts), which live in IndexedDB rather than the snapshot.
+ */
+export function buildLibraryZip(s: LibrarySnapshot, root = libraryZipName(new Date(s.savedAt)).replace(/\.zip$/, ''), extra: Record<string, Uint8Array> = {}): Uint8Array {
   const files: Record<string, Uint8Array> = {
     [`${root}/${LIBRARY_FILE}`]: strToU8(JSON.stringify(s)),
     [`${root}/README.txt`]: strToU8(README),
   };
   for (const [p, c] of Object.entries(readableFiles(s))) files[`${root}/${p}`] = strToU8(c);
+  for (const [p, b] of Object.entries(extra)) files[`${root}/${p}`] = b;
   return zipSync(files, { level: 6 });
 }
 
@@ -398,11 +408,11 @@ export function importLibrary(s: LibrarySnapshot, kv: KV = localKV): ImportResul
 }
 
 /** Events the lists listen for, so imported things show up without a reload where possible. */
-export const LIBRARY_REFRESH_EVENTS = ['saved-graphs-changed', 'presentations-changed', 'assetbrowser-folders-changed', 'customfn-changed', 'exprpreset-changed', 'transformpreset-changed', 'keyframepreset-changed'];
+export const LIBRARY_REFRESH_EVENTS = ['backgrounds-changed', 'saved-graphs-changed', 'presentations-changed', 'assetbrowser-folders-changed', 'customfn-changed', 'exprpreset-changed', 'transformpreset-changed', 'keyframepreset-changed'];
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
-export type LibraryKind = 'graphs' | 'versions' | 'group presets' | 'functions' | 'expressions' | 'transforms' | 'keyframe presets' | 'published nodes' | 'presentations' | 'palettes' | 'glsl shaders' | 'settings';
+export type LibraryKind = 'graphs' | 'versions' | 'group presets' | 'functions' | 'expressions' | 'transforms' | 'keyframe presets' | 'published nodes' | 'presentations' | 'palettes' | 'glsl shaders' | 'backgrounds' | 'settings';
 
 export interface LibraryStats {
   /** Per kind: how many and how much space (characters, about bytes: saved work is mostly plain text). */
@@ -416,7 +426,7 @@ export interface LibraryStats {
 export const STORAGE_LIMIT = 5 * 1024 * 1024;
 
 export function libraryStats(s: LibrarySnapshot): LibraryStats {
-  const kinds = Object.fromEntries((['graphs', 'versions', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'presentations', 'palettes', 'glsl shaders', 'settings'] as LibraryKind[]).map(k => [k, { count: 0, size: 0 }])) as LibraryStats['kinds'];
+  const kinds = Object.fromEntries((['graphs', 'versions', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'presentations', 'palettes', 'glsl shaders', 'backgrounds', 'settings'] as LibraryKind[]).map(k => [k, { count: 0, size: 0 }])) as LibraryStats['kinds'];
   let playSetups = 0, total = 0;
   for (const [k, v] of Object.entries(s.items)) {
     const size = k.length + v.length;
@@ -430,6 +440,10 @@ export function libraryStats(s: LibrarySnapshot): LibraryStats {
       kind = 'versions';
       const h = parse(v);
       count = Array.isArray(h) ? h.length : 0;
+    } else if (k === BACKGROUND_PALETTES_KEY) {
+      kind = 'backgrounds';
+      const a = parse(v);
+      count = Array.isArray(a) ? a.length : 0;
     } else if (k === 'shader-studio:palette-presets' || k === 'shader-studio:glsl-shaders') {
       kind = k === 'shader-studio:palette-presets' ? 'palettes' : 'glsl shaders';
       const a = parse(v);
@@ -461,15 +475,17 @@ export function kindOfKey(k: string, v: string): LibraryKind {
   if (found) return found.dir as LibraryKind;
   if (k === 'shader-studio:palette-presets') return 'palettes';
   if (k === 'shader-studio:glsl-shaders') return 'glsl shaders';
+  if (k === BACKGROUND_PALETTES_KEY) return 'backgrounds';
   return 'settings';
 }
 
 /** The sets the Download menu offers: everything, or one kind of thing. */
-export type DownloadSetId = 'everything' | 'graphs' | 'presentations' | 'glsl' | 'functions' | 'nodes' | 'presets';
+export type DownloadSetId = 'everything' | 'graphs' | 'presentations' | 'backgrounds' | 'glsl' | 'functions' | 'nodes' | 'presets';
 export const DOWNLOAD_SETS: ReadonlyArray<{ id: DownloadSetId; label: string; hint: string; kinds: readonly LibraryKind[] | null }> = [
-  { id: 'everything', label: 'Everything', hint: 'The whole library: graphs with their versions, presentations, shaders, functions, nodes, presets and settings', kinds: null },
+  { id: 'everything', label: 'Everything', hint: 'The whole library: graphs with their versions, presentations, backgrounds, shaders, functions, nodes, presets and settings', kinds: null },
   { id: 'graphs', label: 'Only graphs', hint: 'Every saved graph as a .json file (with its versions), in its folders', kinds: ['graphs', 'versions'] },
   { id: 'presentations', label: 'Only presentations', hint: 'Every presentation as a .present.json file (with the Plays it shows), in its folders', kinds: ['presentations'] },
+  { id: 'backgrounds', label: 'Only backgrounds', hint: 'Image backgrounds as picture files and background palettes, in their folders', kinds: ['backgrounds'] },
   { id: 'glsl', label: 'Only GLSL shaders', hint: 'Every saved shader as a plain .glsl file (notes as a comment at the top), in its folders', kinds: ['glsl shaders'] },
   { id: 'functions', label: 'Only custom functions', hint: 'The Functions library: each preset as a .json file', kinds: ['functions'] },
   { id: 'nodes', label: 'Only published nodes', hint: 'Node types you published from the Builder, as .json files', kinds: ['published nodes'] },
@@ -481,7 +497,7 @@ export function snapshotOfKinds(s: LibrarySnapshot, kinds: readonly LibraryKind[
   if (!kinds) return s;
   const want = new Set(kinds);
   const items: Record<string, string> = {};
-  for (const [k, v] of Object.entries(s.items)) if (want.has(kindOfKey(k, v)) || (k === 'assetbrowser_folders' && (want.has('graphs') || want.has('functions') || want.has('group presets') || want.has('presentations')))) items[k] = v;
+  for (const [k, v] of Object.entries(s.items)) if (want.has(kindOfKey(k, v)) || (k === 'assetbrowser_folders' && (want.has('graphs') || want.has('functions') || want.has('group presets') || want.has('presentations') || want.has('backgrounds')))) items[k] = v;
   return { ...s, items };
 }
 
@@ -494,14 +510,14 @@ export function countInSet(s: LibrarySnapshot, set: DownloadSetId): number {
     if (def.kinds && !def.kinds.includes(kind)) continue;
     if (kind === 'versions' || kind === 'settings') continue;
     if (kind === 'glsl shaders') { const list = parse(v); n += Array.isArray(list) ? list.length : 0; continue; }
-    if (kind === 'palettes') { const list = parse(v); n += Array.isArray(list) ? list.length : 1; continue; }
+    if (kind === 'palettes' || kind === 'backgrounds') { const list = parse(v); n += Array.isArray(list) ? list.length : 1; continue; }
     n++;
   }
   return n;
 }
 
-/** A ZIP of one set: `library.json` restricted to it (importable) plus the readable files of that set. */
-export function buildSetZip(s: LibrarySnapshot, set: DownloadSetId): { bytes: Uint8Array; name: string } {
+/** A ZIP of one set: `library.json` restricted to it (importable) plus the readable files of that set, and `extra` files (image backgrounds). */
+export function buildSetZip(s: LibrarySnapshot, set: DownloadSetId, extra: Record<string, Uint8Array> = {}): { bytes: Uint8Array; name: string } {
   const def = DOWNLOAD_SETS.find(d => d.id === set)!;
   const part = snapshotOfKinds(s, def.kinds);
   const what = set === 'everything' ? 'library' : set === 'glsl' ? 'GLSL shaders' : set === 'nodes' ? 'published nodes' : set === 'functions' ? 'custom functions' : set;
@@ -516,5 +532,6 @@ export function buildSetZip(s: LibrarySnapshot, set: DownloadSetId): { bytes: Ui
     if (def.kinds && p === 'settings.json') continue;
     files[`${root}/${p}`] = strToU8(c);
   }
+  for (const [p, b] of Object.entries(extra)) files[`${root}/${p}`] = b;
   return { bytes: zipSync(files, { level: 6 }), name };
 }
