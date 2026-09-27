@@ -9,18 +9,47 @@
  * per frame.
  *
  * `source` is a tagged union so other ways in (typed-in tables, a URL, a live
- * stream) slot in later without changing what reads a dataset. Only `file` is
- * built so far; the others are parsed and kept, and have no editor yet.
+ * stream) all feed the same notebook; nothing that reads a dataset cares
+ * which it came from.
  */
 
 export type DatasetFormat = 'csv' | 'tsv' | 'json' | 'text';
 export type HeaderMode = 'auto' | 'yes' | 'no';
 
+/** A typed-in table's column: text columns hold labels, categories repeat a few values. */
+export type ManualColumnType = 'number' | 'category' | 'text';
+export interface ManualColumn { name: string; type: ManualColumnType }
+
+export type StreamTransport = 'poll' | 'websocket' | 'sse' | 'osc' | 'demo';
+/** What a stream does with each message's rows: add them to a rolling window, or make them the whole table. */
+export type StreamMode = 'append' | 'replace';
+
 export type DatasetSource =
   | { kind: 'file'; format: DatasetFormat; filename: string; text: string; header?: HeaderMode }
-  | { kind: 'manual' }
-  | { kind: 'url'; url: string; format: DatasetFormat; refresh?: number }
-  | { kind: 'stream'; transport: 'poll' | 'websocket' | 'sse' | 'osc'; address: string; format?: DatasetFormat; window: number };
+  /** Typed in: the cells as typed (strings), read per column type when the notebook runs. */
+  | { kind: 'manual'; columns: ManualColumn[]; rows: string[][] }
+  /**
+   * Fetched from a link. `text` is what came back, kept like a file's so the
+   * graph opens offline; Refresh fetches `url` again. `kaggle` marks a file
+   * from a Kaggle dataset (fetched with the user's own key).
+   */
+  | { kind: 'url'; url: string; format: DatasetFormat; text: string; header?: HeaderMode; fetchedAt?: number; refresh?: number; kaggle?: { slug: string; file: string } }
+  /**
+   * A live feed. Messages become rows, appended into a window of the last
+   * `window` rows or replacing the table. `text` is the last window as CSV,
+   * saved when you pause, disconnect or keep it, so the graph opens with it.
+   */
+  | {
+    kind: 'stream'; transport: StreamTransport; address: string; format?: DatasetFormat; window: number;
+    mode: StreamMode;
+    /** Poll: seconds between fetches. Demo: rows per second. */
+    interval: number;
+    /** Connect when the graph opens (examples; feeds you trust). */
+    autoConnect: boolean;
+    /** A website export reconnects to the feed (needs the network) or carries the last window. */
+    onExport: 'reconnect' | 'freeze';
+    text?: string;
+  };
 
 export type ColumnType = 'number' | 'category' | 'other';
 
@@ -62,6 +91,9 @@ export const DATASET_MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const DATASET_MAX_ROWS = 200_000;
 export const DATASET_MAX_COLUMNS = 256;
 export const DATASET_MAX_CELLS = 64;
+/** Rows a typed-in table keeps (it's typed or pasted, not imported). */
+export const MANUAL_MAX_ROWS = 20_000;
+export const STREAM_TRANSPORTS: readonly StreamTransport[] = ['poll', 'websocket', 'sse', 'osc', 'demo'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -117,20 +149,46 @@ function parseSource(raw: unknown): DatasetSource | null {
       const header = s.header === 'yes' || s.header === 'no' ? s.header : undefined;
       return { kind: 'file', format, filename: str(s.filename, 200) ?? 'data', text, ...(header ? { header } : {}) };
     }
-    case 'manual': return { kind: 'manual' };
+    case 'manual': {
+      const columns: ManualColumn[] = [];
+      const names = new Set<string>();
+      for (const c of Array.isArray(s.columns) ? s.columns.slice(0, DATASET_MAX_COLUMNS) : []) {
+        if (!c || typeof c !== 'object') continue;
+        const x = c as Record<string, unknown>;
+        const name = str(x.name, 200)?.trim();
+        if (!name || names.has(name)) continue;
+        names.add(name);
+        columns.push({ name, type: x.type === 'number' || x.type === 'category' ? x.type : 'text' });
+      }
+      const rows = (Array.isArray(s.rows) ? s.rows.slice(0, MANUAL_MAX_ROWS) : [])
+        .map(r => columns.map((_, i) => (Array.isArray(r) && typeof r[i] === 'string' ? (r[i] as string).slice(0, 2000) : Array.isArray(r) && typeof r[i] === 'number' ? String(r[i]) : '')));
+      return { kind: 'manual', columns, rows };
+    }
     case 'url': {
       const url = str(s.url, 2000), format = fmt(s.format);
       if (!url || !format) return null;
+      const text = typeof s.text === 'string' && s.text.length <= DATASET_MAX_FILE_BYTES ? s.text : '';
       const refresh = typeof s.refresh === 'number' && Number.isFinite(s.refresh) && s.refresh > 0 ? s.refresh : undefined;
-      return { kind: 'url', url, format, ...(refresh ? { refresh } : {}) };
+      const header = s.header === 'yes' || s.header === 'no' ? s.header : undefined;
+      const fetchedAt = typeof s.fetchedAt === 'number' && Number.isFinite(s.fetchedAt) ? s.fetchedAt : undefined;
+      const k = s.kaggle as Record<string, unknown> | undefined;
+      const kaggle = k && typeof k === 'object' && typeof k.slug === 'string' && typeof k.file === 'string' ? { slug: k.slug.slice(0, 200), file: k.file.slice(0, 400) } : undefined;
+      return { kind: 'url', url, format, text, ...(header ? { header } : {}), ...(fetchedAt ? { fetchedAt } : {}), ...(refresh ? { refresh } : {}), ...(kaggle ? { kaggle } : {}) };
     }
     case 'stream': {
-      const transport = ['poll', 'websocket', 'sse', 'osc'].includes(s.transport as string) ? s.transport as 'poll' : null;
+      const transport = STREAM_TRANSPORTS.includes(s.transport as StreamTransport) ? s.transport as StreamTransport : null;
       const address = str(s.address, 2000);
       const window = typeof s.window === 'number' && Number.isFinite(s.window) ? Math.max(1, Math.min(DATASET_MAX_ROWS, Math.round(s.window))) : 1000;
       if (!transport || address === null) return null;
       const format = fmt(s.format);
-      return { kind: 'stream', transport, address, window, ...(format ? { format } : {}) };
+      const interval = typeof s.interval === 'number' && Number.isFinite(s.interval) && s.interval > 0 ? Math.min(3600, s.interval) : transport === 'demo' ? 10 : 5;
+      const text = typeof s.text === 'string' && s.text.length <= DATASET_MAX_FILE_BYTES ? s.text : undefined;
+      return {
+        kind: 'stream', transport, address, window, ...(format ? { format } : {}),
+        mode: s.mode === 'replace' ? 'replace' : 'append', interval,
+        autoConnect: s.autoConnect === true, onExport: s.onExport === 'freeze' ? 'freeze' : 'reconnect',
+        ...(text !== undefined ? { text } : {}),
+      };
     }
     default: return null;
   }

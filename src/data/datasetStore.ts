@@ -24,6 +24,7 @@ class DatasetRuntime {
   private anyListeners = new Set<Listener>();
   private cache = new Map<string, { version: number; value: DatasetResult | null }>();
   private clock = 0;
+  private recordListeners = new Set<(next: DatasetsRecord, prev: DatasetsRecord) => void>();
 
   /**
    * The saved datasets changed (the store calls this). One whose result or
@@ -40,6 +41,13 @@ class DatasetRuntime {
       this.live.delete(id);
       this.bump(id);
     }
+    if (prev !== next) for (const fn of this.recordListeners) fn(next, prev);
+  }
+
+  /** Tell `fn` whenever the saved datasets change at all (a source edited, one added or removed): the stream runtime follows this. */
+  onRecords(fn: (next: DatasetsRecord, prev: DatasetsRecord) => void): () => void {
+    this.recordListeners.add(fn);
+    return () => { this.recordListeners.delete(fn); };
   }
 
   private bump(id: string): void {

@@ -1,6 +1,6 @@
 /** Small helpers the Data editor's panels share (kept out of the component files for fast refresh). */
 import type { Tokens } from '../../theme/tokens';
-import type { Column } from '../../data/types';
+import type { Column, StreamTransport } from '../../data/types';
 import type { DataOutputSpec } from '../../nodes/definitions/data';
 
 /** The dot colour for a column type. */
@@ -29,3 +29,12 @@ export function defaultOutputs(columns: readonly Column[]): DataOutputSpec[] {
   const first = columns.find(c => c.type === 'number');
   return first ? [{ key: 'o1', columns: [first.name] }] : [];
 }
+
+/** A stream's ways in, as the editor lists them. */
+export const TRANSPORTS: { value: StreamTransport; label: string; what: string }[] = [
+  { value: 'poll', label: 'Poll a URL', what: 'Fetch a link every few seconds (JSON or CSV).' },
+  { value: 'websocket', label: 'WebSocket', what: 'Messages pushed over ws:// or wss://.' },
+  { value: 'sse', label: 'Server-Sent Events', what: 'An event stream (text/event-stream).' },
+  { value: 'osc', label: 'OSC', what: 'Messages from TouchOSC, Max, Ableton… through the OSC listener.' },
+  { value: 'demo', label: 'Demo stream', what: 'Rows made up in the app, no network: for trying things out.' },
+];

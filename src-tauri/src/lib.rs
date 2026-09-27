@@ -3,6 +3,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
+mod data_fetch;
 mod osc_listener;
 
 // ── FFmpeg session state ──────────────────────────────────────────────────────
@@ -247,6 +248,10 @@ pub fn run() {
             osc_start,
             osc_stop,
             open_url,
+            data_fetch::fetch_url,
+            data_fetch::kaggle_account,
+            data_fetch::kaggle_save,
+            data_fetch::kaggle_forget,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

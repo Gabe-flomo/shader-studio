@@ -21,7 +21,7 @@ import { formatBytes, type Dataset, type HeaderMode, type NotebookCell } from '.
 
 const DELIM_NAME: Record<string, string> = { ',': 'commas', '\t': 'tabs', ';': 'semicolons', '|': 'pipes' };
 
-function MiniTable({ p }: { p: Extract<ValuePreview, { kind: 'table' }> }) {
+export function MiniTable({ p }: { p: Extract<ValuePreview, { kind: 'table' }> }) {
   const tk = useTokens();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -83,7 +83,7 @@ function CellResult({ out, stale }: { out: CellOutput | undefined; stale: boolea
 }
 
 export function DataNotebook({
-  dataset, cellOut, info, parseError, runError, running, completions, onCells, onHeader, onReplaceFile, onRun,
+  dataset, cellOut, info, parseError, runError, running, completions, onCells, onHeader, onReplaceFile, onRun, sourcePanel,
 }: {
   dataset: Dataset;
   cellOut: Record<string, CellOutput>;
@@ -96,6 +96,8 @@ export function DataNotebook({
   onHeader: (h: HeaderMode) => void;
   onReplaceFile: () => void;
   onRun: () => void;
+  /** Where the data comes from, for sources other than a file (the typed-in table, a link, a stream). */
+  sourcePanel?: ReactNode;
 }) {
   const tk = useTokens();
   const src = dataset.source;
@@ -145,16 +147,18 @@ export function DataNotebook({
     );
   }
 
+  const tableInput = src.kind === 'manual' || src.kind === 'stream' || ((src.kind === 'file' || src.kind === 'url') && (src.format === 'csv' || src.format === 'tsv'));
+  const what = src.kind === 'url' ? 'what the link sent' : 'the file';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {sourceLine}
+      {src.kind === 'file' ? sourceLine : sourcePanel}
       {parseError && (
         <div style={{ padding: '8px 10px', borderRadius: radius.md, background: alpha(tk.status.danger, 0.08), color: tk.status.danger, fontSize: 12, lineHeight: 1.45 }}>{parseError}</div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>Notebook</span>
         <span style={{ fontSize: 11.5, color: tk.text.faint, flex: 1, minWidth: 0 }}>
-          JavaScript, top to bottom. {src.kind === 'file' && (src.format === 'csv' || src.format === 'tsv') ? <><code style={{ font: `500 11.5px ${fontFamily.mono}` }}>df</code> is the table;</> : <><code style={{ font: `500 11.5px ${fontFamily.mono}` }}>data</code> is the file;</>} the last value (or <code style={{ font: `500 11.5px ${fontFamily.mono}` }}>result</code>) becomes the dataset.
+          JavaScript, top to bottom. {tableInput ? <><code style={{ font: `500 11.5px ${fontFamily.mono}` }}>df</code> is the table{src.kind === 'stream' ? ' (the live window)' : ''};</> : <><code style={{ font: `500 11.5px ${fontFamily.mono}` }}>data</code> is {what};</>} the last value (or <code style={{ font: `500 11.5px ${fontFamily.mono}` }}>result</code>) becomes the dataset.
         </span>
       </div>
       {cells.map((c, i) => {
