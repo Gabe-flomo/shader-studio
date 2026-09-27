@@ -59,6 +59,10 @@ export interface EditorContext {
   /** The whole record, and a way to change it: a layer kind's edit reaches every layer made from it. */
   play: PlayRecord;
   changePlay: (fn: (p: PlayRecord) => PlayRecord) => void;
+  /** The card is in the split view's big Layers panel (room for a big editor like the drum pads'). */
+  big?: boolean;
+  /** A touch-first layout (phones): no split view, so big editors open in a sheet. */
+  touch?: boolean;
 }
 
 const MATTES: Choice[] = [

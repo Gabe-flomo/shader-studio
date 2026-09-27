@@ -75,7 +75,7 @@ let draggingRow: ItemRef | null = null;
 const sameItem = (a: ItemRef, b: ItemRef) => a.kind === b.kind && a.id === b.id;
 const nodeItem = (n: TreeNode): ItemRef => (n.kind === 'layer' ? { kind: 'layer', id: n.layer.id } : { kind: 'group', id: n.group.id });
 
-export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, top, split = false }: {
+export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, top, split = false, big = false }: {
   play: PlayRecord;
   touch: boolean;
   /** Targets that already have a control (their + is shown pressed). */
@@ -87,6 +87,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   top?: ReactNode;
   /** Wide (the Play split view's big panel): the list of layers on the left, the selected layer's editor on the right. */
   split?: boolean;
+  /** In the split view's big panel (wide or not): big editors (the drum pads') show in full. */
+  big?: boolean;
 }) {
   const tk = useTokens();
   const mode = useThemeMode();
@@ -314,6 +316,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
       matteOf: matteUsers(play.layers, l.id),
       nested,
       exposedTargets,
+      big,
       onSelect: () => setSelected(l.id),
       onPatch: fn => patch(l.id, fn),
       revealTick: selected === l.id ? revealTick : 0,
@@ -567,7 +570,7 @@ function DuplicateGroupDialog({ group, play, onPick, onClose }: { group: LayerGr
   );
 }
 
-function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch, selected, stripe, dim, groupItems, pictureHidden, drawing, maskDrawing, matteOf, nested, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull, onPairXY, headerOnly = false }: {
+function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch, selected, stripe, dim, groupItems, pictureHidden, drawing, maskDrawing, matteOf, nested, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull, onPairXY, headerOnly = false, big = false }: {
   layer: PlayLayer;
   layers: PlayLayer[];
   play: PlayRecord;
@@ -607,6 +610,8 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   onPairXY: (key: string) => void;
   /** Just the card's header: the split view lists layers this way and edits the selected one beside the list. */
   headerOnly?: boolean;
+  /** In the split view's big panel. */
+  big?: boolean;
 }) {
   const tk = useTokens();
   const [editing, setEditing] = useState(false);
@@ -629,6 +634,8 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
     createNull: onCreateNull,
     play,
     changePlay: onChangePlay,
+    big,
+    touch,
   };
   // A layer made from a saved kind shows the kind's icon, colour and name.
   const mode = useThemeMode();

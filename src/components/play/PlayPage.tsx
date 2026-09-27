@@ -592,7 +592,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {big === 'controls' && <>{controlsHeader}{renderControls(true)}</>}
       {big === 'layers' && (layersOk
-        ? <LayersPanel play={play} touch={false} split={splitWide} exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))} />
+        ? <LayersPanel play={play} touch={false} split={splitWide} big exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))} />
         : <LockedLayers play={play} />)}
       {big === 'finish' && (finishOk ? <FinishPanel play={play} onChange={update} touch={false} wide={splitWide} /> : <LockedFinish play={play} />)}
       {big === 'mappings' && renderMappings(true)}

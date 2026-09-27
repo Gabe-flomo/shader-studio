@@ -2,7 +2,12 @@
 
 A **Drum pads** layer is a 4 × 4 sampler: each pad plays a sample, Simpler-style, hit by clicks, keys, MIDI notes, a pad grid, actions and signals, and takes. It draws nothing on the picture; its sound goes through its own effect chain to the master bus, feeds the audio readers, and is mixed into recordings and renders. Add it from **Add layer → Inputs & helpers → Drum pads** (layers are Pro). The example is **Drum pads** in the Play folder, next to Audio effects.
 
-## Pads
+## The card: sidebar summary, full editor in the split view
+
+The full editor (the 4 × 4 pads, the selected pad's sample and waveform, the Kit settings) is too big for the sidebar, so it shows only in the **split view's big Layers panel** (`ctx.big`, set by `LayersPanel big` in `PlayPage`).
+
+- **Sidebar** (and a narrow window): a summary card, `DrumPadSummary` in `layers/DrumPadEditor.tsx`: how many pads have sounds, a mini 4 × 4 grid you can still tap to play, the kit's effect chain in a line (`drumFxSummary`: "Filter → Reverb", "None", "(off)"), Volume, Stop, and **Open in split view**. That button calls `openLayerInSplit(id)` (`playSplit.ts`): the split view turns on, its panel switches to Layers, and the layer is selected, so the wide panel edits it beside the list.
+- **Phones** (no split view): the button says **Open full editor** and opens the editor in a full-height sheet.
 
 Sixteen pads, drawn like the hardware: pads 1–4 along the bottom, 13–16 on top. Click a pad to play it (higher on the pad is a harder hit) and to select it for editing. Drop a sound file on a pad to load it.
 
@@ -31,7 +36,7 @@ A pad's numbers are layer properties named `pad<N>_<key>` (`pad3_pitch`, `pad1_s
 
 ## What plays them
 
-- **Clicks** on the layer card.
+- **Clicks** on the pads, in the full editor or the sidebar's mini grid.
 - **Keys** (on the Play page, not while typing): Z X C V play pads 1–4, A S D F 5–8, Q W E R 9–12, 1 2 3 4 13–16. Turn off with **Keys**.
 - **MIDI notes**: from the **base note** (36 by default, so 36–51 like a drum rack), on any channel or one channel. Note-on velocity sets how hard, and note-off lets a gate pad go. MIDI files and the computer-keyboard stand-in play them too.
 - **The pad grid** (MIDI settings → Pad grid): its lower-left 4 × 4, from the device or the on-screen grid. A note the grid takes isn't also played as a note.
@@ -84,6 +89,8 @@ Drum pads are a layer, so they're Pro (`play.layers`). On Free the layer isn't i
 - triggering from MIDI (range, channel), keys (not while typing, not off the Play page), the on-screen grid and actions
 - an offline mix placing a take's hit on its exact sample, with the take's pitch
 - the record (parse, old files, actions, take events, targets) and web exports (samples carried or left out, the page's kit)
+
+`src/components/play/__tests__/drumPadSplit.test.tsx`: the sidebar renders the summary card (not the editor), the big panel the full editor, phones get Open full editor, `openLayerInSplit` turns the split on at Layers with the layer selected, and the effect-chain line.
 
 ## Not yet
 

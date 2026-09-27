@@ -5,6 +5,10 @@
  * end you drag, how it plays, its numbers (each a mapping target), and what
  * plays the pads (keys, MIDI, the pad grid). Its sound's effect chain is in
  * Finish → Sound; readers can listen to it from here.
+ *
+ * The full editor only shows in the split view's big Layers panel (ctx.big).
+ * The sidebar shows a summary (DrumPadSummary: a mini grid to play, the
+ * effects, Volume) with Open in split view; phones open the editor in a sheet.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
@@ -12,6 +16,7 @@ import { DRUM_SYNTH_LABELS, emptyDrumPad, padHasSound, padName, padsReaderInput,
 import { DP_CHOKES, DP_COLS, DP_KEYS, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey } from '../../../play/kit/drumPads.js';
 import { isAudioFile, playDrumPads, SAMPLE_ACCEPT } from '../../../play/drumPads';
 import { Button } from '../../ui/Button';
+import { Sheet } from '../../ui/Sheet';
 import { Segmented, Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { NumberInput } from '../../NodeGraph/NumberInput';
@@ -20,6 +25,8 @@ import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { EMPTY_READERS, useReadersPanel, withReaders } from '../readersPanelUi';
 import { sizeText } from '../backgroundFiles';
 import { Section } from './Section';
+import { openLayerInSplit, usePlaySplit } from '../playSplit';
+import { AUDIO_FX_EFFECTS, layerChainId, type PlayAudioFx } from '../../../types/playAudioFx';
 import type { EditorContext } from './editors';
 import type { FieldKit } from './fields';
 
@@ -29,10 +36,80 @@ const ROWS = Array.from({ length: DP_PADS / DP_COLS }, (_, r) => DP_PADS / DP_CO
 
 function usePadsVersion(): number {
   const ref = useRef(0);
-  return useSyncExternalStore(fn => playDrumPads.subscribe(() => { ref.current++; fn(); }), () => ref.current);
+  return useSyncExternalStore(fn => playDrumPads.subscribe(() => { ref.current++; fn(); }), () => ref.current, () => ref.current);
 }
 
 export function DrumPadEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
+  return ctx.big ? <DrumPadFull f={f} ctx={ctx} /> : <DrumPadSummary f={f} ctx={ctx} />;
+}
+
+/** The kit's effect chain in a line: "Filter → Reverb", "None", or "off". */
+export function drumFxSummary(fx: PlayAudioFx | undefined, layerId: string): string {
+  const chain = fx?.chains[layerChainId(layerId)];
+  const on = chain?.effects.filter(e => e.enabled !== false) ?? [];
+  if (!chain || !chain.effects.length) return 'None';
+  const names = (on.length ? on : chain.effects).map(e => AUDIO_FX_EFFECTS[e.kind]?.label ?? e.kind).join(' → ');
+  return !chain.on || !on.length ? `${names} (off)` : names;
+}
+
+/** The sidebar's card: what's loaded, a small grid to play, the effects and Volume, and the way to the full editor. */
+function DrumPadSummary({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
+  const l = f.l as DrumPadLayer;
+  const tk = f.tk;
+  usePadsVersion();
+  const [, setTick] = useState(0);
+  useEffect(() => playDrumPads.subscribe(() => { window.setTimeout(() => setTick(t => t + 1), 140); }), []);
+  const splitOk = usePlaySplit(s => s.available) && !ctx.touch;
+  const [sheet, setSheet] = useState(false);
+  const loaded = l.pads.filter(padHasSound).length;
+  const now = performance.now();
+  const open = () => { if (!splitOk || !openLayerInSplit(l.id)) setSheet(true); };
+  const text = (t: string) => <span style={{ color: tk.text.muted, font: `11.5px/1.4 ${fontFamily.ui}` }}>{t}</span>;
+  return (
+    <>
+      <Section kind="drumpad" title="Pads">
+        <div data-drum-summary style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6 }}>
+          <div role="grid" aria-label="Drum pads (mini)" style={{ display: 'grid', gridTemplateColumns: `repeat(${DP_COLS}, 18px)`, gap: 3, flexShrink: 0 }}>
+            {ROWS.flatMap(r => Array.from({ length: DP_COLS }, (_, c) => r * DP_COLS + c)).map(i => {
+              const p = l.pads[i];
+              const has = padHasSound(p);
+              const hit = playDrumPads.lastHit(l.id, i);
+              const lit = hit && now - hit.at < 130 ? hit.vel : 0;
+              return (
+                <button key={i} type="button" disabled={!has} aria-label={`Pad ${i + 1}: ${has ? padName(p, i) : 'empty'}`} title={has ? `${i + 1} · ${padName(p, i)}` : `${i + 1} · empty`}
+                  onPointerDown={() => { if (has) playDrumPads.trigger(l.id, i, 0.85); }}
+                  onPointerUp={() => playDrumPads.letGo(l.id, i)}
+                  onPointerLeave={e => { if (e.buttons) playDrumPads.letGo(l.id, i); }}
+                  style={{ width: 18, height: 18, padding: 0, border: 0, borderRadius: 4, cursor: has ? 'pointer' : 'default', touchAction: 'none',
+                    background: lit ? alpha(tk.accent.base, 0.35 + 0.5 * lit) : has ? alpha(tk.accent.base, 0.28) : tk.bg.field,
+                    boxShadow: `inset 0 0 0 1px ${has ? alpha(tk.accent.base, 0.5) : tk.border.default}` }} />
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+            <span style={{ color: tk.text.primary, font: `600 12px ${fontFamily.ui}` }}>{loaded} of {DP_PADS} pads have sounds</span>
+            {text(`Effects: ${drumFxSummary(ctx.play.audioFx, l.id)}`)}
+            {text('Tap a pad to play it.')}
+          </div>
+        </div>
+        <div style={{ marginTop: 6 }}>{f.prop('volume')}</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          <Button size="sm" variant="primary" icon={splitOk ? 'splitPanel' : 'sliders'} onClick={open} title={splitOk ? 'Edit the pads, their samples and how they play in the split view’s big Layers panel' : 'Edit the pads, their samples and how they play'}>
+            {splitOk ? 'Open in split view' : 'Open full editor'}
+          </Button>
+          <Button size="sm" icon="pause" onClick={() => playDrumPads.stopAll(l.id)} title="Stop everything sounding">Stop</Button>
+        </div>
+      </Section>
+      {sheet && (
+        <Sheet title={l.label} onClose={() => setSheet(false)} maxHeight="100dvh">
+          <DrumPadFull f={f} ctx={{ ...ctx, big: true }} />
+        </Sheet>
+      )}
+    </>
+  );
+}
+
+function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const l = f.l as DrumPadLayer;
   const tk = f.tk;
   usePadsVersion();
