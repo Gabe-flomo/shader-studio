@@ -3,8 +3,9 @@
  * editor can load, with the layer settings it expects (trails want the
  * canvas kept between frames; picture readers need the picture sampled).
  */
-import { DEFAULT_SCRIPT } from '../../../types/playLayers';
+import { DEFAULT_SCRIPT, DEFAULT_SCRIPT_3D } from '../../../types/playLayers';
 import { KL_SKETCH_NAMES, klCompileSketch } from '../../../play/kit/layers.js';
+import { K3_SKETCH_NAMES } from '../../../play/kit/sketch3d.js';
 
 export interface ScriptExample { name: string; hint: string; code: string; settings: { clear: boolean; readPicture: boolean } }
 
@@ -115,13 +116,77 @@ function draw(s) {
   },
 ];
 
+/** Starters for a Script layer in 3D. */
+export const SCRIPT_EXAMPLES_3D: ScriptExample[] = [
+  {
+    name: 'Boxes', hint: 'A ring of lit boxes turning over the picture. Drag on the picture to orbit. Three sliders declared in the script.', settings: { clear: true, readPicture: false },
+    code: DEFAULT_SCRIPT_3D,
+  },
+  {
+    name: 'Picture cube', hint: 'A cube wearing the live shader (s.picture.texture), with a lit sphere going round it.', settings: { clear: true, readPicture: false },
+    code: `// The picture as a texture: s.picture.texture is the shader under this layer, this frame.
+let size = 260;
+let spin = 0.5;
+
+function draw(s) {
+  orbitControl();
+  ambientLight(90);
+  directionalLight(255, 255, 255, 0.2, 0.5, -1);
+  noStroke();
+  push();
+  rotateX(s.time * spin * 0.8);
+  rotateY(s.time * spin);
+  texture(s.picture.texture);
+  box(size);
+  pop();
+  const a = s.time * 1.2;
+  push();
+  translate(cos(a) * size, sin(a * 2) * 40, sin(a) * size);
+  fill(255, 190, 90);
+  sphere(size * 0.12);
+  pop();
+}
+`,
+  },
+  {
+    name: 'three.js', hint: 'Raw three.js through s.three: a torus knot built once in setup, turned in draw, lit by p5-style lights.', settings: { clear: true, readPicture: false },
+    code: `// s.three = { THREE, scene, camera, renderer, root }: build in setup, change in draw.
+// root holds the p5-style shapes (y down); scene is three's usual y-up world.
+let knot;
+
+function setup(s) {
+  const { THREE, scene } = s.three;
+  knot = new THREE.Mesh(
+    new THREE.TorusKnotGeometry(Math.min(s.width, s.height) * 0.18, 34, 200, 24),
+    new THREE.MeshStandardMaterial({ color: 0x8fd3ff, metalness: 0.4, roughness: 0.3 }),
+  );
+  scene.add(knot);
+}
+
+function draw(s) {
+  orbitControl();
+  ambientLight(50);
+  directionalLight(255, 240, 220, -0.5, 0.8, -1);
+  pointLight(120, 160, 255, 0, 0, 400);
+  knot.rotation.x = s.time * 0.4;
+  knot.rotation.y = s.time * 0.6;
+}
+`,
+  },
+];
+
+export function examplesFor(mode: '2d' | '3d'): ScriptExample[] {
+  return mode === '3d' ? SCRIPT_EXAMPLES_3D : SCRIPT_EXAMPLES;
+}
+
 /** The sliders a script declares, read by running its top level once (the kit does the same each time the code changes). */
 export function extractScriptParams(code: string): { ok: true; defs: import('../../../types/playLayers').ScriptParamDef[] } | { ok: false; error: string } {
   let raw: unknown;
   try {
     // The same wrapper the kit uses, with helpers that do nothing, so a sketch that draws at its top level still parses.
     const stub: Record<string, unknown> = {};
-    for (const n of KL_SKETCH_NAMES) stub[n] = /^[A-Z_]+$/.test(n) ? 0 : (n === 'width' || n === 'height' || n.startsWith('mouse') || n === 'frameCount' || n === 'deltaTime') ? 0 : () => 0;
+    // 2D and 3D names alike: reading params does not depend on the mode.
+    for (const n of [...KL_SKETCH_NAMES, ...K3_SKETCH_NAMES]) stub[n] = /^[A-Z_]+$/.test(n) ? 0 : (n === 'width' || n === 'height' || n.startsWith('mouse') || n === 'frameCount' || n === 'deltaTime') ? 0 : () => 0;
     raw = klCompileSketch(code, stub).params;
   } catch (e) {
     return { ok: false, error: (e as Error)?.message ?? String(e) };

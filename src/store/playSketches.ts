@@ -367,6 +367,57 @@ function draw(s) {
 }
 `;
 
+/** A CPU toy: Background → Colour, so no shader runs; ink trails on a flat colour. */
+export const SKETCH_INK = `// No shader here: the Play page's Background is Colour, so the graph is
+// paused and this sketch is all that runs, on a flat colour. A CPU toy.
+// Walkers follow a drifting noise field and leave ink. "Clear each frame"
+// is off, so every frame draws over the last; erasing a little of the
+// canvas each frame turns the strokes into fading trails.
+const params = {
+  count:   { value: 1200, min: 50, max: 4000, step: 10, label: 'Walkers' },
+  swirl:   { value: 2.4, min: 0.5, max: 8, step: 0.1, label: 'Swirl size' },
+  speed:   { value: 0.14, min: 0.02, max: 0.6, step: 0.01, label: 'Speed' },
+  fade:    { value: 0.05, min: 0, max: 0.3, step: 0.005, label: 'Fade' },
+  hue:     { value: 190, min: 0, max: 360, step: 1, label: 'Hue' },
+};
+let walkers = [];
+
+function spawn(s) {
+  return { x: Math.random() * s.width, y: Math.random() * s.height, life: 2 + Math.random() * 5, age: 0 };
+}
+
+function setup(s) { walkers = []; }
+
+function draw(s) {
+  const { ctx, width, height, dt, time, params, mouse } = s;
+  // 1. Fade: erase a little of every pixel (the same amount a second at any frame rate).
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = 'rgba(0, 0, 0, ' + (1 - Math.pow(1 - params.fade, dt * 60)) + ')';
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = 'source-over';
+  while (walkers.length < params.count) { const w = spawn(s); w.age = Math.random() * w.life; walkers.push(w); }
+  walkers.length = params.count;
+  // 2. Move each walker along the field and draw the step it took.
+  const k = params.swirl / height, step = params.speed * height * dt;
+  ctx.lineWidth = height * 0.0018; ctx.lineCap = 'round';
+  for (const w of walkers) {
+    let a = noise(w.x * k, w.y * k, time * 0.08) * Math.PI * 4;
+    // The mouse pushes walkers away within a fifth of the height.
+    if (mouse.over) {
+      const dx = w.x - mouse.x, dy = w.y - mouse.y, d = Math.hypot(dx, dy), r = height * 0.2;
+      if (d < r) a = lerp(a, Math.atan2(dy, dx), 1 - d / r);
+    }
+    const nx = w.x + Math.cos(a) * step, ny = w.y + Math.sin(a) * step;
+    const t = w.age / w.life;
+    ctx.strokeStyle = 'hsl(' + (params.hue + (a * 12) % 60) + ' 80% ' + (58 + 20 * Math.sin(t * Math.PI)) + '% / ' + Math.sin(t * Math.PI) + ')';
+    ctx.beginPath(); ctx.moveTo(w.x, w.y); ctx.lineTo(nx, ny); ctx.stroke();
+    w.x = nx; w.y = ny; w.age += dt;
+    // 3. A walker that is old or off the canvas starts again somewhere new.
+    if (w.age > w.life || w.x < 0 || w.y < 0 || w.x > width || w.y > height) Object.assign(w, spawn(s));
+  }
+}
+`;
+
 /** 3D on the 2D canvas: rotate, project, sort, shade. No WebGL, no libraries. */
 export const SKETCH_3D = `// 3D on a 2D canvas, the way Processing did it before WebGL: rotate each
 // point in JavaScript, divide by depth for perspective, then paint the faces
@@ -472,5 +523,75 @@ function draw(s) {
       ctx.fill(); ctx.stroke();
     }
   }
+}
+`;
+
+/** 3D Script layer: p5's 3D names on WebGL, lit shapes over the glow, orbitControl. */
+export const SKETCH_3D_SHAPES = `// A 3D Script layer: the layer's Mode is 3D, so it draws with WebGL (three.js
+// underneath) using p5's 3D names: box, sphere, torus, lights, orbitControl.
+// Nothing paints a background, so the glow shader shows through around the shapes.
+// The origin is the middle of the picture; y goes down, z comes toward you, in pixels.
+// Drag on the picture to turn the camera.
+const params = {
+  count: { value: 7, min: 1, max: 16, step: 1, label: 'Shapes' },
+  size:  { value: 0.09, min: 0.03, max: 0.2, step: 0.005, label: 'Size' },
+  spin:  { value: 0.4, min: -2, max: 2, step: 0.05, label: 'Spin' },
+  shiny: { kind: 'toggle', value: true, label: 'Shiny' },
+};
+
+function draw(s) {
+  const { params, time } = s;
+  orbitControl();
+  const u = min(width, height);            // sizes as fractions of the picture
+  ambientLight(50, 55, 80);
+  directionalLight(255, 245, 230, -0.5, 0.7, -0.6);
+  pointLight(90, 140, 255, 0, 0, u * 0.15); // a blue light where the glow is
+  noStroke();
+  const r = u * 0.36;
+  for (let i = 0; i < params.count; i++) {
+    const a = (i / params.count) * TWO_PI + time * params.spin;
+    push();
+    translate(cos(a) * r, sin(a * 2 + time) * u * 0.04, sin(a) * r * 0.55);
+    rotateX(time * 0.7 + i);
+    rotateY(time * 0.9 + i * 0.5);
+    fill(hsl(200 + (i / params.count) * 160, 70, 62));
+    if (params.shiny) { specularMaterial(170); shininess(60); }
+    const d = u * params.size;
+    const k = i % 5;
+    if (k === 0) box(d * 1.4);
+    else if (k === 1) sphere(d * 0.9, 32, 24);
+    else if (k === 2) torus(d * 0.8, d * 0.28, 40, 20);
+    else if (k === 3) cone(d * 0.8, d * 1.6, 32);
+    else cylinder(d * 0.6, d * 1.5, 32);
+    pop();
+  }
+}
+`;
+
+/** 3D Script layer: the picture as a texture (s.picture.texture) on a cube. */
+export const SKETCH_3D_TEXTURE = `// The shader on a cube. s.picture.texture is the picture under this layer, this
+// frame, as a texture; texture() wraps it round the shapes that follow. The cube
+// wears the very picture it floats over, live; two lights shade its faces apart.
+// Drag on the picture to turn the camera.
+const params = {
+  size:  { value: 0.42, min: 0.1, max: 0.8, step: 0.01, label: 'Size' },
+  spin:  { value: 0.5, min: -2, max: 2, step: 0.05, label: 'Spin' },
+  tilt:  { value: 0.45, min: -1.5, max: 1.5, step: 0.05, label: 'Tilt' },
+  edges: { kind: 'toggle', value: true, label: 'Edges' },
+};
+
+function draw(s) {
+  const { params, time } = s;
+  orbitControl();
+  const u = min(width, height);
+  ambientLight(120);
+  directionalLight(255, 250, 240, -0.5, 0.6, -0.7);
+  push();
+  rotateX(params.tilt + sin(time * 0.4) * 0.15);
+  rotateY(time * params.spin);
+  texture(s.picture.texture);
+  if (params.edges) stroke(255); else noStroke();
+  box(u * params.size);
+  pop();
 }
 `;

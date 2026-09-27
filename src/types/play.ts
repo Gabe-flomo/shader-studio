@@ -335,10 +335,48 @@ export function parseLayerTarget(target: string): { layerId: string; key: string
   return { layerId: rest.slice(0, i), key: rest.slice(i + 2) };
 }
 
-/** How the Play picture is shown. Hiding it leaves only the layers on the backdrop; the shader still runs, so mattes and particles can still read it. */
+/**
+ * What the Play picture is, under the layers:
+ *   shader  the graph (the default)
+ *   image   a still picture (a data URL in the record)
+ *   video   a video file (a data URL when small enough to keep, else this session only)
+ *   colour  the backdrop colour alone: no picture at all, a CPU-only sketch
+ * With any source but the shader, the graph doesn't run on the Play page.
+ */
+export type BackgroundSource = 'shader' | 'image' | 'video' | 'colour';
+/** How an image or video meets the canvas: fill it (cropping), fit inside it (bars in the backdrop colour), or stretch to it. */
+export type BackgroundFit = 'cover' | 'contain' | 'stretch';
+
+export interface BackgroundImage {
+  name: string;
+  /** A data URL (PNG, JPEG or WebP), scaled to BACKGROUND_IMAGE_SIDE at most. */
+  src: string;
+}
+
+export interface BackgroundVideo {
+  name: string;
+  /** The file as a data URL; '' when it is over BACKGROUND_VIDEO_KEEP (it plays this session only). */
+  src: string;
+  /** The file's size in bytes. */
+  bytes: number;
+  loop: boolean;
+  muted: boolean;
+  /** Playback rate: 1 = as recorded. */
+  rate: number;
+}
+
+/**
+ * How the Play picture is shown. `picture: false` (Layers only) covers the
+ * source with the backdrop colour; the source still runs underneath, so
+ * mattes and particles can still read it. `source` absent = the shader.
+ */
 export interface PlayDisplay {
   picture: boolean;
   backdrop: [number, number, number];
+  source?: BackgroundSource;
+  fit?: BackgroundFit;
+  image?: BackgroundImage;
+  video?: BackgroundVideo;
 }
 
 export interface PlayRecord {
@@ -469,6 +507,75 @@ export interface PlayMidiFile {
 export const MIDI_FILE_MAX = 2_000_000;
 
 export const DEFAULT_DISPLAY: PlayDisplay = { picture: true, backdrop: [0, 0, 0] };
+
+/** The longest side a background image is kept at. */
+export const BACKGROUND_IMAGE_SIDE = 2048;
+/** Largest background image a record keeps (data URL characters, about 3 MB of file). */
+export const BACKGROUND_IMAGE_MAX = 4_200_000;
+/**
+ * Largest background video a record keeps (file bytes). Bigger ones play for
+ * this session only: saves live in browser storage, which holds a few MB.
+ */
+export const BACKGROUND_VIDEO_KEEP = 2.5 * 1024 * 1024;
+/** Data URL characters for BACKGROUND_VIDEO_KEEP bytes (base64 is 4/3 the size), with room for the header. */
+const BACKGROUND_VIDEO_MAX = Math.ceil((BACKGROUND_VIDEO_KEEP * 4) / 3) + 100;
+export const BACKGROUND_RATES = [0.25, 0.5, 1, 1.5, 2] as const;
+
+/** What is under the layers: the display's source, the shader when there is no display. */
+export function backgroundSource(display: PlayDisplay | undefined): BackgroundSource {
+  return display?.source ?? 'shader';
+}
+
+/** Does the Play page draw something other than the graph (so the graph doesn't run there)? */
+export function replacesShader(display: PlayDisplay | undefined): boolean {
+  return backgroundSource(display) !== 'shader';
+}
+
+/** Is the picture (whatever its source) covered by the backdrop? A colour background is the backdrop, so never. */
+export function pictureHidden(display: PlayDisplay | undefined): boolean {
+  return display?.picture === false && backgroundSource(display) !== 'colour';
+}
+
+/** Where a video background is at `time` seconds of the graph clock. */
+export function videoTimeAt(time: number, duration: number, rate: number, loop: boolean): number {
+  if (!(duration > 0) || !Number.isFinite(duration)) return 0;
+  const t = Math.max(0, time) * (rate > 0 ? rate : 1);
+  // Stop a hair before the end: a video element at its exact duration can show nothing.
+  return loop ? t % duration : Math.min(t, Math.max(0, duration - 0.001));
+}
+
+const DATA_IMAGE = /^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/]+=*$/;
+const DATA_VIDEO = /^data:video\/(mp4|webm|quicktime|ogg|x-m4v);base64,[A-Za-z0-9+/]+=*$/;
+
+/**
+ * The display settings from a file, or undefined when they are the defaults.
+ * Old files (picture + backdrop only) read as the shader, so their
+ * "Layers only" keeps the shader running underneath as it always did.
+ */
+export function parseDisplay(raw: unknown): PlayDisplay | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const d = raw as Record<string, unknown>;
+  const out: PlayDisplay = { picture: d.picture !== false, backdrop: rgb(d.backdrop, DEFAULT_DISPLAY.backdrop) };
+  const im = d.image as Record<string, unknown> | undefined;
+  if (im && typeof im === 'object' && typeof im.src === 'string' && im.src.length <= BACKGROUND_IMAGE_MAX && DATA_IMAGE.test(im.src)) {
+    out.image = { name: typeof im.name === 'string' && im.name.trim() ? im.name.slice(0, 120) : 'Image', src: im.src };
+  }
+  const vi = d.video as Record<string, unknown> | undefined;
+  if (vi && typeof vi === 'object' && typeof vi.name === 'string' && vi.name) {
+    const src = typeof vi.src === 'string' && vi.src.length <= BACKGROUND_VIDEO_MAX && DATA_VIDEO.test(vi.src) ? vi.src : '';
+    const bytes = typeof vi.bytes === 'number' && Number.isFinite(vi.bytes) && vi.bytes > 0 ? Math.round(vi.bytes) : 0;
+    const rate = typeof vi.rate === 'number' && Number.isFinite(vi.rate) ? Math.max(0.1, Math.min(4, vi.rate)) : 1;
+    out.video = { name: vi.name.slice(0, 120), src, bytes, loop: vi.loop !== false, muted: vi.muted !== false, rate };
+  }
+  if (d.fit === 'contain' || d.fit === 'stretch') out.fit = d.fit;
+  if (d.source === 'image' || d.source === 'video' || d.source === 'colour') out.source = d.source;
+  return isDefaultDisplay(out) ? undefined : out;
+}
+
+/** Nothing to save: the shader, shown, on black, with no media kept. */
+export function isDefaultDisplay(d: PlayDisplay): boolean {
+  return d.picture && !d.source && !d.image && !d.video && !d.fit && d.backdrop.every((v, i) => v === DEFAULT_DISPLAY.backdrop[i]);
+}
 
 export const PLAY_VERSION = 1 as const;
 
@@ -787,10 +894,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
       offset: typeof mf.offset === 'number' && Number.isFinite(mf.offset) ? Math.max(-3600, Math.min(3600, mf.offset)) : 0,
     };
   }
-  const disp = r.display as Record<string, unknown> | undefined;
-  if (disp && typeof disp === 'object' && (disp.picture === false || disp.backdrop !== undefined)) {
-    out.display = { picture: disp.picture !== false, backdrop: rgb(disp.backdrop, DEFAULT_DISPLAY.backdrop) };
-  }
+  const disp = parseDisplay(r.display);
+  if (disp) out.display = disp;
   const hands = parseHands(r.hands);
   if (hands) out.hands = hands;
   if (Array.isArray(r.takes)) {
@@ -875,5 +980,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && !play.hands && (play.display?.picture ?? true));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && !play.hands && (!play.display || isDefaultDisplay(play.display)));
 }

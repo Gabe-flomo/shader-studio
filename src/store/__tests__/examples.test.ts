@@ -8,6 +8,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { parseActionTarget, parseLayerTarget, parsePlayRecord } from '../../types/play';
 import { collectPlayCandidates } from '../../play/playControls';
 import { klSketchCompile, klSketchPress, klSketchStep } from '../../play/kit/layers.js';
+import * as threeSlim from '../../play/kit/three-slim.js';
 import { takeEventsBetween, takePointerAt, takeValuesAt } from '../../lib/takePlayback';
 
 vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} });
@@ -141,7 +142,8 @@ describe('bundled examples', () => {
       for (const l of EXAMPLE_GRAPHS[k].play?.layers ?? []) {
         if (l.kind !== 'script') continue;
         count++;
-        const st = klSketchCompile(l.code);
+        // A 3D sketch runs on the app's three.js set (no renderer here: the scene is built, not drawn).
+        const st = klSketchCompile(l.code, { mode: l.mode, three: threeSlim });
         expect(st.error, `${k}/${l.id}`).toBeNull();
         const values = l as unknown as Record<string, number>;
         for (let f = 0; f < 90; f++) {
@@ -150,7 +152,7 @@ describe('bundled examples', () => {
           for (const d of l.paramDefs) params[d.key] = values[`p_${d.key}`] ?? d.value;
           const s = {
             ctx, width: 640, height: 360, dpr: 1, time: f / 60, dt: 1 / 60, frame: f, params, state: (st as unknown as { state: object }).state,
-            mouse: { x: 320 + f, y: 180, over: f > 45, down: f > 60 }, picture: { brightness: (x: number) => x / 640 },
+            mouse: { x: 320 + f, y: 180, over: f > 45, down: f > 60 }, picture: { brightness: (x: number) => x / 640, texture: null },
             null: (name: string) => (name === 'B' ? null : { x: 100 + f, y: 120 }), random: Math.random,
           };
           expect(klSketchStep(st, s, l.paramDefs, l.clear), `${k}/${l.id} frame ${f}`).toBeNull();

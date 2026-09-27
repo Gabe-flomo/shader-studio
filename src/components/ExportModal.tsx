@@ -16,6 +16,7 @@ import { RulerSlider } from './ui/RulerSlider';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
 import { playOverlay, type TransparentPicture } from '../play/overlay';
+import { playBackground } from '../play/background';
 import { midiEngine } from '../lib/midiEngine';
 import { formatDuration } from '../lib/midiFile';
 import { recordingBaseName, recordingPath, saveRecording } from '../utils/recordingsFolder';
@@ -443,15 +444,17 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         codec: useCodec,
         audioWav: mix ? wavBytes(mix) : null,
         // Throwing here is what actually stops the encode loop on Cancel.
-        renderFrame: (t) => {
+        renderFrame: async (t) => {
           if (abortRef.current) throw new Error('cancelled');
           frameActs = applier?.apply(t) ?? [];
-          renderAtTime(t, { dt: 1 / fps, first: firstRender });
+          // Play's image, video or colour background: no shader to render, the video seeks to the frame.
+          if (playBackground.active()) await playBackground.seek(t);
+          else renderAtTime(t, { dt: 1 / fps, first: firstRender });
           firstRender = false;
           frameTime = t;
         },
         readPixels: (out, width, height) => {
-          handleReadPixels(out, width, height);
+          if (!playBackground.active()) handleReadPixels(out, width, height);
           playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame, { transparent, picture, pointer: applier?.pointer(frameTime), actions: frameActs, seed: applier?.seed, audio: applier?.audio(frameTime) });
           firstFrame = false;
         },
@@ -524,8 +527,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         if (abortRef.current) throw new Error('cancelled');
         const t = span.from + i / fps;
         const actions = applier?.apply(t) ?? [];
-        renderAtTime(t, { dt: 1 / fps, first: i === 0 });
-        readPixels(pixels, w, h);
+        if (playBackground.active()) await playBackground.seek(t);
+        else { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); }
         playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: applier?.pointer(t), actions, seed: applier?.seed, audio: applier?.audio(t) });
         const img = fx.createImageData(w, h);
         img.data.set(pixels);
@@ -600,8 +603,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       const { width: w, height: h, renderAtTime, readPixels } = offlineRender;
       const t = useNodeGraphStore.getState().currentTime;
       const pixels = new Uint8Array(w * h * 4);
-      renderAtTime(t);
-      readPixels(pixels, w, h);
+      if (!playBackground.active()) { renderAtTime(t); readPixels(pixels, w, h); }
       playOverlay.compositePixels(pixels, w, h, t, 1 / 60, true, { transparent: true, picture });
       const c = document.createElement('canvas');
       c.width = w; c.height = h;

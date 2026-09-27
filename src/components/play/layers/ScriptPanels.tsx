@@ -19,8 +19,8 @@ import { C, C_LIGHT } from '../../glslSyntax';
 import { tokenizeJsLine } from '../../code/jsSyntax';
 import { ScriptPreview } from './ScriptPreview';
 import { extractScriptParams } from './scriptExamples';
-import { SCRIPT_REFERENCE, refInsert, refSignature, type RefItem } from './scriptReference';
-import { SCRIPT_SNIPPETS, SNIPPET_GROUPS, SNIPPET_GROUP_INTENT, type ScriptSnippet } from './scriptSnippets';
+import { referenceFor, refInsert, refSignature, type RefItem } from './scriptReference';
+import { SNIPPET_GROUP_INTENT, snippetGroupsFor, snippetsFor, type ScriptSnippet } from './scriptSnippets';
 import { addControl, controlKeyProblem, labelFromKey, looksLikeCount, type ControlHelper, type ControlKind } from './scriptTools';
 
 const heading = (t: string, color: string) => <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color, textTransform: 'uppercase' }}>{t}</span>;
@@ -39,11 +39,11 @@ export function ScriptCodeView({ code, maxHeight }: { code: string; maxHeight?: 
 
 // ── Reference ────────────────────────────────────────────────────────────────
 
-export function ScriptReferenceList({ query, onInsert }: { query: string; onInsert: (text: string) => void }) {
+export function ScriptReferenceList({ query, mode = '2d', onInsert }: { query: string; mode?: '2d' | '3d'; onInsert: (text: string) => void }) {
   const tk = useTokens();
   const [open, setOpen] = useState<string | null>(null);
   const q = query.trim().toLowerCase();
-  const groups = SCRIPT_REFERENCE.map(g => ({ ...g, items: q ? g.items.filter(it => `${it.name} ${it.doc} ${(it.args ?? []).map(a => a.name).join(' ')}`.toLowerCase().includes(q)) : g.items })).filter(g => g.items.length);
+  const groups = referenceFor(mode).map(g => ({ ...g, items: q ? g.items.filter(it => `${it.name} ${it.doc} ${(it.args ?? []).map(a => a.name).join(' ')}`.toLowerCase().includes(q)) : g.items })).filter(g => g.items.length);
   if (!groups.length) return <span style={{ fontSize: 12, color: tk.text.muted }}>Nothing matches “{query}”.</span>;
   return (
     <>
@@ -112,8 +112,10 @@ function RefEntry({ it, open, onToggle, onInsert }: { it: RefItem; open: boolean
 
 // ── Patterns ─────────────────────────────────────────────────────────────────
 
-export function ScriptPatternList({ query, previewWidth, onInsert, onLoad }: {
+export function ScriptPatternList({ query, mode = '2d', previewWidth, onInsert, onLoad }: {
   query: string;
+  /** 3D shows the 3D group and runs its examples in 3D. */
+  mode?: '2d' | '3d';
   previewWidth: number;
   onInsert: (sn: ScriptSnippet) => void;
   onLoad: (sn: ScriptSnippet) => void;
@@ -124,10 +126,10 @@ export function ScriptPatternList({ query, previewWidth, onInsert, onLoad }: {
   const where = (sn: ScriptSnippet) => (sn.where === 'top' ? 'top of file' : `in ${sn.where}`);
   return (
     <>
-      {SNIPPET_GROUPS.map(g => {
+      {snippetGroupsFor(mode).map(g => {
         // The filter matches a pattern's name and doc, or its group's name and what the group is for.
         const groupHit = !!q && `${g} ${SNIPPET_GROUP_INTENT[g]}`.toLowerCase().includes(q);
-        const rows = SCRIPT_SNIPPETS.filter(sn => sn.group === g && (!q || groupHit || `${sn.name} ${sn.doc}`.toLowerCase().includes(q)));
+        const rows = snippetsFor(mode).filter(sn => sn.group === g && (!q || groupHit || `${sn.name} ${sn.doc}`.toLowerCase().includes(q)));
         if (!rows.length) return null;
         return (
           <div key={g} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -149,7 +151,7 @@ export function ScriptPatternList({ query, previewWidth, onInsert, onLoad }: {
                     <Button size="sm" icon="plus" onMouseDown={e => e.preventDefault()} onClick={() => onInsert(sn)} title={`Insert ${sn.where === 'top' ? 'at the top of the sketch' : `in ${sn.where}`}`}>Insert</Button>
                     <Button size="sm" variant="ghost" icon={on ? 'chevU' : 'eye'} aria-expanded={on} onMouseDown={e => e.preventDefault()} onClick={() => setOpen(on ? null : sn.name)}>{on ? 'Hide example' : 'See it used'}</Button>
                   </div>
-                  {on && <PatternExample sn={sn} width={previewWidth} onLoad={() => onLoad(sn)} />}
+                  {on && <PatternExample sn={sn} mode={mode} width={previewWidth} onLoad={() => onLoad(sn)} />}
                 </div>
               );
             })}
@@ -160,12 +162,12 @@ export function ScriptPatternList({ query, previewWidth, onInsert, onLoad }: {
   );
 }
 
-function PatternExample({ sn, width, onLoad }: { sn: ScriptSnippet; width: number; onLoad: () => void }) {
+function PatternExample({ sn, mode, width, onLoad }: { sn: ScriptSnippet; mode: '2d' | '3d'; width: number; onLoad: () => void }) {
   const tk = useTokens();
   const defs = useMemo<ScriptParamDef[]>(() => { const r = extractScriptParams(sn.example); return r.ok ? r.defs : []; }, [sn.example]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 2 }}>
-      <ScriptPreview code={sn.example} defs={defs} values={{}} clear={sn.settings?.clear !== false} width={width} />
+      <ScriptPreview code={sn.example} defs={defs} values={{}} clear={sn.settings?.clear !== false} mode={mode} width={width} />
       <ScriptCodeView code={sn.example} maxHeight={240} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <Button size="sm" icon="code" onMouseDown={e => e.preventDefault()} onClick={onLoad} title="Replace the sketch with this example (Undo brings yours back)">Load as the sketch</Button>

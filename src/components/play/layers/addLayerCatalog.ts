@@ -28,7 +28,9 @@ export const BUILTIN_GROUPS: ReadonlyArray<{ id: BuiltinGroupId; label: string }
   { id: 'code', label: 'Code' },
 ];
 
-export interface BuiltinLayer { kind: PlayLayerKind; label: string; hint: string; icon: IconName; group: BuiltinGroupId }
+/** `variant`: the same kind set up another way (a Script layer in 3D). */
+export type BuiltinVariant = 'script3d';
+export interface BuiltinLayer { kind: PlayLayerKind; label: string; hint: string; icon: IconName; group: BuiltinGroupId; variant?: BuiltinVariant }
 
 /** The built-in layer kinds: name, one-line hint, icon, and the group Add layer shows them in. */
 export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
@@ -46,9 +48,14 @@ export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
   { kind: 'audio', group: 'inputs', label: 'Audio', hint: 'Live sound as a waveform, bars, a ring or a blob.', icon: 'wave' },
   { kind: 'camera', group: 'inputs', label: 'Camera', hint: 'Your webcam: as a layer, a mask, or what particles read. Its motion is a source.', icon: 'camera' },
   { kind: 'script', group: 'code', label: 'Script', hint: 'Draw with JavaScript: a setup and a draw function on a 2D canvas over the picture, with sliders you declare. Reads the picture, the mouse and nulls.', icon: 'code' },
+  { kind: 'script', variant: 'script3d', group: 'code', label: '3D Script', hint: 'Draw in 3D with p5-style JavaScript on WebGL: boxes, spheres, lights and a camera you can drag, over the picture. The picture can skin the shapes.', icon: 'cube' },
 ];
 
-export const BUILTIN_LAYER = Object.fromEntries(BUILTIN_LAYERS.map(k => [k.kind, k])) as Record<PlayLayerKind, BuiltinLayer>;
+/** Each kind's plain entry (not a variant), by kind. */
+export const BUILTIN_LAYER = Object.fromEntries(BUILTIN_LAYERS.filter(k => !k.variant).map(k => [k.kind, k])) as Record<PlayLayerKind, BuiltinLayer>;
+
+/** A row's stable key in the menu. */
+export const builtinKey = (b: BuiltinLayer) => `b:${b.kind}${b.variant ? `:${b.variant}` : ''}`;
 
 // ── Search ──────────────────────────────────────────────────────────────────
 

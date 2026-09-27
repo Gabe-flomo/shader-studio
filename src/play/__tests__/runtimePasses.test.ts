@@ -137,6 +137,23 @@ describe('web runtime passes', () => {
     const { frameCalls } = run({ fragmentShader: fs, media: { textures: { u_tex_a: { src: null } }, videos: {}, audio: [] } }, 1);
     expect(frameCalls).toContainEqual(['uniform1i', { uniform: 'u_tex_a' }, 3]);
   });
+
+  it('an image, video or colour background: the graph never compiles or draws, its passes and inputs stay off', () => {
+    for (const source of ['image', 'video', 'colour']) {
+      const display = { picture: true, backdrop: [0, 0, 0], source, image: { name: 'a.png', src: 'data:image/png;base64,AAAA' }, video: { name: 'b.mp4', src: 'data:video/mp4;base64,AAAA', bytes: 3, loop: true, muted: true, rate: 1 } };
+      const { calls, frameCalls } = run({
+        fragmentShader: FS, play: { ...emptyPlayRecord(), display },
+        passes: { stateful: true, echo: null, particles: [] },
+        media: { textures: {}, videos: { u_vid: { src: 'data:video/mp4;base64,AAAA', loop: true, speed: 1 } }, audio: [] },
+      }, 3);
+      const sources = calls.filter(c => c[0] === 'shaderSource').map(c => c[2] as string);
+      expect(sources.some(s => s.includes('u_prevFrame')), source).toBe(false);
+      expect(frameCalls.filter(c => c[0] === 'drawArrays'), source).toEqual([]);
+      expect(calls.filter(c => c[0] === 'createFramebuffer'), source).toEqual([]);
+    }
+    // The shader, as ever, draws each frame.
+    expect(run({ fragmentShader: FS }, 2).frameCalls.filter(c => c[0] === 'drawArrays').length).toBe(2);
+  });
 });
 
 describe('web runtime helpers', () => {

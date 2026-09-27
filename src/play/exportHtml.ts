@@ -24,13 +24,16 @@
 import runtimeSource from './runtime/play-runtime.js?raw';
 import particleSource from './particle-sim.js?raw';
 import geometrySource from './kit/geometry.js?raw';
+import sketch3dSource from './kit/sketch3d.js?raw';
 import layersSource from './kit/layers.js?raw';
 import bodiesSource from './kit/bodies.js?raw';
 import handsSource from './kit/hands.js?raw';
 import kitSource from './kit/kit.js?raw';
-import { usesHands, type PlayRecord } from '../types/play';
+import { BACKGROUND_VIDEO_KEEP, usesHands, type PlayRecord } from '../types/play';
 import type { HandAssets } from './handExport';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
+import { playUses3D, threeSource } from './threeSource';
+export { playUses3D };
 
 export interface PlayHtmlInput {
   title: string;
@@ -155,6 +158,8 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: 
       out.push({ what: l.fileName ? `The song “${l.fileName}” (${l.label})` : `The song in ${l.label}`, why: 'Songs aren’t saved with a setup, so the page listens to the visitor’s microphone instead, after they click Enable.' });
     }
   }
+  const bgVideo = play.display?.source === 'video' ? play.display.video : undefined;
+  if (bgVideo && !bgVideo.src) out.push({ what: `The background video “${bgVideo.name}” (${sizeText(bgVideo.bytes)})`, why: `Videos over ${sizeText(BACKGROUND_VIDEO_KEEP)} play in the app for the session only, so the page shows the backdrop colour instead. Trim or compress it under ${sizeText(BACKGROUND_VIDEO_KEEP)} to bring it along.` });
   if (play.midiFile) out.push({ what: `The MIDI file “${play.midiFile.name}”`, why: 'The web player doesn’t play MIDI files yet: what it drives stays where you left it. Record a video to keep the performance.' });
   const audioIds = new Set(play.layers.filter(l => l.kind === 'audio').map(l => l.id));
   const bands = play.mappings.filter(m => m.source.kind === 'sensor' && audioIds.has(m.source.layerId) && AUDIO_BAND_READS.has(m.source.read)).length;
@@ -170,13 +175,16 @@ export const HAND_BYTES = 12.2 * 1024 * 1024;
 const VIDEO_LIMIT = 4 * 1024 * 1024;
 const AUDIO_LIMIT = 6 * 1024 * 1024;
 
-/** Each image, video and song the page carries, and what it adds to the page's size. */
-export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending'): { what: string; bytes: number }[] {
+/** Each image, video and song the page carries (the graph's, and Play's background), and what it adds to the page's size. */
+export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', play?: PlayRecord): { what: string; bytes: number }[] {
   const out: { what: string; bytes: number }[] = [];
   if (hands) out.push({ what: 'Hand tracking (MediaPipe and its hand model)', bytes: hands === 'pending' ? HAND_BYTES : hands.bundle.length + hands.loader.length + hands.wasm.length + hands.model.length });
   for (const t of Object.values(media?.textures ?? {})) if (t.src) out.push({ what: `Image in ${t.label}${t.scaledTo ? ` (scaled to ${t.scaledTo} px)` : ''}`, bytes: t.src.length });
   for (const v of Object.values(media?.videos ?? {})) if (v.src) out.push({ what: `Video “${v.name}” in ${v.label}`, bytes: v.src.length });
   for (const a of media?.audio ?? []) if (a.src) out.push({ what: `Song “${a.name}” in ${a.label}`, bytes: a.src.length });
+  const d = play?.display;
+  if (d?.source === 'image' && d.image) out.push({ what: `Background image “${d.image.name}”`, bytes: d.image.src.length });
+  if (d?.source === 'video' && d.video?.src) out.push({ what: `Background video “${d.video.name}”`, bytes: d.video.src.length });
   return out;
 }
 
@@ -210,6 +218,13 @@ export function playBundle(input: PlayHtmlInput) {
   delete play.source;
   // Takes are for rendering in the app; the page never plays them back.
   delete play.takes;
+  // The background carries only the file it shows: an image kept for later isn't needed with a video (or the shader) showing.
+  if (play.display) {
+    const d = { ...play.display };
+    if (d.source !== 'image') delete d.image;
+    if (d.source !== 'video') delete d.video;
+    play.display = d;
+  }
   return {
     title: input.title,
     fragmentShader: input.fragmentShader,
@@ -235,13 +250,30 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, layersSource, bodiesSource, handsSource, kitSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, layersSource, bodiesSource, handsSource, kitSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
   return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement } };\n})();\n`;
 }
 
-const runtimeScript = () => (kitScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
+/**
+ * The page's scripts: three.js first when a 3D Script layer needs it (a
+ * global `SSThree` the runtime hands the kit), then the kit and the player.
+ * Without the three.js script loaded (loadThreeSource) a 3D layer draws
+ * nothing in the page and says why.
+ */
+function runtimeScript(play: PlayRecord): string {
+  const three = playUses3D(play) ? threeSource() ?? '' : '';
+  return (three + (three ? '\n' : '') + kitScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
+}
+
+/** What three.js adds to the page, for the export dialogs; null when no layer needs it. Before it loads, about how much. */
+export function threeCarried(play: PlayRecord): { what: string; bytes: number } | null {
+  if (!playUses3D(play)) return null;
+  return { what: 'three.js, for the 3D Script layers', bytes: threeSource()?.length ?? THREE_BYTES };
+}
+/** The three.js script's size as built (three 0.182, three-slim.js), for the dialog until the real one loads. */
+const THREE_BYTES = 562_600;
 
 /** The complete page. Pure: same input, same string. */
 export function buildPlayHtml(input: PlayHtmlInput, options: EmbedOptions = DEFAULT_EMBED): string {
@@ -258,7 +290,7 @@ export function buildPlayHtml(input: PlayHtmlInput, options: EmbedOptions = DEFA
 <div id="play"></div>
 <script>window.PLAY_BUNDLE = ${scriptJson(playBundle(input))};
 window.PLAY_OPTIONS = ${scriptJson(runtimeOptions(options))};</script>
-<script>${runtimeScript()}</script>
+<script>${runtimeScript(input.play)}</script>
 </body>
 </html>
 `;
@@ -283,7 +315,7 @@ export function buildPlaySnippet(input: PlayHtmlInput, options: EmbedOptions = D
   return `<!-- Playfield · ${escapeHtml(input.title)} (${bg ? `background, ${options.placement === 'page' ? 'whole page' : 'fills its section'}` : 'player with controls'}) -->
 <div data-shader-studio style="${style}"></div>
 <script>
-${runtimeScript()}
+${runtimeScript(input.play)}
 (function(){var e=document.currentScript.previousElementSibling;${hostFix}
 ShaderStudioPlay.mount(e, ${scriptJson(playBundle(input))}, ${scriptJson(runtimeOptions(options))});})();
 </script>

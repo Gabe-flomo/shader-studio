@@ -13,7 +13,9 @@ import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
-import { SKETCH_3D, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
+import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
+// An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
+import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 import {
   defaultLayer, handAnchor, type ActionKind, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
@@ -29,7 +31,7 @@ function layer<K extends PlayLayerKind>(kind: K, id: string, label: string, over
  * are read from the code the way Apply reads them, and each starts at its
  * declared value (or `values`).
  */
-function scriptLayer(id: string, label: string, code: string, over: { clear?: boolean; readPicture?: boolean; blend?: string; opacity?: number; toShader?: boolean; values?: Record<string, number> } = {}): PlayLayer {
+function scriptLayer(id: string, label: string, code: string, over: { mode?: '2d' | '3d'; clear?: boolean; readPicture?: boolean; blend?: string; opacity?: number; toShader?: boolean; values?: Record<string, number> } = {}): PlayLayer {
   const r = extractScriptParams(code);
   if (!r.ok) throw new Error(`playExamples: script ${id}: ${r.error}`);
   const { values = {}, ...rest } = over;
@@ -538,10 +540,10 @@ The glow's Radius reads the same distance as a sensor (Layer sensor → Cursor �
       layer('particles', 'dust', 'Dust', { count: 900, field: 'noise', speed: 0.8, size: 2.5, trail: 0.5, reveal: true }),
     ],
     display: { picture: false, backdrop: [0.03, 0.03, 0.05] },
-    notes: `**What it shows.** Picture → **Layers only** covers the shader with a backdrop colour, but it keeps rendering underneath. A Reveal matte and particles with **Mask** on show it only where they are.
+    notes: `**What it shows.** Background → **Layers only** covers the shader with a backdrop colour, but it keeps rendering underneath. A Reveal matte and particles with **Mask** on show it only where they are.
 
 **Try this.**
-• Switch Picture back to Shown to see what's underneath.
+• Turn Layers only off (under Background) to see what's underneath.
 • Change the backdrop colour.
 • Turn Mask off on the particles.`,
   })),
@@ -628,7 +630,7 @@ The glow's Radius reads the same distance as a sensor (Layer sensor → Cursor �
     notes: `**What it shows.** Contour lines join points of equal brightness, like a map's height lines. **Flow** drifts the levels so lines crawl up and down the slopes.
 
 **Try this.**
-• Set Picture back to Shown to see what they trace.
+• Turn Layers only off (under Background) to see what they trace.
 • Try 4 levels, or 30.
 • Set Flow to 0 to hold them still.`,
   })),
@@ -779,7 +781,7 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
 
 **Try this.**
 • Set Trail to 1 so the painting never fades.
-• Switch Picture to Shown.
+• Turn Layers only off (under Background).
 • Change the particles' field.`,
   })),
 
@@ -960,6 +962,31 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Lower Lens for a wide-angle look; map an LFO onto Hue.
 • In the editor, change the \`light\` direction, or add your own mesh function.`,
   })),
+  ex('script3DShapes', glowGraph({ radius: 0.12, falloff: 7, tint: [0.3, 0.5, 1] }), play({
+    layers: [scriptLayer('shapes', 'Shapes', SKETCH_3D_SHAPES, { mode: '3d' })],
+    controls: [ctl('count', 'layer:shapes::p_count', 'Shapes · Shapes', 1, 16, 1), ctl('size', 'layer:shapes::p_size', 'Shapes · Size', 0.03, 0.2), ctl('spin', 'layer:shapes::p_spin', 'Shapes · Spin', -2, 2)],
+    notes: `**What it shows.** A **3D Script** layer: the same setup and draw as any Script layer, but its Mode is 3D, so it draws with WebGL. p5's 3D names work as plain names (\`box\`, \`sphere\`, \`torus\`, \`cone\`, lights, \`orbitControl\`), with three.js underneath. The layer starts clear every frame, so the SDF Glow shader is the background.
+
+**How it's built.** Each shape is \`push()\`, a \`translate\` round a ring, two turns, a colour and a shape, then \`pop()\`. Three lights shade them: a dim ambient, a warm directional from the top left and a blue point light where the glow is. Shapes of the same kind and look are drawn together as one instanced mesh, so hundreds stay fast. The layer is composited like any other: Opacity, Blend, the Layers node and the Cloner all see it.
+
+**Try this.**
+• Drag on the picture to orbit the camera.
+• Turn Shiny off for matte shapes; raise Shapes and Size.
+• In the editor, swap \`fill(…)\` for \`normalMaterial()\`, or add \`background(10)\` to see what the layer covers.
+• Patterns → 3D has a grid of boxes, orbiting spheres, particles and a terrain.`,
+  })),
+  ex('script3DTexture', fbmGraph({ scale: 2.5, timeScale: 0.08 }), play({
+    layers: [scriptLayer('cube', 'Cube', SKETCH_3D_TEXTURE, { mode: '3d' })],
+    controls: [ctl('size', 'layer:cube::p_size', 'Cube · Size', 0.1, 0.8), ctl('spin', 'layer:cube::p_spin', 'Cube · Spin', -2, 2), ctl('tilt', 'layer:cube::p_tilt', 'Cube · Tilt', -1.5, 1.5)],
+    notes: `**What it shows.** \`s.picture.texture\` is the picture under a 3D Script layer, this frame, as a texture. \`texture(s.picture.texture)\` skins the next shapes with it, so the cube wears the live shader it floats over.
+
+**How it's built.** The picture is an ordinary graph: FBM noise through a palette. The layer turns a box and calls \`texture\` before it. An ambient and a directional light shade the faces so the cube reads against the same picture behind it; without lights the texture shows flat, at full brightness. The picture is copied to the GPU only on frames that read it.
+
+**Try this.**
+• Drag on the picture to orbit; Tilt and Spin turn the cube.
+• Open the Studio and change the palette: the cube changes with it.
+• In the editor, draw \`sphere(…)\` or \`plane(…)\` after \`texture\`, or take the lights out to see it flat.`,
+  })),
   ex('scriptMouse', glowGraph({ radius: 0.04, falloff: 30, tint: [0.3, 0.35, 0.6] }), play({
     layers: [scriptLayer('chain', 'Chain', SKETCH_MOUSE)],
     controls: [ctl('len', 'layer:chain::p_length', 'Chain · Length', 5, 120, 1), ctl('follow', 'layer:chain::p_follow', 'Chain · Follow', 0.02, 0.6)],
@@ -978,10 +1005,10 @@ Actions use them like keys, and they work on websites too (a background can reac
     display: { picture: false, backdrop: [0.02, 0.02, 0.035] },
     notes: `**What it shows.** \`s.picture.brightness(x, y)\` reads the shader under a pixel, 0 (black) to 1 (white). The layer's **Picture** switch turns it on; the kit samples the shader at 64 × 36 each frame.
 
-**How it's built.** Each dot throws darts: a random spot is kept with a chance equal to its brightness (raised to Contrast), so bright parts collect more dots. Dots live a second or two, then land somewhere new, so the stipple follows the drifting FBM underneath. The picture itself is hidden (Picture → Layers only).
+**How it's built.** Each dot throws darts: a random spot is kept with a chance equal to its brightness (raised to Contrast), so bright parts collect more dots. Dots live a second or two, then land somewhere new, so the stipple follows the drifting FBM underneath. The picture itself is hidden (Background → Layers only).
 
 **Try this.**
-• Switch Picture back to Shown to see what is being read.
+• Turn Layers only off (under Background) to see what is being read.
 • Raise Contrast for starker darks; lower it toward 0.5 for an even dust.
 • Turn the layer's Picture switch off: every spot reads 0 and the dots scatter evenly.`,
   })),
@@ -1054,6 +1081,38 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Drag Glow falloff down for a wide haze, up for a tight tube.
 • In the editor, draw a filled circle: the glow hugs its outline.
 • Turn "Seen by the Layers node" off on the layer: the lines stay, the glow goes.`,
+  })),
+
+  // ─ Backgrounds: an image, a video or a colour instead of the shader ─
+  ex('bgColourSketch', glowGraph({ radius: 0.1 }), play({
+    layers: [scriptLayer('ink', 'Ink', SKETCH_INK, { clear: false })],
+    controls: [ctl('walkers', 'layer:ink::p_count', 'Ink · Walkers', 50, 4000, 10), ctl('swirl', 'layer:ink::p_swirl', 'Ink · Swirl size', 0.5, 8), ctl('fade', 'layer:ink::p_fade', 'Ink · Fade', 0, 0.3), ctl('hue', 'layer:ink::p_hue', 'Ink · Hue', 0, 360, 1)],
+    mappings: [map('hueDrift', 'hue', S.lfo('triangle', 0.02), 170, 330)],
+    display: { picture: true, backdrop: [0.05, 0.05, 0.08], source: 'colour' },
+    notes: `**What it shows.** **Background → Colour**: no shader at all. The graph is paused on this page (the Studio still shows the glow), and the only thing running is a Script layer on a flat colour: a sketch in plain JavaScript, a CPU toy.
+
+**How it's built.** Ink's walkers follow \`noise(x, y, time)\` and draw one short step each frame. "Clear each frame" is off, so the steps pile up; the sketch erases a little of the canvas every frame, which turns them into trails. An LFO drifts the hue.
+
+**Try this.**
+• Move over the picture: the walkers part around the pointer.
+• Pick another colour next to Background.
+• Switch Background to **Shader**: the same ink over the glow, and the graph runs again.`,
+  })),
+  ex('bgPhotoFlow', glowGraph({ radius: 0.1 }), play({
+    layers: [
+      layer('particles', 'wind', 'Wind', { count: 1400, field: 'flow', turns: 1, speed: 0.7, size: 1.3, trail: 0.75, colour: 'palette', palette: 3, paletteBy: 'heading', blend: 'screen', detail: 'fine' }),
+    ],
+    controls: [ctl('turns', 'layer:wind::turns', 'Wind · Turns', 0, 4), ctl('dir', 'layer:wind::angle', 'Wind · Direction', -180, 180, 1), ctl('speed', 'layer:wind::speed', 'Wind · Speed', 0, 2)],
+    mappings: [map('turn', 'dir', S.lfo('triangle', 0.015), -60, 60)],
+    display: { picture: true, backdrop: [0, 0, 0], source: 'image', image: { name: 'Ridges at dusk.jpg', src: RIDGES_AT_DUSK } },
+    notes: `**What it shows.** **Background → Image**: a photo instead of the shader. Everything that reads the picture reads the photo: here a **Flow** particle field turns its brightness into headings, so the particles stream along the ridges and circle the sun.
+
+**How it's built.** The picture is a still (made for this example), kept in the setup, so saves, play files and web pages carry it. The graph is paused on this page. The particles read the photo at 128 × 72 (Detail: fine); an LFO slowly turns the whole field.
+
+**Try this.**
+• Drag Turns: at 0 every particle heads the same way; higher, they wrap around the light.
+• Background → **Replace** with your own photo, or pick **Video** for a moving picture.
+• Turn **Layers only** on: the photo hides, the particles keep following it.`,
   })),
 
   // ─ Hands ─

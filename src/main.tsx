@@ -13,6 +13,7 @@ import { getNodeDefinition } from './nodes/definitions'
 import { watchForStaleBuild } from './lib/staleBuild'
 import { takeApplier, useTakes } from './lib/takes'
 import { playOverlay } from './play/overlay'
+import { playBackground } from './play/background'
 import { handFeed } from './lib/handFeed'
 import { playEngine } from './lib/playEngine'
 
@@ -25,7 +26,7 @@ if (import.meta.env.DEV) {
   const w = window as unknown as { __shaderStudio?: unknown; __shaderStudioDev?: unknown }
   w.__shaderStudio = useNodeGraphStore
   w.__shaderStudioDev = {
-    compileGraph, nodePreviewRenderer, loadExampleGraphs, resolveNodeAliases, getNodeDefinition, useTakes, takeApplier, playOverlay, handFeed, playEngine,
+    compileGraph, nodePreviewRenderer, loadExampleGraphs, resolveNodeAliases, getNodeDefinition, useTakes, takeApplier, playOverlay, playBackground, handFeed, playEngine,
     /**
      * Hand tracking without a camera (the preview browser has none): feed the real tracker a video,
      * an image or a canvas instead, then start it. A URL ending in an image type is loaded as an image.

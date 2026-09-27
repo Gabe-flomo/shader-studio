@@ -1,4 +1,6 @@
 import type { PlayLayer, PlayRecord, ActionKind } from '../../types/play';
+import type { KitBackground } from './layers.js';
+export type { KitBackground } from './layers.js';
 import type { HdState } from './hands.js';
 
 export interface KitPointer { x: number; y: number; over: boolean; down: boolean }
@@ -17,6 +19,8 @@ export interface KitEnv {
   /** Exporting with a transparent background: don't paint the backdrop. */
   transparent?: boolean;
   backdrop: [number, number, number];
+  /** An image, a video or a colour in place of the shader: painted under the layers, and what they read as the picture (`gl` is then ignored). */
+  background?: KitBackground | null;
   audio: KitAudio | null;
   /** An audio layer's sound: a song loaded into it, or the live input. Falls back to `audio`. */
   audioFor?: (l: PlayLayer) => KitAudio | null;
@@ -32,6 +36,8 @@ export interface KitEnv {
   hand?: (side: string, point: number) => { x: number; y: number } | null;
   /** Hand tracking: draw the hands' skeleton with the markers (null or absent: don't). */
   hands?: { state: HdState; colour: [number, number, number] } | null;
+  /** three.js for 3D Script layers (the three-slim.js set); without it they wait and draw nothing. */
+  three?: unknown;
 }
 
 /** What the graph's Layers node reads: colour at half resolution, and a 16-bit packed distance grid (row 0 at the top). */

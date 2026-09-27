@@ -74,6 +74,7 @@ export const ICONS = {
   book: { sw: 1.4, body: "<path d='M8 4.3C6.6 3.2 4.6 2.8 2 2.9v9.5c2.6-.1 4.6.3 6 1.4 1.4-1.1 3.4-1.5 6-1.4V2.9c-2.6-.1-4.6.3-6 1.4z'/><path d='M8 4.3v9.5'/>" },
   hand: { sw: 1.4, body: "<path d='M5.2 8.6V3.9a1 1 0 0 1 2 0v3.5M7.2 7.2V2.8a1 1 0 0 1 2 0v4.4M9.2 7.2V3.6a1 1 0 0 1 2 0v4M11.2 7.8V5.4a1 1 0 0 1 2 0v4.2c0 2.6-2 4.8-4.6 4.8-1.6 0-2.8-.7-3.7-2L3 10a1 1 0 0 1 1.5-1.3l.7.8'/>" },
   sliders: { sw: 1.5, body: "<path d='M2.5 4.5h11M2.5 11.5h11'/><circle cx='6' cy='4.5' r='1.6' fill='currentColor'/><circle cx='10.5' cy='11.5' r='1.6' fill='currentColor'/>" },
+  cube: { sw: 1.4, body: "<path d='M8 1.8l5.4 3.1v6.2L8 14.2l-5.4-3.1V4.9z'/><path d='M2.6 4.9L8 8l5.4-3.1M8 8v6.2'/>" },
 } satisfies Record<string, IconDef>;
 
 export type IconName = keyof typeof ICONS;
