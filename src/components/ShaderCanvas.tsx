@@ -14,6 +14,7 @@ import { layerAudio } from '../lib/layerAudio';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
 import { playBackground, planFrame, planGraphs, planShowsThis } from '../play/background';
+import { playVideoLayers } from '../play/videoLayers';
 import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
 import type { BackgroundItem } from '../types/play';
 import { HandsPill } from './play/HandsChip';
@@ -361,6 +362,8 @@ let clockAtTeardown = 0;
 
 function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogram, keepClock = false }: Props & { keepClock?: boolean }) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  // Video layers run (and sound) while a preview is here to keep them on its clock.
+  useEffect(() => playVideoLayers.claim(), []);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   // Installed by the boot effect: compiles (vs, fs) off to the side and swaps it in. Resolves false if superseded.
@@ -1309,6 +1312,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (queue) playBackground.followQueue(queue, elapsed, playing);
       const background = queue ? !planShowsThis(queue) : playBackground.active();
       if (!queue && background) playBackground.follow(elapsed, playing);
+      // Video layers keep to the clock too (their own start, speed and loop).
+      playVideoLayers.follow(elapsed, playing);
       const plan = planFrame({
         background, shaderMoving, needsRender,
         layersMoving: renderKeepAlive.active() || playOverlay.isAnimated() || playEngine.isAnimating() || (queue ? playBackground.queueMoving(queue, playing) : playBackground.moving(playing)) || (playing && midiEngine.hasFile()),

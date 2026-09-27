@@ -22,6 +22,7 @@
  *              "the picture" reads it instead
  *   audio     { wave, freq, sampleRate } from the live input, or null
  *   camera     a playing <video> of the webcam, or null
+ *   layerVideo(layer)  a Video layer's <video> (following the clock, the host's job), or null (optional)
  *   image(src) a loaded <img> for a data URL, or null while loading
  *   sensor(key, value)     report a sensor reading (`layerId::read`)
  *   override(layerId, key, value|null)  where a following null is now
@@ -49,7 +50,7 @@ import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 import { kdState, kdAct, kdPlan, kdTextItems, kdFrame, kdDrawTable, kdColumn, kdText, kdChunkText, kdWrapText, kdScriptView } from './data.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
-const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, lens: 1, script: 1 };
+const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1 };
 
 export function createLayerKit() {
   const pool = {};
@@ -190,17 +191,23 @@ export function createLayerKit() {
     return n && n.kind === 'null' ? { x: env.value(n, 'x'), y: env.value(n, 'y') } : null;
   }
 
+  /** A Video layer's frame now: its element once it has a picture, else null. */
+  function videoOf(env, l) {
+    const v = env.layerVideo ? env.layerVideo(l) : null;
+    return v && v.readyState >= 2 && v.videoWidth > 0 ? v : null;
+  }
+
   /** A text or image layer's shape as a small alpha mask → distance field (for 'layer' shapes). */
   function layerField(shape, record, env, aspect) {
     const src = record.layers.find(l => l.id === shape.sourceId);
-    if (!src || (src.kind !== 'text' && src.kind !== 'image' && src.kind !== 'camera')) return null;
+    if (!src || (src.kind !== 'text' && src.kind !== 'image' && src.kind !== 'camera' && src.kind !== 'video')) return null;
     const gh = 90, gw = Math.max(8, Math.round(gh * aspect));
     const v = k => env.value(src, k);
     const key = [src.kind, src.text, src.sequence ? textState(src, env.time).index : -1, src.src ? src.src.length : 0, src.font, src.fontUrl, klFontGeneration(), src.weight, v('x'), v('y'), v(src.kind === 'text' ? 'size' : 'scale'), v('rotation'), gw].join('|');
     let m = masks.get(shape.id);
-    if (m && m.key === key && src.kind !== 'camera') return m;
+    if (m && m.key === key && src.kind !== 'camera' && src.kind !== 'video') return m;
     const c = klCanvas(pool, 'layerMask', gw, gh), s = c.getContext('2d', { willReadFrequently: true });
-    const image = src.kind === 'image' ? env.image(src.src) : src.kind === 'camera' ? env.camera : null;
+    const image = src.kind === 'image' ? env.image(src.src) : src.kind === 'camera' ? env.camera : src.kind === 'video' ? videoOf(env, src) : null;
     // Text in a sequence is shaped by the line showing now; otherwise all of it.
     const text = src.kind !== 'text' ? '' : src.sequence ? String(src.text).split('\n')[textState(src, env.time).index] || '' : src.text;
     klPaintShape(s, Object.assign({}, src, { matte: 'reveal' }), v, gw, gh, image, text, null);
@@ -649,8 +656,8 @@ export function createLayerKit() {
           box = { x: Math.max(0, Math.floor(sx - ext)), y: Math.max(0, Math.floor(sy - ext)), w: 0, h: 0 };
           box.w = Math.min(W, Math.ceil(sx + ext)) - box.x; box.h = Math.min(H, Math.ceil(sy + ext)) - box.y;
         }
-      } else if (src.kind === 'text' || src.kind === 'image' || src.kind === 'camera') {
-        const img = src.kind === 'image' ? env.image(src.src) : src.kind === 'camera' ? cam : null;
+      } else if (src.kind === 'text' || src.kind === 'image' || src.kind === 'camera' || src.kind === 'video') {
+        const img = src.kind === 'image' ? env.image(src.src) : src.kind === 'camera' ? cam : src.kind === 'video' ? videoOf(env, src) : null;
         if (src.kind !== 'text' && !img) return;
         klPaintShape(s, src, vs, W, H, img, src.text, null);
         if (src.kind === 'text') {
@@ -672,10 +679,10 @@ export function createLayerKit() {
         switch (l.kind) {
           case 'null': break; // markers are drawn last, above everything
           case 'background': break; // painted first, under everything (see the top of frame)
-          case 'text': case 'image': case 'camera': {
+          case 'text': case 'image': case 'camera': case 'video': {
             const opacity = v('opacity');
             if (opacity <= 0) break;
-            const src = l.kind === 'image' ? env.image(l.src) : l.kind === 'camera' ? cam : null;
+            const src = l.kind === 'image' ? env.image(l.src) : l.kind === 'camera' ? cam : l.kind === 'video' ? videoOf(env, l) : null;
             if (l.kind !== 'text' && !src) break;
             let text = l.text, anim = null;
             if (l.kind === 'text' && l.sequence) {
@@ -788,7 +795,7 @@ export function createLayerKit() {
       return off;
     }
     // Text, images and the camera with a Reveal or Luma picture matte already chose how they meet the picture.
-    const blendOf = l => ((l.kind === 'text' || l.kind === 'image' || l.kind === 'camera') && l.matte !== 'over') ? 'source-over' : KL_BLEND[l.blend] || 'source-over';
+    const blendOf = l => ((l.kind === 'text' || l.kind === 'image' || l.kind === 'camera' || l.kind === 'video') && l.matte !== 'over') ? 'source-over' : KL_BLEND[l.blend] || 'source-over';
     const drawLayer = (c, l) => {
       if (!ownCanvas(l)) { drawOne(c, l, true); return; }
       const off = renderLayer(l);

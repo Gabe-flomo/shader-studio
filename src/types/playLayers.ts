@@ -486,6 +486,71 @@ export interface CameraLayer extends LayerBase {
   matte: MatteMode;
 }
 
+/** How a video layer's frame is sized before its Scale: as tall as the picture, fitted inside it, or filling it (cropped). */
+export type VideoFit = 'height' | 'contain' | 'cover';
+/** A video layer's sound: none (muted), analysed for audio readers but not heard, or heard and analysed. */
+export type VideoSound = 'off' | 'listen' | 'play';
+
+/**
+ * A video file over the picture, placed like an image (docs/video-layer.md).
+ * The file lives in the backgrounds library (IndexedDB, lib/backgroundLibrary.ts),
+ * never in the setup: the layer keeps its id there, and its name and size so
+ * it can ask for the file again where the library doesn't have it.
+ *
+ * Playback follows the graph clock by default (frame t shows start + t × speed,
+ * so takes and offline renders are frame-exact), or runs free. Muted unless
+ * `sound` is on: then its sound goes through the shared audio analysis, and
+ * audio readers can listen to it ("Video · <label>").
+ */
+export interface VideoLayer extends LayerBase {
+  kind: 'video';
+  /** The file's id in the backgrounds library; '' until a video is picked. */
+  videoId: string;
+  /** The file's name and size, to ask for it again (another browser, a cleared library). */
+  fileName: string;
+  bytes: number;
+  fit: VideoFit;
+  x: number;
+  y: number;
+  /** 1 = the fitted size (Fit: Height makes that the picture's height). */
+  scale: number;
+  rotation: number;
+  opacity: number;
+  /** Background for the reveal matte. */
+  color: RGB;
+  blend: BlendMode;
+  matte: MatteMode;
+  /** Pause holds the start frame (following the clock) or where it is (running free). */
+  playing: boolean;
+  loop: boolean;
+  /** Playback rate: 1 is as recorded. */
+  speed: number;
+  /** Seconds into the video that the clock's 0 shows (or where a free-running video starts). */
+  start: number;
+  /** Follow the graph clock (pausing, ↺ and scrubbing move it; exact in takes and renders), or run on its own. */
+  follow: boolean;
+  sound: VideoSound;
+  /** 0..1, for `sound: 'play'`. */
+  volume: number;
+}
+
+/**
+ * Where a video layer is at clock `time` (seconds): start + time × speed,
+ * wrapped when it loops, else held just before the end.
+ */
+export function videoLayerTimeAt(time: number, duration: number, speed: number, loop: boolean, start: number): number {
+  if (!(duration > 0) || !Number.isFinite(duration)) return Math.max(0, start);
+  const t = Math.max(0, start) + Math.max(0, time) * (speed > 0 ? speed : 1);
+  return loop ? t % duration : Math.min(t, Math.max(0, duration - 0.001));
+}
+
+/** The audio readers' input for a video layer's sound (types/play.ts PlayAudioReaders.input). */
+export const videoReaderInput = (layerId: string) => `video:${layerId}`;
+/** The video layer id an audio readers' input names, or null when it names something else. */
+export function videoLayerOfInput(input: string): string | null {
+  return input.startsWith('video:') && input.length > 6 ? input.slice(6) : null;
+}
+
 /**
  * Copies of another layer (a shape, text, image, camera or null), arranged in
  * a grid, a ring, a line, along a brush stroke or on a particles layer's
@@ -856,10 +921,10 @@ export interface DataLayer extends LayerBase {
 let dataItemCount: (l: DataLayer) => number = () => 0;
 export function setDataItemCount(fn: (l: DataLayer) => number): void { dataItemCount = fn; }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer;
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video'];
 
 /** The starter sketch a new Script layer holds. */
 export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
@@ -975,6 +1040,10 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
   brush: { toShader: true, paint: 'drag', nullId: '', size: 14, colour: 'palette', color: [1, 1, 1], palette: 1, fade: 4, walls: false, opacity: 0.9, blend: 'screen' },
   bodies: { toShader: true, source: 'letters', text: 'PLAY', count: 24, size: 48, gravity: 1, angle: 0, bounce: 0.35, friction: 0.3, font: 'sans', fontUrl: '', colour: 'tint', color: [1, 1, 1], palette: 1, solidPicture: false, threshold: 0.6, scatter: 1, opacity: 1, blend: 'normal' },
   camera: { toShader: true, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], mirror: true, blend: 'normal', matte: 'over' },
+  video: {
+    toShader: true, videoId: '', fileName: '', bytes: 0, fit: 'contain', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], blend: 'normal', matte: 'over',
+    playing: true, loop: true, speed: 1, start: 0, follow: true, sound: 'off', volume: 0.8,
+  },
   cloner: {
     toShader: true, sourceId: '', hideSource: true, arrange: 'grid', count: 12, cols: 5, rows: 3, x: 0.5, y: 0.5, x2: 0.9, y2: 0.5, spacingX: 0.25, spacingY: 0.25,
     radius: 0.3, startAngle: 0, sweep: 360, face: false, pathId: '', spread: 1, jitter: 0, seed: 1,
@@ -1082,6 +1151,10 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     font: E('sans', 'serif', 'mono'), fontUrl: S, colour: E('tint', 'palette'), color: C, palette: N(0, 9, true), solidPicture: B, threshold: unit, scatter: N(0, 10), opacity: unit, blend: blendF,
   },
   camera: { toShader: B, x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, mirror: B, blend: blendF, matte: matteF },
+  video: {
+    toShader: B, videoId: S, fileName: S, bytes: N(0), fit: E('height', 'contain', 'cover'), x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, blend: blendF, matte: matteF,
+    playing: B, loop: B, speed: N(0.05, 8), start: N(0), follow: B, sound: E('off', 'listen', 'play'), volume: unit,
+  },
   cloner: {
     toShader: B, sourceId: S, hideSource: B, arrange: E('grid', 'ring', 'line', 'path', 'points'), count: N(1, 400, true), cols: N(1, 40, true), rows: N(1, 40, true),
     x: N(), y: N(), x2: N(), y2: N(), spacingX: N(0), spacingY: N(0), radius: N(0), startAngle: N(), sweep: N(-360, 360), face: B, pathId: S, spread: unit, jitter: N(0), seed: N(0, 9999, true),
@@ -1405,6 +1478,12 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     X('Centre of the camera image'), Y('Centre of the camera image'),
     { key: 'scale', label: 'Scale', min: 0.05, max: 3, hint: 'Camera image height as a fraction of the picture height.' },
     ROT, OPACITY,
+  ],
+  video: [
+    X('Centre of the video'), Y('Centre of the video'),
+    { key: 'scale', label: 'Scale', min: 0.05, max: 3, hint: 'Size against the fitted size (Fit: Height makes 1 as tall as the picture).' },
+    ROT, OPACITY,
+    { key: 'volume', label: 'Volume', min: 0, max: 1, hint: 'Sound: Play out loud: how loud it is heard. Readers listen at full level whatever this is.' },
   ],
   cloner: [
     X('The arrangement’s centre (a line’s start)'), Y('The arrangement’s centre (a line’s start)'),

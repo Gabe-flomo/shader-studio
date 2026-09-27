@@ -31,6 +31,7 @@ const ROWS: Array<[string, string, string]> = [
   ['playTextSequence', 'Text sequences', 'One line at a time, stepped by keys or a timer, with transitions.'],
   ['playImage', 'Images', 'Your own picture (PNG, JPG, SVG) as a layer, blended or matted.'],
   ['playCamera', 'Camera', 'Your webcam as a picture for glyphs, and its motion as a source.'],
+  ['playVideoSound', 'Video with sound', 'Pick a video: its lows pulse the glow and its highs fire sparks, through audio readers on its sound.'],
   ['playBrush', 'Brush', 'Paint on the picture. Strokes fade, and can be walls for particles.'],
   ['playAudioLayer', 'Audio visualiser', 'Live sound drawn as a waveform, spectrum bars, a ring or a blob.'],
   ['playGlyphs', 'Glyphs: ASCII and halftone', 'The picture redrawn on a grid of characters or dots.'],

@@ -130,6 +130,9 @@ export const BACKGROUNDS_MANIFEST_KIND = 'shader-studio-backgrounds';
 
 const DB_NAME = 'shader-studio-backgrounds';
 const STORE = 'images';
+/** Video files for Play's Video layers (version 2 of the database added it). */
+const VIDEO_STORE = 'videos';
+const DB_VERSION = 2;
 
 // ── Change listeners ────────────────────────────────────────────────────────
 
@@ -153,9 +156,12 @@ function db(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
       if (typeof indexedDB === 'undefined') { reject(new Error('This browser can’t store image backgrounds (no IndexedDB).')); return; }
-      const open = indexedDB.open(DB_NAME, 1);
-      open.onupgradeneeded = () => { if (!open.result.objectStoreNames.contains(STORE)) open.result.createObjectStore(STORE, { keyPath: 'id' }); };
-      open.onsuccess = () => resolve(open.result);
+      const open = indexedDB.open(DB_NAME, DB_VERSION);
+      open.onupgradeneeded = () => {
+        for (const name of [STORE, VIDEO_STORE]) if (!open.result.objectStoreNames.contains(name)) open.result.createObjectStore(name, { keyPath: 'id' });
+      };
+      // A newer version opened in another tab: let it upgrade (this tab opens again on its next use).
+      open.onsuccess = () => { const d = open.result; d.onversionchange = () => { d.close(); dbPromise = null; }; resolve(d); };
       open.onerror = () => reject(open.error ?? new Error('Couldn’t open the backgrounds store.'));
     });
     dbPromise.catch(() => { dbPromise = null; });
@@ -163,10 +169,10 @@ function db(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
-function tx<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest | void): Promise<T> {
+function tx<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest | void, store = STORE): Promise<T> {
   return db().then(d => new Promise<T>((resolve, reject) => {
-    const t = d.transaction(STORE, mode);
-    const req = run(t.objectStore(STORE));
+    const t = d.transaction(store, mode);
+    const req = run(t.objectStore(store));
     t.oncomplete = () => resolve((req ? req.result : undefined) as T);
     t.onerror = () => reject(t.error ?? new Error('The backgrounds store refused that.'));
     t.onabort = () => reject(t.error ?? new Error('The backgrounds store refused that (full?).'));
@@ -635,3 +641,64 @@ export async function importBackgroundFiles(files: Record<string, Uint8Array>): 
 
 /** For tests: forget the cached list and the open database. */
 export function resetBackgroundCache(): void { cache = null; dbPromise = null; }
+
+// ── Videos (Play's Video layers) ────────────────────────────────────────────
+//
+// A Video layer keeps only a video's id, name and size; the file itself is
+// here (store `videos`), as its bytes and MIME type like the images. Never in
+// localStorage or a setup: a video is megabytes. Not listed in the Library
+// window yet, and not in library ZIPs.
+
+export interface LibraryVideoMeta {
+  id: string;
+  name: string;
+  /** MIME type of the stored file. */
+  type: string;
+  bytes: number;
+  createdAt: number;
+}
+interface StoredVideo extends LibraryVideoMeta { data: ArrayBuffer }
+
+/** Keep a video file. The same file (name and size) picked again reuses its record. */
+export async function addVideoFile(file: Blob & { name?: string }, o: { name?: string; id?: string } = {}): Promise<LibraryVideoMeta> {
+  const name = cleanName(o.name ?? file.name ?? 'Video');
+  if (!o.id) {
+    const all = await tx<StoredVideo[]>('readonly', s => s.getAll(), VIDEO_STORE);
+    const same = (all ?? []).find(v => v.name === name && v.bytes === file.size);
+    if (same) return videoMeta(same);
+  }
+  const rec: StoredVideo = { id: o.id || newBackgroundId('vid'), name, type: file.type || 'video/mp4', bytes: file.size, createdAt: Date.now(), data: await file.arrayBuffer() };
+  await tx('readwrite', s => s.put(rec), VIDEO_STORE);
+  emit();
+  return videoMeta(rec);
+}
+
+function videoMeta(r: StoredVideo): LibraryVideoMeta {
+  return { id: r.id, name: r.name, type: r.type, bytes: r.bytes, createdAt: r.createdAt };
+}
+
+/** Every kept video (no bytes), newest first. */
+export async function listVideos(): Promise<LibraryVideoMeta[]> {
+  const all = await tx<StoredVideo[]>('readonly', s => s.getAll(), VIDEO_STORE);
+  return (all ?? []).map(videoMeta).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** A kept video's file, or null when this browser doesn't have it. */
+export async function getVideo(id: string): Promise<(LibraryVideoMeta & { blob: Blob }) | null> {
+  if (!id) return null;
+  const r = await tx<StoredVideo | undefined>('readonly', s => s.get(id), VIDEO_STORE);
+  return r ? { ...videoMeta(r), blob: new Blob([r.data], { type: r.type }) } : null;
+}
+
+export async function hasVideo(id: string): Promise<boolean> {
+  if (!id) return false;
+  return (await tx<number>('readonly', s => s.count(id), VIDEO_STORE)) > 0;
+}
+
+/** Delete a kept video. True when there was one. */
+export async function deleteVideo(id: string): Promise<boolean> {
+  if (!(await hasVideo(id))) return false;
+  await tx('readwrite', s => s.delete(id), VIDEO_STORE);
+  emit();
+  return true;
+}

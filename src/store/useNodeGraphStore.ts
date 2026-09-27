@@ -1456,7 +1456,7 @@ function nodeInScope(state: { nodes: GraphNode[]; activeGroupPath: string[] }, i
  * picture (encoded from its decoded canvas), and the videos and songs
  * mediaSources.ts kept when they were loaded.
  */
-function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTextures' | 'videoUniforms' | 'audioUniforms'>): PlayMedia {
+function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTextures' | 'videoUniforms' | 'audioUniforms' | 'play'>): PlayMedia {
   const byId = new Map(st.nodes.map(n => [n.id, n]));
   const labelOf = (id: string, fallback: string) => {
     const n = byId.get(id);
@@ -1491,7 +1491,14 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
       bands, range: typeof n.params.freq_range === 'number' ? n.params.freq_range : 200, mode: n.params.mode === 'full' ? 'full' : 'band',
     });
   }
-  return { textures, videos, audio };
+  // Video layers: the files play/videoLayers.ts remembered when it opened them (key `vlayer:<id>`).
+  const layerVideos: NonNullable<PlayMedia['layerVideos']> = {};
+  for (const l of st.play.layers) {
+    if (l.kind !== 'video' || !l.videoId) continue;
+    const m = mediaSource(`vlayer:${l.id}`);
+    layerVideos[l.id] = { label: l.label, name: l.fileName || m?.name || '', src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : l.bytes) };
+  }
+  return { textures, videos, audio, ...(Object.keys(layerVideos).length ? { layerVideos } : {}) };
 }
 
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({

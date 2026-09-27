@@ -6,7 +6,7 @@
  *
  * Each reader is a source ("Reader · Kick", 0..1) and a trigger ("Audio
  * reader crosses"). They listen to the live input, or to the song in one of
- * the graph's Audio Input nodes.
+ * the graph's Audio Input nodes, or to a Video layer's sound.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -17,6 +17,9 @@ import { READER_GAIN_MAX, READER_GAIN_MIN, READER_WIDTH_MAX, READER_WIDTH_MIN, f
 import { audioReaderBank } from '../../lib/audioReaderBank';
 import { audioEngine } from '../../lib/audioEngine';
 import { liveAudio, type LiveStatus } from '../../lib/liveAudio';
+import { videoLayerOfInput } from '../../types/playLayers';
+import { playVideoLayers } from '../../play/videoLayers';
+import { readerVideoNote, useVideoSoundState } from './videoSoundUi';
 import { Modal } from '../ui/Modal';
 import { Sheet } from '../ui/Sheet';
 import { Button, IconButton } from '../ui/Button';
@@ -26,7 +29,7 @@ import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { LiveAudioChip } from './chips';
 import { SpectrumView } from './SpectrumView';
-import { EMPTY_READERS as EMPTY, removeReader, usesReader, useReadersPanel, withReaders } from './readersPanelUi';
+import { EMPTY_READERS as EMPTY, readerInputOptions, removeReader, usesReader, useReadersPanel, withReaders } from './readersPanelUi';
 
 /** Mounted once on the Play page. */
 export function AudioReadersHost({ compact }: { compact: boolean }) {
@@ -112,26 +115,27 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
     id: n.id,
     label: (typeof n.params.label === 'string' && n.params.label.trim()) || 'Audio Input',
   }));
-  const inputOptions = [
-    { value: '', label: 'Live input (mic, interface, cable)' },
-    ...songs.map(s => ({ value: s.id, label: `Song · ${s.label}${audioEngine.isLoaded(s.id) ? ` · ${audioEngine.getFileName(s.id)}` : ' (no song loaded)'}` })),
-  ];
-  if (cfg.input && !songs.some(s => s.id === cfg.input)) inputOptions.push({ value: cfg.input, label: 'Song · a node no longer in the graph' });
+  const inputOptions = readerInputOptions(cfg.input, songs.map(x => ({ ...x, file: audioEngine.isLoaded(x.id) ? audioEngine.getFileName(x.id) : null })), play.layers);
+  const videoId = videoLayerOfInput(cfg.input);
+  const video = videoId ? play.layers.find(v => v.id === videoId && v.kind === 'video') : undefined;
   const song = songs.find(s => s.id === cfg.input);
+  const videoState = useVideoSoundState(videoId ?? '');
 
   const hint = (text: string) => <span style={{ color: tk.text.muted, font: `11.5px/1.45 ${fontFamily.ui}` }}>{text}</span>;
   const testing = status === 'on' && liveAudio.testing() === 'loop';
   const sourceRow = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
       <span style={capStyle(tk)}>Listen to</span>
-      <Select ariaLabel="What the readers listen to" value={cfg.input} options={inputOptions} onChange={v => edit(c => ({ ...c, input: v }))} height={28} style={{ flex: compact ? '1 1 100%' : '0 1 280px', minWidth: 0 }} />
+      <Select ariaLabel="What the readers listen to" value={cfg.input} options={inputOptions} onChange={v => { if (videoLayerOfInput(v)) playVideoLayers.resumeAudio(); edit(c => ({ ...c, input: v })); }} height={28} style={{ flex: compact ? '1 1 100%' : '0 1 280px', minWidth: 0 }} />
       {!cfg.input && <LiveAudioChip readers={false} />}
       {!cfg.input && !testing && (
         <Button size="sm" icon="play" onClick={() => void liveAudio.startTest('loop')} title="A drum loop with a voice, made on the spot: try readers without a mic">Play test loop</Button>
       )}
     </div>
   );
-  const sourceNote = cfg.input
+  const sourceNote = videoId
+    ? (readerVideoNote(video?.label ?? '', video ? videoState : 'gone') ? hint(readerVideoNote(video?.label ?? '', video ? videoState : 'gone')) : null)
+    : cfg.input
     ? !song ? hint('That Audio Input node has been deleted. Pick another input.')
       : !audioEngine.isLoaded(cfg.input) ? hint(`${song.label} has no song loaded. Load one in the Studio, or listen to the live input.`)
         : !audioEngine.isPlaying(cfg.input) ? hint(`${song.label} is stopped. Press play on it in the Studio (or start the clock) to hear it here.`)

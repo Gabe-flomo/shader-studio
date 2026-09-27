@@ -221,7 +221,7 @@ export function geoAnchor(layer, value, aspect, reported, lookup, depth) {
   const at = () => ({ x: value('x'), y: value('y') });
   const rep = () => { const x = reported(layer.id + '::ax'), y = reported(layer.id + '::ay'); return typeof x === 'number' && typeof y === 'number' && isFinite(x) && isFinite(y) ? { x, y } : null; };
   switch (layer.kind) {
-    case 'null': case 'text': case 'image': case 'camera': case 'lens': case 'audio':
+    case 'null': case 'text': case 'image': case 'camera': case 'video': case 'lens': case 'audio':
       return at();
     case 'shape': {
       if (layer.shape === 'layer') {

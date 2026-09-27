@@ -26,7 +26,7 @@ export const KM_MASK_DEFAULTS = { x: 0, y: 0, w: 0.5, h: 0.5, rotation: 0, round
 /** Mask shape → the shape-layer outline it draws with. Polygon points are in its box, -0.5..0.5 each way (y up). */
 const KM_SHAPES = { rect: 'box', ellipse: 'circle', polygon: 'polygon' };
 /** Kinds whose rotation turns the whole layer (their masks turn with it). */
-const KM_TURNS = { text: 1, image: 1, camera: 1, shape: 1 };
+const KM_TURNS = { text: 1, image: 1, camera: 1, video: 1, shape: 1 };
 /** Luma mattes are read back at most this many pixels along the long side (a luma matte is soft anyway). */
 const KM_LUMA_SIDE = 960;
 

@@ -17,6 +17,8 @@
  *             compiles or draws; the layers read the background as the picture
  *   play.layers[0] a Background layer: its queue decides instead (the layer kit's queue.js
  *             says what shows); the page's own shader runs only while "this graph" shows
+ *   play.layers[i] a Video layer carries its file as `src` (a data URL, or '' when it stayed out);
+ *             its sound joins the audio readers (`audioReaders.input` 'video:<id>') after a first click
  *   backgroundGraphs: { [sourceId]: { fragmentShader, uniforms } }  the queue's other
  *             graphs, each linked on first show and drawn only while it shows
  * options: {
@@ -863,6 +865,81 @@ void main() {
         followVideo(v, item.rate, item.loop !== false, run);
       }
     };
+    // Video layers: their files ride in the page as `src` (exportHtml.ts playBundle), each in a <video>
+    // of its own on the page's clock as in the app (play/videoLayers.ts): frame t shows start + t × speed.
+    const lVideos = new Map();
+    for (const l of play.layers) {
+      if (l.kind !== 'video' || !l.src) continue;
+      const e = document.createElement('video');
+      e.muted = true; e.loop = false; e.playsInline = true; e.preload = 'auto';
+      e.setAttribute('playsinline', ''); e.setAttribute('muted', '');
+      const url = dataToBlobUrl(l.src); if (url !== l.src) blobUrls.push(url);
+      e.src = url;
+      e.addEventListener('loadeddata', () => { needsDraw = true; });
+      e.addEventListener('seeked', () => { needsDraw = true; });
+      lVideos.set(l.id, { el: e, started: false, an: null, freq: null, gain: null });
+    }
+    const layerVideo = l => { const v = lVideos.get(l.id); return v ? v.el : null; };
+    /** Where a video layer is at `t` (types/playLayers.ts videoLayerTimeAt). */
+    function videoLayerTimeAt(t, duration, speed, loop, start) {
+      if (!(duration > 0) || !isFinite(duration)) return Math.max(0, start);
+      const x = Math.max(0, start) + Math.max(0, t) * (speed > 0 ? speed : 1);
+      return loop ? x % duration : Math.min(x, Math.max(0, duration - 0.001));
+    }
+    const followLayerVideos = run => {
+      for (const l of play.layers) {
+        const v = lVideos.get(l.id);
+        if (!v || v.el.readyState < 1) continue;
+        const e = v.el, rate = l.speed > 0 ? l.speed : 1;
+        if (e.playbackRate !== rate) e.playbackRate = rate;
+        if (v.gain) v.gain.gain.value = l.sound === 'play' ? Math.max(0, Math.min(1, value(l, 'volume'))) : 0;
+        if (!l.follow) {
+          e.loop = !!l.loop;
+          if (!v.started) { v.started = true; if (l.start > 0) e.currentTime = l.start; }
+          if (run && l.playing) { if (e.paused && !e.ended) { const p = e.play(); if (p && p.catch) p.catch(() => {}); } }
+          else if (!e.paused) e.pause();
+          continue;
+        }
+        e.loop = !!l.loop;
+        const d = e.duration, known = isFinite(d) && d > 0;
+        const target = videoLayerTimeAt(l.playing ? time : 0, d, rate, !!l.loop, l.start || 0);
+        const diff = Math.abs(e.currentTime - target);
+        const off = !known ? 0 : l.loop ? Math.min(diff, d - diff) : diff;
+        if (run && l.playing && (l.loop || !known || target < d - 0.01)) {
+          if (e.paused) { const p = e.play(); if (p && p.catch) p.catch(() => {}); }
+          if (off > 0.3 && !e.seeking) e.currentTime = target;
+        } else {
+          if (!e.paused) e.pause();
+          if (off > 0.02 && !e.seeking) e.currentTime = target;
+        }
+      }
+    };
+    // Their sound (Listen: analysed for the readers; Play: heard too). Browsers start sound only after a
+    // click or a key, so it joins then: one MediaElementSource per element, into an analyser and a gain.
+    const soundVideos = play.layers.filter(l => l.kind === 'video' && lVideos.has(l.id) && (l.sound === 'listen' || l.sound === 'play'));
+    const vSound = { ctx: null, started: false };
+    function startVideoSound() {
+      if (!soundVideos.length || !alive) return;
+      if (!vSound.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        vSound.ctx = new AC();
+      }
+      if (vSound.ctx.state === 'suspended') vSound.ctx.resume();
+      if (vSound.started) return;
+      vSound.started = true;
+      for (const l of soundVideos) {
+        const v = lVideos.get(l.id);
+        try {
+          const src = vSound.ctx.createMediaElementSource(v.el);
+          const an = vSound.ctx.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0.8;
+          const g = vSound.ctx.createGain(); g.gain.value = l.sound === 'play' ? Math.max(0, Math.min(1, l.volume)) : 0;
+          src.connect(an); an.connect(g); g.connect(vSound.ctx.destination);
+          v.an = an; v.freq = new Float32Array(an.frequencyBinCount); v.gain = g;
+          v.el.muted = false; v.el.removeAttribute('muted');
+        } catch (e) { /* this browser won't route the video's sound */ }
+      }
+    }
     const qProgram = id => {
       if (qProgs.has(id)) return qProgs.get(id);
       const g = qGraphs[id];
@@ -1090,7 +1167,10 @@ void main() {
       R.at = now;
       let freq = null, sr = 48000;
       const a = R.cfg.input ? audioById.get(R.cfg.input) : null;
-      if (a && a.an) { a.an.getFloatFrequencyData(a.freq); freq = a.freq; sr = a.an.context.sampleRate; }
+      // A Video layer's sound (`video:<id>`), once the visitor's first click has let it start.
+      const vid = R.cfg.input && R.cfg.input.indexOf('video:') === 0 ? lVideos.get(R.cfg.input.slice(6)) : null;
+      if (vid) { if (vid.an) { vid.an.getFloatFrequencyData(vid.freq); freq = vid.freq; sr = vid.an.context.sampleRate; } }
+      else if (a && a.an) { a.an.getFloatFrequencyData(a.freq); freq = a.freq; sr = a.an.context.sampleRate; }
       else if ((!R.cfg.input || !a) && shared.live.status === 'on') { updateLive(); freq = shared.live.freq; sr = shared.live.sr; }
       R.ok = !!freq;
       if (!freq) { R.levels.clear(); return; }
@@ -1283,6 +1363,7 @@ void main() {
     const listeners = [];
     const on = (target, type, fn, o) => { target.addEventListener(type, fn, o); listeners.push(() => target.removeEventListener(type, fn, o)); };
     if (bgVideo && !bgMuted) on(window, 'pointerdown', () => { bgVideo.muted = false; }, true);
+    if (soundVideos.length) { on(window, 'pointerdown', startVideoSound, true); on(window, 'keydown', startVideoSound, true); }
     if (queueLayer && (queueLayer.sources || []).some(s => s.kind === 'video' && s.muted === false)) { on(window, 'pointerdown', () => { qSound = true; }, true); on(window, 'keydown', () => { qSound = true; }, true); }
     if (pointerOn) {
       on(stage, 'pointermove', e => {
@@ -1320,7 +1401,8 @@ void main() {
     const usesTilt = play.mappings.some(m => m.source.kind === 'tilt');
     // Readers on the live input (or on a node whose song stayed out of the page, which listens to the input instead) need it too.
     const readerNode = readers.cfg && readers.cfg.input ? audioById.get(readers.cfg.input) : null;
-    const readersLive = !!(readers.cfg && readers.cfg.readers.length) && (!readers.cfg.input || !readerNode || !readerNode.src);
+    const readerVideo = !!(readers.cfg && readers.cfg.input && readers.cfg.input.indexOf('video:') === 0 && lVideos.has(readers.cfg.input.slice(6)));
+    const readersLive = !!(readers.cfg && readers.cfg.readers.length) && (!readers.cfg.input || (readerNode ? !readerNode.src : !readerVideo));
     const usesLive = play.mappings.some(m => m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio'))
       || actions.some(a => a.trigger.on === 'audio') || play.layers.some(l => l.kind === 'audio' && l.visible) || audioNodes.some(a => !a.src) || readersLive;
     const matteIds = new Set(play.layers.map(l => (l.trackMatte ? l.trackMatte.id : '')));
@@ -1471,7 +1553,7 @@ void main() {
         video: qVideo,
         allowDirect: true,
         audio: L.status === 'on' ? { wave: L.wave, freq: L.freq, sampleRate: L.sr } : null,
-        camera: camVideo || shared.camera, image: img,
+        camera: camVideo || shared.camera, image: img, layerVideo,
         hand: handSt && usesHands ? (side, point) => HK.point(handSt, side, point) : undefined,
         handsLive: !!(handSt && usesHands && handSt.live),
         // The skeleton is a setup aid: a page shows it only with its markers on.
@@ -1549,6 +1631,7 @@ void main() {
       const running = playing && !reduced && !document.hidden && !(pauseOffscreen && !onScreen);
       runVideos(running);
       followBackground(running);
+      followLayerVideos(running);
       if ((pauseOffscreen && !onScreen) || document.hidden) return;
       if (reduced && !needsDraw && frame > 0) return;
       if (playing && !reduced) time += dt;
@@ -1610,6 +1693,8 @@ void main() {
         for (const v of videos) if (v.el) { v.el.pause(); v.el.removeAttribute('src'); v.el.load(); }
         if (bgVideo) { bgVideo.pause(); bgVideo.removeAttribute('src'); bgVideo.load(); }
         for (const v of qVideos.values()) { v.pause(); v.removeAttribute('src'); v.load(); }
+        for (const v of lVideos.values()) { v.el.pause(); v.el.removeAttribute('src'); v.el.load(); }
+        if (vSound.ctx) vSound.ctx.close();
         for (const u of blobUrls) URL.revokeObjectURL(u);
         if (song.ctx) song.ctx.close();
         const lose = gl.getExtension('WEBGL_lose_context');
@@ -1654,8 +1739,8 @@ void main() {
       },
       fire(id) { const c = controls.get(id); if (c) fireAction(c); },
       // The graph's own songs (Audio Input files): heard or silent. Browsers want a click first.
-      hasSound: songs.length > 0,
-      sound(audible) { startSongs(!!audible); },
+      hasSound: songs.length > 0 || soundVideos.some(l => l.sound === 'play'),
+      sound(audible) { startSongs(!!audible); startVideoSound(); },
       usesCamera,
       // Replace one Script layer's code in this mount: it compiles and starts over on the next frame.
       setScript(layerId, code) {

@@ -26,6 +26,8 @@ export interface KitEnv {
   /** An audio layer's sound: a song loaded into it, or the live input. Falls back to `audio`. */
   audioFor?: (l: PlayLayer) => KitAudio | null;
   camera: HTMLVideoElement | null;
+  /** A Video layer's element (the host keeps it on the clock), or null while it has none. */
+  layerVideo?: (layer: PlayLayer) => HTMLVideoElement | null;
   image(src: string): HTMLImageElement | null;
   sensor(key: string, value: number): void;
   override(layerId: string, key: string, value: number | null): void;

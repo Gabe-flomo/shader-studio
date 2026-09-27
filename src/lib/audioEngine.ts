@@ -144,12 +144,39 @@ class AudioEngine {
     state.startedAt = audioCtx.currentTime - off;
   }
 
+  /** Outside sources joined to the output (a Video layer's sound): counted so a recording takes them too. */
+  private outside = 0;
+
+  /** The shared context, made on first use. Outside sources (a Video layer's sound) are made in it. */
+  context(): AudioContext {
+    return this.getCtx();
+  }
+
+  /**
+   * An outside source joins the songs: through the master volume to the
+   * speakers, and onto the record bus. Returns the way to take it off again.
+   */
+  connectOutside(node: AudioNode): () => void {
+    this.getCtx();
+    node.connect(this.masterGainNode!);
+    node.connect(this.recordBus!);
+    this.outside++;
+    let done = false;
+    return () => {
+      if (done) return;
+      done = true;
+      this.outside = Math.max(0, this.outside - 1);
+      try { node.disconnect(this.masterGainNode!); } catch { /* already off */ }
+      try { node.disconnect(this.recordBus!); } catch { /* already off */ }
+    };
+  }
+
   /**
    * The songs as they play, for a real-time recording's audio track. Null
    * before any song has been loaded (there is nothing to hear yet).
    */
   recordingStream(): MediaStream | null {
-    if (!this.ctx || !this.recordBus || this.nodes.size === 0) return null;
+    if (!this.ctx || !this.recordBus || (this.nodes.size === 0 && this.outside === 0)) return null;
     if (!this.recordDest) {
       this.recordDest = this.ctx.createMediaStreamDestination();
       this.recordBus.connect(this.recordDest);

@@ -98,6 +98,8 @@ export interface PlayMedia {
   videos?: Record<string, PlayMediaFile & { loop: boolean; speed: number }>;
   /** Audio Input nodes: the uniform per band (index = band), and how the bands are read. */
   audio?: (PlayMediaFile & { id: string; uniforms: string[]; bands: number[]; range: number; mode: string })[];
+  /** Video layers' files, by layer id (the page puts each in its layer as `src`). */
+  layerVideos?: Record<string, PlayMediaFile>;
 }
 
 export type EmbedMode = 'player' | 'background';
@@ -187,6 +189,16 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: 
   for (const a of media?.audio ?? []) {
     if (!a.src && a.bytes > 0) out.push({ what: `The song “${a.name}” (${sizeText(a.bytes)}) in ${a.label}`, why: `Songs over ${sizeText(AUDIO_LIMIT)} stay out of the page, so ${a.label} listens to the visitor’s microphone instead, after they click Listen to audio.` });
   }
+  // Video layers: a file over the limit, or one not opened in this session, stays out; the layer then draws nothing.
+  for (const l of play.layers) {
+    if (l.kind !== 'video' || !l.videoId) continue;
+    const f = media?.layerVideos?.[l.id];
+    if (f?.src) continue;
+    const bytes = f?.bytes || l.bytes;
+    out.push(bytes > VIDEO_LIMIT
+      ? { what: `The video “${l.fileName}” (${sizeText(bytes)}) in ${l.label}`, why: `Videos over ${sizeText(VIDEO_LIMIT)} stay out of the page to keep it light, so that layer draws nothing there${readsVideo(play, l.id) ? ' and its audio readers hear nothing' : ''}. Trim or compress it under ${sizeText(VIDEO_LIMIT)} to bring it along.` }
+      : { what: `The video “${l.fileName}” in ${l.label}`, why: 'Its file isn’t open in this session (it is still loading, or this browser’s library doesn’t have it), so that layer draws nothing on the page. Open the Play page until it shows, then export again.' });
+  }
   for (const l of play.layers) {
     if (l.kind === 'audio' && l.input === 'file') {
       out.push({ what: l.fileName ? `The song “${l.fileName}” (${l.label})` : `The song in ${l.label}`, why: 'Songs aren’t saved with a setup, so the page listens to the visitor’s microphone instead, after they click Enable.' });
@@ -209,6 +221,11 @@ export const HAND_BYTES = 12.2 * 1024 * 1024;
 const VIDEO_LIMIT = 4 * 1024 * 1024;
 const AUDIO_LIMIT = 6 * 1024 * 1024;
 
+/** Do the setup's audio readers listen to this video layer? */
+function readsVideo(play: PlayRecord, layerId: string): boolean {
+  return !!play.audioReaders?.readers.length && play.audioReaders.input === `video:${layerId}`;
+}
+
 /** Each image, video and song the page carries (the graph's, and Play's background), and what it adds to the page's size. */
 export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', play?: PlayRecord, datasets?: WebDatasets): { what: string; bytes: number }[] {
   const out: { what: string; bytes: number }[] = [...datasetsCarried(datasets)];
@@ -216,6 +233,10 @@ export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', 
   for (const t of Object.values(media?.textures ?? {})) if (t.src) out.push({ what: `Image in ${t.label}${t.scaledTo ? ` (scaled to ${t.scaledTo} px)` : ''}`, bytes: t.src.length });
   for (const v of Object.values(media?.videos ?? {})) if (v.src) out.push({ what: `Video “${v.name}” in ${v.label}`, bytes: v.src.length });
   for (const a of media?.audio ?? []) if (a.src) out.push({ what: `Song “${a.name}” in ${a.label}`, bytes: a.src.length });
+  for (const l of play?.layers ?? []) {
+    const f = l.kind === 'video' ? media?.layerVideos?.[l.id] : undefined;
+    if (f?.src) out.push({ what: `Video “${f.name}” in ${f.label}`, bytes: f.src.length });
+  }
   const queue = backgroundLayerOf(play);
   const d = queue ? undefined : play?.display;
   if (d?.source === 'image' && d.image) out.push({ what: `Background image “${d.image.name}”`, bytes: d.image.src.length });
@@ -268,6 +289,10 @@ export function playBundle(input: PlayHtmlInput) {
     if (queue || d.source !== 'image') delete d.image;
     if (queue || d.source !== 'video') delete d.video;
     play.display = d;
+  }
+  // Video layers carry their file in the page (a data URL, when it came along); the library id means nothing there.
+  if (play.layers.some(l => l.kind === 'video')) {
+    play.layers = play.layers.map(l => (l.kind === 'video' ? { ...l, src: input.media?.layerVideos?.[l.id]?.src ?? '' } as typeof l : l));
   }
   // A saved graph's nodes stay out: the page runs the graph compiled (backgroundGraphs).
   if (queue) play.layers = [{ ...queue, sources: queue.sources.map(s => { if (!s.nodes) return s; const c = { ...s }; delete c.nodes; return c; }) }, ...play.layers.slice(1)];
