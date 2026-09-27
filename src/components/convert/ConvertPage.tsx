@@ -247,7 +247,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const run = () => { setSource(code); setAsBlock(new Set()); setSelected(null); if (compact) setPane('graph'); };
   /** A whole new shader (an example, a file, Tidy, Clear): converted straight away. */
   const load = (next: string) => { changeCode(next); setSource(next); };
-  const onPaneKey = (e: React.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(); } };
+  const onPaneKey = (e: React.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'Enter') { e.preventDefault(); run(); } };
 
   const materialize = () => {
     if (blocked) return;

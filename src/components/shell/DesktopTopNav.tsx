@@ -16,6 +16,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { reportFileResult, reportGlslImport } from './reportFileResult';
 import { importAnyFile } from './importAnyFile';
 import { SaveGraphForm, VersionsButton } from './GraphVersions';
+import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
 
 const TABS: { page: Page; label: string }[] = [
   { page: 'studio', label: 'Studio' },
@@ -95,6 +96,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         <SaveGraphButton compact={compact} />
         <LoadGraphButton />
         {!compact && <Divider />}
+        <IconButton icon="rebuild" label={REBUILD_TOOLTIP} shortcut={shortcuts.rebuild} onClick={() => { void rebuildWithToast(); }} />
         <IconButton
           icon={mode === 'light' ? 'moon' : 'sun'}
           label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}

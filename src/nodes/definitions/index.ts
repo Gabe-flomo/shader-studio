@@ -680,7 +680,11 @@ export function getNodeDefinition(type: string): NodeDefinition | undefined {
  * param definitions (and its sockets) are merged in. Cached per node object;
  * the store replaces the object on every change, so the cache follows.
  */
-const perNodeDefs = new WeakMap<GraphNode, NodeDefinition>();
+let perNodeDefs = new WeakMap<GraphNode, NodeDefinition>();
+/** Forget every per-node definition (Rebuild: the next compile works them all out again). */
+export function clearNodeDefinitionCache(): void {
+  perNodeDefs = new WeakMap();
+}
 export function getNodeDefinitionFor(node: GraphNode): NodeDefinition | undefined {
   const def = getNodeDefinition(node.type);
   if (!def) return def;

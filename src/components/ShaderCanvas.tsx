@@ -21,6 +21,9 @@ import { OfflineHistory } from '../lib/offlineHistory';
 import { seededRandom, stringSeed } from '../play/particle-sim.js';
 import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
 import { getBreakpoint, isMobile } from '../hooks/useBreakpoint';
+import { onRebuild } from '../lib/rebuild';
+import { buildPreviewUniforms } from './previewUniforms';
+import { REBUILD_TOOLTIP, rebuildWithToast } from './shell/rebuildAction';
 
 export type CanvasHandle = { canvas: HTMLCanvasElement };
 
@@ -274,46 +277,74 @@ export { HIST_BINS };
  */
 export default function ShaderCanvas(props: Props = {}) {
   const epoch = useNodeGraphStore(s => s.previewEpoch);
+  // A restart (a new canvas and context) keeps the clock where it was; a fresh preview starts at 0.
+  const [firstEpoch] = useState(epoch);
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <ShaderCanvasSurface key={epoch} {...props} />
+      <ShaderCanvasSurface key={epoch} {...props} keepClock={epoch !== firstEpoch} />
       <PreviewStatus />
     </div>
   );
 }
 
+const CHIP: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 7, height: 28, padding: '0 6px 0 10px', borderRadius: 8,
+  background: 'rgba(13,13,18,0.82)', font: '600 11.5px system-ui, -apple-system, sans-serif', pointerEvents: 'auto',
+};
+const CHIP_BUTTON: React.CSSProperties = {
+  height: 22, padding: '0 8px', border: 0, borderRadius: 6, cursor: 'pointer',
+  background: 'rgba(255,255,255,0.12)', color: '#e8e9ef', font: '600 11px system-ui, -apple-system, sans-serif',
+};
+
 function PreviewStatus() {
   const stale = useNodeGraphStore(s => s.previewStale);
   const lost = useNodeGraphStore(s => s.glContextLost);
-  const restart = useNodeGraphStore(s => s.restartPreview);
-  if (lost) {
-    return (
-      <div role="alert" style={{
-        position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
-        background: 'rgba(13,13,18,0.86)', color: '#e8e9ef', font: '13px system-ui, -apple-system, sans-serif', textAlign: 'center', padding: 20,
-      }}>
-        <b style={{ fontSize: 14 }}>Preview paused</b>
-        <span style={{ color: '#a9abb6' }}>The graphics driver reset. Your graph is fine.</span>
-        <button type="button" onClick={restart} style={{
-          height: 32, padding: '0 14px', border: 0, borderRadius: 8, cursor: 'pointer',
-          background: '#e8e9ef', color: '#0d0d12', font: '600 12.5px system-ui, -apple-system, sans-serif',
-        }}>Restart preview</button>
-      </div>
-    );
-  }
+  if (lost) return <GpuResetNotice />;
   if (!stale) return null;
   return (
-    <div role="status" title="The newest change doesn't compile. See the node with the red ring, or Generated code." style={{
-      position: 'absolute', left: 10, top: 10, zIndex: 5, display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 10px',
-      borderRadius: 8, background: 'rgba(13,13,18,0.78)', color: '#fca5a5', font: '600 11.5px system-ui, -apple-system, sans-serif', pointerEvents: 'auto',
-    }}>
+    <div role="status" title="The newest change doesn't compile. See the node with the red ring, or Generated code." style={{ ...CHIP, position: 'absolute', left: 10, top: 10, zIndex: 5, color: '#fca5a5' }}>
       <i style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444' }} />
       Showing the last working version
+      <button type="button" title={REBUILD_TOOLTIP} onClick={() => { void rebuildWithToast(); }} style={CHIP_BUTTON}>Rebuild</button>
     </div>
   );
 }
 
-function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogram }: Props) {
+/**
+ * While the WebGL context is lost: a small "restoring" chip over the dimmed preview. The canvas
+ * rebuilds itself when the browser gives the context back; if that hasn't happened after a few
+ * seconds, Restart preview makes a new one.
+ */
+function GpuResetNotice() {
+  const restart = useNodeGraphStore(s => s.restartPreview);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setSlow(true), 5000); return () => clearTimeout(t); }, []);
+  return (
+    <div role="status" style={{
+      position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+      background: 'rgba(13,13,18,0.55)', color: '#e8e9ef', font: '12.5px system-ui, -apple-system, sans-serif', textAlign: 'center', padding: 20,
+    }}>
+      <div style={{ ...CHIP, padding: '0 12px', color: '#fcd34d' }}>
+        <i style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b' }} />
+        GPU reset: restoring…
+      </div>
+      {slow && (
+        <>
+          <span style={{ color: '#a9abb6', maxWidth: 260 }}>The graphics driver hasn’t come back yet. Your graph is fine.</span>
+          <button type="button" onClick={restart} style={{
+            height: 30, padding: '0 14px', border: 0, borderRadius: 8, cursor: 'pointer',
+            background: '#e8e9ef', color: '#0d0d12', font: '600 12.5px system-ui, -apple-system, sans-serif',
+          }}>Restart preview</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The clock when the last preview canvas was torn down, for a restarted one to carry on from. */
+let clockAtTeardown = 0;
+
+function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogram, keepClock = false }: Props & { keepClock?: boolean }) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
@@ -543,6 +574,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     compileScene.add(compileMesh);
     let compileGeneration = 0;
     swapShaderRef.current = async (vsSrc, fsSrc) => {
+      // A rebuild in progress builds the program from the store's newest source itself.
+      if (gpuReset) await gpuReset;
+      // Nothing compiles on a lost context; the restore builds the newest source.
+      if (glContextLost) return false;
       if (material.vertexShader === vsSrc && material.fragmentShader === fsSrc) {
         // e.g. an edit that fixed an error, landing back on the shader still on screen
         useNodeGraphStore.getState().setPreviewStale(false);
@@ -961,32 +996,32 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // mobile), after a driver reset, or when the tab is backgrounded on some
     // devices. Without preventDefault() on 'webglcontextlost' the browser
     // never fires 'webglcontextrestored', so the canvas would stay black
-    // for good. Three.js already re-initialises its own GL state on restore
-    // and lazily re-uploads textures/buffers; what's left for us is our
-    // sized resources (render targets, ping-pong buffers, u_resolution) —
-    // applySize() rebuilds exactly those, so restore goes through it rather
-    // than duplicating that logic here.
+    // for good. While lost the loop idles and the preview says "GPU reset:
+    // restoring…". On restore Three.js has re-initialised its own GL state;
+    // resetGpu() (below, shared with Rebuild) then builds everything of ours
+    // again: the program from the store's newest source, render targets,
+    // feedback/echo history, particles, textures and every uniform.
     //
     // NOTE: no stopPropagation() — ExportModal listens for 'webglcontextlost'
     // on this same canvas during an export to abort with a GPU-memory error.
     let glContextLost = false;
+    // Set while resetGpu() runs: the loop draws nothing, so the last picture stays on screen.
+    let gpuReset: Promise<string[]> | null = null;
     const handleContextLost = (e: Event) => {
       e.preventDefault();
       glContextLost = true;
-      console.error('[ShaderCanvas] WebGL context lost — rendering paused until the browser restores it');
+      console.warn('[ShaderCanvas] WebGL context lost — rendering paused until the browser restores it');
       useNodeGraphStore.getState().setGlContextLost(true);
     };
     const handleContextRestored = () => {
       glContextLost = false;
       console.warn('[ShaderCanvas] WebGL context restored — rebuilding GPU resources');
-      // Stale render targets / ping-pong buffers are disposed and re-created at
-      // the current CSS size × renderScale; shader programs rebuild on the
-      // next render because Three.js reset its program cache.
-      applySize();
-      material.needsUpdate = true;
       lastRafTime = null; // don't count the lost interval as one giant dt
-      useNodeGraphStore.getState().setGlContextLost(false);
-      requestRender();
+      void resetGpu().then(() => {
+        if (glContextLost) return; // lost again meanwhile
+        useNodeGraphStore.getState().setGlContextLost(false);
+        requestRender();
+      });
     };
     renderer.domElement.addEventListener('webglcontextlost', handleContextLost);
     renderer.domElement.addEventListener('webglcontextrestored', handleContextRestored);
@@ -1045,7 +1080,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Manual virtual-time accumulator (replaces THREE.Clock) so playback can be
     // paused without resetting to 0 — THREE.Clock.start() always zeroes
     // elapsedTime, so there's no clean way to "resume" with it.
-    let virtualTime = 0;
+    let virtualTime = keepClock ? clockAtTeardown : 0;
     let lastRafTime: number | null = null;
     let frameCount = 0;
     const SAMPLE_EVERY = 6; // sample every 6 frames (~10fps if running at 60fps)
@@ -1089,6 +1124,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // While the WebGL context is lost every GL call is a no-op (and the
       // readbacks below would return garbage), so idle until it's restored.
       if (glContextLost) { lastRafTime = now; scheduleFrame(); return; }
+      // A rebuild is building the program and targets again: keep the last picture until it's done.
+      if (gpuReset) { lastRafTime = now; scheduleFrame(); return; }
       const frameT0 = performance.now();
       pollGpuTimer();
 
@@ -1697,6 +1734,104 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         lastRafTime = null; // the next start counts from its own first frame, not across the stop
       }
     }
+
+    // ── GPU reset (Rebuild, and recovery after a lost context) ───────────────
+    // Throws away every GPU object this preview made and builds it again from
+    // the store: a fresh uniforms object (params, textures, the Play-driven and
+    // audio values carried over from the last frame so the next one has them
+    // at once), a newly linked program (the old material is disposed first so
+    // three.js can't hand back its cached program), every render target (so
+    // feedback and echo history start clean), probe programs, the particle
+    // systems' programs and buffers, and each texture's upload. The clock,
+    // the graph, the Play setup and its layers are left alone.
+    const buildUniforms = (prev: Record<string, THREE.IUniform>) => buildPreviewUniforms(
+      useNodeGraphStore.getState(), prev,
+      { width: renderer.domElement.width, height: renderer.domElement.height },
+      { u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms },
+    );
+    /** Compile a material off to the side; null (and the errors reported) when it doesn't link. */
+    const compileFresh = async (vsSrc: string, fsSrc: string, uniforms: Record<string, THREE.IUniform>): Promise<THREE.ShaderMaterial | null> => {
+      const m = new THREE.ShaderMaterial({ vertexShader: vsSrc, fragmentShader: fsSrc, uniforms });
+      compileMesh.material = m;
+      try { await renderer.compileAsync(compileScene, camera); } catch (e) { console.warn('[ShaderCanvas] compileAsync rejected', e); }
+      const linked = (renderer.properties.get(m) as { currentProgram?: { program?: WebGLProgram } }).currentProgram?.program;
+      if (linked && gl.getProgramParameter(linked, gl.LINK_STATUS) === false) {
+        const errors = flushGlErrors();
+        if (errors.length > 0) useNodeGraphStore.getState().setGlslErrors(errors, glFailedSource());
+        m.dispose();
+        return null;
+      }
+      return m;
+    };
+    const doResetGpu = async (): Promise<string[]> => {
+      const reset: string[] = [];
+      compileGeneration++; // a swap still compiling is superseded: this builds the newest source
+      // Probe programs (node outputs, scopes) are built again on demand.
+      for (const cache of [probeMatCache, scopeMatCache, previewScopeMatCache]) { cache.forEach(disposeProbeMat); cache.clear(); }
+      lastProbeFs = null; lastScopeFs = null; lastPreviewScopeFs = null; lastProbedNodeId = null;
+      // Render targets: disposed ones are allocated again on their next use; history starts black.
+      if (pingPongA.current) { pingPongA.current.dispose(); pingPongA.current = null; }
+      if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
+      pingPongIdx.current = 0;
+      disposeEchoRing();
+      for (const target of [rt, floatRt, statsRT, histRt, probeRT]) target.dispose();
+      costRt?.dispose(); costRt = null;
+      reset.push('render targets');
+      if (isStatefulRef.current) reset.push('feedback history');
+      if (echoRef.current) reset.push('echo history');
+      // Textures: each is uploaded again the next time it's drawn.
+      const textures = new Set<THREE.Texture>([FONT_TEXTURE]);
+      const st = useNodeGraphStore.getState();
+      const collect = (v: unknown) => { if (v instanceof THREE.Texture && !(v as THREE.Texture & { isRenderTargetTexture?: boolean }).isRenderTargetTexture) textures.add(v); };
+      for (const u of Object.values(material.uniforms)) collect(u.value);
+      for (const t of Object.values(st.nodeTextures)) collect(t);
+      for (const t of Object.values(st.videoTextures)) collect(t);
+      for (const t of textures) t.dispose();
+      reset.push('textures');
+      // GPU particles: programs and buffers are made again on the next draw.
+      if (gpuParticlesRef.current.size > 0) {
+        for (const [, points] of gpuParticlesRef.current) { points.geometry.dispose(); (points.material as THREE.ShaderMaterial).dispose(); }
+        reset.push('particles');
+      }
+      blitMat.dispose();
+      probeDummy.dispose();
+      // The program: the old material goes first, so three.js links a new one instead of reusing it.
+      const vsSrc = st.vertexShader || FALLBACK_VERTEX;
+      const fsSrc = (st.rawGlslShader ?? st.fragmentShader) || FALLBACK_FRAGMENT;
+      const uniforms = buildUniforms(material.uniforms);
+      const lastWorking = { vs: vertexShaderRef.current || material.vertexShader, fs: fragmentShaderRef.current || material.fragmentShader };
+      material.dispose();
+      let next = await compileFresh(vsSrc, fsSrc, uniforms);
+      if (next) {
+        vertexShaderRef.current = vsSrc;
+        fragmentShaderRef.current = fsSrc;
+        useNodeGraphStore.getState().setPreviewStale(false);
+      } else {
+        // The newest source doesn't compile: keep showing the last one that did, built fresh too.
+        next = (lastWorking.fs !== fsSrc || lastWorking.vs !== vsSrc ? await compileFresh(lastWorking.vs, lastWorking.fs, uniforms) : null)
+          ?? new THREE.ShaderMaterial({ vertexShader: FALLBACK_VERTEX, fragmentShader: FALLBACK_FRAGMENT, uniforms });
+        useNodeGraphStore.getState().setPreviewStale(true);
+      }
+      material = next;
+      mesh.material = next;
+      compileMesh.material = next;
+      costMesh.material = next;
+      materialRef.current = next;
+      reset.unshift('the shader program');
+      return reset;
+    };
+    const resetGpu = (): Promise<string[]> => {
+      if (!gpuReset) {
+        gpuReset = doResetGpu().finally(() => { gpuReset = null; idleFrames = 0; requestRender(); });
+      }
+      return gpuReset;
+    };
+    const unregisterRebuild = onRebuild(() => {
+      // A context that never came back can't be rebuilt in place: start the preview again.
+      if (glContextLost) { useNodeGraphStore.getState().restartPreview(); return ['the WebGL context (a new one)']; }
+      return resetGpu();
+    });
+
     scheduleFrame();
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -1756,6 +1891,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       loopRunning = false;
+      clockAtTeardown = virtualTime;
+      unregisterRebuild();
       unsubRender();
       unsubWake();
       io?.disconnect();
