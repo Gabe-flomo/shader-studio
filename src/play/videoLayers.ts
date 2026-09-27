@@ -26,6 +26,8 @@ import { matteUsers, videoLayerTimeAt, type PlayLayer, type VideoLayer } from '.
 import type { PlayRecord } from '../types/play';
 import { addVideoFile, getVideo } from '../lib/backgroundLibrary';
 import { audioEngine } from '../lib/audioEngine';
+import { audioFxHost } from '../lib/audioFx';
+import { layerChainId } from '../types/playAudioFx';
 import { forgetMedia, rememberMedia } from '../lib/mediaSources';
 import { videoSound, type VideoSoundState } from '../lib/videoSound';
 import { playEngine } from '../lib/playEngine';
@@ -305,10 +307,13 @@ class PlayVideoLayers {
       an.fftSize = 2048; an.smoothingTimeConstant = 0.8;
       const gain = ctx.createGain();
       gain.gain.value = 0;
-      src.connect(an);
-      an.connect(gain);
+      // The sound → its effect chain → the layer's volume → the mix; the analyser taps the chain (lib/audioFx.ts).
+      const inlet = ctx.createGain();
+      src.connect(inlet);
+      const unFx = audioFxHost.attach(ctx, layerChainId(l.id), inlet, gain, an);
       e.analyser = an; e.gain = gain;
-      e.unplug = audioEngine.connectOutside(gain);
+      const unOut = audioEngine.connectOutside(gain);
+      e.unplug = () => { unOut(); unFx(); };
       if (ctx.state === 'suspended') { void ctx.resume().then(() => this.emit(), () => {}); this.armResume(); }
     }
     v.volume = 1;

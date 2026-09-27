@@ -25,7 +25,9 @@ import { formatDuration } from '../lib/midiFile';
 import { recordingBaseName, recordingPath, saveRecording } from '../utils/recordingsFolder';
 import { RecordingsSetting } from './shell/RecordingsSetting';
 import { audioEngine } from '../lib/audioEngine';
-import { mixdown, recordingTracks, wavBytes } from '../lib/recordingAudio';
+import { mixdown, recordingTracks, wavBytes, type MixFx } from '../lib/recordingAudio';
+import { takeValueAt } from '../lib/audioFxOffline';
+import { playEngine } from '../lib/playEngine';
 import { rollingSeconds, takeApplier, useTakes } from '../lib/takes';
 import { TakesList } from './play/TakesList';
 import { TAKE_MAX_SECONDS, type PlayTake } from '../types/play';
@@ -174,6 +176,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const nothingShows = transparent && picture === 'drop' && !hasLayers;
   // Sound: only songs already in Playfield, never the microphone.
   const tracks = external ? [] : recordingTracks(play, nodes);
+  // The audio effects in an offline mix: the record's chains, their numbers from the take (or as they are now).
+  const mixFx = (from: number): MixFx => ({ fx: can('play.audioFx') ? play.audioFx : undefined, valueAt: takeValueAt(take, from, (id, k, b) => playEngine.layerValue(id, k, b)) });
   const [withAudio, setWithAudio] = useState(true);
   const sound = withAudio && tracks.length > 0;
   const clockSongs = tracks.some(t => t.clock);
@@ -468,7 +472,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       const target = await recordingPath(`${filename || 'shader graph'}.${codecExt(useCodec)}`);
       if (!target) { restoreScale(); setState('idle'); return; }
       // The songs mixed for the export's length, from the clock's 0 (where the frames start).
-      const mix = sound ? await mixdown(tracks, span.length, span.from) : null;
+      const mix = sound ? await mixdown(tracks, span.length, span.from, 48000, mixFx(span.from)) : null;
       const run = runFfmpegEncode({
         outputPath: target,
         width: w,
@@ -585,7 +589,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         setElapsed((performance.now() - startT) / 1000);
       }
       if (sound) {
-        const mix = await mixdown(tracks, span.length, span.from);
+        const mix = await mixdown(tracks, span.length, span.from, 48000, mixFx(span.from));
         if (mix) add(`${base}.wav`, wavBytes(mix));
       }
       zip.end();

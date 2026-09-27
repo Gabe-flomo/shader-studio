@@ -335,6 +335,7 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
         const f = finishTargetLabel(ctx.finish, `finish:${r.layerId.slice(7)}::${r.key}`);
         return f ? `${f.effect} · ${f.param}` : `Finish · ${r.key}`;
       }
+      if (r.layerId.startsWith('audiofx:')) return `Sound · ${r.key}`;
       return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${r.key}`;
     }
   }

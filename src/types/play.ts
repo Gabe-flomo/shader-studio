@@ -450,6 +450,7 @@ import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds
 import { parseSourceCredit, type SourceCredit } from './credit';
 import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
 import { finishHosts, finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
+import { audioFxEffects, audioFxPropId, isAudioFxEmpty, parseAudioFx, parseAudioFxTarget, type PlayAudioFx } from './playAudioFx';
 import { sgParseValueRef } from '../play/kit/signals.js';
 import { PAD_GRID_MAX, PAD_GRID_READS, parseMidiLocks, parseNoteRange, parsePadGrid, type MidiLock, type PadGridRead, type PlayPadGrid } from './playMidi';
 export type { MidiLock, PadGridRead, PlayPadGrid } from './playMidi';
@@ -578,7 +579,9 @@ export function parsePropTarget(target: string): { layerId: string; key: string 
   const lt = parseLayerTarget(target);
   if (lt) return lt;
   const ft = parseFinishTarget(target);
-  return ft ? { layerId: finishPropId(ft.effectId), key: ft.key } : null;
+  if (ft) return { layerId: finishPropId(ft.effectId), key: ft.key };
+  const at = parseAudioFxTarget(target);
+  return at ? { layerId: audioFxPropId(at.chainId, at.effectId), key: at.key } : null;
 }
 
 /**
@@ -706,6 +709,12 @@ export interface PlayRecord {
    * and time displacement over the final picture. Absent = none.
    */
   finish?: PlayFinish;
+  /**
+   * Audio effects (types/playAudioFx.ts): an effect chain per sound (audio
+   * layers, Video layers' sound, Audio Input songs, the MIDI synth) and on the
+   * master bus. Absent = none.
+   */
+  audioFx?: PlayAudioFx;
   /** Named signals that actions send and triggers listen for. Absent = none. */
   signals?: PlaySignal[];
   /** Pair controls: two controls played as one (two sliders, an XY pad). Absent = none. */
@@ -1291,7 +1300,12 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   // Controls on a Finish effect's number need that effect.
   const finish = parseFinish(r.finish);
   const effectIds = new Set(finishHosts(finish).map(e => e.id));
+  // Controls on an audio effect's number need that effect (a chain on a deleted layer goes with the layer).
+  const audioFx = parseAudioFx(r.audioFx, new Set(layers.map(l => l.id)));
+  const audioFxIds = new Set(audioFxEffects(audioFx).map(x => `${x.chainId}:${x.effect.id}`));
   const keptControls = controls.filter(c => {
+    const at = parseAudioFxTarget(c.target);
+    if (at) return audioFxIds.has(`${at.chainId}:${at.effectId}`);
     const ft = parseFinishTarget(c.target);
     if (ft) return effectIds.has(ft.effectId);
     const lt = parseLayerTarget(c.target) ?? parseActionTarget(c.target);
@@ -1358,6 +1372,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   if (hands) out.hands = hands;
   if (audioReaders) out.audioReaders = audioReaders;
   if (finish) out.finish = finish;
+  if (audioFx) out.audioFx = audioFx;
   if (Array.isArray(r.takes)) {
     const seenT = new Set<string>();
     const takes: PlayTake[] = [];
@@ -1511,5 +1526,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx));
 }

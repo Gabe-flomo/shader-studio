@@ -14,9 +14,15 @@
  *   frame by frame (FFmpeg)             the same songs mixed offline for the
  *                                       export's length, from the clock's 0,
  *                                       as a WAV FFmpeg muxes in
+ *
+ * Both carry the audio effects: real time taps the mix after the master
+ * chain (audioEngine.ts), and the offline mix builds the same chains
+ * (audioFxOffline.ts), following a take's recorded numbers when it has them.
  */
-import { audioEngine } from './audioEngine';
+import { audioEngine, trackChainId } from './audioEngine';
 import type { PlayRecord } from '../types/play';
+import { layerChainId, type PlayAudioFx } from '../types/playAudioFx';
+import { offlineFx, type ValueAt } from './audioFxOffline';
 import type { GraphNode } from '../types/nodeGraph';
 import { videoLayerTimeAt, type VideoLayer } from '../types/playLayers';
 import { videoSound } from './videoSound';
@@ -28,6 +34,14 @@ export interface RecordingTrack {
   clock: boolean;
   /** A Video layer's sound: its file and how it plays (else the track is a song in the audio engine, by `key`). */
   video?: VideoTrack;
+  /** The effect chain it goes through (types/playAudioFx.ts); absent: straight to the master chain. */
+  chain?: string;
+}
+
+/** The audio effects for an offline mix: the record's chains, and each number through the mix (default: the record's). */
+export interface MixFx {
+  fx: PlayAudioFx | undefined;
+  valueAt?: ValueAt;
 }
 
 /** How a Video layer's sound plays against the clock (its layer's settings when the export starts). */
@@ -47,7 +61,7 @@ export interface VideoTrack {
 export function videoTrackOf(l: VideoLayer, file: { blob: Blob; duration: number } | null): RecordingTrack | null {
   if (l.sound !== 'play' || !file) return null;
   return {
-    key: `vlayer:${l.id}`, label: l.fileName || l.label, clock: true,
+    key: `vlayer:${l.id}`, label: l.fileName || l.label, clock: true, chain: layerChainId(l.id),
     video: { layerId: l.id, file: file.blob, duration: file.duration, playing: l.playing, loop: l.loop, speed: l.speed, start: l.start, volume: Math.max(0, Math.min(1, l.volume)) },
   };
 }
@@ -93,39 +107,47 @@ export function recordingTracks(play: PlayRecord, nodes: readonly GraphNode[]): 
     if (l.kind === 'video') { const t = videoTrackOf(l, videoSound.file(l.id)); if (t) out.push(t); continue; }
     if (l.kind !== 'audio' || !l.visible || (l as { input?: string }).input !== 'file') continue;
     const key = `layer:${l.id}`;
-    if (audioEngine.isLoaded(key)) out.push({ key, label: audioEngine.getFileName(key) || l.label, clock: true });
+    if (audioEngine.isLoaded(key)) out.push({ key, label: audioEngine.getFileName(key) || l.label, clock: true, chain: trackChainId(key) });
   }
   for (const n of nodes) {
     if (n.type !== 'audioInput' || !audioEngine.isPlaying(n.id)) continue;
-    out.push({ key: n.id, label: audioEngine.getFileName(n.id) || 'Audio Input', clock: false });
+    out.push({ key: n.id, label: audioEngine.getFileName(n.id) || 'Audio Input', clock: false, chain: trackChainId(n.id) });
   }
   return out;
 }
 
 /**
  * The tracks mixed for `duration` seconds starting at clock time `from`:
- * clock songs at that point in the song (looped), others from their start.
+ * clock songs at that point in the song (looped), others from their start,
+ * each through its effect chain and all through the master chain (`fx`).
  * Null when there's nothing to mix.
  */
-export async function mixdown(tracks: readonly RecordingTrack[], duration: number, from = 0, sampleRate = 48000): Promise<AudioBuffer | null> {
-  const buffers = tracks.filter(t => !t.video).map(t => ({ t, b: audioEngine.buffer(t.key) })).filter((x): x is { t: RecordingTrack; b: AudioBuffer } => !!x.b);
-  const videos: Array<{ b: AudioBuffer; plan: NonNullable<ReturnType<typeof videoTrackPlan>> }> = [];
+export async function mixdown(tracks: readonly RecordingTrack[], duration: number, from = 0, sampleRate = 48000, fx?: MixFx): Promise<AudioBuffer | null> {
+  const songs = tracks.filter(t => !t.video).map(t => ({ t, b: audioEngine.buffer(t.key) })).filter((x): x is { t: RecordingTrack; b: AudioBuffer } => !!x.b);
+  return mixBuffers(tracks.filter(t => t.video), songs, duration, from, sampleRate, fx);
+}
+
+/** mixdown with the songs' buffers in hand (tests give a generated tone); `tracks` are the Video layers' sounds. */
+export async function mixBuffers(tracks: readonly RecordingTrack[], buffers: ReadonlyArray<{ t: RecordingTrack; b: AudioBuffer }>, duration: number, from = 0, sampleRate = 48000, fx?: MixFx): Promise<AudioBuffer | null> {
+  const videos: Array<{ b: AudioBuffer; plan: NonNullable<ReturnType<typeof videoTrackPlan>>; chain?: string }> = [];
   for (const t of tracks) {
     if (!t.video || duration <= 0) continue;
     const b = await decodeVideoSound(t.video.file, sampleRate);
     const plan = b ? videoTrackPlan(t.video, b.duration, from, duration) : null;
-    if (b && plan) videos.push({ b, plan });
+    if (b && plan) videos.push({ b, plan, chain: t.chain });
   }
   if ((!buffers.length && !videos.length) || duration <= 0) return null;
   const ctx = new OfflineAudioContext(2, Math.max(1, Math.ceil(duration * sampleRate)), sampleRate);
-  for (const { b, plan } of videos) {
+  const chains = await offlineFx(ctx, fx?.fx, duration, fx?.valueAt);
+  for (const { b, plan, chain } of videos) {
     const src = ctx.createBufferSource();
     src.buffer = b;
     src.playbackRate.value = plan.rate;
     if (plan.loop) { src.loop = true; src.loopStart = 0; src.loopEnd = plan.loopEnd; }
     const gain = ctx.createGain();
     gain.gain.value = plan.gain;
-    src.connect(gain).connect(ctx.destination);
+    // The sound → its chain → the layer's volume → the master chain, as live (videoLayers.ts).
+    src.connect(chains.input(chain ?? 'master', gain));
     src.start(0, plan.offset);
     if (plan.stopAt !== null) src.stop(plan.stopAt);
   }
@@ -133,7 +155,7 @@ export async function mixdown(tracks: readonly RecordingTrack[], duration: numbe
     const src = ctx.createBufferSource();
     src.buffer = b;
     src.loop = true;
-    src.connect(ctx.destination);
+    src.connect(chains.input(t.chain ?? 'master'));
     const off = t.clock && b.duration > 0 ? ((from % b.duration) + b.duration) % b.duration : 0;
     src.start(0, off);
   }

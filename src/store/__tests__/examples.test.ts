@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { parseAudioFxTarget, readAudioFxValue } from '../../types/playAudioFx';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../exampleGraphs';
@@ -76,6 +77,8 @@ describe('bundled examples', () => {
       for (const c of play.controls) {
         const ft = parseFinishTarget(c.target);
         if (ft) { if (!effectIds.has(ft.effectId)) problems.push(`${k}: control "${c.label}" targets a missing Finish effect ${ft.effectId}`); continue; }
+        const at = parseAudioFxTarget(c.target);
+        if (at) { if (readAudioFxValue(play.audioFx, c.target) === undefined) problems.push(`${k}: control "${c.label}" targets a missing audio effect ${at.effectId}`); continue; }
         const lt = parseLayerTarget(c.target) ?? parseActionTarget(c.target);
         if (lt ? !layerIds.has(lt.layerId) : !targets.has(c.target)) problems.push(`${k}: control "${c.label}" targets ${c.target}, which is not a live param or layer`);
       }

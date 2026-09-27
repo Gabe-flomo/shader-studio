@@ -11,6 +11,8 @@
  * aloud) or a tone (silent) instead.
  */
 import { renderTestLoop } from './testLoop';
+import { audioFxHost } from './audioFx';
+import { MASTER_CHAIN } from '../types/playAudioFx';
 
 export type LiveBand = 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
 export type LiveStatus = 'off' | 'requesting' | 'on' | 'denied' | 'unsupported';
@@ -141,18 +143,21 @@ class LiveAudio {
       const src = ctx.createBufferSource(), vol = ctx.createGain();
       src.buffer = this.loopBuffer; src.loop = true;
       vol.gain.value = 0.6;
-      src.connect(analyser);
-      src.connect(vol).connect(ctx.destination);
+      // Played aloud, so through the master effects (lib/audioFx.ts); the readers hear it after them (or before).
+      const unFx = audioFxHost.attach(ctx, MASTER_CHAIN, src, vol, analyser);
+      vol.connect(ctx.destination);
       src.start();
-      this.test = { kind, stop: () => { try { src.stop(); } catch { /* already stopped */ } src.disconnect(); vol.disconnect(); } };
+      this.test = { kind, stop: () => { try { src.stop(); } catch { /* already stopped */ } unFx(); src.disconnect(); vol.disconnect(); } };
       this.label = 'Test loop';
     } else {
       const osc = ctx.createOscillator(), amp = ctx.createGain();
       osc.frequency.value = hz; amp.gain.value = 0.3;
-      osc.connect(amp).connect(analyser);
+      osc.connect(amp);
+      // Silent, but through the master effects all the same, so a filter sweep shows in the readers.
+      const unFx = audioFxHost.attach(ctx, MASTER_CHAIN, amp, null, analyser);
       osc.start();
       this.test = {
-        kind, stop: () => { try { osc.stop(); } catch { /* already stopped */ } osc.disconnect(); amp.disconnect(); },
+        kind, stop: () => { try { osc.stop(); } catch { /* already stopped */ } unFx(); osc.disconnect(); amp.disconnect(); },
         setHz: f => { osc.frequency.setValueAtTime(f, ctx.currentTime); this.label = `Test tone ${Math.round(f)} Hz`; },
       };
       this.label = `Test tone ${Math.round(hz)} Hz`;

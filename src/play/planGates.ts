@@ -55,7 +55,7 @@ const cache = new WeakMap<PlayRecord, PlayRecord>();
  * mappings Free can run. The input is never changed.
  */
 export function playableForPlan(record: PlayRecord, plan: Plan | null): PlayRecord {
-  if (canOn(plan, 'play.layers') && canOn(plan, 'play.sources') && canOn(plan, 'play.backgrounds') && canOn(plan, 'play.midiFile') && canOn(plan, 'play.finish')) return record;
+  if (canOn(plan, 'play.layers') && canOn(plan, 'play.sources') && canOn(plan, 'play.backgrounds') && canOn(plan, 'play.midiFile') && canOn(plan, 'play.finish') && canOn(plan, 'play.audioFx')) return record;
   const hit = cache.get(record);
   if (hit) return hit;
   const out: PlayRecord = {
@@ -68,6 +68,7 @@ export function playableForPlan(record: PlayRecord, plan: Plan | null): PlayReco
     midiFile: undefined,
     padGrid: canOn(plan, 'play.sources') ? record.padGrid : undefined,
     finish: canOn(plan, 'play.finish') ? record.finish : undefined,
+    audioFx: canOn(plan, 'play.audioFx') ? record.audioFx : undefined,
     display: record.display ? { picture: true, backdrop: record.display.backdrop } : undefined,
   };
   cache.set(record, out);
@@ -84,5 +85,6 @@ export function proOnlyParts(record: PlayRecord, plan: Plan | null): string[] {
   if (!canOn(plan, 'play.backgrounds') && record.display?.source && record.display.source !== 'shader') out.push('the background');
   if (!canOn(plan, 'play.midiFile') && record.midiFile) out.push('the MIDI file');
   if (!canOn(plan, 'play.finish') && record.finish?.effects.some(e => e.enabled) && record.finish.on) out.push('the Finish stack');
+  if (!canOn(plan, 'play.audioFx') && Object.values(record.audioFx?.chains ?? {}).some(c => c.on && c.effects.some(e => e.enabled))) out.push('the audio effects');
   return out;
 }

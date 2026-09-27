@@ -15,6 +15,7 @@ import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
 import { layerNumericProps, parseActionTarget, parseLayerTarget } from '../types/play';
 import { finishHost, finishParamOf, parseFinishTarget, patchFinishEffect, readFinishValue } from '../types/playFinish';
+import { audioFxEffect, audioFxParam, parseAudioFxTarget, patchAudioFxEffect, readAudioFxValue } from '../types/playAudioFx';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDrivers';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
@@ -186,6 +187,12 @@ export function findTargetNode(nodes: GraphNode[], target: string): GraphNode | 
  * built-in description.
  */
 export function controlHelp(nodes: GraphNode[], target: string, play?: PlayRecord): { hint?: string; comment?: string } {
+  const at = parseAudioFxTarget(target);
+  if (at) {
+    const e = audioFxEffect(play?.audioFx, at.chainId, at.effectId);
+    const hint = e ? audioFxParam(e.kind, at.key)?.hint : undefined;
+    return hint ? { hint } : {};
+  }
   const ft = parseFinishTarget(target);
   if (ft) {
     const e = finishHost(play?.finish, ft.effectId);
@@ -220,6 +227,7 @@ export function readLayerValue(play: PlayRecord | undefined, target: string): nu
 export function readControlValue(nodes: GraphNode[], target: string, play?: PlayRecord): number | number[] | undefined {
   if (parseLayerTarget(target)) return readLayerValue(play, target);
   if (parseFinishTarget(target)) return readFinishValue(play?.finish, target);
+  if (parseAudioFxTarget(target)) return readAudioFxValue(play?.audioFx, target);
   if (parseActionTarget(target)) return undefined;
   // "group::…::node::param": an outer group's override of the rest of the path wins (that's what its
   // card's slider sets), then the next group's, then the node's own value.
@@ -256,17 +264,19 @@ export function readBaseValues(nodes: GraphNode[], play: PlayRecord): Map<string
 
 /** A copy of `play` with driven layer properties written into their layers (for a play file export). */
 export function bakeLayerValues(play: PlayRecord, values: Map<string, number | number[]>): PlayRecord {
-  let layers = play.layers, finish = play.finish;
+  let layers = play.layers, finish = play.finish, audioFx = play.audioFx;
   for (const c of play.controls) {
     const v = values.get(c.id);
     if (typeof v !== 'number') continue;
+    const at = parseAudioFxTarget(c.target);
+    if (at && audioFx) { audioFx = patchAudioFxEffect(audioFx, at.chainId, at.effectId, { [at.key]: v }); continue; }
     const ft = parseFinishTarget(c.target);
     if (ft && finish) { finish = patchFinishEffect(finish, ft.effectId, { [ft.key]: v }); continue; }
     const lt = parseLayerTarget(c.target);
     if (!lt) continue;
     layers = layers.map(l => l.id === lt.layerId ? { ...l, [lt.key]: v } as typeof l : l);
   }
-  return layers === play.layers && finish === play.finish ? play : { ...play, layers, ...(finish ? { finish } : {}) };
+  return layers === play.layers && finish === play.finish && audioFx === play.audioFx ? play : { ...play, layers, ...(finish ? { finish } : {}), ...(audioFx ? { audioFx } : {}) };
 }
 
 /**
@@ -279,7 +289,7 @@ export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: 
   let out = nodes;
   for (const c of play.controls) {
     const v = values.get(c.id);
-    if (v === undefined || parseLayerTarget(c.target) || parseActionTarget(c.target) || parseFinishTarget(c.target)) continue;
+    if (v === undefined || parseLayerTarget(c.target) || parseActionTarget(c.target) || parseFinishTarget(c.target) || parseAudioFxTarget(c.target)) continue;
     const value = Array.isArray(v) ? [v[0], v[1], v[2]] : v;
     const parts = c.target.split('::');
     const key = parts[parts.length - 1];
@@ -314,7 +324,7 @@ export type TargetFate =
  * control can be pointed at the new path (group::…::node::param).
  */
 export function locateTarget(nodes: GraphNode[], target: string): TargetFate {
-  if (parseLayerTarget(target) || parseActionTarget(target) || parseFinishTarget(target)) return { status: 'ok' };
+  if (parseLayerTarget(target) || parseActionTarget(target) || parseFinishTarget(target) || parseAudioFxTarget(target)) return { status: 'ok' };
   if (readControlValue(nodes, target) !== undefined) return { status: 'ok' };
   const parts = target.split('::');
   const nodeId = parts[parts.length - 2], key = parts[parts.length - 1];

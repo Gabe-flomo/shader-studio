@@ -29,6 +29,7 @@ import { playId } from '../../../play/playControls';
 import { Section } from '../layers/Section';
 import { usePlayUi } from '../playUi';
 import { CurveEditor } from './CurveEditor';
+import { AudioFxPanel } from './AudioFxPanel';
 import { ColourWheel } from './ColourWheel';
 import { deleteLook, loadSavedLooks, saveLook, SAVED_LOOKS_CHANGED, type SavedLook } from './savedLooks';
 import {
@@ -63,11 +64,36 @@ const HALATION_PRESETS: Array<{ name: string; values: Record<string, number> }> 
   { name: 'Strong', values: { amount: 1.4, reach: 0.8, threshold: 0, headroom: 8, warmth: 0.7, growth: 0.7 } },
 ];
 
-export function FinishPanel({ play, onChange, touch, wide = false }: {
+/** The Finish tab: the picture's stack, or the sound's effect chains (AudioFxPanel). */
+export function FinishPanel(props: {
   play: PlayRecord;
   onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
   touch: boolean;
   /** The split view's wide panel: cards in columns. */
+  wide?: boolean;
+}) {
+  const tk = useTokens();
+  const view = usePlayUi(s => s.finishView), setView = usePlayUi(s => s.setFinishView);
+  const nSound = Object.values(props.play.audioFx?.chains ?? {}).reduce((n, c) => n + c.effects.length, 0);
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flexShrink: 0, padding: '8px 12px 0', borderBottom: `1px solid ${tk.border.subtle}` }}>
+        <Segmented fill size="sm" ariaLabel="Finish the picture or the sound" value={view} onChange={v => setView(v as 'picture' | 'sound')}
+          options={[
+            { value: 'picture', label: `Picture${props.play.finish?.effects.length ? ` · ${props.play.finish.effects.length}` : ''}`, title: 'Grade, lens, film and time effects over the whole picture' },
+            { value: 'sound', label: `Sound${nSound ? ` · ${nSound}` : ''}`, title: 'Reverb, echo, filter, distortion and compression on each sound and the master' },
+          ]} />
+        <div style={{ height: 8 }} />
+      </div>
+      {view === 'sound' ? <AudioFxPanel {...props} /> : <PictureFinish {...props} />}
+    </div>
+  );
+}
+
+function PictureFinish({ play, onChange, touch, wide = false }: {
+  play: PlayRecord;
+  onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
+  touch: boolean;
   wide?: boolean;
 }) {
   const tk = useTokens();

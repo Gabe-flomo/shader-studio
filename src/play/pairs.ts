@@ -56,7 +56,7 @@ export function partnerTarget(target: string): { target: string; axis: 'x' | 'y'
   const lt = parseLayerTarget(target);
   // `axis` is the partner's: Y for an X, X for a Y.
   if (lt) { const p = pairedKey(lt.key); return p ? { target: layerTarget(lt.layerId, p.other), axis: p.axis === 'x' ? 'y' : 'x' } : null; }
-  if (target.startsWith('finish:') || target.startsWith('act:')) return null;
+  if (target.startsWith('finish:') || target.startsWith('audiofx:') || target.startsWith('act:')) return null;
   const { paramKey } = targetParts(target);
   const p = pairedKey(paramKey);
   return p ? { target: target.slice(0, target.length - paramKey.length) + p.other, axis: p.axis === 'x' ? 'y' : 'x' } : null;

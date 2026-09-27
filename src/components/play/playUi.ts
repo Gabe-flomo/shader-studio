@@ -74,6 +74,11 @@ interface PlayUi {
   finishTick: number;
   /** Open the Finish tab at this effect. */
   revealFinish: (effectId: string) => void;
+  /** The Finish tab's view: the picture's effects or the sound's. */
+  finishView: 'picture' | 'sound';
+  setFinishView: (v: 'picture' | 'sound') => void;
+  /** Open the Finish tab's Sound view at this audio effect. */
+  revealAudioFx: (effectId: string) => void;
 }
 
 const NONE: ReadonlySet<string> = new Set();
@@ -97,7 +102,10 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   reveal: id => set({ tab: 'layers', selected: id, revealTick: get().revealTick + 1, ...(get().selected === id ? {} : { mask: '' }) }),
   finishFocus: '',
   finishTick: 0,
-  revealFinish: id => set({ tab: 'finish', finishFocus: id, finishTick: get().finishTick + 1 }),
+  revealFinish: id => set({ tab: 'finish', finishView: 'picture', finishFocus: id, finishTick: get().finishTick + 1 }),
+  finishView: 'picture',
+  setFinishView: finishView => set({ finishView }),
+  revealAudioFx: id => set({ tab: 'finish', finishView: 'sound', finishFocus: id, finishTick: get().finishTick + 1 }),
   mask: '',
   setMask: mask => set({ mask }),
   panel: loadPanel(),
