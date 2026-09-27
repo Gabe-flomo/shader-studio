@@ -17,7 +17,7 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
 import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_POINT_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, sourceOptions, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
-import { SENSOR_READS_FOR, type SensorRead } from '../../types/play';
+import { sensorReadsFor, type SensorRead } from '../../types/play';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
 import { applyCurve, playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
@@ -266,7 +266,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     });
   }, [revealLayer, setTab, tk.accent.base]);
   // Layers a source or trigger can read: shapes (click, fill, hover), particles (speed, spread), cameras (motion), nulls (distance).
-  const layerRefs = useMemo(() => play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind })), [play.layers]);
+  const layerRefs = useMemo(() => play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind, ...(l.kind === 'shape' ? { shape: l.shape } : {}) })), [play.layers]);
   // Desktop: the drawer's height, dragged from its top edge and remembered.
   const rootRef = useRef<HTMLDivElement>(null);
   const [drawerH, setDrawerH] = useState<number>(() => {
@@ -1083,12 +1083,12 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   );
 }
 
-interface LayerRef { id: string; label: string; kind: string }
+interface LayerRef { id: string; label: string; kind: string; shape?: string }
 
 /** The first layer that measures something, and what it reads (a new sensor source starts there). */
 function firstSensor(layers: LayerRef[]): { layerId: string; read: SensorRead } | null {
-  const l = layers.find(x => SENSOR_READS_FOR[x.kind]);
-  return l ? { layerId: l.id, read: SENSOR_READS_FOR[l.kind][0] } : null;
+  const l = layers.find(x => sensorReadsFor(x).length);
+  return l ? { layerId: l.id, read: sensorReadsFor(l)[0] } : null;
 }
 
 /** The dataset a new Data source starts on: the first Data layer's, else the first in the graph. */
@@ -1229,14 +1229,14 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
     case 'data':
       return <DataSourceOptions source={source} labelStyle={labelStyle} onChange={onChange} />;
     case 'sensor': {
-      const sensing = layerRefs.filter(l => SENSOR_READS_FOR[l.kind]);
+      const sensing = layerRefs.filter(l => sensorReadsFor(l).length);
       if (!sensing.length) return row(hint('Add a layer first: a shape, particles, a null…'));
       const layer = layerRefs.find(l => l.id === source.layerId);
-      const reads = layer ? SENSOR_READS_FOR[layer.kind] ?? [] : [];
+      const reads = sensorReadsFor(layer);
       return (
         <>
           {row(<>
-            <Select ariaLabel="Sensor layer" value={source.layerId} options={sensing.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const k = layerRefs.find(l => l.id === v)?.kind ?? ''; const r = SENSOR_READS_FOR[k] ?? []; onChange({ ...source, layerId: v, read: r.includes(source.read) ? source.read : r[0] ?? 'fill' }); }} height={26} />
+            <Select ariaLabel="Sensor layer" value={source.layerId} options={sensing.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const r = sensorReadsFor(layerRefs.find(l => l.id === v)); onChange({ ...source, layerId: v, read: r.includes(source.read) ? source.read : r[0] ?? 'fill' }); }} height={26} />
             {reads.length > 1 && <Segmented size="sm" ariaLabel="Reads" value={source.read} options={reads.map(r => ({ value: r, label: SENSOR_LABELS[r], title: SENSOR_HINTS[r] }))} onChange={v => onChange({ ...source, read: v })} />}
             {reads.length === 1 && hint(SENSOR_LABELS[reads[0]])}
             {source.read === 'distance' && <>{hint('to')}<AnchorPicker value={source.otherId} layers={layerRefs} exclude={source.layerId} ariaLabel="Distance to" onChange={otherId => onChange({ ...source, otherId })} /></>}

@@ -40,7 +40,10 @@ import { DEFAULT_SCRIPT, DEFAULT_SCRIPT_3D, DEFAULT_SCRIPT_PARAMS, script3dDefau
 import { useTokens } from '../../../theme/themeStore';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { handFeed } from '../../../lib/handFeed';
-import { addFingertipNulls } from '../layerOps';
+import { addFingertipNulls, addHandPath, handPathNulls } from '../layerOps';
+import { playId } from '../../../play/playControls';
+import { defaultLayer } from '../../../types/play';
+import { HD_POINT_NAMES } from '../../../play/kit/hands.js';
 
 export interface EditorContext {
   layers: PlayLayer[];
@@ -205,6 +208,9 @@ function CameraHands() {
         <Button size="sm" icon="plus" onClick={() => { setPlay(p => addFingertipNulls(p)); if (handFeed.getStatus() === 'off') void handFeed.start(); }}>
           {hasTipNulls ? 'Add fingertip nulls (missing ones)' : 'Add fingertip nulls'}
         </Button>
+        <Button size="sm" icon="hand" title="A filled shape between both hands' thumb and index tips (nulls added where missing): it moves with your hands. Mask with it, matte with it, or make it a zone." onClick={() => { setPlay(p => addHandPath(p).play); if (handFeed.getStatus() === 'off') void handFeed.start(); }}>
+          Add hand path
+        </Button>
       </div>
     </Section>
   );
@@ -360,13 +366,15 @@ export function ShapeEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const sources = ctx.layers.filter(x => x.kind === 'text' || x.kind === 'image' || x.kind === 'camera');
   const particles = ctx.layers.filter(x => x.kind === 'particles' || x.kind === 'bodies');
   const geometric = shape === 'box' || shape === 'circle' || shape === 'line' || shape === 'polygon';
+  const outlined = geometric || shape === 'path';
   return (
     <>
       <Section kind="shape" title="Shape">
         {f.seg('Shape', 'shape', [
           { value: 'box', label: 'Box' }, { value: 'circle', label: 'Circle' }, { value: 'line', label: 'Line' }, { value: 'polygon', label: 'Drawn' },
+          { value: 'path', label: 'Path', title: 'Corners that are nulls: it moves as they do (put them on your fingertips)' },
           { value: 'layer', label: 'Layer', title: 'The shape of a text or image layer' }, { value: 'picture', label: 'Picture', title: 'The bright parts of the picture' },
-        ], 'Box, circle and line are sized with the sliders or the handles on the picture. Drawn is any outline you click or drag on the picture. Layer takes a text or image layer\'s shape (particles flow around your words); Picture makes the bright parts of the shader solid.')}
+        ], 'Box, circle and line are sized with the sliders or the handles on the picture. Drawn is any outline you click or drag on the picture. Path joins nulls (your fingertips, with hand tracking) into a shape that moves with them. Layer takes a text or image layer\'s shape (particles flow around your words); Picture makes the bright parts of the shader solid.')}
         {shape === 'polygon' && (
           <Buttons>
             {ctx.drawing
@@ -376,6 +384,7 @@ export function ShapeEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         )}
         {shape === 'layer' && f.pick('Layer', 'sourceId', sources, 'Add a Text or Image layer first', 'The text, image or camera layer whose shape this is. It follows that layer as it moves.')}
         {shape === 'picture' && f.prop('threshold')}
+        {shape === 'path' && <PathRows f={f} ctx={ctx} />}
         {f.toggle('Invert', 'invert', 'Swap inside and outside: the fill covers everything but the shape, particles and triggers treat the outside as inside, and a matte made from it shows the other side')}
       </Section>
       {geometric && (
@@ -400,9 +409,92 @@ export function ShapeEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
       <Section kind="shape" title="Look" hint="Off makes it an invisible zone: it still acts on particles, and is outlined only while the Layers tab is open." on={g<boolean>('show')} onToggle={v => f.set({ show: v })}>
         {f.colour('Fill', 'fill')}
         {f.prop('fillOpacity')}
-        {geometric && <>{f.colour('Outline', 'stroke')}{f.props('strokeWidth', 'trim')}</>}
+        {outlined && <>{f.colour('Outline', 'stroke')}{f.props('strokeWidth', 'trim')}</>}
         {f.select('Blend', 'blend', BLENDS, BLEND_HINT)}
       </Section>
+    </>
+  );
+}
+
+/** What a null is doing, in a few words: which hand point it follows, or that it follows the mouse or another null. */
+function nullFollows(n: NullLayer, layers: PlayLayer[]): string {
+  if (n.follow === 'hand') return `${n.handSide === 'any' ? 'Either hand' : n.handSide === 'right' ? 'Right hand' : 'Left hand'} · ${HD_POINT_NAMES[n.handPoint] ?? `point ${n.handPoint}`}`;
+  if (n.follow === 'mouse') return 'Follows the mouse';
+  if (n.follow === 'null') return `Follows ${layers.find(x => x.id === n.followId)?.label ?? 'a null'}`;
+  return 'Stays where you drag it';
+}
+
+/** A path shape's corners (nulls, in order: add, reorder, remove), how it joins them, and what a lost hand does. */
+function PathRows({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
+  const tk = f.tk;
+  const ids = f.get<string[]>('pointIds') ?? [];
+  const style = f.get<string>('pathStyle');
+  const byId = new Map(ctx.layers.map(l => [l.id, l]));
+  const free = nulls(ctx).filter(n => !ids.includes(n.id));
+  const setIds = (next: string[]) => f.set({ pointIds: next });
+  const move = (i: number, d: number) => { const j = i + d; if (j < 0 || j >= ids.length) return; const next = [...ids]; [next[i], next[j]] = [next[j], next[i]]; setIds(next); };
+  const newNull = () => {
+    const id = playId('layer');
+    ctx.changePlay(p => {
+      const n = p.layers.filter(l => l.kind === 'null').length + 1;
+      const nul = defaultLayer('null', id, `Null ${n}`) as NullLayer;
+      // Round a small circle, so each new corner lands somewhere new.
+      const a = (ids.length / 6) * Math.PI * 2;
+      nul.x = 0.5 + Math.cos(a) * 0.15; nul.y = 0.5 + Math.sin(a) * 0.2;
+      return { ...p, layers: [...p.layers.map(l => (l.id === f.l.id ? { ...l, pointIds: [...ids, id] } as PlayLayer : l)), nul] };
+    });
+  };
+  const fingertips = () => {
+    ctx.changePlay(p => { const r = handPathNulls(p); return { ...r.play, layers: r.play.layers.map(l => (l.id === f.l.id ? { ...l, pointIds: r.ids } as PlayLayer : l)) }; });
+    if (handFeed.getStatus() === 'off') void handFeed.start();
+  };
+  const small: React.CSSProperties = { color: tk.text.faint, font: `11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+  return (
+    <>
+      {f.row('Points', (
+        <div style={{ flex: 1, minWidth: 180, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {ids.length === 0 && <span style={small}>No points yet: add nulls, or use your fingertips.</span>}
+          {ids.map((id, i) => {
+            const n = byId.get(id);
+            const ok = n?.kind === 'null';
+            return (
+              <div key={`${id}:${i}`} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, padding: '2px 2px 2px 8px', borderRadius: radius.md, background: tk.bg.field }}>
+                <span style={{ width: 16, flexShrink: 0, color: tk.text.faint, font: `600 10.5px ${fontFamily.mono}` }}>{i + 1}</span>
+                {ok && <span style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, background: (n as NullLayer).color }} />}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ color: ok ? tk.text.primary : tk.status.danger, font: `500 12px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ok ? n!.label : 'Missing null'}</span>
+                  {ok && <span style={small}>{nullFollows(n as NullLayer, ctx.layers)}</span>}
+                </div>
+                <IconButton icon="chevU" size="sm" label={`Move point ${i + 1} earlier`} disabled={i === 0} onClick={() => move(i, -1)} />
+                <IconButton icon="chevD" size="sm" label={`Move point ${i + 1} later`} disabled={i === ids.length - 1} onClick={() => move(i, 1)} />
+                <IconButton icon="close" size="sm" tone="danger" label={`Remove point ${i + 1} (the null stays)`} onClick={() => setIds(ids.filter((_, k) => k !== i))} />
+              </div>
+            );
+          })}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Select ariaLabel="Add a null as a point" value="" height={26} style={{ flex: 1, minWidth: 120 }}
+              options={[{ value: '', label: free.length ? 'Add a null…' : 'Add a point…' }, ...free.map(n => ({ value: n.id, label: n.label })), { value: '__new', label: '+ New null' }]}
+              onChange={v => { if (v === '__new') newNull(); else if (v) setIds([...ids, v]); }} />
+            <Button size="sm" icon="hand" onClick={fingertips}>Fingertips</Button>
+          </div>
+        </div>
+      ), 'The nulls that are its corners, in order. Put them on your fingertips (a null that Follows a hand), the mouse, or drag them. Fingertips uses both hands\' thumb and index tips (adding the nulls that are missing). Removing a point keeps its null.')}
+      {f.seg('Style', 'pathStyle', [
+        { value: 'fill', label: 'Fill', title: 'A polygon through the points' }, { value: 'smooth', label: 'Smooth', title: 'A closed curve through the points' },
+        { value: 'circle', label: 'Circle', title: 'A circle their spread sets' }, { value: 'lines', label: 'Lines', title: 'A line through them in order, left open' },
+        { value: 'web', label: 'Web', title: 'Every pair of points joined' },
+      ], 'Fill joins the points into a polygon; Smooth draws a round curve through them; Circle grows and shrinks with how far apart they are; Lines is a string through them in order; Web joins every pair. Lines and webs are drawn with the Outline.')}
+      {(style === 'fill' || style === 'smooth') && f.toggle('Hull', 'hull', 'Wrap round the outside', 'Go round the outermost points, so fingers that cross never twist it into a bow-tie. Off: the points in list order.')}
+      {style === 'circle' && f.seg('Centre', 'circleMode', [
+        { value: 'spread', label: 'Middle', title: 'Centred between the points; radius: how far they are from the middle on average' },
+        { value: 'first', label: 'First point', title: 'Centred on the first point; the others set the radius (with two, the second one)' },
+      ], 'Middle: centred between the points, sized by how spread they are. First point: centred on point 1, and the distance to the others is the radius: pinch to shrink it.')}
+      {style === 'web' && f.prop('webReach')}
+      {f.seg('Hand lost', 'onLost', [
+        { value: 'drop', label: 'Drop', title: 'Leave that corner out until the hand is back' },
+        { value: 'hold', label: 'Hold', title: 'Keep the corner where the hand was last seen' },
+        { value: 'fade', label: 'Fade', title: 'Fade the whole shape out until the hand is back' },
+      ], 'When a hand a point follows leaves the picture (while hand tracking runs): drop its corners (four become a triangle, then a line), hold them where they were, or fade the whole shape out until it is back.')}
     </>
   );
 }

@@ -134,7 +134,8 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
     ), hint);
   };
   const seg = (text: string, key: string, options: Choice[], hint?: string) =>
-    row(text, <Segmented size="sm" ariaLabel={text} value={get<string>(key)} options={options} onChange={v => set({ [key]: v })} />, hint);
+    // Seven or more choices may not fit a phone's card on one line: they wrap.
+    row(text, <Segmented size="sm" ariaLabel={text} value={get<string>(key)} options={options} onChange={v => set({ [key]: v })} wrap={options.length >= 7} />, hint);
   const select = (text: string, key: string, options: Choice[], hint?: string) =>
     row(text, <Select ariaLabel={text} value={String(get(key))} options={options} onChange={v => set({ [key]: v })} height={26} />, hint);
   const toggle = (text: string, key: string, what: string, hint?: string) =>

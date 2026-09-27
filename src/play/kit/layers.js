@@ -329,6 +329,18 @@ export function klPaintBackground(c, bg, W, H, cache) {
  */
 export function klShapePath(l, v, W, H) {
   const path = new Path2D();
+  if (l.shape === 'path') {
+    // Made from nulls: the kit hands the geometry over as l.pathGeo (picture heights, y up).
+    const g = l.pathGeo;
+    if (!g) return { path, len: 0 };
+    if (g.style === 'web') {
+      for (let i = 0; i < g.segs.length; i += 5) { path.moveTo(g.segs[i] * H, (1 - g.segs[i + 1]) * H); path.lineTo(g.segs[i + 2] * H, (1 - g.segs[i + 3]) * H); }
+    } else {
+      for (let i = 0; i < g.pts.length; i += 2) { const x = g.pts[i] * H, y = (1 - g.pts[i + 1]) * H; if (i) path.lineTo(x, y); else path.moveTo(x, y); }
+      if (g.closed) path.closePath();
+    }
+    return { path, len: g.perimeter * H };
+  }
   const cx = v('x') * W, cy = (1 - v('y')) * H, rot = v('rotation') * Math.PI / 180;
   const w = v('w') * H, h = v('h') * H;
   const c = Math.cos(rot), s = Math.sin(rot);
@@ -381,7 +393,20 @@ function klInvertedMask(mask, W, H, fill) {
 /** Draw a shape layer: fill and trimmed outline, or a dashed guide when it is an invisible zone and you are editing. */
 export function klDrawShape(ctx, l, v, W, H, dpr, maskCanvas, editing, selected) {
   const isMask = l.shape === 'layer' || l.shape === 'picture';
-  const opacity = 1;
+  // A path made from nulls: its geometry (l.pathGeo), and how far it has faded (On lost: Fade).
+  const geo = l.shape === 'path' ? l.pathGeo : null;
+  const opacity = geo ? Math.max(0, Math.min(1, geo.alpha == null ? 1 : geo.alpha)) : 1;
+  if (l.shape === 'path' && (!geo || !geo.pts.length || opacity <= 0)) {
+    if (editing && selected && geo && geo.pts.length) klDrawGuide(ctx, l, v, W, H, dpr, maskCanvas, selected);
+    return;
+  }
+  if (geo && geo.style === 'web') {
+    if (l.show) klDrawWeb(ctx, l, v, geo, W, H, dpr, opacity);
+    if (editing && (!l.show || selected)) klDrawGuide(ctx, l, v, W, H, dpr, maskCanvas, selected);
+    return;
+  }
+  // An open path (lines, or two points) draws as a line: no fill.
+  const open = !!geo && !geo.closed;
   if (l.show) {
     ctx.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
     if (isMask) {
@@ -393,8 +418,8 @@ export function klDrawShape(ctx, l, v, W, H, dpr, maskCanvas, editing, selected)
       }
     } else {
       const sp = klShapePath(l, v, W, H);
-      const fillA = v('fillOpacity');
-      if (fillA > 0 && l.shape !== 'line') {
+      const fillA = v('fillOpacity') * opacity;
+      if (fillA > 0 && l.shape !== 'line' && !open) {
         ctx.globalAlpha = fillA; ctx.fillStyle = klCss(l.fill);
         if (l.invert) {
           // Inverted: fill the whole picture with the shape cut out (even-odd: the frame is one ring, the shape the hole).
@@ -405,10 +430,12 @@ export function klDrawShape(ctx, l, v, W, H, dpr, maskCanvas, editing, selected)
         } else ctx.fill(sp.path, 'evenodd');
       }
       const sw = v('strokeWidth') * dpr, trim = Math.max(0, Math.min(1, v('trim')));
-      const lineW = l.shape === 'line' ? Math.max(sw, v('h') * H) : sw;
+      // A line with no outline is drawn in its fill colour: a box line its height thick, an open path 2 px.
+      const lineLike = l.shape === 'line' || open;
+      const lineW = l.shape === 'line' ? Math.max(sw, v('h') * H) : open ? Math.max(sw, 2 * dpr) : sw;
       if (lineW > 0 && trim > 0) {
-        ctx.globalAlpha = l.shape === 'line' && sw <= 0 ? fillA : 1;
-        ctx.strokeStyle = klCss(l.shape === 'line' && sw <= 0 ? l.fill : l.stroke);
+        ctx.globalAlpha = lineLike && sw <= 0 ? fillA : opacity;
+        ctx.strokeStyle = klCss(lineLike && sw <= 0 ? l.fill : l.stroke);
         ctx.lineWidth = lineW; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
         if (trim < 1) ctx.setLineDash([sp.len * trim, sp.len * 2]);
         ctx.stroke(sp.path);
@@ -418,6 +445,30 @@ export function klDrawShape(ctx, l, v, W, H, dpr, maskCanvas, editing, selected)
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
   if (editing && (!l.show || selected)) klDrawGuide(ctx, l, v, W, H, dpr, maskCanvas, selected);
+}
+
+/**
+ * A web: every link a line of its own, fading as it stretches toward the
+ * reach. Outline colour and width (the fill colour, 1.5 px, with no outline);
+ * Trim draws each link on from its first point.
+ */
+function klDrawWeb(ctx, l, v, geo, W, H, dpr, opacity) {
+  const sw = v('strokeWidth') * dpr, trim = Math.max(0, Math.min(1, v('trim')));
+  if (trim <= 0) return;
+  const noOutline = sw <= 0;
+  const base = (noOutline ? v('fillOpacity') : 1) * opacity;
+  ctx.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
+  ctx.strokeStyle = klCss(noOutline ? l.fill : l.stroke);
+  ctx.lineWidth = noOutline ? 1.5 * dpr : sw; ctx.lineCap = 'round';
+  const s = geo.segs;
+  for (let i = 0, k = 0; i < s.length; i += 5, k++) {
+    const a = base * (geo.alphas[k] == null ? 1 : geo.alphas[k]);
+    if (a <= 0.004) continue;
+    const ax = s[i] * H, ay = (1 - s[i + 1]) * H, bx = s[i + 2] * H, by = (1 - s[i + 3]) * H;
+    ctx.globalAlpha = a;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(ax + (bx - ax) * trim, ay + (by - ay) * trim); ctx.stroke();
+  }
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 
 /** An invisible zone's outline while editing: dashed, with its name and action. */
@@ -436,7 +487,8 @@ function klDrawGuide(ctx, l, v, W, H, dpr, maskCanvas, selected) {
   ctx.globalAlpha = 0.9;
   ctx.font = '600 ' + 10.5 * dpr + 'px ' + KL_FONTS.sans; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const label = l.label + (l.action && l.action !== 'none' ? ' · ' + l.action : '');
-  const tx = v('x') * W, ty = (1 - v('y')) * H;
+  const geo = l.shape === 'path' ? l.pathGeo : null;
+  const tx = (geo ? geo.cx : v('x')) * W, ty = (1 - (geo ? geo.cy : v('y'))) * H;
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   const tw = ctx.measureText(label).width + 10 * dpr;
   ctx.fillRect(tx - tw / 2, ty - 8 * dpr, tw, 16 * dpr);

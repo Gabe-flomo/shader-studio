@@ -83,7 +83,30 @@ Every gesture has **hysteresis**: it starts past one threshold and ends only pas
 
 ## Nulls that follow a hand
 
-A null's **Follows** can be **A hand**: pick the hand and the point (a fingertip, the wrist…). It chases that landmark on its Spring and Wobble like any following null, and waits where it was when the hand leaves. Everything that reads nulls reads it unchanged: particle roles (emitter, absorber, attract, repel, vortex), sensors (distance to another layer or a hand point), Script layers' `s.null()`, Cloner effectors, brushes, lenses and mappings.
+A null's **Follows** can be **A hand**: pick the hand and the point (a fingertip, the wrist…). It chases that landmark on its Spring and Wobble like any following null, and waits where it was when the hand leaves. Until it has seen its hand (and while tracking is off) it rests where it was placed, so you can drag it. Everything that reads nulls reads it unchanged: particle roles (emitter, absorber, attract, repel, vortex), sensors (distance to another layer or a hand point), Script layers' `s.null()`, Cloner effectors, brushes, lenses and mappings.
+
+## Hand paths (shapes made from nulls)
+
+A Shape's **Shape** can be **Path**: its corners are nulls, in order, so a path through nulls that follow your fingertips is a shape that moves with your hands. Put a null on both thumb and index tips and the four points are a quad you hold between your hands; three make a triangle; two make a line (or a circle that grows as you spread them). Since it is a shape, everything a shape does works: fill, outline, **Trim**, blend, **Invert**, a track matte for another layer, particle zones, Fill and Hover readings, triggers.
+
+**Add hand path** (Add layer → Drawing, or the Camera layer's Hand tracking section) makes one in a step: the fingertip nulls it needs (both hands' index and thumb tips; ones already there are reused) and a filled path through them with Hull on, and starts tracking. The **Hand paths** example in the Play folder is a window through ASCII framed by four fingertips, strung with a web.
+
+On the path's card:
+
+- **Points**: the nulls, in order, each with what it follows (*Right hand · Index tip*, *Follows the mouse*…). Reorder with the arrows, remove with × (the null stays), add any null (or **+ New null**), or press **Fingertips** for the four fingertip nulls.
+- **Style**: **Fill** (a polygon through the points), **Smooth** (a closed centripetal Catmull-Rom curve through them: round, never looping between close points), **Circle**, **Lines** (a line through them in order, left open) or **Web** (every pair joined). Lines and webs are drawn with the Outline colour and width.
+- **Hull** (Fill, Smooth): go round the outermost points, so crossing fingers never twist the shape into a bow-tie. Off: list order.
+- **Centre** (Circle): **Middle** centres it between the points, its radius their mean distance from there; **First point** centres it on point 1 and the others set the radius (with two points, the second: pinch to shrink it).
+- **Reach** (Web): join only points closer than this (picture heights), links fading as they stretch toward it; 0 joins all at full strength.
+- **Hand lost**: when a hand a point follows is out of view (while tracking runs), **Drop** its corners (four become a triangle, then a line), **Hold** them where they were last seen, or **Fade** the whole shape out until the hand is back (0.35 s).
+
+**Readings**: a path reads its **Area** (the share of the picture it covers; lines and webs: the area their points span), **Perimeter** (its outline's length, a web's links added up; 1 is the length of the picture's own edge) and **Spread** (the points' mean distance from their centre; 1 is half a picture height or more), with Fill, Hover and Distance like any shape. With Fade they fade with the shape. Map them from the card's Readings or Mappings → Layer sensor.
+
+**As a zone**: Fill, Smooth and Circle are closed regions (walls, containers, attract, sensors…); Lines and Web are walls as thick as their outline. Its anchor (proximity, distance) is its points' centre.
+
+**Without a camera**: a hand null that has never seen its hand rests where it was placed, and you can drag it there, so a setup made for hands still shows its shape. Once tracking runs, a hand out of view is lost (Hand lost decides). A path has no box of its own: select it on the picture by pressing inside it; move it by moving its nulls.
+
+**Where it lives**: the geometry is in the kit (`play/kit/geometry.js`: `geoPathBuild`, `geoHull`, `geoCatmullRom`, `geoPathNodes`, `geoPathFade`, `geoPathReadings`), built each frame in `kit.js` after the nulls' springs (so it works the same in exported websites), drawn by `klDrawShape` in `layers.js`. Saved on the Shape: `shape: 'path'`, `pointIds`, `pathStyle`, `hull`, `webReach`, `circleMode`, `onLost`; files from before have the defaults.
 
 ## Recording
 

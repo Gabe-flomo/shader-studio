@@ -293,7 +293,7 @@ export const DATA_ROW_COLUMN = '#row';
 /** Layer kinds with a centre on the picture: what proximity triggers and distance sensors can measure from. */
 export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data'];
 
-export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
+export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble' | 'area' | 'perimeter';
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   shape: ['fill', 'hover', 'distance'],
   particles: ['speed', 'spread', 'distance'],
@@ -302,6 +302,13 @@ export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   audio: ['level', 'bass', 'lowmid', 'highmid', 'treble', 'distance'],
   text: ['distance'], image: ['distance'], lens: ['distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['distance'], data: ['distance'],
 };
+/** A path shape (corners that are nulls) also reads its area, perimeter and spread. */
+const PATH_READS: readonly SensorRead[] = ['area', 'perimeter', 'spread', 'fill', 'hover', 'distance'];
+/** What a layer can be read for: its kind's readings, and a path shape's own. */
+export function sensorReadsFor(l: { kind: string; shape?: string } | undefined | null): readonly SensorRead[] {
+  if (!l) return [];
+  return l.kind === 'shape' && l.shape === 'path' ? PATH_READS : SENSOR_READS_FOR[l.kind] ?? [];
+}
 
 export type PlayCurve = 'linear' | 'exp' | 'log' | 'custom';
 
@@ -917,7 +924,7 @@ function parseHands(v: unknown): PlayHands | null {
   return out;
 }
 
-const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble']);
+const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter']);
 
 function parseAction(raw: unknown): PlayAction | null {
   if (!raw || typeof raw !== 'object') return null;

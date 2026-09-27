@@ -257,11 +257,25 @@ export interface ParticlesLayer extends LayerBase {
  */
 export type ZoneAction = 'none' | 'wall' | 'container' | 'attract' | 'repel' | 'sink' | 'portal' | 'emitter' | 'absorber' | 'wind' | 'vortex' | 'drag' | 'tint' | 'resize' | 'sensor';
 
+/**
+ * How a path shape joins its nulls:
+ *   fill    a polygon through them, in order (with Hull: round the outside)
+ *   smooth  a closed curve through them (centripetal Catmull-Rom)
+ *   circle  a circle their spread sets (see PathCircleMode)
+ *   lines   a line through them, in order, left open
+ *   web     every pair joined (within Reach), links fading as they stretch
+ */
+export type PathStyle = 'fill' | 'smooth' | 'circle' | 'lines' | 'web';
+/** spread: centred on the points' middle, radius their mean distance from it. first: centred on the first point, radius the mean distance of the others (with two points, the second sets it). */
+export type PathCircleMode = 'spread' | 'first';
+/** A point whose null follows a hand that is out of view: left out (drop), kept where it was (hold), or the whole shape fades out until it is back (fade). */
+export type PathOnLost = 'drop' | 'hold' | 'fade';
+
 /** A shape: something to see, an invisible zone that acts on particles, or both. */
 export interface ShapeLayer extends LayerBase {
   kind: 'shape';
-  /** box · circle (an ellipse when w ≠ h) · line (length w, thickness h) · polygon (points) · layer (a text or image layer's shape) · picture (the bright parts of the picture) */
-  shape: 'box' | 'circle' | 'line' | 'polygon' | 'layer' | 'picture';
+  /** box · circle (an ellipse when w ≠ h) · line (length w, thickness h) · polygon (points) · layer (a text or image layer's shape) · picture (the bright parts of the picture) · path (corners that are nulls: pointIds) */
+  shape: 'box' | 'circle' | 'line' | 'polygon' | 'layer' | 'picture' | 'path';
   x: number;
   y: number;
   /** Width and height in picture heights. */
@@ -276,6 +290,15 @@ export interface ShapeLayer extends LayerBase {
   sourceId: string;
   /** shape 'picture': brightness at or above this is inside. */
   threshold: number;
+  /** shape 'path': the null layers that are its corners, in order (missing ones are skipped). */
+  pointIds: string[];
+  pathStyle: PathStyle;
+  /** fill · smooth: go round the outside (the convex hull), so crossing points never make a bow-tie. */
+  hull: boolean;
+  /** web: join only points closer than this (picture heights); 0 joins every pair. */
+  webReach: number;
+  circleMode: PathCircleMode;
+  onLost: PathOnLost;
   /** Swap inside and outside. */
   invert: boolean;
   // Look
@@ -941,6 +964,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
   },
   shape: {
     toShader: true, shape: 'box', x: 0.5, y: 0.5, w: 0.3, h: 0.2, rotation: 0, round: 0, points: [], sourceId: '', threshold: 0.5, invert: false,
+    pointIds: [], pathStyle: 'fill', hull: true, webReach: 0, circleMode: 'spread', onLost: 'fade',
     show: true, fill: [1, 1, 1], fillOpacity: 0.15, stroke: [1, 1, 1], strokeWidth: 1.5, trim: 1, blend: 'normal',
     action: 'wall', strength: 1, reach: 0.15, bounce: 0, angle: 0, targetId: '', tint: [1, 0.35, 0.3], scale: 2, tilt: 0, affects: '',
   },
@@ -1026,8 +1050,9 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     falloff: N(0.01), links: N(0, 0.5), reveal: B, trail: unit, blend: blendF,
   },
   shape: {
-    toShader: B, shape: E('box', 'circle', 'line', 'polygon', 'layer', 'picture'), x: N(), y: N(), w: N(0.001), h: N(0.001), rotation: N(), round: N(0, 0.5),
+    toShader: B, shape: E('box', 'circle', 'line', 'polygon', 'layer', 'picture', 'path'), x: N(), y: N(), w: N(0.001), h: N(0.001), rotation: N(), round: N(0, 0.5),
     points: { t: 'points' }, sourceId: S, threshold: unit, invert: B,
+    pointIds: { t: 'ids' }, pathStyle: E('fill', 'smooth', 'circle', 'lines', 'web'), hull: B, webReach: N(0, 4), circleMode: E('spread', 'first'), onLost: E('drop', 'hold', 'fade'),
     show: B, fill: C, fillOpacity: unit, stroke: C, strokeWidth: N(0), trim: unit, blend: blendF,
     action: E('none', 'wall', 'container', 'attract', 'repel', 'sink', 'portal', 'emitter', 'absorber', 'wind', 'vortex', 'drag', 'tint', 'resize', 'sensor'),
     strength: N(0), reach: N(0.001), bounce: unit, angle: N(), targetId: S, tint: C, scale: N(0), tilt: N(0, 85), affects: S,
@@ -1320,6 +1345,7 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     ROT,
     { key: 'round', label: 'Rounding', min: 0, max: 0.5, hint: 'Box corners: 0 is square, 0.5 fully round.' },
     { key: 'threshold', label: 'Threshold', min: 0, max: 1, hint: 'Picture shapes: brightness at or above this counts as inside.' },
+    { key: 'webReach', label: 'Reach', min: 0, max: 1.5, hint: 'Path web: join only points closer than this (picture heights); links fade as they stretch toward it. 0 joins every pair at full strength.' },
     { key: 'fillOpacity', label: 'Fill', min: 0, max: 1, hint: 'How solid the fill is when the shape is shown.' },
     { key: 'strokeWidth', label: 'Outline', min: 0, max: 20, step: 0.5, hint: 'Outline width in pixels. 0 = none.' },
     { key: 'trim', label: 'Trim', min: 0, max: 1, hint: 'How much of the outline is drawn. Animate it from 0 to 1 to draw the shape on.' },

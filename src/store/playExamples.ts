@@ -1329,6 +1329,31 @@ Distance reads only while both hands are in view, so the rings hold their size w
 • Set Fires to **Every 0.5 sec** and hold your finger on the circle.`,
   })),
 
+  // A path between four fingertips: a window through ASCII, strung with a web.
+  ex('handPaths', fbmGraph({ scale: 2.4, timeScale: 0.07, preset: '2' }), play({
+    layers: [
+      layer('glyphs', 'ascii', 'ASCII', { cell: 12, colour: 'picture', cover: true, background: [0.02, 0.02, 0.04], contrast: 1.4, trackMatte: { id: 'window', mode: 'alpha', invert: true } }),
+      layer('shape', 'window', 'Window', { visible: false, shape: 'path', pointIds: ['rIndex', 'rThumb', 'lThumb', 'lIndex'], pathStyle: 'fill', hull: true, onLost: 'fade', action: 'none', fill: [1, 1, 1], fillOpacity: 1, strokeWidth: 0 }),
+      layer('shape', 'strings', 'Strings', { shape: 'path', pointIds: ['rIndex', 'rThumb', 'lThumb', 'lIndex'], pathStyle: 'web', onLost: 'drop', action: 'none', fillOpacity: 0, stroke: [1, 0.85, 0.55], strokeWidth: 1.5 }),
+      layer('null', 'rIndex', 'Right index tip', { follow: 'hand', handSide: 'right', handPoint: 8, x: 0.66, y: 0.7, spring: 0.7, wobble: 0.15, size: 6, color: '#ffb86b' }),
+      layer('null', 'rThumb', 'Right thumb tip', { follow: 'hand', handSide: 'right', handPoint: 4, x: 0.6, y: 0.32, spring: 0.7, wobble: 0.15, size: 6, color: '#ffb86b' }),
+      layer('null', 'lThumb', 'Left thumb tip', { follow: 'hand', handSide: 'left', handPoint: 4, x: 0.4, y: 0.32, spring: 0.7, wobble: 0.15, size: 6, color: '#7ee0b0' }),
+      layer('null', 'lIndex', 'Left index tip', { follow: 'hand', handSide: 'left', handPoint: 8, x: 0.34, y: 0.7, spring: 0.7, wobble: 0.15, size: 6, color: '#7ee0b0' }),
+    ],
+    controls: [ctl('cell', 'layer:ascii::cell', 'ASCII · Cell (window area)', 6, 40, 1)],
+    mappings: [map('open', 'cell', S.sensor('window', 'area'), 8, 40, { smoothMs: 120 })],
+    notes: `**What it shows.** A **Path** shape: its corners are nulls, so when the nulls follow your fingertips the shape moves with your hands. Frame the picture with both thumbs and index fingers and the ASCII opens a window onto the landscape under it. This one is made for **hand tracking**, and works without a camera too: until tracking starts, the four points rest in a frame you can drag.
+
+**How it's built.** Four nulls follow both hands' thumb and index tips. **Window** is a Shape → **Path** through them, Style **Fill** with **Hull** on (it wraps round the outside, so crossing fingers never make a bow-tie). It is hidden and is the ASCII layer's **track matte**, inverted: the characters everywhere except inside your hands. **Strings** is a second path through the same nulls, Style **Web**: every pair joined. The Window's **Area** reading drives the ASCII cell size, so opening your hands coarsens the characters.
+
+**Try this.**
+• Press **Enable hand tracking** on the picture and make a frame with both hands. Without a camera, drag the four dots.
+• Take one hand away: the Window fades out (Hand lost: **Fade**) and the Strings drop that hand's corners (**Drop**). Try **Hold**.
+• Window → Style **Smooth** for a rounded window, or **Circle** for a lens your fingers size.
+• ASCII → Matte → turn Invert off: the characters only inside your hands.
+• Add hand path (Add layer, or the Camera layer's Hand tracking section) makes this setup in one step.`,
+  })),
+
   // ─ Recording ─
   ex('playTake', glowGraph({ radius: 0.1, falloff: 10 }), play({
     layers: [

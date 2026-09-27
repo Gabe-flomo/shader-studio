@@ -13,7 +13,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { candidateLabel, collectPlayCandidates } from '../../play/playControls';
 import { SENSOR_HINTS, SENSOR_LABELS } from '../../play/playSources';
 import { playEngine } from '../../lib/playEngine';
-import { layerNumericProps, SENSOR_READS_FOR, layerTarget, type PlayLayer, type PlaySource, type SensorRead } from '../../types/play';
+import { layerNumericProps, sensorReadsFor, layerTarget, type PlayLayer, type PlaySource, type SensorRead } from '../../types/play';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
@@ -98,7 +98,7 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
 /** A layer's readings (audio bands, a shape's fill…) with meters and Map…, in its editor. */
 export function LayerReadings({ layer }: { layer: PlayLayer }) {
   const tk = useTokens();
-  const reads = (SENSOR_READS_FOR[layer.kind] ?? []).filter(r => r !== 'distance') as SensorRead[];
+  const reads = sensorReadsFor(layer as { kind: string; shape?: string }).filter(r => r !== 'distance') as SensorRead[];
   const [vals, setVals] = useState<Record<string, number | null>>({});
   useEffect(() => {
     if (!reads.length) return;
@@ -109,7 +109,7 @@ export function LayerReadings({ layer }: { layer: PlayLayer }) {
     }, 100);
     return () => window.clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layer.id, layer.kind]);
+  }, [layer.id, layer.kind, reads.join()]);
   if (!reads.length) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>

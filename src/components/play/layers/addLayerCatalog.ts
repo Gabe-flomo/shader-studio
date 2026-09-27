@@ -28,13 +28,14 @@ export const BUILTIN_GROUPS: ReadonlyArray<{ id: BuiltinGroupId; label: string }
   { id: 'code', label: 'Code' },
 ];
 
-/** `variant`: the same kind set up another way (a Script layer in 3D). */
-export type BuiltinVariant = 'script3d';
+/** `variant`: the same kind set up another way (a Script layer in 3D, a Shape made from hand nulls). */
+export type BuiltinVariant = 'script3d' | 'handPath';
 export interface BuiltinLayer { kind: PlayLayerKind; label: string; hint: string; icon: IconName; group: BuiltinGroupId; variant?: BuiltinVariant }
 
 /** The built-in layer kinds: name, one-line hint, icon, and the group Add layer shows them in. */
 export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
   { kind: 'shape', group: 'drawing', label: 'Shape', hint: 'Boxes, circles, lines or drawn outlines: to see, and as walls, emitters, portals, sensors.', icon: 'layoutCanvas' },
+  { kind: 'shape', variant: 'handPath', group: 'drawing', label: 'Hand path', hint: 'A shape between your thumb and index fingertips, both hands, that moves as they do (hand tracking). Fill it, mask with it, use it as a matte or a zone.', icon: 'hand' },
   { kind: 'brush', group: 'drawing', label: 'Brush', hint: 'Paint on the picture with the mouse. Strokes fade and can be walls.', icon: 'curve' },
   { kind: 'cloner', group: 'drawing', label: 'Cloner', hint: 'Copies of a shape, text, image or null in a grid, ring, line or along a stroke. Vary them by index; nulls and shapes push, grow, turn or hide the copies near them.', icon: 'copy' },
   { kind: 'background', group: 'textImages', label: 'Background', hint: 'Under every layer: a queue of graphs, sketches, images, videos and colours, one showing at a time. Step through it with keys, beats, notes or hands; cut or crossfade. One per setup.', icon: 'slides' },

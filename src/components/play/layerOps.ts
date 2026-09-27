@@ -5,7 +5,7 @@
  * draw order, make a null for a property that follows one, and make a null
  * that drives a control.
  */
-import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type TriggerSpec } from '../../types/play';
+import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type ShapeLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type TriggerSpec } from '../../types/play';
 import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
 import { resetKindLayer } from '../../play/layerKinds';
 import { dropMatteRefs } from '../../play/mattes';
@@ -16,8 +16,8 @@ export function removeLayer(p: PlayRecord, id: string): PlayRecord {
   const ids = new Set(controls.map(c => c.id));
   const out: PlayRecord = {
     ...p,
-    // A layer that used it as its matte goes back to no matte.
-    layers: dropMatteRefs(p.layers.filter(l => l.id !== id), id),
+    // A layer that used it as its matte goes back to no matte; a path that used it as a corner loses that corner.
+    layers: dropMatteRefs(p.layers.filter(l => l.id !== id), id).map(l => (l.kind === 'shape' && l.pointIds?.includes(id) ? { ...l, pointIds: l.pointIds.filter(x => x !== id) } : l)),
     controls,
     mappings: p.mappings.filter(m => ids.has(m.controlId)
       && !((m.source.kind === 'null' || m.source.kind === 'sensor') && m.source.layerId === id)
@@ -113,6 +113,43 @@ export function addFingertipNulls(p: PlayRecord): PlayRecord {
     added.push(nul);
   }
   return added.length ? { ...p, layers: [...p.layers, ...added] } : p;
+}
+
+/** The fingertips a hand path starts from, in order round the shape: both index tips up, both thumbs below. */
+export const HAND_PATH_POINTS: ReadonlyArray<{ side: 'right' | 'left'; point: number; label: string; x: number; y: number }> = [
+  { side: 'right', point: 8, label: 'Right index tip', x: 0.64, y: 0.66 },
+  { side: 'right', point: 4, label: 'Right thumb tip', x: 0.6, y: 0.36 },
+  { side: 'left', point: 4, label: 'Left thumb tip', x: 0.4, y: 0.36 },
+  { side: 'left', point: 8, label: 'Left index tip', x: 0.36, y: 0.66 },
+];
+
+/**
+ * A filled path shape between both hands' thumb and index tips: four
+ * corners that move with your hands, wrapped round the outside (Hull) so
+ * crossing fingers never make a bow-tie. Nulls already following those
+ * points are used; missing ones are added (resting where a frame of hands
+ * would be, until tracking starts). Returns the record and the shape's id.
+ */
+export function addHandPath(p: PlayRecord, id = playId('layer')): { play: PlayRecord; id: string } {
+  const { play: withNulls, ids: pointIds } = handPathNulls(p);
+  const n = p.layers.filter(l => l.kind === 'shape' && l.shape === 'path').length + 1;
+  const shape = defaultLayer('shape', id, `Hand path ${n}`) as ShapeLayer;
+  Object.assign(shape, { shape: 'path', pointIds, pathStyle: 'fill', hull: true, onLost: 'fade', action: 'none', fill: [0.45, 0.8, 1], fillOpacity: 0.35, stroke: [0.45, 0.8, 1], strokeWidth: 2 });
+  return { play: { ...withNulls, layers: [...withNulls.layers, shape] }, id };
+}
+
+/** The nulls on both hands' thumb and index tips (HAND_PATH_POINTS order): the ones there, plus any missing, added. */
+export function handPathNulls(p: PlayRecord): { play: PlayRecord; ids: string[] } {
+  const added: PlayLayer[] = [];
+  const ids = HAND_PATH_POINTS.map(h => {
+    const have = p.layers.find(l => l.kind === 'null' && l.follow === 'hand' && l.handSide === h.side && l.handPoint === h.point);
+    if (have) return have.id;
+    const nul = defaultLayer('null', playId('layer'), h.label) as NullLayer;
+    Object.assign(nul, { follow: 'hand', handSide: h.side, handPoint: h.point, x: h.x, y: h.y, spring: 0.7, wobble: 0.15, size: 6 });
+    added.push(nul);
+    return nul.id;
+  });
+  return { play: added.length ? { ...p, layers: [...p.layers, ...added] } : p, ids };
 }
 
 /** The same three things the picture's right-click menu offers. */
