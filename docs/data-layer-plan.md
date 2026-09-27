@@ -1,7 +1,7 @@
 # Data layer: a plan
 
 Plan, not built. Written 26 Sep 2026 from a voice note, so a later session can
-pick it up. Section 6 lists the decisions to settle first.
+pick it up. Section 6 records the decisions (settled the same day).
 
 ## 1. The idea
 
@@ -68,31 +68,52 @@ curve like mappings.
 - **Sensors and proximity**: each drawn point can be an anchor.
 - **Takes**: offset changes and actions are recorded like any others.
 
-## 4. The notebook: Python, JavaScript, or both
+## 4. The notebook: JavaScript that reads like pandas
 
-**Python** runs in the browser through **Pyodide** (CPython compiled to
-WebAssembly, with pandas, numpy and scikit-learn available as packages).
-- It runs on your machine, in a worker, so the app never freezes.
-- It's large: about 10 MB for the core, plus about 20 MB for pandas, and more
-  for scikit-learn. It would load only when a Data layer's notebook first runs,
-  and be cached after that.
-- For the desktop app and offline use it can be bundled like the hand model. Or
-  it can be fetched from the Pyodide CDN the first time, which needs a network
-  connection once.
-- Startup is a few seconds the first time in a session.
+JavaScript only; no Python runtime. The notebook's cells are JavaScript with a
+small **table helper** shaped after pandas, so transforms read the way you'd
+write them in a notebook:
 
-**JavaScript** is free and instant. The same notebook cells run as JS, with a
-small table helper (filter, map, groupBy, sort, and a k-means for clustering).
-It's enough for most transforms.
+```js
+df = data                                // the imported table
+df = df.where(r => r.temp > 20)          // or df.where('temp > 20')
+df = df.assign({ f: r => r.temp * 9 / 5 + 32 })
+by = df.groupby('city').mean('temp')
+df.sort('price', { descending: true }).head(10)
+df['x']                                   // a column as an array
+df.describe()                             // count, mean, min, max per column
+df.kmeans(['x', 'y'], 4)                  // adds a cluster column
+```
 
-**Suggested:** ship JavaScript first, as the default and always available, then
-add Python as an option on the same layer. Both produce the same frozen result,
-so everything downstream is the same.
+- **Inputs:** a CSV arrives as a table (`df`), JSON as a plain value, text as a
+  string.
+- **Output:** the last value (or `result`) becomes the dataset.
+- **When it runs:** instantly, in a worker. It's saved with the dataset and never
+  runs per frame.
 
-**Notebook shape:** a few cells run top to bottom. The file arrives as `data`.
-Whatever the last cell returns (or assigns to `result`) becomes the layer's
-dataset. Output shows as a table preview or text, with errors inline. Cells and
-the result are saved with the Play setup.
+## 4b. The Data node (Studio)
+
+The same datasets are available to the node graph. A **Data** node picks a
+dataset and passes numbers into the shader:
+
+- **Editor.** It opens as a window, like expressions, functions and keyframes:
+  import, the notebook, a table preview, and the choice of outputs.
+- **Card.** It stays small: the dataset name, the row count and the outputs.
+- **Outputs.** Each chosen numeric column as a float, or grouped columns as a
+  vec2/vec3/vec4 (x,y → vec2; r,g,b → vec3; four columns → vec4).
+- **Index.** A shader works per pixel, so an **Index** input picks the row. With
+  **Blend** on, a fractional index fades between neighbouring rows, for smooth
+  motion.
+- **Count** output: the number of rows.
+- **Data texture** output: the whole table as a float texture (one row per
+  texel, up to four columns per texture). Loops sample it with the row index, so
+  an iterated group can draw every row, for example a circle at each (x, y).
+  Uniform arrays would cap out at a few hundred values.
+- **Normalize 0–1:** an option on the dataset, off by default. It maps each
+  numeric column from its min…max to 0…1; columns already in 0…1 are left as
+  they are.
+- **Datasets belong to the graph file.** One import is shared by the Data node
+  and the Data layer, so editing the notebook updates both.
 
 ## 5. Storage, exports, presentations
 
@@ -104,29 +125,27 @@ the result are saved with the Play setup.
 - **Refresh:** re-run the notebook, like Refresh from graph, whenever you want
   the result rebuilt from the file.
 
-## 6. Decisions to settle before building
+## 6. Decisions (settled 26 Sep 2026)
 
-1. **Python in the first version, or JavaScript first and Python after?**
-   Python adds 30 MB+ and a few seconds of startup on first run, but
-   pandas and scikit-learn are what you'd reach for.
-2. **Bundle Pyodide for offline, or fetch it on first use?** Bundling adds
-   30–60 MB to the desktop app.
-3. **JSON that isn't a table:** only readable from scripts in v1, or should the
-   layer offer a few views (a tree, points from a list of `{x, y}`)?
-4. **Many data layers or one?** You said one for the prototype. Scripts can
-   still name it (`s.data('Sales')`) so more can come later.
-5. **Size caps:** rows (say 100k for points, 5k for labels) and file size
-   (say 5 MB stored in the setup).
+1. **JavaScript only.** No Python. The notebook uses a pandas-style table
+   helper instead.
+2. **So nothing to bundle:** no runtime download, and everything works offline.
+3. **Also a Data node** in the graph, sharing datasets with the layer, with
+   Normalize 0–1 as an option (off by default). Its editor opens as a window;
+   its card and the Play viewer stay simple.
+4. **Still open:** JSON that isn't a table (scripts only in v1 unless asked);
+   size caps (100k rows for points, 5k for labels, 5 MB stored per file).
 
 ## 7. Milestones
 
-1. **The layer, CSV in JS.** Import, parse (types sniffed per column), table
+0. **Datasets and the Data node.** Import and parse (column types sniffed),
+   the dataset store in the graph file, Normalize, the JS notebook with the
+   table helper, and the Data node (column outputs, Index/Blend, Count, data
+   texture) with its editor window.
+1. **The layer, CSV.** Import, parse (types sniffed per column), table
    views: points, path, bars, pie, lines; axes modes; column → property
    mapping; offset/window stepping and actions; `s.data()`; data sources.
 2. **Text.** Split modes, frequency and sort, show one chunk at a time with the
    text style.
-3. **Notebook (JS).** Cells, `data`/`result`, preview, errors, save.
-4. **Python.** Pyodide in a worker, pandas DataFrame in, DataFrame / str /
-   dict out, the same preview.
-5. **JSON views, exports and Present, examples** (a small CSV of city
+3. **JSON views, exports and Present, examples** (a small CSV of city
    temperatures, a route, a poem stepped word by word).
