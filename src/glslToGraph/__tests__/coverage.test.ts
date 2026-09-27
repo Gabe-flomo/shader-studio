@@ -78,10 +78,11 @@ describe('expressions', () => {
     const { r } = ok('void main(){ vec2 uv = gl_FragCoord.xy / u_resolution.xy; mat3 m = mat3(0.5); vec3 c = vec3(uv, 1.0) * m; gl_FragColor = vec4(c, 1.0); }');
     expect(r.nodes.some(n => n.type === 'multiply' && n.params.outputType === 'mat3')).toBe(false);
   });
-  it('writes more than one component at a time (vec3 through nodes, vec4 through a block)', () => {
+  it('writes more than one component at a time (vec3 and vec4 through Split and Make)', () => {
     const { r } = ok('void main(){ vec3 col = vec3(0.1); vec2 uv = gl_FragCoord.xy / u_resolution.xy; col.rb = uv; col.xy += 0.2; vec4 o = vec4(col, 1.0); o.g = sqrt(o.g); gl_FragColor = o; }');
     expect(r.nodes.some(n => n.type === 'makeVec3')).toBe(true);
-    expect(code(r.nodes)).toMatch(/vec4\(v\.x, x, v\.z, v\.w\)/);
+    expect(r.nodes.filter(n => n.type === 'makeVec4')).toHaveLength(2);
+    expect(r.report.blocks).toEqual([]);
   });
   it('splits `a = x, b += y;` into two statements', () => {
     ok('void main(){ float a = 0.0, b = 1.0; a = 0.5, b += a; gl_FragColor = vec4(vec3(a * b), 1.0); }');
@@ -136,5 +137,76 @@ describe('writes inside an expression', () => {
     ok('void main(){ vec2 U = gl_FragCoord.xy; float d = length(mod(U += 3.0, 7.0)); U = vec2(1.0); gl_FragColor = vec4(vec3(d + U.x), 1.0); }');
     // In a loop: written before it's read, each time round.
     ok('void main(){ float v = 0.0, a = 0.0, A; for (int i = 0; i < 3; i++) v = max(v, cos(A = a + gl_FragCoord.x) * sin(A)), a += 1.0; gl_FragColor = vec4(vec3(v), 1.0); }');
+  });
+});
+
+describe('phase 2: what used to be kept as code', () => {
+  const types = (nodes: GraphNode[]) => nodes.map(n => n.type);
+  it('vec4 arithmetic, vec4 constructors of every shape, and a final colour with its own alpha are nodes', () => {
+    const { r } = ok('void main(){ vec2 u = gl_FragCoord.xy / u_resolution.xy; vec4 a = vec4(u, u.yx) * 2.0 + vec4(0.5); vec4 b = vec4(u.x, vec3(0.2, u)) - a / vec4(1.0, 2.0, 3.0, 4.0); gl_FragColor = vec4(b.rgb, u.y); }');
+    expect(r.report.blocks).toEqual([]);
+    expect(r.nodes.some(n => n.type === 'add' && n.params.outputType === 'vec4')).toBe(true);
+    expect(types(r.nodes)).toContain('makeVec4');
+    expect(types(r.nodes)).toContain('vec4Output');
+  });
+  it('abs, ceil, tanh, min, max, pow and step work on vectors; length, dot and normalize on any vector', () => {
+    const { r } = ok('void main(){ vec2 u = gl_FragCoord.xy / u_resolution.xy - 0.5; vec3 p = vec3(u, 0.3); vec3 q = abs(p) + ceil(p * 2.0) + tanh(p) + min(p, 0.2) + max(p, vec3(0.1)) + pow(abs(p), vec3(1.5)) + step(0.1, p); float d = length(p) + dot(p, q) + normalize(q).x + length(vec4(p, 1.0)); gl_FragColor = vec4(q * d, 1.0); }');
+    expect(r.report.blocks).toEqual([]);
+    expect(r.nodes.find(n => n.type === 'abs')!.params.outputType).toBe('vec3');
+    expect(r.nodes.find(n => n.type === 'pow')!.inputs.exponent.type).toBe('vec3');
+    expect(r.nodes.filter(n => n.type === 'length').map(n => n.params.outputType).sort()).toEqual(['vec3', 'vec4']);
+    expect(r.nodes.find(n => n.type === 'dot')!.inputs.a.type).toBe('vec3');
+  });
+  it('a swizzle of any pattern is a Swizzle node', () => {
+    const { r } = ok('void main(){ vec2 u = gl_FragCoord.xy / u_resolution.xy; vec4 w = vec4(u, 0.2, 0.9); vec3 c = u.xyx + w.zwx + w.bgr; gl_FragColor = vec4(c, 1.0).zwxy; }');
+    expect(r.report.blocks).toEqual([]);
+    expect(r.nodes.filter(n => n.type === 'swizzle').map(n => n.params.pattern).sort()).toEqual(['xyx', 'zwxy', 'zwx', 'zyx'].sort());
+  });
+  it('mat2(c, -s, s, c) * v, v * mat2(…), a mat2 variable and a rot() helper are Rotate 2D nodes', () => {
+    const { r } = ok('mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }\nvoid main(){ vec2 u = gl_FragCoord.xy / u_resolution.xy - 0.5; float a = u_time; u = mat2(cos(a), -sin(a), sin(a), cos(a)) * u; mat2 m = mat2(cos(a), sin(a), -sin(a), cos(a)); u = u * m; u *= rot(0.3); gl_FragColor = vec4(u, 0.0, 1.0); }');
+    expect(r.nodes.filter(n => n.type === 'rotate2d')).toHaveLength(3);
+    expect(r.report.blocks).toEqual([]);
+    expect(r.report.regions).toEqual([]);
+    // m * v with mat2(c, -s, s, c) turns by -a, v * m with mat2(c, s, -s, c) by -a, v * rot(t) by +t.
+    expect(r.nodes.filter(n => n.type === 'negate')).toHaveLength(2);
+    expect(r.nodes.find(n => n.type === 'rotate2d' && n.params.angle === 0.3)).toBeTruthy();
+  });
+  it('a matrix that is not a rotation stays code', () => {
+    const { r } = ok('void main(){ vec2 u = gl_FragCoord.xy / u_resolution.xy; float a = u_time; u = mat2(cos(a), sin(a), sin(a), cos(a)) * u; gl_FragColor = vec4(u, 0.0, 1.0); }');
+    expect(r.nodes.some(n => n.type === 'rotate2d')).toBe(false);
+    expect(r.report.blocks.length).toBeGreaterThan(0);
+  });
+});
+
+describe('discard', () => {
+  it('`if (c) discard;` multiplies the colour by 0 there, through an RGBA Output', () => {
+    const { r } = ok('void main(){ vec2 u = gl_FragCoord.xy / u_resolution.xy; if (u.x > 0.5) discard; gl_FragColor = vec4(u, 0.0, 1.0); }');
+    const out = r.nodes.find(n => n.type === 'vec4Output')!;
+    const mul = r.nodes.find(n => n.id === out.inputs.color.connection!.nodeId)!;
+    expect(mul.type).toBe('multiply');
+    const keep = r.nodes.find(n => n.id === mul.inputs.b.connection!.nodeId)!;
+    expect(String(keep.params.expr)).toMatch(/\? thenV : elseV/);
+    expect(r.report.notes.join(' ')).toMatch(/discard/);
+  });
+  it('a discard in no branch at all makes every pixel transparent black', () => {
+    const { r } = ok('void main(){ discard; gl_FragColor = vec4(1.0); }');
+    expect(r.nodes.find(n => n.type === 'multiply')!.params.b).toBe(0);
+  });
+});
+
+describe('uniforms no node stands for', () => {
+  it('become live Constants entries and Play controls, with defaults from their names', () => {
+    const { r } = ok('uniform float u_speed; uniform float amount0; uniform float shift; uniform int steps; uniform vec2 offset; uniform vec3 tint;\nvoid main(){ vec2 u = gl_FragCoord.xy / u_resolution.xy + offset; float v = sin(u.x * float(steps) + u_time * u_speed + shift) * amount0; gl_FragColor = vec4(tint * v, 1.0); }');
+    const card = r.nodes.find(n => n.type === 'constants')!;
+    const items = card.params.items as Array<{ key: string; type: string; value: unknown; slider: boolean }>;
+    expect(items.every(i => i.slider)).toBe(true);
+    expect(Object.fromEntries(items.map(i => [i.key, [i.type, i.value]]))).toEqual({ u_speed: ['float', 1], amount0: ['float', 1], shift: ['float', 0], steps: ['float', 4], offset: ['vec2', [0, 0]], tint: ['color', [0.5, 0.5, 0.5]] });
+    expect(r.report.uniforms!.map(u => u.name)).toEqual(['u_speed', 'amount0', 'shift', 'steps', 'offset', 'tint']);
+    expect(r.controls!.map(c => c.target)).toEqual(['u_speed', 'amount0', 'shift', 'steps', 'offset_x', 'offset_y', 'tint'].map(k => `${card.id}::${k}`));
+    expect(r.controls!.find(c => c.label === 'tint')!.kind).toBe('color');
+  });
+  it('one a helper function reads is still refused, with the reason the fix-up is offered for', () => {
+    const r = glslToGraph('uniform float k;\nfloat f(float x) { return x * k; }\nvoid main(){ gl_FragColor = vec4(vec3(f(gl_FragCoord.x)), 1.0); }');
+    expect(r.report.unsupported.join(' ')).toMatch(/read inside f\(\), which can’t reach a Play control/);
   });
 });

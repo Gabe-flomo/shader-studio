@@ -42,7 +42,9 @@ for (const f of readdirSync(dir).filter(f => /\.(glsl|frag)$/.test(f)).sort()) {
       try { compiled = compileGraph({ nodes: optimizeGraph(raw.nodes, { minChain: 3, keepSliders: true }).nodes }); }
       catch (e) { compiled = { success: false, errors: [`threw: ${(e as Error).message}`] } as ReturnType<typeof compileGraph>; }
     }
-    pairs.push({ name, orig: `${head.join('\n')}\n${body}`, graph: compiled?.success ? compiled.fragmentShader : null, uniforms: compiled?.paramUniforms ?? {} });
+    // A uniform the graph made a Play control starts at a value of its own: the original gets the same.
+    const origUniforms = Object.fromEntries((raw.report.uniforms ?? []).map(u => [u.name, u.value]));
+    pairs.push({ name, orig: `${head.join('\n')}\n${body}`, graph: compiled?.success ? compiled.fragmentShader : null, uniforms: compiled?.paramUniforms ?? {}, origUniforms });
     results.push({
       name, ...(applied.length ? { fixups: applied } : {}), unsupported: raw.report.unsupported, nodes: raw.nodes.length, loops: raw.report.stats.loops,
       blocks: raw.report.blocks.map(b => b.why), regions: raw.report.regions.map(r => r.why),

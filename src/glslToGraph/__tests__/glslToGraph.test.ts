@@ -2,7 +2,7 @@
  * The GLSL → node graph experiment: every corpus shader either converts to a
  * graph the compiler accepts, or is refused up front with a reason. Pixel
  * equivalence needs a browser: see tools/g2n-roundtrip.ts + g2n-pixel-compare.mjs
- * (as of writing, 10 of 11 render identically; 08 is refused for `discard`).
+ * (as of writing, all 16 render identically; 08's `discard` is alpha 0).
  */
 import { describe, it, expect } from 'vitest';
 import { glslToGraph } from '..';
@@ -12,7 +12,7 @@ const files = import.meta.glob('./corpus/*.frag', { query: '?raw', import: 'defa
 const corpus = Object.entries(files).map(([p, src]) => [p.split('/').pop()!, src] as const).sort((a, b) => a[0].localeCompare(b[0]));
 
 describe('GLSL → node graph', () => {
-  it.each(corpus.filter(([f]) => !f.startsWith('08')))('%s converts to a graph the compiler accepts', (_f, src) => {
+  it.each(corpus)('%s converts to a graph the compiler accepts', (_f, src) => {
     const r = glslToGraph(src);
     expect(r.report.unsupported).toEqual([]);
     expect(r.nodes.some(n => n.type === 'output' || n.type === 'vec4Output')).toBe(true);
@@ -21,12 +21,17 @@ describe('GLSL → node graph', () => {
     expect(c.success).toBe(true);
   });
 
-  it('refuses what a graph can’t hold, and says why', () => {
+  it('turns `if (c) discard;` into alpha 0 through an RGBA Output, and rot() into a Rotate 2D node', () => {
     const r = glslToGraph(corpus.find(([f]) => f.startsWith('08'))![1]);
-    expect(r.nodes).toEqual([]);
-    expect(r.report.unsupported.join(' ')).toMatch(/discard/);
-    // The preview still says what would have become code, so the user knows before committing.
-    expect(r.report.regions.map(x => x.why).join(' ')).toMatch(/rot\(\) returns a mat2/);
+    expect(r.report.unsupported).toEqual([]);
+    const out = r.nodes.find(n => n.type === 'vec4Output')!;
+    const mul = r.nodes.find(n => n.id === out.inputs.color.connection!.nodeId)!;
+    expect(mul).toMatchObject({ type: 'multiply', params: { outputType: 'vec4' } });
+    expect(r.nodes.some(n => n.type === 'rotate2d')).toBe(true);
+    expect(r.report.regions.map(x => x.why).join(' ')).not.toMatch(/rot/);
+  });
+  it('still refuses a discard inside a while loop, and says why', () => {
+    expect(glslToGraph('void main(){ float x = gl_FragCoord.x; while (x > 1.0) { x *= 0.5; if (x < 3.0) discard; } gl_FragColor = vec4(x); }').report.unsupported.join(' ')).toMatch(/discard/);
   });
 
   it('is deterministic', () => {
@@ -167,25 +172,16 @@ describe('what a pasted shader brings along', () => {
   });
 });
 
-describe('inexact nodes are offered with a warning, or kept as code on request', () => {
-  const src = 'void main(){ vec2 uv = gl_FragCoord.xy / u_resolution.xy; float k = uv.x - 0.5; float v = 0.1 / k; gl_FragColor = vec4(vec3(v), 1.0); }';
-  it('warns and marks the node', () => {
-    const r = glslToGraph(src);
-    expect(r.report.warnings).toHaveLength(1);
-    expect(r.report.warnings[0].why).toMatch(/Divide node guards/);
-    const n = r.nodes.find(x => x.id === r.report.warnings[0].nodeId)!;
-    expect(n.type).toBe('divide');
-    expect(n.params.__importWarning).toBeTruthy();
-    expect(r.report.blocks).toHaveLength(0);
-  });
-  it('becomes a block when asked, keeping the same warning id', () => {
-    const first = glslToGraph(src);
-    const r = glslToGraph(src, { asBlock: new Set([first.report.warnings[0].id]) });
-    expect(r.report.warnings[0].id).toBe(first.report.warnings[0].id);
-    expect(r.report.warnings[0].nodeId).toBeUndefined();
-    expect(r.report.blocks.map(b => b.code)).toEqual(['0.1 / k']);
-    expect(r.nodes.find(n => n.type === 'exprNode')!.params.__importedCode).toBe('block');
-    expect(compileGraph({ nodes: r.nodes }).success).toBe(true);
+describe('the guarded math nodes come out exact', () => {
+  it('a divide by a value that may be negative, pow and sqrt are nodes with Exact on, and plain GLSL', () => {
+    const r = glslToGraph('void main(){ vec2 uv = gl_FragCoord.xy / u_resolution.xy; float k = uv.x - 0.5; float v = 0.1 / k + pow(k, 3.0) + sqrt(k); gl_FragColor = vec4(vec3(v), 1.0); }');
+    expect(r.report.warnings).toEqual([]);
+    expect(r.report.blocks).toEqual([]);
+    for (const t of ['divide', 'pow', 'sqrt']) expect(r.nodes.filter(n => n.type === t).every(n => n.params.exact === true)).toBe(true);
+    const c = compileGraph({ nodes: r.nodes });
+    expect(c.success).toBe(true);
+    expect(c.fragmentShader).not.toMatch(/0\.0001/);
+    expect(c.fragmentShader).not.toMatch(/sqrt\(max\(/);
   });
 
   it('expands #defines without their trailing comments, function-like ones with arguments, and leaves flags alone', () => {

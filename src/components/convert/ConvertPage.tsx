@@ -187,6 +187,8 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const wrapped = useMemo(() => wrapOriginal(checkAgainst ?? source), [source, checkAgainst]);
   const original = wrapped.code;
   const uniforms = useMemo(() => compiled?.paramUniforms ?? {}, [compiled]);
+  // A uniform the graph made a Play control starts at its own value: the original is drawn with the same.
+  const originalUniforms = useMemo(() => Object.fromEntries((raw.report.uniforms ?? []).map(u => [u.name, u.value])), [raw]);
   const graphFrag = compiled?.success ? compiled.fragmentShader : null;
   const onDiff = useCallback((d: PairDiff | null) => setDiff(d), []);
 
@@ -194,7 +196,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const canvasWrap = useRef<HTMLDivElement>(null);
   const shapeRef = useRef('');
   useEffect(() => {
-    setScratchNodes(conv.nodes);
+    setScratchNodes(conv.nodes, raw.controls);
     // Re-place the view when the graph's shape changed (new or different nodes), not on every slider edit.
     const shape = conv.nodes.map(n => n.id).join('|');
     if (shape !== shapeRef.current) {
@@ -202,7 +204,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
       const t = setTimeout(() => showStart(conv.nodes, canvasWrap.current), 80);
       return () => clearTimeout(t);
     }
-  }, [conv, setScratchNodes]);
+  }, [conv, raw.controls, setScratchNodes]);
   // The layout above spaced cards by estimated heights; once they have rendered, space them by what they
   // measure (a code card's height depends on its code), so no card overlaps the one below it.
   useEffect(() => {
@@ -338,7 +340,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
         <div style={{ padding: '14px', color: tk.text.faint, lineHeight: 1.5 }}>Paste a fragment shader, or pick an example, and press Convert. The check compares the original with the graph here.</div>
       ) : (
       <div style={{ padding: '10px 14px 0', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-        <RenderPair original={original} graph={graphFrag} uniforms={uniforms} onDiff={onDiff} size={84} />
+        <RenderPair original={original} graph={graphFrag} uniforms={uniforms} originalUniforms={originalUniforms} onDiff={onDiff} size={84} />
         <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
           {diff && 'error' in diff ? (
             <span style={{ color: tk.status.warningText, font: `600 12px ${fontFamily.ui}` }}>{diff.side === 'original' ? 'The original doesn’t compile here' : 'The converted graph doesn’t compile'}</span>

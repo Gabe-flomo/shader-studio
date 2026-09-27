@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { GraphNode, InputSocket, OutputSocket, DataType } from '../types/nodeGraph';
-import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
+import { VECTORIZABLE_NODES, swizzleTypes } from '../nodes/definitions/math';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
@@ -10,7 +10,7 @@ import { askChoice } from '../components/ui/dialogStore';
 import { buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
-import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord } from '../types/play';
+import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord, type PlayControl } from '../types/play';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
 import { buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia } from '../play/exportHtml';
@@ -379,6 +379,22 @@ function probeValuesEqual(a: Record<string, number[]>, b: Record<string, number[
     for (let i = 0; i < av.length; i++) if (av[i] !== bv[i]) return false;
   }
   return true;
+}
+
+/**
+ * A Swizzle card's sockets follow its params: the input is its input type, the output as wide as
+ * its pattern. A wire into the input that no longer fits is dropped, as the type pills do.
+ */
+function retypeSwizzle(n: GraphNode): GraphNode {
+  if (n.type !== 'swizzle') return n;
+  const { input, output } = swizzleTypes(n);
+  const inp = n.inputs.input, out = n.outputs.output;
+  if (inp?.type === input && out?.type === output) return n;
+  return {
+    ...n,
+    inputs: { ...n.inputs, input: { ...(inp ?? { label: 'Input' }), type: input as DataType, connection: inp?.type === input ? inp.connection : undefined } },
+    outputs: { ...n.outputs, output: { ...(out ?? { label: 'Output' }), type: output as DataType } },
+  };
 }
 
 /** What beginScratch keeps aside while a scratch graph is on the canvas. */
@@ -765,7 +781,8 @@ interface NodeGraphState {
    */
   scratch: ScratchSnapshot | null;
   beginScratch: () => void;
-  setScratchNodes: (nodes: GraphNode[]) => void;
+  /** `controls`: Play controls the scratch graph comes with (a converted shader's uniforms). */
+  setScratchNodes: (nodes: GraphNode[], controls?: PlayControl[]) => void;
   endScratch: (commit: boolean) => void;
   /** Empty the canvas down to UV → Output (the trash button's right-click) */
   clearToMinimal: () => void;
@@ -3418,7 +3435,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             }
           }
         }
-        return { nodes: state.nodes.map(n => n.id === nodeId ? { ...n, params: { ...n.params, ...params } } : n) };
+        return { nodes: state.nodes.map(n => n.id === nodeId ? retypeSwizzle({ ...n, params: { ...n.params, ...params } }) : n) };
       }
       // Subgraph node — also sync to group node's override keys (depth 1 only)
       const path = state.activeGroupPath;
@@ -3429,7 +3446,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         if (!activeNodes) return {};
         const newActiveNodes = activeNodes.map(sn => {
           if (sn.id !== nodeId) return sn;
-          const updated = { ...sn, params: { ...sn.params, ...params } };
+          const updated = retypeSwizzle({ ...sn, params: { ...sn.params, ...params } });
           if (sn.type === 'loopCarry' && 'dataType' in params) {
             const t = params.dataType as import('../types/nodeGraph').DataType;
             return {
@@ -3466,7 +3483,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
                 ...sg,
                 nodes: sg.nodes.map(sn => {
                   if (sn.id !== nodeId) return sn;
-                  const updated = { ...sn, params: { ...sn.params, ...params } };
+                  const updated = retypeSwizzle({ ...sn, params: { ...sn.params, ...params } });
                   // loopCarry: auto-update socket types when dataType changes
                   if (sn.type === 'loopCarry' && 'dataType' in params) {
                     const t = params.dataType as import('../types/nodeGraph').DataType;
@@ -4616,11 +4633,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       selectedNodeId: s.selectedNodeId, selectedNodeIds: s.selectedNodeIds,
     } });
   },
-  setScratchNodes: (rawNodes) => {
+  setScratchNodes: (rawNodes, controls) => {
     if (!get().scratch) get().beginScratch();
     const nodes = rawNodes.map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
     idGenerator.syncFromGraph(nodes);
-    set(st => ({ nodes, looseGroups: [], play: emptyPlayRecord(), previewNodeId: null, activeGroupId: null, activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [], nodeProbeValues: null, graphEpoch: st.graphEpoch + 1 }));
+    set(st => ({ nodes, looseGroups: [], play: { ...emptyPlayRecord(), controls: controls ?? [] }, previewNodeId: null, activeGroupId: null, activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [], nodeProbeValues: null, graphEpoch: st.graphEpoch + 1 }));
     get().compile();
   },
   endScratch: (commit) => {

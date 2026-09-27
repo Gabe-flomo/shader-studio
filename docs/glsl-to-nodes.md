@@ -9,10 +9,10 @@ same picture, prove it does by rendering both, and tell the user up front which
 parts will stay as code (Expression Blocks / Custom Functions) and which can't
 convert at all?
 
-**Short answer: yes.** The prototype converts 11 of 12 test shaders into graphs
+**Short answer: yes.** The prototype converted 11 of 12 test shaders into graphs
 that render **pixel-identical** to the original (max error 0 of 255 at 96×96,
-dithering off, same GPU), and refuses the 12th before converting, naming the
-reason (`discard`). Conversion is deterministic and takes 10–40 ms per shader.
+dithering off, same GPU), and refused the 12th before converting, naming the
+reason (`discard`, which converts now). Conversion is deterministic and takes 10–40 ms per shader.
 
 ## What exists now
 
@@ -88,11 +88,44 @@ main like any other global; one that helpers read stays a global (arrays
 don't travel as parameters here).
 
 **Vector constructors and swizzles.** `vec2(v3)` and `vec3(v4)` are the
-leading components, `vec3(v2, f)` and `vec3(f, v2)` a Make Vec3 from the
-parts, and a part of a longer vector (`.xy` of a vec3, `.zx`) is its
-components through the shared Split card into a Make Vec2/3.
+leading components; any other constructor (`vec4(v2, f, f)`, `vec4(f, v3)`,
+`vec3(v2, f)`, `vec4(x)`) is a Make Vec2/3/4 from the parts, a vector's parts
+through its shared Split card. A swizzle of one component is that Split's
+output; `.yx`, `.yzx` and the other patterns the Vec2/Vec3 Swizzle cards
+offer stay on those cards; any other pattern (`.xyx`, `.zwxy`, `.bgr`, a part
+of a longer vector) is a **Swizzle** card, which takes any pattern of one to
+four letters on a vec2, vec3 or vec4.
 
-1. **A node.** `a * b` → Multiply, `sin(x)` → Sin (freq 1, amp 1), `vec3(r, g, b)`
+**Rotations.** `mat2(c, -s, s, c)` and `mat2(c, s, -s, c)`, where c and s are
+cos and sin of one angle (written inline, through `float c = cos(a), s =
+sin(a)`, in a `mat2` variable, or returned by a helper whose whole body is
+that), times a vec2 on either side is a **Rotate 2D** node. The side and the
+form decide the sign: `mat2(c, -s, s, c) * v` turns by -a, `v * mat2(c, -s,
+s, c)` (the golf `uv *= rot(t)`) by +a; a Negate goes in front of the angle
+when it is -a. Any other matrix, or a rotation used for something other than
+turning a vec2, stays code.
+
+**`discard`.** A value like any variable: *kept*, 1 until a `discard` sets it
+to 0, merged by `if`/`else` into a ternary block. At the end the colour is
+multiplied by it into an RGBA Output, so a discarded pixel is transparent
+black, which is what a cleared canvas shows where a fragment was discarded
+(the check clears both canvases every frame). A `discard` inside a loop that
+is kept as code stays inside that code; one inside a `while` in main() is
+refused.
+
+**Uniforms no node stands for** (`uniform float speed;`) are sliders: each
+float, int, vec2 or vec3 one becomes a live entry on the Constants card and a
+Play control (a vec2 or vec3 one control per component, a colour one colour
+control), and the preview asks nothing. The starting value comes from the
+name: a scale-like name (speed, scale, zoom, size, amount, intensity, freq,
+count…) starts at 1 (an int at 4) with a 0–2 range, a vec3 named like a colour
+(col, tint, rgb) is a mid-grey colour, anything else starts at 0 (what WebGL
+gives an unset uniform) in -1–1. The check sets the original's uniform to the
+same value, so the two pictures agree. A uniform a helper function reads, a
+bool, vec4 or matrix uniform, and a sampler are still refused (the "make
+them constants" fix-up is offered).
+
+1. **A node.** `a * b` → Multiply (float, vec2, vec3 or vec4), `sin(x)` → Sin (freq 1, amp 1), `vec3(r, g, b)`
    → Make Vec3, `p.x` → Split Vec2, `smoothstep(e0, e1, x)` → Smoothstep, `gl_FragCoord`
    → Frag Coord, `u_time` → Time… **Numbers** go two ways. An anonymous one
    (`uv * 4.0`, the edges of a smoothstep) becomes the using node's own slider,
@@ -104,9 +137,9 @@ components through the shared Split card into a Make Vec2/3.
    makes a Constant node any more, and nodes nothing reads are pruned.
 2. **An Expression Block.** Anything rung 1 can't express becomes an Expression
    Block whose inputs are the live variables it reads and whose expression is
-   the original sub-expression **verbatim** (regenerated from the AST). Examples:
-   `abs(x)` (no Abs node), `.xyx` swizzles, `vec3(vec2, float)`, `mat2(...) * uv`,
-   `a / b` when `b` might be ≤ 0 (see traps). The block is as small as possible:
+   the original sub-expression **verbatim** (regenerated from the AST). Examples
+   today: a ternary from an `if`, `fwidth`, `log`, `exp2`, a comparison used as
+   a number, a matrix that isn't a rotation. The block is as small as possible:
    only the offending sub-expression, so its neighbours still become nodes.
 3. **A Custom Function region.** A call to a user function, or a loop that can't
    be a group, becomes a Custom Function node carrying that code plus every
@@ -143,10 +176,13 @@ makes the call, and returns everything the call produced packed into one
 vector when it fits in four components (else several regions, each calling
 again); blocks pull the values back out and the out variables take them.
 
-The **report** lists every block and region with the reason, counts sliders
-and loops, and lists what makes the shader unconvertible (`unsupported`):
-`discard`, textures, uniforms with no source node, non-const globals, arrays,
-`return` in main. That report is the preview step.
+The **report** lists every block and region with the reason (code that
+ended up unused, like a rotation matrix a Rotate 2D node replaced, is left
+out), counts sliders and loops, says which uniforms became Play controls and
+at what values (`uniforms`, and `controls` on the result), and lists what
+makes the shader unconvertible (`unsupported`): textures, a uniform a helper
+reads, a global array a helper reads, a write inside an expression that a
+later line reads, `uint`. That report is the preview step.
 
 The graph is laid out in columns by depth (sources left, Output right).
 
@@ -162,7 +198,7 @@ The graph is laid out in columns by depth (sources left, Output right).
 | 16 | array of planets, loop indexed by the counter (unrolled), `vec2(vec3)` | 67 | 2 | 0 | 1 | identical |
 | 06 | `for` loop, 4 iterations → iterated group carrying `a` | 16 | 0 | 0 | 5 | identical |
 | 07 | plasma (sqrt) | 49 | 1 | 0 | 15 | identical |
-| 08 | rotation + hash + `discard` | – | – | – | – | **refused: `discard`** (preview still lists 2 regions) |
+| 08 | rotation + hash + `discard` | – | – | – | – | was refused for `discard`; now converts (a Rotate 2D node, alpha 0 where it discards) and gives the same picture |
 | 09 | Shadertoy fbm (`mainImage`, 3 nested helpers, loop) | 15 | 0 | 1 | 0 | identical |
 | 10 | inline `mat2` rotation, box SDF | 25 | 4 | 0 | 4 | identical |
 | 11 | raymarcher (64-step loop with `break`) | 18 | 2 | 1 | 2 | identical |
@@ -183,12 +219,13 @@ PSNR ≥ 40 dB counts as "same"; anything else shows the diff.
 
 - **Several math nodes are "safe" versions of GLSL, not GLSL.** Divide emits
   `a / max(b, 0.0001)` (wrong for negative divisors), Pow clamps its base to ≥ 0,
-  Sqrt clamps its input. The converter maps `/` to Divide only when the divisor
-  is provably positive (a literal, the resolution or one of its components) and
-  never maps `pow`/`sqrt`; otherwise it keeps the original text in a block. The
-  equivalence check is what makes this visible: an early version mapped `/`
-  blindly and was caught. A future "exact" flag on those nodes would let more
-  expressions become nodes.
+  Sqrt clamps its input. Each now has an **Exact** switch on its card: off by
+  default (a hand-built graph keeps its guard, so a drag never lands on inf or
+  NaN), on for every Divide, Pow and Square Root the converter makes (the plain
+  GLSL call, so the picture is the code's). The equivalence check is what made
+  this visible: an early version mapped `/` blindly and was caught. With the
+  switch there is nothing left to offer as an inexact node, so the page's "Not
+  quite GLSL" list is empty; the mechanism stays for the next such node.
 - **Sliders are uniforms.** The compiled graph reads slider values from uniforms
   (`paramUniforms`), so any standalone render of graph GLSL must set them; the
   first comparison run had every slider at 0.
@@ -223,9 +260,9 @@ PSNR ≥ 40 dB counts as "same"; anything else shows the diff.
 
 | Construct | Today | Plan |
 |---|---|---|
-| `discard` | refused | `if (c) discard;` → alpha 0 through Output (RGBA); a general `discard` stays refused |
+| `discard` | done: `if (c) discard;` multiplies the colour by 0 there, through an RGBA Output (transparent black) | a `discard` inside a `while` in main() stays refused |
 | textures / `iChannelN` | read as black (the whole `texture(iChannelN, …)` call, however many parentheses it holds) | Texture Input node + `texture2D` → its colour/alpha outputs; iChannel slots become upload prompts in the preview |
-| unknown uniforms | refused; a **fix-up** makes each a const holding 0 (what WebGL gives an unset uniform), and a sampler black | become Play controls (a uniform *is* a slider) or Constants entries; the preview asks for a default |
+| unknown uniforms | done: a float, int, vec2 or vec3 uniform is a live Constants entry and a Play control, its starting value from its name, the check setting the original's uniform to the same | one a helper function reads (thread it as a parameter, as mutable globals are); bool, vec4, matrix uniforms |
 | global `const`s | done (const arrays travel as region text) | on the Constants card and in region text |
 | global variables (mutable) | done when only main() writes them (a parameter of every reader, forward declarations included) | a global a helper writes stays refused |
 | a global array a helper reads (`vec3 palette[7]` filled in main) | refused; a **fix-up** turns one main() fills with fixed values into a function (`vec3 palette(int i)`) | one filled at run time (black hole distortion's `pt[]`): arrays as parameters are legal ES 1.00 but niche |
@@ -237,13 +274,18 @@ PSNR ≥ 40 dB counts as "same"; anything else shows the diff.
 | `uint`, `<<`, `^` (GLSL ES 3.00 integers) | refused; a **fix-up** puts a float hash in a float function built on them (a different random pattern, and it says so) | policy call: the Studio preview is WebGL2 and could run them, Play (WebGL1) can't |
 | `#ifdef` / `#ifndef` / `#if 0` / `#else` / `#endif` | done, against the shader's own `#define`s | `#if` with arithmetic |
 | statement macros (`#define S col += x;`), `\`-continued `#define`s | done: macros expand without added parentheses, as the preprocessor does | |
-| writes to several components (`col.rgb =`, `O.xz +=`, `gl_FragColor.a =`) | done: vec2/vec3 through Split and Make, vec4 through a block | |
+| writes to several components (`col.rgb =`, `O.xz +=`, `gl_FragColor.a =`) | done: vec2, vec3 and vec4 through Split and Make | |
 | an assignment or `++` inside an expression (golf: `O = ++h`, `mod(U += T, T)`) | kept inside its block when nothing reads the variable afterwards; **refused** when something does (a block gets its inputs by value, so the write would be lost and the picture silently differ); a **fix-up** gives each write a line of its own | |
 | comma operator | `a = x, b += y;` is two statements; `(x, y)` is y; a comma with writes stays code | |
-| vec4 arithmetic, `vec3` length/dot/normalize, `abs`, `pow`, `sqrt`, `min/max` on vectors, `tanh` on vectors | block | new nodes or type-generic versions of existing ones; an "exact" switch on Divide/Pow/Sqrt |
+| vec4 arithmetic, vec4 constructors, a final colour with its own alpha | done: Add/Subtract/Multiply/Divide and the other type-picked nodes take vec4 (the card's pills offer v4), a **Make Vec4** card builds one | |
+| `abs`, `ceil`, `tanh`, `min`/`max`, `pow`, `step`, `sqrt` on vectors | done: type-generic versions (the card's type pills); `min(v, 0.5)` keeps a float B, `pow(v, v)` and `step(e, v)` type the second socket to match | |
+| `length`, `dot`, `normalize` on vec3/vec4 | done: the card's type is its input's (vec2 by default, so older graphs are unchanged) | |
+| the Divide / Pow / Sqrt guards | done: an **Exact** switch, on for converted nodes | |
+| `.xyx`-style swizzles | done: a **Swizzle** card (any pattern, any width) | |
+| `mat2(c,-s,s,c) * v`, `v * m`, `uv *= rot(t)` | done: a **Rotate 2D** node when c and s are cos and sin of one angle | golf rotations `mat2(cos(a + vec4(0, 11, 33, 0)))` are approximate (33 ≈ 10.5π), so they stay code |
 | matrix products (`v * mat3(…)`) | block | a Transform node |
-| `.xyx`-style swizzles | block | a general Swizzle node (any pattern, any width) |
-| `mat2(c,-s,s,c) * v` | block | recognise the rotate pattern → Rotate 2D node |
+| a ternary from `if`/`else` | block `(c) ? a : b` | the Select node is `mix` (not the same for inf/NaN); an exact Select would take these |
+| `fwidth`, `log`, `exp2`, `atan(y_over_x)`, a comparison as a number | block | small nodes of their own; cheap but rare in the corpus (1–2 each) |
 
 ## The user corpus (50 shaders)
 
@@ -257,13 +299,25 @@ npx tsx tools/g2n-corpus.mts src/glslToGraph/__tests__/corpus/user /tmp/g2n   # 
 node tools/g2n-corpus-check.mjs /tmp/g2n                                      # RenderPair's check, headless Chrome
 ```
 
-| | Before | After |
-|---|---|---|
-| Same picture (the page's check as it was, WebGL1) | 17 | – |
-| Same picture (WebGL2, as the app renders) | 21 | **41** |
-| Differs | 2 (moire, oragami: silently wrong) | 3 (a handful of pixels, see below) |
-| Graph doesn't compile / check can't run | 4 | 0 |
-| Refused | 23 | 6 |
+| | Before | After | Phase 2 |
+|---|---|---|---|
+| Same picture (the page's check as it was, WebGL1) | 17 | – | – |
+| Same picture (WebGL2, as the app renders) | 21 | 41 | **41** |
+| Differs | 2 (moire, oragami: silently wrong) | 3 (a handful of pixels, see below) | 3 (the same three) |
+| Graph doesn't compile / check can't run | 4 | 0 | 0 |
+| Refused | 23 | 6 | 6 |
+| Expression Blocks, over the 44 that convert | – | 127 | **26** |
+| Custom Functions (regions) | – | 103 | 99 |
+| Nodes | – | 1235 | 1524 |
+
+Phase 2 (the Exact switch, vec4, type-generic nodes, Swizzle, rotations,
+discard, uniforms) took the blocks from 127 to 26 without a Same picture
+lost; the pictures that were identical are still identical (most at 0/255).
+The blocks left: 7 ternaries from `if`, 4 matrix products, 3 writes inside an
+expression nothing reads after, 3 golf rotations `mat2(cos(a + vec4(…)))`, 2
+`fwidth`, and one each of `log`, `exp2`, `atan(x)`, a comparison, a mat3 and a
+mat2 that isn't a rotation. The 16 small shaders in `corpus/` all give the same
+picture now (08, refused for `discard`, included), with 3 blocks, all ternaries.
 
 Still refused: Fractal anxiety and black hole distortion (a global array
 helpers read), moire, oragami and rosace (a write inside an expression that a
@@ -457,10 +511,12 @@ No randomness, no timestamps in ids (ids are sequential per conversion).
   offline renderer (the export path already renders a graph at a fixed time and
   reads pixels back; render the original through the GLSL page's material the
   same way). ~1 week.
-- *Phase 2 (coverage):* the node additions in the table above, an "exact" switch
-  on the guarded math nodes, discard→alpha, unknown uniforms → Play controls.
-  Each addition moves shaders from blocks to nodes; the corpus and pixel gate
-  keep them honest. ~1–2 weeks, incremental.
+- *Phase 2 (coverage), done:* the node additions in the table above, an Exact
+  switch on the guarded math nodes, discard → alpha, unknown uniforms → Play
+  controls. Blocks over the user corpus went from 127 to 26 with no Same
+  picture lost (see the corpus section). Left from the table: matrix products
+  (a Transform node), an exact Select for `if` ternaries, textures, and the
+  few rare built-ins.
 - *Phase 3 (quality):* common-subexpression sharing (hash-consing on
   `(op, inputs, params)`), pattern recognition for the app's higher-level nodes
   (palette, SDF shapes, rotate), a layout pass that groups a helper function's
