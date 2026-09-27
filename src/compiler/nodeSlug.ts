@@ -71,6 +71,10 @@ const TYPE_ABBREV: Record<string, string> = {
 
 /** Convert a human label to a safe GLSL identifier fragment. */
 export function slugifyLabel(label: string): string {
+  // A camelCase title (a Convert import titles cards with the shader's own variable names,
+  // `electricField`) is kept as written, so the generated code reads like the source. Other
+  // titles slug as before (lower case, 16 characters).
+  if (/^[a-z][A-Za-z0-9]*(_[A-Za-z0-9]+)*$/.test(label) && /[A-Z]/.test(label) && label.length <= 24) return label;
   return label
     .toLowerCase()
     .replace(/\s+/g, '_')

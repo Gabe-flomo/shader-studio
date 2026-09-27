@@ -28,6 +28,7 @@ import { tokenizeJsLine } from '../components/code/jsSyntax';
 import { resolveCode } from './code';
 import { baseValue, mappingsByControl } from './controls';
 import { sourceLimits } from './snapshot';
+import { rangeIncluding } from '../lib/rangeMath';
 import { aspectRatio, PRESENTATION_FILE_KIND, type Block, type Presentation, type PresentSource } from '../types/presentation';
 import type { MarkdownOptions } from './markdown';
 import { creditPlace, creditSentence } from '../types/credit';
@@ -134,9 +135,11 @@ function interactiveHtml(b: Extract<Block, { type: 'interactive' }>, s: PresentS
       return `<div class="pp-control" data-control="${esc(c.id)}"><div class="pp-row"><b>${esc(labels[c.id])}</b></div><input type="color" value="${hex}" aria-label="${esc(labels[c.id])}">${hint}${badges}</div>`;
     }
     const n = typeof v === 'number' ? v : c.min;
-    const step = c.step ?? (c.max - c.min) / 400;
+    // A value past the control's range widens it: a native range input would clamp it on load.
+    const { min: lo, max: hi } = rangeIncluding(n, c.min, c.max);
+    const step = c.step ?? (hi - lo) / 400;
     const d = step >= 1 ? 0 : step >= 0.1 ? 1 : step >= 0.01 ? 2 : 3;
-    return `<div class="pp-control" data-control="${esc(c.id)}"><div class="pp-row"><b>${esc(labels[c.id])}</b><span class="pp-value">${n.toFixed(d)}</span></div><input type="range" min="${c.min}" max="${c.max}" step="${step}" value="${n}" aria-label="${esc(labels[c.id])}">${hint}${badges}</div>`;
+    return `<div class="pp-control" data-control="${esc(c.id)}"><div class="pp-row"><b>${esc(labels[c.id])}</b><span class="pp-value">${n.toFixed(d)}</span></div><input type="range" min="${lo}" max="${hi}" step="${step}" value="${n}" aria-label="${esc(labels[c.id])}">${hint}${badges}</div>`;
   }).join('');
   const enable = `${needs.has('midi') ? '<button type="button" class="pp-btn pp-enable-midi">Enable MIDI</button>' : ''}${needs.has('audio') ? '<button type="button" class="pp-btn pp-listen">Listen</button>' : ''}`;
   const text = b.markdown.trim() ? `<div class="pp-md">${render(b.markdown, { math, controls: labels, layers })}</div>` : '';

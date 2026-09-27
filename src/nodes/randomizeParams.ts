@@ -1,5 +1,6 @@
 import type { GraphNode, NodeDefinition, ParamDef, SubgraphData, SurfacedParam } from '../types/nodeGraph';
 import { getNodeDefinitionFor } from './definitions';
+import { hasCustomRange, paramSliderRange } from './sliderRange';
 import { isParamVisible } from '../compiler/uniformPatcher';
 import { isKeyframeBypassed, socketHasKeyframes } from '../compiler/keyframes';
 
@@ -41,11 +42,8 @@ export function randomizedParams(node: GraphNode, def: NodeDefinition, rand: () 
 
 /** Same effective range as the card's ruler (NodeComponent's float row) */
 function floatRange(node: GraphNode, key: string, pd: ParamDef): [number, number] {
-  const customMax = typeof node.params[`__scMax_${key}`] === 'number' ? node.params[`__scMax_${key}`] as number : null;
-  const bidir = node.params[`__scBidir_${key}`] === true;
-  if (customMax === null && pd.min === undefined && pd.max === undefined) return [-1, 1];
-  const max = customMax ?? pd.max ?? 1;
-  const min = bidir ? -max : customMax !== null ? 0 : pd.min ?? 0;
+  if (!hasCustomRange(node.params, key) && pd.min === undefined && pd.max === undefined) return [-1, 1];
+  const { min, max } = paramSliderRange(node.params, key, pd);
   return [min, max];
 }
 

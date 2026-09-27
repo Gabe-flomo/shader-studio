@@ -22,6 +22,7 @@ import { TYPE_COLORS } from './typeColors';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
+import { hasCustomRange, paramSliderRange, rangePatch, resetRangePatch } from '../../nodes/sliderRange';
 import { frozenValueOf } from '../../nodes/sliderFreeze';
 import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -2554,10 +2555,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 const overrideKey = `${innerNode.id}::${paramKey}`;
                 const rawVal = node.params[overrideKey] ?? innerNode.params[paramKey];
                 const currentVal = typeof rawVal === 'number' ? rawVal : (typeof paramDef.min === 'number' ? paramDef.min : 0);
-                const innerBidir = innerNode.params[`__scBidir_${paramKey}`] === true;
-                const innerCustomMax = typeof innerNode.params[`__scMax_${paramKey}`] === 'number' ? innerNode.params[`__scMax_${paramKey}`] as number : null;
-                const effMax = innerCustomMax ?? (paramDef.max ?? 1);
-                const effMin = innerBidir ? -effMax : (innerCustomMax != null ? 0 : (paramDef.min ?? 0));
+                const { min: effMin, max: effMax } = paramSliderRange(innerNode.params, paramKey, paramDef);
                 const innerDefault = innerDef?.defaultParams?.[paramKey];
                 return groupParamRow({
                   rowKey: paramKey, psKey, label: paramDef.label, value: currentVal, min: effMin, max: effMax,
@@ -3976,10 +3974,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             }
             const step = paramDef.step ?? 0.01;
             const bidir = node.params[`__scBidir_${key}`] === true;
-            const customMax = typeof node.params[`__scMax_${key}`] === 'number' ? node.params[`__scMax_${key}`] as number : null;
-            const baseMax = paramDef.max ?? 1;
-            const effMax = customMax ?? baseMax;
-            const effMin = bidir ? -effMax : (customMax != null ? 0 : (paramDef.min ?? 0));
+            const customRange = hasCustomRange(node.params, key);
+            const { min: effMin, max: effMax } = paramSliderRange(node.params, key, paramDef);
             const defVal = def?.defaultParams?.[key];
             const hovered = hoveredSliderKey === key;
             const drive = playDriven.get(`${node.id}::${key}`);
@@ -4019,6 +4015,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                     defaultValue={typeof defVal === 'number' ? defVal : (effMin + effMax) / 2}
                     onChange={v => setFloat(key, String(v))}
                     onType={handleTyped}
+                    onRange={(lo, hi) => updateNodeParams(node.id, rangePatch(key, lo, hi))}
                     ariaLabel={paramDef.label}
                     touch={isTouchDevice}
                     disabled={!!drive}
@@ -4026,12 +4023,12 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 )}
                 {/* Range tools: bidirectional (±max) and, after typing past the range, reset it.
                     Always there (faint until needed) so hovering never moves the slider under the pointer. */}
-                <div style={{ display: 'flex', gap: 1, marginRight: -6, opacity: hovered || bidir || customMax != null ? 1 : 0.4, transition: 'opacity 120ms' }}>
+                <div style={{ display: 'flex', gap: 1, marginRight: -6, opacity: hovered || bidir || customRange ? 1 : 0.4, transition: 'opacity 120ms' }}>
                   <CardButton icon="bidir" on={bidir}
                     label={bidir ? `Range is −${+effMax.toFixed(3)} to ${+effMax.toFixed(3)}: click for 0 to max` : 'Make the range run both ways (−max to max)'}
-                    onClick={() => updateNodeParams(node.id, { [`__scBidir_${key}`]: !bidir })} />
-                  {customMax != null && (
-                    <CardButton icon="reset" label="Reset the slider range" onClick={() => updateNodeParams(node.id, { [`__scMax_${key}`]: null })} />
+                    onClick={() => updateNodeParams(node.id, { [`__scBidir_${key}`]: !bidir, [`__scMin_${key}`]: null })} />
+                  {customRange && (
+                    <CardButton icon="reset" label="Reset the slider range" onClick={() => updateNodeParams(node.id, resetRangePatch(key))} />
                   )}
                 </div>
               </div>
@@ -4187,6 +4184,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                       defaultValue={(sl.min + sl.max) / 2}
                       onChange={v => updateNodeParams(node.id, { [inp.name]: v }, { immediate: true })}
                       onType={n => updateNodeParams(node.id, { [inp.name]: n }, { immediate: true })}
+                      onRange={(lo, hi) => updateNodeParams(node.id, { inputs: cfInputs.map(i => (i.name === inp.name ? { ...i, slider: { min: lo, max: hi } } : i)) })}
                       ariaLabel={inp.name}
                       touch={isTouchDevice}
                     />

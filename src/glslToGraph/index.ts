@@ -34,6 +34,7 @@ import { ES3_INTEGER, ES3_INTEGER_NOTE } from '../glsl/dialects';
 import type { ConstantsItem } from '../nodes/definitions/constants';
 import type { PlayControl } from '../types/play';
 import { ALWAYS_HELPERS_GLSL } from '../compiler/shaderAssembler';
+import { rangeForValue } from '../lib/rangeMath';
 
 type T = 'float' | 'vec2' | 'vec3' | 'vec4';
 interface Ref { nodeId: string; outputKey: string; type: T; /** A literal's value and, when it initialised a variable, that name. */ lit?: number; name?: string }
@@ -412,6 +413,27 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   const anon = (v: Val): v is Val & { lit: number } => v.lit !== undefined && !v.name;
   /** A Val as a node output. A literal is a pending Ref: `mk` folds it into a slider or makes it a node. */
   const asRef = (v: Val): Ref => v.ref ?? { nodeId: LIT, outputKey: 'value', type: 'float', lit: v.lit ?? 0, ...(v.name ? { name: v.name } : {}) };
+  /**
+   * The shader's names on the cards: `vec3 electricField = …` titles the card that value came out
+   * of "electricField" (and the compiler names its variable after it). Only a card made for this
+   * statement (`mark` is the scope's length before it), with one output and no title of its own:
+   * a shared source, a Split read by many, a function's region keep theirs. A name given twice in
+   * one scope (a reassignment) reads name, name_2, … so every title stays unique.
+   */
+  const labelsIn = new WeakMap<GraphNode[], Set<string>>();
+  const UNTITLED = new Set(['constants', 'output', 'vec4Output', 'group']);
+  function titleWith(v: Val, name: string, mark: number): void {
+    if (!v.ref || !/^[A-Za-z_]\w*$/.test(name) || /^gl_/.test(name) || name.endsWith('_')) return;
+    const i = sink.findIndex(n => n.id === v.ref!.nodeId);
+    if (i < mark) return;
+    const n = sink[i];
+    if (UNTITLED.has(n.type) || Object.keys(n.outputs).length !== 1 || (typeof n.params.label === 'string' && n.params.label)) return;
+    for (const r of sourceRefs.values()) if (r.nodeId === n.id) return;
+    let used = labelsIn.get(sink); if (!used) labelsIn.set(sink, used = new Set());
+    let label = name; for (let k = 2; used.has(label); k++) label = `${name}_${k}`;
+    used.add(label);
+    n.params.label = label;
+  }
 
   // ── Types ──────────────────────────────────────────────────────────────────
   type Env = Map<string, Val>;
@@ -993,7 +1015,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         return;
       }
       const prev = env.get(name);
-      { const v = expr(rhsAst, env, prev?.type); const w = prev?.int ? { ...v, int: true } : v; env.set(name, w.lit !== undefined ? { ...w, name: w.name ?? name } : w); }
+      { const mark = sink.length; const v = expr(rhsAst, env, prev?.type); titleWith(v, name, mark); const w = prev?.int ? { ...v, int: true } : v; env.set(name, w.lit !== undefined ? { ...w, name: w.name ?? name } : w); }
       return;
     }
     if (left.type === 'postfix' && (left.postfix as Ast).type === 'field_selection' && (left.expression as Ast).type === 'identifier') {
@@ -1217,7 +1239,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
           }
           const isInt = ty === 'int' || undefined;
           // A number keeps the first name it was given: `float k = SIZE;` reads SIZE's constant, not a second one.
-          if (d.initializer) { const v = { ...expr(d.initializer as Ast, env, (ty in N_OF ? ty : undefined) as T | undefined), int: isInt }; env.set(name, v.lit !== undefined ? { ...v, name: v.name ?? name } : v); }
+          if (d.initializer) { const mark = sink.length; const v = { ...expr(d.initializer as Ast, env, (ty in N_OF ? ty : undefined) as T | undefined), int: isInt }; titleWith(v, name, mark); env.set(name, v.lit !== undefined ? { ...v, name: v.name ?? name } : v); }
           else env.set(name, { lit: ty === 'float' || ty === 'int' ? 0 : undefined, type: (ty in N_OF ? ty : 'float') as T, ast: { type: 'zero' }, int: isInt });
         }
         return;
@@ -1351,7 +1373,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     // (regions also get their text). One a graph can't hold (a matrix) stays text-only.
     for (const c of consts) {
       if (!c.init) continue;
-      try { const v = { ...expr(c.init, env), int: c.type === 'int' || undefined }; env.set(c.name, v.lit !== undefined ? { ...v, name: v.name ?? c.name } : v); }
+      try { const mark = sink.length; const v = { ...expr(c.init, env), int: c.type === 'int' || undefined }; titleWith(v, c.name, mark); env.set(c.name, v.lit !== undefined ? { ...v, name: v.name ?? c.name } : v); }
       catch (e) { if (!(e instanceof Unsupported || e instanceof Unmapped)) throw e; }
     }
     stmts(((main!.body as Ast).statements as Ast[]), env);
@@ -1641,12 +1663,10 @@ function tokenOf(spec: Ast | undefined): string {
   return '';
 }
 
-/** A slider range that shows a literal comfortably: symmetric around zero for small values, 0..2× for larger ones. */
+/** A literal's slider range (see rangeForValue): always holds it, with room either side. */
 function sliderRange(v: number): { min: number; max: number } {
-  const a = Math.abs(v);
-  if (a <= 1) return { min: v < 0 ? -1 : 0, max: 1 };
-  const top = Math.pow(10, Math.ceil(Math.log10(a * 2)));
-  return { min: v < 0 ? -top : 0, max: top };
+  const { min, max } = rangeForValue(v);
+  return { min, max };
 }
 
 /** Drop nodes nothing reads, repeatedly, keeping outputs and `keep`. */
