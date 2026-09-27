@@ -53,6 +53,18 @@ export function drumFxSummary(fx: PlayAudioFx | undefined, layerId: string): str
 }
 
 /** The sidebar's card: what's loaded, a small grid to play, the effects and Volume, and the way to the full editor. */
+/** Whether the kit has anything sounding; polled while the editor shows, so Stop appears and goes on its own. */
+function useSounding(layerId: string): boolean {
+  const [n, setN] = useState(() => playDrumPads.playing(layerId));
+  useEffect(() => {
+    const read = () => setN(playDrumPads.playing(layerId));
+    const off = playDrumPads.subscribe(read);
+    const id = window.setInterval(read, 250);
+    return () => { off(); window.clearInterval(id); };
+  }, [layerId]);
+  return n > 0;
+}
+
 function DrumPadSummary({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const l = f.l as DrumPadLayer;
   const tk = f.tk;
@@ -61,6 +73,7 @@ function DrumPadSummary({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   useEffect(() => playDrumPads.subscribe(() => { window.setTimeout(() => setTick(t => t + 1), 140); }), []);
   const splitOk = usePlaySplit(s => s.available) && !ctx.touch;
   const [sheet, setSheet] = useState(false);
+  const sounding = useSounding(l.id);
   const loaded = l.pads.filter(padHasSound).length;
   const now = performance.now();
   const open = () => { if (!splitOk || !openLayerInSplit(l.id)) setSheet(true); };
@@ -97,12 +110,15 @@ function DrumPadSummary({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           <Button size="sm" variant="primary" icon={splitOk ? 'splitPanel' : 'sliders'} onClick={open} title={splitOk ? 'Edit the pads, their samples and how they play in the split view’s big Layers panel' : 'Edit the pads, their samples and how they play'}>
             {splitOk ? 'Open in split view' : 'Open full editor'}
           </Button>
-          <Button size="sm" icon="pause" onClick={() => playDrumPads.stopAll(l.id)} title="Stop everything sounding">Stop</Button>
+          {sounding && <Button size="sm" icon="pause" onClick={() => playDrumPads.stopAll(l.id)} title="Stop everything sounding">Stop</Button>}
         </div>
       </Section>
       {sheet && (
-        <Sheet title={l.label} onClose={() => setSheet(false)} maxHeight="100dvh">
+        <Sheet title={l.label} onClose={() => setSheet(false)} maxHeight="94dvh">
           <DrumPadFull f={f} ctx={{ ...ctx, big: true }} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 0 6px' }}>
+            <Button variant="primary" onClick={() => setSheet(false)}>Done</Button>
+          </div>
         </Sheet>
       )}
     </>
@@ -117,6 +133,7 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const [busy, setBusy] = useState(-1);
   const [over, setOver] = useState(-1);
   const fileRef = useRef<HTMLInputElement>(null);
+  const sounding = useSounding(l.id);
   // Lights fade: draw again a moment after a hit.
   const [, setTick] = useState(0);
   useEffect(() => playDrumPads.subscribe(() => { window.setTimeout(() => setTick(t => t + 1), 140); }), []);
@@ -175,6 +192,7 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
                 aria-label={`Pad ${i + 1}: ${has ? padName(p, i) : 'empty'}`}
                 title={has ? `${padName(p, i)} · key ${keyName(DP_KEYS[i])} · note ${l.baseNote + i}. Drop a sound here to replace it.` : 'Empty: drop a sound here, or select it and pick one below.'}
                 onPointerDown={e => down(i, e)}
+                onClick={() => { if (!has && ctx.touch) { setSel(i); fileRef.current?.click(); } }}
                 onPointerUp={() => up(i)}
                 onPointerLeave={e => { if (e.buttons) up(i); }}
                 onDragOver={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setOver(i); } }}
@@ -192,15 +210,15 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
                 </span>
                 <span style={{ display: 'flex', justifyContent: 'space-between', color: st === 'missing' || st === 'error' ? tk.status.danger : tk.text.faint, font: `500 9.5px ${fontFamily.mono}` }}>
                   <span>{st === 'missing' ? 'missing' : st === 'error' ? 'error' : i + 1}</span>
-                  {l.keys && <span>{keyName(DP_KEYS[i])}</span>}
+                  {l.keys && !ctx.touch && <span>{keyName(DP_KEYS[i])}</span>}
                 </span>
               </button>
             );
           })}
         </div>
-        {note('Click a pad to play it (higher is harder) and edit it below. Drop sound files on pads to load them.')}
+        {note(ctx.touch ? 'Tap a pad to play it (higher is harder); tap an empty pad to add a sound.' : 'Click a pad to play it (higher is harder) and edit it below. Drop sound files on pads to load them.')}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-          <Button size="sm" icon="pause" onClick={() => playDrumPads.stopAll(l.id)} title="Stop everything sounding">Stop</Button>
+          {sounding && <Button size="sm" icon="pause" onClick={() => playDrumPads.stopAll(l.id)} title="Stop everything sounding">Stop</Button>}
           {!mine && <Button size="sm" icon="wave" onClick={listenHere} title="Point the setup’s audio readers at these pads">Readers listen here</Button>}
           <Button size="sm" variant={mine ? 'primary' : 'ghost'} icon="wave" onClick={openReaders} title="The spectrum and readers, listening to these pads">Audio readers…</Button>
         </div>
