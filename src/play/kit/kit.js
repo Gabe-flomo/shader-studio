@@ -239,6 +239,13 @@ export function createLayerKit() {
     else if (env.hidden && !env.transparent) { ctx.fillStyle = klCss(env.backdrop || [0, 0, 0]); ctx.fillRect(0, 0, W, H); }
     else if (env.background && !env.transparent) ctx.drawImage(gl, 0, 0);
     const layers = record.layers;
+    // The overlay sits over the GL canvas, so a blend mode would only meet the other layers. When one
+    // is in use, copy the shader in underneath first so multiply, screen, difference… act on it too.
+    // (Not with the Layers node: there the shader already shows the layers.)
+    const shaderOnGl = bq ? bq.direct : !env.background && !env.hidden;
+    if (shaderOnGl && !env.transparent && !env.shaderTap && env.gl && layers.some(l => l.visible !== false && l.blend && l.blend !== 'normal')) {
+      try { ctx.drawImage(env.gl, 0, 0, W, H); } catch (err) { /* no picture to copy yet */ }
+    }
     const ids = new Set(layers.map(l => l.id));
     for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
     // Sketch sources that left the queue (or whose layer did) stop keeping state.
