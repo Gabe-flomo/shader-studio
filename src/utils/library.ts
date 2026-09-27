@@ -12,10 +12,13 @@
  * Importing never overwrites: new things are added; a graph whose name is
  * taken comes in as "<name> (imported)" with its versions; a preset or
  * setting you already have is kept as yours; lists (palettes, folders,
- * favourites) are merged. ZIPs from the old Backup button (graphs/presets/
- * functions folders, no library.json) import too.
+ * favourites) are merged. A presentation is checked (parsePresentation) and,
+ * when its name is taken by a different one, comes in as "<name> (2)".
+ * ZIPs from the old Backup button (graphs/presets/functions folders, no
+ * library.json), a lone .present.json and ZIPs of them import too.
  */
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import { PRESENTATION_FILE_KIND, parsePresentation, type Presentation } from '../types/presentation';
 
 export const LIBRARY_KIND = 'shader-studio-library';
 export const LIBRARY_FILE = 'library.json';
@@ -44,6 +47,9 @@ export interface LibrarySnapshot {
 const EXTRA_KEYS = new Set(['nodepalette_favorites', 'fn_builder_groups_v1', 'fn_builder_saved_fns_v1', 'assetbrowser_folders', 'codePanel_height']);
 const GRAPH_PREFIX = 'shader-studio:';
 const VERSIONS_PREFIX = 'shader-studio-versions:';
+export const PRESENTATION_KEY_PREFIX = 'shader-studio-presentation:';
+/** The folder scope of the Present page's list of presentations. */
+export const PRESENTATION_FOLDER_SCOPE = 'presentations';
 
 /** Stored under a prefix: what it is, where it goes in the ZIP, and its folder scope. */
 const KINDS: Array<{ prefix: string; dir: string; scope?: string }> = [
@@ -53,7 +59,7 @@ const KINDS: Array<{ prefix: string; dir: string; scope?: string }> = [
   { prefix: 'shader-studio:tp:', dir: 'transforms' },
   { prefix: 'shader-studio:kfp:', dir: 'keyframe presets' },
   { prefix: 'shader-studio:un:', dir: 'published nodes' },
-  { prefix: 'shader-studio-presentation:', dir: 'presentations' },
+  { prefix: PRESENTATION_KEY_PREFIX, dir: 'presentations', scope: PRESENTATION_FOLDER_SCOPE },
 ];
 const NAMED_FILES: Record<string, string> = {
   'shader-studio:palette-presets': 'palettes.json',
@@ -88,15 +94,16 @@ export function takeSnapshot(kv: KV = localKV): LibrarySnapshot {
 }
 
 /** How much is in a snapshot, for the UI ("12 graphs · 30 presets"). */
-export function describeSnapshot(s: LibrarySnapshot): { graphs: number; presets: number; nodes: number; other: number } {
-  let graphs = 0, presets = 0, nodes = 0, other = 0;
+export function describeSnapshot(s: LibrarySnapshot): { graphs: number; presets: number; nodes: number; presentations: number; other: number } {
+  let graphs = 0, presets = 0, nodes = 0, presentations = 0, other = 0;
   for (const [k, v] of Object.entries(s.items)) {
     if (isGraphKey(k, v)) graphs++;
     else if (k.startsWith('shader-studio:un:')) nodes++;
+    else if (k.startsWith(PRESENTATION_KEY_PREFIX)) presentations++;
     else if (KINDS.some(x => k.startsWith(x.prefix))) presets++;
     else if (!k.startsWith(VERSIONS_PREFIX)) other++;
   }
-  return { graphs, presets, nodes, other };
+  return { graphs, presets, nodes, presentations, other };
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
@@ -119,7 +126,7 @@ export function readableFiles(s: LibrarySnapshot, folders: Record<string, string
   const out: Record<string, string> = {};
   const put = (path: string, content: string) => {
     let p = path, n = 2;
-    while (p in out) p = path.replace(/(\.json)?$/, ` (${n++})$1`);
+    while (p in out) p = path.replace(/((\.present)?\.json)?$/, ` (${n++})$1`);
     out[p] = content;
   };
   const settings: Record<string, unknown> = {};
@@ -137,6 +144,13 @@ export function readableFiles(s: LibrarySnapshot, folders: Record<string, string
       continue;
     }
     if (k.startsWith(VERSIONS_PREFIX)) continue;
+    if (k.startsWith(PRESENTATION_KEY_PREFIX)) {
+      // As the file the Present page downloads (.present.json), so one can be taken out and opened anywhere.
+      const name = k.slice(PRESENTATION_KEY_PREFIX.length);
+      const folder = folderOf(folders, PRESENTATION_FOLDER_SCOPE, name);
+      put(`presentations/${folder ? `${folder}/` : ''}${safeName(name)}.present.json`, presentationFileText(v));
+      continue;
+    }
     const kind = KINDS.find(x => k.startsWith(x.prefix));
     if (kind) {
       const id = k.slice(kind.prefix.length);
@@ -164,13 +178,23 @@ export function readableFiles(s: LibrarySnapshot, folders: Record<string, string
   return out;
 }
 
+/** A stored presentation as a `.present.json` file: its kind first, without the imported mark (the reader decides that). */
+export function presentationFileText(stored: string): string {
+  const p = parse(stored);
+  if (!p || typeof p !== 'object') return stored;
+  const { origin: _origin, kind: _kind, ...rest } = p as Record<string, unknown>;
+  void _origin; void _kind;
+  return JSON.stringify({ kind: PRESENTATION_FILE_KIND, ...rest }, null, 1);
+}
+
 const README = `Shader Studio library
 
 library.json is the whole library: import this ZIP (or just library.json) in
 Playfield (Preferences → Library → Import) to bring everything back.
 
 The folders are the same things as separate files, to look through or to
-share one at a time: a graph file opens with Import in Playfield.
+share one at a time: a graph file opens with Import in Playfield, and a
+.present.json file (under presentations/) opens on the Present page.
 `;
 
 export function libraryZipName(at = new Date(), what = 'library'): string {
@@ -204,6 +228,8 @@ export function readLibrary(bytes: Uint8Array): LibrarySnapshot {
   if (!isZip) {
     const v = parse(strFromU8(bytes));
     if (isSnapshot(v)) return v;
+    const one = presentationItem(v);
+    if (one) return { kind: LIBRARY_KIND, version: 1, savedAt: 0, items: { [one[0]]: one[1] } };
     throw new Error('Not a Shader Studio library (export one with “Export everything”)');
   }
   const files = unzipSync(bytes);
@@ -219,13 +245,27 @@ export function readLibrary(bytes: Uint8Array): LibrarySnapshot {
     const text = strFromU8(data);
     const v = parse(text) as { id?: string; nodes?: unknown } | undefined;
     if (!v) continue;
+    const pres = presentationItem(v);
+    if (pres) {
+      let key = pres[0], i = 2;
+      while (key in items) key = `${pres[0]} (${i++})`;
+      items[key] = pres[1];
+      continue;
+    }
     const base = path.split('/').pop()!.replace(/\.json$/, '');
     if (/(^|\/)graphs\//.test(path) && Array.isArray(v.nodes)) items[GRAPH_PREFIX + base] = text;
     else if (/(^|\/)presets\//.test(path) && typeof v.id === 'string') items[`shader-studio:gp:${v.id}`] = text;
     else if (/(^|\/)functions\//.test(path) && typeof v.id === 'string') items[`shader-studio:cfp:${v.id}`] = text;
   }
-  if (Object.keys(items).length === 0) throw new Error('No Playfield graphs or presets in that ZIP');
+  if (Object.keys(items).length === 0) throw new Error('No Playfield graphs, presets or presentations in that ZIP');
   return { kind: LIBRARY_KIND, version: 1, savedAt: 0, items };
+}
+
+/** A `.present.json` file's content as a stored presentation: [key, value], or null when it isn't one. */
+function presentationItem(v: unknown): [string, string] | null {
+  if (!v || typeof v !== 'object' || (v as { kind?: unknown }).kind !== PRESENTATION_FILE_KIND) return null;
+  const p = parsePresentation(v);
+  return p ? [PRESENTATION_KEY_PREFIX + p.title, JSON.stringify(p)] : null;
 }
 
 /** Lists and maps merge: union by id (or by value), yours winning where both have one. */
@@ -254,15 +294,35 @@ export interface ImportResult {
   added: number;
   /** Graphs whose name was taken, brought in as "<name> (imported)". */
   renamed: string[];
+  /** Presentations whose name was taken by a different one, brought in as "<name> (2)", "(3)"… */
+  renamedPresentations: string[];
+  /** Presentations that weren't readable, left out. */
+  skipped: number;
   /** Things you already had a different copy of; yours was kept. */
   kept: number;
   /** Already here, identical. */
   same: number;
 }
 
+/** `name`, or `name (2)`, `name (3)`… whichever no presentation has. */
+export function freePresentationName(name: string, kv: Pick<KV, 'get'>): string {
+  const b = name.trim() || 'Untitled presentation';
+  if (kv.get(PRESENTATION_KEY_PREFIX + b) == null) return b;
+  let i = 2;
+  while (kv.get(`${PRESENTATION_KEY_PREFIX}${b} (${i})`) != null) i++;
+  return `${b} (${i})`;
+}
+
+/** The same presentation, whatever its title, save time or imported mark. */
+function samePresentation(mine: Presentation | null, theirs: Presentation): boolean {
+  if (!mine) return false;
+  const strip = (x: object) => JSON.stringify({ ...x, title: '', updatedAt: 0, origin: undefined });
+  return strip(mine) === strip(theirs);
+}
+
 /** Merge a library into storage. Never overwrites anything of yours. */
 export function importLibrary(s: LibrarySnapshot, kv: KV = localKV): ImportResult {
-  const r: ImportResult = { added: 0, renamed: [], kept: 0, same: 0 };
+  const r: ImportResult = { added: 0, renamed: [], renamedPresentations: [], skipped: 0, kept: 0, same: 0 };
   const has = (k: string) => kv.get(k) != null;
   const free = (name: string) => {
     let n = `${name} (imported)`, i = 2;
@@ -270,9 +330,29 @@ export function importLibrary(s: LibrarySnapshot, kv: KV = localKV): ImportResul
     return n;
   };
   const renamedTo = new Map<string, string>();
+  const presRenamedTo = new Map<string, string>();
   for (const [k, v] of Object.entries(s.items)) {
     if (!isLibraryKey(k) || k.startsWith(VERSIONS_PREFIX) || k === 'assetbrowser_folders') continue;
     const mine = kv.get(k);
+    if (k.startsWith(PRESENTATION_KEY_PREFIX)) {
+      if (mine === v) { r.same++; continue; }
+      const name = k.slice(PRESENTATION_KEY_PREFIX.length);
+      const p = parsePresentation(parse(v));
+      if (!p) { r.skipped++; continue; }
+      // Script layers from a library are code from somewhere else: they run in a sandboxed frame.
+      if (p.sources.some(src => src.bundle.play.layers.some(l => l.kind === 'script'))) p.origin = 'imported';
+      if (mine == null) { kv.set(k, JSON.stringify({ ...p, title: name })); r.added++; continue; }
+      // Already here under this name, or as an earlier import's "(2)", "(3)"…
+      const same = (key: string) => samePresentation(parsePresentation(parse(kv.get(key))), p);
+      let dup = same(k);
+      for (let i = 2; !dup && kv.get(`${k} (${i})`) != null; i++) dup = same(`${k} (${i})`);
+      if (dup) { r.same++; continue; }
+      const n = freePresentationName(name, kv);
+      kv.set(PRESENTATION_KEY_PREFIX + n, JSON.stringify({ ...p, title: n }));
+      presRenamedTo.set(name, n);
+      r.renamedPresentations.push(n);
+      continue;
+    }
     if (isGraphKey(k, v)) {
       const name = k.slice(GRAPH_PREFIX.length);
       if (mine == null) {
@@ -306,6 +386,10 @@ export function importLibrary(s: LibrarySnapshot, kv: KV = localKV): ImportResul
     for (const [from, to] of renamedTo) {
       const m = theirFolders.graphs?.membership;
       if (m && m[from]) m[to] = m[from];
+    }
+    for (const [from, to] of presRenamedTo) {
+      const m = theirFolders[PRESENTATION_FOLDER_SCOPE]?.membership;
+      if (m && m[from]) { m[to] = m[from]; delete m[from]; }
     }
     const merged = mergeJson(parse(kv.get('assetbrowser_folders')) ?? {}, theirFolders);
     kv.set('assetbrowser_folders', JSON.stringify(merged));
@@ -381,10 +465,11 @@ export function kindOfKey(k: string, v: string): LibraryKind {
 }
 
 /** The sets the Download menu offers: everything, or one kind of thing. */
-export type DownloadSetId = 'everything' | 'graphs' | 'glsl' | 'functions' | 'nodes' | 'presets';
+export type DownloadSetId = 'everything' | 'graphs' | 'presentations' | 'glsl' | 'functions' | 'nodes' | 'presets';
 export const DOWNLOAD_SETS: ReadonlyArray<{ id: DownloadSetId; label: string; hint: string; kinds: readonly LibraryKind[] | null }> = [
-  { id: 'everything', label: 'Everything', hint: 'The whole library: graphs with their versions, shaders, functions, nodes, presets and settings', kinds: null },
+  { id: 'everything', label: 'Everything', hint: 'The whole library: graphs with their versions, presentations, shaders, functions, nodes, presets and settings', kinds: null },
   { id: 'graphs', label: 'Only graphs', hint: 'Every saved graph as a .json file (with its versions), in its folders', kinds: ['graphs', 'versions'] },
+  { id: 'presentations', label: 'Only presentations', hint: 'Every presentation as a .present.json file (with the Plays it shows), in its folders', kinds: ['presentations'] },
   { id: 'glsl', label: 'Only GLSL shaders', hint: 'Every saved shader as a plain .glsl file (notes as a comment at the top), in its folders', kinds: ['glsl shaders'] },
   { id: 'functions', label: 'Only custom functions', hint: 'The Functions library: each preset as a .json file', kinds: ['functions'] },
   { id: 'nodes', label: 'Only published nodes', hint: 'Node types you published from the Builder, as .json files', kinds: ['published nodes'] },
@@ -396,7 +481,7 @@ export function snapshotOfKinds(s: LibrarySnapshot, kinds: readonly LibraryKind[
   if (!kinds) return s;
   const want = new Set(kinds);
   const items: Record<string, string> = {};
-  for (const [k, v] of Object.entries(s.items)) if (want.has(kindOfKey(k, v)) || (k === 'assetbrowser_folders' && (want.has('graphs') || want.has('functions') || want.has('group presets')))) items[k] = v;
+  for (const [k, v] of Object.entries(s.items)) if (want.has(kindOfKey(k, v)) || (k === 'assetbrowser_folders' && (want.has('graphs') || want.has('functions') || want.has('group presets') || want.has('presentations')))) items[k] = v;
   return { ...s, items };
 }
 

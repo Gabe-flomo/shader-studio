@@ -30,7 +30,7 @@ describe('library export', () => {
   it('takes only what Playfield owns', () => {
     const s = takeSnapshot(memKV(SAMPLE));
     expect(Object.keys(s.items)).not.toContain('someone-elses-key');
-    expect(describeSnapshot(s)).toEqual({ graphs: 2, presets: 2, nodes: 1, other: 4 });
+    expect(describeSnapshot(s)).toEqual({ graphs: 2, presets: 2, nodes: 1, presentations: 0, other: 4 });
   });
 
   it('lays graphs out in their folders with their versions, and the rest by kind', () => {
@@ -153,5 +153,77 @@ describe('downloading one kind of thing', async () => {
     expect(glsl.name).toMatch(/^Shader Studio GLSL shaders /);
     expect(Object.keys(unzipSync(glsl.bytes)).filter(p => p.endsWith('.glsl'))).toHaveLength(2);
     expect(Object.keys(snapshotOfKinds(snap, ['functions']).items)).toEqual(['shader-studio:cfp:f1', 'assetbrowser_folders']);
+  });
+});
+
+describe('presentations in the library', async () => {
+  const { buildSetZip, countInSet } = await import('../library');
+  const { emptyPresentation, PRESENTATION_FILE_KIND } = await import('../../types/presentation');
+  const pres = (title: string, text = 'hello') => {
+    const p = emptyPresentation(title, 1000);
+    p.steps[0].blocks.push({ type: 'text', id: 'b1', markdown: text });
+    return JSON.stringify(p);
+  };
+  const KEY = 'shader-studio-presentation:';
+  const withPres = {
+    ...SAMPLE,
+    [`${KEY}Intro`]: pres('Intro'),
+    [`${KEY}Loose talk`]: pres('Loose talk'),
+    assetbrowser_folders: JSON.stringify({ ...JSON.parse(SAMPLE.assetbrowser_folders), presentations: { folders: [{ id: 'pf', label: 'Talks' }], membership: { Intro: 'pf' } } }),
+  };
+
+  it('goes into the full ZIP as .present.json files in their folders, and comes back out exactly', () => {
+    const s = takeSnapshot(memKV(withPres));
+    expect(describeSnapshot(s).presentations).toBe(2);
+    const zip = buildLibraryZip(s, 'lib');
+    const files = unzipSync(zip);
+    const intro = JSON.parse(strFromU8(files['lib/presentations/Talks/Intro.present.json']));
+    expect(intro.kind).toBe(PRESENTATION_FILE_KIND);
+    expect(intro.steps[0].blocks[0].markdown).toBe('hello');
+    expect(files['lib/presentations/Loose talk.present.json']).toBeDefined();
+    expect(readLibrary(zip).items).toEqual(s.items);
+    // Into an empty library: both arrive, the folder with them.
+    const fresh = memKV();
+    const r = importLibrary(readLibrary(zip), fresh);
+    expect(fresh.data.get(`${KEY}Intro`)).toBeDefined();
+    expect(fresh.data.get(`${KEY}Loose talk`)).toBeDefined();
+    expect(JSON.parse(fresh.data.get('assetbrowser_folders')!).presentations.membership.Intro).toBe('pf');
+    expect(r.renamedPresentations).toEqual([]);
+  });
+
+  it('a clashing name comes in as (2), then (3); the same one twice adds nothing; broken ones are left out', () => {
+    const mine = memKV({ [`${KEY}Intro`]: pres('Intro', 'mine') });
+    const theirs = takeSnapshot(memKV({ [`${KEY}Intro`]: pres('Intro', 'theirs'), [`${KEY}Broken`]: '{"title":"Broken"}' }));
+    const r = importLibrary(theirs, mine);
+    expect(r.renamedPresentations).toEqual(['Intro (2)']);
+    expect(r.skipped).toBe(1);
+    expect(JSON.parse(mine.data.get(`${KEY}Intro`)!).steps[0].blocks[0].markdown).toBe('mine');
+    const two = JSON.parse(mine.data.get(`${KEY}Intro (2)`)!);
+    expect(two.title).toBe('Intro (2)');
+    expect(two.steps[0].blocks[0].markdown).toBe('theirs');
+    expect(mine.data.has(`${KEY}Broken`)).toBe(false);
+    // Again: already here as "Intro (2)", so nothing new.
+    const again = importLibrary(theirs, mine);
+    expect(again.renamedPresentations).toEqual([]);
+    expect(again.same).toBe(1);
+    // A third, different "Intro" gets (3).
+    const third = importLibrary(takeSnapshot(memKV({ [`${KEY}Intro`]: pres('Intro', 'a third') })), mine);
+    expect(third.renamedPresentations).toEqual(['Intro (3)']);
+  });
+
+  it('downloads on their own, and a lone .present.json or a ZIP of them reads as a library', () => {
+    const s = takeSnapshot(memKV(withPres));
+    expect(countInSet(s, 'presentations')).toBe(2);
+    const { bytes, name } = buildSetZip(s, 'presentations');
+    expect(name).toMatch(/^Shader Studio presentations /);
+    const paths = Object.keys(unzipSync(bytes)).map(p => p.split('/').slice(1).join('/'));
+    expect(paths.filter(p => p.endsWith('.present.json')).sort()).toEqual(['presentations/Loose talk.present.json', 'presentations/Talks/Intro.present.json']);
+    expect(paths.some(p => p.startsWith('graphs/'))).toBe(false);
+    expect(Object.keys(readLibrary(bytes).items).filter(k => k.startsWith(KEY)).sort()).toEqual([`${KEY}Intro`, `${KEY}Loose talk`]);
+
+    const file = JSON.stringify({ kind: PRESENTATION_FILE_KIND, ...JSON.parse(pres('Solo')) });
+    expect(Object.keys(readLibrary(strToU8(file)).items)).toEqual([`${KEY}Solo`]);
+    const loose = zipSync({ 'a/Solo.present.json': strToU8(file), 'b/Solo.present.json': strToU8(file) });
+    expect(Object.keys(readLibrary(loose).items).sort()).toEqual([`${KEY}Solo`, `${KEY}Solo (2)`]);
   });
 });
