@@ -80,6 +80,14 @@ export const ICONS = {
   cube: { sw: 1.4, body: "<path d='M8 1.8l5.4 3.1v6.2L8 14.2l-5.4-3.1V4.9z'/><path d='M2.6 4.9L8 8l5.4-3.1M8 8v6.2'/>" },
   table: { sw: 1.4, body: "<rect x='2.2' y='2.6' width='11.6' height='10.8' rx='1.8'/><path d='M2.2 6.2h11.6M2.2 9.8h11.6M6.4 6.2v7.2'/>" },
   live: { sw: 1.5, body: "<circle cx='8' cy='8' r='1.4' fill='currentColor' stroke='none'/><path d='M5.2 5.2a4 4 0 000 5.6M10.8 5.2a4 4 0 010 5.6M3.2 3.2a6.8 6.8 0 000 9.6M12.8 3.2a6.8 6.8 0 010 9.6'/>" },
+  mouse: { sw: 1.4, body: "<rect x='4' y='1.8' width='8' height='12.4' rx='4'/><path d='M8 4.2v2.3'/>" },
+  keyboard: { sw: 1.4, body: "<rect x='1.6' y='4' width='12.8' height='8' rx='1.8'/><path d='M4.2 6.6h.01M6.7 6.6h.01M9.3 6.6h.01M11.8 6.6h.01M5.3 9.4h5.4'/>" },
+  bolt: { sw: 1.4, body: "<path d='M9 1.8L3.6 9.1h4L7 14.2l5.4-7.3h-4z'/>" },
+  clock: { sw: 1.4, body: "<circle cx='8' cy='8' r='6'/><path d='M8 4.6V8l2.3 1.5'/>" },
+  piano: { sw: 1.4, body: "<rect x='1.8' y='2.8' width='12.4' height='10.4' rx='1.6'/><path d='M6 13.2V8.6M10 13.2V8.6'/><rect x='4.8' y='2.8' width='2.4' height='5.8' rx='.5' fill='currentColor' stroke='none'/><rect x='8.8' y='2.8' width='2.4' height='5.8' rx='.5' fill='currentColor' stroke='none'/>" },
+  antenna: { sw: 1.4, body: "<circle cx='8' cy='6.6' r='1.3'/><path d='M8 7.9v6.3M5.3 3.9a3.8 3.8 0 000 5.4M10.7 3.9a3.8 3.8 0 010 5.4M3.2 1.9a6.7 6.7 0 000 9.4M12.8 1.9a6.7 6.7 0 010 9.4'/>" },
+  gamepad: { sw: 1.4, body: "<path d='M4.6 4.4h6.8a3.2 3.2 0 013.1 2.5l.7 3.3a1.9 1.9 0 01-3.3 1.6L10.6 10H5.4l-1.3 1.8A1.9 1.9 0 01.8 10.2l.7-3.3a3.2 3.2 0 013.1-2.5z'/><path d='M5 6.4v2.2M3.9 7.5h2.2'/><circle cx='10.9' cy='6.9' r='.5' fill='currentColor' stroke='none'/><circle cx='12' cy='8.1' r='.5' fill='currentColor' stroke='none'/>" },
+  phone: { sw: 1.4, body: "<rect x='4.2' y='1.6' width='7.6' height='12.8' rx='1.8'/><path d='M7.2 12.2h1.6'/>" },
 } satisfies Record<string, IconDef>;
 
 export type IconName = keyof typeof ICONS;

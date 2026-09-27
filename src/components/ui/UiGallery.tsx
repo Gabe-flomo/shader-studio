@@ -8,12 +8,32 @@ import { Callout } from './Callout';
 import { Chip } from './Chip';
 import { Segmented, Toggle } from './Choice';
 import { Field, TypeSelect } from './Field';
+import { GroupedPicker, type PickerSection } from './GroupedPicker';
 import { Kbd } from './Kbd';
 import { Menu } from './Menu';
 import { Modal } from './Modal';
 import { RulerSlider } from './RulerSlider';
 import { Toaster } from './Toaster';
 import { toast } from './toastStore';
+
+const PICKER_DEMO: PickerSection[] = [
+  { heading: 'Pointer & keys', items: [
+    { value: 'mouse:x', label: 'Mouse X', icon: 'mouse', description: 'Across the picture' },
+    { value: 'key', label: 'Keyboard key', icon: 'keyboard', description: 'Held or not' },
+  ] },
+  { heading: 'Generators', items: [
+    { value: 'lfo', label: 'LFO', icon: 'wave', description: 'Sine, triangle, saw or square' },
+    { value: 'noise', label: 'Noise', icon: 'dice', description: 'Smooth, drifting, random or stepped', pro: true },
+    { value: 'clock', label: 'Clock', icon: 'clock', description: 'A shape in time with a BPM', pro: true },
+  ] },
+  { heading: 'Devices', items: [
+    { value: 'midi:cc', label: 'MIDI CC', icon: 'piano', description: 'A knob or fader', pro: true },
+    { value: 'osc', label: 'OSC', icon: 'antenna', description: 'Ableton, TouchOSC…', pro: true },
+    { value: 'gamepad', label: 'Gamepad', icon: 'gamepad', description: 'A stick axis or a button', pro: true },
+    { value: 'tilt', label: 'Phone tilt', icon: 'phone', description: 'Tip the phone', pro: true },
+    { value: 'off', label: 'Unavailable', icon: 'lock', description: 'A disabled row', disabled: true },
+  ] },
+];
 
 // Dev-only page (open the app with #ui) showing every primitive in both themes side by side.
 
@@ -59,6 +79,7 @@ function Column({ mode }: { mode: ThemeMode }) {
   const [tool, setTool] = useState<'select' | 'add' | 'draw'>('select');
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [modal, setModal] = useState(false);
+  const [pick, setPick] = useState('lfo');
 
   return (
     <div style={{ flex: '1 1 480px', minWidth: 0, padding: 32, background: tk.bg.app, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, display: 'flex', flexDirection: 'column', gap: 28 }}>
@@ -90,6 +111,13 @@ function Column({ mode }: { mode: ThemeMode }) {
         <div style={{ ...row, maxWidth: 420 }}>
           <Field mono defaultValue="shader-export" suffix=".webm" style={{ flex: 1 }} />
           <Field mono defaultValue="1/0" invalid style={{ width: 120 }} />
+        </div>
+      </Section>
+
+      <Section title="Grouped picker">
+        <div style={{ ...row, maxWidth: 420 }}>
+          <GroupedPicker ariaLabel="Source" value={pick} sections={PICKER_DEMO} onChange={setPick} search style={{ flex: 1 }} />
+          <GroupedPicker ariaLabel="Source (no search)" value={pick} sections={PICKER_DEMO} onChange={setPick} search={false} height={26} />
         </div>
       </Section>
 

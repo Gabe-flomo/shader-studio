@@ -12,13 +12,16 @@
  */
 import { openProSheet, useCan } from '../../lib/plan';
 import { FREE_TRIGGER_ONS } from '../../play/planGates';
-import { useEffect, useState } from 'react';
+import { HAND_POINT_SECTIONS, triggerKindSections } from './sourcePickerSections';
+import { GroupedPicker } from '../ui/GroupedPicker';
+import { sectionsFromOptions } from '../ui/groupedPickerModel';
+import { useEffect, useMemo, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { ActionKind, FireMode, HandGesture, LiveAudioBand, TriggerMode, TriggerSpec } from '../../types/play';
 import { parseHandAnchor } from '../../types/play';
 import {
-  CHANNELS, HAND_GESTURE_OPTIONS, HAND_POINT_OPTIONS, HAND_SIDES, LIVE_BAND_OPTIONS, TRIGGER_KINDS,
+  CHANNELS, HAND_GESTURE_OPTIONS, HAND_SIDES, LIVE_BAND_OPTIONS,
   anchorChoice, anchorOptions, anchorPick, fireModes, fireOf, keyName, repeatHint, triggerFromKind, triggerLabel, withFire,
 } from '../../play/playSources';
 import { playEngine } from '../../lib/playEngine';
@@ -52,10 +55,10 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
   const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
   // Free: key, click and audio triggers; the rest say Pro and open the Pro sheet (play/planGates.ts).
   const allSources = useCan('play.sources');
-  const kinds = allSources ? TRIGGER_KINDS : TRIGGER_KINDS.map(k => (FREE_TRIGGER_ONS.has(k.value) ? k : { ...k, label: `${k.label} · Pro` }));
+  const kinds = useMemo(() => triggerKindSections(!allSources), [allSources]);
   return (
     <>
-      <Select ariaLabel="Trigger" value={t.on} options={kinds} onChange={v => {
+      <GroupedPicker ariaLabel="Trigger" value={t.on} sections={kinds} width={290} onChange={v => {
         if (!allSources && !FREE_TRIGGER_ONS.has(v as TriggerSpec['on'])) { openProSheet('play.sources'); return; }
         onChange(triggerFromKind(v as TriggerSpec['on'], t, layers, readers[0]?.id ?? ''));
       }} height={26} />
@@ -186,12 +189,13 @@ export function AnchorPicker({ value, layers, exclude, ariaLabel, onChange }: {
 }) {
   const hand = parseHandAnchor(value);
   const options = anchorOptions(layers, exclude);
+  const sections = sectionsFromOptions(options);
   const pick = anchorPick(value);
   const known = options.some(o => o.value === pick);
   return (
     <span style={{ display: 'inline-flex', gap: 4, minWidth: 0, flexWrap: 'wrap' }}>
-      <Select ariaLabel={ariaLabel} value={known ? pick : ''} options={known ? options : [{ value: '', label: 'Pick one' }, ...options]} onChange={v => onChange(anchorChoice(v, value))} height={26} style={{ maxWidth: 170 }} />
-      {hand && <Select ariaLabel={`${ariaLabel}: point on the hand`} value={`${hand.point}`} options={HAND_POINT_OPTIONS} onChange={v => onChange(`hand:${hand.side}:${parseInt(v, 10) || 0}`)} height={26} style={{ maxWidth: 150 }} />}
+      <GroupedPicker ariaLabel={ariaLabel} value={known ? pick : ''} placeholder="Pick one" sections={sections} onChange={v => onChange(anchorChoice(v, value))} height={26} style={{ maxWidth: 170 }} width={220} />
+      {hand && <GroupedPicker ariaLabel={`${ariaLabel}: point on the hand`} value={`${hand.point}`} sections={HAND_POINT_SECTIONS} onChange={v => onChange(`hand:${hand.side}:${parseInt(v, 10) || 0}`)} height={26} style={{ maxWidth: 150 }} width={220} searchPlaceholder="Search points" />}
     </span>
   );
 }
