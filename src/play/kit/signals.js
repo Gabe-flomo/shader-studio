@@ -1,0 +1,186 @@
+/**
+ * signals.js — conditions, signals and axis swaps: the logic both the Play
+ * engine (lib/playEngine.ts) and the web runtime (runtime/play-runtime.js,
+ * through the inlined kit as SSKit.signals) run, so a setup behaves the same
+ * in the app, in a take and on a website. Pure: no DOM, no clock.
+ *
+ *   sgGate          is a value past a threshold (below, above, equal within a
+ *                   tolerance), with hysteresis so it doesn't flicker at the edge
+ *   sgCondStep      a condition over frames: opens, closes, or taps once for a
+ *                   crossing (crosses up / crosses down)
+ *   sgRunActions    one frame of actions, with signals passed on down a chain:
+ *                   each signal at most once a frame, and at most SG_DEPTH links
+ *   sgSwapStep      the axis swap of a pair mapping: drive A until it crosses a
+ *                   threshold, then B until B crosses the swap-back threshold
+ *   sgParseValueRef what a condition's value path points at
+ *
+ * Top-level names start with `sg` (the kit's files share one scope in exports).
+ */
+
+/** Links a signal chain may pass through in one frame; what's left carries on next frame. */
+export const SG_DEPTH = 8;
+
+/**
+ * Is the condition met, given whether it was met last frame? `v` null (a hand
+ * out of view, a missing layer) is never met.
+ *   below   opens under `threshold`, holds until above threshold + hysteresis
+ *   above   opens over `threshold`, holds until below threshold − hysteresis
+ *   equals  opens within `tolerance` of it, holds until tolerance + hysteresis
+ * A crossing reads as the level it crosses into (crossUp → above).
+ */
+export function sgGate(open, v, cmp, threshold, hysteresis, tolerance) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return false;
+  const h = Math.max(0, hysteresis || 0);
+  switch (cmp) {
+    case 'below': case 'crossDown':
+      return open ? v <= threshold + h : v < threshold;
+    case 'equals': {
+      const tol = Math.max(0, tolerance || 0);
+      return Math.abs(v - threshold) <= (open ? tol + h : tol);
+    }
+    default:
+      return open ? v >= threshold - h : v > threshold;
+  }
+}
+
+/** A condition's memory between frames. */
+export function sgCondNew() {
+  return { open: false, known: false };
+}
+
+/** Does this comparison fire on the crossing only (a tap), rather than while it holds? */
+export function sgIsCrossing(cmp) {
+  return cmp === 'crossUp' || cmp === 'crossDown';
+}
+
+/**
+ * One frame of a condition (`c`: { cmp, threshold, hysteresis, tolerance })
+ * reading `v`. Returns what happened:
+ *   'open'   a level condition became true (a press that is held)
+ *   'close'  it stopped being true (the release)
+ *   'tap'    a crossing happened: a press and its release in one frame
+ *   null     nothing changed
+ * A crossing needs to have seen the other side first: a value already above
+ * when it starts doesn't count as crossing up.
+ */
+export function sgCondStep(st, v, c) {
+  const was = st.open;
+  const now = sgGate(was, v, c.cmp, c.threshold, c.hysteresis, c.tolerance);
+  st.open = now;
+  if (sgIsCrossing(c.cmp)) {
+    const seen = st.known;
+    st.known = v !== null && v !== undefined && Number.isFinite(v);
+    return now && !was && seen ? 'tap' : null;
+  }
+  st.known = v !== null && v !== undefined;
+  if (now && !was) return 'open';
+  if (!now && was) return 'close';
+  return null;
+}
+
+/**
+ * One frame of actions. `fires(a)` says how many times action `a` fires now
+ * (its trigger's firing mode, capped by the caller); `run(a)` carries out an
+ * ordinary action; `emit(id)` presses signal `id` (its "When signal fires"
+ * triggers see it at once). An action whose `do` is 'signal' emits its
+ * `signal` instead of running.
+ *
+ * After the first pass, actions triggered by a signal get another look, so a
+ * chain (A fires B, B fires C) runs within the frame. Each signal fires at
+ * most once a frame and a chain stops after SG_DEPTH passes, so a loop (A
+ * fires B fires A) can't hang the page. Returns the signals fired, in order.
+ */
+export function sgRunActions(actions, fires, run, emit) {
+  const fired = new Set();
+  const order = [];
+  let wave = actions;
+  for (let depth = 0; depth < SG_DEPTH && wave.length; depth++) {
+    let emitted = false;
+    for (const a of wave) {
+      const n = fires(a);
+      for (let i = 0; i < n; i++) {
+        if (a.do === 'signal') {
+          if (a.signal && !fired.has(a.signal)) { fired.add(a.signal); order.push(a.signal); emit(a.signal); emitted = true; }
+        } else run(a);
+      }
+    }
+    if (!emitted) break;
+    wave = actions.filter(a => a.trigger && a.trigger.on === 'signal');
+  }
+  return order;
+}
+
+/** An axis swap's memory: the axis being driven and each axis's last driven value. */
+export function sgSwapNew() {
+  return { axis: 'a', prevA: null, prevB: null };
+}
+
+function sgCrossed(prev, v, at, dir) {
+  if (prev === null || v === null || v === undefined) return false;
+  return dir === 'down' ? prev > at && v <= at : prev < at && v >= at;
+}
+
+/**
+ * One frame of an axis swap (`sw`: { at, dir, backAt, backDir }). `va` and
+ * `vb` are the values the axes were just driven to (null for the one not
+ * driven). While driving A, A crossing `at` (going `dir`) swaps to B; while
+ * driving B, B crossing `backAt` (going `backDir`) swaps back. Returns 'toB',
+ * 'toA' or null. The axis just swapped to has no previous value, so it needs
+ * a frame before it can swap again.
+ */
+export function sgSwapStep(st, va, vb, sw) {
+  if (st.axis === 'a') {
+    const hit = sgCrossed(st.prevA, va, sw.at, sw.dir);
+    st.prevA = va === undefined ? null : va;
+    if (hit) { st.axis = 'b'; st.prevB = null; return 'toB'; }
+  } else {
+    const hit = sgCrossed(st.prevB, vb, sw.backAt, sw.backDir);
+    st.prevB = vb === undefined ? null : vb;
+    if (hit) { st.axis = 'a'; st.prevA = null; return 'toA'; }
+  }
+  return null;
+}
+
+/**
+ * What a condition's value path points at:
+ *   ctl:<controlId>            a control on the panel, in its own units
+ *   layer:<id>::<key>          a layer's property (a mapping may drive it)
+ *   finish:<effect>::<key>     a Finish effect's number
+ *   map:<mappingId>            a mapping's source reading, 0..1
+ *   mouse:x · mouse:y          the pointer, 0..1 (y up)
+ *   dist:<A>|<B>               how far apart two anchors are, in picture heights
+ * An anchor is a layer id, a hand point (hand:<side>:<point>), the pointer
+ * (mouse) or a point on the picture (pt:<x>,<y>, 0..1 with y up).
+ */
+export function sgParseValueRef(ref) {
+  if (typeof ref !== 'string' || !ref) return null;
+  if (ref.startsWith('ctl:')) return ref.length > 4 ? { kind: 'control', id: ref.slice(4) } : null;
+  if (ref.startsWith('map:')) return ref.length > 4 ? { kind: 'mapping', id: ref.slice(4) } : null;
+  if (ref === 'mouse:x' || ref === 'mouse:y') return { kind: 'mouse', axis: ref.slice(6) };
+  if (ref.startsWith('dist:')) {
+    const i = ref.indexOf('|');
+    if (i < 6 || i === ref.length - 1) return null;
+    return { kind: 'distance', a: ref.slice(5, i), b: ref.slice(i + 1) };
+  }
+  if (ref.startsWith('layer:') || ref.startsWith('finish:')) {
+    const fin = ref.startsWith('finish:');
+    const rest = ref.slice(fin ? 7 : 6);
+    const i = rest.lastIndexOf('::');
+    if (i <= 0 || i + 2 >= rest.length) return null;
+    return { kind: 'prop', layerId: (fin ? 'finish:' : '') + rest.slice(0, i), key: rest.slice(i + 2) };
+  }
+  return null;
+}
+
+/** A point on the picture from `pt:<x>,<y>`, or null. */
+export function sgScreenPoint(ref) {
+  const m = /^pt:(-?[0-9.]+),(-?[0-9.]+)$/.exec(ref || '');
+  if (!m) return null;
+  const x = Number(m[1]), y = Number(m[2]);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+/** The trigger key a value condition counts its presses under (its identity, not its firing mode). */
+export function sgValueKey(t) {
+  return 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance;
+}

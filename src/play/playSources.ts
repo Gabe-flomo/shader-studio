@@ -3,7 +3,11 @@
  * <select> offers, conversion to and from the record's PlaySource shape, and
  * short labels. Pure; shared by the Play page and the control rows.
  */
-import type { ActionKind, FireMode, FireSpec, HandGesture, HandRead, HandSide, LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySource, SensorRead, TriggerMode, TriggerSpec } from '../types/play';
+import type { ActionKind, CondCmp, FireMode, FireSpec, HandGesture, HandRead, HandSide, LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySignal, PlaySource, SensorRead, TriggerMode, TriggerSpec, ValueCondition } from '../types/play';
+import type { PlayFinish } from '../types/playFinish';
+import { finishTargetLabel } from '../types/playFinish';
+import { sgParseValueRef, sgScreenPoint } from './kit/signals.js';
+import { proximityCondition } from './triggers';
 import { ANCHOR_KINDS, DEFAULT_FIRE, handAnchor, parseHandAnchor } from '../types/play';
 import { HD_POINT_NAMES } from './kit/hands.js';
 import { datasetStore } from '../data/datasetStore';
@@ -253,7 +257,7 @@ export const TILT_AXES = [
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 /** "Key Space", "C4 · ch. 2", "Any note", "Click", "OSC /1/push1", "Every beat", "Dot near Box". */
-export function triggerLabel(t: TriggerSpec, layers: ReadonlyArray<{ id: string; label: string }> = []): string {
+export function triggerLabel(t: TriggerSpec, layers: ReadonlyArray<{ id: string; label: string }> = [], ctx: LabelContext = {}): string {
   switch (t.on) {
     case 'key': return `Key ${keyName(t.code)}`;
     case 'note': return `${t.note < 0 ? 'Any note' : `${NOTE_NAMES[t.note % 12]}${Math.floor(t.note / 12) - 1}`}${t.channel ? ` · ch. ${t.channel}` : ''}`;
@@ -265,13 +269,68 @@ export function triggerLabel(t: TriggerSpec, layers: ReadonlyArray<{ id: string;
     case 'hand': return `${SIDE_NAMES[t.side]} · ${HAND_GESTURE_LABELS[t.gesture]}`;
     case 'proximity': return `${anchorLabel(t.a, layers)} ${t.when === 'closer' ? 'near' : 'away from'} ${anchorLabel(t.b, layers)}`;
     case 'reader': return `${audioReaderBank.name(t.readerId) ?? 'Reader'} crosses ${Math.round(t.threshold * 100)}%`;
+    case 'value': return conditionLabel(t, { layers, ...ctx });
+    case 'signal': return `Signal ${signalName(t.signal, ctx.signals)}`;
+  }
+}
+
+// ── Conditions and signals ──────────────────────────────────────────────────
+
+/** What names a condition's value path and a signal need: the setup's parts, as far as the caller has them. */
+export interface LabelContext {
+  layers?: ReadonlyArray<{ id: string; label: string }>;
+  controls?: ReadonlyArray<{ id: string; label: string }>;
+  signals?: ReadonlyArray<PlaySignal>;
+  mappings?: ReadonlyArray<{ id: string; source: PlaySource }>;
+  finish?: PlayFinish;
+}
+
+/** A signal's name ("Missing signal" when it was deleted). */
+export function signalName(id: string, signals: ReadonlyArray<PlaySignal> = []): string {
+  return signals.find(x => x.id === id)?.name ?? (id ? 'Missing signal' : 'Pick one');
+}
+
+export const COND_LABELS: Record<CondCmp, { label: string; word: string; title: string }> = {
+  below: { label: 'Below', word: 'below', title: 'While it is under the threshold' },
+  above: { label: 'Above', word: 'above', title: 'While it is over the threshold' },
+  crossUp: { label: 'Crosses ↑', word: 'crosses up', title: 'The moment it passes the threshold going up' },
+  crossDown: { label: 'Crosses ↓', word: 'crosses down', title: 'The moment it passes the threshold going down' },
+  equals: { label: 'Equals', word: 'equals', title: 'While it is within the tolerance of the threshold' },
+};
+
+const round = (n: number) => `${Math.round(n * 1000) / 1000}`;
+
+/** "Radius above 0.5", "Dot ↔ Box below 0.1", "Mouse X crosses up 0.8". */
+export function conditionLabel(c: ValueCondition, ctx: LabelContext = {}): string {
+  return `${valueRefLabel(c.value, ctx)} ${COND_LABELS[c.cmp].word} ${round(c.threshold)}${c.cmp === 'equals' ? ` ± ${round(c.tolerance)}` : ''}`;
+}
+
+/** A condition's value in words: "Amount", "Dot · x", "Grade · Exposure", "Mouse X", "Dot ↔ Mouse". */
+export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
+  const r = sgParseValueRef(ref);
+  if (!r) return 'Pick a value';
+  switch (r.kind) {
+    case 'control': return ctx.controls?.find(c => c.id === r.id)?.label ?? 'Missing control';
+    case 'mapping': { const m = ctx.mappings?.find(x => x.id === r.id); return m ? `${sourceLabel(m.source, ctx.controls, ctx.layers)} (source)` : 'Missing mapping'; }
+    case 'mouse': return `Mouse ${r.axis.toUpperCase()}`;
+    case 'distance': return `${anchorLabel(r.a, ctx.layers)} ↔ ${anchorLabel(r.b, ctx.layers)}`;
+    case 'prop': {
+      if (r.layerId.startsWith('finish:')) {
+        const f = finishTargetLabel(ctx.finish, `finish:${r.layerId.slice(7)}::${r.key}`);
+        return f ? `${f.effect} · ${f.param}` : `Finish · ${r.key}`;
+      }
+      return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${r.key}`;
+    }
   }
 }
 
 // ── Anchors (what proximity and distance measure between) ───────────────────
 
-/** "Right · Index tip", or the layer's name. */
+/** "Right · Index tip", "Mouse", "Point 0.5, 0.5", or the layer's name. */
 export function anchorLabel(ref: string, layers: ReadonlyArray<{ id: string; label: string }> = []): string {
+  if (ref === 'mouse') return 'Mouse';
+  const pt = sgScreenPoint(ref);
+  if (pt) return `Point ${round(pt.x)}, ${round(pt.y)}`;
   const h = parseHandAnchor(ref);
   if (h) return `${SIDE_NAMES[h.side]} · ${HD_POINT_NAMES[h.point] ?? 'Point'}`;
   return layers.find(l => l.id === ref)?.label ?? (ref ? 'Missing layer' : 'Pick one');
@@ -310,11 +369,11 @@ export function anchorChoice(pick: string, prev: string): string {
 
 /** "On release" for a key, "On exit" for things that come and go (a shape, proximity, a hand). */
 export function releaseLabel(t: TriggerSpec): string {
-  return t.on === 'proximity' || t.on === 'zone' || (t.on === 'hand' && (t.gesture === 'appear' || t.gesture === 'leave')) ? 'On exit' : 'On release';
+  return t.on === 'value' ? 'When it stops' : t.on === 'proximity' || t.on === 'zone' || (t.on === 'hand' && (t.gesture === 'appear' || t.gesture === 'leave')) ? 'On exit' : 'On release';
 }
 
 export function fireModes(t: TriggerSpec): { value: FireMode; label: string; title: string }[] {
-  const held = t.on === 'proximity' ? 'while close' : t.on === 'beat' ? 'on each beat’s first quarter' : t.on === 'reader' || t.on === 'audio' ? 'while it stays above the threshold' : 'while held';
+  const held = t.on === 'value' ? 'while the condition holds' : t.on === 'proximity' ? 'while close' : t.on === 'beat' ? 'on each beat’s first quarter' : t.on === 'reader' || t.on === 'audio' ? 'while it stays above the threshold' : 'while held';
   return [
     { value: 'once', label: 'Once', title: t.on === 'proximity' ? 'When A comes close to B (or goes far, for Farther than)' : t.on === 'reader' || t.on === 'audio' ? 'When the level goes above the threshold' : 'When it starts: the key goes down, the gesture begins' },
     { value: 'held', label: 'Continuously', title: `Every frame ${held}` },
@@ -405,6 +464,8 @@ export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
   { value: 'zone', label: 'Shape (click, enter, fill)' },
   { value: 'hand', label: 'Hand gesture (pinch, fist…)' },
   { value: 'proximity', label: 'Proximity (two things close)' },
+  { value: 'value', label: 'When a value… (below, above, crosses)' },
+  { value: 'signal', label: 'When a signal fires' },
 ];
 
 /**
@@ -412,11 +473,11 @@ export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
  * replaces (its firing mode always). `layers` supplies a new shape trigger's
  * shape and a new proximity trigger's two layers.
  */
-export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: ReadonlyArray<{ id: string; kind: string }> = [], readerId = ''): TriggerSpec {
-  return withFire(triggerOnFromKind(on, prev, layers, readerId), prev.fire);
+export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: ReadonlyArray<{ id: string; kind: string }> = [], readerId = '', signalId = ''): TriggerSpec {
+  return withFire(triggerOnFromKind(on, prev, layers, readerId, signalId), prev.fire);
 }
 
-function triggerOnFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: ReadonlyArray<{ id: string; kind: string }>, readerId: string): TriggerSpec {
+function triggerOnFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: ReadonlyArray<{ id: string; kind: string }>, readerId: string, signalId: string): TriggerSpec {
   const shapeId = layers.find(l => l.kind === 'shape')?.id ?? '';
   switch (on) {
     case 'key': return { on: 'key', code: prev.on === 'key' ? prev.code : 'Space' };
@@ -436,6 +497,13 @@ function triggerOnFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: Rea
       const b = pos.find(l => l.id !== a)?.id ?? (a.startsWith('hand:') ? '' : handAnchor('right', 8));
       return { on: 'proximity', a, b, when: 'closer', distance: 0.15, margin: 0.03 };
     }
+    case 'value': {
+      if (prev.on === 'value') return prev;
+      // A proximity trigger becomes its distance condition; otherwise the mouse, which everyone has.
+      if (prev.on === 'proximity') return { on: 'value', ...proximityCondition(prev) };
+      return { on: 'value', value: 'mouse:x', cmp: 'crossUp', threshold: 0.5, hysteresis: 0.05, tolerance: 0.01 };
+    }
+    case 'signal': return prev.on === 'signal' ? prev : { on: 'signal', signal: signalId };
   }
 }
 
