@@ -107,6 +107,8 @@ class NodePreviewRenderer {
     fragmentShader: string,
     uniforms: Record<string, THREE.IUniform>,
     size = 80,
+    /** quiet: a shader that doesn't compile gives '' (not a cleared square) and logs nothing. */
+    opts: { quiet?: boolean } = {},
   ): Promise<string> {
     const cacheKey = `${nodeId}@${size}`;
     // u_time changes every frame, so keying on it meant the cache never hit;
@@ -137,12 +139,19 @@ class NodePreviewRenderer {
       const mesh = new THREE.Mesh(this.geometry, material);
       this.scene.add(mesh);
 
-      r.setRenderTarget(rt);
-      r.render(this.scene, this.camera);
-      r.setRenderTarget(null);
-
-      this.scene.remove(mesh);
-      material.dispose();
+      const prevOnError = r.debug.onShaderError;
+      let failed = false;
+      if (opts.quiet) r.debug.onShaderError = () => { failed = true; };
+      try {
+        r.setRenderTarget(rt);
+        r.render(this.scene, this.camera);
+        r.setRenderTarget(null);
+      } finally {
+        r.debug.onShaderError = prevOnError;
+        this.scene.remove(mesh);
+        material.dispose();
+      }
+      if (failed) return '';
 
       // Read pixels → offscreen canvas → data URL
       const buf = new Uint8Array(size * size * 4);

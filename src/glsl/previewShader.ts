@@ -21,7 +21,7 @@ export const BINDING_LABEL: Record<BindingKind, string> = {
 export function bindingsFor(type: string): BindingKind[] {
   if (type === 'float') return ['time', 'distance', 'uv01', 'seed', 'const'];
   if (type === 'vec2') return ['uv', 'uv01', 'mouse', 'seed', 'const'];
-  if (type === 'vec3') return ['direction', 'uv', 'const'];
+  if (type === 'vec3') return ['direction', 'uv', 'uv01', 'const'];
   if (type === 'vec4') return ['uv', 'const'];
   return ['const'];
 }
@@ -44,6 +44,8 @@ export function defaultBinding(p: ParamRole): Binding {
     case 'vec3':
       if (p.role === 'direction' || p.role === 'normal') return { kind: 'direction', value: [] };
       if (p.role === 'position') return { kind: 'uv', value: [] };
+      // A colour: a spread of colours (red across, green up), so what the function does to colour shows.
+      if (p.role === 'colour') return { kind: 'uv01', value: [] };
       return c(1.0, 0.6, 0.3);
     case 'vec4': return { kind: 'uv', value: [] };
     default: return c(0.0);
@@ -58,9 +60,9 @@ function argExpr(type: string, b: Binding): string {
   const asType = (e2: string, e3: string, e4: string, e1: string) => (type === 'vec2' ? e2 : type === 'vec3' ? e3 : type === 'vec4' ? e4 : e1);
   switch (k) {
     case 'uv': return asType('pv_uv', 'vec3(pv_uv, 0.0)', 'vec4(pv_uv, 0.0, 1.0)', 'pv_uv.x');
-    case 'uv01': return asType('pv_uv01', 'vec3(pv_uv01, 0.0)', 'vec4(pv_uv01, 0.0, 1.0)', 'pv_uv01.x');
+    case 'uv01': return asType('pv_uv01', 'vec3(pv_uv01, 1.0 - pv_uv01.x)', 'vec4(pv_uv01, 0.0, 1.0)', 'pv_uv01.x');
     case 'mouse': return asType('pv_mouse', 'vec3(pv_mouse, 0.0)', 'vec4(pv_mouse, 0.0, 1.0)', 'pv_mouse.x');
-    case 'time': return asType('vec2(u_time)', 'vec3(u_time)', 'vec4(u_time)', 'u_time');
+    case 'time': return asType('vec2(pv_time)', 'vec3(pv_time)', 'vec4(pv_time)', 'pv_time');
     case 'distance': return asType('vec2(pv_dist)', 'vec3(pv_dist)', 'vec4(pv_dist)', 'pv_dist');
     case 'direction': return asType('normalize(pv_uv)', 'normalize(vec3(pv_uv, 1.5))', 'vec4(normalize(vec3(pv_uv, 1.5)), 0.0)', 'pv_uv.x');
     case 'seed': return asType('floor(pv_uv * 6.0)', 'vec3(floor(pv_uv * 6.0), 0.0)', 'vec4(floor(pv_uv * 6.0), 0.0, 1.0)', 'floor(pv_uv.x * 6.0)');
@@ -103,22 +105,33 @@ export function previewShaderFor(fn: DiscoveredFn, roles: ParamRole[], ret: Role
   if (!['float', 'vec2', 'vec3', 'vec4', 'int', 'bool'].includes(fn.returnType)) return { ok: false, error: `Returns ${fn.returnType}.` };
   const bad = fn.params.find(p => !['float', 'vec2', 'vec3', 'vec4', 'int', 'bool'].includes(p.type));
   if (bad) return { ok: false, error: `Takes ${bad.type} ${bad.name}; no way to make one up.` };
-  const args = fn.params.map((p, i) => argExpr(p.type, bindings[i] ?? defaultBinding(roles[i] ?? { name: p.name, type: p.type, role: 'unknown', confidence: 0, because: [] }))).join(', ');
-  const source = `precision highp float;
+  return { ok: true, source: previewSource(bundleText(fn), fn.name, fn.returnType, fn.params, roles, ret.role, bindings) };
+}
+
+/**
+ * The preview shader around any callable: `helpers` defines `callName`, which
+ * takes `params` and returns `returnType`. Each parameter is fed from its
+ * binding (or its role's default binding) and the result painted by `retRole`.
+ * The discovery preview and the Functions library's thumbnails both use it,
+ * so a saved function looks the way it did when it was found.
+ */
+export function previewSource(helpers: string, callName: string, returnType: string, params: Array<{ name: string; type: string }>, roles: ParamRole[], retRole: ValueRole, bindings: Binding[], opts: { sweepTime?: boolean } = {}): string {
+  const args = params.map((p, i) => argExpr(p.type, bindings[i] ?? defaultBinding(roles[i] ?? { name: p.name, type: p.type, role: 'unknown', confidence: 0, because: [] }))).join(', ');
+  return `precision highp float;
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec2 u_mouse;
-${bundleText(fn)}
+${helpers}
 
 void main() {
   vec2 pv_uv01 = gl_FragCoord.xy / u_resolution;
   vec2 pv_uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y * 2.0;
   vec2 pv_mouse = (u_mouse - 0.5 * u_resolution) / u_resolution.y * 2.0;
   float pv_dist = length(pv_uv) - 0.6;
-  ${fn.returnType} pv_v = ${fn.name}(${args});
-  ${paint(fn.returnType, ret.role)}
+  float pv_time = ${opts.sweepTime ? 'u_time + pv_uv01.x * 4.0' : 'u_time'};
+  ${returnType} pv_v = ${callName}(${args});
+  ${paint(returnType, retRole)}
   gl_FragColor = vec4(col, 1.0);
 }
 `;
-  return { ok: true, source };
 }

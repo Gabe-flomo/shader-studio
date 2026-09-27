@@ -293,6 +293,18 @@ export function bundleText(f: DiscoveredFn): string {
   return [...f.defines, ...f.dependencies.map(d => d.text), f.text].join('\n\n');
 }
 
+/**
+ * Which functions are already in the Functions library: a lookup from a
+ * discovered function to the label of the saved preset carrying the same code
+ * (defines, helpers and all, spacing aside), or undefined.
+ */
+export function savedLookup(presets: ReadonlyArray<{ label: string; glslFunctions: string }>): (f: DiscoveredFn) => string | undefined {
+  const norm = (s: string) => s.replace(/\s+/g, ' ').trim();
+  const byCode = new Map<string, string>();
+  for (const p of presets) if (p.glslFunctions.trim()) byCode.set(norm(p.glslFunctions), p.label);
+  return f => byCode.get(norm(bundleText(f)));
+}
+
 const SOCKET_TYPES = new Set(['float', 'vec2', 'vec3', 'vec4', 'mat2', 'mat3']);
 const OUTPUT_TYPES = new Set(['float', 'vec2', 'vec3', 'vec4']);
 

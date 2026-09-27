@@ -65,3 +65,70 @@ saved from a node. A function can't be saved when it returns something other
 than float/vec2/vec3/vec4, takes a parameter type that can't be a socket
 (int, bool, samplers, arrays), has `out` parameters (publish it as a Code
 node instead), recurses, or reads globals.
+
+## Roles and the live preview
+
+Each parameter gets a guessed role (`src/glsl/roles.ts`): position, uv 0–1,
+time, distance, colour, direction, normal, seed, angle, amount, number. The
+guess comes from the name (`uv`, `t`, `d`…), how the body uses it
+(`length(p)`, `sin(t * 3.0 + 1.0)`, `dot(p, vec2(12.9, 78.2))`) and what the
+file passes to it at its call sites. The role picks what the preview feeds it
+(UV into a position, Time into a time, a circle's distance into a distance, a
+spread of colours into a colour, cell ids into a seed) and the return role
+picks the paint (a distance as a signed field with rings, a colour as itself).
+A guess with little behind it is shown with a `?`. Both the role and what
+feeds the parameter can be changed beside the preview.
+
+### Roles learn from your corrections
+
+Changing a parameter's role is remembered (`src/glsl/roleMemory.ts`, this
+browser's localStorage, key `shader-studio:discover:learned-roles`). Each
+choice is kept by the parameter's type, its name and its *usage pattern*:
+how the body uses it with the name taken out (`inside sin/cos with · ;
+· × rate + phase`). The next time a function is looked at:
+
+- the same name used the same way takes the choice outright (confidence 1);
+- the same use under another name leans the guess towards the choice
+  (and away from the role that was turned down) strongly enough to decide a
+  close call;
+- the same name used differently leans only a little, so a hash's `p` doesn't
+  become a colour because a hue rotation's `p` was one.
+
+Where a remembered choice decided the role, the parameter says **Learned from
+your choice** with **Forget** beside it; under the roles, **Forget all**
+clears every learned role. Roles never learned from a parameter of another
+type.
+
+## Thumbnails in the Functions library
+
+Every Custom Function preset in the palette's Functions list has a small
+rendered picture, and a larger one in the card that opens when it is
+selected. Discovery saves the preview's choices with the preset (`preview`:
+the bindings, the roles and the return role), so a saved function looks the
+way it did when it was found. A preset saved from a node has none; its roles
+are guessed the same way, from the helper its body calls when the body is a
+plain call (`fbm(p)`), otherwise from the body. In a still picture time runs
+across the square, left to right, so a function of time shows its range.
+
+The pictures are rendered offscreen by the node-preview renderer
+(`src/lib/fnThumbnails.ts`, `src/glsl/presetPreview.ts`), only when a row
+scrolls into view, one per idle slot, and cached by content
+(`thumbnailKey`: inputs, output, body, helpers, bindings, size; not the name,
+comment or save time), so renaming keeps the picture and an edit makes a new
+one. A preset that doesn't compile on its own keeps the function icon, with a
+tooltip saying so.
+
+## Functions on the Convert page
+
+The Convert page lists the pasted shader's helper functions under
+**Functions** (beside **Check** under the editor; **Fns** in the phone's pane
+switcher), with the same list, preview, roles and saving as the modal. A
+function already in the library is marked *saved*.
+
+Converting also looks in the library: a call to a helper whose code (and the
+code of everything it calls, spacing, comments and `#define`s aside) is the
+same as a saved preset's becomes that preset's node, named and commented as
+saved, with its arguments converted to nodes and wired in, instead of a
+region that carries the whole call as code. The check lists these under
+**From your Functions**. Only presets whose body is a plain call of their
+inputs (what discovery saves) are matched.

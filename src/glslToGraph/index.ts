@@ -48,6 +48,20 @@ const LIT = '__lit__';
 export interface ConversionOptions {
   /** Warned expressions (by `ConversionWarning.id`) to keep as Expression Blocks instead of the inexact node. */
   asBlock?: ReadonlySet<string>;
+  /**
+   * Saved Custom Function presets (the Functions library). A call to a helper
+   * whose code is the same as a preset's function (and everything it calls)
+   * becomes that preset's node, its arguments wired in as nodes, instead of a
+   * region that carries the whole call as code.
+   */
+  library?: readonly LibraryFunction[];
+}
+
+/** What the converter needs of a saved function preset. */
+export interface LibraryFunction {
+  id: string; label: string; comment?: string;
+  inputs: ReadonlyArray<{ name: string; type: string }>;
+  outputType: string; body: string; glslFunctions: string;
 }
 
 /** A node that isn't quite GLSL: offered with a warning, and the choice to keep the code instead. */
@@ -67,6 +81,8 @@ export interface ConversionReport {
   blocks: { code: string; why: string }[];
   /** Statement regions that became Custom Function nodes. */
   regions: { code: string; why: string }[];
+  /** Helper calls that became a saved function from the library: the helper's name and the preset's. */
+  reused?: { fn: string; presetId: string; label: string }[];
   /** Why the shader can't be a graph at all (empty when it can). */
   unsupported: string[];
   /** When the shader doesn't parse: the line of the paste the parser stopped at. */
@@ -144,15 +160,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   const consts: ConstDecl[] = [];
   for (const st of ast.program) {
     if (st.type === 'function') {
-      const proto = st.prototype as Ast; const header = proto.header as Ast;
-      const name = ((header.name as Ast).identifier as string);
-      const ret = tokenOf((header.returnType as Ast).specifier as Ast);
-      const params = ((proto.parameters as Ast[] | undefined) ?? []).map(p => ({
-        name: (p.identifier as Ast)?.identifier as string ?? '', type: tokenOf((p.specifier as Ast) ?? (p.declaration as Ast)),
-        qual: ((((p.qualifier as Ast[] | undefined) ?? []).map(q => q.token as string).find(q => q === 'out' || q === 'inout') ?? 'in') as 'in' | 'out' | 'inout'),
-      }));
-      const body = generate(st.body as never).trim().replace(/^\{/, '').replace(/\}$/, '').trim();
-      const f: UserFn = { name, ret, params, source: generate(st as never), body, overloads: [] };
+      const f = userFnOf(st);
+      const name = f.name;
       const prev = fns.get(name);
       if (prev) { prev.overloads.push(f); f.overloads = prev.overloads; } else { f.overloads.push(f); fns.set(name, f); }
     } else if (st.type === 'declaration_statement') {
@@ -532,6 +541,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       const o = overloadFor(user, args, env);
       if (o.params.some(p => p.qual !== 'in')) return outCall(a, env, o) ?? (() => { throw new Unmapped(`${name}() returns nothing`); })();
       if (!(o.ret in N_OF)) throw new Unmapped(`${name}() returns a ${o.ret}`);
+      const saved = libraryMatch(name);
+      if (saved) { const v = fromLibrary(a, env, name, saved); if (v) return v; }
       return region(a, env, `call to ${name}()`);
     }
     const vs = args.map(x => build(x, env));
@@ -734,6 +745,49 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       for (const d of inner) if (fns.has(d) && !need.has(d)) queue.push(d);
     }
     return withConsts([...fns.values()].filter(f => f.name !== 'main' && need.has(f.name)).flatMap(f => f.overloads.map(o => o.source)).join('\n\n'));
+  }
+
+  // ── The Functions library: a helper the person already saved ──────────────
+  /** The saved preset that is this helper, by name; worked out once per conversion. */
+  let libraryByFn: Map<string, LibraryFunction> | null = null;
+  function libraryMatch(name: string): LibraryFunction | undefined {
+    if (!options.library?.length) return undefined;
+    if (!libraryByFn) {
+      libraryByFn = new Map();
+      const ours = closureKeys(fns);
+      for (const p of options.library) {
+        const m = presetCall(p);
+        if (!m) continue;
+        const theirs = presetClosureKeys(p.glslFunctions);
+        const called = theirs.has(m) ? m : theirs.has(`${m}_`) ? `${m}_` : null;
+        if (!called || !fns.has(called) || libraryByFn.has(called)) continue;
+        const f = fns.get(called)!;
+        if (f.overloads.length !== 1 || f.params.length !== p.inputs.length || f.ret !== p.outputType || f.params.some((q, i) => q.qual !== 'in' || q.type !== p.inputs[i].type)) continue;
+        if (ours.get(called) === theirs.get(called)) libraryByFn.set(called, p);
+      }
+    }
+    return libraryByFn.get(name);
+  }
+  /** A call to a saved function: its arguments as nodes wired into the preset's node. Null (and nothing kept) when an argument can't be built. */
+  function fromLibrary(a: Ast, env: Env, name: string, p: LibraryFunction): Val | null {
+    const args = (a.args as Ast[] | undefined ?? []).filter(x => x.type !== 'literal');
+    if (args.length !== p.inputs.length) return null;
+    const mark = sink.length, sliders = report.stats.sliders;
+    const undo = () => { sink.length = mark; report.stats.sliders = sliders; return null; };
+    let vs: Val[];
+    try { vs = args.map(x => build(x, env)); }
+    catch (e) { if (!(e instanceof Unmapped)) throw e; return undo(); }
+    if (vs.some((v, i) => v.type !== p.inputs[i].type)) return undo();
+    const t = p.outputType as T;
+    const inputs = p.inputs.map(i => ({ name: i.name, type: i.type as T }));
+    const n = mk('customFn', {
+      __fromPreset: p.id, label: p.label, ...(p.comment ? { __comment: p.comment } : {}),
+      inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t,
+      body: `${name}(${inputs.map(i => i.name).join(', ')})`, glslFunctions: helpersFor(a),
+    }, Object.fromEntries(inputs.map((i, k) => [i.name, asRef(vs[k])])),
+    { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
+    (report.reused ??= []).push({ fn: name, presetId: p.id, label: p.label });
+    return { ref: ref(n, 'result', t), type: t, ast: a };
   }
 
   /**
@@ -1341,6 +1395,75 @@ function hostToOurs(source: string, report: ConversionReport): { code: string; t
 
 /** The functions the compiled shader always defines; a user function of the same name is renamed on the way in. */
 const BUILTIN_HELPER_NAMES = new Set([...ALWAYS_HELPERS_GLSL().matchAll(/\b(?:float|vec[234]|mat[234]|int|bool|void)\s+([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]));
+
+/** The function a saved preset's body calls with its inputs in order (`fbm(p)`), or null for any other body. */
+function presetCall(p: LibraryFunction): string | null {
+  const m = /^\s*(?:return\s+)?([A-Za-z_]\w*)\s*\(([^;]*)\)\s*;?\s*$/.exec(p.body);
+  if (!m) return null;
+  const args = m[2].split(',').map(a => a.trim()).filter(Boolean);
+  return args.length === p.inputs.length && args.every((a, i) => a === p.inputs[i].name) ? m[1] : null;
+}
+
+/** The names of the functions a piece of code calls (constructors included; callers filter). */
+function callNames(a: unknown, out: Set<string>): void {
+  if (Array.isArray(a)) { for (const x of a) callNames(x, out); return; }
+  if (!a || typeof a !== 'object') return;
+  const n = a as Ast;
+  if (n.type === 'function_call') { const idn = n.identifier as Ast; const name = idn.type === 'identifier' ? idn.identifier as string : tokenOf(idn); if (name) out.add(name); }
+  for (const [k, v] of Object.entries(n)) if (k !== 'type') callNames(v, out);
+}
+
+/**
+ * Each function's code with everything it calls, in program order, as the
+ * parser prints it (so spacing, comments and #defines don't count): two
+ * functions with the same key are the same code.
+ */
+function closureKeys(fns: Map<string, UserFn>): Map<string, string> {
+  const calls = new Map<string, Set<string>>();
+  for (const [name, f] of fns) { const out = new Set<string>(); for (const o of f.overloads) callNames(parser.parse(o.source, { quiet: true }).program, out); calls.set(name, out); }
+  const keys = new Map<string, string>();
+  for (const name of fns.keys()) {
+    const need = new Set<string>(); const queue = [name];
+    while (queue.length) { const c = queue.pop()!; if (need.has(c) || !fns.has(c)) continue; need.add(c); for (const d of calls.get(c) ?? []) queue.push(d); }
+    keys.set(name, [...fns.values()].filter(f => need.has(f.name)).flatMap(f => f.overloads.map(o => o.source.replace(/\s+/g, ' ').replace(/ ?([^\w ]) ?/g, '$1').trim())).join('\n'));
+  }
+  return keys;
+}
+
+/** `closureKeys` of a preset's helper block, read the way a paste is (macros expanded, names that clash with the app's helpers renamed). */
+const presetKeyCache = new Map<string, Map<string, string>>();
+function presetClosureKeys(glsl: string): Map<string, string> {
+  const hit = presetKeyCache.get(glsl);
+  if (hit) return hit;
+  const fns = new Map<string, UserFn>();
+  try {
+    const { code } = normaliseHostShader(glsl);
+    const program = (parser.parse(code, { quiet: true }) as unknown as { program: Ast[] }).program;
+    for (const st of program) {
+      if (st.type !== 'function') continue;
+      const f = userFnOf(st);
+      const prev = fns.get(f.name);
+      if (prev) { prev.overloads.push(f); f.overloads = prev.overloads; } else { f.overloads.push(f); fns.set(f.name, f); }
+    }
+  } catch { /* a helper block that doesn't parse matches nothing */ }
+  const keys = closureKeys(fns);
+  if (presetKeyCache.size > 200) presetKeyCache.clear();
+  presetKeyCache.set(glsl, keys);
+  return keys;
+}
+
+/** A top-level function definition as the converter keeps it. */
+function userFnOf(st: Ast): UserFn {
+  const proto = st.prototype as Ast; const header = proto.header as Ast;
+  const name = ((header.name as Ast).identifier as string);
+  const ret = tokenOf((header.returnType as Ast).specifier as Ast);
+  const params = ((proto.parameters as Ast[] | undefined) ?? []).map(p => ({
+    name: (p.identifier as Ast)?.identifier as string ?? '', type: tokenOf((p.specifier as Ast) ?? (p.declaration as Ast)),
+    qual: ((((p.qualifier as Ast[] | undefined) ?? []).map(q => q.token as string).find(q => q === 'out' || q === 'inout') ?? 'in') as 'in' | 'out' | 'inout'),
+  }));
+  const body = generate(st.body as never).trim().replace(/^\{/, '').replace(/\}$/, '').trim();
+  return { name, ret, params, source: generate(st as never), body, overloads: [] };
+}
 
 /** A copy of the tree with one identifier renamed. */
 function renameId(a: Ast, from: string, to: string): Ast {

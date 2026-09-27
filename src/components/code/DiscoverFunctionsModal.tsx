@@ -12,21 +12,17 @@
  * helpers, so each appears in the palette's Functions section.
  */
 import { useMemo, useState } from 'react';
-import { discoverFunctions, toCustomFnPreset, bundleText, type DiscoveredFn, type DiscoverFilter } from '../../glsl/discover';
-import { inferParamRoles, inferReturnRole, ROLE_INFO, type ParamRole } from '../../glsl/roles';
-import { previewShaderFor, defaultBinding, bindingsFor, BINDING_LABEL, type Binding, type BindingKind } from '../../glsl/previewShader';
-import { MiniShader } from './MiniShader';
-import { saveCustomFnPreset } from '../../store/useNodeGraphStore';
-import { tokenizeLine, C, C_LIGHT } from '../glslSyntax';
-import { useThemeMode, useTokens } from '../../theme/themeStore';
-import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { discoverFunctions, savedLookup, type DiscoverFilter } from '../../glsl/discover';
+import { loadCustomFns } from '../../store/useNodeGraphStore';
+import { DiscoverResults } from './DiscoverResults';
+import { saveLabel, useDiscoverPicks } from './useDiscoverPicks';
+import { useTokens } from '../../theme/themeStore';
 import { Button } from '../ui/Button';
 import { Chip } from '../ui/Chip';
 import { Segmented, Toggle } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
-import { toast } from '../ui/toastStore';
 
 export interface DiscoverSourceShader { id: string; name: string; code: string; group?: string; note?: string }
 
@@ -46,8 +42,6 @@ export function DiscoverFunctionsModal({ sources, onClose, onShowInFile, current
   currentId?: string;
 }) {
   const tk = useTokens();
-  const mode = useThemeMode();
-  const pal = mode === 'light' ? C_LIGHT : C;
   const narrow = typeof window !== 'undefined' && window.innerWidth < 760;
 
   // ── Scope ──
@@ -84,48 +78,12 @@ export function DiscoverFunctionsModal({ sources, onClose, onShowInFile, current
   const result = useMemo(() => discoverFunctions(scoped, filter), [scoped, filter]);
   const repeats = useMemo(() => [...result.duplicates.values()].reduce((a, b) => a + b, 0), [result]);
 
-  // ── Selection and preview ──
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [names, setNames] = useState<Record<string, string>>({});
-  const [comments, setComments] = useState<Record<string, string>>({});
-  const active = result.matches.find(f => f.id === activeId) ?? result.matches[0] ?? null;
-  const shownSelected = result.matches.filter(f => selected.has(f.id));
-  const defaultComment = (f: DiscoveredFn) => `Found in “${f.sourceName}”, lines ${f.startLine}–${f.endLine}${f.dependencies.length ? ` · with ${f.dependencies.map(d => d.name).join(', ')}` : ''}`;
-  const [saving, setSaving] = useState(false);
-
-  // ── Roles, bindings and the live preview of the chosen function ──
-  const roles = useMemo<ParamRole[]>(() => (active ? inferParamRoles(active) : []), [active]);
-  const ret = useMemo(() => (active ? inferReturnRole(active) : null), [active]);
-  const [bindingOverrides, setBindingOverrides] = useState<Record<string, Binding[]>>({});
-  const bindings = useMemo<Binding[]>(() => active ? (bindingOverrides[active.id] ?? roles.map(defaultBinding)) : [], [active, roles, bindingOverrides]);
-  const setBinding = (i: number, b: Binding) => { if (!active) return; const next = [...bindings]; next[i] = b; setBindingOverrides(m => ({ ...m, [active.id]: next })); };
-  const preview = useMemo(() => (active && ret ? previewShaderFor(active, roles, ret, bindings) : null), [active, roles, ret, bindings]);
-  const [showUses, setShowUses] = useState(false);
-
-  const save = async () => {
-    if (!shownSelected.length || saving) return;
-    setSaving(true);
-    const failed: string[] = []; let saved = 0;
-    for (const f of shownSelected) {
-      const prep = toCustomFnPreset(f, (names[f.id] ?? f.name).trim() || f.name, (comments[f.id] ?? defaultComment(f)).trim() || undefined);
-      if (!prep.ok) { failed.push(`${f.name}: ${prep.error}`); continue; }
-      const r = await saveCustomFnPreset(prep.data);
-      if (r.ok) saved++; else failed.push(`${f.name}: ${('message' in r && typeof r.message === 'string') ? r.message : 'could not save'}`);
-    }
-    setSaving(false);
-    if (saved) toast.success(saved === 1 ? 'Saved 1 function to Functions' : `Saved ${saved} functions to Functions`, { message: failed.length ? `${failed.length} skipped: ${failed.join(' · ')}` : 'Find them in the palette under Functions, or in a Custom Function node’s presets.' });
-    else if (failed.length) toast.error('Nothing saved', { message: failed.join(' · ') });
-    if (saved) onClose();
-  };
+  // ── Selection, preview and saving ──
+  const picks = useDiscoverPicks(result.matches);
+  const savedAs = useMemo(() => savedLookup(loadCustomFns()), []);
+  const save = async () => { if (await picks.save()) onClose(); };
 
   const caps: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint, margin: '12px 0 6px' };
-  const badge = (text: string, color = tk.text.muted, bg = tk.bg.field): React.ReactNode => (
-    <span style={{ display: 'inline-flex', alignItems: 'center', height: 16, padding: '0 5px', borderRadius: radius.sm, font: `700 10px ${fontFamily.mono}`, color, background: bg, flexShrink: 0 }}>{text}</span>
-  );
-  const levelLabel = (f: DiscoveredFn) => f.level < 0 ? 'recursive' : f.level === 0 ? 'self-contained' : f.level === 1 ? 'calls 1 level' : `calls ${f.level} levels`;
-
-  const previewCode = active ? bundleText(active) : '';
 
   return (
     <Modal
@@ -137,9 +95,9 @@ export function DiscoverFunctionsModal({ sources, onClose, onShowInFile, current
       onClose={onClose}
       footer={
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-          <span style={{ flex: 1, color: tk.text.muted, fontSize: 12 }}>{shownSelected.length ? `${shownSelected.length} selected` : 'Tick the functions to keep'}</span>
+          <span style={{ flex: 1, color: tk.text.muted, fontSize: 12 }}>{picks.shownSelected.length ? `${picks.shownSelected.length} selected` : 'Tick the functions to keep'}</span>
           <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button size="sm" variant="primary" icon="save" disabled={!shownSelected.length || saving} onClick={save}>{`Save ${shownSelected.length || ''} to Functions`.replace('  ', ' ')}</Button>
+          <Button size="sm" variant="primary" icon="save" disabled={!picks.shownSelected.length || picks.saving} onClick={save}>{saveLabel(picks.shownSelected.length)}</Button>
         </div>
       }
     >
@@ -189,108 +147,12 @@ export function DiscoverFunctionsModal({ sources, onClose, onShowInFile, current
         </div>
 
         {/* ── Matches and preview ── */}
-        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 6px', borderBottom: `1px solid ${tk.border.subtle}` }}>
-            <span style={{ ...caps, margin: 0, flex: 1 }}>Matches</span>
-            <Button size="sm" variant="ghost" disabled={!result.matches.length} onClick={() => setSelected(new Set(result.matches.map(f => f.id)))}>Select all</Button>
-            <Button size="sm" variant="ghost" disabled={!shownSelected.length} onClick={() => setSelected(new Set())}>Clear</Button>
-          </div>
-          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 8px' }} role="listbox" aria-label="Discovered functions">
-            {scoped.length === 0 && <div style={{ padding: 12, fontSize: 12, color: tk.text.faint }}>Nothing in scope. {scope === 'folders' ? 'Pick a folder.' : 'Save a shader first, or widen the search.'}</div>}
-            {scoped.length > 0 && result.matches.length === 0 && <div style={{ padding: 12, fontSize: 12, color: tk.text.faint }}>{result.total ? `${result.total} functions found, none pass the filters.` : 'No functions in these shaders besides main.'}</div>}
-            {result.matches.map(f => {
-              const isActive = active?.id === f.id;
-              return (
-                <div
-                  key={f.id} role="option" aria-selected={isActive}
-                  onClick={() => setActiveId(f.id)}
-                  onDoubleClick={() => setSelected(s => toggleIn(s, f.id))}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: radius.md, cursor: 'pointer', background: isActive ? alpha(tk.accent.base, 0.1) : 'transparent', boxShadow: isActive ? `inset 0 0 0 1px ${alpha(tk.accent.base, 0.35)}` : 'none' }}
-                >
-                  <input type="checkbox" aria-label={`Keep ${f.name}`} checked={selected.has(f.id)} onChange={() => setSelected(s => toggleIn(s, f.id))} onClick={e => e.stopPropagation()} style={{ margin: 0, accentColor: tk.accent.base }} />
-                  <span style={{ flex: 1, minWidth: 0, font: `500 12px ${fontFamily.mono}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.signature}>
-                    <span style={{ color: tk.text.muted }}>{f.returnType} </span><span style={{ fontWeight: 700 }}>{f.name}</span><span style={{ color: tk.text.secondary }}>({f.params.map(p => `${p.type} ${p.name}`).join(', ')})</span>
-                  </span>
-                  {badge(f.level < 0 ? 'rec' : `L${f.level}`, f.level === 0 ? tk.status.success : f.level < 0 ? tk.status.danger : tk.text.muted, f.level === 0 ? alpha(tk.status.success, 0.14) : tk.bg.field)}
-                  {!f.selfContained && badge('globals', tk.status.warning, alpha(tk.status.warning, 0.14))}
-                  {!narrow && <span style={{ color: tk.text.faint, fontSize: 11, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.sourceName}>{f.sourceName}</span>}
-                </div>
-              );
-            })}
-          </div>
-
-          {active && (
-            <div style={{ flexShrink: 0, height: narrow ? '45%' : '44%', minHeight: 160, borderTop: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 4px', flexWrap: 'wrap' }}>
-                <Field aria-label="Name in the library" value={names[active.id] ?? active.name} height={26} mono onChange={e => setNames(m => ({ ...m, [active.id]: e.target.value }))} style={{ width: 180 }} />
-                {badge(active.returnType, tk.text.muted)}
-                <span style={{ fontSize: 11, color: tk.text.faint, flex: 1, minWidth: 120 }}>{ret && ret.role !== 'unknown' ? `returns a ${ROLE_INFO[ret.role].label} · ` : ''}{levelLabel(active)}{active.dependencies.length ? ` · brings ${active.dependencies.map(d => d.name).join(', ')}` : ''}{active.defines.length ? ` · ${active.defines.length} #define${active.defines.length > 1 ? 's' : ''}` : ''} · {active.sourceName}, lines {active.startLine}–{active.endLine}</span>
-                {active.callSites.length > 0 && <Button size="sm" variant={showUses ? undefined : 'ghost'} icon="search" onClick={() => setShowUses(v => !v)}>{`Used ${active.callSites.length}×`}</Button>}
-                {onShowInFile && <Button size="sm" variant="ghost" icon="code" onClick={() => onShowInFile(active.sourceId, { start: active.start, end: active.end })}>Show in file</Button>}
-                <Button size="sm" variant={selected.has(active.id) ? 'ghost' : undefined} icon={selected.has(active.id) ? 'check' : 'plus'} onClick={() => setSelected(s => toggleIn(s, active.id))}>{selected.has(active.id) ? 'Kept' : 'Keep'}</Button>
-              </div>
-              <div style={{ padding: '0 12px 6px' }}>
-                <Field aria-label="Comment" placeholder={defaultComment(active)} value={comments[active.id] ?? ''} height={26} onChange={e => setComments(m => ({ ...m, [active.id]: e.target.value }))} />
-              </div>
-              {!active.selfContained && <div style={{ margin: '0 12px 6px', fontSize: 11, color: tk.status.warning }}>Reads {active.globals.join(', ')} from its shader, so it can’t be saved as a library function as it is.</div>}
-              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: narrow ? 'column' : 'row', gap: 0 }}>
-                <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  {showUses && (
-                    <div style={{ flexShrink: 0, maxHeight: 110, overflowY: 'auto', borderBottom: `1px solid ${tk.border.subtle}`, padding: '4px 12px 6px' }}>
-                      <div style={{ ...caps, margin: '4px 0 4px' }}>Used in {active.sourceName}</div>
-                      {active.callSites.slice(0, 12).map((c, i) => (
-                        <button key={i} type="button" onClick={() => onShowInFile?.(active.sourceId, { start: c.start, end: c.end })} title={onShowInFile ? 'Show this call in the file' : undefined}
-                          style={{ display: 'flex', gap: 8, width: '100%', textAlign: 'left', border: 0, background: 'transparent', cursor: onShowInFile ? 'pointer' : 'default', padding: '2px 0', font: `11px ${fontFamily.mono}`, color: tk.text.secondary }}>
-                          <span style={{ color: tk.text.faint, minWidth: 34 }}>{c.line}</span>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{c.text}</span>
-                          <span style={{ color: tk.text.faint, flexShrink: 0 }}>in {c.inFn}</span>
-                        </button>
-                      ))}
-                      {active.callSites.length > 12 && <div style={{ fontSize: 10.5, color: tk.text.faint }}>and {active.callSites.length - 12} more</div>}
-                    </div>
-                  )}
-                  <pre style={{ flex: 1, minHeight: 0, overflow: 'auto', margin: 0, padding: '8px 12px', background: tk.bg.field, font: `12px/1.55 ${fontFamily.mono}`, color: tk.text.primary, whiteSpace: 'pre', tabSize: 4 }}>
-                    {previewCode.split('\n').map((line, i) => (
-                      <div key={i} style={{ minHeight: '1.55em' }}>{tokenizeLine(line, pal).map((t, j) => <span key={j} style={{ color: t.color }}>{t.text}</span>)}</div>
-                    ))}
-                  </pre>
-                </div>
-                <div style={{ width: narrow ? 'auto' : 212, flexShrink: 0, borderLeft: narrow ? 'none' : `1px solid ${tk.border.subtle}`, padding: '8px 10px', overflowY: 'auto', display: 'flex', flexDirection: narrow ? 'row' : 'column', gap: 8, alignItems: narrow ? 'flex-start' : 'stretch' }}>
-                  <MiniShader source={preview?.ok ? preview.source : null} size={narrow ? 120 : 190} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1 }}>
-                    {preview && !preview.ok && <div style={{ fontSize: 10.5, lineHeight: 1.4, color: tk.text.faint }}>{preview.error}</div>}
-                    {roles.map((r, i) => (
-                      <div key={r.name} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 11 }} title={r.because.length ? `${ROLE_INFO[r.role].hint}\n${r.because.join(' · ')}` : ROLE_INFO[r.role].hint}>
-                          <span style={{ font: `600 11px ${fontFamily.mono}`, color: tk.text.primary }}>{r.type} {r.name}</span>
-                          <span style={{ color: r.confidence > 0.4 ? tk.kind.expr : tk.text.faint }}>{ROLE_INFO[r.role].label}{r.confidence > 0.4 ? '' : '?'}</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <select
-                            aria-label={`Feed ${r.name} with`} value={bindings[i]?.kind ?? 'const'}
-                            onChange={e => setBinding(i, { kind: e.target.value as BindingKind, value: bindings[i]?.value?.length ? bindings[i].value : [0.5] })}
-                            style={{ flex: 1, minWidth: 0, height: 24, borderRadius: radius.sm, border: 0, background: tk.bg.field, color: tk.text.secondary, font: `500 11px ${fontFamily.ui}`, padding: '0 4px' }}
-                          >
-                            {bindingsFor(r.type).map(k => <option key={k} value={k}>{BINDING_LABEL[k]}</option>)}
-                          </select>
-                          {bindings[i]?.kind === 'const' && (
-                            <input
-                              aria-label={`Value for ${r.name}`} value={(bindings[i].value ?? []).join(', ')}
-                              onChange={e => setBinding(i, { kind: 'const', value: e.target.value.split(',').map(x => Number(x.trim())).filter(n => Number.isFinite(n)) })}
-                              style={{ width: r.type === 'float' ? 52 : 92, height: 24, borderRadius: radius.sm, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}`, padding: '0 6px' }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {active.params.length === 0 && <div style={{ fontSize: 10.5, color: tk.text.faint }}>No parameters: the preview calls it as it is.</div>}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {!active && result.matches.length === 0 && <div style={{ flexShrink: 0, padding: 12, fontSize: 11.5, color: tk.text.faint, borderTop: `1px solid ${tk.border.subtle}`, lineHeight: 1.5 }}>Self-contained functions (level 0) are the safest to keep: a hash, a rotation, a palette. A level-1 function brings its helpers with it, so noise() arrives together with the hash() it calls.</div>}
-        </div>
+        <DiscoverResults
+          picks={picks} narrow={narrow} onShowInFile={onShowInFile} savedAs={savedAs}
+          empty={scoped.length === 0
+            ? <>Nothing in scope. {scope === 'folders' ? 'Pick a folder.' : 'Save a shader first, or widen the search.'}</>
+            : <>{result.total ? `${result.total} functions found, none pass the filters.` : 'No functions in these shaders besides main.'}<div style={{ marginTop: 10, lineHeight: 1.5 }}>Self-contained functions (level 0) are the safest to keep: a hash, a rotation, a palette. A level-1 function brings its helpers with it, so noise() arrives together with the hash() it calls.</div></>}
+        />
       </div>
     </Modal>
   );

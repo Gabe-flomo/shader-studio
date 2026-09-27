@@ -60,13 +60,12 @@ export function MiniShader({ source, size = 180, onError }: { source: string | n
 
   return (
     <div style={{ position: 'relative', width: size, height: size, borderRadius: radius.md, overflow: 'hidden', background: '#0d0d12', flexShrink: 0 }}>
-      {source && !error && (
-        <canvas
-          ref={ref} width={size} height={size} aria-label="Function preview"
-          onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); mouse.current = [e.clientX - r.left, e.clientY - r.top]; }}
-          style={{ display: 'block', width: size, height: size }}
-        />
-      )}
+      {/* Always mounted (hidden behind an error): the next source compiles on this canvas, so one error doesn't stick. */}
+      <canvas
+        ref={ref} width={size} height={size} aria-label="Function preview"
+        onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); mouse.current = [e.clientX - r.left, e.clientY - r.top]; }}
+        style={{ display: 'block', width: size, height: size, visibility: source && !error ? 'visible' : 'hidden' }}
+      />
       {(error || !source) && (
         <div style={{ position: 'absolute', inset: 0, padding: 10, overflow: 'auto', font: `500 10.5px/1.4 ${fontFamily.mono}`, color: error ? '#ffb4a2' : tk.text.faint }}>
           {error ? error.replace(/^ERROR:\s*/, '') : 'No preview'}
