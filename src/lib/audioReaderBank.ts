@@ -13,9 +13,10 @@ import { stepReaders } from '../play/audioReaders';
 import { liveAudio } from './liveAudio';
 import { audioEngine } from './audioEngine';
 import { videoSound } from './videoSound';
-import { videoLayerOfInput } from '../types/playLayers';
+import { padsLayerOfInput, videoLayerOfInput } from '../types/playLayers';
+import { padSound } from './padSound';
 
-export type ReaderInputState = 'live-on' | 'live-off' | 'song' | 'song-missing' | 'video' | 'video-missing';
+export type ReaderInputState = 'live-on' | 'live-off' | 'song' | 'song-missing' | 'video' | 'video-missing' | 'pads' | 'pads-missing';
 
 class AudioReaderBank {
   private cfg: PlayAudioReaders | undefined;
@@ -41,6 +42,8 @@ class AudioReaderBank {
     if (!input) return liveAudio.isOn() ? 'live-on' : 'live-off';
     const video = videoLayerOfInput(input);
     if (video) return videoSound.analyser(video) ? 'video' : 'video-missing';
+    const pads = padsLayerOfInput(input);
+    if (pads) return padSound.analyser(pads) ? 'pads' : 'pads-missing';
     return audioEngine.isLoaded(input) ? 'song' : 'song-missing';
   }
 
@@ -51,8 +54,8 @@ class AudioReaderBank {
       const raw = liveAudio.raw();
       return raw ? { freq: raw.freq, sampleRate: raw.sampleRate } : null;
     }
-    const video = videoLayerOfInput(input);
-    const an = video ? videoSound.analyser(video) : audioEngine.getAnalyser(input);
+    const video = videoLayerOfInput(input), pads = padsLayerOfInput(input);
+    const an = video ? videoSound.analyser(video) : pads ? padSound.analyser(pads) : audioEngine.getAnalyser(input);
     if (!an) return null;
     if (!this.buf || this.buf.length !== an.frequencyBinCount) this.buf = new Float32Array(an.frequencyBinCount);
     const now = performance.now();

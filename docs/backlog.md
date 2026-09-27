@@ -51,11 +51,9 @@ Built: effect chains (filter, echo, reverb, distortion, compressor) on each soun
   - filter (low, high, band, with resonance);
   - distortion (soft, hard, fold, tube, bitcrush).
   Every parameter is mappable, and it applies in offline renders and website exports.
-- **Drum pad sampler layer:** a grid of pads with banks, each holding a sample.
-  - Per pad: start/end with a waveform view, loop points, one-shot or gate, reverse, pitch, volume and pan, ADSR, choke groups, and velocity to volume.
-  - Triggers: clicks, keys, MIDI notes and grid pads, actions and signals, takes.
-  - Effects: one chain for the whole sampler.
-  - It feeds the audio readers and is mixed into renders. Samples live in the library and `.playfile`.
+- **Drum pad sampler layer:** shipped (docs/drum-pads.md). Follow-ups:
+  - Banks (A/B), a Sounds tab in the Library, pad samples in presentations, the pad grid on websites.
+  - Slicing, time-stretch, and filter or pitch envelopes per pad.
 - **Plugin hosting (desktop only):**
   - Audio Units first (AVAudioEngine and AVAudioUnit), then VST3 (check the SDK licence).
   - List parameters as mapping targets and open the plugin's own window.

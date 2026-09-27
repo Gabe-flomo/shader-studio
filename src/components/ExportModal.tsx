@@ -25,7 +25,7 @@ import { formatDuration } from '../lib/midiFile';
 import { recordingBaseName, recordingPath, saveRecording } from '../utils/recordingsFolder';
 import { RecordingsSetting } from './shell/RecordingsSetting';
 import { audioEngine } from '../lib/audioEngine';
-import { mixdown, recordingTracks, wavBytes, type MixFx } from '../lib/recordingAudio';
+import { mixdown, padHitsOf, recordingTracks, wavBytes, type MixFx } from '../lib/recordingAudio';
 import { takeValueAt } from '../lib/audioFxOffline';
 import { playEngine } from '../lib/playEngine';
 import { rollingSeconds, takeApplier, useTakes } from '../lib/takes';
@@ -177,7 +177,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   // Sound: only songs already in Playfield, never the microphone.
   const tracks = external ? [] : recordingTracks(play, nodes);
   // The audio effects in an offline mix: the record's chains, their numbers from the take (or as they are now).
-  const mixFx = (from: number): MixFx => ({ fx: can('play.audioFx') ? play.audioFx : undefined, valueAt: takeValueAt(take, from, (id, k, b) => playEngine.layerValue(id, k, b)) });
+  // Drum pads sound where the take hit them, each at the moment it landed.
+  const mixFx = (from: number): MixFx => ({ fx: can('play.audioFx') ? play.audioFx : undefined, valueAt: takeValueAt(take, from, (id, k, b) => playEngine.layerValue(id, k, b)), padHits: padHitsOf(take, from) });
   const [withAudio, setWithAudio] = useState(true);
   const sound = withAudio && tracks.length > 0;
   const clockSongs = tracks.some(t => t.clock);

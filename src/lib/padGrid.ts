@@ -107,9 +107,17 @@ class PadGrid implements InputSource {
     for (const l of this.listeners) l();
   }
 
+  private pressListeners = new Set<(col: number, row: number, vel: number) => void>();
+  /** On-screen grid presses (vel 0: let go), as they happen (drum pads play them). */
+  onPress(fn: (col: number, row: number, vel: number) => void): () => void {
+    this.pressListeners.add(fn);
+    return () => { this.pressListeners.delete(fn); };
+  }
+
   /** A pad pressed on the on-screen grid (velocity 0..1). */
   press(col: number, row: number, vel = 0.8): void {
     if (!this.pg) return;
+    for (const fn of this.pressListeners) fn(col, row, vel);
     this.queue.push(() => {
       const pg = this.pg, g = this.g;
       if (!pg || !g) return;
@@ -121,6 +129,7 @@ class PadGrid implements InputSource {
 
   release(col: number, row: number): void {
     if (!this.pg) return;
+    for (const fn of this.pressListeners) fn(col, row, 0);
     this.queue.push(() => {
       const pg = this.pg, g = this.g;
       if (!pg || !g) return;

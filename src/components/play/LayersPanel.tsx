@@ -14,6 +14,7 @@
  * dragged and invisible zones are outlined.
  */
 import { VideoEditor } from './layers/VideoEditor';
+import { DrumPadEditor } from './layers/DrumPadEditor';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { accentColor } from '../../theme/categories';
@@ -639,6 +640,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
     case 'image': body = <ImageEditor f={f} pictureHidden={pictureHidden} />; break;
     case 'camera': body = <CameraEditor f={f} pictureHidden={pictureHidden} />; break;
     case 'video': body = <VideoEditor f={f} ctx={ctx} pictureHidden={pictureHidden} />; break;
+    case 'drumpad': body = <DrumPadEditor f={f} ctx={ctx} />; break;
     case 'particles': body = <ParticlesEditor f={f} ctx={ctx} />; break;
     case 'shape': body = <ShapeEditor f={f} ctx={ctx} />; break;
     case 'audio': body = <AudioEditor f={f} />; break;
@@ -730,7 +732,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
               <LayerReadings layer={l} />
             </Section>
           )}
-          {l.kind !== 'null' && !isBackground && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
+          {l.kind !== 'null' && l.kind !== 'drumpad' && !isBackground && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
         </>
       )}
     </div>

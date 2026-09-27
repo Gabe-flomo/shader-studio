@@ -62,7 +62,7 @@ const MIN_GAP = 1 / 62;
 // ── Capture ──────────────────────────────────────────────────────────────────
 
 interface RawTrack { meta: Omit<TakeTrack, 'keys'>; t: number[]; v: number[] }
-type KitAction = { do: ActionKind; layerId: string; amount: number };
+type KitAction = { do: ActionKind; layerId: string; amount: number; vel?: number };
 
 /** The MIDI node's channel writes this frame (the bus's one tap, shared by every capture). */
 const busNow = new Map<string, number>();
@@ -74,7 +74,8 @@ const tapBus: InputWriter = (key, value) => {
 export class TakeCapture {
   private tracks = new Map<string, RawTrack>();
   private events: { t: number; a: KitAction }[] = [];
-  private pending: KitAction[] = [];
+  /** `at`: the clock time a drum pad hit landed, between frames (else the next frame's). */
+  private pending: Array<KitAction & { at?: number }> = [];
   private first: number | null = null;
   private last = -Infinity;
   private kept = -Infinity;
@@ -93,7 +94,7 @@ export class TakeCapture {
     this.play = play;
     this.keep = keep;
     this.seed = seed;
-    this.offAct = playOverlay.onAct(a => this.pending.push({ do: a.do, layerId: a.layerId, amount: a.amount }));
+    this.offAct = playOverlay.onAct(a => this.pending.push({ do: a.do, layerId: a.layerId, amount: a.amount, ...(a.vel !== undefined ? { vel: a.vel } : {}), ...(a.at !== undefined ? { at: a.at } : {}) }));
   }
 
   dispose(): void { this.offAct(); this.data.dispose(); }
@@ -205,7 +206,10 @@ export class TakeCapture {
   }
 
   private flushEvents(time: number): void {
-    for (const a of this.pending) this.events.push({ t: time, a });
+    if (!this.pending.length) return;
+    // A pad hit keeps the moment it landed (sample-accurate in a render), never later than this frame.
+    for (const { at, ...a } of this.pending) this.events.push({ t: at !== undefined && at <= time && at >= time - 0.25 ? at : time, a });
+    this.events.sort((x, y) => x.t - y.t);
     this.pending.length = 0;
   }
 

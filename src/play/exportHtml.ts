@@ -39,6 +39,7 @@ import finishGlslSource from './kit/finishGlsl.js?raw';
 import finishSource from './kit/finish.js?raw';
 import audioFxSource from './kit/audioFx.js?raw';
 import signalsSource from './kit/signals.js?raw';
+import drumPadsSource from './kit/drumPads.js?raw';
 import { renderableFinish } from '../types/playFinish';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { BACKGROUND_VIDEO_KEEP, backgroundLayerOf, usesHands, type PlayRecord } from '../types/play';
@@ -108,6 +109,8 @@ export interface PlayMedia {
   audio?: (PlayMediaFile & { id: string; uniforms: string[]; bands: number[]; range: number; mode: string })[];
   /** Video layers' files, by layer id (the page puts each in its layer as `src`). */
   layerVideos?: Record<string, PlayMediaFile>;
+  /** Drum pad layers' samples, by layer id and pad index (the page puts each in its pad as `src`). */
+  layerPads?: Record<string, Record<string, PlayMediaFile>>;
 }
 
 export type EmbedMode = 'player' | 'background';
@@ -207,6 +210,17 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: 
       ? { what: `The video “${l.fileName}” (${sizeText(bytes)}) in ${l.label}`, why: `Videos over ${sizeText(VIDEO_LIMIT)} stay out of the page to keep it light, so that layer draws nothing there${readsVideo(play, l.id) ? ' and its audio readers hear nothing' : ''}. Trim or compress it under ${sizeText(VIDEO_LIMIT)} to bring it along.` }
       : { what: `The video “${l.fileName}” in ${l.label}`, why: 'Its file isn’t open in this session (it is still loading, or this browser’s library doesn’t have it), so that layer draws nothing on the page. Open the Play page until it shows, then export again.' });
   }
+  // Drum pads: a sample over the limit, or not opened this session, stays out; that pad is silent on the page.
+  for (const l of play.layers) {
+    if (l.kind !== 'drumpad') continue;
+    l.pads.forEach((p, i) => {
+      if (!p.sampleId || media?.layerPads?.[l.id]?.[i]?.src) return;
+      const bytes = media?.layerPads?.[l.id]?.[i]?.bytes || p.bytes;
+      out.push(bytes > AUDIO_LIMIT
+        ? { what: `The sound “${p.fileName}” (${sizeText(bytes)}) on pad ${i + 1} of ${l.label}`, why: `Sounds over ${sizeText(AUDIO_LIMIT)} stay out of the page, so that pad is silent there. Trim it to bring it along.` }
+        : { what: `The sound “${p.fileName}” on pad ${i + 1} of ${l.label}`, why: 'Its file isn’t open in this session (still loading, or this browser’s library doesn’t have it), so that pad is silent on the page. Open the Play page until the pad shows, then export again.' });
+    });
+  }
   for (const l of play.layers) {
     if (l.kind === 'audio' && l.input === 'file') {
       out.push({ what: l.fileName ? `The song “${l.fileName}” (${l.label})` : `The song in ${l.label}`, why: 'Songs aren’t saved with a setup, so the page listens to the visitor’s microphone instead, after they click Enable.' });
@@ -244,6 +258,7 @@ export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', 
   for (const l of play?.layers ?? []) {
     const f = l.kind === 'video' ? media?.layerVideos?.[l.id] : undefined;
     if (f?.src) out.push({ what: `Video “${f.name}” in ${f.label}`, bytes: f.src.length });
+    if (l.kind === 'drumpad') for (const s of Object.values(media?.layerPads?.[l.id] ?? {})) if (s.src) out.push({ what: `Sound “${s.name}” in ${s.label}`, bytes: s.src.length });
   }
   const queue = backgroundLayerOf(play);
   const d = queue ? undefined : play?.display;
@@ -307,6 +322,10 @@ export function playBundle(input: PlayHtmlInput) {
   if (play.layers.some(l => l.kind === 'video')) {
     play.layers = play.layers.map(l => (l.kind === 'video' ? { ...l, src: input.media?.layerVideos?.[l.id]?.src ?? '' } as typeof l : l));
   }
+  // Drum pad layers carry their samples in their pads (data URLs, when they came along).
+  if (play.layers.some(l => l.kind === 'drumpad')) {
+    play.layers = play.layers.map(l => (l.kind === 'drumpad' ? { ...l, pads: l.pads.map((p, i) => ({ ...p, src: input.media?.layerPads?.[l.id]?.[i]?.src ?? '' })) } as typeof l : l));
+  }
   // A saved graph's nodes stay out: the page runs the graph compiled (backgroundGraphs).
   if (queue) play.layers = [{ ...queue, sources: queue.sources.map(s => { if (!s.nodes) return s; const c = { ...s }; delete c.nodes; return c; }) }, ...play.layers.slice(1)];
   const graphs = queue ? Object.fromEntries(Object.entries(input.backgroundGraphs ?? {}).filter(([id]) => queue.sources.some(s => s.id === id))) : {};
@@ -337,10 +356,10 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, audioFxSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, audioFxSource, drumPadsSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH } };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH } };\n})();\n`;
 }
 
 /**

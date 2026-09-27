@@ -24,6 +24,7 @@ import { loadThreeRuntime, playUses3D, threeRuntime } from './threeSource';
 import { klPaintBackground } from './kit/layers.js';
 import { playBackground, planShowsThis } from './background';
 import { playVideoLayers } from './videoLayers';
+import { playDrumPads } from './drumPads';
 import { klVideoFit } from './kit/layers.js';
 import type { BqPlan } from './kit/queue.js';
 import { setScriptStatus } from './scriptStatus';
@@ -37,7 +38,8 @@ import { addMask, maskFromOutline } from './mattes';
 import { fnActive, fnAnimated, fnCreate, type FnEffect, type FnRenderer } from './kit/finish.js';
 import { finishPropId, renderableFinish } from '../types/playFinish';
 
-type KitAction = { do: ActionKind; layerId: string; amount: number };
+/** `vel` and `at`: a drum pad hit's velocity (0 lets a gate pad go) and the clock time it landed (takes stamp it there). */
+type KitAction = { do: ActionKind; layerId: string; amount: number; vel?: number; at?: number };
 /** An audio layer's sound from a take: a frame, null (the input was off), or undefined (not recorded: the live sound). */
 export type TakeAudioSource = (l: PlayLayer) => KitAudio | null | undefined;
 
@@ -83,6 +85,9 @@ class PlayOverlay {
 
   constructor() {
     playEngine.onAction(a => this.fire({ do: a.do, layerId: a.layerId, amount: a.amount }));
+    // Drum pads: every hit goes through here (a take records it), and comes back to play.
+    playDrumPads.setActor(a => this.fire(a));
+    this.onPad(a => playDrumPads.play(a));
   }
 
   // ── Actions, and a take playing back ───────────────────────────────────────
@@ -97,9 +102,16 @@ class PlayOverlay {
 
   private fire(a: KitAction): void {
     if (this.replaying) return;
-    this.kit.act(a);
+    if (a.do === 'pad') for (const cb of this.padListeners) cb(a);
+    else this.kit.act(a);
     for (const cb of this.actListeners) cb(a);
   }
+
+  private padListeners = new Set<(a: KitAction) => void>();
+  /** Drum pad hits (`do: 'pad'`), live and from a take playing back (play/drumPads.ts plays them). */
+  onPad(cb: (a: KitAction) => void): () => void { this.padListeners.add(cb); return () => { this.padListeners.delete(cb); }; }
+  /** Is a take playing back (live pad hits wait)? */
+  isReplaying(): boolean { return this.replaying; }
 
   /** Every action that fires on the live picture (a take records them). Returns an unsubscribe. */
   onAct(cb: (a: KitAction) => void): () => void { this.actListeners.add(cb); return () => { this.actListeners.delete(cb); }; }
@@ -120,7 +132,10 @@ class PlayOverlay {
   /** The take's audio frames for audio layers (null: the live sound). */
   setReplayAudio(fn: TakeAudioSource | null): void { this.replayAudio = fn; }
   /** An action from the take playing back. */
-  replayAct(a: KitAction): void { this.kit.act(a); }
+  replayAct(a: KitAction): void {
+    if (a.do === 'pad') { for (const cb of this.padListeners) cb(a); return; }
+    this.kit.act(a);
+  }
   /** Start the layers over (a take scrubbed backwards), with the take's seed. */
   resetLayers(): void { this.kit.reset(this.seed); }
   /**
@@ -210,6 +225,7 @@ class PlayOverlay {
     this.record = record;
     playBackground.setRecord(record);
     playVideoLayers.setRecord(record);
+    playDrumPads.setRecord(record);
     // Example graphs in a Background queue compile from the examples' chunk: load it now, so the picture and exports have them.
     // (Imported when needed: queueGraphs brings the graph store along.)
     if (record.layers[0]?.kind === 'background' && record.layers[0].sources.some(x => x.kind === 'graph' && x.graph?.startsWith('example:'))) void import('./queueGraphs').then(m => m.preloadQueueExamples());

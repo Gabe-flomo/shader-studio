@@ -35,6 +35,7 @@ export const ACTION_LABELS: Record<BuiltinActionKind, string> = {
   burst: 'Burst particles', scatter: 'Scatter', reset: 'Reset', freeze: 'Freeze / unfreeze',
   next: 'Next line', prev: 'Previous line', shuffle: 'Random line',
   toggle: 'Show / hide', show: 'Show', hide: 'Hide', drop: 'Drop again', clear: 'Clear strokes', goto: 'Go to',
+  pad: 'Play pad',
 };
 
 /** Change background: what next, previous, random, go to and reset mean on a Background layer. */

@@ -15,6 +15,11 @@
  *                                       export's length, from the clock's 0,
  *                                       as a WAV FFmpeg muxes in
  *
+ * Drum pad layers are heard when something hits them: real time takes them
+ * off the record bus like any sound, and a frame-by-frame render of a take
+ * plays its recorded hits at the exact moment each landed (`padHits`),
+ * through the same sampler (play/kit/drumPads.js), numbers from the take.
+ *
  * Both carry the audio effects: real time taps the mix after the master
  * chain (audioEngine.ts), and the offline mix builds the same chains
  * (audioFxOffline.ts), following a take's recorded numbers when it has them.
@@ -26,6 +31,9 @@ import { offlineFx, type ValueAt } from './audioFxOffline';
 import type { GraphNode } from '../types/nodeGraph';
 import { videoLayerTimeAt, type VideoLayer } from '../types/playLayers';
 import { videoSound } from './videoSound';
+import { padSound } from './padSound';
+import { dpCreateSampler, dpHitNumbers, dpKey } from '../play/kit/drumPads.js';
+import type { DrumPad, DrumPadLayer } from '../types/playLayers';
 
 export interface RecordingTrack {
   key: string;
@@ -36,12 +44,43 @@ export interface RecordingTrack {
   video?: VideoTrack;
   /** The effect chain it goes through (types/playAudioFx.ts); absent: straight to the master chain. */
   chain?: string;
+  /** A Drum pad layer: its pads and their samples (it sounds only where a take hits it). */
+  pads?: PadTrack;
+}
+
+/** A Drum pad layer in a mix: its settings when the export starts, and each pad's decoded sample. */
+export interface PadTrack {
+  layerId: string;
+  layer: Pick<DrumPadLayer, 'volume' | 'pads'> & Record<string, unknown>;
+  buffers: ReadonlyArray<AudioBuffer | null>;
+}
+
+/** A drum pad hit in a mix: `t` seconds into it, pad 0-based, velocity (0 lets a gate pad go). */
+export interface PadHit { layerId: string; pad: number; vel: number; t: number }
+
+/** A take's pad hits as seconds into a mix starting at clock time `from`. */
+export function padHitsOf(take: { from: number; events: ReadonlyArray<{ t: number; do: string; layerId: string; amount: number; vel?: number }> } | null | undefined, from: number, length = Infinity): PadHit[] {
+  if (!take) return [];
+  return take.events
+    .filter(e => e.do === 'pad')
+    .map(e => ({ layerId: e.layerId, pad: Math.round(e.amount) - 1, vel: e.vel ?? 1, t: take.from + e.t - from }))
+    .filter(h => h.t >= 0 && h.t < length && h.pad >= 0);
+}
+
+/** A Drum pad layer as a track, when any of its pads has a sample open here. */
+export function padTrackOf(l: DrumPadLayer, bufferOf: (p: DrumPad) => AudioBuffer | null): RecordingTrack | null {
+  if (!l.visible) return null;
+  const buffers = l.pads.map(p => bufferOf(p));
+  if (!buffers.some(Boolean)) return null;
+  return { key: `dpad:${l.id}`, label: l.label, clock: true, chain: layerChainId(l.id), pads: { layerId: l.id, layer: l as unknown as PadTrack['layer'], buffers } };
 }
 
 /** The audio effects for an offline mix: the record's chains, and each number through the mix (default: the record's). */
 export interface MixFx {
   fx: PlayAudioFx | undefined;
   valueAt?: ValueAt;
+  /** Drum pad hits (a take's), in mix seconds. */
+  padHits?: readonly PadHit[];
 }
 
 /** How a Video layer's sound plays against the clock (its layer's settings when the export starts). */
@@ -105,6 +144,7 @@ export function recordingTracks(play: PlayRecord, nodes: readonly GraphNode[]): 
   for (const l of play.layers) {
     // A video layer is heard hidden too (it keeps running while its sound is on).
     if (l.kind === 'video') { const t = videoTrackOf(l, videoSound.file(l.id)); if (t) out.push(t); continue; }
+    if (l.kind === 'drumpad') { const t = padTrackOf(l, p => padSound.buffer(p)); if (t) out.push(t); continue; }
     if (l.kind !== 'audio' || !l.visible || (l as { input?: string }).input !== 'file') continue;
     const key = `layer:${l.id}`;
     if (audioEngine.isLoaded(key)) out.push({ key, label: audioEngine.getFileName(key) || l.label, clock: true, chain: trackChainId(key) });
@@ -123,11 +163,11 @@ export function recordingTracks(play: PlayRecord, nodes: readonly GraphNode[]): 
  * Null when there's nothing to mix.
  */
 export async function mixdown(tracks: readonly RecordingTrack[], duration: number, from = 0, sampleRate = 48000, fx?: MixFx): Promise<AudioBuffer | null> {
-  const songs = tracks.filter(t => !t.video).map(t => ({ t, b: audioEngine.buffer(t.key) })).filter((x): x is { t: RecordingTrack; b: AudioBuffer } => !!x.b);
-  return mixBuffers(tracks.filter(t => t.video), songs, duration, from, sampleRate, fx);
+  const songs = tracks.filter(t => !t.video && !t.pads).map(t => ({ t, b: audioEngine.buffer(t.key) })).filter((x): x is { t: RecordingTrack; b: AudioBuffer } => !!x.b);
+  return mixBuffers(tracks.filter(t => t.video || t.pads), songs, duration, from, sampleRate, fx);
 }
 
-/** mixdown with the songs' buffers in hand (tests give a generated tone); `tracks` are the Video layers' sounds. */
+/** mixdown with the songs' buffers in hand (tests give a generated tone); `tracks` are the Video layers' sounds and the Drum pad layers. */
 export async function mixBuffers(tracks: readonly RecordingTrack[], buffers: ReadonlyArray<{ t: RecordingTrack; b: AudioBuffer }>, duration: number, from = 0, sampleRate = 48000, fx?: MixFx): Promise<AudioBuffer | null> {
   const videos: Array<{ b: AudioBuffer; plan: NonNullable<ReturnType<typeof videoTrackPlan>>; chain?: string }> = [];
   for (const t of tracks) {
@@ -136,7 +176,8 @@ export async function mixBuffers(tracks: readonly RecordingTrack[], buffers: Rea
     const plan = b ? videoTrackPlan(t.video, b.duration, from, duration) : null;
     if (b && plan) videos.push({ b, plan, chain: t.chain });
   }
-  if ((!buffers.length && !videos.length) || duration <= 0) return null;
+  const pads = tracks.filter(t => t.pads && duration > 0);
+  if ((!buffers.length && !videos.length && !pads.length) || duration <= 0) return null;
   const ctx = new OfflineAudioContext(2, Math.max(1, Math.ceil(duration * sampleRate)), sampleRate);
   const chains = await offlineFx(ctx, fx?.fx, duration, fx?.valueAt);
   for (const { b, plan, chain } of videos) {
@@ -151,6 +192,7 @@ export async function mixBuffers(tracks: readonly RecordingTrack[], buffers: Rea
     src.start(0, plan.offset);
     if (plan.stopAt !== null) src.stop(plan.stopAt);
   }
+  for (const t of pads) { const vol = ctx.createGain(); playPadHits(ctx, chains.input(t.chain ?? 'master', vol), vol, t.pads!, fx?.padHits ?? [], fx?.valueAt); }
   for (const { t, b } of buffers) {
     const src = ctx.createBufferSource();
     src.buffer = b;
@@ -160,6 +202,30 @@ export async function mixBuffers(tracks: readonly RecordingTrack[], buffers: Rea
     src.start(0, off);
   }
   return ctx.startRendering();
+}
+
+/**
+ * A Drum pad layer's hits in an offline mix, each at its exact moment (sample
+ * accurate), into `input` (its chain, which ends in `volume`): the same
+ * sampler as live, the pads' numbers where the take had them at each hit.
+ */
+export function playPadHits(ctx: BaseAudioContext, input: AudioNode, volume: GainNode | null, track: PadTrack, hits: readonly PadHit[], valueAt?: ValueAt): void {
+  const l = track.layer;
+  const num = (key: string, t: number) => {
+    const base = typeof l[key] === 'number' ? l[key] as number : undefined;
+    return valueAt && base !== undefined ? valueAt(track.layerId, key, base, t) : base;
+  };
+  if (volume) volume.gain.value = Math.max(0, num('volume', 0) ?? 1);
+  const sampler = dpCreateSampler(ctx);
+  sampler.output.connect(input);
+  for (const h of [...hits].filter(x => x.layerId === track.layerId).sort((a, b) => a.t - b.t)) {
+    const p = l.pads[h.pad];
+    if (!p) continue;
+    if (h.vel <= 0) { sampler.release(h.pad, h.t); continue; }
+    const buffer = track.buffers[h.pad];
+    if (!buffer) continue;
+    sampler.hit(h.pad, { ...dpHitNumbers(key => num(dpKey(h.pad, key), h.t)), buffer, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: h.vel }, h.t);
+  }
 }
 
 /** 16-bit PCM WAV bytes of an AudioBuffer (stereo stays stereo; more channels are cut to two). */

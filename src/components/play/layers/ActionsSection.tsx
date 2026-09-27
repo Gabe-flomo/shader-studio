@@ -21,6 +21,7 @@ import { NumberInput } from '../../NodeGraph/NumberInput';
 import { FirePicker, TriggerPicker } from '../TriggerPicker';
 import { withFire } from '../../../play/playSources';
 import { actionLabel } from './help';
+import { padName } from '../../../types/playLayers';
 
 
 const actionsFor = (l: PlayLayer | undefined): readonly ActionKind[] => actionsForLayer(l);
@@ -46,7 +47,7 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
     // With no layers yet, an action can still send a signal.
     const id = playId('act');
     onChange(p => {
-      if (l) return { ...p, actions: [...(p.actions ?? []), { id, trigger: { on: 'key', code: 'Space' }, do: defaultAction(l), layerId: l.id, amount: 60, enabled: true }] };
+      if (l) return { ...p, actions: [...(p.actions ?? []), { id, trigger: { on: 'key', code: 'Space' }, do: defaultAction(l), layerId: l.id, amount: l.kind === 'drumpad' ? 1 : 60, enabled: true }] };
       const { play: q, signal } = withSignal(p);
       return { ...q, actions: [...(q.actions ?? []), { id, trigger: { on: 'key', code: 'Space' }, do: SIGNAL_ACTION, layerId: '', amount: 1, enabled: true, signal }] };
     });
@@ -63,7 +64,7 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
     }
     const l = play.layers.find(x => x.id === a.layerId) ?? play.layers[play.layers.length - 1];
     if (!l) return;
-    update(a.id, { do: v as ActionKind, layerId: l.id, signal: undefined, ...(v === 'goto' ? { amount: 1 } : a.do === SIGNAL_ACTION ? { amount: 60 } : {}) });
+    update(a.id, { do: v as ActionKind, layerId: l.id, signal: undefined, ...(v === 'goto' || v === 'pad' ? { amount: 1 } : a.do === SIGNAL_ACTION ? { amount: 60 } : {}) });
   };
   const learn = (id: string) => {
     cancel.current?.();
@@ -112,6 +113,12 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
                 : <Select ariaLabel="Layer" value={a.layerId} options={play.layers.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const l = play.layers.find(x => x.id === v); update(a.id, { layerId: v, do: l && actionsFor(l).includes(a.do) ? a.do : l ? defaultAction(l) : a.do }); }} height={26} />}
               {(a.do === 'burst' || a.do === 'scatter') && (
                 <NumberInput value={a.amount} min={0} max={a.do === 'burst' ? 5000 : 10} step={a.do === 'burst' ? 10 : 0.5} title={a.do === 'burst' ? 'How many particles' : 'How hard'} onCommit={n => update(a.id, { amount: Math.max(0, n) })} style={numStyle} />
+              )}
+              {a.do === 'pad' && layer?.kind === 'drumpad' && (
+                // Play pad N, counting from 1.
+                <Select ariaLabel="Which pad" value={String(Math.max(1, Math.min(16, Math.round(a.amount))))} height={26}
+                  options={layer.pads.map((p, i) => ({ value: String(i + 1), label: `${i + 1} · ${padName(p, i)}` }))}
+                  onChange={v => update(a.id, { amount: Number(v) })} />
               )}
               {a.do === 'goto' && layer?.kind === 'data' && (
                 // Go to row N, counting from 1.

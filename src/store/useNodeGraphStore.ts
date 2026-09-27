@@ -22,7 +22,7 @@ import { migratePlayRecord } from './migratePlay';
 import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
-import { buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia } from '../play/exportHtml';
+import { buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia, type PlayMediaFile } from '../play/exportHtml';
 import { loadThreeSource, playUses3D } from '../play/threeSource';
 import { webInputFrom } from '../play/webInput';
 import { queueGraphsForWeb } from '../play/queueGraphs';
@@ -1513,7 +1513,19 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
     const m = mediaSource(`vlayer:${l.id}`);
     layerVideos[l.id] = { label: l.label, name: l.fileName || m?.name || '', src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : l.bytes) };
   }
-  return { textures, videos, audio, ...(Object.keys(layerVideos).length ? { layerVideos } : {}) };
+  // Drum pad samples: remembered by play/drumPads.ts when each loaded (key `dsample:<sampleId>`); generated drums need nothing.
+  const layerPads: NonNullable<PlayMedia['layerPads']> = {};
+  for (const l of st.play.layers) {
+    if (l.kind !== 'drumpad') continue;
+    const files: Record<string, PlayMediaFile> = {};
+    l.pads.forEach((p, i) => {
+      if (!p.sampleId) return;
+      const m = mediaSource(`dsample:${p.sampleId}`);
+      files[i] = { label: `${l.label} · pad ${i + 1}`, name: p.fileName || m?.name || '', src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : p.bytes) };
+    });
+    if (Object.keys(files).length) layerPads[l.id] = files;
+  }
+  return { textures, videos, audio, ...(Object.keys(layerVideos).length ? { layerVideos } : {}), ...(Object.keys(layerPads).length ? { layerPads } : {}) };
 }
 
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({

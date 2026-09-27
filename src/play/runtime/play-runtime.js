@@ -335,7 +335,7 @@ void main() {
     const noteOn = type === 0x90 && data[2] > 0, noteOff = type === 0x80 || (type === 0x90 && data[2] === 0);
     const seq = ++shared.midiSeq, KM = typeof SSKit !== 'undefined' && SSKit.midi ? SSKit.midi : null;
     if (type === 0xb0 && KM) KM.lockRecord(shared.midiLocks, device || '', chn, data[1] & 127, data[2], seq);
-    if (type >= 0x80 && type <= 0xe0) for (const inst of shared.instances) if (inst.pad) inst.pad(data[0], data[1] || 0, data[2] || 0, device || '');
+    if (type >= 0x80 && type <= 0xe0) for (const inst of shared.instances) { if (inst.pad) inst.pad(data[0], data[1] || 0, data[2] || 0, device || ''); if (inst.drum) inst.drum(data[0], data[1] || 0, data[2] || 0); }
     for (const ch of [shared.midi[0], shared.midi[chn]]) {
       if (noteOn) { ch.note = data[1]; ch.vel = data[2]; ch.held.add(data[1]); ch.seenNote = true; ch.noteSeq[data[1] & 127] = seq; ch.noteVel[data[1] & 127] = data[2]; }
       else if (noteOff) ch.held.delete(data[1]);
@@ -1144,6 +1144,56 @@ void main() {
     const K = typeof SSKit !== 'undefined' ? SSKit.createLayerKit() : null;
     const layerValue = (id, key, fb) => { const k = id + '::' + key; let v = overrides.get(k); if (v === undefined) v = layerLive.get(k); return v === undefined ? fb : v; };
     const value = (l, k) => layerValue(l.id, k, l[k]);
+    // Drum pad layers (the kit's drumPads.js): each pad's sample from its data URL, or a generated drum,
+    // decoded as the page opens; heard once the visitor's first click or key lets sound start.
+    const DPK = typeof SSKit !== 'undefined' && SSKit.drumPads ? SSKit.drumPads : null;
+    const drumLayers = DPK ? play.layers.filter(l => l.kind === 'drumpad' && l.visible) : [];
+    const drums = { ctx: null, kits: new Map(), wired: false };
+    if (drumLayers.length) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        drums.ctx = new AC();
+        for (const l of drumLayers) {
+          const kit = { l, sampler: null, an: null, freq: null, out: null, buffers: l.pads.map(() => null) };
+          drums.kits.set(l.id, kit);
+          l.pads.forEach((p, i) => {
+            if (p.src) fetch(p.src).then(r => r.arrayBuffer()).then(b => drums.ctx.decodeAudioData(b)).then(buf => { kit.buffers[i] = buf; }, () => {});
+            else if (p.synth) kit.buffers[i] = DPK.synth(drums.ctx, p.synth);
+          });
+        }
+      }
+    }
+    // Each kit: sampler → its effect chain (`layer:<id>`, analysed for the readers) → its volume → the master chain.
+    function wireDrums() {
+      if (drums.wired || !drums.ctx) return;
+      drums.wired = true;
+      const bus = drums.ctx.createGain();
+      afxAttach(drums.ctx, 'master', bus, drums.ctx.destination, null);
+      for (const k of drums.kits.values()) {
+        k.sampler = DPK.sampler(drums.ctx);
+        k.an = drums.ctx.createAnalyser(); k.an.fftSize = 2048; k.an.smoothingTimeConstant = 0.8; k.freq = new Float32Array(k.an.frequencyBinCount);
+        k.out = drums.ctx.createGain(); k.out.gain.value = Math.max(0, k.l.volume);
+        afxAttach(drums.ctx, 'layer:' + k.l.id, k.sampler.output, k.out, k.an);
+        k.out.connect(bus);
+      }
+    }
+    function startDrums() { if (!drums.ctx || !alive) return; wireDrums(); if (drums.ctx.state === 'suspended') drums.ctx.resume(); }
+    // A hit: { layerId, amount (pad number from 1), vel (0 lets a gate pad go) }.
+    function drumAct(a) {
+      const k = drums.kits.get(a.layerId);
+      if (!k) return;
+      startDrums();
+      const pad = Math.round(a.amount) - 1, vel = a.vel == null ? 1 : a.vel, p = k.l.pads[pad];
+      if (!p || !k.sampler) return;
+      if (vel <= 0) { k.sampler.release(pad); return; }
+      const buf = k.buffers[pad];
+      if (!buf) return;
+      k.out.gain.value = Math.max(0, value(k.l, 'volume'));
+      k.sampler.hit(pad, Object.assign(DPK.numbers(key => value(k.l, DPK.key(pad, key))), { buffer: buf, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: vel }));
+    }
+    const drumHit = (pad, vel) => { for (const l of drumLayers) drumAct({ layerId: l.id, amount: pad + 1, vel }); };
+    // Play pad actions go to the drums; every other action to the layer kit.
+    if (K && drumLayers.length) { const kitAct = K.act; K.act = a => (a.do === 'pad' ? drumAct(a) : kitAct(a)); }
     const actions = (play.actions || []).filter(a => a.enabled);
     // Conditions, signals and axis swaps: the kit's signals.js, the same code the app runs.
     const SG = typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals : null;
@@ -1267,7 +1317,10 @@ void main() {
       const a = R.cfg.input ? audioById.get(R.cfg.input) : null;
       // A Video layer's sound (`video:<id>`), once the visitor's first click has let it start.
       const vid = R.cfg.input && R.cfg.input.indexOf('video:') === 0 ? lVideos.get(R.cfg.input.slice(6)) : null;
-      if (vid) { if (vid.an) { vid.an.getFloatFrequencyData(vid.freq); freq = vid.freq; sr = vid.an.context.sampleRate; } }
+      // A Drum pad layer's sound (`pads:<id>`), once the first click or key has let it start.
+      const dk = R.cfg.input && R.cfg.input.indexOf('pads:') === 0 ? drums.kits.get(R.cfg.input.slice(5)) : null;
+      if (dk) { if (dk.an) { dk.an.getFloatFrequencyData(dk.freq); freq = dk.freq; sr = dk.an.context.sampleRate; } }
+      else if (vid) { if (vid.an) { vid.an.getFloatFrequencyData(vid.freq); freq = vid.freq; sr = vid.an.context.sampleRate; } }
       else if (a && a.an) { a.an.getFloatFrequencyData(a.freq); freq = a.freq; sr = a.an.context.sampleRate; }
       else if ((!R.cfg.input || !a) && shared.live.status === 'on') { updateLive(); freq = shared.live.freq; sr = shared.live.sr; }
       R.ok = !!freq;
@@ -1525,6 +1578,21 @@ void main() {
     const on = (target, type, fn, o) => { target.addEventListener(type, fn, o); listeners.push(() => target.removeEventListener(type, fn, o)); };
     if (bgVideo && !bgMuted) on(window, 'pointerdown', () => { bgVideo.muted = false; }, true);
     if (soundVideos.length) { on(window, 'pointerdown', startVideoSound, true); on(window, 'keydown', startVideoSound, true); }
+    if (drums.ctx) {
+      on(window, 'pointerdown', startDrums, true);
+      // Z X C V / A S D F / Q W E R / 1 2 3 4 play pads 1–16 (a player only: a background never takes keys).
+      if (mode === 'player' && drumLayers.some(l => l.keys)) {
+        const held = new Map();
+        on(window, 'keydown', e => {
+          if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isTyping(e.target)) return;
+          const pad = DPK.padOfKey(e.code);
+          if (pad < 0) return;
+          held.set(e.code, pad);
+          for (const l of drumLayers) if (l.keys) drumAct({ layerId: l.id, amount: pad + 1, vel: 1 });
+        });
+        on(window, 'keyup', e => { const pad = held.get(e.code); if (pad === undefined) return; held.delete(e.code); for (const l of drumLayers) if (l.keys && l.pads[pad] && l.pads[pad].mode === 'gate') drumAct({ layerId: l.id, amount: pad + 1, vel: 0 }); });
+      } else on(window, 'keydown', startDrums, true);
+    }
     if (queueLayer && (queueLayer.sources || []).some(s => s.kind === 'video' && s.muted === false)) { on(window, 'pointerdown', () => { qSound = true; }, true); on(window, 'keydown', () => { qSound = true; }, true); }
     if (pointerOn) {
       on(stage, 'pointermove', e => {
@@ -1557,12 +1625,12 @@ void main() {
 
     // Panel (player only)
     const readouts = new Map();
-    const usesMidi = !!play.padGrid || play.mappings.some(m => m.source.kind === 'midi' || m.source.kind === 'pad' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'));
+    const usesMidi = !!play.padGrid || drumLayers.some(l => l.midi) || play.mappings.some(m => m.source.kind === 'midi' || m.source.kind === 'pad' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'));
     const usesOsc = play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc'));
     const usesTilt = play.mappings.some(m => m.source.kind === 'tilt');
     // Readers on the live input (or on a node whose song stayed out of the page, which listens to the input instead) need it too.
     const readerNode = readers.cfg && readers.cfg.input ? audioById.get(readers.cfg.input) : null;
-    const readerVideo = !!(readers.cfg && readers.cfg.input && readers.cfg.input.indexOf('video:') === 0 && lVideos.has(readers.cfg.input.slice(6)));
+    const readerVideo = !!(readers.cfg && readers.cfg.input && ((readers.cfg.input.indexOf('video:') === 0 && lVideos.has(readers.cfg.input.slice(6))) || (readers.cfg.input.indexOf('pads:') === 0 && drums.kits.has(readers.cfg.input.slice(5)))));
     const readersLive = !!(readers.cfg && readers.cfg.readers.length) && (!readers.cfg.input || (readerNode ? !readerNode.src : !readerVideo));
     const usesLive = play.mappings.some(m => m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio'))
       || actions.some(a => a.trigger.on === 'audio') || play.layers.some(l => l.kind === 'audio' && l.visible) || audioNodes.some(a => !a.src) || readersLive;
@@ -1641,6 +1709,22 @@ void main() {
       }
       head.append(tools);
       panel.append(head);
+      // Drum pads: a button per pad that plays something (hold a gate pad).
+      for (const l of drumLayers) {
+        const row = el('div', 'ssp-control');
+        row.append(el('span', 'ssp-label', l.label));
+        const grid = el('div', 'ssp-row');
+        grid.style.flexWrap = 'wrap'; grid.style.gap = '4px'; grid.style.justifyContent = 'flex-start';
+        l.pads.forEach((p, i) => {
+          if (!p.src && !p.synth) return;
+          const b = el('button', 'ssp-btn', p.name || (p.fileName || '').replace(/\.[a-z0-9]{2,4}$/i, '') || ({ kick: 'Kick', snare: 'Snare', hat: 'Closed hat', openhat: 'Open hat', clap: 'Clap', tom: 'Tom', rim: 'Rim', cowbell: 'Cowbell' })[p.synth] || String(i + 1));
+          b.onpointerdown = () => drumAct({ layerId: l.id, amount: i + 1, vel: 1 });
+          b.onpointerup = () => { if (p.mode === 'gate') drumAct({ layerId: l.id, amount: i + 1, vel: 0 }); };
+          grid.append(b);
+        });
+        row.append(grid);
+        panel.append(row);
+      }
       if (!play.controls.length) panel.append(el('div', 'ssp-empty', 'No controls in this play file.'));
       for (const c of play.controls) {
         const row = el('div', 'ssp-control');
@@ -1741,6 +1825,18 @@ void main() {
     const reduced = stillForReducedMotion && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const inst = { mode, claimsKey: code => keysUsed.has(code), pad: padG ? (st, d1, d2, dev) => { padQueue.push([st, d1, d2, dev]); } : null };
+    // MIDI notes from each drum layer's base note play its pads (36–51 by default).
+    if (drumLayers.some(l => l.midi)) inst.drum = (st, d1, d2) => {
+      const type = st & 0xf0, ch = (st & 0x0f) + 1;
+      if (type !== 0x90 && type !== 0x80) return;
+      for (const l of drumLayers) {
+        if (!l.midi || (l.channel && l.channel !== ch)) continue;
+        const pad = DPK.padOfNote(d1, l.baseNote);
+        if (pad < 0) continue;
+        const vel = type === 0x90 ? d2 / 127 : 0;
+        if (vel > 0 || (l.pads[pad] && l.pads[pad].mode === 'gate')) drumAct({ layerId: l.id, amount: pad + 1, vel });
+      }
+    };
     shared.instances.add(inst);
 
     let raf = 0, alive = true;
@@ -1888,6 +1984,7 @@ void main() {
         for (const v of qVideos.values()) { v.pause(); v.removeAttribute('src'); v.load(); }
         for (const v of lVideos.values()) { v.el.pause(); v.el.removeAttribute('src'); v.el.load(); }
         if (vSound.ctx) vSound.ctx.close();
+        if (drums.ctx) drums.ctx.close();
         for (const u of blobUrls) URL.revokeObjectURL(u);
         if (song.ctx) song.ctx.close();
         if (finishR) finishR.dispose();

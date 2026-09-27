@@ -14,6 +14,8 @@
  * their proportions on any canvas shape.
  */
 
+import { DP_CHOKES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
+
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken' | 'difference' | 'exclusion' | 'add';
 
 /** How a text, image or camera layer meets the picture. */
@@ -551,6 +553,103 @@ export function videoLayerOfInput(input: string): string | null {
   return input.startsWith('video:') && input.length > 6 ? input.slice(6) : null;
 }
 
+// ── Drum pads ───────────────────────────────────────────────────────────────
+
+/**
+ * One pad of a Drum pad layer: what it plays and how (its numbers are layer
+ * properties, `pad<N>_<key>`, so each is a mapping target). The sample lives
+ * in the media library (IndexedDB, lib/backgroundLibrary.ts, next to the
+ * videos) and the pad keeps its id, name and size; or it plays a generated
+ * drum (`synth`), which needs no file at all.
+ */
+export interface DrumPad {
+  /** '' for an empty pad (or a generated one). */
+  sampleId: string;
+  fileName: string;
+  bytes: number;
+  /** A generated drum (kit/drumPads.js DP_SYNTHS), used when there is no sample. */
+  synth: DpSynth | '';
+  /** A name of its own ('' shows the file's or the drum's). */
+  name: string;
+  /** One-shot plays to the end; gate plays while held. */
+  mode: DpMode;
+  /** Gate: start to end round and round while held. */
+  loop: boolean;
+  reverse: boolean;
+  /** 1..8: a hit cuts every voice in the same group (an open hat by a closed one). 0: none. */
+  choke: number;
+}
+
+/**
+ * A drum pad sampler (docs/drum-pads.md): 16 pads, each a sample played
+ * Simpler-style, hit by clicks, keys, MIDI notes and grid pads, actions and
+ * takes. It draws nothing: its sound goes through its effect chain
+ * (`layer:<id>`) to the master bus, and audio readers can listen to it
+ * (`pads:<id>`).
+ */
+export interface DrumPadLayer extends LayerBase {
+  kind: 'drumpad';
+  pads: DrumPad[];
+  /** The whole kit's level, after its effect chain. */
+  volume: number;
+  /** Z X C V / A S D F / Q W E R / 1 2 3 4 play pads 1–16. */
+  keys: boolean;
+  /** MIDI notes from `baseNote` play pads 1–16 (36–51 by default, a drum rack's). */
+  midi: boolean;
+  /** 0: any channel. */
+  channel: number;
+  baseNote: number;
+  /** The pad grid's lower-left 4 × 4 plays the pads. */
+  grid: boolean;
+  [padKey: `pad${number}_${string}`]: number;
+}
+
+export const emptyDrumPad = (): DrumPad => ({ sampleId: '', fileName: '', bytes: 0, synth: '', name: '', mode: 'oneshot', loop: false, reverse: false, choke: 0 });
+/** Does the pad play anything? */
+export const padHasSound = (p: DrumPad | undefined): boolean => !!p && (!!p.sampleId || !!p.synth);
+/** What a pad is called: its own name, its file's, its drum's, or "Pad 3". */
+export function padName(p: DrumPad | undefined, i: number): string {
+  if (!p) return `Pad ${i + 1}`;
+  return p.name || p.fileName.replace(/\.[a-z0-9]{2,4}$/i, '') || (p.synth ? DRUM_SYNTH_LABELS[p.synth] : '') || `Pad ${i + 1}`;
+}
+export const DRUM_SYNTH_LABELS: Record<DpSynth, string> = { kick: 'Kick', snare: 'Snare', hat: 'Closed hat', openhat: 'Open hat', clap: 'Clap', tom: 'Tom', rim: 'Rim', cowbell: 'Cowbell' };
+
+/** Every pad number at its default, for a new layer. */
+function drumPadNumbers(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (let i = 0; i < DP_PADS; i++) for (const p of DP_PARAMS) out[dpKey(i, p.key)] = p.value;
+  return out;
+}
+
+function parseDrumPads(v: unknown): DrumPad[] {
+  const arr = Array.isArray(v) ? v : [];
+  const out: DrumPad[] = [];
+  for (let i = 0; i < DP_PADS; i++) {
+    const r = arr[i] && typeof arr[i] === 'object' ? arr[i] as Record<string, unknown> : {};
+    const p = emptyDrumPad();
+    if (typeof r.sampleId === 'string') p.sampleId = r.sampleId.slice(0, 200);
+    if (typeof r.fileName === 'string') p.fileName = r.fileName.slice(0, 120);
+    if (typeof r.bytes === 'number' && Number.isFinite(r.bytes)) p.bytes = Math.max(0, Math.round(r.bytes));
+    if ((DP_SYNTHS as readonly string[]).includes(r.synth as string)) p.synth = r.synth as DpSynth;
+    if (typeof r.name === 'string') p.name = r.name.slice(0, 60);
+    if (r.mode === 'gate') p.mode = 'gate';
+    p.loop = r.loop === true;
+    p.reverse = r.reverse === true;
+    if (typeof r.choke === 'number' && Number.isFinite(r.choke)) p.choke = Math.max(0, Math.min(DP_CHOKES, Math.round(r.choke)));
+    // A web export carries the sample in the pad itself (runtime only).
+    if (typeof r.src === 'string' && r.src.startsWith('data:audio/')) (p as DrumPad & { src?: string }).src = r.src;
+    out.push(p);
+  }
+  return out;
+}
+
+/** The audio readers' input for a Drum pad layer's sound. */
+export const padsReaderInput = (layerId: string) => `pads:${layerId}`;
+/** The Drum pad layer id an audio readers' input names, or null. */
+export function padsLayerOfInput(input: string): string | null {
+  return input.startsWith('pads:') && input.length > 5 ? input.slice(5) : null;
+}
+
 /**
  * Copies of another layer (a shape, text, image, camera or null), arranged in
  * a grid, a ring, a line, along a brush stroke or on a particles layer's
@@ -955,10 +1054,10 @@ export interface DataLayer extends LayerBase {
 let dataItemCount: (l: DataLayer) => number = () => 0;
 export function setDataItemCount(fn: (l: DataLayer) => number): void { dataItemCount = fn; }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer;
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad'];
 
 /** The starter sketch a new Script layer holds. */
 export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
@@ -1078,6 +1177,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     toShader: true, videoId: '', fileName: '', bytes: 0, fit: 'contain', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], blend: 'normal', matte: 'over',
     playing: true, loop: true, speed: 1, start: 0, follow: true, sound: 'off', volume: 0.8,
   },
+  drumpad: { toShader: false, pads: Array.from({ length: DP_PADS }, emptyDrumPad), volume: 0.9, keys: true, midi: true, channel: 0, baseNote: 36, grid: true, ...drumPadNumbers() },
   cloner: {
     toShader: true, sourceId: '', hideSource: true, arrange: 'grid', count: 12, cols: 5, rows: 3, x: 0.5, y: 0.5, x2: 0.9, y2: 0.5, spacingX: 0.25, spacingY: 0.25,
     radius: 0.3, startAngle: 0, sweep: 360, face: false, pathId: '', spread: 1, jitter: 0, seed: 1,
@@ -1101,7 +1201,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
 export function defaultLayer(kind: PlayLayerKind, id: string, label: string): PlayLayer {
   const d = LAYER_DEFAULTS[kind] as unknown as Record<string, unknown>;
   const copy: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(d)) copy[k] = Array.isArray(v) ? [...v] : v;
+  for (const [k, v] of Object.entries(d)) copy[k] = Array.isArray(v) ? v.map(x => (x && typeof x === 'object' && !Array.isArray(x) ? { ...x } : x)) : v;
   return { id, kind, label, visible: true, ...copy } as unknown as PlayLayer;
 }
 
@@ -1119,7 +1219,9 @@ type Field =
   /** A list of layer ids. */
   | { t: 'ids' }
   /** A Background layer's queue. */
-  | { t: 'queue' };
+  | { t: 'queue' }
+  /** A Drum pad layer's pads. */
+  | { t: 'drumpads' };
 
 const BLENDS = ['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken', 'difference', 'exclusion', 'add'] as const;
 const MATTES = ['over', 'reveal', 'luma'] as const;
@@ -1185,6 +1287,10 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     font: E('sans', 'serif', 'mono'), fontUrl: S, colour: E('tint', 'palette'), color: C, palette: N(0, 9, true), solidPicture: B, threshold: unit, scatter: N(0, 10), opacity: unit, blend: blendF,
   },
   camera: { toShader: B, x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, mirror: B, blend: blendF, matte: matteF },
+  drumpad: {
+    toShader: B, pads: { t: 'drumpads' }, volume: N(0, 1.5), keys: B, midi: B, channel: N(0, 16, true), baseNote: N(0, 112, true), grid: B,
+    ...Object.fromEntries(Array.from({ length: DP_PADS }, (_, i) => DP_PARAMS.map(p => [dpKey(i, p.key), N(p.min, p.max)] as const)).flat()),
+  },
   video: {
     toShader: B, videoId: S, fileName: S, bytes: N(0), fit: E('height', 'contain', 'cover'), x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, blend: blendF, matte: matteF,
     playing: B, loop: B, speed: N(0.05, 8), start: N(0), follow: B, sound: E('off', 'listen', 'play'), volume: unit,
@@ -1234,6 +1340,7 @@ function coerce(v: unknown, f: Field, fallback: unknown): unknown {
     case 'params':
       return Array.isArray(v) ? v.filter(isScriptParamDef).slice(0, 32).map(d => ({ ...d })) : fallback;
     case 'queue': return parseBackgroundItems(v);
+    case 'drumpads': return parseDrumPads(v);
   }
 }
 
@@ -1272,9 +1379,9 @@ export function parseLayer(raw: unknown): PlayLayer | null {
 // ── Track mattes and masks ───────────────────────────────────────────────────
 
 /** Nulls draw nothing and the Background layer is the picture: every other kind can be matted and masked. */
-export function canHaveMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'background'; }
+export function canHaveMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'background' && kind !== 'drumpad'; }
 /** Anything that draws can be a matte, the Background layer (the picture) included. */
-export function canBeMatte(kind: PlayLayerKind): boolean { return kind !== 'null'; }
+export function canBeMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'drumpad'; }
 
 function parseTrackMatte(v: unknown, selfId: string): TrackMatte | null {
   if (!v || typeof v !== 'object') return null;
@@ -1552,6 +1659,7 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'scale', label: 'Scale', min: 0.05, max: 3, hint: 'Camera image height as a fraction of the picture height.' },
     ROT, OPACITY,
   ],
+  drumpad: [{ key: 'volume', label: 'Volume', min: 0, max: 1.5, hint: 'The whole kit’s level, after its effect chain.' }],
   video: [
     X('Centre of the video'), Y('Centre of the video'),
     { key: 'scale', label: 'Scale', min: 0.05, max: 3, hint: 'Size against the fitted size (Fit: Height makes 1 as tall as the picture).' },
@@ -1649,6 +1757,8 @@ function kindNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
     if (!(n > 0)) return base;
     return base.map(d => d.key === 'offset' ? { ...d, max: Math.max(1, n - 1) } : d.key === 'from' || d.key === 'to' || d.key === 'count' ? { ...d, max: Math.max(2, n) } : d);
   }
+  // Each pad that plays something: its numbers, "Pad 3 · Pitch" (`pad3_pitch`).
+  if (l.kind === 'drumpad') return [...base, ...l.pads.flatMap((p, i) => (padHasSound(p) ? DP_PARAMS.map(d => ({ key: dpKey(i, d.key), label: `Pad ${i + 1} · ${d.label}`, min: d.min, max: d.max, step: d.step, hint: d.hint })) : []))];
   if (l.kind !== 'script') return base;
   // Buttons are actions, not numbers; toggles are 0/1 numbers.
   // A colour is a packed RGB, not a number to slide; a choice slides from option to option.

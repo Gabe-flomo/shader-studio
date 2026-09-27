@@ -12,7 +12,8 @@
  * move a parameter, so a render keeps their starting values.
  */
 import { afCreateChain, afLoadWorklet, afNeedsWorklet, type AfChain, type AfEffect } from '../play/kit/audioFx.js';
-import { audioFxPropId, MASTER_CHAIN, parseAudioFxTarget, type AudioFxChain, type PlayAudioFx } from '../types/playAudioFx';
+import { audioFxPropId, MASTER_CHAIN, type AudioFxChain, type PlayAudioFx } from '../types/playAudioFx';
+import { parsePropTarget } from '../types/play';
 import type { PlayTake, TakeTrack } from '../types/play';
 import { trackAt } from './takePlayback';
 
@@ -36,7 +37,11 @@ export interface OfflineFx {
  */
 export function takeValueAt(take: PlayTake | null | undefined, from: number, now: (propId: string, key: string, base: number) => number = (_i, _k, b) => b): ValueAt {
   const tracks = new Map<string, TakeTrack>();
-  for (const tr of take?.tracks ?? []) if (tr.kind === 'control' && tr.target && parseAudioFxTarget(tr.target)) tracks.set(tr.target, tr);
+  // Audio effect numbers and layer numbers (a drum pad's pitch): keyed by prop id and key, as asked.
+  for (const tr of take?.tracks ?? []) {
+    const pt = tr.kind === 'control' && tr.target ? parsePropTarget(tr.target) : null;
+    if (pt) tracks.set(`${pt.layerId}::${pt.key}`, tr);
+  }
   if (!take || !tracks.size) return (id, key, base) => now(id, key, base);
   return (id, key, base, t) => {
     const tr = tracks.get(`${id}::${key}`);
