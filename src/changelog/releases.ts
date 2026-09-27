@@ -39,6 +39,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.8',
+    date: '2026-09-27',
+    title: 'Finishing, one file format, and linked lessons',
+    highlights: [
+      { area: 'Play', text: 'Finish stack: grade the whole picture (curves, colour wheels, split tone, looks) with lens, CRT, grain and bloom.', link: { kind: 'example', key: 'finishGrade', page: 'play' } },
+      { area: 'Play', text: 'Halation that behaves like film: lamps glow red to white and grow, white paper stays clean.', link: { kind: 'example', key: 'finishHalation', page: 'play' } },
+      { area: 'Play', text: 'Time displacement: parts of the picture show older frames, as a slit-scan, by brightness or through a shape.', link: { kind: 'example', key: 'finishTime', page: 'play' } },
+      { area: 'Files', text: 'One file format, .playfile: every download offers it, and it brings along the nodes, functions and images it needs.', link: { kind: 'doc', path: 'docs/playfile-format.md' } },
+      { area: 'Files', text: 'Node packs can be signed by their maker and sealed so their code stays hidden.' },
+      { area: 'Present', text: 'Link a graph to its presentation: loading one offers the other.' },
+      { area: 'Play', text: 'Videos in the Library, drag-and-drop images and videos onto Play, and video sound in rendered takes.' },
+    ],
+  },
+  {
     id: '2026.9.7',
     date: '2026-09-27',
     title: 'Sign-in, plans, and video with sound',
