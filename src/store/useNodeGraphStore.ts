@@ -18,6 +18,7 @@ import { bakeControlValues, bakeLayerValues } from '../play/playControls';
 import { buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia } from '../play/exportHtml';
 import { loadThreeSource, playUses3D } from '../play/threeSource';
 import { webInputFrom } from '../play/webInput';
+import { queueGraphsForWeb } from '../play/queueGraphs';
 import { imageDataUrl, mediaSource } from '../lib/mediaSources';
 import { audioUniformNamesByNode } from '../compiler/audioUniformNames';
 
@@ -4548,7 +4549,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const v = playEngine.liveValue(c.id);
       if (v !== undefined) live.set(c.id, v);
     }
-    return webInputFrom(st, st.play, { title, aspect: st.previewAspect, live, media: webMedia(st) });
+    // A Background layer's other graphs, compiled for the page (examples that haven't loaded yet are listed as left behind).
+    return webInputFrom(st, st.play, { title, aspect: st.previewAspect, live, media: webMedia(st), backgroundGraphs: queueGraphsForWeb(st.play).graphs });
   },
 
   exportPlayHtml: async (options, title, extras) => {

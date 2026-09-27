@@ -13,7 +13,7 @@ import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
-import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
+import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIREFLIES, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
 // An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 import {
@@ -1111,8 +1111,38 @@ Actions use them like keys, and they work on websites too (a background can reac
 
 **Try this.**
 • Drag Turns: at 0 every particle heads the same way; higher, they wrap around the light.
-• Background → **Replace** with your own photo, or pick **Video** for a moving picture.
+• Background → **Replace** with your own photo, or choose **Video…** for a moving picture (it starts a Background layer).
 • Turn **Layers only** on: the photo hides, the particles keep following it.`,
+  })),
+  // A Background layer: two graphs and a photo in a queue, stepped by keys and a beat, crossfading.
+  ex('bgQueue', fbmGraph({ scale: 2.4, timeScale: 0.08, preset: '4' }), play({
+    layers: [
+      layer('background', 'bg', 'Background', {
+        sources: [
+          { id: 'clouds', kind: 'graph', name: 'Clouds', graph: 'this' },
+          { id: 'rings', kind: 'graph', name: 'Fractal Rings', graph: 'example:fractalRings' },
+          { id: 'ridges', kind: 'image', name: 'Ridges at dusk', src: RIDGES_AT_DUSK },
+        ],
+        transition: 'fade', duration: 1.2,
+      }),
+      scriptLayer('flies', 'Fireflies', SKETCH_FIREFLIES, { readPicture: true }),
+    ],
+    controls: [ctl('index', 'layer:bg::index', 'Background · Index', 0, 2, 1), ctl('fade', 'layer:bg::duration', 'Background · Fade (s)', 0, 4), ctl('pull', 'layer:flies::p_pull', 'Fireflies · Pull to light', 0, 3)],
+    actions: [
+      act('go1', T.key('Digit1'), 'goto', 'bg', 1),
+      act('go2', T.key('Digit2'), 'goto', 'bg', 2),
+      act('go3', T.key('Digit3'), 'goto', 'bg', 3),
+      act('beat', T.beat(96, 8), 'next', 'bg'),
+    ],
+    notes: `**What it shows.** A **Background layer**: a queue of three sources under everything, one showing at a time. This graph (clouds), the Fractal Rings example and a photo. Press **1**, **2** or **3** to go straight to one; every 8 beats at 96 BPM it moves on by itself. Changes crossfade over 1.2 s.
+
+**How it's built.** The Background layer is the bottom layer. Its sources: **Clouds** is the open graph; **Fractal Rings** is compiled off-screen and drawn as a second shader, only while it shows; the photo is kept in the setup. Four actions do the changing: Go to background 1, 2 and 3 on the number keys, and Next background on a beat. The **Fireflies** Script layer reads the picture (\`s.picture.brightness\`) and climbs toward its light, whichever source is showing.
+
+**Try this.**
+• Drag Index on the panel: map a MIDI knob or an LFO onto it instead of keys.
+• Set Fade to 0 for hard cuts, or change Transition to Cut on the layer.
+• Add a video, a sketch or a colour to the queue (Layers → Background → Add source), and scale or turn the background under Placement.
+• Record a take while you press the keys: its render changes at the same frames.`,
   })),
 
   // ─ Hands ─

@@ -67,6 +67,7 @@ const ROWS: Array<[string, string, string]> = [
   ['scriptGlow', 'Script: the shader glows around it', 'The Layers node reads the sketch back, and SDF Glow turns its lines to neon.'],
   ['bgColourSketch', 'Background: a colour, no shader', 'Background → Colour: the graph pauses and a Script layer runs alone on a flat colour, a CPU toy.'],
   ['bgPhotoFlow', 'Background: particles over a photo', 'Background → Image: a photo instead of the shader, and a flow field of particles reading it.'],
+  ['bgQueue', 'Background queue', 'Two graphs and a photo in a Background layer: keys 1, 2, 3 and a beat step through them, crossfading, with fireflies reading the picture.'],
   ['handFingertips', 'Hands: fingertips move particles', 'Nulls follow your fingertips: particles flow from your index finger into your thumb.'],
   ['handPinch', 'Hands: pinch, point and fist', 'Pinch drives a slider, a fist fires a burst, pointing toggles a setting.'],
   ['handTwoHands', 'Hands: two at once', 'How far apart your hands are zooms the picture; their heights mix the colour.'],

@@ -595,3 +595,44 @@ function draw(s) {
   pop();
 }
 `;
+
+/** Fireflies that climb toward the light of whatever the Background layer shows (the Background queue example). */
+export const SKETCH_FIREFLIES = `// Fireflies that read the picture under them: s.picture.brightness(x, y)
+// is 0 to 1 (the layer's Picture switch is on). Whatever the background shows,
+// a graph or the photo, they drift uphill toward its light and glow there.
+const params = {
+  count: { value: 140, min: 10, max: 500, step: 10, label: 'Fireflies' },
+  size:  { value: 1, min: 0.3, max: 3, step: 0.05, label: 'Size' },
+  pull:  { value: 1.2, min: 0, max: 3, step: 0.05, label: 'Pull to light' },
+};
+let flies = [];
+
+function setup(s) { flies = []; }
+
+function draw(s) {
+  const { ctx, width: w, height: h, dt, time, params } = s;
+  while (flies.length < params.count) flies.push({ x: Math.random() * w, y: Math.random() * h, vx: 0, vy: 0, p: Math.random() * 6.28 });
+  flies.length = params.count;
+  const e = h * 0.05, speed = h * 0.3;
+  ctx.globalCompositeOperation = 'lighter';
+  for (const f of flies) {
+    // Which way the picture gets brighter, from four reads around the fly.
+    const gx = s.picture.brightness(f.x + e, f.y) - s.picture.brightness(f.x - e, f.y);
+    const gy = s.picture.brightness(f.x, f.y + e) - s.picture.brightness(f.x, f.y - e);
+    f.vx += (gx * params.pull * 6 + Math.cos(time * 0.9 + f.p) * 0.35) * speed * dt;
+    f.vy += (gy * params.pull * 6 + Math.sin(time * 1.3 + f.p) * 0.35) * speed * dt;
+    f.vx *= 0.94; f.vy *= 0.94;
+    f.x = (f.x + f.vx * dt + w) % w;
+    f.y = (f.y + f.vy * dt + h) % h;
+    const b = s.picture.brightness(f.x, f.y);
+    const r = h * 0.005 * params.size * (0.7 + b);
+    const twinkle = 0.55 + 0.45 * Math.sin(time * 3 + f.p * 5);
+    // A soft halo, then a bright core: added together ('lighter'), crowds glow.
+    ctx.fillStyle = 'rgba(255, 170, 70, ' + (0.12 * twinkle) + ')';
+    ctx.beginPath(); ctx.arc(f.x, f.y, r * 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255, 236, 170, ' + (0.85 * twinkle) + ')';
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+`;

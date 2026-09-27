@@ -17,9 +17,11 @@ import { AddLayerMenu } from './layers/AddLayerMenu';
 import { BUILTIN_LAYER, BUILTIN_LAYERS, type BuiltinVariant } from './layers/addLayerCatalog';
 import { script3dDefaults } from '../../types/playLayers';
 import { fontFamily, radius } from '../../theme/tokens';
-import { layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
+import { backgroundLayerOf, layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { playId } from '../../play/playControls';
-import { addNullFor, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, moveLayer, removeLayer, renameLayer, resetLayer } from './layerOps';
+import { addNullFor, backgroundMenuItems, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, moveLayer, removeLayer, renameLayer, resetLayer } from './layerOps';
+import { BackgroundEditor } from './layers/BackgroundEditor';
+import { addBackground, thisGraphSource } from '../../play/backgroundQueue';
 import { toast } from '../ui/toastStore';
 import { SoloButton, SoloStrip } from './Solo';
 import { LayerReadings } from './MapToMenu';
@@ -70,6 +72,15 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     setSelected(id);
   };
   const add = (kind: PlayLayerKind, variant?: BuiltinVariant) => {
+    if (kind === 'background') {
+      // One per setup, at the bottom. A new one starts with this graph, so the picture stays as it was.
+      const there = backgroundLayerOf(play);
+      if (there) { usePlayUi.getState().reveal(there.id); toast.info('This setup has a Background layer', { message: 'Add sources to its queue.' }); return; }
+      const id = playId('layer');
+      onChange(p => addBackground(p, [thisGraphSource()], id).play);
+      setSelected(id);
+      return;
+    }
     // A 3D Script is a Script layer in 3D, starting from the 3D starter.
     const is3d = variant === 'script3d';
     const n = play.layers.filter(l => l.kind === kind && (kind !== 'script' || (l.kind === 'script' && (l.mode === '3d') === is3d))).length + 1;
@@ -227,7 +238,11 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
     case 'bodies': body = <BodiesEditor f={f} ctx={ctx} />; break;
     case 'cloner': body = <ClonerEditor f={f} ctx={ctx} />; break;
     case 'script': body = <ScriptEditor f={f} ctx={ctx} />; break;
+    case 'background': body = <BackgroundEditor f={f} ctx={ctx} />; break;
   }
+  // The Background layer stays at the bottom: it doesn't move, and there is only one.
+  const isBackground = l.kind === 'background';
+  const floor = layers[0]?.kind === 'background' ? 1 : 0;
 
   return (
     <div
@@ -248,14 +263,14 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
         ) : (
           <button type="button" title="Rename" onClick={() => { setDraft(l.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'text', color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.label}</button>
         )}
-        {l.kind !== 'null' && <SoloButton kind="layer" id={l.id} />}
+        {l.kind !== 'null' && !isBackground && <SoloButton kind="layer" id={l.id} />}
         <Toggle checked={l.visible} onChange={visible => set({ visible })} />
-        <IconButton icon="chevU" label="Move up (drawn earlier)" size="sm" disabled={index === 0} tooltip={false} onClick={() => onMove(-1)} />
-        <IconButton icon="chevD" label="Move down (drawn later, on top)" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />
+        {!isBackground && <IconButton icon="chevU" label="Move up (drawn earlier)" size="sm" disabled={index <= floor} tooltip={false} onClick={() => onMove(-1)} />}
+        {!isBackground && <IconButton icon="chevD" label="Move down (drawn later, on top)" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />}
         <span ref={moreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More: duplicate, reset, delete" size="sm" tooltip={false} onClick={() => { const r = moreRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 220, y: r.bottom + 4 } : null); }} />
         </span>
-        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={layerMenuItems({ onDuplicate, onReset, onRemove })} />}
+        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={isBackground ? backgroundMenuItems({ onReset, onRemove }) : layerMenuItems({ onDuplicate, onReset, onRemove })} />}
       </div>
       {open && (
         <>
@@ -267,7 +282,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
               <LayerReadings layer={l} />
             </Section>
           )}
-          {l.kind !== 'null' && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
+          {l.kind !== 'null' && !isBackground && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
         </>
       )}
     </div>

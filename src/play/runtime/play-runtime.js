@@ -12,6 +12,10 @@
  *   play.display.source 'image' | 'video' | 'colour': that background (display.image,
  *             display.video, display.backdrop) in place of the shader, which then never
  *             compiles or draws; the layers read the background as the picture
+ *   play.layers[0] a Background layer: its queue decides instead (the layer kit's queue.js
+ *             says what shows); the page's own shader runs only while "this graph" shows
+ *   backgroundGraphs: { [sourceId]: { fragmentShader, uniforms } }  the queue's other
+ *             graphs, each linked on first show and drawn only while it shows
  * options: {
  *   mode: 'player' | 'background',   player shows the controls; background is the picture only
  *   fit: 'contain' | 'cover',        contain keeps the exported shape (letterbox); cover fills the box
@@ -410,9 +414,12 @@ void main() {
     const play = Object.assign({}, play0, { layers: (play0.layers || []).map(l => Object.assign({}, l)) });
     // Play's background: an image, a video or a colour in place of the shader. Then the graph never
     // compiles or draws here; the layer kit paints the background and reads it as the picture.
-    const bgDisp = play.display || {};
+    // A Background layer (always the first) decides instead: the shader runs only while "this graph" shows.
+    const queueLayer = play.layers[0] && play.layers[0].kind === 'background' ? play.layers[0] : null;
+    const queueHasThis = !!queueLayer && (queueLayer.sources || []).some(s => s.kind === 'graph' && s.graph === 'this');
+    const bgDisp = queueLayer ? {} : play.display || {};
     const bgSource = bgDisp.source === 'image' || bgDisp.source === 'video' || bgDisp.source === 'colour' ? bgDisp.source : 'shader';
-    const bgOnly = bgSource !== 'shader';
+    const bgOnly = queueLayer ? !queueHasThis : bgSource !== 'shader';
     const onScript = typeof opts.onScript === 'function' ? opts.onScript : null;
     const scriptErrors = new Map();
     injectCss();
@@ -512,7 +519,7 @@ void main() {
       gl.activeTexture(gl.TEXTURE0 + u); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(l, u);
     };
     // Text nodes read the same 16×16 ASCII atlas the app builds (only drawn when the shader reads it).
-    const fontTex = (B.fragmentShader.match(/\bu_fontTexture\b/g) || []).length > 1 ? texture(gl.LINEAR) : white;
+    let fontTex = !bgOnly && (B.fragmentShader.match(/\bu_fontTexture\b/g) || []).length > 1 ? texture(gl.LINEAR) : white;
     if (fontTex !== white) upload(fontTex, fontAtlas(), false);
 
     // Render targets for feedback and echo: half float where the GPU can draw into it (as the app), else 8 bit.
@@ -609,11 +616,12 @@ void main() {
       // Sound only after the visitor has clicked (browsers block it before): until then it plays muted.
       bgMuted = bgVid.muted !== false;
     }
-    const background = bgOnly ? { el: bgEl, fit: bgDisp.fit === 'contain' || bgDisp.fit === 'stretch' ? bgDisp.fit : 'cover', colour: bgDisp.backdrop || [0, 0, 0] } : null;
-    const followBackground = run => {
-      const v = bgVideo;
+    const background = bgOnly && !queueLayer ? { el: bgEl, fit: bgDisp.fit === 'contain' || bgDisp.fit === 'stretch' ? bgDisp.fit : 'cover', colour: bgDisp.backdrop || [0, 0, 0] } : null;
+    const followBackground = run => { if (bgVideo) followVideo(bgVideo, bgVid.rate, bgVid.loop !== false, run); };
+    // Keep a video on the page's clock (as the app's play/background.ts).
+    const followVideo = (v, rateIn, loop, run) => {
       if (!v || v.readyState < 1) return;
-      const rate = bgVid.rate > 0 ? bgVid.rate : 1, loop = bgVid.loop !== false;
+      const rate = rateIn > 0 ? rateIn : 1;
       if (v.playbackRate !== rate) v.playbackRate = rate;
       const target = videoTimeAt(time, v.duration, rate, loop), d = v.duration, diff = Math.abs(v.currentTime - target);
       // Without a known length it just plays (videos recorded in a browser can say Infinity).
@@ -626,6 +634,71 @@ void main() {
         if (!v.paused) v.pause();
         if (off > 0.02 && !v.seeking) v.currentTime = target;
       }
+    };
+    // The Background layer's queue: its videos (made when one first shows, following the clock only
+    // while it shows), its other graphs as programs of their own, and the pictures the layer kit composes.
+    const qGraphs = B.backgroundGraphs || {};
+    const qProgs = new Map(), qFrames = new Map(), qVideos = new Map();
+    let qSound = false;
+    const qVideo = item => {
+      if (!item.src) return null;
+      let e = qVideos.get(item.id);
+      if (!e) {
+        e = document.createElement('video');
+        e.muted = true; e.loop = item.loop !== false; e.playsInline = true; e.preload = 'auto';
+        e.setAttribute('playsinline', ''); e.setAttribute('muted', '');
+        const url = dataToBlobUrl(item.src); if (url !== item.src) blobUrls.push(url);
+        e.src = url;
+        e.addEventListener('loadeddata', () => { needsDraw = true; });
+        e.addEventListener('seeked', () => { needsDraw = true; });
+        qVideos.set(item.id, e);
+      }
+      return e;
+    };
+    const followQueue = (plan, run) => {
+      const showing = new Map(plan.items.filter(i => i.item.kind === 'video').map(i => [i.item.id, i.item]));
+      for (const [id, v] of qVideos) {
+        const item = showing.get(id);
+        if (!item) { if (!v.paused) v.pause(); continue; }
+        // Sound only after the visitor has clicked (browsers block it before).
+        const muted = item.muted !== false || !qSound;
+        if (v.muted !== muted) v.muted = muted;
+        followVideo(v, item.rate, item.loop !== false, run);
+      }
+    };
+    const qProgram = id => {
+      if (qProgs.has(id)) return qProgs.get(id);
+      const g = qGraphs[id];
+      let e = null;
+      if (g) {
+        try {
+          const p = link(VS, g.fragmentShader);
+          e = { program: p, locs: new Map(), uniforms: g.uniforms || {}, font: (g.fragmentShader.match(/\bu_fontTexture\b/g) || []).length > 1 };
+        } catch (err) { e = null; }
+      }
+      qProgs.set(id, e);
+      return e;
+    };
+    const drawQueueGraph = e => {
+      const W = glCanvas.width, H = glCanvas.height;
+      const ql = n => { if (!e.locs.has(n)) e.locs.set(n, gl.getUniformLocation(e.program, n)); return e.locs.get(n); };
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, W, H);
+      gl.useProgram(e.program);
+      setUniformAt(ql('u_time'), time);
+      setUniformAt(ql('u_resolution'), [W, H]);
+      setUniformAt(ql('u_mouse'), [mouse.x * W, mouse.y * H]);
+      for (const k in e.uniforms) setUniformAt(ql(k), e.uniforms[k]);
+      const fl = ql('u_fontTexture');
+      if (fl) { if (e.font && fontTex === white) { fontTex = texture(gl.LINEAR); upload(fontTex, fontAtlas(), false); } gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fontTex); gl.uniform1i(fl, 0); }
+      drawQuad();
+    };
+    const captureQueue = id => {
+      let c = qFrames.get(id);
+      if (!c) { c = document.createElement('canvas'); qFrames.set(id, c); }
+      if (c.width !== glCanvas.width || c.height !== glCanvas.height) { c.width = glCanvas.width; c.height = glCanvas.height; }
+      const x = c.getContext('2d'); x.clearRect(0, 0, c.width, c.height);
+      try { x.drawImage(glCanvas, 0, 0); } catch (err) { /* nothing to copy */ }
     };
     const uploadVideos = () => {
       for (const v of videos) {
@@ -968,6 +1041,7 @@ void main() {
     const listeners = [];
     const on = (target, type, fn, o) => { target.addEventListener(type, fn, o); listeners.push(() => target.removeEventListener(type, fn, o)); };
     if (bgVideo && !bgMuted) on(window, 'pointerdown', () => { bgVideo.muted = false; }, true);
+    if (queueLayer && (queueLayer.sources || []).some(s => s.kind === 'video' && s.muted === false)) { on(window, 'pointerdown', () => { qSound = true; }, true); on(window, 'keydown', () => { qSound = true; }, true); }
     if (pointerOn) {
       on(stage, 'pointermove', e => {
         const u = clampedMouse(e.clientX, e.clientY);
@@ -1134,7 +1208,7 @@ void main() {
     const images = new Map();
     const img = src => { if (!src) return null; let i = images.get(src); if (!i) { i = new Image(); i.onload = () => { needsDraw = true; }; i.src = src; images.set(src, i); } return i.complete && i.naturalWidth ? i : null; };
     // Layers only covers the picture with the backdrop (a colour background is the backdrop already).
-    const hidden = !!(play.display && play.display.picture === false && bgSource !== 'colour');
+    const hidden = !queueLayer && !!(play.display && play.display.picture === false && bgSource !== 'colour');
     const audioLayer = play.layers.some(l => l.kind === 'audio' && l.visible);
     const pointer = { x: 0.5, y: 0.5, over: false, down: false };
     function drawLayers(dt) {
@@ -1147,6 +1221,9 @@ void main() {
         gl: glCanvas, W, H, dpr, time, dt, value, pointer, markers, editing: false, hidden,
         backdrop: play.display ? play.display.backdrop : [0, 0, 0],
         background,
+        graphFrame: item => qFrames.get(item.id) || null,
+        video: qVideo,
+        allowDirect: true,
         audio: L.status === 'on' ? { wave: L.wave, freq: L.freq, sampleRate: L.sr } : null,
         camera: camVideo || shared.camera, image: img,
         hand: handSt && usesHands ? (side, point) => HK.point(handSt, side, point) : undefined,
@@ -1215,8 +1292,9 @@ void main() {
       raf = requestAnimationFrame(tick);
       const dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
       lastNow = now;
-      runVideos(playing && !reduced && !document.hidden && !(pauseOffscreen && !onScreen));
-      followBackground(playing && !reduced && !document.hidden && !(pauseOffscreen && !onScreen));
+      const running = playing && !reduced && !document.hidden && !(pauseOffscreen && !onScreen);
+      runVideos(running);
+      followBackground(running);
       if ((pauseOffscreen && !onScreen) || document.hidden) return;
       if (reduced && !needsDraw && frame > 0) return;
       if (playing && !reduced) time += dt;
@@ -1228,13 +1306,25 @@ void main() {
       // Feedback and echo change with every frame drawn, so while paused they draw only when something changes (as in the app).
       if (!playing && (stateful || echoCfg) && !needsDraw && !moved && frame > 1) { refreshPanel(now); return; }
       needsDraw = false;
-      if (!bgOnly) {
+      // A Background layer: what shows now (its actions carried out), before anything is drawn.
+      const qPlan = queueLayer && K ? K.background(play, { time, value, allowDirect: true }) : null;
+      if (qPlan) followQueue(qPlan, running);
+      const showsThis = !qPlan || qPlan.items.some(i => i.item.kind === 'graph' && i.item.graph === 'this');
+      if (!bgOnly && showsThis) {
         uploadVideos();
         // Reduced motion's still frame of a feedback graph is the picture after its first 1.5 s
         // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
         if (reduced && stateful && frame === 1) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
         drawPicture();
         if (particles.length) drawParticles();
+        if (qPlan && !qPlan.direct) { const self = qPlan.items.find(i => i.item.kind === 'graph' && i.item.graph === 'this'); if (self) captureQueue(self.item.id); }
+      }
+      if (qPlan) for (const { item } of qPlan.items) {
+        if (item.kind !== 'graph' || item.graph === 'this') continue;
+        const e = qProgram(item.id);
+        if (!e) continue;
+        drawQueueGraph(e);
+        if (!qPlan.direct) captureQueue(item.id);
       }
       if (play.layers.length || hidden || usesLayersNode || bgOnly) drawLayers(dt);
       refreshPanel(now);
@@ -1251,6 +1341,7 @@ void main() {
         shared.instances.delete(inst);
         for (const v of videos) if (v.el) { v.el.pause(); v.el.removeAttribute('src'); v.el.load(); }
         if (bgVideo) { bgVideo.pause(); bgVideo.removeAttribute('src'); bgVideo.load(); }
+        for (const v of qVideos.values()) { v.pause(); v.removeAttribute('src'); v.load(); }
         for (const u of blobUrls) URL.revokeObjectURL(u);
         if (song.ctx) song.ctx.close();
         const lose = gl.getExtension('WEBGL_lose_context');

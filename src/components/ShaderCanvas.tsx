@@ -11,7 +11,9 @@ import { midiEngine } from '../lib/midiEngine';
 import { layerAudio } from '../lib/layerAudio';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
-import { playBackground, planFrame } from '../play/background';
+import { playBackground, planFrame, planGraphs, planShowsThis } from '../play/background';
+import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
+import type { BackgroundItem } from '../types/play';
 import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
 import { layersUniforms, setLayersTap } from '../play/layersTexture';
@@ -109,6 +111,13 @@ export interface OfflineRenderHandle {
   readPixels: (out: Uint8Array, width: number, height: number) => void;
   /** Set a uniform before the next renderAtTime (a take's recorded slider values). Unknown names are ignored. */
   setUniform: (name: string, value: number | number[]) => void;
+  /**
+   * A Background layer's graph source (not this graph) at `time`, read into
+   * `out` (RGBA, top-down, width × height of the export target). False when
+   * it has no program (still loading, or it doesn't compile). Call it before
+   * renderAtTime: it uses the same targets.
+   */
+  renderQueueGraph: (item: BackgroundItem, time: number, out: Uint8Array) => boolean;
   /** Pixel dimensions of the export render target */
   width: number;
   height: number;
@@ -678,6 +687,65 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     perspCamera.position.z = 3;
     perspCameraRef.current = perspCamera;
 
+    // ── Background layer: graph sources as a second program ─────────────────
+    // A graph in a Background layer's queue (a bundled example, a saved graph)
+    // is compiled off-screen (play/queueGraphs.ts) and drawn here with its own
+    // material, into the same float target and dithering blit as the preview's
+    // own graph, only on frames where it shows. Its uniforms are its saved
+    // values; time, resolution and the mouse are shared with the preview.
+    // Programs link off to the side (compileAsync) and draw once ready.
+    const bgScene = new THREE.Scene();
+    const bgMesh = new THREE.Mesh(geometry, material);
+    bgScene.add(bgMesh);
+    const bgPrograms = new Map<string, { key: string; material: THREE.ShaderMaterial; ready: boolean; failed: boolean }>();
+    const bgProgram = (item: BackgroundItem, sync = false): THREE.ShaderMaterial | null => {
+      const c = compiledQueueGraph(item);
+      if (!c || c === 'loading' || 'error' in c) return null;
+      let e = bgPrograms.get(item.id);
+      if (!e || e.key !== c.key) {
+        e?.material.dispose();
+        const shared = material.uniforms;
+        const uniforms: Record<string, THREE.IUniform> = {
+          u_time: { value: 0 }, u_resolution: shared.u_resolution, u_mouse: shared.u_mouse, u_prevFrame: { value: null },
+          ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
+          u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms,
+        };
+        for (const [name, value] of Object.entries(c.uniforms)) uniforms[name] = { value: Array.isArray(value) ? [...value] : value };
+        const m = new THREE.ShaderMaterial({ vertexShader: c.vertexShader, fragmentShader: c.fragmentShader, uniforms });
+        const entry = { key: c.key, material: m, ready: false, failed: false };
+        e = entry;
+        bgPrograms.set(item.id, entry);
+        const compileScene = new THREE.Scene();
+        compileScene.add(new THREE.Mesh(geometry, m));
+        const settle = () => {
+          const prog = (renderer.properties.get(m) as { currentProgram?: { program?: WebGLProgram } }).currentProgram?.program;
+          if (prog && gl.getProgramParameter(prog, gl.LINK_STATUS) === false) { entry.failed = true; flushGlErrors(); }
+          entry.ready = true;
+        };
+        if (sync) { renderer.compile(compileScene, camera); settle(); }
+        else renderer.compileAsync(compileScene, camera).then(() => { settle(); requestRender(); }, () => { entry.failed = true; });
+      }
+      return e.ready && !e.failed ? e.material : null;
+    };
+    /** Draw a graph source at `time` into `into` (null: the screen), through the float target and the dithering blit. */
+    const drawBgGraph = (m: THREE.ShaderMaterial, time: number, into: THREE.WebGLRenderTarget | null, scratch: THREE.WebGLRenderTarget, seed: number) => {
+      m.uniforms.u_time.value = time;
+      bgMesh.material = m;
+      renderer.setRenderTarget(scratch);
+      renderer.render(bgScene, camera);
+      blitMat.uniforms.tInput.value = scratch.texture;
+      blitMat.uniforms.u_seed.value = seed;
+      renderer.setRenderTarget(into);
+      renderer.render(blitScene, camera);
+      renderer.setRenderTarget(null);
+    };
+    /** Programs for sources no longer in the queue go. */
+    const pruneBgPrograms = (keep: ReadonlySet<string>) => {
+      for (const [id, e] of bgPrograms) if (!keep.has(id)) { e.material.dispose(); bgPrograms.delete(id); }
+    };
+    const unsubQueueGraphs = onQueueGraphsChange(requestRender);
+    let bgPruneTick = 0;
+
     // Register offline render handle for FFmpeg export.
     // Uses a dedicated WebGLRenderTarget — completely isolated from the live
     // display canvas so resize events and double-buffering can't corrupt readback.
@@ -810,6 +878,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           }
           renderer.setRenderTarget(null);
           for (const [k, v] of keep) if (u[k]) u[k].value = v;
+        },
+        renderQueueGraph: (item: BackgroundItem, time: number, out: Uint8Array) => {
+          ensureRT();
+          const m = bgProgram(item, true);
+          if (!m || !exportRT || !exportReadbackRT) return false;
+          drawBgGraph(m, time, exportReadbackRT, exportRT, ditherSeed(Math.floor(time * 100.0)));
+          handle.readPixels(out, exportW, exportH);
+          return true;
         },
         readPixels: (out: Uint8Array, width: number, height: number) => {
           if (!exportReadbackRT) return;
@@ -1217,18 +1293,35 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
         || midiEngine.hasFile()
       );
-      // Play with an image, a video or a colour in place of the shader: the graph doesn't run at all.
-      const background = playBackground.active();
-      if (background) playBackground.follow(elapsed, playing);
+      // A Background layer on the Play page: its queue decides, and the graph runs only while
+      // "this graph" shows. Else Play's image, video or colour: the graph doesn't run at all.
+      const queue = playOverlay.queuePlan(elapsed);
+      if (queue) playBackground.followQueue(queue, elapsed, playing);
+      const background = queue ? !planShowsThis(queue) : playBackground.active();
+      if (!queue && background) playBackground.follow(elapsed, playing);
       const plan = planFrame({
         background, shaderMoving, needsRender,
-        layersMoving: renderKeepAlive.active() || playOverlay.isAnimated() || playEngine.isAnimating() || playBackground.moving(playing) || (playing && midiEngine.hasFile()),
+        layersMoving: renderKeepAlive.active() || playOverlay.isAnimated() || playEngine.isAnimating() || (queue ? playBackground.queueMoving(queue, playing) : playBackground.moving(playing)) || (playing && midiEngine.hasFile()),
       });
       const dynamic = plan.dynamic;
+      // The queue's other graphs showing now, drawn as a second program (and copied for the kit unless one goes straight to the screen).
+      const drawQueueGraphs = () => {
+        if (!queue) return;
+        if (++bgPruneTick % 120 === 0) pruneBgPrograms(new Set(playOverlay.queueSourceIds()));
+        for (const item of planGraphs(queue)) {
+          const m = bgProgram(item);
+          if (!m) continue;
+          gpuTimer.begin('background');
+          drawBgGraph(m, elapsed, null, floatRt, ditherSeed(frameCount));
+          gpuTimer.end();
+          if (!queue.direct) playBackground.captureGraph(item.id, renderer.domElement);
+        }
+      };
       if (plan.layersOnly) {
         needsRender = false;
         idleFrames = 0;
         frameCount++;
+        drawQueueGraphs();
         playOverlay.draw(renderer.domElement, elapsed, dt);
       } else if (plan.shader) {
         needsRender = false;
@@ -1272,6 +1365,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           renderer.render(particleScene, perspCamera);
           gpuTimer.end();
           renderer.autoClear = true;
+        }
+
+        // ── Background layer: this graph is one source of the queue. Copied for the kit when it
+        // crossfades or is transformed; then any other graph fading with it is drawn. ──
+        if (queue) {
+          if (!queue.direct) { const self = queue.items.find(i => i.item.kind === 'graph' && i.item.graph === 'this'); if (self) playBackground.captureGraph(self.item.id, renderer.domElement); }
+          drawQueueGraphs();
         }
 
         // ── Play layers: drawn over the picture while it is still in the drawing buffer ──
@@ -1912,6 +2012,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       unsubRender();
       unsubWake();
       unsubBackground();
+      unsubQueueGraphs();
+      pruneBgPrograms(new Set());
       io?.disconnect();
       ro.disconnect();
       renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);

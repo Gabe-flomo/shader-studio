@@ -57,7 +57,7 @@ export function exportNotes(p: Presentation): ExportNote[] {
     if (!used.has(s.id)) continue;
     const limits = sourceLimits(s);
     if (limits.length) out.push({ what: `“${s.title}” is a still`, why: `The web player can’t run ${limits.join(', ')} yet.` });
-    for (const l of leftBehind(s.bundle.play)) if (!/notes/i.test(l.what)) out.push({ what: `${l.what} in “${s.title}”`, why: l.why });
+    for (const l of leftBehind(s.bundle.play, undefined, { graphs: s.bundle.backgroundGraphs ?? {} })) if (!/notes/i.test(l.what)) out.push({ what: `${l.what} in “${s.title}”`, why: l.why });
   }
   return out;
 }

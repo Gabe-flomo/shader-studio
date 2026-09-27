@@ -22,7 +22,8 @@ import { cameraInput } from '../lib/cameraInput';
 import { createLayerKit, type KitAudio, type KitEnv, type KitPointer, type LayerKit } from './kit/kit.js';
 import { loadThreeRuntime, playUses3D, threeRuntime } from './threeSource';
 import { klPaintBackground } from './kit/layers.js';
-import { playBackground } from './background';
+import { playBackground, planShowsThis } from './background';
+import type { BqPlan } from './kit/queue.js';
 import { setScriptStatus } from './scriptStatus';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
@@ -139,10 +140,49 @@ class PlayOverlay {
 
   setRecord(record: PlayRecord): void {
     this.record = record;
-    playBackground.setDisplay(record.display);
+    playBackground.setRecord(record);
+    // Example graphs in a Background queue compile from the examples' chunk: load it now, so the picture and exports have them.
+    // (Imported when needed: queueGraphs brings the graph store along.)
+    if (record.layers[0]?.kind === 'background' && record.layers[0].sources.some(x => x.kind === 'graph' && x.graph?.startsWith('example:'))) void import('./queueGraphs').then(m => m.preloadQueueExamples());
     // A 3D sketch: load three.js (the script exported pages carry), so the layer draws and a later export has it at hand.
     if (!threeRuntime() && playUses3D(record)) void loadThreeRuntime().catch(() => {});
   }
+
+  /**
+   * The Background layer's plan for the live frame at `time` (null without
+   * one, or off the Play page): ShaderCanvas asks before it draws, to render
+   * the graph sources that show and keep the showing videos on the clock.
+   */
+  queuePlan(time: number): BqPlan | null {
+    if (!playBackground.layerActive()) { this.lastQueue = null; return null; }
+    this.lastQueue = this.kit.background(this.record, { time, value: this.value, allowDirect: true });
+    return this.lastQueue;
+  }
+  private lastQueue: BqPlan | null = null;
+  /** What the Background layer shows now (for its panel): the source showing and the one fading out, or null off the Play page. */
+  queueShowing(): { toId: string; fromId: string } | null {
+    const q = this.lastQueue;
+    if (!q) return null;
+    const to = q.items[q.items.length - 1]?.item.id ?? '';
+    return { toId: to, fromId: q.items.length > 1 ? q.items[0].item.id : '' };
+  }
+  /** The Background layer's source ids (ShaderCanvas lets go of programs for the others). */
+  queueSourceIds(): string[] { const l = this.record.layers[0]; return l?.kind === 'background' ? l.sources.map(s => s.id) : []; }
+
+  /**
+   * An offline frame's Background plan (null without a Background layer): the
+   * export's own kit, started fresh on the first frame with the take's seed,
+   * gets this frame's actions first. compositePixels then draws the same
+   * frame without applying them again.
+   */
+  exportQueuePlan(time: number, first: boolean, actions: readonly KitAction[], seed = 0): BqPlan | null {
+    if (!playBackground.layerActive()) return null;
+    if (first || !this.exportKit) { this.exportKit = createLayerKit(); this.exportKit.reset(seed); }
+    for (const a of actions) this.exportKit.act(a);
+    this.exportPrepared = true;
+    return this.exportKit.background(this.record, { time, value: this.value, allowDirect: false });
+  }
+  private exportPrepared = false;
 
   /** Fire an action now (the panel's Burst / Drop / Next / Clear buttons). */
   act(a: KitAction): void { this.fire(a); }
@@ -160,7 +200,7 @@ class PlayOverlay {
   setShaderTap(fn: ((tap: ShaderTap) => void) | null): void { this.shaderTap = fn; }
 
   /** Is there anything on the overlay: a visible layer, Layers only, or a background in place of the shader? */
-  hasLayers(): boolean { return this.record.layers.some(l => l.visible) || playBackground.hidden() || playBackground.active(); }
+  hasLayers(): boolean { return this.record.layers.some(l => l.visible) || playBackground.hidden() || playBackground.active() || playBackground.layerActive(); }
 
   /** Anything moving on its own keeps the render loop running. */
   isAnimated(): boolean { return this.kit.isAnimated(this.record) || !!this.drawing; }
@@ -432,6 +472,10 @@ class PlayOverlay {
       backdrop: this.record.display?.backdrop ?? [0, 0, 0],
       // An offline frame gets its background painted in by compositePixels (the video seeked to the frame).
       background: forExport ? null : playBackground.kitBackground(),
+      // A Background layer: its graph sources as ShaderCanvas drew them (live) or an offline render did, its videos on the clock.
+      graphFrame: item => (forExport ? playBackground.offlineGraphFrame(item) : playBackground.graphFrame(item)),
+      video: item => playBackground.queueVideo(item),
+      allowDirect: !forExport,
       audio: needsAudio ? liveAudio.raw() : null,
       audioFor: l => {
         // A take playing back: the sound it recorded, where it has it.
@@ -447,7 +491,7 @@ class PlayOverlay {
       hand: forExport || this.replaying ? undefined : (side, point) => playEngine.handPoint(side as 'left' | 'right' | 'any', point),
       hands: this.handsOverlay(forExport),
       // The graph's Layers node can't read the layers while the graph isn't running.
-      shaderTap: forExport || playBackground.active() ? undefined : this.shaderTap ?? undefined,
+      shaderTap: forExport || playBackground.active() || (playBackground.layerActive() && !planShowsThis(this.lastQueue)) ? undefined : this.shaderTap ?? undefined,
       scriptStatus: forExport ? undefined : setScriptStatus,
       // three.js for 3D Script layers, once loaded (they wait until then).
       three: threeRuntime(),
@@ -538,13 +582,19 @@ class PlayOverlay {
    */
   compositePixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean, opts: { transparent?: boolean; picture?: TransparentPicture; pointer?: KitPointer | null; actions?: readonly KitAction[]; seed?: number; audio?: TakeAudioSource | null } = {}): void {
     // The Play page's "Layers only" hides the picture as well: transparent, that means none.
-    const dropPicture = !!opts.transparent && (opts.picture === 'drop' || this.record.display?.picture === false);
+    const queue = playBackground.layerActive();
+    const dropPicture = !!opts.transparent && (opts.picture === 'drop' || (!queue && this.record.display?.picture === false));
     const luma = !!opts.transparent && opts.picture === 'luma' && !dropPicture;
     if (!this.hasLayers()) { if (dropPicture) rgba.fill(0); else if (luma) lumaKey(rgba); return; }
     // A take's seed: the render's random choices are the ones made when it played back.
-    if (first || !this.exportKit) { this.exportKit = createLayerKit(); this.exportKit.reset(opts.seed ?? 0); }
-    // A take's actions that fired by this frame (bursts, Next line, script buttons).
-    for (const a of opts.actions ?? []) this.exportKit.act(a);
+    // exportQueuePlan may have started this frame already (a Background layer), actions and all.
+    if (!this.exportPrepared) {
+      if (first || !this.exportKit) { this.exportKit = createLayerKit(); this.exportKit.reset(opts.seed ?? 0); }
+      // A take's actions that fired by this frame (bursts, Next line, script buttons).
+      for (const a of opts.actions ?? []) this.exportKit.act(a);
+    }
+    this.exportPrepared = false;
+    const kit = this.exportKit!;
     const pic = this.exportPicture ?? (this.exportPicture = document.createElement('canvas'));
     const out = this.exportCanvas ?? (this.exportCanvas = document.createElement('canvas'));
     for (const c of [pic, out]) if (c.width !== width || c.height !== height) { c.width = width; c.height = height; }
@@ -568,7 +618,9 @@ class PlayOverlay {
       env.audioFor = l => { const a = takeAudio(l); return a !== undefined ? a : live ? live(l) : env.audio; };
     }
     if (opts.transparent) { env.transparent = true; if (dropPicture) env.hidden = true; }
-    this.exportKit.frame(ox, this.record, env);
+    // A Background layer is the picture: with a transparent export it stays in unless the picture is dropped.
+    if (queue && opts.transparent && !dropPicture) env.transparent = false;
+    kit.frame(ox, this.record, env);
     if (dropPicture) { rgba.set(ox.getImageData(0, 0, width, height).data); return; }
     // Keyed after the layers have read the picture (their mattes and colours see it as it is).
     if (luma) { lumaKey(rgba); img.data.set(rgba); px.putImageData(img, 0, 0); }

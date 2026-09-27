@@ -16,7 +16,8 @@ import { RulerSlider } from './ui/RulerSlider';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
 import { playOverlay, type TransparentPicture } from '../play/overlay';
-import { playBackground } from '../play/background';
+import { playBackground, planGraphs, planShowsThis } from '../play/background';
+import type { BqPlan } from '../play/kit/queue.js';
 import { midiEngine } from '../lib/midiEngine';
 import { formatDuration } from '../lib/midiFile';
 import { recordingBaseName, recordingPath, saveRecording } from '../utils/recordingsFolder';
@@ -101,6 +102,16 @@ interface ScaleSupport {
 }
 
 const fmtPx = (w: number, h: number) => `${w}×${h}`;
+
+/**
+ * An offline frame of a Background layer: its showing videos seeked to `t`
+ * and its other graphs drawn at `t` (before the main render: they share the
+ * export's targets), ready for compositePixels to paint.
+ */
+async function queueFrame(off: OfflineRenderHandle, plan: BqPlan, t: number, scratch: Uint8Array): Promise<void> {
+  await playBackground.seekQueue(plan, t);
+  for (const item of planGraphs(plan)) if (off.renderQueueGraph(item, t, scratch)) playBackground.setOfflineGraph(item.id, scratch, off.width, off.height);
+}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -426,6 +437,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     let frameTime = 0, firstFrame = true, firstRender = true;
     const applier = take ? takeApplier(take, offlineRender) : null;
     let frameActs: ReturnType<NonNullable<typeof applier>['apply']> = [];
+    // A Background layer: this frame's plan (its actions applied), and a buffer for its other graphs.
+    let frameQueue: BqPlan | null = null;
+    const queueScratch = new Uint8Array(w * h * 4);
     const startT = performance.now();
 
     try {
@@ -447,14 +461,17 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         renderFrame: async (t) => {
           if (abortRef.current) throw new Error('cancelled');
           frameActs = applier?.apply(t) ?? [];
+          frameQueue = playOverlay.exportQueuePlan(t, firstFrame, frameActs, applier?.seed);
+          // A Background layer: the sources showing at t (the shader only while this graph is one).
           // Play's image, video or colour background: no shader to render, the video seeks to the frame.
-          if (playBackground.active()) await playBackground.seek(t);
+          if (frameQueue) { await queueFrame(offlineRender, frameQueue, t, queueScratch); if (planShowsThis(frameQueue)) renderAtTime(t, { dt: 1 / fps, first: firstRender }); }
+          else if (playBackground.active()) await playBackground.seek(t);
           else renderAtTime(t, { dt: 1 / fps, first: firstRender });
           firstRender = false;
           frameTime = t;
         },
         readPixels: (out, width, height) => {
-          if (!playBackground.active()) handleReadPixels(out, width, height);
+          if (frameQueue ? planShowsThis(frameQueue) : !playBackground.active()) handleReadPixels(out, width, height);
           playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame, { transparent, picture, pointer: applier?.pointer(frameTime), actions: frameActs, seed: applier?.seed, audio: applier?.audio(frameTime) });
           firstFrame = false;
         },
@@ -513,6 +530,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     const base = filename || 'shader graph';
     const digits = Math.max(5, String(total).length);
     const pixels = new Uint8Array(w * h * 4);
+    const queueScratch = new Uint8Array(w * h * 4);
     const frame = document.createElement('canvas');
     frame.width = w; frame.height = h;
     const fx = frame.getContext('2d')!;
@@ -527,7 +545,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         if (abortRef.current) throw new Error('cancelled');
         const t = span.from + i / fps;
         const actions = applier?.apply(t) ?? [];
-        if (playBackground.active()) await playBackground.seek(t);
+        const queue = playOverlay.exportQueuePlan(t, i === 0, actions, applier?.seed);
+        if (queue) { await queueFrame(offlineRender, queue, t, queueScratch); if (planShowsThis(queue)) { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); } }
+        else if (playBackground.active()) await playBackground.seek(t);
         else { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); }
         playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: applier?.pointer(t), actions, seed: applier?.seed, audio: applier?.audio(t) });
         const img = fx.createImageData(w, h);
@@ -595,7 +615,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     }
   };
 
-  const handleScreenshot = () => {
+  const handleScreenshot = async () => {
     if (!canvas) return;
     const name = filename || 'shader graph';
     if (transparent && offlineRender) {
@@ -603,7 +623,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       const { width: w, height: h, renderAtTime, readPixels } = offlineRender;
       const t = useNodeGraphStore.getState().currentTime;
       const pixels = new Uint8Array(w * h * 4);
-      if (!playBackground.active()) { renderAtTime(t); readPixels(pixels, w, h); }
+      const queue = playOverlay.exportQueuePlan(t, true, []);
+      if (queue) { await queueFrame(offlineRender, queue, t, new Uint8Array(w * h * 4)); if (planShowsThis(queue)) { renderAtTime(t); readPixels(pixels, w, h); } }
+      else if (!playBackground.active()) { renderAtTime(t); readPixels(pixels, w, h); }
       playOverlay.compositePixels(pixels, w, h, t, 1 / 60, true, { transparent: true, picture });
       const c = document.createElement('canvas');
       c.width = w; c.height = h;

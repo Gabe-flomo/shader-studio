@@ -13,7 +13,7 @@ import type { PlayRecord } from '../types/play';
 
 /** Does the Play have a 3D Script layer (so its page carries three.js)? Hidden ones count: an action can show them. */
 export function playUses3D(play: PlayRecord): boolean {
-  return play.layers.some(l => l.kind === 'script' && l.mode === '3d');
+  return play.layers.some(l => (l.kind === 'script' && l.mode === '3d') || (l.kind === 'background' && l.sources.some(s => s.kind === 'script' && s.mode === '3d')));
 }
 
 let cached: string | null = null;
