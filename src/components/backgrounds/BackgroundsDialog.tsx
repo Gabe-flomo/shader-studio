@@ -31,11 +31,12 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { formatSize } from '../../utils/library';
 import { browserKV, describeVideoUses, videoUses, type VideoUse } from '../../lib/videoUsage';
 import {
-  IMAGE_FOLDER_SCOPE, PALETTE_FOLDER_SCOPE, freePaletteName, ensureSoundWave, getImage, getVideo, isAudioType, importImageFile, moveImage, movePalette, paletteCss, renameImage, renamePalette, renameVideo, savePalette, videoExt,
+  IMAGE_FOLDER_SCOPE, PALETTE_FOLDER_SCOPE, addVideoFile, freePaletteName, ensureSoundWave, getImage, getVideo, isAudioType, importImageFile, moveImage, movePalette, paletteCss, renameImage, renamePalette, renameVideo, savePalette, videoExt,
   type BackgroundImageMeta, type LibraryVideoMeta, type Palette,
 } from '../../lib/backgroundLibrary';
 import { deleteImageWithUndo, deletePaletteWithUndo, deleteVideosWithUndo, useBackgroundImages, useLibraryVideos, usePalettes } from './useBackgrounds';
 import { openCapture, type BackgroundPick } from './backgroundsUi';
+import { audioAccept, isAudioFile, notAudioMessage } from '../../lib/audioAccept';
 import { PaletteEditor } from './FillEditor';
 
 type Tab = 'images' | 'palettes' | 'videos' | 'sounds';
@@ -105,6 +106,7 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
   const [editing, setEditing] = useState<Palette | 'new' | null>(null);
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const soundInput = useRef<HTMLInputElement>(null);
   const [, bump] = useState(0);
   useEffect(() => {
     const on = () => bump(n => n + 1);
@@ -123,7 +125,9 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
   // Which setups use each video: saved graphs and presentations, and the open graph as it is now.
   const openName = useNodeGraphStore(s => s.currentGraph?.name ?? null);
   const openLayers = useNodeGraphStore(s => s.play.layers);
-  const uses = useMemo(() => (tab === 'videos' || tab === 'sounds' ? videoUses(media.map(v => v.id), browserKV, { name: openName, layers: openLayers }) : null), [tab, media, openName, openLayers]);
+  const openEngine = useNodeGraphStore(s => s.play.audioEngine);
+  const openSounds = useMemo(() => (openEngine?.racks ?? []).flatMap(r => (r.instrument?.zones ?? []).map(z => z.sampleId)), [openEngine]);
+  const uses = useMemo(() => (tab === 'videos' || tab === 'sounds' ? videoUses(media.map(v => v.id), browserKV, { name: openName, layers: openLayers, sounds: openSounds }) : null), [tab, media, openName, openLayers, openSounds]);
   const unusedVideos = useMemo(() => (uses ? media.filter(v => !uses.get(v.id)?.length) : []), [uses, media]);
   const sound = tab === 'sounds';
   const kindWord = sound ? 'sound' : 'video';
@@ -231,6 +235,21 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
     catch (e) { toast.error('Couldn’t add that image', { message: e instanceof Error ? e.message : String(e) }); }
     finally { setBusy(false); }
   };
+  // Sounds of your own, several at once: kept with the drum pads' samples, for drum pads and the Audio engine's sample player.
+  const uploadSounds = async (files: File[]) => {
+    const ok = files.filter(isAudioFile), bad = files.filter(f => !isAudioFile(f));
+    if (bad.length) toast.error(bad.length === 1 ? 'That isn’t a sound' : `${bad.length} files aren’t sounds`, { message: notAudioMessage(bad[0]) });
+    if (!ok.length) return;
+    setBusy(true);
+    let added = 0;
+    const failed: string[] = [];
+    for (const f of ok) {
+      try { await addVideoFile(f); added++; } catch { failed.push(f.name); }
+    }
+    setBusy(false);
+    if (added) toast.success(added === 1 ? `Added “${ok[0].name}”` : `Added ${added} sounds`, { message: 'Use them on drum pads, or in an Audio engine rack’s sample player.' });
+    if (failed.length) toast.error(`Couldn’t keep ${failed.join(', ')}`, { message: 'This browser may be out of room for files.' });
+  };
   const capture = async () => {
     const id = await openCapture();
     if (id) setTab('images');
@@ -240,6 +259,8 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: compact ? '0 0 10px' : '14px 18px 10px', borderBottom: `1px solid ${tk.border.subtle}` }}>
       <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/avif" style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importFile(f); }} />
+      <input ref={soundInput} type="file" multiple accept={audioAccept()} style={{ display: 'none' }}
+        onChange={e => { const fs = [...(e.target.files ?? [])]; e.target.value = ''; if (fs.length) void uploadSounds(fs); }} />
       {tabs.length > 1 && (
         <Segmented<Tab> fill ariaLabel="Kind of background" value={tab} onChange={setTab} options={[
           { value: 'images', label: `Images${images ? ` (${images.length})` : ''}` },
@@ -256,6 +277,7 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
           </>
         ) : tab === 'videos' || tab === 'sounds' ? (
           <>
+            {sound && <Button size="sm" variant="primary" icon="import" disabled={busy} onClick={() => soundInput.current?.click()} title="WAV, MP3, AIFF, FLAC, M4A or OGG files, several at once, for drum pads and the Audio engine’s sample player">{busy ? 'Adding…' : 'Upload sounds…'}</Button>}
             <Button size="sm" icon="trash" disabled={!unusedVideos.length} onClick={() => void cleanUp()}
               title={`Delete the ${kindWord}s no saved Play setup, presentation or the open graph uses`}>
               {unusedVideos.length ? `Clean up ${unusedVideos.length} unused (${formatSize(unusedVideos.reduce((n, v) => n + v.bytes, 0))})` : 'Nothing unused'}
@@ -292,7 +314,7 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
       : videoError ? empty(`${sound ? 'Sounds' : 'Videos'} can’t be kept in this browser: ${videoError}`)
       : list.length ? <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{list.map(videoRow)}</div>
       : empty(needle ? `No ${kindWord} called anything like “${q.trim()}”.` : sound
-        ? 'No sounds yet. Add a Drum pads layer on Play and drop a sample on a pad.'
+        ? 'No sounds yet. Upload some, or add a Drum pads layer on Play and drop a sample on a pad.'
         : 'No videos yet. Add a Video layer on Play and pick a file, or drop a video on the picture.');
   } else {
     const found = needle ? palettes.filter(p => p.name.toLowerCase().includes(needle)) : null;
@@ -313,7 +335,7 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
   const note = (
     <div style={{ color: tk.text.faint, font: `500 11.5px/1.5 ${fontFamily.ui}` }}>
       {picking ? 'Choose one to use it. ' : ''}{tab === 'sounds'
-        ? 'Kept in this browser with the videos; Export everything, the workspace folder and the backup folder include them. A drum pad points at its sample here, so a setup shared without it asks for the file.'
+        ? 'Kept in this browser with the videos; Export everything, the workspace folder and the backup folder include them. Drum pads and the Audio engine’s sample player point at their sounds here, so a setup shared without them asks for the files.'
         : tab === 'videos'
         ? 'Kept in this browser; Export everything, the workspace folder and the backup folder include them. A Video layer points at its file here, so a setup shared without it asks for the file.'
         : 'Kept in this browser; Export everything and the backup folder include them. A setup that uses one keeps its own copy, so it works when shared.'}

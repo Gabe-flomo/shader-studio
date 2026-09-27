@@ -29,6 +29,8 @@ import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { LiveAudioChip } from './chips';
 import { SpectrumView } from './SpectrumView';
+import { engineRackOfInput } from '../../lib/engineSound';
+import { useCan } from '../../lib/plan';
 import { EMPTY_READERS as EMPTY, readerInputOptions, removeReader, usesReader, useReadersPanel, withReaders } from './readersPanelUi';
 
 /** Mounted once on the Play page. */
@@ -76,6 +78,7 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
   const levels = useLevels(readers);
   const ticks = useMemo(() => thresholdsByReader(play), [play]);
   const status = useLiveStatus();
+  const engineOk = useCan('audio.engine');
 
   const edit = (fn: (c: PlayAudioReaders) => PlayAudioReaders) => setPlay(p => withReaders(p, fn(p.audioReaders ?? EMPTY)));
   const patch = (id: string, over: Partial<AudioReader>) => edit(c => ({ ...c, readers: c.readers.map(r => (r.id === id ? { ...r, ...over } : r)) }));
@@ -115,7 +118,7 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
     id: n.id,
     label: (typeof n.params.label === 'string' && n.params.label.trim()) || 'Audio Input',
   }));
-  const inputOptions = readerInputOptions(cfg.input, songs.map(x => ({ ...x, file: audioEngine.isLoaded(x.id) ? audioEngine.getFileName(x.id) : null })), play.layers);
+  const inputOptions = readerInputOptions(cfg.input, songs.map(x => ({ ...x, file: audioEngine.isLoaded(x.id) ? audioEngine.getFileName(x.id) : null })), play.layers, play.audioEngine?.racks ?? []);
   const videoId = videoLayerOfInput(cfg.input);
   const video = videoId ? play.layers.find(v => v.id === videoId && v.kind === 'video') : undefined;
   const song = songs.find(s => s.id === cfg.input);
@@ -135,7 +138,13 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
   );
   const padsId = padsLayerOfInput(cfg.input);
   const padsLayer = padsId ? play.layers.find(v => v.id === padsId && v.kind === 'drumpad') : undefined;
-  const sourceNote = padsId
+  const rackId = engineRackOfInput(cfg.input);
+  const rack = rackId ? play.audioEngine?.racks.find(r => r.id === rackId) : undefined;
+  const sourceNote = rackId
+    ? hint(!rack ? 'That Audio engine rack has been deleted. Pick another input.'
+      : !engineOk ? 'The Audio engine is part of Pro: its racks are kept, and play again with Pro.'
+        : `${rack.name}: the readers hear the rack after its effects. Play it (MIDI, the computer keyboard, the keys on its card) to see them move.`)
+    : padsId
     ? hint(!padsLayer ? 'That Drum pad layer has been deleted. Pick another input.' : `${padsLayer.label}: the readers hear its pads after its effects. Hit a pad (click, keys, MIDI) to see them move.`)
     : videoId
     ? (readerVideoNote(video?.label ?? '', video ? videoState : 'gone') ? hint(readerVideoNote(video?.label ?? '', video ? videoState : 'gone')) : null)

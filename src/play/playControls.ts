@@ -16,6 +16,7 @@ import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
 import { layerNumericProps, parseActionTarget, parseLayerTarget } from '../types/play';
 import { finishHost, finishParamOf, parseFinishTarget, patchFinishEffect, readFinishValue } from '../types/playFinish';
 import { audioFxEffect, audioFxParam, parseAudioFxTarget, patchAudioFxEffect, readAudioFxValue } from '../types/playAudioFx';
+import { auTargetExists, parseAuTarget, readAuValue } from '../types/playAudioEngine';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDrivers';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
@@ -228,6 +229,8 @@ export function readControlValue(nodes: GraphNode[], target: string, play?: Play
   if (parseLayerTarget(target)) return readLayerValue(play, target);
   if (parseFinishTarget(target)) return readFinishValue(play?.finish, target);
   if (parseAudioFxTarget(target)) return readAudioFxValue(play?.audioFx, target);
+  // An Audio Unit's parameter: the value kept in the setup (0 until one is set; the + keeps the plug-in's).
+  if (parseAuTarget(target)) return auTargetExists(play?.audioEngine, target) ? readAuValue(play?.audioEngine, target) ?? 0 : undefined;
   if (parseActionTarget(target)) return undefined;
   // "group::…::node::param": an outer group's override of the rest of the path wins (that's what its
   // card's slider sets), then the next group's, then the node's own value.

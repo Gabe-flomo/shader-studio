@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- A signed build with the hardened runtime needs these to open the camera (Camera layers, hand tracking) and the microphone (Live audio). -->
+<!-- A signed build with the hardened runtime needs these to open the camera (Camera layers, hand tracking) and the microphone (Live audio),
+     and (disable-library-validation) to load third-party Audio Units (AUv2 plug-ins) into the Audio engine, docs/audio-engine.md. -->
 <plist version="1.0">
 <dict>
   <key>com.apple.security.device.camera</key>
   <true/>
   <key>com.apple.security.device.audio-input</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
   <true/>
 </dict>
 </plist>

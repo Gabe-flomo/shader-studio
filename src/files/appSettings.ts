@@ -23,7 +23,7 @@ export const SETTING_CATEGORIES: ReadonlyArray<{ id: SettingCategory; label: str
   { id: 'play', label: 'Play' },
   { id: 'finish', label: 'Finish and looks' },
   { id: 'present', label: 'Present' },
-  { id: 'devices', label: 'Camera, MIDI and OSC' },
+  { id: 'devices', label: 'Camera, MIDI, OSC and audio' },
   { id: 'editors', label: 'Code editors' },
   { id: 'saving', label: 'Folders and saving' },
   { id: 'windows', label: 'Windows' },
@@ -85,6 +85,8 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:midiSound': S('MIDI sound', 'devices'),
   'shader-studio:osc:port': S('OSC port', 'devices'),
   'shader-studio:osc:udpPort': S('OSC UDP port', 'devices'),
+  'shader-studio:audio:plugins': S('Audio Unit plugins', 'devices', { hint: 'Every installed plugin is offered again, and none is marked New' }),
+  'shader-studio:audio:engine': S('Audio engine output and volume', 'devices', { hint: 'The system output, full volume, not muted' }),
   // Code editors
   'shader-studio:glsl-editor': S('GLSL page: the open code', 'editors'),
   'glsl-editor:open-shader': S('GLSL page: the open shader', 'editors'),

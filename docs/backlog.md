@@ -53,10 +53,7 @@ Built: effect chains (filter, echo, reverb, distortion, compressor) on each soun
 - **Drum pad sampler layer:** shipped (docs/drum-pads.md). Follow-ups:
   - Banks (A/B), a Sounds tab in the Library, pad samples in presentations, the pad grid on websites.
   - Slicing, time-stretch, and filter or pitch envelopes per pad.
-- **Plugin hosting (desktop only):**
-  - Audio Units first (AVAudioEngine and AVAudioUnit), then VST3 (check the SDK licence).
-  - List parameters as mapping targets and open the plugin's own window.
-  - Needs a native audio engine, the disable-library-validation entitlement, matching chip builds, and ideally plugins running out of process.
+- **Plugin hosting (desktop only):** Audio Units shipped in the Audio engine (docs/audio-engine.md). Follow-ups are listed there: web sounds through AU effects, the engine's sound in recordings and renders, VST3.
 
 ## Later / skipped
 

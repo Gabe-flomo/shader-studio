@@ -3,6 +3,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
+mod audio_engine;
 mod data_fetch;
 mod midi;
 mod playfile;
@@ -245,6 +246,7 @@ pub fn run() {
         .manage(FfmpegState(Mutex::new(None)))
         .manage(OscState(Mutex::new(None)))
         .manage(midi::MidiState::default())
+        .manage(audio_engine::EngineState::default())
         .manage(workspace::WatchState(Mutex::new(None)))
         .manage(playfile::OpenedFiles(Mutex::new(Vec::new())))
         .invoke_handler(tauri::generate_handler![
@@ -259,6 +261,29 @@ pub fn run() {
             midi::midi_open_output,
             midi::midi_close_output,
             midi::midi_send,
+            audio_engine::ae_status,
+            audio_engine::ae_units,
+            audio_engine::ae_rack_create,
+            audio_engine::ae_rack_remove,
+            audio_engine::ae_rack_volume,
+            audio_engine::ae_set_instrument,
+            audio_engine::ae_set_sampler,
+            audio_engine::ae_sound_has,
+            audio_engine::ae_sound_put,
+            audio_engine::ae_sampler_zone,
+            audio_engine::ae_effect_insert,
+            audio_engine::ae_effect_remove,
+            audio_engine::ae_effect_move,
+            audio_engine::ae_bypass,
+            audio_engine::ae_params,
+            audio_engine::ae_param_set,
+            audio_engine::ae_state_get,
+            audio_engine::ae_state_set,
+            audio_engine::ae_midi,
+            audio_engine::ae_outputs,
+            audio_engine::ae_set_output,
+            audio_engine::ae_master,
+            audio_engine::ae_open_ui,
             open_url,
             data_fetch::fetch_url,
             data_fetch::kaggle_account,
