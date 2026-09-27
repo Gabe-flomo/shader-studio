@@ -12,7 +12,7 @@
  * Phones keep their own picture-over-panel split (shell/PhoneSplit.tsx).
  */
 import { create } from 'zustand';
-import type { PlayTab } from './playUi';
+import { usePlayUi, type PlayTab } from './playUi';
 
 export type SplitSide = 'left' | 'right' | 'top' | 'bottom';
 
@@ -148,3 +148,18 @@ export const usePlaySplit = create<PlaySplit>((set, get) => {
 
 /** The section the big panel shows, or null when there's no big panel on screen. */
 export const useBigTab = (): PlayTab | null => usePlaySplit(s => (s.on && s.available && s.host ? s.tab : null));
+
+/**
+ * Open a layer's full editor in the split view's big panel: the split on, its
+ * panel on Layers, the layer selected (a big editor like the drum pads' only
+ * shows in full there; the sidebar keeps a summary). False when there's no
+ * split view on screen (phones), for the caller to show it another way.
+ */
+export function openLayerInSplit(layerId: string): boolean {
+  const split = usePlaySplit.getState();
+  if (!split.available) return false;
+  split.setTab('layers');
+  if (!split.on) split.setOn(true);
+  usePlayUi.getState().select(layerId);
+  return true;
+}

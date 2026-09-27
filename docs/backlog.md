@@ -5,7 +5,7 @@ Collected from the owner's notes on 27 September 2026. Each item is planned, not
 ## Order
 
 1. **Finish what's paused:** p5.js import with multi-file scripts and a Console; the pop-out node pack builder (including `.playfile` carrying videos).
-2. **Finish stack follow-ups:** custom effects from a graph (the Picture node and Publish as Finish effect), multi-pass custom effects, shader HDR for halation and bloom.
+2. **Finish stack follow-ups:** multi-pass custom effects, shader HDR for halation and bloom. (Custom effects from a graph is skipped for now: see Later / skipped.)
 3. **Files page:** a Notes section; tidy the settings entries.
 4. **Actions and controls:** done (condition triggers, signals, pair controls, axis swap); what's left is under its heading.
 5. **MIDI:** knob lock, key-press note ranges, grid controllers (Push, Launchpad).
@@ -17,7 +17,6 @@ Collected from the owner's notes on 27 September 2026. Each item is planned, not
 
 Done: the animatable before/after wipe (`finish.compare`), stack presets, and custom effects from a snippet (Your effects, node packs, sealing, exports). See `finish-stack.md`.
 
-- **Custom effects from a graph.** A **Picture** source node (the finished frame) wired through any nodes, then **Publish as Finish effect**: the compiled graph becomes an ordinary custom effect (its exposed sliders its settings). The conversion is written up in `finish-stack.md`, "From a graph (next step)".
 - **Multi-pass custom effects** (their own blurs, feedback).
 - **Shader HDR for halation and bloom.** Feed the shader's picture from before tone mapping into the stack.
 
@@ -58,3 +57,9 @@ Built: effect chains (filter, echo, reverb, distortion, compressor) on each soun
   - Audio Units first (AVAudioEngine and AVAudioUnit), then VST3 (check the SDK licence).
   - List parameters as mapping targets and open the plugin's own window.
   - Needs a native audio engine, the disable-library-validation entitlement, matching chip builds, and ideally plugins running out of process.
+
+## Later / skipped
+
+Skipped for now by the owner (27 September 2026). The write-up stays for when it comes back.
+
+- **Custom effects from a graph.** A **Picture** source node (the finished frame) wired through any nodes, then **Publish as Finish effect**: the compiled graph becomes an ordinary custom effect (its exposed sliders its settings). The conversion is written up in `finish-stack.md`, "From a graph (next step)".
