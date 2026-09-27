@@ -8,7 +8,7 @@
 import type { GraphNode } from '../../types/nodeGraph';
 import { STOP_PALETTE_MAX } from '../../nodes/definitions/color';
 import { getNodeDefinition } from '../../nodes/definitions';
-import { evenStops, type GradientStop, type RGB } from '../ui/gradientStops';
+import { colourAt, evenPositions, evenStops, sortStops, type GradientStop, type GradientStyle, type RGB } from '../ui/gradientStops';
 
 /** The stop colours a Stops Palette node currently has, in order (2 … 32). */
 export function stopColoursOf(params: Record<string, unknown>): RGB[] {
@@ -35,4 +35,15 @@ export function stopParamsOf(stops: readonly GradientStop[]): Record<string, unk
   const out: Record<string, unknown> = { stops: String(n) };
   for (let i = 0; i < n; i++) { const c = stops[i].color; out[`color${i}`] = [c[0], c[1], c[2]]; }
   return out;
+}
+
+/**
+ * A Library palette's colours (a Play or Present background, with a place per
+ * stop) as a Stops Palette's evenly spaced stops: one per stop, sampled where
+ * they sit, so an evenly spaced palette comes over exactly.
+ */
+export function libraryPaletteColours(p: { stops: readonly GradientStop[]; style: GradientStyle }): RGB[] {
+  const sorted = sortStops(p.stops);
+  const n = Math.max(2, Math.min(STOP_PALETTE_MAX, sorted.length));
+  return evenPositions(n).map(t => colourAt(sorted, t, p.style));
 }

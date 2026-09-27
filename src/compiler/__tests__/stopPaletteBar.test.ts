@@ -10,7 +10,7 @@ import { getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 import { STOP_PALETTE_MAX } from '../../nodes/definitions/color';
 import { evenStops, insertColourAt, removeStop, reorderColours, type RGB } from '../../components/ui/gradientStops';
-import { stopColoursOf, stopParamsOf, stopsOfNode } from '../../components/NodeGraph/stopPaletteModel';
+import { libraryPaletteColours, stopColoursOf, stopParamsOf, stopsOfNode } from '../../components/NodeGraph/stopPaletteModel';
 
 const def = getNodeDefinition('stopPalette')!;
 const COLORS: RGB[] = [[0.1, 0.2, 0.3], [0.9, 0.5, 0.1], [0.2, 0.8, 0.4], [0.05, 0.05, 0.1], [1, 1, 1], [0.5, 0.25, 0.75], [0.33, 0.66, 0.99]];
@@ -75,5 +75,18 @@ describe('Stops Palette bar', () => {
     const p = stopParamsOf(many);
     expect(p.stops).toBe(String(STOP_PALETTE_MAX));
     expect(p[`color${STOP_PALETTE_MAX}`]).toBeUndefined();
+  });
+  it('a Library palette (Present and Play backgrounds) comes over as one stop per colour', () => {
+    const even = { stops: evenStops([[1, 0, 0], [0, 1, 0], [0, 0, 1]] as RGB[]), style: 'gradient' as const };
+    expect(libraryPaletteColours(even)).toEqual([[1, 0, 0], [0, 1, 0], [0, 0, 1]]);
+    // Unevenly placed stops are sampled where they sit along the bar.
+    const uneven = { stops: [{ pos: 0, color: [1, 0, 0] as RGB }, { pos: 0.25, color: [0, 1, 0] as RGB }, { pos: 1, color: [0, 0, 1] as RGB }], style: 'gradient' as const };
+    const c = libraryPaletteColours(uneven);
+    expect(c[0]).toEqual([1, 0, 0]);
+    expect(c[2]).toEqual([0, 0, 1]);
+    expect(c[1][1]).toBeCloseTo(2 / 3);
+    expect(c[1][2]).toBeCloseTo(1 / 3);
+    expect(libraryPaletteColours({ stops: even.stops, style: 'bands' })).toEqual([[1, 0, 0], [0, 1, 0], [0, 0, 1]]);
+    expect(libraryPaletteColours({ stops: evenStops([[0, 0, 0]] as RGB[]), style: 'gradient' })).toHaveLength(2);
   });
 });
