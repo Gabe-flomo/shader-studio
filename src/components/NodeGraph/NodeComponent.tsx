@@ -1,4 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { audioAccept, isAudioFile, notAudioMessage } from '../../lib/audioAccept';
 
 // Inject save-flash keyframe once
 if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
@@ -987,8 +988,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     // Resolves (never rejects) with the outcome so a UI can report it; the
     // node's params are only updated once the audio has actually decoded.
     const loadAudioFile = (file: File): Promise<FileResult> => {
-      if (!file.name.match(/\.(wav|mp3|ogg|aac|flac)$/i)) {
-        const error = `"${file.name}" is not a supported audio file (wav, mp3, ogg, aac, flac)`;
+      if (!isAudioFile(file)) {
+        const error = notAudioMessage(file);
         console.error('[AudioInput]', error);
         return Promise.resolve({ ok: false, error });
       }
@@ -1096,7 +1097,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <input
             ref={audioFileInputRef}
             type="file"
-            accept="audio/*,.wav,.mp3,.ogg,.aac,.flac"
+            accept={audioAccept()}
             style={{ display: 'none' }}
             onChange={handleAudioFileInput}
           />
@@ -1122,7 +1123,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 ♫ {fileName}
               </span>
             ) : (
-              <span style={{ fontSize: '10px', color: tc.surface2 }}>Click or drop WAV / MP3 / OGG</span>
+              <span style={{ fontSize: '10px', color: tc.surface2 }}>Click or drop WAV / MP3 / M4A / OGG</span>
             )}
           </div>
 

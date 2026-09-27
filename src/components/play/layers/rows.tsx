@@ -16,6 +16,7 @@ import { layerAudio } from '../../../lib/layerAudio';
 import { toast } from '../../ui/toastStore';
 import { LiveAudioChip } from '../chips';
 import type { FieldKit } from './fields';
+import { audioAccept, isAudioFile, notAudioMessage } from '../../../lib/audioAccept';
 
 const FONTS = [{ value: 'sans', label: 'Sans' }, { value: 'serif', label: 'Serif' }, { value: 'mono', label: 'Mono' }];
 
@@ -59,6 +60,7 @@ export function AudioSourceRows({ f }: { f: FieldKit }) {
   const state = useSyncExternalStore(layerAudio.subscribe, () => `${layerAudio.isLoaded(id)}|${layerAudio.isPlaying(id)}`);
   const [loaded, playing] = state.split('|').map(x => x === 'true');
   const pick = async (file: File) => {
+    if (!isAudioFile(file)) { toast.error('Couldn’t load that song', { message: notAudioMessage(file) }); return; }
     setBusy(true);
     try {
       await layerAudio.load(id, file);
@@ -76,7 +78,7 @@ export function AudioSourceRows({ f }: { f: FieldKit }) {
       {input === 'live' && f.row('Live', <LiveAudioChip />)}
       {input === 'file' && f.row('Song', (
         <>
-          <input ref={fileRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void pick(file); }} />
+          <input ref={fileRef} type="file" accept={audioAccept()} style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void pick(file); }} />
           <Button size="sm" icon="import" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Loading…' : loaded ? 'Change song' : fileName ? 'Load it again' : 'Load a song'}</Button>
           {loaded && <ClockButton />}
           {fileName && <span style={{ color: f.tk.text.faint, font: '11px Inter, system-ui, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }} title={fileName}>{fileName}</span>}
