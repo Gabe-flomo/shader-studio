@@ -50,6 +50,8 @@ export interface PlayMount {
    * With `capture`, returns the picture with its layers as one canvas.
    */
   renderAt?(t: number, o?: { steps?: number[]; dt?: number; seed?: number; capture?: boolean }): HTMLCanvasElement | null;
+  /** Bring the video layers (and a video background) to their exact frames at `t` before a renderAt capture. */
+  seekVideos?(t: number): Promise<void>;
 }
 
 interface PlayRuntime {

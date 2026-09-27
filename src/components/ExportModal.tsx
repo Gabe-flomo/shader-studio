@@ -879,7 +879,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
 
             {tracks.length > 0 && (
               <Section label="Sound">
-                <Toggle checked={withAudio} onChange={setWithAudio} label={`Include ${tracks.length === 1 ? `“${tracks[0].label}”` : `${tracks.length} songs: ${tracks.map(t => t.label).join(', ')}`}`} />
+                <Toggle checked={withAudio} onChange={setWithAudio} label={`Include ${tracks.length === 1 ? `“${tracks[0].label}”` : `${tracks.length} ${tracks.some(t => t.video) ? 'sounds' : 'songs'}: ${tracks.map(t => t.label).join(', ')}`}`} />
                 <Help>
                   {pngSequence
                     ? 'Added to the zip as a WAV, lined up with frame 1.'

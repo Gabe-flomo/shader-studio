@@ -3,7 +3,7 @@
  * exports (a full HTML page or a paste-in embed snippet). Plain ES2020, no
  * imports, no framework.
  *
- *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still(), renderAt(t, o) }
+ *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still(), renderAt(t, o), seekVideos(t) }
  *
  * bundle:  { title, fragmentShader, uniforms, paramBindings, play, aspect, passes?, media? }
  *   passes: { stateful, echo: { copies, delay } | null, particles: [{ vertexShader, fragmentShader, count, shape }] }
@@ -877,6 +877,14 @@ void main() {
       e.src = url;
       e.addEventListener('loadeddata', () => { needsDraw = true; });
       e.addEventListener('seeked', () => { needsDraw = true; });
+      // Recorded in a browser, a video can say its length is Infinity until a seek past the end
+      // works it out (as the app's play/videoLayers.ts does): without it, the clock can't place it.
+      e.addEventListener('loadedmetadata', () => {
+        if (e.duration !== Infinity) return;
+        const back = () => { e.removeEventListener('durationchange', back); e.currentTime = 0; };
+        e.addEventListener('durationchange', back);
+        e.currentTime = 1e7;
+      });
       lVideos.set(l.id, { el: e, started: false, an: null, freq: null, gain: null });
     }
     const layerVideo = l => { const v = lVideos.get(l.id); return v ? v.el : null; };
@@ -1723,6 +1731,51 @@ void main() {
         for (const at of steps) { time = Math.max(0, +at || 0); frame++; tickMappings(fdt); paint(fdt, false); }
         time = Math.max(0, +t || 0); frame++; tickMappings(fdt); paint(fdt, false);
         return o.capture ? composite() : null;
+      },
+      /**
+       * Bring every video layer (and a video background) to its exact frame at
+       * `t`, decoded, before a renderAt capture of that moment: a promise that
+       * settles when they're there (or gives up on one after a few seconds).
+       * A free-running video layer goes where it would be following the clock,
+       * as in the app's renders, so the same time gives the same picture.
+       */
+      seekVideos(t) {
+        const at = Math.max(0, +t || 0);
+        const wait = (e, ev, ms) => new Promise(res => {
+          const done = () => { e.removeEventListener(ev, done); clearTimeout(timer); res(); };
+          const timer = setTimeout(done, ms);
+          e.addEventListener(ev, done);
+        });
+        const seekTo = async (e, target) => {
+          if (!e.paused) e.pause();
+          if (Math.abs(e.currentTime - target) < 0.0005 && e.readyState >= 2) return;
+          const done = wait(e, 'seeked', 3000);
+          e.currentTime = target;
+          await done;
+          if (e.readyState < 2) await wait(e, 'loadeddata', 2000);
+        };
+        const jobs = [];
+        for (const l of play.layers) {
+          const v = lVideos.get(l.id);
+          if (!v) continue;
+          const e = v.el;
+          // Running free: it has started where the capture says, not at its own start.
+          v.started = true;
+          jobs.push((async () => {
+            if (e.readyState < 1) await wait(e, 'loadedmetadata', 4000);
+            // Its length still being worked out (see above): wait for it, or the clock can't place it.
+            if (e.duration === Infinity) await wait(e, 'durationchange', 3000);
+            await seekTo(e, videoLayerTimeAt(l.playing ? at : 0, e.duration, l.speed, !!l.loop, l.start || 0));
+          })());
+        }
+        if (bgVideo) {
+          const e = bgVideo;
+          jobs.push((async () => {
+            if (e.readyState < 1) await wait(e, 'loadedmetadata', 4000);
+            await seekTo(e, videoTimeAt(at, e.duration, bgVid.rate, bgVid.loop !== false));
+          })());
+        }
+        return Promise.all(jobs).then(() => { needsDraw = true; });
       },
       get(id) {
         const c = controls.get(id);

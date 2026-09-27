@@ -59,7 +59,9 @@
  *   `backgrounds/images.json` (a manifest: ids, names, sizes, sources,
  *   folders) and each image under `backgrounds/images/<folder>/<name>.png`.
  *   importBackgroundFiles(files) brings them back (ids kept, so setups that
- *   name one relink; an id already here is left alone).
+ *   name one relink; an id already here is left alone). The Video layers'
+ *   videos travel the same way beside them (videoZipFiles, importVideoFiles:
+ *   `backgrounds/videos.json` and `backgrounds/videos/`; see the end).
  */
 import { strFromU8, strToU8 } from 'fflate';
 import { createFolder, getMembership, loadFolders, moveItemsToFolder, removeItemsFromFolders } from '../utils/assetFolders';
@@ -646,8 +648,17 @@ export function resetBackgroundCache(): void { cache = null; dbPromise = null; }
 //
 // A Video layer keeps only a video's id, name and size; the file itself is
 // here (store `videos`), as its bytes and MIME type like the images. Never in
-// localStorage or a setup: a video is megabytes. Not listed in the Library
-// window yet, and not in library ZIPs.
+// localStorage or a setup: a video is megabytes. Each record also keeps a
+// poster frame (a small JPEG, made when the file comes in, or later for older
+// records: ensureVideoPoster), its frame size and length, for lists.
+//
+//   addVideoFile(file, { name?, id?, createdAt?, poster? }) → meta (the same name and size reuses its record)
+//   listVideos() · getVideo(id) · hasVideo(id) · renameVideo(id, name)
+//   deleteVideo(id) → true when there was one · removeVideo(id) → an undo function, or null
+//   ensureVideoPoster(id) → the meta with a poster, when the browser can make one
+//   videoZipFiles(ids?, { naming? }) → `backgrounds/videos.json` and each file under
+//     `backgrounds/videos/`, for library ZIPs, profiles and the backup folder
+//   importVideoFiles(files) → { added, same, skipped } (ids kept; one already here is left)
 
 export interface LibraryVideoMeta {
   id: string;
@@ -656,25 +667,58 @@ export interface LibraryVideoMeta {
   type: string;
   bytes: number;
   createdAt: number;
+  /** A poster frame: a small JPEG data URL; '' when none could be made, absent until tried. */
+  thumb?: string;
+  width?: number;
+  height?: number;
+  /** Seconds; absent while unknown. */
+  duration?: number;
 }
 interface StoredVideo extends LibraryVideoMeta { data: ArrayBuffer }
 
+/** What a poster frame knows about a video. */
+export type VideoPoster = Pick<LibraryVideoMeta, 'thumb' | 'width' | 'height' | 'duration'>;
+
+export const VIDEOS_MANIFEST = 'backgrounds/videos.json';
+export const VIDEOS_MANIFEST_KIND = 'shader-studio-videos';
+const VIDEO_EXT: Record<string, string> = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/ogg': 'ogv', 'video/x-m4v': 'm4v' };
+const VIDEO_MIME: Record<string, string> = { mp4: 'video/mp4', m4v: 'video/x-m4v', webm: 'video/webm', mov: 'video/quicktime', ogv: 'video/ogg' };
+/** A video file's extension for its MIME type ("webm"), mp4 when unknown. */
+export const videoExt = (type: string) => VIDEO_EXT[type.split(';')[0]] ?? 'mp4';
+/** A video file's MIME type from its name, or '' when the name doesn't say. */
+export const videoMimeOf = (name: string) => VIDEO_MIME[/\.([a-z0-9]+)$/i.exec(name)?.[1]?.toLowerCase() ?? ''] ?? '';
+
+/** Posters are made in the background when videos come in (not in tests: nothing to decode with). */
+const canPoster = () => typeof document !== 'undefined' && typeof URL !== 'undefined' && !!URL.createObjectURL && import.meta.env?.MODE !== 'test';
+
 /** Keep a video file. The same file (name and size) picked again reuses its record. */
-export async function addVideoFile(file: Blob & { name?: string }, o: { name?: string; id?: string } = {}): Promise<LibraryVideoMeta> {
+export async function addVideoFile(file: Blob & { name?: string }, o: { name?: string; id?: string; createdAt?: number; poster?: VideoPoster } = {}): Promise<LibraryVideoMeta> {
   const name = cleanName(o.name ?? file.name ?? 'Video');
   if (!o.id) {
     const all = await tx<StoredVideo[]>('readonly', s => s.getAll(), VIDEO_STORE);
     const same = (all ?? []).find(v => v.name === name && v.bytes === file.size);
     if (same) return videoMeta(same);
   }
-  const rec: StoredVideo = { id: o.id || newBackgroundId('vid'), name, type: file.type || 'video/mp4', bytes: file.size, createdAt: Date.now(), data: await file.arrayBuffer() };
+  const type = file.type || videoMimeOf(file.name ?? name) || 'video/mp4';
+  const rec: StoredVideo = { id: o.id || newBackgroundId('vid'), name, type, bytes: file.size, createdAt: o.createdAt ?? Date.now(), ...cleanPoster(o.poster), data: await file.arrayBuffer() };
   await tx('readwrite', s => s.put(rec), VIDEO_STORE);
   emit();
+  if (rec.thumb === undefined && canPoster()) void ensureVideoPoster(rec.id).catch(() => {});
   return videoMeta(rec);
 }
 
+function cleanPoster(p: VideoPoster | undefined): VideoPoster {
+  if (!p) return {};
+  const out: VideoPoster = {};
+  if (typeof p.thumb === 'string' && (p.thumb === '' || p.thumb.startsWith('data:image/'))) out.thumb = p.thumb;
+  if (typeof p.width === 'number' && p.width > 0) out.width = Math.round(p.width);
+  if (typeof p.height === 'number' && p.height > 0) out.height = Math.round(p.height);
+  if (typeof p.duration === 'number' && Number.isFinite(p.duration) && p.duration > 0) out.duration = p.duration;
+  return out;
+}
+
 function videoMeta(r: StoredVideo): LibraryVideoMeta {
-  return { id: r.id, name: r.name, type: r.type, bytes: r.bytes, createdAt: r.createdAt };
+  return { id: r.id, name: r.name, type: r.type, bytes: r.bytes, createdAt: r.createdAt, ...cleanPoster(r) };
 }
 
 /** Every kept video (no bytes), newest first. */
@@ -695,6 +739,17 @@ export async function hasVideo(id: string): Promise<boolean> {
   return (await tx<number>('readonly', s => s.count(id), VIDEO_STORE)) > 0;
 }
 
+async function patchVideo(id: string, patch: Partial<Pick<StoredVideo, 'name' | 'thumb' | 'width' | 'height' | 'duration'>>): Promise<LibraryVideoMeta | null> {
+  const r = await tx<StoredVideo | undefined>('readonly', s => s.get(id), VIDEO_STORE);
+  if (!r) return null;
+  const next = { ...r, ...patch };
+  await tx('readwrite', s => s.put(next), VIDEO_STORE);
+  emit();
+  return videoMeta(next);
+}
+
+export async function renameVideo(id: string, name: string): Promise<void> { await patchVideo(id, { name: cleanName(name) }); }
+
 /** Delete a kept video. True when there was one. */
 export async function deleteVideo(id: string): Promise<boolean> {
   if (!(await hasVideo(id))) return false;
@@ -702,3 +757,135 @@ export async function deleteVideo(id: string): Promise<boolean> {
   emit();
   return true;
 }
+
+/** Delete a kept video; returns a function that puts it back (same id and all), or null when it wasn't there. */
+export async function removeVideo(id: string): Promise<(() => Promise<void>) | null> {
+  const r = await tx<StoredVideo | undefined>('readonly', s => s.get(id), VIDEO_STORE);
+  if (!r) return null;
+  await tx('readwrite', s => s.delete(id), VIDEO_STORE);
+  emit();
+  return async () => { await tx('readwrite', s => s.put(r), VIDEO_STORE); emit(); };
+}
+
+/** A poster frame of a video file (browser only): a frame a little way in, as a small JPEG, with its size and length. */
+export async function videoPosterOf(blob: Blob, timeoutMs = 6000): Promise<VideoPoster | null> {
+  if (typeof document === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return null;
+  const url = URL.createObjectURL(blob);
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.preload = 'auto';
+  const once = (ev: string) => new Promise<boolean>(res => {
+    const done = (ok: boolean) => { clearTimeout(t); v.removeEventListener(ev, yes); v.removeEventListener('error', no); res(ok); };
+    const yes = () => done(true), no = () => done(false);
+    const t = setTimeout(() => done(false), timeoutMs);
+    v.addEventListener(ev, yes);
+    v.addEventListener('error', no);
+  });
+  try {
+    const loaded = once('loadeddata');
+    v.src = url;
+    if (!(await loaded)) return null;
+    let duration = v.duration;
+    // Recorded in a browser, the length can read Infinity until a seek past the end works it out.
+    if (duration === Infinity) { const d = once('durationchange'); v.currentTime = 1e7; await d; duration = v.duration; }
+    const known = Number.isFinite(duration) && duration > 0;
+    const seeked = once('seeked');
+    v.currentTime = known ? Math.min(1, duration * 0.1) : 0;
+    await seeked;
+    const w = v.videoWidth, h = v.videoHeight;
+    return cleanPoster({ thumb: w && h ? thumbnailOf(v, w, h) : '', width: w, height: h, duration: known ? duration : undefined });
+  } catch { return null; } finally {
+    v.removeAttribute('src');
+    try { v.load(); } catch { /* gone */ }
+    URL.revokeObjectURL(url);
+  }
+}
+
+const posterWork = new Map<string, Promise<LibraryVideoMeta | null>>();
+/** Make a kept video's poster frame when it has none yet (one at a time per video). The meta, poster or not; null when it's gone. */
+export function ensureVideoPoster(id: string): Promise<LibraryVideoMeta | null> {
+  const had = posterWork.get(id);
+  if (had) return had;
+  const work = (async () => {
+    const v = await getVideo(id);
+    if (!v) return null;
+    const { blob, ...meta } = v;
+    if (meta.thumb !== undefined) return meta;
+    const p = await videoPosterOf(blob);
+    // Nothing to show (a format this browser can't decode): an empty thumb, so lists don't ask again.
+    return (await patchVideo(id, p ?? { thumb: '' })) ?? meta;
+  })().finally(() => { posterWork.delete(id); });
+  posterWork.set(id, work);
+  return work;
+}
+
+// ── Videos in ZIPs and folders ──────────────────────────────────────────────
+
+export interface VideosManifest {
+  kind: typeof VIDEOS_MANIFEST_KIND;
+  version: 1;
+  /** `file` is relative to the manifest's folder ("videos/Clip.webm"). */
+  videos: Array<{ id: string; name: string; file: string; type: string; bytes: number; createdAt: number; thumb?: string; width?: number; height?: number; duration?: number }>;
+}
+
+/**
+ * Kept videos as files (paths from the ZIP's root): `backgrounds/videos.json`
+ * and each file under `backgrounds/videos/`, named after the video (`name`,
+ * for ZIPs people open) or its id (`id`, stable for a folder written again
+ * and again). All of them, or those with these ids. Empty without videos.
+ */
+export async function videoZipFiles(ids: readonly string[] | null = null, o: { naming?: 'name' | 'id' } = {}): Promise<Record<string, Uint8Array>> {
+  let metas: LibraryVideoMeta[];
+  try { metas = await listVideos(); } catch { return {}; }
+  if (ids) { const want = new Set(ids); metas = metas.filter(m => want.has(m.id)); }
+  if (!metas.length) return {};
+  const out: Record<string, Uint8Array> = {};
+  const manifest: VideosManifest = { kind: VIDEOS_MANIFEST_KIND, version: 1, videos: [] };
+  for (const m of [...metas].reverse()) {
+    const r = await tx<StoredVideo | undefined>('readonly', s => s.get(m.id), VIDEO_STORE);
+    if (!r) continue;
+    const ext = videoExt(r.type);
+    const base = `backgrounds/videos/${o.naming === 'id' ? safeFile(m.id) : safeFile(m.name.replace(/\.[a-z0-9]{2,4}$/i, ''))}`;
+    let path = `${base}.${ext}`, n = 2;
+    while (path in out) path = `${base} (${n++}).${ext}`;
+    out[path] = new Uint8Array(r.data);
+    manifest.videos.push({ id: m.id, name: m.name, file: path.slice('backgrounds/'.length), type: r.type, bytes: r.bytes, createdAt: m.createdAt, ...cleanPoster(m) });
+  }
+  out[VIDEOS_MANIFEST] = strToU8(JSON.stringify(manifest, null, 1));
+  return out;
+}
+
+/** What the kept videos are (ids, names, sizes), to tell when they changed. */
+export async function videosSignature(): Promise<string> {
+  try { return JSON.stringify((await listVideos()).map(m => [m.id, m.name, m.bytes])); } catch { return '[]'; }
+}
+
+/** The videos manifest in a set of files (under any folder), and the folder it sits in ("…/backgrounds/"). */
+export function findVideosManifest(files: Record<string, Uint8Array>): { root: string; manifest: VideosManifest } | null {
+  const path = Object.keys(files).find(p => p === VIDEOS_MANIFEST || p.endsWith(`/${VIDEOS_MANIFEST}`));
+  if (!path) return null;
+  try {
+    const m = JSON.parse(strFromU8(files[path])) as VideosManifest;
+    if (m?.kind !== VIDEOS_MANIFEST_KIND || !Array.isArray(m.videos)) return null;
+    return { root: path.slice(0, path.length - 'videos.json'.length), manifest: m };
+  } catch { return null; }
+}
+
+/** Bring videos back from a ZIP's (or folder's) files. Ids are kept; one already here is counted as `same` and left. */
+export async function importVideoFiles(files: Record<string, Uint8Array>): Promise<{ added: number; same: number; skipped: number }> {
+  const r = { added: 0, same: 0, skipped: 0 };
+  const found = findVideosManifest(files);
+  if (!found) return r;
+  for (const e of found.manifest.videos) {
+    if (!e || typeof e.id !== 'string' || typeof e.file !== 'string') { r.skipped++; continue; }
+    const data = files[found.root + e.file];
+    if (!data) { r.skipped++; continue; }
+    if (await hasVideo(e.id)) { r.same++; continue; }
+    const copy = new Uint8Array(data.byteLength); copy.set(data);
+    await addVideoFile(new Blob([copy.buffer], { type: e.type || videoMimeOf(e.file) || 'video/mp4' }), {
+      id: e.id, name: typeof e.name === 'string' ? e.name : 'Video', createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined, poster: e,
+    });
+    r.added++;
+  }
+  return r;
+}
+

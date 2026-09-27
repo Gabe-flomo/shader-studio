@@ -53,7 +53,7 @@ export function SpaceMeter({ inv, estimate, compact = false, onCleanUp }: { inv:
       )}
       {estimate && estimate.quota > 0 && (
         <span style={{ fontSize: 11.5, color: tk.text.faint, lineHeight: 1.4 }} title="IndexedDB and caches: the browser's own estimate for this site">
-          {inv.external ? `Images ${formatSize(inv.external)} · ` : ''}IndexedDB and caches: {formatSize(estimate.usage)} of {big(estimate.quota)}
+          {inv.external ? `Images and videos ${formatSize(inv.external)} · ` : ''}IndexedDB and caches: {formatSize(estimate.usage)} of {big(estimate.quota)}
         </span>
       )}
       {full && (

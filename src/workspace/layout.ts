@@ -16,6 +16,7 @@
  *   scripts/sketches/<Name>.sketch.json             a saved sketch
  *   scripts/layer-kinds/<folder>/<Name>.kind.json   a layer kind
  *   backgrounds/images/<id>.<ext>, backgrounds/images.json, backgrounds/palettes.json
+ *   backgrounds/videos/<id>.<ext>, backgrounds/videos.json   the Video layers' files, as they are
  *
  * The folder a file sits in is its folder in the app. A name the file system
  * can't hold ("a/b") is kept inside the file (workspaceName, or the label the
@@ -50,6 +51,7 @@ export const IMAGE_SCOPE = 'backgrounds:images';
 export const BG_PALETTE_SCOPE = 'backgrounds:palettes';
 const BG_MANIFEST_KIND = 'shader-studio-backgrounds';
 const BG_PALETTES_KIND = 'shader-studio-background-palettes';
+const VIDEOS_MANIFEST_KIND = 'shader-studio-videos';
 
 export type Area = 'graphs' | 'presentations' | 'glsl' | 'functions' | 'presets' | 'nodes' | 'scripts' | 'backgrounds';
 export const AREAS: readonly Area[] = ['graphs', 'presentations', 'glsl', 'functions', 'presets', 'nodes', 'scripts', 'backgrounds'];
@@ -95,6 +97,9 @@ export interface PathInfo { area: Area; kind: string; policy: Policy; label: str
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg|avif)$/i;
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml', avif: 'image/avif' };
 const EXT_OF: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/avif': 'avif' };
+const VIDEO_EXT = /\.(mp4|m4v|webm|mov|ogv)$/i;
+const VIDEO_MIME: Record<string, string> = { mp4: 'video/mp4', m4v: 'video/x-m4v', webm: 'video/webm', mov: 'video/quicktime', ogv: 'video/ogg' };
+const VIDEO_EXT_OF: Record<string, string> = { 'video/mp4': 'mp4', 'video/x-m4v': 'm4v', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/ogg': 'ogv' };
 
 const under = (path: string, root: string) => path.startsWith(`${root}/`);
 const eqExt = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -117,6 +122,8 @@ export function classify(path: string): PathInfo | null {
   if (path === 'backgrounds/images.json') return mk('backgrounds', 'imagesManifest', 'merge', 'Background images list');
   if (path === 'backgrounds/palettes.json') return mk('backgrounds', 'bgPalettes', 'merge', 'Background palettes');
   if (under(path, 'backgrounds/images')) return IMAGE_EXT.test(path) && parts.length === 3 ? mk('backgrounds', 'image', 'newer', 'Background image', false) : null;
+  if (path === 'backgrounds/videos.json') return mk('backgrounds', 'videosManifest', 'merge', 'Videos list');
+  if (under(path, 'backgrounds/videos')) return VIDEO_EXT.test(path) && parts.length === 3 ? mk('backgrounds', 'video', 'newer', 'Video', false) : null;
   for (const k of LIST_KINDS) if (under(path, k.root) && eqExt(ext, k.ext)) return mk(k.area, k.kind, 'item', k.label);
   for (const k of KEY_KINDS) if (under(path, k.root) && eqExt(ext, k.ext)) return mk(k.area, k.kind, 'item', k.label);
   return null;
@@ -163,8 +170,8 @@ export interface Entry {
 }
 export type Tree = Map<string, Entry>;
 
-export interface ImageMeta { id: string; name: string; type: string; width: number; height: number; createdAt: number; bytes: number; source?: unknown }
-/** The background images (IndexedDB in the app, a map in tests). Folders are the folder store's business, not this. */
+export interface ImageMeta { id: string; name: string; type: string; width: number; height: number; createdAt: number; bytes: number; source?: unknown; duration?: number }
+/** The background images, or the Video layers' videos (IndexedDB in the app, a map in tests). Folders are the folder store's business, not this. */
 export interface ImageStore {
   list(): Promise<ImageMeta[]>;
   read(id: string): Promise<Uint8Array | null>;
@@ -182,6 +189,8 @@ export interface Encoded {
   /** The keys each area wrote files for: what a decode of that area may remove. */
   keys: Map<Area, Set<string>>;
   images: Map<string, ImageMeta>;
+  /** The videos written (absent when there's no video store). */
+  videos?: Map<string, ImageMeta>;
 }
 
 function memoized<T>(memo: EncodeMemo, slot: string, value: string, make: () => T): T {
@@ -196,7 +205,7 @@ const textEntry = (text: string): Entry => ({ text, hash: hashString(text) });
 
 interface Pending { area: Area; key: string; dir: string; folder: string | null; name: string; ext: string; uniqueIn: string; emit: (base: string, path: string) => void }
 
-export async function encodeTree(kv: KV, images: ImageStore | null, memo: EncodeMemo = newMemo()): Promise<Encoded> {
+export async function encodeTree(kv: KV, images: ImageStore | null, memo: EncodeMemo = newMemo(), videos: ImageStore | null = null): Promise<Encoded> {
   const tree: Tree = new Map();
   const keys = new Map<Area, Set<string>>(AREAS.map(a => [a, new Set<string>()]));
   const own = (a: Area, k: string) => keys.get(a)!.add(k);
@@ -332,34 +341,63 @@ export async function encodeTree(kv: KV, images: ImageStore | null, memo: Encode
     p.emit(base, `${p.dir}/${base}${p.ext}`);
   }
 
-  // Background images: the files as they are, and a list of their names and folders.
+  // Background images and videos: the files as they are, and a list of their names (and the images' folders).
+  const metas = images ? await encodeMedia(IMAGES, images, tree, memo, store) : new Map<string, ImageMeta>();
+  const vmetas = videos ? await encodeMedia(VIDEOS, videos, tree, memo, store) : undefined;
+  return { tree, keys, images: metas, ...(vmetas ? { videos: vmetas } : {}) };
+}
+
+/** How one kind of file store (images, videos) looks in the folder. */
+interface MediaSpec {
+  /** 'images' → backgrounds/images/ and backgrounds/images.json (its list field too). */
+  dir: 'images' | 'videos';
+  kind: string;
+  manifestKind: string;
+  label: string;
+  extOf: (type: string) => string;
+  mimeOf: (ext: string) => string;
+  /** Folder scope, for a store whose items sit in folders. */
+  scope?: string;
+  /** What else its list keeps of each item. */
+  extra(m: ImageMeta): Obj;
+}
+const IMAGES: MediaSpec = {
+  dir: 'images', kind: 'image', manifestKind: BG_MANIFEST_KIND, label: 'background image', scope: IMAGE_SCOPE,
+  extOf: t => EXT_OF[t] ?? 'png', mimeOf: e => MIME[e] ?? 'image/png',
+  extra: m => ({ width: m.width, height: m.height }),
+};
+const VIDEOS: MediaSpec = {
+  dir: 'videos', kind: 'video', manifestKind: VIDEOS_MANIFEST_KIND, label: 'video',
+  extOf: t => VIDEO_EXT_OF[t.split(';')[0]] ?? 'mp4', mimeOf: e => VIDEO_MIME[e] ?? 'video/mp4',
+  extra: m => ({ ...(m.width > 0 ? { width: m.width } : {}), ...(m.height > 0 ? { height: m.height } : {}), ...(m.duration ? { duration: m.duration } : {}) }),
+};
+
+async function encodeMedia(spec: MediaSpec, src: ImageStore, tree: Tree, memo: EncodeMemo, store: FolderStore): Promise<Map<string, ImageMeta>> {
   const metas = new Map<string, ImageMeta>();
-  if (images) {
-    let list: ImageMeta[] = [];
-    try { list = await images.list(); } catch { list = []; }
-    const manifest: Obj[] = [];
-    for (const m of [...list].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))) {
-      const file = `images/${safeName(m.id, 'image')}.${EXT_OF[m.type] ?? 'png'}`;
-      const slot = `${m.id}:${m.bytes}:${m.type}`;
-      let hash = memo.imageHashes.get(slot);
-      if (!hash) {
-        const data = await images.read(m.id).catch(() => null);
-        if (!data) continue;
-        hash = hashBytes(data);
-        memo.imageHashes.set(slot, hash);
-      }
-      metas.set(m.id, m);
-      const id = m.id;
-      tree.set(`backgrounds/${file}`, { hash, load: async () => { const d = await images.read(id); if (!d) throw new Error(`The background image “${m.name}” is gone`); return d; } });
-      const folder = folderLabel(store, IMAGE_SCOPE, m.id);
-      manifest.push({ id: m.id, name: m.name, file, type: m.type, width: m.width, height: m.height, createdAt: m.createdAt, ...(m.source ? { source: m.source } : {}), ...(folder ? { folder } : {}) });
+  let list: ImageMeta[] = [];
+  try { list = await src.list(); } catch { list = []; }
+  const manifest: Obj[] = [];
+  for (const m of [...list].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))) {
+    const file = `${spec.dir}/${safeName(m.id, spec.kind)}.${spec.extOf(m.type)}`;
+    const slot = `${m.id}:${m.bytes}:${m.type}`;
+    let hash = memo.imageHashes.get(slot);
+    if (!hash) {
+      const data = await src.read(m.id).catch(() => null);
+      if (!data) continue;
+      hash = hashBytes(data);
+      memo.imageHashes.set(slot, hash);
     }
-    if (manifest.length || list.length) {
-      const text = pretty({ kind: BG_MANIFEST_KIND, version: 1, images: manifest });
-      tree.set('backgrounds/images.json', memoized(memo, 'images.json#entry', text, () => textEntry(text)));
-    }
+    metas.set(m.id, m);
+    const id = m.id;
+    tree.set(`backgrounds/${file}`, { hash, load: async () => { const d = await src.read(id); if (!d) throw new Error(`The ${spec.label} “${m.name}” is gone`); return d; } });
+    const folder = folderLabel(store, spec.scope, m.id);
+    manifest.push({ id: m.id, name: m.name, file, type: m.type, ...spec.extra(m), createdAt: m.createdAt, ...(m.source ? { source: m.source } : {}), ...(folder ? { folder } : {}) });
   }
-  return { tree, keys, images: metas };
+  if (manifest.length || list.length) {
+    const text = pretty({ kind: spec.manifestKind, version: 1, [spec.dir]: manifest });
+    tree.set(`backgrounds/${spec.dir}.json`, memoized(memo, `${spec.dir}.json#entry`, text, () => textEntry(text)));
+  }
+  return metas;
 }
 
 /** A graph's history as one file per version: the stored graph itself, with the version's own details only when they differ from it. */
@@ -398,7 +436,7 @@ export function entryText(e: Entry): string | null {
 export function validate(path: string, e: Entry): string | null {
   const info = classify(path);
   if (!info) return 'not a workspace file';
-  if (!info.json) return info.kind === 'image' && e.bytes && e.bytes.length === 0 ? 'empty image file' : null;
+  if (!info.json) return (info.kind === 'image' || info.kind === 'video') && e.bytes && e.bytes.length === 0 ? `empty ${info.kind} file` : null;
   const text = entryText(e);
   const v = parse(text);
   if (!obj(v)) return 'not readable JSON (half-written, or edited by hand?)';
@@ -407,6 +445,7 @@ export function validate(path: string, e: Entry): string | null {
     case 'graph': return Array.isArray(o.nodes) ? null : 'not a graph (no nodes)';
     case 'presentation': { const { kind: _k, workspaceName: _w, ...rest } = o; void _k; void _w; return parsePresentation(rest) ? null : 'not a presentation'; }
     case 'imagesManifest': return Array.isArray(o.images) ? null : 'no images list';
+    case 'videosManifest': return Array.isArray(o.videos) ? null : 'no videos list';
     case 'bgPalettes': return Array.isArray(o.palettes) ? null : 'no palettes list';
     default: return null;
   }
@@ -414,17 +453,20 @@ export function validate(path: string, e: Entry): string | null {
 
 // ── Decoding ────────────────────────────────────────────────────────────────
 
+export interface MediaChanges { put: Array<{ meta: ImageMeta; entry: Entry }>; rename: Array<{ id: string; name: string }>; remove: string[] }
+
 export interface CacheChanges {
   set: Map<string, string>;
   remove: Set<string>;
   /** Folder membership per scope: id → folder label (null: in no folder). */
   membership: Map<string, Map<string, string | null>>;
-  images: { put: Array<{ meta: ImageMeta; entry: Entry }>; rename: Array<{ id: string; name: string }>; remove: string[] };
+  images: MediaChanges;
+  videos: MediaChanges;
   /** Paths turned into something; the rest were skipped (unreadable, or an earlier version of no graph). */
   consumed: Set<string>;
 }
 
-const emptyChanges = (): CacheChanges => ({ set: new Map(), remove: new Set(), membership: new Map(), images: { put: [], rename: [], remove: [] }, consumed: new Set() });
+const emptyChanges = (): CacheChanges => ({ set: new Map(), remove: new Set(), membership: new Map(), images: { put: [], rename: [], remove: [] }, videos: { put: [], rename: [], remove: [] }, consumed: new Set() });
 
 const idSuffix = (path: string) => hashString(path).slice(0, 6);
 
@@ -452,7 +494,7 @@ function unencodable(current: unknown): Obj[] {
  * remove, folder membership and image changes. `tree` must hold every file
  * of those areas (the cache's own files, with the folder's changes applied).
  */
-export function decodeAreas(areas: Iterable<Area>, tree: Tree, kv: KV, enc: Pick<Encoded, 'keys' | 'images'>): CacheChanges {
+export function decodeAreas(areas: Iterable<Area>, tree: Tree, kv: KV, enc: Pick<Encoded, 'keys' | 'images' | 'videos'>): CacheChanges {
   const ch = emptyChanges();
   const want = new Set(areas);
   const byKind = new Map<string, Array<{ path: string; entry: Entry; info: PathInfo }>>();
@@ -645,38 +687,46 @@ export function decodeAreas(areas: Iterable<Area>, tree: Tree, kv: KV, enc: Pick
       ch.consumed.add(pal.path);
     } else if (enc.keys.get('backgrounds')?.has(BG_PALETTES_KEY)) set(BG_PALETTES_KEY, '[]');
 
-    const man = files('imagesManifest')[0];
-    const entries = man ? (json(man.entry)?.images as unknown[] | undefined) : undefined;
-    if (man) ch.consumed.add(man.path);
-    const byFile = new Map<string, Obj>();
-    for (const e of Array.isArray(entries) ? entries.map(obj) : []) if (e && typeof e.id === 'string' && typeof e.file === 'string') byFile.set(foldCase(`backgrounds/${e.file}`), e);
-    const present = new Set<string>();
-    for (const f of files('image')) {
-      const e = byFile.get(foldCase(f.path));
-      const { base, ext } = splitPath(f.path);
-      const id = str(e?.id) ?? base;
-      if (present.has(id)) continue;
-      present.add(id);
-      ch.consumed.add(f.path);
-      const had = enc.images.get(id);
-      if (had) {
-        const name = str(e?.name);
-        if (name && name !== had.name) ch.images.rename.push({ id, name });
-      } else {
-        ch.images.put.push({
-          entry: f.entry,
-          meta: {
-            id, name: str(e?.name) ?? base, type: str(e?.type) ?? MIME[ext.slice(1).toLowerCase()] ?? 'image/png',
-            width: typeof e?.width === 'number' ? e.width : 0, height: typeof e?.height === 'number' ? e.height : 0,
-            createdAt: typeof e?.createdAt === 'number' ? e.createdAt : Date.now(), bytes: 0, ...(e?.source ? { source: e.source } : {}),
-          },
-        });
-      }
-      if (e) member(ch, IMAGE_SCOPE, id, typeof e.folder === 'string' && e.folder ? e.folder : null);
-    }
-    for (const id of enc.images.keys()) if (!present.has(id)) ch.images.remove.push(id);
+    decodeMedia(IMAGES, files('imagesManifest')[0], files('image'), enc.images, ch.images, ch);
+    // Videos only where the app has a video store to put them in (encodeTree was given one).
+    if (enc.videos) decodeMedia(VIDEOS, files('videosManifest')[0], files('video'), enc.videos, ch.videos, ch);
   }
   return ch;
+}
+
+/** A media list and its files as puts, renames and removals against what was encoded (`had`). */
+function decodeMedia(spec: MediaSpec, man: { path: string; entry: Entry } | undefined, list: Array<{ path: string; entry: Entry }>, had: Map<string, ImageMeta>, out: MediaChanges, ch: CacheChanges): void {
+  const entries = man ? (obj(parse(entryText(man.entry)))?.[spec.dir] as unknown[] | undefined) : undefined;
+  if (man) ch.consumed.add(man.path);
+  const byFile = new Map<string, Obj>();
+  for (const e of Array.isArray(entries) ? entries.map(obj) : []) if (e && typeof e.id === 'string' && typeof e.file === 'string') byFile.set(foldCase(`backgrounds/${e.file}`), e);
+  const present = new Set<string>();
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+  for (const f of list) {
+    const e = byFile.get(foldCase(f.path));
+    const { base, ext } = splitPath(f.path);
+    const id = str(e?.id) ?? base;
+    if (present.has(id)) continue;
+    present.add(id);
+    ch.consumed.add(f.path);
+    const was = had.get(id);
+    if (was) {
+      const name = str(e?.name);
+      if (name && name !== was.name) out.rename.push({ id, name });
+    } else {
+      out.put.push({
+        entry: f.entry,
+        meta: {
+          id, name: str(e?.name) ?? base, type: str(e?.type) ?? spec.mimeOf(ext.slice(1).toLowerCase()),
+          width: num(e?.width), height: num(e?.height),
+          createdAt: typeof e?.createdAt === 'number' ? e.createdAt : Date.now(), bytes: 0,
+          ...(e?.source ? { source: e.source } : {}), ...(num(e?.duration) ? { duration: num(e?.duration) } : {}),
+        },
+      });
+    }
+    if (e && spec.scope) member(ch, spec.scope, id, typeof e.folder === 'string' && e.folder ? e.folder : null);
+  }
+  for (const id of had.keys()) if (!present.has(id)) out.remove.push(id);
 }
 
 /** Folder membership from a decode, into the folder store (folders made by name when there's none). */
@@ -723,9 +773,9 @@ export function equivalent(path: string, a: Entry, b: Entry): boolean {
   return canonical(pa) === canonical(pb);
 }
 
-/** Both sides changed a list file (images.json, palettes.json): everything from both, the newer side's where both have one. */
+/** Both sides changed a list file (images.json, videos.json, palettes.json): everything from both, the newer side's where both have one. */
 export function mergeLists(path: string, local: Entry, folder: Entry, localNewer: boolean): Entry {
-  const field = path.endsWith('images.json') ? 'images' : 'palettes';
+  const field = path.endsWith('images.json') ? 'images' : path.endsWith('videos.json') ? 'videos' : 'palettes';
   const pl = obj(parse(entryText(local))), pf = obj(parse(entryText(folder)));
   if (!pl || !pf) return localNewer || !pf ? local : folder;
   const [first, second] = localNewer ? [pl, pf] : [pf, pl];

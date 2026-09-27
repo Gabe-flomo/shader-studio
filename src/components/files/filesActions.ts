@@ -13,6 +13,7 @@ import { expandRemoval, localMutableKV, removalWarnings, removeFolderKeepItems, 
 import { buildProfileZip, everythingSnapshot, externalPart, installMerge, installReplace, installSources, selectionSnapshot, type InstallSummary, type Profile } from '../../files/profileZip';
 import { removeExternal } from '../../files/sources';
 import '../../files/backgroundsSource';
+import '../../files/videosSource';
 import type { FileNode, Inventory } from '../../files/inventory';
 import { GRAPH_PREFIX, LAYER_KINDS_KEY, NODE_PREFIX, SCRIPTS_KEY } from '../../files/inventory';
 import { reloadUserNodesFromStorage } from '../../nodes/userNodes/userNodeRegistry';

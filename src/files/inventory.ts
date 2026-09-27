@@ -117,6 +117,8 @@ export interface ExternalListing {
   folderScope?: string;
   /** The JSON field saved things point at its items with ("libraryId"), for Used by. */
   refField?: string;
+  /** Saved things point at its items (a Video layer's file) rather than keeping a copy: removing one breaks them. */
+  refIsLink?: boolean;
   items: Array<{ id: string; label: string; size: number; modified?: number; detail?: string; hash?: string; thumb?: string }>;
 }
 
@@ -534,7 +536,16 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
         detail: it.detail, hash: it.hash, ref: { t: 'external', source: ext.source, id: it.id }, ...(it.thumb ? { thumb: it.thumb } : {}),
         ...(ext.folderScope ? { membership: { scope: ext.folderScope, id: it.id } } : {}),
       };
-      if (ext.refField) {
+      if (ext.refField && ext.refIsLink) {
+        // Setups whose layers point at it (a Video layer's file): without it, those layers ask for it again.
+        const needle = `"${ext.refField}":${JSON.stringify(it.id)}`;
+        const usedBy: UsedBy[] = [];
+        const layers = (c: number) => `${c === 1 ? 'A Video layer' : `${c} Video layers`}`;
+        for (const g of graphs) { const c = g.raw.split(needle).length - 1; if (c) usedBy.push({ id: g.id, label: g.name, where: `${layers(c)} in its Play setup`, breaks: true }); }
+        for (const p of presentations) { const c = p.raw.split(needle).length - 1; if (c) usedBy.push({ id: p.node.id, label: p.name, where: `${layers(c)} in a Play in it`, breaks: true }); }
+        n.usedBy = usedBy;
+        if (!usedBy.length) n.unused = 'No saved Play setup or presentation uses it';
+      } else if (ext.refField) {
         // What embedded a copy of it names it beside the copy.
         const needle = `"${ext.refField}":${JSON.stringify(it.id)}`;
         const usedBy: UsedBy[] = [];

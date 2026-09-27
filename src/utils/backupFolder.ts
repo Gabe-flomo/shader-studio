@@ -19,7 +19,10 @@
  */
 import { describeSnapshot, importLibrary, isLibraryKey, isSnapshot, LIBRARY_FILE, LIBRARY_REFRESH_EVENTS, readableFiles, takeSnapshot, type ImportResult, type LibrarySnapshot } from './library';
 import { toast } from '../components/ui/toastStore';
-import { backgroundZipFiles, backgroundsSignature, importBackgroundFiles, subscribe as onBackgroundsChange, BACKGROUNDS_MANIFEST } from '../lib/backgroundLibrary';
+import {
+  backgroundZipFiles, backgroundsSignature, importBackgroundFiles, subscribe as onBackgroundsChange, BACKGROUNDS_MANIFEST,
+  getVideo, importVideoFiles, listVideos, videoExt, videosSignature, VIDEOS_MANIFEST, VIDEOS_MANIFEST_KIND, type VideosManifest,
+} from '../lib/backgroundLibrary';
 
 export type BackupSupport = 'desktop' | 'browser' | 'none';
 
@@ -49,7 +52,7 @@ Playfield keeps this folder up to date with everything you save.
 library.json      everything, exactly: Preferences → Library → Restore reads it
 history/          a copy of library.json per day, the last ${HISTORY_KEEP} days
 graphs/ …         the same things as separate files, to browse or share
-backgrounds/      image backgrounds as picture files (Restore brings them back too)
+backgrounds/      image backgrounds as picture files, and the Video layers' videos (Restore brings them back too)
 
 Don't edit library.json by hand; the readable files are copies.
 `;
@@ -179,6 +182,7 @@ let timer = 0;
 let lastLibrary = '';
 let lastReadable = '';
 let lastBackgrounds = '';
+let lastVideos = '';
 let writing = false;
 let again = false;
 
@@ -219,6 +223,7 @@ export async function backupNow(force = false): Promise<void> {
     }
     if (settingsFile) await target.write('settings.json', settingsFile);
     await writeBackgrounds(force);
+    await writeVideos(force);
     const old = (await target.list('history')).filter(n => /^library-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort().slice(0, -HISTORY_KEEP);
     for (const n of old) await target.remove(`history/${n}`);
     lastLibrary = libText;
@@ -240,9 +245,62 @@ async function writeBackgrounds(force: boolean): Promise<void> {
   const files = await backgroundZipFiles();
   // Never clear the folder's images because this browser's list came back empty (a store that couldn't open).
   if (!Object.keys(files).length && sig === '[]' && !force) { lastBackgrounds = sig; return; }
-  await target.remove(BACKGROUNDS_DIR);
+  // Just the images: the videos beside them are written on their own (writeVideos).
+  await target.remove(`${BACKGROUNDS_DIR}/images`);
+  await target.remove(BACKGROUNDS_MANIFEST);
   for (const [p, b] of Object.entries(files)) await target.writeBytes(p, b);
   lastBackgrounds = sig;
+}
+
+const VIDEOS_DIR = `${BACKGROUNDS_DIR}/videos`;
+
+/**
+ * The Video layers' files, when the list changed since the last write (or
+ * `force`): `backgrounds/videos/<id>.<ext>` and `backgrounds/videos.json`.
+ * Named by id, so a file already there is never written again (videos are big).
+ */
+async function writeVideos(force: boolean): Promise<void> {
+  if (!target?.writeBytes) return;
+  const sig = await videosSignature();
+  if (!force && sig === lastVideos) return;
+  let list: Awaited<ReturnType<typeof listVideos>>;
+  try { list = await listVideos(); } catch { return; }
+  // Never clear the folder's videos because this browser's list came back empty.
+  if (!list.length && !force) { lastVideos = sig; return; }
+  const have = new Set(await target.list(VIDEOS_DIR));
+  const want = new Set<string>();
+  const manifest: VideosManifest = { kind: VIDEOS_MANIFEST_KIND, version: 1, videos: [] };
+  for (const m of [...list].reverse()) {
+    const name = `${m.id.replace(/[^\w.-]/g, '_')}.${videoExt(m.type)}`;
+    if (!have.has(name)) {
+      const v = await getVideo(m.id);
+      if (!v) continue;
+      await target.writeBytes(`${VIDEOS_DIR}/${name}`, new Uint8Array(await v.blob.arrayBuffer()));
+    }
+    want.add(name);
+    const { thumb, width, height, duration } = m;
+    manifest.videos.push({ id: m.id, name: m.name, file: `videos/${name}`, type: m.type, bytes: m.bytes, createdAt: m.createdAt, ...(thumb ? { thumb } : {}), ...(width ? { width } : {}), ...(height ? { height } : {}), ...(duration ? { duration } : {}) });
+  }
+  for (const n of have) if (!want.has(n)) await target.remove(`${VIDEOS_DIR}/${n}`);
+  await target.write(VIDEOS_MANIFEST, JSON.stringify(manifest, null, 1));
+  lastVideos = sig;
+}
+
+/** The folder's videos back into this browser (ids kept; ones already here left alone). */
+async function restoreVideos(): Promise<number> {
+  if (!target?.readBytes) return 0;
+  const m = await target.readBytes(VIDEOS_MANIFEST);
+  if (!m) return 0;
+  const files: Record<string, Uint8Array> = { [VIDEOS_MANIFEST]: m };
+  try {
+    const manifest = JSON.parse(new TextDecoder().decode(m)) as { videos?: Array<{ file?: string }> };
+    for (const e of manifest.videos ?? []) {
+      if (typeof e?.file !== 'string') continue;
+      const b = await target.readBytes(`${BACKGROUNDS_DIR}/${e.file}`);
+      if (b) files[`${BACKGROUNDS_DIR}/${e.file}`] = b;
+    }
+  } catch { return 0; }
+  return (await importVideoFiles(files)).added;
 }
 
 /** The folder's image backgrounds back into this browser (ids kept; ones already here left alone). */
@@ -283,7 +341,7 @@ function hookStorage(): void {
 
 async function connect(t: Target): Promise<void> {
   target = t;
-  lastLibrary = ''; lastReadable = ''; lastBackgrounds = '';
+  lastLibrary = ''; lastReadable = ''; lastBackgrounds = ''; lastVideos = '';
   set({ folder: t.label, needsPermission: false, error: null });
   hookStorage();
   await backupNow();
@@ -391,10 +449,12 @@ export async function restoreFromFolder(): Promise<ImportResult | null> {
   const r = importLibrary(lib);
   let images = 0;
   try { images = await restoreBackgrounds(); } catch (e) { console.warn('[backup] restoring image backgrounds failed', e); }
+  let videos = 0;
+  try { videos = await restoreVideos(); } catch (e) { console.warn('[backup] restoring videos failed', e); }
   for (const ev of LIBRARY_REFRESH_EVENTS) window.dispatchEvent(new Event(ev));
   set({ canRestore: false });
   toast.success('Restored from the backup folder', {
-    message: `${r.added} added${images ? ` and ${images} image background${images === 1 ? '' : 's'}` : ''}${r.renamed.length ? `, ${r.renamed.length} as “… (imported)”` : ''}. Reload to load published nodes and settings.`,
+    message: `${r.added} added${images ? ` and ${images} image background${images === 1 ? '' : 's'}` : ''}${videos ? `, ${videos} video${videos === 1 ? '' : 's'}` : ''}${r.renamed.length ? `, ${r.renamed.length} as “… (imported)”` : ''}. Reload to load published nodes and settings.`,
     action: { label: 'Reload', onClick: () => location.reload() },
     sticky: true,
   });

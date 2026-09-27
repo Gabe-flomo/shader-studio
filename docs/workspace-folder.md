@@ -78,6 +78,8 @@ scripts/layer-kinds/<folder>/<Name>.kind.json    layer kinds
 backgrounds/images/<id>.<ext>                    background images, as the picture files
 backgrounds/images.json                          their names, sizes and folders
 backgrounds/palettes.json                        background palettes
+backgrounds/videos/<id>.<ext>                    the Video layers' videos, as the video files
+backgrounds/videos.json                          their names, sizes and lengths
 .shader-studio/deleted.json                      what was deleted, and when (see Deletions)
 ```
 

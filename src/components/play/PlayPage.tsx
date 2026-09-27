@@ -50,6 +50,9 @@ import { LayerContextMenu } from './LayerContextMenu';
 import { driveWithNull, graphNullDrives, layerNullDrives, pairedKey, type NullDrive } from './layerOps';
 import { toast } from '../ui/toastStore';
 import { usePlayUi, type PanelSize } from './playUi';
+import { setLayerDropHandler } from '../../play/layerDrop';
+import { addDroppedLayers, dropLabel } from './dropLayers';
+import { appDropMakers } from './dropMakers';
 import { sidebarView, useBigTab, usePlaySplit } from './playSplit';
 import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
@@ -168,6 +171,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   }, [updateNodeParams, setPlay]);
 
   const update = useCallback((fn: (p: PlayRecord) => PlayRecord) => setPlay(fn), [setPlay]);
+  // Images and videos dropped on the picture become layers where they land (play/layerDrop.ts).
+  useEffect(() => setLayerDropHandler({
+    label: n => dropLabel(n),
+    drop: (files, at) => { void addDroppedLayers(files, at, update, appDropMakers); },
+  }), [update]);
   // What this plan runs (play/planGates.ts). Locked parts stay visible, and nothing in the record is removed.
   const layersOk = useCan('play.layers');
   const backgroundsOk = useCan('play.backgrounds');
