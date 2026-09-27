@@ -49,7 +49,7 @@ export const RELEASES: Release[] = [
       { area: 'Play', text: 'Hand paths: shapes whose corners follow your fingertips.', link: { kind: 'example', key: 'handPaths', page: 'play' } },
       { area: 'Play', text: 'Blend modes like Multiply and Difference now mix with the shader, not only with other layers.' },
       { area: 'Play', text: 'Split view (⌘⇧L): a big Controls, Layers or Mappings panel beside the picture, and a grouped, searchable Source picker.' },
-      { area: 'Present', text: 'An inviting empty Present page with sample cards; long menus open as sheets on phones.', link: { kind: 'page', page: 'present' } },
+      { area: 'Present', text: 'Themes (Classic, Landing, Article, Portfolio) you can tweak and save, and Google Fonts by pasting a link.', link: { kind: 'page', page: 'present' } },
       { area: 'Studio', text: 'Turning a slider off freezes it at the value it has right now.' },
     ],
   },
