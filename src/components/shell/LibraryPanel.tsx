@@ -56,6 +56,7 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
   const used = stats.total / STORAGE_LIMIT;
   const tiles: Array<[string, string, string]> = [
     ['Graphs', `${k.graphs.count}`, `${k.versions.count} earlier version${k.versions.count === 1 ? '' : 's'} · ${stats.playSetups} with Play`],
+    ['Presentations', `${k.presentations.count}`, k.presentations.count ? `${formatSize(k.presentations.size)}, Plays included` : 'none yet'],
     ['Presets', `${presets}`, PRESET_KINDS.filter(x => k[x].count).map(x => `${k[x].count} ${KIND_LABELS[x].toLowerCase()}`).join(' · ') || 'none yet'],
     ['Published nodes', `${k['published nodes'].count}`, `${k.palettes.count} palette${k.palettes.count === 1 ? '' : 's'} · ${k['glsl shaders'].count} GLSL`],
     ['Saved data', formatSize(stats.total), `${Math.round(used * 100)}% of the browser’s ~5 MB`],
@@ -67,8 +68,8 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {!inCard && <span style={label}>Library</span>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1, borderRadius: radius.md, overflow: 'hidden', background: tk.border.subtle }}>
-        {tiles.map(([l, v, sub]) => (
-          <div key={l} style={{ padding: '8px 10px', background: tk.bg.panel, minWidth: 0 }}>
+        {tiles.map(([l, v, sub], i) => (
+          <div key={l} style={{ padding: '8px 10px', background: tk.bg.panel, minWidth: 0, gridColumn: i === tiles.length - 1 && tiles.length % 2 === 1 ? '1 / -1' : undefined }}>
             <div style={{ fontSize: 11, color: tk.text.muted }}>{l}</div>
             <div style={{ font: `650 17px ${fontFamily.ui}`, color: l === 'Saved data' && used > 0.8 ? tk.status.warningText : tk.text.primary }}>{v}</div>
             <div title={sub} style={{ fontSize: 10.5, color: tk.text.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
@@ -96,9 +97,9 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
         </div>
       )}
       <div style={row}>
-        <Button size="sm" icon="export" onClick={run(exportEverything)} title="One ZIP: library.json (for importing) plus every graph and preset as files in folders">Export everything</Button>
+        <Button size="sm" icon="export" onClick={run(exportEverything)} title="One ZIP: library.json (for importing) plus every graph, presentation and preset as files in folders">Export everything</Button>
         <span ref={dlRef} style={{ display: 'inline-flex' }}>
-          <Button size="sm" icon="export" title="One kind of thing as a ZIP of plain files: just the graphs, just the GLSL shaders (.glsl), just the functions, nodes or presets" onClick={() => { const r = dlRef.current?.getBoundingClientRect(); setDlMenu(r ? { x: r.left, y: r.bottom + 4 } : null); }}>Download…</Button>
+          <Button size="sm" icon="export" title="One kind of thing as a ZIP of plain files: just the graphs, the presentations (.present.json), the GLSL shaders (.glsl), the functions, nodes or presets" onClick={() => { const r = dlRef.current?.getBoundingClientRect(); setDlMenu(r ? { x: r.left, y: r.bottom + 4 } : null); }}>Download…</Button>
         </span>
         {dlMenu && (
           <Menu x={dlMenu.x} y={dlMenu.y} minWidth={280} onClose={() => setDlMenu(null)}
@@ -160,7 +161,8 @@ export function LibraryCard() {
   const toggle = () => setOpen(o => { try { localStorage.setItem(OPEN_KEY, o ? '0' : '1'); } catch { /* preference only */ } return !o; });
   const ok = st.folder && !st.needsPermission && !st.error;
   const stats = useLibraryStats();
-  const counts = `${stats.kinds.graphs.count} graph${stats.kinds.graphs.count === 1 ? '' : 's'} · ${formatSize(stats.total)}`;
+  const pres = stats.kinds.presentations.count;
+  const counts = `${stats.kinds.graphs.count} graph${stats.kinds.graphs.count === 1 ? '' : 's'}${pres ? ` · ${pres} presentation${pres === 1 ? '' : 's'}` : ''} · ${formatSize(stats.total)}`;
   const line = `${counts} · ${st.support === 'none' ? 'no backup folder here'
     : !st.folder ? 'no backup folder yet'
     : st.needsPermission ? 'allow the backup folder again'

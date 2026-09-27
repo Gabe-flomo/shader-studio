@@ -6,7 +6,7 @@
  */
 import { create } from 'zustand';
 import { cloneBlock, cloneStep, emptyPresentation, newStep, type Block, type Presentation, type PresentSource, type Step } from '../../types/presentation';
-import { deletePresentation, freeName, loadPresentation, rememberLast, renamePresentation, savePresentation } from '../../present/storage';
+import { deletePresentation, freeName, loadPresentation, rememberLast, renamePresentation, savePresentation, type DeletedPresentation } from '../../present/storage';
 import { toast } from '../ui/toastStore';
 
 export type PresentMode = 'edit' | 'slides' | 'scroll';
@@ -18,13 +18,16 @@ interface PresentationState {
   step: number;
   selected: string | null;
   status: 'saved' | 'pending' | 'failed';
+  /** When the open presentation was last written to storage. */
+  savedAt: number;
 
   open(name: string): boolean;
   /** Save `doc` under a free name based on its title and open it. */
   adopt(doc: Presentation): string;
   create(title: string): string;
   rename(to: string): boolean;
-  remove(): void;
+  /** Delete the open presentation; what was stored comes back for Undo. */
+  remove(): DeletedPresentation | null;
   close(): void;
 
   setMode(m: PresentMode): void;
@@ -66,7 +69,7 @@ export const usePresentation = create<PresentationState>((set, get) => {
     const { name, doc } = get();
     if (!name || !doc) return;
     const r = savePresentation(name, doc);
-    set({ status: r.ok ? 'saved' : 'failed' });
+    set(r.ok ? { status: 'saved', savedAt: Date.now() } : { status: 'failed' });
     if (!r.ok) toast.error('Couldn’t save the presentation', { message: r.error });
   };
   const schedule = () => {
@@ -78,22 +81,23 @@ export const usePresentation = create<PresentationState>((set, get) => {
   const mapSteps = (fn: (s: Step, i: number) => Step) => get().update(p => ({ ...p, steps: p.steps.map(fn) }));
 
   return {
-    name: null, doc: null, mode: 'edit', step: 0, selected: null, status: 'saved',
+    name: null, doc: null, mode: 'edit', step: 0, selected: null, status: 'saved', savedAt: 0,
 
     open(name) {
       saveNow();
       const doc = loadPresentation(name);
       if (!doc) return false;
       rememberLast(name);
-      set({ name, doc, step: 0, selected: null, status: 'saved' });
+      set({ name, doc, step: 0, selected: null, status: 'saved', savedAt: doc.updatedAt });
       return true;
     },
     adopt(doc) {
       saveNow();
       const name = freeName(doc.title);
       const p = { ...doc, title: name, updatedAt: Date.now() };
-      savePresentation(name, p);
-      set({ name, doc: p, step: 0, selected: null, status: 'saved', mode: 'edit' });
+      const r = savePresentation(name, p);
+      if (!r.ok) toast.error('Couldn’t save the presentation', { message: r.error });
+      set({ name, doc: p, step: 0, selected: null, status: r.ok ? 'saved' : 'failed', savedAt: r.ok ? Date.now() : 0, mode: 'edit' });
       return name;
     },
     create(title) {
@@ -111,8 +115,9 @@ export const usePresentation = create<PresentationState>((set, get) => {
     remove() {
       const { name } = get();
       if (timer) { clearTimeout(timer); timer = null; }
-      if (name) deletePresentation(name);
+      const gone = name ? deletePresentation(name) : null;
       set({ name: null, doc: null, step: 0, selected: null, mode: 'edit', status: 'saved' });
+      return gone;
     },
     close() { saveNow(); set({ name: null, doc: null, step: 0, selected: null }); },
 

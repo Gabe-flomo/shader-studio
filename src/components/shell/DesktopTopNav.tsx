@@ -14,6 +14,7 @@ import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { reportFileResult, reportGlslImport } from './reportFileResult';
+import { importAnyFile } from './importAnyFile';
 import { SaveGraphForm, VersionsButton } from './GraphVersions';
 
 const TABS: { page: Page; label: string }[] = [
@@ -44,7 +45,6 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
   const undo = useNodeGraphStore(s => s.undo);
   const redo = useNodeGraphStore(s => s.redo);
   const exportGraph = useNodeGraphStore(s => s.exportGraph);
-  const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
   const importGlslFromFile = useNodeGraphStore(s => s.importGlslFromFile);
   // Shortcut labels follow the user's rebinding on the Keys page.
   const [shortcuts] = useState(loadShortcutMap);
@@ -103,8 +103,8 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         {!compact && <Divider />}
         {compact ? (
           <>
-            <IconButton icon="import" label="Import a graph file" shortcut={shortcuts.import}
-              onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
+            <IconButton icon="import" label="Import a graph or presentation file" shortcut={shortcuts.import}
+              onClick={() => { void importAnyFile(onPageChange); }} />
             <IconButton icon="code" label="Import a GLSL shader as a node"
               onClick={async () => { reportGlslImport(await importGlslFromFile()); }} />
             <IconButton icon="export" label="Export this graph to a file" shortcut={shortcuts.export}
@@ -112,8 +112,8 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
           </>
         ) : (
           <>
-            <Tooltip label="Import a graph file" shortcut={shortcuts.import}>
-              <Button size="sm" icon="import" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }}>Import</Button>
+            <Tooltip label="Import a graph file, or a .present.json (opens on the Present page)" shortcut={shortcuts.import}>
+              <Button size="sm" icon="import" onClick={() => { void importAnyFile(onPageChange); }}>Import</Button>
             </Tooltip>
             <Tooltip label="Import a GLSL fragment shader (Shadertoy or raw) as a node, wired UV → shader → Output">
               <Button size="sm" icon="code" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>GLSL</Button>

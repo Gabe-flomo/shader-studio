@@ -9,15 +9,17 @@ import { Icon } from '../ui/Icon';
 import { Menu } from '../ui/Menu';
 import { LoadGraphButton, SaveGraphButton } from './DesktopTopNav';
 import { reportFileResult, reportGlslImport } from './reportFileResult';
+import { importAnyFile } from './importAnyFile';
 import { isPlayRecordEmpty } from '../../types/play';
 import { exportEverything, importEverything } from '../../utils/libraryActions';
 import { Modal } from '../ui/Modal';
 import { LibraryPanel } from './LibraryPanel';
 
 /**
- * Phone top bar (Mobile board): logo (back to Studio), the Studio | Play switch, undo/redo,
- * save/load, and a ⋯ menu with the rest — Keys, Record, Import, Export and the theme. Grows by
- * the status-bar inset.
+ * Phone top bar (Mobile board): the Studio | Play | Present switch (other pages: the logo, back
+ * to the Studio, and the page's name), undo/redo and save/load for the graph (not on Present,
+ * which has its own file actions), and a ⋯ menu with the rest — Keys, Record, Import, Export and
+ * the theme. Grows by the status-bar inset. Fits a 360px phone.
  */
 export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
   page: Page;
@@ -32,12 +34,12 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
   const undo = useNodeGraphStore(s => s.undo);
   const redo = useNodeGraphStore(s => s.redo);
   const exportGraph = useNodeGraphStore(s => s.exportGraph);
-  const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
   const importGlslFromFile = useNodeGraphStore(s => s.importGlslFromFile);
   const hasPlay = useNodeGraphStore(s => !isPlayRecordEmpty(s.play));
   const moreRef = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [library, setLibrary] = useState(false);
+  const mainPage = page === 'studio' || page === 'play' || page === 'present';
 
   return (
     <div style={{
@@ -47,20 +49,21 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
       display: 'flex', alignItems: 'center', gap: 2, background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`,
       color: tk.text.primary, font: `13px ${fontFamily.ui}`, userSelect: 'none', position: 'relative', zIndex: 30,
     }}>
-      <button
+      {/* On Studio, Play and Present the switch's Studio does this, and a 360px phone needs the room. */}
+      {!mainPage && <button
         type="button"
-        aria-label={page === 'studio' ? 'Playfield' : 'Back to the Studio'}
+        aria-label="Back to the Studio"
         onClick={() => onPageChange('studio')}
         style={{
-          width: 28, height: 28, padding: 0, border: 0, borderRadius: radius.md, cursor: 'pointer',
+          width: 28, height: 28, flexShrink: 0, padding: 0, border: 0, borderRadius: radius.md, cursor: 'pointer',
           background: tk.ink.base, color: tk.ink.text, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
       >
         <Icon name="presets" size={13} />
-      </button>
-      {page === 'studio' || page === 'play' ? (
-        // Studio and Play are the two halves of the app: the switch between them is always in sight.
-        <span style={{ marginLeft: 8 }}>
+      </button>}
+      {mainPage ? (
+        // Studio, Play and Present are the app's main pages: the switch between them is always in sight.
+        <span style={{ flexShrink: 0 }}>
           <Segmented
             size="sm"
             ariaLabel="Page"
@@ -69,25 +72,29 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             options={[
               { value: 'studio', label: 'Studio' },
               { value: 'play', label: hasPlay ? 'Play •' : 'Play', title: hasPlay ? 'This graph has a Play setup' : 'Perform this graph: controls, mappings, layers' },
+              { value: 'present', label: 'Present', title: 'Teach with your Plays: steps of text, pictures, sliders and code' },
             ]}
           />
         </span>
       ) : (
-        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : page === 'convert' ? 'Convert' : page === 'present' ? 'Present' : 'Builder'}</span>
+        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : page === 'convert' ? 'Convert' : 'Builder'}</span>
       )}
       <span style={{ flex: 1 }} />
-      <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 36, height: 40 }} />
-      <IconButton icon="redo" label="Redo" tooltip={false} onClick={redo} style={{ width: 36, height: 40 }} />
-      <span style={{ width: 1, height: 20, background: tk.border.default, margin: '0 2px' }} />
-      <SaveGraphButton compact />
-      <LoadGraphButton />
+      {/* The graph's own actions; Present has its own file actions in its header. */}
+      {page !== 'present' && <>
+        <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 34, height: 40 }} />
+        <IconButton icon="redo" label="Redo" tooltip={false} onClick={redo} style={{ width: 34, height: 40 }} />
+        <span style={{ width: 1, height: 20, flexShrink: 0, background: tk.border.default, margin: '0 1px' }} />
+        <SaveGraphButton compact />
+        <LoadGraphButton />
+      </>}
       <span ref={moreRef} style={{ display: 'inline-flex' }}>
         <IconButton
           icon="more"
           label="More"
           tooltip={false}
           active={!!menu}
-          style={{ width: 36, height: 40 }}
+          style={{ width: 34, height: 40 }}
           onClick={() => {
             const r = moreRef.current?.getBoundingClientRect();
             setMenu(r ? { x: r.right - 220, y: r.bottom + 6 } : null);
@@ -109,12 +116,12 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             page === 'present'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Present', icon: 'slides', hint: 'Teach with your Plays: steps of text, pictures, sliders and code', onSelect: () => onPageChange('present') },
-            { label: 'Import a graph', icon: 'import', onSelect: async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); } },
+            { label: 'Import a file', icon: 'import', hint: 'A graph, or a .present.json (opens on Present)', onSelect: () => { void importAnyFile(onPageChange); } },
             { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
             { label: 'Convert GLSL to nodes', icon: 'nodes', hint: 'Paste a shader, preview the nodes it becomes, make it real', onSelect: () => onPageChange('convert') },
             { label: 'Export this graph', icon: 'export', onSelect: async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); } },
             { label: 'Library…', icon: 'folder', hint: 'What’s saved, export and import, backup and recordings', onSelect: () => setLibrary(true) },
-            { label: 'Export everything', icon: 'export', hint: 'Every graph, preset and setting as one ZIP', onSelect: () => { void exportEverything(); } },
+            { label: 'Export everything', icon: 'export', hint: 'Every graph, presentation, preset and setting as one ZIP', onSelect: () => { void exportEverything(); } },
             { label: 'Import a library', icon: 'import', hint: 'A library ZIP: adds to what you have', onSelect: () => { void importEverything(); } },
             'separator',
             page === 'shortcuts'
