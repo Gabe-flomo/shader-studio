@@ -19,6 +19,9 @@ import { KindDialog } from './KindDialog';
 import { Field } from '../../ui/Field';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { CameraChip } from '../chips';
+import { HandsChip } from '../HandsChip';
+import { Select } from '../../ui/Select';
+import { HAND_POINT_OPTIONS, HAND_SIDES } from '../../../play/playSources';
 import { BLENDS, BLEND_HINT, type Choice, type FieldKit } from './fields';
 import { ImagePicker, SpritePicker } from './pickers';
 import { FIELD_HELP, ZONE_HELP } from './help';
@@ -99,8 +102,14 @@ export function NullEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
       <Section kind="null" title="Follow">
         {f.seg('Follows', 'follow', [
           { value: 'none', label: 'Nothing' }, { value: 'mouse', label: 'Mouse', title: 'Chases the pointer while it is over the picture' }, { value: 'null', label: 'A null', title: 'Chases another null' },
+          { value: 'hand', label: 'A hand', title: 'Chases a fingertip or joint of a tracked hand (hand tracking, with the camera)' },
         ], 'A following null chases its target on a spring: it lags, overshoots and settles. Its X and Y (and anything mapped from them) move with that motion. Nulls can follow nulls that follow nulls, for chains.')}
         {l.follow === 'null' && f.pick('Target', 'followId', nulls(ctx, l.id), 'Add a second null', 'The null this one chases.', () => ctx.createNull('followId'))}
+        {l.follow === 'hand' && <>
+          {f.seg('Hand', 'handSide', HAND_SIDES, 'Your own right or left hand. Either follows your right hand while it is in view, else your left.')}
+          {f.row('Point', <Select ariaLabel="Point on the hand" value={String(l.handPoint)} options={HAND_POINT_OPTIONS} onChange={v => f.set({ handPoint: parseInt(v, 10) || 0 })} height={26} style={{ flex: 1, minWidth: 0 }} />, 'The fingertip or joint it chases. When the hand leaves the picture it waits where it was.')}
+          {f.row('Tracking', <HandsChip />)}
+        </>}
         {l.follow !== 'none' && f.props('spring', 'wobble')}
       </Section>
       <Section kind="null" title="Particles">

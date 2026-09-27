@@ -10,7 +10,7 @@ import { askChoice } from '../components/ui/dialogStore';
 import { buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricRig, graphOutput, instantiateNode, twoDNodesBefore3D } from '../nodes/scene3dDefaults';
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
-import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord, type PlayControl } from '../types/play';
+import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, usesHands, type PlayRecord, type PlayControl } from '../types/play';
 import { migratePlayRecord } from './migratePlay';
 import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
@@ -470,7 +470,8 @@ interface NodeGraphState {
    */
   playWebInput: (title: string) => { input: PlayHtmlInput; missing: string[] };
   /** Save a web page (player or background) to a file. See play/exportHtml.ts. */
-  exportPlayHtml: (options: EmbedOptions, title: string) => Promise<FileResult>;
+  /** `hands`: carry hand tracking's files in the page (about 12 MB; play/handExport.ts). */
+  exportPlayHtml: (options: EmbedOptions, title: string, extras?: { hands?: boolean }) => Promise<FileResult>;
   /** Bumped when a play file is imported; App switches to the Play page. */
   playOpenRequest: number;
   /** Asks the app to open the Studio centred on a node (a Play control's "go to source"). `n` counts requests. */
@@ -4549,8 +4550,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return webInputFrom(st, st.play, { title, aspect: st.previewAspect, live, media: webMedia(st) });
   },
 
-  exportPlayHtml: async (options, title) => {
+  exportPlayHtml: async (options, title, extras) => {
     const { input } = get().playWebInput(title);
+    if (extras?.hands && usesHands(input.play)) {
+      const { loadHandAssets } = await import('../play/handExport');
+      input.handAssets = await loadHandAssets();
+    }
     const base = (title.trim() || 'play').replace(/\.html?$/i, '').replace(/[^\w\- ]+/g, '').trim() || 'play';
     return saveTextFile(buildPlayHtml(input, options), `${base}${options.mode === 'background' ? '-background' : ''}.html`, 'text/html');
   },

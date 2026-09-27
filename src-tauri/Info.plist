@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merged into the app's Info.plist by the Tauri CLI (and embedded in dev
+  builds). macOS only lets WKWebView open the camera when the app says why.
+-->
+<plist version="1.0">
+<dict>
+  <key>NSCameraUsageDescription</key>
+  <string>Playfield uses the camera for Camera layers and hand tracking. Everything runs on this Mac: frames are never uploaded or saved.</string>
+</dict>
+</plist>

@@ -14,6 +14,7 @@
 - **Web page export: done** (`src/play/exportHtml.ts`, `src/play/runtime/play-runtime.js`). One self-contained HTML file with the shader, the panel, the mappings and the layers.
 - **Step 4, triggers and envelopes: done** (`src/play/triggers.ts`). A Trigger source fires on a key, a click, a beat, a MIDI note, an OSC message or an audio hit and plays an envelope (ADSR, velocity), a toggle, a step or a random value. Noise sources (smooth, drift, random, stepped) sit beside the LFO.
 - **OSC and live audio: done.** `npm run osc-bridge` (tools/osc-bridge.mjs) brings OSC from Ableton or TouchOSC in; a Live audio source listens to a mic or a virtual cable carrying Ableton's sound. First-time setup: docs/connecting-ableton.md (also in the app, Mappings → ⓘ).
+- **Hand tracking: done** (docs/hand-tracking.md). MediaPipe's Hand Landmarker in a worker, fed by the shared webcam, loaded only when hands are first enabled and bundled with the app (offline). Landmarks, pinch, openness, palm, roll, nearness and the two hands' distance are sources; pinches, fist, open palm, point and a hand coming or going are gesture triggers; nulls can follow any landmark.
 - **Step 5, MIDI files and offline export: not started.** Quantise-to-scale and latch processors, MIDI clock and Ableton Link are next after it.
 
 ---
@@ -40,6 +41,7 @@ A mapping is `source → range → curve → smoothing → control`. Every sourc
 | Live audio in | level, bass, low-mid, high-mid, treble of a mic or a virtual cable | Listen asks for the microphone; pick BlackHole / CABLE Output for Ableton |
 | OSC | one argument of an OSC address, scaled from min..max | needs `npm run osc-bridge`; Learn picks the next address |
 | MIDI CC, note, velocity, gate, bend | Web MIDI or the keyboard stand-in | Learn takes the next message |
+| Hands | any of 21 landmarks (X, Y, Z), pinch, openness, palm centre, roll, nearness, in view, a gesture held, the distance between the hands | camera + hand tracking (Enable); Learn takes the landmark that moved most |
 
 Every mapping's curve can also be **drawn**: pick Draw and drag across the pad; the samples are stored with the mapping.
 
@@ -91,6 +93,10 @@ The first folder in Examples is **Play**: one small example per technique, numbe
 
 - **Notes** (`PlayRecord.notes`): plain text shown in a card at the top of the Play page. A blank line starts a paragraph, a line starting with `• ` is a bullet and `**bold**` is bold. Drag a layer (its heading) or a control (its grip) onto the card to link it: `[[layer:<id>]]` shows as a chip with the current name, and clicking it opens that layer or flashes that control. The card grows into a page of its own with the expand button. Every Play example's notes have the same three parts: *What it shows*, *How it's built*, *Try this*. Anyone can write notes on their own setup (the speech-bubble button in the Controls header, or the pencil on the card). They travel with the graph and in play files, so a setup made for teaching carries its own explanation.
 - **Where things live**: `src/store/playExampleIndex.ts` has the names, descriptions and order (light, so the examples browser can list them without loading the graphs); `src/store/playExamples.ts` builds the records from small helpers, so each one is exactly what the parser produces. The examples test checks that the folder comes first, the numbers match the order, every record parses without loss and has notes, and every control points at a live param or layer.
+
+## Hands
+
+Hand tracking (docs/hand-tracking.md) adds a **Hands** group to the source list, **On: Hand gesture** to triggers (pinch with each finger, fist, open palm, point, comes into view, leaves view, each with hysteresis so it fires once), and **Follows → A hand** to nulls, so particle roles, sensors, Script layers' `s.null()` and Cloner effectors can follow a fingertip. The model runs locally in a worker at about 30 frames a second, on the camera a Camera layer uses (which can stay hidden). Takes record what hands drove, and rest the tracker while they play back. The **Hands** folder in Examples has three setups: fingertips moving particles, pinch / point / fist, and two hands at once. Web exports carry it only when asked (**Include hand tracking**, about 12.2 MB).
 
 ## Controls
 

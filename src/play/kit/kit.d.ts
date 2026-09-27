@@ -1,4 +1,5 @@
 import type { PlayLayer, PlayRecord, ActionKind } from '../../types/play';
+import type { HdState } from './hands.js';
 
 export interface KitPointer { x: number; y: number; over: boolean; down: boolean }
 export interface KitAudio { wave: Float32Array | null; freq: Float32Array | null; sampleRate: number }
@@ -27,6 +28,10 @@ export interface KitEnv {
   shaderTap?: (tap: ShaderTap) => void;
   /** A Script layer compiled or ran: null clears its error, a string is the message shown under its code. */
   scriptStatus?: (layerId: string, error: string | null) => void;
+  /** Hand tracking: a landmark on the picture for a null following a hand (null while that hand is out of view). */
+  hand?: (side: string, point: number) => { x: number; y: number } | null;
+  /** Hand tracking: draw the hands' skeleton with the markers (null or absent: don't). */
+  hands?: { state: HdState; colour: [number, number, number] } | null;
 }
 
 /** What the graph's Layers node reads: colour at half resolution, and a 16-bit packed distance grid (row 0 at the top). */
