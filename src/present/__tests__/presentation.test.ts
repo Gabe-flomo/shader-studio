@@ -22,6 +22,7 @@ import { snapshotExample, snapshotSaved, refreshSnapshot, sourceLimits } from '.
 import { resolveCode, parseLineRanges } from '../code';
 import { emptyPresentation, newBlock, parsePresentation, type InteractiveBlock, type Presentation, type PresentSource } from '../../types/presentation';
 import { buildSamplePresentation } from '../sample';
+import { SAMPLE_PRESENTATIONS } from '../samples';
 
 let light: PresentSource;
 beforeAll(async () => {
@@ -161,5 +162,43 @@ describe('the sample presentation', () => {
     const types = new Set(p.steps.flatMap(s => s.blocks.map(b => b.type)));
     expect([...types].sort()).toEqual(['code', 'interactive', 'render', 'text']);
     expect(parsePresentation(JSON.parse(JSON.stringify(p)))).toEqual(p);
+  });
+});
+
+describe('every sample presentation', () => {
+  it.each(SAMPLE_PRESENTATIONS.map(p => [p.title, p] as const))('%s builds, survives the parse gate, and every block resolves', async (_title, sample) => {
+    const p = await sample.build(0);
+    expect(p.title).toBe(sample.title);
+    expect(p.steps.length).toBeGreaterThanOrEqual(5);
+    // Nothing is dropped: every control an interactive block names is in its snapshot, every source is used and known.
+    expect(parsePresentation(JSON.parse(JSON.stringify(p)))).toEqual(p);
+    const types = new Set(p.steps.flatMap(s => s.blocks.map(b => b.type)));
+    expect([...types].sort()).toEqual(['code', 'interactive', 'render', 'text']);
+    const sources = new Map(p.sources.map(s => [s.id, s]));
+    const used = new Set(p.steps.flatMap(s => s.blocks.flatMap(b => (b.type === 'render' || b.type === 'interactive') ? [b.source] : b.type === 'code' && b.from ? [b.from.source] : [])));
+    expect([...sources.keys()].filter(id => !used.has(id)), 'sources no block reads').toEqual([]);
+    for (const s of p.steps) for (const b of s.blocks) {
+      if (b.type === 'interactive') {
+        expect(b.controls.length, `${s.title}: an interactive block with no controls`).toBeGreaterThan(0);
+        // Every [[control:id]] chip names one of the block's controls.
+        for (const m of b.markdown.matchAll(/\[\[control:([\w-]+)\]\]/g)) expect(b.controls.map(c => c.controlId), `${s.title}: chip ${m[1]}`).toContain(m[1]);
+      }
+      if (b.type === 'code') {
+        const r = resolveCode(b, sources);
+        expect(r.problem, `${s.title}: code block`).toBeUndefined();
+        expect(r.rows.length).toBeGreaterThan(0);
+        for (const [, z] of b.highlightLines ?? []) expect(z, `${s.title}: highlight past the end`).toBeLessThanOrEqual(r.rows.length);
+      }
+    }
+  });
+
+  it('Sketching over shaders has live Script blocks next to a canvas of the same source', async () => {
+    const p = await SAMPLE_PRESENTATIONS.find(s => s.title === 'Sketching over shaders')!.build(0);
+    const live = p.steps.flatMap(s => s.blocks.filter(b => b.type === 'code' && b.live).map(b => ({ s, b })));
+    expect(live.length).toBeGreaterThanOrEqual(2);
+    for (const { s, b } of live) {
+      const src = b.type === 'code' && b.from ? b.from.source : '';
+      expect(s.blocks.some(x => (x.type === 'render' || x.type === 'interactive') && x.source === src), s.title).toBe(true);
+    }
   });
 });
