@@ -33,6 +33,8 @@ type Measure = {
   textWidth: (l: PlayLayer, line: string) => number;
   /** Width / height of an image or camera frame, or 0 while unknown. */
   mediaAspect: (l: PlayLayer) => number;
+  /** A video layer's height before its Scale (its fit), in picture heights; 1 when not given. */
+  fitHeight?: (l: PlayLayer) => number;
 };
 
 export function layerBounds(l: PlayLayer, v: Value, m: Measure): Bounds | null {
@@ -49,6 +51,10 @@ export function layerBounds(l: PlayLayer, v: Value, m: Measure): Bounds | null {
     }
     case 'image': case 'camera': {
       const a = m.mediaAspect(l), h = v(l, 'scale');
+      return a > 0 ? { x, y, w: h * a, h, rot: v(l, 'rotation'), uniform: true, turns: true } : null;
+    }
+    case 'video': {
+      const a = m.mediaAspect(l), h = v(l, 'scale') * (m.fitHeight ? m.fitHeight(l) : 1);
       return a > 0 ? { x, y, w: h * a, h, rot: v(l, 'rotation'), uniform: true, turns: true } : null;
     }
     case 'audio': return { x, y, w: v(l, 'w'), h: v(l, 'h'), rot: 0, uniform: false, turns: false };
@@ -151,7 +157,7 @@ export function patchFor(l: PlayLayer, start: Bounds, b: Bounds, v: Value): Reco
       if (l.shape === 'polygon' && (kx !== 1 || ky !== 1)) out.points = l.points.map((p, i) => r4(p * (i % 2 ? ky : kx)));
       break;
     case 'text': out.size = r4(v(l, 'size') * ky); break;
-    case 'image': case 'camera': out.scale = r4(v(l, 'scale') * ky); break;
+    case 'image': case 'camera': case 'video': out.scale = r4(v(l, 'scale') * ky); break;
     case 'audio': case 'data': out.w = r4(b.w); out.h = r4(b.h); break;
     case 'lens': out.radius = r4(v(l, 'radius') * kx); break;
   }

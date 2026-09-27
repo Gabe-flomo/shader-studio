@@ -23,6 +23,8 @@ import { createLayerKit, type KitAudio, type KitEnv, type KitPointer, type Layer
 import { loadThreeRuntime, playUses3D, threeRuntime } from './threeSource';
 import { klPaintBackground } from './kit/layers.js';
 import { playBackground, planShowsThis } from './background';
+import { playVideoLayers } from './videoLayers';
+import { klVideoFit } from './kit/layers.js';
 import type { BqPlan } from './kit/queue.js';
 import { setScriptStatus } from './scriptStatus';
 import { kitDataset } from './dataLayer';
@@ -153,6 +155,7 @@ class PlayOverlay {
   setRecord(record: PlayRecord): void {
     this.record = record;
     playBackground.setRecord(record);
+    playVideoLayers.setRecord(record);
     // Example graphs in a Background queue compile from the examples' chunk: load it now, so the picture and exports have them.
     // (Imported when needed: queueGraphs brings the graph store along.)
     if (record.layers[0]?.kind === 'background' && record.layers[0].sources.some(x => x.kind === 'graph' && x.graph?.startsWith('example:'))) void import('./queueGraphs').then(m => m.preloadQueueExamples());
@@ -249,8 +252,10 @@ class PlayOverlay {
       mediaAspect: layer => {
         if (layer.kind === 'image') { const img = this.image(layer.src); return img ? img.naturalWidth / Math.max(1, img.naturalHeight) : 0; }
         if (layer.kind === 'camera') { const v = cameraInput.element(); return v && v.videoWidth ? v.videoWidth / Math.max(1, v.videoHeight) : 0; }
+        if (layer.kind === 'video') return playVideoLayers.aspect(layer.id);
         return 0;
       },
+      fitHeight: layer => (layer.kind === 'video' ? klVideoFit(layer.fit, playVideoLayers.aspect(layer.id), this.aspect) : 1),
     });
   }
 
@@ -585,6 +590,7 @@ class PlayOverlay {
         return (l as { input?: string }).input === 'file' ? layerAudio.raw(l.id) : needsAudio ? liveAudio.raw() : null;
       },
       camera: cameraInput.element(),
+      layerVideo: l => playVideoLayers.element(l.id),
       image: src => this.image(src),
       sensor: forExport ? () => {} : (k, v) => playEngine.setSensor(k, v),
       override: forExport || this.replaying ? () => {} : (id, k, v) => playEngine.setOverride(id, k, v),

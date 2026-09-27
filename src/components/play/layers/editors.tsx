@@ -78,7 +78,7 @@ function Buttons({ children }: { children: ReactNode }) {
 // Flocking's switch remembers the amount it had, so off and on again comes back the same.
 const lastFlock = new Map<string, number>();
 
-function matteRows(f: FieldKit, pictureHidden: boolean) {
+export function matteRows(f: FieldKit, pictureHidden: boolean) {
   const matte = f.get<string>('matte');
   return (
     <>
@@ -363,7 +363,7 @@ export function ShapeEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const g = f.get;
   const shape = g<string>('shape'), action = g<ZoneAction>('action');
   const others = ctx.layers.filter(x => x.kind === 'shape' && x.id !== f.l.id);
-  const sources = ctx.layers.filter(x => x.kind === 'text' || x.kind === 'image' || x.kind === 'camera');
+  const sources = ctx.layers.filter(x => x.kind === 'text' || x.kind === 'image' || x.kind === 'camera' || x.kind === 'video');
   const particles = ctx.layers.filter(x => x.kind === 'particles' || x.kind === 'bodies');
   const geometric = shape === 'box' || shape === 'circle' || shape === 'line' || shape === 'polygon';
   const outlined = geometric || shape === 'path';
@@ -668,7 +668,7 @@ export function BodiesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 export function ClonerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const g = f.get;
   const arrange = g<string>('arrange');
-  const sources = ctx.layers.filter(x => x.id !== f.l.id && (x.kind === 'shape' || x.kind === 'text' || x.kind === 'image' || x.kind === 'camera' || x.kind === 'null' || x.kind === 'script'));
+  const sources = ctx.layers.filter(x => x.id !== f.l.id && (x.kind === 'shape' || x.kind === 'text' || x.kind === 'image' || x.kind === 'camera' || x.kind === 'video' || x.kind === 'null' || x.kind === 'script'));
   const brushes = ctx.layers.filter(x => x.kind === 'brush');
   const particles = ctx.layers.filter(x => x.kind === 'particles');
   const effectorLayers = ctx.layers.filter(x => x.id !== f.l.id && (x.kind === 'null' || x.kind === 'shape'));

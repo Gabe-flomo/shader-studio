@@ -31,5 +31,7 @@ export function klFillT(angle: number | undefined, u: number, v: number, aspect:
 export function klFillColourAt(fill: KitFill | null | undefined, t: number): [number, number, number];
 export function klFillAt(fill: KitFill | null | undefined, u: number, v: number, aspect: number): [number, number, number];
 export function klPaintFill(x: CanvasRenderingContext2D, fill: KitFill, W: number, H: number): void;
+/** A video layer's height before its Scale, in picture heights, for a frame of aspect `va` on a picture of aspect `pa`. */
+export function klVideoFit(fit: string, va: number, pa: number): number;
 export function klFitRect(fit: string, w: number, h: number, W: number, H: number): { x: number; y: number; w: number; h: number };
 export function klPaintBackground(c: HTMLCanvasElement, bg: KitBackground, W: number, H: number, cache?: boolean): HTMLCanvasElement;

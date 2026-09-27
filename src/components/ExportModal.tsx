@@ -18,6 +18,7 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
 import { playOverlay, type TransparentPicture } from '../play/overlay';
 import { playBackground, planGraphs, planShowsThis } from '../play/background';
+import { playVideoLayers } from '../play/videoLayers';
 import type { BqPlan } from '../play/kit/queue.js';
 import { midiEngine } from '../lib/midiEngine';
 import { formatDuration } from '../lib/midiFile';
@@ -485,6 +486,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
           if (frameQueue) { await queueFrame(offlineRender, frameQueue, t, queueScratch); if (planShowsThis(frameQueue)) renderAtTime(t, { dt: 1 / fps, first: firstRender }); }
           else if (playBackground.active()) await playBackground.seek(t);
           else renderAtTime(t, { dt: 1 / fps, first: firstRender });
+          // Video layers: each at this frame, decoded, before the layers are laid over it.
+          await playVideoLayers.seek(t);
           firstRender = false;
           frameTime = t;
         },
@@ -567,6 +570,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         if (queue) { await queueFrame(offlineRender, queue, t, queueScratch); if (planShowsThis(queue)) { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); } }
         else if (playBackground.active()) await playBackground.seek(t);
         else { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); }
+        await playVideoLayers.seek(t);
         playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: applier?.pointer(t), actions, seed: applier?.seed, audio: applier?.audio(t) });
         const img = fx.createImageData(w, h);
         img.data.set(pixels);

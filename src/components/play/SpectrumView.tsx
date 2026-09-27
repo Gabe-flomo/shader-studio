@@ -23,15 +23,18 @@ const DARK = THEMES.dark;
 /** Minor gridlines between the labelled ticks. */
 const MINOR_HZ = [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000];
 const DB_LINES = [-20, -40, -60, -80];
-const PAD = { l: 30, r: 10, t: 20, b: 20 };
+type Pad = { l: number; r: number; t: number; b: number };
+const PAD_FULL: Pad = { l: 30, r: 10, t: 20, b: 20 };
+/** The compact view (a layer card's mini spectrum): no dB scale, labels tucked under the plot. */
+const PAD_COMPACT: Pad = { l: 6, r: 6, t: 8, b: 14 };
 /** How near a dot a press has to land to take it: 16 px for a mouse, 22 px for a finger (a 44 px target). */
 const HIT = { mouse: 16, touch: 22 };
 
 /** Is (x, y) on the plot (or just above it, where the dots' labels go)? */
-const inPlot = (x: number, y: number, W: number, H: number) => x >= PAD.l && x <= W - PAD.r && y >= PAD.t - 6 && y <= H - PAD.b;
+const inPlot = (x: number, y: number, W: number, H: number, PAD: Pad) => x >= PAD.l && x <= W - PAD.r && y >= PAD.t - 6 && y <= H - PAD.b;
 
 /** The reader whose dot is nearest (x, y), within `slop` px. */
-function readerAt(readers: readonly AudioReader[], W: number, H: number, x: number, y: number, slop: number): AudioReader | null {
+function readerAt(readers: readonly AudioReader[], W: number, H: number, x: number, y: number, slop: number, PAD: Pad): AudioReader | null {
   const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
   let best: AudioReader | null = null, bd = slop;
   for (const r of readers) {
@@ -56,10 +59,17 @@ export interface SpectrumViewProps {
   onSelect: (id: string) => void;
   onAdd: (hz: number, topDb: number) => void;
   onMove: (id: string, hz: number, gain: number) => void;
+  /** A small version for a layer card: no dB scale, fewer labels. */
+  compact?: boolean;
+  /** Draw this spectrum instead of the readers' input's (a Video layer's own sound). Null: silent. */
+  spectrum?: () => { freq: Float32Array; sampleRate: number } | null;
+  /** What it says while there is no sound. */
+  emptyText?: string;
 }
 
 export function SpectrumView(props: SpectrumViewProps) {
   const { height } = props;
+  const PAD = props.compact ? PAD_COMPACT : PAD_FULL;
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const live = useRef(props);
@@ -105,7 +115,8 @@ export function SpectrumView(props: SpectrumViewProps) {
       if (!cv || !ctx || s.w <= 0) return;
       const dt = s.last ? Math.min(0.1, (now - s.last) / 1000) : 1 / 60;
       s.last = now;
-      const { readers, selected, peakHold, canAdd } = live.current;
+      const { readers, selected, peakHold, canAdd, compact } = live.current;
+      const PAD = compact ? PAD_COMPACT : PAD_FULL;
       const W = s.w, H = s.h;
       const pw = W - PAD.l - PAD.r, ph = H - PAD.t - PAD.b;
       const xOf = (hz: number) => PAD.l + hzToUnit(hz) * pw;
@@ -127,7 +138,7 @@ export function SpectrumView(props: SpectrumViewProps) {
       for (const t of SPEC_TICKS) { const x = Math.round(xOf(t.hz)) + 0.5; ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + ph); }
       for (const db of DB_LINES) { const y = Math.round(yOf(db)) + 0.5; ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l + pw, y); }
       ctx.stroke();
-      ctx.font = `500 9.5px ${fontFamily.ui}`;
+      ctx.font = `500 ${compact ? 8.5 : 9.5}px ${fontFamily.ui}`;
       ctx.fillStyle = DARK.text.faint;
       ctx.textBaseline = 'top';
       for (const t of SPEC_TICKS) {
@@ -135,8 +146,10 @@ export function SpectrumView(props: SpectrumViewProps) {
         ctx.textAlign = t.hz === 20 ? 'left' : t.hz === 20000 ? 'right' : 'center';
         // Narrow views keep every other label.
         if (pw < 360 && (t.hz === 50 || t.hz === 500 || t.hz === 5000)) continue;
-        ctx.fillText(t.label, x, PAD.t + ph + 5);
+        if (compact && pw < 240 && (t.hz === 20 || t.hz === 200 || t.hz === 2000 || t.hz === 20000)) continue;
+        ctx.fillText(t.label, x, PAD.t + ph + (compact ? 3 : 5));
       }
+      if (!compact) {
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       for (const db of DB_LINES) ctx.fillText(`${db}`, PAD.l - 5, yOf(db));
@@ -145,6 +158,7 @@ export function SpectrumView(props: SpectrumViewProps) {
       ctx.fillText('dB', 6, 5);
       ctx.textAlign = 'right';
       ctx.fillText('Hz', W - PAD.r, 5);
+      }
 
       // Reader bands, behind the curve.
       for (const r of readers) {
@@ -156,7 +170,7 @@ export function SpectrumView(props: SpectrumViewProps) {
 
       // The spectrum: one point every 2 px, each the mean power over its slice of the log axis.
       audioReaderBank.update();
-      const spec = audioReaderBank.spectrum();
+      const spec = live.current.spectrum ? live.current.spectrum() : audioReaderBank.spectrum();
       const n = Math.max(16, Math.floor(pw / 2));
       if (!s.disp || s.disp.length !== n) { s.disp = new Float32Array(n).fill(PLOT_DB_MIN); s.peak = new Float32Array(n).fill(PLOT_DB_MIN); s.peakAge = new Float32Array(n); }
       const disp = s.disp, peak = s.peak!, age = s.peakAge!;
@@ -243,7 +257,7 @@ export function SpectrumView(props: SpectrumViewProps) {
       });
 
       // Where the pointer is, and what a click there does.
-      if (s.hover && !s.drag && inPlot(s.hover.x, s.hover.y, W, H)) {
+      if (s.hover && !s.drag && inPlot(s.hover.x, s.hover.y, W, H, PAD)) {
         const hz = unitToHz((s.hover.x - PAD.l) / pw);
         const db = PLOT_DB_MAX - ((s.hover.y - PAD.t) / ph) * (PLOT_DB_MAX - PLOT_DB_MIN);
         ctx.strokeStyle = 'rgba(255,255,255,0.22)';
@@ -253,22 +267,22 @@ export function SpectrumView(props: SpectrumViewProps) {
         ctx.fillStyle = DARK.text.muted;
         ctx.textBaseline = 'top';
         ctx.textAlign = 'right';
-        const over = readerAt(readers, W, H, s.hover.x, s.hover.y, HIT.mouse);
-        ctx.fillText(`${formatHz(hz)} · ${Math.round(db)} dB${over ? '' : canAdd ? '  ·  click to add a reader' : '  ·  16 readers at most'}`, W - PAD.r - 22, 5);
+        const over = readerAt(readers, W, H, s.hover.x, s.hover.y, HIT.mouse, PAD);
+        ctx.fillText(compact ? formatHz(hz) : `${formatHz(hz)} · ${Math.round(db)} dB${over ? '' : canAdd ? '  ·  click to add a reader' : '  ·  16 readers at most'}`, W - PAD.r - (compact ? 2 : 22), compact ? 2 : 5);
       }
       if (!spec) {
-        ctx.font = `500 12px ${fontFamily.ui}`;
+        ctx.font = `500 ${compact ? 11 : 12}px ${fontFamily.ui}`;
         ctx.fillStyle = DARK.text.faint;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('No sound coming in', PAD.l + pw / 2, PAD.t + ph / 2);
+        ctx.fillText(live.current.emptyText ?? 'No sound coming in', PAD.l + pw / 2, PAD.t + ph / 2);
       }
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  const hitReader = (x: number, y: number, slop: number) => readerAt(live.current.readers, st.current.w, st.current.h, x, y, slop);
+  const hitReader = (x: number, y: number, slop: number) => readerAt(live.current.readers, st.current.w, st.current.h, x, y, slop, PAD);
   const local = (e: React.PointerEvent) => {
     const r = canvas.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -290,7 +304,7 @@ export function SpectrumView(props: SpectrumViewProps) {
       try { canvas.current?.setPointerCapture(e.pointerId); } catch { /* moves still arrive while over the canvas */ }
       return;
     }
-    if (!inPlot(p.x, p.y, st.current.w, st.current.h) || !live.current.canAdd) return;
+    if (!inPlot(p.x, p.y, st.current.w, st.current.h, PAD) || !live.current.canAdd) return;
     st.current.tap = { x: p.x, y: p.y, pointer: e.pointerId };
   };
   const onPointerMove = (e: React.PointerEvent) => {

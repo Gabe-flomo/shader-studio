@@ -291,7 +291,7 @@ export type PlaySource =
 export const DATA_ROW_COLUMN = '#row';
 
 /** Layer kinds with a centre on the picture: what proximity triggers and distance sensors can measure from. */
-export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data'];
+export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data', 'video'];
 
 export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble' | 'area' | 'perimeter';
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
@@ -336,10 +336,10 @@ export interface PlayMapping {
 
 export type {
   BlendMode, MatteMode, NullLayer, TextLayer, ImageLayer, ParticlesLayer, ParticleField, ParticleShape, ParticleModulator,
-  ShapeLayer, ZoneAction, AudioLayer, GlyphsLayer, ContoursLayer, LensLayer, BrushLayer, BodiesLayer, CameraLayer,
+  ShapeLayer, ZoneAction, AudioLayer, GlyphsLayer, ContoursLayer, LensLayer, BrushLayer, BodiesLayer, CameraLayer, VideoLayer, VideoFit, VideoSound,
   PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind, DataLayer, DataView, DataSplit, TrackMatte, LayerMask, MaskShape, MaskOp, MaskProp,
 } from './playLayers';
-export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot } from './playLayers';
+export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot, videoLayerTimeAt, videoReaderInput, videoLayerOfInput } from './playLayers';
 import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataTypes';
 import { parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';

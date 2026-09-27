@@ -204,7 +204,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
           </div>
         </>
       )}
-      {note(`Comes along: the picture, ${bg ? '' : 'controls, '}mappings and layers${input.play.layers.some(l => l.kind === 'image') ? ', images placed as layers' : ''}${carried.length ? ', and what is listed above' : ''}. Google Fonts load from Google when the page opens.${input.media?.audio?.some(a => a.src) ? (bg ? ' A background listens to its song silently from the visitor’s first click or key.' : ' The song plays when the visitor clicks Play sound; the picture reacts from then on.') : ''}`)}
+      {note(`Comes along: the picture, ${bg ? '' : 'controls, '}mappings and layers${input.play.layers.some(l => l.kind === 'image') ? ', images placed as layers' : ''}${carried.length ? ', and what is listed above' : ''}. Google Fonts load from Google when the page opens.${input.play.layers.some(l => l.kind === 'video' && l.sound !== 'off' && !!input.media?.layerVideos?.[l.id]?.src) ? ' A video layer’s sound (and its audio readers) starts at the visitor’s first click or key.' : ''}${input.media?.audio?.some(a => a.src) ? (bg ? ' A background listens to its song silently from the visitor’s first click or key.' : ' The song plays when the visitor clicks Play sound; the picture reacts from then on.') : ''}`)}
       </div>
       <SitePreview snippet={snippet} opts={opts} title={title} site={site} device={device} onSite={setSite} onDevice={setDevice} wide={wide} />
       </div>

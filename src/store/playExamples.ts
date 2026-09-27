@@ -634,6 +634,37 @@ The glow's Radius reads the same distance as a sensor (Layer sensor → Cursor �
 • Wave at it: the glow swells with the motion.
 • Change the glyphs' style to Dots.`,
   })),
+  ex('playVideoSound', glowGraph({ radius: 0.12, falloff: 12, tint: [1, 0.55, 0.3] }), play({
+    audioReaders: {
+      input: 'video:vid',
+      readers: [
+        reader('low', 'Low', 80, 1, 25, 5, 180, [1, 0.45, 0.4]),
+        reader('high', 'High', 6000, 1.5, 45, 1, 80, [0.35, 0.82, 0.98]),
+      ],
+    },
+    layers: [
+      layer('null', 'centre', 'Centre', { x: 0.5, y: 0.5, size: 10, visible: false }),
+      layer('video', 'vid', 'Video', { x: 0.74, y: 0.72, scale: 0.4, fit: 'contain', sound: 'play', volume: 0.8, toShader: false }),
+      layer('particles', 'sparks', 'Sparks', { count: 700, emit: 'burst', spawn: 'null', nullId: 'centre', spawnRadius: 0.04, field: 'noise', noiseScale: 2, speed: 1.2, life: 0.8, fade: 0.7, size: 2.2, sizeJitter: 0.6, colour: 'palette', palette: 1, paletteBy: 'age', trail: 0.5, blend: 'screen' }),
+    ],
+    controls: [ctl('radius', 'circ::radius', 'Pulse (low)', 0.05, 0.4), ctl('vol', 'layer:vid::volume', 'Video · Volume', 0, 1)],
+    mappings: [map('pulse', 'radius', { kind: 'reader', readerId: 'low' }, 0.08, 0.3, { smoothMs: 30 })],
+    actions: [act('highs', T.reader('high', 0.55, 0.2), 'burst', 'sparks', 30)],
+    notes: `**What it shows.** A Video layer whose sound drives the picture. With its Sound on, the video's audio goes through the same analysis as the live input and songs, so audio readers can listen to it: pick out the lows, a voice or the hi-hats and map them to anything.
+
+**Start here.** Open **Layers → Video** and press **Pick a video…** (any MP4, WebM or MOV with sound). It plays in the top-right corner, heard through the master volume. No video ships with the example: yours stays in this browser’s library, not in the setup.
+
+**How it's built.** Two readers listen to **Video · Video** (the Audio readers' Listen to):
+• **Low**, 80 Hz, an octave wide: drives the glow's Pulse.
+• **High**, 6 kHz: an action bursts sparks from the centre each time it crosses 0.55 (**On: Audio reader crosses**).
+The layer card's mini spectrum shows the video's sound with the readers' dots; **Audio readers…** opens the full panel.
+
+**Try this.**
+• Drag a dot on the mini spectrum to retune it, up or down for how loud reads as full.
+• Set Sound to **Listen** to analyse the video without hearing it (it still drives the glow).
+• Pause the clock: the video pauses too, and the readers fall silent. ↺ starts both over.
+• Turn **Clock** off on the layer to let the video run on its own.`,
+  })),
   ex('playBrush', quietGraph(), play({
     layers: [
       layer('particles', 'rain', 'Rain', { count: 700, field: 'none', attractor: 'none', speed: 0.8, angle: -90, spawn: 'edges', edges: 'respawn', size: 1.5, colour: 'tint', color: [0.6, 0.8, 1], trail: 0.4, flock: 0 }),

@@ -157,12 +157,23 @@ export function klPaintShape(s, l, v, W, H, src, text, anim) {
   } else if (src) {
     const iw = src.videoWidth || src.naturalWidth || src.width, ih = src.videoHeight || src.naturalHeight || src.height;
     if (iw > 0 && ih > 0) {
-      const h = v('scale') * H, w = h * iw / ih;
+      const h = v('scale') * H * (l.kind === 'video' ? klVideoFit(l.fit, iw / ih, W / H) : 1), w = h * iw / ih;
       if (l.mirror) s.scale(-1, 1);
       s.drawImage(src, -w / 2, -h / 2, w, h);
     }
   }
   s.restore();
+}
+
+/**
+ * A video layer's height before its Scale, in picture heights: 1 for 'height',
+ * the height that fits a `va`-shaped frame inside (contain) or around (cover)
+ * a `pa`-shaped picture. Its width follows from its own shape.
+ */
+export function klVideoFit(fit, va, pa) {
+  if (fit !== 'contain' && fit !== 'cover') return 1;
+  if (!(va > 0) || !(pa > 0)) return 1;
+  return fit === 'contain' ? Math.min(1, pa / va) : Math.max(1, pa / va);
 }
 
 /**

@@ -1,6 +1,7 @@
 /**
- * audioReaderBank.ts — the setup's audio readers, read from the live input
- * or from an Audio Input node's song, once per frame on the wall clock
+ * audioReaderBank.ts — the setup's audio readers, read from the live input,
+ * an Audio Input node's song or a Video layer's sound (`video:<layerId>`,
+ * see videoSound.ts), once per frame on the wall clock
  * (sound is real time, whatever the graph clock does).
  *
  * The Play engine reads levels here for reader sources and triggers; the
@@ -11,8 +12,10 @@ import type { AudioReader, PlayAudioReaders } from '../types/play';
 import { stepReaders } from '../play/audioReaders';
 import { liveAudio } from './liveAudio';
 import { audioEngine } from './audioEngine';
+import { videoSound } from './videoSound';
+import { videoLayerOfInput } from '../types/playLayers';
 
-export type ReaderInputState = 'live-on' | 'live-off' | 'song' | 'song-missing';
+export type ReaderInputState = 'live-on' | 'live-off' | 'song' | 'song-missing' | 'video' | 'video-missing';
 
 class AudioReaderBank {
   private cfg: PlayAudioReaders | undefined;
@@ -36,6 +39,8 @@ class AudioReaderBank {
   inputState(): ReaderInputState {
     const input = this.input();
     if (!input) return liveAudio.isOn() ? 'live-on' : 'live-off';
+    const video = videoLayerOfInput(input);
+    if (video) return videoSound.analyser(video) ? 'video' : 'video-missing';
     return audioEngine.isLoaded(input) ? 'song' : 'song-missing';
   }
 
@@ -46,7 +51,8 @@ class AudioReaderBank {
       const raw = liveAudio.raw();
       return raw ? { freq: raw.freq, sampleRate: raw.sampleRate } : null;
     }
-    const an = audioEngine.getAnalyser(input);
+    const video = videoLayerOfInput(input);
+    const an = video ? videoSound.analyser(video) : audioEngine.getAnalyser(input);
     if (!an) return null;
     if (!this.buf || this.buf.length !== an.frequencyBinCount) this.buf = new Float32Array(an.frequencyBinCount);
     const now = performance.now();

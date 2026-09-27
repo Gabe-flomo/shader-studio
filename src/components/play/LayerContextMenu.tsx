@@ -23,7 +23,7 @@ export function LayerContextMenu({ play, onChange }: { play: PlayRecord; onChang
   if (l.kind === 'null') quick.push(l.follow === 'mouse' ? { label: 'Stop following the mouse', onSelect: () => patch({ follow: 'none' }) } : { label: 'Follow the mouse', hint: 'On a spring', onSelect: () => patch({ follow: 'mouse' }) });
   if (l.kind === 'shape') quick.push(l.show ? { label: 'Make it invisible', hint: 'Still acts on particles', onSelect: () => patch({ show: false }) } : { label: 'Show it', onSelect: () => patch({ show: true }) });
   if (l.kind === 'text' && l.sequence) quick.push({ label: 'Next line', onSelect: () => playOverlay.act({ do: 'next', layerId: id, amount: 1 }) });
-  if (l.kind === 'text' || l.kind === 'image' || l.kind === 'shape') quick.push({ label: 'Straighten', hint: 'Rotation 0°', onSelect: () => patch({ rotation: 0 }) });
+  if (l.kind === 'text' || l.kind === 'image' || l.kind === 'video' || l.kind === 'shape') quick.push({ label: 'Straighten', hint: 'Rotation 0°', onSelect: () => patch({ rotation: 0 }) });
   return (
     <Menu
       x={at.x}

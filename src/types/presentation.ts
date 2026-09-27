@@ -282,6 +282,10 @@ function parseMedia(v: unknown): PlayMedia | undefined {
       });
     }
   }
+  if (isObj(v.layerVideos)) {
+    out.layerVideos = {};
+    for (const [k, x] of Object.entries(v.layerVideos)) { const f = parseFile(x, 'video'); if (f) out.layerVideos[k.slice(0, 100)] = f; }
+  }
   return out;
 }
 

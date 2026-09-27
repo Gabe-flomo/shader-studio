@@ -13,6 +13,7 @@
  * While this tab is open the overlay is in editing mode: shapes can be
  * dragged and invisible zones are outlined.
  */
+import { VideoEditor } from './layers/VideoEditor';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { accentColor } from '../../theme/categories';
@@ -561,6 +562,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
     case 'text': body = <TextEditor f={f} ctx={ctx} pictureHidden={pictureHidden} />; break;
     case 'image': body = <ImageEditor f={f} pictureHidden={pictureHidden} />; break;
     case 'camera': body = <CameraEditor f={f} pictureHidden={pictureHidden} />; break;
+    case 'video': body = <VideoEditor f={f} ctx={ctx} pictureHidden={pictureHidden} />; break;
     case 'particles': body = <ParticlesEditor f={f} ctx={ctx} />; break;
     case 'shape': body = <ShapeEditor f={f} ctx={ctx} />; break;
     case 'audio': body = <AudioEditor f={f} />; break;
