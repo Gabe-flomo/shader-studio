@@ -20,6 +20,10 @@ import type { BlockContext } from './Blocks';
 import { StepView } from './StepView';
 import { usePresentation } from './presentationStore';
 import { openOnStage } from './stageHandoff';
+import { Backdrop } from './Backdrop';
+import { COLUMN, lookVars, useImageMap, useStepLook } from './presentLook';
+import { stepLook, type StepLook } from '../../types/presentationStyle';
+import type { Step } from '../../types/presentation';
 
 const typing = (t: EventTarget | null) => t instanceof HTMLElement && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
 
@@ -89,6 +93,7 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
   useEffect(() => { const on = () => setFs(!!document.fullscreenElement); document.addEventListener('fullscreenchange', on); return () => document.removeEventListener('fullscreenchange', on); }, []);
   const toggleFs = () => { if (document.fullscreenElement) void document.exitFullscreen(); else void rootRef.current?.requestFullscreen?.().catch(() => {}); };
   const step = doc?.steps[index];
+  const look = useStepLook(step);
   if (!doc || !step) return null;
   const full: BlockContext = { ...ctx, editing: false, active: true, large: !ctx.compact };
   // The step's first canvas, for the Stage button.
@@ -97,12 +102,16 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
   const onStage = firstSource ? () => openOnStage(doc, firstSource, step) : undefined;
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark) }}>
-      <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        <div key={step.id} style={{
-          maxWidth: 1180, margin: '0 auto', boxSizing: 'border-box', minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center',
-          padding: ctx.compact ? '22px 16px 28px' : '44px 56px 44px', animation: 'pp-in .28s ease-out',
-        }}>
-          <StepView step={step} index={index} total={total} ctx={full} />
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        {/* Keyed by step: the next background fades in over the last. */}
+        <Backdrop key={step.id} look={look} column={COLUMN.slides} style={{ animation: 'pp-fade .35s ease-out' }} />
+        <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto', position: 'relative', zIndex: 1, ...lookVars(look) }}>
+          <div key={step.id} style={{
+            maxWidth: 1180, margin: '0 auto', boxSizing: 'border-box', minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center',
+            padding: ctx.compact ? '22px 16px 28px' : '44px 56px 44px', animation: 'pp-in .28s ease-out',
+          }}>
+            <StepView step={step} index={index} total={total} ctx={full} />
+          </div>
         </div>
       </div>
       <NavBar index={index} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={i => setStep(i)} fullscreen={fs} onFullscreen={ctx.compact ? undefined : toggleFs} onStage={onStage} />
@@ -120,6 +129,17 @@ export function ScrollView({ ctx }: { ctx: Omit<BlockContext, 'active' | 'editin
   const [progress, setProgress] = useState(0);
   const [current, setCurrent] = useState(() => usePresentation.getState().step);
   const total = doc?.steps.length ?? 0;
+  const images = useImageMap();
+  const looks = useMemo(() => (doc?.steps ?? []).map(st => stepLook(doc?.style, images, st)), [doc?.steps, doc?.style, images]);
+  // The scroller's height: a step's background stays in view (sticky) while its step scrolls past.
+  const [viewH, setViewH] = useState(0);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setViewH(el.clientHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [doc]);
   // Open where the Edit view was.
   useEffect(() => {
     const i = usePresentation.getState().step;
@@ -148,20 +168,52 @@ export function ScrollView({ ctx }: { ctx: Omit<BlockContext, 'active' | 'editin
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, zIndex: 3, background: alpha(tk.accent.base, 0.12) }}>
         <div style={{ width: `${progress * 100}%`, height: '100%', background: tk.accent.base, transition: 'width .08s linear' }} />
       </div>
-      <div ref={scroller} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        <article style={{ maxWidth: 920, margin: '0 auto', padding: ctx.compact ? '26px 16px 120px' : '56px 48px 160px', boxSizing: 'border-box' }}>
-          <h1 style={{ margin: '0 0 8px', color: tk.text.primary, font: `760 ${ctx.compact ? 28 : 38}px/1.15 ${fontFamily.ui}`, letterSpacing: '-0.02em' }}>{doc.title}</h1>
-          <div style={{ color: tk.text.faint, font: `500 13px ${fontFamily.ui}`, marginBottom: ctx.compact ? 30 : 48 }}>{total} step{total === 1 ? '' : 's'}</div>
-          {doc.steps.map((s, i) => (
-            <section key={s.id} ref={el => { if (el) sections.current.set(i, el); else sections.current.delete(i); }} style={{ scrollMarginTop: 24, paddingBottom: ctx.compact ? 44 : 64, marginBottom: ctx.compact ? 44 : 64, borderBottom: i < total - 1 ? `1px solid ${tk.border.default}` : 'none' }}>
-              <StepView step={s} index={i} total={total} ctx={c} />
-            </section>
-          ))}
-        </article>
+      <div ref={scroller} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', ['--pp-vh' as string]: viewH ? `${viewH}px` : '100vh' }}>
+        {doc.steps.map((s, i) => (
+          <ScrollSection key={s.id} step={s} index={i} total={total} ctx={c} look={looks[i]} prevBg={i > 0 && !!looks[i - 1].bg} last={i === total - 1}
+            title={i === 0 ? doc.title : undefined}
+            sectionRef={el => { if (el) sections.current.set(i, el); else sections.current.delete(i); }} />
+        ))}
       </div>
       <div style={{ position: 'absolute', bottom: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 3 }}>
         <NavBar floating index={current} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={jump} />
       </div>
     </div>
+  );
+}
+
+/**
+ * One step of the Scroll view: full width, so its background runs edge to
+ * edge; the background is sticky (it stays put while a long step scrolls by,
+ * then leaves with it) and clipped to the step. The first carries the title.
+ */
+function ScrollSection({ step, index, total, ctx, look, prevBg, last, title, sectionRef }: {
+  step: Step; index: number; total: number; ctx: BlockContext; look: StepLook; prevBg: boolean; last: boolean; title?: string;
+  sectionRef: (el: HTMLElement | null) => void;
+}) {
+  const tk = useTokens();
+  const bg = !!look.bg;
+  const pad = ctx.compact ? 44 : 64;
+  // Two plain steps in a row get a rule between them, as on paper; a background is its own divider.
+  const rule = index > 0 && !bg && !prevBg;
+  return (
+    <section ref={sectionRef} style={{ position: 'relative', clipPath: bg ? 'inset(0)' : undefined, scrollMarginTop: 0, ...lookVars(look) }}>
+      {bg && (
+        <div style={{ position: 'sticky', top: 0, height: 'var(--pp-vh, 100vh)', marginBottom: 'calc(-1 * var(--pp-vh, 100vh))', zIndex: 0 }}>
+          <Backdrop look={look} column={COLUMN.scroll} />
+        </div>
+      )}
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 920, margin: '0 auto', boxSizing: 'border-box', padding: ctx.compact ? '0 16px' : '0 48px' }}>
+        <div style={{ borderTop: rule ? `1px solid var(--pp-rule, ${tk.border.default})` : undefined, paddingTop: title ? (ctx.compact ? 26 : 56) : pad, paddingBottom: last ? (ctx.compact ? 120 : 160) : pad }}>
+          {title && (
+            <>
+              <h1 className="pp-title" style={{ margin: '0 0 8px', fontSize: `calc(${ctx.compact ? 28 : 38}px * var(--pp-scale, 1))`, letterSpacing: '-0.02em', lineHeight: 1.15 }}>{title}</h1>
+              <div style={{ color: `var(--pp-muted, ${tk.text.faint})`, font: `500 13px ${fontFamily.ui}`, marginBottom: ctx.compact ? 30 : 48 }}>{total} step{total === 1 ? '' : 's'}</div>
+            </>
+          )}
+          <StepView step={step} index={index} total={total} ctx={ctx} />
+        </div>
+      </div>
+    </section>
   );
 }

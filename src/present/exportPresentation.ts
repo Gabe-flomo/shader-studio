@@ -31,6 +31,8 @@ import { sourceLimits } from './snapshot';
 import { aspectRatio, PRESENTATION_FILE_KIND, type Block, type Presentation, type PresentSource } from '../types/presentation';
 import type { MarkdownOptions } from './markdown';
 import { creditPlace, creditSentence } from '../types/credit';
+import { fontFaceCss, stepLook, textVars, typeVars, usedImages, type PresentImage } from '../types/presentationStyle';
+import { backdropLayers, declsToCss } from './backdrop';
 
 export interface PresentationHtmlOptions {
   layout: 'slides' | 'scroll';
@@ -152,31 +154,37 @@ function blockHtml(b: Block, sources: ReadonlyMap<string, PresentSource>, render
 
 const PAGE_CSS = `
 *{box-sizing:border-box}html,body{margin:0}[hidden]{display:none!important}
-body{background:#eef0f4;color:#3a3d47;font:16px/1.62 system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
-.pp-md{overflow-wrap:break-word;min-width:0}.pp-md>:first-child{margin-top:0}.pp-md>:last-child{margin-bottom:0}
+body{--pp-heading:#1a1b23;--pp-body:#3a3d47;--pp-muted:#6b6f7a;--pp-accent:#2f5fe0;--pp-wash:#f4f5f8;--pp-rule:#e7e8ee;--pp-shadow:none;background:#eef0f4;color:#3a3d47;font:16px/1.62 var(--pp-font-body,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif);-webkit-text-size-adjust:100%}
+.pp-md{overflow-wrap:break-word;min-width:0;color:var(--pp-body);font-size:calc(16px * var(--pp-scale,1));line-height:var(--pp-lh,1.62);text-shadow:var(--pp-shadow)}.pp-md>:first-child{margin-top:0}.pp-md>:last-child{margin-bottom:0}
 .pp-md p,.pp-md ul,.pp-md ol,.pp-md pre,.pp-md blockquote,.pp-md table{margin:0 0 .8em}
-.pp-md h1,.pp-md h2,.pp-md h3{color:#1a1b23;line-height:1.25;margin:1.1em 0 .45em}
-.pp-md strong{color:#1a1b23}.pp-md a{color:#2f5fe0}
-.pp-md code{font:.88em ui-monospace,SFMono-Regular,Menlo,monospace;background:#f4f5f8;padding:.1em .35em;border-radius:5px;color:#1a1b23}
-.pp-md pre{background:#f4f5f8;padding:10px 12px;border-radius:8px;overflow:auto}.pp-md pre code{background:none;padding:0}
-.pp-md blockquote{border-left:3px solid #d7d9e2;padding-left:.9em;color:#6b6f7a}
+.pp-md h1,.pp-md h2,.pp-md h3{color:var(--pp-heading);font-family:var(--pp-font-heading,inherit);font-weight:var(--pp-hw,700);line-height:1.25;margin:1.1em 0 .45em}
+.pp-md strong{color:var(--pp-heading)}.pp-md a{color:var(--pp-accent)}
+.pp-md code{font:.88em var(--pp-font-code,ui-monospace,SFMono-Regular,Menlo,monospace);background:var(--pp-wash);padding:.1em .35em;border-radius:5px;color:var(--pp-heading);text-shadow:none}
+.pp-md pre{background:var(--pp-wash);padding:10px 12px;border-radius:8px;overflow:auto}.pp-md pre code{background:none;padding:0}
+.pp-md blockquote{border-left:3px solid var(--pp-rule);padding-left:.9em;color:var(--pp-muted)}
+.pp-md hr{border:0;border-top:1px solid var(--pp-rule)}.pp-md th,.pp-md td{border:1px solid var(--pp-rule);padding:4px 9px}
 .pp-md img{max-width:100%}.pp-md math{font-size:1.1em}.pp-md .pp-math-display{display:block;margin:.9em 0;overflow-x:auto}
 .pp-md math[display=block]{margin:.2em 0}
-.pp-chip{display:inline-flex;align-items:center;gap:4px;margin:0 1px;padding:1px 8px;border-radius:10px;border:0;font:600 .84em system-ui,sans-serif;background:#3a6ff724;color:#2f5fe0;cursor:pointer}
+.pp-chip{display:inline-flex;align-items:center;gap:4px;margin:0 1px;padding:1px 8px;border-radius:10px;border:0;font:600 .84em system-ui,sans-serif;background:#3a6ff72e;color:var(--pp-accent);cursor:pointer;text-shadow:none}
 .pp-chip:hover,.pp-chip.pp-on{background:#3a6ff742;box-shadow:0 0 0 2px #3a6ff740}
 .pp-chip-gone{background:#f4f5f8;color:#9a9da8;text-decoration:line-through}
-.pp-step{max-width:1100px;margin:0 auto;padding:40px 24px}
-.pp-step>header{display:flex;align-items:baseline;gap:12px;margin-bottom:24px}
-.pp-step>header span{color:#2f5fe0;font:700 12px system-ui,sans-serif;letter-spacing:.06em;flex-shrink:0}.pp-step>header span i{font-style:normal;color:#9a9da8;font-weight:500}
-.pp-step>header h2{margin:0;color:#1a1b23;font:700 28px/1.2 system-ui,sans-serif;letter-spacing:-.015em}
+.pp-step{position:relative}
+.pp-inner{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:40px 24px}
+.pp-inner>header{display:flex;align-items:baseline;gap:12px;margin-bottom:24px}
+.pp-inner>header span{color:var(--pp-accent);font:700 12px system-ui,sans-serif;letter-spacing:.06em;flex-shrink:0;text-shadow:var(--pp-shadow)}.pp-inner>header span i{font-style:normal;color:var(--pp-muted);font-weight:500}
+.pp-inner>header h2,h1.pp-title{margin:0;color:var(--pp-heading);font-family:var(--pp-font-heading,system-ui,sans-serif);font-weight:var(--pp-hw,700);font-size:calc(28px * var(--pp-scale,1));line-height:1.2;letter-spacing:-.015em;text-shadow:var(--pp-shadow)}
+.pp-bg,.pp-bg>i{position:absolute;inset:0;pointer-events:none}.pp-bg{overflow:hidden;z-index:0}
+.slides .pp-bg{animation:pp-fade .35s ease-out}@keyframes pp-fade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.slides .pp-bg{animation:none}}
+.scroll .pp-bgwrap{position:sticky;top:0;height:100vh;margin-bottom:-100vh;z-index:0}.scroll .pp-has-bg{clip-path:inset(0)}
 .pp-grid{display:grid;gap:28px 32px;align-items:start}.pp-grid.pp-2{grid-template-columns:repeat(2,minmax(0,1fr))}.pp-grid>.pp-wide{grid-column:1/-1}
 .pp-grid>*{min-width:0}
 figure{margin:0}
 .pp-render{display:flex;flex-direction:column;align-items:center;gap:8px}.pp-render>*{width:var(--w);max-width:100%;min-width:min(200px,100%)}
-.pp-render figcaption{color:#6b6f7a;font-size:13.5px;text-align:center}
-.pp-credit{margin:0;color:#9a9da8;font:500 12.5px/1.45 system-ui,sans-serif}.pp-render .pp-credit{text-align:center;margin-top:-4px}
+.pp-render figcaption{color:var(--pp-muted);font-size:13.5px;text-align:center;text-shadow:var(--pp-shadow)}
+.pp-credit{margin:0;color:var(--pp-muted);font:500 12.5px/1.45 system-ui,sans-serif}.pp-render .pp-credit{text-align:center;margin-top:-4px}
 .pp-credit svg{vertical-align:-1px;margin-right:6px}
-.pp-credit a{color:#2f5fe0;font-weight:600;text-decoration:none}.pp-credit a:hover{text-decoration:underline}
+.pp-credit a{color:var(--pp-accent);font-weight:600;text-decoration:none}.pp-credit a:hover{text-decoration:underline}
 .pp-pic{display:flex;flex-direction:column;gap:8px;min-width:0}
 .pp-canvas{position:relative;width:100%;border-radius:12px;overflow:hidden;background:#0d0d12}
 .slides .pp-render .pp-canvas{max-width:calc(56vh * var(--ar,1.78));margin:0 auto}
@@ -201,7 +209,7 @@ figure{margin:0}
 .pp-code-head{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 12px;background:#fff;border-bottom:1px solid #eef0f3;font:500 12px system-ui,sans-serif;color:#6b6f7a}
 .pp-code-head b{font:650 10.5px ui-monospace,Menlo,monospace;letter-spacing:.04em;color:#9a9da8}.pp-code-head span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pp-copy{border:0;background:none;color:#3a3d47;font:500 12px system-ui,sans-serif;cursor:pointer;padding:4px 8px;border-radius:6px}.pp-copy:hover{background:#f2f3f6}
-.pp-code pre{margin:0;padding:8px 0;max-height:460px;overflow:auto;font:12.5px/1.62 ui-monospace,SFMono-Regular,Menlo,monospace}
+.pp-code pre{margin:0;padding:8px 0;max-height:460px;overflow:auto;font:12.5px/1.62 var(--pp-font-code,ui-monospace,SFMono-Regular,Menlo,monospace)}
 .pp-line,.pp-gap{display:block;white-space:pre;padding-right:16px}.pp-line i,.pp-gap i{display:inline-block;width:calc(var(--gw) + 26px);padding-right:14px;text-align:right;color:#c3c5cf;font-style:normal;user-select:none}
 .pp-mark{background:#3a6ff71f;box-shadow:inset 3px 0 0 #3a6ff7}.pp-mark i{color:#3a6ff7}.pp-gap{color:#9a9da8;font:500 11px system-ui,sans-serif;padding:2px 0}
 .pp-code figcaption{padding:7px 12px 8px;border-top:1px solid #eef0f3;color:#6b6f7a;font-size:13px}
@@ -217,20 +225,61 @@ figure{margin:0}
 .pp-over{display:inline-flex;align-items:center;height:28px;padding:0 10px;border:0;border-radius:8px;background:#0b0b10b3;color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}.pp-over:disabled{opacity:.75;cursor:default}
 .slides{height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 .slides .pp-stage{flex:1;min-height:0;overflow-y:auto}
-.slides .pp-step{min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:44px 56px;max-width:1180px}
-.slides .pp-step>header h2{font-size:32px}.slides .pp-md{font-size:17px}
+.slides .pp-step{min-height:100%;display:flex;flex-direction:column;justify-content:center}
+.slides .pp-inner{width:100%;padding:44px 56px;max-width:1180px}
+.slides .pp-inner>header h2{font-size:calc(32px * var(--pp-scale,1))}.slides .pp-md{font-size:calc(17px * var(--pp-scale,1))}
 .pp-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fff;border-top:1px solid #e7e8ee}
 .pp-bar>button{width:34px;height:34px;border:0;border-radius:9px;background:none;color:#3a3d47;font-size:18px;cursor:pointer}.pp-bar>button:disabled{opacity:.35;cursor:default}
 .pp-progress{flex:1;display:flex;gap:4px}.pp-progress button{flex:1;height:18px;padding:0;border:0;background:none;cursor:pointer;display:flex;align-items:center}
 .pp-progress button::after{content:'';width:100%;height:4px;border-radius:2px;background:#d7d9e2}.pp-progress .pp-done::after{background:#3a6ff78c}.pp-progress .pp-now::after{background:#3a6ff7}
 .pp-count{font:600 12px ui-monospace,Menlo,monospace;color:#6b6f7a;min-width:48px;text-align:center}
-.scroll .pp-doc{max-width:920px;margin:0 auto;padding:56px 0 120px}.scroll h1.pp-title{margin:0 24px 8px;color:#1a1b23;font:760 38px/1.15 system-ui,sans-serif;letter-spacing:-.02em}
-.scroll .pp-step{padding:48px 24px 56px;border-bottom:1px solid #e7e8ee}.scroll .pp-step:last-child{border-bottom:0}
+.scroll .pp-inner{max-width:920px;padding:56px 24px}.scroll .pp-step:last-of-type .pp-inner{padding-bottom:120px}
+.scroll h1.pp-title{margin:0 0 8px;font-size:calc(38px * var(--pp-scale,1));line-height:1.15;letter-spacing:-.02em}.pp-count-steps{color:var(--pp-muted);font-size:13px;margin-bottom:40px}
+.scroll .pp-rule>.pp-inner{border-top:1px solid var(--pp-rule)}
 .pp-scrollbar{position:fixed;top:0;left:0;right:0;height:3px;background:#3a6ff71f;z-index:5}.pp-scrollbar i{display:block;height:100%;width:0;background:#3a6ff7}
-.pp-by{margin:60px 24px 0;color:#9a9da8;font-size:12px}
+.pp-by{max-width:920px;margin:0 auto;padding:0 24px 60px;color:#9a9da8;font-size:12px}
 @media (max-width:767px){.pp-grid.pp-2{grid-template-columns:1fr}.pp-inter.pp-side{grid-template-columns:1fr}.pp-render>*{width:100%}
-.slides .pp-step{padding:22px 16px 28px;justify-content:flex-start}.pp-step{padding:26px 16px}.slides .pp-step>header h2,.pp-step>header h2{font-size:22px}.slides .pp-md{font-size:16px}.scroll h1.pp-title{font-size:28px;margin:0 16px 8px}.scroll .pp-doc{padding-top:26px}}
+.slides .pp-step{justify-content:flex-start}.slides .pp-inner{padding:22px 16px 28px}.pp-inner,.scroll .pp-inner{padding:40px 16px}.slides .pp-inner>header h2,.pp-inner>header h2{font-size:calc(22px * var(--pp-scale,1))}.slides .pp-md{font-size:calc(16px * var(--pp-scale,1))}.scroll h1.pp-title{font-size:calc(28px * var(--pp-scale,1))}.scroll .pp-step:first-child .pp-inner{padding-top:26px}}
 `;
+
+/** Content column widths the blur falloff is shaped around (the page's reading width in each layout). */
+const EXPORT_COLUMN = { slides: 1068, scroll: 872 } as const;
+
+/**
+ * The page's look: the fonts' @font-face rules and the typography's variables,
+ * each image background once (a class the layers share, so a picture used on
+ * many steps, or blurred over itself, is carried once), and each step's
+ * background layers and text colours.
+ */
+export function styleSheet(p: Presentation, layout: 'slides' | 'scroll'): { css: string; looks: ReturnType<typeof stepLook>[]; backdrops: string[] } {
+  const images = new Map<string, PresentImage>((p.images ?? []).map(i => [i.id, i]));
+  const cls = new Map<string, string>();
+  const rules: string[] = [];
+  const fonts = fontFaceCss(p.fonts ?? []);
+  if (fonts) rules.push(fonts);
+  const tv = Object.entries(typeVars(p.style?.typography)).map(([k, v]) => `${k}:${v}`).join(';');
+  if (tv) rules.push(`:root{${tv}}`);
+  const looks = p.steps.map(s => stepLook(p.style, images, s));
+  const backdrops = looks.map(look => {
+    const bg = look.bg;
+    if (!bg) return '';
+    const img = bg.kind === 'image' && bg.image ? images.get(bg.image) : undefined;
+    let imageClass: string | undefined;
+    if (img) {
+      imageClass = cls.get(img.id);
+      if (!imageClass) {
+        imageClass = `pp-img${cls.size + 1}`;
+        cls.set(img.id, imageClass);
+        rules.push(`.${imageClass}{background-image:url("${img.src}")}`);
+      }
+    }
+    const layers = backdropLayers(bg, { imageClass, matte: img?.avg, tone: look.tone, column: EXPORT_COLUMN[layout] });
+    if (!layers.length) return '';
+    const html = `<div class="pp-bg" aria-hidden="true">${layers.map(l => `<i class="pp-l-${l.name}${imageClass && (l.name === 'base' || l.name === 'blur') ? ` ${imageClass}` : ''}" style="${esc(declsToCss(l.decls))}"></i>`).join('')}</div>`;
+    return layout === 'scroll' ? `<div class="pp-bgwrap">${html}</div>` : html;
+  });
+  return { css: rules.join('\n'), looks, backdrops };
+}
 
 /** The whole page. `render` is the Markdown renderer (present/markdown.ts), passed in so this stays importable anywhere. */
 export function buildPresentationHtml(p: Presentation, render: Render, opts: PresentationHtmlOptions): string {
@@ -239,20 +288,26 @@ export function buildPresentationHtml(p: Presentation, render: Render, opts: Pre
   const used = new Set(p.steps.flatMap(s => s.blocks.flatMap(b => (b.type === 'render' || b.type === 'interactive' ? [b.source] : []))));
   const bundles = Object.fromEntries(p.sources.filter(s => used.has(s.id)).map(s => [s.id, playBundle(s.bundle)]));
   const total = p.steps.length;
+  const style = styleSheet(p, opts.layout);
   const steps = p.steps.map((s, i) => {
     const blocks = s.blocks.map(b => {
       const html = blockHtml(b, sources, render, math);
       return html ? `<div class="pp-block${b.type === 'interactive' || s.columns === 1 ? ' pp-wide' : ''}">${html}</div>` : '';
     }).join('\n');
     const num = `<span>${String(i + 1).padStart(2, '0')}<i> / ${String(total).padStart(2, '0')}</i></span>`;
-    return `<section class="pp-step" data-step="${i}"${opts.layout === 'slides' && i > 0 ? ' hidden' : ''}><header>${num}${s.title ? `<h2>${esc(s.title)}</h2>` : ''}</header><div class="pp-grid${s.columns === 2 ? ' pp-2' : ''}">${blocks}</div></section>`;
+    const look = style.looks[i];
+    const vars = Object.entries(textVars(look.text)).map(([k, v]) => `${k}:${v}`).join(';');
+    const bg = style.backdrops[i];
+    const cls = ['pp-step', bg ? 'pp-has-bg' : '', opts.layout === 'scroll' && i > 0 && !bg && !style.backdrops[i - 1] ? 'pp-rule' : ''].filter(Boolean).join(' ');
+    const title = opts.layout === 'scroll' && i === 0 ? `<h1 class="pp-title">${esc(p.title)}</h1><div class="pp-count-steps">${total} step${total === 1 ? '' : 's'}</div>` : '';
+    return `<section class="${cls}" data-step="${i}"${vars ? ` style="${esc(vars)}"` : ''}${opts.layout === 'slides' && i > 0 ? ' hidden' : ''}>${bg}<div class="pp-inner">${title}<header>${num}${s.title ? `<h2>${esc(s.title)}</h2>` : ''}</header><div class="pp-grid${s.columns === 2 ? ' pp-2' : ''}">${blocks}</div></div></section>`;
   }).join('\n');
   const nav = opts.layout === 'slides'
     ? `<nav class="pp-bar"><button type="button" class="pp-prev" aria-label="Previous step">‹</button><div class="pp-progress">${p.steps.map((s, i) => `<button type="button" aria-label="${i + 1}. ${esc(s.title ?? 'Step')}" title="${i + 1}. ${esc(s.title ?? 'Step')}"></button>`).join('')}</div><span class="pp-count">1 / ${total}</span><button type="button" class="pp-next" aria-label="Next step">›</button></nav>`
     : '<div class="pp-scrollbar"><i></i></div>';
   const body = opts.layout === 'slides'
     ? `<main class="pp-stage">${steps}</main>${nav}`
-    : `${nav}<main class="pp-doc"><h1 class="pp-title">${esc(p.title)}</h1>${steps}<p class="pp-by">Made with Playfield.</p></main>`;
+    : `${nav}<main class="pp-doc">${steps}<p class="pp-by">Made with Playfield.</p></main>`;
   // Copy takes what the block shows: a live block's current edit, or the code as quoted.
   const copy = `document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('.pp-copy');if(!b)return;var t=b.closest('.pp-code').querySelector('textarea').value;navigator.clipboard&&navigator.clipboard.writeText(t).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1400)})});`;
   const scripts = `${kitScript()}${runtimeSource}\n${pageSource}`.replace(/<\/script/gi, '<\\/script');
@@ -262,7 +317,7 @@ export function buildPresentationHtml(p: Presentation, render: Render, opts: Pre
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${esc(p.title)}</title>
-<style>${PAGE_CSS}${math === 'html' && opts.katexCss ? opts.katexCss : ''}</style>
+<style>${PAGE_CSS}${style.css}${math === 'html' && opts.katexCss ? opts.katexCss : ''}</style>
 </head>
 <body class="${opts.layout}">
 ${body}
@@ -279,5 +334,7 @@ ${copy}</script>
 export function presentationFileJson(p: Presentation): string {
   const { origin: _origin, ...rest } = p;
   void _origin;
+  // Only the image backgrounds something shows travel.
+  if (rest.images) { const used = usedImages(p.style, p.steps); rest.images = rest.images.filter(i => used.has(i.id)); }
   return JSON.stringify({ kind: PRESENTATION_FILE_KIND, ...rest }, null, 1);
 }

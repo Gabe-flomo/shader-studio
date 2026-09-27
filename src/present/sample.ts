@@ -5,6 +5,7 @@
  * end test.
  */
 import { snapshotExample } from './snapshot';
+import { renderStill, sampleFonts, withStepImage, withTypography } from './sampleStyle';
 import { PRESENTATION_VERSION, newId, type Block, type InteractiveBlock, type Presentation, type PresentSource, type Step } from '../types/presentation';
 
 export const SAMPLE_TITLE = 'Ray marching, step by step';
@@ -103,5 +104,13 @@ Here a sine breathes [[control:radius]] at a quarter of a cycle a second and a t
 Open any of these in the Studio from the source list to see how it's wired.`),
     ], 2),
   ];
-  return { version: PRESENTATION_VERSION, title: SAMPLE_TITLE, steps, sources: keys.map(k => src[k]), createdAt: now, updatedAt: now };
+  let doc: Presentation = { version: PRESENTATION_VERSION, title: SAMPLE_TITLE, steps, sources: keys.map(k => src[k]), createdAt: now, updatedAt: now };
+  // In the app: a still of the march (its glowing ring of steps) behind the first step, softened behind the text,
+  // and a serif for headings over a plain sans (both only when they can be made here).
+  const [still, type] = await Promise.all([
+    renderStill(src.learn3dMarch, { w: 1600, h: 900, time: 2.5 }),
+    sampleFonts({ heading: { family: 'Fraunces', weight: 600 }, body: { family: 'Inter' }, code: { family: 'JetBrains Mono' } }),
+  ]);
+  if (still) doc = withStepImage(doc, 0, still, 'The march at 2.5 s', { blur: 0.5, falloff: 0.75, shade: 0.45, vignette: 0.35 });
+  return withTypography(doc, type);
 }

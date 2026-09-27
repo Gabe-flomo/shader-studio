@@ -34,7 +34,7 @@ export function CodeView({ code, caption, maxHeight = 460 }: { code: ResolvedCod
           <Icon name="warning" size={14} />{code.problem}
         </div>
       ) : (
-        <div style={{ maxHeight, overflow: 'auto', padding: '8px 0', font: `12.5px/1.62 ${fontFamily.mono}` }}>
+        <div style={{ maxHeight, overflow: 'auto', padding: '8px 0', font: `12.5px/1.62 var(--pp-font-code, ${fontFamily.mono})` }}>
           {code.rows.map((r, i) => 'gap' in r ? (
             <div key={`g${i}`} style={{ display: 'flex', color: tk.text.faint, font: `500 11px ${fontFamily.ui}`, padding: '2px 0' }}>
               <span style={{ width: width * 8 + 26, flexShrink: 0, textAlign: 'right', paddingRight: 14 }}>⋯</span>

@@ -9,6 +9,8 @@
 import { buildSamplePresentation, SAMPLE_TITLE } from './sample';
 import { SKETCH_BUTTONS, SKETCH_FIRST, SKETCH_MOUSE, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from '../store/playSketches';
 import { blocks, linesBetween, presentation, sources, step } from './sampleKit';
+import { sampleFonts, withTypography } from './sampleStyle';
+import { PALETTE_PRESETS, paletteFill } from '../lib/backgroundLibrary';
 import type { BlockAspect, Presentation, Step } from '../types/presentation';
 import { BOOK_TITLE, CONVERT_TITLE, FIELD_TITLE, FIRST_PLAY_TITLE, MAKING_TITLE, STUDIO_TITLE, buildBookPresentation, buildConvertPresentation, buildFieldSocketsPresentation, buildFirstPlayPresentation, buildMakingPresentation, buildStudioPresentation } from './teachingSamples';
 
@@ -96,7 +98,11 @@ Blend toward it with [[control:sepia]]; [[control:hue]] turns every colour aroun
       ]),
     ]),
   ];
-  return presentation(MATRICES_TITLE, keys, src, steps, now);
+  // A dark gradient with a vignette behind the first step, and a grotesque with Plex for the text and code.
+  const ink = PALETTE_PRESETS.find(x => x.id === 'preset:ink');
+  const first = ink ? { ...steps[0], background: { kind: 'fill' as const, fill: paletteFill(ink), vignette: 0.45 } } : steps[0];
+  const doc = presentation(MATRICES_TITLE, keys, src, [first, ...steps.slice(1)], now);
+  return withTypography(doc, await sampleFonts({ heading: { family: 'Space Grotesk', weight: 600 }, body: { family: 'IBM Plex Sans' }, code: { family: 'IBM Plex Mono' } }));
 }
 
 // ── Playing a shader ────────────────────────────────────────────────────────

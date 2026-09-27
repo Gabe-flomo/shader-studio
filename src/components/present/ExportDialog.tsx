@@ -17,6 +17,7 @@ import { reportFileResult } from '../shell/reportFileResult';
 import { loadMarkdown } from './useMarkdown';
 import { usePresentation } from './presentationStore';
 import { exportPresentationFile, fileBase } from './presentationFiles';
+import { STYLE_WARN_BYTES, sizeLabel, styleBytes } from '../../types/presentationStyle';
 
 /** KaTeX's stylesheet with its fonts (woff2) inlined as data URLs, so the exported page needs nothing else. */
 async function katexCssInline(): Promise<string> {
@@ -43,6 +44,15 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [math, setMath] = useState<'mathml' | 'html'>('mathml');
   const [busy, setBusy] = useState(false);
   const notes = useMemo(() => (doc ? exportNotes(doc) : []), [doc]);
+  const kept = useMemo(() => {
+    if (!doc) return null;
+    const b = styleBytes(doc);
+    const families = [...new Set((doc.fonts ?? []).map(f => f.family))];
+    const images = doc.images?.length ?? 0;
+    if (!b.total) return null;
+    const parts = [images ? `${images} image background${images === 1 ? '' : 's'}` : '', families.length ? `the fonts ${families.join(', ')}` : ''].filter(Boolean);
+    return { text: `It carries ${parts.join(' and ')}: ${sizeLabel(b.total)}.`, heavy: b.total > STYLE_WARN_BYTES };
+  }, [doc]);
   if (!doc) return null;
   const save = async () => {
     setBusy(true);
@@ -75,6 +85,12 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div>{label('Layout')}<Segmented fill ariaLabel="Layout" value={layout} onChange={setLayout} options={[{ value: 'slides', label: 'Slides', sub: 'one step at a time' }, { value: 'scroll', label: 'Scroll', sub: 'one long page' }]} /></div>
         <div>{label('Maths')}<Segmented fill ariaLabel="Maths" value={math} onChange={setMath} options={[{ value: 'mathml', label: 'MathML', sub: 'small, the browser draws it' }, { value: 'html', label: 'KaTeX', sub: 'same everywhere, ~360 KB more' }]} /></div>
+        {kept && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: kept.heavy ? tk.status.warningText : tk.text.muted, font: `500 12px/1.5 ${fontFamily.ui}` }}>
+            <Icon name={kept.heavy ? 'warning' : 'info'} size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>{kept.text}{kept.heavy ? ' That’s a heavy page: it will be slow to open on phones. Use fewer image backgrounds.' : ' Embedded, so the page works offline.'}</span>
+          </div>
+        )}
         {notes.length > 0 && (
           <div style={{ padding: '10px 12px', borderRadius: radius.lg, background: tk.bg.field, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: tk.status.warningText, font: `650 12px ${fontFamily.ui}` }}><Icon name="warning" size={13} />What the page leaves behind</div>

@@ -42,6 +42,8 @@ import { PresentationsDialog } from './PresentationsDialog';
 import { whenSaved } from '../../store/graphVersions';
 import type { BlockContext } from './Blocks';
 import { useCamera } from '../../present/runtimeHost';
+import { Backdrop } from './Backdrop';
+import { COLUMN, lookVars, usePresentFonts, useStepLook, useTypeVars } from './presentLook';
 
 function usePresentationList(): PresentationEntry[] {
   const [list, setList] = useState(listPresentations);
@@ -92,6 +94,8 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
   useEffect(() => () => useCamera.getState().stop(), []);
 
   const css = useMemo(() => presentCss(tk), [tk]);
+  const fonts = usePresentFonts();
+  const typeVars = useTypeVars();
   const ctx: Omit<BlockContext, 'active' | 'editing' | 'large'> = useMemo(() => ({
     sources: new Map((doc?.sources ?? []).map(s => [s.id, s])),
     sandbox: doc?.origin === 'imported',
@@ -99,8 +103,9 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
   }), [doc?.sources, doc?.origin, compact]);
 
   return (
-    <div ref={rootRef} style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark), color: tk.text.primary, font: `13px ${fontFamily.ui}` }}>
+    <div ref={rootRef} style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark), color: tk.text.primary, font: `13px ${fontFamily.ui}`, ...typeVars }}>
       <style>{css}</style>
+      {fonts && <style>{fonts}</style>}
       <Header compact={compact} list={list} onExport={() => setExporting(true)} onBrowse={() => setBrowsing(true)} />
       {!doc ? <EmptyState compact={compact} /> : mode === 'slides' ? <SlidesView ctx={ctx} rootRef={rootRef} /> : mode === 'scroll' ? <ScrollView ctx={ctx} /> : compact ? <EditPhone ctx={ctx} onNavigate={onNavigate} /> : <EditDesktop ctx={ctx} onNavigate={onNavigate} />}
       {exporting && doc && <ExportDialog onClose={() => setExporting(false)} />}
@@ -261,17 +266,21 @@ function EditDesktop({ ctx, onNavigate }: { ctx: Omit<BlockContext, 'active' | '
   const index = usePresentation(s => s.step);
   const select = usePresentation(s => s.select);
   const step = doc?.steps[index];
+  const look = useStepLook(step);
   const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }); }, [index]);
   if (!doc || !step) return null;
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <aside style={{ width: 236, flexShrink: 0, borderRight: `1px solid ${tk.border.default}`, background: tk.bg.subtle }}><StepsList /></aside>
-      <main ref={scroller} onClick={() => select(null)} style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
-        <div style={{ maxWidth: 1040, margin: '0 auto', padding: '48px 48px 120px' }}>
-          <StepView step={step} index={index} total={doc.steps.length} ctx={{ ...ctx, editing: true, active: true, large: false }} />
-        </div>
-      </main>
+      <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex' }}>
+        <Backdrop look={look} column={COLUMN.edit} />
+        <main ref={scroller} onClick={() => select(null)} style={{ flex: 1, minWidth: 0, overflowY: 'auto', position: 'relative', zIndex: 1, ...lookVars(look) }}>
+          <div style={{ maxWidth: 1040, margin: '0 auto', padding: '48px 48px 120px' }}>
+            <StepView step={step} index={index} total={doc.steps.length} ctx={{ ...ctx, editing: true, active: true, large: false }} />
+          </div>
+        </main>
+      </div>
       <aside style={{ width: 340, flexShrink: 0, borderLeft: `1px solid ${tk.border.default}`, background: tk.bg.subtle, overflowY: 'auto' }}>
         <Inspector navigate={onNavigate} />
       </aside>
@@ -287,16 +296,20 @@ function EditPhone({ ctx, onNavigate }: { ctx: Omit<BlockContext, 'active' | 'ed
   const select = usePresentation(s => s.select);
   const [sheet, setSheet] = useState(false);
   const step = doc?.steps[index];
+  const look = useStepLook(step);
   if (!doc || !step) return null;
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <StepsStrip />
-      <main onClick={() => select(null)} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '22px 16px 96px' }}>
-        <StepView step={step} index={index} total={doc.steps.length} ctx={{ ...ctx, editing: true, active: true, large: false }} />
-      </main>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        <Backdrop look={look} column={COLUMN.edit} />
+        <main onClick={() => select(null)} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '22px 16px 96px', position: 'relative', zIndex: 1, ...lookVars(look) }}>
+          <StepView step={step} index={index} total={doc.steps.length} ctx={{ ...ctx, editing: true, active: true, large: false }} />
+        </main>
+      </div>
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 'calc(14px + env(safe-area-inset-bottom, 0px))', display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 5 }}>
         <div style={{ display: 'flex', gap: 6, padding: 5, borderRadius: 24, background: tk.bg.panel, boxShadow: tk.shadow.popover, border: `1px solid ${tk.border.default}`, pointerEvents: 'auto' }}>
-          <Button size="sm" variant="primary" icon="sliders" onClick={() => setSheet(true)} style={{ borderRadius: 18 }}>{selected ? 'Block settings' : 'Step and sources'}</Button>
+          <Button size="sm" variant="primary" icon="sliders" onClick={() => setSheet(true)} style={{ borderRadius: 18 }}>{selected ? 'Block settings' : 'Step and style'}</Button>
           {selected && <Button size="sm" variant="ghost" onClick={() => select(null)} style={{ borderRadius: 18 }}>Done</Button>}
         </div>
       </div>
