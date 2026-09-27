@@ -5,14 +5,30 @@
  * same compile and step as the layer kit, so what runs here runs there.
  */
 import { useEffect, useRef, useState } from 'react';
-import { klSketchCompile, klSketchPress, klSketchStep, type KlSketchState } from '../../../play/kit/layers.js';
+import { klSketchCompile, klSketchDispose, klSketchPress, klSketchStep, type KlSketchState } from '../../../play/kit/layers.js';
+import { k3PictureTexture, k3Render, k3Renderer } from '../../../play/kit/sketch3d.js';
+import { useThreeRuntime } from '../../../play/threeSource';
 import { useTokens } from '../../../theme/themeStore';
 import { fontFamily, radius } from '../../../theme/tokens';
 import type { ScriptParamDef } from '../../../types/playLayers';
 import { Button, IconButton } from '../../ui/Button';
 
-export function ScriptPreview({ code, defs, values, clear, ratio = 16 / 9, width = 320 }: {
+/** No shader here: a soft glow stands in for the picture (its brightness, and in 3D its texture). */
+let glow: HTMLCanvasElement | null = null;
+function glowCanvas(): HTMLCanvasElement {
+  if (glow) return glow;
+  glow = document.createElement('canvas'); glow.width = 256; glow.height = 144;
+  const x = glow.getContext('2d')!;
+  const g = x.createRadialGradient(128, 72, 4, 128, 72, 150);
+  g.addColorStop(0, '#ffe3a3'); g.addColorStop(0.35, '#e0609a'); g.addColorStop(0.7, '#3a3a9a'); g.addColorStop(1, '#0b0b10');
+  x.fillStyle = g; x.fillRect(0, 0, 256, 144);
+  return glow;
+}
+
+export function ScriptPreview({ code, defs, values, clear, mode = '2d', ratio = 16 / 9, width = 320 }: {
   code: string;
+  /** 3D: the sketch draws with three.js (a shared WebGL renderer), copied onto this canvas each frame. */
+  mode?: '2d' | '3d';
   defs: ScriptParamDef[];
   /** Current control values by key (the layer's `p_` values); a missing key uses the declared value. */
   values: Record<string, number>;
@@ -29,14 +45,17 @@ export function ScriptPreview({ code, defs, values, clear, ratio = 16 / 9, width
   const [error, setError] = useState<string | null>(null);
   const [run, setRun] = useState(0);
   const height = Math.round(width / ratio);
+  // 3D: three.js loads on first use; the run starts once it is here.
+  const three = useThreeRuntime(mode === '3d');
+  const waiting = mode === '3d' && !three;
 
   useEffect(() => {
-    const canvas = ref.current; if (!canvas) return;
+    const canvas = ref.current; if (!canvas || waiting) return;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const W = Math.round(width * dpr), H = Math.round(height * dpr);
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d'); if (!ctx) return;
-    const st = klSketchCompile(code);
+    const st = klSketchCompile(code, { mode, three });
     stRef.current = st;
     setError(st.error);
     if (st.error) return;
@@ -53,16 +72,24 @@ export function ScriptPreview({ code, defs, values, clear, ratio = 16 / 9, width
         ctx, width: W, height: H, dpr, time: (now - t0) / 1000, dt, frame: st.frame, params, state: (st as unknown as { state: unknown }).state,
         mouse: { x: m.x * dpr, y: m.y * dpr, over: m.over, down: m.down },
         // No shader here: the picture reads as a soft glow in the middle, so picture-reading sketches show something.
-        picture: { brightness: (x: number, y: number) => Math.max(0, 1 - Math.hypot((x - W / 2) / (W / 2), (y - H / 2) / (H / 2))) },
+        picture: {
+          brightness: (x: number, y: number) => Math.max(0, 1 - Math.hypot((x - W / 2) / (W / 2), (y - H / 2) / (H / 2))),
+          get texture() { return st.g3 ? k3PictureTexture(three, glowCanvas(), 0) : null; },
+        },
         null: () => null, random: Math.random,
       };
       const err = klSketchStep(st, s, defs, clear);
       if (err) { setError(err); return; }
+      if (st.g3) {
+        const out = k3Render(st.g3, k3Renderer(three, W, H), W, H);
+        if (clear || st.frame <= 1) ctx.clearRect(0, 0, W, H);
+        if (out) ctx.drawImage(out, 0, 0);
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => { alive = false; cancelAnimationFrame(raf); };
-  }, [code, width, height, run]);
+    return () => { alive = false; cancelAnimationFrame(raf); klSketchDispose(st); };
+  }, [code, mode, three, waiting, width, height, run]);
 
   const buttons = defs.filter(d => d.kind === 'button');
   return (
@@ -76,6 +103,9 @@ export function ScriptPreview({ code, defs, values, clear, ratio = 16 / 9, width
           onPointerDown={() => { mouse.current.down = true; }}
           onPointerUp={() => { mouse.current.down = false; }}
         />
+        {waiting && !error && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', font: `500 11.5px ${fontFamily.ui}`, color: 'rgba(255,255,255,0.6)' }}>Loading three.js…</div>
+        )}
         {error && (
           <div style={{ position: 'absolute', inset: 0, padding: 10, overflow: 'auto', font: `500 11px/1.4 ${fontFamily.mono}`, color: '#ffb4a2', background: 'rgba(11,11,16,0.9)' }}>{error}</div>
         )}

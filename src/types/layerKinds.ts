@@ -13,11 +13,11 @@
  * missing still runs: the layer becomes a plain Script layer with that code.
  * `parseLayerKinds` and `syncLayerKinds` are the gates parsePlayRecord uses.
  */
-import type { PlayLayer, ScriptLayer, ScriptParamDef } from './playLayers';
+import type { PlayLayer, ScriptLayer, ScriptMode, ScriptParamDef } from './playLayers';
 import { isScriptParamDef } from './playLayers';
 
 /** The icons a kind may use (all of them are IconNames; the UI checks that). */
-export const LAYER_KIND_ICONS = ['code', 'spark', 'star', 'wave', 'dice', 'hash', 'loop', 'curve', 'grid', 'target', 'grip', 'text', 'eye', 'sun', 'moon', 'sliders', 'overlay', 'layoutCanvas'] as const;
+export const LAYER_KIND_ICONS = ['code', 'spark', 'star', 'wave', 'dice', 'hash', 'loop', 'curve', 'grid', 'target', 'grip', 'text', 'eye', 'sun', 'moon', 'sliders', 'overlay', 'layoutCanvas', 'cube'] as const;
 export type LayerKindIcon = (typeof LAYER_KIND_ICONS)[number];
 
 /** The colours a kind may use: accent names the theme turns into a light or a dark shade. */
@@ -35,6 +35,8 @@ export interface LayerKindDef {
   hint: string;
   icon: LayerKindIcon;
   colour: LayerKindColour;
+  /** What the code draws with (a 3D kind makes 3D Script layers). */
+  mode: ScriptMode;
   code: string;
   /** The params the code declares, read when it was saved or last edited. */
   paramDefs: ScriptParamDef[];
@@ -70,6 +72,7 @@ export function parseLayerKind(raw: unknown): LayerKindDef | null {
     hint: typeof k.hint === 'string' ? k.hint.slice(0, 240) : '',
     icon: (LAYER_KIND_ICONS as readonly string[]).includes(k.icon as string) ? k.icon as LayerKindIcon : 'code',
     colour: (LAYER_KIND_COLOURS as readonly string[]).includes(k.colour as string) ? k.colour as LayerKindColour : 'mauve',
+    mode: k.mode === '3d' ? '3d' : '2d',
     code: k.code,
     paramDefs: Array.isArray(k.paramDefs) ? k.paramDefs.filter(isScriptParamDef).slice(0, 32).map(d => ({ ...d })) : [],
     clear: k.clear !== false,
@@ -106,8 +109,8 @@ export function syncLayerKinds(layers: PlayLayer[], kinds: readonly LayerKindDef
     if (l.kind !== 'script' || !l.kindId) return l;
     const k = kinds.find(x => x.id === l.kindId);
     if (!k) { const plain = { ...l } as ScriptLayer; delete plain.kindId; return plain; }
-    if (l.code === k.code && sameDefs(l.paramDefs, k.paramDefs)) return l;
-    return withKindParams({ ...l, code: k.code, paramDefs: k.paramDefs.map(d => ({ ...d })) });
+    if (l.code === k.code && l.mode === k.mode && sameDefs(l.paramDefs, k.paramDefs)) return l;
+    return withKindParams({ ...l, mode: k.mode, code: k.code, paramDefs: k.paramDefs.map(d => ({ ...d })) });
   });
 }
 

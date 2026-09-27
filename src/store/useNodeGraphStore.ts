@@ -16,6 +16,7 @@ import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
 import { buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia } from '../play/exportHtml';
+import { loadThreeSource, playUses3D } from '../play/threeSource';
 import { webInputFrom } from '../play/webInput';
 import { imageDataUrl, mediaSource } from '../lib/mediaSources';
 import { audioUniformNamesByNode } from '../compiler/audioUniformNames';
@@ -4556,6 +4557,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const { loadHandAssets } = await import('../play/handExport');
       input.handAssets = await loadHandAssets();
     }
+    // A 3D Script layer: the page carries three.js, loaded on first need.
+    if (playUses3D(input.play)) await loadThreeSource();
     const base = (title.trim() || 'play').replace(/\.html?$/i, '').replace(/[^\w\- ]+/g, '').trim() || 'play';
     return saveTextFile(buildPlayHtml(input, options), `${base}${options.mode === 'background' ? '-background' : ''}.html`, 'text/html');
   },

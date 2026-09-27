@@ -37,7 +37,7 @@ import { exposeScriptParam } from './scriptExpose';
 import { ScriptPreview } from './ScriptPreview';
 import type { ApplyOptions } from './scriptApply';
 import { scriptCompletions } from './scriptCompletions';
-import { SCRIPT_EXAMPLES, extractScriptParams } from './scriptExamples';
+import { SCRIPT_EXAMPLES, SCRIPT_EXAMPLES_3D, extractScriptParams } from './scriptExamples';
 import { ScriptControlBuilder, ScriptPatternList, ScriptReferenceList } from './ScriptPanels';
 import type { ScriptSnippet } from './scriptSnippets';
 import { controlCandidate, makeControl, placeCode, type ControlKind } from './scriptTools';
@@ -51,7 +51,7 @@ function useNarrow(px: number) {
   return narrow;
 }
 
-export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyError, runError, kind, onSaveAsKind, onClose }: {
+export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyError, runError, kind, onSaveAsKind, mode, onMode, onClose }: {
   l: ScriptLayer;
   f: FieldKit;
   act: (kind: ActionKind, amount?: number) => void;
@@ -67,6 +67,9 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
   kind?: { name: string; icon: IconName; colour: string; uses: number };
   /** A plain Script layer: save the sketch as a layer kind. */
   onSaveAsKind?: () => void;
+  /** What the sketch draws with; the Controls tab can switch it. */
+  mode: '2d' | '3d';
+  onMode: (mode: '2d' | '3d') => void;
   onClose: () => void;
 }) {
   const tk = useTokens();
@@ -115,7 +118,7 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
   const canUndo = histPos.at > 0, canRedo = histPos.at < histPos.len - 1;
 
   // ── Completions and the selection ─────────────────────────────────────────
-  const completions = useMemo(() => scriptCompletions(draft), [draft]);
+  const completions = useMemo(() => scriptCompletions(draft, mode), [draft, mode]);
   const candidate = controlCandidate(draft, selected);
 
   // Defs of the draft (for the scratch run), refreshed a moment after typing stops.
@@ -171,9 +174,10 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
     if (apply(r.code, { startAt }) && alsoControl) pendingExpose.current = candidate.name;
     setSelected('');
   };
-  const loadCode = (code: string, settings?: { clear: boolean; readPicture: boolean }) => { commit(code, 0); apply(code, settings ? { settings } : undefined); };
+  // A starter or example of the other mode switches the layer's mode along with the code.
+  const loadCode = (code: string, settings?: { clear: boolean; readPicture: boolean; mode?: '2d' | '3d' }) => { commit(code, 0); apply(code, settings ? { settings } : undefined); };
   const loadExample = (sn: ScriptSnippet) => {
-    loadCode(sn.example, { clear: sn.settings?.clear ?? true, readPicture: sn.settings?.readPicture ?? false });
+    loadCode(sn.example, { clear: sn.settings?.clear ?? true, readPicture: sn.settings?.readPicture ?? false, mode });
     toast.info(`Loaded “${sn.name}”`, { message: 'Undo (⌘Z) brings your sketch back.' });
   };
   const addNewControl = (code: string, key: string, startAt: number | undefined, toPanel: boolean) => {
@@ -183,8 +187,11 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
 
   const openMenu = (e: React.MouseEvent, items: MenuItem[]) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ x: r.left, y: r.top - 6 - Math.min(400, items.length * 34), items }); };
   const startersMenu = (): MenuItem[] => [
-    ...SCRIPT_EXAMPLES.map(ex => ({ label: ex.name, hint: ex.hint, icon: 'code' as const, onSelect: () => loadCode(ex.code, ex.settings) })),
-    ...(saved.length ? ['separator' as const, ...saved.map(s => ({ label: s.name, hint: 'Saved by you · right-click a saved one in the panel to remove it', icon: 'star' as const, onSelect: () => loadCode(s.code, { clear: s.clear, readPicture: s.readPicture }) }))] : []),
+    // This mode's starters first, then the other mode's (loading one switches the layer to it), then yours.
+    ...(mode === '3d' ? SCRIPT_EXAMPLES_3D : SCRIPT_EXAMPLES).map(ex => ({ label: ex.name, hint: ex.hint, icon: (mode === '3d' ? 'cube' : 'code') as IconName, onSelect: () => loadCode(ex.code, { ...ex.settings, mode }) })),
+    'separator' as const,
+    ...(mode === '3d' ? SCRIPT_EXAMPLES : SCRIPT_EXAMPLES_3D).map(ex => ({ label: `${ex.name} (${mode === '3d' ? '2D' : '3D'})`, hint: `${ex.hint} Loading it switches the layer to ${mode === '3d' ? '2D' : '3D'}.`, icon: (mode === '3d' ? 'code' : 'cube') as IconName, onSelect: () => loadCode(ex.code, { ...ex.settings, mode: mode === '3d' ? '2d' : '3d' }) })),
+    ...(saved.length ? ['separator' as const, ...saved.map(s => ({ label: s.mode === '3d' && mode !== '3d' ? `${s.name} (3D)` : s.mode !== '3d' && mode === '3d' ? `${s.name} (2D)` : s.name, hint: 'Saved by you · right-click a saved one in the panel to remove it', icon: 'star' as const, onSelect: () => loadCode(s.code, { clear: s.clear, readPicture: s.readPicture, mode: s.mode }) }))] : []),
     ...(saved.length ? ['separator' as const, ...saved.map(s => ({ label: `Remove “${s.name}”`, danger: true, onSelect: () => { removeScript(s.id); toast.info(`Removed “${s.name}”`); } }))] : []),
   ];
   const importMenu = (): MenuItem[] => {
@@ -205,7 +212,7 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
   const saveAsStarter = async () => {
     const name = await askText('Save as starter', { label: 'Name', initial: l.label, confirmLabel: 'Save' });
     if (!name) return;
-    saveScript(name, draft, { clear: l.clear, readPicture: l.readPicture });
+    saveScript(name, draft, { clear: l.clear, readPicture: l.readPicture, mode });
     toast.success(`Saved “${name}”`, { message: 'It is in Starters, and other script layers can import it.' });
   };
 
@@ -231,14 +238,16 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {tab === 'preview' && (
           <>
-            <ScriptPreview code={previewCode} defs={draftDefs} values={values} clear={l.clear} ratio={ratio} width={sideWidth - 24} />
+            <ScriptPreview code={previewCode} defs={draftDefs} values={values} clear={l.clear} mode={mode} ratio={ratio} width={sideWidth - 24} />
             <span style={{ fontSize: 11.5, lineHeight: 1.45, color: tk.text.muted }}>
-              The draft runs here on its own, as you type, with the layer’s current control values and the mouse over this box. The picture reads as a soft glow in the middle and there are no nulls. <b>Apply</b> puts it on the picture.
+              {mode === '3d'
+                ? <>The draft runs here on its own, as you type, with the layer’s current control values; drag in the box to orbit. A soft glow stands in for the picture (and for s.picture.texture) and there are no nulls. <b>Apply</b> puts it on the picture.</>
+                : <>The draft runs here on its own, as you type, with the layer’s current control values and the mouse over this box. The picture reads as a soft glow in the middle and there are no nulls. <b>Apply</b> puts it on the picture.</>}
             </span>
           </>
         )}
-        {tab === 'reference' && <ScriptReferenceList query={filter} onInsert={insertAtCaret} />}
-        {tab === 'patterns' && <ScriptPatternList query={filter} previewWidth={sideWidth - 44} onInsert={insertPattern} onLoad={loadExample} />}
+        {tab === 'reference' && <ScriptReferenceList query={filter} mode={mode} onInsert={insertAtCaret} />}
+        {tab === 'patterns' && <ScriptPatternList query={filter} mode={mode} previewWidth={sideWidth - 44} onInsert={insertPattern} onLoad={loadExample} />}
         {tab === 'controls' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {heading('Declared by the sketch')}
@@ -247,6 +256,7 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
             <div style={{ margin: '10px 0 4px' }}>{heading('New control')}</div>
             <ScriptControlBuilder draft={draft} onAdd={addNewControl} />
             <div style={{ marginTop: 10 }}>{heading('Canvas')}</div>
+            {f.row('Mode', <Segmented size="sm" ariaLabel="Draw in 2D or 3D" value={mode} onChange={onMode} options={[{ value: '2d', label: '2D canvas' }, { value: '3d', label: '3D (WebGL)' }]} />, kind ? `Changes every ${kind.name} layer.` : '2D draws on a canvas (s.ctx); 3D draws with WebGL (three.js), still over the picture.')}
             {f.toggle('Clear', 'clear', 'Clear every frame', 'Off keeps what was drawn, for trails.')}
             {f.toggle('Picture', 'readPicture', 'Read the picture', 'Samples the shader each frame for s.picture.brightness(x, y).')}
             {f.props('opacity')}
@@ -259,8 +269,8 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
   return (
     <Modal
       title={kind ? kind.name : 'Script editor'}
-      subtitle={kind ? `Layer kind · ${kind.uses} layer${kind.uses === 1 ? '' : 's'}` : narrow ? l.label : `${l.label} · JavaScript on a canvas over the picture`}
-      icon={kind ? kind.icon : 'code'}
+      subtitle={kind ? `Layer kind · ${kind.uses} layer${kind.uses === 1 ? '' : 's'}${mode === '3d' ? ' · 3D' : ''}` : narrow ? l.label : `${l.label} · ${mode === '3d' ? 'JavaScript in 3D (WebGL) over the picture' : 'JavaScript on a canvas over the picture'}`}
+      icon={kind ? kind.icon : mode === '3d' ? 'cube' : 'code'}
       iconColor={kind ? kind.colour : tk.kind.fn}
       width={1200}
       height={860}

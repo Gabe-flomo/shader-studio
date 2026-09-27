@@ -7,6 +7,7 @@
  * up and are flipped here.
  */
 import { paletteCssAt, paletteColour } from '../particle-sim.js';
+import { K3_SKETCH_NAMES, k3Create, k3Helpers, k3Setup, k3Begin, k3End, k3Dispose } from './sketch3d.js';
 
 export const KL_BLEND = {
   normal: 'source-over', multiply: 'multiply', screen: 'screen', overlay: 'overlay', lighten: 'lighten', darken: 'darken',
@@ -995,16 +996,27 @@ export function klCompileSketch(code, P) {
  * A compiled sketch and what the runner keeps between frames. Shared by the
  * layer kit and the editor's scratch preview, so both run the same thing.
  */
-export function klSketchCompile(code) {
-  const st = { code, setup: null, draw: null, set: null, has: null, params: {}, vars: null, error: null, state: {}, frame: 0, w: 0, h: 0, ready: false, s: null, pressed: {} };
+export function klSketchCompile(code, opts) {
+  const mode = opts && opts.mode === '3d' ? '3d' : '2d';
+  const st = { code, mode, setup: null, draw: null, set: null, has: null, params: {}, vars: null, error: null, state: {}, frame: 0, w: 0, h: 0, ready: false, s: null, pressed: {}, g3: null };
   try {
-    const P = klSketchHelpers(() => st.s);
+    let P = klSketchHelpers(() => st.s);
+    if (mode === '3d') {
+      // 3D: the same sketch, drawn with three.js (sketch3d.js). The 2D helpers stay for maths and colours.
+      const T = opts && opts.three;
+      if (!T) { st.error = 'This 3D sketch needs three.js, which is not loaded here.'; return st; }
+      st.g3 = k3Create(T);
+      P = k3Helpers(st.g3, P, () => st.s);
+    }
     const r = klCompileSketch(code, P);
     st.setup = r.setup; st.draw = r.draw; st.set = r.set; st.has = r.has; st.params = r.params || {};
     if (!st.draw) st.error = 'The script needs a draw(s) function.';
   } catch (e) { st.error = 'Compile: ' + ((e && e.message) || e); }
   return st;
 }
+
+/** Let a compiled sketch's GPU resources go (3D only; a 2D sketch holds none). */
+export function klSketchDispose(st) { if (st && st.g3) { k3Dispose(st.g3); st.g3 = null; } }
 
 /** A button param was pressed: next frame `s.pressed(key)` is true, `s.params[key]` is the amount, and a handler in params runs. */
 export function klSketchPress(st, key, amount) { st.pressed[key] = typeof amount === 'number' ? amount : 1; }
@@ -1017,7 +1029,9 @@ export function klSketchPress(st, key, amount) { st.pressed[key] = typeof amount
  */
 export function klSketchStep(st, s, defs, clear) {
   if (st.error) return st.error;
-  const W = s.width, H = s.height, bx = s.ctx;
+  const W = s.width, H = s.height, g3 = st.g3, bx = g3 ? null : s.ctx;
+  // 3D: no 2D context; s.three is the scene, camera and renderer (sketch3d.js).
+  if (g3) { s.ctx = null; s.three = g3.api; }
   st.s = s;
   const pressed = st.pressed; st.pressed = {};
   s.pressed = k => Object.prototype.hasOwnProperty.call(pressed, k);
@@ -1029,16 +1043,25 @@ export function klSketchStep(st, s, defs, clear) {
   try {
     if (!st.ready || st.w !== W || st.h !== H) {
       st.w = W; st.h = H; st.state = {}; s.state = st.state; st.frame = 0; s.frame = 0;
-      bx.setTransform(1, 0, 0, 1, 0, 0); bx.clearRect(0, 0, W, H);
+      if (g3) { k3Setup(g3, W, H); k3Begin(g3, W, H); }
+      else { bx.setTransform(1, 0, 0, 1, 0, 0); bx.clearRect(0, 0, W, H); }
       if (st.setup) st.setup(s);
       st.ready = true;
     }
-    bx.save(); bx.setTransform(1, 0, 0, 1, 0, 0); bx.globalAlpha = 1; bx.globalCompositeOperation = 'source-over';
-    if (clear) bx.clearRect(0, 0, W, H);
+    // 3D: the pools start empty and the host renders the scene after this returns (k3Render).
+    if (g3) k3Begin(g3, W, H);
+    else { bx.save(); bx.setTransform(1, 0, 0, 1, 0, 0); bx.globalAlpha = 1; bx.globalCompositeOperation = 'source-over'; if (clear) bx.clearRect(0, 0, W, H); }
     for (const k in pressed) { const fn = st.params[k]; if (typeof fn === 'function') fn(s, pressed[k]); }
     st.draw(s);
-    bx.restore();
+    if (g3) k3End(g3); else bx.restore();
     st.frame++;
     return null;
-  } catch (e) { st.error = 'Runtime: ' + ((e && e.message) || e); return st.error; }
+  } catch (e) {
+    if (g3) { try { k3End(g3); } catch (x) { /* already broken */ } }
+    st.error = 'Runtime: ' + ((e && e.message) || e);
+    // A 3D name on a 2D layer: say which setting it needs.
+    const m = !g3 && e instanceof ReferenceError && /^(\w+) is not defined/.exec(e.message);
+    if (m && K3_SKETCH_NAMES.indexOf(m[1]) >= 0 && KL_SKETCH_NAMES.indexOf(m[1]) < 0) st.error += '. ' + m[1] + '() draws in 3D: set the layer’s Mode to 3D (Canvas settings).';
+    return st.error;
+  }
 }

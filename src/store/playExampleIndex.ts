@@ -55,6 +55,8 @@ const ROWS: Array<[string, string, string]> = [
   ['playGlowText', 'Glowing text and strokes', 'The Layers node: SDF Glow on whatever the layers draw.'],
   ['scriptFirst', 'Script: a first sketch', 'A JavaScript sketch over the shader: setup and draw, with sliders it declares.'],
   ['script3D', 'Script: 3D on a 2D canvas', 'A lit torus, ball or cube turning over SDF Glow, projected and sorted in plain JavaScript.'],
+  ['script3DShapes', '3D Script: shapes over the shader', 'Lit boxes, spheres and rings in WebGL over SDF Glow, with p5’s 3D names. Drag to orbit.'],
+  ['script3DTexture', '3D Script: the shader on a cube', 'A cube skinned with the live picture through s.picture.texture.'],
   ['scriptMouse', 'Script: the mouse', 'A chain of beads chases s.mouse; hold the button to swell it.'],
   ['scriptPicture', 'Script: reading the picture', 'Dots land where the shader is bright: s.picture.brightness makes a stipple.'],
   ['scriptNulls', 'Script: nulls as handles', 'A string between two nulls, plucked by a third that follows the mouse.'],

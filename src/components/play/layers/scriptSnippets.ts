@@ -8,6 +8,8 @@
  */
 import { IDIOM_BASE, SCRIPT_IDIOMS } from './scriptIdioms';
 import { placeCode } from './scriptTools';
+import { SCRIPT_SNIPPETS_3D } from './scriptSnippets3d';
+export { SCRIPT_SNIPPETS_3D };
 
 export interface ScriptSnippet {
   group: SnippetGroup;
@@ -26,7 +28,8 @@ export const SNIPPET_GROUPS = [
   'Sketch basics', 'Add a shape', 'Follow the mouse', 'React to the beat', 'Trails and fades', 'Grids and tiling',
   'Noise motion', 'Motion paths', 'Physics-lite', 'Text', 'Colour palettes', 'Read the picture',
 ] as const;
-export type SnippetGroup = (typeof SNIPPET_GROUPS)[number];
+/** A 3D Script layer's patterns are their own group, shown only in 3D (scriptSnippets3d.ts). */
+export type SnippetGroup = (typeof SNIPPET_GROUPS)[number] | '3D';
 export const SNIPPET_GROUP_INTENT: Record<SnippetGroup, string> = {
   'Sketch basics': 'Controls, state that lasts between frames, timers.',
   'Add a shape': 'A shape with a size, a turn and a look you can make sliders of.',
@@ -40,6 +43,7 @@ export const SNIPPET_GROUP_INTENT: Record<SnippetGroup, string> = {
   'Text': 'Words that type, wave, wrap round or fit.',
   'Colour palettes': 'Colours that go together, chosen by index, time or a blend.',
   'Read the picture': 'Use the shader’s brightness to place, size or steer things (turn Picture on).',
+  '3D': 'Shapes, lights and a camera in 3D; the picture as a texture.',
 };
 
 const PATTERNS: Array<Omit<ScriptSnippet, 'example' | 'settings'>> = [
@@ -561,4 +565,13 @@ function draw(s) {
 export const SCRIPT_SNIPPETS: ScriptSnippet[] = [
   ...PATTERNS.map(p => ({ ...p, ...(EXAMPLES[p.name] ?? { example: '' }) })),
   ...SCRIPT_IDIOMS.map(({ base, example, ...idiom }) => ({ ...idiom, example: example ?? placeCode(base ?? IDIOM_BASE, idiom.where, idiom.code) })),
-].sort((a, b) => SNIPPET_GROUPS.indexOf(a.group) - SNIPPET_GROUPS.indexOf(b.group));
+].sort((a, b) => groupOrder(a.group) - groupOrder(b.group));
+function groupOrder(g: SnippetGroup): number { return (SNIPPET_GROUPS as readonly string[]).indexOf(g); }
+
+/** The groups and patterns a sketch's mode shows: 3D sketches get the 3D group; 2D ones everything else. */
+export function snippetGroupsFor(mode: '2d' | '3d'): readonly SnippetGroup[] {
+  return mode === '3d' ? ['3D'] : SNIPPET_GROUPS;
+}
+export function snippetsFor(mode: '2d' | '3d'): ScriptSnippet[] {
+  return mode === '3d' ? SCRIPT_SNIPPETS_3D : SCRIPT_SNIPPETS;
+}

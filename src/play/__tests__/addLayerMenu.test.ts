@@ -5,14 +5,14 @@ import type { FolderEntry } from '../../utils/assetFolders';
 import type { LayerKindDef } from '../../types/layerKinds';
 
 const kind = (id: string, name: string, hint = ''): KindEntry => ({
-  def: { id, name, hint, icon: 'code', colour: 'mauve', code: '', paramDefs: [], clear: true, readPicture: false, version: 1 } as LayerKindDef,
+  def: { id, name, hint, icon: 'code', colour: 'mauve', mode: '2d', code: '', paramDefs: [], clear: true, readPicture: false, version: 1 } as LayerKindDef,
   inFile: false,
 });
 const folder = (id: string, label: string): FolderEntry => ({ id, label, collapsed: false, createdAt: 0 });
 
 describe('Add layer: built-in groups', () => {
-  it('offers every layer kind exactly once', () => {
-    const offered = builtinGroups().flatMap(g => g.items.map(i => i.kind));
+  it('offers every layer kind exactly once (variants aside)', () => {
+    const offered = builtinGroups().flatMap(g => g.items.filter(i => !i.variant).map(i => i.kind));
     expect([...offered].sort()).toEqual([...LAYER_KINDS].sort());
     expect(new Set(offered).size).toBe(offered.length);
   });
@@ -27,10 +27,16 @@ describe('Add layer: built-in groups', () => {
     expect(builtinGroups().map(g => g.label)).toEqual(BUILTIN_GROUPS.map(g => g.label));
   });
 
+  it('offers 3D Script beside Script, under Code', () => {
+    const code = builtinGroups().find(g => g.key === 'builtin:code')!;
+    expect(code.items.map(i => [i.label, i.variant ?? null])).toEqual([['Script', null], ['3D Script', 'script3d']]);
+    expect(builtinGroups('webgl').flatMap(g => g.items.map(i => i.label))).toEqual(['3D Script']);
+  });
+
   it('drops a new built-in into its group without special cases', () => {
-    const extra = [...BUILTIN_LAYERS, { kind: 'script' as const, group: 'code' as const, label: '3D Script', hint: 'WebGL', icon: 'code' as const }];
+    const extra = [...BUILTIN_LAYERS, { kind: 'null' as const, group: 'code' as const, label: 'Code null', hint: 'A test', icon: 'code' as const }];
     const code = builtinGroups('', extra).find(g => g.key === 'builtin:code')!;
-    expect(code.items.map(i => i.label)).toEqual(['Script', '3D Script']);
+    expect(code.items.map(i => i.label)).toEqual(['Script', '3D Script', 'Code null']);
   });
 });
 

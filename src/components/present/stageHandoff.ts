@@ -6,12 +6,15 @@
  * presentation came from a file and has Script layers.
  */
 import { leftBehind } from '../../play/exportHtml';
+import { loadThreeSource, playUses3D, threeSource } from '../../play/threeSource';
 import { snapshotStagePage, stepScriptEdits } from '../../present/liveScript';
 import { sourceLimits } from '../../present/snapshot';
 import type { Presentation, PresentSource, Step } from '../../types/presentation';
 import { useStage } from '../play/stageStore';
 
 export function openOnStage(doc: Presentation, source: PresentSource, step: Step | undefined): void {
+  // A 3D Script layer: its page carries three.js, loaded first (once).
+  if (playUses3D(source.bundle.play) && !threeSource()) { void loadThreeSource().then(() => openOnStage(doc, source, step), () => {}); return; }
   const edits = stepScriptEdits(step).get(source.id);
   const hasScript = source.bundle.play.layers.some(l => l.kind === 'script');
   useStage.getState().openSnapshot({

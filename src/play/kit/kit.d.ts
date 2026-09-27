@@ -36,6 +36,8 @@ export interface KitEnv {
   hand?: (side: string, point: number) => { x: number; y: number } | null;
   /** Hand tracking: draw the hands' skeleton with the markers (null or absent: don't). */
   hands?: { state: HdState; colour: [number, number, number] } | null;
+  /** three.js for 3D Script layers (the three-slim.js set); without it they wait and draw nothing. */
+  three?: unknown;
 }
 
 /** What the graph's Layers node reads: colour at half resolution, and a 16-bit packed distance grid (row 0 at the top). */

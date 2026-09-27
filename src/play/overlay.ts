@@ -20,6 +20,7 @@ import { liveAudio } from '../lib/liveAudio';
 import { layerAudio } from '../lib/layerAudio';
 import { cameraInput } from '../lib/cameraInput';
 import { createLayerKit, type KitAudio, type KitEnv, type KitPointer, type LayerKit } from './kit/kit.js';
+import { loadThreeRuntime, playUses3D, threeRuntime } from './threeSource';
 import { klPaintBackground } from './kit/layers.js';
 import { playBackground } from './background';
 import { setScriptStatus } from './scriptStatus';
@@ -136,7 +137,12 @@ class PlayOverlay {
     this.ctx = el ? el.getContext('2d') : null;
   }
 
-  setRecord(record: PlayRecord): void { this.record = record; playBackground.setDisplay(record.display); }
+  setRecord(record: PlayRecord): void {
+    this.record = record;
+    playBackground.setDisplay(record.display);
+    // A 3D sketch: load three.js (the script exported pages carry), so the layer draws and a later export has it at hand.
+    if (!threeRuntime() && playUses3D(record)) void loadThreeRuntime().catch(() => {});
+  }
 
   /** Fire an action now (the panel's Burst / Drop / Next / Clear buttons). */
   act(a: KitAction): void { this.fire(a); }
@@ -443,6 +449,8 @@ class PlayOverlay {
       // The graph's Layers node can't read the layers while the graph isn't running.
       shaderTap: forExport || playBackground.active() ? undefined : this.shaderTap ?? undefined,
       scriptStatus: forExport ? undefined : setScriptStatus,
+      // three.js for 3D Script layers, once loaded (they wait until then).
+      three: threeRuntime(),
     };
   }
 

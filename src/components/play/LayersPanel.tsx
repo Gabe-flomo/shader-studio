@@ -14,7 +14,8 @@ import { accentColor } from '../../theme/categories';
 import { kindOf, type LayerKindDef } from '../../types/layerKinds';
 import { addKindLayer, kindHint } from '../../play/layerKinds';
 import { AddLayerMenu } from './layers/AddLayerMenu';
-import { BUILTIN_LAYER } from './layers/addLayerCatalog';
+import { BUILTIN_LAYER, BUILTIN_LAYERS, type BuiltinVariant } from './layers/addLayerCatalog';
+import { script3dDefaults } from '../../types/playLayers';
 import { fontFamily, radius } from '../../theme/tokens';
 import { layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { playId } from '../../play/playControls';
@@ -68,10 +69,13 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     onChange(p => addKindLayer(p, k, id));
     setSelected(id);
   };
-  const add = (kind: PlayLayerKind) => {
-    const n = play.layers.filter(l => l.kind === kind).length + 1;
+  const add = (kind: PlayLayerKind, variant?: BuiltinVariant) => {
+    // A 3D Script is a Script layer in 3D, starting from the 3D starter.
+    const is3d = variant === 'script3d';
+    const n = play.layers.filter(l => l.kind === kind && (kind !== 'script' || (l.kind === 'script' && (l.mode === '3d') === is3d))).length + 1;
     const id = playId('layer');
-    onChange(p => ({ ...p, layers: [...p.layers, defaultLayer(kind, id, `${KIND[kind].label} ${n}`)] }));
+    const made = defaultLayer(kind, id, `${is3d ? '3D Script' : KIND[kind].label} ${n}`);
+    onChange(p => ({ ...p, layers: [...p.layers, is3d ? ({ ...made, ...script3dDefaults() } as PlayLayer) : made] }));
     setSelected(id);
   };
   const patch = (id: string, fn: (l: PlayLayer) => PlayLayer) => onChange(p => ({ ...p, layers: p.layers.map(l => l.id === id ? fn(l) : l) }));
@@ -205,6 +209,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
   const kind = kindOf(l, play.layerKinds);
   const look = kind
     ? { label: kind.name, hint: `${kindHint(kind.hint, kind.paramDefs.length)}. A Script layer underneath.`, icon: kind.icon as IconName, color: accentColor(kind.colour, mode) }
+    : l.kind === 'script' && l.mode === '3d' ? { ...(BUILTIN_LAYERS.find(b => b.variant === 'script3d') ?? KIND.script), color: tk.text.faint }
     : { ...KIND[l.kind], color: tk.text.faint };
   let body: ReactNode = null;
   switch (l.kind) {

@@ -3,6 +3,28 @@ import react from '@vitejs/plugin-react'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
+/**
+ * `virtual:three-slim-source`: the three.js a 3D Script layer uses
+ * (src/play/kit/three-slim.js), bundled into one minified script that defines
+ * the `SSThree` global, as a string. Exported web pages with a 3D Script layer
+ * inline it; the app loads it with import() only when it exports one.
+ */
+function threeSlimSource(): Plugin {
+  const id = 'virtual:three-slim-source';
+  const entry = fileURLToPath(new URL('./src/play/kit/three-slim.js', import.meta.url));
+  return {
+    name: 'three-slim-source',
+    resolveId: s => (s === id ? `\0${id}` : null),
+    async load(s) {
+      if (s !== `\0${id}`) return null;
+      const { build } = await import('esbuild');
+      const out = await build({ entryPoints: [entry], bundle: true, minify: true, format: 'iife', globalName: 'SSThree', legalComments: 'none', write: false, target: 'es2020', logLevel: 'silent' });
+      this.addWatchFile(entry);
+      return `export default ${JSON.stringify(out.outputFiles[0].text)};`;
+    },
+  };
+}
+
 // Hand tracking (docs/hand-tracking.md) runs MediaPipe's WebAssembly, which
 // lives in the npm package. Serve it at <base>mediapipe/wasm/ in dev and copy
 // it there in a build, so the app (and the desktop app) tracks hands offline
@@ -47,7 +69,7 @@ const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
 const usePolling = process.env.VITE_USE_POLLING === '1';
 
 export default defineConfig({
-  plugins: [react(), mediapipeWasm()],
+  plugins: [react(), mediapipeWasm(), threeSlimSource()],
   // The hand tracker's worker imports MediaPipe as an ES module.
   worker: { format: 'es' },
   base: isTauri ? '/' : '/shader-studio/',

@@ -525,3 +525,73 @@ function draw(s) {
   }
 }
 `;
+
+/** 3D Script layer: p5's 3D names on WebGL, lit shapes over the glow, orbitControl. */
+export const SKETCH_3D_SHAPES = `// A 3D Script layer: the layer's Mode is 3D, so it draws with WebGL (three.js
+// underneath) using p5's 3D names: box, sphere, torus, lights, orbitControl.
+// Nothing paints a background, so the glow shader shows through around the shapes.
+// The origin is the middle of the picture; y goes down, z comes toward you, in pixels.
+// Drag on the picture to turn the camera.
+const params = {
+  count: { value: 7, min: 1, max: 16, step: 1, label: 'Shapes' },
+  size:  { value: 0.09, min: 0.03, max: 0.2, step: 0.005, label: 'Size' },
+  spin:  { value: 0.4, min: -2, max: 2, step: 0.05, label: 'Spin' },
+  shiny: { kind: 'toggle', value: true, label: 'Shiny' },
+};
+
+function draw(s) {
+  const { params, time } = s;
+  orbitControl();
+  const u = min(width, height);            // sizes as fractions of the picture
+  ambientLight(50, 55, 80);
+  directionalLight(255, 245, 230, -0.5, 0.7, -0.6);
+  pointLight(90, 140, 255, 0, 0, u * 0.15); // a blue light where the glow is
+  noStroke();
+  const r = u * 0.36;
+  for (let i = 0; i < params.count; i++) {
+    const a = (i / params.count) * TWO_PI + time * params.spin;
+    push();
+    translate(cos(a) * r, sin(a * 2 + time) * u * 0.04, sin(a) * r * 0.55);
+    rotateX(time * 0.7 + i);
+    rotateY(time * 0.9 + i * 0.5);
+    fill(hsl(200 + (i / params.count) * 160, 70, 62));
+    if (params.shiny) { specularMaterial(170); shininess(60); }
+    const d = u * params.size;
+    const k = i % 5;
+    if (k === 0) box(d * 1.4);
+    else if (k === 1) sphere(d * 0.9, 32, 24);
+    else if (k === 2) torus(d * 0.8, d * 0.28, 40, 20);
+    else if (k === 3) cone(d * 0.8, d * 1.6, 32);
+    else cylinder(d * 0.6, d * 1.5, 32);
+    pop();
+  }
+}
+`;
+
+/** 3D Script layer: the picture as a texture (s.picture.texture) on a cube. */
+export const SKETCH_3D_TEXTURE = `// The shader on a cube. s.picture.texture is the picture under this layer, this
+// frame, as a texture; texture() wraps it round the shapes that follow. The cube
+// wears the very picture it floats over, live; two lights shade its faces apart.
+// Drag on the picture to turn the camera.
+const params = {
+  size:  { value: 0.42, min: 0.1, max: 0.8, step: 0.01, label: 'Size' },
+  spin:  { value: 0.5, min: -2, max: 2, step: 0.05, label: 'Spin' },
+  tilt:  { value: 0.45, min: -1.5, max: 1.5, step: 0.05, label: 'Tilt' },
+  edges: { kind: 'toggle', value: true, label: 'Edges' },
+};
+
+function draw(s) {
+  const { params, time } = s;
+  orbitControl();
+  const u = min(width, height);
+  ambientLight(120);
+  directionalLight(255, 250, 240, -0.5, 0.6, -0.7);
+  push();
+  rotateX(params.tilt + sin(time * 0.4) * 0.15);
+  rotateY(time * params.spin);
+  texture(s.picture.texture);
+  if (params.edges) stroke(255); else noStroke();
+  box(u * params.size);
+  pop();
+}
+`;

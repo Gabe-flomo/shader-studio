@@ -27,6 +27,7 @@
  *   override(layerId, key, value|null)  where a following null is now
  *   hand(side, point)      a tracked hand's landmark on the picture ({ x, y }) or null (optional)
  *   hands      { state, colour } to draw the hands' skeleton with the markers, or null (optional)
+ *   three      three.js (three-slim.js) for 3D Script layers, or null
  *
  * The kit keeps per-layer state (particles, bodies, strokes, springs, text
  * sequences) between frames, keyed by layer id. Actions (burst, next line…)
@@ -34,7 +35,8 @@
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, stringSeed, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments } from './geometry.js';
-import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klPaintBackground } from './layers.js';
+import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klPaintBackground, klSketchDispose } from './layers.js';
+import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 import { hdDraw } from './hands.js';
 
@@ -150,7 +152,7 @@ export function createLayerKit() {
     else if (env.background && !env.transparent) ctx.drawImage(gl, 0, 0);
     const layers = record.layers;
     const ids = new Set(layers.map(l => l.id));
-    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts]) for (const id of [...m.keys()]) if (!ids.has(id)) m.delete(id);
+    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
     // A visibility change in the panel wins over an earlier show/hide action.
     for (const l of layers) { if (lastVisible.has(l.id) && lastVisible.get(l.id) !== l.visible) shown.delete(l.id); lastVisible.set(l.id, l.visible); }
     const baseVisible = l => (shown.has(l.id) ? shown.get(l.id) : l.visible);
@@ -307,8 +309,13 @@ export function createLayerKit() {
     // A sketch runs once a frame into its own canvas; the layer and any cloner copying it both use that canvas.
     function stepScript(l) {
       let st = scripts.get(l.id);
-      if (!st || st.code !== l.code) {
-        st = klSketchCompile(l.code);
+      const mode = l.mode === '3d' ? '3d' : '2d', three = env.three || null;
+      // A 3D sketch waits for three.js (the host hands it over in env.three) rather than failing before it arrives.
+      if (mode === '3d' && !three && !st) return null;
+      if (!st || st.code !== l.code || st.mode !== mode || (mode === '3d' && st.three !== three)) {
+        klSketchDispose(st);
+        st = klSketchCompile(l.code, { mode, three });
+        st.three = three;
         scripts.set(l.id, st);
         if (env.scriptStatus) env.scriptStatus(l.id, st.error);
       }
@@ -332,12 +339,22 @@ export function createLayerKit() {
             const i = (cy * KIT_COARSE_W + cx) * 4;
             return (coarse[i] + coarse[i + 1] + coarse[i + 2]) / 765;
           },
+          // 3D: the picture this frame as a texture, uploaded only when a sketch reads it.
+          get texture() { return st.g3 ? k3PictureTexture(three, gl, frameNo) : null; },
         },
         null: name => { const n = record.layers.find(x => x.kind === 'null' && (x.id === name || x.label === name)); return n ? { x: env.value(n, 'x') * W, y: (1 - env.value(n, 'y')) * H } : null; },
         random: rngFor(l.id, 'script'),
       };
       const err = klSketchStep(st, s, l.paramDefs || [], l.clear);
       if (err) { if (env.scriptStatus) env.scriptStatus(l.id, err); return null; }
+      if (st.g3) {
+        // 3D: render the scene (a shared WebGL renderer) and copy it into the layer's canvas, so the
+        // blend, the opacity, the Cloner and the Layers node treat it like any 2D sketch.
+        const out = k3Render(st.g3, k3Renderer(three, W, H), W, H);
+        bx.setTransform(1, 0, 0, 1, 0, 0); bx.globalAlpha = 1; bx.globalCompositeOperation = 'source-over';
+        if (l.clear || st.frame <= 1) bx.clearRect(0, 0, W, H);
+        if (out) bx.drawImage(out, 0, 0);
+      }
       return buf;
     }
     function drawScript(c, l, v) {
@@ -682,6 +699,6 @@ export function createLayerKit() {
      * Forget all state (a new recording starts from scratch). `seed` (a take's)
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
-    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); parts.clear(); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
+    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
   };
 }
