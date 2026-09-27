@@ -50,7 +50,9 @@ export type PackExtra =
   /** A background image from the library. */
   | { kind: 'background'; id: string; name: string }
   /** Notes in markdown (a readme, how to use the nodes). */
-  | { kind: 'note'; id: string; name: string; text: string };
+  | { kind: 'note'; id: string; name: string; text: string }
+  /** A custom Finish effect from Your effects (sealed with the pack when it is). */
+  | { kind: 'finishEffect'; id: string; name: string };
 
 export type PackExtraKind = PackExtra['kind'];
 
@@ -105,6 +107,8 @@ export interface PackInfo {
   examples?: string[];
   /** Names of the `presentation` items that go with it. */
   presentations?: string[];
+  /** Names of the custom Finish effects it carries (in the nodes item's `finishEffects`). */
+  finishEffects?: string[];
 }
 
 /** A pack that came in: its nodes sit in a node-list category named after it, with its examples a click away. */
@@ -143,5 +147,6 @@ export function readPackInfo(raw: unknown): PackInfo | null {
     notes: notes?.length ? notes : undefined,
     examples: strList(o.examples),
     presentations: strList(o.presentations),
+    finishEffects: strList(o.finishEffects),
   };
 }

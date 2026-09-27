@@ -6,9 +6,11 @@
  * See docs/finish-stack.md.
  */
 import {
-  FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_TIME_MAPS, FN_TIME_QUALITY, FN_CURVE_CHANNELS, FN_HUE_CURVES,
-  fnDefaultEffect, fnDefaultCurves, type FnCurves, type FnKind, type FnParam,
+  FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_TIME_MAPS, FN_TIME_QUALITY, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
+  fnDefaultEffect, fnDefaultCurves, fnDefaultCompare, fnParseCustom, type FnCompare, type FnCurves, type FnKind, type FnParam,
 } from '../play/kit/finish.js';
+import type { SealedBlob } from './userNode';
+import { decryptPayload, encryptPayload } from '../playfile/sealing';
 
 export type FinishKind = FnKind;
 export type FinishCurves = FnCurves;
@@ -18,8 +20,17 @@ export type FinishTimeQuality = 'low' | 'medium' | 'high';
 /** One effect in the stack: its kind's numbers (FN_EFFECTS[kind].params) as keys, plus what isn't a number. */
 export interface FinishEffect {
   id: string;
-  kind: FinishKind;
+  /** A built-in effect, or 'custom' (effect code: see play/kit/finish.js fnParseCustom). */
+  kind: FinishKind | 'custom';
   enabled: boolean;
+  /** Custom: its name in the stack. */
+  name?: string;
+  /** Custom: its GLSL (`vec3 effect(vec2 uv, vec3 color)` and its `uniform` settings). Empty when sealed. */
+  code?: string;
+  /** Custom: the saved effect it came from (Your effects), if any. */
+  defId?: string;
+  /** Custom: the code, encrypted, for an effect from a sealed node pack (filled in only in memory). */
+  sealed?: SealedBlob;
   /** Grade: the Tone Map node's mode ('none' = no tone mapping). */
   tone?: string;
   /** Grade: the curves ([x0, y0, x1, y1…] each, 0..1). */
@@ -35,10 +46,14 @@ export interface FinishEffect {
   [key: string]: unknown;
 }
 
-/** The Finish stack: on or bypassed, and its effects in order. Absent = none. */
+export type FinishCompare = FnCompare;
+
+/** The Finish stack: on or bypassed, its effects in order, and the before/after wipe. Absent = none. */
 export interface PlayFinish {
   on: boolean;
   effects: FinishEffect[];
+  /** The before/after wipe (absent = off): saved, mappable (`finish:compare::pos`), and in renders and exports when on. */
+  compare?: FinishCompare;
 }
 
 export const FINISH_KINDS = FN_KINDS as readonly FinishKind[];
@@ -70,44 +85,150 @@ export function finishPropId(effectId: string): string {
   return `${FINISH_TARGET_PREFIX}${effectId}`;
 }
 
+/** The id the before/after wipe's numbers go under: `finish:compare::pos`. */
+export const FINISH_COMPARE_ID = FN_COMPARE_ID;
+
+/**
+ * What in a finish has numbers, as effects: the effects, then the wipe (when
+ * the record has one) as `{ id: 'compare', kind: 'compare', enabled: on, pos,
+ * angle, softness }`. Read-only views: patch with patchFinishEffect.
+ */
+export interface FinishCompareHost extends FinishCompare { id: 'compare'; kind: 'compare'; enabled: boolean; name?: undefined; code?: undefined; sealed?: undefined; [key: string]: unknown }
+export type FinishHost = FinishEffect | FinishCompareHost;
+
+export function compareHost(c: FinishCompare): FinishCompareHost {
+  return { ...c, id: 'compare', kind: 'compare', enabled: c.on };
+}
+export function finishHosts(finish: PlayFinish | undefined): FinishHost[] {
+  if (!finish) return [];
+  return finish.compare ? [...finish.effects, compareHost(finish.compare)] : finish.effects;
+}
+export function finishHost(finish: PlayFinish | undefined, id: string): FinishHost | undefined {
+  if (!finish) return undefined;
+  if (id === FN_COMPARE_ID) return finish.compare ? compareHost(finish.compare) : undefined;
+  return finish.effects.find(e => e.id === id);
+}
+
+type HostLike = { kind: FinishHost['kind']; name?: unknown; code?: unknown; sealed?: unknown };
+
+/** An effect's name in lists: the built-in label, a custom effect's own name, or the wipe. */
+export function finishHostLabel(e: HostLike): string {
+  if (e.kind === 'compare') return 'Before / after wipe';
+  if (e.kind === 'custom') return (typeof e.name === 'string' && e.name.trim()) || 'Custom effect';
+  return FN_EFFECTS[e.kind]?.label ?? String(e.kind);
+}
+
+/** An effect's numbers, in order (a custom effect's from its code). */
+export function finishParamsOf(e: HostLike): FnParam[] {
+  if (e.kind === 'compare') return FN_COMPARE_PARAMS as FnParam[];
+  if (e.kind === 'custom') return fnParseCustom(finishCustomCode(e as Pick<FinishEffect, 'code' | 'sealed'>)).params;
+  return FN_EFFECTS[e.kind]?.params ?? [];
+}
+
 /** An effect's numbers that can be controls: its sliders, then the hidden ones (wheel positions, colour channels). */
-export function finishNumericProps(e: Pick<FinishEffect, 'kind'>): FnParam[] {
-  const ps = FN_EFFECTS[e.kind]?.params ?? [];
+export function finishNumericProps(e: HostLike): FnParam[] {
+  const ps = finishParamsOf(e);
   return [...ps.filter(p => !p.hidden), ...ps.filter(p => p.hidden)];
 }
 
 export function finishParam(kind: FinishKind, key: string): FnParam | undefined {
   return FN_EFFECTS[kind]?.params.find(p => p.key === key);
 }
+/** One number of an effect (built-in, custom or the wipe). */
+export function finishParamOf(e: HostLike, key: string): FnParam | undefined {
+  return finishParamsOf(e).find(p => p.key === key);
+}
 
 /** "Grade · Exposure": a finish target's words, or null when it isn't one or its effect is gone. */
 export function finishTargetLabel(finish: PlayFinish | undefined, target: string): { effect: string; param: string } | null {
   const ft = parseFinishTarget(target);
   if (!ft) return null;
-  const e = finish?.effects.find(x => x.id === ft.effectId);
+  const e = finishHost(finish, ft.effectId);
   if (!e) return null;
-  return { effect: FN_EFFECTS[e.kind].label, param: finishParam(e.kind, ft.key)?.label ?? ft.key };
+  return { effect: finishHostLabel(e), param: finishParamOf(e, ft.key)?.label ?? ft.key };
 }
 
 /** A number of an effect in the record (undefined when the effect or key is gone). */
 export function readFinishValue(finish: PlayFinish | undefined, target: string): number | undefined {
   const ft = parseFinishTarget(target);
   if (!ft || !finish) return undefined;
-  const e = finish.effects.find(x => x.id === ft.effectId);
+  const e = finishHost(finish, ft.effectId);
   const v = e ? e[ft.key] : undefined;
-  return typeof v === 'number' && finishParam(e!.kind, ft.key) ? v : undefined;
+  return typeof v === 'number' && finishParamOf(e!, ft.key) ? v : undefined;
 }
 
-/** The finish with one effect's numbers patched. */
-export function patchFinishEffect(finish: PlayFinish | undefined, effectId: string, patch: Partial<FinishEffect>): PlayFinish | undefined {
+/** The finish with one effect's numbers patched (the id 'compare' patches the wipe). */
+export function patchFinishEffect(finish: PlayFinish | undefined, effectId: string, patch: Record<string, unknown>): PlayFinish | undefined {
   if (!finish) return finish;
+  if (effectId === FN_COMPARE_ID) {
+    const c = { ...(finish.compare ?? fnDefaultCompare()) };
+    for (const k of ['pos', 'angle', 'softness'] as const) if (typeof patch[k] === 'number') c[k] = patch[k] as number;
+    if (typeof patch.enabled === 'boolean') c.on = patch.enabled;
+    if (typeof patch.on === 'boolean') c.on = patch.on;
+    return { ...finish, compare: c };
+  }
   return { ...finish, effects: finish.effects.map(e => (e.id === effectId ? { ...e, ...patch } as FinishEffect : e)) };
+}
+
+// ── Custom effects ──────────────────────────────────────────────────────────
+
+const unsealed = new Map<string, string>();
+/** A custom effect's code: as written, or (from a sealed pack) decrypted in memory; '' when it can't be read. */
+export function finishCustomCode(e: Pick<FinishEffect, 'code' | 'sealed'>): string {
+  if (!e.sealed) return typeof e.code === 'string' ? e.code : '';
+  const k = e.sealed.data;
+  const hit = unsealed.get(k);
+  if (hit !== undefined) return hit;
+  let code = '';
+  try { code = decryptPayload(e.sealed).functionCode; } catch { code = ''; }
+  if (unsealed.size > 64) unsealed.delete(unsealed.keys().next().value!);
+  unsealed.set(k, code);
+  return code;
+}
+
+/** Seal a custom effect's code (for a sealed node pack): the code goes into the blob and out of the record. */
+export function sealCustomCode(code: string): SealedBlob {
+  return encryptPayload({ functionCode: code, helperFunctions: [] });
+}
+
+const renderable = new WeakMap<PlayFinish, PlayFinish>();
+/** The finish as the renderer needs it: sealed custom effects with their code filled in (in memory only; the record keeps them sealed). */
+export function renderableFinish(finish: PlayFinish | undefined): PlayFinish | undefined {
+  if (!finish || !finish.effects.some(e => e.kind === 'custom' && e.sealed)) return finish;
+  const hit = renderable.get(finish);
+  if (hit) return hit;
+  const out = { ...finish, effects: finish.effects.map(e => (e.kind === 'custom' && e.sealed ? { ...e, code: finishCustomCode(e) } : e)) };
+  renderable.set(finish, out);
+  return out;
+}
+
+/** A new custom effect in the stack, at its settings' defaults. */
+export function newCustomEffect(def: { name: string; code: string; defId?: string; sealed?: SealedBlob }, id = finishEffectId('custom')): FinishEffect {
+  const e: FinishEffect = { id, kind: 'custom', enabled: true, name: def.name.trim().slice(0, 60) || 'Custom effect', code: def.sealed ? '' : def.code, ...(def.defId ? { defId: def.defId } : {}), ...(def.sealed ? { sealed: def.sealed } : {}) };
+  for (const p of fnParseCustom(finishCustomCode(e)).params) e[p.key] = p.value;
+  return e;
+}
+
+/** A custom effect with new code: the settings it still has keep their values (clamped), new ones start at their defaults, gone ones go. */
+export function withCustomCode(e: FinishEffect, code: string): FinishEffect {
+  const old = fnParseCustom(finishCustomCode(e)).params;
+  const out: FinishEffect = { id: e.id, kind: 'custom', enabled: e.enabled, name: e.name, code, ...(e.defId ? { defId: e.defId } : {}) };
+  for (const p of fnParseCustom(code).params) {
+    const v = e[p.key];
+    out[p.key] = typeof v === 'number' && old.some(o => o.key === p.key) ? Math.max(p.min, Math.min(p.max, v)) : p.value;
+  }
+  return out;
+}
+
+export function isSealedBlob(x: unknown): x is SealedBlob {
+  const b = x as SealedBlob | null;
+  return !!b && typeof b === 'object' && b.v === 1 && b.alg === 'A256GCM' && typeof b.salt === 'string' && typeof b.iv === 'string' && typeof b.data === 'string';
 }
 
 // ── Making and parsing ──────────────────────────────────────────────────────
 
 let seq = 0;
-export function finishEffectId(kind: FinishKind): string {
+export function finishEffectId(kind: FinishKind | 'custom'): string {
   seq += 1;
   return `fx_${kind}_${Date.now().toString(36)}${seq.toString(36)}`;
 }
@@ -141,10 +262,36 @@ export function parseCurves(raw: unknown): FinishCurves {
   return out;
 }
 
+/** The longest custom effect code kept (characters). */
+export const FINISH_CUSTOM_MAX_CODE = 20000;
+
+/** A custom effect from a file: its name, code (or sealed blob) and settings, clamped to what the code declares. */
+function parseCustomEffect(r: Record<string, unknown>): FinishEffect | null {
+  const sealed = isSealedBlob(r.sealed) ? r.sealed : undefined;
+  const code = typeof r.code === 'string' ? r.code.slice(0, FINISH_CUSTOM_MAX_CODE) : '';
+  if (!sealed && !code.trim()) return null;
+  const id = typeof r.id === 'string' && r.id.trim() ? r.id.slice(0, 80) : finishEffectId('custom');
+  const e = newCustomEffect({ name: typeof r.name === 'string' ? r.name : 'Custom effect', code, ...(typeof r.defId === 'string' && r.defId ? { defId: r.defId.slice(0, 80) } : {}), ...(sealed ? { sealed } : {}) }, id);
+  e.enabled = r.enabled !== false;
+  for (const p of finishParamsOf(e)) e[p.key] = clampNum(r[p.key], p);
+  return e;
+}
+
+/** The wipe from a file (absent or odd = none). */
+export function parseCompare(raw: unknown): FinishCompare | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const c = fnDefaultCompare();
+  c.on = r.on === true;
+  for (const p of FN_COMPARE_PARAMS) (c as unknown as Record<string, number>)[p.key] = clampNum(r[p.key], p);
+  return c;
+}
+
 /** One effect from a file, at its kind's defaults where anything is missing or odd; null for an unknown kind. */
 export function parseFinishEffect(raw: unknown): FinishEffect | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
+  if (r.kind === 'custom') return parseCustomEffect(r);
   const kind = r.kind as FinishKind;
   if (!FINISH_KINDS.includes(kind)) return null;
   const id = typeof r.id === 'string' && r.id.trim() ? r.id.slice(0, 80) : finishEffectId(kind);
@@ -164,7 +311,7 @@ export function parseFinishEffect(raw: unknown): FinishEffect | null {
   return e;
 }
 
-/** The stack from a file: known effects only, one of each kind (the first), ids unique. Absent or empty (and on) = undefined. */
+/** The stack from a file: known effects only, one of each built-in kind (the first; custom effects any number), ids unique, and the wipe. Absent or empty (and on) = undefined. */
 export function parseFinish(raw: unknown): PlayFinish | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const r = raw as Record<string, unknown>;
@@ -173,15 +320,16 @@ export function parseFinish(raw: unknown): PlayFinish | undefined {
   if (Array.isArray(r.effects)) {
     for (const x of r.effects) {
       const e = parseFinishEffect(x);
-      if (!e || kinds.has(e.kind)) continue;
-      if (ids.has(e.id)) e.id = finishEffectId(e.kind);
+      if (!e || (e.kind !== 'custom' && kinds.has(e.kind))) continue;
+      if (ids.has(e.id) || e.id === FN_COMPARE_ID) e.id = finishEffectId(e.kind);
       kinds.add(e.kind); ids.add(e.id);
       effects.push(e);
     }
   }
   const on = r.on !== false;
   if (!effects.length && on) return undefined;
-  return { on, effects };
+  const compare = parseCompare(r.compare);
+  return compare ? { on, effects, compare } : { on, effects };
 }
 
 /** Does the finish do anything worth saving? */

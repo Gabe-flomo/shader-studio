@@ -15,6 +15,8 @@
  *                      description, and one item per extra
  *   versions           semver parse / bump, and the version an export gets
  */
+import { loadSavedEffects, type ListKV, type SavedEffect } from '../play/finishLibrary';
+import { sealCustomCode } from '../types/playFinish';
 import type { UserNodeDefinition } from '../types/userNode';
 import { GLSL_KEY, GRAPH_PREFIX } from '../files/inventory';
 import { PRESENTATION_KEY_PREFIX } from '../utils/library';
@@ -220,7 +222,7 @@ export function validatePack(p: PackProject, env: PackEnv, compiled?: CompileRes
 
   if (!p.name.trim()) pack.push({ level: 'error', text: 'Give the pack a name.' });
   if (!parseVersion(p.version)) pack.push({ level: 'error', text: `“${p.version}” isn’t a version: use three numbers, like 1.0.0.` });
-  if (!p.packNodes.length) pack.push({ level: 'error', text: 'Add at least one node.' });
+  if (!p.packNodes.length && !p.extras.some(e => e.kind === 'finishEffect')) pack.push({ level: 'error', text: 'Add at least one node (or a Finish effect).' });
   if (!p.author.trim()) pack.push({ level: 'info', text: 'No author name: the file will say “Unnamed author”.' });
   const builtin = new Set([...(env.builtinLabels?.() ?? [])].map(l => l.toLowerCase()));
 
@@ -259,6 +261,8 @@ export function validatePack(p: PackProject, env: PackEnv, compiled?: CompileRes
       if (!glslShader(env.kv, e.id)) add(extras, k, { level: 'warn', text: 'This shader isn’t on the GLSL page any more: it will be left out.' });
     } else if (e.kind === 'note') {
       if (!e.text.trim()) add(extras, k, { level: 'info', text: 'It’s empty: it will be left out.' });
+    } else if (e.kind === 'finishEffect') {
+      if (!loadSavedEffects(listKV(env.kv)).some(x => x.id === e.id)) add(extras, k, { level: 'warn', text: 'This Finish effect isn’t in Your effects any more: it will be left out.' });
     }
   }
   const all = [...pack, ...[...nodes.values()].flat(), ...[...extras.values()].flat()];
@@ -340,15 +344,26 @@ export async function assemblePack(p: PackProject, env: PackEnv, o: { version?: 
       items.push({ kind: 'background', name: f.name || e.name, data: f.bytes, ext: extFor(f.type), meta: { type: f.type } });
     }
   }
+  // Custom Finish effects travel inside the nodes item (sealed with the pack, or when they came sealed).
+  const saved = loadSavedEffects(listKV(env.kv));
+  const finishEffects: SavedEffect[] = [];
+  for (const e of p.extras) {
+    if (e.kind !== 'finishEffect') continue;
+    const fx = saved.find(x => x.id === e.id);
+    if (!fx) { missing.push(`“${e.name}”`); continue; }
+    const out: SavedEffect = { ...fx, pack: packCategory(p) };
+    if (p.sealed && !out.sealed) { out.sealed = sealCustomCode(out.code); out.code = ''; }
+    finishEffects.push(out);
+  }
   if (missing.length) notes.push(`Left out (not here any more): ${missing.join(', ')}.`);
 
-  const info = packInfo(p, version, examples, presentations);
+  const info = { ...packInfo(p, version, examples, presentations), ...(finishEffects.length ? { finishEffects: finishEffects.map(f => f.name) } : {}) };
   const defs = packDefinitions(p, env, o.now);
   const sealed = defs.length > 0 && defs.every(d => !!d.sealed);
   const nodesItem: WriteItem = {
     kind: 'nodes', name: info.name,
-    data: JSON.stringify({ version: 1, nodes: defs, pack: info }, null, 1),
-    meta: { count: defs.length, sealed: sealed ? true : defs.some(d => !!d.sealed) ? 'some' : false, labels: defs.map(d => d.label).slice(0, 50), pack: { id: info.id, name: info.name, version } },
+    data: JSON.stringify({ version: 1, nodes: defs, pack: info, ...(finishEffects.length ? { finishEffects } : {}) }, null, 1),
+    meta: { count: defs.length, ...(finishEffects.length ? { finishEffects: finishEffects.length } : {}), sealed: sealed ? true : defs.some(d => !!d.sealed) ? 'some' : false, labels: defs.map(d => d.label).slice(0, 50), pack: { id: info.id, name: info.name, version } },
   };
   return { items: [nodesItem, ...items], info, defs, sealed, notes };
 }
@@ -366,3 +381,8 @@ function extFor(type: string): string {
 
 /** Byte length of an item's data (for the export summary). */
 export const itemBytes = (it: WriteItem): number => (typeof it.data === 'string' ? new TextEncoder().encode(it.data).length : it.data.length);
+
+/** The pack's KV as the Finish library reads it (read-only here). */
+function listKV(kv: ReadKV): ListKV {
+  return { get: k => kv.get(k), set: () => ({ ok: false, error: 'read-only' }) };
+}

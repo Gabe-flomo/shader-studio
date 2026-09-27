@@ -14,7 +14,7 @@
 import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
 import { layerNumericProps, parseActionTarget, parseLayerTarget } from '../types/play';
-import { finishParam, parseFinishTarget, readFinishValue } from '../types/playFinish';
+import { finishHost, finishParamOf, parseFinishTarget, patchFinishEffect, readFinishValue } from '../types/playFinish';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDrivers';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
@@ -188,8 +188,8 @@ export function findTargetNode(nodes: GraphNode[], target: string): GraphNode | 
 export function controlHelp(nodes: GraphNode[], target: string, play?: PlayRecord): { hint?: string; comment?: string } {
   const ft = parseFinishTarget(target);
   if (ft) {
-    const e = play?.finish?.effects.find(x => x.id === ft.effectId);
-    const hint = e ? finishParam(e.kind, ft.key)?.hint : undefined;
+    const e = finishHost(play?.finish, ft.effectId);
+    const hint = e ? finishParamOf(e, ft.key)?.hint : undefined;
     return hint ? { hint } : {};
   }
   const lt = parseLayerTarget(target);
@@ -261,7 +261,7 @@ export function bakeLayerValues(play: PlayRecord, values: Map<string, number | n
     const v = values.get(c.id);
     if (typeof v !== 'number') continue;
     const ft = parseFinishTarget(c.target);
-    if (ft && finish) { finish = { ...finish, effects: finish.effects.map(e => (e.id === ft.effectId ? { ...e, [ft.key]: v } : e)) }; continue; }
+    if (ft && finish) { finish = patchFinishEffect(finish, ft.effectId, { [ft.key]: v }); continue; }
     const lt = parseLayerTarget(c.target);
     if (!lt) continue;
     layers = layers.map(l => l.id === lt.layerId ? { ...l, [lt.key]: v } as typeof l : l);

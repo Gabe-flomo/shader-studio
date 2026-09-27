@@ -5,7 +5,7 @@ Collected from the owner's notes on 27 September 2026. Each item is planned, not
 ## Order
 
 1. **Finish what's paused:** p5.js import with multi-file scripts and a Console; the pop-out node pack builder (including `.playfile` carrying videos).
-2. **Finish stack follow-ups:** an animatable before/after wipe, whole-stack presets, custom effects.
+2. **Finish stack follow-ups:** custom effects from a graph (the Picture node and Publish as Finish effect), multi-pass custom effects, shader HDR for halation and bloom.
 3. **Files page:** a Notes section; tidy the settings entries.
 4. **Actions and controls:** condition triggers, "send a signal" actions, pair/position controls, axis swap.
 5. **MIDI:** knob lock, key-press note ranges, grid controllers (Push, Launchpad).
@@ -15,12 +15,10 @@ Collected from the owner's notes on 27 September 2026. Each item is planned, not
 
 ## Finish stack follow-ups
 
-- **Animatable before/after.** Today the compare divider only shows while editing (`uCompare` is skipped in renders). Save it on the record (`finish.compare`: on, position, maybe angle), expose `finish:compare::pos` as a mapping target, and apply it in renders and exports, so it becomes an animated wipe between the ungraded and finished picture.
-- **Stack presets.** "Save stack as preset…" keeps the effects, their order and every setting (curves included). Load with Replace stack or Add to stack; rename and delete; carried in library ZIPs, `.playfile` and the Files page.
-- **Custom effects,** two routes:
-  - *From a graph:* a new **Picture** source node (the finished frame) wired through any nodes, then **Publish as Finish effect**. Exposed sliders become the effect's settings (`finish:<effect>::<param>`).
-  - *From a snippet:* fill in `vec3 effect(vec2 uv, vec3 color)` with `picture(uv)`, `px` and `time`; `uniform float amount; // 0..1 = 0.5` makes a slider.
-  - Both run as extra steps in the single Finish pass. A broken one is skipped, not blanked, and errors show inline. Saved in the library, shareable in node packs, and they work in renders and website exports. Multi-pass custom effects come later.
+Done: the animatable before/after wipe (`finish.compare`), stack presets, and custom effects from a snippet (Your effects, node packs, sealing, exports). See `finish-stack.md`.
+
+- **Custom effects from a graph.** A **Picture** source node (the finished frame) wired through any nodes, then **Publish as Finish effect**: the compiled graph becomes an ordinary custom effect (its exposed sliders its settings). The conversion is written up in `finish-stack.md`, "From a graph (next step)".
+- **Multi-pass custom effects** (their own blurs, feedback).
 - **Shader HDR for halation and bloom.** Feed the shader's picture from before tone mapping into the stack.
 
 ## Files page

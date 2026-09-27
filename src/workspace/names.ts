@@ -93,7 +93,7 @@ export function isConflictName(base: string): boolean {
 }
 
 /** The extensions the workspace uses, longest first, so "x.graph.json" splits as x + .graph.json. */
-export const EXTENSIONS = ['.graph.json', '.present.json', '.glsl.json', '.fn.json', '.node.json', '.sketch.json', '.kind.json', '.builder.json', '.builder-group.json', '.palette.json', '.glsl', '.json', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.avif'];
+export const EXTENSIONS = ['.graph.json', '.present.json', '.glsl.json', '.fn.json', '.node.json', '.sketch.json', '.kind.json', '.builder.json', '.builder-group.json', '.palette.json', '.finish.json', '.effect.json', '.glsl', '.json', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.avif'];
 
 /** A path's folder, name and extension: "graphs/Tests/Foo.graph.json" → ["graphs/Tests", "Foo", ".graph.json"]. */
 export function splitPath(path: string): { dir: string; base: string; ext: string } {

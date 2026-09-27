@@ -9,7 +9,7 @@
  * laid out like Lumetri: a Look to start from, Basic, Curves, Colour wheels,
  * Split toning, HSL secondary, Tone mapping.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { Button, IconButton } from '../../ui/Button';
@@ -26,18 +26,23 @@ import { askConfirm, askText } from '../../ui/dialogStore';
 import { toast } from '../../ui/toastStore';
 import { moveItem } from '../../../lib/reorder';
 import { playId } from '../../../play/playControls';
-import { playOverlay } from '../../../play/overlay';
 import { Section } from '../layers/Section';
 import { usePlayUi } from '../playUi';
 import { CurveEditor } from './CurveEditor';
 import { ColourWheel } from './ColourWheel';
 import { deleteLook, loadSavedLooks, saveLook, SAVED_LOOKS_CHANGED, type SavedLook } from './savedLooks';
+import {
+  applyStackPreset, deleteStackPreset, EFFECT_TEMPLATE, FINISH_LIBRARY_CHANGED, loadSavedEffects, loadStackPresets, renameStackPreset, saveEffect, saveStackPreset,
+  type StackPreset,
+} from '../../../play/finishLibrary';
+import { GlslEditor } from '../../code/GlslEditor';
 import type { PlayControl, PlayRecord } from '../../../types/play';
 import {
-  FINISH_EFFECTS, FINISH_KINDS, FINISH_TIME_QUALITY, GRADE_LOOKS, applyLook, emptyFinish, finishParam, finishTarget, lookFromGrade, newFinishEffect,
-  type FinishEffect, type FinishKind, type PlayFinish,
+  FINISH_COMPARE_ID, FINISH_EFFECTS, FINISH_KINDS, FINISH_TIME_QUALITY, GRADE_LOOKS, applyLook, compareHost, emptyFinish, finishCustomCode, finishHostLabel, finishHosts,
+  finishParamOf, finishParamsOf, finishTarget, lookFromGrade, newCustomEffect, newFinishEffect, patchFinishEffect, withCustomCode,
+  type FinishCompare, type FinishEffect, type FinishHost, type FinishKind, type PlayFinish,
 } from '../../../types/playFinish';
-import { fnRingSize, type FnParam } from '../../../play/kit/finish.js';
+import { FN_COMPARE_PARAMS, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam } from '../../../play/kit/finish.js';
 
 const TONE_OPTIONS = [
   { value: 'none', label: 'None' }, { value: 'aces', label: 'ACES' }, { value: 'agx', label: 'AgX' }, { value: 'hable', label: 'Hable' },
@@ -67,36 +72,48 @@ export function FinishPanel({ play, onChange, touch, wide = false }: {
 }) {
   const tk = useTokens();
   const finish = play.finish ?? emptyFinish();
-  const compare = usePlayUi(s => s.compare), setCompare = usePlayUi(s => s.setCompare);
   const focus = usePlayUi(s => s.finishFocus), focusTick = usePlayUi(s => s.finishTick);
   const exposed = useMemo(() => new Set(play.controls.map(c => c.target)), [play.controls]);
+  const [lib, setLib] = useState(() => ({ presets: loadStackPresets(), effects: loadSavedEffects() }));
+  useEffect(() => {
+    const on = () => setLib({ presets: loadStackPresets(), effects: loadSavedEffects() });
+    window.addEventListener(FINISH_LIBRARY_CHANGED, on);
+    return () => window.removeEventListener(FINISH_LIBRARY_CHANGED, on);
+  }, []);
+  const [presetMenu, setPresetMenu] = useState<{ x: number; y: number } | null>(null);
 
   const setFinish = (fn: (f: PlayFinish) => PlayFinish) => onChange(p => {
     const next = fn(p.finish ?? emptyFinish());
-    // Controls on an effect that went go with it (and their mappings).
-    const ids = new Set(next.effects.map(e => e.id));
+    // Controls on an effect that went go with it (and their mappings). The wipe's stay while the stack does.
+    const ids = new Set(finishHosts(next).map(e => e.id));
     const gone = p.controls.filter(c => c.target.startsWith('finish:') && !ids.has(c.target.slice(7, c.target.lastIndexOf('::')))).map(c => c.id);
     const out: PlayRecord = { ...p, finish: next.effects.length || !next.on ? next : undefined };
     if (gone.length) { const g = new Set(gone); out.controls = p.controls.filter(c => !g.has(c.id)); out.mappings = p.mappings.filter(m => !g.has(m.controlId)); }
     return out;
   });
-  const patch = (id: string, change: Partial<FinishEffect>) => setFinish(f => ({ ...f, effects: f.effects.map(e => (e.id === id ? { ...e, ...change } as FinishEffect : e)) }));
-  const expose = (e: FinishEffect, p: FnParam) => onChange(r => {
+  const patch = (id: string, change: Record<string, unknown>) => setFinish(f => patchFinishEffect(f, id, change)!);
+  const expose = (e: FinishHost, p: FnParam) => onChange(r => {
     const target = finishTarget(e.id, p.key);
     if (r.controls.some(c => c.target === target)) return r;
-    const control: PlayControl = { id: playId('ctl'), target, kind: 'float', label: `${FINISH_EFFECTS[e.kind].label} · ${p.label}`, min: p.min, max: p.max, ...(p.step ? { step: p.step } : {}) };
+    const control: PlayControl = { id: playId('ctl'), target, kind: 'float', label: `${finishHostLabel(e)} · ${p.label}`, min: p.min, max: p.max, ...(p.step ? { step: p.step } : {}) };
     toast.success(`${control.label} is a control`, { message: 'Map a source onto it in Mappings (audio, an LFO, the mouse…).', action: { label: 'Show', onClick: () => usePlayUi.getState().setTab('controls') } });
     return { ...r, controls: [...r.controls, control] };
   });
-  const add = (kind: FinishKind) => {
-    if (finish.effects.some(e => e.kind === kind)) return;
-    const e = newFinishEffect(kind);
+  const push = (e: FinishEffect) => {
     setFinish(f => ({ ...f, on: true, effects: [...f.effects, e] }));
     usePlayUi.getState().revealFinish(e.id);
   };
-
-  // A new compare starts in the middle; leaving the tab keeps it (the picture shows the divider).
-  useEffect(() => { playOverlay.setCompare(compare); }, [compare]);
+  const add = (value: string) => {
+    if (value === NEW_CODE) { push(newCustomEffect({ name: 'Posterize', code: EFFECT_TEMPLATE })); return; }
+    if (value.startsWith(SAVED_PREFIX)) {
+      const d = lib.effects.find(x => x.id === value.slice(SAVED_PREFIX.length));
+      if (d) push(newCustomEffect({ name: d.name, code: d.code, defId: d.id, ...(d.sealed ? { sealed: d.sealed } : {}) }));
+      return;
+    }
+    const kind = value as FinishKind;
+    if (!FINISH_EFFECTS[kind] || finish.effects.some(e => e.kind === kind)) return;
+    push(newFinishEffect(kind));
+  };
 
   const sections: PickerSection[] = useMemo(() => {
     const groups = new Map<string, PickerSection['items'][number][]>();
@@ -107,28 +124,71 @@ export function FinishPanel({ play, onChange, touch, wide = false }: {
       list.push({ value: k, label: d.label, description: inStack ? 'Already in the stack' : d.summary, icon: d.icon as IconName, disabled: inStack });
       groups.set(d.group, list);
     }
-    return [...groups].map(([heading, items]) => ({ heading, items }));
-  }, [finish.effects]);
+    const yours: PickerSection['items'][number][] = [
+      ...lib.effects.map(d => ({ value: SAVED_PREFIX + d.id, label: d.name, description: d.description || (d.sealed ? `Sealed${d.pack ? ` · ${d.pack}` : ''}` : d.pack ? `From ${d.pack}` : 'Your effect code'), icon: 'code' as IconName })),
+      { value: NEW_CODE, label: 'New effect code…', description: 'Write vec3 effect(vec2 uv, vec3 color) in GLSL; uniforms become sliders', icon: 'plus' as IconName },
+    ];
+    return [...[...groups].map(([heading, items]) => ({ heading, items })), { heading: 'Your effects', items: yours }];
+  }, [finish.effects, lib.effects]);
 
+  // Stack presets: save, and load (Replace stack / Add to stack), rename, delete.
+  const savePreset = async () => {
+    const name = await askText('Save the stack as a preset', { label: 'Name', initial: 'My finish', confirmLabel: 'Save preset' });
+    if (!name?.trim()) return;
+    const { result } = saveStackPreset(name.trim(), finish);
+    if (!result.ok) { toast.error('Couldn’t save the preset', { message: result.error }); return; }
+    toast.success(`Saved “${name.trim()}”`, { message: 'Every effect, its order and its settings. Load it from Presets on any Play.' });
+  };
+  const loadPreset = (pr: StackPreset, mode: 'replace' | 'add') => {
+    let skipped: string[] = [];
+    setFinish(f => { const r = applyStackPreset(f, pr, mode); skipped = r.skipped; return r.finish; });
+    if (skipped.length) toast.info(`Added “${pr.name}”`, { message: `Left out ${skipped.join(', ')}: the stack already has ${skipped.length === 1 ? 'one' : 'them'}.` });
+  };
+  const renamePreset = async (pr: StackPreset) => {
+    const name = await askText('Rename the preset', { label: 'Name', initial: pr.name, confirmLabel: 'Rename' });
+    if (name?.trim()) renameStackPreset(pr.id, name);
+  };
+  const removePreset = async (pr: StackPreset) => {
+    if (await askConfirm(`Delete the preset “${pr.name}”?`, { message: 'Plays that loaded it keep their stacks.', confirmLabel: 'Delete', danger: true })) deleteStackPreset(pr.id);
+  };
+  const presetItems: MenuItem[] = [
+    { label: 'Save stack as preset…', icon: 'save', disabled: !finish.effects.length, hint: 'Every effect, its order and settings', onSelect: () => { void savePreset(); } },
+    ...lib.presets.flatMap((pr): MenuItem[] => [
+      'separator',
+      { heading: `${pr.name} · ${pr.finish.effects.map(e => finishHostLabel(e)).join(', ')}`.slice(0, 90) },
+      { label: 'Replace stack', icon: 'import', onSelect: () => loadPreset(pr, 'replace') },
+      { label: 'Add to stack', icon: 'plus', onSelect: () => loadPreset(pr, 'add') },
+      { label: 'Rename…', icon: 'edit', onSelect: () => { void renamePreset(pr); } },
+      { label: 'Delete', icon: 'trash', danger: true, onSelect: () => { void removePreset(pr); } },
+    ]),
+  ];
+
+  const compare = finish.compare;
   const active = finish.on && finish.effects.some(e => e.enabled);
+  const toggleWipe = () => setFinish(f => ({ ...f, compare: { ...(f.compare ?? fnDefaultCompare()), on: !f.compare?.on } }));
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 12px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '2px 0 8px' }}>
         <Toggle checked={finish.on} onChange={on => setFinish(f => ({ ...f, on }))} label="Finish" />
-        <Tooltip label="Before / after" description="Split the picture: left of the divider is the picture before the Finish stack. Drag the divider on the picture." placement="bottom">
+        <Tooltip label="Before / after wipe" description="Split the picture: on one side of the divider, the picture before the Finish stack. It is saved with the Play, shows in renders and exports, and its position and angle can be mapped (an LFO makes a moving wipe). Drag the divider on the picture." placement="bottom">
           <span>
-            <Button size="sm" variant={compare !== null ? 'primary' : 'secondary'} icon="layoutSplit" disabled={!active} onClick={() => setCompare(compare === null ? 0.5 : null)}>Before / after</Button>
+            <Button size="sm" variant={compare?.on ? 'primary' : 'secondary'} icon="layoutSplit" disabled={!active} onClick={toggleWipe}>Before / after</Button>
           </span>
         </Tooltip>
+        <Button size="sm" icon="presets" onClick={ev => { const r = (ev.currentTarget as HTMLElement).getBoundingClientRect(); setPresetMenu({ x: r.left, y: r.bottom + 4 }); }}>Presets</Button>
         <span style={{ flex: 1 }} />
         <div style={{ minWidth: 170 }}>
-          <GroupedPicker value="" placeholder="+ Add effect" ariaLabel="Add an effect" title="Add an effect" sections={sections} onChange={v => add(v as FinishKind)} width={300} search={false} />
+          <GroupedPicker value="" placeholder="+ Add effect" ariaLabel="Add an effect" title="Add an effect" sections={sections} onChange={add} width={300} search={false} />
         </div>
       </div>
+      {presetMenu && <Menu x={presetMenu.x} y={presetMenu.y} items={presetItems} onClose={() => setPresetMenu(null)} title="Stack presets" minWidth={230} />}
+      {compare?.on && active && (
+        <WipeCard compare={compare} touch={touch} exposed={exposed} onPatch={change => patch(FINISH_COMPARE_ID, change)} onExpose={p => expose(compareHost(compare), p)} />
+      )}
       {finish.effects.length === 0 && (
         <div style={{ padding: '18px 14px', borderRadius: radius.md, background: tk.bg.panel, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
           <div style={{ color: tk.text.secondary, font: `650 12.5px ${fontFamily.ui}`, marginBottom: 4 }}>Finish the whole picture</div>
-          Effects here work on the final frame, the shader and every layer together, like a colourist’s grade and a lens on the camera. Start with a <b>Grade</b>, or add <b>Bloom</b>, <b>Film grain</b>, a <b>CRT</b> or <b>Time displacement</b>. With nothing here the picture costs nothing extra.
+          Effects here work on the final frame, the shader and every layer together, like a colourist’s grade and a lens on the camera. Start with a <b>Grade</b>, or add <b>Bloom</b>, <b>Film grain</b>, a <b>CRT</b> or <b>Time displacement</b>, or write your own under <b>+ Add effect → Your effects</b>. With nothing here the picture costs nothing extra.
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
             {(['grade', 'bloom', 'grain', 'vignette'] as FinishKind[]).map(k => <Button key={k} size="sm" icon="plus" onClick={() => add(k)}>{FINISH_EFFECTS[k].label}</Button>)}
           </div>
@@ -157,9 +217,36 @@ export function FinishPanel({ play, onChange, touch, wide = false }: {
       </div>
       {finish.effects.length > 1 && (
         <div style={{ marginTop: 10, color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>
-          Colour effects run top to bottom. Camera shake, lens distortion and CRT curvature bend the picture before anything reads it; chromatic aberration and time displacement choose what is read.
+          Colour effects (your own included) run top to bottom. Camera shake, lens distortion and CRT curvature bend the picture before anything reads it; chromatic aberration and time displacement choose what is read.
         </div>
       )}
+    </div>
+  );
+}
+
+const NEW_CODE = '__code';
+const SAVED_PREFIX = 'saved:';
+
+// ── The before/after wipe ───────────────────────────────────────────────────
+
+function WipeCard({ compare, touch, exposed, onPatch, onExpose }: {
+  compare: FinishCompare;
+  touch: boolean;
+  exposed: Set<string>;
+  onPatch: (change: Record<string, unknown>) => void;
+  onExpose: (p: FnParam) => void;
+}) {
+  const tk = useTokens();
+  const host = compareHost(compare);
+  return (
+    <div style={{ borderRadius: radius.md, background: tk.bg.panel, border: `1px solid ${tk.border.default}`, padding: '6px 10px 10px', marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Icon name="layoutSplit" size={14} style={{ color: tk.accent.base, flexShrink: 0 }} />
+        <span style={{ flex: 1, color: tk.text.primary, font: `650 12.5px ${fontFamily.ui}` }}>Before / after wipe</span>
+        <IconButton icon="close" size="sm" label="Turn the wipe off (its settings are kept)" onClick={() => onPatch({ on: false })} />
+      </div>
+      {FN_COMPARE_PARAMS.map(p => <NumRow key={p.key} e={host} p={p} touch={touch} exposed={exposed.has(finishTarget(FINISH_COMPARE_ID, p.key))} onSet={v => onPatch({ [p.key]: v })} onExpose={onExpose} />)}
+      <Note>Saved with the Play and drawn in renders, takes, stills and websites. Map <b>Position</b> (an LFO, the mouse, audio) for a moving wipe; drag the divider on the picture to place it.</Note>
     </div>
   );
 }
@@ -185,7 +272,9 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
 }) {
   const onMove = (to: number) => onReorder(index, to);
   const tk = useTokens();
-  const def = FINISH_EFFECTS[e.kind];
+  const custom = e.kind === 'custom';
+  const title = finishHostLabel(e);
+  const icon: IconName = custom ? 'code' : FINISH_EFFECTS[e.kind as FinishKind].icon as IconName;
   const foldKey = `finish:${e.id}`;
   const folded = usePlayUi(s => !!s.folded[foldKey]);
   const toggleFold = usePlayUi(s => s.toggleFold);
@@ -202,7 +291,16 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
     { label: 'Move up', icon: 'chevU', disabled: index === 0, onSelect: () => onMove(index - 1) },
     { label: 'Move down', icon: 'chevD', disabled: index === count - 1, onSelect: () => onMove(index + 1) },
     'separator',
-    { label: 'Reset to defaults', icon: 'resetParams', onSelect: () => onReplace({ ...newFinishEffect(e.kind, e.id), enabled: e.enabled }) },
+    ...(custom ? [
+      { label: 'Rename…', icon: 'edit', onSelect: () => { void askText('Rename the effect', { label: 'Name', initial: title, confirmLabel: 'Rename' }).then(n => { if (n?.trim()) onPatch({ name: n.trim().slice(0, 60) }); }); } },
+      ...(e.sealed ? [] : [{ label: e.defId ? 'Save to Your effects (update)' : 'Save to Your effects', icon: 'save', hint: 'Keep it in + Add effect → Your effects', onSelect: () => {
+        const { result, saved } = saveEffect({ name: title, code: e.code ?? '', ...(e.defId && loadSavedEffects().some(x => x.id === e.defId && !x.sealed) ? { id: e.defId } : {}) });
+        if (!result.ok || !saved) { toast.error('Couldn’t save the effect', { message: result.ok ? undefined : result.error }); return; }
+        onPatch({ defId: saved.id });
+        toast.success(`Saved “${saved.name}”`, { message: 'It is under + Add effect → Your effects, in library exports and node packs.' });
+      } } as MenuItem]),
+    ] as MenuItem[] : []),
+    { label: 'Reset to defaults', icon: 'resetParams', onSelect: () => onReplace(custom ? { ...newCustomEffect({ name: title, code: e.code ?? '', ...(e.defId ? { defId: e.defId } : {}), ...(e.sealed ? { sealed: e.sealed } : {}) }, e.id), enabled: e.enabled } : { ...newFinishEffect(e.kind as FinishKind, e.id), enabled: e.enabled }) },
     { label: 'Remove', icon: 'trash', danger: true, onSelect: onRemove },
   ];
   const k = kitFor(e, touch, exposed, onPatch, onExpose);
@@ -216,9 +314,9 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
         style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 6px 6px 8px', cursor: touch ? 'default' : 'grab' }}
       >
         {!touch && <Icon name="grip" size={12} style={{ color: tk.text.disabled, flexShrink: 0 }} />}
-        <Icon name={def.icon as IconName} size={14} style={{ color: e.enabled ? tk.accent.base : tk.text.faint, flexShrink: 0 }} />
+        <Icon name={icon} size={14} style={{ color: e.enabled ? tk.accent.base : tk.text.faint, flexShrink: 0 }} />
         <button type="button" onClick={() => toggleFold(foldKey)} aria-expanded={!folded} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `650 12.5px ${fontFamily.ui}`, textAlign: 'left' }}>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{def.label}</span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
           {e.kind === 'grade' && e.look && <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lookName(e.look)}</span>}
         </button>
         <Toggle checked={e.enabled} onChange={enabled => onPatch({ enabled })} />
@@ -230,7 +328,7 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
           {editorFor(e, k, touch, layers, onPatch, onReplace)}
         </div>
       )}
-      {menu && <Menu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} title={def.label} />}
+      {menu && <Menu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} title={title} />}
     </div>
   );
 }
@@ -247,15 +345,15 @@ interface RowKit {
 
 function kitFor(e: FinishEffect, touch: boolean, exposed: Set<string>, onPatch: (c: Partial<FinishEffect>) => void, onExpose: (p: FnParam) => void): RowKit {
   return {
-    num: (key, label) => <NumRow key={key} e={e} p={finishParam(e.kind, key)!} label={label} touch={touch} exposed={exposed.has(finishTarget(e.id, key))} onSet={v => onPatch({ [key]: v })} onExpose={onExpose} />,
-    nums: (...keys) => keys.map(key => <NumRow key={key} e={e} p={finishParam(e.kind, key)!} touch={touch} exposed={exposed.has(finishTarget(e.id, key))} onSet={v => onPatch({ [key]: v })} onExpose={onExpose} />),
+    num: (key, label) => <NumRow key={key} e={e} p={finishParamOf(e, key)!} label={label} touch={touch} exposed={exposed.has(finishTarget(e.id, key))} onSet={v => onPatch({ [key]: v })} onExpose={onExpose} />,
+    nums: (...keys) => keys.map(key => <NumRow key={key} e={e} p={finishParamOf(e, key)!} touch={touch} exposed={exposed.has(finishTarget(e.id, key))} onSet={v => onPatch({ [key]: v })} onExpose={onExpose} />),
     colour: (label, keys, hint) => <Row key={`c:${label}`} label={label} hint={hint}><ColorSwatch label={label} value={[num(e, keys[0]), num(e, keys[1]), num(e, keys[2])]} onChange={([r, g, b]) => onPatch({ [keys[0]]: r, [keys[1]]: g, [keys[2]]: b })} size="sm" /></Row>,
     row: (label, body, hint) => <Row key={`r:${label}`} label={label} hint={hint}>{body}</Row>,
     note: text => <Note>{text}</Note>,
   };
 }
 
-const num = (e: FinishEffect, key: string): number => { const v = e[key]; return typeof v === 'number' ? v : finishParam(e.kind, key)?.value ?? 0; };
+const num = (e: FinishHost, key: string): number => { const v = e[key]; return typeof v === 'number' ? v : finishParamOf(e, key)?.value ?? 0; };
 
 function Label({ text, hint }: { text: string; hint?: string }) {
   const tk = useTokens();
@@ -270,12 +368,12 @@ function Note({ children }: { children: ReactNode }) {
   return <div style={{ marginTop: 6, color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>{children}</div>;
 }
 
-function NumRow({ e, p, label, touch, exposed, onSet, onExpose }: { e: FinishEffect; p: FnParam; label?: string; touch: boolean; exposed: boolean; onSet: (v: number) => void; onExpose: (p: FnParam) => void }) {
+function NumRow({ e, p, label, touch, exposed, onSet, onExpose }: { e: FinishHost; p: FnParam; label?: string; touch: boolean; exposed: boolean; onSet: (v: number) => void; onExpose: (p: FnParam) => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
       <Label text={label ?? p.label} hint={p.hint || undefined} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <RulerSlider value={num(e, p.key)} min={p.min} max={p.max} step={p.step} defaultValue={p.value} onChange={onSet} ariaLabel={`${FINISH_EFFECTS[e.kind].label} ${p.label}`} touch={touch} integer={p.step === 1 && p.max - p.min === 1} />
+        <RulerSlider value={num(e, p.key)} min={p.min} max={p.max} step={p.step} defaultValue={p.value} onChange={onSet} ariaLabel={`${finishHostLabel(e)} ${p.label}`} touch={touch} integer={p.step === 1 && p.max - p.min === 1} />
       </div>
       <IconButton icon={exposed ? 'check' : 'plus'} size="sm" active={exposed} disabled={exposed} label={exposed ? 'Already a control' : `Make ${p.label} a control, to map audio, an LFO or the mouse onto it`} onClick={() => onExpose(p)} />
     </div>
@@ -297,7 +395,8 @@ function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: Array<{ i
       </>
     );
     case 'time': return <TimeEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
-    default: return <>{FINISH_EFFECTS[e.kind].params.filter(p => !p.hidden).map(p => k.num(p.key))}</>;
+    case 'custom': return <CustomEditor e={e} k={k} touch={touch} onReplace={onReplace} />;
+    default: return <>{finishParamsOf(e).filter(p => !p.hidden).map(p => k.num(p.key))}</>;
   }
 }
 
@@ -415,6 +514,65 @@ function GradeEditor({ e, k, touch, onPatch, onReplace }: { e: FinishEffect; k: 
         </Row>
         {k.num('amount')}
       </Section>
+    </>
+  );
+}
+
+// ── Custom effects (effect code) ────────────────────────────────────────────
+
+/** Errors as the code editor marks them: "Line 3: …" → line 3. */
+function errorLinesOf(err: string): Map<number, string> {
+  const out = new Map<number, string>();
+  for (const l of err.split('\n')) { const m = /^Line (\d+): (.*)$/.exec(l); if (m && !out.has(+m[1])) out.set(+m[1], m[2]); }
+  return out;
+}
+
+function CustomEditor({ e, k, touch, onReplace }: { e: FinishEffect; k: RowKit; touch: boolean; onReplace: (e: FinishEffect) => void }) {
+  const tk = useTokens();
+  const sealed = !!e.sealed;
+  const code = sealed ? '' : e.code ?? '';
+  const [draft, setDraft] = useState(code);
+  const [open, setOpen] = useState(!sealed);
+  // The record's code changed elsewhere (undo, a preset): show it.
+  const committed = useRef(code);
+  useEffect(() => { if (code !== committed.current) { committed.current = code; setDraft(code); } }, [code]);
+  const [error, setError] = useState('');
+  // Check and commit a moment after typing stops. A broken effect is still kept (the renderer leaves it out and says why).
+  useEffect(() => {
+    if (sealed) { setError(''); return; }
+    const t = setTimeout(() => {
+      setError(fnCheckCustom(draft));
+      if (draft !== committed.current) { committed.current = draft; onReplace(withCustomCode(e, draft)); }
+    }, 350);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, sealed]);
+  const parsed = useMemo(() => fnParseCustom(finishCustomCode(e)), [e]);
+  const sliders = parsed.params.filter(p => !p.colour);
+  return (
+    <>
+      {sealed
+        ? <Note>Sealed effect{e.name ? ` “${e.name}”` : ''}: its code isn’t shown. Its settings work like any other.</Note>
+        : (
+          <div style={{ marginTop: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Button size="sm" variant="ghost" icon={open ? 'chevD' : 'chevR'} onClick={() => setOpen(!open)}>Effect code</Button>
+              <span style={{ flex: 1 }} />
+              {error
+                ? <span style={{ color: tk.status.danger, font: `600 11px ${fontFamily.ui}` }}>Doesn’t compile: skipped</span>
+                : <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{sliders.length ? `${sliders.length} slider${sliders.length === 1 ? '' : 's'}` : 'No settings'}{parsed.colours.length ? ` · ${parsed.colours.length} colour${parsed.colours.length === 1 ? '' : 's'}` : ''}</span>}
+            </div>
+            {open && (
+              <div style={{ display: 'flex', height: touch ? 220 : 260, marginTop: 4, borderRadius: radius.sm, overflow: 'hidden', border: `1px solid ${error ? tk.status.danger : tk.border.default}` }}>
+                <GlslEditor value={draft} onChange={setDraft} ariaLabel={`${e.name ?? 'Custom effect'} code`} errorLines={errorLinesOf(error)} />
+              </div>
+            )}
+            {error && <pre style={{ margin: '6px 0 0', padding: '6px 8px', borderRadius: radius.sm, background: alpha(tk.status.danger, 0.1), color: tk.status.danger, font: `11px/1.45 ${fontFamily.mono}`, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 120, overflow: 'auto' }}>{error}</pre>}
+            {open && <Note>Write <code>vec3 effect(vec2 uv, vec3 color)</code>. <code>picture(uv)</code> reads the picture as it came in, <code>px</code> is one pixel, <code>time</code> the clock. Each <code>uniform float name; // 0..1 = 0.5</code> is a slider (and a control), <code>uniform vec3 name; // color = #ff8800</code> a colour. A broken effect is skipped; the picture never goes blank.</Note>}
+          </div>
+        )}
+      {sliders.map(p => k.num(p.key))}
+      {parsed.colours.map(c => k.colour(c.label, c.keys))}
     </>
   );
 }

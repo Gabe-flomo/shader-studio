@@ -74,9 +74,6 @@ interface PlayUi {
   finishTick: number;
   /** Open the Finish tab at this effect. */
   revealFinish: (effectId: string) => void;
-  /** Before/after on the picture: the divider's place (0..1; left of it is the picture before the Finish stack), or null for off. */
-  compare: number | null;
-  setCompare: (x: number | null) => void;
 }
 
 const NONE: ReadonlySet<string> = new Set();
@@ -101,8 +98,6 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   finishFocus: '',
   finishTick: 0,
   revealFinish: id => set({ tab: 'finish', finishFocus: id, finishTick: get().finishTick + 1 }),
-  compare: null,
-  setCompare: compare => set({ compare: compare === null ? null : Math.max(0, Math.min(1, compare)) }),
   mask: '',
   setMask: mask => set({ mask }),
   panel: loadPanel(),
