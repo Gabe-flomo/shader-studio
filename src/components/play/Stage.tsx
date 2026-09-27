@@ -24,6 +24,7 @@ import { controlExists, readControlValue, targetParts } from '../../play/playCon
 import { sourceLabel } from '../../play/playSources';
 import { leftBehind } from '../../play/exportHtml';
 import { stagePageHtml } from '../../present/liveScript';
+import { playUses3D, useThreeSource } from '../../play/threeSource';
 import { parseLayerTarget, type PlayControl, type PlayRecord } from '../../types/play';
 import { playEngine } from '../../lib/playEngine';
 import { useTokens } from '../../theme/themeStore';
@@ -70,13 +71,15 @@ export function Stage({ canvas, onRecord }: {
 
   // Exact: the exported page, built when entering (Refresh rebuilds it after edits).
   const [build, setBuild] = useState(0);
+  // A 3D Script layer: the page carries three.js, so Exact waits for it to load.
+  const threeReady = useThreeSource(useNodeGraphStore(s => playUses3D(s.play)) && mode === 'exact' && !snap);
   const exact = useMemo(() => {
-    if (mode !== 'exact') return null;
+    if (mode !== 'exact' || !threeReady) return null;
     if (snap) return { html: snap.html, missing: snap.missing, left: snap.left };
     const { input, missing } = useNodeGraphStore.getState().playWebInput(graphName);
     return { html: stagePageHtml(input), missing, left: leftBehind(input.play, input.media) };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, build, snap]);
+  }, [mode, build, snap, threeReady]);
 
   const record = () => {
     if (mode === 'full') { onRecord(null); return; }

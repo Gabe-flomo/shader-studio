@@ -20,6 +20,9 @@ import { liveAudio } from '../lib/liveAudio';
 import { layerAudio } from '../lib/layerAudio';
 import { cameraInput } from '../lib/cameraInput';
 import { createLayerKit, type KitAudio, type KitEnv, type KitPointer, type LayerKit } from './kit/kit.js';
+// three.js for 3D Script layers: the set exported pages carry (three is in the app already).
+import * as threeSlim from './kit/three-slim.js';
+import { loadThreeSource, playUses3D, threeSource } from './threeSource';
 import { setScriptStatus } from './scriptStatus';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
@@ -133,7 +136,11 @@ class PlayOverlay {
     this.ctx = el ? el.getContext('2d') : null;
   }
 
-  setRecord(record: PlayRecord): void { this.record = record; }
+  setRecord(record: PlayRecord): void {
+    this.record = record;
+    // A 3D sketch: fetch the three.js script exported pages carry now, so a later export or the Stage has it at hand.
+    if (!threeSource() && playUses3D(record)) void loadThreeSource().catch(() => {});
+  }
 
   /** Fire an action now (the panel's Burst / Drop / Next / Clear buttons). */
   act(a: KitAction): void { this.fire(a); }
@@ -433,6 +440,7 @@ class PlayOverlay {
       override: forExport || this.replaying ? () => {} : (id, k, v) => playEngine.setOverride(id, k, v),
       shaderTap: forExport ? undefined : this.shaderTap ?? undefined,
       scriptStatus: forExport ? undefined : setScriptStatus,
+      three: threeSlim,
     };
   }
 

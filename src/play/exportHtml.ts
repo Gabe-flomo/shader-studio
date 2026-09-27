@@ -24,11 +24,14 @@
 import runtimeSource from './runtime/play-runtime.js?raw';
 import particleSource from './particle-sim.js?raw';
 import geometrySource from './kit/geometry.js?raw';
+import sketch3dSource from './kit/sketch3d.js?raw';
 import layersSource from './kit/layers.js?raw';
 import bodiesSource from './kit/bodies.js?raw';
 import kitSource from './kit/kit.js?raw';
 import type { PlayRecord } from '../types/play';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
+import { playUses3D, threeSource } from './threeSource';
+export { playUses3D };
 
 export interface PlayHtmlInput {
   title: string;
@@ -225,13 +228,30 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, layersSource, bodiesSource, kitSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, layersSource, bodiesSource, kitSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
   return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit };\n})();\n`;
 }
 
-const runtimeScript = () => (kitScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
+/**
+ * The page's scripts: three.js first when a 3D Script layer needs it (a
+ * global `SSThree` the runtime hands the kit), then the kit and the player.
+ * Without the three.js script loaded (loadThreeSource) a 3D layer draws
+ * nothing in the page and says why.
+ */
+function runtimeScript(play: PlayRecord): string {
+  const three = playUses3D(play) ? threeSource() ?? '' : '';
+  return (three + (three ? '\n' : '') + kitScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
+}
+
+/** What three.js adds to the page, for the export dialogs; null when no layer needs it. Before it loads, about how much. */
+export function threeCarried(play: PlayRecord): { what: string; bytes: number } | null {
+  if (!playUses3D(play)) return null;
+  return { what: 'three.js, for the 3D Script layers', bytes: threeSource()?.length ?? THREE_BYTES };
+}
+/** The three.js script's size as built (three 0.182, three-slim.js), for the dialog until the real one loads. */
+const THREE_BYTES = 562_600;
 
 /** The complete page. Pure: same input, same string. */
 export function buildPlayHtml(input: PlayHtmlInput, options: EmbedOptions = DEFAULT_EMBED): string {
@@ -248,7 +268,7 @@ export function buildPlayHtml(input: PlayHtmlInput, options: EmbedOptions = DEFA
 <div id="play"></div>
 <script>window.PLAY_BUNDLE = ${scriptJson(playBundle(input))};
 window.PLAY_OPTIONS = ${scriptJson(runtimeOptions(options))};</script>
-<script>${runtimeScript()}</script>
+<script>${runtimeScript(input.play)}</script>
 </body>
 </html>
 `;
@@ -273,7 +293,7 @@ export function buildPlaySnippet(input: PlayHtmlInput, options: EmbedOptions = D
   return `<!-- Playfield · ${escapeHtml(input.title)} (${bg ? `background, ${options.placement === 'page' ? 'whole page' : 'fills its section'}` : 'player with controls'}) -->
 <div data-shader-studio style="${style}"></div>
 <script>
-${runtimeScript()}
+${runtimeScript(input.play)}
 (function(){var e=document.currentScript.previousElementSibling;${hostFix}
 ShaderStudioPlay.mount(e, ${scriptJson(playBundle(input))}, ${scriptJson(runtimeOptions(options))});})();
 </script>

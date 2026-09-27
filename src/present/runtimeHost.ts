@@ -12,6 +12,7 @@
 import { create } from 'zustand';
 import runtimeSource from '../play/runtime/play-runtime.js?raw';
 import { kitScript, playBundle, type PlayHtmlInput } from '../play/exportHtml';
+import * as threeSlim from '../play/kit/three-slim.js';
 
 export interface PlayMountOptions {
   mode?: 'player' | 'background';
@@ -53,11 +54,13 @@ interface PlayRuntime {
 }
 
 declare global {
-  interface Window { ShaderStudioPlay?: PlayRuntime }
+  interface Window { ShaderStudioPlay?: PlayRuntime; SSThree?: unknown }
 }
 
 /** The runtime, evaluated on first use. */
 export function playRuntime(): PlayRuntime {
+  // 3D Script layers: the app's three.js (the set an exported page carries), where the runtime looks for it.
+  if (!window.SSThree) window.SSThree = threeSlim;
   if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 5) {
     // The same text the web export inlines: the kit first, then the player.
     new Function(`${kitScript()}\n${runtimeSource}`)();

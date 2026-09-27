@@ -990,6 +990,8 @@ void main() {
         backdrop: play.display ? play.display.backdrop : [0, 0, 0],
         audio: L.status === 'on' ? { wave: L.wave, freq: L.freq, sampleRate: L.sr } : null,
         camera: camVideo || shared.camera, image: img,
+        // three.js for 3D Script layers: the page carries it (SSThree) only when it has one.
+        three: typeof SSThree !== 'undefined' ? SSThree : (window.SSThree || null),
         scriptStatus: (id, err) => { const e = err || null; if (scriptErrors.get(id) === e) return; scriptErrors.set(id, e); if (onScript) { try { onScript(id, e); } catch (x) { /* the host's problem */ } } },
         sensor: (k, v) => sensors.set(k, v),
         override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },

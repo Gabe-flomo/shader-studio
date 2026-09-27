@@ -108,7 +108,7 @@ function withKind(play: PlayRecord, kind: LayerKindDef): PlayRecord {
 export function kindLayer(kind: LayerKindDef, id: string, label: string): ScriptLayer {
   const base = defaultLayer('script', id, label) as ScriptLayer & Record<string, unknown>;
   for (const k of Object.keys(base)) if (k.startsWith('p_')) delete base[k];
-  return withKindParams({ ...base, code: kind.code, paramDefs: kind.paramDefs.map(d => ({ ...d })), clear: kind.clear, readPicture: kind.readPicture, kindId: kind.id });
+  return withKindParams({ ...base, mode: kind.mode, code: kind.code, paramDefs: kind.paramDefs.map(d => ({ ...d })), clear: kind.clear, readPicture: kind.readPicture, kindId: kind.id });
 }
 
 /** Add a layer of `kind` (copying the kind into the file if it is not there yet). */
@@ -127,7 +127,7 @@ export function saveLayerAsKind(play: PlayRecord, layerId: string, look: KindLoo
   if (!l || l.kind !== 'script') return { play, kind: null };
   const kind: LayerKindDef = {
     id, name: look.name.trim() || 'Sketch', hint: look.hint.trim(), icon: look.icon, colour: look.colour,
-    code: l.code, paramDefs: l.paramDefs.map(d => ({ ...d })), clear: l.clear, readPicture: l.readPicture, version: 1,
+    mode: l.mode, code: l.code, paramDefs: l.paramDefs.map(d => ({ ...d })), clear: l.clear, readPicture: l.readPicture, version: 1,
   };
   const next = withKind(play, kind);
   // A layer still called "Script 2" takes the kind's name; one you named keeps yours.
@@ -148,13 +148,13 @@ export function restyleKind(play: PlayRecord, id: string, look: Partial<KindLook
  * every layer made from it. Each layer keeps its own values for params it
  * already had; new params start at their declared value.
  */
-export function editKind(play: PlayRecord, id: string, code: string, paramDefs: ScriptLayer['paramDefs']): { play: PlayRecord; kind: LayerKindDef | null } {
+export function editKind(play: PlayRecord, id: string, code: string, paramDefs: ScriptLayer['paramDefs'], mode?: ScriptLayer['mode']): { play: PlayRecord; kind: LayerKindDef | null } {
   const k = kindById(play, id);
   if (!k) return { play, kind: null };
-  const kind: LayerKindDef = { ...k, code, paramDefs: paramDefs.map(d => ({ ...d })), version: k.version + 1 };
+  const kind: LayerKindDef = { ...k, mode: mode ?? k.mode, code, paramDefs: paramDefs.map(d => ({ ...d })), version: k.version + 1 };
   const next = withKind(play, kind);
   return {
-    play: { ...next, layers: next.layers.map(l => (l.kind === 'script' && l.kindId === id ? withKindParams({ ...l, code, paramDefs: paramDefs.map(d => ({ ...d })) }) : l)) },
+    play: { ...next, layers: next.layers.map(l => (l.kind === 'script' && l.kindId === id ? withKindParams({ ...l, mode: kind.mode, code, paramDefs: paramDefs.map(d => ({ ...d })) }) : l)) },
     kind,
   };
 }

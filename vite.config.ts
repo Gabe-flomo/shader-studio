@@ -1,5 +1,28 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
+
+/**
+ * `virtual:three-slim-source`: the three.js a 3D Script layer uses
+ * (src/play/kit/three-slim.js), bundled into one minified script that defines
+ * the `SSThree` global, as a string. Exported web pages with a 3D Script layer
+ * inline it; the app loads it with import() only when it exports one.
+ */
+function threeSlimSource(): Plugin {
+  const id = 'virtual:three-slim-source';
+  const entry = fileURLToPath(new URL('./src/play/kit/three-slim.js', import.meta.url));
+  return {
+    name: 'three-slim-source',
+    resolveId: s => (s === id ? `\0${id}` : null),
+    async load(s) {
+      if (s !== `\0${id}`) return null;
+      const { build } = await import('esbuild');
+      const out = await build({ entryPoints: [entry], bundle: true, minify: true, format: 'iife', globalName: 'SSThree', legalComments: 'none', write: false, target: 'es2020', logLevel: 'silent' });
+      this.addWatchFile(entry);
+      return `export default ${JSON.stringify(out.outputFiles[0].text)};`;
+    },
+  };
+}
 
 // https://vite.dev/config/
 // base switches automatically: '/' for Tauri desktop, '/shader-studio/' for GitHub Pages.
@@ -13,7 +36,7 @@ const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
 const usePolling = process.env.VITE_USE_POLLING === '1';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), threeSlimSource()],
   base: isTauri ? '/' : '/shader-studio/',
   server: {
     watch: usePolling ? { usePolling: true, interval: 500 } : undefined,

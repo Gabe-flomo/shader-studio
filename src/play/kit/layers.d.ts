@@ -15,7 +15,9 @@ export const KL_SKETCH_NAMES: readonly string[];
 export function klSketchHelpers(get: () => { ctx: CanvasRenderingContext2D; width: number; height: number; mouse: { x: number; y: number; down: boolean }; frame: number; dt: number; time: number; random?: () => number }): Record<string, unknown>;
 export function klCompileSketch(code: string, P: Record<string, unknown>): { setup: ((s: unknown) => void) | null; draw: ((s: unknown) => void) | null; params: Record<string, unknown>; has: (k: string) => boolean; set: (k: string, v: number) => void };
 
-export interface KlSketchState { code: string; error: string | null; params: Record<string, unknown>; frame: number; ready: boolean; pressed: Record<string, number>; s: unknown }
-export function klSketchCompile(code: string): KlSketchState;
+export interface KlSketchState { code: string; mode: '2d' | '3d'; error: string | null; params: Record<string, unknown>; frame: number; ready: boolean; pressed: Record<string, number>; s: unknown; state: Record<string, unknown>; g3: import('./sketch3d.js').K3Sketch | null }
+/** `opts.mode` '3d' draws with three.js (`opts.three`, the three-slim.js set) instead of a 2D canvas. */
+export function klSketchCompile(code: string, opts?: { mode?: '2d' | '3d'; three?: unknown }): KlSketchState;
+export function klSketchDispose(st: KlSketchState | null | undefined): void;
 export function klSketchPress(st: KlSketchState, key: string, amount?: number): void;
 export function klSketchStep(st: KlSketchState, s: Record<string, unknown>, defs: ReadonlyArray<{ key: string; kind?: string }>, clear: boolean): string | null;

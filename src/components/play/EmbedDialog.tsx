@@ -13,7 +13,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { DEFAULT_EMBED, buildPlaySnippet, leftBehind, mediaCarried, type EmbedOptions } from '../../play/exportHtml';
+import { DEFAULT_EMBED, buildPlaySnippet, leftBehind, mediaCarried, playUses3D, threeCarried, type EmbedOptions } from '../../play/exportHtml';
+import { useThreeSource } from '../../play/threeSource';
 import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -42,9 +43,11 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const bg = opts.mode === 'background';
   // Built once per open + option change; the snapshot is taken when the dialog opens.
   const { input, missing } = useMemo(() => playWebInput(title), [playWebInput, title]);
-  const snippet = useMemo(() => buildPlaySnippet(input, opts), [input, opts]);
+  // A 3D Script layer brings three.js along: the snippet is rebuilt once it has loaded.
+  const threeReady = useThreeSource(playUses3D(input.play));
+  const snippet = useMemo(() => buildPlaySnippet(input, opts), [input, opts, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
   const left = useMemo(() => leftBehind(input.play, input.media), [input]);
-  const carried = useMemo(() => mediaCarried(input.media), [input]);
+  const carried = useMemo(() => { const t = threeCarried(input.play); return [...(t ? [t] : []), ...mediaCarried(input.media)]; }, [input, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
   // Show what the reader recognises: the div, then the mount call; the runtime and the piece are elided.
   const preview = useMemo(() => {
     const lines = snippet.trimEnd().split('\n');
@@ -169,7 +172,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
           </div>
         </>
       )}
-      {note(`Comes along: the picture, ${bg ? '' : 'controls, '}mappings and layers${input.play.layers.some(l => l.kind === 'image') ? ', images placed as layers' : ''}${carried.length ? ', and the files listed above' : ''}. Google Fonts load from Google when the page opens.${input.media?.audio?.some(a => a.src) ? (bg ? ' A background listens to its song silently from the visitor’s first click or key.' : ' The song plays when the visitor clicks Play sound; the picture reacts from then on.') : ''}`)}
+      {note(`Comes along: the picture, ${bg ? '' : 'controls, '}mappings and layers${input.play.layers.some(l => l.kind === 'image') ? ', images placed as layers' : ''}${carried.length ? ', and what is listed above' : ''}. Google Fonts load from Google when the page opens.${input.media?.audio?.some(a => a.src) ? (bg ? ' A background listens to its song silently from the visitor’s first click or key.' : ' The song plays when the visitor clicks Play sound; the picture reacts from then on.') : ''}`)}
       </div>
       <SitePreview snippet={snippet} opts={opts} title={title} site={site} device={device} onSite={setSite} onDevice={setDevice} wide={wide} />
       </div>

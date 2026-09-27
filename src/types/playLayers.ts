@@ -500,6 +500,8 @@ export interface ClonerLayer extends LayerBase {
 /** A slider a script declares: `params = { speed: { value: 1, min: 0, max: 5, step: 0.1, label: 'Speed' } }`. Its value lives on the layer as `p_<key>`. */
 /** What a declared param is on the panel: a slider (the default), an on/off toggle, or a button that presses (an action). */
 export type ScriptParamKind = 'slider' | 'toggle' | 'button';
+/** What a Script layer draws with: a 2D canvas, or WebGL through three.js. */
+export type ScriptMode = '2d' | '3d';
 export interface ScriptParamDef { key: string; label: string; kind?: ScriptParamKind; value: number; min: number; max: number; step?: number; hint?: string }
 
 /**
@@ -509,6 +511,12 @@ export interface ScriptParamDef { key: string; label: string; kind?: ScriptParam
  */
 export interface ScriptLayer extends LayerBase {
   kind: 'script';
+  /**
+   * 2d: the sketch draws on a 2D canvas (s.ctx). 3d: it draws with WebGL
+   * through three.js (box, sphere, lights, camera… and s.three), into a
+   * transparent canvas composited the same way. Files from before 3D have none: 2d.
+   */
+  mode: ScriptMode;
   code: string;
   /** Sliders the script declared the last time it compiled; controls target them as `p_<key>`. */
   paramDefs: ScriptParamDef[];
@@ -568,6 +576,49 @@ export const DEFAULT_SCRIPT_PARAMS: ScriptParamDef[] = [
   { key: 'speed', label: 'Speed', value: 1, min: 0, max: 4, step: 0.05 },
 ];
 
+/** The starter sketch a new 3D Script layer holds. */
+export const DEFAULT_SCRIPT_3D = `// A 3D sketch: setup runs once, draw runs every frame, drawn with WebGL over the picture.
+// The origin is the middle of the picture: x goes right, y down, z toward you, in pixels.
+// Drag on the picture to turn the camera (orbitControl). Nothing paints the background,
+// so the shader shows through; call background() for a solid one.
+const params = {
+  count: { value: 12, min: 1, max: 60, step: 1, label: 'Boxes' },
+  size:  { value: 60, min: 10, max: 200, label: 'Size' },
+  speed: { value: 1, min: 0, max: 4, step: 0.05, label: 'Speed' },
+};
+
+function draw(s) {
+  const { params, time } = s;
+  orbitControl();
+  ambientLight(60);
+  directionalLight(255, 255, 255, -0.4, 0.6, -1);
+  noStroke();
+  const r = min(width, height) * 0.3;
+  for (let i = 0; i < params.count; i++) {
+    const a = (i / params.count) * TWO_PI + time * 0.3 * params.speed;
+    push();
+    translate(cos(a) * r, sin(a * 2) * r * 0.2, sin(a) * r);
+    rotateX(time * params.speed + i);
+    rotateY(time * params.speed * 0.7);
+    fill(hsl((i / params.count) * 360, 80, 60));
+    box(params.size);
+    pop();
+  }
+}
+`;
+export const DEFAULT_SCRIPT_3D_PARAMS: ScriptParamDef[] = [
+  { key: 'count', label: 'Boxes', value: 12, min: 1, max: 60, step: 1 },
+  { key: 'size', label: 'Size', value: 60, min: 10, max: 200 },
+  { key: 'speed', label: 'Speed', value: 1, min: 0, max: 4, step: 0.05 },
+];
+
+/** A 3D Script layer's starting point: the 3D starter and its controls at their declared values. */
+export function script3dDefaults(): Pick<ScriptLayer, 'mode' | 'code' | 'paramDefs'> & Record<`p_${string}`, number> {
+  const out: Pick<ScriptLayer, 'mode' | 'code' | 'paramDefs'> & Record<`p_${string}`, number> = { mode: '3d', code: DEFAULT_SCRIPT_3D, paramDefs: DEFAULT_SCRIPT_3D_PARAMS.map(d => ({ ...d })) };
+  for (const d of DEFAULT_SCRIPT_3D_PARAMS) out[`p_${d.key}`] = d.value;
+  return out;
+}
+
 // ── Defaults ─────────────────────────────────────────────────────────────────
 
 type Defaults<T> = Omit<T, 'id' | 'label' | 'visible' | 'kind'>;
@@ -609,7 +660,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     randScale: 0, randRotation: 0, randOpacity: 0, randHue: 0,
     effectors: [], effRadius: 0.25, effSoftness: 0.6, effPush: 0, effScale: 1, effRotate: 0, effOpacity: 0, effHue: 0, effHide: 0, effInvert: false, blend: 'normal',
   },
-  script: { toShader: true, code: DEFAULT_SCRIPT, paramDefs: DEFAULT_SCRIPT_PARAMS, clear: true, readPicture: false, opacity: 1, blend: 'normal', p_count: 24, p_size: 18, p_speed: 1 },
+  script: { toShader: true, mode: '2d', code: DEFAULT_SCRIPT, paramDefs: DEFAULT_SCRIPT_PARAMS, clear: true, readPicture: false, opacity: 1, blend: 'normal', p_count: 24, p_size: 18, p_speed: 1 },
 };
 
 /** A fresh layer of a kind with sensible defaults. */
@@ -704,7 +755,7 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     randScale: N(0), randRotation: N(0), randOpacity: N(0), randHue: N(0),
     effectors: { t: 'ids' }, effRadius: N(0), effSoftness: unit, effPush: N(), effScale: N(), effRotate: N(), effOpacity: N(), effHue: N(), effHide: unit, effInvert: B, blend: blendF,
   },
-  script: { toShader: B, code: S, paramDefs: { t: 'params' }, clear: B, readPicture: B, opacity: unit, blend: blendF },
+  script: { toShader: B, mode: E('2d', '3d'), code: S, paramDefs: { t: 'params' }, clear: B, readPicture: B, opacity: unit, blend: blendF },
 };
 
 function coerce(v: unknown, f: Field, fallback: unknown): unknown {

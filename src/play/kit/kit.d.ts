@@ -27,6 +27,10 @@ export interface KitEnv {
   shaderTap?: (tap: ShaderTap) => void;
   /** A Script layer compiled or ran: null clears its error, a string is the message shown under its code. */
   scriptStatus?: (layerId: string, error: string | null) => void;
+  /** three.js for 3D Script layers (the three-slim.js set); without it they wait and draw nothing. */
+  three?: unknown;
+  /** three.js for 3D Script layers (the three-slim.js set); without it they wait and draw nothing. */
+  three?: unknown;
 }
 
 /** What the graph's Layers node reads: colour at half resolution, and a 16-bit packed distance grid (row 0 at the top). */
