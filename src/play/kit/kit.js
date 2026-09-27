@@ -28,6 +28,8 @@
  *   hand(side, point)      a tracked hand's landmark on the picture ({ x, y }) or null (optional)
  *   hands      { state, colour } to draw the hands' skeleton with the markers, or null (optional)
  *   three      three.js (three-slim.js) for 3D Script layers, or null
+ *   data(ref)  a dataset by id or name: { id, name, result } (its frozen result,
+ *              Normalize applied), or null (optional)
  *
  * The kit keeps per-layer state (particles, bodies, strokes, springs, text
  * sequences) between frames, keyed by layer id. Actions (burst, next line…)
@@ -40,6 +42,7 @@ import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 import { hdDraw } from './hands.js';
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
+import { kdState, kdAct, kdPlan, kdTextItems, kdFrame, kdDrawTable, kdColumn, kdText, kdChunkText, kdWrapText, kdScriptView } from './data.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
 const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, lens: 1, script: 1 };
@@ -49,6 +52,8 @@ export function createLayerKit() {
   const parts = new Map(), bodies = new Map(), brushes = new Map(), springs = new Map(), texts = new Map(), audios = new Map(), masks = new Map(), scripts = new Map();
   const scriptPresses = new Map(); // layer id → { key: amount }: script buttons pressed since the layer's last frame
   const frozen = new Set(), shown = new Map(), lastVisible = new Map();
+  // Data layers: each one's stepping, and per dataset the current row of the first Data layer showing it (for s.data()).
+  const dStates = new Map(), dsCurrent = new Map();
   let queue = [];
   let coarse = null, fine = null, camSample = null, camPrev = null, motion = 0;
   const sensorVals = new Map();
@@ -156,6 +161,7 @@ export function createLayerKit() {
       picture: { brightness: () => 0 },
       null: () => null,
       random: rngFor('bg:' + item.id, 'script'),
+      data: name => { const e = env.data && name != null ? env.data(String(name)) : null; if (!e) return null; const cur = dsCurrent.get(e.id); const view = kdScriptView(e, cur ? cur.items : null); const index = Math.max(0, Math.min(view.length - 1, cur ? cur.index : 0)); return Object.assign({}, view, { index: view.length ? index : -1, current: view.length ? view.rows[index] : null }); },
     };
     const err = klSketchStep(st, s, [], true);
     if (err) { if (env.scriptStatus) env.scriptStatus('bg:' + item.id, err); return null; }
@@ -233,7 +239,7 @@ export function createLayerKit() {
     else if (env.background && !env.transparent) ctx.drawImage(gl, 0, 0);
     const layers = record.layers;
     const ids = new Set(layers.map(l => l.id));
-    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
+    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
     // Sketch sources that left the queue (or whose layer did) stop keeping state.
     if (bqSketches.size) { const inQueue = new Set(bq ? record.layers[0].sources.map(s => s.id) : []); for (const id of [...bqSketches.keys()]) if (!inQueue.has(id)) { klSketchDispose(bqSketches.get(id)); bqSketches.delete(id); } }
     // A visibility change in the panel wins over an earlier show/hide action.
@@ -294,6 +300,17 @@ export function createLayerKit() {
       ? (detail === 'fine' && camFine ? { s: camFine, w: KIT_FINE_W, h: KIT_FINE_H } : camSample ? { s: camSample, w: KIT_COARSE_W, h: KIT_COARSE_H } : null)
       : (detail === 'fine' && fine ? { s: fine, w: KIT_FINE_W, h: KIT_FINE_H } : coarse ? { s: coarse, w: KIT_COARSE_W, h: KIT_COARSE_H } : null);
 
+    // A Data layer's dataset: its result, and how many rows (or text chunks) it has.
+    const dataOf = l => {
+      const e = l.dataset && env.data ? env.data(l.dataset) : null;
+      const r = e ? e.result : null;
+      if (r && r.kind === 'table') return { e, n: r.rows, table: r, text: null };
+      if (r && r.kind === 'text') { const t = kdTextItems(r, l); return { e, n: t.items.length, table: null, text: t }; }
+      return { e, n: 0, table: null, text: null };
+    };
+    const dataState = l => { let st = dStates.get(l.id); if (!st) { st = kdState(); dStates.set(l.id, st); } return st; };
+    const dsSeen = new Set();
+
     // 3. Zones: every visible shape (it counts what is inside; its action may move things), and brush strokes set as walls.
     const zones = [], zoneById = new Map(), maskShows = new Map();
     for (const l of vis) {
@@ -349,11 +366,15 @@ export function createLayerKit() {
         case 'show': shown.set(l.id, true); break;
         case 'hide': shown.set(l.id, false); break;
         case 'freeze': if (frozen.has(l.id)) frozen.delete(l.id); else frozen.add(l.id); { const b = bodies.get(l.id); if (b) b.st.frozen = frozen.has(l.id); } break;
-        case 'next': case 'prev': case 'shuffle': if (l.kind === 'text') stepText(l, a.do, time); break;
+        case 'next': case 'prev': case 'shuffle': case 'goto':
+          if (l.kind === 'text' && a.do !== 'goto') stepText(l, a.do, time);
+          else if (l.kind === 'data') kdAct(dataState(l), l, env.value(l, 'offset'), env.value(l, 'count'), dataOf(l).n, a, rngFor(l.id, 'data'));
+          break;
         case 'clear': if (l.kind === 'brush') brushState(l.id).pts = []; break;
         case 'drop': { const b = bodies.get(l.id); if (b) bdDrop(b.st, l, aspect, (env.value(l, 'size') * dpr) / H, rngFor(l.id, 'bodies')); break; }
         case 'reset':
           if (l.kind === 'text') stepText(l, 'reset', time);
+          else if (l.kind === 'data') dataState(l).pos = 0;
           else if (l.kind === 'brush') brushState(l.id).pts = [];
           else if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) bdDrop(b.st, l, aspect, (env.value(l, 'size') * dpr) / H, rngFor(l.id, 'bodies')); }
           else if (l.kind === 'particles') { if (!pending.has(l.id)) pending.set(l.id, []); pending.get(l.id).push(a); }
@@ -391,6 +412,73 @@ export function createLayerKit() {
      * the layer's opacity and blend. A broken script reports its error and draws nothing until the
      * code changes; the other layers carry on.
      */
+    // A Script layer's s.data(name): the dataset's rows and columns, and the current row of the first Data layer showing it.
+    function scriptData(name) {
+      const e = env.data && name != null ? env.data(String(name)) : null;
+      if (!e) return null;
+      const cur = dsCurrent.get(e.id);
+      const view = kdScriptView(e, cur ? cur.items : null);
+      const index = Math.max(0, Math.min(view.length - 1, cur ? cur.index : 0));
+      return Object.assign({}, view, { index: view.length ? index : -1, current: view.length ? view.rows[index] : null });
+    }
+    // A Data layer: a table as points, a path, bars, a pie or lines; text a chunk (or a window) at a time in the text style.
+    function drawData(c, l, v) {
+      const info = dataOf(l), st = dataState(l);
+      const plan = kdPlan(st, l, v, info.n, time);
+      const row = Math.max(0, plan.current);
+      report(env, l.id + '::row', row); report(env, l.id + '::rows', info.n);
+      if (l.dataset && !dsSeen.has(l.dataset)) {
+        dsSeen.add(l.dataset);
+        dsCurrent.set(info.e ? info.e.id : l.dataset, { index: row, items: info.text ? info.text.items : null });
+        report(env, 'ds:' + l.dataset + '::row', row); report(env, 'ds:' + l.dataset + '::rows', info.n);
+      }
+      let at = null;
+      const frame = kdFrame(l, v, W, H, dpr, l.labels || l.ticks);
+      if (info.table) {
+        c.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
+        const mark = l.highlight && l.show !== 'window';
+        for (const set of plan.sets) {
+          const p = kdDrawTable(c, l, v, info.table, set.rows, frame, W, H, dpr, set.alpha, set.current, mark);
+          if (set.current === plan.current && p) at = p;
+        }
+        const cap = kdColumn(info.table, l.captionCol);
+        if (cap) {
+          const fs = Math.max(8, v('labelSize') * dpr * 1.9);
+          c.font = l.weight + ' ' + fs + 'px ' + klFontFor(l); c.textAlign = 'center'; c.textBaseline = 'bottom';
+          c.fillStyle = klCss(l.textColor);
+          for (const set of plan.sets) { c.globalAlpha = v('opacity') * set.alpha; c.fillText(kdText(cap, set.current), frame.left + frame.w / 2, Math.max(fs, frame.top - 6 * dpr)); }
+          c.globalAlpha = 1;
+        }
+        c.globalCompositeOperation = 'source-over';
+      } else if (info.text) {
+        // The Text layer's renderer: painted as a text layer with this layer's style, then matted the same way.
+        const cx = l.fit === 'region' ? v('x') : 0.5, cy = l.fit === 'region' ? v('y') : 0.5;
+        const maxW = l.fit === 'region' ? frame.w : W * 0.9, maxH = l.fit === 'region' ? frame.h : H * 0.9;
+        const look = { kind: 'text', font: l.font, fontUrl: l.fontUrl, weight: l.weight, color: l.textColor, matte: l.matte, blend: l.blend };
+        const scratch = klCanvas(pool, 'scratch', W, H), s = scratch.getContext('2d');
+        for (const set of plan.sets) {
+          const text = kdChunkText(l, info.text.items, info.text.counts, set.rows);
+          // Wrapped to the frame's width; a long window (or one long word) shrinks until it fits.
+          let size = Math.max(1, v('textSize') * H), lines = text;
+          for (let k = 0; k < 12; k++) {
+            s.font = l.weight + ' ' + size + 'px ' + klFontFor(look);
+            lines = kdWrapText(s, text, maxW);
+            const ls = lines.split('\n');
+            let wide = 0;
+            for (const x of ls) wide = Math.max(wide, s.measureText(x).width);
+            if ((ls.length * size * 1.15 <= maxH && wide <= maxW) || size < 8) break;
+            size *= 0.85;
+          }
+          const vv = k => (k === 'x' ? cx : k === 'y' ? cy : k === 'size' ? size / H : k === 'rotation' ? 0 : v(k));
+          klPaintShape(s, look, vv, W, H, null, lines, null);
+          klMatte(c, s, scratch, look, gl, W, H, v('opacity') * set.alpha, env.hidden, l.matte === 'luma' ? luma() : null);
+        }
+        at = { x: cx * W, y: (1 - cy) * H };
+      }
+      if (!at && info.n) at = { x: frame.left + frame.w / 2, y: frame.top + frame.h / 2 };
+      report(env, l.id + '::ax', at ? at.x / W : NaN); report(env, l.id + '::ay', at ? 1 - at.y / H : NaN);
+    }
+
     // A sketch runs once a frame into its own canvas; the layer and any cloner copying it both use that canvas.
     function stepScript(l) {
       let st = scripts.get(l.id);
@@ -429,6 +517,7 @@ export function createLayerKit() {
         },
         null: name => { const n = record.layers.find(x => x.kind === 'null' && (x.id === name || x.label === name)); return n ? { x: env.value(n, 'x') * W, y: (1 - env.value(n, 'y')) * H } : null; },
         random: rngFor(l.id, 'script'),
+        data: scriptData,
         // Where proximity triggers and distance sensors measure this layer from, in pixels. Kept between frames.
         anchor: st.anchor || null,
       };
@@ -551,6 +640,7 @@ export function createLayerKit() {
             break;
           case 'cloner': drawCloner(c, l, v); break;
           case 'script': drawScript(c, l, v); break;
+          case 'data': drawData(c, l, v); break;
           case 'particles': drawParticleLayer(c, l, v, env, record, zones, zoneById, pictureFor(l.readFrom, l.detail), pending.get(l.id), W, H, dpr, aspect, time, dt, pointer, gl); break;
           case 'bodies': {
             const sizeH = (v('size') * dpr) / H;
@@ -799,13 +889,13 @@ export function createLayerKit() {
     isAnimated(record) {
       // A crossfade under way, or a sketch showing in the background.
       if (bqLast && record.layers[0] && record.layers[0].id === bqLast.layerId && (bqLast.fading || bqLast.items.some(i => i.item.kind === 'script'))) return true;
-      return record.layers.some(l => (shown.has(l.id) ? shown.get(l.id) : l.visible) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && l.sequence) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera')));
+      return record.layers.some(l => (shown.has(l.id) ? shown.get(l.id) : l.visible) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && l.sequence) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera') || (l.kind === 'data' && dStates.has(l.id) && dStates.get(l.id).from >= 0)));
     },
     /**
      * Forget all state (a new recording starts from scratch). `seed` (a take's)
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
     background,
-    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
+    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
   };
 }

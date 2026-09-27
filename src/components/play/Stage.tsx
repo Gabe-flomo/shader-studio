@@ -80,7 +80,7 @@ export function Stage({ canvas, onRecord }: {
     if (mode !== 'exact' || !threeReady) return null;
     if (snap) return { html: snap.html, missing: snap.missing, left: snap.left };
     const { input, missing } = useNodeGraphStore.getState().playWebInput(graphName);
-    return { html: stagePageHtml(input), missing, left: leftBehind(input.play, input.media, { graphs: input.backgroundGraphs ?? {} }) };
+    return { html: stagePageHtml(input), missing, left: leftBehind(input.play, input.media, { graphs: input.backgroundGraphs ?? {}, datasets: input.datasets }) };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, build, snap, threeReady]);
 

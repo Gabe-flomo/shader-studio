@@ -50,8 +50,8 @@ export function resetLayer(p: PlayRecord, id: string): PlayRecord {
   return {
     ...p,
     // A layer of a saved kind goes back to that kind's code and values, not to the starter sketch.
-    // A Background layer keeps its queue: the sources are what it is, not a setting.
-    layers: p.layers.map(l => (l.id === id ? resetKindLayer(p, l) ?? { ...defaultLayer(l.kind, l.id, l.label), visible: l.visible, ...(l.kind === 'background' ? { sources: l.sources } : {}) } as PlayLayer : l)),
+    // A Background layer keeps its queue, a Data layer its dataset: they are what it is, not a setting.
+    layers: p.layers.map(l => (l.id === id ? resetKindLayer(p, l) ?? { ...defaultLayer(l.kind, l.id, l.label), visible: l.visible, ...(l.kind === 'background' ? { sources: l.sources } : l.kind === 'data' ? { dataset: l.dataset } : {}) } as PlayLayer : l)),
   };
 }
 

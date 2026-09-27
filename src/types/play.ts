@@ -201,10 +201,21 @@ export type PlaySource =
    */
   | { kind: 'sensor'; layerId: string; read: SensorRead; otherId: string }
   /** A tracked hand (see HandRead). Every field is always present; the ones a read doesn't use are ignored. */
-  | { kind: 'hand'; side: HandSide; read: HandRead; point: number; axis: 'x' | 'y' | 'z'; gesture: HandGesture };
+  | { kind: 'hand'; side: HandSide; read: HandRead; point: number; axis: 'x' | 'y' | 'z'; gesture: HandGesture }
+  /**
+   * A dataset's current row (src/data/): `column`'s value there, 0..1 over
+   * the column's min..max (a category column by its place among the values;
+   * `#row` is how far through the rows it is). The current row is the one a
+   * Data layer (`layerId`, or the first showing the dataset) steps to, so the
+   * value moves as its Offset or its actions move.
+   */
+  | { kind: 'data'; dataset: string; column: string; layerId: string };
+
+/** The data source's pseudo-column: how far through the rows (or chunks) the current one is, 0..1. */
+export const DATA_ROW_COLUMN = '#row';
 
 /** Layer kinds with a centre on the picture: what proximity triggers and distance sensors can measure from. */
-export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner'];
+export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data'];
 
 export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
@@ -213,7 +224,7 @@ export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   camera: ['motion', 'distance'],
   null: ['distance'],
   audio: ['level', 'bass', 'lowmid', 'highmid', 'treble', 'distance'],
-  text: ['distance'], image: ['distance'], lens: ['distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['distance'],
+  text: ['distance'], image: ['distance'], lens: ['distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['distance'], data: ['distance'],
 };
 
 export type PlayCurve = 'linear' | 'exp' | 'log' | 'custom';
@@ -243,7 +254,7 @@ export interface PlayMapping {
 export type {
   BlendMode, MatteMode, NullLayer, TextLayer, ImageLayer, ParticlesLayer, ParticleField, ParticleShape, ParticleModulator,
   ShapeLayer, ZoneAction, AudioLayer, GlyphsLayer, ContoursLayer, LensLayer, BrushLayer, BodiesLayer, CameraLayer,
-  PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind,
+  PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind, DataLayer, DataView, DataSplit,
 } from './playLayers';
 export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot } from './playLayers';
 import { parseLayer, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
@@ -263,6 +274,7 @@ import { parseSourceCredit, type SourceCredit } from './credit';
  *   drop     bodies: drop them again from the top
  *   clear    brush: wipe the strokes
  *   next / prev / shuffle / goto   background: another source (goto: the `amount`th, 1 = the first)
+ *   next / prev / shuffle / goto   data: another row or chunk (a whole window when it steps by windows; goto: the `amount`th row)
  */
 export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto';
 /** A built-in action, or a button a Script layer declares (`script:<key>`). */
@@ -293,6 +305,8 @@ export const ACTIONS_FOR: Record<string, readonly BuiltinActionKind[]> = {
   brush: ['clear', 'toggle', 'show', 'hide'],
   // Change background: the next, previous, a random or the Nth source; Reset goes back to what Index says.
   background: ['next', 'prev', 'shuffle', 'goto', 'reset', 'toggle', 'show', 'hide'],
+  // Step through a dataset: the next, previous, a random or the Nth row (or chunk); Reset goes back to what Offset says.
+  data: ['next', 'prev', 'shuffle', 'goto', 'reset', 'toggle', 'show', 'hide'],
   other: ['toggle', 'show', 'hide'],
 };
 
@@ -759,6 +773,10 @@ function parseSource(raw: unknown): PlaySource | null {
       const layerId = str(s.layerId);
       const read = SENSOR_READS.has(s.read as string) ? (s.read as SensorRead) : null;
       return layerId && read ? { kind: 'sensor', layerId, read, otherId: str(s.otherId) ?? '' } : null;
+    }
+    case 'data': {
+      const dataset = str(s.dataset);
+      return dataset && /^[a-z][a-z0-9]{0,31}$/.test(dataset) ? { kind: 'data', dataset, column: str(s.column) ?? DATA_ROW_COLUMN, layerId: str(s.layerId) ?? '' } : null;
     }
     case 'hand': {
       const read = HAND_READS.has(s.read as string) ? (s.read as HandRead) : 'point';

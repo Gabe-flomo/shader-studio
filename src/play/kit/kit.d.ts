@@ -48,7 +48,12 @@ export interface KitEnv {
   allowDirect?: boolean;
   /** three.js for 3D Script layers (the three-slim.js set); without it they wait and draw nothing. */
   three?: unknown;
+  /** A dataset by id or name (Data layers, s.data() in sketches): its frozen result with Normalize applied, or null. */
+  data?: (ref: string) => KitDataset | null;
 }
+
+/** A dataset as the kit reads it. */
+export interface KitDataset { id: string; name: string; result: import('../../data/types').DatasetResult | null }
 
 export type { BqPlan } from './queue.js';
 

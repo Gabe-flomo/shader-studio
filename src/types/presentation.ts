@@ -14,6 +14,8 @@
 import { parsePlayRecord, type PlayRecord } from './play';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
 import type { PlayHtmlInput, PlayMedia, PlayMediaFile, PlayPasses } from '../play/exportHtml';
+import type { WebDatasets } from '../play/dataExport';
+import { parseDatasetResult } from '../data/types';
 
 export const PRESENTATION_FILE_KIND = 'shader-studio-presentation';
 export const PRESENTATION_VERSION = 1 as const;
@@ -274,6 +276,17 @@ function parseMedia(v: unknown): PlayMedia | undefined {
   return out;
 }
 
+/** A snapshot's datasets (results and names only), checked like a saved graph's. */
+function parseWebDatasets(v: unknown): WebDatasets | undefined {
+  if (!isObj(v)) return undefined;
+  const out: WebDatasets = {};
+  for (const [id, raw] of Object.entries(v).slice(0, 64)) {
+    if (!/^[a-z][a-z0-9]{0,31}$/.test(id) || !isObj(raw)) continue;
+    out[id] = { name: str(raw.name, 120) ?? id, result: parseDatasetResult(raw.result) };
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 function parseBundle(v: unknown): PlayHtmlInput | null {
   if (!isObj(v)) return null;
   const fragmentShader = typeof v.fragmentShader === 'string' && v.fragmentShader.length > 0 && v.fragmentShader.length < 2_000_000 ? v.fragmentShader : null;
@@ -285,6 +298,8 @@ function parseBundle(v: unknown): PlayHtmlInput | null {
   if (passes) out.passes = passes;
   const media = parseMedia(v.media);
   if (media) out.media = media;
+  const datasets = parseWebDatasets(v.datasets);
+  if (datasets) out.datasets = datasets;
   return out;
 }
 

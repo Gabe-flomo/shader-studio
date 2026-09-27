@@ -25,6 +25,7 @@ import { klPaintBackground } from './kit/layers.js';
 import { playBackground, planShowsThis } from './background';
 import type { BqPlan } from './kit/queue.js';
 import { setScriptStatus } from './scriptStatus';
+import { kitDataset } from './dataLayer';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
 
@@ -495,6 +496,8 @@ class PlayOverlay {
       scriptStatus: forExport ? undefined : setScriptStatus,
       // three.js for 3D Script layers, once loaded (they wait until then).
       three: threeRuntime(),
+      // Datasets for Data layers and s.data() in sketches (their frozen results, Normalize applied).
+      data: kitDataset,
     };
   }
 

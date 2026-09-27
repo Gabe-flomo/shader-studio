@@ -8,6 +8,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { parseActionTarget, parseLayerTarget, parsePlayRecord } from '../../types/play';
 import { collectPlayCandidates } from '../../play/playControls';
 import { klSketchCompile, klSketchPress, klSketchStep } from '../../play/kit/layers.js';
+import { kdScriptView } from '../../play/kit/data.js';
 import * as threeSlim from '../../play/kit/three-slim.js';
 import { takeEventsBetween, takePointerAt, takeValuesAt } from '../../lib/takePlayback';
 
@@ -154,6 +155,8 @@ describe('bundled examples', () => {
             ctx, width: 640, height: 360, dpr: 1, time: f / 60, dt: 1 / 60, frame: f, params, state: (st as unknown as { state: object }).state,
             mouse: { x: 320 + f, y: 180, over: f > 45, down: f > 60 }, picture: { brightness: (x: number) => x / 640, texture: null },
             null: (name: string) => (name === 'B' ? null : { x: 100 + f, y: 120 }), random: Math.random,
+            // The example's own datasets, as the kit hands them to s.data() (the first row current).
+            data: (name: string) => { const d = Object.values(EXAMPLE_GRAPHS[k].datasets ?? {}).find(x => x.id === name || x.name === name); if (!d) return null; const v = kdScriptView({ id: d.id, name: d.name, result: d.result }, null); return { ...v, index: 0, current: v.rows[0] ?? null }; },
           };
           expect(klSketchStep(st, s, l.paramDefs, l.clear), `${k}/${l.id} frame ${f}`).toBeNull();
         }

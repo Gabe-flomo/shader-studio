@@ -680,10 +680,119 @@ export function parseBackgroundItems(v: unknown): BackgroundItem[] {
   return out;
 }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer;
+
+// ── Data (a dataset drawn over the picture: play/kit/data.js) ────────────────
+
+/** How a Data layer draws a table. */
+export type DataView = 'points' | 'path' | 'bars' | 'pie' | 'lines';
+/** How a text dataset is cut into chunks. */
+export type DataSplit = 'lines' | 'separator' | 'words' | 'letters' | 'chunks';
+
+/**
+ * A dataset (src/data/) drawn over the picture: a table as points, a path,
+ * bars, a pie or lines; text one chunk (or a window of chunks) at a time in
+ * a text style. Which rows show steps like the Background queue: Offset (a
+ * number any control or mapping can drive) plus Next / Previous / Random /
+ * Go to actions, with a cut or a crossfade. Columns are named ('' = none).
+ */
+export interface DataLayer extends LayerBase {
+  kind: 'data';
+  /** The dataset's id in the graph file ('' = none chosen yet). */
+  dataset: string;
+  view: DataView;
+  /** Points and path: the columns across and up. */
+  xCol: string;
+  yCol: string;
+  /** Bars, pie, lines: the name of each bar or slice (lines: one line per value), and its number. */
+  categoryCol: string;
+  valueCol: string;
+  /** Points: size, opacity, rotation (degrees) and a label from columns. */
+  sizeCol: string;
+  opacityCol: string;
+  rotationCol: string;
+  labelCol: string;
+  /** The current row's value of this column, written above the view. */
+  captionCol: string;
+  /** tint: one colour · rgb: three columns (0–1 or 0–255) · palette: one column (or row order) through a palette. */
+  colour: 'tint' | 'rgb' | 'palette';
+  colourCol: string;
+  rCol: string;
+  gCol: string;
+  bCol: string;
+  color: RGB;
+  palette: number;
+  /** centred: 0,0 in the middle, each axis −1…1 · corner: 0,0 bottom-left, min…max across. */
+  axes: 'centred' | 'corner';
+  /** centred: normalise over min…max (range), or symmetric around 0 (zero). */
+  centre: 'range' | 'zero';
+  /** Fill the picture, or a region (x, y its centre; w, h in picture heights) moved and sized on the picture. */
+  fit: 'picture' | 'region';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Points and path: a unit across as long as a unit up (a map, a route keeps its shape). */
+  equal: boolean;
+  axisLine: boolean;
+  grid: boolean;
+  ticks: boolean;
+  labels: boolean;
+  mark: 'dot' | 'square' | 'triangle';
+  /** Mark size in px; with a size column, from sizeMin to sizeMax. */
+  size: number;
+  sizeMin: number;
+  sizeMax: number;
+  /** Path and lines: line width in px, and how much of them is drawn (0…1). */
+  lineWidth: number;
+  trim: number;
+  /** Mark the current row (Show all or a range). */
+  highlight: boolean;
+  opacity: number;
+  blend: BlendMode;
+  // Text datasets
+  split: DataSplit;
+  separator: string;
+  chunkSize: number;
+  /** text: as written · frequency: each chunk once, most frequent first · alphabetical: each once, A to Z. */
+  order: 'text' | 'frequency' | 'alphabetical';
+  /** Show how often each chunk occurs. */
+  counts: boolean;
+  // The text style (a Text layer's), for chunks, labels and ticks
+  textSize: number;
+  textColor: RGB;
+  font: 'sans' | 'serif' | 'mono';
+  fontUrl: string;
+  weight: number;
+  matte: MatteMode;
+  /** Axis and point labels, in px. */
+  labelSize: number;
+  // Stepping
+  show: 'all' | 'range' | 'window';
+  /** range: rows from…to, counting from 1. */
+  from: number;
+  to: number;
+  /** window: how many rows show from the current one. */
+  count: number;
+  /** window: Next and Previous move one row, or a whole window (pages). */
+  stepBy: 'row' | 'window';
+  /** Which row is current (the window starts there): Next and Previous count on from it. */
+  offset: number;
+  transition: 'cut' | 'fade';
+  duration: number;
+}
+
+/**
+ * How many rows (or text chunks) a Data layer's dataset has, for its Offset,
+ * From and To sliders. The app sets it (play/dataLayer.ts) from the dataset
+ * store; until then it is 0 and the sliders run to 100.
+ */
+let dataItemCount: (l: DataLayer) => number = () => 0;
+export function setDataItemCount(fn: (l: DataLayer) => number): void { dataItemCount = fn; }
+
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data'];
 
 /** The starter sketch a new Script layer holds. */
 export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
@@ -806,7 +915,15 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     effectors: [], effRadius: 0.25, effSoftness: 0.6, effPush: 0, effScale: 1, effRotate: 0, effOpacity: 0, effHue: 0, effHide: 0, effInvert: false, blend: 'normal',
   },
   script: { toShader: true, mode: '2d', code: DEFAULT_SCRIPT, paramDefs: DEFAULT_SCRIPT_PARAMS, clear: true, readPicture: false, opacity: 1, blend: 'normal', p_count: 24, p_size: 18, p_speed: 1 },
-  background: { toShader: false, sources: [], index: 0, offset: 0, x: 0.5, y: 0.5, scale: 1, rotation: 0, fit: 'cover', colour: [0, 0, 0], transition: 'fade', duration: 0.8 },
+  background: { toShader: false, sources: [], index: 0, offset: 0, x: 0.5, y: 0.5, scale: 1, rotation: 0, fit: 'cover', colour: [0, 0, 0], transition: 'fade', duration: 0.8 },  data: {
+    toShader: true, dataset: '', view: 'points', xCol: '', yCol: '', categoryCol: '', valueCol: '', sizeCol: '', opacityCol: '', rotationCol: '', labelCol: '', captionCol: '',
+    colour: 'tint', colourCol: '', rCol: '', gCol: '', bCol: '', color: [1, 0.82, 0.4], palette: 1,
+    axes: 'corner', centre: 'range', fit: 'picture', x: 0.5, y: 0.5, w: 1.2, h: 0.7, equal: false, axisLine: true, grid: false, ticks: true, labels: true,
+    mark: 'dot', size: 8, sizeMin: 3, sizeMax: 24, lineWidth: 2.5, trim: 1, highlight: true, opacity: 1, blend: 'normal',
+    split: 'words', separator: ',', chunkSize: 12, order: 'text', counts: false,
+    textSize: 0.14, textColor: [1, 1, 1], font: 'serif', fontUrl: '', weight: 600, matte: 'over', labelSize: 11,
+    show: 'all', from: 1, to: 10, count: 1, stepBy: 'row', offset: 0, transition: 'fade', duration: 0.5,
+  },
 };
 
 /** A fresh layer of a kind with sensible defaults. */
@@ -907,6 +1024,14 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
   background: {
     toShader: B, sources: { t: 'queue' }, index: N(0, 999), offset: N(-999, 999), x: N(), y: N(), scale: N(0.01, 20), rotation: N(),
     fit: E('cover', 'contain', 'stretch'), colour: C, transition: E('cut', 'fade'), duration: N(0, 30),
+  },  data: {
+    toShader: B, dataset: S, view: E('points', 'path', 'bars', 'pie', 'lines'), xCol: S, yCol: S, categoryCol: S, valueCol: S, sizeCol: S, opacityCol: S, rotationCol: S, labelCol: S, captionCol: S,
+    colour: E('tint', 'rgb', 'palette'), colourCol: S, rCol: S, gCol: S, bCol: S, color: C, palette: N(0, 9, true),
+    axes: E('centred', 'corner'), centre: E('range', 'zero'), fit: E('picture', 'region'), x: N(), y: N(), w: N(0.01, 10), h: N(0.01, 10), equal: B, axisLine: B, grid: B, ticks: B, labels: B,
+    mark: E('dot', 'square', 'triangle'), size: N(0.5, 200), sizeMin: N(0, 200), sizeMax: N(0, 400), lineWidth: N(0.25, 40), trim: unit, highlight: B, opacity: unit, blend: blendF,
+    split: E('lines', 'separator', 'words', 'letters', 'chunks'), separator: S, chunkSize: N(1, 10000, true), order: E('text', 'frequency', 'alphabetical'), counts: B,
+    textSize: N(0.005, 2), textColor: C, font: E('sans', 'serif', 'mono'), fontUrl: S, weight: N(100, 900), matte: matteF, labelSize: N(4, 64),
+    show: E('all', 'range', 'window'), from: N(1, 1e6), to: N(1, 1e6), count: N(1, 1e5), stepBy: E('row', 'window'), offset: N(-1e6, 1e6), transition: E('cut', 'fade'), duration: N(0, 30),
   },
 };
 
@@ -1142,6 +1267,23 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'scale', label: 'Scale', min: 0.1, max: 4, hint: 'Size of the background: 1 fills the picture as fitted. Over 1 zooms in; under 1 shows the colour around it.' },
     ROT,
     { key: 'duration', label: 'Fade (s)', min: 0, max: 5, step: 0.05, hint: 'Crossfade: how long one source takes to fade into the next.' },
+  ],  data: [
+    { key: 'offset', label: 'Offset', min: 0, max: 100, step: 1, hint: 'Which row (or chunk) is current, counting from 0: a window starts there. Make it a control and map anything onto it (a key, an LFO, a hand). Next and Previous count on from here.' },
+    { key: 'count', label: 'Window', min: 1, max: 50, step: 1, hint: 'Window: how many rows (or chunks) show at once, from the current one.' },
+    { key: 'from', label: 'From row', min: 1, max: 100, step: 1, hint: 'Range: the first row that shows, counting from 1.' },
+    { key: 'to', label: 'To row', min: 1, max: 100, step: 1, hint: 'Range: the last row that shows, counting from 1.' },
+    { key: 'duration', label: 'Fade (s)', min: 0, max: 5, step: 0.05, hint: 'Fade: how long the rows (or words) that go take to fade into the ones that come.' },
+    X('The region’s centre'), Y('The region’s centre'),
+    { key: 'w', label: 'Width', min: 0.05, max: 3, hint: 'Region: width in picture heights.' },
+    { key: 'h', label: 'Height', min: 0.05, max: 2, hint: 'Region: height in picture heights.' },
+    { key: 'size', label: 'Size', min: 1, max: 60, step: 0.5, hint: 'Points: mark size in pixels (without a size column).' },
+    { key: 'sizeMin', label: 'Smallest', min: 0, max: 60, step: 0.5, hint: 'Size column: the mark size, in pixels, for its smallest value.' },
+    { key: 'sizeMax', label: 'Largest', min: 1, max: 120, step: 0.5, hint: 'Size column: the mark size, in pixels, for its largest value.' },
+    { key: 'lineWidth', label: 'Line', min: 0.5, max: 16, step: 0.25, hint: 'Path and lines: line width in pixels.' },
+    { key: 'trim', label: 'Trim', min: 0, max: 1, hint: 'Path and lines: how much is drawn. Animate it from 0 to 1 to draw the route on.' },
+    { key: 'textSize', label: 'Text size', min: 0.02, max: 0.6, hint: 'Text: letter height as a fraction of the picture height.' },
+    { key: 'labelSize', label: 'Labels', min: 6, max: 32, step: 0.5, hint: 'Axis numbers and labels, in pixels.' },
+    OPACITY,
   ],
 };
 
@@ -1155,6 +1297,12 @@ export function layerNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp>
   const base = LAYER_NUMERIC_PROPS[l.kind];
   // Index and Offset run over the queue: a slider from the first source to the last.
   if (l.kind === 'background') { const last = Math.max(1, l.sources.length - 1); return base.map(d => d.key === 'index' || d.key === 'offset' ? { ...d, max: last } : d); }
+  // Offset, From, To and Window run over the dataset's rows (or chunks), once it is known.
+  if (l.kind === 'data') {
+    const n = dataItemCount(l);
+    if (!(n > 0)) return base;
+    return base.map(d => d.key === 'offset' ? { ...d, max: Math.max(1, n - 1) } : d.key === 'from' || d.key === 'to' || d.key === 'count' ? { ...d, max: Math.max(2, n) } : d);
+  }
   if (l.kind !== 'script') return base;
   // Buttons are actions, not numbers; toggles are 0/1 numbers.
   return [...l.paramDefs.filter(d => d.kind !== 'button').map(d => d.kind === 'toggle'

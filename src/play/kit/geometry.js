@@ -233,7 +233,8 @@ export function geoAnchor(layer, value, aspect, reported, lookup, depth) {
       if (layer.arrange === 'line') return { x: (value('x') + value('x2')) / 2, y: (value('y') + value('y2')) / 2 };
       if (layer.arrange === 'path' || layer.arrange === 'points') return rep() || at();
       return at();
-    case 'particles': case 'bodies': case 'brush':
+    // A Data layer: its current row where it is drawn (a path: its head).
+    case 'particles': case 'bodies': case 'brush': case 'data':
       return rep();
     case 'script':
       return rep() || { x: 0.5, y: 0.5 };

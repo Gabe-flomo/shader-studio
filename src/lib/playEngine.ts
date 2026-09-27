@@ -30,6 +30,7 @@ import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parseLayerTarget } fr
 import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
 import { handFeed } from './handFeed';
+import { readDataSource } from '../play/dataLayer';
 import { hdAge, hdCreate, hdGate, hdPlacement, hdPoint, hdRead, hdUpdate, type HdState } from '../play/kit/hands.js';
 import { DEFAULT_HANDS, parseHandAnchor, usesHands, type FireMode, type HandGesture, type HandSide, type PlayLayer } from '../types/play';
 
@@ -351,6 +352,11 @@ class PlayEngine implements InputSource {
     this.sensors.set(key, value);
   }
 
+  /** What a layer last reported under `key` (a Data layer's `<id>::row`, for its panel), or undefined. */
+  sensor(key: string): number | undefined {
+    return this.sensors.get(key);
+  }
+
   /** A following null moved (null clears it). */
   setOverride(layerId: string, key: string, value: number | null): void {
     const k = `${layerId}::${key}`;
@@ -655,6 +661,8 @@ class PlayEngine implements InputSource {
         if (AUDIO_READS.has(source.read)) return this.audioBand(source.layerId, source.read as LiveBand);
         return this.sensors.get(`${source.layerId}::${source.read}`) ?? null;
       }
+      case 'data':
+        return readDataSource(source, k => this.sensors.get(k));
       case 'hand':
         return hdRead(this.hands, source.side, source.read, source.point, source.axis, source.gesture);
       case 'null': {
