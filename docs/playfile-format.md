@@ -44,6 +44,7 @@ glsl/<Name>.glsl                   a GLSL shader, plain text
 backgrounds/<Name>.<png|jpg|…>     a background image, as the picture file
 library/<Name>.library.json        a Library snapshot: presets, functions, scripts, palettes…
 profile/<Name>.zip                 a whole profile ZIP (Files → Download everything)
+videos/<Name>.<mp4|webm|mov…>      a Video layer's file (meta: its library id and type)
 ```
 
 Paths are unique inside the file (a clash gets ` (2)`); a name is made safe
@@ -91,6 +92,7 @@ for a path, but the item's real name is the manifest's `name`.
 | `background` | added to the backgrounds library | — (same name and size is "already here") |
 | `library` | merged like Install's Merge: nothing of yours is overwritten, clashing presets come in as `Name (2)` | automatic |
 | `profile` | Install's Merge (needs Pro: `files.install`) | automatic |
+| `video` | added to the videos library under its id, so the Video layers that name it find it | — (the same id is "already here") |
 
 "Already here" (identical content) rows are shown but not ticked. Nothing in a
 file runs on import: graphs and presentations are data, and node types are GLSL
@@ -208,6 +210,11 @@ export brings:
   a linked graph or presentation ("keep both") updates the links. Records
   without these fields export as before.
 
+- the files of the videos their Video layers use (`videoId`), as `video`
+  items. Past 200 MB in all the export asks first whether to take them along
+  (the same question as a library ZIP); left out, those layers ask for their
+  files after an import.
+
 A graph file already carries its groups, expression and custom function nodes'
 code, datasets, Play media and layer kinds, so it opens without the extra
 items; they come along so they're in the recipient's library too.
@@ -230,6 +237,7 @@ as the other:
 | Files → Download everything | everything | ZIP (or a folder, desktop) | Pro, as before |
 | Files → a selection's Download… | the selection (+ what it uses, optional) | ZIP | Pro, as before |
 | Node types (My nodes, a node's card, Library → Only published nodes) | a node pack only (signed, optionally sealed) | — | Pro (`nodes.pack`) |
+| Builder → Node packs → Export | the pack: its nodes, examples and extras (signed, optionally sealed) | — | Pro (`nodes.pack`) |
 
 Deliberately not `.playfile`: rendered video and frames (`.mp4`, `.mov`,
 `.webm`, `.png`), "Put it on a website" and "Export as a web page" (they're
@@ -265,6 +273,15 @@ Install.
 Unchanged: it keeps graphs, presentations and shaders as readable files. A
 published node is written in its stored form, so a sealed node's file holds
 its encrypted blob, not its code.
+
+## Node packs
+
+A pack made in Builder → Node packs is a `nodes` item whose JSON also carries
+`pack` (name, version, author, description, colour, glyph, licence, notes, and
+the names of its example graphs and presentations), plus those graphs and
+files as ordinary items. On import its nodes are listed under the pack's name
+and its examples are opened from the pack's entry in the node list. See
+[node-packs.md](node-packs.md).
 
 ## Tests
 

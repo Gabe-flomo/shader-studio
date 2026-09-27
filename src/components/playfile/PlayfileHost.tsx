@@ -205,7 +205,7 @@ function ImportDialog({ open, onClose }: { open: OpenImport; onClose: () => void
             <div key={kind} style={{ borderTop: gi ? `1px solid ${tk.border.subtle}` : 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: tk.bg.subtle, font: `600 12px ${fontFamily.ui}`, color: tk.text.primary }}>
                 <Icon name={KIND_ICONS[kind]} size={14} style={{ color: tk.text.muted }} />
-                {rows.length === 1 ? KIND_LAYOUT[kind].label : KIND_LAYOUT[kind].plural}
+                {kind === 'nodes' ? (rows.length === 1 ? 'Node type' : 'Node types') : rows.length === 1 ? KIND_LAYOUT[kind].label : KIND_LAYOUT[kind].plural}
                 <span style={{ fontWeight: 400, color: tk.text.muted }}>· {rows.length}</span>
               </div>
               {rows.map(r => {
