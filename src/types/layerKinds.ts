@@ -17,7 +17,7 @@ import type { PlayLayer, ScriptLayer, ScriptMode, ScriptParamDef } from './playL
 import { isScriptParamDef } from './playLayers';
 
 /** The icons a kind may use (all of them are IconNames; the UI checks that). */
-export const LAYER_KIND_ICONS = ['code', 'spark', 'star', 'wave', 'dice', 'hash', 'loop', 'curve', 'grid', 'target', 'grip', 'text', 'eye', 'sun', 'moon', 'sliders', 'overlay', 'layoutCanvas'] as const;
+export const LAYER_KIND_ICONS = ['code', 'spark', 'star', 'wave', 'dice', 'hash', 'loop', 'curve', 'grid', 'target', 'grip', 'text', 'eye', 'sun', 'moon', 'sliders', 'overlay', 'layoutCanvas', 'cube'] as const;
 export type LayerKindIcon = (typeof LAYER_KIND_ICONS)[number];
 
 /** The colours a kind may use: accent names the theme turns into a light or a dark shade. */

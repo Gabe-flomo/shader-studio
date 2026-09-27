@@ -13,7 +13,7 @@ import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
-import { SKETCH_3D, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
+import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
 import {
   defaultLayer, type ActionKind, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
@@ -29,7 +29,7 @@ function layer<K extends PlayLayerKind>(kind: K, id: string, label: string, over
  * are read from the code the way Apply reads them, and each starts at its
  * declared value (or `values`).
  */
-function scriptLayer(id: string, label: string, code: string, over: { clear?: boolean; readPicture?: boolean; blend?: string; opacity?: number; toShader?: boolean; values?: Record<string, number> } = {}): PlayLayer {
+function scriptLayer(id: string, label: string, code: string, over: { mode?: '2d' | '3d'; clear?: boolean; readPicture?: boolean; blend?: string; opacity?: number; toShader?: boolean; values?: Record<string, number> } = {}): PlayLayer {
   const r = extractScriptParams(code);
   if (!r.ok) throw new Error(`playExamples: script ${id}: ${r.error}`);
   const { values = {}, ...rest } = over;
@@ -929,6 +929,31 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Shape: 0 is a torus, 1 a ball, 2 a cube. Turn on Wireframe to see every face, the back ones too.
 • Lower Lens for a wide-angle look; map an LFO onto Hue.
 • In the editor, change the \`light\` direction, or add your own mesh function.`,
+  })),
+  ex('script3DShapes', glowGraph({ radius: 0.12, falloff: 7, tint: [0.3, 0.5, 1] }), play({
+    layers: [scriptLayer('shapes', 'Shapes', SKETCH_3D_SHAPES, { mode: '3d' })],
+    controls: [ctl('count', 'layer:shapes::p_count', 'Shapes · Shapes', 1, 16, 1), ctl('size', 'layer:shapes::p_size', 'Shapes · Size', 0.03, 0.2), ctl('spin', 'layer:shapes::p_spin', 'Shapes · Spin', -2, 2)],
+    notes: `**What it shows.** A **3D Script** layer: the same setup and draw as any Script layer, but its Mode is 3D, so it draws with WebGL. p5's 3D names work as plain names (\`box\`, \`sphere\`, \`torus\`, \`cone\`, lights, \`orbitControl\`), with three.js underneath. The layer starts clear every frame, so the SDF Glow shader is the background.
+
+**How it's built.** Each shape is \`push()\`, a \`translate\` round a ring, two turns, a colour and a shape, then \`pop()\`. Three lights shade them: a dim ambient, a warm directional from the top left and a blue point light where the glow is. Shapes of the same kind and look are drawn together as one instanced mesh, so hundreds stay fast. The layer is composited like any other: Opacity, Blend, the Layers node and the Cloner all see it.
+
+**Try this.**
+• Drag on the picture to orbit the camera.
+• Turn Shiny off for matte shapes; raise Shapes and Size.
+• In the editor, swap \`fill(…)\` for \`normalMaterial()\`, or add \`background(10)\` to see what the layer covers.
+• Patterns → 3D has a grid of boxes, orbiting spheres, particles and a terrain.`,
+  })),
+  ex('script3DTexture', fbmGraph({ scale: 2.5, timeScale: 0.08 }), play({
+    layers: [scriptLayer('cube', 'Cube', SKETCH_3D_TEXTURE, { mode: '3d' })],
+    controls: [ctl('size', 'layer:cube::p_size', 'Cube · Size', 0.1, 0.8), ctl('spin', 'layer:cube::p_spin', 'Cube · Spin', -2, 2), ctl('tilt', 'layer:cube::p_tilt', 'Cube · Tilt', -1.5, 1.5)],
+    notes: `**What it shows.** \`s.picture.texture\` is the picture under a 3D Script layer, this frame, as a texture. \`texture(s.picture.texture)\` skins the next shapes with it, so the cube wears the live shader it floats over.
+
+**How it's built.** The picture is an ordinary graph: FBM noise through a palette. The layer turns a box and calls \`texture\` before it; with no lights the texture shows at full brightness. The picture is copied to the GPU only on frames that read it.
+
+**Try this.**
+• Drag on the picture to orbit; Tilt and Spin turn the cube.
+• Open the Studio and change the palette: the cube changes with it.
+• In the editor, draw \`sphere(…)\` or \`plane(…)\` after \`texture\`, or add lights to shade the faces.`,
   })),
   ex('scriptMouse', glowGraph({ radius: 0.04, falloff: 30, tint: [0.3, 0.35, 0.6] }), play({
     layers: [scriptLayer('chain', 'Chain', SKETCH_MOUSE)],

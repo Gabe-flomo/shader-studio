@@ -1,13 +1,14 @@
 /**
  * three-slim.js — the part of three.js a 3D Script layer gets, as `s.three.THREE`.
  *
- * The app imports this module (three is already in the app); an exported web
- * page that has a 3D Script layer carries the same set, bundled from this
- * file into one script that defines the `SSThree` global (the
- * `virtual:three-slim-source` module in vite.config.ts). Keeping it to what
- * sketches use makes that script about 550 KB (140 KB gzipped) instead of
- * the 700 KB all of three.js would add to the page.
- * Add a name here and both the app and exported pages have it.
+ * It is bundled from this file into one script that defines the `SSThree`
+ * global (the `virtual:three-slim-source` module in vite.config.ts). An
+ * exported page with a 3D Script layer carries that script; the app loads the
+ * same script on first need (play/threeSource.ts), so both run one build and
+ * the app's own three chunk is unchanged. Tests import this module directly.
+ * Keeping it to what sketches use makes that script about 550 KB (140 KB
+ * gzipped) instead of the 700 KB all of three.js would add to the page. Add a
+ * name here and both the app and exported pages have it.
  */
 export {
   // Rendering and the scene

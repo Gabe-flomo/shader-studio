@@ -27,7 +27,8 @@ import { ImagePicker, SpritePicker } from './pickers';
 import { FIELD_HELP, ZONE_HELP } from './help';
 import { Section } from './Section';
 import { AudioSourceRows, FontRow } from './rows';
-import { SCRIPT_EXAMPLES, extractScriptParams } from './scriptExamples';
+import { examplesFor, extractScriptParams } from './scriptExamples';
+import { Segmented } from '../../ui/Choice';
 import { controlCandidate, makeControl } from './scriptTools';
 import { scriptPatch, type ApplyOptions } from './scriptApply';
 import { ScriptControls } from './ScriptControls';
@@ -35,7 +36,7 @@ import { ScriptModal } from './ScriptModal';
 import { useScriptStatus } from '../../../play/scriptStatus';
 import { selectTokenOnDoubleClick, wrapOnKeyDown } from '../../code/editKeys';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
-import type { ScriptLayer, ScriptParamDef } from '../../../types/playLayers';
+import { DEFAULT_SCRIPT, DEFAULT_SCRIPT_3D, DEFAULT_SCRIPT_PARAMS, script3dDefaults, type ScriptLayer, type ScriptMode, type ScriptParamDef } from '../../../types/playLayers';
 
 export interface EditorContext {
   layers: PlayLayer[];
@@ -642,10 +643,10 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
     if (!kind) { f.set(r.patch); return true; }
     // Editing the kind: every layer of it gets the code; this layer also takes the values the edit asked for.
     ctx.changePlay(p => {
-      const next = editKind(p, kind.id, code, r.defs).play;
+      const next = editKind(p, kind.id, code, r.defs, opts?.settings?.mode).play;
       return { ...next, layers: next.layers.map(x => (x.id === l.id ? { ...x, ...r.patch } as PlayLayer : x)) };
     });
-    if (layerKindRegistry.get(kind.id)) layerKindRegistry.register({ ...kind, code, paramDefs: r.defs, version: kind.version + 1 }, 'saved');
+    if (layerKindRegistry.get(kind.id)) layerKindRegistry.register({ ...kind, mode: opts?.settings?.mode ?? kind.mode, code, paramDefs: r.defs, version: kind.version + 1 }, 'saved');
     return true;
   };
   const turnInto = () => {
@@ -690,6 +691,22 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   };
   const removeFromFile = () => { if (kind) void removeKindFromFile(ctx.play, kind, ctx.changePlay); };
 
+  // ── 2D or 3D ──────────────────────────────────────────────────────────────
+  const sketchMode: ScriptMode = l.mode === '3d' ? '3d' : '2d';
+  const setSketchMode = (m: ScriptMode) => {
+    if (m === sketchMode) return;
+    // An untouched starter swaps for the other mode's starter; your own code stays (a 2D helper then says it needs 2D).
+    const starter = l.code === (sketchMode === '3d' ? DEFAULT_SCRIPT_3D : DEFAULT_SCRIPT) && !dirty;
+    const next: Record<string, unknown> = !starter ? { mode: m } : m === '3d' ? script3dDefaults()
+      : { mode: '2d', code: DEFAULT_SCRIPT, paramDefs: DEFAULT_SCRIPT_PARAMS.map(d => ({ ...d })), ...Object.fromEntries(DEFAULT_SCRIPT_PARAMS.map(d => [`p_${d.key}`, d.value])) };
+    if (!kind) { f.set(next); return; }
+    const code = (next.code as string | undefined) ?? l.code, defs = (next.paramDefs as ScriptParamDef[] | undefined) ?? l.paramDefs;
+    ctx.changePlay(p => editKind(p, kind.id, code, defs, m).play);
+    if (layerKindRegistry.get(kind.id)) layerKindRegistry.register({ ...kind, mode: m, code, paramDefs: defs, version: kind.version + 1 }, 'saved');
+  };
+  const modeRow = f.row('Mode', <Segmented size="sm" ariaLabel="Draw in 2D or 3D" value={sketchMode} onChange={setSketchMode} options={[{ value: '2d', label: '2D canvas' }, { value: '3d', label: '3D (WebGL)' }]} />,
+    kind ? `Changes every ${kind.name} layer. 2D draws on a canvas (s.ctx); 3D draws shapes, lights and a camera with WebGL (three.js).` : '2D draws on a canvas (s.ctx). 3D draws shapes, lights and a camera with WebGL (three.js), still over the picture. The untouched starter swaps for the other one.');
+
   const error = applyError ? `Compile: ${applyError}` : runError;
   const defs: ScriptParamDef[] = l.paramDefs ?? [];
   const kindWord = candidate ? { slider: 'slider', toggle: 'toggle', button: 'button' }[candidate.kind] : '';
@@ -700,6 +717,7 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 
   const canvas = (
     <Section kind="script" title="Canvas">
+      {modeRow}
       {f.toggle('Clear', 'clear', 'Clear the canvas every frame', 'Off keeps what was drawn, for trails; the script can fade it itself.')}
       {f.toggle('Picture', 'readPicture', 'Let the script read the picture’s brightness', 'Samples the shader at low resolution each frame for s.picture.brightness(x, y).')}
       {f.props('opacity')}
@@ -712,6 +730,7 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
       draft={draft} setDraft={setDraft} apply={apply} applyError={applyError} runError={runError}
       kind={kind ? { name: kind.name, icon: kind.icon, colour: kindColour, uses } : undefined}
       onSaveAsKind={kind ? undefined : () => setDialog('save')}
+      mode={sketchMode} onMode={setSketchMode}
       onClose={() => setBig(false)}
     />
   );
@@ -719,7 +738,7 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
     <>
       {dialog === 'save' && (
         <KindDialog title="Save as a layer kind" confirmLabel="Save kind" controls={extractCount(draft, defs.length)} taken={takenNames}
-          initial={{ name: l.label.replace(/\s+\d+$/, '') || 'Sketch', hint: '', icon: 'code', colour: 'mauve' }}
+          initial={{ name: l.label.replace(/\s+\d+$/, '') || 'Sketch', hint: '', icon: sketchMode === '3d' ? 'cube' : 'code', colour: 'mauve' }}
           onDone={look => { setDialog(null); if (look) saveAsKind(look); }} />
       )}
       {dialog === 'restyle' && kind && (
@@ -771,13 +790,13 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 
   return (
     <>
-      <Section kind="script" title="Code" hint="A sketch: setup(s) runs once, draw(s) every frame, on a 2D canvas the size of the picture. p5-style helpers work as plain names. Declare controls in a params object, or turn a variable into one.">
+      <Section kind="script" title="Code" hint={sketchMode === '3d' ? 'A 3D sketch: setup(s) runs once, draw(s) every frame, drawing with WebGL over the picture. p5’s 3D names (box, sphere, lights, camera, orbitControl) work as plain names; s.three is three.js itself. Declare controls in a params object, or turn a variable into one.' : 'A sketch: setup(s) runs once, draw(s) every frame, on a 2D canvas the size of the picture. p5-style helpers work as plain names. Declare controls in a params object, or turn a variable into one.'}>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 6px 0' }}>
           <Button size="sm" variant="primary" icon="popout" onClick={() => setBig(true)} title="The big editor: highlighting, autocomplete, a scratch run, the reference, patterns to insert">Open editor</Button>
           <Button size="sm" icon="save" onClick={() => setDialog('save')} title="Save this sketch as a layer kind of its own: it joins Add layer with its own name, icon and colour, and its controls become the layer's properties">Save as kind</Button>
           <span style={{ flex: 1 }} />
-          {SCRIPT_EXAMPLES.map(ex => (
-            <Button key={ex.name} size="sm" variant="ghost" title={ex.hint} onClick={() => { setDraft(ex.code); apply(ex.code, { settings: ex.settings }); }}>{ex.name}</Button>
+          {examplesFor(sketchMode).map(ex => (
+            <Button key={ex.name} size="sm" variant="ghost" title={ex.hint} onClick={() => { setDraft(ex.code); apply(ex.code, { settings: { ...ex.settings, mode: sketchMode } }); }}>{ex.name}</Button>
           ))}
         </div>
         <textarea

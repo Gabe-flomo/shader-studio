@@ -29,7 +29,7 @@ import { Sheet } from '../../ui/Sheet';
 import { portalGuard } from '../../ui/portalGuard';
 import { KindDialog } from './KindDialog';
 import { addKindToList, applyKindLook, removeKindFromFile, removeKindFromList } from './kindActions';
-import { builtinGroups, LAYER_KIND_FOLDER_SCOPE, loadClosed, saveClosed, yourLayers, type KindEntry } from './addLayerCatalog';
+import { builtinGroups, builtinKey, LAYER_KIND_FOLDER_SCOPE, type BuiltinVariant, loadClosed, saveClosed, yourLayers, type KindEntry } from './addLayerCatalog';
 
 const WIDTH = 340;
 const SEARCH_H = 48;
@@ -58,7 +58,7 @@ export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onChang
   /** Phone layout: a bottom sheet with bigger rows. */
   touch: boolean;
   anchorRef: RefObject<HTMLElement | null>;
-  onAdd: (kind: PlayLayerKind) => void;
+  onAdd: (kind: PlayLayerKind, variant?: BuiltinVariant) => void;
   onAddKind: (def: LayerKindDef) => void;
   onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
   onClose: () => void;
@@ -99,7 +99,7 @@ export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onChang
   });
   // The rows you can reach with the keyboard, in the order they are drawn.
   const visible: Row[] = [];
-  if (isOpen('section:builtin')) for (const g of builtins) if (isOpen(g.key)) for (const b of g.items) visible.push({ key: `b:${b.kind}`, label: b.label, hint: b.hint, icon: b.icon, onAdd: () => onAdd(b.kind) });
+  if (isOpen('section:builtin')) for (const g of builtins) if (isOpen(g.key)) for (const b of g.items) visible.push({ key: builtinKey(b), label: b.label, hint: b.hint, icon: b.icon, onAdd: () => onAdd(b.kind, b.variant) });
   if (isOpen('section:yours')) {
     for (const g of yours.folders) if (g.folder && folderOpen(g.folder)) for (const e of g.items) visible.push(kindRow(e));
     for (const e of yours.loose) visible.push(kindRow(e));
@@ -289,7 +289,7 @@ export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onChang
             {isOpen('section:builtin') && builtins.map(g => (
               <div key={g.key} style={{ paddingBottom: 2 }}>
                 {groupHead(isOpen(g.key), g.label, searching ? g.items.length : g.total, () => toggle(g.key))}
-                {isOpen(g.key) && g.items.map(b => row({ key: `b:${b.kind}`, label: b.label, hint: b.hint, icon: b.icon, onAdd: () => onAdd(b.kind) }, 30))}
+                {isOpen(g.key) && g.items.map(b => row({ key: builtinKey(b), label: b.label, hint: b.hint, icon: b.icon, onAdd: () => onAdd(b.kind, b.variant) }, 30))}
               </div>
             ))}
           </div>

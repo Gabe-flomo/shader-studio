@@ -12,7 +12,7 @@
 import { create } from 'zustand';
 import runtimeSource from '../play/runtime/play-runtime.js?raw';
 import { kitScript, playBundle, type PlayHtmlInput } from '../play/exportHtml';
-import * as threeSlim from '../play/kit/three-slim.js';
+import { loadThreeRuntime, playUses3D } from '../play/threeSource';
 
 export interface PlayMountOptions {
   mode?: 'player' | 'background';
@@ -59,8 +59,6 @@ declare global {
 
 /** The runtime, evaluated on first use. */
 export function playRuntime(): PlayRuntime {
-  // 3D Script layers: the app's three.js (the set an exported page carries), where the runtime looks for it.
-  if (!window.SSThree) window.SSThree = threeSlim;
   if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 5) {
     // The same text the web export inlines: the kit first, then the player.
     new Function(`${kitScript()}\n${runtimeSource}`)();
@@ -70,6 +68,8 @@ export function playRuntime(): PlayRuntime {
 
 /** Mount a source's bundle; the mount is cleaned out of `el` on destroy even if the shader failed. */
 export function mountPlay(el: HTMLElement, input: PlayHtmlInput, opts: PlayMountOptions): PlayMount {
+  // 3D Script layers: three.js (the script an exported page carries) where the runtime looks for it; they wait until it is here.
+  if (playUses3D(input.play) && !window.SSThree) void loadThreeRuntime().then(t => { window.SSThree = t; }, () => {});
   const m = playRuntime().mount(el, playBundle(input), { mode: 'player', fit: 'cover', ...opts });
   return {
     ...m,

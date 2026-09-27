@@ -20,9 +20,7 @@ import { liveAudio } from '../lib/liveAudio';
 import { layerAudio } from '../lib/layerAudio';
 import { cameraInput } from '../lib/cameraInput';
 import { createLayerKit, type KitAudio, type KitEnv, type KitPointer, type LayerKit } from './kit/kit.js';
-// three.js for 3D Script layers: the set exported pages carry (three is in the app already).
-import * as threeSlim from './kit/three-slim.js';
-import { loadThreeSource, playUses3D, threeSource } from './threeSource';
+import { loadThreeRuntime, playUses3D, threeRuntime } from './threeSource';
 import { setScriptStatus } from './scriptStatus';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
@@ -138,8 +136,8 @@ class PlayOverlay {
 
   setRecord(record: PlayRecord): void {
     this.record = record;
-    // A 3D sketch: fetch the three.js script exported pages carry now, so a later export or the Stage has it at hand.
-    if (!threeSource() && playUses3D(record)) void loadThreeSource().catch(() => {});
+    // A 3D sketch: load three.js (the script exported pages carry), so the layer draws and a later export has it at hand.
+    if (!threeRuntime() && playUses3D(record)) void loadThreeRuntime().catch(() => {});
   }
 
   /** Fire an action now (the panel's Burst / Drop / Next / Clear buttons). */
@@ -443,7 +441,8 @@ class PlayOverlay {
       hands: this.handsOverlay(forExport),
       shaderTap: forExport ? undefined : this.shaderTap ?? undefined,
       scriptStatus: forExport ? undefined : setScriptStatus,
-      three: threeSlim,
+      // three.js for 3D Script layers, once loaded (they wait until then).
+      three: threeRuntime(),
     };
   }
 

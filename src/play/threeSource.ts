@@ -44,6 +44,42 @@ export function setThreeSource(source: string): void {
   cached = source;
 }
 
+/**
+ * three.js for the app's own 3D Script layers: the same script evaluated once
+ * here, so the app and exported pages run the very same build, and the app's
+ * main bundle carries none of it until a 3D sketch appears.
+ */
+let runtime: unknown = null;
+let runtimePending: Promise<unknown> | null = null;
+const waitingRuntime = new Set<() => void>();
+export function threeRuntime(): unknown {
+  return runtime;
+}
+export function loadThreeRuntime(): Promise<unknown> {
+  if (runtime) return Promise.resolve(runtime);
+  if (!runtimePending) {
+    runtimePending = loadThreeSource().then(src => {
+      runtime = new Function(`${src}\nreturn SSThree;`)();
+      for (const fn of waitingRuntime) fn();
+      waitingRuntime.clear();
+      return runtime;
+    }).catch(e => { runtimePending = null; throw e; });
+  }
+  return runtimePending;
+}
+/** In a component: three.js for a 3D sketch when `needed` (null until it has loaded; the component re-renders then). */
+export function useThreeRuntime(needed: boolean): unknown {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    if (!needed || runtime) return;
+    const on = () => bump(n => n + 1);
+    waitingRuntime.add(on);
+    void loadThreeRuntime().catch(() => {});
+    return () => { waitingRuntime.delete(on); };
+  }, [needed]);
+  return needed ? runtime : null;
+}
+
 /** In a component: loads the script when `needed`, and re-renders once it is here. True when ready (or not needed). */
 export function useThreeSource(needed: boolean): boolean {
   const [, bump] = useState(0);

@@ -13,9 +13,9 @@
  * y down, z toward you, one unit a pixel at z = 0. The shapes live under a
  * root group flipped in y; three.js itself (s.three) keeps its own y-up world.
  *
- * THREE is handed in (the app imports three-slim.js; an exported page carries
- * the same set as the SSThree global), so this file has no imports and inlines
- * into the web kit like the others. Top-level names start with `k3` / `K3`.
+ * THREE is handed in (the three-slim.js set: the SSThree global an exported
+ * page carries, which the app loads the same way), so this file has no
+ * imports and inlines into the web kit like the others. Top-level names start with `k3` / `K3`.
  */
 
 /** Names the 3D helpers add or replace, for the editor's reference and its param reader. */
@@ -163,6 +163,7 @@ export function k3Create(T) {
   const lineGeo = new T.BufferGeometry();
   const lines = new T.LineSegments(lineGeo, new T.LineBasicMaterial({ vertexColors: true, transparent: true }));
   lines.frustumCulled = false;
+  lines.userData.k3 = true;
   root.add(lines);
   const g = {
     T, scene, root, persp, ortho, lines, lineGeo, linePos: new Float32Array(0), lineCol: new Float32Array(0), lineN: 0,
@@ -191,7 +192,9 @@ function k3DefaultCamera(g, W, H) {
 
 /** setup is about to run (first frame, a resize): a fresh camera, and what the last setup added to the scene goes. */
 export function k3Setup(g, W, H) {
+  // The pools stay (marked k3); what the sketch added, to the scene or to root, goes.
   for (const c of g.scene.children.slice()) if (c !== g.root) g.scene.remove(c);
+  for (const c of g.root.children.slice()) if (!c.userData.k3) g.root.remove(c);
   g.api.camera = g.persp;
   k3DefaultCamera(g, W, H); g.cam.set = false;
   k3CopyStyle(k3DefaultStyle(), g.style); g.styleKey = '';
@@ -294,6 +297,7 @@ function k3MakeBatch(g, gg, cap) {
   b.mesh.instanceMatrix.setUsage(T.DynamicDrawUsage); b.mesh.instanceColor.setUsage(T.DynamicDrawUsage);
   b.mesh.frustumCulled = false;
   b.mesh.count = 0;
+  b.mesh.userData.k3 = true;
   g.root.add(b.mesh);
   return b;
 }
@@ -305,6 +309,7 @@ function k3Grow(g, b) {
   mesh.instanceColor.array.set(old.instanceColor.array);
   mesh.instanceMatrix.setUsage(T.DynamicDrawUsage); mesh.instanceColor.setUsage(T.DynamicDrawUsage);
   mesh.frustumCulled = false;
+  mesh.userData.k3 = true;
   g.root.remove(old); old.dispose();
   g.root.add(mesh);
   b.mesh = mesh; b.cap = cap;
@@ -360,8 +365,9 @@ function k3Light(g, kind) {
   if (i < list.length) return list[i];
   let l;
   if (kind === 'ambient') l = new T.AmbientLight(0xffffff, 0);
-  else if (kind === 'directional') { l = new T.DirectionalLight(0xffffff, 0); g.root.add(l.target); }
+  else if (kind === 'directional') { l = new T.DirectionalLight(0xffffff, 0); l.target.userData.k3 = true; g.root.add(l.target); }
   else { l = new T.PointLight(0xffffff, 0, 0, 0); }
+  l.userData.k3 = true;
   g.root.add(l);
   list.push(l);
   return l;

@@ -5,7 +5,7 @@
  */
 import type { Completion } from '../../code/glslReference';
 import type { MemberCompletions } from '../../code/useCompletion';
-import { SCRIPT_REFERENCE, refSignature, type RefItem } from './scriptReference';
+import { referenceFor, refSignature, type RefItem } from './scriptReference';
 import { declaredParams } from './scriptTools';
 
 const KEYWORDS = ['const', 'let', 'function', 'return', 'if', 'else', 'for', 'while', 'break', 'continue', 'true', 'false', 'null', 'undefined', 'new', 'typeof', 'of', 'in'];
@@ -39,25 +39,29 @@ export function refToCompletion(it: RefItem, name = it.name): Completion {
   return { kind: 'fn', name, detail: refSignature(it), type: it.type === 'nothing' ? undefined : it.type, insert, ...more };
 }
 
-let cachedStatic: { all: Completion[]; members: MemberCompletions } | null = null;
-function staticCompletions() {
-  if (cachedStatic) return cachedStatic;
+const cachedStatic: Partial<Record<'2d' | '3d', { all: Completion[]; members: MemberCompletions }>> = {};
+function staticCompletions(mode: '2d' | '3d') {
+  const hit = cachedStatic[mode];
+  if (hit) return hit;
   const all: Completion[] = [];
   const sMembers: Completion[] = [];
-  for (const g of SCRIPT_REFERENCE) for (const it of g.items) {
+  for (const g of referenceFor(mode)) for (const it of g.items) {
     if (it.name.startsWith('s.')) sMembers.push(refToCompletion(it, it.name.slice(2)));
     else all.push(refToCompletion(it));
   }
   for (const k of KEYWORDS) all.push({ kind: 'keyword', name: k, insert: k });
   const ctx: Completion[] = CTX.map(([name, doc, insert]) => (insert ? { kind: 'fn', name, detail: insert.slice(name.length), doc, insert } : { kind: 'const', name, doc, insert: name }));
   const math: Completion[] = MATH.map(n => (n === 'PI' ? { kind: 'const', name: n, doc: 'π.', insert: n } : { kind: 'fn', name: n, detail: '()', doc: `Math.${n}.`, insert: `${n}()` }));
-  cachedStatic = { all, members: { s: sMembers, ctx, Math: math, math } };
-  return cachedStatic;
+  // 3D has no 2D context: no ctx. members.
+  const members: MemberCompletions = mode === '3d' ? { s: sMembers, Math: math, math } : { s: sMembers, ctx, Math: math, math };
+  const made = { all, members };
+  cachedStatic[mode] = made;
+  return made;
 }
 
-/** Completions for a sketch: the built-ins plus the identifiers the code declares. */
-export function scriptCompletions(code: string): { all: Completion[]; members: MemberCompletions } {
-  const base = staticCompletions();
+/** Completions for a sketch: the built-ins for its mode plus the identifiers the code declares. */
+export function scriptCompletions(code: string, mode: '2d' | '3d' = '2d'): { all: Completion[]; members: MemberCompletions } {
+  const base = staticCompletions(mode);
   const own = new Map<string, Completion>();
   const re = /\b(?:let|const|var|function)\s+([A-Za-z_$][\w$]*)/g;
   let m: RegExpExecArray | null;
