@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Playfield",
-  "version": "2026.9.7",
+  "version": "2026.9.8",
   "identifier": "com.shaderstudio.app",
   "build": {
     "frontendDist": "../dist",
@@ -40,16 +40,23 @@
     },
     "fileAssociations": [
       {
-        "ext": ["playfile"],
+        "ext": [
+          "playfile"
+        ],
         "name": "Playfield file",
         "description": "Playfield file",
         "role": "Editor",
         "rank": "Owner",
         "mimeType": "application/x-playfile+zip",
-        "contentTypes": ["com.shaderstudio.playfile"],
+        "contentTypes": [
+          "com.shaderstudio.playfile"
+        ],
         "exportedType": {
           "identifier": "com.shaderstudio.playfile",
-          "conformsTo": ["public.zip-archive", "public.data"]
+          "conformsTo": [
+            "public.zip-archive",
+            "public.data"
+          ]
         }
       }
     ]
