@@ -45,7 +45,7 @@ import { whenSaved } from '../../store/graphVersions';
 import type { BlockContext } from './Blocks';
 import { useCamera } from '../../present/runtimeHost';
 import { Backdrop, MissingImageNote } from './Backdrop';
-import { COLUMN, lookVars, usePresentFonts, useStepLook, useTypeVars } from './presentLook';
+import { lookVars, ThemeScope, useColumn, usePageBackground, usePageVars, usePresentFonts, useStepLook } from './presentLook';
 
 function usePresentationList(): PresentationEntry[] {
   const [list, setList] = useState(listPresentations);
@@ -99,7 +99,7 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
 
   const css = useMemo(() => presentCss(tk), [tk]);
   const fonts = usePresentFonts();
-  const typeVars = useTypeVars();
+  const page = usePageVars();
   const ctx: Omit<BlockContext, 'active' | 'editing' | 'large'> = useMemo(() => ({
     sources: new Map((doc?.sources ?? []).map(s => [s.id, s])),
     sandbox: doc?.origin === 'imported',
@@ -107,7 +107,7 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
   }), [doc?.sources, doc?.origin, compact]);
 
   return (
-    <div ref={rootRef} style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark), color: tk.text.primary, font: `13px ${fontFamily.ui}`, ...typeVars }}>
+    <div ref={rootRef} {...(doc ? page.attrs : {})} style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark), color: tk.text.primary, font: `13px ${fontFamily.ui}`, ...(doc ? page.style : {}) }}>
       <style>{css}</style>
       {fonts && <style>{fonts}</style>}
       <Header compact={compact} list={list} onExport={() => setExporting(true)} onBrowse={() => setBrowsing(true)} />
@@ -305,17 +305,21 @@ function EditDesktop({ ctx, onNavigate }: { ctx: Omit<BlockContext, 'active' | '
   const step = doc?.steps[index];
   const look = useStepLook(step);
   const scroller = useRef<HTMLDivElement>(null);
+  const pageBg = usePageBackground();
+  const column = useColumn('edit');
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }); }, [index]);
   if (!doc || !step) return null;
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <aside style={{ width: 236, flexShrink: 0, borderRight: `1px solid ${tk.border.default}`, background: tk.bg.subtle }}><StepsList /></aside>
-      <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex' }}>
-        <Backdrop look={look} column={COLUMN.edit} />
+      <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', ...pageBg }}>
+        <Backdrop look={look} column={column} />
         <main ref={scroller} onClick={() => select(null)} style={{ flex: 1, minWidth: 0, overflowY: 'auto', position: 'relative', zIndex: 1, ...lookVars(look) }}>
-          <div style={{ maxWidth: 1040, margin: '0 auto', padding: '48px 48px 120px' }}>
-            <MissingImageNote look={look} />
-            <StepView step={step} index={index} total={doc.steps.length} ctx={{ ...ctx, editing: true, active: true, large: false }} />
+          <div style={{ maxWidth: column + 96, margin: '0 auto', padding: '48px 48px 120px' }}>
+            <ThemeScope>
+              <MissingImageNote look={look} />
+              <StepView step={step} index={index} total={doc.steps.length} ctx={{ ...ctx, editing: true, active: true, large: false }} />
+            </ThemeScope>
           </div>
         </main>
       </div>
@@ -335,15 +339,19 @@ function EditPhone({ ctx, onNavigate }: { ctx: Omit<BlockContext, 'active' | 'ed
   const [sheet, setSheet] = useState(false);
   const step = doc?.steps[index];
   const look = useStepLook(step);
+  const pageBg = usePageBackground();
+  const column = useColumn('edit');
   if (!doc || !step) return null;
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <StepsStrip />
-      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        <Backdrop look={look} column={COLUMN.edit} />
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', ...pageBg }}>
+        <Backdrop look={look} column={column} />
         <main onClick={() => select(null)} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '22px 16px 96px', position: 'relative', zIndex: 1, ...lookVars(look) }}>
-          <MissingImageNote look={look} />
-          <StepView step={step} index={index} total={doc.steps.length} ctx={{ ...ctx, editing: true, active: true, large: false }} />
+          <ThemeScope>
+            <MissingImageNote look={look} />
+            <StepView step={step} index={index} total={doc.steps.length} ctx={{ ...ctx, editing: true, active: true, large: false }} />
+          </ThemeScope>
         </main>
       </div>
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 'calc(14px + env(safe-area-inset-bottom, 0px))', display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 5 }}>

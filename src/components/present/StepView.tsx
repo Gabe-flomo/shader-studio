@@ -13,16 +13,19 @@ import { BlockView, type BlockContext } from './Blocks';
 import { BLOCK_META } from './blockMeta';
 import { SourcePicker } from './Sources';
 import { usePresentation } from './presentationStore';
+import { usePresentTheme } from './presentLook';
 
 export function StepView({ step, index, ctx, total }: { step: Step; index: number; total: number; ctx: BlockContext }) {
-  const tk = useTokens();
   const patchStep = usePresentation(s => s.patchStep);
   const cols = ctx.compact ? 1 : step.columns;
   const stepCtx = useMemo(() => ({ ...ctx, step }), [ctx, step]);
+  const numbers = usePresentTheme().spec.number;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  // The theme's step number: "02 / 07", an eyebrow pill, or a byline ("Step 2 of 7").
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: ctx.large ? 26 : 22 }}>
-      <header style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-        <span style={{ color: `var(--pp-accent, ${tk.accent.text})`, font: `700 ${ctx.large ? 13 : 12}px ${fontFamily.ui}`, letterSpacing: '0.06em', flexShrink: 0, textShadow: 'var(--pp-shadow, none)' }}>{String(index + 1).padStart(2, '0')}<span style={{ color: `var(--pp-muted, ${tk.text.faint})`, fontWeight: 500 }}> / {String(total).padStart(2, '0')}</span></span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: `calc(${ctx.large ? 26 : 22}px * var(--pp-space, 1))` }}>
+      <header className="pp-head">
+        <span className="pp-num" style={ctx.large && numbers === 'plain' ? { fontSize: 13 } : undefined}>{numbers === 'meta' ? <>Step {index + 1}<i> of {total}</i></> : <>{pad(index + 1)}<i> / {pad(total)}</i></>}</span>
         {ctx.editing ? (
           <input
             value={step.title ?? ''}
@@ -30,10 +33,10 @@ export function StepView({ step, index, ctx, total }: { step: Step; index: numbe
             onChange={e => patchStep(index, { title: e.target.value || undefined })}
             onKeyDown={e => e.stopPropagation()}
             className="pp-title"
-            style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', padding: 0, fontSize: `calc(${ctx.compact ? 22 : 26}px * var(--pp-scale, 1))` }}
+            style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', padding: 0, fontSize: `calc(${ctx.compact ? 22 : 26}px * var(--pp-scale, 1) * var(--pp-title, 1))` }}
           />
         ) : step.title ? (
-          <h2 className="pp-title" style={{ margin: 0, fontSize: `calc(${ctx.compact ? 22 : ctx.large ? 32 : 26}px * var(--pp-scale, 1))` }}>{step.title}</h2>
+          <h2 className="pp-title" style={{ margin: 0, fontSize: `calc(${ctx.compact ? 22 : ctx.large ? 32 : 26}px * var(--pp-scale, 1) * var(--pp-title, 1))` }}>{step.title}</h2>
         ) : null}
       </header>
       {step.blocks.length > 0 && (

@@ -5,9 +5,11 @@
  *   StepBackgroundSettings      this step's background: the presentation's
  *                               (Default), None, Colour, Gradient or Image,
  *                               and its legibility effects
- *   PresentationStyleSettings   the background every step shows unless it
- *                               sets its own; typography (Google Fonts for
- *                               headings, body and code, embedded; size, line
+ *   PresentationStyleSettings   the theme (ThemeSettings.tsx); the background
+ *                               every step shows unless it sets its own;
+ *                               typography (the theme's fonts, or Google Fonts
+ *                               for headings, body and code, chosen from the
+ *                               list or pasted as a link, embedded; size, line
  *                               height, colours) with a live specimen; and
  *                               what the embedded images and fonts weigh
  *
@@ -37,15 +39,16 @@ import {
   DARK_BELOW, IMAGE_EFFECTS, LINE_HEIGHT_RANGE, luminance, SCALE_RANGE, DEFAULT_LINE_HEIGHT, fontStack, resolveBackground, sizeLabel, stepLook, styleBytes,
   type FontCategory, type FontRole, type FontRoleName, type PresentBackground, type PresentImage, type RGB,
 } from '../../types/presentationStyle';
-import { FONT_CATEGORIES, GOOGLE_FONTS, findFont, nearestWeight, previewCssUrl, type GoogleFont } from '../../present/googleFonts';
+import { FONT_CATEGORIES, GOOGLE_FONTS, findFont, nearestWeight, parseFontLink, previewCssUrl, type GoogleFont } from '../../present/googleFonts';
+import { ThemeSettings } from './ThemeSettings';
 import { IMAGE_ACCEPT } from '../play/backgroundFiles';
 import { paperStyle } from './paper';
 import { Backdrop } from './Backdrop';
-import { lookVars, useImageMap, useLibraryImage, useStepLook, useTypeVars } from './presentLook';
+import { lookVars, useImageMap, useLibraryImage, usePageBackground, usePageVars, usePresentTheme, useStepLook } from './presentLook';
 import { Row, Section } from './InspectorParts';
 import { usePresentation } from './presentationStore';
 import {
-  applyImage, chooseFont, relinkImage, fontBusy, onFontBusy, patchTypography, presentImageFromFile, presentImageFromLibrary, setDefaultBackground, setStepBackground,
+  applyImage, chooseFont, chooseFontByLink, relinkImage, fontBusy, onFontBusy, patchTypography, presentImageFromFile, presentImageFromLibrary, setDefaultBackground, setStepBackground,
 } from './styleActions';
 
 type Kind = 'default' | PresentBackground['kind'];
@@ -340,13 +343,17 @@ function usePreviewFonts(): void {
   }, []);
 }
 
-function FontPicker({ role, value, compact, anchorRef, onPick, onClose }: {
+function FontPicker({ role, value, compact, anchorRef, themeFont, onPick, onLink, onClose }: {
   role: FontRoleName; value: FontRole | undefined; compact: boolean; anchorRef: React.RefObject<HTMLElement | null>;
-  onPick: (f: GoogleFont | null) => void; onClose: () => void;
+  /** The theme's font for the role: what "none chosen" shows. */
+  themeFont: { name: string; stack: string };
+  onPick: (f: GoogleFont | null) => void; onLink: (input: string) => void; onClose: () => void;
 }) {
   const tk = useTokens();
   usePreviewFonts();
   const [q, setQ] = useState('');
+  const [link, setLink] = useState('');
+  const parsed = link.trim() ? parseFontLink(link) : null;
   const [cat, setCat] = useState<FontCategory | 'all'>(role === 'code' ? 'mono' : 'all');
   const list = GOOGLE_FONTS.filter(f => (cat === 'all' || f.category === cat) && f.family.toLowerCase().includes(q.trim().toLowerCase()));
   const chip = (id: FontCategory | 'all', label: string) => {
@@ -365,11 +372,24 @@ function FontPicker({ role, value, compact, anchorRef, onPick, onClose }: {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
       <Field autoFocus={!compact} height={32} value={q} placeholder="Search fonts" aria-label="Search fonts" leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} onChange={e => setQ(e.target.value)} onKeyDown={e => e.stopPropagation()} />
       <div style={{ display: 'flex', gap: 5, overflowX: 'auto', paddingBottom: 2 }}>{chip('all', 'All')}{FONT_CATEGORIES.map(c => chip(c.id, c.label))}</div>
-      <div role="listbox" aria-label="Fonts" style={{ display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto', maxHeight: compact ? undefined : 340, minHeight: 0 }}>
-        {!q && row('system', <span style={{ font: `500 16px ${role === 'code' ? fontFamily.mono : fontFamily.ui}` }}>{role === 'code' ? 'System monospace' : 'System font'}</span>, 'no download', !value, () => onPick(null))}
+      <div role="listbox" aria-label="Fonts" style={{ display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto', maxHeight: compact ? undefined : 220, minHeight: 0 }}>
+        {!q && row('theme', <span style={{ font: `500 16px ${themeFont.stack}` }}>{themeFont.name}</span>, 'the theme’s · no download', !value, () => onPick(null))}
         {list.map(f => row(f.family, <span style={{ font: `${f.category === 'display' || f.category === 'handwriting' ? 400 : 500} 17px ${fontStack(f)}` }}>{f.family}</span>, FONT_CATEGORIES.find(c => c.id === f.category)?.label ?? '', value?.family === f.family, () => onPick(f)))}
-        {!list.length && <div style={{ padding: 16, color: tk.text.muted, font: `500 12px ${fontFamily.ui}`, textAlign: 'center' }}>No font called “{q}” in this list.</div>}
+        {!list.length && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: 14, color: tk.text.muted, font: `500 12px ${fontFamily.ui}`, textAlign: 'center' }}>
+            No font called “{q}” in this list.
+            {parseFontLink(q) && <Button size="sm" icon="search" onClick={() => onLink(q)}>Use “{parseFontLink(q)?.family}” from Google Fonts</Button>}
+          </div>
+        )}
       </div>
+      <form onSubmit={e => { e.preventDefault(); if (parsed) onLink(link); }} style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 10, borderTop: `1px solid ${tk.border.subtle}` }}>
+        <label htmlFor={`pp-font-link-${role}`} style={{ color: tk.text.secondary, font: `600 11.5px ${fontFamily.ui}` }}>Paste a Google Fonts link or family name</label>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Field id={`pp-font-link-${role}`} height={30} value={link} placeholder="fonts.google.com/specimen/… or Space Grotesk" aria-label="Google Fonts link or family name" onChange={e => setLink(e.target.value)} onKeyDown={e => e.stopPropagation()} style={{ flex: 1, minWidth: 0 }} />
+          <Button size="sm" variant="primary" type="submit" disabled={!parsed} style={{ height: 30 }}>Use</Button>
+        </div>
+        {link.trim() && <span style={{ color: parsed ? tk.text.faint : tk.status.warningText, font: `500 11px/1.4 ${fontFamily.ui}` }}>{parsed ? <>Uses <b>{parsed.family}</b>{parsed.weights.length ? ` (weights ${parsed.weights.join(', ')})` : ''} from Google Fonts.</> : 'Not a Google Fonts link or family name: a fonts.google.com page, a fonts.googleapis.com/css2 link, or a name.'}</span>}
+      </form>
       <div style={{ color: tk.text.faint, font: `500 11px/1.45 ${fontFamily.ui}` }}>From Google Fonts. The one you choose is downloaded once and kept in the presentation, so it works offline and in exported pages.</div>
     </div>
   );
@@ -381,6 +401,8 @@ function FontPicker({ role, value, compact, anchorRef, onPick, onClose }: {
 function FontRow({ role, label, sample, compact }: { role: FontRoleName; label: string; sample: string; compact: boolean }) {
   const tk = useTokens();
   const value = usePresentation(s => s.doc?.style?.typography?.[role]);
+  const spec = usePresentTheme().spec;
+  const themeFont = role === 'heading' ? { name: spec.headingName, stack: spec.headingFont } : role === 'body' ? { name: spec.bodyName, stack: spec.bodyFont } : { name: 'System monospace', stack: spec.codeFont };
   const busy = useFontBusy();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
@@ -393,14 +415,23 @@ function FontRow({ role, label, sample, compact }: { role: FontRoleName; label: 
     const ok = await chooseFont(role, { family: f.family, category: f.category, weight });
     if (ok) toast.success(`${label}: ${f.family}`, { message: 'Downloaded from Google Fonts and kept in the presentation.' });
   };
+  const byLink = async (input: string) => {
+    setOpen(false);
+    const got = await chooseFontByLink(role, input);
+    if (got) toast.success(`${label}: ${got.family}`, { message: 'Downloaded from Google Fonts and kept in the presentation.' });
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={{ color: tk.text.secondary, font: `600 12px ${fontFamily.ui}` }}>{label}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ flex: 1, color: tk.text.secondary, font: `600 12px ${fontFamily.ui}` }}>{label}</span>
+        {value && <button type="button" onClick={() => void chooseFont(role, null)} title={`Back to the theme’s font (${themeFont.name})`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 20, padding: '0 6px', border: 0, borderRadius: 6, cursor: 'pointer', background: 'transparent', color: tk.accent.text, font: `600 11px ${fontFamily.ui}` }}><Icon name="undo" size={11} />Reset to theme</button>}
+      </span>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <button ref={ref} type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(o => !o)} title={sample}
           style={{ flex: 1, minWidth: 0, height: compact ? 40 : 36, display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 0 10px', border: 0, borderRadius: radius.control, cursor: 'pointer', background: tk.bg.field, color: tk.text.primary, boxShadow: open ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none' }}>
-          <span style={{ flex: 1, minWidth: 0, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', font: `${role === 'heading' ? value?.weight ?? 650 : 500} 14.5px ${value ? fontStack(value) : role === 'code' ? fontFamily.mono : fontFamily.ui}` }}>
-            {loading && busy ? `Downloading ${busy}…` : value?.family ?? (role === 'code' ? 'System monospace' : 'System font')}
+          <span style={{ flex: 1, minWidth: 0, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', font: `${role === 'heading' ? value?.weight ?? spec.headingWeight : 500} 14.5px ${value ? fontStack(value) : themeFont.stack}` }}>
+            {loading && busy ? `Downloading ${busy}…` : value?.family ?? `${themeFont.name} (theme)`}
           </span>
           <Icon name="chevD" size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />
         </button>
@@ -410,7 +441,7 @@ function FontRow({ role, label, sample, compact }: { role: FontRoleName; label: 
             onChange={w => void chooseFont('heading', { ...value, weight: Number(w) })} />
         )}
       </div>
-      {open && <FontPicker role={role} value={value} compact={compact} anchorRef={ref} onPick={f => void pick(f)} onClose={() => setOpen(false)} />}
+      {open && <FontPicker role={role} value={value} compact={compact} anchorRef={ref} themeFont={themeFont} onPick={f => void pick(f)} onLink={i => void byLink(i)} onClose={() => setOpen(false)} />}
     </div>
   );
 }
@@ -420,16 +451,27 @@ function Specimen() {
   const tk = useTokens();
   const step = usePresentation(s => s.doc?.steps[s.step]);
   const look = useStepLook(step);
-  const vars = useTypeVars();
-  const dark = useThemeStore(s => s.mode) === 'dark';
+  const page = usePageVars();
+  const bg = usePageBackground(true);
   return (
-    <div style={{ position: 'relative', overflow: 'hidden', borderRadius: radius.lg, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, ...paperStyle(tk.bg.app, dark), ...vars, ...lookVars(look) }}>
+    <div {...page.attrs} style={{ position: 'relative', overflow: 'hidden', borderRadius: radius.lg, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, ...bg, ...page.style, ...lookVars(look) }}>
       <Backdrop look={look} column={220} />
       <div style={{ position: 'relative', zIndex: 1, padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div className="pp-title" style={{ fontSize: 'calc(21px * var(--pp-scale, 1))' }}>{step?.title || 'A step title'}</div>
+        <div className="pp-title" style={{ fontSize: 'calc(21px * var(--pp-scale, 1) * min(var(--pp-title, 1), 1.2))' }}>{step?.title || 'A step title'}</div>
         <div className="pp-md" style={{ fontSize: 'calc(13.5px * var(--pp-scale, 1))' }}><p>Body text reads like this, with <strong>bold</strong>, <a>a link</a> and <code>code()</code>.</p></div>
       </div>
     </div>
+  );
+}
+
+/** "Reset to theme" beside a setting's value. */
+function ResetLink({ onClick }: { onClick: () => void }) {
+  const tk = useTokens();
+  return (
+    <button type="button" onClick={onClick} title="Back to the theme’s"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 20, padding: '0 6px', border: 0, borderRadius: 6, cursor: 'pointer', background: 'transparent', color: tk.accent.text, font: `600 11px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
+      <Icon name="undo" size={11} />Reset to theme
+    </button>
   );
 }
 
@@ -448,6 +490,7 @@ function ColourRow({ label, value, auto, onChange }: { label: string; value: RGB
 
 export function PresentationStyleSettings({ compact }: { compact: boolean }) {
   const tk = useTokens();
+  const spec = usePresentTheme().spec;
   const doc = usePresentation(s => s.doc);
   const images = useImageMap();
   const stepIndex = usePresentation(s => s.step);
@@ -461,6 +504,7 @@ export function PresentationStyleSettings({ compact }: { compact: boolean }) {
   const stepText = stepLook(doc.style, images, doc.steps[stepIndex]).text;
   return (
     <>
+      <ThemeSettings compact={compact} />
       <Section title="Background of every step" extra={overridden ? <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>{overridden} step{overridden === 1 ? '' : 's'} set their own</span> : undefined}>
         <BackgroundEditor forStep={false} compact={compact} value={defaultBg ?? { kind: 'none' }} inherited={null} lightText={look.lightText} onChange={bg => setDefaultBackground(bg)} />
       </Section>
@@ -471,24 +515,24 @@ export function PresentationStyleSettings({ compact }: { compact: boolean }) {
           <Icon name="info" size={13} style={{ flexShrink: 0, marginTop: 1 }} />
           <span>Fonts are downloaded from Google Fonts once, when you choose them, and kept in the presentation: it works offline, in the app and in exported pages.</span>
         </div>
-        <Row label="Text size" extra={<span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{Math.round((t?.scale ?? 1) * 100)}%</span>}>
-          <RulerSlider ariaLabel="Text size" value={Math.round((t?.scale ?? 1) * 100)} min={SCALE_RANGE[0] * 100} max={SCALE_RANGE[1] * 100} step={1} defaultValue={100} touch={compact}
-            onChange={v => patchTypography({ scale: Math.abs(v - 100) < 0.5 ? undefined : v / 100 })} />
+        <Row label="Text size" extra={<>{t?.scale !== undefined && <ResetLink onClick={() => patchTypography({ scale: undefined })} />}<span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{Math.round((t?.scale ?? spec.scale) * 100)}%</span></>}>
+          <RulerSlider ariaLabel="Text size" value={Math.round((t?.scale ?? spec.scale) * 100)} min={SCALE_RANGE[0] * 100} max={SCALE_RANGE[1] * 100} step={1} defaultValue={Math.round(spec.scale * 100)} touch={compact}
+            onChange={v => patchTypography({ scale: Math.abs(v - spec.scale * 100) < 0.5 ? undefined : v / 100 })} />
         </Row>
-        <Row label="Line height" extra={<span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{(t?.lineHeight ?? DEFAULT_LINE_HEIGHT).toFixed(2)}</span>}>
-          <RulerSlider ariaLabel="Line height" value={t?.lineHeight ?? DEFAULT_LINE_HEIGHT} min={LINE_HEIGHT_RANGE[0]} max={LINE_HEIGHT_RANGE[1]} step={0.01} defaultValue={DEFAULT_LINE_HEIGHT} touch={compact}
-            onChange={v => patchTypography({ lineHeight: Math.abs(v - DEFAULT_LINE_HEIGHT) < 0.005 ? undefined : v })} />
+        <Row label="Line height" extra={<>{t?.lineHeight !== undefined && <ResetLink onClick={() => patchTypography({ lineHeight: undefined })} />}<span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{(t?.lineHeight ?? spec.lineHeight ?? DEFAULT_LINE_HEIGHT).toFixed(2)}</span></>}>
+          <RulerSlider ariaLabel="Line height" value={t?.lineHeight ?? spec.lineHeight} min={LINE_HEIGHT_RANGE[0]} max={LINE_HEIGHT_RANGE[1]} step={0.01} defaultValue={spec.lineHeight} touch={compact}
+            onChange={v => patchTypography({ lineHeight: Math.abs(v - spec.lineHeight) < 0.005 ? undefined : v })} />
         </Row>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <ColourRow label="Heading colour" value={t?.headingColour} auto={stepText?.heading ?? tk.text.primary} onChange={c => patchTypography({ headingColour: c })} />
           <ColourRow label="Body colour" value={t?.bodyColour} auto={stepText?.body ?? tk.text.secondary} onChange={c => patchTypography({ bodyColour: c })} />
-          <span style={{ color: tk.text.faint, font: `500 11.5px/1.4 ${fontFamily.ui}` }}>Automatic: light text on dark backgrounds, dark text on light ones.</span>
+          <span style={{ color: tk.text.faint, font: `500 11.5px/1.4 ${fontFamily.ui}` }}>Automatic: the theme’s colours, and light text on dark backgrounds, dark text on light ones. A colour set here wins everywhere.</span>
         </div>
       </Section>
       <Section title="Where it's kept">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, color: tk.text.secondary, font: `500 12px/1.5 ${fontFamily.ui}` }}>
           <span>Images: {doc.images?.length ? `${doc.images.length} in the Library’s image backgrounds; the presentation keeps small previews (${sizeLabel(bytes.images)})` : 'none'}</span>
-          <span>Fonts: {doc.fonts?.length ? `${[...new Set(doc.fonts.map(f => f.family))].join(', ')}, in this browser’s font cache` : 'the system’s'}</span>
+          <span>Fonts: {doc.fonts?.length ? `${[...new Set(doc.fonts.map(f => f.family))].join(', ')}, in this browser’s font cache` : 'the theme’s, from the system (nothing to download)'}</span>
           <span style={{ color: tk.text.faint }}>Exported pages and downloaded files carry the full pictures and fonts, so they work anywhere.</span>
         </div>
       </Section>

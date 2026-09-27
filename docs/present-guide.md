@@ -76,6 +76,62 @@ one HTML file with everything in it: slides or one long page, maths as
 MathML or KaTeX. Put it on any website or open it from your computer. The
 same window has **Presentation file** for the `.present.json`.
 
+## How it looks: themes, colours and fonts
+
+The settings panel's **Style** tab (with no block selected) decides the look
+of the whole presentation: in Edit, Slides and Scroll, and in the exported
+web page, which looks the same.
+
+**Theme** comes first. Each is a small live preview; click one to use it.
+
+| Theme | Looks like | What defines it |
+| --- | --- | --- |
+| **Classic** | The Present page as it always was | The app's colours (light or dark with the app), paper grain, system fonts, "01 / 07" step numbers. Every presentation made before themes is Classic and looks exactly as it did. |
+| **Landing** | Play's *Landing page* website | Warm off-white, ink headlines set big, bold and tight, the step number as an eyebrow pill above the title, pill buttons, generous spacing. |
+| **Article** | Play's *Blog post* website | Georgia headings and body, a narrow reading column (680 px), relaxed line height, the step number as a byline ("Step 2 of 7"). |
+| **Portfolio** | Play's *Portfolio* website | Near-black, clean sans set tight, pictures on rounded tiles, white pill buttons. |
+
+Under the previews, every setting the theme decides can be changed, and each
+one changed shows **Reset to theme** to go back:
+
+- **Colours**: Light, Dark, or **Match** (with the app here; in an exported
+  page, with the reader's system). Then **Background**, **Cards** (controls,
+  code headers, Portfolio's tiles), **Text** (headings and body; captions
+  follow it), **Accent** (step numbers, chips, buttons, the progress bar) and
+  **Links**.
+- **Corner radius** of pictures, cards and code; **Column width** of the
+  reading column (Edit, Scroll and exports; slides stay at least as wide as
+  they were); **Spacing** between blocks and around steps.
+- **Reset all** (beside the section's title) drops every change, including
+  the fonts and text size below.
+- **Save as my theme** keeps the theme with its changes and fonts under a
+  name. Your themes are listed after the built-ins (marked *Yours*), for any
+  presentation; the × on one deletes it (with Undo). They're kept with your
+  palettes in this browser and travel in library backups.
+
+A step's own background (the **Step** tab), and the presentation's
+**Background of every step**, sit on top of the theme, with their legibility
+effects: text over a picture or a dark gradient still turns light.
+
+### Fonts
+
+**Typography** has Headings, Body and Code. Until you choose one, each uses
+the theme's font (system fonts: nothing is downloaded). To choose:
+
+- Pick from the list (search, or filter by Sans, Serif, Display…), or
+- **Paste a Google Fonts link or family name** at the bottom of the picker:
+  a font's page (`https://fonts.google.com/specimen/Space+Grotesk`), a
+  `https://fonts.googleapis.com/css2?family=…` link (or the whole `<link>`
+  tag Google gives you), or just a name like `Bebas Neue`. The weights the
+  link names are used; a heading takes the one nearest bold. Typing a name
+  that isn't in the list into the search offers the same.
+
+The font is downloaded from Google Fonts once, kept in this browser's font
+cache, and embedded only when you export or download the presentation, so it
+works offline and anywhere. If Google can't be reached, nothing changes and a
+notice says so. **Reset to theme** beside a font goes back to the theme's.
+Text size and line height start at the theme's and reset the same way.
+
 ## Moving presentations between machines
 
 - **All of them**: in the list, **Download all** saves one ZIP of
