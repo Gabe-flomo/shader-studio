@@ -42,10 +42,15 @@ const BACKGROUND_ACTION_LABELS: Partial<Record<BuiltinActionKind, string>> = {
   next: 'Next background', prev: 'Previous background', shuffle: 'Random background', goto: 'Go to background', reset: 'Back to Index',
 };
 
+/** Step through a dataset: what next, previous, random, go to and reset mean on a Data layer. */
+const DATA_ACTION_LABELS: Partial<Record<BuiltinActionKind, string>> = {
+  next: 'Next row', prev: 'Previous row', shuffle: 'Random row', goto: 'Go to row', reset: 'Back to Offset',
+};
+
 /** The label of an action: a built-in's, or a script button's label (its param label, or the key). */
 export function actionLabel(kind: ActionKind, l?: PlayLayer): string {
   const key = scriptActionKey(kind);
-  if (key === null) return (l?.kind === 'background' ? BACKGROUND_ACTION_LABELS[kind as BuiltinActionKind] : undefined) ?? ACTION_LABELS[kind as BuiltinActionKind] ?? kind;
+  if (key === null) return (l?.kind === 'background' ? BACKGROUND_ACTION_LABELS[kind as BuiltinActionKind] : l?.kind === 'data' ? DATA_ACTION_LABELS[kind as BuiltinActionKind] : undefined) ?? ACTION_LABELS[kind as BuiltinActionKind] ?? kind;
   const def = l?.kind === 'script' ? l.paramDefs.find(d => d.key === key) : undefined;
   return def?.label ?? key;
 }

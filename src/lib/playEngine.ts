@@ -30,7 +30,8 @@ import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parseLayerTarget } fr
 import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
 import { handFeed } from './handFeed';
-import { hdAge, hdCreate, hdGate, hdPlacement, hdPoint, hdRead, hdUpdate, type HdState } from '../play/kit/hands.js';
+import { readDataSource } from '../play/dataLayer';
+import { hdAge, hdCreate, hdGate, hdPlacement, hdPoint, hdRead, hdTrackerOptions, hdUpdate, type HdState } from '../play/kit/hands.js';
 import { DEFAULT_HANDS, parseHandAnchor, usesHands, type FireMode, type HandGesture, type HandSide, type PlayLayer } from '../types/play';
 
 /** A trigger's firing-mode state, with the mode it was made for (a changed mode starts afresh). */
@@ -300,6 +301,7 @@ class PlayEngine implements InputSource {
     this.tiltIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'tilt');
     this.gamepadIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'gamepad');
     this.handsBound = usesHands(record);
+    handFeed.configure(hdTrackerOptions(record.hands));
     this.triggerKeysBound = new Set(this.allTriggers().map(triggerKey));
     this.oscIsBound = record.mappings.some(m => m.enabled && (m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')))
       || (record.actions ?? []).some(a => a.enabled && a.trigger.on === 'osc');
@@ -349,6 +351,11 @@ class PlayEngine implements InputSource {
   /** A layer measured something (fill, hover, speed, spread, motion). */
   setSensor(key: string, value: number): void {
     this.sensors.set(key, value);
+  }
+
+  /** What a layer last reported under `key` (a Data layer's `<id>::row`, for its panel), or undefined. */
+  sensor(key: string): number | undefined {
+    return this.sensors.get(key);
   }
 
   /** A following null moved (null clears it). */
@@ -517,9 +524,10 @@ class PlayEngine implements InputSource {
       const settings = this.record.hands ?? DEFAULT_HANDS;
       const camAspect = frame.w > 0 && frame.h > 0 ? frame.w / frame.h : 16 / 9;
       const place = hdPlacement(this.record, (l, k) => this.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]), camAspect, this.aspect, settings.mirror);
-      hdUpdate(this.hands, frame, { picAspect: this.aspect, place, smoothing: settings.smoothing });
+      hdUpdate(this.hands, frame, { picAspect: this.aspect, place, smoothing: settings.smoothing, responsiveness: settings.responsiveness, maxHands: settings.maxHands, swap: settings.swap });
     }
     hdAge(this.hands, typeof performance !== 'undefined' ? performance.now() : Date.now());
+    handFeed.setCount(this.hands.count);
   }
 
   /** The hands as the engine sees them now (the overlay draws the skeleton from this). */
@@ -655,6 +663,8 @@ class PlayEngine implements InputSource {
         if (AUDIO_READS.has(source.read)) return this.audioBand(source.layerId, source.read as LiveBand);
         return this.sensors.get(`${source.layerId}::${source.read}`) ?? null;
       }
+      case 'data':
+        return readDataSource(source, k => this.sensors.get(k));
       case 'hand':
         return hdRead(this.hands, source.side, source.read, source.point, source.axis, source.gesture);
       case 'null': {

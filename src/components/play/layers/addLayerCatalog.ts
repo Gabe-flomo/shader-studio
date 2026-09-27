@@ -40,6 +40,7 @@ export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
   { kind: 'background', group: 'textImages', label: 'Background', hint: 'Under every layer: a queue of graphs, sketches, images, videos and colours, one showing at a time. Step through it with keys, beats, notes or hands; cut or crossfade. One per setup.', icon: 'slides' },
   { kind: 'text', group: 'textImages', label: 'Text', hint: 'Words over the picture or the picture inside them. Can step through lines.', icon: 'edit' },
   { kind: 'image', group: 'textImages', label: 'Image', hint: 'A picture of your own, blended or matted.', icon: 'overlay' },
+  { kind: 'data', group: 'textImages', label: 'Data', hint: 'A dataset on the picture: a table as points, a path, bars, a pie or lines; text a word or a line at a time. Step through the rows with keys, beats or an Offset.', icon: 'grid' },
   { kind: 'particles', group: 'particles', label: 'Particles', hint: 'Flow along the picture, flock, swarm nulls and shapes, burst on the beat.', icon: 'spark' },
   { kind: 'bodies', group: 'particles', label: 'Bodies', hint: 'Letters, circles or boxes that fall, bounce and pile up.', icon: 'dice' },
   { kind: 'glyphs', group: 'effects', label: 'Glyphs', hint: 'The picture as ASCII, halftone dots, squares or lines.', icon: 'hash' },

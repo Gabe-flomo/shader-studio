@@ -9,11 +9,14 @@
  *    the network, and the export lists it as such. OSC and the demo feed
  *    can't be reached from a published page: OSC needs this computer's
  *    bridge, and the demo lives in the app, so those are always frozen.
+ *    So is a feed shaped by its notebook: pages don't carry notebooks, so
+ *    the page couldn't turn new rows into what the app shows.
  *
  * Pure: the exporter (and the Present page) call this per dataset.
  */
 import type { Dataset, DatasetResult } from '../types';
 import type { StreamSource } from './streamHub';
+import { isPassThrough } from './messages';
 
 export interface StreamExport {
   /** The result the page starts with. */
@@ -30,7 +33,8 @@ export function streamExportPlan(d: Dataset, live: DatasetResult | null): Stream
   if (src.kind !== 'stream') return null;
   const result = live ?? d.result;
   const reachable = src.transport === 'poll' || src.transport === 'websocket' || src.transport === 'sse';
-  if (src.onExport === 'reconnect' && reachable) {
+  const plain = isPassThrough(d.cells);
+  if (src.onExport === 'reconnect' && reachable && plain) {
     return {
       result,
       connect: { transport: src.transport as 'poll' | 'websocket' | 'sse', address: src.address, interval: src.interval, mode: src.mode, window: src.window, ...(src.format ? { format: src.format } : {}) },
@@ -38,7 +42,9 @@ export function streamExportPlan(d: Dataset, live: DatasetResult | null): Stream
     };
   }
   const why = src.onExport === 'reconnect'
-    ? src.transport === 'osc'
+    ? reachable
+      ? 'Its notebook changes the rows, and pages don’t carry notebooks, so the page carries the last window instead of reconnecting. Move the changes out of the notebook (or turn Reconnect off) to silence this.'
+      : src.transport === 'osc'
       ? 'OSC comes through this computer’s bridge, which a published page can’t reach, so the page carries the last window instead.'
       : 'The demo feed is made up inside the app, so the page carries the last window instead.'
     : 'The page carries the last window and doesn’t connect.';

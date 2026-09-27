@@ -20,11 +20,18 @@ import {
   defaultLayer, handAnchor, type ActionKind, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
 } from '../types/play';
+import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 
 // ── Record helpers ───────────────────────────────────────────────────────────
 
 function layer<K extends PlayLayerKind>(kind: K, id: string, label: string, over: Partial<Extract<PlayLayer, { kind: K }>> = {}): PlayLayer {
   return { ...defaultLayer(kind, id, label), ...over } as PlayLayer;
+}
+/** The layer with a mask of its own added (its numbers as the parser keeps them: every one, defaults filled in). */
+function masked(l: PlayLayer, id: string, shape: MaskShape, nums: Partial<Record<MaskProp, number>>, o: { op?: MaskOp; invert?: boolean; points?: number[] } = {}): PlayLayer {
+  const out = { ...l, masks: [...(l.masks ?? []), { id, shape, points: o.points ?? [], op: o.op ?? 'add', invert: o.invert ?? false }] } as Record<string, unknown>;
+  for (const k of MASK_PROP_KEYS) out[maskKey(id, k)] = nums[k] ?? MASK_DEFAULTS[k];
+  return out as unknown as PlayLayer;
 }
 /**
  * A Script layer holding `code`: the sliders, toggles and buttons it declares
@@ -1143,6 +1150,47 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Set Fade to 0 for hard cuts, or change Transition to Cut on the layer.
 • Add a video, a sketch or a colour to the queue (Layers → Background → Add source), and scale or turn the background under Placement.
 • Record a take while you press the keys: its render changes at the same frames.`,
+  })),
+
+  // ─ Mattes & masks ─
+  // A photo matted by a hidden particles layer: the photo shows only where the particles (and their trails) are.
+  ex('matteParticles', quietGraph(), play({
+    layers: [
+      layer('image', 'photo', 'Photo', { src: RIDGES_AT_DUSK, scale: 1.02, toShader: false, trackMatte: { id: 'dust', mode: 'alpha', invert: false } }),
+      layer('particles', 'dust', 'Dust', {
+        visible: false, toShader: false, count: 1100, field: 'noise', noiseScale: 1.4, noiseEvolve: 0.25, speed: 0.55, steer: 0.35, size: 9, sizeJitter: 0.6,
+        trail: 0.94, life: 5, fade: 0.3, spawn: 'anywhere', attractor: 'mouse', force: 'spiral', strength: 0.6, catchRadius: 0, colour: 'tint', color: [1, 1, 1], opacity: 1, flock: 0, seed: 7,
+      }),
+    ],
+    controls: [ctl('size', 'layer:dust::size', 'Dust · Size', 1, 24, 0.5), ctl('trail', 'layer:dust::trail', 'Dust · Trail', 0, 1)],
+    notes: `**What it shows.** A **track matte**: the Photo layer shows only where the Dust particles are. The particles themselves are hidden; their trails paint the photo in over the dark shader, and it fades back out as the trails fade.
+
+**How it's built.** Photo → **Matte** → Dust, by **Alpha** (where the matte is solid). Using a layer as a matte hides it, as in After Effects; it keeps running, and its row sits under the Photo with a link. The particles drift on a noise field and spiral round the mouse.
+
+**Try this.**
+• Move the mouse over the picture: the dust gathers and the photo follows it.
+• Photo → Matte → turn **Invert** on: the photo everywhere except the trails.
+• Photo → Matte → **Show it on the picture too** to see the particles doing the work.
+• Drag Size and Trail on the panel: big, slow trails reveal most of the photo.`,
+  })),
+  // Text through a moving window (a hidden Shape matte), over ASCII cut by a feathered mask of its own.
+  ex('maskReveal', fbmGraph({ scale: 2.2, timeScale: 0.06, preset: '3' }), play({
+    layers: [
+      masked(layer('glyphs', 'ascii', 'ASCII', { cell: 11, colour: 'picture', cover: true, background: [0.02, 0.02, 0.04], contrast: 1.4, toShader: false }), 'm1', 'ellipse', { w: 1.1, h: 0.62, feather: 0.12 }),
+      layer('text', 'title', 'Title', { text: 'MATTES\nAND MASKS', size: 0.2, weight: 800, color: [1, 0.97, 0.9], toShader: false, trackMatte: { id: 'window', mode: 'alpha', invert: false } }),
+      layer('shape', 'window', 'Window', { visible: false, toShader: false, shape: 'circle', x: 0.5, y: 0.5, w: 0.46, h: 0.46, fill: [1, 1, 1], fillOpacity: 1, strokeWidth: 0, action: 'none' }),
+    ],
+    controls: [ctl('wx', 'layer:window::x', 'Window · X', 0, 1), ctl('feather', 'layer:ascii::mask_m1_feather', 'ASCII · Mask 1 · Feather', 0, 0.3)],
+    mappings: [map('sweep', 'wx', S.lfo('sine', 0.12), 0.22, 0.78)],
+    notes: `**What it shows.** Two ways to cut a layer. The Title shows only inside the **Window**, a hidden circle that sweeps across (a **track matte**). Under it, the **ASCII** layer has a **mask** of its own: a soft ellipse, so the characters fade out toward the edges.
+
+**How it's built.** Title → **Matte** → **New shape** made the Window, hidden and tucked under the Title in the list; an LFO moves its X. ASCII → **Mask** → Ellipse, with **Feather** 0.12. Mask numbers are layer numbers, so Feather is a control on the panel like any other.
+
+**Try this.**
+• Drag Feather on the panel, or open ASCII → Mask 1 and drag its amber handles on the picture.
+• Add a second mask to the ASCII (Mask → Rectangle) and set it to **Subtract** to cut a hole.
+• Title → Matte → **Luma**, then give the Window a grey fill: the text dims to match.
+• Select the Window in the list: its handles work while it is hidden. Make it a Box, or draw a Polygon.`,
   })),
 
   // ─ Hands ─

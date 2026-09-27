@@ -16,7 +16,7 @@ import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { Select } from '../ui/Select';
 import { cellText } from '../../data/notebook';
-import { streamHub, type StreamSource, type StreamStatus } from '../../data/streams/streamHub';
+import { isPassThrough, streamHub, type StreamSource, type StreamStatus } from '../../data/streams/streamHub';
 import { STREAM_DEFAULTS } from '../../data/datasetActions';
 import { datasetStore } from '../../data/datasetStore';
 import { DATASET_MAX_ROWS, type Dataset, type DatasetFormat, type DatasetResult, type StreamTransport } from '../../data/types';
@@ -227,7 +227,9 @@ export function StreamPanel({ dataset, onSource, narrow = false }: {
               { value: 'reconnect', label: 'Reconnect', disabled: src.transport === 'osc' || src.transport === 'demo', title: src.transport === 'osc' ? 'A published page can’t reach the OSC bridge' : src.transport === 'demo' ? 'The demo only runs in the app' : undefined },
             ]} /></div>
           ), src.onExport === 'reconnect' && src.transport !== 'osc' && src.transport !== 'demo'
-            ? 'The page connects to the same feed when it opens: it needs the network, and the export lists it.'
+            ? isPassThrough(dataset.cells)
+              ? 'The page connects to the same feed when it opens: it needs the network, and the export lists it.'
+              : 'The notebook changes the rows, and pages don’t carry notebooks, so the export keeps the last window instead.'
             : 'The page carries the rows the stream has now, and never connects.')}
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Button size="sm" variant="ghost" icon="save" disabled={!streamHub.window(dataset.id)} onClick={keepWindow} title="Save the rows in the window now with the graph">Keep these rows with the graph</Button>

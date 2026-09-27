@@ -113,17 +113,29 @@ export type HandRead = 'point' | 'palm' | 'pinch' | 'open' | 'roll' | 'size' | '
 export type HandGesture = 'pinch' | 'pinchMiddle' | 'pinchRing' | 'pinchPinky' | 'fist' | 'open' | 'point' | 'appear' | 'leave';
 export const HAND_GESTURES: readonly HandGesture[] = ['pinch', 'pinchMiddle', 'pinchRing', 'pinchPinky', 'fist', 'open', 'point', 'appear', 'leave'];
 
-/** Hand tracking's settings for a setup. Absent = the defaults. */
+/** Hand tracking's settings for a setup. Absent = the defaults. The optional ones are left out of a file until changed. */
 export interface PlayHands {
-  /** 0 raw landmarks … 1 very smooth (and a little late). */
+  /** 0 raw landmarks … 1 very smooth (and a little late): the one-euro filter's cutoff when still. */
   smoothing: number;
-  /** Draw the hands' skeleton over the picture while guides are showing. */
+  /** Show hand on picture: the skeleton over the picture. Its own switch, apart from the guides (H). */
   overlay: boolean;
   colour: [number, number, number];
   /** Selfie view: your right hand moves right on the picture. A Camera layer's own Mirror wins when there is one. */
   mirror: boolean;
+  /** 0..1: how much a fast move opens the filter up (the one-euro filter's beta). Default 0.5. */
+  responsiveness?: number;
+  /** Swap left and right: for a camera that already sends a mirrored picture. */
+  swap?: boolean;
+  /** Hands to look for (MediaPipe's numHands). Default 2. */
+  maxHands?: 1 | 2;
+  /** 0 lenient … 1 strict: the three confidence thresholds together. Default 0.5 (a notch stricter than MediaPipe's own). */
+  strictness?: number;
+  /** The three thresholds set by hand (Advanced), instead of Strictness. */
+  confidence?: { detection: number; presence: number; tracking: number };
 }
 export const DEFAULT_HANDS: PlayHands = { smoothing: 0.5, overlay: true, colour: [0.35, 1, 0.75], mirror: true };
+export const DEFAULT_HAND_RESPONSIVENESS = 0.5;
+export const DEFAULT_HAND_STRICTNESS = 0.5;
 
 /** Does a setup read hands anywhere: a hand source, a gesture trigger (mapping or action), or a null following a hand? */
 export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'>): boolean {
@@ -131,6 +143,30 @@ export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layer
     || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId)))
     || (play.actions ?? []).some(a => triggerUsesHands(a.trigger))
     || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
+}
+
+/**
+ * The one hand a setup reads, when it reads only one ('left' or 'right'), or
+ * null (both, either, the distance between them, or none). Max hands uses it
+ * to suggest 1.
+ */
+export function oneHandUsed(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'>): 'left' | 'right' | null {
+  const sides = new Set<HandSide>();
+  const trig = (t: TriggerSpec) => {
+    if (t.on === 'hand') sides.add(t.side);
+    if (t.on === 'proximity') for (const r of [t.a, t.b]) { const h = parseHandAnchor(r); if (h) sides.add(h.side); }
+  };
+  for (const m of play.mappings) {
+    const s = m.source;
+    if (s.kind === 'hand') { if (s.read === 'spread') { sides.add('left'); sides.add('right'); } else sides.add(s.side); }
+    else if (s.kind === 'trigger') trig(s.trigger);
+    else if (s.kind === 'sensor' && s.read === 'distance') { const h = parseHandAnchor(s.otherId); if (h) sides.add(h.side); }
+  }
+  for (const a of play.actions ?? []) trig(a.trigger);
+  for (const l of play.layers) if (l.kind === 'null' && l.follow === 'hand') sides.add(l.handSide);
+  if (sides.size !== 1) return null;
+  const only = [...sides][0];
+  return only === 'any' ? null : only;
 }
 
 /** A gesture trigger, or a proximity trigger measuring from a hand. */
@@ -201,10 +237,21 @@ export type PlaySource =
    */
   | { kind: 'sensor'; layerId: string; read: SensorRead; otherId: string }
   /** A tracked hand (see HandRead). Every field is always present; the ones a read doesn't use are ignored. */
-  | { kind: 'hand'; side: HandSide; read: HandRead; point: number; axis: 'x' | 'y' | 'z'; gesture: HandGesture };
+  | { kind: 'hand'; side: HandSide; read: HandRead; point: number; axis: 'x' | 'y' | 'z'; gesture: HandGesture }
+  /**
+   * A dataset's current row (src/data/): `column`'s value there, 0..1 over
+   * the column's min..max (a category column by its place among the values;
+   * `#row` is how far through the rows it is). The current row is the one a
+   * Data layer (`layerId`, or the first showing the dataset) steps to, so the
+   * value moves as its Offset or its actions move.
+   */
+  | { kind: 'data'; dataset: string; column: string; layerId: string };
+
+/** The data source's pseudo-column: how far through the rows (or chunks) the current one is, 0..1. */
+export const DATA_ROW_COLUMN = '#row';
 
 /** Layer kinds with a centre on the picture: what proximity triggers and distance sensors can measure from. */
-export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner'];
+export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data'];
 
 export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
@@ -213,7 +260,7 @@ export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   camera: ['motion', 'distance'],
   null: ['distance'],
   audio: ['level', 'bass', 'lowmid', 'highmid', 'treble', 'distance'],
-  text: ['distance'], image: ['distance'], lens: ['distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['distance'],
+  text: ['distance'], image: ['distance'], lens: ['distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['distance'], data: ['distance'],
 };
 
 export type PlayCurve = 'linear' | 'exp' | 'log' | 'custom';
@@ -243,11 +290,11 @@ export interface PlayMapping {
 export type {
   BlendMode, MatteMode, NullLayer, TextLayer, ImageLayer, ParticlesLayer, ParticleField, ParticleShape, ParticleModulator,
   ShapeLayer, ZoneAction, AudioLayer, GlyphsLayer, ContoursLayer, LensLayer, BrushLayer, BodiesLayer, CameraLayer,
-  PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind,
+  PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind, DataLayer, DataView, DataSplit, TrackMatte, LayerMask, MaskShape, MaskOp, MaskProp,
 } from './playLayers';
 export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot } from './playLayers';
 import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataTypes';
-import { parseLayer, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
+import { parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 import { parseSourceCredit, type SourceCredit } from './credit';
 
@@ -264,6 +311,7 @@ import { parseSourceCredit, type SourceCredit } from './credit';
  *   drop     bodies: drop them again from the top
  *   clear    brush: wipe the strokes
  *   next / prev / shuffle / goto   background: another source (goto: the `amount`th, 1 = the first)
+ *   next / prev / shuffle / goto   data: another row or chunk (a whole window when it steps by windows; goto: the `amount`th row)
  */
 export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto';
 /** A built-in action, or a button a Script layer declares (`script:<key>`). */
@@ -294,6 +342,8 @@ export const ACTIONS_FOR: Record<string, readonly BuiltinActionKind[]> = {
   brush: ['clear', 'toggle', 'show', 'hide'],
   // Change background: the next, previous, a random or the Nth source; Reset goes back to what Index says.
   background: ['next', 'prev', 'shuffle', 'goto', 'reset', 'toggle', 'show', 'hide'],
+  // Step through a dataset: the next, previous, a random or the Nth row (or chunk); Reset goes back to what Offset says.
+  data: ['next', 'prev', 'shuffle', 'goto', 'reset', 'toggle', 'show', 'hide'],
   other: ['toggle', 'show', 'hide'],
 };
 
@@ -679,12 +729,24 @@ function handGesture(v: unknown): HandGesture { return typeof v === 'string' && 
 function parseHands(v: unknown): PlayHands | null {
   if (!v || typeof v !== 'object') return null;
   const h = v as Record<string, unknown>;
-  return {
-    smoothing: Math.max(0, Math.min(1, num(h.smoothing, DEFAULT_HANDS.smoothing))),
+  const unit = (x: unknown, d: number) => Math.max(0, Math.min(1, num(x, d)));
+  const out: PlayHands = {
+    smoothing: unit(h.smoothing, DEFAULT_HANDS.smoothing),
     overlay: h.overlay !== false,
     colour: rgb(h.colour, DEFAULT_HANDS.colour),
     mirror: h.mirror !== false,
   };
+  // Newer settings, only when a file has them (older files read back unchanged).
+  if (typeof h.responsiveness === 'number') out.responsiveness = unit(h.responsiveness, DEFAULT_HAND_RESPONSIVENESS);
+  if (h.swap === true) out.swap = true;
+  if (h.maxHands === 1 || h.maxHands === 2) out.maxHands = h.maxHands;
+  if (typeof h.strictness === 'number') out.strictness = unit(h.strictness, DEFAULT_HAND_STRICTNESS);
+  const c = h.confidence as Record<string, unknown> | undefined;
+  if (c && typeof c === 'object') {
+    const t = (x: unknown) => Math.max(0.05, Math.min(0.95, num(x, 0.6)));
+    out.confidence = { detection: t(c.detection), presence: t(c.presence), tracking: t(c.tracking) };
+  }
+  return out;
 }
 
 const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble']);
@@ -762,6 +824,10 @@ function parseSource(raw: unknown): PlaySource | null {
       const layerId = str(s.layerId);
       const read = SENSOR_READS.has(s.read as string) ? (s.read as SensorRead) : null;
       return layerId && read ? { kind: 'sensor', layerId, read, otherId: str(s.otherId) ?? '' } : null;
+    }
+    case 'data': {
+      const dataset = str(s.dataset);
+      return dataset && /^[a-z][a-z0-9]{0,31}$/.test(dataset) ? { kind: 'data', dataset, column: str(s.column) ?? DATA_ROW_COLUMN, layerId: str(s.layerId) ?? '' } : null;
     }
     case 'hand': {
       const read = HAND_READS.has(s.read as string) ? (s.read as HandRead) : 'point';
@@ -870,7 +936,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   }
   // Layers made from a kind take its code; a kind the file lacks leaves a plain Script layer with the code it kept.
   const layerKinds = parseLayerKinds(r.layerKinds);
-  layers = normaliseBackgroundLayer(syncLayerKinds(layers, layerKinds));
+  // A matte on a layer the file lacks, or one that loops, is dropped.
+  layers = repairMattes(normaliseBackgroundLayer(syncLayerKinds(layers, layerKinds)));
   // Controls on a layer property need that layer; mappings reading a null need that null.
   const layerIds = new Set(layers.map(l => l.id));
   const keptControls = controls.filter(c => { const lt = parseLayerTarget(c.target) ?? parseActionTarget(c.target); return !lt || layerIds.has(lt.layerId); });

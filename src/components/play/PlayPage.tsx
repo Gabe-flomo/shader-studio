@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { DataSourceOptions } from './DataSourceOptions';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
@@ -1006,7 +1007,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {chevron}
         <span style={{ ...labelStyle, width: 40 }}>Source</span>
-        <Select ariaLabel="Source" value={type} options={SOURCE_TYPES} onChange={v => onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs)) })} height={26} style={{ flex: 1, minWidth: 0 }} />
+        <Select ariaLabel="Source" value={type} options={SOURCE_TYPES} onChange={v => onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs), firstDataset()) })} height={26} style={{ flex: 1, minWidth: 0 }} />
         {m.source.kind === 'null' && (
           nullLayers.length === 0
             ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a Null layer first</span>
@@ -1077,6 +1078,13 @@ interface LayerRef { id: string; label: string; kind: string }
 function firstSensor(layers: LayerRef[]): { layerId: string; read: SensorRead } | null {
   const l = layers.find(x => SENSOR_READS_FOR[x.kind]);
   return l ? { layerId: l.id, read: SENSOR_READS_FOR[l.kind][0] } : null;
+}
+
+/** The dataset a new Data source starts on: the first Data layer's, else the first in the graph. */
+function firstDataset(): string {
+  const st = useNodeGraphStore.getState();
+  const l = st.play.layers.find(x => x.kind === 'data' && x.dataset);
+  return (l?.kind === 'data' ? l.dataset : '') || Object.keys(st.datasets)[0] || '';
 }
 
 /** The second row of a mapping: the fields a source kind needs beyond its name. */
@@ -1205,6 +1213,8 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
           <div style={{ margin: '-2px 0 6px 60px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{HAND_READ_HINTS[source.read]}</div>
         </>
       );
+    case 'data':
+      return <DataSourceOptions source={source} labelStyle={labelStyle} onChange={onChange} />;
     case 'sensor': {
       const sensing = layerRefs.filter(l => SENSOR_READS_FOR[l.kind]);
       if (!sensing.length) return row(hint('Add a layer first: a shape, particles, a null…'));

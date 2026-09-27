@@ -24,9 +24,9 @@ import { runNotebook } from '../notebook';
 import { oscClient } from '../../lib/oscClient';
 import { fetchBytes, CorsError } from '../urlFetch';
 import { decodeFetched } from '../urlSource';
-import type { DatasetResult, DatasetSource, DatasetsRecord, NotebookCell, TableResult } from '../types';
+import type { DatasetResult, DatasetSource, DatasetsRecord, TableResult } from '../types';
 import { backoffDelay, demoRow, RateMeter } from './backoff';
-import { flatRows, messageToRows, newLineState, oscMatches, oscToRow, type LineState, type Row } from './messages';
+import { flatRows, isPassThrough, messageToRows, newLineState, oscMatches, oscToRow, type LineState, type Row } from './messages';
 import { applyRows, csvToTable, tableToCsv, trimTable } from './window';
 
 export type StreamSource = Extract<DatasetSource, { kind: 'stream' }>;
@@ -47,10 +47,7 @@ export interface StreamStatus {
 
 const OFF: StreamStatus = { state: 'off', rowsPerSecond: 0, lastRow: null, lastAt: null, rows: 0, error: null, retryAt: null };
 
-/** The notebook only shows the data (`df`, `data`, or nothing): the window goes straight to readers. */
-export function isPassThrough(cells: ReadonlyArray<NotebookCell>): boolean {
-  return cells.every(c => /^\s*(?:(?:df|data|result)\s*;?\s*)?$/.test(c.code.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')));
-}
+export { isPassThrough };
 
 /** What a change of source means for a live connection: nothing, new settings, or connect again. */
 export function sourceChange(a: StreamSource, b: StreamSource): 'same' | 'settings' | 'reconnect' {

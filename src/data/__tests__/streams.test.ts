@@ -13,7 +13,10 @@ import { parseTakeDataFeeds } from '../streams/takeDataTypes';
 import { streamExportPlan } from '../streams/exportPlan';
 import { datasetStore } from '../datasetStore';
 import { datasetFromStream } from '../datasetActions';
-import { parseDatasetsRecord, type Dataset, type TableResult } from '../types';
+import { parseDatasetsRecord, type Dataset, type DatasetsRecord, type TableResult } from '../types';
+import { datasetsForWeb } from '../../play/dataExport';
+import { leftBehind } from '../../play/exportHtml';
+import { defaultLayer, emptyPlayRecord, type PlayRecord } from '../../types/play';
 
 const col = (t: TableResult, name: string) => t.columns.find(c => c.name === name)?.values;
 
@@ -289,6 +292,38 @@ describe('website export', () => {
     expect(osc.note.why).toMatch(/bridge/);
     expect(streamExportPlan(make({ transport: 'demo', onExport: 'reconnect' }), null)!.note.why).toMatch(/inside the app/);
     expect(streamExportPlan({ ...make({}), source: { kind: 'manual', columns: [], rows: [] } }, null)).toBeNull();
+  });
+});
+
+describe('website export of a live dataset (the page carries datasets)', () => {
+  const live = applyRows(emptyTable(), [{ v: 10 }, { v: 20 }], 'append', 10);
+  const setup = (patch: Partial<StreamSource>, cells = [{ id: 'c', code: 'df' }], normalize = false): { datasets: DatasetsRecord; play: PlayRecord } => {
+    const d = datasetFromStream('websocket', [], { address: 'wss://feed.example/x', name: 'Feed' });
+    const ds: Dataset = { ...d, cells, normalize, source: { ...(d.source as StreamSource), ...patch } };
+    const play: PlayRecord = { ...emptyPlayRecord(), layers: [{ ...defaultLayer('script', 's1', 'Sketch'), code: "const d = s.data('Feed')" } as PlayRecord['layers'][number]] };
+    return { datasets: { [ds.id]: ds }, play };
+  };
+
+  it('Reconnect: the page gets the feed and the live window, raw (the page normalizes as rows come)', () => {
+    const { datasets, play } = setup({ onExport: 'reconnect' }, undefined, true);
+    const web = datasetsForWeb(datasets, play, [], { live: () => live });
+    const w = Object.values(web)[0];
+    expect(w.stream).toEqual({ transport: 'websocket', address: 'wss://feed.example/x', interval: 5, mode: 'append', window: 500, normalize: true });
+    expect(w.result).toBe(live);
+    expect(w.note?.why).toMatch(/Needs the network/);
+    expect(leftBehind(play, undefined, { datasets: web }).map(l => l.what)).toContain('“Feed” reconnects to its feed');
+  });
+
+  it('Freeze, or a notebook the page can’t run: the live window as it is now, normalized, and no feed', () => {
+    const frozen = Object.values(datasetsForWeb(setup({ onExport: 'freeze' }).datasets, setup({}).play, [], { live: () => live }))[0];
+    expect(frozen.stream).toBeUndefined();
+    expect(frozen.result).toBe(live);
+    const shaped = setup({ onExport: 'reconnect' }, [{ id: 'c', code: 'df.head(1)' }], true);
+    const w = Object.values(datasetsForWeb(shaped.datasets, shaped.play, [], { live: () => live }))[0];
+    expect(w.stream).toBeUndefined();
+    expect(w.note?.why).toMatch(/pages don’t carry notebooks/);
+    const v = (w.result as TableResult).columns[0];
+    expect(v.type === 'number' && [v.values, v.min, v.max]).toEqual([[0, 1], 0, 1]);
   });
 });
 

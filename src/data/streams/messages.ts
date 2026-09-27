@@ -13,7 +13,7 @@
  *    arguments.
  */
 import { readNumber, isMissing, splitCsv } from '../parse';
-import type { DatasetFormat } from '../types';
+import type { DatasetFormat, NotebookCell } from '../types';
 
 export type Row = Record<string, unknown>;
 
@@ -128,6 +128,11 @@ export function oscMatches(filter: string, address: string): boolean {
   if (!f || f === '*' || f === '/*') return true;
   if (f.endsWith('*')) return address.startsWith(f.slice(0, -1));
   return address === f || address.startsWith(f.endsWith('/') ? f : `${f}/`);
+}
+
+/** The notebook only shows the data (`df`, `data`, or nothing): a stream's window goes straight to readers. */
+export function isPassThrough(cells: ReadonlyArray<NotebookCell>): boolean {
+  return cells.every(c => /^\s*(?:(?:df|data|result)\s*;?\s*)?$/.test(c.code.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')));
 }
 
 /** Keep rows' values flat (numbers, text, booleans, null); anything nested becomes its JSON text. */

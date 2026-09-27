@@ -11,15 +11,24 @@
  *
  * t is when the camera frame was taken (ms, performance.now), w × h its size,
  * lm the 21 landmarks in the camera image (0..1, y down; z relative to the
- * wrist, in image widths). `side` is the performer's own hand: the tracker has
- * already undone MediaPipe's selfie convention.
+ * wrist, in image widths). `side` is MediaPipe's classifier as it comes: the
+ * performer's own hand for an unmirrored camera frame (checked against photos
+ * of known right hands), with its score. It is only a vote, one frame at a time.
  *
- * hdUpdate turns a frame into hands on the picture: placed where a camera
- * layer shows the camera (or covering the picture when there is none),
- * mirrored like a selfie view by default, smoothed with a one-euro filter,
- * held for a moment when a hand drops out, and read as values (pinch,
- * openness, palm centre, roll…) and gestures with hysteresis (a pinch fires
- * once, not on every jittery frame).
+ * hdUpdate turns frames into steady hands:
+ *   - it drops detections that can't be a hand (too small, or off the frame);
+ *   - it follows each hand as a track, matched frame to frame by where its
+ *     palm is, so a hand keeps its side even when the classifier wavers: the
+ *     side changes only after the classifier disagrees, sure of itself, for
+ *     HD_SIDE_SWITCH_MS;
+ *   - a new hand has to be seen HD_APPEAR_FRAMES frames running before it
+ *     counts (a phantom for a frame or two never appears), and a hand that
+ *     drops out is held for HD_HOLD_MS;
+ *   - then it places the hands where a camera layer shows the camera (or
+ *     covering the picture when there is none), mirrored like a selfie view by
+ *     default, smooths each landmark with a one-euro filter, and reads them as
+ *     values (pinch, openness, palm centre, roll…) and gestures with
+ *     hysteresis (a pinch fires once, not on every jittery frame).
  */
 
 /** The 21 landmarks, in MediaPipe's order. */
@@ -44,6 +53,13 @@ export const HD_BONES = [
 export const HD_GESTURES = ['pinch', 'pinchMiddle', 'pinchRing', 'pinchPinky', 'fist', 'open', 'point', 'appear', 'leave'];
 /** How long a hand that dropped out of the picture is still "there" (ms): a missed frame doesn't flicker it off. */
 export const HD_HOLD_MS = 250;
+/** Frames running a new hand has to be seen before it counts: a phantom for a frame or two never appears. */
+export const HD_APPEAR_FRAMES = 3;
+/** A hand's side changes only after the classifier says the other side this long (ms), at HD_SIDE_SCORE or surer. */
+export const HD_SIDE_SWITCH_MS = 700;
+export const HD_SIDE_SCORE = 0.8;
+/** The smallest believable hand: its landmarks' extent, in camera-image heights. */
+export const HD_MIN_SIZE = 0.06;
 
 // Gesture thresholds: turn on past `on`, off again only past `off` (hysteresis).
 const HD_PINCH_ON = 0.28, HD_PINCH_OFF = 0.42;
@@ -56,6 +72,8 @@ const hdClamp = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 function hdHand() {
   return {
     present: false, seen: -1e12, ever: false,
+    /** The track this hand is showing (0: none), and that track's classifier score. */
+    track: 0, score: 0,
     /** Smoothed landmarks on the picture: x (0..1 of its width), y (0..1, up), z (picture heights, relative to the wrist; smaller is nearer). */
     pts: new Float64Array(63),
     euro: null,
@@ -64,9 +82,14 @@ function hdHand() {
   };
 }
 
-/** Tracking state for both hands. `live` turns true with the first frame. */
+/**
+ * Tracking state for both hands. `live` turns true with the first frame.
+ * `tracks` are the hands being followed (a new one is `confirmed` after
+ * HD_APPEAR_FRAMES); `left` and `right` are what everything reads.
+ * `raw` and `rejected` count the last frame's detections (for the settings' readout).
+ */
 export function hdCreate() {
-  return { live: false, t: -1, seq: 0, count: 0, aspect: 16 / 9, left: hdHand(), right: hdHand() };
+  return { live: false, t: -1, seq: 0, count: 0, aspect: 16 / 9, left: hdHand(), right: hdHand(), tracks: [], nextId: 1, raw: 0, rejected: 0 };
 }
 
 // ── One-euro filter (Casiez et al.): steady when still, quick when moving ─────
@@ -82,10 +105,35 @@ export function hdEuroStep(f, v, t, minCutoff, beta) {
   f.x += hdAlpha(minCutoff + beta * Math.abs(f.dx), dt) * (v - f.x);
   return f.x;
 }
-/** The filter's settings for a Smoothing of 0..1 (0: raw landmarks). */
-export function hdEuroParams(smoothing) {
-  const s = hdClamp(smoothing);
-  return { minCutoff: 0.6 + 12 * (1 - s) * (1 - s), beta: 0.4 + 8 * (1 - s) };
+/**
+ * The filter's settings. Smoothing (0..1) sets the cutoff when the hand is
+ * still: 0 passes the landmarks through, 0.5 is 1.6 Hz, 1 is 0.3 Hz (calm,
+ * and slow to follow). Responsiveness (0..1) sets how much speed opens the
+ * filter up (beta): 0 never (a plain low-pass, laggy on fast moves), 0.5 a
+ * fast move follows within a frame or two, 1 barely smooths while moving.
+ * Positions are in picture units, so a quick hand moves 1–3 units a second.
+ */
+export function hdEuroParams(smoothing, responsiveness) {
+  const s = hdClamp(smoothing), r = hdClamp(responsiveness == null ? 0.5 : responsiveness);
+  return { minCutoff: 0.3 * Math.pow(30, 1 - s), beta: r <= 0 ? 0 : 0.5 * Math.pow(80, r) };
+}
+
+/**
+ * MediaPipe's options for the setup's hand settings (PlayHands): how many
+ * hands, and the three confidence thresholds, from Strictness 0..1 (0.5: a
+ * notch stricter than MediaPipe's own 0.5 defaults) or as set by hand.
+ */
+export function hdTrackerOptions(hands) {
+  const h = hands || {};
+  const s = hdClamp(h.strictness == null ? 0.5 : h.strictness);
+  const c = h.confidence;
+  const lerp = (a, b) => Math.round((a + (b - a) * s) * 100) / 100;
+  return {
+    numHands: h.maxHands === 1 ? 1 : 2,
+    detection: c ? c.detection : lerp(0.3, 0.9),
+    presence: c ? c.presence : lerp(0.3, 0.84),
+    tracking: c ? c.tracking : lerp(0.3, 0.8),
+  };
 }
 
 // ── Where the camera sits on the picture ─────────────────────────────────────
@@ -110,49 +158,174 @@ export function hdToPicture(u, v, place, camAspect, picAspect) {
   return [place.cx + (dx * c - dy * s) / picAspect, place.cy - (dx * s + dy * c)];
 }
 
+// ── Tracks: which detection is which hand ───────────────────────────────────
+
+/** Palm centre (camera image, x in image heights so distances are square), extent, and whether it is believable. */
+function hdMeasure(lm, camAspect) {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, off = 0;
+  for (let i = 0; i < 21; i++) {
+    const u = lm[i * 3], v = lm[i * 3 + 1];
+    if (u < x0) x0 = u;
+    if (u > x1) x1 = u;
+    if (v < y0) y0 = v;
+    if (v > y1) y1 = v;
+    if (u < -0.15 || u > 1.15 || v < -0.15 || v > 1.15) off++;
+  }
+  // The palm: the wrist and the four knuckles.
+  let cu = 0, cv = 0;
+  for (const i of [0, 5, 9, 13, 17]) { cu += lm[i * 3] / 5; cv += lm[i * 3 + 1] / 5; }
+  const size = Math.max((x1 - x0) * camAspect, y1 - y0);
+  const inFrame = cu > -0.08 && cu < 1.08 && cv > -0.08 && cv < 1.08 && off <= 10;
+  return { x: cu * camAspect, y: cv, size, ok: inFrame && size >= HD_MIN_SIZE };
+}
+
+const hdOther = side => (side === 'left' ? 'right' : 'left');
+
+/**
+ * Match this frame's detections to the tracks: nearest palm first, within a
+ * gate that grows with the hand's size (the classifier's side breaks a near
+ * tie); then, a little further out, a detection the classifier gives the
+ * same side as a track (a quick move). Returns [track, detection] pairs.
+ */
+function hdMatch(tracks, dets) {
+  const pairs = [];
+  for (const t of tracks) {
+    const gate = Math.max(0.15, 0.9 * t.size);
+    for (const d of dets) {
+      const dist = Math.hypot(t.x - d.x, t.y - d.y);
+      if (dist <= gate) pairs.push({ t, d, dist: dist + (d.side === t.side ? 0 : 0.05), pass: 0 });
+      else if (dist <= 2.5 * gate && d.side === t.side) pairs.push({ t, d, dist, pass: 1 });
+    }
+  }
+  pairs.sort((a, b) => a.pass - b.pass || a.dist - b.dist);
+  const usedT = new Set(), usedD = new Set(), out = [];
+  for (const p of pairs) {
+    if (usedT.has(p.t) || usedD.has(p.d)) continue;
+    usedT.add(p.t); usedD.add(p.d); out.push([p.t, p.d]);
+  }
+  return out;
+}
+
 // ── Updating ─────────────────────────────────────────────────────────────────
 
 /**
- * Take a tracker frame. `o`: { picAspect, place (hdPlacement), smoothing }.
- * `now` is the frame's time (ms). Two detections claiming the same hand: the
- * surer one keeps it and the other is taken as the opposite hand.
+ * Take a tracker frame. `o`: { picAspect, place (hdPlacement), smoothing,
+ * responsiveness, maxHands (1 or 2), swap (swap left and right),
+ * appearFrames }. The frame's time (ms) is its clock.
  */
 export function hdUpdate(st, frame, o) {
   const now = frame.t;
   st.live = true; st.seq++; st.aspect = o.picAspect;
   const camAspect = frame.w > 0 && frame.h > 0 ? frame.w / frame.h : 16 / 9;
   const place = o.place || hdPlacement(null, null, camAspect, o.picAspect, true);
-  const hands = (frame.hands || []).slice(0, 2).sort((a, b) => (b.score || 0) - (a.score || 0));
-  const bySide = { left: null, right: null };
-  for (const h of hands) {
+  const maxHands = o.maxHands === 1 ? 1 : 2;
+  const appear = Math.max(1, o.appearFrames == null ? HD_APPEAR_FRAMES : o.appearFrames | 0);
+  const tracks = st.tracks || (st.tracks = []);
+
+  // 1. Believable detections, surest first, no more than maxHands.
+  const dets = [];
+  let rejected = 0;
+  for (const h of frame.hands || []) {
+    if (!h.lm || h.lm.length < 63) continue;
+    const m = hdMeasure(h.lm, camAspect);
+    if (!m.ok) { rejected++; continue; }
     const side = h.side === 'left' ? 'left' : 'right';
-    if (!bySide[side]) bySide[side] = h; else if (!bySide[side === 'left' ? 'right' : 'left']) bySide[side === 'left' ? 'right' : 'left'] = h;
+    dets.push({ side: o.swap ? hdOther(side) : side, score: h.score || 0, lm: h.lm, x: m.x, y: m.y, size: m.size });
   }
-  const ep = hdEuroParams(o.smoothing == null ? 0.5 : o.smoothing);
-  const raw = o.smoothing <= 0.001;
-  st.count = 0;
-  for (const side of ['left', 'right']) {
-    const hand = st[side], det = bySide[side];
-    if (det && det.lm && det.lm.length >= 63) {
-      if (!hand.present || !hand.euro) hand.euro = Array.from({ length: 63 }, () => ({ x: 0, dx: 0, t: -1 }));
-      const zScale = place.h * camAspect;
-      for (let i = 0; i < 21; i++) {
-        const p = hdToPicture(det.lm[i * 3], det.lm[i * 3 + 1], place, camAspect, o.picAspect);
-        const z = (det.lm[i * 3 + 2] || 0) * zScale;
-        const vals = [p[0], p[1], z];
-        for (let k = 0; k < 3; k++) {
-          const j = i * 3 + k;
-          hand.pts[j] = raw ? vals[k] : hdEuroStep(hand.euro[j], vals[k], now, ep.minCutoff, ep.beta);
-        }
-      }
-      hand.present = true; hand.ever = true; hand.seen = now;
-      hdDerive(hand, o.picAspect);
-    } else if (hand.present && now - hand.seen > HD_HOLD_MS) {
-      hdDrop(hand);
+  dets.sort((a, b) => b.score - a.score);
+  if (dets.length > maxHands) dets.length = maxHands;
+  st.raw = dets.length; st.rejected = rejected;
+
+  // 2. Which detection is which hand.
+  const matched = hdMatch(tracks, dets);
+  const seenNow = new Set();
+  for (const [t, d] of matched) {
+    const dt = Math.min(100, Math.max(0, now - t.seen));
+    t.x = d.x; t.y = d.y; t.size = d.size; t.seen = now; t.hits++; t.det = d; t.said = d.side; t.score = d.score;
+    seenNow.add(t);
+    if (!t.confirmed) {
+      // A new hand's side: the classifier's votes so far, weighted by how sure it was.
+      t.vote += (d.side === 'right' ? 1 : -1) * Math.max(0.05, d.score);
+      t.side = t.vote >= 0 ? 'right' : 'left';
+    } else if (d.side !== t.side && d.score >= HD_SIDE_SCORE) t.flip += dt;
+    else t.flip = Math.max(0, t.flip - 2 * dt);
+  }
+  // Unmatched: a new hand not yet shown is forgotten at once (a phantom); a shown one is held.
+  for (let i = tracks.length - 1; i >= 0; i--) {
+    const t = tracks[i];
+    if (seenNow.has(t)) continue;
+    t.det = null;
+    if (!t.confirmed || now - t.seen > HD_HOLD_MS) tracks.splice(i, 1);
+  }
+  const taken = new Set(matched.map(p => p[1]));
+  for (const d of dets) {
+    if (taken.has(d)) continue;
+    tracks.push({ id: st.nextId++, side: d.side, said: d.side, score: d.score, vote: (d.side === 'right' ? 1 : -1) * Math.max(0.05, d.score), flip: 0, hits: 1, confirmed: false, x: d.x, y: d.y, size: d.size, seen: now, det: d });
+  }
+
+  // 3. A new hand seen long enough counts, if there's room (a held hand makes way for it).
+  for (const t of tracks) {
+    if (t.confirmed || t.hits < appear) continue;
+    let shown = tracks.filter(u => u.confirmed);
+    if (shown.length >= maxHands) {
+      const held = shown.filter(u => !u.det).sort((a, b) => a.seen - b.seen)[0];
+      if (!held) continue;
+      tracks.splice(tracks.indexOf(held), 1);
+      shown = shown.filter(u => u !== held);
     }
-    if (hand.present) st.count++;
+    // Two hands can't be the same side: the newcomer takes the other one.
+    if (shown.some(u => u.side === t.side)) t.side = hdOther(t.side);
+    t.confirmed = true; t.flip = 0;
+  }
+
+  // 4. Side hysteresis: the classifier has disagreed, surely, for long enough.
+  for (const t of tracks) {
+    if (!t.confirmed || t.flip < HD_SIDE_SWITCH_MS) continue;
+    const other = tracks.find(u => u !== t && u.confirmed && u.side !== t.side);
+    if (!other) { t.side = hdOther(t.side); t.flip = 0; }
+    else if (other.flip >= HD_SIDE_SWITCH_MS / 2) {
+      // Both hands say they're the other one: swap them.
+      const s = t.side; t.side = other.side; other.side = s; t.flip = 0; other.flip = 0;
+    }
+  }
+
+  // 5. Onto the picture: smoothed landmarks for each hand seen this frame.
+  hdSync(st);
+  const ep = hdEuroParams(o.smoothing == null ? 0.5 : o.smoothing, o.responsiveness);
+  const raw = o.smoothing <= 0.001;
+  const zScale = place.h * camAspect;
+  for (const side of ['left', 'right']) {
+    const hand = st[side];
+    const t = hand.present ? tracks.find(u => u.id === hand.track) : null;
+    if (!t || !t.det) continue;
+    const lm = t.det.lm;
+    if (!hand.euro) hand.euro = Array.from({ length: 63 }, () => ({ x: 0, dx: 0, t: -1 }));
+    for (let i = 0; i < 21; i++) {
+      const p = hdToPicture(lm[i * 3], lm[i * 3 + 1], place, camAspect, o.picAspect);
+      const vals = [p[0], p[1], (lm[i * 3 + 2] || 0) * zScale];
+      for (let k = 0; k < 3; k++) {
+        const j = i * 3 + k;
+        hand.pts[j] = raw ? vals[k] : hdEuroStep(hand.euro[j], vals[k], now, ep.minCutoff, ep.beta);
+      }
+    }
+    hdDerive(hand, o.picAspect);
   }
   st.t = now;
+}
+
+/** Show each confirmed track as its side's hand; a hand whose track is gone drops. */
+function hdSync(st) {
+  const by = { left: null, right: null };
+  for (const t of st.tracks || []) if (t.confirmed && !by[t.side]) by[t.side] = t;
+  st.count = 0;
+  for (const side of ['left', 'right']) {
+    const hand = st[side], t = by[side];
+    if (!t) { if (hand.present) hdDrop(hand); hand.track = 0; continue; }
+    // A different hand in this slot (a new one, or a side that changed): its filter and gestures start afresh.
+    if (hand.track !== t.id) { hdDrop(hand); hand.track = t.id; }
+    hand.present = true; hand.ever = true; hand.seen = t.seen; hand.score = t.score;
+    st.count++;
+  }
 }
 
 function hdDrop(hand) {
@@ -162,13 +335,24 @@ function hdDrop(hand) {
 
 /** Let a held hand go once the hold is over, when frames stop arriving (the tracker paused or stalled). */
 export function hdAge(st, now) {
-  let n = 0;
-  for (const side of ['left', 'right']) {
-    const hand = st[side];
-    if (hand.present && now - hand.seen > HD_HOLD_MS + 250) hdDrop(hand);
-    if (hand.present) n++;
+  const tracks = st.tracks || [];
+  for (let i = tracks.length - 1; i >= 0; i--) {
+    const t = tracks[i];
+    if (now - t.seen > (t.confirmed ? HD_HOLD_MS + 250 : 250)) tracks.splice(i, 1);
   }
-  st.count = n;
+  hdSync(st);
+}
+
+/**
+ * What the tracker sees, for the settings' readout: each hand followed (its
+ * id, side, what the classifier said last and how sure, shown or still
+ * waiting to count, held), and the last frame's detections and rejects.
+ */
+export function hdTracks(st) {
+  return {
+    raw: st.raw || 0, rejected: st.rejected || 0,
+    tracks: (st.tracks || []).map(t => ({ id: t.id, side: t.side, said: t.said, score: t.score, shown: !!t.confirmed, held: !t.det })),
+  };
 }
 
 /** Everything a hand is read as, and its gestures, from its smoothed landmarks. */

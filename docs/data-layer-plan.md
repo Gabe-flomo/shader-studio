@@ -1,6 +1,6 @@
 # Data layer: a plan
 
-Plan, not built. Written 26 Sep 2026 from a voice note, so a later session can
+Plan, now mostly built. Written 26 Sep 2026 from a voice note, so a later session can
 pick it up. Section 6 records the decisions (settled the same day).
 
 ## 1. The idea
@@ -163,8 +163,7 @@ dataset and passes numbers into the shader:
      same way.
    - Parsing is `parseSourceText(text, format)` (`src/data/parse.ts`), a pure
      function of text, so fetched or streamed text goes through it unchanged.
-   - Exports and Present don't carry datasets yet: their Data nodes read 0
-     and the export lists "Data node values" as left behind.
+   - Exports and Present didn't carry datasets at first (built in 1–3 below).
 1. **The layer, CSV.** Import, parse (types sniffed per column), table
    views: points, path, bars, pie, lines; axes modes; column → property
    mapping; offset/window stepping and actions; `s.data()`; data sources.
@@ -172,6 +171,40 @@ dataset and passes numbers into the shader:
    text style.
 3. **JSON views, exports and Present, examples** (a small CSV of city
    temperatures, a route, a poem stepped word by word).
+
+   *Milestones 1–3 built* (JSON views aside: a JSON value is for scripts).
+   The layer is `DataLayer` in `src/types/playLayers.ts`, drawn by
+   `src/play/kit/data.js` (pure layout, stepping and text functions, then
+   the drawing); its editor is `src/components/play/layers/DataLayerEditor.tsx`
+   and it opens the dataset window (the Data node's, without Outputs).
+   - **Views:** points (size, colour as RGB columns or through a palette,
+     opacity, rotation, label), path (Trim, a dot on its head), bars (grow
+     from 0 over the whole column, so a window keeps its scale), pie, lines
+     (a series per category). A caption column writes the current row's
+     value above the view. Same scale keeps maps and routes in shape.
+   - **Axes:** centred (range or zero) or corner; the picture (with a margin)
+     or a region moved and sized with the transform handles; axis lines,
+     grid, tick numbers and labels in the layer's text style.
+   - **Text:** lines, a separator, words, letters or N-character chunks; as
+     written, most frequent or A to Z, with counts; drawn with the Text
+     layer's renderer and mattes, wrapped and shrunk to fit.
+   - **Stepping:** Show all, a range or a window; Offset; Next, Previous,
+     Random (another page when it steps by windows), Go to row, Reset; cut or
+     fade. The layer reports `<id>::row` / `::rows` and, for the first layer
+     on a dataset, `ds:<id>::row`; its anchor is the current row (a path's
+     head), so proximity triggers and distance sensors work on it.
+   - **Everywhere else:** `s.data(name)` in 2D and 3D sketches (and
+     Background sketches); the mapping source `{ kind: 'data', dataset,
+     column, layerId }` ("Data · <dataset> · current · <column>", `#row` for
+     how far through), which reads `datasetStore.effective()` so a new result
+     or a live replacement shows at once.
+   - **Exports and Present** carry `datasets` in the bundle
+     (`src/play/dataExport.ts`): results with Normalize applied and names,
+     for what the page reads (Data layers, data mappings, Data nodes'
+     textures, sketches naming a dataset in quotes). The runtime binds Data
+     node textures (RGBA32F) itself. Left behind: the notebooks and files,
+     and datasets never run.
+   - **Examples:** Data 3–6 in the Data folder.
 
 ## 8. Later milestones: more ways data comes in (added 26 Sep 2026)
 
@@ -217,6 +250,49 @@ Data layer, mapping sources) works the same whichever it is.
      "needs the network") or freeze the last window.
    - This is the plugin plan's `defineMapping` / `defineFeed` idea, done for
      data.
+
+*Milestones 6–8 built* (27 Sep 2026). New datasets start from the editor's
+empty view or its … menu: **Import a file**, **Type it in**, **From a link**,
+**From Kaggle**, **Live stream**.
+
+- **Typed in** (`src/data/manualTable.ts`, `ManualSheet.tsx`): cells are kept
+  as typed and read per column type (number, category, text) when the
+  notebook runs; bad numbers show red and read as empty. Keys: arrows, Tab,
+  Enter, typing, Delete, ⌥↑/↓ to move a row, ⌘Z / ⇧⌘Z (the sheet's own
+  undo). Pasting a block grows the table; into an empty one a header row
+  becomes the names and each column is typed from its values. Rows are
+  windowed, so a 20 000-row table stays quick. **Edit a copy by hand** makes
+  a typed-in table from any table dataset.
+- **Links** (`urlSource.ts`, `urlFetch.ts`, `LinkImport.tsx`): GitHub and
+  Gist pages, Google Sheets (published or shared), Hugging Face and Dropbox
+  links are rewritten to the file; zips are opened (fflate); ndjson becomes
+  an array; a web page instead of data is refused with a hint. The desktop
+  app fetches through `fetch_url` (`src-tauri/src/data_fetch.rs`, ureq: https
+  only, or http to this computer; no cookies; 25 MB; 30 s). **Kaggle**: the
+  username and key go to the system keychain (`keyring`), and Rust adds them
+  to kaggle.com requests itself; in a browser they're in localStorage, with a
+  warning, and Kaggle's API usually refuses the page anyway (CORS).
+  **Parquet and Excel are not read** (they get a message pointing to CSV);
+  `hyparquet` would add Parquet.
+- **Streams** (`src/data/streams/`): `streamHub` keeps one connection per
+  stream dataset, retries with backoff, and publishes each window through the
+  notebook (in the worker, newest window wins; skipped when the notebook only
+  shows `df`) to `datasetStore.replaceResult`. Transports: Poll, WebSocket,
+  SSE, OSC (the Play OSC client: the desktop listener or the browser bridge;
+  one row per message: address, value, value2…) and a **Demo stream** made up
+  in the app. Pause or Disconnect keeps the window with the dataset (as CSV)
+  and its result, so the graph opens with them; **Connect when the graph
+  opens** reconnects on load. Takes record each stream's rows (the window at
+  the start, then every message with its time, `PlayTake.dataFeeds`); replay
+  and rendering mute the hub and feed those rows instead.
+- **Website export**: a stream set to **Freeze** carries its live window; one
+  set to **Reconnect** carries it raw plus the feed, and the page's runtime
+  connects (poll, WebSocket, SSE) and adds rows itself (listed as needing
+  the network). OSC, the demo and feeds shaped by a notebook are always
+  frozen, and the export says why (`streams/exportPlan.ts`,
+  `play/dataExport.ts`).
+- **Examples**: Data 7 (a constellation typed in) and Data 8 (a live feed on
+  the demo stream, with notes on pointing it at a real feed).
 
 ## 9. The Data node's "Use as" modes (added 26 Sep 2026)
 

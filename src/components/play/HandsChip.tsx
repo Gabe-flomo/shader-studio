@@ -1,22 +1,26 @@
 /**
  * HandsChip.tsx — hand tracking's status and settings (docs/hand-tracking.md).
  *
- *   HandsChip   "Hands: tracking 2 hands", with Enable / Stop and the settings
- *               (smoothing, the skeleton over the picture, selfie mirroring).
+ *   HandsChip   "Hands: tracking 2 hands", an eye to show or hide the hand
+ *               on the picture, Enable / Stop and the settings (hands to
+ *               track, strictness, smoothing, mirroring, sides, a readout).
  *               Shown wherever hands are used: the mappings drawer, a hand
- *               trigger, a null that follows a hand.
+ *               trigger, a null that follows a hand, a Camera layer.
+ *   ShowHandToggle  "Show hand on picture", for the Camera layer's section.
  *   HandsPill   the same Enable, floating on the picture while the setup
  *               reads hands and tracking is off (browsers need a click to
  *               open the camera).
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { handFeed, type HandStatus } from '../../lib/handFeed';
+import { playEngine } from '../../lib/playEngine';
+import { hdTrackerOptions, hdTracks } from '../../play/kit/hands.js';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { DEFAULT_HANDS, usesHands, type PlayHands } from '../../types/play';
+import { DEFAULT_HAND_RESPONSIVENESS, DEFAULT_HAND_STRICTNESS, DEFAULT_HANDS, oneHandUsed, usesHands, type PlayHands } from '../../types/play';
 import { Button, IconButton } from '../ui/Button';
-import { Toggle } from '../ui/Choice';
+import { Segmented, Toggle } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { RulerSlider } from '../ui/RulerSlider';
@@ -43,9 +47,23 @@ function handsText(status: HandStatus, count: number, paused = false): string {
   }
 }
 
+/** The setup's hand settings, and a setter that saves a change with it. */
+function useHandSettings(): [PlayHands, (patch: Partial<PlayHands>) => void] {
+  const hands = useNodeGraphStore(s => s.play.hands) ?? DEFAULT_HANDS;
+  const setPlay = useNodeGraphStore(s => s.setPlay);
+  const set = (patch: Partial<PlayHands>) => setPlay(p => {
+    const next: PlayHands = { ...(p.hands ?? DEFAULT_HANDS), ...patch };
+    // An option set back to nothing leaves the file (older files stay as they were).
+    for (const k of Object.keys(patch) as (keyof PlayHands)[]) if (patch[k] === undefined) delete next[k];
+    return { ...p, hands: next };
+  });
+  return [hands, set];
+}
+
 export function HandsChip({ settings = true }: { settings?: boolean }) {
   const tk = useTokens();
   const { status, count, paused } = useHands();
+  const [hands, set] = useHandSettings();
   const [open, setOpen] = useState(false);
   const gear = useRef<HTMLSpanElement>(null);
   // The tooltip's frame rate and timings, refreshed while tracking.
@@ -62,6 +80,13 @@ export function HandsChip({ settings = true }: { settings?: boolean }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
       <span title={title} style={{ color: status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.muted, font: `11px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>{handsText(status, count, paused)}</span>
+      {status !== 'unsupported' && (
+        <IconButton
+          icon={hands.overlay ? 'eye' : 'eyeOff'} size="sm" active={hands.overlay}
+          label={hands.overlay ? 'Hide hand on picture (tracking keeps going)' : 'Show hand on picture'}
+          onClick={() => set({ overlay: !hands.overlay })}
+        />
+      )}
       {(status === 'off' || status === 'blocked' || status === 'error') && (
         <Button size="sm" icon="hand" onClick={() => void handFeed.start()}>{status === 'off' ? 'Enable' : 'Try again'}</Button>
       )}
@@ -72,7 +97,7 @@ export function HandsChip({ settings = true }: { settings?: boolean }) {
         </span>
       )}
       {open && (
-        <Popover anchorRef={gear} onClose={() => setOpen(false)} align="end" width={300} padding={12}>
+        <Popover anchorRef={gear} onClose={() => setOpen(false)} align="end" width={300} padding={0}>
           <HandsSettings />
         </Popover>
       )}
@@ -80,42 +105,135 @@ export function HandsChip({ settings = true }: { settings?: boolean }) {
   );
 }
 
-/** Smoothing, the skeleton overlay and mirroring, saved with the setup. */
+/** "Show hand on picture" with its colour: the Camera layer's section, and the top of the settings. */
+export function ShowHandToggle() {
+  const [hands, set] = useHandSettings();
+  const hex = `#${hands.colour.map(c => Math.round(c * 255).toString(16).padStart(2, '0')).join('')}`;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Toggle checked={hands.overlay} onChange={overlay => set({ overlay })} label="Show hand on picture" />
+      <span style={{ flex: 1 }} />
+      <label title="Colour of the hand on the picture" style={{ position: 'relative', width: 26, height: 22, borderRadius: radius.sm, background: hex, cursor: 'pointer', boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.15)}`, opacity: hands.overlay ? 1 : 0.5, flexShrink: 0 }}>
+        <input type="color" aria-label="Colour of the hand on the picture" value={hex} onChange={e => { const h = e.target.value; set({ colour: [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255] }); }} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+      </label>
+    </div>
+  );
+}
+
+/** Everything hand tracking can be tuned by, saved with the setup, and what it sees right now. */
 function HandsSettings() {
   const tk = useTokens();
-  const hands = useNodeGraphStore(s => s.play.hands) ?? DEFAULT_HANDS;
+  const [hands, set] = useHandSettings();
   const camera = useNodeGraphStore(s => s.play.layers.find(l => l.kind === 'camera'));
-  const setPlay = useNodeGraphStore(s => s.setPlay);
-  const set = (patch: Partial<PlayHands>) => setPlay(p => ({ ...p, hands: { ...(p.hands ?? DEFAULT_HANDS), ...patch } }));
-  const hex = `#${hands.colour.map(c => Math.round(c * 255).toString(16).padStart(2, '0')).join('')}`;
+  const onlySide = useNodeGraphStore(s => oneHandUsed(s.play));
+  const [advanced, setAdvanced] = useState(!!hands.confidence);
   const label = { color: tk.text.primary, font: `600 12px ${fontFamily.ui}` };
   const hint = { color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}`, margin: '3px 0 0' };
+  const head = (text: string, right?: ReactNode) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+      <span style={label}>{text}</span>{right}
+    </div>
+  );
+  const maxHands = hands.maxHands ?? 2;
+  const strictness = hands.strictness ?? DEFAULT_HAND_STRICTNESS;
+  const conf = hdTrackerOptions(hands);
+  const setConf = (k: 'detection' | 'presence' | 'tracking', v: number) => set({ confidence: { detection: conf.detection, presence: conf.presence, tracking: conf.tracking, [k]: v } });
+  const small = { color: tk.text.muted, font: `11px ${fontFamily.ui}` };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 12, maxHeight: 'min(620px, calc(100vh - 80px))', overflowY: 'auto', boxSizing: 'border-box' }}>
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <span style={label}>Smoothing</span>
-        </div>
-        <RulerSlider ariaLabel="Hand smoothing" value={hands.smoothing} min={0} max={1} step={0.05} defaultValue={DEFAULT_HANDS.smoothing} onChange={v => set({ smoothing: v })} />
-        <p style={hint}>Low follows every twitch; high is steady but a little late.</p>
+        <ShowHandToggle />
+        <p style={hint}>Just the drawing: tracking keeps going while it’s hidden. The eye beside the status does the same. H hides the other guides, not the hand.</p>
       </div>
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Toggle checked={hands.overlay} onChange={overlay => set({ overlay })} label="Show hands on the picture" />
-          <span style={{ flex: 1 }} />
-          <label title="Colour of the hands on the picture" style={{ position: 'relative', width: 26, height: 22, borderRadius: radius.sm, background: hex, cursor: 'pointer', boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.15)}`, opacity: hands.overlay ? 1 : 0.5 }}>
-            <input type="color" aria-label="Colour of the hands on the picture" value={hex} onChange={e => { const h = e.target.value; set({ colour: [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255] }); }} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
-          </label>
-        </div>
-        <p style={hint}>Bones and dots over the picture, for setting up. They show with the guides: H hides them.</p>
+        {head('Hands to track', (
+          <Segmented size="sm" ariaLabel="Hands to track" value={String(maxHands) as '1' | '2'} onChange={v => set({ maxHands: v === '1' ? 1 : undefined })}
+            options={[{ value: '1', label: '1' }, { value: '2', label: '2' }]} />
+        ))}
+        <p style={hint}>
+          {maxHands === 1 ? 'Only one hand is followed, so a second one never appears. Distance between the hands reads nothing.' : 'Up to two. With 1, a second hand can never appear by mistake.'}
+          {onlySide && maxHands === 2 ? ` This setup only reads your ${onlySide} hand: 1 is steadier if you keep the other hand out of view.` : ''}
+        </p>
+      </div>
+      <div>
+        {head('Strictness')}
+        <RulerSlider ariaLabel="Hand tracking strictness" value={strictness} min={0} max={1} step={0.05} defaultValue={DEFAULT_HAND_STRICTNESS} disabled={!!hands.confidence}
+          onChange={v => set({ strictness: v, confidence: undefined })} />
+        <p style={hint}>{hands.confidence ? 'Set by hand below.' : 'Higher ignores faint or doubtful hands (fewer phantom hands); too high can lose your hand in dim light.'}</p>
+        <button type="button" onClick={() => setAdvanced(a => !a)} aria-expanded={advanced}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, padding: 0, border: 0, background: 'none', color: tk.text.muted, font: `600 11px ${fontFamily.ui}`, cursor: 'pointer' }}>
+          <Icon name={advanced ? 'chevD' : 'chevR'} size={13} /> Advanced
+        </button>
+        {advanced && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+            {([['detection', 'Finding a hand', 'How sure the model must be to find a new hand.'], ['presence', 'Keeping a hand', 'How sure it must be that a found hand is still there.'], ['tracking', 'Following a hand', 'Below this it looks for the hand afresh instead of following it.']] as const).map(([k, name, what]) => (
+              <div key={k} title={what}>
+                <div style={{ ...small, marginBottom: 3 }}>{name}</div>
+                <RulerSlider ariaLabel={name} value={conf[k]} min={0.1} max={0.95} step={0.05} onChange={v => setConf(k, v)} />
+              </div>
+            ))}
+            <p style={{ ...hint, margin: 0 }}>
+              MediaPipe’s detection, presence and tracking confidence. {hands.confidence
+                ? <button type="button" onClick={() => set({ confidence: undefined })} style={{ padding: 0, border: 0, background: 'none', color: tk.accent.base, font: `600 11px ${fontFamily.ui}`, cursor: 'pointer' }}>Use Strictness again</button>
+                : 'Moving one sets all three by hand.'}
+            </p>
+          </div>
+        )}
+      </div>
+      <div>
+        {head('Smoothing')}
+        <RulerSlider ariaLabel="Hand smoothing" value={hands.smoothing} min={0} max={1} step={0.05} defaultValue={DEFAULT_HANDS.smoothing} onChange={v => set({ smoothing: v })} />
+        <p style={hint}>How calm a still hand is. 0 follows every twitch.</p>
+      </div>
+      <div>
+        {head('Responsiveness')}
+        <RulerSlider ariaLabel="Hand responsiveness" value={hands.responsiveness ?? DEFAULT_HAND_RESPONSIVENESS} min={0} max={1} step={0.05} defaultValue={DEFAULT_HAND_RESPONSIVENESS} onChange={v => set({ responsiveness: v })} />
+        <p style={hint}>How quickly a fast move is followed. Low lags behind quick moves; high lets a little jitter through while moving.</p>
       </div>
       <div>
         <Toggle checked={camera?.kind === 'camera' ? camera.mirror : hands.mirror} disabled={!!camera} onChange={mirror => set({ mirror })} label="Mirror, like a selfie" />
         <p style={hint}>{camera ? 'The Camera layer’s own Mirror decides this: hands line up with the camera image it shows.' : 'Your right hand moves right on the picture.'}</p>
       </div>
+      <div>
+        <Toggle checked={!!hands.swap} onChange={swap => set({ swap: swap || undefined })} label="Swap left and right" />
+        <p style={hint}>Right should be your own right hand (the R at the wrist). If it’s the other way round, as with a camera that mirrors its own picture, turn this on. Mirror doesn’t change which hand is which.</p>
+      </div>
+      <HandsReadout />
       <p style={{ ...hint, margin: 0, paddingTop: 8, borderTop: `1px solid ${tk.border.default}` }}>
         Everything runs on this computer: camera frames never leave it.
       </p>
+    </div>
+  );
+}
+
+/** What the tracker sees right now, to help find out why a hand misbehaves. */
+function HandsReadout() {
+  const tk = useTokens();
+  const { status } = useHands();
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (status !== 'on') return;
+    const id = window.setInterval(() => setTick(t => t + 1), 250);
+    return () => window.clearInterval(id);
+  }, [status]);
+  if (status !== 'on') return null;
+  const s = handFeed.stats, o = handFeed.getOptions();
+  const r = hdTracks(playEngine.handState());
+  const mono = { font: `11px/1.6 ${fontFamily.mono}`, color: tk.text.secondary };
+  const name = (side: string) => (side === 'left' ? 'Left' : 'Right');
+  return (
+    <div style={{ background: tk.bg.field, borderRadius: radius.md, padding: '8px 10px' }}>
+      <div style={{ color: tk.text.primary, font: `600 11px ${fontFamily.ui}`, marginBottom: 4 }}>What the tracker sees</div>
+      <div style={mono}>{s.fps} fps · {s.inferMs} ms · {s.delegate || '…'}</div>
+      <div style={mono}>Found {r.raw}{r.rejected ? `, ignored ${r.rejected} (too small or off the frame)` : ''} · looking for {o.numHands}</div>
+      {r.tracks.length === 0 && <div style={{ ...mono, color: tk.text.faint }}>No hands</div>}
+      {r.tracks.map(t => (
+        <div key={t.id} style={mono}>
+          #{t.id} {name(t.side)} · model says {name(t.said)} {Math.round(t.score * 100)}%
+          {!t.shown ? ' · appearing…' : t.held ? ' · held' : ''}
+        </div>
+      ))}
+      <div style={{ ...mono, color: tk.text.faint }}>Confidence {o.detection} / {o.presence} / {o.tracking}</div>
     </div>
   );
 }
