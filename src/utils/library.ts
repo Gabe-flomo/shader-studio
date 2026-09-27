@@ -68,6 +68,8 @@ const NAMED_FILES: Record<string, string> = {
   'shader-studio:palette-presets': 'palettes.json',
   [BACKGROUND_PALETTES_KEY]: 'background palettes.json',
   'shader-studio:glsl-shaders': 'glsl shaders.json',
+  // Your saved Present themes (present/userThemes.ts USER_THEMES_KEY).
+  'shader-studio-present:themes': 'present themes.json',
 };
 
 export function isLibraryKey(key: string): boolean {

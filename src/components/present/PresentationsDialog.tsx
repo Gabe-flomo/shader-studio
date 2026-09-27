@@ -5,6 +5,9 @@
  * download, copy, rename, file or delete it (with Undo). New, Import and
  * Download all sit at the top.
  */
+import { reportFileResult } from '../shell/reportFileResult';
+import { offerSetExport } from '../playfile/exportMenus';
+import { exportPresentationPlayfile } from '../../playfile/app';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -22,7 +25,7 @@ import { createFolder, loadFolders, moveItemsToFolder, removeItemsFromFolders, g
 import { PRESENTATION_FOLDER_SCOPE } from '../../utils/library';
 import { loadPresentation, renamePresentation, type PresentationEntry } from '../../present/storage';
 import { usePresentation } from './presentationStore';
-import { deleteWithUndo, downloadAllPresentations, exportPresentationFile, importPresentationFile } from './presentationFiles';
+import { deleteWithUndo, exportPresentationFile, importPresentationFile } from './presentationFiles';
 import { announcePresentationOpened } from './linkActions';
 import { LinkBadge } from '../shell/GraphLinks';
 import { usePresentationLinks } from '../shell/linkHooks';
@@ -105,7 +108,8 @@ export function PresentationsDialog({ list, compact, onClose, onNew }: { list: P
     const inFolder = getFolderForItem(PRESENTATION_FOLDER_SCOPE, name);
     return [
       { label: 'Open', icon: 'slides', onSelect: () => open(name) },
-      { label: 'Download', icon: 'export', hint: 'A .present.json file with every Play in it', onSelect: () => void exportPresentationFile(name) },
+      { label: 'Download as .playfile', icon: 'export', hint: 'With its Plays, pictures, fonts and the graphs it was made from', onSelect: () => void exportPresentationPlayfile(name).then(r => reportFileResult(r, { failTitle: 'Couldn’t download it' })) },
+      { label: 'Download as .present.json', icon: 'code', hint: 'A readable file with every Play in it', onSelect: () => void exportPresentationFile(name) },
       { label: 'Make a copy', icon: 'copy', onSelect: () => { duplicateSaved(name); onClose(); } },
       { label: 'Rename…', icon: 'edit', onSelect: () => void renameSaved(name) },
       { label: inFolder ? 'Move to another folder…' : 'Move to a folder…', icon: 'folder', onSelect: () => { const at = menu; if (at) setTimeout(() => setMenu({ ...at, move: true }), 0); } },
@@ -136,8 +140,8 @@ export function PresentationsDialog({ list, compact, onClose, onNew }: { list: P
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: compact ? '0 0 10px' : '14px 18px 10px', borderBottom: `1px solid ${tk.border.subtle}` }}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <Button size="sm" variant="primary" icon="plus" onClick={() => { onClose(); onNew(); }}>New</Button>
-        <Button size="sm" icon="import" onClick={() => { void importPresentationFile().then(onClose); }} title="Open a .present.json file as a new presentation">Import…</Button>
-        <Button size="sm" variant="ghost" icon="export" disabled={!list.length} onClick={() => void downloadAllPresentations()} title="Every presentation as .present.json files in one ZIP, in their folders (with a library.json that imports them all back)">Download all</Button>
+        <Button size="sm" icon="import" onClick={() => { void importPresentationFile().then(onClose); }} title="Open a .playfile or a .present.json file as a new presentation">Import…</Button>
+        <Button size="sm" variant="ghost" icon="export" disabled={!list.length} onClick={e => offerSetExport(e.currentTarget, 'presentations')} title="Every presentation in one .playfile, or as .present.json files in a ZIP (with a library.json that imports them all back)">Download all</Button>
       </div>
       {list.length > 3 && (
         <Field aria-label="Search presentations" placeholder="Search presentations" height={32} value={q} onChange={e => setQ(e.target.value)}

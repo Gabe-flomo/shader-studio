@@ -1,3 +1,4 @@
+import { offerGraphExport } from '../playfile/exportMenus';
 import { useEffect, useRef, useState } from 'react';
 import { SAVED_GRAPHS_CHANGED, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getMembership, loadFolders, toggleFolderCollapsed } from '../../utils/assetFolders';
@@ -53,7 +54,6 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
   const toggleTheme = useThemeStore(s => s.toggle);
   const undo = useNodeGraphStore(s => s.undo);
   const redo = useNodeGraphStore(s => s.redo);
-  const exportGraph = useNodeGraphStore(s => s.exportGraph);
   const importGlslFromFile = useNodeGraphStore(s => s.importGlslFromFile);
   // Shortcut labels follow the user's rebinding on the Keys page.
   const [shortcuts] = useState(loadShortcutMap);
@@ -116,23 +116,23 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         {!compact && <Divider />}
         {compact ? (
           <>
-            <IconButton icon="import" label="Import a graph or presentation file" shortcut={shortcuts.import}
+            <IconButton icon="import" label="Import a .playfile, graph or presentation file" shortcut={shortcuts.import}
               onClick={() => { void importAnyFile(onPageChange); }} />
             <IconButton icon="code" label="Import a GLSL shader as a node"
               onClick={async () => { reportGlslImport(await importGlslFromFile()); }} />
-            <IconButton icon="export" label="Export this graph to a file" shortcut={shortcuts.export}
-              onClick={async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); }} />
+            <IconButton icon="export" label="Export this graph to a file (.playfile or readable JSON)" shortcut={shortcuts.export}
+              onClick={e => offerGraphExport(e.currentTarget)} />
           </>
         ) : (
           <>
-            <Tooltip label="Import a graph file, or a .present.json (opens on the Present page)" shortcut={shortcuts.import}>
+            <Tooltip label="Import a .playfile, a graph file, or a .present.json (opens on the Present page)" shortcut={shortcuts.import}>
               <Button size="sm" icon="import" onClick={() => { void importAnyFile(onPageChange); }}>Import</Button>
             </Tooltip>
             <Tooltip label="Import a GLSL fragment shader (Shadertoy or raw) as a node, wired UV → shader → Output">
               <Button size="sm" icon="code" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>GLSL</Button>
             </Tooltip>
-            <Tooltip label="Export this graph to a file" shortcut={shortcuts.export}>
-              <Button size="sm" icon="export" onClick={async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); }}>Export</Button>
+            <Tooltip label="Export this graph: a .playfile with what it uses, or readable JSON" shortcut={shortcuts.export}>
+              <Button size="sm" icon="export" onClick={e => offerGraphExport(e.currentTarget)}>Export</Button>
             </Tooltip>
           </>
         )}

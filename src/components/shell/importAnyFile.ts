@@ -1,22 +1,26 @@
 /**
  * importAnyFile — the top bar's Import: one button for the files Playfield
- * makes. A graph (or Play) file opens in the Studio; a `.present.json` opens
- * on the Present page as a new presentation; a library.json merges into the
- * library. The kind is read from the file, not its name.
+ * makes. A `.playfile` opens its preview (what's inside, then import); the
+ * older formats keep opening as before: a graph (or Play) file opens in the
+ * Studio, a `.present.json` on the Present page as a new presentation, a
+ * library.json or library/profile ZIP merges into the library. The kind is
+ * read from the file, not its name.
  */
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { PRESENTATION_FILE_KIND } from '../../types/presentation';
-import { errorMessage, openTextFile } from '../../utils/fileIO';
+import { errorMessage, openBinaryFile } from '../../utils/fileIO';
+import { CONTAINER_ACCEPT } from '../../playfile/format';
+import { isPlayfile } from '../../playfile/reader';
 import { LIBRARY_KIND } from '../../utils/library';
 import { importLibraryBytes } from '../../utils/libraryActions';
 import { toast } from '../ui/toastStore';
 import type { Page } from '../page';
 import { reportFileResult } from './reportFileResult';
 
-export type ImportedAs = 'graph' | 'presentation' | 'library' | null;
+export type ImportedAs = 'graph' | 'presentation' | 'library' | 'playfile' | null;
 
 /** What a file's text is, by its `kind`. Anything else is tried as a graph. */
-export function fileKind(text: string): Exclude<ImportedAs, null> {
+export function fileKind(text: string): Exclude<ImportedAs, null | 'playfile'> {
   let kind: unknown;
   try { kind = (JSON.parse(text) as { kind?: unknown } | null)?.kind; } catch { return 'graph'; }
   if (kind === PRESENTATION_FILE_KIND) return 'presentation';
@@ -42,10 +46,23 @@ export async function importText(text: string, navigate: (p: Page) => void, file
   return ok ? 'graph' : null;
 }
 
+/** Import a file's bytes: a .playfile opens its preview; a ZIP is a library or profile; anything else is read as text. */
+export async function importBytes(name: string, bytes: Uint8Array, navigate: (p: Page) => void): Promise<ImportedAs> {
+  if (isPlayfile(bytes)) {
+    const { openPlayfileBytes } = await import('../../playfile/app');
+    return (await openPlayfileBytes(name, bytes)) ? 'playfile' : null;
+  }
+  if (bytes.length > 3 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    void importLibraryBytes(name, bytes);
+    return 'library';
+  }
+  return importText(new TextDecoder().decode(bytes), navigate, name);
+}
+
 /** Pick a file and import it (top bar Import, its shortcut, the phone ⋯ menu). */
 export async function importAnyFile(navigate: (p: Page) => void): Promise<ImportedAs> {
-  let text: string | null;
-  try { text = await openTextFile('.json,.present.json'); } catch (e) { toast.error('Couldn’t import that file', { message: errorMessage(e) }); return null; }
-  if (text === null) return null;
-  return importText(text, navigate);
+  let picked: Awaited<ReturnType<typeof openBinaryFile>>;
+  try { picked = await openBinaryFile(`${CONTAINER_ACCEPT},.json,.present.json,.zip`); } catch (e) { toast.error('Couldn’t import that file', { message: errorMessage(e) }); return null; }
+  if (!picked) return null;
+  return importBytes(picked.name, picked.bytes, navigate);
 }

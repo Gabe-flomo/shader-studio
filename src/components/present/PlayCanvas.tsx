@@ -179,7 +179,7 @@ export function PlayCanvas({ slotId, source, aspect, pointer, startTime, paused,
     </div>
   );
   return (
-    <div ref={boxRef} data-canvas={slotId} data-live={live || undefined} style={{ position: 'relative', width: '100%', aspectRatio: `${ratio}`, borderRadius: radius.lg, overflow: 'hidden', background: tk.bg.render, ...style }}>
+    <div ref={boxRef} data-canvas={slotId} data-live={live || undefined} style={{ position: 'relative', width: '100%', aspectRatio: `${ratio}`, borderRadius: `var(--pp-radius, ${radius.lg}px)`, overflow: 'hidden', background: tk.bg.render, ...style }}>
       {!live && picture && <img src={picture} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
       {live && !framed && <div ref={hostRef} style={{ position: 'absolute', inset: 0 }} />}
       {live && framed && frameHtml && (

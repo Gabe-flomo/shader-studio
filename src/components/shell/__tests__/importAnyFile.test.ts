@@ -1,17 +1,22 @@
 /**
- * The top bar's Import reads the file's kind: a .present.json goes to the
- * Present page as a new presentation, a library merges, anything else is a
- * graph for the Studio.
+ * The top bar's Import reads the file's kind: a .playfile opens its
+ * preview, a .present.json goes to the Present page as a new presentation, a
+ * library merges, anything else is a graph for the Studio.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
-  file: null as string | null,
+  file: null as string | Uint8Array | null,
   importGraph: vi.fn(() => ({ ok: true as const })),
   importPresentationText: vi.fn<(text: string) => string | null>(() => 'Intro'),
   importLibraryBytes: vi.fn(),
+  openPlayfileBytes: vi.fn(async () => true),
 }));
-vi.mock('../../../utils/fileIO', () => ({ openTextFile: async () => h.file, errorMessage: (e: unknown) => String(e) }));
+vi.mock('../../../utils/fileIO', () => ({
+  openBinaryFile: async () => (h.file === null ? null : { name: 'x', bytes: typeof h.file === 'string' ? new TextEncoder().encode(h.file) : h.file }),
+  errorMessage: (e: unknown) => String(e),
+}));
+vi.mock('../../../playfile/app', () => ({ openPlayfileBytes: h.openPlayfileBytes }));
 vi.mock('../../../store/useNodeGraphStore', () => ({ useNodeGraphStore: { getState: () => ({ importGraph: h.importGraph }) } }));
 vi.mock('../../present/presentationFiles', () => ({ importPresentationText: h.importPresentationText }));
 vi.mock('../../../utils/libraryActions', () => ({ importLibraryBytes: h.importLibraryBytes }));
@@ -58,6 +63,15 @@ describe('top bar Import', () => {
     expect(await importAnyFile(navigate)).toBe(null);
     expect(h.importGraph).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('opens a .playfile’s preview (and still reads the old formats by their content)', async () => {
+    const { writePlayfile } = await import('../../../playfile/writer');
+    h.file = (await writePlayfile([{ kind: 'graph', name: 'G', data: '{"nodes":[]}' }])).bytes;
+    expect(await importAnyFile(vi.fn())).toBe('playfile');
+    expect(h.openPlayfileBytes).toHaveBeenCalled();
+    expect(h.importGraph).not.toHaveBeenCalled();
+    expect(h.importLibraryBytes).not.toHaveBeenCalled();
   });
 
   it('reads the kind, not the name', () => {

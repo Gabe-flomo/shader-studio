@@ -1,3 +1,5 @@
+import { isPlayfile } from '../playfile/reader';
+import { CONTAINER_ACCEPT } from '../playfile/format';
 import { requireFeature } from '../lib/plan';
 import { create } from 'zustand';
 import type { GraphNode, InputSocket, OutputSocket, DataType } from '../types/nodeGraph';
@@ -83,7 +85,8 @@ import type { GroupPreset } from '../types/groupPreset';
 import type { SubgraphData } from '../types/nodeGraph';
 import { buildUserNodeDefinition, CODE_RETURN_PORT, type PublishUserNodeSpec, type PublishSource } from '../nodes/userNodes/publishUserNode';
 import { USER_NODE_DEFAULT_CATEGORY } from '../types/userNode';
-import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes, recompileUserNodes } from '../nodes/userNodes/userNodeRegistry';
+import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes, recompileUserNodes, containsSealedCode } from '../nodes/userNodes/userNodeRegistry';
+import { sealDefinition } from '../playfile/sealing';
 import { runRebuildHandlers } from '../lib/rebuild';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { getNodeDefinition, getNodeDefinitionFor, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams, clearNodeDefinitionCache } from '../nodes/definitions';
@@ -93,7 +96,7 @@ import { compileGraph } from '../compiler/graphCompiler';
 import { recordGraphCompile } from '../lib/perfStats';
 import { convertFragmentShader } from '../nodes/userNodes/glslImport';
 import { paramBindingKey } from '../compiler/uniformPatcher';
-import { saveTextFile, openTextFile, pickJsonFiles, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
+import { saveTextFile, openTextFile, openBinaryFile, pickJsonFiles, readJsonFilesFromDir, writeTextFileAtPath, deleteFileAtPath, safeSetItem, errorMessage, CANCELLED } from '../utils/fileIO';
 import { planGraphImport, type PreviewAspect } from '../utils/graphImportPlan';
 import { loadFolders, createFolder, moveItemsToFolder } from '../utils/assetFolders';
 import type { FileResult } from '../utils/fileIO';
@@ -498,6 +501,8 @@ interface NodeGraphState {
    * opens looking exactly as the picture does at export time.
    */
   exportPlayFile: () => Promise<FileResult>;
+  /** The open graph as a readable file: a graph file, or a Play file (live control values baked in). What both exports write. */
+  graphFileJson: (asPlay: boolean) => string;
   /**
    * Everything a web export needs, as the picture is right now (driven
    * controls at their live value), and what in the graph it can't run.
@@ -926,7 +931,8 @@ interface NodeGraphState {
   /** Save one node type (or all of them) as a shareable .json file. */
   exportUserNodes: (ids?: string[]) => Promise<FileResult>;
   /** Pick a .json exported from any Playfield and register the node types in it. */
-  importUserNodesFromFile: () => Promise<FileResult & { imported?: string[]; replaced?: string[] }>;
+  /** A .playfile node pack opens its preview (`deferred`: the dialog imports); an older node .json imports straight away. */
+  importUserNodesFromFile: () => Promise<FileResult & { imported?: string[]; replaced?: string[]; deferred?: boolean }>;
 }
 
 // ─── Example graph data ───────────────────────────────────────────────────────
@@ -2832,7 +2838,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     const built = buildUserNodeDefinition(resolved, spec);
     if (!built.ok) return { ok: false, error: built.error };
-    const result = await registerUserNode(built.def);
+    // Built from sealed nodes: the new node is sealed too, so their code never becomes editable.
+    const sealedInside = containsSealedCode(built.def);
+    const result = await registerUserNode(sealedInside.length ? sealDefinition(built.def) : built.def);
+    if (result.ok && sealedInside.length) toast.info('Published as a sealed node', { message: `It’s built from ${sealedInside.map(l => `“${l}”`).join(', ')}, from a sealed node pack, so its code stays hidden too.` });
     // Instances of a re-published node pick up the new function on the next compile.
     get().compile();
     return result;
@@ -2867,22 +2876,32 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   exportUserNodes: async (ids) => {
-    // Sharing nodes as a file is making a node pack: Pro. Importing one is Free.
+    // Sharing nodes as a file is making a node pack (Pro; importing one is Free), and node types
+    // only leave as a signed .playfile pack (docs/accounts-and-plans.md decision 5): the dialog
+    // asks whether to seal it, then writes it.
     if (!requireFeature('nodes.pack')) return { ok: false, cancelled: true, error: 'Making node packs is part of Pro' };
-    const payload = exportUserNodes(ids);
-    if (payload.nodes.length === 0) return { ok: false, error: 'No node types to export yet.' };
-    const name = payload.nodes.length === 1 ? `${labelToSlug(payload.nodes[0].label)}.node.json` : 'my-nodes.json';
-    return saveTextFile(JSON.stringify(payload, null, 2), name);
+    if (exportUserNodes(ids).nodes.length === 0) return { ok: false, error: 'No node types to export yet.' };
+    const { openNodePackDialog } = await import('../playfile/app');
+    openNodePackDialog(ids);
+    return { ok: true };
   },
 
   importUserNodesFromFile: async () => {
     let json: string | null;
     try {
-      json = await openTextFile('.json');
+      const picked = await openBinaryFile(`${CONTAINER_ACCEPT},.json`);
+      if (!picked) return CANCELLED;
+      // A node pack: its preview says who signed it and what's sealed, then imports.
+      if (isPlayfile(picked.bytes)) {
+        const { openPlayfileBytes } = await import('../playfile/app');
+        const opened = await openPlayfileBytes(picked.name, picked.bytes);
+        return opened ? { ok: true, deferred: true } : CANCELLED;
+      }
+      // Older node files: plain JSON, still read.
+      json = new TextDecoder().decode(picked.bytes);
     } catch (e) {
       return { ok: false, error: errorMessage(e) };
     }
-    if (json === null) return CANCELLED;
     const r = await importUserNodes(json);
     if (!r.ok) return { ok: false, error: r.error ?? 'Import failed' };
     get().compile();
@@ -4621,14 +4640,19 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return saveTextFile(buildPlayHtml(input, options), `${base}${options.mode === 'background' ? '-background' : ''}.html`, 'text/html');
   },
 
-  exportPlayFile: async () => {
+  graphFileJson: (asPlay) => {
     const { nodes, looseGroups, play, datasets } = get();
+    if (!asPlay) return JSON.stringify({ nodes, looseGroups, ...(isPlayRecordEmpty(play) ? {} : { play }), ...datasetsField(datasets), layout: LAYOUT_VERSION }, null, 2);
     const live = new Map<string, number | number[]>();
     for (const c of play.controls) {
       const v = playEngine.liveValue(c.id);
       if (v !== undefined) live.set(c.id, v);
     }
-    const json = JSON.stringify({ kind: PLAY_FILE_KIND, nodes: bakeControlValues(nodes, play, live), looseGroups, play: bakeLayerValues(play, live), ...datasetsField(datasets), layout: LAYOUT_VERSION }, null, 2);
+    return JSON.stringify({ kind: PLAY_FILE_KIND, nodes: bakeControlValues(nodes, play, live), looseGroups, play: bakeLayerValues(play, live), ...datasetsField(datasets), layout: LAYOUT_VERSION }, null, 2);
+  },
+
+  exportPlayFile: async () => {
+    const json = get().graphFileJson(true);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     let name = 'play-file';
     if (!isTauri) {
@@ -4971,8 +4995,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   exportGraph: async () => {
-    const { nodes, looseGroups, play, datasets } = get();
-    const json = JSON.stringify({ nodes, looseGroups, ...(isPlayRecordEmpty(play) ? {} : { play }), ...datasetsField(datasets), layout: LAYOUT_VERSION }, null, 2);
+    const json = get().graphFileJson(false);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     let name = 'shader-graph';
     if (!isTauri) {
