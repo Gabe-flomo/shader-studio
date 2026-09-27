@@ -67,11 +67,11 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         font: `12.5px ${fontFamily.ui}`, userSelect: 'none',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: compact ? 'auto' : 250, flexShrink: 0 }}>
-        <span style={{ width: 26, height: 26, borderRadius: radius.md, background: tk.ink.base, color: tk.ink.text, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: compact ? 'auto' : 250, flexShrink: compact ? 0 : 1, minWidth: compact ? undefined : 36, overflow: 'hidden' }}>
+        <span style={{ width: 26, height: 26, flexShrink: 0, borderRadius: radius.md, background: tk.ink.base, color: tk.ink.text, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="presets" size={13} />
         </span>
-        {!compact && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em' }}>Playfield</span>}
+        {!compact && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Playfield</span>}
       </div>
 
       <div role="tablist" style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover }}>
@@ -86,7 +86,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
               style={{
                 padding: compact ? '6px 10px' : '6px 14px', borderRadius: 7, border: 0, cursor: 'pointer',
                 background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
-                color: on ? tk.text.primary : tk.text.faint, font: `${on ? 600 : 500} 13px ${fontFamily.ui}`,
+                color: on ? tk.text.primary : tk.text.faint, font: `${on ? 600 : 500} 13px ${fontFamily.ui}`, whiteSpace: 'nowrap',
               }}
             >
               {t.label}
