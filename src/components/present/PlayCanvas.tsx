@@ -21,6 +21,7 @@ import type { ScriptEdits } from '../../present/liveScript';
 import { sourceLimits } from '../../present/snapshot';
 import { aspectRatio, type BlockAspect, type PresentSource } from '../../types/presentation';
 import { DEFAULT_EMBED, buildPlayHtml, playUsesCamera } from '../../play/exportHtml';
+import { playUses3D, useThreeSource } from '../../play/threeSource';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
@@ -123,9 +124,11 @@ export function PlayCanvas({ slotId, source, aspect, pointer, startTime, paused,
 
   // Someone else's Script layers run in a sandboxed page of their own; an interactive block's controls come with it (that page's panel).
   const withPanel = !!onMount;
-  const frameHtml = useMemo(() => (framed && live && bundle
+  // A 3D Script layer: the framed page carries three.js, so it waits for it to load.
+  const threeReady = useThreeSource(!!framed && !!bundle && playUses3D(bundle.play));
+  const frameHtml = useMemo(() => (framed && live && bundle && threeReady
     ? buildPlayHtml(bundle, withPanel ? { ...DEFAULT_EMBED, mode: 'player', fit: 'cover', host: true } : { ...DEFAULT_EMBED, mode: 'background', fit: 'cover', followPage: false, markers: false, host: true })
-    : null), [framed, live, bundle, withPanel]);
+    : null), [framed, live, bundle, withPanel, threeReady]);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const frameReady = useRef(false);
 

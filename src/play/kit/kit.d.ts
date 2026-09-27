@@ -1,4 +1,8 @@
-import type { PlayLayer, PlayRecord, ActionKind } from '../../types/play';
+import type { PlayLayer, PlayRecord, ActionKind, BackgroundItem } from '../../types/play';
+import type { BqPlan } from './queue.js';
+import type { KitBackground } from './layers.js';
+export type { KitBackground } from './layers.js';
+import type { HdState } from './hands.js';
 
 export interface KitPointer { x: number; y: number; over: boolean; down: boolean }
 export interface KitAudio { wave: Float32Array | null; freq: Float32Array | null; sampleRate: number }
@@ -16,6 +20,8 @@ export interface KitEnv {
   /** Exporting with a transparent background: don't paint the backdrop. */
   transparent?: boolean;
   backdrop: [number, number, number];
+  /** An image, a video or a colour in place of the shader: painted under the layers, and what they read as the picture (`gl` is then ignored). */
+  background?: KitBackground | null;
   audio: KitAudio | null;
   /** An audio layer's sound: a song loaded into it, or the live input. Falls back to `audio`. */
   audioFor?: (l: PlayLayer) => KitAudio | null;
@@ -27,7 +33,24 @@ export interface KitEnv {
   shaderTap?: (tap: ShaderTap) => void;
   /** A Script layer compiled or ran: null clears its error, a string is the message shown under its code. */
   scriptStatus?: (layerId: string, error: string | null) => void;
+  /** Hand tracking: a landmark on the picture for a null following a hand (null while that hand is out of view). */
+  hand?: (side: string, point: number) => { x: number; y: number } | null;
+  /** Hand tracking: draw the hands' skeleton with the markers (null or absent: don't). */
+  hands?: { state: HdState; colour: [number, number, number] } | null;
+  /**
+   * Background layer: a graph source's picture this frame (the host rendered it), or null.
+   * For `this` graph null means `gl` holds it.
+   */
+  graphFrame?: (item: BackgroundItem) => CanvasImageSource | null;
+  /** Background layer: a video source's element, kept on the clock by the host (null while it has none). */
+  video?: (item: BackgroundItem) => HTMLVideoElement | null;
+  /** Background layer: the host may draw one untransformed graph straight to the GL canvas (see BqPlan.direct). */
+  allowDirect?: boolean;
+  /** three.js for 3D Script layers (the three-slim.js set); without it they wait and draw nothing. */
+  three?: unknown;
 }
+
+export type { BqPlan } from './queue.js';
 
 /** What the graph's Layers node reads: colour at half resolution, and a 16-bit packed distance grid (row 0 at the top). */
 export interface ShaderTap { color: HTMLCanvasElement; field: Uint8Array; gw: number; gh: number }
@@ -37,6 +60,12 @@ export interface LayerKit {
   act(a: { do: ActionKind; layerId: string; amount: number }): void;
   shapeAt(record: PlayRecord, x: number, y: number, aspect: number, value: (layer: PlayLayer, key: string) => number): string | null;
   isAnimated(record: PlayRecord): boolean;
+  /**
+   * The Background layer's plan for this frame (null without one): what the
+   * host must render first (graphs) and keep playing (videos). Carries out
+   * Change background actions queued since the last frame.
+   */
+  background(record: PlayRecord, env: Pick<KitEnv, 'time' | 'value' | 'allowDirect'>): BqPlan | null;
   /** Forget all state; `seed` makes the layers' random choices repeatable (a take). */
   reset(seed?: number): void;
 }

@@ -95,6 +95,16 @@ export async function registerUserNode(def: UserNodeDefinition, { persist = true
   return { ok: true };
 }
 
+/**
+ * Build every user node's definition again from its saved source (Rebuild). The list and its
+ * version stay as they are: only what the compiler reads is refreshed.
+ */
+export function recompileUserNodes(): void {
+  ensureLoaded();
+  for (const [id, def] of defs) compiled.set(id, userNodeToDefinition(def));
+  if (transient) transient = { def: transient.def, compiled: userNodeToDefinition(transient.def) };
+}
+
 export function unregisterUserNode(id: string): void {
   ensureLoaded();
   defs.delete(id);

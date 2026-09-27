@@ -6,7 +6,8 @@
  */
 import { useSyncExternalStore } from 'react';
 
-export interface SavedScript { id: string; name: string; code: string; clear: boolean; readPicture: boolean; savedAt: number }
+/** A sketch you kept as a starter; `mode` is 3d for a 3D sketch (absent in ones saved before 3D: 2d). */
+export interface SavedScript { id: string; name: string; code: string; clear: boolean; readPicture: boolean; mode: '2d' | '3d'; savedAt: number }
 
 const KEY = 'shader-studio:play:savedScripts';
 const listeners = new Set<() => void>();
@@ -17,7 +18,7 @@ function read(): SavedScript[] {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '[]');
     cache = Array.isArray(raw) ? raw.filter((s): s is SavedScript => !!s && typeof s.id === 'string' && typeof s.name === 'string' && typeof s.code === 'string')
-      .map(s => ({ ...s, clear: s.clear !== false, readPicture: !!s.readPicture, savedAt: typeof s.savedAt === 'number' ? s.savedAt : 0 })) : [];
+      .map(s => ({ ...s, clear: s.clear !== false, readPicture: !!s.readPicture, mode: s.mode === '3d' ? '3d' as const : '2d' as const, savedAt: typeof s.savedAt === 'number' ? s.savedAt : 0 })) : [];
   } catch { cache = []; }
   return cache;
 }
@@ -30,10 +31,10 @@ function write(next: SavedScript[]) {
 export function listSavedScripts(): SavedScript[] { return read(); }
 
 /** Save (or overwrite, by name) a sketch as a starter. Returns the entry. */
-export function saveScript(name: string, code: string, settings: { clear: boolean; readPicture: boolean }): SavedScript {
+export function saveScript(name: string, code: string, settings: { clear: boolean; readPicture: boolean; mode?: '2d' | '3d' }): SavedScript {
   const trimmed = name.trim() || 'Untitled sketch';
   const existing = read().find(s => s.name.toLowerCase() === trimmed.toLowerCase());
-  const entry: SavedScript = { id: existing?.id ?? `sk_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: trimmed, code, clear: settings.clear, readPicture: settings.readPicture, savedAt: Date.now() };
+  const entry: SavedScript = { id: existing?.id ?? `sk_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: trimmed, code, clear: settings.clear, readPicture: settings.readPicture, mode: settings.mode === '3d' ? '3d' : '2d', savedAt: Date.now() };
   write([...read().filter(s => s.id !== entry.id), entry].sort((a, b) => a.name.localeCompare(b.name)));
   return entry;
 }

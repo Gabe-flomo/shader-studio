@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import type { Tone } from './tone';
+import { useActivityStore } from './activityStore';
 
-export interface ToastAction { label: string; onClick: () => void }
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+  /** Whether the button still applies, asked when the History panel's Activity log offers it later. */
+  stillValid?: () => boolean;
+}
 
 export interface Toast {
   id: number;
@@ -13,6 +19,8 @@ export interface Toast {
   action?: ToastAction;
   /** Stay until dismissed, like an error (for a notice that asks for something, like a reload). */
   sticky?: boolean;
+  /** Its entry in the Activity log (History panel). */
+  logId?: number;
 }
 
 interface ToastState {
@@ -28,7 +36,9 @@ export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   push: (t) => {
     const id = nextId++;
-    set(s => ({ toasts: [...s.toasts, { ...t, id }].slice(-MAX_VISIBLE) }));
+    // Every notice is also kept in the Activity log, so one that faded can still be read
+    const logId = useActivityStore.getState().add(t);
+    set(s => ({ toasts: [...s.toasts, { ...t, id, logId }].slice(-MAX_VISIBLE) }));
     return id;
   },
   dismiss: (id) => set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })),

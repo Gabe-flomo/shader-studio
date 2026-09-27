@@ -7,7 +7,7 @@
  * fires. The envelope finishes its attack even if the gate closed during it,
  * so a quick tap is a full hit rather than a flicker.
  */
-import type { NoiseType, TriggerMode, TriggerSpec } from '../types/play';
+import type { FireSpec, NoiseType, TriggerMode, TriggerSpec } from '../types/play';
 
 export interface TriggerParams {
   mode: TriggerMode;
@@ -44,7 +44,86 @@ export function triggerKey(t: TriggerSpec): string {
     case 'beat': return `beat:${t.bpm}:${t.beats}`;
     case 'audio': return `audio:${t.band}:${t.threshold}`;
     case 'zone': return t.event === 'fill' ? `zone:${t.layerId}:fill:${t.threshold}` : `zone:${t.layerId}:${t.event}`;
+    case 'hand': return `hand:${t.side}:${t.gesture}`;
+    case 'proximity': return `prox:${t.a}:${t.b}:${t.when}:${t.distance}:${t.margin}`;
   }
+}
+
+// ── Firing modes (once, held, every N, on release) ──────────────────────────
+
+/** What a firing mode remembers between frames. */
+export interface FireState {
+  /** Presses seen so far. */
+  seen: number;
+  /** Whether the gate was open last frame. */
+  held: boolean;
+  /** Every: frames or seconds since the last fire. */
+  since: number;
+}
+
+export function newFireState(presses = 0, gate = false): FireState {
+  return { seen: presses, held: gate, since: 0 };
+}
+
+/**
+ * How many times a trigger fires this frame. `presses` is the hub's running
+ * count, `gate` whether it is held now, `dt` the frame step in seconds.
+ *   once     each new press (today's behaviour)
+ *   held     1 every frame while held, and once for a tap that came and went between frames
+ *   every    1 on the press, then 1 each time `every` frames or seconds have passed while held
+ *   release  each let-go: the gate closing, or a tap that came and went between frames
+ * Callers cap the count (a stalled tab mustn't fire a hundred bursts at once).
+ */
+export function stepFire(st: FireState, fire: FireSpec | undefined, presses: number, gate: boolean, dt: number): number {
+  const fresh = Math.max(0, presses - st.seen);
+  st.seen = presses;
+  const was = st.held;
+  st.held = gate;
+  switch (fire?.mode ?? 'once') {
+    case 'once':
+      return fresh;
+    case 'release':
+      // Held before + pressed since − still held = let-goes this frame.
+      return Math.max(0, (was ? 1 : 0) + fresh - (gate ? 1 : 0));
+    case 'held':
+      return gate || fresh > 0 ? 1 : 0;
+    case 'every': {
+      const f = fire as FireSpec;
+      if (fresh > 0) { st.since = 0; return 1; }
+      if (!gate) { st.since = 0; return 0; }
+      st.since += f.unit === 'frames' ? 1 : dt;
+      const period = f.unit === 'frames' ? Math.max(1, Math.round(f.every)) : Math.max(0.01, f.every);
+      // A small tolerance so 0.1 s at 60 fps (6 frames of 1/60) isn't a frame late from rounding.
+      if (st.since < period - 1e-6) return 0;
+      const n = Math.floor((st.since + 1e-6) / period);
+      st.since -= n * period;
+      return n;
+    }
+  }
+}
+
+/** Does this mode keep firing while the trigger is held (so the render loop has to keep drawing)? */
+export function firesWhileHeld(fire: FireSpec | undefined): boolean {
+  return fire?.mode === 'held' || fire?.mode === 'every';
+}
+
+// ── Proximity ───────────────────────────────────────────────────────────────
+
+/**
+ * A proximity trigger's gate this frame, given whether it was open and the
+ * distance now (null while an anchor is missing: a hand out of view closes
+ * it). Closer: opens below `distance`, closes above `distance + margin`.
+ * Farther: opens above `distance`, closes below `distance - margin`.
+ */
+export function proximityGate(open: boolean, d: number | null, when: 'closer' | 'farther', distance: number, margin: number): boolean {
+  if (d === null) return false;
+  if (when === 'closer') return open ? d <= distance + margin : d < distance;
+  return open ? d >= distance - margin : d > distance;
+}
+
+/** Distance between two points on the picture (0..1, y up) in picture heights. */
+export function anchorDistance(a: { x: number; y: number }, b: { x: number; y: number }, aspect: number): number {
+  return Math.hypot((a.x - b.x) * aspect, a.y - b.y);
 }
 
 /** A beat trigger's press count and gate at `time` seconds: one press per `beats` beats, gate open for the first quarter (≤ 120 ms). */

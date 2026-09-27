@@ -9,6 +9,13 @@
  *   passes: { stateful, echo: { copies, delay } | null, particles: [{ vertexShader, fragmentShader, count, shape }] }
  *   media:  { textures: { uniform: { src } }, videos: { uniform: { src, loop, speed } },
  *             audio: [{ id, src, uniforms, bands, range, mode }] }   (src: a data URL, or null)
+ *   play.display.source 'image' | 'video' | 'colour': that background (display.image,
+ *             display.video, display.backdrop) in place of the shader, which then never
+ *             compiles or draws; the layers read the background as the picture
+ *   play.layers[0] a Background layer: its queue decides instead (the layer kit's queue.js
+ *             says what shows); the page's own shader runs only while "this graph" shows
+ *   backgroundGraphs: { [sourceId]: { fragmentShader, uniforms } }  the queue's other
+ *             graphs, each linked on first show and drawn only while it shows
  * options: {
  *   mode: 'player' | 'background',   player shows the controls; background is the picture only
  *   fit: 'contain' | 'cover',        contain keeps the exported shape (letterbox); cover fills the box
@@ -53,11 +60,17 @@
  * from their embedded song or the live input. A MIDI Input node's outputs
  * stay at rest.
  *
+ * Hand tracking runs only in pages exported with "Include hand tracking": the
+ * bundle's `hands` then carries MediaPipe and the hand model (gzipped), which
+ * the first Enable hands click unpacks into a worker (ShaderStudioPlay.
+ * enableHands() does the same for a host's own button). The landmarks are
+ * read by the kit's hands.js, the same code the app runs.
+ *
  * The trigger, noise and envelope maths mirror src/play/triggers.ts.
  */
 (function () {
   'use strict';
-  if (window.ShaderStudioPlay && window.ShaderStudioPlay.version >= 5) return;
+  if (window.ShaderStudioPlay && window.ShaderStudioPlay.version >= 6) return;
 
   const CSS = `
 .ssp{display:flex;width:100%;height:100%;min-height:0;box-sizing:border-box;font:13px/1.4 system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#e6e7ec}
@@ -122,9 +135,40 @@
     return x;
   }
   function triggerKey(t) {
-    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; }
+    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; }
     return '';
   }
+  // Firing modes (once, held, every N frames or seconds, on release): how many times a trigger fires this frame.
+  function stepFire(st, fire, presses, gate, dt) {
+    const fresh = Math.max(0, presses - st.seen); st.seen = presses;
+    const was = st.held; st.held = gate;
+    const mode = fire && fire.mode ? fire.mode : 'once';
+    if (mode === 'once') return fresh;
+    if (mode === 'release') return Math.max(0, (was ? 1 : 0) + fresh - (gate ? 1 : 0));
+    if (mode === 'held') return gate || fresh > 0 ? 1 : 0;
+    if (fresh > 0) { st.since = 0; return 1; }
+    if (!gate) { st.since = 0; return 0; }
+    st.since += fire.unit === 'frames' ? 1 : dt;
+    const period = fire.unit === 'frames' ? Math.max(1, Math.round(fire.every)) : Math.max(0.01, fire.every);
+    if (st.since < period - 1e-6) return 0;
+    const n = Math.floor((st.since + 1e-6) / period); st.since -= n * period;
+    return n;
+  }
+  // A firing-mode slot per action or trigger mapping; a changed mode starts from "nothing yet".
+  function fireSlot(map, id, t, presses, gate) {
+    const mode = t.fire && t.fire.mode ? t.fire.mode : 'once';
+    const slot = map.get(id);
+    if (slot && slot.mode === mode) return { slot, fresh: false };
+    const made = { mode, st: { seen: presses, held: gate, since: 0 }, count: 0 };
+    map.set(id, made);
+    return { slot: made, fresh: true };
+  }
+  function proximityGate(open, d, when, distance, margin) {
+    if (d === null) return false;
+    if (when === 'closer') return open ? d <= distance + margin : d < distance;
+    return open ? d >= distance - margin : d > distance;
+  }
+  function handAnchorOf(ref) { const m = /^hand:(left|right|any):(\d{1,2})$/.exec(ref); return m && +m[2] <= 20 ? { side: m[1], point: +m[2] } : null; }
   function beatAt(bpm, beats, time) {
     const period = (60 / Math.max(1, bpm)) * Math.max(0.0625, beats);
     const count = Math.floor(time / period) + 1;
@@ -164,6 +208,14 @@
     // WebGL1: fwidth and friends are an extension there.
     if (!vertex && /\b(dFdx|dFdy|fwidth)\b/.test(src) && !/#extension\s+GL_OES_standard_derivatives/.test(src) && derivatives()) return '#extension GL_OES_standard_derivatives : enable\n' + src;
     return src;
+  }
+  // With an image, a video or a colour background the graph's shader is never compiled: this stands in, and never draws.
+  const BG_ONLY_FRAG = 'precision mediump float;\nvoid main(){ gl_FragColor = vec4(0.0); }';
+  /** Where a video background is at `time` seconds (types/play.ts videoTimeAt). */
+  function videoTimeAt(time, duration, rate, loop) {
+    if (!(duration > 0) || !isFinite(duration)) return 0;
+    const t = Math.max(0, time) * (rate > 0 ? rate : 1);
+    return loop ? t % duration : Math.min(t, Math.max(0, duration - 0.001));
   }
   // The app's dithering blit (ShaderCanvas BLIT_FRAG): a float target to 8 bits without banding.
   const BLIT_FRAG = `#ifdef GL_FRAGMENT_PRECISION_HIGH
@@ -360,6 +412,14 @@ void main() {
     // The layers are this mount's own copies: dragging a null or replacing a script never reaches the bundle.
     const play0 = B.play || { controls: [], mappings: [], layers: [] };
     const play = Object.assign({}, play0, { layers: (play0.layers || []).map(l => Object.assign({}, l)) });
+    // Play's background: an image, a video or a colour in place of the shader. Then the graph never
+    // compiles or draws here; the layer kit paints the background and reads it as the picture.
+    // A Background layer (always the first) decides instead: the shader runs only while "this graph" shows.
+    const queueLayer = play.layers[0] && play.layers[0].kind === 'background' ? play.layers[0] : null;
+    const queueHasThis = !!queueLayer && (queueLayer.sources || []).some(s => s.kind === 'graph' && s.graph === 'this');
+    const bgDisp = queueLayer ? {} : play.display || {};
+    const bgSource = bgDisp.source === 'image' || bgDisp.source === 'video' || bgDisp.source === 'colour' ? bgDisp.source : 'shader';
+    const bgOnly = queueLayer ? !queueHasThis : bgSource !== 'shader';
     const onScript = typeof opts.onScript === 'function' ? opts.onScript : null;
     const scriptErrors = new Map();
     injectCss();
@@ -388,8 +448,8 @@ void main() {
     const gl2 = !!gl;
     if (!gl) gl = glCanvas.getContext('webgl', ctxOpts);
     if (!gl) { stage.append(el('div', 'ssp-error', 'WebGL is not available in this browser.')); return { destroy() {} }; }
-    const passes = B.passes || {};
-    const media = B.media || {};
+    const passes = bgOnly ? {} : B.passes || {};
+    const media = bgOnly ? { audio: (B.media || {}).audio } : B.media || {};
     const stateful = !!passes.stateful;
     const echoCfg = passes.echo && passes.echo.copies > 0 ? passes.echo : null;
     const particleDefs = passes.particles || [];
@@ -409,7 +469,7 @@ void main() {
     let program, blitProgram = null;
     const particles = [];
     try {
-      program = link(VS, B.fragmentShader);
+      program = link(VS, bgOnly ? BG_ONLY_FRAG : B.fragmentShader);
       if (stateful || echoCfg) blitProgram = link(VS, BLIT_FRAG);
       for (const ps of particleDefs) particles.push(Object.assign({ program: link(particleVertex(ps.vertexShader), ps.fragmentShader) }, ps));
     } catch (e) { stage.append(el('div', 'ssp-error', 'The shader did not compile here: ' + e.message)); return { destroy() {} }; }
@@ -459,7 +519,7 @@ void main() {
       gl.activeTexture(gl.TEXTURE0 + u); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(l, u);
     };
     // Text nodes read the same 16×16 ASCII atlas the app builds (only drawn when the shader reads it).
-    const fontTex = (B.fragmentShader.match(/\bu_fontTexture\b/g) || []).length > 1 ? texture(gl.LINEAR) : white;
+    let fontTex = !bgOnly && (B.fragmentShader.match(/\bu_fontTexture\b/g) || []).length > 1 ? texture(gl.LINEAR) : white;
     if (fontTex !== white) upload(fontTex, fontAtlas(), false);
 
     // Render targets for feedback and echo: half float where the GPU can draw into it (as the app), else 8 bit.
@@ -539,6 +599,107 @@ void main() {
       e.addEventListener('seeked', () => { needsDraw = true; });
       v.el = e;
     }
+    // The background's image or video (a colour needs neither). The video follows the page's clock, as in the app.
+    let bgEl = null, bgVideo = null, bgMuted = true;
+    const bgVid = bgDisp.video || {};
+    if (bgSource === 'image' && bgDisp.image && bgDisp.image.src) {
+      bgEl = new Image(); bgEl.onload = () => { needsDraw = true; }; bgEl.src = bgDisp.image.src;
+    } else if (bgSource === 'video' && bgVid.src) {
+      const e = document.createElement('video');
+      e.muted = true; e.loop = bgVid.loop !== false; e.playsInline = true; e.preload = 'auto';
+      e.setAttribute('playsinline', ''); e.setAttribute('muted', '');
+      const url = dataToBlobUrl(bgVid.src); if (url !== bgVid.src) blobUrls.push(url);
+      e.src = url;
+      e.addEventListener('loadeddata', () => { needsDraw = true; });
+      e.addEventListener('seeked', () => { needsDraw = true; });
+      bgEl = bgVideo = e;
+      // Sound only after the visitor has clicked (browsers block it before): until then it plays muted.
+      bgMuted = bgVid.muted !== false;
+    }
+    const background = bgOnly && !queueLayer ? { el: bgEl, fit: bgDisp.fit === 'contain' || bgDisp.fit === 'stretch' ? bgDisp.fit : 'cover', colour: bgDisp.backdrop || [0, 0, 0] } : null;
+    const followBackground = run => { if (bgVideo) followVideo(bgVideo, bgVid.rate, bgVid.loop !== false, run); };
+    // Keep a video on the page's clock (as the app's play/background.ts).
+    const followVideo = (v, rateIn, loop, run) => {
+      if (!v || v.readyState < 1) return;
+      const rate = rateIn > 0 ? rateIn : 1;
+      if (v.playbackRate !== rate) v.playbackRate = rate;
+      const target = videoTimeAt(time, v.duration, rate, loop), d = v.duration, diff = Math.abs(v.currentTime - target);
+      // Without a known length it just plays (videos recorded in a browser can say Infinity).
+      const known = isFinite(d) && d > 0;
+      const off = !known ? 0 : loop ? Math.min(diff, d - diff) : diff;
+      if (run && (loop || !known || target < d - 0.01)) {
+        if (v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); }
+        if (off > 0.3 && !v.seeking) v.currentTime = target;
+      } else {
+        if (!v.paused) v.pause();
+        if (off > 0.02 && !v.seeking) v.currentTime = target;
+      }
+    };
+    // The Background layer's queue: its videos (made when one first shows, following the clock only
+    // while it shows), its other graphs as programs of their own, and the pictures the layer kit composes.
+    const qGraphs = B.backgroundGraphs || {};
+    const qProgs = new Map(), qFrames = new Map(), qVideos = new Map();
+    let qSound = false;
+    const qVideo = item => {
+      if (!item.src) return null;
+      let e = qVideos.get(item.id);
+      if (!e) {
+        e = document.createElement('video');
+        e.muted = true; e.loop = item.loop !== false; e.playsInline = true; e.preload = 'auto';
+        e.setAttribute('playsinline', ''); e.setAttribute('muted', '');
+        const url = dataToBlobUrl(item.src); if (url !== item.src) blobUrls.push(url);
+        e.src = url;
+        e.addEventListener('loadeddata', () => { needsDraw = true; });
+        e.addEventListener('seeked', () => { needsDraw = true; });
+        qVideos.set(item.id, e);
+      }
+      return e;
+    };
+    const followQueue = (plan, run) => {
+      const showing = new Map(plan.items.filter(i => i.item.kind === 'video').map(i => [i.item.id, i.item]));
+      for (const [id, v] of qVideos) {
+        const item = showing.get(id);
+        if (!item) { if (!v.paused) v.pause(); continue; }
+        // Sound only after the visitor has clicked (browsers block it before).
+        const muted = item.muted !== false || !qSound;
+        if (v.muted !== muted) v.muted = muted;
+        followVideo(v, item.rate, item.loop !== false, run);
+      }
+    };
+    const qProgram = id => {
+      if (qProgs.has(id)) return qProgs.get(id);
+      const g = qGraphs[id];
+      let e = null;
+      if (g) {
+        try {
+          const p = link(VS, g.fragmentShader);
+          e = { program: p, locs: new Map(), uniforms: g.uniforms || {}, font: (g.fragmentShader.match(/\bu_fontTexture\b/g) || []).length > 1 };
+        } catch (err) { e = null; }
+      }
+      qProgs.set(id, e);
+      return e;
+    };
+    const drawQueueGraph = e => {
+      const W = glCanvas.width, H = glCanvas.height;
+      const ql = n => { if (!e.locs.has(n)) e.locs.set(n, gl.getUniformLocation(e.program, n)); return e.locs.get(n); };
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, W, H);
+      gl.useProgram(e.program);
+      setUniformAt(ql('u_time'), time);
+      setUniformAt(ql('u_resolution'), [W, H]);
+      setUniformAt(ql('u_mouse'), [mouse.x * W, mouse.y * H]);
+      for (const k in e.uniforms) setUniformAt(ql(k), e.uniforms[k]);
+      const fl = ql('u_fontTexture');
+      if (fl) { if (e.font && fontTex === white) { fontTex = texture(gl.LINEAR); upload(fontTex, fontAtlas(), false); } gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fontTex); gl.uniform1i(fl, 0); }
+      drawQuad();
+    };
+    const captureQueue = id => {
+      let c = qFrames.get(id);
+      if (!c) { c = document.createElement('canvas'); qFrames.set(id, c); }
+      if (c.width !== glCanvas.width || c.height !== glCanvas.height) { c.width = glCanvas.width; c.height = glCanvas.height; }
+      const x = c.getContext('2d'); x.clearRect(0, 0, c.width, c.height);
+      try { x.drawImage(glCanvas, 0, 0); } catch (err) { /* nothing to copy */ }
+    };
     const uploadVideos = () => {
       for (const v of videos) {
         const e = v.el;
@@ -579,7 +740,7 @@ void main() {
       gl.disableVertexAttribArray(1);
     };
     // The graph's Layers node: the layers' colour and distance field, uploaded after each frame's layers are drawn.
-    const usesLayersNode = /\bu_layers(Field)?\b/.test(B.fragmentShader);
+    const usesLayersNode = !bgOnly && /\bu_layers(Field)?\b/.test(B.fragmentShader);
     let layersTap = null, layersColourTex = null, layersFieldTex = null, layersFieldSize = [0, 0];
     if (usesLayersNode) {
       const mk = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0])); return t; };
@@ -661,11 +822,11 @@ void main() {
         case 'live': { if (shared.live.status !== 'on') return null; updateLive(); return Math.max(0, Math.min(1, shared.live.v[s.band] * s.gain)); }
         case 'osc': { const a = shared.osc.get(s.address); if (!a) return null; const raw = a[s.arg]; const v = typeof raw === 'number' ? raw : typeof raw === 'boolean' ? (raw ? 1 : 0) : null; return v === null ? null : Math.max(0, Math.min(1, (v - s.min) / (s.max - s.min))); }
         case 'null': { const l = layersById.get(s.layerId); if (!l) return null; return Math.max(0, Math.min(1, layerValue(l.id, s.axis, l[s.axis]))); }
+        case 'hand': return handSt ? HK.read(handSt, s.side, s.read, s.point, s.axis, s.gesture) : null;
         case 'sensor': {
           if (s.read === 'distance') {
-            const a = layersById.get(s.layerId), b = layersById.get(s.otherId);
-            if (!a || !b) return null;
-            return Math.min(1, Math.hypot((value(a, 'x') - value(b, 'x')) * glCanvas.width / Math.max(1, glCanvas.height), value(a, 'y') - value(b, 'y')));
+            const d = s.otherId ? anchorGap(s.layerId, s.otherId) : null;
+            return d === null ? null : Math.min(1, d);
           }
           const v = sensors.get(s.layerId + '::' + s.read);
           return v === undefined ? null : v;
@@ -674,14 +835,36 @@ void main() {
         default: return null;
       }
     }
+    // Where an anchor is (a layer's centre, or a hand's landmark), 0..1 with y up, and how far apart two are in picture heights.
+    const anchorLookup = id => { const l = layersById.get(id); return l ? { layer: l, value: k => value(l, k) } : null; };
+    const reported = k => sensors.get(k);
+    function anchorAt(ref) {
+      const h = handAnchorOf(ref);
+      if (h) return handSt && usesHands ? HK.point(handSt, h.side, h.point) : null;
+      const l = layersById.get(ref);
+      return l && typeof SSKit !== 'undefined' && SSKit.anchor ? SSKit.anchor(l, k => value(l, k), glCanvas.width / Math.max(1, glCanvas.height), reported, anchorLookup) : null;
+    }
+    function anchorGap(a, b) {
+      const pa = anchorAt(a), pb = anchorAt(b);
+      return pa && pb ? Math.hypot((pa.x - pb.x) * glCanvas.width / Math.max(1, glCanvas.height), pa.y - pb.y) : null;
+    }
+    function triggerInput(t) {
+      if (t.on === 'beat') { const b = beatAt(t.bpm, t.beats, time); return { presses: b.count, gate: b.gate }; }
+      const k = triggerKey(t);
+      return { presses: shared.presses.get(k) || 0, gate: (shared.held.get(k) || 0) > 0 };
+    }
+    const mappingFire = new Map(), actionFire = new Map();
     function readTrigger(m, dt) {
       const s = m.source, t = s.trigger;
-      let presses, gate, vel = 1;
-      if (t.on === 'beat') { const b = beatAt(t.bpm, t.beats, time); presses = b.count; gate = b.gate; }
-      else { const k = triggerKey(t); presses = shared.presses.get(k) || 0; gate = (shared.held.get(k) || 0) > 0; if (s.velocity) vel = shared.velocities.get(k) || 1; }
+      const inp = triggerInput(t);
+      const vel = s.velocity && t.on !== 'beat' ? shared.velocities.get(triggerKey(t)) || 1 : 1;
+      // The firing mode turns presses into fires; the envelope, toggle or step counts those.
+      const f = fireSlot(mappingFire, m.id, t, inp.presses, inp.gate);
       let st = trig.get(m.id);
-      if (!st) { st = { seen: presses, value: 0, stage: 'idle', peak: 1, index: -1 }; trig.set(m.id, st); }
-      return stepTrigger(st, s, presses, gate, dt, vel);
+      if (!st) { st = { seen: 0, value: 0, stage: 'idle', peak: 1, index: -1 }; trig.set(m.id, st); }
+      if (f.fresh) st.seen = 0;
+      else f.slot.count += Math.min(4, stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt));
+      return stepTrigger(st, s, f.slot.count, inp.gate, dt, vel);
     }
     const colourBuf = new Map();
     function tickAudioTriggers() {
@@ -695,7 +878,16 @@ void main() {
       }
     }
     // Shape enter / fill triggers: a sensor crossing its threshold is a press (80% hysteresis).
-    const zoneGates = new Set(), actionSeen = new Map();
+    const zoneGates = new Set(), proxGates = new Set();
+    // Proximity: A and B closer (or farther) than the distance is a press; past the margin it lets go.
+    function tickProximityTriggers() {
+      for (const t of allTriggers) {
+        if (t.on !== 'proximity') continue;
+        const k = triggerKey(t), open = proxGates.has(k), on = proximityGate(open, anchorGap(t.a, t.b), t.when, t.distance, t.margin);
+        if (on && !open) { proxGates.add(k); press(k); }
+        else if (!on && open) { proxGates.delete(k); release(k); }
+      }
+    }
     function tickZoneTriggers() {
       for (const t of allTriggers) {
         if (t.on !== 'zone' || t.event === 'click') continue;
@@ -704,20 +896,48 @@ void main() {
         else if (open && v < th * 0.8) { zoneGates.delete(k); release(k); }
       }
     }
-    // Actions (burst, next line, drop…): once per new press of their trigger.
-    function tickActions() {
+    // Hands: this mount's view of the page's tracker (placed where its Camera layer shows the camera), and gesture triggers.
+    const HK = typeof SSKit !== 'undefined' && SSKit.hands ? SSKit.hands : null;
+    const handSt = HK ? HK.create() : null;
+    const handSettings = Object.assign({ smoothing: 0.5, overlay: true, colour: [0.35, 1, 0.75], mirror: true }, play.hands || {});
+    const trigHands = t => t.on === 'hand' || (t.on === 'proximity' && (!!handAnchorOf(t.a) || !!handAnchorOf(t.b)));
+    const usesHands = play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && trigHands(m.source.trigger)) || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!handAnchorOf(m.source.otherId || '')))
+      || actions.some(a => trigHands(a.trigger)) || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
+    if (usesHands && B.hands) shared.hands.assets = B.hands;
+    const handGates = new Set();
+    let handSeq = -1;
+    function tickHands() {
+      if (!handSt || !usesHands) return;
+      const H = shared.hands;
+      if (H.frame && H.seq !== handSeq) {
+        handSeq = H.seq;
+        const picAspect = glCanvas.width / Math.max(1, glCanvas.height), camAspect = H.frame.w / Math.max(1, H.frame.h);
+        HK.update(handSt, H.frame, { picAspect, place: HK.placement(play, value, camAspect, picAspect, handSettings.mirror), smoothing: handSettings.smoothing });
+      }
+      HK.age(handSt, performance.now());
+      for (const t of allTriggers) {
+        if (t.on !== 'hand') continue;
+        const k = triggerKey(t), on = HK.gate(handSt, t.side, t.gesture), open = handGates.has(k);
+        if (on && !open) { handGates.add(k); press(k); }
+        else if (!on && open) { handGates.delete(k); release(k); }
+      }
+    }
+    // Actions (burst, next line, drop…): by their trigger's mode, once per press unless it says every frame, every N or on release.
+    function tickActions(dt) {
       for (const a of actions) {
-        const presses = a.trigger.on === 'beat' ? beatAt(a.trigger.bpm, a.trigger.beats, time).count : shared.presses.get(triggerKey(a.trigger)) || 0;
-        const seen = actionSeen.get(a.id);
-        actionSeen.set(a.id, presses);
-        if (seen === undefined || presses <= seen || !K) continue;
-        for (let i = 0; i < Math.min(4, presses - seen); i++) K.act(a);
+        const inp = triggerInput(a.trigger);
+        const f = fireSlot(actionFire, a.id, a.trigger, inp.presses, inp.gate);
+        if (f.fresh || !K) continue;
+        const n = Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, dt));
+        for (let i = 0; i < n; i++) K.act(a);
       }
     }
     function tickMappings(dt) {
+      tickHands();
       tickAudioTriggers();
       tickZoneTriggers();
-      tickActions();
+      tickProximityTriggers();
+      tickActions(dt);
       const driven = new Set();
       let moved = false;
       for (const m of play.mappings) {
@@ -820,6 +1040,8 @@ void main() {
     const clampedMouse = (cx, cy) => { const u = toUnit(cx, cy); mouse.x = Math.max(0, Math.min(1, u.x)); mouse.y = Math.max(0, Math.min(1, u.y)); mouse.over = u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1; return u; };
     const listeners = [];
     const on = (target, type, fn, o) => { target.addEventListener(type, fn, o); listeners.push(() => target.removeEventListener(type, fn, o)); };
+    if (bgVideo && !bgMuted) on(window, 'pointerdown', () => { bgVideo.muted = false; }, true);
+    if (queueLayer && (queueLayer.sources || []).some(s => s.kind === 'video' && s.muted === false)) { on(window, 'pointerdown', () => { qSound = true; }, true); on(window, 'keydown', () => { qSound = true; }, true); }
     if (pointerOn) {
       on(stage, 'pointermove', e => {
         const u = clampedMouse(e.clientX, e.clientY);
@@ -914,6 +1136,15 @@ void main() {
         }, () => { b.textContent = 'Camera blocked'; });
         tools.append(b);
       }
+      if (usesHands && B.hands) {
+        const b = el('button', 'ssp-btn', 'Enable hands');
+        b.title = 'Follows your hands with the camera. Everything runs on this device; nothing is uploaded.';
+        const show = s => { b.textContent = s === 'on' ? 'Hands on' : s === 'starting' ? 'Starting…' : s === 'blocked' ? 'Camera blocked' : s === 'unsupported' ? 'No hand tracking here' : s === 'error' ? 'Hands didn’t start' : 'Enable hands'; b.disabled = s === 'on' || s === 'starting' || s === 'unsupported'; };
+        shared.hands.listeners.add(show); listeners.push(() => shared.hands.listeners.delete(show));
+        show(shared.hands.status);
+        b.onclick = () => enableHands();
+        tools.append(b);
+      }
       if (usesTilt && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         const b = el('button', 'ssp-btn', 'Enable motion');
         b.onclick = () => DeviceOrientationEvent.requestPermission().then(() => b.remove());
@@ -976,7 +1207,8 @@ void main() {
     const octx = ovCanvas.getContext('2d');
     const images = new Map();
     const img = src => { if (!src) return null; let i = images.get(src); if (!i) { i = new Image(); i.onload = () => { needsDraw = true; }; i.src = src; images.set(src, i); } return i.complete && i.naturalWidth ? i : null; };
-    const hidden = !!(play.display && play.display.picture === false);
+    // Layers only covers the picture with the backdrop (a colour background is the backdrop already).
+    const hidden = !queueLayer && !!(play.display && play.display.picture === false && bgSource !== 'colour');
     const audioLayer = play.layers.some(l => l.kind === 'audio' && l.visible);
     const pointer = { x: 0.5, y: 0.5, over: false, down: false };
     function drawLayers(dt) {
@@ -988,8 +1220,16 @@ void main() {
       K.frame(octx, play, {
         gl: glCanvas, W, H, dpr, time, dt, value, pointer, markers, editing: false, hidden,
         backdrop: play.display ? play.display.backdrop : [0, 0, 0],
+        background,
+        graphFrame: item => qFrames.get(item.id) || null,
+        video: qVideo,
+        allowDirect: true,
         audio: L.status === 'on' ? { wave: L.wave, freq: L.freq, sampleRate: L.sr } : null,
         camera: camVideo || shared.camera, image: img,
+        hand: handSt && usesHands ? (side, point) => HK.point(handSt, side, point) : undefined,
+        hands: handSt && usesHands && handSettings.overlay && handSt.live ? { state: handSt, colour: handSettings.colour } : null,
+        // three.js for 3D Script layers: the page carries it (SSThree) only when it has one.
+        three: typeof SSThree !== 'undefined' ? SSThree : (window.SSThree || null),
         scriptStatus: (id, err) => { const e = err || null; if (scriptErrors.get(id) === e) return; scriptErrors.set(id, e); if (onScript) { try { onScript(id, e); } catch (x) { /* the host's problem */ } } },
         sensor: (k, v) => sensors.set(k, v),
         override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },
@@ -1052,7 +1292,9 @@ void main() {
       raf = requestAnimationFrame(tick);
       const dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
       lastNow = now;
-      runVideos(playing && !reduced && !document.hidden && !(pauseOffscreen && !onScreen));
+      const running = playing && !reduced && !document.hidden && !(pauseOffscreen && !onScreen);
+      runVideos(running);
+      followBackground(running);
       if ((pauseOffscreen && !onScreen) || document.hidden) return;
       if (reduced && !needsDraw && frame > 0) return;
       if (playing && !reduced) time += dt;
@@ -1064,13 +1306,27 @@ void main() {
       // Feedback and echo change with every frame drawn, so while paused they draw only when something changes (as in the app).
       if (!playing && (stateful || echoCfg) && !needsDraw && !moved && frame > 1) { refreshPanel(now); return; }
       needsDraw = false;
-      uploadVideos();
-      // Reduced motion's still frame of a feedback graph is the picture after its first 1.5 s
-      // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
-      if (reduced && stateful && frame === 1) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
-      drawPicture();
-      if (particles.length) drawParticles();
-      if (play.layers.length || hidden || usesLayersNode) drawLayers(dt);
+      // A Background layer: what shows now (its actions carried out), before anything is drawn.
+      const qPlan = queueLayer && K ? K.background(play, { time, value, allowDirect: true }) : null;
+      if (qPlan) followQueue(qPlan, running);
+      const showsThis = !qPlan || qPlan.items.some(i => i.item.kind === 'graph' && i.item.graph === 'this');
+      if (!bgOnly && showsThis) {
+        uploadVideos();
+        // Reduced motion's still frame of a feedback graph is the picture after its first 1.5 s
+        // (90 frames at 60 fps), which is what the feedback looks like once it has built up.
+        if (reduced && stateful && frame === 1) for (let i = 0; i < 89; i++) { drawPicture(); time += 1 / 60; }
+        drawPicture();
+        if (particles.length) drawParticles();
+        if (qPlan && !qPlan.direct) { const self = qPlan.items.find(i => i.item.kind === 'graph' && i.item.graph === 'this'); if (self) captureQueue(self.item.id); }
+      }
+      if (qPlan) for (const { item } of qPlan.items) {
+        if (item.kind !== 'graph' || item.graph === 'this') continue;
+        const e = qProgram(item.id);
+        if (!e) continue;
+        drawQueueGraph(e);
+        if (!qPlan.direct) captureQueue(item.id);
+      }
+      if (play.layers.length || hidden || usesLayersNode || bgOnly) drawLayers(dt);
       refreshPanel(now);
     }
     raf = requestAnimationFrame(tick);
@@ -1084,6 +1340,8 @@ void main() {
         for (const off of listeners) off();
         shared.instances.delete(inst);
         for (const v of videos) if (v.el) { v.el.pause(); v.el.removeAttribute('src'); v.el.load(); }
+        if (bgVideo) { bgVideo.pause(); bgVideo.removeAttribute('src'); bgVideo.load(); }
+        for (const v of qVideos.values()) { v.pause(); v.removeAttribute('src'); v.load(); }
         for (const u of blobUrls) URL.revokeObjectURL(u);
         if (song.ctx) song.ctx.close();
         const lose = gl.getExtension('WEBGL_lose_context');
@@ -1130,6 +1388,82 @@ void main() {
     };
   }
 
+  // The worker that runs the Hand Landmarker (mirrors src/lib/handWorker.ts): MediaPipe's ES module and
+  // its WebAssembly come in as blob URLs, the model as bytes. MediaPipe's "Left" is the performer's right hand.
+  const HAND_WORKER = [
+    'let lm = null, lastT = 0;',
+    'self.onmessage = async e => {',
+    '  const d = e.data;',
+    '  if (d.type === "init") {',
+    '    try {',
+    '      const V = await import(d.bundle);',
+    '      const make = del => V.HandLandmarker.createFromOptions({ wasmLoaderPath: d.loader, wasmBinaryPath: d.wasm }, { baseOptions: { modelAssetBuffer: d.model, delegate: del }, runningMode: "VIDEO", numHands: 2 });',
+    '      try { lm = await make("GPU"); } catch (x) { lm = await make("CPU"); }',
+    '      self.postMessage({ type: "ready" });',
+    '    } catch (x) { self.postMessage({ type: "failed", message: String(x) }); }',
+    '    return;',
+    '  }',
+    '  if (d.type === "frame") {',
+    '    let hands = [];',
+    '    if (lm) {',
+    '      const t = Math.max(lastT + 1, Math.round(d.t)); lastT = t;',
+    '      try {',
+    '        const r = lm.detectForVideo(d.bitmap, t);',
+    '        hands = r.landmarks.map((p, i) => { const c = (r.handedness[i] || [])[0] || {}; const f = new Float32Array(63); for (let j = 0; j < 21; j++) { f[j * 3] = p[j].x; f[j * 3 + 1] = p[j].y; f[j * 3 + 2] = p[j].z; } return { side: c.categoryName === "Left" ? "right" : "left", score: c.score || 0, lm: f }; });',
+    '      } catch (x) { /* a bad frame: none this time */ }',
+    '    }',
+    '    d.bitmap.close();',
+    '    self.postMessage({ type: "result", t: d.t, w: d.w, h: d.h, hands });',
+    '  }',
+    '};',
+  ].join('\n');
+
+  // One tracker for the page: every mount with hand mappings reads its frames.
+  shared.hands = { status: 'off', frame: null, seq: 0, count: 0, busy: false, sent: 0, worker: null, assets: null, listeners: new Set() };
+  function setHandStatus(s) { shared.hands.status = s; shared.hands.listeners.forEach(f => f(s)); }
+  function gunzip(b64) {
+    const bin = atob(b64), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  }
+  function pumpHands() {
+    const H = shared.hands, v = shared.camera;
+    if (!H.worker || H.busy) return;
+    if (!v || v.readyState < 2 || !v.videoWidth || document.hidden) { setTimeout(pumpHands, 200); return; }
+    const w = Math.min(480, v.videoWidth), h = Math.max(1, Math.round(w * v.videoHeight / v.videoWidth)), t = performance.now();
+    H.busy = true; H.sent = t;
+    createImageBitmap(v, { resizeWidth: w, resizeHeight: h, resizeQuality: 'low' }).then(
+      bmp => H.worker.postMessage({ type: 'frame', bitmap: bmp, t, w: v.videoWidth, h: v.videoHeight }, [bmp]),
+      () => { H.busy = false; setTimeout(pumpHands, 250); });
+  }
+  // Call from a click: the camera opens inside the gesture, then the files unpack and the model loads.
+  function enableHands() {
+    const H = shared.hands, assets = H.assets;
+    if (H.status === 'on' || H.status === 'starting') return Promise.resolve(H.status);
+    if (!assets || typeof DecompressionStream === 'undefined' || typeof Worker === 'undefined' || typeof createImageBitmap === 'undefined') { setHandStatus('unsupported'); return Promise.resolve('unsupported'); }
+    const cam = enableCamera();
+    setHandStatus('starting');
+    return cam.then(c => {
+      if (c !== 'on') { setHandStatus('blocked'); return 'blocked'; }
+      return Promise.all([gunzip(assets.bundle), gunzip(assets.loader), gunzip(assets.wasm), gunzip(assets.model)]).then(([bundle, loader, wasm, model]) => new Promise(resolve => {
+        const url = (data, type) => URL.createObjectURL(new Blob([data], { type }));
+        const w = new Worker(url(HAND_WORKER, 'text/javascript'), { type: 'module' });
+        H.worker = w;
+        w.onmessage = e => {
+          const d = e.data;
+          if (d.type === 'ready') { setHandStatus('on'); pumpHands(); resolve('on'); }
+          else if (d.type === 'failed') { H.worker = null; w.terminate(); setHandStatus('error'); resolve('error'); }
+          else if (d.type === 'result') {
+            H.busy = false; H.frame = { t: d.t, w: d.w, h: d.h, hands: d.hands }; H.seq++; H.count = d.hands.length;
+            setTimeout(pumpHands, Math.max(0, 1000 / 30 - (performance.now() - H.sent)));
+          }
+        };
+        w.onerror = () => { H.worker = null; setHandStatus('error'); resolve('error'); };
+        w.postMessage({ type: 'init', bundle: url(bundle, 'text/javascript'), loader: url(loader, 'text/javascript'), wasm: url(wasm, 'application/wasm'), model: new Uint8Array(model) }, [model]);
+      }));
+    }).catch(() => { setHandStatus('error'); return 'error'; });
+  }
+
   // For a host drawing its own panel: what the panel's Enable MIDI and Listen buttons do, for every mount on the page.
   function enableMidi() {
     if (!navigator.requestMIDIAccess) return Promise.resolve(false);
@@ -1151,7 +1485,7 @@ void main() {
     shared.camera = null; shared.cameraStream = null;
   }
   // internals: the pure GPU and audio helpers, for tests.
-  window.ShaderStudioPlay = { version: 5, mount, enableMidi, listen: startLive, enableCamera, stopCamera, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex } };
+  window.ShaderStudioPlay = { version: 6, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex } };
 
   // A full-page export: mount on #play with the page's options (URL params can override).
   if (window.PLAY_BUNDLE && document.getElementById('play')) {

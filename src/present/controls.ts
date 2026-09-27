@@ -34,7 +34,7 @@ export function mappingWords(m: PlayMapping, play: PlayRecord): string {
     case 'clock': return `Clock ${s.bpm} BPM`;
     case 'noise': return `Noise ${round(s.rate)}/s`;
     case 'midi': return `MIDI ${sourceLabel(s)}`;
-    case 'trigger': return triggerLabel(s.trigger);
+    case 'trigger': return triggerLabel(s.trigger, play.layers);
     case 'live': return `Sound ${s.band === 'level' ? 'level' : s.band}`;
     default: return sourceLabel(s, play.controls, play.layers);
   }

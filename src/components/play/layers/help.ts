@@ -34,13 +34,18 @@ export const ZONE_HELP: Record<ZoneAction, { label: string; body: string }> = {
 export const ACTION_LABELS: Record<BuiltinActionKind, string> = {
   burst: 'Burst particles', scatter: 'Scatter', reset: 'Reset', freeze: 'Freeze / unfreeze',
   next: 'Next line', prev: 'Previous line', shuffle: 'Random line',
-  toggle: 'Show / hide', show: 'Show', hide: 'Hide', drop: 'Drop again', clear: 'Clear strokes',
+  toggle: 'Show / hide', show: 'Show', hide: 'Hide', drop: 'Drop again', clear: 'Clear strokes', goto: 'Go to',
+};
+
+/** Change background: what next, previous, random, go to and reset mean on a Background layer. */
+const BACKGROUND_ACTION_LABELS: Partial<Record<BuiltinActionKind, string>> = {
+  next: 'Next background', prev: 'Previous background', shuffle: 'Random background', goto: 'Go to background', reset: 'Back to Index',
 };
 
 /** The label of an action: a built-in's, or a script button's label (its param label, or the key). */
 export function actionLabel(kind: ActionKind, l?: PlayLayer): string {
   const key = scriptActionKey(kind);
-  if (key === null) return ACTION_LABELS[kind as BuiltinActionKind] ?? kind;
+  if (key === null) return (l?.kind === 'background' ? BACKGROUND_ACTION_LABELS[kind as BuiltinActionKind] : undefined) ?? ACTION_LABELS[kind as BuiltinActionKind] ?? kind;
   const def = l?.kind === 'script' ? l.paramDefs.find(d => d.key === key) : undefined;
   return def?.label ?? key;
 }

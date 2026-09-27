@@ -7,7 +7,7 @@ import { extractScriptParams } from './scriptExamples';
 
 export interface ApplyOptions {
   /** Layer settings a starter expects; when given, every control resets to its declared value. */
-  settings?: { clear: boolean; readPicture: boolean };
+  settings?: { clear: boolean; readPicture: boolean; mode?: '2d' | '3d' };
   /** Starting values by key (a variable turned into a control keeps its own value). */
   startAt?: Record<string, number>;
 }

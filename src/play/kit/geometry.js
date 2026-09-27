@@ -194,3 +194,50 @@ export function geoFieldFromAlpha(data, gw, gh) {
   for (let i = 0; i < gw * gh; i++) mask[i] = data[i * 4 + 3] > 110 ? 1 : 0;
   return geoFieldFromMask(mask, gw, gh);
 }
+
+/**
+ * A layer's anchor: the point proximity triggers and distance sensors measure
+ * from, 0..1 across and up the picture. Always the layer's centre:
+ *   null, text, image, camera, lens, audio   its position (text and images are drawn centred on it)
+ *   shape      box, circle and line: its position; a polygon: its bounds' centre after rotation;
+ *              a layer's shape: that layer's anchor; the picture's bright parts: their centroid (reported)
+ *   cloner     grid and ring: the centre; line: its middle; path and points: the copies' centroid (reported)
+ *   particles, bodies, brush   the centroid of what is alive (reported), none until something is
+ *   script     where the sketch sets s.anchor (reported), else the picture's centre
+ * `value(key)` reads the layer's property now (a mapping may drive it),
+ * `reported(key)` a number the kit reported (`<id>::ax`, `<id>::ay`), and
+ * `lookup(id)` another layer. Null when the layer has no anchor yet.
+ */
+export function geoAnchor(layer, value, aspect, reported, lookup, depth) {
+  if (!layer) return null;
+  const at = () => ({ x: value('x'), y: value('y') });
+  const rep = () => { const x = reported(layer.id + '::ax'), y = reported(layer.id + '::ay'); return typeof x === 'number' && typeof y === 'number' && isFinite(x) && isFinite(y) ? { x, y } : null; };
+  switch (layer.kind) {
+    case 'null': case 'text': case 'image': case 'camera': case 'lens': case 'audio':
+      return at();
+    case 'shape': {
+      if (layer.shape === 'layer') {
+        const src = (depth || 0) < 3 && layer.sourceId ? lookup(layer.sourceId) : null;
+        return src ? geoAnchor(src.layer, src.value, aspect, reported, lookup, (depth || 0) + 1) : at();
+      }
+      if (layer.shape === 'picture') return rep() || { x: 0.5, y: 0.5 };
+      const pts = layer.points || [];
+      if (layer.shape !== 'polygon' || pts.length < 6) return at();
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (let i = 0; i + 1 < pts.length; i += 2) { x0 = Math.min(x0, pts[i]); x1 = Math.max(x1, pts[i]); y0 = Math.min(y0, pts[i + 1]); y1 = Math.max(y1, pts[i + 1]); }
+      // The polygon's frame back to the picture (the inverse of geoCompile's `local`).
+      const lx = (x0 + x1) / 2, ly = (y0 + y1) / 2, rot = (value('rotation') || 0) * Math.PI / 180, c = Math.cos(rot), s = Math.sin(rot);
+      return { x: value('x') + (lx * c + ly * s) / aspect, y: value('y') + (-lx * s + ly * c) };
+    }
+    case 'cloner':
+      if (layer.arrange === 'line') return { x: (value('x') + value('x2')) / 2, y: (value('y') + value('y2')) / 2 };
+      if (layer.arrange === 'path' || layer.arrange === 'points') return rep() || at();
+      return at();
+    case 'particles': case 'bodies': case 'brush':
+      return rep();
+    case 'script':
+      return rep() || { x: 0.5, y: 0.5 };
+    default:
+      return null;
+  }
+}

@@ -22,12 +22,24 @@ import { inputBus, paramChannelKey, type InputSource, type InputWriter } from '.
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
-import { beatAt, newTriggerState, noiseAt, stepTrigger, triggerKey, type TriggerState } from '../play/triggers';
+import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityGate, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
+import { geoAnchor } from '../play/kit/geometry.js';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
 import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parseLayerTarget } from '../types/play';
 import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
+import { handFeed } from './handFeed';
+import { hdAge, hdCreate, hdGate, hdPlacement, hdPoint, hdRead, hdUpdate, type HdState } from '../play/kit/hands.js';
+import { DEFAULT_HANDS, parseHandAnchor, usesHands, type FireMode, type HandGesture, type HandSide, type PlayLayer } from '../types/play';
+
+/** A trigger's firing-mode state, with the mode it was made for (a changed mode starts afresh). */
+interface FireSlot { mode: FireMode; st: FireState; count: number }
+
+/** Gestures Learn listens for (coming into view and leaving are picked by hand, not learned). */
+const LEARN_GESTURES: readonly HandGesture[] = ['pinch', 'pinchMiddle', 'pinchRing', 'pinchPinky', 'fist', 'open', 'point'];
+/** How far a landmark has to move (0..1 of the picture) before Learn takes it. */
+const HAND_LEARN_MOVE = 0.12;
 
 /** Sensor reads that are an audio layer's bands. */
 const AUDIO_READS: ReadonlySet<string> = new Set(['level', 'bass', 'lowmid', 'highmid', 'treble']);
@@ -149,11 +161,25 @@ class PlayEngine implements InputSource {
   private overrides = new Map<string, number>();
   private aspect = 16 / 9;
   private zoneGates = new Set<string>();
-  /** Presses an action has already fired for, per action id. */
-  private actionSeen = new Map<string, number>();
+  /** Each action's firing mode state (once, held, every N, on release), per action id. */
+  private actionFire = new Map<string, FireSlot>();
+  /** Each trigger mapping's firing mode state; its count of fires is what the envelope, toggle or step sees. */
+  private mappingFire = new Map<string, FireSlot>();
+  /** Proximity triggers whose gate is open (A and B are close, or far). */
+  private proxGates = new Set<string>();
   private actionListeners = new Set<(a: PlayAction) => void>();
   /** Action controls: the last mapped level, so a rise through 0.5 fires once. */
   private actionLevel = new Map<string, number>();
+
+  // ── Hands (hand tracking): landmarks from handFeed, read as sources, gestures and null targets ──
+  private hands: HdState = hdCreate();
+  private handSeq = -1;
+  private handsBound = false;
+  /** Gesture triggers whose gate is open (a press was counted, the release is still to come). */
+  private handGates = new Set<string>();
+  /** Learn: where each landmark was when the hand was first seen, and which gestures were already held. */
+  private handLearnFrom: Map<string, number> | null = null;
+  private handLearnHeld: Set<string> | null = null;
 
   private press(key: string, velocity = 1): void {
     this.presses.set(key, (this.presses.get(key) ?? 0) + 1);
@@ -273,10 +299,14 @@ class PlayEngine implements InputSource {
     this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse');
     this.tiltIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'tilt');
     this.gamepadIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'gamepad');
+    this.handsBound = usesHands(record);
     this.triggerKeysBound = new Set(this.allTriggers().map(triggerKey));
     this.oscIsBound = record.mappings.some(m => m.enabled && (m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')))
       || (record.actions ?? []).some(a => a.enabled && a.trigger.on === 'osc');
-    for (const id of [...this.actionSeen.keys()]) if (!(record.actions ?? []).some(a => a.id === id)) this.actionSeen.delete(id);
+    for (const id of [...this.actionFire.keys()]) if (!(record.actions ?? []).some(a => a.id === id)) this.actionFire.delete(id);
+    for (const id of [...this.mappingFire.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger')) this.mappingFire.delete(id);
+    const proxKeys = new Set(this.allTriggers().filter(t => t.on === 'proximity').map(triggerKey));
+    for (const k of [...this.proxGates]) if (!proxKeys.has(k)) { this.proxGates.delete(k); this.release(k); }
     oscClient.setWanted(this.oscIsBound || oscClient.getStatus() === 'connected');
     for (const id of [...this.triggerStates.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger')) this.triggerStates.delete(id);
     // Show the new state (a mapping added, removed or disabled) even while the clock is paused.
@@ -382,10 +412,32 @@ class PlayEngine implements InputSource {
     return c.v[band];
   }
 
-  private nullAt(id: string): { x: number; y: number } | null {
-    const l = this.record.layers.find(x => x.id === id);
-    return l && l.kind === 'null' ? { x: this.layerValue(id, 'x', l.x), y: this.layerValue(id, 'y', l.y) } : null;
+  /**
+   * Where an anchor is on the picture now (0..1, y up): a layer's centre (see
+   * geoAnchor) or a tracked hand's landmark. Null while it has none (a hand out
+   * of view, particles with none alive).
+   */
+  anchorAt(ref: string): { x: number; y: number } | null {
+    const hand = parseHandAnchor(ref);
+    if (hand) return this.handPoint(hand.side, hand.point);
+    const l = this.record.layers.find(x => x.id === ref);
+    return l ? geoAnchor(l as unknown as PlayLayer & Record<string, unknown>, this.valueOf(l), this.aspect, this.reported, this.lookup) : null;
   }
+
+  /** How far apart two anchors are, in picture heights, or null while either has no position. */
+  anchorGap(a: string, b: string): number | null {
+    const pa = this.anchorAt(a), pb = this.anchorAt(b);
+    return pa && pb ? anchorDistance(pa, pb, this.aspect) : null;
+  }
+
+  private valueOf(l: PlayLayer): (key: string) => number {
+    return key => this.layerValue(l.id, key, (l as unknown as Record<string, number>)[key]);
+  }
+  private reported = (key: string) => this.sensors.get(key);
+  private lookup = (id: string) => {
+    const l = this.record.layers.find(x => x.id === id);
+    return l ? { layer: l as unknown as PlayLayer & Record<string, unknown>, value: this.valueOf(l) } : null;
+  };
 
   /** Every trigger in the record: mapping triggers and action triggers. */
   private allTriggers(): TriggerSpec[] {
@@ -408,18 +460,131 @@ class PlayEngine implements InputSource {
     }
   }
 
-  /** Fire each action once per new press of its trigger. */
-  private tickActions(): void {
+  /** Proximity triggers: A and B coming closer than (or going farther than) the distance is a press; the margin keeps it from flickering. */
+  private tickProximityTriggers(): void {
+    for (const t of this.allTriggers()) {
+      if (t.on !== 'proximity') continue;
+      const key = triggerKey(t);
+      const open = this.proxGates.has(key);
+      const on = proximityGate(open, this.anchorGap(t.a, t.b), t.when, t.distance, t.margin);
+      if (on && !open) { this.proxGates.add(key); this.press(key); }
+      else if (!on && open) { this.proxGates.delete(key); this.release(key); }
+    }
+  }
+
+  /** Is this trigger held (or true) right now? For the panel's readouts. */
+  isHeld(t: TriggerSpec): boolean {
+    return this.triggerInput(t).gate;
+  }
+
+  /** A trigger's running press count and whether it is held now. */
+  private triggerInput(t: TriggerSpec): { presses: number; gate: boolean } {
+    if (t.on === 'beat') { const b = beatAt(t.bpm, t.beats, this.time); return { presses: b.count, gate: b.gate }; }
+    const key = triggerKey(t);
+    return { presses: this.presses.get(key) ?? 0, gate: (this.held.get(key) ?? 0) > 0 };
+  }
+
+  /** A firing-mode slot for a trigger, new when there was none or its mode changed (it starts from "nothing yet"). */
+  private fireSlot(map: Map<string, FireSlot>, id: string, t: TriggerSpec, presses: number, gate: boolean): { slot: FireSlot; fresh: boolean } {
+    const mode = t.fire?.mode ?? 'once';
+    const slot = map.get(id);
+    if (slot && slot.mode === mode) return { slot, fresh: false };
+    const made = { mode, st: newFireState(presses, gate), count: 0 };
+    map.set(id, made);
+    return { slot: made, fresh: true };
+  }
+
+  /** Fire each action by its trigger's mode: once per press (the default), every frame or every N while held, or on release. */
+  private tickActions(dt: number): void {
     for (const a of this.record.actions ?? []) {
       if (!a.enabled) continue;
-      const presses = a.trigger.on === 'beat' ? beatAt(a.trigger.bpm, a.trigger.beats, this.time).count : this.presses.get(triggerKey(a.trigger)) ?? 0;
-      const seen = this.actionSeen.get(a.id);
-      this.actionSeen.set(a.id, presses);
+      const { presses, gate } = this.triggerInput(a.trigger);
       // A new action starts from "no presses yet"; a beat that jumped (a seek) fires once.
-      if (seen === undefined || presses <= seen) continue;
-      const times = Math.min(4, presses - seen);
+      const { slot, fresh } = this.fireSlot(this.actionFire, a.id, a.trigger, presses, gate);
+      if (fresh) continue;
+      const times = Math.min(4, stepFire(slot.st, a.trigger.fire, presses, gate, dt));
       for (let i = 0; i < times; i++) for (const cb of this.actionListeners) cb(a);
     }
+  }
+
+  // ── Hands ─────────────────────────────────────────────────────────────────
+
+  /** Take in the tracker's newest frame (placed where the Camera layer shows the camera), and let go of hands gone too long. */
+  private updateHands(): void {
+    const { frame, seq } = handFeed.frame();
+    if (frame && seq !== this.handSeq) {
+      this.handSeq = seq;
+      const settings = this.record.hands ?? DEFAULT_HANDS;
+      const camAspect = frame.w > 0 && frame.h > 0 ? frame.w / frame.h : 16 / 9;
+      const place = hdPlacement(this.record, (l, k) => this.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]), camAspect, this.aspect, settings.mirror);
+      hdUpdate(this.hands, frame, { picAspect: this.aspect, place, smoothing: settings.smoothing });
+    }
+    hdAge(this.hands, typeof performance !== 'undefined' ? performance.now() : Date.now());
+  }
+
+  /** The hands as the engine sees them now (the overlay draws the skeleton from this). */
+  handState(): HdState { return this.hands; }
+
+  /** A landmark on the picture for a null following a hand, or null while that hand is out of view. */
+  handPoint(side: HandSide, point: number): { x: number; y: number } | null {
+    return hdPoint(this.hands, side, point);
+  }
+
+  /** Gesture triggers: a gesture starting is a press, ending is the release (hands.js keeps the hysteresis). */
+  private tickHandTriggers(): void {
+    for (const t of this.allTriggers()) {
+      if (t.on !== 'hand') continue;
+      const key = triggerKey(t);
+      const on = hdGate(this.hands, t.side, t.gesture);
+      const open = this.handGates.has(key);
+      if (on && !open) { this.handGates.add(key); this.press(key); }
+      else if (!on && open) { this.handGates.delete(key); this.release(key); }
+    }
+  }
+
+  /**
+   * Learn with hands. A source: the landmark and axis that moved furthest
+   * since the hand was first seen (past HAND_LEARN_MOVE). A trigger: the
+   * first gesture that starts (one already held when Learn began has to be
+   * let go and made again).
+   */
+  private learnHands(): void {
+    const h = this.hands;
+    if (this.learnTriggerCb) {
+      const held = new Set<string>();
+      for (const side of ['right', 'left'] as const) for (const g of LEARN_GESTURES) if (hdGate(h, side, g)) held.add(`${side}:${g}`);
+      const before = this.handLearnHeld;
+      this.handLearnHeld = held;
+      if (!before) return;
+      for (const k of held) {
+        if (before.has(k)) continue;
+        const [side, gesture] = k.split(':') as [HandSide, HandGesture];
+        this.finishLearnTrigger({ on: 'hand', side, gesture });
+        return;
+      }
+      return;
+    }
+    if (!this.learnCb) return;
+    const from = this.handLearnFrom ?? (this.handLearnFrom = new Map());
+    let best = '', bestMove = HAND_LEARN_MOVE;
+    for (const side of ['right', 'left'] as const) {
+      const hand = h[side];
+      if (!hand.present) continue;
+      for (let i = 0; i < 21; i++) {
+        for (const axis of ['x', 'y'] as const) {
+          const key = `${side}:${i}:${axis}`;
+          const v = hand.pts[i * 3 + (axis === 'y' ? 1 : 0)];
+          const start = from.get(key);
+          if (start === undefined) { from.set(key, v); continue; }
+          // Fingertips win a near tie: moving a finger moves its whole chain a little.
+          const move = Math.abs(v - start) * (i % 4 === 0 && i > 0 ? 1.1 : 1);
+          if (move > bestMove) { bestMove = move; best = key; }
+        }
+      }
+    }
+    if (!best) return;
+    const [side, point, axis] = best.split(':');
+    this.finishLearn({ kind: 'hand', side: side as HandSide, read: 'point', point: Number(point), axis: axis as 'x' | 'y', gesture: 'pinch' });
   }
 
   /**
@@ -484,12 +649,14 @@ class PlayEngine implements InputSource {
       }
       case 'sensor': {
         if (source.read === 'distance') {
-          const a = this.nullAt(source.layerId), b = this.nullAt(source.otherId);
-          return a && b ? Math.min(1, Math.hypot((a.x - b.x) * this.aspect, a.y - b.y)) : null;
+          const d = source.otherId ? this.anchorGap(source.layerId, source.otherId) : null;
+          return d === null ? null : Math.min(1, d);
         }
         if (AUDIO_READS.has(source.read)) return this.audioBand(source.layerId, source.read as LiveBand);
         return this.sensors.get(`${source.layerId}::${source.read}`) ?? null;
       }
+      case 'hand':
+        return hdRead(this.hands, source.side, source.read, source.point, source.axis, source.gesture);
       case 'null': {
         const base = this.layerBase(source.layerId, source.axis);
         if (base === null) return null;
@@ -526,20 +693,16 @@ class PlayEngine implements InputSource {
   private readTrigger(m: PlayMapping, dt: number): number {
     const src = m.source as Extract<PlaySource, { kind: 'trigger' }>;
     const t = src.trigger;
-    let presses: number, gate: boolean, velocity = 1;
-    if (t.on === 'beat') {
-      const b = beatAt(t.bpm, t.beats, this.time);
-      presses = b.count; gate = b.gate;
-    } else {
-      const key = triggerKey(t);
-      presses = this.presses.get(key) ?? 0;
-      gate = (this.held.get(key) ?? 0) > 0;
-      if (src.velocity) velocity = this.velocities.get(key) ?? 1;
-    }
+    const { presses, gate } = this.triggerInput(t);
+    const velocity = src.velocity && t.on !== 'beat' ? this.velocities.get(triggerKey(t)) ?? 1 : 1;
+    // The firing mode turns presses and the gate into fires; the envelope, toggle or step counts those.
+    // A new mapping (or a new mode) starts from "nothing yet", so it doesn't fire for presses made before it.
+    const { slot, fresh } = this.fireSlot(this.mappingFire, m.id, t, presses, gate);
     let st = this.triggerStates.get(m.id);
-    // A new mapping starts from "no presses yet", so it doesn't fire for presses made before it existed.
-    if (!st) { st = newTriggerState(presses); this.triggerStates.set(m.id, st); }
-    return stepTrigger(st, src, presses, gate, dt, velocity);
+    if (!st) { st = newTriggerState(0); this.triggerStates.set(m.id, st); }
+    if (fresh) st.seen = 0;
+    else slot.count += Math.min(4, stepFire(slot.st, t.fire, presses, gate, dt));
+    return stepTrigger(st, src, slot.count, gate, dt, velocity);
   }
 
   /** Audio-hit triggers: a band crossing its threshold is a press; falling below 80% of it releases (hysteresis). */
@@ -566,6 +729,8 @@ class PlayEngine implements InputSource {
   setMuted(on: boolean): void {
     if (on === this.muted) return;
     this.muted = on;
+    // The take has every hand-driven value: the tracker rests meanwhile instead of fighting it.
+    handFeed.setPaused(on);
     // Back live: every control gets its slider's value (or its mapping's) again.
     if (!on) for (const id of this.controls.keys()) this.restoreOnce.add(id);
     inputBus.wake();
@@ -580,14 +745,20 @@ class PlayEngine implements InputSource {
     this.time = time;
     this.frame++;
     if (this.muted) {
-      for (const a of this.record.actions ?? []) {
-        if (a.enabled) this.actionSeen.set(a.id, a.trigger.on === 'beat' ? beatAt(a.trigger.bpm, a.trigger.beats, time).count : this.presses.get(triggerKey(a.trigger)) ?? 0);
-      }
+      // The take fires what was recorded. Back live, triggers start from "nothing yet": presses made meanwhile don't fire.
+      this.actionFire.clear();
+      this.mappingFire.clear();
       return;
+    }
+    if (this.handsBound || handFeed.isOn() || this.hands.live) {
+      this.updateHands();
+      this.tickHandTriggers();
+      if (this.learnCb || this.learnTriggerCb) this.learnHands();
     }
     this.tickAudioTriggers();
     this.tickZoneTriggers();
-    this.tickActions();
+    this.tickProximityTriggers();
+    this.tickActions(dt);
     if (this.learnCb && this.performing) this.pollGamepadLearn();
     // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.
     if (this.gamepadIsBound && this.performing) inputBus.wake();
@@ -759,12 +930,16 @@ class PlayEngine implements InputSource {
 
   /** Actions and layer-property mappings run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.record.controls.some(c => c.kind === 'action' || parseLayerTarget(c.target) !== null);
+    return !!this.record.actions?.length || this.allTriggers().some(t => t.on === 'proximity') || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parseLayerTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
   isAnimating(): boolean {
     if ((this.record.actions ?? []).some(a => a.enabled && a.trigger.on === 'beat')) return true;
+    // Held, or every N while held: keeps firing without anything else moving.
+    if (this.allTriggers().some(t => firesWhileHeld(t.fire) && this.triggerInput(t).gate)) return true;
+    // Tracking hands: landmarks arrive about 30 times a second, and smoothing and springs ease between them.
+    if (handFeed.isOn() && !handFeed.isPaused()) return true;
     return this.record.mappings.some(m => m.enabled && (
       m.source.kind === 'noise' ||
       ((m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio')) && liveAudio.isOn()) ||
@@ -826,6 +1001,8 @@ class PlayEngine implements InputSource {
     this.learnOffOsc = null;
     this.learnCb = null;
     this.learnTriggerCb = null;
+    this.handLearnFrom = null;
+    this.handLearnHeld = null;
   }
 
   private finishLearn(source: PlaySource): void {

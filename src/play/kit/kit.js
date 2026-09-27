@@ -15,12 +15,19 @@
  *   value(layer, key)      a layer property now (a mapping may drive it)
  *   pointer    { x, y, over, down } over the picture, 0..1 with y up
  *   markers    draw null markers · editing: outline invisible zones · selectedId
- *   hidden, backdrop       Picture → Layers only
- *   audio      { wave, freq, sampleRate } from the live input, or null
+ *   hidden, backdrop       Background → Layers only
+ *   background { el, fit, colour } when an image, a video or a colour stands in
+ *              for the shader (then `gl` is ignored): the kit paints it at the
+ *              overlay's size, under the layers, and everything that reads
+ *              "the picture" reads it instead
+ *   audio     { wave, freq, sampleRate } from the live input, or null
  *   camera     a playing <video> of the webcam, or null
  *   image(src) a loaded <img> for a data URL, or null while loading
  *   sensor(key, value)     report a sensor reading (`layerId::read`)
  *   override(layerId, key, value|null)  where a following null is now
+ *   hand(side, point)      a tracked hand's landmark on the picture ({ x, y }) or null (optional)
+ *   hands      { state, colour } to draw the hands' skeleton with the markers, or null (optional)
+ *   three      three.js (three-slim.js) for 3D Script layers, or null
  *
  * The kit keeps per-layer state (particles, bodies, strokes, springs, text
  * sequences) between frames, keyed by layer id. Actions (burst, next line…)
@@ -28,8 +35,11 @@
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, stringSeed, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments } from './geometry.js';
-import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress } from './layers.js';
+import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klPaintBackground, klSketchDispose } from './layers.js';
+import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
+import { hdDraw } from './hands.js';
+import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
 const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, lens: 1, script: 1 };
@@ -88,6 +98,80 @@ export function createLayerKit() {
 
   function brushState(id) { let b = brushes.get(id); if (!b) { b = { pts: [], stroke: 0, was: false }; brushes.set(id, b); } return b; }
 
+  // ── Background layer (queue.js): the queue's state, its sketches, and the last plan ──
+  const bqStates = new Map(), bqSketches = new Map();
+  let bqLast = null;
+  const BQ_ACTS = { next: 1, prev: 1, shuffle: 1, goto: 1, reset: 1 };
+  /**
+   * The Background layer's plan (null without one). Carries out the Change
+   * background actions queued since the last call, then says what shows now.
+   * The host asks before it draws (to render graph sources first); the frame
+   * asks again and gets the same answer.
+   */
+  function background(record, env) {
+    const l = record.layers[0];
+    if (!l || l.kind !== 'background') { bqLast = null; return null; }
+    let st = bqStates.get(l.id);
+    if (!st) { st = bqState(); bqStates.set(l.id, st); }
+    const value = k => env.value(l, k);
+    if (queue.length) {
+      const rest = [];
+      for (const a of queue) {
+        if (a.layerId !== l.id) { rest.push(a); continue; }
+        if (BQ_ACTS[a.do]) bqAct(st, l, value, a, rngFor(l.id, 'background'));
+        else if (a.do === 'toggle') shown.set(l.id, !(shown.has(l.id) ? shown.get(l.id) : l.visible));
+        else if (a.do === 'show') shown.set(l.id, true);
+        else if (a.do === 'hide') shown.set(l.id, false);
+      }
+      queue = rest;
+    }
+    if (lastVisible.has(l.id) && lastVisible.get(l.id) !== l.visible) shown.delete(l.id);
+    lastVisible.set(l.id, l.visible);
+    const visible = shown.has(l.id) ? shown.get(l.id) : l.visible;
+    bqLast = bqPlan(st, l, value, env.time, visible, !!env.allowDirect);
+    return bqLast;
+  }
+  /** A sketch source, one step a frame into a canvas the size of the picture (only while it shows). */
+  function bqSketch(item, W, H, dpr, time, dt, pointer, env) {
+    let st = bqSketches.get(item.id);
+    const mode = item.mode === '3d' ? '3d' : '2d', three = env.three || null;
+    // A 3D sketch waits for three.js, as a 3D Script layer does.
+    if (mode === '3d' && !three && !st) return null;
+    if (!st || st.code !== (item.code || '') || st.mode !== mode || (mode === '3d' && st.three !== three)) {
+      klSketchDispose(st);
+      st = klSketchCompile(item.code || '', { mode, three });
+      st.three = three;
+      bqSketches.set(item.id, st);
+      if (env.scriptStatus) env.scriptStatus('bg:' + item.id, st.error);
+    }
+    const buf = klCanvas(pool, 'bqs_' + item.id, W, H);
+    if (st.steppedAt === frameNo) return st.error ? null : buf;
+    st.steppedAt = frameNo;
+    if (st.error) return null;
+    const params = {};
+    for (const k in st.params) { const d = st.params[k]; params[k] = d && typeof d === 'object' && typeof d.value === 'number' ? d.value : typeof d === 'number' ? d : 0; }
+    const s = {
+      ctx: buf.getContext('2d'), width: W, height: H, dpr, time, dt, frame: st.frame, params, state: st.state,
+      mouse: { x: pointer.x * W, y: (1 - pointer.y) * H, over: !!pointer.over, down: !!pointer.down },
+      picture: { brightness: () => 0 },
+      null: () => null,
+      random: rngFor('bg:' + item.id, 'script'),
+    };
+    const err = klSketchStep(st, s, [], true);
+    if (err) { if (env.scriptStatus) env.scriptStatus('bg:' + item.id, err); return null; }
+    return buf;
+  }
+  /** What a source shows this frame: { el, w, h, full } (full = it is the picture's size), or null. */
+  function bqFrameOf(item, env, W, H, dpr, time, dt, pointer) {
+    switch (item.kind) {
+      case 'image': { const im = item.src ? env.image(item.src) : null; return im ? { el: im, w: im.naturalWidth || im.width, h: im.naturalHeight || im.height } : null; }
+      case 'video': { const v = env.video ? env.video(item) : null; return v && v.readyState >= 2 && v.videoWidth > 0 ? { el: v, w: v.videoWidth, h: v.videoHeight } : null; }
+      case 'script': { const b = bqSketch(item, W, H, dpr, time, dt, pointer, env); return b ? { el: b, w: W, h: H, full: true } : null; }
+      case 'graph': { const g = env.graphFrame ? env.graphFrame(item) : null; const el = g || (item.graph === 'this' ? env.gl : null); return el ? { el, w: W, h: H, full: true } : null; }
+      default: return null;
+    }
+  }
+
   /** The null a layer points at, where it is now. */
   function nullPos(record, env, id) {
     const n = id && record.layers.find(l => l.id === id);
@@ -132,15 +216,26 @@ export function createLayerKit() {
   function frame(ctx, record, env) {
     frameNo++;
     const W = env.W, H = env.H, dpr = env.dpr || 1, time = env.time, dt = Math.min(0.1, Math.max(0, env.dt));
-    const aspect = W / H, gl = env.gl, pointer = env.pointer || { x: 0.5, y: 0.5, over: false, down: false };
+    const aspect = W / H, pointer = env.pointer || { x: 0.5, y: 0.5, over: false, down: false };
+    // A Background layer: its queue is the picture every layer reads (painted here, unless the
+    // host drew its one graph straight to the GL canvas). Else Play's image, video or colour in
+    // place of the shader, else the shader.
+    const bq = background(record, env);
+    const gl = bq
+      ? (bq.direct ? env.gl : bqCompose(klCanvas(pool, 'bgq', W, H), bq, W, H, item => bqFrameOf(item, env, W, H, dpr, time, dt, pointer)))
+      : env.background ? klPaintBackground(klCanvas(pool, 'background', W, H), env.background, W, H, true) : env.gl;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, W, H);
     // A transparent export keeps the backdrop out: only the layers, over nothing.
-    if (env.hidden && !env.transparent) { ctx.fillStyle = klCss(env.backdrop || [0, 0, 0]); ctx.fillRect(0, 0, W, H); }
+    if (bq) { if (!bq.direct && !env.transparent) ctx.drawImage(gl, 0, 0); }
+    else if (env.hidden && !env.transparent) { ctx.fillStyle = klCss(env.backdrop || [0, 0, 0]); ctx.fillRect(0, 0, W, H); }
+    else if (env.background && !env.transparent) ctx.drawImage(gl, 0, 0);
     const layers = record.layers;
     const ids = new Set(layers.map(l => l.id));
-    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts]) for (const id of [...m.keys()]) if (!ids.has(id)) m.delete(id);
+    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
+    // Sketch sources that left the queue (or whose layer did) stop keeping state.
+    if (bqSketches.size) { const inQueue = new Set(bq ? record.layers[0].sources.map(s => s.id) : []); for (const id of [...bqSketches.keys()]) if (!inQueue.has(id)) { klSketchDispose(bqSketches.get(id)); bqSketches.delete(id); } }
     // A visibility change in the panel wins over an earlier show/hide action.
     for (const l of layers) { if (lastVisible.has(l.id) && lastVisible.get(l.id) !== l.visible) shown.delete(l.id); lastVisible.set(l.id, l.visible); }
     const baseVisible = l => (shown.has(l.id) ? shown.get(l.id) : l.visible);
@@ -155,7 +250,9 @@ export function createLayerKit() {
       if (l.follow === 'none') { if (springs.has(l.id)) { springs.delete(l.id); env.override(l.id, 'x', null); env.override(l.id, 'y', null); } continue; }
       let s = springs.get(l.id);
       if (!s) { s = { x: l.x, y: l.y, vx: 0, vy: 0 }; springs.set(l.id, s); }
-      const target = l.follow === 'mouse' ? (pointer.over ? pointer : null) : nullPos(record, { value: (n, k) => (springs.has(n.id) && n.id !== l.id ? springs.get(n.id)[k] : env.value(n, k)) }, l.followId);
+      const target = l.follow === 'mouse' ? (pointer.over ? pointer : null)
+        : l.follow === 'hand' ? (env.hand ? env.hand(l.handSide, l.handPoint) : null)
+        : nullPos(record, { value: (n, k) => (springs.has(n.id) && n.id !== l.id ? springs.get(n.id)[k] : env.value(n, k)) }, l.followId);
       if (target) {
         const k = 4 + Math.pow(env.value(l, 'spring'), 2) * 400, zeta = 1 - Math.min(0.95, env.value(l, 'wobble') * 0.95), c = 2 * zeta * Math.sqrt(k);
         for (let i = 0; i < 4; i++) {
@@ -214,9 +311,11 @@ export function createLayerKit() {
       }
       const z = geoCompile(spec, aspect);
       // Rough share of the picture it covers, for the fill sensor.
-      let inside = 0;
-      for (let gy = 0; gy < 12; gy++) for (let gx = 0; gx < 20; gx++) if (z.dist((gx + 0.5) / 20, (gy + 0.5) / 12) < 0) inside++;
+      let inside = 0, sx = 0, sy = 0;
+      for (let gy = 0; gy < 12; gy++) for (let gx = 0; gx < 20; gx++) if (z.dist((gx + 0.5) / 20, (gy + 0.5) / 12) < 0) { inside++; sx += (gx + 0.5) / 20; sy += (gy + 0.5) / 12; }
       z.area = inside / 240;
+      // The bright parts' centre is this shape's anchor (proximity, distance).
+      if (l.shape === 'picture') { report(env, l.id + '::ax', inside ? sx / inside : NaN); report(env, l.id + '::ay', inside ? sy / inside : NaN); }
       zones.push(z); zoneById.set(l.id, z);
     }
     // Nulls with a particle role are small round zones that move with the null.
@@ -295,8 +394,13 @@ export function createLayerKit() {
     // A sketch runs once a frame into its own canvas; the layer and any cloner copying it both use that canvas.
     function stepScript(l) {
       let st = scripts.get(l.id);
-      if (!st || st.code !== l.code) {
-        st = klSketchCompile(l.code);
+      const mode = l.mode === '3d' ? '3d' : '2d', three = env.three || null;
+      // A 3D sketch waits for three.js (the host hands it over in env.three) rather than failing before it arrives.
+      if (mode === '3d' && !three && !st) return null;
+      if (!st || st.code !== l.code || st.mode !== mode || (mode === '3d' && st.three !== three)) {
+        klSketchDispose(st);
+        st = klSketchCompile(l.code, { mode, three });
+        st.three = three;
         scripts.set(l.id, st);
         if (env.scriptStatus) env.scriptStatus(l.id, st.error);
       }
@@ -320,12 +424,28 @@ export function createLayerKit() {
             const i = (cy * KIT_COARSE_W + cx) * 4;
             return (coarse[i] + coarse[i + 1] + coarse[i + 2]) / 765;
           },
+          // 3D: the picture this frame as a texture, uploaded only when a sketch reads it.
+          get texture() { return st.g3 ? k3PictureTexture(three, gl, frameNo) : null; },
         },
         null: name => { const n = record.layers.find(x => x.kind === 'null' && (x.id === name || x.label === name)); return n ? { x: env.value(n, 'x') * W, y: (1 - env.value(n, 'y')) * H } : null; },
         random: rngFor(l.id, 'script'),
+        // Where proximity triggers and distance sensors measure this layer from, in pixels. Kept between frames.
+        anchor: st.anchor || null,
       };
       const err = klSketchStep(st, s, l.paramDefs || [], l.clear);
+      const an = s.anchor;
+      st.anchor = an && typeof an === 'object' && isFinite(an.x) && isFinite(an.y) ? { x: +an.x, y: +an.y } : null;
+      report(env, l.id + '::ax', st.anchor ? st.anchor.x / W : 0.5);
+      report(env, l.id + '::ay', st.anchor ? 1 - st.anchor.y / H : 0.5);
       if (err) { if (env.scriptStatus) env.scriptStatus(l.id, err); return null; }
+      if (st.g3) {
+        // 3D: render the scene (a shared WebGL renderer) and copy it into the layer's canvas, so the
+        // blend, the opacity, the Cloner and the Layers node treat it like any 2D sketch.
+        const out = k3Render(st.g3, k3Renderer(three, W, H), W, H);
+        bx.setTransform(1, 0, 0, 1, 0, 0); bx.globalAlpha = 1; bx.globalCompositeOperation = 'source-over';
+        if (l.clear || st.frame <= 1) bx.clearRect(0, 0, W, H);
+        if (out) bx.drawImage(out, 0, 0);
+      }
       return buf;
     }
     function drawScript(c, l, v) {
@@ -348,6 +468,10 @@ export function createLayerKit() {
         if (s && s.sim) { points = []; const sim = s.sim; for (let i = 0; i < sim.count && points.length < 400; i++) if (sim.alive[i]) points.push({ x: sim.x[i], y: sim.y[i] }); }
       }
       const layout = klClonerLayout(l, v, aspect, path, points);
+      if (l.arrange === 'path' || l.arrange === 'points') {
+        let cx = 0, cy = 0; for (const p of layout) { cx += p.x; cy += p.y; }
+        report(env, l.id + '::ax', layout.length ? cx / layout.length : NaN); report(env, l.id + '::ay', layout.length ? cy / layout.length : NaN);
+      }
       if (!layout.length) return;
       // Effectors: a null is a point, a shape counts from its edge.
       const effectors = [];
@@ -402,6 +526,7 @@ export function createLayerKit() {
       try {
         switch (l.kind) {
           case 'null': break; // markers are drawn last, above everything
+          case 'background': break; // painted first, under everything (see the top of frame)
           case 'text': case 'image': case 'camera': {
             const opacity = v('opacity');
             if (opacity <= 0) break;
@@ -539,15 +664,24 @@ export function createLayerKit() {
         const sim = p.sim, maxV = Math.max(1e-6, env.value(l, 'speed') * 0.18);
         let sp = 0, n = 0, mx = 0, my = 0, mxx = 0, myy = 0;
         for (let i = 0; i < sim.count; i++) { if (!sim.alive[i]) continue; n++; sp += Math.hypot(sim.vx[i], sim.vy[i]); const X = sim.x[i] * aspect, Y = sim.y[i]; mx += X; my += Y; mxx += X * X; myy += Y * Y; }
+        report(env, l.id + '::ax', n ? mx / n / aspect : NaN); report(env, l.id + '::ay', n ? my / n : NaN);
         if (n) {
           mx /= n; my /= n;
           report(env, l.id + '::speed', Math.min(1, sp / n / maxV));
           report(env, l.id + '::spread', Math.min(1, Math.sqrt(Math.max(0, mxx / n - mx * mx + myy / n - my * my)) / (0.29 * Math.hypot(aspect, 1))));
         } else { report(env, l.id + '::speed', 0); report(env, l.id + '::spread', 0); }
       } else if (l.kind === 'camera') report(env, l.id + '::motion', cam ? motion : 0);
+      else if (l.kind === 'bodies' || l.kind === 'brush') {
+        // Anchors: the centroid of the bodies, or of the strokes on the picture.
+        let cx = 0, cy = 0, n = 0;
+        if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) for (const o of b.st.bodies) { cx += o.x / aspect; cy += o.y; n++; } }
+        else { const b = brushes.get(l.id); if (b) for (const p of b.pts) { cx += p.x; cy += p.y; n++; } }
+        report(env, l.id + '::ax', n ? cx / n : NaN); report(env, l.id + '::ay', n ? cy / n : NaN);
+      }
     }
 
-    // 7. Null markers on top of everything.
+    // 7. Null markers on top of everything, and the tracked hands' skeleton (a setup aid) with them.
+    if (env.markers && env.hands) hdDraw(ctx, env.hands.state, W, H, dpr, env.hands.colour);
     if (env.markers) for (const l of vis) if (l.kind === 'null') klDrawNull(ctx, l, env.value(l, 'x'), env.value(l, 'y'), env.value(l, 'size'), dpr, W, H, l.role && l.role !== 'none' ? env.value(l, 'radius') * H : 0);
   }
 
@@ -663,12 +797,15 @@ export function createLayerKit() {
     },
     /** Does anything need a new frame every tick (particles, bodies, a following null…)? */
     isAnimated(record) {
+      // A crossfade under way, or a sketch showing in the background.
+      if (bqLast && record.layers[0] && record.layers[0].id === bqLast.layerId && (bqLast.fading || bqLast.items.some(i => i.item.kind === 'script'))) return true;
       return record.layers.some(l => (shown.has(l.id) ? shown.get(l.id) : l.visible) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && l.sequence) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera')));
     },
     /**
      * Forget all state (a new recording starts from scratch). `seed` (a take's)
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
-    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); parts.clear(); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
+    background,
+    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
   };
 }

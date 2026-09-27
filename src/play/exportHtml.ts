@@ -24,11 +24,17 @@
 import runtimeSource from './runtime/play-runtime.js?raw';
 import particleSource from './particle-sim.js?raw';
 import geometrySource from './kit/geometry.js?raw';
+import sketch3dSource from './kit/sketch3d.js?raw';
 import layersSource from './kit/layers.js?raw';
 import bodiesSource from './kit/bodies.js?raw';
+import handsSource from './kit/hands.js?raw';
+import queueSource from './kit/queue.js?raw';
 import kitSource from './kit/kit.js?raw';
-import type { PlayRecord } from '../types/play';
+import { BACKGROUND_VIDEO_KEEP, backgroundLayerOf, usesHands, type PlayRecord } from '../types/play';
+import type { HandAssets } from './handExport';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
+import { playUses3D, threeSource } from './threeSource';
+export { playUses3D };
 
 export interface PlayHtmlInput {
   title: string;
@@ -43,6 +49,14 @@ export interface PlayHtmlInput {
   passes?: PlayPasses;
   /** The files the graph's inputs read. */
   media?: PlayMedia;
+  /** Hand tracking's files (play/handExport.ts), when the author chose to include them. */
+  handAssets?: HandAssets;
+  /**
+   * A Background layer's graph sources other than this graph, compiled (by
+   * source id): the page runs each as a program of its own while it shows
+   * (play/queueGraphs.ts queueGraphsForWeb).
+   */
+  backgroundGraphs?: Record<string, { fragmentShader: string; uniforms: Record<string, number | number[]> }>;
 }
 
 /** What ShaderCanvas runs around the fragment shader, from the compile. */
@@ -137,8 +151,15 @@ export function playUsesCamera(play: PlayRecord): boolean {
  * player only) and the notes. Images placed as layers are data URLs and do
  * travel, as do the graph's images and small videos and songs.
  */
-export function leftBehind(play: PlayRecord, media?: PlayMedia): LeftBehind[] {
+export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: boolean; graphs?: PlayHtmlInput['backgroundGraphs'] } = {}): LeftBehind[] {
   const out: LeftBehind[] = [];
+  // A Background layer: its videos too big to keep, and graphs that weren't compiled (an example still loading, one that doesn't compile).
+  const queue = backgroundLayerOf(play);
+  for (const s of queue?.sources ?? []) {
+    if (s.kind === 'video' && !s.src) out.push({ what: `The background video “${s.name}”${s.bytes ? ` (${sizeText(s.bytes)})` : ''}`, why: `Videos over ${sizeText(BACKGROUND_VIDEO_KEEP)} play in the app for the session only, so the page shows the Background layer’s colour while it would show. Trim or compress it under ${sizeText(BACKGROUND_VIDEO_KEEP)} to bring it along.` });
+    if (s.kind === 'graph' && s.graph !== 'this' && opts.graphs && !opts.graphs[s.id]) out.push({ what: `The background graph “${s.name}”`, why: 'It couldn’t be compiled for the page (an example still loading, or a graph with an error), so the page shows the Background layer’s colour while it would show. Open the page again in a moment, or check the graph.' });
+  }
+  if (usesHands(play) && !opts.hands) out.push({ what: 'Hand tracking', why: `It needs MediaPipe and its hand model (about ${sizeText(HAND_BYTES)}), which stay out of the page unless you tick Include hand tracking. Without them, hand mappings, gestures and nulls that follow a hand stay at rest.` });
   for (const v of Object.values(media?.videos ?? {})) {
     if (!v.src && v.bytes > 0) out.push({ what: `The video “${v.name}” (${sizeText(v.bytes)}) in ${v.label}`, why: `Videos over ${sizeText(VIDEO_LIMIT)} stay out of the page to keep it light, so that input shows black there. Trim or compress it under ${sizeText(VIDEO_LIMIT)} to bring it along.` });
   }
@@ -150,6 +171,8 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia): LeftBehind[] {
       out.push({ what: l.fileName ? `The song “${l.fileName}” (${l.label})` : `The song in ${l.label}`, why: 'Songs aren’t saved with a setup, so the page listens to the visitor’s microphone instead, after they click Enable.' });
     }
   }
+  const bgVideo = !queue && play.display?.source === 'video' ? play.display.video : undefined;
+  if (bgVideo && !bgVideo.src) out.push({ what: `The background video “${bgVideo.name}” (${sizeText(bgVideo.bytes)})`, why: `Videos over ${sizeText(BACKGROUND_VIDEO_KEEP)} play in the app for the session only, so the page shows the backdrop colour instead. Trim or compress it under ${sizeText(BACKGROUND_VIDEO_KEEP)} to bring it along.` });
   if (play.midiFile) out.push({ what: `The MIDI file “${play.midiFile.name}”`, why: 'The web player doesn’t play MIDI files yet: what it drives stays where you left it. Record a video to keep the performance.' });
   const audioIds = new Set(play.layers.filter(l => l.kind === 'audio').map(l => l.id));
   const bands = play.mappings.filter(m => m.source.kind === 'sensor' && audioIds.has(m.source.layerId) && AUDIO_BAND_READS.has(m.source.read)).length;
@@ -158,16 +181,28 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia): LeftBehind[] {
   return out;
 }
 
+/** What hand tracking adds to a page (play/handExport.ts: MediaPipe and the model, gzipped, then base64), measured. */
+export const HAND_BYTES = 12.2 * 1024 * 1024;
+
 /** Mirrors lib/mediaSources.ts EMBED_LIMIT (this module stays free of browser-only imports). */
 const VIDEO_LIMIT = 4 * 1024 * 1024;
 const AUDIO_LIMIT = 6 * 1024 * 1024;
 
-/** Each image, video and song the page carries, and what it adds to the page's size. */
-export function mediaCarried(media?: PlayMedia): { what: string; bytes: number }[] {
+/** Each image, video and song the page carries (the graph's, and Play's background), and what it adds to the page's size. */
+export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', play?: PlayRecord): { what: string; bytes: number }[] {
   const out: { what: string; bytes: number }[] = [];
+  if (hands) out.push({ what: 'Hand tracking (MediaPipe and its hand model)', bytes: hands === 'pending' ? HAND_BYTES : hands.bundle.length + hands.loader.length + hands.wasm.length + hands.model.length });
   for (const t of Object.values(media?.textures ?? {})) if (t.src) out.push({ what: `Image in ${t.label}${t.scaledTo ? ` (scaled to ${t.scaledTo} px)` : ''}`, bytes: t.src.length });
   for (const v of Object.values(media?.videos ?? {})) if (v.src) out.push({ what: `Video “${v.name}” in ${v.label}`, bytes: v.src.length });
   for (const a of media?.audio ?? []) if (a.src) out.push({ what: `Song “${a.name}” in ${a.label}`, bytes: a.src.length });
+  const queue = backgroundLayerOf(play);
+  const d = queue ? undefined : play?.display;
+  if (d?.source === 'image' && d.image) out.push({ what: `Background image “${d.image.name}”`, bytes: d.image.src.length });
+  if (d?.source === 'video' && d.video?.src) out.push({ what: `Background video “${d.video.name}”`, bytes: d.video.src.length });
+  for (const s of queue?.sources ?? []) {
+    if (s.kind === 'image' && s.src) out.push({ what: `Background image “${s.name}”`, bytes: s.src.length });
+    if (s.kind === 'video' && s.src) out.push({ what: `Background video “${s.name}”`, bytes: s.src.length });
+  }
   return out;
 }
 
@@ -201,6 +236,19 @@ export function playBundle(input: PlayHtmlInput) {
   delete play.source;
   // Takes are for rendering in the app; the page never plays them back.
   delete play.takes;
+  // The background carries only the file it shows: an image kept for later isn't needed with a video (or the shader) showing.
+  // A Background layer decides instead of the header's setting, whose files then stay out altogether.
+  const queue = backgroundLayerOf(play);
+  if (play.display) {
+    const d = { ...play.display };
+    if (queue) delete d.source;
+    if (queue || d.source !== 'image') delete d.image;
+    if (queue || d.source !== 'video') delete d.video;
+    play.display = d;
+  }
+  // A saved graph's nodes stay out: the page runs the graph compiled (backgroundGraphs).
+  if (queue) play.layers = [{ ...queue, sources: queue.sources.map(s => { if (!s.nodes) return s; const c = { ...s }; delete c.nodes; return c; }) }, ...play.layers.slice(1)];
+  const graphs = queue ? Object.fromEntries(Object.entries(input.backgroundGraphs ?? {}).filter(([id]) => queue.sources.some(s => s.id === id))) : {};
   return {
     title: input.title,
     fragmentShader: input.fragmentShader,
@@ -210,6 +258,8 @@ export function playBundle(input: PlayHtmlInput) {
     aspect: aspect ? { id: aspect.id, ratio: aspect.ratio } : { id: 'free', ratio: null },
     ...(input.passes && (input.passes.stateful || input.passes.echo || input.passes.particles.length) ? { passes: input.passes } : {}),
     ...(input.media ? { media: runtimeMedia(input.media) } : {}),
+    ...(input.handAssets && usesHands(input.play) ? { hands: input.handAssets } : {}),
+    ...(Object.keys(graphs).length ? { backgroundGraphs: graphs } : {}),
     generatedBy: 'Playfield',
   };
 }
@@ -225,13 +275,30 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, layersSource, bodiesSource, kitSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, layersSource, bodiesSource, handsSource, queueSource, kitSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement } };\n})();\n`;
 }
 
-const runtimeScript = () => (kitScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
+/**
+ * The page's scripts: three.js first when a 3D Script layer needs it (a
+ * global `SSThree` the runtime hands the kit), then the kit and the player.
+ * Without the three.js script loaded (loadThreeSource) a 3D layer draws
+ * nothing in the page and says why.
+ */
+function runtimeScript(play: PlayRecord): string {
+  const three = playUses3D(play) ? threeSource() ?? '' : '';
+  return (three + (three ? '\n' : '') + kitScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
+}
+
+/** What three.js adds to the page, for the export dialogs; null when no layer needs it. Before it loads, about how much. */
+export function threeCarried(play: PlayRecord): { what: string; bytes: number } | null {
+  if (!playUses3D(play)) return null;
+  return { what: 'three.js, for the 3D Script layers', bytes: threeSource()?.length ?? THREE_BYTES };
+}
+/** The three.js script's size as built (three 0.182, three-slim.js), for the dialog until the real one loads. */
+const THREE_BYTES = 562_600;
 
 /** The complete page. Pure: same input, same string. */
 export function buildPlayHtml(input: PlayHtmlInput, options: EmbedOptions = DEFAULT_EMBED): string {
@@ -248,7 +315,7 @@ export function buildPlayHtml(input: PlayHtmlInput, options: EmbedOptions = DEFA
 <div id="play"></div>
 <script>window.PLAY_BUNDLE = ${scriptJson(playBundle(input))};
 window.PLAY_OPTIONS = ${scriptJson(runtimeOptions(options))};</script>
-<script>${runtimeScript()}</script>
+<script>${runtimeScript(input.play)}</script>
 </body>
 </html>
 `;
@@ -273,7 +340,7 @@ export function buildPlaySnippet(input: PlayHtmlInput, options: EmbedOptions = D
   return `<!-- Playfield · ${escapeHtml(input.title)} (${bg ? `background, ${options.placement === 'page' ? 'whole page' : 'fills its section'}` : 'player with controls'}) -->
 <div data-shader-studio style="${style}"></div>
 <script>
-${runtimeScript()}
+${runtimeScript(input.play)}
 (function(){var e=document.currentScript.previousElementSibling;${hostFix}
 ShaderStudioPlay.mount(e, ${scriptJson(playBundle(input))}, ${scriptJson(runtimeOptions(options))});})();
 </script>

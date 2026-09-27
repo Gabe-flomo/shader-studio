@@ -15,7 +15,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
-import { CHANNELS, COLOUR_CHANNELS, CURVES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, SENSOR_HINTS, SENSOR_LABELS, SOURCE_TYPES, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
+import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_POINT_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, SOURCE_TYPES, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import { SENSOR_READS_FOR, type SensorRead } from '../../types/play';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
@@ -44,6 +44,9 @@ import { toast } from '../ui/toastStore';
 import { usePlayUi, type PanelSize } from './playUi';
 import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
+import { HandsChip } from './HandsChip';
+import { handFeed } from '../../lib/handFeed';
+import { usesHands, type HandGesture } from '../../types/play';
 import { ColourPad } from './ColourPad';
 import { useLiveValues } from './useLiveValues';
 import { useStage } from './stageStore';
@@ -52,8 +55,10 @@ import { SoloButton, SoloStrip } from './Solo';
 import { GuidesToggle } from './GuidesToggle';
 import { OpenPlayableButton } from './OpenPlayable';
 import { MidiFileCard } from './MidiFileCard';
-import { TriggerPicker } from './TriggerPicker';
-import { DEFAULT_DISPLAY, actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind, type PlayDisplay } from '../../types/play';
+import { AnchorPicker, FirePicker, TriggerPicker, type TriggerLayerRef } from './TriggerPicker';
+import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind } from '../../types/play';
+import { playBackground } from '../../play/background';
+import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
@@ -113,8 +118,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // Mouse and keyboard sources listen only while this page shows. Solo is for this page only.
   useEffect(() => {
     playEngine.setPerforming(true);
-    return () => { playEngine.setPerforming(false); usePlayUi.getState().clearSolo(); };
+    usePlayUi.getState().setPerforming(true);
+    return () => { playEngine.setPerforming(false); usePlayUi.getState().setPerforming(false); usePlayUi.getState().clearSolo(); };
   }, []);
+  // An image, video or colour background replaces the shader while this page shows (the Studio keeps the graph).
+  useEffect(() => playBackground.claim(), []);
   // H shows or hides the picture's guides, unless a mapping listens to H.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -349,7 +357,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           <GuidesToggle onPanel />
         </div>
       )}
-      {!compact && <PictureRow play={play} onChange={update} />}
+      {!compact && <BackgroundRow play={play} onChange={update} />}
       {tab === 'controls' && <div style={{ flex: 1, minHeight: play.notes && !compact ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {compact && (
           // Phones: everything scrolls together under the picture, notes first.
@@ -360,7 +368,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
               <AspectPicker onPanel />
               <GuidesToggle onPanel />
             </div>
-            <PictureRow play={play} onChange={update} />
+            <BackgroundRow play={play} onChange={update} />
           </div>
         )}
         {(() => {
@@ -606,39 +614,6 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
 
 // ── Control row ──────────────────────────────────────────────────────────────
 
-/**
- * Show the shader, or only the layers on a backdrop colour. The shader keeps
- * rendering underneath, so reveal mattes, masks and particles still read it:
- * text with a Reveal matte then shows the picture inside the letters only.
- */
-function PictureRow({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: PlayRecord) => PlayRecord) => void }) {
-  const tk = useTokens();
-  const d = play.display ?? DEFAULT_DISPLAY;
-  const hex = `#${d.backdrop.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('')}`;
-  const setDisplay = (patch: Partial<PlayDisplay>) => onChange(p => {
-    const next = { ...(p.display ?? DEFAULT_DISPLAY), ...patch };
-    const isDefault = next.picture && next.backdrop.every((v, i) => v === DEFAULT_DISPLAY.backdrop[i]);
-    if (isDefault) { const rest = { ...p }; delete rest.display; return rest; }
-    return { ...p, display: next };
-  });
-  return (
-    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel }}>
-      <Tooltip label="Picture" description="Layers only hides the shader and shows the layers on a backdrop. The shader still runs underneath: text or images with a Reveal matte, and particles with Mask on, show it only inside themselves.">
-        <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'help' }}>Picture</span>
-      </Tooltip>
-      <Segmented size="sm" ariaLabel="Picture" value={d.picture ? 'shown' : 'hidden'} options={[
-        { value: 'shown', label: 'Shown', title: 'The shader, with the layers on top' },
-        { value: 'hidden', label: 'Layers only', title: 'Hide the shader; layers can still reveal it' },
-      ]} onChange={v => setDisplay({ picture: v === 'shown' })} />
-      {!d.picture && (
-        <label title="Backdrop colour" style={{ position: 'relative', width: 36, height: 22, borderRadius: radius.md, background: hex, boxShadow: `inset 0 0 0 1px ${alpha('#888', 0.5)}`, cursor: 'pointer' }}>
-          <input type="color" aria-label="Backdrop colour" value={hex} onChange={e => { const h = e.target.value; setDisplay({ backdrop: [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255] }); }} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
-        </label>
-      )}
-    </div>
-  );
-}
-
 /** Where a control's value lives: a layer's property or a node's param. */
 interface ControlSource { kind: 'layer' | 'node'; title: string; param: string; within?: string; missing: boolean; go: () => void }
 
@@ -793,7 +768,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           {control.kind === 'action' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62 }}>Amount</span>
-              <NumberInput value={control.amount ?? 1} min={0} max={1000} step={source.param === actionLabel('burst') ? 10 : 0.1} title="Burst: how many particles. Scatter: how hard. Others ignore it." onCommit={n => onAmount(Math.max(0, n))} style={{ width: 64, height: 24, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' }} />
+              <NumberInput value={control.amount ?? 1} min={0} max={1000} step={source.param === actionLabel('burst') ? 10 : 0.1} title="Burst: how many particles. Scatter: how hard. Go to: which background, from 1. Others ignore it." onCommit={n => onAmount(Math.max(0, n))} style={{ width: 64, height: 24, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' }} />
               <span style={{ color: tk.text.faint, fontSize: 11 }}>A mapping presses it each time it rises past the middle of its range.</span>
             </div>
           )}
@@ -854,7 +829,8 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
     if (row?.source.kind === 'trigger') {
       const src = row.source;
       return playEngine.startLearnTrigger(trigger => {
-        onUpdate(row.id, { source: { ...src, trigger } });
+        // Learn picks what fires it; how it fires (once, every frame…) stays.
+        onUpdate(row.id, { source: { ...src, trigger: withFire(trigger, src.trigger.fire) } });
         setLearnFor(null);
       });
     }
@@ -874,6 +850,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
   }, [learnFor]);
 
   const noControls = play.controls.length === 0;
+  const learnTrigger = !!learnFor && learnFor !== 'new' && play.mappings.find(m => m.id === learnFor)?.source.kind === 'trigger';
   const midi = midiEngine.webMidi();
   // Collapsed rows show one line: source → control, the meter and the switch. UI state only.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
@@ -922,9 +899,17 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               <MidiStatusChip />
             </div>
           )}
+          {(usesHands(play) || (learnFor && handFeed.getStatus() !== 'unsupported')) && (
+            <div style={{ margin: '4px 0 6px', padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field }}>
+              <HandsChip />
+            </div>
+          )}
           {learnFor && (
             <div style={{ margin: '6px 0 2px', padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 12px ${fontFamily.ui}` }}>
-              Move a knob, hit a note or press a key… <span style={{ fontWeight: 500, opacity: 0.8 }}>Esc to cancel</span>
+              {learnTrigger
+                ? <>Press a key, hit a note{handFeed.isOn() ? ' or make a hand gesture' : ''}… </>
+                : <>Move a knob, hit a note, press a key{handFeed.isOn() ? ' or move a finger' : ''}… </>}
+              <span style={{ fontWeight: 500, opacity: 0.8 }}>Esc to cancel</span>
             </div>
           )}
           <SoloStrip kind="mapping" total={play.mappings.length} />
@@ -1202,20 +1187,35 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
         <LiveAudioChip />
       </>);
     case 'trigger':
-      return <TriggerOptions source={source} shapes={layerRefs.filter(l => l.kind === 'shape')} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />;
+      return <TriggerOptions source={source} layers={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />;
+    case 'hand':
+      return (
+        <>
+          {row(<>
+            {source.read !== 'spread' && <Segmented size="sm" ariaLabel="Which hand" value={source.side} options={HAND_SIDES} onChange={side => onChange({ ...source, side })} />}
+            {source.read === 'point' && <>
+              <Select ariaLabel="Point on the hand" value={`${source.point}`} options={HAND_POINT_OPTIONS} onChange={v => onChange({ ...source, point: parseInt(v, 10) || 0 })} height={26} style={{ flex: 1, minWidth: 110 }} />
+              <Segmented size="sm" ariaLabel="Axis" value={source.axis} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z', title: 'Toward the camera (from the wrist)' }]} onChange={axis => onChange({ ...source, axis })} />
+            </>}
+            {source.read === 'palm' && <Segmented size="sm" ariaLabel="Axis" value={source.axis === 'y' ? 'y' : 'x'} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }]} onChange={axis => onChange({ ...source, axis })} />}
+            {source.read === 'pinch' && <Select ariaLabel="Finger the thumb pinches" value={`${source.point}`} options={PINCH_FINGERS} onChange={v => onChange({ ...source, point: parseInt(v, 10) || 8 })} height={26} />}
+            {source.read === 'gesture' && <Select ariaLabel="Gesture" value={source.gesture} options={HAND_GESTURE_OPTIONS} onChange={v => onChange({ ...source, gesture: v as HandGesture })} height={26} />}
+          </>)}
+          <div style={{ margin: '-2px 0 6px 60px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{HAND_READ_HINTS[source.read]}</div>
+        </>
+      );
     case 'sensor': {
       const sensing = layerRefs.filter(l => SENSOR_READS_FOR[l.kind]);
-      if (!sensing.length) return row(hint('Add a Shape, Particles, Camera or Null layer first'));
+      if (!sensing.length) return row(hint('Add a layer first: a shape, particles, a null…'));
       const layer = layerRefs.find(l => l.id === source.layerId);
       const reads = layer ? SENSOR_READS_FOR[layer.kind] ?? [] : [];
-      const nulls = layerRefs.filter(l => l.kind === 'null' && l.id !== source.layerId);
       return (
         <>
           {row(<>
             <Select ariaLabel="Sensor layer" value={source.layerId} options={sensing.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const k = layerRefs.find(l => l.id === v)?.kind ?? ''; const r = SENSOR_READS_FOR[k] ?? []; onChange({ ...source, layerId: v, read: r.includes(source.read) ? source.read : r[0] ?? 'fill' }); }} height={26} />
             {reads.length > 1 && <Segmented size="sm" ariaLabel="Reads" value={source.read} options={reads.map(r => ({ value: r, label: SENSOR_LABELS[r], title: SENSOR_HINTS[r] }))} onChange={v => onChange({ ...source, read: v })} />}
             {reads.length === 1 && hint(SENSOR_LABELS[reads[0]])}
-            {source.read === 'distance' && (nulls.length ? <>{hint('to')}<Select ariaLabel="Other null" value={source.otherId} options={[{ value: '', label: 'Pick a null' }, ...nulls.map(l => ({ value: l.id, label: l.label }))]} onChange={v => onChange({ ...source, otherId: v })} height={26} /></> : hint('Add a second null'))}
+            {source.read === 'distance' && <>{hint('to')}<AnchorPicker value={source.otherId} layers={layerRefs} exclude={source.layerId} ariaLabel="Distance to" onChange={otherId => onChange({ ...source, otherId })} /></>}
           </>)}
           <div style={{ margin: '-2px 0 6px 60px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{SENSOR_HINTS[source.read]}</div>
         </>
@@ -1227,16 +1227,16 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
 }
 
 /** Where a trigger fires from and what it does. */
-function TriggerOptions({ source, shapes, numStyle, labelStyle, onChange }: {
+function TriggerOptions({ source, layers, numStyle, labelStyle, onChange }: {
   source: Extract<PlaySource, { kind: 'trigger' }>;
-  shapes: ReadonlyArray<{ id: string; label: string }>;
+  layers: ReadonlyArray<TriggerLayerRef>;
   numStyle: React.CSSProperties;
   labelStyle: React.CSSProperties;
   onChange: (source: PlaySource) => void;
 }) {
-  const row = (label: string, children: ReactNode) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-      <span style={labelStyle}>{label}</span>
+  const row = (label: string, children: ReactNode, top = false) => (
+    <div style={{ display: 'flex', alignItems: top ? 'flex-start' : 'center', gap: 6, marginBottom: 6, flexWrap: top ? 'nowrap' : 'wrap' }}>
+      <span style={top ? { ...labelStyle, lineHeight: '26px' } : labelStyle}>{label}</span>
       {children}
     </div>
   );
@@ -1244,7 +1244,8 @@ function TriggerOptions({ source, shapes, numStyle, labelStyle, onChange }: {
   const setT = (trigger: TriggerSpec) => onChange({ ...source, trigger });
   return (
     <>
-      {row('On', <TriggerPicker trigger={t} shapes={shapes} numStyle={numStyle} onChange={setT} />)}
+      {row('On', <TriggerPicker trigger={t} layers={layers} numStyle={numStyle} onChange={setT} />)}
+      {row('Fires', <FirePicker trigger={t} what={`mode:${source.mode}`} numStyle={numStyle} onChange={setT} />, true)}
       {row('Does', <Segmented size="sm" ariaLabel="Trigger mode" value={source.mode} options={TRIGGER_MODES} onChange={v => onChange({ ...source, mode: v })} />)}
       {source.mode === 'envelope' && (
         <>

@@ -36,9 +36,11 @@ import { spawnPoint } from './spawnPoint';
 import { LibraryCard } from '../shell/LibraryPanel';
 import { CreditTag } from '../ui/Credit';
 import { creditSentence, type SourceCredit } from '../../types/credit';
+import { HistoryPanel, CountBadge } from '../history/HistoryPanel';
+import { useUnseenActivity } from '../ui/activityStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes';
+type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes' | 'history';
 
 interface ContentPaneState {
   id: string;
@@ -56,6 +58,7 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
   { id: 'functions',   label: 'Functions',       icon: 'fn',      color: tk => tk.kind.fn },
   { id: 'expressions', label: 'Expression Blocks', icon: 'expr',    color: tk => tk.kind.expr },
   { id: 'keyframes',   label: 'Saved Keyframes', icon: 'kf',      color: tk => tk.status.warning },
+  { id: 'history',     label: 'History',         icon: 'history', color: tk => tk.accent.base },
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
@@ -718,6 +721,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
           />
         );
 
+      case 'history':
+        return <HistoryPanel />;
+
       default: return null;
     }
   };
@@ -782,6 +788,7 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
     try { return JSON.parse(localStorage.getItem('nodepalette_favorites') ?? '[]'); } catch { return []; }
   });
   const [drawerQuery, setDrawerQuery] = useState('');
+  const unseen = useUnseenActivity();
   const [panes, setPanes]             = useState<ContentPaneState[]>(() => [mkPane('nodes')]);
   const [focusedPaneId, setFocusedPaneId] = useState(() => panes[0].id);
 
@@ -886,6 +893,7 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
       <div style={{ width: 52, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 0', borderRight: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle }}>
         {SIDEBAR_TABS.map(({ id, label, icon }) => (
           <RailButton key={id} icon={icon} label={label} active={focusedPane.activeTab === id}
+            badge={id === 'history' && unseen.count > 0 ? unseen : undefined}
             onClick={() => updatePane(focusedPane.id, { activeTab: id })} />
         ))}
         {onCollapse && (
@@ -937,25 +945,30 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
   );
 }
 
-function RailButton({ icon, label, active, onClick }: { icon: IconName; label: string; active: boolean; onClick: () => void }) {
+function RailButton({ icon, label, active, onClick, badge }: {
+  icon: IconName; label: string; active: boolean; onClick: () => void;
+  /** New notices in the Activity log (History tab). */
+  badge?: { count: number; error: boolean };
+}) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
     <Tooltip label={label} placement="right">
       <button
         onClick={onClick}
-        aria-label={label}
+        aria-label={badge ? `${label}, ${badge.count} new ${badge.count === 1 ? 'notice' : 'notices'}` : label}
         aria-pressed={active}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         style={{
-          width: 36, height: 36, border: 0, borderRadius: 10, padding: 0, cursor: 'pointer',
+          width: 36, height: 36, border: 0, borderRadius: 10, padding: 0, cursor: 'pointer', position: 'relative',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: active ? tk.bg.selected : hover ? tk.bg.hover : 'transparent',
           color: active ? tk.accent.base : hover ? tk.text.secondary : tk.text.faint,
         }}
       >
         <Icon name={icon} />
+        {badge && <CountBadge count={badge.count} error={badge.error} style={{ position: 'absolute', top: 1, right: 0, boxShadow: `0 0 0 2px ${tk.bg.subtle}` }} />}
       </button>
     </Tooltip>
   );

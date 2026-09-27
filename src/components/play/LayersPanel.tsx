@@ -12,12 +12,16 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { accentColor } from '../../theme/categories';
 import { kindOf, type LayerKindDef } from '../../types/layerKinds';
-import { addKindLayer, addableKinds, kindHint, useInstalledKinds } from '../../play/layerKinds';
-import type { MenuItem } from '../ui/Menu';
+import { addKindLayer, kindHint } from '../../play/layerKinds';
+import { AddLayerMenu } from './layers/AddLayerMenu';
+import { BUILTIN_LAYER, BUILTIN_LAYERS, type BuiltinVariant } from './layers/addLayerCatalog';
+import { script3dDefaults } from '../../types/playLayers';
 import { fontFamily, radius } from '../../theme/tokens';
-import { layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
+import { backgroundLayerOf, layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { playId } from '../../play/playControls';
-import { addNullFor, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, moveLayer, removeLayer, renameLayer, resetLayer } from './layerOps';
+import { addNullFor, backgroundMenuItems, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, moveLayer, removeLayer, renameLayer, resetLayer } from './layerOps';
+import { BackgroundEditor } from './layers/BackgroundEditor';
+import { addBackground, thisGraphSource } from '../../play/backgroundQueue';
 import { toast } from '../ui/toastStore';
 import { SoloButton, SoloStrip } from './Solo';
 import { LayerReadings } from './MapToMenu';
@@ -38,23 +42,7 @@ import {
   type EditorContext, ClonerEditor, ScriptEditor } from './layers/editors';
 import { ActionsSection } from './layers/ActionsSection';
 
-const KINDS: { kind: PlayLayerKind; label: string; hint: string; icon: IconName }[] = [
-  { kind: 'particles', label: 'Particles', hint: 'Flow along the picture, flock, swarm nulls and shapes, burst on the beat.', icon: 'spark' },
-  { kind: 'shape', label: 'Shape', hint: 'Boxes, circles, lines or drawn outlines: to see, and as walls, emitters, portals, sensors.', icon: 'layoutCanvas' },
-  { kind: 'null', label: 'Null', hint: 'A point to drag or animate. Drives mappings, follows things, emits or absorbs particles.', icon: 'grip' },
-  { kind: 'text', label: 'Text', hint: 'Words over the picture or the picture inside them. Can step through lines.', icon: 'edit' },
-  { kind: 'image', label: 'Image', hint: 'A picture of your own, blended or matted.', icon: 'overlay' },
-  { kind: 'bodies', label: 'Bodies', hint: 'Letters, circles or boxes that fall, bounce and pile up.', icon: 'dice' },
-  { kind: 'brush', label: 'Brush', hint: 'Paint on the picture with the mouse. Strokes fade and can be walls.', icon: 'curve' },
-  { kind: 'audio', label: 'Audio', hint: 'Live sound as a waveform, bars, a ring or a blob.', icon: 'wave' },
-  { kind: 'glyphs', label: 'Glyphs', hint: 'The picture as ASCII, halftone dots, squares or lines.', icon: 'hash' },
-  { kind: 'contours', label: 'Contours', hint: 'Topographic lines through the picture\'s brightness.', icon: 'loop' },
-  { kind: 'lens', label: 'Lens', hint: 'A circle that magnifies, pixelates, blurs or inverts what is under it.', icon: 'search' },
-  { kind: 'camera', label: 'Camera', hint: 'Your webcam: as a layer, a mask, or what particles read. Its motion is a source.', icon: 'camera' },
-  { kind: 'cloner', label: 'Cloner', hint: 'Copies of a shape, text, image or null in a grid, ring, line or along a stroke. Vary them by index; nulls and shapes push, grow, turn or hide the copies near them.', icon: 'copy' },
-  { kind: 'script', label: 'Script', hint: 'Draw with JavaScript: a setup and a draw function on a 2D canvas over the picture, with sliders you declare. Reads the picture, the mouse and nulls.', icon: 'code' },
-];
-const KIND = Object.fromEntries(KINDS.map(k => [k.kind, k])) as Record<PlayLayerKind, (typeof KINDS)[number]>;
+const KIND = BUILTIN_LAYER;
 
 export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, top }: {
   play: PlayRecord;
@@ -69,7 +57,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
 }) {
   const tk = useTokens();
   const addRef = useRef<HTMLSpanElement>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState(false);
   const selected = usePlayUi(s => s.selected), setSelected = usePlayUi(s => s.select), revealTick = usePlayUi(s => s.revealTick);
   const [drawing, setDrawing] = useState<ShapeDrawing | null>(null);
   useEffect(() => { playOverlay.setEditing(true, selected); }, [selected]);
@@ -78,28 +66,27 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   // A layer clicked on the picture is selected here too.
   useEffect(() => playOverlay.onSelect(id => usePlayUi.getState().reveal(id)), []);
 
-  const installed = useInstalledKinds();
-  const mode = useThemeMode();
   const addKind = (k: LayerKindDef) => {
     const id = playId('layer');
     onChange(p => addKindLayer(p, k, id));
     setSelected(id);
   };
-  // The built-in kinds, then sketches saved as kinds: this file's, then the rest of your list.
-  const addItems = (): MenuItem[] => {
-    const items: MenuItem[] = KINDS.map(k => ({ label: k.label, hint: k.hint, icon: k.icon, onSelect: () => add(k.kind) }));
-    const extra = addableKinds(play, installed);
-    if (extra.length) items.push('separator', ...extra.map(({ def, inFile }) => ({
-      label: def.name, icon: def.icon, iconColor: accentColor(def.colour, mode),
-      hint: `${kindHint(def.hint, def.paramDefs.length)}${inFile ? '' : ' · from your list'}`,
-      onSelect: () => addKind(def),
-    })));
-    return items;
-  };
-  const add = (kind: PlayLayerKind) => {
-    const n = play.layers.filter(l => l.kind === kind).length + 1;
+  const add = (kind: PlayLayerKind, variant?: BuiltinVariant) => {
+    if (kind === 'background') {
+      // One per setup, at the bottom. A new one starts with this graph, so the picture stays as it was.
+      const there = backgroundLayerOf(play);
+      if (there) { usePlayUi.getState().reveal(there.id); toast.info('This setup has a Background layer', { message: 'Add sources to its queue.' }); return; }
+      const id = playId('layer');
+      onChange(p => addBackground(p, [thisGraphSource()], id).play);
+      setSelected(id);
+      return;
+    }
+    // A 3D Script is a Script layer in 3D, starting from the 3D starter.
+    const is3d = variant === 'script3d';
+    const n = play.layers.filter(l => l.kind === kind && (kind !== 'script' || (l.kind === 'script' && (l.mode === '3d') === is3d))).length + 1;
     const id = playId('layer');
-    onChange(p => ({ ...p, layers: [...p.layers, defaultLayer(kind, id, `${KIND[kind].label} ${n}`)] }));
+    const made = defaultLayer(kind, id, `${is3d ? '3D Script' : KIND[kind].label} ${n}`);
+    onChange(p => ({ ...p, layers: [...p.layers, is3d ? ({ ...made, ...script3dDefaults() } as PlayLayer) : made] }));
     setSelected(id);
   };
   const patch = (id: string, fn: (l: PlayLayer) => PlayLayer) => onChange(p => ({ ...p, layers: p.layers.map(l => l.id === id ? fn(l) : l) }));
@@ -135,9 +122,9 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         {play.layers.length > 0 && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}` }}>{play.layers.length}</span>}
         <span style={{ flex: 1 }} />
         <span ref={addRef} style={{ display: 'inline-flex' }}>
-          <Button size="sm" icon="plus" onClick={() => { const r = addRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 280, y: r.bottom + 6 } : null); }}>Add layer</Button>
+          <Button size="sm" icon="plus" aria-expanded={menu} onClick={() => setMenu(m => !m)}>Add layer</Button>
         </span>
-        {menu && <Menu x={menu.x} y={menu.y} minWidth={280} onClose={() => setMenu(null)} items={addItems()} />}
+        {menu && <AddLayerMenu play={play} touch={touch} anchorRef={addRef} onAdd={add} onAddKind={addKind} onChange={onChange} onClose={() => setMenu(false)} />}
       </div>
       <div ref={listRef} style={{ flex: 1, minHeight: play.notes && !top ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {top && <div style={{ margin: '0 -12px' }}>{top}</div>}
@@ -158,7 +145,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             count={play.layers.length}
             touch={touch}
             selected={selected === l.id}
-            pictureHidden={play.display?.picture === false}
+            pictureHidden={isPictureHidden(play.display)}
             drawing={drawing?.layerId === l.id ? drawing.mode : null}
             exposedTargets={exposedTargets}
             onSelect={() => setSelected(l.id)}
@@ -233,6 +220,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
   const kind = kindOf(l, play.layerKinds);
   const look = kind
     ? { label: kind.name, hint: `${kindHint(kind.hint, kind.paramDefs.length)}. A Script layer underneath.`, icon: kind.icon as IconName, color: accentColor(kind.colour, mode) }
+    : l.kind === 'script' && l.mode === '3d' ? { ...(BUILTIN_LAYERS.find(b => b.variant === 'script3d') ?? KIND.script), color: tk.text.faint }
     : { ...KIND[l.kind], color: tk.text.faint };
   let body: ReactNode = null;
   switch (l.kind) {
@@ -250,7 +238,11 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
     case 'bodies': body = <BodiesEditor f={f} ctx={ctx} />; break;
     case 'cloner': body = <ClonerEditor f={f} ctx={ctx} />; break;
     case 'script': body = <ScriptEditor f={f} ctx={ctx} />; break;
+    case 'background': body = <BackgroundEditor f={f} ctx={ctx} />; break;
   }
+  // The Background layer stays at the bottom: it doesn't move, and there is only one.
+  const isBackground = l.kind === 'background';
+  const floor = layers[0]?.kind === 'background' ? 1 : 0;
 
   return (
     <div
@@ -271,14 +263,14 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
         ) : (
           <button type="button" title="Rename" onClick={() => { setDraft(l.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'text', color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.label}</button>
         )}
-        {l.kind !== 'null' && <SoloButton kind="layer" id={l.id} />}
+        {l.kind !== 'null' && !isBackground && <SoloButton kind="layer" id={l.id} />}
         <Toggle checked={l.visible} onChange={visible => set({ visible })} />
-        <IconButton icon="chevU" label="Move up (drawn earlier)" size="sm" disabled={index === 0} tooltip={false} onClick={() => onMove(-1)} />
-        <IconButton icon="chevD" label="Move down (drawn later, on top)" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />
+        {!isBackground && <IconButton icon="chevU" label="Move up (drawn earlier)" size="sm" disabled={index <= floor} tooltip={false} onClick={() => onMove(-1)} />}
+        {!isBackground && <IconButton icon="chevD" label="Move down (drawn later, on top)" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />}
         <span ref={moreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More: duplicate, reset, delete" size="sm" tooltip={false} onClick={() => { const r = moreRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 220, y: r.bottom + 4 } : null); }} />
         </span>
-        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={layerMenuItems({ onDuplicate, onReset, onRemove })} />}
+        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={isBackground ? backgroundMenuItems({ onReset, onRemove }) : layerMenuItems({ onDuplicate, onReset, onRemove })} />}
       </div>
       {open && (
         <>
@@ -290,7 +282,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
               <LayerReadings layer={l} />
             </Section>
           )}
-          {l.kind !== 'null' && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
+          {l.kind !== 'null' && !isBackground && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
         </>
       )}
     </div>

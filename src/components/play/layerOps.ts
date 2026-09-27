@@ -5,7 +5,7 @@
  * draw order, make a null for a property that follows one, and make a null
  * that drives a control.
  */
-import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource } from '../../types/play';
+import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type TriggerSpec } from '../../types/play';
 import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
 import { resetKindLayer } from '../../play/layerKinds';
 
@@ -19,11 +19,18 @@ export function removeLayer(p: PlayRecord, id: string): PlayRecord {
     controls,
     mappings: p.mappings.filter(m => ids.has(m.controlId)
       && !((m.source.kind === 'null' || m.source.kind === 'sensor') && m.source.layerId === id)
-      && !(m.source.kind === 'trigger' && m.source.trigger.on === 'zone' && m.source.trigger.layerId === id)),
+      && !(m.source.kind === 'trigger' && triggerReads(m.source.trigger, id)))
+      // A distance to the removed layer has nothing to measure to: it asks for another.
+      .map(m => (m.source.kind === 'sensor' && m.source.otherId === id ? { ...m, source: { ...m.source, otherId: '' } } : m)),
   };
-  const actions = (p.actions ?? []).filter(a => a.layerId !== id && !(a.trigger.on === 'zone' && a.trigger.layerId === id));
+  const actions = (p.actions ?? []).filter(a => a.layerId !== id && !triggerReads(a.trigger, id));
   if (actions.length) out.actions = actions; else delete out.actions;
   return out;
+}
+
+/** Does a trigger read this layer (a shape trigger on it, a proximity trigger from or to it)? */
+function triggerReads(t: TriggerSpec, id: string): boolean {
+  return (t.on === 'zone' && t.layerId === id) || (t.on === 'proximity' && (t.a === id || t.b === id));
 }
 
 /** A copy right above the original (drawn on top), nudged so it can be told apart on the picture. */
@@ -43,13 +50,16 @@ export function resetLayer(p: PlayRecord, id: string): PlayRecord {
   return {
     ...p,
     // A layer of a saved kind goes back to that kind's code and values, not to the starter sketch.
-    layers: p.layers.map(l => (l.id === id ? resetKindLayer(p, l) ?? { ...defaultLayer(l.kind, l.id, l.label), visible: l.visible } as PlayLayer : l)),
+    // A Background layer keeps its queue: the sources are what it is, not a setting.
+    layers: p.layers.map(l => (l.id === id ? resetKindLayer(p, l) ?? { ...defaultLayer(l.kind, l.id, l.label), visible: l.visible, ...(l.kind === 'background' ? { sources: l.sources } : {}) } as PlayLayer : l)),
   };
 }
 
 export function moveLayer(p: PlayRecord, id: string, dir: -1 | 1): PlayRecord {
   const i = p.layers.findIndex(l => l.id === id), j = i + dir;
   if (i < 0 || j < 0 || j >= p.layers.length) return p;
+  // The Background layer stays at the bottom.
+  if (p.layers[i].kind === 'background' || p.layers[j].kind === 'background') return p;
   const layers = [...p.layers];
   [layers[i], layers[j]] = [layers[j], layers[i]];
   return { ...p, layers };
@@ -80,6 +90,14 @@ export function layerMenuItems({ onDuplicate, onReset, onRemove }: { onDuplicate
     { label: 'Duplicate', hint: 'A copy on top, slightly offset', onSelect: onDuplicate },
     { label: 'Reset to defaults', hint: 'Every setting back to new; the name, controls and mappings stay', onSelect: onReset },
     { label: 'Delete', hint: 'With the controls and mappings that use it', onSelect: onRemove, danger: true },
+  ];
+}
+
+/** The Background layer's menu: no Duplicate (there is only one). */
+export function backgroundMenuItems({ onReset, onRemove }: { onReset: () => void; onRemove: () => void }) {
+  return [
+    { label: 'Reset settings', hint: 'Index, placement and transition back to new; the queue, controls and mappings stay', onSelect: onReset },
+    { label: 'Delete', hint: 'The header’s Background setting decides again', onSelect: onRemove, danger: true },
   ];
 }
 

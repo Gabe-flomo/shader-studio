@@ -75,6 +75,8 @@ export const SCRIPT_REFERENCE: RefGroup[] = [
       'const b = s.picture.brightness(mouseX, mouseY);\ncircle(mouseX, mouseY, 10 + b * 50);', { returns: '0 (black) to 1 (white).' }),
     fn('s.null', [['name', 'string', 'The Null layer’s label (or id).']], '{ x, y } | null', 'Where a Null layer is, in pixels. Nulls are handles you can drag, keyframe or map, so this is how a sketch follows something you move.',
       'const c = s.null(\'Sun\') || { x: width / 2, y: height / 2 };\ncircle(c.x, c.y, 30);', { returns: 'The null’s position, or null when there is no null by that name.', insert: "s.null('Sun')" }),
+    val('s.anchor', '{ x, y } | null', 'Where this layer is, in pixels, for proximity triggers and distance sensors (On: Proximity, Layer sensor → Distance). Set it to the thing that moves; unset, the layer counts as the picture’s centre. It keeps its value between frames.',
+      's.state.x = (s.state.x || 0) + 2;\ncircle(s.state.x, height / 2, 20);\ns.anchor = { x: s.state.x, y: height / 2 };', { insert: 's.anchor = { x: width / 2, y: height / 2 }' }),
     fn('s.pressed', [['key', 'string', 'A button’s key in params.']], 'boolean', 'Whether a button was pressed this frame (from the panel, a key, a beat or a note). True for one frame; the amount is in s.params[key].',
       "if (s.pressed('burst')) s.state.dots = [];", { returns: 'true on the frame it was pressed.', insert: "s.pressed('')" }),
     fn('s.random', [], 'number', 'Math.random: a number from 0 up to (not including) 1.', 'const r = s.random();', { returns: '0 ≤ r < 1.' }),
@@ -168,3 +170,86 @@ export const SCRIPT_REFERENCE: RefGroup[] = [
     fn('millis', [], 'number', 'The Play clock in milliseconds (s.time × 1000).', 'const blink = floor(millis() / 500) % 2;', { returns: 'Milliseconds.' }),
   ] },
 ];
+
+// ── 3D ───────────────────────────────────────────────────────────────────────
+// A Script layer in 3D (sketch3d.js): p5's WEBGL names on three.js. The origin
+// is the middle of the picture, y goes down, z toward you; units are pixels.
+
+const DETAIL: A = ['detailX?', 'number', 'Segments around (more is smoother, and slower).'];
+const DETAIL_Y: A = ['detailY?', 'number', 'Segments from top to bottom.'];
+const LIGHT_COLOUR: A = ['c', COLOUR, 'The light’s colour: grey, r g b in 0–255, or a CSS colour. 255 is full strength.'];
+
+export const SCRIPT_REFERENCE_3D: RefGroup[] = [
+  { title: '3D shapes', items: [
+    fn('box', [['w?', 'number', 'Width in pixels (50).'], ['h?', 'number', 'Height; the width when left out.'], ['d?', 'number', 'Depth; the width when left out.']], 'nothing',
+      'A box centred on the origin, in the fill (and stroke, as edges). Move it with translate first.', 'rotateY(s.time);\nbox(80);', { insert: 'box(80)' }),
+    fn('sphere', [['r?', 'number', 'Radius in pixels (50).'], DETAIL, DETAIL_Y], 'nothing', 'A sphere centred on the origin.', 'sphere(60);\nsphere(60, 8, 6); // faceted', { insert: 'sphere(50)' }),
+    fn('ellipsoid', [['rx?', 'number', 'Radius along x (50).'], ['ry?', 'number', 'Along y; rx when left out.'], ['rz?', 'number', 'Along z; rx when left out.'], DETAIL, DETAIL_Y], 'nothing', 'A squashed or stretched sphere.', 'ellipsoid(80, 30, 50);', { insert: 'ellipsoid(80, 30, 50)' }),
+    fn('torus', [['r?', 'number', 'Radius of the ring (50).'], ['tube?', 'number', 'Radius of the tube (10).'], DETAIL, DETAIL_Y], 'nothing', 'A ring, like a doughnut, lying in the picture’s plane.', 'rotateX(s.time);\ntorus(80, 20);', { insert: 'torus(60, 15)' }),
+    fn('cylinder', [['r?', 'number', 'Radius (50).'], ['h?', 'number', 'Height along y; r when left out.'], DETAIL, ['detailY?', 'number', 'Segments along its height.'], ['bottomCap?', 'boolean', 'false leaves the ends open.'], ['topCap?', 'boolean', 'false leaves the ends open.']], 'nothing', 'A cylinder standing along y.', 'cylinder(30, 120);', { insert: 'cylinder(30, 100)' }),
+    fn('cone', [['r?', 'number', 'Radius of the base (50).'], ['h?', 'number', 'Height along y; r when left out.'], DETAIL, ['detailY?', 'number', 'Segments along its height.'], ['cap?', 'boolean', 'false leaves the base open.']], 'nothing', 'A cone along y.', 'cone(40, 100);', { insert: 'cone(40, 100)' }),
+    fn('plane', [['w?', 'number', 'Width in pixels (50).'], ['h?', 'number', 'Height; the width when left out.']], 'nothing', 'A flat rectangle facing you, seen from both sides. A floor after rotateX(HALF_PI), or a screen with texture().', 'rotateX(HALF_PI);\nplane(400, 400);', { insert: 'plane(200, 200)' }),
+    fn('line', [['x1', 'number', 'Start x.'], ['y1', 'number', 'Start y.'], ['z1', 'number', 'Start z (with six numbers; with four, the line lies at z = 0).'], ['x2', 'number', 'End x.'], ['y2', 'number', 'End y.'], ['z2', 'number', 'End z.']], 'nothing',
+      'A line in the stroke colour (the fill’s without one). WebGL lines are one pixel wide.', 'stroke(255);\nline(-100, 0, 0, 100, 0, 0);', { insert: 'line(0, 0, 0, 100, 100, 100)' }),
+  ] },
+  { title: '3D transform', items: [
+    fn('push', [], 'nothing', 'Saves the transform, fill, stroke and material, so what follows can move freely until pop().', 'push();\ntranslate(100, 0, 0);\nsphere(20);\npop();'),
+    fn('pop', [], 'nothing', 'Restores what the matching push() saved.', 'pop();'),
+    fn('translate', [['x', 'number', 'Pixels to the right.'], ['y', 'number', 'Pixels down.'], ['z?', 'number', 'Pixels toward you.']], 'nothing', 'Moves the origin; shapes drawn after it are placed there. The transform starts afresh each frame.', 'translate(0, 0, -200);\nbox(50);', { insert: 'translate(0, 0, 0)' }),
+    fn('rotateX', [['a', 'number', 'Angle in radians.']], 'nothing', 'Turns what follows about the x axis (tips it toward you).', 'rotateX(s.time);\nbox(60);'),
+    fn('rotateY', [['a', 'number', 'Angle in radians.']], 'nothing', 'Turns what follows about the y axis (spins it like a top).', 'rotateY(s.time);\nbox(60);'),
+    fn('rotateZ', [['a', 'number', 'Angle in radians.']], 'nothing', 'Turns what follows about the z axis (in the picture’s plane).', 'rotateZ(s.time);\nplane(80);'),
+    fn('rotate', [['a', 'number', 'Angle in radians.'], ['axis?', '[x, y, z]', 'The axis to turn about; z when left out.']], 'nothing', 'Turns what follows about any axis.', 'rotate(s.time, [1, 1, 0]);\nbox(60);'),
+    fn('scale', [['x', 'number', 'Factor along x (1 is unchanged).'], ['y?', 'number', 'Along y; x when left out.'], ['z?', 'number', 'Along z; x when y is left out, else 1.']], 'nothing', 'Grows or shrinks what follows.', 'scale(2);\nsphere(20);'),
+    fn('resetMatrix', [], 'nothing', 'Back to no transform (the origin in the middle).', 'resetMatrix();'),
+  ] },
+  { title: '3D colour and materials', items: [
+    fn('background', [['c', COLOUR, COLOUR_ARGS]], 'nothing', 'Paints the whole layer this frame, hiding the shader under it. Leave it out to draw over the picture: a 3D layer starts clear every frame.', 'background(10, 10, 20);', { insert: 'background(20)' }),
+    fn('clear', [], 'nothing', 'Undoes background() for this frame, so the picture shows through again. That is the default.', 'if (s.params.see) clear();'),
+    fn('fill', [['c', COLOUR, COLOUR_ARGS]], 'nothing', 'The colour of shapes that follow. Flat without lights; shaded once the frame calls a light.', 'fill(255, 120, 40);\nsphere(50);', { insert: 'fill(255)' }),
+    fn('noFill', [], 'nothing', 'Shapes that follow draw only their edges (with stroke).', 'noFill();\nstroke(255);\nbox(100);'),
+    fn('stroke', [['c', COLOUR, COLOUR_ARGS]], 'nothing', 'Shapes that follow also draw their edges in this colour; lines use it too.', 'stroke(255);\nbox(100);', { insert: 'stroke(255)' }),
+    fn('noStroke', [], 'nothing', 'No edges on the shapes that follow (the default).', 'noStroke();'),
+    fn('normalMaterial', [], 'nothing', 'Colours each face by the way it points: a quick look that needs no lights.', 'normalMaterial();\ntorus(80, 25);'),
+    fn('ambientMaterial', [['c?', COLOUR, 'The colour the surface reflects; the fill when left out.']], 'nothing', 'A matte surface that lights shade, even in a frame without lights.', 'ambientLight(80);\ndirectionalLight(255, 255, 255, 0, 1, -1);\nambientMaterial(200, 120, 60);\nsphere(60);', { insert: 'ambientMaterial(200)' }),
+    fn('specularMaterial', [['c?', COLOUR, 'The colour of the highlight (white when left out).']], 'nothing', 'A shiny surface: the fill colour with a highlight where lights catch it. shininess() sets how tight.', 'pointLight(255, 255, 255, 0, -200, 200);\nfill(40, 90, 200);\nspecularMaterial(255);\nshininess(60);\nsphere(60);', { insert: 'specularMaterial(255)' }),
+    fn('emissiveMaterial', [['c', COLOUR, 'The colour it glows with.']], 'nothing', 'A surface that glows in its own colour on top of the fill, lit or not.', 'emissiveMaterial(255, 80, 0);\nsphere(30);', { insert: 'emissiveMaterial(255, 80, 0)' }),
+    fn('shininess', [['n', 'number', 'From 1 (broad) up (tight); 32 to start.']], 'nothing', 'How tight the highlight of specularMaterial is.', 'shininess(80);'),
+    fn('texture', [['t', 'texture | canvas | image | video', 'What to wrap on the shapes: s.picture.texture for the live shader, a canvas you draw on, an image or a video.']], 'nothing',
+      'Wraps the shapes that follow in a picture. fill() turns it off again.', 'texture(s.picture.texture);\nrotateY(s.time);\nbox(160);', { insert: 'texture(s.picture.texture)' }),
+  ] },
+  { title: 'Lights', items: [
+    fn('ambientLight', [LIGHT_COLOUR], 'nothing', 'Light from everywhere, so the dark sides are not black. Lights last for the frame they are called in, so call them in draw.', 'ambientLight(60);', { insert: 'ambientLight(60)' }),
+    fn('directionalLight', [LIGHT_COLOUR, ['dx', 'number', 'The way the light travels: x.'], ['dy', 'number', 'y (1 is downward).'], ['dz', 'number', 'z (−1 is away from you).']], 'nothing', 'Light from far away in one direction, like the sun. The colour can be three numbers, so this takes six.', 'directionalLight(255, 255, 255, 0.3, 0.6, -1);', { insert: 'directionalLight(255, 255, 255, 0, 1, -1)' }),
+    fn('pointLight', [LIGHT_COLOUR, ['x', 'number', 'Where the light is: x.'], ['y', 'number', 'y.'], ['z', 'number', 'z (positive is in front).']], 'nothing', 'Light from a point, like a bulb, as strong at any distance.', 'pointLight(255, 200, 150, mouseX - width / 2, mouseY - height / 2, 200);', { insert: 'pointLight(255, 255, 255, 0, -200, 200)' }),
+  ] },
+  { title: 'Camera', items: [
+    fn('camera', [['x?', 'number', 'Where the camera is: x.'], ['y?', 'number', 'y.'], ['z?', 'number', 'z (in front of the picture is positive).'], ['cx?', 'number', 'What it looks at: x.'], ['cy?', 'number', 'y.'], ['cz?', 'number', 'z.'], ['ux?', 'number', 'Which way is up: x.'], ['uy?', 'number', 'y (1, as in p5).'], ['uz?', 'number', 'z.']], 'nothing',
+      'Places the camera. It stays there until moved, so setup is a good place. With no arguments, back to where it starts.', 'function setup(s) {\n  camera(0, -300, 700, 0, 0, 0, 0, 1, 0);\n}', { insert: 'camera(0, -300, 700, 0, 0, 0, 0, 1, 0)' }),
+    fn('perspective', [['fovy?', 'number', 'How tall the view is, in radians (π/3).'], ['aspect?', 'number', 'Ignored: the picture’s shape is used.'], ['near?', 'number', 'Nearest distance drawn.'], ['far?', 'number', 'Farthest distance drawn.']], 'nothing', 'A perspective view (the default): far things look smaller. A wider fovy exaggerates depth.', 'function setup(s) {\n  perspective(PI / 2);\n}'),
+    fn('ortho', [['left?', 'number', 'Left edge (−width/2).'], ['right?', 'number', 'Right edge.'], ['bottom?', 'number', 'Bottom edge.'], ['top?', 'number', 'Top edge.'], ['near?', 'number', 'Nearest distance.'], ['far?', 'number', 'Farthest distance.']], 'nothing', 'A flat view with no perspective: sizes stay the same at any depth, for isometric scenes.', 'function setup(s) {\n  ortho();\n}'),
+    fn('orbitControl', [['sx?', 'number', 'How fast a sideways drag turns (1).'], ['sy?', 'number', 'How fast an up-and-down drag turns (1).']], 'nothing', 'Drag on the picture (or the Run preview) to turn the camera round what it looks at. Call it in draw.', 'orbitControl();'),
+  ] },
+  { title: 'three.js', items: [
+    val('s.three', '{ THREE, scene, camera, renderer, root }', 'three.js itself, for what the p5 names do not cover. Build objects in setup and add them to scene; change them in draw. The scene keeps three’s usual y-up world, one unit a pixel.',
+      'let knot;\nfunction setup(s) {\n  const { THREE, scene } = s.three;\n  knot = new THREE.Mesh(new THREE.TorusKnotGeometry(80, 20), new THREE.MeshNormalMaterial());\n  scene.add(knot);\n}\nfunction draw(s) {\n  knot.rotation.y = s.time;\n}'),
+    val('s.three.THREE', 'module', 'The three.js classes: Mesh, the geometries and materials, lights, Vector3, Color, CanvasTexture and more (the set exported pages carry).', 'const { Mesh, IcosahedronGeometry, MeshStandardMaterial } = s.three.THREE;'),
+    val('s.three.scene', 'THREE.Scene', 'The scene that is drawn. What setup adds stays until setup runs again (a resize, a code change).', 'const n = s.three.scene.children.length;'),
+    val('s.three.camera', 'THREE.Camera', 'The camera the scene is drawn with. Set it to a camera of your own and the p5 camera names stop steering it.', 'const cam = s.three.camera;'),
+    val('s.three.renderer', 'THREE.WebGLRenderer', 'The renderer, shared by every 3D layer: read from it, but settings you change reach the others. Set once the first frame has drawn.', 'const gl = s.three.renderer;'),
+    val('s.three.root', 'THREE.Group', 'Where the p5-style shapes and lights live, flipped so y goes down. Add objects here to share the p5 coordinates.', 'const p5World = s.three.root;'),
+    val('s.picture.texture', 'THREE.Texture', 'The picture under the layer, this frame, as a texture: skin a shape with the live shader. It uploads only on frames that read it.', 'texture(s.picture.texture);\nbox(160);'),
+  ] },
+];
+
+/** The groups a sketch's mode shows: 2D as ever; 3D the 3D groups, then what still applies (the sketch, the frame, maths, colours). */
+export function referenceFor(mode: '2d' | '3d'): RefGroup[] {
+  if (mode !== '3d') return SCRIPT_REFERENCE;
+  const keep = new Set(['Sketch', 'The frame (s)', 'Maths and random', 'Math shortcuts', 'p5 names']);
+  const colours = new Set(['color', 'hsl', 'lerpColor']);
+  return [
+    ...SCRIPT_REFERENCE_3D,
+    ...SCRIPT_REFERENCE.filter(g => keep.has(g.title)).map(g => ({ ...g, items: g.items.filter(it => it.name !== 's.ctx') })),
+    { title: 'Colour values', items: SCRIPT_REFERENCE.flatMap(g => g.items).filter(it => colours.has(it.name)) },
+  ];
+}

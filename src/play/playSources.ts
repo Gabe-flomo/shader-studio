@@ -3,12 +3,15 @@
  * <select> offers, conversion to and from the record's PlaySource shape, and
  * short labels. Pure; shared by the Play page and the control rows.
  */
-import type { LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySource, SensorRead, TriggerMode, TriggerSpec } from '../types/play';
+import type { ActionKind, FireMode, FireSpec, HandGesture, HandRead, HandSide, LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySource, SensorRead, TriggerMode, TriggerSpec } from '../types/play';
+import { ANCHOR_KINDS, DEFAULT_FIRE, handAnchor, parseHandAnchor } from '../types/play';
+import { HD_POINT_NAMES } from './kit/hands.js';
 
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend';
+export type HandSourceType = `hand:${HandRead}`;
+export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | HandSourceType;
 
-/** In the order the drop-down shows them: what everyone has first, MIDI hardware last. */
-export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
+/** In the order the drop-down shows them: what everyone has first, MIDI hardware last, then hand tracking under its own heading. */
+export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[] = [
   { value: 'mouse:x', label: 'Mouse X' },
   { value: 'mouse:y', label: 'Mouse Y' },
   { value: 'mouse:down', label: 'Mouse button' },
@@ -30,7 +33,83 @@ export const SOURCE_TYPES: { value: SourceType; label: string }[] = [
   { value: 'midi:velocity', label: 'MIDI velocity' },
   { value: 'midi:gate', label: 'MIDI gate' },
   { value: 'midi:bend', label: 'Pitch bend' },
+  { value: 'hand:point', label: 'Fingertip or joint (X, Y, Z)', group: 'Hands' },
+  { value: 'hand:pinch', label: 'Pinch (thumb to a finger)', group: 'Hands' },
+  { value: 'hand:open', label: 'Openness (fist to open hand)', group: 'Hands' },
+  { value: 'hand:palm', label: 'Palm centre', group: 'Hands' },
+  { value: 'hand:roll', label: 'Roll (turn of the hand)', group: 'Hands' },
+  { value: 'hand:size', label: 'Nearness (how big it looks)', group: 'Hands' },
+  { value: 'hand:present', label: 'Hand in view', group: 'Hands' },
+  { value: 'hand:gesture', label: 'Gesture held (fist, pinch…)', group: 'Hands' },
+  { value: 'hand:spread', label: 'Distance between the hands', group: 'Hands' },
 ];
+
+// ── Hands ────────────────────────────────────────────────────────────────────
+
+export const HAND_SIDES: { value: HandSide; label: string; title: string }[] = [
+  { value: 'right', label: 'Right', title: 'Your right hand' },
+  { value: 'left', label: 'Left', title: 'Your left hand' },
+  { value: 'any', label: 'Either', title: 'Your right hand when it is in view, else your left (gestures: either hand)' },
+];
+const SIDE_NAMES: Record<HandSide, string> = { right: 'Right', left: 'Left', any: 'Either hand' };
+
+/** The 21 landmarks, fingertips first (what people reach for), for a picker. */
+export const HAND_POINT_OPTIONS: { value: string; label: string }[] = [8, 4, 12, 16, 20, 0, 5, 9, 13, 17, 1, 2, 3, 6, 7, 10, 11, 14, 15, 18, 19]
+  .map(i => ({ value: `${i}`, label: HD_POINT_NAMES[i] }));
+export const PINCH_FINGERS: { value: string; label: string }[] = [
+  { value: '8', label: 'Index' }, { value: '12', label: 'Middle' }, { value: '16', label: 'Ring' }, { value: '20', label: 'Pinky' },
+];
+export const HAND_GESTURE_OPTIONS: { value: HandGesture; label: string; title: string }[] = [
+  { value: 'pinch', label: 'Pinch', title: 'Thumb and index fingertips together' },
+  { value: 'pinchMiddle', label: 'Middle pinch', title: 'Thumb and middle fingertips together' },
+  { value: 'pinchRing', label: 'Ring pinch', title: 'Thumb and ring fingertips together' },
+  { value: 'pinchPinky', label: 'Pinky pinch', title: 'Thumb and little fingertips together' },
+  { value: 'fist', label: 'Fist', title: 'All four fingers curled in' },
+  { value: 'open', label: 'Open palm', title: 'All fingers and the thumb stretched out' },
+  { value: 'point', label: 'Point', title: 'Index finger out, the others curled' },
+  { value: 'appear', label: 'Comes into view', title: 'Fires when the hand appears; held while it stays' },
+  { value: 'leave', label: 'Leaves view', title: 'Fires when the hand goes out of view; held while it is away' },
+];
+export const HAND_GESTURE_LABELS = Object.fromEntries(HAND_GESTURE_OPTIONS.map(g => [g.value, g.label])) as Record<HandGesture, string>;
+
+/** What each hand reading means, for the row's hint. */
+export const HAND_READ_HINTS: Record<HandRead, string> = {
+  point: 'X and Y run 0 to 1 across the picture (Y up), with the camera image placed as the Camera layer shows it. Z is 0.5 level with the wrist and grows toward the camera.',
+  palm: 'The middle of the palm, 0 to 1 across the picture.',
+  pinch: '0 when the fingertips touch, 1 when they are spread wide. Measured against the size of the hand, so it reads the same near and far.',
+  open: '0 for a fist, 1 for an open hand.',
+  roll: '0.5 with the fingers up; more as the hand leans right, less as it leans left.',
+  size: 'How big the hand looks: 0 far from the camera, 1 close to it.',
+  present: '1 while the hand is in view, 0 when it is not (a short hold hides dropped frames).',
+  gesture: '1 while the gesture is held, 0 otherwise: a gate. For an envelope or a toggle, use Trigger with On: Hand gesture.',
+  spread: 'How far apart your two palms are: 1 is a picture width. Reads only while both hands are in view.',
+};
+
+/** A new hand source of a reading, keeping the side (and the point, where it still makes sense) of the one it replaces. */
+export function handSource(read: HandRead, prev: PlaySource): PlaySource {
+  const p = prev.kind === 'hand' ? prev : null;
+  const side = p?.side ?? 'right';
+  const tips = [8, 12, 16, 20];
+  const point = read === 'pinch' ? (p && tips.includes(p.point) ? p.point : 8) : (p?.point ?? 8);
+  const axis = read === 'palm' ? (p?.axis === 'y' ? 'y' : 'x') : (p?.axis ?? 'x');
+  return { kind: 'hand', side, read, point, axis, gesture: p?.gesture && read === 'gesture' ? p.gesture : 'fist' };
+}
+
+/** "Right · Index tip · X", "Left · Pinch", "Hands apart". */
+export function handSourceLabel(s: Extract<PlaySource, { kind: 'hand' }>): string {
+  const side = SIDE_NAMES[s.side];
+  switch (s.read) {
+    case 'point': return `${side} · ${HD_POINT_NAMES[s.point] ?? 'Point'} · ${s.axis.toUpperCase()}`;
+    case 'palm': return `${side} · Palm ${s.axis === 'y' ? 'Y' : 'X'}`;
+    case 'pinch': { const f = PINCH_FINGERS.find(x => x.value === `${s.point}`)?.label ?? 'Index'; return `${side} · ${f === 'Index' ? 'Pinch' : `${f} pinch`}`; }
+    case 'open': return `${side} · Openness`;
+    case 'roll': return `${side} · Roll`;
+    case 'size': return `${side} · Nearness`;
+    case 'present': return `${side} · In view`;
+    case 'gesture': return `${side} · ${HAND_GESTURE_LABELS[s.gesture]} (held)`;
+    case 'spread': return 'Hands apart';
+  }
+}
 
 export const CHANNELS = [{ value: '0', label: 'All' }, ...Array.from({ length: 16 }, (_, i) => ({ value: `${i + 1}`, label: `${i + 1}` }))];
 
@@ -51,11 +130,13 @@ export const COLOUR_CHANNELS = [
 export function sourceType(s: PlaySource): SourceType {
   if (s.kind === 'midi') return `midi:${s.signal}` as SourceType;
   if (s.kind === 'mouse') return `mouse:${s.axis}` as SourceType;
+  if (s.kind === 'hand') return `hand:${s.read}`;
   return s.kind;
 }
 
 /** `otherControlId` is the first control a new control source may point at (not the mapping's own target); `nullId` the first null layer; `sensor` the first layer that measures something. */
 export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId = '', nullId = '', sensor: { layerId: string; read: SensorRead } | null = null): PlaySource {
+  if (t.startsWith('hand:')) return handSource(t.slice(5) as HandRead, prev);
   const channel = prev.kind === 'midi' ? prev.channel : 0;
   switch (t) {
     case 'midi:cc': return { kind: 'midi', signal: 'cc', channel, cc: prev.kind === 'midi' && prev.cc !== undefined ? prev.cc : 1 };
@@ -79,6 +160,7 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
     case 'audio': return { kind: 'audio', nodeId: prev.kind === 'audio' ? prev.nodeId : '', band: 0 };
     case 'tilt': return { kind: 'tilt', axis: 'gamma' };
     case 'gamepad': return { kind: 'gamepad', pad: 0, control: 'axis', index: 0 };
+    default: return prev;
   }
 }
 
@@ -86,18 +168,19 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
 export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string; label: string }> = [], layers: ReadonlyArray<{ id: string; label: string }> = []): string {
   if (s.kind === 'mouse') return s.axis === 'down' ? 'Mouse button' : `Mouse ${s.axis.toUpperCase()}`;
   if (s.kind === 'null') return `${layers.find(l => l.id === s.layerId)?.label ?? 'Null'} ${s.axis.toUpperCase()}`;
-  if (s.kind === 'sensor') return `${layers.find(l => l.id === s.layerId)?.label ?? 'Layer'} ${SENSOR_LABELS[s.read].toLowerCase()}`;
+  if (s.kind === 'sensor') return `${layers.find(l => l.id === s.layerId)?.label ?? 'Layer'} ${SENSOR_LABELS[s.read].toLowerCase()}${s.read === 'distance' && s.otherId ? ` to ${anchorLabel(s.otherId, layers)}` : ''}`;
   if (s.kind === 'key') return `Key ${keyName(s.code)}`;
   if (s.kind === 'control') return `← ${controls.find(c => c.id === s.controlId)?.label ?? 'control'}`;
   if (s.kind === 'lfo') return `LFO ${s.shape} ${s.rate} Hz`;
   if (s.kind === 'noise') return `Noise ${s.type}${s.type === 'random' ? '' : ` ${s.rate}/s`}`;
   if (s.kind === 'osc') return `OSC ${s.address}`;
   if (s.kind === 'live') return `Live ${LIVE_BAND_LABELS[s.band]}`;
-  if (s.kind === 'trigger') return `${s.mode === 'envelope' ? 'Env' : s.mode === 'toggle' ? 'Toggle' : s.mode === 'step' ? 'Step' : 'Random'} · ${triggerLabel(s.trigger)}`;
+  if (s.kind === 'trigger') return `${s.mode === 'envelope' ? 'Env' : s.mode === 'toggle' ? 'Toggle' : s.mode === 'step' ? 'Step' : 'Random'} · ${triggerLabel(s.trigger, layers)}`;
   if (s.kind === 'clock') return `${s.bpm} bpm · ${s.beats} beat${s.beats === 1 ? '' : 's'}`;
   if (s.kind === 'audio') return `Audio band ${s.band + 1}`;
   if (s.kind === 'tilt') return `Tilt ${s.axis === 'beta' ? 'front/back' : s.axis === 'gamma' ? 'left/right' : 'compass'}`;
   if (s.kind === 'gamepad') return `Pad ${s.pad + 1} ${s.control} ${s.index}`;
+  if (s.kind === 'hand') return handSourceLabel(s);
   const ch = s.channel === 0 ? '' : ` · ch. ${s.channel}`;
   switch (s.signal) {
     case 'cc': return `CC ${s.cc ?? 1}${ch}`;
@@ -132,8 +215,8 @@ export const TILT_AXES = [
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-/** "Key Space", "C4 · ch. 2", "Any note", "Click", "OSC /1/push1", "Every beat". */
-export function triggerLabel(t: TriggerSpec): string {
+/** "Key Space", "C4 · ch. 2", "Any note", "Click", "OSC /1/push1", "Every beat", "Dot near Box". */
+export function triggerLabel(t: TriggerSpec, layers: ReadonlyArray<{ id: string; label: string }> = []): string {
   switch (t.on) {
     case 'key': return `Key ${keyName(t.code)}`;
     case 'note': return `${t.note < 0 ? 'Any note' : `${NOTE_NAMES[t.note % 12]}${Math.floor(t.note / 12) - 1}`}${t.channel ? ` · ch. ${t.channel}` : ''}`;
@@ -142,7 +225,115 @@ export function triggerLabel(t: TriggerSpec): string {
     case 'beat': return t.beats === 1 ? `Every beat @ ${t.bpm}` : `Every ${t.beats} beats @ ${t.bpm}`;
     case 'audio': return `${LIVE_BAND_LABELS[t.band]} hit`;
     case 'zone': return t.event === 'click' ? 'Click on shape' : t.event === 'enter' ? 'Pointer enters shape' : `Shape fills to ${Math.round(t.threshold * 100)}%`;
+    case 'hand': return `${SIDE_NAMES[t.side]} · ${HAND_GESTURE_LABELS[t.gesture]}`;
+    case 'proximity': return `${anchorLabel(t.a, layers)} ${t.when === 'closer' ? 'near' : 'away from'} ${anchorLabel(t.b, layers)}`;
   }
+}
+
+// ── Anchors (what proximity and distance measure between) ───────────────────
+
+/** "Right · Index tip", or the layer's name. */
+export function anchorLabel(ref: string, layers: ReadonlyArray<{ id: string; label: string }> = []): string {
+  const h = parseHandAnchor(ref);
+  if (h) return `${SIDE_NAMES[h.side]} · ${HD_POINT_NAMES[h.point] ?? 'Point'}`;
+  return layers.find(l => l.id === ref)?.label ?? (ref ? 'Missing layer' : 'Pick one');
+}
+
+/** Layers with a centre on the picture, for an anchor picker. */
+export function anchorLayers<L extends { id: string; kind: string }>(layers: ReadonlyArray<L>): L[] {
+  return layers.filter(l => ANCHOR_KINDS.includes(l.kind));
+}
+
+/**
+ * The first picker of an anchor: every positioned layer, then the three
+ * hands (the landmark is picked beside it). A hand anchor's value here is
+ * `hand:<side>`; anchorChoice() turns a pick back into a ref.
+ */
+export function anchorOptions(layers: ReadonlyArray<{ id: string; label: string; kind: string }>, exclude = ''): { value: string; label: string; group?: string }[] {
+  return [
+    ...anchorLayers(layers).filter(l => l.id !== exclude).map(l => ({ value: l.id, label: l.label, group: 'Layers' })),
+    { value: 'hand:right', label: 'Right hand', group: 'Hands' },
+    { value: 'hand:left', label: 'Left hand', group: 'Hands' },
+    { value: 'hand:any', label: 'Either hand', group: 'Hands' },
+  ];
+}
+/** The first picker's value for a ref. */
+export function anchorPick(ref: string): string {
+  const h = parseHandAnchor(ref);
+  return h ? `hand:${h.side}` : ref;
+}
+/** A ref from the first picker's value, keeping the landmark of a hand ref it replaces (the index tip for a new one). */
+export function anchorChoice(pick: string, prev: string): string {
+  if (!pick.startsWith('hand:')) return pick;
+  return handAnchor(pick.slice(5) as HandSide, parseHandAnchor(prev)?.point ?? 8);
+}
+
+// ── Firing modes ────────────────────────────────────────────────────────────
+
+/** "On release" for a key, "On exit" for things that come and go (a shape, proximity, a hand). */
+export function releaseLabel(t: TriggerSpec): string {
+  return t.on === 'proximity' || t.on === 'zone' || (t.on === 'hand' && (t.gesture === 'appear' || t.gesture === 'leave')) ? 'On exit' : 'On release';
+}
+
+export function fireModes(t: TriggerSpec): { value: FireMode; label: string; title: string }[] {
+  const held = t.on === 'proximity' ? 'while close' : t.on === 'beat' ? 'on each beat’s first quarter' : 'while held';
+  return [
+    { value: 'once', label: 'Once', title: t.on === 'proximity' ? 'When A comes close to B (or goes far, for Farther than)' : 'When it starts: the key goes down, the gesture begins' },
+    { value: 'held', label: 'Continuously', title: `Every frame ${held}` },
+    { value: 'every', label: 'Every N', title: `At the start, then every few frames or seconds ${held}` },
+    { value: 'release', label: releaseLabel(t), title: t.on === 'proximity' ? 'When A moves away again' : 'When it lets go: the key comes up, the gesture ends' },
+  ];
+}
+
+/** The same trigger with a firing mode (the default mode leaves the field off, so files stay as they were). */
+export function withFire(t: TriggerSpec, fire: FireSpec | undefined): TriggerSpec {
+  const { fire: _drop, ...rest } = t;
+  void _drop;
+  return fire && fire.mode !== 'once' ? { ...rest, fire } : (rest as TriggerSpec);
+}
+
+/** A trigger's firing mode, filled in. */
+export function fireOf(t: TriggerSpec): FireSpec {
+  return t.fire ?? DEFAULT_FIRE;
+}
+
+/** "Once", "Every frame", "Every 3 frames", "Every 0.25 s", "On release". */
+export function fireLabel(t: TriggerSpec): string {
+  const f = fireOf(t);
+  switch (f.mode) {
+    case 'once': return 'Once';
+    case 'held': return 'Every frame';
+    case 'every': return f.unit === 'frames' ? `Every ${f.every} frame${f.every === 1 ? '' : 's'}` : `Every ${f.every} s`;
+    case 'release': return releaseLabel(t);
+  }
+}
+
+/**
+ * What goes wrong when something fires over and over, or null when that is
+ * fine (a burst every 3 frames is a stream of sparks). Keyed by what fires:
+ * an action kind, or a trigger mapping's mode (`mode:toggle`). A new action
+ * that shouldn't repeat adds a line here.
+ */
+const REPEAT_HINTS: Record<string, string> = {
+  toggle: 'A toggle fired every frame flickers on and off. Use Once, or Every N with a longer gap.',
+  freeze: 'Freeze flips between frozen and moving each time it fires, so repeating it stutters. Use Once.',
+  next: 'Each fire moves on (another line, another background), so repeating it races through them and cuts crossfades short. Every N seconds reads better.',
+  prev: 'Each fire moves back (another line, another background), so repeating it races through them and cuts crossfades short. Every N seconds reads better.',
+  shuffle: 'Each fire picks another line or background, so repeating it flickers. Every N seconds reads better.',
+  // goto: repeating Go to N shows the same source again, which changes nothing.
+  drop: 'Each fire drops the bodies from the top again, so repeating it keeps them in the air.',
+  reset: 'Each fire starts the layer over, so repeating it holds it at the start.',
+  'mode:toggle': 'A toggle fired every frame flickers between its two values. Use Once, or Every N with a longer gap.',
+  'mode:step': 'A step fired every frame races through its steps. Every N reads better.',
+  'mode:random': 'A new random value every frame is jitter. That may be what you want; Noise → Random does the same.',
+};
+
+/** The hint for firing `what` (an action kind, or `mode:<trigger mode>`) with this firing mode, or null. */
+export function repeatHint(what: ActionKind | `mode:${TriggerMode}`, fire: FireSpec | undefined): string | null {
+  if (!fire || fire.mode === 'once' || fire.mode === 'release') return null;
+  // Every N slower than about a fifth of a second is a rhythm, not a flicker.
+  if (fire.mode === 'every' && (fire.unit === 'seconds' ? fire.every >= 0.2 : fire.every >= 12)) return null;
+  return REPEAT_HINTS[what] ?? null;
 }
 
 export const SENSOR_LABELS: Record<SensorRead, string> = { fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance', level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble' };
@@ -152,7 +343,7 @@ export const SENSOR_HINTS: Record<SensorRead, string> = {
   speed: 'How fast the particles are moving on average, against their Speed setting.',
   spread: 'How spread out the particles are: near 0 in a clump, near 1 everywhere.',
   motion: 'How much is moving in front of the camera.',
-  distance: 'How far this null is from another one: 1 is a picture height or more.',
+  distance: 'How far this layer’s centre is from another layer or a point on a hand: 0 touching, 1 a picture height or more.',
   level: 'How loud the layer’s sound is overall (its Gain scales it).',
   bass: 'Bass, 25–150 Hz: kicks and bass lines.',
   lowmid: 'Low-mids, 150–600 Hz: body, warmth, most voices.',
@@ -171,10 +362,21 @@ export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
   { value: 'note', label: 'MIDI note' },
   { value: 'osc', label: 'OSC message' },
   { value: 'zone', label: 'Shape (click, enter, fill)' },
+  { value: 'hand', label: 'Hand gesture (pinch, fist…)' },
+  { value: 'proximity', label: 'Proximity (two things close)' },
 ];
 
-/** `shapeId` is the first shape layer, for a new shape trigger. */
-export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec, shapeId = ''): TriggerSpec {
+/**
+ * A new trigger of a kind, keeping what still makes sense of the one it
+ * replaces (its firing mode always). `layers` supplies a new shape trigger's
+ * shape and a new proximity trigger's two layers.
+ */
+export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: ReadonlyArray<{ id: string; kind: string }> = []): TriggerSpec {
+  return withFire(triggerOnFromKind(on, prev, layers), prev.fire);
+}
+
+function triggerOnFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: ReadonlyArray<{ id: string; kind: string }>): TriggerSpec {
+  const shapeId = layers.find(l => l.kind === 'shape')?.id ?? '';
   switch (on) {
     case 'key': return { on: 'key', code: prev.on === 'key' ? prev.code : 'Space' };
     case 'mouse': return { on: 'mouse' };
@@ -183,6 +385,15 @@ export function triggerFromKind(on: TriggerSpec['on'], prev: TriggerSpec, shapeI
     case 'osc': return { on: 'osc', address: prev.on === 'osc' ? prev.address : '/1/push1' };
     case 'audio': return { on: 'audio', band: prev.on === 'audio' ? prev.band : 'bass', threshold: prev.on === 'audio' ? prev.threshold : 0.6 };
     case 'zone': return { on: 'zone', layerId: prev.on === 'zone' ? prev.layerId : shapeId, event: prev.on === 'zone' ? prev.event : 'click', threshold: prev.on === 'zone' ? prev.threshold : 0.5 };
+    case 'hand': return { on: 'hand', side: prev.on === 'hand' ? prev.side : 'right', gesture: prev.on === 'hand' ? prev.gesture : 'pinch' };
+    case 'proximity': {
+      if (prev.on === 'proximity') return prev;
+      // Nulls first (the usual pair), then anything with a centre; a hand when there is only one layer.
+      const pos = anchorLayers(layers).sort((x, y) => (x.kind === 'null' ? 0 : 1) - (y.kind === 'null' ? 0 : 1));
+      const a = pos[0]?.id ?? handAnchor('right', 8);
+      const b = pos.find(l => l.id !== a)?.id ?? (a.startsWith('hand:') ? '' : handAnchor('right', 8));
+      return { on: 'proximity', a, b, when: 'closer', distance: 0.15, margin: 0.03 };
+    }
   }
 }
 

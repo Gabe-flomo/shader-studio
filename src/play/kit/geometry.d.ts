@@ -11,3 +11,12 @@ export function geoFieldFromCoverage(cover: Float32Array, gw: number, gh: number
 export function geoFieldAt(f: DistanceField, x: number, y: number): number;
 export function geoFieldFromBrightness(sample: Uint8ClampedArray, sw: number, sh: number, threshold: number): DistanceField;
 export function geoFieldFromAlpha(data: Uint8ClampedArray, gw: number, gh: number): DistanceField;
+/** A layer's centre for proximity and distance (see geometry.js). */
+export function geoAnchor(
+  layer: { id: string; kind: string } & Record<string, unknown>,
+  value: (key: string) => number,
+  aspect: number,
+  reported: (key: string) => number | undefined,
+  lookup: (id: string) => { layer: { id: string; kind: string } & Record<string, unknown>; value: (key: string) => number } | null,
+  depth?: number,
+): { x: number; y: number } | null;
