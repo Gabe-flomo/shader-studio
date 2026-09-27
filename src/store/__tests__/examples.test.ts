@@ -32,6 +32,18 @@ describe('bundled examples', () => {
     expect(filed.filter(k => !EXAMPLE_GRAPHS[k]), 'folder points at a missing example').toEqual([]);
   });
 
+  it('are written in the current Grid Columns units, so none relies on the load migration', () => {
+    // Grid and Grid Pattern's Columns counts cells across the width since version 2
+    // (nodes/definitions/gridColumns.ts). An unstamped node here would be doubled on load.
+    const old: string[] = [];
+    for (const k of keys) {
+      walk(EXAMPLE_GRAPHS[k].nodes, n => {
+        if ((n.type === 'gridLayout' || n.type === 'gridPattern') && n.params._schemaVersion !== 2) old.push(`${k}: ${n.id}`);
+      });
+    }
+    expect(old).toEqual([]);
+  });
+
   it('use only current node types (no deprecated or unknown nodes)', () => {
     const bad: string[] = [];
     for (const k of keys) {

@@ -31,7 +31,7 @@ describe('Grid Pattern node', () => {
   });
   it('uses the same cell size as the Grid node so the two line up', () => {
     const r = compileGraph({ nodes: graph({ columns: 12 }) });
-    expect(r.fragmentShader).toMatch(/(\w+)_cell = \1_asp \/ 12\.0;/);
+    expect(r.fragmentShader).toMatch(/(\w+)_cell = 2\.0 \* \1_asp \/ 12\.0;/);
   });
   it('measures influence from the centre when no point is wired, and from the point when one is', () => {
     const none = compileGraph({ nodes: graph({ affect: 'grow' }, false) }).fragmentShader;

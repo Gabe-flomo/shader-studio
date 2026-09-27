@@ -287,6 +287,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const notesCard = (play.notes || notesEditing) ? (
     <NotesCard
       notes={play.notes ?? ''}
+      source={play.source}
       editing={notesEditing}
       targets={noteTargets}
       onOpen={openRef}

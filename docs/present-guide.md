@@ -16,10 +16,17 @@ or is deleted.
 ## Make one
 
 - With nothing saved yet, the page offers **Open the sample**, **New
-  presentation** and **Import a file**.
+  presentation** and **Import a file**, with **More samples** under them.
 - Otherwise click the presentation's title (top left of the page) for the
   file menu: **New presentation…**, **Import a .present.json file…**, the
-  sample, and the actions for the one that's open.
+  samples, and the actions for the one that's open.
+- The samples come in two groups. **Learn the app** teaches Playfield
+  itself: *Getting started in the Studio*, *From shader to instrument: your
+  first Play*, *Field sockets: one shape, many copies*, *Bring your own
+  GLSL* (the Convert page) and *Making a lesson with Present*. **Topics**
+  teach shaders: *Shaders from zero* (The Book of Shaders through the Learn
+  folder), ray marching, matrices, playing a shader and sketching over one.
+  Opening a sample builds it fresh from the bundled examples.
 - Add blocks to a step (Text, Render, Interactive, Code). The first time a
   block needs a picture it asks you to choose a Play: a saved graph or an
   example with a Play setup. That takes a snapshot into the presentation.

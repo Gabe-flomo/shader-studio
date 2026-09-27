@@ -5,6 +5,9 @@
  *   Text         Markdown with maths. Selected in Edit, it becomes a text box
  *                with the result right under it.
  *   Render       a source's picture: its shape, width, caption, clock.
+ *                A source that credits where it comes from (a Learn lesson's
+ *                chapter of The Book of Shaders) gets a small linked line under
+ *                the picture, here and in exported pages.
  *   Interactive  text, the picture and the chosen controls, relabelled, with
  *                what drives each one; chips in the text point at a slider.
  *   Code         highlighted GLSL or JavaScript, typed or quoted from a source.
@@ -36,6 +39,7 @@ import { Markdown } from './Markdown';
 import { PlayCanvas } from './PlayCanvas';
 import { usePresentation } from './presentationStore';
 import { BLOCK_META } from './blockMeta';
+import { CreditCaption } from '../ui/Credit';
 
 export interface BlockContext {
   sources: ReadonlyMap<string, PresentSource>;
@@ -185,6 +189,7 @@ function RenderBlockView({ block, ctx }: { block: RenderBlock; ctx: BlockContext
   const tk = useTokens();
   const links = useCanvasLinks(ctx, block.source);
   const pct = ctx.compact ? 100 : WIDTH_PCT[block.width];
+  const credit = ctx.sources.get(block.source)?.bundle.play.source;
   return (
     <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
       <div style={{ width: `${pct}%`, minWidth: ctx.compact ? 0 : 200, maxWidth: '100%' }}>
@@ -194,6 +199,7 @@ function RenderBlockView({ block, ctx }: { block: RenderBlock; ctx: BlockContext
           style={ctx.large ? { maxWidth: `calc(52vh * ${aspectRatio(block.aspect)})`, margin: '0 auto' } : undefined} />
       </div>
       {block.caption && <figcaption style={{ width: `${pct}%`, maxWidth: '100%', color: tk.text.muted, font: `500 13px/1.45 ${fontFamily.ui}`, textAlign: 'center' }}>{block.caption}</figcaption>}
+      {credit && <CreditCaption source={credit} style={{ width: `${pct}%`, maxWidth: '100%', marginTop: block.caption ? -4 : 0 }} />}
     </figure>
   );
 }
@@ -271,8 +277,12 @@ function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: Bl
 
   const stacked = ctx.compact || block.layout === 'stacked';
   const text = <Markdown text={block.markdown} controls={labels} layers={layerLabels} hot={hot ?? flash} onChip={nudge} onChipHover={setHot} size={ctx.large ? 'lg' : 'md'} placeholder={ctx.editing ? 'Add the lesson’s text in the block settings.' : undefined} />;
-  const canvas = <PlayCanvas slotId={block.id} source={source} aspect={block.aspect} pointer={block.pointer} active={ctx.active} sandbox={ctx.sandbox} onMount={onMount}
+  const picture = <PlayCanvas slotId={block.id} source={source} aspect={block.aspect} pointer={block.pointer} active={ctx.active} sandbox={ctx.sandbox} onMount={onMount}
     scripts={links.scripts} onScript={links.onScript} onStage={links.onStage} compact={ctx.compact} />;
+  const credit = play?.source;
+  const canvas = credit
+    ? <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>{picture}<CreditCaption source={credit} align="left" /></figure>
+    : picture;
   const panel = (
     <div style={{ display: 'grid', gridTemplateColumns: stacked && !ctx.compact ? 'repeat(auto-fill, minmax(220px, 1fr))' : '1fr', gap: 10 }}>
       {chosen.length === 0 && ctx.editing && <div style={{ color: tk.text.faint, font: `500 12.5px ${fontFamily.ui}` }}>No controls chosen. Pick some in the block settings.</div>}

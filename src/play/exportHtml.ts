@@ -197,6 +197,8 @@ export function playBundle(input: PlayHtmlInput) {
   // Notes are for the author and learners in the app; the website player never shows them.
   const play = { ...input.play };
   delete play.notes;
+  // The credit is printed into the page's HTML where the page shows it (a presentation); the player never reads it.
+  delete play.source;
   // Takes are for rendering in the app; the page never plays them back.
   delete play.takes;
   return {

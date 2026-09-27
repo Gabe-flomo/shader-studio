@@ -1,5 +1,6 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { p, f } from './helpers';
+import { columnsExpr, gridColumnsMigration } from './gridColumns';
 
 // Grid — aspect-corrected UV-space grid. Takes a UV input and a column count,
 // exposes cell-local data needed for any grid-based pattern or effect.
@@ -21,18 +22,21 @@ export const GridLayoutNode: NodeDefinition = {
     cell_size:      { type: 'float', label: 'Cell Size' },
     aspect_ratio:   { type: 'float', label: 'Aspect Ratio' },
   },
-  defaultParams: { columns: 10.0 },
+  // _schemaVersion: new nodes are made in the current Columns units (see gridColumns.ts).
+  defaultParams: { columns: 10.0, _schemaVersion: 2 },
+  ...gridColumnsMigration(10),
   paramDefs: {
-    columns: { label: 'Columns', type: 'float', min: 1.0, max: 80.0, step: 1.0, hint: 'How many cells across the width. Rows follow from the aspect ratio.' },
+    columns: { label: 'Columns', type: 'float', min: 1.0, max: 160.0, step: 1.0, hint: 'How many cells across the width. Rows follow from the aspect ratio.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
     const uv   = inputVars.uv      || 'g_uv';
-    const cols = inputVars.columns || p(node.params.columns, 10.0);
+    const cols = columnsExpr(node, inputVars.columns, 10.0);
     return {
       code: [
         `    float ${id}_asp  = u_resolution.x / u_resolution.y;\n`,
-        `    float ${id}_cell = ${id}_asp / ${cols};\n`,
+        // The UV runs from -aspect to +aspect across, so the width is 2 * aspect.
+        `    float ${id}_cell = 2.0 * ${id}_asp / ${cols};\n`,
         `    vec2  ${id}_gp   = ${uv} / ${id}_cell;\n`,
         `    vec2  ${id}_cid  = floor(${id}_gp);\n`,
         `    vec2  ${id}_cuv  = fract(${id}_gp) - 0.5;\n`,

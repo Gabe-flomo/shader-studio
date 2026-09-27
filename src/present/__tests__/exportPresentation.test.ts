@@ -16,6 +16,7 @@ vi.hoisted(() => {
 import { buildPresentationHtml, exportNotes, presentationFileJson } from '../exportPresentation';
 import { renderMarkdown } from '../markdown';
 import { buildSamplePresentation } from '../sample';
+import { snapshotExample } from '../snapshot';
 import { parsePresentation, PRESENTATION_FILE_KIND, type Presentation } from '../../types/presentation';
 
 let sample: Presentation;
@@ -65,6 +66,31 @@ describe('presentation web page', () => {
     expect(notes[0].why).toContain('MIDI Input node outputs');
     const html = buildPresentationHtml(p, renderMarkdown, { layout: 'slides', math: 'mathml' });
     expect(html).toContain('data-still="1"');
+  });
+});
+
+describe('credits', () => {
+  it('a Learn lesson on a step carries its Book credit under the picture, in the page and the file', async () => {
+    const r = await snapshotExample('learnStep');
+    if (!r.ok) throw new Error(r.error);
+    const src = r.source;
+    expect(src.bundle.play.source).toMatchObject({ chapter: 5, section: 'Step and Smoothstep' });
+    const p = structuredClone(sample);
+    p.sources.push(src);
+    p.steps.push({
+      id: 'credit', columns: 1, blocks: [
+        { type: 'render', id: 'bcr', source: src.id, aspect: '16:9', width: 'full', pointer: false },
+        { type: 'interactive', id: 'bci', source: src.id, markdown: 'Step', controls: [], layout: 'side', aspect: '16:9', pointer: false },
+      ],
+    });
+    const html = buildPresentationHtml(p, renderMarkdown, { layout: 'scroll', math: 'mathml' });
+    const credits = html.match(/<p class="pp-credit"><svg[^]*?<\/svg>From <a href="https:\/\/thebookofshaders\.com\/05\/" target="_blank" rel="noopener noreferrer"[^>]*>The Book of Shaders<\/a>, Ch\. 5 · Shaping functions · Step and Smoothstep<\/p>/g) ?? [];
+    expect(credits).toHaveLength(2);
+    // The sample's own sources credit nothing, so nothing else gets a line.
+    expect(buildPresentationHtml(sample, renderMarkdown, { layout: 'scroll', math: 'mathml' })).not.toContain('class="pp-credit"');
+    // The player's bundle doesn't need it; the file keeps it.
+    expect(html).not.toContain('"source":{"title"');
+    expect(parsePresentation(JSON.parse(presentationFileJson(p)))!.sources.at(-1)!.bundle.play.source).toEqual(src.bundle.play.source);
   });
 });
 

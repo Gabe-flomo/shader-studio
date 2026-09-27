@@ -85,7 +85,7 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
     uv(),
     n('mouse', 'mouse', 40, 420),
     n('gridPattern', 'gp', 320, 220, {
-      columns: 10, shape: 'diamond', size: 0.34, pattern: 'checker',
+      columns: 20, shape: 'diamond', size: 0.34, pattern: 'checker',
       affect: 'grow', affectRadius: 0.8, affectSoftness: 0.8, affectAmount: 1.2, overflow: 'neighbours',
       color: [0.98, 0.78, 0.42], background: BG,
       ...note('Everything happens in this one node. Columns cuts the canvas into cells; Built-in shape and Size draw one shape per cell; Pattern picks which cells get one; Affect says what the Affect Pos point (the mouse) does to the shapes inside Affect Radius. Overflow is on Neighbours so the grown diamonds are not cut at their cell edges.'),
@@ -106,7 +106,7 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
   // ── 2 · By hand ───────────────────────────────────────────────────────────
   add('gridTourByHand', [
     uv(),
-    n('gridLayout', 'grid', 300, 220, { columns: 12,
+    n('gridLayout', 'grid', 300, 220, { columns: 24,
       ...note('The Grid node does only the cutting: Cell UV is the position inside each cell (−0.5…0.5), Cell ID the column and row. Everything else is up to the nodes after it.') },
       { uv: ['uv', 'uv'] }),
     n('noiseFloat', 'hash', 560, 360, { mode: 'hash', scale: 1, speed: 0, outMin: 0.12, outMax: 0.44,
@@ -152,7 +152,7 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
     n('mix', 'morph', 1480, 200, { ...note('Mixing two distances gives the shapes in between: 0 is the star, 1 the square.') },
       { a: ['star', 'distance'], b: ['box', 'distance'], t: ['blend', 'result'] }),
     n('palette', 'pal', 1480, 460, { preset: '1', scale: 0.16 }, { value: ['phase', 'value'] }),
-    n('gridPattern', 'gp', 1740, 260, { columns: 9, pattern: 'all', affect: 'none', background: BG,
+    n('gridPattern', 'gp', 1740, 260, { columns: 18, pattern: 'all', affect: 'none', background: BG,
       ...note('Shape and Picture are field sockets (ƒ): the whole chain behind them is run once per cell, in that cell’s coordinates.') },
       { shape: ['morph', 'result'], picture: ['pal', 'color'] }),
     out(['gp', 'color'], 2000),
@@ -179,7 +179,7 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
       ...note('The wave as a radius: each cell’s circle is as big as the wave is high at that cell.') }, { value: ['wave', 'output'] }),
     n('circleSDF', 'circ', 1240, 200, {}, { radius: ['size', 'result'] }),
     n('palette', 'pal', 1240, 440, { preset: '4', scale: 0.3 }, { value: ['wave', 'output'] }),
-    n('gridPattern', 'gp', 1500, 260, { columns: 18, pattern: 'all', affect: 'none', background: BG },
+    n('gridPattern', 'gp', 1500, 260, { columns: 36, pattern: 'all', affect: 'none', background: BG },
       { shape: ['circ', 'distance'], picture: ['pal', 'color'] }),
     out(['gp', 'color'], 1760),
   ], playRecord([
@@ -205,7 +205,7 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
       { a: ['circ', 'distance'], b: ['star', 'distance'], t: ['cell', 'influence'] }),
     n('palette', 'pal', 580, 820, { preset: '0', scale: 1, __inExpr_value: '0.55 - input * 0.55',
       ...note('Influence picks the colour: an input expression turns 0…1 into a walk along the palette from blue (far) to cream (under the mouse).') }, { value: ['cell', 'influence'] }),
-    n('gridPattern', 'gp', 860, 260, { columns: 11, pattern: 'all', affect: 'spin', affectRadius: 0.9, affectSoftness: 0.9, affectAmount: 1.0, background: BG,
+    n('gridPattern', 'gp', 860, 260, { columns: 22, pattern: 'all', affect: 'spin', affectRadius: 0.9, affectSoftness: 0.9, affectAmount: 1.0, background: BG,
       ...note('Affect is Spin, so the stars turn as they appear. Influence reaches the shape chain whatever Affect does, even Nothing.') },
       { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'], shape: ['morph', 'result'], picture: ['pal', 'color'] }),
     out(['gp', 'color'], 1140),
@@ -230,7 +230,7 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
     n('noiseFloat', 'hash', 300, 740, { mode: 'hash', scale: 1, speed: 0 }, { uv: ['cell', 'cellID'] }),
     n('palette', 'pal', 540, 740, { preset: '1', scale: 1 }, { value: ['hash', 'value'] }),
     n('gridPattern', 'gp', 820, 260, {
-      columns: 7, pattern: 'all', jitter: 0.25, affect: 'push', affectRadius: 0.9, affectSoftness: 0.8, affectAmount: 0.45,
+      columns: 14, pattern: 'all', jitter: 0.25, affect: 'push', affectRadius: 0.9, affectSoftness: 0.8, affectAmount: 0.45,
       overflow: 'neighbours', antialias: 0.012, background: BG,
       ...note('Overflow: Neighbours. Each pixel also draws the rings of the eight cells around it, each moved by its own jitter and push, so rings cross cell borders whole. Overlaps stack the same way on both sides of a border.'),
     }, { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'], shape: ['thick', 'result'], picture: ['pal', 'color'] }),
@@ -261,7 +261,7 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
       ...note('A ring of dots. Its UV is unwired, and because the Array is itself wired into Grid Pattern’s Shape, that UV is the grid cell’s coordinates: one ring per cell.') },
       { shape: ['dot', 'distance'], count: ['count', 'value'], rotation: ['spin', 'result'] }),
     n('palette', 'pal', 820, 620, { preset: '1', scale: 0.12 }, { value: ['count', 'value'] }),
-    n('gridPattern', 'gp', 1100, 300, { columns: 7, pattern: 'all', affect: 'none', background: BG },
+    n('gridPattern', 'gp', 1100, 300, { columns: 14, pattern: 'all', affect: 'none', background: BG },
       { shape: ['arr', 'distance'], picture: ['pal', 'color'] }),
     out(['gp', 'color'], 1360),
   ], playRecord([

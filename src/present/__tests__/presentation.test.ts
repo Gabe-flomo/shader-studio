@@ -22,7 +22,10 @@ import { snapshotExample, snapshotSaved, refreshSnapshot, sourceLimits } from '.
 import { resolveCode, parseLineRanges } from '../code';
 import { emptyPresentation, newBlock, parsePresentation, type InteractiveBlock, type Presentation, type PresentSource } from '../../types/presentation';
 import { buildSamplePresentation } from '../sample';
-import { SAMPLE_PRESENTATIONS } from '../samples';
+import { FIRST_SAMPLE, SAMPLE_GROUPS, SAMPLE_PRESENTATIONS } from '../samples';
+import { BOOK_TITLE, FIXUP_AFTER, FIXUP_BEFORE, buildBookPresentation, buildConvertPresentation, buildFieldSocketsPresentation } from '../teachingSamples';
+import { suggestFixups } from '../../glslToGraph/fixups';
+import { CONVERT_EXAMPLES } from '../../glslToGraph/examples';
 
 let light: PresentSource;
 beforeAll(async () => {
@@ -200,5 +203,47 @@ describe('every sample presentation', () => {
       const src = b.type === 'code' && b.from ? b.from.source : '';
       expect(s.blocks.some(x => (x.type === 'render' || x.type === 'interactive') && x.source === src), s.title).toBe(true);
     }
+  });
+});
+
+describe('the samples that teach the app', () => {
+  const markdownOf = (p: Presentation) => p.steps.map(s => s.blocks.map(b => (b.type === 'text' || b.type === 'interactive' ? b.markdown : '')).join('\n'));
+
+  it('sit in the menu’s groups, with unique titles', () => {
+    expect(new Set(SAMPLE_PRESENTATIONS.map(s => s.title)).size).toBe(SAMPLE_PRESENTATIONS.length);
+    for (const s of SAMPLE_PRESENTATIONS) expect(SAMPLE_GROUPS.map(g => g.id), s.title).toContain(s.group);
+    expect(SAMPLE_PRESENTATIONS.filter(s => s.group === 'app').length).toBeGreaterThanOrEqual(5);
+    expect(SAMPLE_PRESENTATIONS).toContain(FIRST_SAMPLE);
+  });
+
+  it('keep to 5–9 steps', async () => {
+    for (const s of SAMPLE_PRESENTATIONS.filter(x => x.group === 'app' || x.title === BOOK_TITLE)) {
+      const p = await s.build(0);
+      expect(p.steps.length, s.title).toBeGreaterThanOrEqual(5);
+      expect(p.steps.length, s.title).toBeLessThanOrEqual(9);
+    }
+  });
+
+  it('Bring your own GLSL quotes the fix-up card’s own rewrite, and the Soft circle the page starts with', async () => {
+    const card = suggestFixups(FIXUP_BEFORE).find(f => f.id === 'hoist-writes');
+    expect(card?.title).toBe('Give each write a line of its own');
+    expect(card?.code.trimEnd()).toBe(FIXUP_AFTER);
+    const p = await buildConvertPresentation(0);
+    expect(markdownOf(p).join('\n')).toContain(card!.title);
+    expect(p.steps.flatMap(s => s.blocks).some(b => b.type === 'code' && b.code === CONVERT_EXAMPLES.circle.code)).toBe(true);
+  });
+
+  it('Field sockets quotes the field function the compiler makes', async () => {
+    const p = await buildFieldSocketsPresentation(0);
+    const code = p.steps.flatMap(s => s.blocks).find(b => b.type === 'code' && !!b.code?.startsWith('float fieldfn_'));
+    expect(code?.type === 'code' ? code.code : '').toMatch(/^float fieldfn_circ_0_distance\(vec2 g_uv, vec2 fieldCell, float fieldInfluence, float fieldIndex\) \{[\s\S]*return circ_0_dist;\n\}$/);
+  });
+
+  it('Shaders from zero credits The Book of Shaders in every step, with the chapter and the Learn lesson', async () => {
+    const p = await buildBookPresentation(0);
+    markdownOf(p).forEach((md, i) => {
+      expect(md, p.steps[i].title).toMatch(/The Book of Shaders\* by Patricio Gonzalez Vivo and Jen Lowe, chapter \d+: \[[^\]]+\]\(https:\/\/thebookofshaders\.com\/\d\d\/\)/);
+      expect(md, p.steps[i].title).toMatch(/Examples → Learn →\*\* \*\*\d\d · /);
+    });
   });
 });
