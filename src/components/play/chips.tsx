@@ -143,15 +143,42 @@ export function LiveAudioChip() {
 export function CameraChip() {
   const tk = useTokens();
   const [status, setStatus] = useState<CameraStatus>(() => cameraInput.getStatus());
-  useEffect(() => cameraInput.onStatus(setStatus), []);
+  const [devices, setDevices] = useState<Array<{ id: string; label: string }>>([]);
+  const [deviceId, setDeviceId] = useState(() => cameraInput.getDeviceId());
+  const [res, setRes] = useState(() => cameraInput.getResolution());
+  useEffect(() => {
+    const refresh = () => { void cameraInput.devices().then(setDevices); };
+    const offStatus = cameraInput.onStatus(st => { setStatus(st); setDeviceId(cameraInput.getDeviceId()); if (st === 'on') refresh(); });
+    const offDevices = cameraInput.onDevices(refresh);
+    refresh();
+    return () => { offStatus(); offDevices(); };
+  }, []);
   const colour = status === 'on' ? tk.status.success : status === 'requesting' ? tk.status.warning : status === 'denied' ? tk.status.danger : tk.text.disabled;
-  const text = status === 'on' ? 'Camera on' : status === 'requesting' ? 'Asking…' : status === 'denied' ? (EMBEDDED ? 'Blocked by this page' : 'Blocked or no camera') : status === 'unsupported' ? 'Not available here' : 'Camera off';
+  const text = status === 'on' ? (cameraInput.getLabel() || 'Camera on') : status === 'requesting' ? 'Asking…' : status === 'denied' ? (EMBEDDED ? 'Blocked by this page' : 'Blocked or no camera') : status === 'unsupported' ? 'Not available here' : 'Camera off';
+  // Labels only appear once access is allowed; before that, one "Default camera" entry is enough.
+  const labelled = devices.some(d => !/^Camera \d+$/.test(d.label));
+  const options = [{ value: '', label: 'Default camera' }, ...(labelled ? devices.map(d => ({ value: d.id, label: d.label })) : [])];
+  const pick = (id: string) => { setDeviceId(id); void cameraInput.setDevice(id); };
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-      <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}` }} title={status === 'denied' && EMBEDDED ? EMBEDDED_HINT : undefined}>{text}</span>
-      {status !== 'on' && status !== 'unsupported' && <Button size="sm" onClick={() => void cameraInput.start()}>Turn on camera</Button>}
-      {status === 'on' && <Button size="sm" variant="ghost" onClick={() => cameraInput.stop()}>Stop</Button>}
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
+        <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}`, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={status === 'denied' && EMBEDDED ? EMBEDDED_HINT : text}>{text}</span>
+        {status !== 'on' && status !== 'unsupported' && <Button size="sm" onClick={() => void cameraInput.start()}>Turn on camera</Button>}
+        {status === 'on' && <Button size="sm" variant="ghost" onClick={() => cameraInput.stop()}>Stop</Button>}
+      </span>
+      {status !== 'unsupported' && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+          <Select ariaLabel="Camera" value={options.some(o => o.value === deviceId) ? deviceId : ''} options={options} onChange={pick} height={24} style={{ maxWidth: 190 }} />
+          <Select ariaLabel="Camera resolution" value={res} options={[{ value: '720p', label: '720p' }, { value: '1080p', label: '1080p' }]} onChange={v => { const r = v as '720p' | '1080p'; setRes(r); void cameraInput.setResolution(r); }} height={24} style={{ width: 76 }} />
+        </span>
+      )}
+      {status === 'on' && cameraInput.usedFallback() && (
+        <span style={{ color: tk.status.warningText, font: `11px/1.4 ${fontFamily.ui}` }}>The chosen camera isn’t connected, so the default one opened.</span>
+      )}
+      {status !== 'on' && status !== 'unsupported' && !labelled && (
+        <span style={{ color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>Turn the camera on once to list every camera: an iPhone (Continuity Camera), an HDMI capture card, a DSLR’s webcam app or OBS.</span>
+      )}
     </span>
   );
 }

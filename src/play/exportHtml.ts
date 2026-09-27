@@ -30,12 +30,14 @@ import bodiesSource from './kit/bodies.js?raw';
 import handsSource from './kit/hands.js?raw';
 import queueSource from './kit/queue.js?raw';
 import mattesSource from './kit/mattes.js?raw';
+import dataSource from './kit/data.js?raw';
 import kitSource from './kit/kit.js?raw';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { BACKGROUND_VIDEO_KEEP, backgroundLayerOf, usesHands, type PlayRecord } from '../types/play';
 import type { HandAssets } from './handExport';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
 import { playUses3D, threeSource } from './threeSource';
+import { datasetsCarried, type WebDatasets } from './dataExport';
 export { playUses3D };
 
 export interface PlayHtmlInput {
@@ -59,6 +61,12 @@ export interface PlayHtmlInput {
    * (play/queueGraphs.ts queueGraphsForWeb).
    */
   backgroundGraphs?: Record<string, { fragmentShader: string; uniforms: Record<string, number | number[]> }>;
+  /**
+   * The datasets the page reads (play/dataExport.ts): each one's frozen
+   * result and name, for Data nodes, Data layers, data mappings and s.data().
+   * Never the notebook or the source file.
+   */
+  datasets?: WebDatasets;
 }
 
 /** What ShaderCanvas runs around the fragment shader, from the compile. */
@@ -127,14 +135,13 @@ export interface GraphFeatures {
 
 /**
  * Human-readable list of things in this graph the standalone page can't run.
- * Feedback, echo, particles and image, video and audio inputs all run there;
- * a MIDI Input node's outputs don't yet (the page's MIDI drives mappings only).
+ * Feedback, echo, particles, image, video and audio inputs and Data nodes (the
+ * page carries their datasets' results) all run there; a MIDI Input node's
+ * outputs don't yet (the page's MIDI drives mappings only).
  */
 export function unsupportedFeatures(f: GraphFeatures): string[] {
   const out: string[] = [];
   if (Object.keys(f.liveUniforms).length) out.push('MIDI Input node outputs');
-  // Datasets stay in the app for now: the page's Data nodes read zeros (docs/data-layer-plan.md, milestone 3).
-  if (f.usesData) out.push('Data node values');
   return out;
 }
 
@@ -159,8 +166,14 @@ export function playUsesCamera(play: PlayRecord): boolean {
  * player only) and the notes. Images placed as layers are data URLs and do
  * travel, as do the graph's images and small videos and songs.
  */
-export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: boolean; graphs?: PlayHtmlInput['backgroundGraphs'] } = {}): LeftBehind[] {
+export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: boolean; graphs?: PlayHtmlInput['backgroundGraphs']; datasets?: WebDatasets } = {}): LeftBehind[] {
   const out: LeftBehind[] = [];
+  // Datasets travel as their results: a dataset never run has none, and notebooks and files stay in the app.
+  const sets = Object.values(opts.datasets ?? {});
+  for (const d of sets) if (!d.result) out.push({ what: `The dataset “${d.name}”`, why: 'It has no result yet (its notebook hasn’t run), so on the page its Data nodes read 0 and its Data layers draw nothing. Open it, press Run all, and export again.' });
+  // Live datasets: frozen at their window, or reconnecting (and so needing the network).
+  for (const d of sets) if (d.note) out.push(d.note);
+  if (sets.some(d => d.result)) out.push({ what: sets.length === 1 ? `The notebook and file of “${sets[0].name}”` : `The notebooks and files of ${sets.length} datasets`, why: 'The page carries each dataset’s result as it is now, not the notebook or the file it came from. Change them in the app and export again to update the page.' });
   // A Background layer: its videos too big to keep, and graphs that weren't compiled (an example still loading, one that doesn't compile).
   const queue = backgroundLayerOf(play);
   for (const s of queue?.sources ?? []) {
@@ -197,8 +210,8 @@ const VIDEO_LIMIT = 4 * 1024 * 1024;
 const AUDIO_LIMIT = 6 * 1024 * 1024;
 
 /** Each image, video and song the page carries (the graph's, and Play's background), and what it adds to the page's size. */
-export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', play?: PlayRecord): { what: string; bytes: number }[] {
-  const out: { what: string; bytes: number }[] = [];
+export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', play?: PlayRecord, datasets?: WebDatasets): { what: string; bytes: number }[] {
+  const out: { what: string; bytes: number }[] = [...datasetsCarried(datasets)];
   if (hands) out.push({ what: 'Hand tracking (MediaPipe and its hand model)', bytes: hands === 'pending' ? HAND_BYTES : hands.bundle.length + hands.loader.length + hands.wasm.length + hands.model.length });
   for (const t of Object.values(media?.textures ?? {})) if (t.src) out.push({ what: `Image in ${t.label}${t.scaledTo ? ` (scaled to ${t.scaledTo} px)` : ''}`, bytes: t.src.length });
   for (const v of Object.values(media?.videos ?? {})) if (v.src) out.push({ what: `Video “${v.name}” in ${v.label}`, bytes: v.src.length });
@@ -270,6 +283,7 @@ export function playBundle(input: PlayHtmlInput) {
     ...(input.media ? { media: runtimeMedia(input.media) } : {}),
     ...(input.handAssets && usesHands(input.play) ? { hands: input.handAssets } : {}),
     ...(Object.keys(graphs).length ? { backgroundGraphs: graphs } : {}),
+    ...(input.datasets && Object.keys(input.datasets).length ? { datasets: input.datasets } : {}),
     generatedBy: 'Playfield',
   };
 }
@@ -285,10 +299,10 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, kitSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, dataSource, kitSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions } };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn } };\n})();\n`;
 }
 
 /**

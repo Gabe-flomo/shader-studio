@@ -26,6 +26,6 @@ export function openOnStage(doc: Presentation, source: PresentSource, step: Step
     edited: !!edits && Object.keys(edits).length > 0,
     play: source.bundle.play,
     missing: sourceLimits(source),
-    left: leftBehind(source.bundle.play, source.bundle.media, { graphs: source.bundle.backgroundGraphs ?? {} }).filter(l => !/notes/i.test(l.what)),
+    left: leftBehind(source.bundle.play, source.bundle.media, { graphs: source.bundle.backgroundGraphs ?? {}, datasets: source.bundle.datasets }).filter(l => !/notes/i.test(l.what)),
   });
 }

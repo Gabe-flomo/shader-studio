@@ -10,7 +10,7 @@ import { Toggle } from '../ui/Choice';
 import { typeColour } from './dataUi';
 import { cellText } from '../../data/notebook';
 import { normalizeSummary, normalizeTable } from '../../data/normalize';
-import { datasetBytes, DATASET_WARN_BYTES, formatBytes, type Column, type Dataset } from '../../data/types';
+import { datasetBytes, DATASET_WARN_BYTES, formatBytes, type Column, type Dataset, type DatasetResult } from '../../data/types';
 
 export const PREVIEW_ROWS = 50;
 
@@ -34,9 +34,10 @@ export function ColumnChips({ columns }: { columns: readonly Column[] }) {
   );
 }
 
-export function DataPreview({ dataset, onNormalize, compact = false }: { dataset: Dataset; onNormalize: (on: boolean) => void; compact?: boolean }) {
+/** `live`: a stream's result as it is now (it isn't saved on every message). */
+export function DataPreview({ dataset, onNormalize, compact = false, live }: { dataset: Dataset; onNormalize: (on: boolean) => void; compact?: boolean; live?: DatasetResult | null }) {
   const tk = useTokens();
-  const r = dataset.result;
+  const r = live !== undefined ? live : dataset.result;
   const shown = useMemo(() => (r && r.kind === 'table' && dataset.normalize ? normalizeTable(r) : r), [r, dataset.normalize]);
   const bytes = useMemo(() => datasetBytes(dataset), [dataset]);
   const label = (t: string) => <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>{t}</span>;
@@ -70,6 +71,14 @@ export function DataPreview({ dataset, onNormalize, compact = false }: { dataset
     );
   }
 
+  if (shown.rows === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {size}
+        {note(dataset.source.kind === 'stream' ? 'No rows yet. Connect the stream and they appear here as they arrive.' : dataset.source.kind === 'manual' ? 'No rows yet. Type some into the table, or paste a block from a spreadsheet.' : 'The table has no rows. Check the notebook: a filter may have kept none.')}
+      </div>
+    );
+  }
   const { mapped, kept } = normalizeSummary(r && r.kind === 'table' ? r : shown);
   const rows = Math.min(PREVIEW_ROWS, shown.rows);
   return (

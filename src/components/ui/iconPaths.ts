@@ -78,6 +78,8 @@ export const ICONS = {
   hand: { sw: 1.4, body: "<path d='M5.2 8.6V3.9a1 1 0 0 1 2 0v3.5M7.2 7.2V2.8a1 1 0 0 1 2 0v4.4M9.2 7.2V3.6a1 1 0 0 1 2 0v4M11.2 7.8V5.4a1 1 0 0 1 2 0v4.2c0 2.6-2 4.8-4.6 4.8-1.6 0-2.8-.7-3.7-2L3 10a1 1 0 0 1 1.5-1.3l.7.8'/>" },
   sliders: { sw: 1.5, body: "<path d='M2.5 4.5h11M2.5 11.5h11'/><circle cx='6' cy='4.5' r='1.6' fill='currentColor'/><circle cx='10.5' cy='11.5' r='1.6' fill='currentColor'/>" },
   cube: { sw: 1.4, body: "<path d='M8 1.8l5.4 3.1v6.2L8 14.2l-5.4-3.1V4.9z'/><path d='M2.6 4.9L8 8l5.4-3.1M8 8v6.2'/>" },
+  table: { sw: 1.4, body: "<rect x='2.2' y='2.6' width='11.6' height='10.8' rx='1.8'/><path d='M2.2 6.2h11.6M2.2 9.8h11.6M6.4 6.2v7.2'/>" },
+  live: { sw: 1.5, body: "<circle cx='8' cy='8' r='1.4' fill='currentColor' stroke='none'/><path d='M5.2 5.2a4 4 0 000 5.6M10.8 5.2a4 4 0 010 5.6M3.2 3.2a6.8 6.8 0 000 9.6M12.8 3.2a6.8 6.8 0 010 9.6'/>" },
 } satisfies Record<string, IconDef>;
 
 export type IconName = keyof typeof ICONS;

@@ -41,9 +41,27 @@ export function spiralRouteCsv(n = 48): string {
   return lines.join('\n') + '\n';
 }
 
+/** A short poem written for the samples (original, so it can ship): two stanzas about a shoreline. */
+export function tideNotesText(): string {
+  return [
+    'Tide Notes',
+    '',
+    'The sea keeps a ledger of light,',
+    'each wave a line it cannot keep;',
+    'the gulls write numbers on the air',
+    'and rub them out before they sleep.',
+    '',
+    'The harbour counts its patient boats,',
+    'the lighthouse counts the dark in turns,',
+    'and every stone along the shore',
+    'remembers what the water learns.',
+  ].join('\n') + '\n';
+}
+
 export interface SampleFile { name: string; filename: string; format: DatasetFormat; text: () => string; what: string }
 
 export const SAMPLE_FILES: SampleFile[] = [
   { name: 'City climate', filename: 'city-climate.csv', format: 'csv', text: cityClimateCsv, what: 'Monthly temperature and rain for five cities (60 rows).' },
   { name: 'Spiral route', filename: 'spiral-route.csv', format: 'csv', text: () => spiralRouteCsv(), what: 'x, y points winding out from the centre (48 rows).' },
+  { name: 'Tide notes', filename: 'tide-notes.txt', format: 'text', text: tideNotesText, what: 'A short poem in two stanzas: step through it word by word or line by line.' },
 ];

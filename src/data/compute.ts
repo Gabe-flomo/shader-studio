@@ -4,10 +4,13 @@
  */
 import { runNotebook, summarizeResult, type NotebookRun, type ValuePreview } from './notebook';
 import { parseSourceText, type ParseInfo } from './parse';
-import type { DatasetFormat, HeaderMode } from './types';
+import type { DatasetFormat, DatasetResult, HeaderMode, TableResult } from './types';
 
 export interface DatasetJob {
+  /** The source's text (a file, a fetched link, a stream's saved window)… */
   text: string;
+  /** …or its table, already read (a typed-in table, a stream's live window): then `text` is ignored. */
+  table?: TableResult;
   format: DatasetFormat;
   header?: HeaderMode;
   cells: Array<{ id: string; code: string }>;
@@ -23,7 +26,8 @@ export interface DatasetJobOut {
 }
 
 export function computeDataset(job: DatasetJob): DatasetJobOut {
-  let parsed;
+  let parsed: { result: DatasetResult; info: ParseInfo };
+  if (job.table) return { input: summarizeResult(job.table), info: {}, run: runNotebook(job.table, job.cells) };
   try {
     parsed = parseSourceText(job.text, job.format, { header: job.header });
   } catch (e) {

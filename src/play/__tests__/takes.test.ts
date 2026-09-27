@@ -16,6 +16,10 @@ import { playEngine } from '../../lib/playEngine';
 import { playOverlay } from '../../play/overlay';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { emptyPlayRecord, parsePlayRecord, TAKE_MAX_SECONDS, TAKES_MAX, type PlayRecord, type PlayTake, type TakeTrack } from '../../types/play';
+import { datasetFromStream } from '../../data/datasetActions';
+import { datasetStore } from '../../data/datasetStore';
+import { streamHub, type StreamSource } from '../../data/streams/streamHub';
+import { emptyTable } from '../../data/streams/window';
 
 const track = (over: Partial<TakeTrack> & Pick<TakeTrack, 'keys'>): TakeTrack => ({ kind: 'control', id: 'speed', target: 'n::speed', label: 'Speed', width: 1, ...over });
 
@@ -260,5 +264,41 @@ describe('the input bus', () => {
     const off = inputBus.addSource({ tickInputs: (_d, _t, w) => w(paramChannelKey('n::speed'), 0.3) });
     expect(inputBus.tick(0, 0).get('u_speed')).toBe(0.3);
     off();
+  });
+});
+
+describe('live datasets in takes', () => {
+  it('records streamed rows with their times, and rendering feeds them back instead of the stream', () => {
+    const d = datasetFromStream('websocket', [], { address: 'wss://feed.example/x' });
+    useNodeGraphStore.getState().setDataset(d);
+    const src = d.source as StreamSource;
+    const cap = new TakeCapture(emptyPlayRecord());
+    cap.sample(0);
+    streamHub.incoming(d.id, [{ v: 1 }], src, emptyTable());
+    cap.sample(0.5);
+    streamHub.incoming(d.id, [{ v: 2 }, { v: 3 }], src, emptyTable());
+    cap.sample(1);
+    cap.sample(1.5);
+    const take = cap.toTake('Feed')!;
+    cap.dispose();
+    expect(take.dataFeeds).toEqual([{ dataset: d.id, mode: 'append', window: 500, columns: ['v'], start: [], batches: [{ t: 0.5, rows: [[1]] }, { t: 1, rows: [[2], [3]] }] }]);
+    const back = parsePlayRecord(JSON.parse(JSON.stringify({ ...emptyPlayRecord(), takes: [take] }))).takes![0];
+    expect(back.dataFeeds).toEqual(take.dataFeeds);
+
+    const rows = () => { const r = datasetStore.result(d.id); return r?.kind === 'table' ? (r.columns[0]?.values ?? []) : null; };
+    const applier = takeApplier(back, { setUniform: () => {}, width: 8, height: 8 });
+    expect(streamHub.isMuted()).toBe(true);
+    applier.apply(back.from + 0.2);
+    expect(rows()).toEqual([]);
+    applier.apply(back.from + 0.7);
+    expect(rows()).toEqual([1]);
+    applier.apply(back.from + 1.4);
+    expect(rows()).toEqual([1, 2, 3]);
+    // Live rows arriving meanwhile don't reach readers.
+    streamHub.incoming(d.id, [{ v: 99 }], src, emptyTable());
+    expect(rows()).toEqual([1, 2, 3]);
+    applier.release();
+    expect(streamHub.isMuted()).toBe(false);
+    useNodeGraphStore.getState().removeDataset(d.id);
   });
 });

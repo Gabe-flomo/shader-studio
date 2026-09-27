@@ -25,6 +25,7 @@ import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { RulerSlider } from '../ui/RulerSlider';
 import { usePlayUi } from './playUi';
+import { CameraChip } from './chips';
 
 /** Inside another site's frame the camera is refused without asking (see chips.tsx). */
 const EMBEDDED = typeof window !== 'undefined' && window.self !== window.top;
@@ -284,6 +285,10 @@ export function HandsButton() {
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={320} padding={0}>
           <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <HandsChip />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Camera</span>
+              <CameraChip />
+            </div>
             <div style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
               {on
                 ? <>Now press <b>Learn</b> and move a finger or pinch, or pick a source from the <b>Hands</b> group in a mapping. Triggers can fire <b>On: Hand gesture</b>, and a Null can follow a hand point.</>

@@ -110,7 +110,8 @@ describe('datasets in the graph file', () => {
     });
     expect(Object.keys(parsed)).toEqual(['route', 'later']);
     expect(parsed.route.result).toEqual({ kind: 'table', rows: 3, columns: [{ name: 'x', type: 'number', values: [1, null, null], min: 1, max: 1 }] });
-    expect(parsed.later.source).toEqual({ kind: 'stream', transport: 'websocket', address: 'ws://x', window: 500 });
+    // Older stream sources get the settings added since.
+    expect(parsed.later.source).toEqual({ kind: 'stream', transport: 'websocket', address: 'ws://x', window: 500, mode: 'append', interval: 5, autoConnect: false, onExport: 'reconnect' });
     expect(parseDatasetsRecord('nope')).toEqual({});
   });
 });
