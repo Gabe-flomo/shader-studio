@@ -246,10 +246,15 @@ function splitSettings(text: string, have: Set<string>): { settings: string; res
 /** A snippet's `const params = { … }` merged into the sketch's own params (keys it already has are skipped); the rest of the snippet returned. */
 function mergeParams(code: string, text: string): { code: string; rest: string } {
   const theirs = paramsBlock(text);
-  if (!theirs || !paramsBlock(code)) return { code, rest: text };
-  const have = new Set(declaredParams(code));
+  if (!theirs) return { code, rest: text };
   let end = theirs.close + 1;
   if (text[end] === ';') end++;
+  // The sketch has no params yet: the snippet's become the sketch's, at the top of the file (even from a draw pattern).
+  if (!paramsBlock(code)) {
+    const block = text.slice(theirs.start, end).replace(/^[ \t]+/, '');
+    return { code: code.trim() ? `${block}\n\n${code.replace(/^\s+/, '')}` : `${block}\n`, rest: text.slice(0, theirs.start) + text.slice(end) };
+  }
+  const have = new Set(declaredParams(code));
   const lines = text.slice(theirs.open + 1, theirs.close).split('\n').filter(line => {
     const key = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*[:(]/.exec(line)?.[1];
     return line.trim() && !(key && have.has(key));

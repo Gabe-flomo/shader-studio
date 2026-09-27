@@ -20,7 +20,7 @@ import { tokenizeJsLine } from '../../code/jsSyntax';
 import { ScriptPreview } from './ScriptPreview';
 import { extractScriptParams } from './scriptExamples';
 import { SCRIPT_REFERENCE, refInsert, refSignature, type RefItem } from './scriptReference';
-import { SCRIPT_SNIPPETS, SNIPPET_GROUPS, type ScriptSnippet } from './scriptSnippets';
+import { SCRIPT_SNIPPETS, SNIPPET_GROUPS, SNIPPET_GROUP_INTENT, type ScriptSnippet } from './scriptSnippets';
 import { addControl, controlKeyProblem, labelFromKey, looksLikeCount, type ControlHelper, type ControlKind } from './scriptTools';
 
 const heading = (t: string, color: string) => <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color, textTransform: 'uppercase' }}>{t}</span>;
@@ -125,11 +125,16 @@ export function ScriptPatternList({ query, previewWidth, onInsert, onLoad }: {
   return (
     <>
       {SNIPPET_GROUPS.map(g => {
-        const rows = SCRIPT_SNIPPETS.filter(sn => sn.group === g && (!q || `${sn.name} ${sn.doc}`.toLowerCase().includes(q)));
+        // The filter matches a pattern's name and doc, or its group's name and what the group is for.
+        const groupHit = !!q && `${g} ${SNIPPET_GROUP_INTENT[g]}`.toLowerCase().includes(q);
+        const rows = SCRIPT_SNIPPETS.filter(sn => sn.group === g && (!q || groupHit || `${sn.name} ${sn.doc}`.toLowerCase().includes(q)));
         if (!rows.length) return null;
         return (
           <div key={g} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {heading(g, tk.text.faint)}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 2 }}>
+              <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>{heading(g, tk.text.faint)}<span style={{ font: `500 10.5px ${fontFamily.mono}`, color: tk.text.faint }}>{rows.length}</span></span>
+              <span style={{ fontSize: 11.5, lineHeight: 1.35, color: tk.text.muted }}>{SNIPPET_GROUP_INTENT[g]}</span>
+            </div>
             {rows.map(sn => {
               const on = open === sn.name;
               return (

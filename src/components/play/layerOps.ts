@@ -7,6 +7,7 @@
  */
 import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource } from '../../types/play';
 import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
+import { resetKindLayer } from '../../play/layerKinds';
 
 /** Remove a layer and the controls, mappings and actions that read or drive it. */
 export function removeLayer(p: PlayRecord, id: string): PlayRecord {
@@ -41,7 +42,8 @@ export function duplicateLayer(p: PlayRecord, id: string): { play: PlayRecord; i
 export function resetLayer(p: PlayRecord, id: string): PlayRecord {
   return {
     ...p,
-    layers: p.layers.map(l => (l.id === id ? { ...defaultLayer(l.kind, l.id, l.label), visible: l.visible } as PlayLayer : l)),
+    // A layer of a saved kind goes back to that kind's code and values, not to the starter sketch.
+    layers: p.layers.map(l => (l.id === id ? resetKindLayer(p, l) ?? { ...defaultLayer(l.kind, l.id, l.label), visible: l.visible } as PlayLayer : l)),
   };
 }
 

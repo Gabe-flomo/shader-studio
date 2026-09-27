@@ -7,7 +7,7 @@ import type { IconName } from './iconPaths';
 import { portalGuard } from './portalGuard';
 
 export type MenuItem =
-  | { label: string; icon?: IconName; hint?: string; danger?: boolean; disabled?: boolean; onSelect: () => void }
+  | { label: string; icon?: IconName; /** Tints the icon (a saved layer kind's colour). */ iconColor?: string; hint?: string; danger?: boolean; disabled?: boolean; onSelect: () => void }
   | 'separator';
 
 const MARGIN = 8;
@@ -94,7 +94,7 @@ export function Menu({ x, y, items, onClose, minWidth = 190, maxWidth = 360 }: {
               opacity: it.disabled ? 0.45 : 1,
             }}
           >
-            {it.icon && <Icon name={it.icon} size={15} style={{ color: it.danger ? tk.status.danger : tk.text.muted, marginTop: long ? 1 : 0 }} />}
+            {it.icon && <Icon name={it.icon} size={15} style={{ color: it.danger ? tk.status.danger : it.iconColor ?? tk.text.muted, marginTop: long ? 1 : 0, flexShrink: 0 }} />}
             {long ? (
               <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                 <span>{it.label}</span>

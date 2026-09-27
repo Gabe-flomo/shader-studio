@@ -9,7 +9,11 @@
  * dragged and invisible zones are outlined.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useTokens } from '../../theme/themeStore';
+import { useThemeMode, useTokens } from '../../theme/themeStore';
+import { accentColor } from '../../theme/categories';
+import { kindOf, type LayerKindDef } from '../../types/layerKinds';
+import { addKindLayer, addableKinds, kindHint, useInstalledKinds } from '../../play/layerKinds';
+import type { MenuItem } from '../ui/Menu';
 import { fontFamily, radius } from '../../theme/tokens';
 import { layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { playId } from '../../play/playControls';
@@ -74,6 +78,24 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   // A layer clicked on the picture is selected here too.
   useEffect(() => playOverlay.onSelect(id => usePlayUi.getState().reveal(id)), []);
 
+  const installed = useInstalledKinds();
+  const mode = useThemeMode();
+  const addKind = (k: LayerKindDef) => {
+    const id = playId('layer');
+    onChange(p => addKindLayer(p, k, id));
+    setSelected(id);
+  };
+  // The built-in kinds, then sketches saved as kinds: this file's, then the rest of your list.
+  const addItems = (): MenuItem[] => {
+    const items: MenuItem[] = KINDS.map(k => ({ label: k.label, hint: k.hint, icon: k.icon, onSelect: () => add(k.kind) }));
+    const extra = addableKinds(play, installed);
+    if (extra.length) items.push('separator', ...extra.map(({ def, inFile }) => ({
+      label: def.name, icon: def.icon, iconColor: accentColor(def.colour, mode),
+      hint: `${kindHint(def.hint, def.paramDefs.length)}${inFile ? '' : ' · from your list'}`,
+      onSelect: () => addKind(def),
+    })));
+    return items;
+  };
   const add = (kind: PlayLayerKind) => {
     const n = play.layers.filter(l => l.kind === kind).length + 1;
     const id = playId('layer');
@@ -115,7 +137,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         <span ref={addRef} style={{ display: 'inline-flex' }}>
           <Button size="sm" icon="plus" onClick={() => { const r = addRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 280, y: r.bottom + 6 } : null); }}>Add layer</Button>
         </span>
-        {menu && <Menu x={menu.x} y={menu.y} minWidth={280} onClose={() => setMenu(null)} items={KINDS.map(k => ({ label: k.label, hint: k.hint, icon: k.icon, onSelect: () => add(k.kind) }))} />}
+        {menu && <Menu x={menu.x} y={menu.y} minWidth={280} onClose={() => setMenu(null)} items={addItems()} />}
       </div>
       <div ref={listRef} style={{ flex: 1, minHeight: play.notes && !top ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {top && <div style={{ margin: '0 -12px' }}>{top}</div>}
@@ -130,6 +152,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             key={l.id}
             layer={l}
             layers={play.layers}
+            play={play}
+            onChangePlay={onChange}
             index={i}
             count={play.layers.length}
             touch={touch}
@@ -157,9 +181,11 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   );
 }
 
-function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidden, drawing, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull }: {
+function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, selected, pictureHidden, drawing, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull }: {
   layer: PlayLayer;
   layers: PlayLayer[];
+  play: PlayRecord;
+  onChangePlay: (fn: (p: PlayRecord) => PlayRecord) => void;
   index: number;
   count: number;
   touch: boolean;
@@ -199,7 +225,15 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
     startDrawing: mode => { onSelect(); playOverlay.startDrawing(l.id, mode); },
     cancelDrawing: () => playOverlay.cancelDrawing(),
     createNull: onCreateNull,
+    play,
+    changePlay: onChangePlay,
   };
+  // A layer made from a saved kind shows the kind's icon, colour and name.
+  const mode = useThemeMode();
+  const kind = kindOf(l, play.layerKinds);
+  const look = kind
+    ? { label: kind.name, hint: `${kindHint(kind.hint, kind.paramDefs.length)}. A Script layer underneath.`, icon: kind.icon as IconName, color: accentColor(kind.colour, mode) }
+    : { ...KIND[l.kind], color: tk.text.faint };
   let body: ReactNode = null;
   switch (l.kind) {
     case 'null': body = <NullEditor f={f} ctx={ctx} />; break;
@@ -231,7 +265,7 @@ function LayerRow({ layer: l, layers, index, count, touch, selected, pictureHidd
         style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26 }}
       >
         <IconButton icon={open ? 'chevD' : 'chevR'} label={open ? 'Collapse layer' : 'Expand layer'} size="sm" tooltip={false} onClick={() => setOpen(o => !o)} style={{ marginLeft: -6 }} />
-        <Tooltip label={KIND[l.kind].label} description={KIND[l.kind].hint}><Icon name={KIND[l.kind].icon} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} /></Tooltip>
+        <Tooltip label={look.label} description={look.hint}><Icon name={look.icon} size={14} style={{ color: look.color, flexShrink: 0 }} /></Tooltip>
         {editing ? (
           <Field autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(l.label); setEditing(false); } }} height={26} style={{ flex: 1 }} />
         ) : (
