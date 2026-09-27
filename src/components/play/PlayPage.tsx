@@ -19,7 +19,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
-import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_POINT_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, sourceOptions, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
+import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import { sensorReadsFor, type SensorRead } from '../../types/play';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
@@ -36,6 +36,8 @@ import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
+import { GroupedPicker } from '../ui/GroupedPicker';
+import { HAND_POINT_SECTIONS, sourcePickerSections } from './sourcePickerSections';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
 import { LayersPanel } from './LayersPanel';
@@ -1059,7 +1061,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   // Free maps from the mouse, keys and audio (play/planGates.ts). A Pro source made on Pro stays as it is, marked, and doesn't run.
   const allSources = useCan('play.sources');
   const locked = !allSources && sourceNeedsPro(m.source);
-  const options = allSources ? sourceOptions(readers) : sourceOptions(readers).map(o => (sourceTypeNeedsPro(o.value) ? { ...o, label: `${o.label} · Pro` } : o));
+  const sourceSections = useMemo(() => sourcePickerSections(readers, !allSources), [readers, allSources]);
   const pickSource = (v: string) => {
     if (!allSources && sourceTypeNeedsPro(v)) { openProSheet('play.sources'); return; }
     if (v === OPEN_READERS) { useReadersPanel.getState().show({ mappingId: m.id, focus: m.source.kind === 'reader' ? m.source.readerId : '' }); return; }
@@ -1105,7 +1107,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {chevron}
         <span style={{ ...labelStyle, width: 40 }}>Source</span>
-        <Select ariaLabel="Source" value={type} options={options} onChange={pickSource} height={26} style={{ flex: 1, minWidth: 0 }} />
+        <GroupedPicker ariaLabel="Source" value={type} sections={sourceSections} onChange={pickSource} height={26} style={{ flex: 1, minWidth: 0 }} width={300} searchPlaceholder="Search sources" />
         {m.source.kind === 'null' && (
           nullLayers.length === 0
             ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a Null layer first</span>
@@ -1309,7 +1311,7 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
           {row(<>
             {source.read !== 'spread' && <Segmented size="sm" ariaLabel="Which hand" value={source.side} options={HAND_SIDES} onChange={side => onChange({ ...source, side })} />}
             {source.read === 'point' && <>
-              <Select ariaLabel="Point on the hand" value={`${source.point}`} options={HAND_POINT_OPTIONS} onChange={v => onChange({ ...source, point: parseInt(v, 10) || 0 })} height={26} style={{ flex: 1, minWidth: 110 }} />
+              <GroupedPicker ariaLabel="Point on the hand" value={`${source.point}`} sections={HAND_POINT_SECTIONS} onChange={v => onChange({ ...source, point: parseInt(v, 10) || 0 })} height={26} style={{ flex: 1, minWidth: 110 }} width={220} searchPlaceholder="Search points" />
               <Segmented size="sm" ariaLabel="Axis" value={source.axis} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z', title: 'Toward the camera (from the wrist)' }]} onChange={axis => onChange({ ...source, axis })} />
             </>}
             {source.read === 'palm' && <Segmented size="sm" ariaLabel="Axis" value={source.axis === 'y' ? 'y' : 'x'} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }]} onChange={axis => onChange({ ...source, axis })} />}

@@ -9,12 +9,14 @@ import { portalGuard } from './portalGuard';
  * Phone bottom sheet: scrim, 24px top corners, grab handle, optional title row with close, and a
  * scrolling body. Tapping the scrim or pressing Esc closes it. `maxHeight` is a CSS length.
  */
-export function Sheet({ title, onClose, children, maxHeight = '80dvh', headerExtra }: {
+export function Sheet({ title, onClose, children, maxHeight = '80dvh', headerExtra, zIndex = 60 }: {
   title?: ReactNode;
   onClose: () => void;
   children: ReactNode;
   maxHeight?: string;
   headerExtra?: ReactNode;
+  /** Above the app's own overlays when opened from inside one (a picker in a drawer). */
+  zIndex?: number;
 }) {
   const tk = useTokens();
   const onCloseRef = useRef(onClose);
@@ -29,7 +31,7 @@ export function Sheet({ title, onClose, children, maxHeight = '80dvh', headerExt
     <div
       {...portalGuard}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, zIndex: 60, background: tk.bg.scrim, display: 'flex', alignItems: 'flex-end' }}
+      style={{ position: 'fixed', inset: 0, zIndex, background: tk.bg.scrim, display: 'flex', alignItems: 'flex-end' }}
     >
       <div
         role="dialog"
