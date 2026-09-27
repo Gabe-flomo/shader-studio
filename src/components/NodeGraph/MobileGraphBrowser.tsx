@@ -44,6 +44,7 @@ import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Button, IconButton } from '../ui/Button';
 import { Sheet } from '../ui/Sheet';
+import { DataEditorLauncher } from '../data/DataEditorLauncher';
 import { suggestConnections } from './smartConnect';
 import { suggestQuickAdds } from './quickAdds';
 import { wirePath } from './wirePath';
@@ -647,7 +648,7 @@ export function InlineVizFrame({ node }: { node: GraphNode }) {
 // scope probe, or a type that isn't really "a shader" on its own. Same
 // list desktop's own SKIP_PREVIEW (NodeComponent.tsx) excludes from its
 // 👁 in-card preview for the same reason.
-export const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'midiInput']);
+export const SKIP_INLINE_PREVIEW = new Set(['output', 'vec4Output', 'scope', 'textureInput', 'audioInput', 'transformVec', 'videoInput', 'midiInput', 'data']);
 // ── Generic live-render fallback ─────────────────────────────────────────
 // For the ~75% of node types with no custom NodeInlineViz entry, this is
 // the same fallback desktop uses (NodeComponent.tsx's own isPreviewActive
@@ -2845,6 +2846,7 @@ export function MobileGraphBrowser() {
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {GROUP_TYPES.has(node.type) && renderGroupBanner(node)}
           {node.type === 'textureInput' && renderTextureUploadBanner(node)}
+          {node.type === 'data' && <DataEditorLauncher node={node} />}
 
           {(hasInputs || node.type === 'group') && (hasOutputs || node.type === 'group') && (
             <div style={tabGroupStyle(tc)}>

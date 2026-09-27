@@ -1,4 +1,6 @@
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
+import { dataBlocksFirst } from '../data/dataGlsl';
+import { MAX_GROUP_ITERATIONS } from '../nodes/definitions/group';
 import type { GraphNode, DataType, InputSocket, NodeDefinition, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { f as formatFloat, FIELD_FN_PREFIX } from '../nodes/definitions/helpers';
@@ -627,7 +629,7 @@ export class ShaderAssembler {
     }
     return {
       body: this.mainCode.join(''),
-      helperBlocks: pruneUnusedGlslFunctions(dedupeGlslFunctions(Array.from(this.functions)), this.mainCode.join('')),
+      helperBlocks: pruneUnusedGlslFunctions(dataBlocksFirst(dedupeGlslFunctions(Array.from(this.functions))), this.mainCode.join('')),
       nodeOutputVars: this.nodeOutputs,
       paramUniforms: this.paramUniforms,
       textureUniforms: this.textureUniforms,
@@ -873,7 +875,7 @@ export class ShaderAssembler {
             return;
           }
 
-          const iters = Math.max(1, Math.min(16, Math.round(
+          const iters = Math.max(1, Math.min(MAX_GROUP_ITERATIONS, Math.round(
             typeof node.params.iterations === 'number' ? node.params.iterations : 1,
           )));
 
@@ -3754,7 +3756,8 @@ export class ShaderAssembler {
 
   private buildResult() {
     const mainBody = this.mainCode.join('');
-    const functionCode = pruneUnusedGlslFunctions(dedupeGlslFunctions(Array.from(this.functions)), mainBody).join('\n');
+    // Data uniforms and their row helpers first, so any function can call them.
+    const functionCode = pruneUnusedGlslFunctions(dataBlocksFirst(dedupeGlslFunctions(Array.from(this.functions))), mainBody).join('\n');
     const paramUniformDecls = Object.entries(this.paramUniforms)
       .map(([name, value]) => `uniform ${Array.isArray(value) ? 'vec3' : 'float'} ${name};`)
       .join('\n');

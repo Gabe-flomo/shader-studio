@@ -36,6 +36,7 @@ export function featuresOf(c: CompiledForWeb): SourceFeatures {
   return {
     textureUniforms: c.textureUniforms, videoUniforms: c.videoUniforms, audioUniforms: c.audioUniforms, liveUniforms: c.liveUniforms,
     isStateful: c.isStateful, particleSystems: c.particleSystems.length, usesEcho: /\bu_echo0\b/.test(c.fragmentShader),
+    ...(/\bu_ds_\w+/.test(c.fragmentShader) ? { usesData: true } : {}),
   };
 }
 

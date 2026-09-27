@@ -11,6 +11,9 @@ import { buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricR
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, usesHands, type PlayRecord, type PlayControl } from '../types/play';
+import { isDatasetsEmpty, parseDatasetsRecord, type Dataset, type DatasetsRecord } from '../data/types';
+import { datasetStore } from '../data/datasetStore';
+import { retypeDataNode } from '../nodes/definitions/data';
 import { migratePlayRecord } from './migratePlay';
 import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
@@ -50,6 +53,11 @@ function suggestTintedOutput(nodeId: string): void {
 
 /** The title of the "open Play" notice; the app clears it while the Play page is open. */
 export const PLAY_SETUP_TOAST = 'This graph has a Play setup';
+
+/** The `datasets` key of a saved graph: left out when there are none. */
+function datasetsField(datasets: DatasetsRecord): { datasets?: DatasetsRecord } {
+  return isDatasetsEmpty(datasets) ? {} : { datasets };
+}
 
 function announcePlay(play: PlayRecord, openPlay: () => void): void {
   if (isPlayRecordEmpty(play)) return;
@@ -406,6 +414,8 @@ function probeValuesEqual(a: Record<string, number[]>, b: Record<string, number[
  * its pattern. A wire into the input that no longer fits is dropped, as the type pills do.
  */
 function retypeSwizzle(n: GraphNode): GraphNode {
+  // A Data card's sockets follow its settings the same way (mode, output groups).
+  if (n.type === 'data') return retypeDataNode(n);
   if (n.type !== 'swizzle') return n;
   const { input, output } = swizzleTypes(n);
   const inp = n.inputs.input, out = n.outputs.output;
@@ -422,6 +432,7 @@ export interface ScratchSnapshot {
   nodes: GraphNode[];
   looseGroups: import('../types/nodeGraph').LooseGroup[];
   play: PlayRecord;
+  datasets: DatasetsRecord;
   currentGraph: { name: string; version: number; latest: boolean } | null;
   graphDirty: boolean;
   previewNodeId: string | null;
@@ -460,6 +471,17 @@ interface NodeGraphState {
    */
   play: PlayRecord;
   setPlay: (next: PlayRecord | ((play: PlayRecord) => PlayRecord)) => void;
+  /**
+   * The graph's datasets (src/data/): imported files, their notebooks and
+   * frozen results, read by Data nodes (and later the Data layer). Saved with
+   * the graph under `datasets`, next to `play`. Not part of undo, like play.
+   */
+  datasets: DatasetsRecord;
+  /** Add or replace a dataset (by its id). */
+  setDataset: (dataset: Dataset) => void;
+  /** Change some of a dataset's fields. */
+  updateDataset: (id: string, patch: Partial<Omit<Dataset, 'id'>>) => void;
+  removeDataset: (id: string) => void;
   /**
    * Save the graph and its Play record as one play file. Controls a
    * mapping is driving right now are written at their live value, so the file
@@ -1480,6 +1502,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   paramUniforms: {},
   paramBindings: {},
   play: emptyPlayRecord(),
+  datasets: {},
   playOpenRequest: 0,
   currentGraph: null,
   graphEpoch: 0,
@@ -4535,6 +4558,18 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return play === state.play ? state : { play };
   }),
 
+  setDataset: (dataset) => set(state => ({ datasets: { ...state.datasets, [dataset.id]: dataset } })),
+  updateDataset: (id, patch) => set(state => {
+    const d = state.datasets[id];
+    return d ? { datasets: { ...state.datasets, [id]: { ...d, ...patch } } } : state;
+  }),
+  removeDataset: (id) => set(state => {
+    if (!state.datasets[id]) return state;
+    const next = { ...state.datasets };
+    delete next[id];
+    return { datasets: next };
+  }),
+
   savedGraphHasPlay: (name) => {
     try {
       const parsed = JSON.parse(localStorage.getItem(`shader-studio:${name}`) ?? 'null') as { play?: unknown } | null;
@@ -4566,13 +4601,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   exportPlayFile: async () => {
-    const { nodes, looseGroups, play } = get();
+    const { nodes, looseGroups, play, datasets } = get();
     const live = new Map<string, number | number[]>();
     for (const c of play.controls) {
       const v = playEngine.liveValue(c.id);
       if (v !== undefined) live.set(c.id, v);
     }
-    const json = JSON.stringify({ kind: PLAY_FILE_KIND, nodes: bakeControlValues(nodes, play, live), looseGroups, play: bakeLayerValues(play, live), layout: LAYOUT_VERSION }, null, 2);
+    const json = JSON.stringify({ kind: PLAY_FILE_KIND, nodes: bakeControlValues(nodes, play, live), looseGroups, play: bakeLayerValues(play, live), ...datasetsField(datasets), layout: LAYOUT_VERSION }, null, 2);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     let name = 'play-file';
     if (!isTauri) {
@@ -4684,7 +4719,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // than leave a previous graph's groups referencing node ids that don't
     // exist in this one.
     const play = graph.play ? migrateLoadedPlay(parsePlayRecord(graph.play), rawNodes) : emptyPlayRecord();
-    set(st => ({ nodes, looseGroups: [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
+    const datasets = parseDatasetsRecord(graph.datasets);
+    set(st => ({ nodes, looseGroups: [], play, datasets, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
     // An example is not a saved project: saving it asks for a name.
     set({ currentGraph: null, graphDirty: false });
@@ -4695,7 +4731,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     undoManager.push(get().nodes, { label: 'Replaced the graph' });
     const nodes = rawNodes.map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
     idGenerator.syncFromGraph(nodes);
-    set(st => ({ nodes, looseGroups: [], play: emptyPlayRecord(), previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
+    set(st => ({ nodes, looseGroups: [], play: emptyPlayRecord(), datasets: {}, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
     set({ currentGraph: null, graphDirty: true });
   },
@@ -4705,7 +4741,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const s = get();
     if (s.scratch) return;
     set({ scratch: {
-      nodes: s.nodes, looseGroups: s.looseGroups, play: s.play, currentGraph: s.currentGraph, graphDirty: s.graphDirty,
+      nodes: s.nodes, looseGroups: s.looseGroups, play: s.play, datasets: s.datasets, currentGraph: s.currentGraph, graphDirty: s.graphDirty,
       previewNodeId: s.previewNodeId, activeGroupId: s.activeGroupId, activeGroupPath: s.activeGroupPath,
       selectedNodeId: s.selectedNodeId, selectedNodeIds: s.selectedNodeIds,
     } });
@@ -4727,7 +4763,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     idGenerator.syncFromGraph(kept.nodes);
     set(st => ({
-      scratch: null, nodes: kept.nodes, looseGroups: kept.looseGroups, play: kept.play, currentGraph: kept.currentGraph, graphDirty: true,
+      scratch: null, nodes: kept.nodes, looseGroups: kept.looseGroups, play: kept.play, datasets: kept.datasets, currentGraph: kept.currentGraph, graphDirty: true,
       previewNodeId: kept.previewNodeId, activeGroupId: kept.activeGroupId, activeGroupPath: kept.activeGroupPath,
       selectedNodeId: kept.selectedNodeId, selectedNodeIds: kept.selectedNodeIds, nodeProbeValues: null, graphEpoch: st.graphEpoch + 1,
     }));
@@ -4808,9 +4844,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   // ─── Save / Load ───────────────────────────────────────────────────────────
   saveGraph: async (name, note) => {
-    const { nodes, looseGroups, play } = get();
-    // `play` is left out when empty so graphs without a Play setup look as they always did.
-    const playField = isPlayRecordEmpty(play) ? {} : { play };
+    const { nodes, looseGroups, play, datasets } = get();
+    // `play` (and `datasets`) are left out when empty so graphs without them look as they always did.
+    const playField = { ...(isPlayRecordEmpty(play) ? {} : { play }), ...datasetsField(datasets) };
     // The version this replaces goes into the project's history first.
     const version = archiveCurrent(name);
     const noteField = note?.trim() ? { note: note.trim().slice(0, 300) } : {};
@@ -4860,11 +4896,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     let nodes: GraphNode[];
     let looseGroups: unknown;
     let play: PlayRecord;
+    let datasets: DatasetsRecord;
     try {
-      const parsed = JSON.parse(raw) as { nodes?: unknown; looseGroups?: unknown; play?: unknown; layout?: unknown };
+      const parsed = JSON.parse(raw) as { nodes?: unknown; looseGroups?: unknown; play?: unknown; datasets?: unknown; layout?: unknown };
       if (!Array.isArray(parsed?.nodes)) throw new Error('missing "nodes" array');
       looseGroups = parsed.looseGroups;
       play = parsePlayRecord(parsed.play);
+      datasets = parseDatasetsRecord(parsed.datasets);
       // Strip in-memory audio state — audio buffers are not persisted, so
       // _isPlaying / _hasFile would crash the audio engine on load.
       const sanitized = (parsed.nodes as GraphNode[]).map(n => {
@@ -4888,7 +4926,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     try { const v = (JSON.parse(raw) as { version?: unknown }).version; if (typeof v === 'number') version = v; } catch { /* parsed above */ }
     let latestVersion = version;
     try { const v = latest ? (JSON.parse(latest) as { version?: unknown }).version : undefined; if (typeof v === 'number') latestVersion = v; } catch { /* newest is unreadable: treat this as it */ }
-    set(st => ({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
+    set(st => ({ nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, datasets, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
     set({ currentGraph: { name, version, latest: version === latestVersion }, graphDirty: false });
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
@@ -4903,8 +4941,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   exportGraph: async () => {
-    const { nodes, looseGroups, play } = get();
-    const json = JSON.stringify({ nodes, looseGroups, ...(isPlayRecordEmpty(play) ? {} : { play }), layout: LAYOUT_VERSION }, null, 2);
+    const { nodes, looseGroups, play, datasets } = get();
+    const json = JSON.stringify({ nodes, looseGroups, ...(isPlayRecordEmpty(play) ? {} : { play }), ...datasetsField(datasets), layout: LAYOUT_VERSION }, null, 2);
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     let name = 'shader-graph';
     if (!isTauri) {
@@ -4923,13 +4961,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     let nodes: GraphNode[];
     let looseGroups: unknown;
     let play: PlayRecord;
+    let datasets: DatasetsRecord;
     let isPlayFile = false;
     try {
-      const parsed = JSON.parse(json) as { kind?: unknown; nodes?: unknown; looseGroups?: unknown; play?: unknown; layout?: unknown } | null;
+      const parsed = JSON.parse(json) as { kind?: unknown; nodes?: unknown; looseGroups?: unknown; play?: unknown; datasets?: unknown; layout?: unknown } | null;
       if (!parsed || typeof parsed !== 'object') throw new Error('file does not contain a JSON object');
       if (!Array.isArray(parsed.nodes)) throw new Error('missing "nodes" array — is this a Playfield graph file?');
       looseGroups = parsed.looseGroups;
       play = parsePlayRecord(parsed.play);
+      datasets = parseDatasetsRecord(parsed.datasets);
       isPlayFile = parsed.kind === PLAY_FILE_KIND;
       play = migrateLoadedPlay(play, parsed.nodes as GraphNode[]);
       nodes = upgradeExprNodes(resolveNodeAliases(parsed.nodes as GraphNode[], getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
@@ -4941,7 +4981,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     undoManager.clear(isPlayFile ? 'Imported a Play file' : 'Imported a graph file');
     idGenerator.syncFromGraph(nodes);
     set(state => ({
-      nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play,
+      nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, datasets,
       previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: state.graphEpoch + 1,
       ...(isPlayFile ? { playOpenRequest: state.playOpenRequest + 1 } : {}),
     }));
@@ -5111,5 +5151,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 // Any change to the graph or its Play setup after it was opened or saved marks it unsaved.
 useNodeGraphStore.subscribe((s, prev) => {
   if (!s.currentGraph || s.graphDirty || s.currentGraph !== prev.currentGraph) return;
-  if (s.nodes !== prev.nodes || s.looseGroups !== prev.looseGroups || s.play !== prev.play) useNodeGraphStore.setState({ graphDirty: true });
+  if (s.nodes !== prev.nodes || s.looseGroups !== prev.looseGroups || s.play !== prev.play || s.datasets !== prev.datasets) useNodeGraphStore.setState({ graphDirty: true });
 });
+
+// The runtime dataset store (src/data/datasetStore.ts) follows the saved datasets: readers subscribe there.
+useNodeGraphStore.subscribe((s, prev) => { if (s.datasets !== prev.datasets) datasetStore.sync(s.datasets); });

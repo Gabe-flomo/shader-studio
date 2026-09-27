@@ -19,7 +19,7 @@ import { C, C_LIGHT } from '../../glslSyntax';
 import { tokenizeJsLine } from '../../code/jsSyntax';
 import { ScriptPreview } from './ScriptPreview';
 import { extractScriptParams } from './scriptExamples';
-import { referenceFor, refInsert, refSignature, type RefItem } from './scriptReference';
+import { referenceFor, refInsert, refSignature, type RefGroup, type RefItem } from './scriptReference';
 import { SNIPPET_GROUP_INTENT, snippetGroupsFor, snippetsFor, type ScriptSnippet } from './scriptSnippets';
 import { addControl, controlKeyProblem, labelFromKey, looksLikeCount, type ControlHelper, type ControlKind } from './scriptTools';
 
@@ -39,11 +39,12 @@ export function ScriptCodeView({ code, maxHeight }: { code: string; maxHeight?: 
 
 // ── Reference ────────────────────────────────────────────────────────────────
 
-export function ScriptReferenceList({ query, mode = '2d', onInsert }: { query: string; mode?: '2d' | '3d'; onInsert: (text: string) => void }) {
+/** The reference list: the Script layer's by default, or any other `reference` (the Data notebook's). */
+export function ScriptReferenceList({ query, mode = '2d', onInsert, reference }: { query: string; mode?: '2d' | '3d'; onInsert: (text: string) => void; reference?: RefGroup[] }) {
   const tk = useTokens();
   const [open, setOpen] = useState<string | null>(null);
   const q = query.trim().toLowerCase();
-  const groups = referenceFor(mode).map(g => ({ ...g, items: q ? g.items.filter(it => `${it.name} ${it.doc} ${(it.args ?? []).map(a => a.name).join(' ')}`.toLowerCase().includes(q)) : g.items })).filter(g => g.items.length);
+  const groups = (reference ?? referenceFor(mode)).map(g => ({ ...g, items: q ? g.items.filter(it => `${it.name} ${it.doc} ${(it.args ?? []).map(a => a.name).join(' ')}`.toLowerCase().includes(q)) : g.items })).filter(g => g.items.length);
   if (!groups.length) return <span style={{ fontSize: 12, color: tk.text.muted }}>Nothing matches “{query}”.</span>;
   return (
     <>

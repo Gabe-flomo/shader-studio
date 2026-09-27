@@ -31,6 +31,8 @@ export interface SourceFeatures {
   isStateful: boolean;
   particleSystems: number;
   usesEcho: boolean;
+  /** Reads a Data node's dataset (not carried into pages yet). */
+  usesData?: boolean;
 }
 
 /** A node of the source graph that has lines in its shader (for code blocks that quote one). */
@@ -292,6 +294,7 @@ function parseFeatures(v: unknown): SourceFeatures | undefined {
     textureUniforms: stringRecord(v.textureUniforms), videoUniforms: stringRecord(v.videoUniforms),
     audioUniforms: stringRecord(v.audioUniforms), liveUniforms: stringRecord(v.liveUniforms),
     isStateful: v.isStateful === true, particleSystems: Math.max(0, Math.round(num(v.particleSystems) ?? 0)), usesEcho: v.usesEcho === true,
+    ...(v.usesData === true ? { usesData: true } : {}),
   };
 }
 

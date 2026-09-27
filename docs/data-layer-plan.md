@@ -142,6 +142,29 @@ dataset and passes numbers into the shader:
    the dataset store in the graph file, Normalize, the JS notebook with the
    table helper, and the Data node (column outputs, Index/Blend, Count, data
    texture) with its editor window.
+
+   *Built* (code in `src/data/`, the node in `src/nodes/definitions/data.ts`,
+   the editor in `src/components/data/`). The Data node has a **Use as** mode:
+   Values (Index/Blend/Wrap), Points (distance, nearest row, second distance;
+   Path joins the rows; Max points caps the per-pixel loop at 1024) and
+   Keyframes (time column or Duration; None, Linear, Smooth, Ease in/out/in-out,
+   Catmull-Rom; Smoothing; Loop, Ping-pong, Hold). Columns reach the shader as
+   RGBA32F textures named after the dataset and the columns they hold, read
+   with `texelFetch`; a row helper `vec4 data_<id>(float row)` serves Custom
+   Functions. Iterated groups now run up to 64 passes. Hooks left for the later
+   milestones:
+   - `Dataset.source` is a tagged union (`file`, `manual`, `url`, `stream`);
+     only `file` has an editor. The others are parsed and kept.
+   - `datasetStore` (`src/data/datasetStore.ts`) is what readers use:
+     `effective(id)` (Normalize applied), `version(id)`, `subscribe(id, fn)`,
+     and `replaceResult` / `appendRows(id, rows, { window })` for a live
+     result that isn't saved. The node's textures follow it with no recompile,
+     row count included; the layer and mapping sources should subscribe the
+     same way.
+   - Parsing is `parseSourceText(text, format)` (`src/data/parse.ts`), a pure
+     function of text, so fetched or streamed text goes through it unchanged.
+   - Exports and Present don't carry datasets yet: their Data nodes read 0
+     and the export lists "Data node values" as left behind.
 1. **The layer, CSV.** Import, parse (types sniffed per column), table
    views: points, path, bars, pie, lines; axes modes; column → property
    mapping; offset/window stepping and actions; `s.data()`; data sources.
