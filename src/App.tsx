@@ -59,6 +59,7 @@ import type { BuilderPage as BuilderPageT } from './components/nodePacks/Builder
 import type { MobileGraphBrowser as MobileGraphBrowserT, MobileNodeGraphOverlay as MobileNodeGraphOverlayT } from './components/NodeGraph/MobileGraphBrowser';
 import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeGraph/MobileNodeBrowser';
 import type { HistoryPanel as HistoryPanelT } from './components/history/HistoryPanel';
+import { useHistoryWindow } from './components/history/historyWindowStore';
 import { useUnseenActivity } from './components/ui/activityStore';
 
 // ── Code splitting ───────────────────────────────────────────────────────────
@@ -82,6 +83,7 @@ const MobileGraphBrowser     = lazyWithSuspense<PropsOf<typeof MobileGraphBrowse
 const MobileNodeGraphOverlay = lazyWithSuspense<PropsOf<typeof MobileNodeGraphOverlayT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileNodeGraphOverlay })));
 const MobileNodeBrowser      = lazyWithSuspense<PropsOf<typeof MobileNodeBrowserT>>(() => import('./components/NodeGraph/MobileNodeBrowser').then(m => ({ default: m.MobileNodeBrowser })));
 const HistoryPanel           = lazyWithSuspense<PropsOf<typeof HistoryPanelT>>(() => import('./components/history/HistoryPanel').then(m => ({ default: m.HistoryPanel })));
+const HistoryWindow          = lazyWithSuspense<Record<string, never>>(() => import('./components/history/HistoryWindow').then(m => ({ default: m.HistoryWindowHost })));
 
 // ── Responsive sizing helpers ─────────────────────────────────────────────────
 function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
@@ -605,6 +607,7 @@ function App() {
   const [expandedExampleFolders, setExpandedExampleFolders] = useState<Set<string>>(new Set());
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts]     = useState(false);
+  const historyPopped = useHistoryWindow(s => s.open);
   // Node search palette
   // showSearchPalette is now in the store (searchPaletteOpen / setSearchPaletteOpen)
   const shaderCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1397,6 +1400,7 @@ function App() {
         <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
       )}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      {historyPopped && <HistoryWindow />}
       <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />
     </div>
   );

@@ -1275,5 +1275,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish));
 }

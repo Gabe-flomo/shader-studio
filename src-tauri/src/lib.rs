@@ -217,12 +217,12 @@ fn osc_stop(state: State<OscState>) -> Result<(), String> {
     Ok(())
 }
 
-/// Open an https:// address in the system browser (credit links: the
+/// Open an http(s):// address in the system browser (credit and note links: the
 /// webview itself ignores target="_blank").
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
-    if !url.starts_with("https://") || url.chars().any(|c| c.is_whitespace() || c.is_control() || c == '"') {
-        return Err("Only https:// addresses can be opened".into());
+    if !(url.starts_with("https://") || url.starts_with("http://")) || url.chars().any(|c| c.is_whitespace() || c.is_control() || c == '"') {
+        return Err("Only http(s):// addresses can be opened".into());
     }
     #[cfg(target_os = "macos")]
     let mut cmd = Command::new("open");

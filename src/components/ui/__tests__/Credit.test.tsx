@@ -10,7 +10,8 @@ vi.hoisted(() => {
 });
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CreditCaption, CreditLink, CreditTag } from '../Credit';
-import { creditPlace, creditShort, creditSentence, parseSourceCredit } from '../../../types/credit';
+import { creditFromForm, creditPlace, creditShort, creditSentence, creditToForm, parseSourceCredit, type SourceCredit } from '../../../types/credit';
+import { isPlayRecordEmpty as isPlayEmpty } from '../../../types/play';
 import { parsePlayRecord } from '../../../types/play';
 import { bookSource } from '../../../store/learnExampleIndex';
 import { EXAMPLE_INDEX } from '../../../store/exampleIndex';
@@ -68,5 +69,44 @@ describe('credit components', () => {
     const html = renderToStaticMarkup(<CreditCaption source={step} />);
     expect(html).toMatch(/<a href="https:\/\/thebookofshaders\.com\/05\/"[^>]*>The Book of Shaders<\/a>/);
     expect(html).toContain('Step and Smoothstep');
+  });
+});
+
+describe('credits people add', () => {
+  const form = { title: 'The Book of Shaders', author: 'Patricio Gonzalez Vivo and Jen Lowe', url: 'thebookofshaders.com/09/', detail: 'Ch. 9 · Patterns', licence: 'CC BY-NC-SA 4.0' };
+
+  it('turns the form into a credit, adding https:// to a bare address', () => {
+    const r = creditFromForm(form);
+    expect(r).toEqual({ credit: { title: 'The Book of Shaders', author: 'Patricio Gonzalez Vivo and Jen Lowe', url: 'https://thebookofshaders.com/09/', section: 'Ch. 9 · Patterns', licence: 'CC BY-NC-SA 4.0' } });
+    const html = renderToStaticMarkup(<CreditLink source={(r as { credit: SourceCredit }).credit} />);
+    expect(html).toContain('Ch. 9 · Patterns');
+    expect(html).toContain('Licence: CC BY-NC-SA 4.0');
+  });
+
+  it('says why a form is not a credit yet', () => {
+    expect(creditFromForm({ ...form, title: ' ' })).toHaveProperty('error');
+    expect(creditFromForm({ ...form, url: '' })).toHaveProperty('error');
+    expect(creditFromForm({ ...form, url: 'javascript:alert(1)' })).toHaveProperty('error');
+    expect(creditFromForm({ ...form, url: 'http://example.com' })).toHaveProperty('error');
+    expect(creditFromForm({ ...form, url: 'https://exa mple.com' })).toHaveProperty('error');
+  });
+
+  it('keeps a built-in credit’s chapter when the detail is left as it was', () => {
+    const f = creditToForm(step);
+    expect(f.detail).toBe('Ch. 5 · Shaping functions · Step and Smoothstep');
+    expect(creditFromForm(f, step)).toEqual({ credit: step });
+    expect(creditFromForm({ ...f, detail: 'Intro' }, step)).toEqual({ credit: { title: step.title, author: step.author, url: step.url, section: 'Intro' } });
+    expect(creditToForm(undefined)).toEqual({ title: '', author: '', url: '', detail: '', licence: '' });
+  });
+
+  it('reads an added credit back from a file, and an old one without a licence', () => {
+    const credit = { title: 'x', url: 'https://example.com/a', section: 'Part 2', licence: ' MIT ' };
+    expect(parseSourceCredit(credit)).toEqual({ ...credit, licence: 'MIT' });
+    expect(parsePlayRecord({ version: 1, controls: [], mappings: [], layers: [], source: credit }).source).toEqual({ ...credit, licence: 'MIT' });
+    expect(parseSourceCredit({ title: 'x', url: 'https://example.com', licence: 7 })).toEqual({ title: 'x', url: 'https://example.com' });
+  });
+
+  it('keeps a Play record with only a credit (not an empty one)', () => {
+    expect(isPlayEmpty(parsePlayRecord({ version: 1, controls: [], mappings: [], layers: [], source: { title: 'x', url: 'https://example.com' } }))).toBe(false);
   });
 });
