@@ -681,8 +681,17 @@ export type VideoPoster = Pick<LibraryVideoMeta, 'thumb' | 'width' | 'height' | 
 
 export const VIDEOS_MANIFEST = 'backgrounds/videos.json';
 export const VIDEOS_MANIFEST_KIND = 'shader-studio-videos';
-const VIDEO_EXT: Record<string, string> = { 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/ogg': 'ogv', 'video/x-m4v': 'm4v' };
-const VIDEO_MIME: Record<string, string> = { mp4: 'video/mp4', m4v: 'video/x-m4v', webm: 'video/webm', mov: 'video/quicktime', ogv: 'video/ogg' };
+// Drum pad samples live here too (audio types): they travel in the same ZIPs, folders and play files.
+const VIDEO_EXT: Record<string, string> = {
+  'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/ogg': 'ogv', 'video/x-m4v': 'm4v',
+  'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac', 'audio/flac': 'flac', 'audio/x-flac': 'flac', 'audio/webm': 'weba', 'audio/aiff': 'aif', 'audio/x-aiff': 'aif',
+};
+const VIDEO_MIME: Record<string, string> = {
+  mp4: 'video/mp4', m4v: 'video/x-m4v', webm: 'video/webm', mov: 'video/quicktime', ogv: 'video/ogg',
+  wav: 'audio/wav', mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', weba: 'audio/webm', aif: 'audio/aiff', aiff: 'audio/aiff',
+};
+/** Is a kept file a sound (a drum pad's sample) rather than a video? */
+export const isAudioType = (type: string) => type.startsWith('audio/');
 /** A video file's extension for its MIME type ("webm"), mp4 when unknown. */
 export const videoExt = (type: string) => VIDEO_EXT[type.split(';')[0]] ?? 'mp4';
 /** A video file's MIME type from its name, or '' when the name doesn't say. */
@@ -700,7 +709,9 @@ export async function addVideoFile(file: Blob & { name?: string }, o: { name?: s
     if (same) return videoMeta(same);
   }
   const type = file.type || videoMimeOf(file.name ?? name) || 'video/mp4';
-  const rec: StoredVideo = { id: o.id || newBackgroundId('vid'), name, type, bytes: file.size, createdAt: o.createdAt ?? Date.now(), ...cleanPoster(o.poster), data: await file.arrayBuffer() };
+  const rec: StoredVideo = { id: o.id || newBackgroundId(isAudioType(type) ? 'snd' : 'vid'), name, type, bytes: file.size, createdAt: o.createdAt ?? Date.now(), ...cleanPoster(o.poster), data: await file.arrayBuffer() };
+  // A sound has no frame to show.
+  if (isAudioType(type) && rec.thumb === undefined) rec.thumb = '';
   await tx('readwrite', s => s.put(rec), VIDEO_STORE);
   emit();
   if (rec.thumb === undefined && canPoster()) void ensureVideoPoster(rec.id).catch(() => {});

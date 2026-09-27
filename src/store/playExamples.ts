@@ -25,7 +25,8 @@ import {
   type CondCmp, type PairAxis, type PlayPair, type PlayPairMapping, type PlaySignal,
 } from '../types/play';
 import { DEFAULT_PAD_GRID, type PlayPadGrid } from '../types/playMidi';
-import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
+import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
+import type { DpSynth } from '../play/kit/drumPads.js';
 import type { GroupColour, LayerGroup } from '../types/layerGroups';
 
 // ── Record helpers ───────────────────────────────────────────────────────────
@@ -106,6 +107,15 @@ const reader = (id: string, name: string, hz: number, width: number, gain: numbe
 /** The same trigger, firing by a mode other than Once. */
 const firing = (t: TriggerSpec, fire: FireSpec): TriggerSpec => ({ ...t, fire });
 const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string, amount = 1): PlayAction => ({ id, trigger, do: kind, layerId, amount, enabled: true });
+/** A Drum pad layer of generated drums: pad i plays `synth` with its own settings (numbers are layer properties). */
+function drumKit(id: string, label: string, pads: Array<[DpSynth, { name?: string; choke?: number; mode?: 'oneshot' | 'gate'; loop?: boolean; reverse?: boolean; pitch?: number; start?: number; end?: number }]>): PlayLayer {
+  const l = defaultLayer('drumpad', id, label) as DrumPadLayer & Record<string, unknown>;
+  pads.forEach(([synth, o], i) => {
+    l.pads[i] = { ...l.pads[i], synth, name: o.name ?? '', choke: o.choke ?? 0, mode: o.mode ?? 'oneshot', loop: o.loop ?? false, reverse: o.reverse ?? false };
+    for (const k of ['pitch', 'start', 'end'] as const) if (o[k] !== undefined) l[`pad${i + 1}_${k}`] = o[k];
+  });
+  return l;
+}
 /** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
 const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
@@ -1705,6 +1715,47 @@ Distance reads only while both hands are in view, so the rings hold their size w
 • Move the mouse up and down: Frames back follows it.
 • Turn Direction to 0 for a sideways scan, or pick another Map on the Time displacement card (Brightness, Noise, Radial, or a layer).
 • Set Quality to High for 64 frames of history.`,
+  })),
+  ex('drumPads', glowGraph({ radius: 0.1, falloff: 16, tint: [1, 0.5, 0.3] }), play({
+    layers: [
+      drumKit('drums', 'Drums', [
+        ['kick', {}], ['snare', {}], ['hat', { choke: 1 }], ['openhat', { choke: 1 }],
+        ['clap', {}], ['tom', {}], ['rim', {}], ['cowbell', {}],
+        ['kick', { name: 'Kick low', pitch: -5 }], ['tom', { name: 'Tom high', pitch: 7 }], ['snare', { name: 'Snare back', reverse: true }], ['clap', { name: 'Clap gate', mode: 'gate', loop: true, start: 0.05, end: 0.3 }],
+      ]),
+      layer('null', 'centre', 'Centre', { x: 0.5, y: 0.5, size: 10, visible: false }),
+      layer('particles', 'sparks', 'Sparks', { count: 900, emit: 'burst', spawn: 'null', nullId: 'centre', spawnRadius: 0.05, field: 'noise', noiseScale: 2, speed: 1.4, life: 0.8, fade: 0.7, size: 2.4, sizeJitter: 0.6, colour: 'palette', palette: 1, paletteBy: 'age', trail: 0.5, blend: 'screen' }),
+    ],
+    audioReaders: {
+      input: 'pads:drums',
+      readers: [
+        reader('lows', 'Kick', 60, 0.8, 30, 2, 180, [1, 0.45, 0.35]),
+        reader('highs', 'Hats', 8000, 1.2, 45, 1, 70, [0.35, 0.82, 0.98]),
+      ],
+    },
+    controls: [
+      ctl('radius', 'circ::radius', 'Pulse (the kick)', 0.05, 0.4),
+      ctl('kickPitch', 'layer:drums::pad1_pitch', 'Drums · Kick pitch', -24, 24, 0.01),
+      ctl('hatDecay', 'layer:drums::pad4_decay', 'Drums · Open hat decay', 0, 1),
+    ],
+    mappings: [
+      map('pulse', 'radius', { kind: 'reader', readerId: 'lows' }, 0.08, 0.26, { smoothMs: 20 }),
+      map('pitch', 'kickPitch', S.mouse('y'), -7, 5, { smoothMs: 40 }),
+    ],
+    actions: [
+      act('hats', T.reader('highs', 0.5, 0.2), 'burst', 'sparks', 30),
+      act('space', T.key('Space'), 'pad', 'drums', 2),
+    ],
+    notes: `**What it shows.** A **Drum pads** layer: sixteen pads, each playing a sound Simpler-style, with the sound feeding audio readers that drive the picture. The kick pulses the glow; the hats throw sparks. Nothing plays by itself: you play it.
+
+**How it's built.** The pads hold generated drums (made when the example opens, so no audio files come with it): a kick, a snare, closed and open hats in the same **choke** group (a closed hat cuts the open one), a clap, toms, a rim and a cowbell, then variations: a lower kick (Pitch −5), a higher tom, a **reversed** snare and a looping **gate** clap (it plays while held). The layer's sound goes through its own effect chain (Finish → Sound) to the master. The audio readers listen to it (**Listen to: Drum pads · Drums**): **Kick** at 60 Hz drives the Pulse, **Hats** at 8 kHz fire the Sparks burst. Mouse Y moves the kick's pitch (a mapping on **Drums · Kick pitch**, the layer property \`pad1_pitch\`).
+
+**Try this.**
+• Press Z X C V, A S D F, Q W E R: pads 1–12 (1 2 3 4 are pads 13–16). Space plays the snare through an action (**Do: Play pad**).
+• Click pads on the layer card (higher on a pad is harder), or play MIDI notes 36–51 (a drum rack's), or a pad grid's lower-left 4 × 4.
+• Select a pad and drag its waveform's edges, try Reverse, Gate and Loop, or drop a sound file of your own on it.
+• Add a Reverb to the Drums chain in Finish → Sound.
+• Record a take and render it: every hit lands in the video's sound at the moment you played it.`,
   })),
   ex('audioEffects', glowGraph({ radius: 0.12, falloff: 12, tint: [1, 0.6, 0.3] }), play({
     audioFx: {

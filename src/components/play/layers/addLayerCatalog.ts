@@ -50,6 +50,7 @@ export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
   { kind: 'lens', group: 'effects', label: 'Lens', hint: 'A circle that magnifies, pixelates, blurs or inverts what is under it.', icon: 'search' },
   { kind: 'null', group: 'inputs', label: 'Null', hint: 'A point to drag or animate. Drives mappings, follows things, emits or absorbs particles.', icon: 'grip' },
   { kind: 'audio', group: 'inputs', label: 'Audio', hint: 'Live sound as a waveform, bars, a ring or a blob.', icon: 'wave' },
+  { kind: 'drumpad', group: 'inputs', label: 'Drum pads', hint: 'A 4 × 4 sampler: drop sounds on pads and hit them with clicks, keys, MIDI or actions. Its sound feeds audio readers and renders.', icon: 'grid' },
   { kind: 'camera', group: 'inputs', label: 'Camera', hint: 'Your webcam: as a layer, a mask, or what particles read. Its motion is a source.', icon: 'camera' },
   { kind: 'script', group: 'code', label: 'Script', hint: 'Draw with JavaScript: a setup and a draw function on a 2D canvas over the picture, with sliders you declare. Reads the picture, the mouse and nulls.', icon: 'code' },
   { kind: 'script', variant: 'script3d', group: 'code', label: '3D Script', hint: 'Draw in 3D with p5-style JavaScript on WebGL: boxes, spheres, lights and a camera you can drag, over the picture. The picture can skin the shapes.', icon: 'cube' },

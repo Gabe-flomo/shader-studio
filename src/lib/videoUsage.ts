@@ -22,7 +22,8 @@ const PRESENTATION_PREFIX = 'shader-studio-presentation:';
 /** How many times a stored text names this video as a Video layer's file. */
 export function countVideoRefs(raw: string, id: string): number {
   if (!id || !raw) return 0;
-  return raw.split(`"videoId":${JSON.stringify(id)}`).length - 1;
+  // A Video layer's file, or a drum pad's sample (kept in the same store).
+  return raw.split(`"videoId":${JSON.stringify(id)}`).length - 1 + raw.split(`"sampleId":${JSON.stringify(id)}`).length - 1;
 }
 
 /** Every use of each of these videos, by id. */
@@ -39,16 +40,17 @@ export function videoUses(ids: readonly string[], kv: ReadKV, open?: { name: str
     // The open graph is counted from what's on screen (it may have changed since it was saved).
     if (kind === 'graph' && open && label === openName) continue;
     const raw = kv.get(k);
-    if (!raw || !raw.includes('"videoId"')) continue;
+    if (!raw || (!raw.includes('"videoId"') && !raw.includes('"sampleId"'))) continue;
     for (const id of want) {
       const n = countVideoRefs(raw, id);
       if (n) out.get(id)!.push({ kind, label, layers: n });
     }
   }
   if (open) {
-    for (const l of open.layers) {
-      if (l.kind !== 'video' || !want.has(l.videoId)) continue;
-      const list = out.get(l.videoId)!;
+    const refs = open.layers.flatMap(l => (l.kind === 'video' ? [l.videoId] : l.kind === 'drumpad' ? l.pads.map(p => p.sampleId) : []));
+    for (const id of refs) {
+      if (!id || !want.has(id)) continue;
+      const list = out.get(id)!;
       const had = list.find(u => u.kind === 'open');
       if (had) had.layers++; else list.unshift({ kind: 'open', label: openName ?? 'The open graph', layers: 1 });
     }

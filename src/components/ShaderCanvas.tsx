@@ -17,6 +17,7 @@ import { playOverlay } from '../play/overlay';
 import { CompareHandle } from './play/finish/CompareHandle';
 import { playBackground, planFrame, planGraphs, planShowsThis } from '../play/background';
 import { playVideoLayers } from '../play/videoLayers';
+import { playDrumPads } from '../play/drumPads';
 import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
 import type { BackgroundItem } from '../types/play';
 import { HandsPill } from './play/HandsChip';
@@ -1323,6 +1324,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (!queue && background) playBackground.follow(elapsed, playing);
       // Video layers keep to the clock too (their own start, speed and loop).
       playVideoLayers.follow(elapsed, playing);
+      // Drum pads: the clock their hits are stamped with, and mapped numbers on sounding pads.
+      playDrumPads.follow(elapsed, playing);
       const plan = planFrame({
         background, shaderMoving, needsRender,
         layersMoving: renderKeepAlive.active() || playOverlay.isAnimated() || (playing && playOverlay.finishMoving()) || playEngine.isAnimating() || (queue ? playBackground.queueMoving(queue, playing) : playBackground.moving(playing)) || (playing && midiEngine.hasFile()),

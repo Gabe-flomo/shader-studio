@@ -70,6 +70,7 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
     for (const l of play.layers) {
       if (l.kind === 'audio' && (l as { input?: string }).input === 'file') out.push({ id: layerChainId(l.id), label: l.label, icon: 'wave', note: 'This audio layer’s song.' });
       if (l.kind === 'video' && (l as { sound?: string }).sound !== 'off') out.push({ id: layerChainId(l.id), label: l.label, icon: 'camera', note: 'This Video layer’s sound (before its volume).' });
+      if (l.kind === 'drumpad') out.push({ id: layerChainId(l.id), label: l.label, icon: 'grid', note: 'This Drum pad layer’s pads, all through one chain (before its volume).' });
     }
     for (const n of nodes) if (n.type === 'audioInput') out.push({ id: nodeChainId(n.id), label: `Audio Input · ${n.id}`, icon: 'wave', note: 'This Audio Input node’s song.' });
     for (const id of Object.keys(fx.chains)) if (!out.some(s => s.id === id)) out.push({ id, label: `${id} (not here)`, icon: 'warning', note: 'Its sound isn’t in this setup any more: remove the chain, or bring the sound back.' });

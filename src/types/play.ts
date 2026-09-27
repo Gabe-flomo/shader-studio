@@ -470,8 +470,9 @@ export type { LayerGroup } from './layerGroups';
  *   clear    brush: wipe the strokes
  *   next / prev / shuffle / goto   background: another source (goto: the `amount`th, 1 = the first)
  *   next / prev / shuffle / goto   data: another row or chunk (a whole window when it steps by windows; goto: the `amount`th row)
+ *   pad      drum pads: play pad number `amount` (1 = the first; docs/drum-pads.md)
  */
-export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto';
+export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto' | 'pad';
 /** A built-in action, or a button a Script layer declares (`script:<key>`). */
 export type ActionKind = BuiltinActionKind | 'signal' | `script:${string}`;
 /** The action that sends a signal (its `signal`) instead of doing something to a layer. */
@@ -495,7 +496,7 @@ export interface PlayAction {
   signal?: string;
 }
 
-export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear', 'goto'];
+export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear', 'goto', 'pad'];
 
 /** Which actions make sense for which layer kinds. */
 export const ACTIONS_FOR: Record<string, readonly BuiltinActionKind[]> = {
@@ -507,6 +508,8 @@ export const ACTIONS_FOR: Record<string, readonly BuiltinActionKind[]> = {
   background: ['next', 'prev', 'shuffle', 'goto', 'reset', 'toggle', 'show', 'hide'],
   // Step through a dataset: the next, previous, a random or the Nth row (or chunk); Reset goes back to what Offset says.
   data: ['next', 'prev', 'shuffle', 'goto', 'reset', 'toggle', 'show', 'hide'],
+  // Play pad N (a drum pad layer draws nothing, so showing and hiding mean nothing there).
+  drumpad: ['pad'],
   other: ['toggle', 'show', 'hide'],
 };
 
@@ -758,7 +761,11 @@ export interface TakeTrack {
 }
 
 /** An action that fired (a burst, Next line, a script button…), `t` seconds into the take. */
-export interface TakeEvent { t: number; do: ActionKind; layerId: string; amount: number }
+export interface TakeEvent {
+  t: number; do: ActionKind; layerId: string; amount: number;
+  /** A drum pad hit's velocity (0..1); 0 lets a gate pad go. Absent: 1. */
+  vel?: number;
+}
 
 /**
  * What an audio layer's sound looked like during a take (see lib/takeAudio.ts):
@@ -1503,7 +1510,8 @@ export function parseTake(raw: unknown): PlayTake | null {
     const at = num(x.t), amount = num(x.amount);
     if (at === null || at < 0 || at > length + 1 || typeof x.do !== 'string' || typeof x.layerId !== 'string') continue;
     if (!(ACTION_KINDS as readonly string[]).includes(x.do) && !scriptActionKey(x.do)) continue;
-    events.push({ t: at, do: x.do as ActionKind, layerId: x.layerId, amount: amount ?? 1 });
+    const vel = num(x.vel);
+    events.push({ t: at, do: x.do as ActionKind, layerId: x.layerId, amount: amount ?? 1, ...(vel !== null ? { vel: Math.max(0, Math.min(1, vel)) } : {}) });
   }
   events.sort((a, b) => a.t - b.t);
   const dataFeeds = parseTakeDataFeeds(t.dataFeeds, length);

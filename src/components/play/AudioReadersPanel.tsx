@@ -17,7 +17,7 @@ import { READER_GAIN_MAX, READER_GAIN_MIN, READER_WIDTH_MAX, READER_WIDTH_MIN, f
 import { audioReaderBank } from '../../lib/audioReaderBank';
 import { audioEngine } from '../../lib/audioEngine';
 import { liveAudio, type LiveStatus } from '../../lib/liveAudio';
-import { videoLayerOfInput } from '../../types/playLayers';
+import { padsLayerOfInput, videoLayerOfInput } from '../../types/playLayers';
 import { playVideoLayers } from '../../play/videoLayers';
 import { readerVideoNote, useVideoSoundState } from './videoSoundUi';
 import { Modal } from '../ui/Modal';
@@ -133,7 +133,11 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
       )}
     </div>
   );
-  const sourceNote = videoId
+  const padsId = padsLayerOfInput(cfg.input);
+  const padsLayer = padsId ? play.layers.find(v => v.id === padsId && v.kind === 'drumpad') : undefined;
+  const sourceNote = padsId
+    ? hint(!padsLayer ? 'That Drum pad layer has been deleted. Pick another input.' : `${padsLayer.label}: the readers hear its pads after its effects. Hit a pad (click, keys, MIDI) to see them move.`)
+    : videoId
     ? (readerVideoNote(video?.label ?? '', video ? videoState : 'gone') ? hint(readerVideoNote(video?.label ?? '', video ? videoState : 'gone')) : null)
     : cfg.input
     ? !song ? hint('That Audio Input node has been deleted. Pick another input.')

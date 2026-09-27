@@ -220,18 +220,19 @@ function extFor(type: string): string {
 }
 
 // ── Videos ──────────────────────────────────────────────────────────────────
-// A Video layer names its file by `videoId` (the videos library, lib/backgroundLibrary.ts).
+// A Video layer names its file by `videoId` (the videos library, lib/backgroundLibrary.ts),
+// a Drum pad layer's pads their samples by `sampleId` (the same store).
 // Graphs, Play setups, presentations and library snapshots that use one carry the file
 // as a `video` item, so the layer finds it after an import elsewhere.
 
 /** Every video id the graph, Play, presentation and library items name (also inside a library snapshot's escaped JSON). */
 export function videoIdsIn(items: readonly WriteItem[]): string[] {
   const out = new Set<string>();
-  const re = /\\?"videoId\\?"\s*:\s*\\?"([^"\\]{1,200})\\?"/g;
+  const re = /\\?"(?:videoId|sampleId)\\?"\s*:\s*\\?"([^"\\]{1,200})\\?"/g;
   for (const it of items) {
     if (it.kind !== 'graph' && it.kind !== 'play' && it.kind !== 'presentation' && it.kind !== 'library') continue;
     const text = typeof it.data === 'string' ? it.data : '';
-    if (!text.includes('videoId')) continue;
+    if (!text.includes('videoId') && !text.includes('sampleId')) continue;
     for (const m of text.matchAll(re)) out.add(m[1]);
   }
   return [...out];

@@ -115,7 +115,7 @@ export function clockRate(bpm: number, beats: number): number {
 
 interface PadSnapshot { axes: number[]; buttons: number[] }
 
-function isTypingTarget(el: EventTarget | null): boolean {
+export function isTypingTarget(el: EventTarget | null): boolean {
   const node = el as HTMLElement | null;
   const tag = node?.tagName;
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!node?.isContentEditable;
@@ -1120,6 +1120,9 @@ class PlayEngine implements InputSource {
   }
 
   // ── Mouse + keyboard backends ─────────────────────────────────────────────
+
+  /** Is the Play page showing (keys play)? */
+  isPerforming(): boolean { return this.performing; }
 
   /** The Play page is showing: listen to the pointer and the keyboard. */
   setPerforming(on: boolean): void {

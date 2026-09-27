@@ -5,7 +5,7 @@
  */
 import { create } from 'zustand';
 import type { PlayAudioReaders, PlayLayer, PlayRecord, TriggerSpec } from '../../types/play';
-import { videoLayerOfInput, videoReaderInput } from '../../types/playLayers';
+import { padsLayerOfInput, padsReaderInput, videoLayerOfInput, videoReaderInput } from '../../types/playLayers';
 
 interface ReadersPanelUi {
   open: boolean;
@@ -64,8 +64,10 @@ export function readerInputOptions(input: string, songs: ReadonlyArray<{ id: str
     ...songs.map(s => ({ value: s.id, label: `Song · ${s.label}${s.file !== null ? ` · ${s.file}` : ' (no song loaded)'}` })),
   ];
   for (const l of layers) if (l.kind === 'video') out.push({ value: videoReaderInput(l.id), label: `Video · ${l.label}${l.sound === 'off' ? ' (sound off)' : ''}` });
-  const video = videoLayerOfInput(input);
+  for (const l of layers) if (l.kind === 'drumpad') out.push({ value: padsReaderInput(l.id), label: `Drum pads · ${l.label}` });
+  const video = videoLayerOfInput(input), pads = padsLayerOfInput(input);
   if (video && !layers.some(l => l.id === video && l.kind === 'video')) out.push({ value: input, label: 'Video · a layer no longer in the setup' });
-  else if (input && !video && !songs.some(s => s.id === input)) out.push({ value: input, label: 'Song · a node no longer in the graph' });
+  else if (pads && !layers.some(l => l.id === pads && l.kind === 'drumpad')) out.push({ value: input, label: 'Drum pads · a layer no longer in the setup' });
+  else if (input && !video && !pads && !songs.some(s => s.id === input)) out.push({ value: input, label: 'Song · a node no longer in the graph' });
   return out;
 }
