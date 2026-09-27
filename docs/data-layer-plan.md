@@ -149,3 +149,48 @@ dataset and passes numbers into the shader:
    text style.
 3. **JSON views, exports and Present, examples** (a small CSV of city
    temperatures, a route, a poem stepped word by word).
+
+## 8. Later milestones: more ways data comes in (added 26 Sep 2026)
+
+A dataset's source is one of: a **file**, **typed in**, a **URL**, or a
+**stream**. Everything downstream (the notebook, Normalize, the Data node, the
+Data layer, mapping sources) works the same whichever it is.
+
+6. **Create data (typed in).** A small spreadsheet in the dataset editor:
+   - add, rename and retype columns;
+   - add, delete and reorder rows;
+   - paste a block from Excel or Google Sheets (tab-separated), and undo.
+
+   It's saved as the dataset's own table.
+7. **Import from a URL.** Paste a link; the format is detected from the
+   extension and the content type, then sniffed from the text. A preview shows
+   before you keep it, and **Refresh** fetches it again.
+   - **Works well with:** direct `.csv`/`.json`/`.txt` links, GitHub raw
+     files, Google Sheets "Publish to web → CSV" links, open-data portals, and
+     Hugging Face dataset files. Parquet needs a small reader such as
+     `hyparquet`, which is optional.
+   - **CORS:** in the browser, a site that doesn't allow cross-origin reads
+     fails with a clear message. The desktop app fetches through a Tauri
+     command, so any public URL works there.
+   - **Kaggle** needs the user's own Kaggle API token, entered once in the
+     app's settings and stored only on that machine (in the system keychain in
+     the desktop app). That comes after plain URLs.
+   - Fetched data is stored like a file, with the URL kept, so the graph
+     still opens offline.
+8. **Streaming (live datasets).**
+   - **Transports:** poll a URL every N seconds, a WebSocket, Server-Sent
+     Events, or OSC through the existing bridge.
+   - **Messages** (JSON objects or CSV lines) become rows. They either append
+     into a rolling **window** of the last N rows, or replace the table.
+   - **Consumers** subscribe to the dataset and update without recompiling:
+     the Data node's texture, the Data layer, `s.data()` and data mapping
+     sources.
+   - **Controls:** a status chip (connected, rows per second, last row) with
+     pause, resume and disconnect.
+   - **Takes** record incoming rows with their times, and replay feeds those
+     instead of the live connection, so a performance driven by a feed renders
+     frame by frame.
+   - **Website export** can either reconnect to the same stream (listed as
+     "needs the network") or freeze the last window.
+   - This is the plugin plan's `defineMapping` / `defineFeed` idea, done for
+     data.
