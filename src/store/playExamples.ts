@@ -13,7 +13,7 @@ import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
-import { SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
+import { SKETCH_3D, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from './playSketches';
 import {
   defaultLayer, type ActionKind, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
@@ -911,6 +911,19 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Drag Dots, Ring size and Spin.
 • Layers → Ring → **Open editor**: change the \`hsl(…)\` line and press ⌘/Ctrl+Enter.
 • Map an LFO onto Ring size: the sketch breathes on its own.`,
+  })),
+  ex('script3D', glowGraph({ radius: 0.2, falloff: 5, tint: [0.25, 0.45, 1] }), play({
+    layers: [scriptLayer('solid', 'Solid', SKETCH_3D)],
+    controls: [ctl('shape', 'layer:solid::p_shape', 'Solid · Shape', 0, 2, 1), ctl('size', 'layer:solid::p_size', 'Solid · Size', 0.1, 0.6), ctl('spin', 'layer:solid::p_spin', 'Solid · Spin', -2, 2), ctl('hue', 'layer:solid::p_hue', 'Solid · Hue', 0, 360, 1)],
+    notes: `**What it shows.** 3D in a Script layer, on its plain 2D canvas: a lit torus, ball or cube turning in front of the SDF Glow shader, which is the background. No WebGL and no library: the sketch does the 3D itself.
+
+**How it's built.** Four steps every frame. **Turn** each point of the mesh (a rotation around y, then x). **Project** it: divide by depth, so far points shrink (Lens sets how strongly). **Hide** faces that point away from the camera. **Sort** the rest far to near and paint them in that order, each shaded by how much it faces the light. It's the painter's algorithm, which is how Processing drew 3D before WebGL. The glow behind is an ordinary graph: UV → Circle SDF → SDF Glow → Tone Map.
+
+**Try this.**
+• Drag on the picture to throw the shape; it keeps its spin.
+• Shape: 0 is a torus, 1 a ball, 2 a cube. Turn on Wireframe to see every face, the back ones too.
+• Lower Lens for a wide-angle look; map an LFO onto Hue.
+• In the editor, change the \`light\` direction, or add your own mesh function.`,
   })),
   ex('scriptMouse', glowGraph({ radius: 0.04, falloff: 30, tint: [0.3, 0.35, 0.6] }), play({
     layers: [scriptLayer('chain', 'Chain', SKETCH_MOUSE)],
