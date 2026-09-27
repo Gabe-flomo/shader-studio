@@ -14,6 +14,7 @@ import { candidateLabel, collectPlayCandidates } from '../../play/playControls';
 import { SENSOR_HINTS, SENSOR_LABELS } from '../../play/playSources';
 import { playEngine } from '../../lib/playEngine';
 import { layerNumericProps, sensorReadsFor, layerTarget, type PlayLayer, type PlaySource, type SensorRead } from '../../types/play';
+import { FINISH_EFFECTS, finishNumericProps, finishTarget } from '../../types/playFinish';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
@@ -41,6 +42,7 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
   const controls = play.controls.filter(c => c.kind !== 'color' && match(c.label));
   const graph = open ? collectPlayCandidates(nodes, bindings).filter(c => c.kind === 'float' && !taken.has(c.target) && match(candidateLabel(c))) : [];
   const layers = play.layers.map(l => ({ l, props: layerNumericProps(l).filter(d => !taken.has(layerTarget(l.id, d.key)) && match(`${l.label} ${d.label}`)) })).filter(x => x.props.length);
+  const finish = (play.finish?.effects ?? []).map(e => ({ e, label: FINISH_EFFECTS[e.kind].label, props: finishNumericProps(e).filter(d => !taken.has(finishTarget(e.id, d.key)) && match(`${FINISH_EFFECTS[e.kind].label} ${d.label}`)) })).filter(x => x.props.length);
   const isOpen = (k: string) => !!query || unfolded.has(k);
   const flip = (k: string) => setUnfolded(p => { const n = new Set(p); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
@@ -67,7 +69,7 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
     </button>
   );
-  const empty = controls.length + graph.length + layers.length === 0;
+  const empty = controls.length + graph.length + layers.length + finish.length === 0;
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
       <Button size="sm" variant="ghost" icon="plus" onClick={() => setOpen(o => !o)} title={`Map ${label} onto a control`}>Map…</Button>
@@ -86,6 +88,13 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
               <div key={l.id}>
                 {folder(`layer:${l.id}`, l.label, props.length, 14)}
                 {isOpen(`layer:${l.id}`) && props.map(d => row(d.key, d.label, () => pick({ layerId: l.id, key: d.key }), 40, d.hint))}
+              </div>
+            ))}
+            {finish.length > 0 && folder('finish', 'From the Finish stack', finish.reduce((n, x) => n + x.props.length, 0))}
+            {finish.length > 0 && isOpen('finish') && finish.map(({ e, label: fl, props }) => (
+              <div key={e.id}>
+                {folder(`finish:${e.id}`, fl, props.length, 14)}
+                {isOpen(`finish:${e.id}`) && props.map(d => row(d.key, d.label, () => pick({ effectId: e.id, key: d.key }), 40, d.hint || undefined))}
               </div>
             ))}
           </div>

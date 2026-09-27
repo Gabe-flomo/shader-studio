@@ -78,6 +78,11 @@ const ROWS: Array<[string, string, string]> = [
   ['handProximity', 'Hands: touch a shape', 'A fingertip near a circle steps the text to its next line and flashes the glow.'],
   ['handPaths', 'Hand paths', 'A shape between four fingertips: a window through ASCII that moves with your hands, strung with a web. Works without a camera too.'],
   ['playTake', 'A recorded take', 'Ships with an 8-second performance: watch it back and Render it without playing.'],
+  ['finishGrade', 'Finish: grade and lens', 'A grade, lens distortion, chromatic aberration and a vignette over the shader and a layer; the mouse sets the white balance.'],
+  ['finishLooks', 'Finish: looks and split toning', 'Teal & orange as a starting point: split toning, colour wheels and curves you can keep changing.'],
+  ['finishScreen', 'Finish: CRT, bloom, grain and shake', 'A curved CRT with its shadow mask and glow, bloom, grain and flicker; Space shakes the camera.'],
+  ['finishHalation', 'Finish: halation', 'Film’s red-to-white halo on a test scene: lamps halate and grow, paper and teal don’t.'],
+  ['finishTime', 'Finish: time displacement', 'Slit-scan: the top of the picture is 30 frames behind the bottom, over a drifting shader and a comet layer.'],
   // Bigger pieces that put several techniques together (their graphs live in exampleGraphs.ts).
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],
   ['flowAroundWords', 'Flow Around Words', 'Particles over an FBM landscape part around a word that acts as a wall.'],
@@ -105,6 +110,7 @@ const GROUP_STARTS: Array<[string, string]> = [
   ['Mattes & masks', 'matteParticles'],
   ['Hands', 'handFingertips'],
   ['Recording', 'playTake'],
+  ['Finish', 'finishGrade'],
   ['Bigger pieces', 'particleGlow'],
 ];
 export const PLAY_EXAMPLE_GROUPS: Array<{ label: string; keys: string[] }> = GROUP_STARTS.map(([label, first], i) => {

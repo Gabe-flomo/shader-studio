@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ALL_FEATURES, FEATURES, can, canOn, closeProSheet, requireFeature, usePlan, useProSheet, type Feature } from '../plan';
 
 const FREE: Feature[] = ['studio', 'present', 'glsl', 'builder', 'learn', 'nodes.import', 'play.controls'];
-const PRO_ONLY: Feature[] = ['play.layers', 'play.sources', 'play.backgrounds', 'play.takes', 'play.midiFile', 'convert', 'export.hires', 'export.website', 'files.everything', 'files.install', 'nodes.publish', 'nodes.pack'];
+const PRO_ONLY: Feature[] = ['play.layers', 'play.sources', 'play.backgrounds', 'play.finish', 'play.takes', 'play.midiFile', 'convert', 'export.hires', 'export.website', 'files.everything', 'files.install', 'nodes.publish', 'nodes.pack'];
 
 afterEach(() => {
   usePlan.getState().setSession({ status: 'signed-in', user: '', plan: 'pro', source: 'open' });

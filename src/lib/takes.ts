@@ -39,7 +39,8 @@ import { bindingKeyOf, playEngine } from './playEngine';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { readControlValue } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
-import { layerTarget, parseActionTarget, parseLayerTarget, TAKE_MAX_SECONDS, TAKES_MAX, type ActionKind, type PlayRecord, type PlayTake, type TakeTrack } from '../types/play';
+import { readFinishValue } from '../types/playFinish';
+import { layerTarget, parseActionTarget, parsePropTarget, TAKE_MAX_SECONDS, TAKES_MAX, type ActionKind, type PlayRecord, type PlayTake, type TakeTrack } from '../types/play';
 import { encodeKeys, takeEventsBetween, takeMouseAt, takePointerAt, takeSize, trackAt } from './takePlayback';
 import { AUDIO_GAP, AudioFrameBuffer, audioNeeds, audioSourceOf, takeAudioAt, takeAudioFor } from './takeAudio';
 import { liveAudio } from './liveAudio';
@@ -129,10 +130,12 @@ export class TakeCapture {
     const { nodes, play } = useNodeGraphStore.getState();
     for (const c of this.play.controls) {
       if (c.kind === 'action' || parseActionTarget(c.target)) continue;
-      const lt = parseLayerTarget(c.target);
+      const lt = parsePropTarget(c.target);
       if (lt) {
+        // A layer property, or a Finish effect's number (its base from the record).
         const layer = play.layers.find(l => l.id === lt.layerId) as unknown as Record<string, number> | undefined;
-        this.push('control', c.id, c.label, time, playEngine.layerValue(lt.layerId, lt.key, layer?.[lt.key] ?? 0), { target: c.target });
+        const base = layer?.[lt.key] ?? readFinishValue(play.finish, c.target) ?? 0;
+        this.push('control', c.id, c.label, time, playEngine.layerValue(lt.layerId, lt.key, base), { target: c.target });
         continue;
       }
       const v = playEngine.liveValue(c.id) ?? readControlValue(nodes, c.target, play) ?? 0;
@@ -273,7 +276,7 @@ function applyTake(take: PlayTake, time: number, out: {
     if (tr.kind === 'control' && tr.target) {
       const v = trackAt(tr, s);
       out.show?.(tr.id, v);
-      const lt = parseLayerTarget(tr.target);
+      const lt = parsePropTarget(tr.target);
       if (lt) { playEngine.setOverride(lt.layerId, lt.key, num(v)); out.layerKeys.add(`${lt.layerId}\u0000${lt.key}`); }
       else out.param(bindingKeyOf(tr.target), v);
     } else if (tr.kind === 'bus') out.bus(tr.id, num(trackAt(tr, s)));

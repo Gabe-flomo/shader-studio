@@ -12,7 +12,7 @@
 import { create } from 'zustand';
 import type { PlayRecord } from '../../types/play';
 
-export type PlayTab = 'controls' | 'layers' | 'mappings';
+export type PlayTab = 'controls' | 'layers' | 'finish' | 'mappings';
 
 const FOLD_KEY = 'shader-studio:play:folded';
 const PANEL_KEY = 'shader-studio:play:panel';
@@ -69,6 +69,14 @@ interface PlayUi {
   /** Solo (or unsolo) several layers at once: a group's. */
   soloLayersSet: (ids: readonly string[], on: boolean) => void;
   clearSolo: () => void;
+  /** The Finish effect to open and scroll to (bumped with finishTick). */
+  finishFocus: string;
+  finishTick: number;
+  /** Open the Finish tab at this effect. */
+  revealFinish: (effectId: string) => void;
+  /** Before/after on the picture: the divider's place (0..1; left of it is the picture before the Finish stack), or null for off. */
+  compare: number | null;
+  setCompare: (x: number | null) => void;
 }
 
 const NONE: ReadonlySet<string> = new Set();
@@ -90,6 +98,11 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   revealTick: 0,
   select: id => set(get().selected === id ? { selected: id } : { selected: id, mask: '' }),
   reveal: id => set({ tab: 'layers', selected: id, revealTick: get().revealTick + 1, ...(get().selected === id ? {} : { mask: '' }) }),
+  finishFocus: '',
+  finishTick: 0,
+  revealFinish: id => set({ tab: 'finish', finishFocus: id, finishTick: get().finishTick + 1 }),
+  compare: null,
+  setCompare: compare => set({ compare: compare === null ? null : Math.max(0, Math.min(1, compare)) }),
   mask: '',
   setMask: mask => set({ mask }),
   panel: loadPanel(),

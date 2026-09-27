@@ -636,3 +636,77 @@ function draw(s) {
   ctx.globalCompositeOperation = 'source-over';
 }
 `;
+
+/** Finish: time displacement — a comet on a figure of eight and a sweeping bar, moving with the clock (so renders move too). */
+export const SKETCH_ORBIT = `// Everything here moves with s.time, so a render of it moves the same way.
+const params = {
+  speed: { value: 1, min: 0, max: 3, step: 0.01, label: 'Speed' },
+  size: { value: 0.07, min: 0.02, max: 0.2, step: 0.005, label: 'Size' },
+};
+
+function draw(s) {
+  const { ctx, width: W, height: H, time, params } = s;
+  const t = time * params.speed;
+  // A bar sweeping left to right and back.
+  const bx = (0.5 + 0.42 * Math.sin(t * 0.9)) * W;
+  ctx.fillStyle = 'rgba(120, 220, 255, 0.9)';
+  ctx.fillRect(bx - H * 0.012, H * 0.1, H * 0.024, H * 0.8);
+  // A comet on a figure of eight.
+  const x = W / 2 + Math.sin(t * 1.3) * W * 0.32, y = H / 2 + Math.sin(t * 2.6) * H * 0.22;
+  const r = params.size * H;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.4, 'rgba(255,200,120,0.9)');
+  g.addColorStop(1, 'rgba(255,120,60,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+`;
+
+/**
+ * The halation test scene (Finish: halation): a grey ramp, paper white, a
+ * saturated teal patch and a row of small lamps, on a dark wall.
+ */
+export const SKETCH_HALATION = `// A test scene for film halation. The picture is 8-bit, so "brighter than
+// white" can only show as "clipped at 1.0": the lamps clip, the paper doesn't.
+const params = {
+  paper: { value: 0.9, min: 0.5, max: 1, step: 0.01, label: 'Paper white' },
+  lamps: { value: 1, min: 0, max: 1, step: 0.01, label: 'Lamps' },
+};
+
+function draw(s) {
+  const { ctx, width: W, height: H, time, params } = s;
+  const u = H / 100; // one unit: 1% of the height
+  ctx.fillStyle = '#16161b';
+  ctx.fillRect(0, 0, W, H);
+  const label = (text, x, y) => { ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = (2.6 * u) + 'px system-ui, sans-serif'; ctx.fillText(text, x, y); };
+  // A grey ramp from black to white: halation should start only at its very top.
+  const g = ctx.createLinearGradient(8 * u, 0, W - 8 * u, 0);
+  g.addColorStop(0, '#000'); g.addColorStop(1, '#fff');
+  ctx.fillStyle = g;
+  ctx.fillRect(8 * u, 82 * u, W - 16 * u, 8 * u);
+  label('grey ramp 0 to 1', 8 * u, 79 * u);
+  // Paper white: a big white card, exposed as a camera would (below clipping).
+  const p = Math.round(params.paper * 255);
+  ctx.fillStyle = 'rgb(' + p + ',' + p + ',' + p + ')';
+  ctx.fillRect(8 * u, 16 * u, 30 * u, 40 * u);
+  label('paper ' + params.paper.toFixed(2), 8 * u, 12 * u);
+  // A saturated teal patch: no red in it, so no red halo.
+  ctx.fillStyle = 'rgb(0,170,160)';
+  ctx.fillRect(46 * u, 16 * u, 26 * u, 40 * u);
+  label('teal', 46 * u, 12 * u);
+  // Small lamps: clipped cores with a soft falloff, like bulbs in a photo.
+  const left = 84 * u, right = W - 12 * u;
+  for (let i = 0; i < 5; i++) {
+    const x = left + (right - left) * (i / 4), y = 36 * u + Math.sin(time * 0.7 + i) * 8 * u;
+    const r = (0.8 + 0.35 * i) * u;
+    const halo = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
+    halo.addColorStop(0, 'rgba(255,255,255,' + params.lamps + ')');
+    halo.addColorStop(0.33, 'rgba(255,250,240,' + params.lamps + ')');
+    halo.addColorStop(1, 'rgba(255,240,220,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(x, y, r * 3, 0, Math.PI * 2); ctx.fill();
+  }
+  label('lamps (clipped)', left - 3 * u, 12 * u);
+}
+`;
