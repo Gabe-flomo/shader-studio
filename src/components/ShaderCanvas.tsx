@@ -13,6 +13,7 @@ import { midiEngine } from '../lib/midiEngine';
 import { layerAudio } from '../lib/layerAudio';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
+import { CompareHandle } from './play/finish/CompareHandle';
 import { playBackground, planFrame, planGraphs, planShowsThis } from '../play/background';
 import { playVideoLayers } from '../play/videoLayers';
 import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
@@ -1317,7 +1318,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       playVideoLayers.follow(elapsed, playing);
       const plan = planFrame({
         background, shaderMoving, needsRender,
-        layersMoving: renderKeepAlive.active() || playOverlay.isAnimated() || playEngine.isAnimating() || (queue ? playBackground.queueMoving(queue, playing) : playBackground.moving(playing)) || (playing && midiEngine.hasFile()),
+        layersMoving: renderKeepAlive.active() || playOverlay.isAnimated() || (playing && playOverlay.finishMoving()) || playEngine.isAnimating() || (queue ? playBackground.queueMoving(queue, playing) : playBackground.moving(playing)) || (playing && midiEngine.hasFile()),
       });
       const dynamic = plan.dynamic;
       // The queue's other graphs showing now, drawn as a second program (and copied for the kit unless one goes straight to the screen).
@@ -2132,6 +2133,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const unsubSolo = usePlayUi.subscribe((ui, prev) => {
       if (ui.soloLayers !== prev.soloLayers || ui.soloMappings !== prev.soloMappings) feedPlay();
       if (ui.guides !== prev.guides) { playOverlay.setGuides(ui.guides); requestRenderRef.current(); }
+      if (ui.compare !== prev.compare) { playOverlay.setCompare(ui.compare); requestRenderRef.current(); }
     });
     playOverlay.setWriter((layerId, patch) => useNodeGraphStore.getState().setPlay(p => ({ ...p, layers: p.layers.map(l => l.id === layerId ? { ...l, ...patch } as typeof l : l) })));
     playEngine.setBaseValues(readBaseValues(lastPlayNodes, lastPlay));
@@ -2386,6 +2388,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         <canvas ref={overlayRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
         {/* A setup that follows hands: Enable, on the picture (browsers need a click to open the camera). */}
         <HandsPill />
+        {/* The Finish stack's before/after divider (Play's Finish tab). */}
+        <CompareHandle />
       </div>
     </div>
   );

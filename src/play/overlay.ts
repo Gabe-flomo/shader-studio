@@ -33,6 +33,8 @@ import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, maskBoun
 import { kmMaskLocal, kmMaskPath, kmMaskPlacement } from './kit/mattes.js';
 import { matteUsers } from '../types/playLayers';
 import { addMask, maskFromOutline } from './mattes';
+import { fnActive, fnAnimated, fnCreate, type FnEffect, type FnRenderer } from './kit/finish.js';
+import { finishPropId } from '../types/playFinish';
 
 type KitAction = { do: ActionKind; layerId: string; amount: number };
 /** An audio layer's sound from a take: a frame, null (the input was off), or undefined (not recorded: the live sound). */
@@ -44,6 +46,9 @@ import type { ShaderTap } from './kit/kit.js';
 
 /** Drawing a shape's outline on the picture: click corners (polygon) or drag freehand (lasso). With `mask`, the outline becomes a new mask on that layer. */
 export interface ShapeDrawing { layerId: string; mode: 'polygon' | 'lasso'; pts: number[]; mask?: boolean }
+
+/** The live Finish stack's most pixels a frame (about 1920 × 1080): the preview stays cheap on a retina screen. Renders use their own size. */
+const FINISH_MAX_PIXELS = 2.1e6;
 
 /** Mask outlines and handles on the picture: amber, apart from the layers' blue. */
 const MASK_COLOUR = '#f5c542';
@@ -150,6 +155,55 @@ class PlayOverlay {
   setCanvas(el: HTMLCanvasElement | null): void {
     this.canvas = el;
     this.ctx = el ? el.getContext('2d') : null;
+    // The Finish stack's canvas and the guides above it: siblings over the layers, made when first needed.
+    if (!el) { this.finishEl?.remove(); this.guidesEl?.remove(); this.finishEl = null; this.guidesEl = null; this.live?.dispose(); this.live = null; }
+  }
+
+  // ── The Finish stack ───────────────────────────────────────────────────────
+
+  private live: FnRenderer | null = null;
+  private exportFinish: FnRenderer | null = null;
+  private finishEl: HTMLCanvasElement | null = null;
+  private guidesEl: HTMLCanvasElement | null = null;
+  private compare: number | null = null;
+
+  /** Is the Finish stack doing something (on, with an effect on)? */
+  hasFinish(): boolean { return fnActive(this.record.finish); }
+  /** Does the stack change with the clock (grain, shake, flicker, time displacement)? The render loop keeps going while it plays. */
+  finishMoving(): boolean { return fnAnimated(this.record.finish); }
+  /** Before/after: the divider's place on the picture (0..1), or null. */
+  setCompare(x: number | null): void { this.compare = x; }
+  /** The live Finish renderer's state (for the panel and the browser checks). */
+  finishInfo() { return this.live?.info() ?? null; }
+
+  private finishValue = (e: FnEffect, key: string) => playEngine.layerValue(finishPropId(e.id), key, (e as Record<string, unknown>)[key] as number);
+
+  /** The layers the time map reads (its Layer map), drawn alone by the kit. */
+  private alphaLayers(): string[] | null {
+    const t = this.record.finish?.effects.find(e => e.kind === 'time' && e.enabled);
+    return this.hasFinish() && t && t.map === 'layer' && t.layerId ? [t.layerId] : null;
+  }
+
+  private ensureFinishCanvases(): boolean {
+    const el = this.canvas;
+    if (!el || !el.parentElement) return false;
+    if (!this.live) {
+      const f = document.createElement('canvas');
+      f.setAttribute('aria-hidden', 'true');
+      f.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none';
+      const g = document.createElement('canvas');
+      g.setAttribute('aria-hidden', 'true');
+      g.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:none';
+      el.after(f, g);
+      this.finishEl = f; this.guidesEl = g;
+      this.live = fnCreate(f);
+    }
+    return this.live.ok;
+  }
+
+  private showFinish(on: boolean): void {
+    if (this.finishEl) this.finishEl.style.display = on ? 'block' : 'none';
+    if (this.guidesEl) this.guidesEl.style.display = on ? 'block' : 'none';
   }
 
   setRecord(record: PlayRecord): void {
@@ -630,15 +684,35 @@ class PlayOverlay {
     if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
     this.aspect = W / H;
     playEngine.setAspect(this.aspect);
-    this.kit.frame(ctx, this.record, this.env(gl, W, H, dpr, time, dt));
-    if (this.drawing) this.drawOutline(ctx, W, H, dpr);
-    else if (this.editing && this.guides && this.selectedId) this.drawHandles(ctx, W, H, dpr);
+    // The Finish stack: the layers draw as usual, their guides go on a canvas of their own above the finished picture.
+    const finishing = this.hasFinish() && this.ensureFinishCanvases();
+    let gx: CanvasRenderingContext2D | null = null;
+    if (finishing && this.guidesEl) {
+      const g = this.guidesEl;
+      if (g.width !== W || g.height !== H) { g.width = W; g.height = H; }
+      gx = g.getContext('2d');
+      gx?.clearRect(0, 0, W, H);
+    }
+    const env = this.env(gl, W, H, dpr, time, dt);
+    if (gx) env.guides = gx;
+    env.alphaLayers = this.alphaLayers();
+    this.kit.frame(ctx, this.record, env);
+    const top = gx ?? ctx;
+    if (this.drawing) this.drawOutline(top, W, H, dpr);
+    else if (this.editing && this.guides && this.selectedId) this.drawHandles(top, W, H, dpr);
+    // The finished frame is drawn at the overlay's size, up to about 1080p's worth of pixels (a retina preview would be 3 to 4 times that).
+    const fs = Math.min(1, Math.sqrt(FINISH_MAX_PIXELS / (W * H)));
+    const finished = finishing && !!this.live?.draw({
+      finish: this.record.finish!, value: this.finishValue, picture: gl, layers: canvas,
+      layerAlpha: id => this.kit.layerCanvas(id), width: Math.round(W * fs), height: Math.round(H * fs), time, compare: this.compare ?? -1,
+    });
+    this.showFinish(finished);
     if (this.composite) {
       const c = this.composite;
       if (c.width !== gl.width || c.height !== gl.height) { c.width = gl.width; c.height = gl.height; }
       const x = c.getContext('2d')!;
-      x.drawImage(gl, 0, 0);
-      x.drawImage(canvas, 0, 0, c.width, c.height);
+      if (finished && this.finishEl) x.drawImage(this.finishEl, 0, 0, c.width, c.height);
+      else { x.drawImage(gl, 0, 0); x.drawImage(canvas, 0, 0, c.width, c.height); }
     }
   }
 
@@ -671,6 +745,8 @@ class PlayOverlay {
     const c = document.createElement('canvas');
     c.width = gl.width; c.height = gl.height;
     const x = c.getContext('2d')!;
+    // With the Finish stack on, its canvas holds the finished frame (the picture and the layers).
+    if (this.hasFinish() && this.finishEl && this.finishEl.style.display !== 'none') { x.drawImage(this.finishEl, 0, 0, c.width, c.height); return c; }
     x.drawImage(gl, 0, 0);
     if (this.canvas) x.drawImage(this.canvas, 0, 0, c.width, c.height);
     return c;
@@ -694,12 +770,33 @@ class PlayOverlay {
    *           composites like Screen/Add
    *   'drop'  left out: only the layers, over nothing
    */
-  compositePixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean, opts: { transparent?: boolean; picture?: TransparentPicture; pointer?: KitPointer | null; actions?: readonly KitAction[]; seed?: number; audio?: TakeAudioSource | null } = {}): void {
+  compositePixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean, opts: CompositeOptions = {}): void {
+    this.layPixels(rgba, width, height, time, dt, first, opts);
+    this.finishPixels(rgba, width, height, time, first);
+  }
+
+  /**
+   * The Finish stack over one offline frame, in place (straight alpha, row 0
+   * at the top). Its own renderer, so the live picture's time ring is left
+   * alone; `first` starts that renderer's ring over, and every later frame
+   * adds to it in order, so a render is the same every time.
+   */
+  finishPixels(rgba: Uint8Array, width: number, height: number, time: number, first: boolean): void {
+    if (!this.hasFinish()) return;
+    if (!this.exportFinish) this.exportFinish = fnCreate(null);
+    if (!this.exportFinish.ok) return;
+    this.exportFinish.draw({
+      finish: this.record.finish!, value: this.finishValue, picture: { data: rgba, width, height }, pixels: true,
+      layerAlpha: id => this.exportKit?.layerCanvas(id) ?? null, width, height, time, first,
+    });
+  }
+
+  private layPixels(rgba: Uint8Array, width: number, height: number, time: number, dt: number, first: boolean, opts: CompositeOptions): void {
     // The Play page's "Layers only" hides the picture as well: transparent, that means none.
     const queue = playBackground.layerActive();
     const dropPicture = !!opts.transparent && (opts.picture === 'drop' || (!queue && this.record.display?.picture === false));
     const luma = !!opts.transparent && opts.picture === 'luma' && !dropPicture;
-    if (!this.hasLayers()) { if (dropPicture) rgba.fill(0); else if (luma) lumaKey(rgba); return; }
+    if (!this.hasLayers() && !this.alphaLayers()) { if (dropPicture) rgba.fill(0); else if (luma) lumaKey(rgba); return; }
     // A take's seed: the render's random choices are the ones made when it played back.
     // exportQueuePlan may have started this frame already (a Background layer), actions and all.
     if (!this.exportPrepared) {
@@ -724,6 +821,7 @@ class PlayOverlay {
     const ox = out.getContext('2d')!;
     const dpr = Math.max(1, height / Math.max(1, this.canvas?.clientHeight || height));
     const env = this.env(pic, width, height, dpr, time, dt, true);
+    env.alphaLayers = this.alphaLayers();
     if (opts.pointer) env.pointer = opts.pointer; // a take's pointer, frame by frame
     const takeAudio = opts.audio;
     if (takeAudio) {
@@ -758,6 +856,8 @@ class PlayOverlay {
 }
 
 export const playOverlay = new PlayOverlay();
+
+type CompositeOptions = { transparent?: boolean; picture?: TransparentPicture; pointer?: KitPointer | null; actions?: readonly KitAction[]; seed?: number; audio?: TakeAudioSource | null };
 
 /** What a transparent export does with the shader's picture (see compositePixels). */
 export type TransparentPicture = 'own' | 'luma' | 'drop';
