@@ -376,7 +376,7 @@ export function ShapeEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         )}
         {shape === 'layer' && f.pick('Layer', 'sourceId', sources, 'Add a Text or Image layer first', 'The text, image or camera layer whose shape this is. It follows that layer as it moves.')}
         {shape === 'picture' && f.prop('threshold')}
-        {f.toggle('Invert', 'invert', 'Swap inside and outside')}
+        {f.toggle('Invert', 'invert', 'Swap inside and outside: the fill covers everything but the shape, particles and triggers treat the outside as inside, and a matte made from it shows the other side')}
       </Section>
       {geometric && (
         <Section kind="shape" title="Position">
