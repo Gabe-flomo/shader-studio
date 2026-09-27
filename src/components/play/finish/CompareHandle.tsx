@@ -5,14 +5,14 @@
  * picture before the Finish stack; drag the grip to move it (`pos`), or use
  * the arrow keys. The line follows the wipe's angle.
  */
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePlayUi } from '../playUi';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { fnActive } from '../../../play/kit/finish.js';
 import { FINISH_COMPARE_ID, patchFinishEffect, renderableFinish } from '../../../types/playFinish';
 
 /** Where `pos` sits for a point on the picture (x, y in 0..1 from the top left), as the Finish pass measures it. */
-export function wipePosAt(x: number, y: number, angle: number, aspect: number): number {
+function wipePosAt(x: number, y: number, angle: number, aspect: number): number {
   const a = angle * Math.PI / 180, nx = Math.cos(a), ny = Math.sin(a);
   const vx = (x - 0.5) * aspect, vy = (0.5 - y);
   const e = 0.5 * (Math.abs(nx) * aspect + Math.abs(ny));
@@ -29,24 +29,30 @@ export function CompareHandle() {
     const ids = new Set(s.play.controls.filter(c => c.target === 'finish:compare::pos' || c.target === 'finish:compare::angle').map(c => c.id));
     return ids.size > 0 && s.play.mappings.some(m => m.enabled && ids.has(m.controlId));
   });
-  const ref = useRef<HTMLDivElement>(null);
+  const [el, setEl] = useState<HTMLDivElement | null>(null);
+  const [aspect, setAspect] = useState(16 / 9);
+  useEffect(() => {
+    if (!el) return;
+    const measure = () => { const r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0) setAspect(r.width / r.height); };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
   const drag = useRef(false);
   if (!compare?.on || !performing || !active || tab !== 'finish' || driven) return null;
   const set = (patch: Record<string, number>) => useNodeGraphStore.getState().setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, FINISH_COMPARE_ID, patch) }));
-  const box = () => ref.current?.parentElement?.getBoundingClientRect();
   const at = (clientX: number, clientY: number) => {
-    const b = box();
+    const b = el?.getBoundingClientRect();
     if (b && b.width > 0 && b.height > 0) set({ pos: wipePosAt((clientX - b.left) / b.width, (clientY - b.top) / b.height, compare.angle, b.width / b.height) });
   };
   // The divider's centre, in 0..1 of the box: along the wipe's direction from the middle.
-  const b = box();
-  const aspect = b && b.height > 0 ? b.width / b.height : 16 / 9;
   const a = compare.angle * Math.PI / 180, nx = Math.cos(a), ny = Math.sin(a);
   const e = 0.5 * (Math.abs(nx) * aspect + Math.abs(ny));
   const d = (compare.pos - 0.5) * 2 * e;
   const cx = 0.5 + (nx * d) / aspect, cy = 0.5 - ny * d;
   return (
-    <div ref={ref} style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 3 }}>
+    <div ref={setEl} style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 3 }}>
       <span aria-hidden style={{ position: 'absolute', left: `${cx * 100}%`, top: `${cy * 100}%`, width: 1.5, height: '300%', background: 'rgba(255,255,255,0.85)', boxShadow: '0 0 2px rgba(0,0,0,0.5)', transform: `translate(-50%, -50%) rotate(${-compare.angle}deg)` }} />
       <div
         role="slider"
