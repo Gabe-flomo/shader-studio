@@ -165,6 +165,40 @@ describe('layers read the background', () => {
   });
 });
 
+/** One frame of a single layer (a null: nothing needs a real canvas) with the given blend over a red shader; what the overlay drew. */
+function blendFrame(blend: string, extra: Partial<KitEnv> = {}): { gl: FakeCanvas; out: FakeCanvas } {
+  const l = { ...defaultLayer('null', 'n', 'Point'), blend } as unknown as PlayRecord['layers'][number];
+  const record: PlayRecord = { ...emptyPlayRecord(), layers: [l] };
+  const gl = new FakeCanvas(); gl.colour = [255, 0, 0, 255];
+  const out = new FakeCanvas(); out.width = 320; out.height = 180;
+  const env = {
+    gl: gl as unknown as HTMLCanvasElement, W: 320, H: 180, dpr: 1, time: 0, dt: 1 / 60,
+    value: (layer: unknown, k: string) => (layer as Record<string, number>)[k],
+    pointer: { x: 0.5, y: 0.5, over: false, down: false }, markers: false, editing: false, hidden: false, backdrop: [0, 0, 0] as [number, number, number],
+    background: null, audio: null, camera: null, image: () => null, sensor: () => {}, override: () => {},
+    ...extra,
+  } as KitEnv;
+  createLayerKit().frame(out.getContext() as unknown as CanvasRenderingContext2D, record, env);
+  return { gl, out };
+}
+
+describe('blend modes meet the shader', () => {
+  it('a layer with a blend mode gets the shader copied in underneath it first', () => {
+    const { gl, out } = blendFrame('difference');
+    expect(out.draws[0]).toBe(gl);
+  });
+
+  it('normal layers leave the overlay see-through over the GL canvas', () => {
+    const { gl, out } = blendFrame('normal');
+    expect(out.draws).not.toContain(gl);
+  });
+
+  it('a transparent export keeps the shader out', () => {
+    const { gl, out } = blendFrame('multiply', { transparent: true } as Partial<KitEnv>);
+    expect(out.draws).not.toContain(gl);
+  });
+});
+
 // ── Web exports ──────────────────────────────────────────────────────────────
 
 function input(display: PlayRecord['display']): PlayHtmlInput {
