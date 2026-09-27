@@ -39,6 +39,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.9',
+    date: '2026-09-27',
+    title: 'p5 sketches, conditions, MIDI grids and sound effects',
+    highlights: [
+      { area: 'Play', text: 'Import p5.js sketches (paste, files or a folder) into Script layers, with tabs, a Console and "Make it a control".', link: { kind: 'example', key: 'p5MultiFile', page: 'play' } },
+      { area: 'Play', text: 'Conditions and signals: act when any value crosses a threshold, and chain actions with named signals.', link: { kind: 'example', key: 'playConditions', page: 'play' } },
+      { area: 'Play', text: 'Pair two controls into one (an XY pad for positions), affect X, Y or both, and swap axes at a threshold.', link: { kind: 'example', key: 'playPairs', page: 'play' } },
+      { area: 'Play', text: 'MIDI: lock a mapping to one knob, set a note range from two keys, and map Push or Launchpad pads to grid cells.', link: { kind: 'example', key: 'playPadGrid', page: 'play' } },
+      { area: 'Play', text: 'Sound effects: filter, echo, reverb, distortion and compressor chains on any sound, mappable and in renders.', link: { kind: 'example', key: 'audioEffects', page: 'play' } },
+      { area: 'Play', text: 'Finish: an animatable before/after wipe, stack presets, and your own effects written as code.' },
+      { area: 'Present', text: 'Add code from your own GLSL, a function, a node or a shader, with live plots and previews; full screen for slides and the canvas.' },
+      { area: 'Files', text: 'A Notes section with every note and comment, readable App settings, a pop-out node pack builder, and History as cards.' },
+    ],
+  },
+  {
     id: '2026.9.8',
     date: '2026-09-27',
     title: 'Finishing, one file format, and linked lessons',
