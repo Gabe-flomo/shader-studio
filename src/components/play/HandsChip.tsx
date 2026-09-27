@@ -300,3 +300,38 @@ export function HandsButton() {
     </span>
   );
 }
+
+/**
+ * HandsLive — a small pulsing "Hands" light in the top bar while hand tracking
+ * is on (or starting), so it's never a surprise that your hands are driving
+ * things. Click it for the chip: Stop, the drawing, the settings.
+ */
+export function HandsLive({ compact = false }: { compact?: boolean }) {
+  const tk = useTokens();
+  const { status, count, paused } = useHands();
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLSpanElement>(null);
+  if (status !== 'on' && status !== 'starting') return null;
+  const colour = status === 'starting' ? tk.status.warning : count > 0 ? tk.status.success : tk.text.muted;
+  return (
+    <span ref={anchor} style={{ display: 'inline-flex' }}>
+      <style>{'@keyframes hands-live-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}'}</style>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        title={`${handsText(status, count, paused)}. Click to stop or change settings.`}
+        aria-label={`${handsText(status, count, paused)}. Open hand tracking`}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: compact ? '0 8px' : '0 10px 0 8px', border: 0, borderRadius: 999, cursor: 'pointer', background: open ? tk.bg.selected : alpha(colour, 0.12), color: tk.text.secondary, font: `600 11.5px ${fontFamily.ui}` }}
+      >
+        <span aria-hidden style={{ width: 7, height: 7, borderRadius: '50%', background: colour, animation: paused ? undefined : 'hands-live-pulse 1.6s ease-in-out infinite' }} />
+        <Icon name="hand" size={13} />
+        {!compact && <span>{status === 'starting' ? 'Starting…' : count === 0 ? 'Hands' : `Hands · ${count}`}</span>}
+      </button>
+      {open && (
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={320} padding={0}>
+          <div style={{ padding: '10px 12px 12px' }}><HandsChip /></div>
+        </Popover>
+      )}
+    </span>
+  );
+}

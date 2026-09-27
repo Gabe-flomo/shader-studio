@@ -14,6 +14,7 @@ import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { WorkspaceChip } from '../workspace/WorkspacePanel';
+import { HandsLive } from '../play/HandsChip';
 import { reportFileResult, reportGlslImport } from './reportFileResult';
 import { importAnyFile } from './importAnyFile';
 import { SaveGraphForm, VersionsButton } from './GraphVersions';
@@ -92,6 +93,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
       </div>
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+        <HandsLive compact={compact} />
         <WorkspaceChip compact={compact} />
         <IconButton icon="undo" label="Undo" shortcut={shortcuts.undo} onClick={undo} />
         <IconButton icon="redo" label="Redo" onClick={redo} />
