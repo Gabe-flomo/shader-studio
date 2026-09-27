@@ -9,7 +9,7 @@ A **Data layer** brings a data file into a Play and turns it into something to
 look at and to perform with:
 
 - **Import** a CSV, JSON or text file.
-- **Transform** it in a small notebook (Python with pandas, or JavaScript), for
+- **Transform** it in a small JavaScript notebook with a pandas-style helper, for
   example: filter, derive columns, run a quick clustering.
 - **Show** it: the layer draws the data by default (scatter, pie, bars, lines
   for a table; words and lines for text).
@@ -26,8 +26,8 @@ layers read the dataset, not the kernel.
 
 | File | In the notebook | What the layer can do with it |
 |---|---|---|
-| CSV / TSV | a pandas DataFrame (Python) or an array of row objects (JS) | numeric and categorical columns: scatter, bars, pie, lines, paths; map columns to x/y/z, size, colour (r,g,b or a palette), rotation, label |
-| JSON | a dict/list (Python) or a plain object (JS) | if it is an array of flat records it is treated as a table; otherwise it is data for Script layers to read |
+| CSV / TSV | a table (`df`) with the pandas-style helper | numeric and categorical columns: scatter, bars, pie, lines, paths; map columns to x/y/z, size, colour (r,g,b or a palette), rotation, label |
+| JSON | a plain value (object or array) | if it is an array of flat records it is treated as a table; otherwise it is data for Script layers to read |
 | Text | a string | split by lines, a separator, words, letters or fixed-size chunks; count frequencies; sort; show one chunk (or N) at a time |
 
 Columns holding lists or nested objects aren't drawn (the panel says why) but
@@ -120,8 +120,8 @@ dataset and passes numbers into the shader:
 - **Stored with the Play setup:** the original file (size-capped like
   images/video, with a warning above the cap), the notebook cells, and the
   frozen result.
-- **Exports and Present** carry only the frozen result, never the Python
-  runtime. Exported pages stay small and need no kernel.
+- **Exports and Present** carry only the frozen result, never the
+  notebook. Exported pages stay small and need no kernel.
 - **Refresh:** re-run the notebook, like Refresh from graph, whenever you want
   the result rebuilt from the file.
 
