@@ -7,6 +7,7 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { TYPE_COLORS } from './typeColors';
 import { registerSocket, getView } from './socketRegistry';
 import { startNodeMouseDrag } from './nodeDrag';
+import { toneSynth } from '../../lib/toneSynth';
 import { midiEngine, midiNoteName, type MidiEvent } from '../../lib/midiEngine';
 import { midiCcList, midiOutputSockets } from '../../lib/midiOutputs';
 
@@ -80,6 +81,9 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
     });
     return () => { window.clearTimeout(pending); unsubscribe(); };
   }, []);
+
+  const [sound, setSound] = useState(() => toneSynth.isEnabled());
+  useEffect(() => toneSynth.subscribe(setSound), []);
 
   const toggleKeyboard = () => {
     const next = !keyboard;
@@ -159,6 +163,11 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
             title="Play notes from the computer keyboard: A–L rows = two octaves, Z/X octave, C/V velocity"
             style={{ background: keyboard ? tc.surface1 : 'none', border: `1px solid ${keyboard ? tc.sky : tc.surface1}`, color: keyboard ? tc.sky : tc.surface2, fontSize: 10, borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}
           >⌨ Keys</button>
+          <button
+            onClick={() => toneSynth.setEnabled(!sound)}
+            title="Hear the notes: a small built-in synth plays whatever this node receives (the keyboard stand-in or a controller). Off by default so a controller already playing into a DAW doesn't sound twice."
+            style={{ background: sound ? tc.surface1 : 'none', border: `1px solid ${sound ? tc.sky : tc.surface1}`, color: sound ? tc.sky : tc.surface2, fontSize: 10, borderRadius: 4, padding: '2px 6px', cursor: 'pointer' }}
+          >♪ Sound</button>
         </div>
         <div style={rowStyle}>
           <span style={labelStyle}>Channel</span>
