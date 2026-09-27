@@ -204,6 +204,45 @@ export function klBuildLuma(c, gl) {
   } catch (e) { return false; }
 }
 
+// ── Background (an image, a video or a colour in place of the shader) ──────
+
+/** Where a w×h picture goes on a W×H canvas: cover crops to fill, contain fits inside, stretch fills exactly. */
+export function klFitRect(fit, w, h, W, H) {
+  if (fit === 'stretch' || !(w > 0) || !(h > 0)) return { x: 0, y: 0, w: W, h: H };
+  const k = fit === 'contain' ? Math.min(W / w, H / h) : Math.max(W / w, H / h);
+  const dw = w * k, dh = h * k;
+  return { x: (W - dw) / 2, y: (H - dh) / 2, w: dw, h: dh };
+}
+
+/**
+ * Paint a background into canvas `c` (W×H): the colour, then the image or
+ * video frame with its fit. `bg` is { el, fit, colour } (el may be null or
+ * not ready yet: the colour alone). A still image is painted again only when
+ * something about it changes. Returns the canvas.
+ */
+export function klPaintBackground(c, bg, W, H, cache) {
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; c._bgKey = ''; }
+  const el = bg.el || null;
+  const isVideo = !!el && typeof el.videoWidth === 'number';
+  const w = !el ? 0 : isVideo ? el.videoWidth : el.naturalWidth || el.width;
+  const h = !el ? 0 : isVideo ? el.videoHeight : el.naturalHeight || el.height;
+  const ready = !!el && w > 0 && h > 0 && (!isVideo || el.readyState >= 2);
+  const col = bg.colour || [0, 0, 0];
+  const key = isVideo || !cache ? '' : [ready ? el.src : '', bg.fit, col.join(','), W, H].join('|');
+  if (key && c._bgKey === key) return c;
+  const x = c.getContext('2d');
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
+  x.fillStyle = klCss(col); x.fillRect(0, 0, W, H);
+  if (ready) {
+    const r = klFitRect(bg.fit, w, h, W, H);
+    x.imageSmoothingQuality = 'high';
+    try { x.drawImage(el, r.x, r.y, r.w, r.h); } catch (e) { /* a frame that isn't decodable yet */ }
+  }
+  c._bgKey = key;
+  return c;
+}
+
 // ── Shape ────────────────────────────────────────────────────────────────────
 
 /**

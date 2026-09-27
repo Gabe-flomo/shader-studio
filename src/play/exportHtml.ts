@@ -29,7 +29,7 @@ import layersSource from './kit/layers.js?raw';
 import bodiesSource from './kit/bodies.js?raw';
 import handsSource from './kit/hands.js?raw';
 import kitSource from './kit/kit.js?raw';
-import { usesHands, type PlayRecord } from '../types/play';
+import { BACKGROUND_VIDEO_KEEP, usesHands, type PlayRecord } from '../types/play';
 import type { HandAssets } from './handExport';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
 import { playUses3D, threeSource } from './threeSource';
@@ -158,6 +158,8 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: 
       out.push({ what: l.fileName ? `The song “${l.fileName}” (${l.label})` : `The song in ${l.label}`, why: 'Songs aren’t saved with a setup, so the page listens to the visitor’s microphone instead, after they click Enable.' });
     }
   }
+  const bgVideo = play.display?.source === 'video' ? play.display.video : undefined;
+  if (bgVideo && !bgVideo.src) out.push({ what: `The background video “${bgVideo.name}” (${sizeText(bgVideo.bytes)})`, why: `Videos over ${sizeText(BACKGROUND_VIDEO_KEEP)} play in the app for the session only, so the page shows the backdrop colour instead. Trim or compress it under ${sizeText(BACKGROUND_VIDEO_KEEP)} to bring it along.` });
   if (play.midiFile) out.push({ what: `The MIDI file “${play.midiFile.name}”`, why: 'The web player doesn’t play MIDI files yet: what it drives stays where you left it. Record a video to keep the performance.' });
   const audioIds = new Set(play.layers.filter(l => l.kind === 'audio').map(l => l.id));
   const bands = play.mappings.filter(m => m.source.kind === 'sensor' && audioIds.has(m.source.layerId) && AUDIO_BAND_READS.has(m.source.read)).length;
@@ -173,13 +175,16 @@ export const HAND_BYTES = 12.2 * 1024 * 1024;
 const VIDEO_LIMIT = 4 * 1024 * 1024;
 const AUDIO_LIMIT = 6 * 1024 * 1024;
 
-/** Each image, video and song the page carries, and what it adds to the page's size. */
-export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending'): { what: string; bytes: number }[] {
+/** Each image, video and song the page carries (the graph's, and Play's background), and what it adds to the page's size. */
+export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', play?: PlayRecord): { what: string; bytes: number }[] {
   const out: { what: string; bytes: number }[] = [];
   if (hands) out.push({ what: 'Hand tracking (MediaPipe and its hand model)', bytes: hands === 'pending' ? HAND_BYTES : hands.bundle.length + hands.loader.length + hands.wasm.length + hands.model.length });
   for (const t of Object.values(media?.textures ?? {})) if (t.src) out.push({ what: `Image in ${t.label}${t.scaledTo ? ` (scaled to ${t.scaledTo} px)` : ''}`, bytes: t.src.length });
   for (const v of Object.values(media?.videos ?? {})) if (v.src) out.push({ what: `Video “${v.name}” in ${v.label}`, bytes: v.src.length });
   for (const a of media?.audio ?? []) if (a.src) out.push({ what: `Song “${a.name}” in ${a.label}`, bytes: a.src.length });
+  const d = play?.display;
+  if (d?.source === 'image' && d.image) out.push({ what: `Background image “${d.image.name}”`, bytes: d.image.src.length });
+  if (d?.source === 'video' && d.video?.src) out.push({ what: `Background video “${d.video.name}”`, bytes: d.video.src.length });
   return out;
 }
 
@@ -213,6 +218,13 @@ export function playBundle(input: PlayHtmlInput) {
   delete play.source;
   // Takes are for rendering in the app; the page never plays them back.
   delete play.takes;
+  // The background carries only the file it shows: an image kept for later isn't needed with a video (or the shader) showing.
+  if (play.display) {
+    const d = { ...play.display };
+    if (d.source !== 'image') delete d.image;
+    if (d.source !== 'video') delete d.video;
+    play.display = d;
+  }
   return {
     title: input.title,
     fragmentShader: input.fragmentShader,

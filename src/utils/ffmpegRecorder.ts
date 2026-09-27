@@ -43,9 +43,9 @@ export interface FfmpegEncodeOptions {
    * Implementation should:
    *   1. Set the shader's u_time uniform to `time`
    *   2. Render the scene
-   * Returns void.
+   * Returns void, or a promise when the frame needs to wait (a video seeking).
    */
-  renderFrame: (time: number) => void;
+  renderFrame: (time: number) => void | Promise<void>;
   /**
    * Called to read the current framebuffer pixels into the provided buffer.
    * Implementation should call gl.readPixels into `out`.
@@ -101,7 +101,7 @@ export async function runFfmpegEncode(opts: FfmpegEncodeOptions): Promise<string
       const time = (opts.startTime ?? 0) + i / opts.fps;
 
       // Render deterministic frame
-      opts.renderFrame(time);
+      await opts.renderFrame(time);
 
       // Read pixels into the reusable buffer
       opts.readPixels(pixelBuf, opts.width, opts.height);

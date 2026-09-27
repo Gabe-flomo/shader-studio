@@ -319,7 +319,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         )}
         {f.props('links', 'opacity', 'trail')}
         {f.select('Blend', 'blend', BLENDS, BLEND_HINT)}
-        {f.toggle('Mask', 'reveal', 'Picture through particles', 'The particles become a mask: each one shows the picture under it instead of a colour. Hide the picture (Picture → Layers only) to see the shader only where particles are.')}
+        {f.toggle('Mask', 'reveal', 'Picture through particles', 'The particles become a mask: each one shows the picture under it instead of a colour. Hide the picture (Background → Layers only) to see the shader only where particles are.')}
       </Section>
     </>
   );

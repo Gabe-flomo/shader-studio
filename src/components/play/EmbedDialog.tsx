@@ -53,7 +53,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const threeReady = useThreeSource(playUses3D(input.play));
   const snippet = useMemo(() => buildPlaySnippet(input, opts), [input, opts, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
   const left = useMemo(() => leftBehind(input.play, input.media, { hands: withHands }), [input, withHands]);
-  const carried = useMemo(() => { const t = threeCarried(input.play); return [...(t ? [t] : []), ...mediaCarried(input.media, withHands ? 'pending' : undefined)]; }, [input, withHands, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  const carried = useMemo(() => { const t = threeCarried(input.play); return [...(t ? [t] : []), ...mediaCarried(input.media, withHands ? 'pending' : undefined, input.play)]; }, [input, withHands, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
   // Show what the reader recognises: the div, then the mount call; the runtime and the piece are elided.
   const preview = useMemo(() => {
     const lines = snippet.trimEnd().split('\n');

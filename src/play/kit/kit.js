@@ -15,8 +15,12 @@
  *   value(layer, key)      a layer property now (a mapping may drive it)
  *   pointer    { x, y, over, down } over the picture, 0..1 with y up
  *   markers    draw null markers · editing: outline invisible zones · selectedId
- *   hidden, backdrop       Picture → Layers only
- *   audio      { wave, freq, sampleRate } from the live input, or null
+ *   hidden, backdrop       Background → Layers only
+ *   background { el, fit, colour } when an image, a video or a colour stands in
+ *              for the shader (then `gl` is ignored): the kit paints it at the
+ *              overlay's size, under the layers, and everything that reads
+ *              "the picture" reads it instead
+ *   audio     { wave, freq, sampleRate } from the live input, or null
  *   camera     a playing <video> of the webcam, or null
  *   image(src) a loaded <img> for a data URL, or null while loading
  *   sensor(key, value)     report a sensor reading (`layerId::read`)
@@ -31,7 +35,7 @@
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, stringSeed, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments } from './geometry.js';
-import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klSketchDispose } from './layers.js';
+import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klPaintBackground, klSketchDispose } from './layers.js';
 import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 import { hdDraw } from './hands.js';
@@ -137,12 +141,15 @@ export function createLayerKit() {
   function frame(ctx, record, env) {
     frameNo++;
     const W = env.W, H = env.H, dpr = env.dpr || 1, time = env.time, dt = Math.min(0.1, Math.max(0, env.dt));
-    const aspect = W / H, gl = env.gl, pointer = env.pointer || { x: 0.5, y: 0.5, over: false, down: false };
+    const aspect = W / H, pointer = env.pointer || { x: 0.5, y: 0.5, over: false, down: false };
+    // An image, a video or a colour in place of the shader: it is the picture every layer reads.
+    const gl = env.background ? klPaintBackground(klCanvas(pool, 'background', W, H), env.background, W, H, true) : env.gl;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, W, H);
     // A transparent export keeps the backdrop out: only the layers, over nothing.
     if (env.hidden && !env.transparent) { ctx.fillStyle = klCss(env.backdrop || [0, 0, 0]); ctx.fillRect(0, 0, W, H); }
+    else if (env.background && !env.transparent) ctx.drawImage(gl, 0, 0);
     const layers = record.layers;
     const ids = new Set(layers.map(l => l.id));
     for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
