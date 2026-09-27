@@ -10,12 +10,12 @@ import { Button, IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { Menu } from '../../ui/Menu';
 import { toast } from '../../ui/toastStore';
-import { askConfirm } from '../../ui/dialogStore';
 import { useThemeMode } from '../../../theme/themeStore';
 import { accentColor } from '../../../theme/categories';
 import { kindOf, newLayerKindId } from '../../../types/layerKinds';
-import { detachLayer, editKind, kindUses, layerKindRegistry, removeKind, restyleKind, saveLayerAsKind, useInstalledKinds, type KindLook } from '../../../play/layerKinds';
+import { detachLayer, editKind, kindUses, layerKindRegistry, saveLayerAsKind, useInstalledKinds, type KindLook } from '../../../play/layerKinds';
 import { KindDialog } from './KindDialog';
+import { addKindToList, applyKindLook, removeKindFromFile, removeKindFromList } from './kindActions';
 import { Field } from '../../ui/Field';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { CameraChip } from '../chips';
@@ -672,24 +672,14 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
     if (made) layerKindRegistry.register(made, 'saved');
     toast.success(`Saved “${look.name.trim()}” as a layer kind`, { message: 'It is in Add layer, here and in your other files. Edit the kind to change every layer made from it.' });
   };
-  const restyle = (look: KindLook) => {
-    if (!kind) return;
-    const r = restyleKind(ctx.play, kind.id, look);
-    ctx.changePlay(p => restyleKind(p, kind.id, look).play);
-    if (r.kind && layerKindRegistry.get(kind.id)) layerKindRegistry.register(r.kind, 'saved');
-  };
+  const restyle = (look: KindLook) => { if (kind) applyKindLook(kind, true, look, ctx.changePlay); };
   const editThisLayerOnly = () => {
     const others = kind ? kindUses(ctx.play, kind.id) - 1 : 0;
     ctx.changePlay(p => detachLayer(p, l.id));
     toast.info(`“${l.label}” has its own code now`, { message: `It is a plain Script layer${others ? `; the other ${kind?.name} layers are unchanged` : ''}. Undo makes it one of the kind again.` });
     setBig(true);
   };
-  const removeFromFile = async () => {
-    if (!kind) return;
-    const n = kindUses(ctx.play, kind.id);
-    const ok = await askConfirm(`Remove “${kind.name}” from this file?`, { message: `Its ${n} layer${n === 1 ? '' : 's'} keep their code as plain Script layers.${layerKindRegistry.get(kind.id) ? ' It stays in your list, so Add layer still offers it.' : ''}`, confirmLabel: 'Remove', danger: true });
-    if (ok) ctx.changePlay(p => removeKind(p, kind.id));
-  };
+  const removeFromFile = () => { if (kind) void removeKindFromFile(ctx.play, kind, ctx.changePlay); };
 
   const error = applyError ? `Compile: ${applyError}` : runError;
   const defs: ScriptParamDef[] = l.paramDefs ?? [];
@@ -754,10 +744,10 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           {kindMenu && <Menu x={kindMenu.x} y={kindMenu.y} minWidth={260} onClose={() => setKindMenu(null)} items={[
             { label: 'Name, icon and colour…', icon: 'edit', onSelect: () => setDialog('restyle') },
             inList
-              ? { label: 'Remove from your list', icon: 'minus', hint: 'Your other files stop offering it in Add layer. This file keeps it.', onSelect: () => { layerKindRegistry.unregister(kind.id); toast.info(`“${kind.name}” is out of your list`); } }
-              : { label: 'Add to your list', icon: 'plus', hint: 'Offer it in Add layer in your other files too.', onSelect: () => { layerKindRegistry.register(kind, 'saved'); toast.success(`“${kind.name}” is in your list`); } },
+              ? { label: 'Remove from your list', icon: 'minus', hint: 'Your other files stop offering it in Add layer. This file keeps it.', onSelect: () => { void removeKindFromList(kind, true); } }
+              : { label: 'Add to your list', icon: 'plus', hint: 'Offer it in Add layer in your other files too.', onSelect: () => addKindToList(kind) },
             'separator',
-            { label: 'Remove from this file…', icon: 'trash', danger: true, onSelect: () => { void removeFromFile(); } },
+            { label: 'Remove from this file…', icon: 'trash', danger: true, onSelect: removeFromFile },
           ]} />}
         </Section>
         <Section kind="script" title="Properties" hint="The sliders, toggles and buttons the kind declares. Each layer of the kind has its own values. Right-click a slider to make it a Play control or drive it with a null.">

@@ -1,7 +1,7 @@
 // ── Asset folder storage ──────────────────────────────────────────────────────
 // Folders are a lightweight organizational layer stored separately from the
 // assets themselves.  A "scope key" identifies which panel owns which folders.
-// Scope keys: 'graphs' | 'functions' | 'presets:group' | 'presets:transform' | 'expressions'
+// Scope keys: 'graphs' | 'functions' | 'presets:group' | 'presets:transform' | 'expressions' | 'layerKinds' (Play's Add layer)
 
 const STORAGE_KEY = 'assetbrowser_folders';
 
