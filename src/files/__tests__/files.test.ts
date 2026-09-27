@@ -51,6 +51,7 @@ function fixture(): Record<string, string> {
       { id: 'g3', name: 'Loose', code: 'x' },
     ]),
     'shader-studio:palette-presets': JSON.stringify([{ id: 'p1', name: 'Warm', kind: 'cosine', savedAt: 1 }]),
+    'shader-studio-backgrounds:palettes': JSON.stringify([{ id: 'pal_1', name: 'Dusk', stops: [{ at: 0, colour: [1, 0, 0] }, { at: 1, colour: [0, 0, 1] }], style: 'gradient', createdAt: 5 }]),
     'shader-studio:play:savedScripts': JSON.stringify([{ id: 'sk_1', name: 'Rain', code: 'draw()', mode: '2d', savedAt: 2 }]),
     'shader-studio:play:layerKinds': JSON.stringify([{ id: 'sketch:rain-1', name: 'Rain drops', code: 'x', paramDefs: [] }]),
     'fn_builder_saved_fns_v1': JSON.stringify([{ id: 'f1', name: 'wave', returnType: 'float', body: 'sin(x)' }]),
@@ -130,7 +131,8 @@ describe('inventory', () => {
 
   it('shows external stores in their section', async () => {
     const i = await buildInventory(memoryKV(fixture()), { external: [{ source: 'bg', section: 'backgrounds', group: 'Images', items: [{ id: 'a', label: 'Sky.jpg', size: 2048 }] }] });
-    expect(labels(node(i, 'section:backgrounds').children)).toEqual(['Palettes', 'Images']);
+    expect(labels(node(i, 'section:backgrounds').children)).toEqual(['Images', 'Palettes']);
+    expect(labels(node(i, 'section:presets').children)).toEqual(['Group presets', 'Expressions', 'Palette node presets']);
     expect(i.external).toBe(2048);
   });
 });
@@ -234,20 +236,21 @@ describe('download', () => {
     const kv = memoryKV(fixture());
     const i = await inv(kv);
     const sel = selectionSnapshot(kv, i, ['section:graphs'], { versions: true });
-    const zip = await buildProfileZip(sel.snapshot, { scope: 'selection', external: [{ source: 'bg', id: 'a1', name: 'Sky.jpg', meta: { w: 2 }, bytes: new Uint8Array([1, 2, 3]) }] });
+    const zip = await buildProfileZip(sel.snapshot, { scope: 'selection', external: { files: { 'store/a1.jpg': new Uint8Array([1, 2, 3]) }, items: [{ source: 'bg', section: 'backgrounds', id: 'a1', name: 'Sky.jpg', size: 3 }] } });
     const files = unzipSync(zip.bytes);
     const paths = Object.keys(files).map(p => p.split('/').slice(1).join('/'));
-    expect(paths).toEqual(expect.arrayContaining(['library.json', 'manifest.json', 'README.txt', 'graphs/Skies/Sunset.json', 'graphs/Waves.json', 'blobs/bg/a1.jpg', 'blobs/bg/index.json']));
-    expect(zip.manifest).toMatchObject({ kind: 'shader-studio-profile', format: 1, scope: 'selection', app: { name: 'Shader Studio' }, sections: { graphs: { count: 3 }, settings: { count: 1 } } });
+    expect(paths).toEqual(expect.arrayContaining(['library.json', 'manifest.json', 'README.txt', 'graphs/Skies/Sunset.json', 'graphs/Waves.json', 'store/a1.jpg']));
+    expect(zip.manifest).toMatchObject({ kind: 'shader-studio-profile', format: 1, scope: 'selection', app: { name: 'Shader Studio' }, sections: { graphs: { count: 3 }, settings: { count: 1 }, backgrounds: { count: 1, size: 3 } }, external: [{ source: 'bg', id: 'a1', name: 'Sky.jpg' }] });
     expect(typeof zip.manifest.app.version).toBe('string');
     // The Library's own import reads it.
     expect(Object.keys(readLibrary(zip.bytes).items)).toContain('shader-studio:Sunset');
     const lib = memoryKV();
     importLibrary(readLibrary(zip.bytes), lib);
     expect(lib.get('shader-studio:Waves')).toBe(fixture()['shader-studio:Waves']);
-    // And Install reads the blobs back.
+    // And Install gets the stores' files back, from the ZIP's root.
     const p = readProfile(zip.bytes);
-    expect(p.external).toEqual([{ source: 'bg', id: 'a1', name: 'Sky.jpg', meta: { w: 2 }, bytes: new Uint8Array([1, 2, 3]) }]);
+    expect(p.files['store/a1.jpg']).toEqual(new Uint8Array([1, 2, 3]));
+    expect(p.manifest?.external).toHaveLength(1);
     expect(strFromU8(files[Object.keys(files).find(f => f.endsWith('manifest.json'))!])).toContain('"external"');
   });
 });

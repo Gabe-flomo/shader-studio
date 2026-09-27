@@ -21,9 +21,10 @@ export function SpaceMeter({ inv, estimate, compact = false, onCleanUp }: { inv:
   const full = frac > 0.8;
   const barColour = full ? tk.status.warning : tk.accent.base;
   // The four biggest sections get their own shade; the rest (and other sites' keys) share one.
-  const sections = [...inv.sections].filter(s => s.size > 0).sort((a, b) => b.size - a.size);
+  // What each section keeps in localStorage: images in IndexedDB don't count against its budget.
+  const sections = inv.sections.map(s => ({ label: s.label, size: s.size - (inv.externalBySection[s.section] ?? 0) })).filter(s => s.size > 0).sort((a, b) => b.size - a.size);
   const top = sections.slice(0, SHADES.length);
-  const rest = sections.slice(SHADES.length).reduce((n, s) => n + s.size, 0) + inv.other + Math.max(0, inv.total - inv.sections.reduce((n, s) => n + s.size, 0));
+  const rest = sections.slice(SHADES.length).reduce((n, s) => n + s.size, 0) + inv.other + Math.max(0, inv.total - sections.reduce((n, s) => n + s.size, 0));
   const segs = [...top.map((s, i) => ({ label: s.label, size: s.size, colour: alpha(barColour, SHADES[i]) })), ...(rest > 0 ? [{ label: 'Other', size: rest, colour: tk.border.strong }] : [])];
 
   return (
@@ -52,7 +53,7 @@ export function SpaceMeter({ inv, estimate, compact = false, onCleanUp }: { inv:
       )}
       {estimate && estimate.quota > 0 && (
         <span style={{ fontSize: 11.5, color: tk.text.faint, lineHeight: 1.4 }} title="IndexedDB and caches: the browser's own estimate for this site">
-          Other storage (IndexedDB, caches): {formatSize(estimate.usage)} of {big(estimate.quota)}
+          {inv.external ? `Images ${formatSize(inv.external)} · ` : ''}IndexedDB and caches: {formatSize(estimate.usage)} of {big(estimate.quota)}
         </span>
       )}
       {full && (

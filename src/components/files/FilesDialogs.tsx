@@ -238,7 +238,7 @@ export function InstallDialog({ fileName, profile, preview, compact, onClose }: 
           })}
           {!sections.length && <div style={{ padding: 16, color: tk.text.faint, fontSize: 12.5 }}>Nothing in this file that Shader Studio can install.</div>}
         </div>
-        {preview.external > 0 && <span style={{ fontSize: 12, color: tk.text.muted }}>Plus {plural(preview.external, 'file')} for the {profile.external.map(f => f.source).filter((v, i, a) => a.indexOf(v) === i).join(', ')} library.</span>}
+
       </div>
     </Modal>
   );

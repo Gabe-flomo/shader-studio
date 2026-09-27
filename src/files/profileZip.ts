@@ -10,7 +10,8 @@
  *                              selection, counts and sizes per section, the items, external files
  *   <root>/README.txt
  *   <root>/graphs/…, presentations/…, glsl shaders/…   the same things as readable files
- *   <root>/blobs/<source>/…    files from IndexedDB stores (sources.ts), with index.json
+ *   <root>/backgrounds/…       IndexedDB stores' files in their own layout (sources.ts): the
+ *                              background images as backgrounds/images.json + picture files
  *
  * A selection holds just the chosen items (a whole section or folder, or
  * single things), optionally their earlier versions and what they depend on
@@ -30,13 +31,15 @@ import {
   SECTIONS, settingLabel, VERSIONS_PREFIX, walk, type FileNode, type Inventory, type SectionId,
 } from './inventory';
 import type { MutableKV } from './mutate';
-import type { ExternalFile } from './sources';
+import { filesSources, type FilesSource } from './sources';
 
 export const PROFILE_KIND = 'shader-studio-profile';
 export const MANIFEST_FILE = 'manifest.json';
 /** Kept on this machine when everything is replaced: where its backups go. */
 const DEVICE_KEYS = new Set(['shader-studio:settings:backupDir', 'shader-studio:settings:recordings']);
-const LIST_KEYS = new Set(['shader-studio:glsl-shaders', 'shader-studio:palette-presets', 'shader-studio:play:savedScripts', 'shader-studio:play:layerKinds', 'fn_builder_saved_fns_v1', 'fn_builder_groups_v1']);
+const LIST_KEYS = new Set(['shader-studio:glsl-shaders', 'shader-studio:palette-presets', 'shader-studio-backgrounds:palettes', 'shader-studio:play:savedScripts', 'shader-studio:play:layerKinds', 'fn_builder_saved_fns_v1', 'fn_builder_groups_v1']);
+/** Lists whose items sit in folders by id: a renamed copy keeps its folder. */
+const LIST_SCOPES: Record<string, string> = { 'shader-studio:play:layerKinds': 'layerKinds', 'shader-studio-backgrounds:palettes': 'backgrounds:palettes' };
 
 export interface ProfileManifest {
   kind: typeof PROFILE_KIND;
@@ -48,14 +51,19 @@ export interface ProfileManifest {
   sections: Partial<Record<SectionId, { count: number; size: number }>>;
   total: { count: number; size: number };
   items: Array<{ section: SectionId; kind: string; label: string; size: number }>;
-  external: Array<{ source: string; id: string; name: string; file: string; size: number }>;
+  /** Items of IndexedDB stores (sources.ts); their files sit in the store's own layout. */
+  external: Array<{ source: string; section: SectionId; id: string; name: string; size: number }>;
 }
 
 export interface Profile {
   snapshot: LibrarySnapshot;
   manifest: ProfileManifest | null;
-  external: Array<ExternalFile & { source: string }>;
+  /** The ZIP's other files, from its root folder (the stores' files: backgrounds/…). */
+  files: Record<string, Uint8Array>;
 }
+
+/** An external store's part of a ZIP: its files, and its items for the manifest. */
+export interface ExternalPart { files: Record<string, Uint8Array>; items: ProfileManifest['external'] }
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? v as Obj : undefined);
@@ -155,7 +163,6 @@ share one at a time: a graph file opens with Import, a .present.json file
 (under presentations/) opens on the Present page, a .glsl file is plain GLSL.
 `;
 
-function extOf(name: string): string { return /\.[a-z0-9]{1,6}$/i.exec(name)?.[0] ?? ''; }
 
 /** Counts and sizes per section of a snapshot (from its own inventory). */
 export async function describeProfile(snapshot: LibrarySnapshot): Promise<{ inv: Inventory; sections: ProfileManifest['sections']; items: ProfileManifest['items']; total: { count: number; size: number } }> {
@@ -171,32 +178,33 @@ export async function describeProfile(snapshot: LibrarySnapshot): Promise<{ inv:
   return { inv, sections, items, total: { count: items.length, size: inv.total } };
 }
 
-export async function buildProfileZip(snapshot: LibrarySnapshot, opts: { scope: 'everything' | 'selection'; name?: string; versions?: boolean; dependencies?: boolean; external?: Array<ExternalFile & { source: string }> } ): Promise<{ bytes: Uint8Array; name: string; manifest: ProfileManifest }> {
+export async function buildProfileZip(snapshot: LibrarySnapshot, opts: { scope: 'everything' | 'selection'; name?: string; versions?: boolean; dependencies?: boolean; external?: ExternalPart }): Promise<{ bytes: Uint8Array; name: string; manifest: ProfileManifest }> {
   const name = opts.name ?? libraryZipName(new Date(snapshot.savedAt), opts.scope === 'everything' ? 'profile' : 'selection');
   const root = name.replace(/\.zip$/, '');
   const d = await describeProfile(snapshot);
-  const externalEntries: ProfileManifest['external'] = [];
-  const files: Record<string, Uint8Array> = {};
-  const indexBySource = new Map<string, Array<{ id: string; name: string; file: string; meta: unknown }>>();
-  for (const f of opts.external ?? []) {
-    const file = `blobs/${f.source}/${f.id}${extOf(f.name)}`;
-    files[`${root}/${file}`] = f.bytes;
-    externalEntries.push({ source: f.source, id: f.id, name: f.name, file, size: f.bytes.length });
-    const l = indexBySource.get(f.source) ?? []; l.push({ id: f.id, name: f.name, file, meta: f.meta }); indexBySource.set(f.source, l);
+  const ext = opts.external ?? { files: {}, items: [] };
+  for (const e of ext.items) {
+    const sec = d.sections[e.section] ?? (d.sections[e.section] = { count: 0, size: 0 });
+    sec.count++; sec.size += e.size;
   }
-  for (const [src, list] of indexBySource) files[`${root}/blobs/${src}/index.json`] = strToU8(JSON.stringify(list, null, 1));
   const manifest: ProfileManifest = {
     kind: PROFILE_KIND, format: 1, app: { name: 'Shader Studio', version: APP_VERSION }, createdAt: snapshot.savedAt, scope: opts.scope,
     options: { versions: opts.scope === 'everything' || !!opts.versions, dependencies: opts.scope === 'everything' || !!opts.dependencies },
-    sections: d.sections, total: { count: d.total.count, size: d.total.size + externalEntries.reduce((n, e) => n + e.size, 0) }, items: d.items, external: externalEntries,
+    sections: d.sections,
+    total: { count: d.total.count + ext.items.length, size: d.total.size + ext.items.reduce((n, e) => n + e.size, 0) },
+    items: [...d.items, ...ext.items.map(e => ({ section: e.section, kind: 'background', label: e.name, size: e.size }))],
+    external: ext.items,
   };
-  files[`${root}/${LIBRARY_FILE}`] = strToU8(JSON.stringify(snapshot));
-  files[`${root}/${MANIFEST_FILE}`] = strToU8(JSON.stringify(manifest, null, 1));
-  files[`${root}/README.txt`] = strToU8(README);
+  const files: Record<string, Uint8Array> = {
+    [`${root}/${LIBRARY_FILE}`]: strToU8(JSON.stringify(snapshot)),
+    [`${root}/${MANIFEST_FILE}`]: strToU8(JSON.stringify(manifest, null, 1)),
+    [`${root}/README.txt`]: strToU8(README),
+  };
   for (const [p, c] of Object.entries(readableFiles(snapshot))) {
     if (opts.scope === 'selection' && p === 'settings.json' && !Object.keys(snapshot.items).some(k => !k.startsWith(GRAPH_PREFIX) || k.startsWith('shader-studio:settings'))) continue;
     files[`${root}/${p}`] = strToU8(c);
   }
+  for (const [p, b] of Object.entries(ext.files)) files[`${root}/${p}`] = b;
   return { bytes: zipSync(files, { level: 6 }), name, manifest };
 }
 
@@ -204,27 +212,21 @@ export async function buildProfileZip(snapshot: LibrarySnapshot, opts: { scope: 
 export function readProfile(bytes: Uint8Array): Profile {
   const snapshot = readLibrary(bytes);
   let manifest: ProfileManifest | null = null;
-  const external: Profile['external'] = [];
+  const files: Record<string, Uint8Array> = {};
   if (bytes.length > 3 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
-    const files = unzipSync(bytes);
-    const mPath = Object.keys(files).find(p => p.endsWith(`/${MANIFEST_FILE}`) || p === MANIFEST_FILE);
-    const m = mPath ? parseJson(strFromU8(files[mPath])) as ProfileManifest | undefined : undefined;
-    if (m && m.kind === PROFILE_KIND) {
-      manifest = m;
-      const root = mPath!.slice(0, -MANIFEST_FILE.length);
-      const bySource = new Map<string, Array<{ id: string; name: string; file: string; meta: unknown }>>();
-      for (const e of m.external ?? []) {
-        if (!bySource.has(e.source)) {
-          const idx = files[`${root}blobs/${e.source}/index.json`];
-          bySource.set(e.source, idx ? (parseJson(strFromU8(idx)) as Array<{ id: string; name: string; file: string; meta: unknown }>) ?? [] : []);
-        }
-        const data = files[root + e.file];
-        const meta = bySource.get(e.source)!.find(x => x.id === e.id)?.meta;
-        if (data) external.push({ source: e.source, id: e.id, name: e.name, meta, bytes: data });
-      }
+    const all = unzipSync(bytes);
+    const lib = Object.keys(all).find(p => p === LIBRARY_FILE || p.endsWith(`/${LIBRARY_FILE}`));
+    const root = lib ? lib.slice(0, -LIBRARY_FILE.length) : '';
+    const m = parseJson(all[root + MANIFEST_FILE] ? strFromU8(all[root + MANIFEST_FILE]) : null) as ProfileManifest | undefined;
+    if (m && m.kind === PROFILE_KIND) manifest = m;
+    for (const [p, b] of Object.entries(all)) {
+      if (!p.startsWith(root) || p.endsWith('/')) continue;
+      const rel = p.slice(root.length);
+      if (rel === LIBRARY_FILE || rel === MANIFEST_FILE || rel === 'README.txt') continue;
+      files[rel] = b;
     }
   }
-  return { snapshot, manifest, external };
+  return { snapshot, manifest, files };
 }
 
 // ── Install ─────────────────────────────────────────────────────────────────
@@ -387,7 +389,7 @@ function planMerge(snapshot: LibrarySnapshot, kv: MutableKV): Plan {
           const to = freeName(label, x => list.some(y => y[nameField] === x));
           const newId = typeof el.id === 'string' ? freeName(el.id, x => list.some(y => y.id === x)).replace(/ \((\d+)\)$/, '_$1') : el.id;
           list.push({ ...el, id: newId, [nameField]: to });
-          if (key === 'shader-studio:play:layerKinds' && typeof el.id === 'string') remap.push({ scope: 'layerKinds', from: el.id, to: String(newId) });
+          if (LIST_SCOPES[key] && typeof el.id === 'string') remap.push({ scope: LIST_SCOPES[key], from: el.id, to: String(newId) });
           Object.assign(row, { status: 'rename', as: to });
           changed = true;
         } else { list.push(el); changed = true; }
@@ -422,19 +424,24 @@ function planMerge(snapshot: LibrarySnapshot, kv: MutableKV): Plan {
 
 export interface InstallPreview {
   manifest: ProfileManifest | null;
-  /** The ZIP's own inventory: its sections, sizes and items. */
+  /** The ZIP's own inventory: its sections, sizes and items (localStorage's part). */
   inv: Inventory;
   rows: InstallRow[];
   counts: Record<InstallStatus, number>;
+  /** How many of the rows are IndexedDB stores' items (images). */
   external: number;
 }
 
-export async function previewInstall(profile: Profile, kv: MutableKV): Promise<InstallPreview> {
+export async function previewInstall(profile: Profile, kv: MutableKV, sources: FilesSource[] = filesSources()): Promise<InstallPreview> {
   const inv = await buildInventory(snapshotKV(profile.snapshot.items));
   const { rows } = planMerge(profile.snapshot, kv);
+  let external = 0;
+  for (const s of sources) {
+    for (const r of await s.preview(profile.files)) { rows.push({ section: s.section, label: r.label, kind: 'background', size: r.size, status: r.status }); external++; }
+  }
   const counts: Record<InstallStatus, number> = { new: 0, same: 0, rename: 0, keep: 0, merge: 0 };
   for (const r of rows) counts[r.status]++;
-  return { manifest: profile.manifest, inv, rows, counts, external: profile.external.length };
+  return { manifest: profile.manifest, inv, rows, counts, external };
 }
 
 export interface InstallSummary {
@@ -464,14 +471,26 @@ export function installMerge(profile: Profile, kv: MutableKV): InstallSummary {
   };
 }
 
+/** Bring the stores' files (images) in; adds to a summary. */
+export async function installSources(profile: Profile, mode: 'merge' | 'replace', summary: InstallSummary, sources: FilesSource[] = filesSources()): Promise<InstallSummary> {
+  for (const s of sources) {
+    const r = await s.install(profile.files, mode);
+    summary.added += r.added;
+    summary.same += r.same;
+  }
+  return summary;
+}
+
 /**
  * Replace everything with a profile: first a backup ZIP of what is here goes
  * to `backup` (a download); if that fails or is cancelled nothing changes.
  * Sign-ins and this machine's backup and recordings folders stay.
  */
-export async function installReplace(profile: Profile, kv: MutableKV, backup: (zip: { bytes: Uint8Array; name: string }) => Promise<boolean>, now = Date.now()): Promise<InstallSummary> {
+export async function installReplace(profile: Profile, kv: MutableKV, backup: (zip: { bytes: Uint8Array; name: string }) => Promise<boolean>, opts: { now?: number; sources?: FilesSource[] } = {}): Promise<InstallSummary> {
+  const now = opts.now ?? Date.now();
+  const sources = opts.sources ?? filesSources();
   const current = everythingSnapshot(kv, now);
-  const zip = await buildProfileZip(current, { scope: 'everything', name: libraryZipName(new Date(now), 'backup before install') });
+  const zip = await buildProfileZip(current, { scope: 'everything', name: libraryZipName(new Date(now), 'backup before install'), external: await externalPart(null, sources) });
   if (!(await backup({ bytes: zip.bytes, name: zip.name }))) throw new Error('The backup wasn’t saved, so nothing was replaced.');
   const changed = new Set<string>();
   for (const k of kv.keys()) if (isOwnedKey(k) && !PRIVATE_KEYS.has(k) && !DEVICE_KEYS.has(k)) { kv.remove(k); changed.add(k); }
@@ -480,7 +499,22 @@ export async function installReplace(profile: Profile, kv: MutableKV, backup: (z
     kv.set(k, v); changed.add(k);
   }
   const added = (await describeProfile(profile.snapshot)).total.count;
-  return { mode: 'replace', added, renamed: [], same: 0, kept: 0, merged: 0, changedKeys: [...changed] };
+  return installSources(profile, 'replace', { mode: 'replace', added, renamed: [], same: 0, kept: 0, merged: 0, changedKeys: [...changed] }, sources);
+}
+
+/** The stores' part of a ZIP: every item's files (refs null) or these, with manifest entries named from their lists. */
+export async function externalPart(refs: Array<{ source: string; id: string }> | null, sources: FilesSource[] = filesSources()): Promise<ExternalPart> {
+  const out: ExternalPart = { files: {}, items: [] };
+  for (const s of sources) {
+    const ids = refs ? refs.filter(r => r.source === s.id).map(r => r.id) : null;
+    if (ids && !ids.length) continue;
+    const listed = await s.list();
+    const want = ids ? listed.filter(i => ids.includes(i.id)) : listed;
+    if (!want.length) continue;
+    Object.assign(out.files, await s.zipFiles(ids));
+    for (const i of want) out.items.push({ source: s.id, section: s.section, id: i.id, name: i.label, size: i.size });
+  }
+  return out;
 }
 
 /** Section labels for rows and summaries. */

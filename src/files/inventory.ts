@@ -21,10 +21,10 @@ export const SECTIONS: ReadonlyArray<{ id: SectionId; label: string; hint: strin
   { id: 'presentations', label: 'Presentations', hint: 'Present page lessons and the Plays they show' },
   { id: 'glsl', label: 'GLSL shaders', hint: 'Shaders saved on the GLSL page' },
   { id: 'functions', label: 'Functions', hint: 'Custom function presets and the Builder’s saved functions' },
-  { id: 'presets', label: 'Presets', hint: 'Group, expression, transform and keyframe presets' },
+  { id: 'presets', label: 'Presets', hint: 'Group, expression, transform, keyframe and Palette node presets' },
   { id: 'nodes', label: 'Published nodes', hint: 'Node types you published from a group or code' },
   { id: 'scripts', label: 'Scripts', hint: 'Saved sketches and layer kinds' },
-  { id: 'backgrounds', label: 'Backgrounds', hint: 'Palettes and background images' },
+  { id: 'backgrounds', label: 'Backgrounds', hint: 'The backgrounds library: images and palettes' },
   { id: 'settings', label: 'Settings', hint: 'Preferences, learned roles, folders and sign-ins' },
 ];
 
@@ -87,6 +87,8 @@ export interface FileNode {
   unused?: string;
   /** Kept out of downloads (sign-ins). */
   private?: boolean;
+  /** A small picture of it (an image background's thumbnail), as a data URL. */
+  thumb?: string;
 }
 
 export interface Inventory {
@@ -99,6 +101,8 @@ export interface Inventory {
   other: number;
   /** Bytes in external stores (IndexedDB), when listed. */
   external: number;
+  /** Of which, per section (a section's size counts them; the localStorage budget doesn't). */
+  externalBySection: Partial<Record<SectionId, number>>;
 }
 
 /** An external store's items, listed ahead of building (sources.ts). */
@@ -106,7 +110,11 @@ export interface ExternalListing {
   source: string;
   section: SectionId;
   group: string;
-  items: Array<{ id: string; label: string; size: number; modified?: number; detail?: string; hash?: string }>;
+  /** Its folder scope in the folder store, when its items can sit in folders. */
+  folderScope?: string;
+  /** The JSON field saved things point at its items with ("libraryId"), for Used by. */
+  refField?: string;
+  items: Array<{ id: string; label: string; size: number; modified?: number; detail?: string; hash?: string; thumb?: string }>;
 }
 
 // ── Keys ────────────────────────────────────────────────────────────────────
@@ -114,7 +122,11 @@ export interface ExternalListing {
 export const GRAPH_PREFIX = 'shader-studio:';
 export const VERSIONS_PREFIX = 'shader-studio-versions:';
 export const GLSL_KEY = 'shader-studio:glsl-shaders';
+/** The Studio's Palette node presets. */
 export const PALETTES_KEY = 'shader-studio:palette-presets';
+/** The backgrounds library's palettes (lib/backgroundLibrary.ts); its images live in IndexedDB (backgroundsSource.ts). */
+export const BG_PALETTES_KEY = 'shader-studio-backgrounds:palettes';
+export const BG_PALETTE_SCOPE = 'backgrounds:palettes';
 export const SCRIPTS_KEY = 'shader-studio:play:savedScripts';
 export const LAYER_KINDS_KEY = 'shader-studio:play:layerKinds';
 export const FOLDERS_KEY = 'assetbrowser_folders';
@@ -323,11 +335,11 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
   const folders = readFolders(kv);
   let total = 0, other = 0;
   const graphs: GraphInfo[] = [];
-  const presentations: Array<{ name: string; parsed: Obj; node: FileNode }> = [];
+  const presentations: Array<{ name: string; raw: string; parsed: Obj; node: FileNode }> = [];
   const perPrefix = new Map<string, FileNode[]>();
   const publishedNodes: FileNode[] = [];
   const settings: FileNode[] = [];
-  let glsl: FileNode[] = [], palettes: FileNode[] = [], scripts: FileNode[] = [], kinds: FileNode[] = [], builderFns: FileNode[] = [], builderGroups: FileNode[] = [];
+  let glsl: FileNode[] = [], palettes: FileNode[] = [], bgPalettes: FileNode[] = [], scripts: FileNode[] = [], kinds: FileNode[] = [], builderFns: FileNode[] = [], builderGroups: FileNode[] = [];
   const installedKinds: Array<{ id: string; node: FileNode }> = [];
   const cfpBodies: Array<{ body: string; node: FileNode }> = [];
 
@@ -347,7 +359,7 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
     } else if (key.startsWith(PRESENTATION_KEY_PREFIX)) {
       const name = key.slice(PRESENTATION_KEY_PREFIX.length);
       const node = presentationNode(name, key, value, obj(parsed));
-      presentations.push({ name, parsed: obj(parsed) ?? {}, node });
+      presentations.push({ name, raw: value, parsed: obj(parsed) ?? {}, node });
     } else if (key.startsWith(NODE_PREFIX)) {
       const p = obj(parsed);
       const id = key.slice(NODE_PREFIX.length);
@@ -382,7 +394,10 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
         } as FileNode & { glslGroup: string };
       });
     } else if (key === PALETTES_KEY) {
-      palettes = listItems(key, parsed, 'backgrounds', 'palette', 'palette', x => `${str(x.kind) === 'stops' ? `${arr(x.stops).length} stops` : 'Cosine'}`);
+      palettes = listItems(key, parsed, 'presets', 'palette', 'palette', x => `${str(x.kind) === 'stops' ? `${arr(x.stops).length} stops` : 'Cosine'}`);
+    } else if (key === BG_PALETTES_KEY) {
+      bgPalettes = listItems(key, parsed, 'backgrounds', 'palette', 'bgpal', x => `${arr(x.stops).length} colours · ${str(x.style) === 'bands' ? 'bands' : 'gradient'}`);
+      for (const n of bgPalettes) if (n.ref?.t === 'part' && n.ref.match) n.membership = { scope: BG_PALETTE_SCOPE, id: String(n.ref.match.value) };
     } else if (key === SCRIPTS_KEY) {
       scripts = listItems(key, parsed, 'scripts', 'script', 'script', x => `${str(x.mode) === '3d' ? '3D' : '2D'} sketch · ${(str(x.code) ?? '').split('\n').length} lines`);
     } else if (key === LAYER_KINDS_KEY) {
@@ -495,26 +510,45 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
     if (items.length) presetChildren.push({ ...group('presets', 'section:presets', def.prefix, def.group, items), id: `section:presets/${def.prefix}`, ...(def.scope ? { scope: def.scope } : {}) });
   }
 
+  if (palettes.length) presetChildren.push(group('presets', 'section:presets', 'palettes', 'Palette node presets', palettes.sort(byName)));
+
   const scriptChildren: FileNode[] = [];
   if (scripts.length) scriptChildren.push(group('scripts', 'section:scripts', 'sketches', 'Saved sketches', scripts.sort(byName)));
   const kindItems = inFolders('scripts', 'section:scripts/kinds', 'layerKinds', kinds.sort(byName), folders, membershipId);
   if (kindItems.length) scriptChildren.push(group('scripts', 'section:scripts', 'kinds', 'Layer kinds', kindItems, { scope: 'layerKinds' }));
 
-  const bgChildren: FileNode[] = [];
-  if (palettes.length) bgChildren.push(group('backgrounds', 'section:backgrounds', 'palettes', 'Palettes', palettes.sort(byName)));
   let external = 0;
+  const externalSizes: Partial<Record<SectionId, number>> = {};
   const externalBySection = new Map<SectionId, FileNode[]>();
   for (const ext of opts.external ?? []) {
-    const items: FileNode[] = ext.items.map(it => ({
-      id: `ext:${ext.source}:${it.id}`, section: ext.section, kind: 'background', label: it.label, size: it.size, modified: it.modified,
-      detail: it.detail, hash: it.hash, ref: { t: 'external', source: ext.source, id: it.id },
-    }));
-    external += items.reduce((n, c) => n + c.size, 0);
+    const items: FileNode[] = ext.items.map(it => {
+      const n: FileNode = {
+        id: `ext:${ext.source}:${it.id}`, section: ext.section, kind: 'background', label: it.label, size: it.size, modified: it.modified,
+        detail: it.detail, hash: it.hash, ref: { t: 'external', source: ext.source, id: it.id }, ...(it.thumb ? { thumb: it.thumb } : {}),
+        ...(ext.folderScope ? { membership: { scope: ext.folderScope, id: it.id } } : {}),
+      };
+      if (ext.refField) {
+        // What embedded a copy of it names it beside the copy.
+        const needle = `"${ext.refField}":${JSON.stringify(it.id)}`;
+        const usedBy: UsedBy[] = [];
+        for (const g of graphs) { const c = g.raw.split(needle).length - 1; if (c) usedBy.push({ id: g.id, label: g.name, where: `${c === 1 ? 'Its Play setup' : `${c} places in its Play setup`} (a copy)` }); }
+        for (const p of presentations) { const c = p.raw.split(needle).length - 1; if (c) usedBy.push({ id: p.node.id, label: p.name, where: `${c === 1 ? 'A Play in it' : `${c} places in it`} (a copy)` }); }
+        n.usedBy = usedBy;
+        if (!usedBy.length) n.unused = 'No Play setup or presentation uses it';
+      }
+      return n;
+    });
+    const bytes = items.reduce((n, c) => n + c.size, 0);
+    external += bytes;
+    externalSizes[ext.section] = (externalSizes[ext.section] ?? 0) + bytes;
     const l = externalBySection.get(ext.section) ?? [];
-    l.push(group(ext.section, `section:${ext.section}`, `ext:${ext.source}`, ext.group, items.sort(byName)));
+    const key = `ext:${ext.source}`;
+    l.push({ ...group(ext.section, `section:${ext.section}`, key, ext.group, inFolders(ext.section, `section:${ext.section}/${key}`, ext.folderScope, items.sort(byName), folders, membershipId)), ...(ext.folderScope ? { scope: ext.folderScope } : {}) });
     externalBySection.set(ext.section, l);
   }
-  bgChildren.push(...externalBySection.get('backgrounds') ?? []);
+  const bgChildren: FileNode[] = [...externalBySection.get('backgrounds') ?? []];
+  const bgPaletteItems = inFolders('backgrounds', 'section:backgrounds/palettes', BG_PALETTE_SCOPE, bgPalettes.sort(byName), folders, membershipId);
+  if (bgPaletteItems.length) bgChildren.push({ ...group('backgrounds', 'section:backgrounds', 'palettes', 'Palettes', bgPaletteItems), scope: BG_PALETTE_SCOPE });
 
   const prefs = settings.filter(s => ![ROLES_KEY, FOLDERS_KEY, SHORTCUTS_KEY].includes((s.ref as { key: string }).key) && !s.private);
   const settingsChildren: FileNode[] = [];
@@ -558,7 +592,7 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
     for (const c of n.children ?? []) index(c, n.id);
   };
   for (const s of sections) index(s);
-  return { sections, byId, parentOf, total, other, external };
+  return { sections, byId, parentOf, total, other, external, externalBySection: externalSizes };
 }
 
 /** Array-stored things (shaders, palettes, sketches, kinds): one node per element, removed by id. */

@@ -13,6 +13,7 @@ import { iconFor, tintFor } from './fileUiShared';
 export function IconTile({ node, size = 28 }: { node: FileNode; size?: number }) {
   const tk = useTokens();
   const c = tintFor(tk, node);
+  if (node.thumb) return <img src={node.thumb} alt="" style={{ width: size, height: size, borderRadius: size > 32 ? 11 : 8, flexShrink: 0, objectFit: 'cover', boxShadow: `inset 0 0 0 1px ${tk.border.default}`, background: tk.bg.field }} />;
   return (
     <span style={{ width: size, height: size, borderRadius: size > 32 ? 11 : 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(c, 0.12), color: c }}>
       <Icon name={iconFor(node)} size={size > 32 ? 19 : 15} />

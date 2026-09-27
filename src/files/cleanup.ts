@@ -57,7 +57,7 @@ export function cleanupSuggestions(inv: Inventory, opts: CleanupOptions = {}): C
 
   const biggest = items.filter(n => n.kind !== 'setting').sort((a, b) => b.size - a.size)
     .filter(n => n.size >= Math.max(8 * 1024, STORAGE_LIMIT * 0.01)).slice(0, opts.biggest ?? 8)
-    .map<Suggestion>(n => ({ id: `big:${n.id}`, kind: 'big', nodeId: n.id, label: n.label, removeIds: [n.id], size: n.size, reason: `${pct(n.size)} of the browser’s room${mostly(n)}` }));
+    .map<Suggestion>(n => ({ id: `big:${n.id}`, kind: 'big', nodeId: n.id, label: n.label, removeIds: [n.id], size: n.size, reason: n.ref?.t === 'external' ? `${kb(n.size)} in the browser’s file storage (IndexedDB), not its 5 MB for saved work` : `${pct(n.size)} of the browser’s room${mostly(n)}` }));
 
   const versions: Suggestion[] = [];
   for (const n of all) {
@@ -96,7 +96,7 @@ export function cleanupSuggestions(inv: Inventory, opts: CleanupOptions = {}): C
   return ([
     { kind: 'big', title: 'Biggest', hint: 'What takes the most room', items: biggest },
     { kind: 'versions', title: 'Old versions', hint: `Earlier graph versions past the newest ${keep}`, items: versions.sort((a, b) => b.size - a.size) },
-    { kind: 'unused', title: 'Not used', hint: 'Datasets, media, layer kinds and Plays nothing reads', items: unused.sort((a, b) => b.size - a.size) },
+    { kind: 'unused', title: 'Not used', hint: 'Images, datasets, media, layer kinds and Plays nothing uses', items: unused.sort((a, b) => b.size - a.size) },
     { kind: 'duplicate', title: 'Duplicates', hint: 'The same content saved twice', items: duplicates.sort((a, b) => b.size - a.size) },
     { kind: 'emptyFolder', title: 'Empty folders', hint: 'Folders with nothing in them', items: empty },
   ] satisfies CleanupGroup[]).filter(g => g.items.length > 0);

@@ -8,8 +8,9 @@ import { toast } from '../ui/toastStore';
 import { LIBRARY_REFRESH_EVENTS, formatSize, libraryZipName } from '../../utils/library';
 import { errorMessage, saveBinaryFile } from '../../utils/fileIO';
 import { expandRemoval, localMutableKV, removalWarnings, removeFolderKeepItems, removeNodes } from '../../files/mutate';
-import { buildProfileZip, everythingSnapshot, installMerge, installReplace, selectionSnapshot, type InstallSummary, type Profile } from '../../files/profileZip';
-import { filesSource, filesSources, removeExternal } from '../../files/sources';
+import { buildProfileZip, everythingSnapshot, externalPart, installMerge, installReplace, installSources, selectionSnapshot, type InstallSummary, type Profile } from '../../files/profileZip';
+import { removeExternal } from '../../files/sources';
+import '../../files/backgroundsSource';
 import type { FileNode, Inventory } from '../../files/inventory';
 import { GRAPH_PREFIX, LAYER_KINDS_KEY, NODE_PREFIX, SCRIPTS_KEY } from '../../files/inventory';
 import { reloadUserNodesFromStorage } from '../../nodes/userNodes/userNodeRegistry';
@@ -17,6 +18,7 @@ import { reloadSavedScripts } from '../../play/savedScripts';
 import { reloadInstalledKinds } from '../../play/layerKinds';
 import { loadGroupPresets, SAVED_GRAPHS_CHANGED, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { PALETTE_PRESETS_CHANGED } from '../../lib/palette';
+import { BACKGROUNDS_CHANGED, resetBackgroundCache } from '../../lib/backgroundLibrary';
 import { unzipSync } from 'fflate';
 
 /** Fired after the Files page changed storage, so the page itself rebuilds. */
@@ -35,10 +37,12 @@ export function syncApp(keys: string[]): void {
     if (any(k => k === SCRIPTS_KEY)) reloadSavedScripts();
     if (any(k => k === LAYER_KINDS_KEY)) reloadInstalledKinds();
     if (any(k => k.startsWith('shader-studio:gp:'))) useNodeGraphStore.setState({ groupPresets: loadGroupPresets() });
+    // The backgrounds library caches its image list; its palettes and folders are read fresh.
+    if (any(k => k.startsWith('shader-studio-backgrounds:') || k === 'assetbrowser_folders')) resetBackgroundCache();
     const open = useNodeGraphStore.getState().currentGraph;
     if (open && localStorage.getItem(GRAPH_PREFIX + open.name) == null) useNodeGraphStore.setState({ currentGraph: null });
   } catch (e) { console.error('[files] refreshing the app after a change', e); }
-  for (const ev of [...LIBRARY_REFRESH_EVENTS, SAVED_GRAPHS_CHANGED, PALETTE_PRESETS_CHANGED, 'usernode-changed', FILES_CHANGED]) window.dispatchEvent(new Event(ev));
+  for (const ev of new Set([...LIBRARY_REFRESH_EVENTS, SAVED_GRAPHS_CHANGED, PALETTE_PRESETS_CHANGED, BACKGROUNDS_CHANGED, 'usernode-changed', FILES_CHANGED])) window.dispatchEvent(new Event(ev));
 }
 
 export interface RemoveConfirm { title: string; size: number; breaks: string[]; copies: string[]; folders: number }
@@ -94,19 +98,6 @@ export function deleteFolderKeepItems(scope: string, folderId: string, label: st
 
 // ── Download ────────────────────────────────────────────────────────────────
 
-async function externalFiles(refs: Array<{ source: string; id: string }> | 'all') {
-  const out: Array<Awaited<ReturnType<NonNullable<ReturnType<typeof filesSource>>['read']>>[number] & { source: string }> = [];
-  const groups = new Map<string, string[]>();
-  if (refs === 'all') { for (const s of filesSources()) groups.set(s.id, (await s.list()).map(i => i.id)); }
-  else for (const r of refs) { const l = groups.get(r.source) ?? []; l.push(r.id); groups.set(r.source, l); }
-  for (const [id, ids] of groups) {
-    const src = filesSource(id);
-    if (!src || !ids.length) continue;
-    for (const f of await src.read(ids)) out.push({ ...f, source: id });
-  }
-  return out;
-}
-
 export type SaveTarget = 'download' | 'folder';
 
 /** Write a ZIP where the person chose: a download (a save dialog in the desktop app), or unpacked into a folder (desktop). */
@@ -133,7 +124,7 @@ async function saveZip(bytes: Uint8Array, name: string, target: SaveTarget): Pro
 export async function downloadEverything(target: SaveTarget = 'download'): Promise<void> {
   try {
     const snap = everythingSnapshot(localMutableKV);
-    const zip = await buildProfileZip(snap, { scope: 'everything', external: await externalFiles('all') });
+    const zip = await buildProfileZip(snap, { scope: 'everything', external: await externalPart(null) });
     const saved = await saveZip(zip.bytes, zip.name, target);
     if (saved.ok) toast.success('Downloaded everything', { message: `${saved.where ? `${saved.where}: ` : `${zip.name}: `}${plural(zip.manifest.total.count, 'item')}, ${formatSize(zip.manifest.total.size)}. Install reads it back.` });
   } catch (e) { toast.error('Couldn’t download everything', { message: errorMessage(e) }); }
@@ -144,7 +135,7 @@ export async function downloadSelection(inv: Inventory, ids: string[], opts: { v
     const sel = selectionSnapshot(localMutableKV, inv, ids, opts);
     const single = sel.items.length === 1 && !sel.dependencies.length ? sel.items[0].label : null;
     const name = libraryZipName(new Date(), single ? single.replace(/[/\\:*?"<>|]/g, '-').slice(0, 60) : 'selection');
-    const zip = await buildProfileZip(sel.snapshot, { scope: 'selection', name, versions: opts.versions, dependencies: opts.dependencies, external: await externalFiles(sel.external) });
+    const zip = await buildProfileZip(sel.snapshot, { scope: 'selection', name, versions: opts.versions, dependencies: opts.dependencies, external: await externalPart(sel.external) });
     const saved = await saveZip(zip.bytes, zip.name, target);
     if (saved.ok) toast.success(`Downloaded ${plural(sel.items.length, 'item')}`, { message: `${saved.where ?? zip.name}${sel.dependencies.length ? `, with ${plural(sel.dependencies.length, 'thing')} they use` : ''}. Install or the Library’s Import reads it.` });
   } catch (e) { toast.error('Couldn’t download that', { message: errorMessage(e) }); }
@@ -153,7 +144,8 @@ export async function downloadSelection(inv: Inventory, ids: string[], opts: { v
 /** What a selection's download holds (for the dialog): the items, what they use, and the size. */
 export function selectionSummary(inv: Inventory, ids: string[], opts: { versions: boolean; dependencies: boolean }): { items: FileNode[]; dependencies: FileNode[]; size: number } {
   const sel = selectionSnapshot(localMutableKV, inv, ids, opts);
-  const size = Object.entries(sel.snapshot.items).reduce((n, [k, v]) => n + k.length + v.length, 0);
+  const size = Object.entries(sel.snapshot.items).reduce((n, [k, v]) => n + k.length + v.length, 0)
+    + sel.items.filter(n => n.ref?.t === 'external').reduce((n, x) => n + x.size, 0);
   return { items: sel.items, dependencies: sel.dependencies, size };
 }
 
@@ -162,18 +154,9 @@ export function selectionSummary(inv: Inventory, ids: string[], opts: { versions
 export async function runInstall(profile: Profile, mode: 'merge' | 'replace'): Promise<InstallSummary | null> {
   try {
     let summary: InstallSummary;
-    if (mode === 'merge') summary = installMerge(profile, localMutableKV);
+    // Images and other IndexedDB stores' files go through their store.
+    if (mode === 'merge') summary = await installSources(profile, 'merge', installMerge(profile, localMutableKV));
     else summary = await installReplace(profile, localMutableKV, async zip => (await saveBinaryFile(zip.bytes, zip.name, 'application/zip')).ok);
-    // Files from IndexedDB stores go through their store.
-    const bySource = new Map<string, typeof profile.external>();
-    for (const f of profile.external) { const l = bySource.get(f.source) ?? []; l.push(f); bySource.set(f.source, l); }
-    for (const [id, files] of bySource) {
-      const src = filesSource(id);
-      if (!src) continue;
-      const r = await src.write(files, mode);
-      summary.added += r.added;
-      summary.renamed.push(...r.renamed.map(to => ({ from: to.replace(/ \(\d+\)$/, ''), to, section: src.section })));
-    }
     syncApp(summary.changedKeys);
     return summary;
   } catch (e) {
