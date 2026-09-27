@@ -8,6 +8,7 @@ mod midi;
 mod playfile;
 mod workspace;
 mod osc_listener;
+mod output_window;
 
 // ── FFmpeg session state ──────────────────────────────────────────────────────
 
@@ -247,6 +248,7 @@ pub fn run() {
         .manage(midi::MidiState::default())
         .manage(workspace::WatchState(Mutex::new(None)))
         .manage(playfile::OpenedFiles(Mutex::new(Vec::new())))
+        .manage(output_window::OutputState::default())
         .invoke_handler(tauri::generate_handler![
             start_ffmpeg_encode,
             send_frame_rgba,
@@ -277,6 +279,12 @@ pub fn run() {
             playfile::open_file_read,
             playfile::signing_key_get,
             playfile::signing_key_save,
+            output_window::output_monitors,
+            output_window::output_open,
+            output_window::output_close,
+            output_window::output_fullscreen,
+            output_window::output_record_put,
+            output_window::output_record_get,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

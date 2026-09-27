@@ -66,6 +66,7 @@ an arms race. That matches "not something crazy".
 |---|---|---|
 | Studio (nodes, graph, groups, History, Rebuild) | ✓ | ✓ |
 | Play | Controls and mappings only: **mouse, keyboard, live audio**. No layers, no other sources (MIDI, OSC, hands, LFOs, triggers…) | Everything: layers, all sources, triggers, takes, backgrounds |
+| Output window and projection mapping (`play.output`, `play.projection`; see `projection.md`) | – | ✓ |
 | Convert (GLSL → nodes) | – | ✓ |
 | Record / export video | Up to **720p and 1080p** | Also **2K and 4K**, frame-by-frame renders of takes |
 | Files | Save, open, organise, delete; **import node packs** others share | Also **Download everything / Install a profile**, selective ZIPs |

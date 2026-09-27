@@ -29,6 +29,7 @@ import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick } from '../lib/timeTick';
+import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
 import { seededRandom, stringSeed } from '../play/particle-sim.js';
@@ -1285,6 +1286,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       }
       // A knob turned while the clock is paused still has to show; so does a layer a mapping moved.
       if (inputBus.changed() || playEngine.layerChanged()) needsRender = true;
+      // The output window (a projector) follows this frame: clock, uniforms, layer numbers (src/output/outputHost.ts).
+      if (outputTap.frame) outputTap.frame(elapsed, timePlayingRef.current, material.uniforms, renderer.domElement);
       // Draw live spectrum into any open AudioInputModal canvases
       for (const audioId of audioIdsRef.current) {
         if (!audioSpectrumRegistry.has(audioId)) continue;

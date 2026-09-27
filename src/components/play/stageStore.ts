@@ -16,6 +16,7 @@
  */
 import { create } from 'zustand';
 import type { PlayRecord } from '../../types/play';
+import type { PlayHtmlInput } from '../../play/exportHtml';
 
 /** A Present canvas on the Stage: the page to run and what to say about it. */
 export interface StageSnapshot {
@@ -30,6 +31,8 @@ export interface StageSnapshot {
   /** The step's live code blocks changed its Script layers. */
   edited: boolean;
   play: PlayRecord;
+  /** What the page is built from (with the step's Script edits): the output window follows it from this. */
+  input?: PlayHtmlInput;
   missing: string[];
   left: { what: string; why: string }[];
 }

@@ -7,7 +7,7 @@
  */
 import { leftBehind } from '../../play/exportHtml';
 import { loadThreeSource, playUses3D, threeSource } from '../../play/threeSource';
-import { snapshotStagePage, stepScriptEdits } from '../../present/liveScript';
+import { snapshotStagePage, stepScriptEdits, withScripts } from '../../present/liveScript';
 import { sourceLimits } from '../../present/snapshot';
 import type { Presentation, PresentSource, Step } from '../../types/presentation';
 import { useStage } from '../play/stageStore';
@@ -25,6 +25,7 @@ export function openOnStage(doc: Presentation, source: PresentSource, step: Step
     sandboxed: doc.origin === 'imported' && hasScript,
     edited: !!edits && Object.keys(edits).length > 0,
     play: source.bundle.play,
+    input: withScripts(source.bundle, edits),
     missing: sourceLimits(source),
     left: leftBehind(source.bundle.play, source.bundle.media, { graphs: source.bundle.backgroundGraphs ?? {}, datasets: source.bundle.datasets }).filter(l => !/notes/i.test(l.what)),
   });
