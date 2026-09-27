@@ -43,9 +43,12 @@ export interface NullLayer extends LayerBase {
   /** Marker radius in px. 0 hides the marker but keeps the point. */
   size: number;
   color: string;
-  /** Chase the mouse or another null on a spring instead of staying put. */
-  follow: 'none' | 'mouse' | 'null';
+  /** Chase the mouse, another null or a point on a tracked hand on a spring instead of staying put. */
+  follow: 'none' | 'mouse' | 'null' | 'hand';
   followId: string;
+  /** follow: 'hand': which hand (the performer's own; 'any' is the right one when it is in view) and which landmark (0 wrist … 8 index tip … 20 pinky tip). */
+  handSide: 'left' | 'right' | 'any';
+  handPoint: number;
   /** 0..1: how hard the spring pulls (low = lazy, high = snappy). */
   spring: number;
   /** 0..1: how much it overshoots and wobbles before settling. */
@@ -624,7 +627,7 @@ export function script3dDefaults(): Pick<ScriptLayer, 'mode' | 'code' | 'paramDe
 type Defaults<T> = Omit<T, 'id' | 'label' | 'visible' | 'kind'>;
 
 const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind: K }>> } = {
-  null: { toShader: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7', follow: 'none', followId: '', spring: 0.5, wobble: 0.3, role: 'none', radius: 0.04, strength: 1, tilt: 0 },
+  null: { toShader: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7', follow: 'none', followId: '', handSide: 'right', handPoint: 8, spring: 0.5, wobble: 0.3, role: 'none', radius: 0.04, strength: 1, tilt: 0 },
   text: {
     toShader: true, text: 'PLAY', x: 0.5, y: 0.5, size: 0.25, rotation: 0, opacity: 1, color: [1, 1, 1], font: 'sans', fontUrl: '', weight: 700, blend: 'normal', matte: 'over',
     sequence: false, interval: 0, transition: 'fade',
@@ -696,7 +699,7 @@ const unit = N(0, 1);
 
 const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
   null: {
-    toShader: B, x: N(), y: N(), size: N(0), color: { t: 'hex' }, follow: E('none', 'mouse', 'null'), followId: S, spring: unit, wobble: unit,
+    toShader: B, x: N(), y: N(), size: N(0), color: { t: 'hex' }, follow: E('none', 'mouse', 'null', 'hand'), followId: S, handSide: E('right', 'left', 'any'), handPoint: N(0, 20, true), spring: unit, wobble: unit,
     role: E('none', 'emitter', 'absorber', 'attract', 'repel', 'vortex'), radius: N(0.001), strength: N(0), tilt: N(0, 85),
   },
   text: {

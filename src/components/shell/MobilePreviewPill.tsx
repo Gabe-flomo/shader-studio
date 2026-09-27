@@ -3,6 +3,7 @@ import { fontFamily } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { timeReadoutRef } from '../../lib/timeTick';
+import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
 
 /**
  * Floating pill at the bottom of the phone preview: play/pause, reset, the time, and the
@@ -36,6 +37,7 @@ export function MobilePreviewPill({ overlayOpen, onToggleOverlay }: { overlayOpe
     }}>
       {btn(timePlaying ? 'pause' : 'play', timePlaying ? 'Pause' : 'Play', () => setTimePlaying(!timePlaying))}
       {btn('reset', 'Reset time to 0', () => window.dispatchEvent(new CustomEvent('reset-time')))}
+      {btn('rebuild', REBUILD_TOOLTIP, () => { void rebuildWithToast(); })}
       <span style={{ font: `12px ${fontFamily.mono}`, color: '#e8e9ef', padding: '0 8px', fontVariantNumeric: 'tabular-nums' }} ref={timeReadoutRef}>0.00s</span>
       {btn('overlay', overlayOpen ? 'Hide the node graph overlay' : 'Show the node graph over the preview', onToggleOverlay, overlayOpen)}
     </div>

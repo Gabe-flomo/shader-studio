@@ -7,6 +7,8 @@ import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
 import { timeReadoutRef } from '../../lib/timeTick';
+import { loadShortcutMap } from '../../hooks/useShortcuts';
+import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
 
 // Header and footer bars for the shader preview. The preview is a render surface, so callers
 // render these under ThemeOverrideContext 'dark' — they look the same in both app themes.
@@ -82,6 +84,8 @@ export function PreviewFooter({ idleHint }: { idleHint: string }) {
   if (hasSelection && !probe && !pixelSample) idleHint = 'computing…';
   const timePlaying = useNodeGraphStore(s => s.timePlaying);
   const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
+  // Follows the user's rebinding on the Keys page.
+  const [rebuildShortcut] = useState(() => loadShortcutMap().rebuild);
   const mono = `11px ${fontFamily.mono}`;
   const num = { color: tk.text.primary, fontVariantNumeric: 'tabular-nums' as const };
 
@@ -89,6 +93,7 @@ export function PreviewFooter({ idleHint }: { idleHint: string }) {
     <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: '0 10px 0 8px', background: tk.bg.render, borderTop: `1px solid ${RULE}`, font: mono, color: tk.text.faint }}>
       <IconButton icon={timePlaying ? 'pause' : 'play'} label={timePlaying ? 'Pause' : 'Play'} shortcut="space" size="sm" onClick={() => setTimePlaying(!timePlaying)} />
       <IconButton icon="reset" label="Reset time to 0" size="sm" onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))} />
+      <IconButton icon="rebuild" label={REBUILD_TOOLTIP} shortcut={rebuildShortcut} size="sm" onClick={() => { void rebuildWithToast(); }} />
       <TimeReadout />
       <span style={{ flex: 1, minWidth: 8 }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', whiteSpace: 'nowrap' }} title={pixelSample ? 'Pixel colour under the cursor (0–1)' : undefined}>
@@ -149,6 +154,9 @@ function ErrorPill() {
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={420} padding={0}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 8px 10px 14px', borderBottom: `1px solid ${tk.border.subtle}` }}>
             <b style={{ flex: 1, fontSize: 13 }}>Shader didn’t compile</b>
+            <Tooltip label={REBUILD_TOOLTIP}>
+              <Button size="sm" variant="ghost" icon="rebuild" style={{ height: 28 }} onClick={() => { void rebuildWithToast(); }}>Rebuild</Button>
+            </Tooltip>
             <Button size="sm" variant="ghost" icon="copy" style={{ height: 28 }}
               onClick={() => { void navigator.clipboard?.writeText([...graph, ...glsl].join('\n')).catch(() => {}); }}>Copy</Button>
             <IconButton icon="close" label="Close" size="sm" tooltip={false} onClick={() => setOpen(false)} />

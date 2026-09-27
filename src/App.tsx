@@ -20,6 +20,7 @@ import { AspectPicker, PreviewFooter, PreviewHeader } from './components/shell/P
 import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
+import { REBUILD_TOOLTIP, rebuildWithToast } from './components/shell/rebuildAction';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/page';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
@@ -48,6 +49,8 @@ import type { PresentPage as PresentPageT } from './components/present/PresentPa
 import type { FunctionBuilder as FunctionBuilderT } from './components/FunctionBuilder/FunctionBuilder';
 import type { MobileGraphBrowser as MobileGraphBrowserT, MobileNodeGraphOverlay as MobileNodeGraphOverlayT } from './components/NodeGraph/MobileGraphBrowser';
 import type { MobileNodeBrowser as MobileNodeBrowserT } from './components/NodeGraph/MobileNodeBrowser';
+import type { HistoryPanel as HistoryPanelT } from './components/history/HistoryPanel';
+import { useUnseenActivity } from './components/ui/activityStore';
 
 // ── Code splitting ───────────────────────────────────────────────────────────
 // Everything that isn't the studio editor itself loads on first use: the
@@ -67,6 +70,7 @@ const FunctionBuilder        = lazyWithSuspense<PropsOf<typeof FunctionBuilderT>
 const MobileGraphBrowser     = lazyWithSuspense<PropsOf<typeof MobileGraphBrowserT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileGraphBrowser })));
 const MobileNodeGraphOverlay = lazyWithSuspense<PropsOf<typeof MobileNodeGraphOverlayT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileNodeGraphOverlay })));
 const MobileNodeBrowser      = lazyWithSuspense<PropsOf<typeof MobileNodeBrowserT>>(() => import('./components/NodeGraph/MobileNodeBrowser').then(m => ({ default: m.MobileNodeBrowser })));
+const HistoryPanel           = lazyWithSuspense<PropsOf<typeof HistoryPanelT>>(() => import('./components/history/HistoryPanel').then(m => ({ default: m.HistoryPanel })));
 
 // ── Responsive sizing helpers ─────────────────────────────────────────────────
 function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
@@ -513,7 +517,8 @@ function App() {
   // accordion, open a node to read its description/preview, then decide to
   // add it. Deliberately not the same flow as the graph FAB's quick-search
   // NodeSearchPalette; that already exists, this is for browsing/reference.
-  const [mobileExamplesTab, setMobileExamplesTab] = useState<'examples' | 'nodes'>('examples');
+  const [mobileExamplesTab, setMobileExamplesTab] = useState<'examples' | 'nodes' | 'history'>('examples');
+  const unseenActivity = useUnseenActivity();
   // Reset's own confirm step, in-app rather than window.confirm() — a native
   // confirm dialog is unreliable (sometimes silently a no-op) inside a Tauri
   // webview, which would make Reset look broken with no error or feedback.
@@ -559,6 +564,7 @@ function App() {
     fitView:        () => _fitViewCallback?.(),
     toggleCode:     () => setShowCode(v => !v),
     toggleRecord:   () => setShowExport(v => !v),
+    rebuild:        () => { void rebuildWithToast(); },
     addNode:        unlessScratch(() => setSearchPaletteOpen(true)),
     groupSelected:  unlessScratch(() => {
       const ids = useNodeGraphStore.getState().selectedNodeIds;
@@ -738,6 +744,7 @@ function App() {
           {glslErrors.map((err, i) => <div key={i} style={{ paddingLeft: '6px' }}>{err}</div>)}
         </div>
       )}
+      <Button size="sm" variant="ghost" icon="rebuild" title={REBUILD_TOOLTIP} onClick={() => { void rebuildWithToast(); }} style={{ marginTop: 6 }}>Rebuild</Button>
     </div>
   ) : null;
 
@@ -913,6 +920,10 @@ function App() {
             }}
           >
             <Icon name="spark" size={15} />Browse
+            {unseenActivity.count > 0 && (
+              <span aria-label={`${unseenActivity.count} new ${unseenActivity.count === 1 ? 'notice' : 'notices'} in History`}
+                style={{ width: 8, height: 8, borderRadius: '50%', marginLeft: -2, background: unseenActivity.error ? tk.status.danger : tk.accent.base, boxShadow: `0 0 0 2px ${tk.ink.base}` }} />
+            )}
           </button>
         </div>
 
@@ -925,10 +936,16 @@ function App() {
                 ariaLabel="Browse"
                 value={mobileExamplesTab}
                 onChange={setMobileExamplesTab}
-                options={[{ value: 'examples', label: 'Examples' }, { value: 'nodes', label: 'Nodes' }]}
+                options={[
+                  { value: 'examples', label: 'Examples' },
+                  { value: 'nodes', label: 'Nodes' },
+                  { value: 'history', label: unseenActivity.count > 0 ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>History<span style={{ width: 7, height: 7, borderRadius: '50%', background: unseenActivity.error ? tk.status.danger : tk.accent.base }} /></span> : 'History' },
+                ]}
               />
             </div>
-            {mobileExamplesTab === 'examples' ? (
+            {mobileExamplesTab === 'history' ? (
+              <HistoryPanel compact onShowOnCanvas={() => setShowMobileExamples(false)} />
+            ) : mobileExamplesTab === 'examples' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_INDEX[k])).map(folder => {
                   const isOpen = expandedExampleFolders.has(folder.label);

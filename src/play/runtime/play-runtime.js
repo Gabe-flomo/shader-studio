@@ -53,11 +53,17 @@
  * from their embedded song or the live input. A MIDI Input node's outputs
  * stay at rest.
  *
+ * Hand tracking runs only in pages exported with "Include hand tracking": the
+ * bundle's `hands` then carries MediaPipe and the hand model (gzipped), which
+ * the first Enable hands click unpacks into a worker (ShaderStudioPlay.
+ * enableHands() does the same for a host's own button). The landmarks are
+ * read by the kit's hands.js, the same code the app runs.
+ *
  * The trigger, noise and envelope maths mirror src/play/triggers.ts.
  */
 (function () {
   'use strict';
-  if (window.ShaderStudioPlay && window.ShaderStudioPlay.version >= 5) return;
+  if (window.ShaderStudioPlay && window.ShaderStudioPlay.version >= 6) return;
 
   const CSS = `
 .ssp{display:flex;width:100%;height:100%;min-height:0;box-sizing:border-box;font:13px/1.4 system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#e6e7ec}
@@ -122,7 +128,7 @@
     return x;
   }
   function triggerKey(t) {
-    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; }
+    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; }
     return '';
   }
   function beatAt(bpm, beats, time) {
@@ -661,6 +667,7 @@ void main() {
         case 'live': { if (shared.live.status !== 'on') return null; updateLive(); return Math.max(0, Math.min(1, shared.live.v[s.band] * s.gain)); }
         case 'osc': { const a = shared.osc.get(s.address); if (!a) return null; const raw = a[s.arg]; const v = typeof raw === 'number' ? raw : typeof raw === 'boolean' ? (raw ? 1 : 0) : null; return v === null ? null : Math.max(0, Math.min(1, (v - s.min) / (s.max - s.min))); }
         case 'null': { const l = layersById.get(s.layerId); if (!l) return null; return Math.max(0, Math.min(1, layerValue(l.id, s.axis, l[s.axis]))); }
+        case 'hand': return handSt ? HK.read(handSt, s.side, s.read, s.point, s.axis, s.gesture) : null;
         case 'sensor': {
           if (s.read === 'distance') {
             const a = layersById.get(s.layerId), b = layersById.get(s.otherId);
@@ -704,6 +711,31 @@ void main() {
         else if (open && v < th * 0.8) { zoneGates.delete(k); release(k); }
       }
     }
+    // Hands: this mount's view of the page's tracker (placed where its Camera layer shows the camera), and gesture triggers.
+    const HK = typeof SSKit !== 'undefined' && SSKit.hands ? SSKit.hands : null;
+    const handSt = HK ? HK.create() : null;
+    const handSettings = Object.assign({ smoothing: 0.5, overlay: true, colour: [0.35, 1, 0.75], mirror: true }, play.hands || {});
+    const usesHands = play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && m.source.trigger.on === 'hand'))
+      || actions.some(a => a.trigger.on === 'hand') || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
+    if (usesHands && B.hands) shared.hands.assets = B.hands;
+    const handGates = new Set();
+    let handSeq = -1;
+    function tickHands() {
+      if (!handSt || !usesHands) return;
+      const H = shared.hands;
+      if (H.frame && H.seq !== handSeq) {
+        handSeq = H.seq;
+        const picAspect = glCanvas.width / Math.max(1, glCanvas.height), camAspect = H.frame.w / Math.max(1, H.frame.h);
+        HK.update(handSt, H.frame, { picAspect, place: HK.placement(play, value, camAspect, picAspect, handSettings.mirror), smoothing: handSettings.smoothing });
+      }
+      HK.age(handSt, performance.now());
+      for (const t of allTriggers) {
+        if (t.on !== 'hand') continue;
+        const k = triggerKey(t), on = HK.gate(handSt, t.side, t.gesture), open = handGates.has(k);
+        if (on && !open) { handGates.add(k); press(k); }
+        else if (!on && open) { handGates.delete(k); release(k); }
+      }
+    }
     // Actions (burst, next line, drop…): once per new press of their trigger.
     function tickActions() {
       for (const a of actions) {
@@ -715,6 +747,7 @@ void main() {
       }
     }
     function tickMappings(dt) {
+      tickHands();
       tickAudioTriggers();
       tickZoneTriggers();
       tickActions();
@@ -914,6 +947,15 @@ void main() {
         }, () => { b.textContent = 'Camera blocked'; });
         tools.append(b);
       }
+      if (usesHands && B.hands) {
+        const b = el('button', 'ssp-btn', 'Enable hands');
+        b.title = 'Follows your hands with the camera. Everything runs on this device; nothing is uploaded.';
+        const show = s => { b.textContent = s === 'on' ? 'Hands on' : s === 'starting' ? 'Starting…' : s === 'blocked' ? 'Camera blocked' : s === 'unsupported' ? 'No hand tracking here' : s === 'error' ? 'Hands didn’t start' : 'Enable hands'; b.disabled = s === 'on' || s === 'starting' || s === 'unsupported'; };
+        shared.hands.listeners.add(show); listeners.push(() => shared.hands.listeners.delete(show));
+        show(shared.hands.status);
+        b.onclick = () => enableHands();
+        tools.append(b);
+      }
       if (usesTilt && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         const b = el('button', 'ssp-btn', 'Enable motion');
         b.onclick = () => DeviceOrientationEvent.requestPermission().then(() => b.remove());
@@ -990,6 +1032,8 @@ void main() {
         backdrop: play.display ? play.display.backdrop : [0, 0, 0],
         audio: L.status === 'on' ? { wave: L.wave, freq: L.freq, sampleRate: L.sr } : null,
         camera: camVideo || shared.camera, image: img,
+        hand: handSt && usesHands ? (side, point) => HK.point(handSt, side, point) : undefined,
+        hands: handSt && usesHands && handSettings.overlay && handSt.live ? { state: handSt, colour: handSettings.colour } : null,
         // three.js for 3D Script layers: the page carries it (SSThree) only when it has one.
         three: typeof SSThree !== 'undefined' ? SSThree : (window.SSThree || null),
         scriptStatus: (id, err) => { const e = err || null; if (scriptErrors.get(id) === e) return; scriptErrors.set(id, e); if (onScript) { try { onScript(id, e); } catch (x) { /* the host's problem */ } } },
@@ -1132,6 +1176,82 @@ void main() {
     };
   }
 
+  // The worker that runs the Hand Landmarker (mirrors src/lib/handWorker.ts): MediaPipe's ES module and
+  // its WebAssembly come in as blob URLs, the model as bytes. MediaPipe's "Left" is the performer's right hand.
+  const HAND_WORKER = [
+    'let lm = null, lastT = 0;',
+    'self.onmessage = async e => {',
+    '  const d = e.data;',
+    '  if (d.type === "init") {',
+    '    try {',
+    '      const V = await import(d.bundle);',
+    '      const make = del => V.HandLandmarker.createFromOptions({ wasmLoaderPath: d.loader, wasmBinaryPath: d.wasm }, { baseOptions: { modelAssetBuffer: d.model, delegate: del }, runningMode: "VIDEO", numHands: 2 });',
+    '      try { lm = await make("GPU"); } catch (x) { lm = await make("CPU"); }',
+    '      self.postMessage({ type: "ready" });',
+    '    } catch (x) { self.postMessage({ type: "failed", message: String(x) }); }',
+    '    return;',
+    '  }',
+    '  if (d.type === "frame") {',
+    '    let hands = [];',
+    '    if (lm) {',
+    '      const t = Math.max(lastT + 1, Math.round(d.t)); lastT = t;',
+    '      try {',
+    '        const r = lm.detectForVideo(d.bitmap, t);',
+    '        hands = r.landmarks.map((p, i) => { const c = (r.handedness[i] || [])[0] || {}; const f = new Float32Array(63); for (let j = 0; j < 21; j++) { f[j * 3] = p[j].x; f[j * 3 + 1] = p[j].y; f[j * 3 + 2] = p[j].z; } return { side: c.categoryName === "Left" ? "right" : "left", score: c.score || 0, lm: f }; });',
+    '      } catch (x) { /* a bad frame: none this time */ }',
+    '    }',
+    '    d.bitmap.close();',
+    '    self.postMessage({ type: "result", t: d.t, w: d.w, h: d.h, hands });',
+    '  }',
+    '};',
+  ].join('\n');
+
+  // One tracker for the page: every mount with hand mappings reads its frames.
+  shared.hands = { status: 'off', frame: null, seq: 0, count: 0, busy: false, sent: 0, worker: null, assets: null, listeners: new Set() };
+  function setHandStatus(s) { shared.hands.status = s; shared.hands.listeners.forEach(f => f(s)); }
+  function gunzip(b64) {
+    const bin = atob(b64), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  }
+  function pumpHands() {
+    const H = shared.hands, v = shared.camera;
+    if (!H.worker || H.busy) return;
+    if (!v || v.readyState < 2 || !v.videoWidth || document.hidden) { setTimeout(pumpHands, 200); return; }
+    const w = Math.min(480, v.videoWidth), h = Math.max(1, Math.round(w * v.videoHeight / v.videoWidth)), t = performance.now();
+    H.busy = true; H.sent = t;
+    createImageBitmap(v, { resizeWidth: w, resizeHeight: h, resizeQuality: 'low' }).then(
+      bmp => H.worker.postMessage({ type: 'frame', bitmap: bmp, t, w: v.videoWidth, h: v.videoHeight }, [bmp]),
+      () => { H.busy = false; setTimeout(pumpHands, 250); });
+  }
+  // Call from a click: the camera opens inside the gesture, then the files unpack and the model loads.
+  function enableHands() {
+    const H = shared.hands, assets = H.assets;
+    if (H.status === 'on' || H.status === 'starting') return Promise.resolve(H.status);
+    if (!assets || typeof DecompressionStream === 'undefined' || typeof Worker === 'undefined' || typeof createImageBitmap === 'undefined') { setHandStatus('unsupported'); return Promise.resolve('unsupported'); }
+    const cam = enableCamera();
+    setHandStatus('starting');
+    return cam.then(c => {
+      if (c !== 'on') { setHandStatus('blocked'); return 'blocked'; }
+      return Promise.all([gunzip(assets.bundle), gunzip(assets.loader), gunzip(assets.wasm), gunzip(assets.model)]).then(([bundle, loader, wasm, model]) => new Promise(resolve => {
+        const url = (data, type) => URL.createObjectURL(new Blob([data], { type }));
+        const w = new Worker(url(HAND_WORKER, 'text/javascript'), { type: 'module' });
+        H.worker = w;
+        w.onmessage = e => {
+          const d = e.data;
+          if (d.type === 'ready') { setHandStatus('on'); pumpHands(); resolve('on'); }
+          else if (d.type === 'failed') { H.worker = null; w.terminate(); setHandStatus('error'); resolve('error'); }
+          else if (d.type === 'result') {
+            H.busy = false; H.frame = { t: d.t, w: d.w, h: d.h, hands: d.hands }; H.seq++; H.count = d.hands.length;
+            setTimeout(pumpHands, Math.max(0, 1000 / 30 - (performance.now() - H.sent)));
+          }
+        };
+        w.onerror = () => { H.worker = null; setHandStatus('error'); resolve('error'); };
+        w.postMessage({ type: 'init', bundle: url(bundle, 'text/javascript'), loader: url(loader, 'text/javascript'), wasm: url(wasm, 'application/wasm'), model: new Uint8Array(model) }, [model]);
+      }));
+    }).catch(() => { setHandStatus('error'); return 'error'; });
+  }
+
   // For a host drawing its own panel: what the panel's Enable MIDI and Listen buttons do, for every mount on the page.
   function enableMidi() {
     if (!navigator.requestMIDIAccess) return Promise.resolve(false);
@@ -1153,7 +1273,7 @@ void main() {
     shared.camera = null; shared.cameraStream = null;
   }
   // internals: the pure GPU and audio helpers, for tests.
-  window.ShaderStudioPlay = { version: 5, mount, enableMidi, listen: startLive, enableCamera, stopCamera, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex } };
+  window.ShaderStudioPlay = { version: 6, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex } };
 
   // A full-page export: mount on #play with the page's options (URL params can override).
   if (window.PLAY_BUNDLE && document.getElementById('play')) {

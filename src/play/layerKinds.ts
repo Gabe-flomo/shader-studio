@@ -139,8 +139,13 @@ export function saveLayerAsKind(play: PlayRecord, layerId: string, look: KindLoo
 export function restyleKind(play: PlayRecord, id: string, look: Partial<KindLook>): { play: PlayRecord; kind: LayerKindDef | null } {
   const k = kindById(play, id);
   if (!k) return { play, kind: null };
-  const kind: LayerKindDef = { ...k, ...look, name: (look.name ?? k.name).trim() || k.name, hint: (look.hint ?? k.hint).trim(), version: k.version + 1 };
+  const kind = restyledKind(k, look);
   return { play: withKind(play, kind), kind };
+}
+
+/** The kind with a new name, hint, icon or colour (a blank name keeps the old one). */
+export function restyledKind(k: LayerKindDef, look: Partial<KindLook>): LayerKindDef {
+  return { ...k, ...look, name: (look.name ?? k.name).trim() || k.name, hint: (look.hint ?? k.hint).trim(), version: k.version + 1 };
 }
 
 /**

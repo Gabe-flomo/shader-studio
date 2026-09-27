@@ -21,6 +21,8 @@
  *   image(src) a loaded <img> for a data URL, or null while loading
  *   sensor(key, value)     report a sensor reading (`layerId::read`)
  *   override(layerId, key, value|null)  where a following null is now
+ *   hand(side, point)      a tracked hand's landmark on the picture ({ x, y }) or null (optional)
+ *   hands      { state, colour } to draw the hands' skeleton with the markers, or null (optional)
  *   three      three.js (three-slim.js) for 3D Script layers, or null
  *
  * The kit keeps per-layer state (particles, bodies, strokes, springs, text
@@ -32,6 +34,7 @@ import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCove
 import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klSketchDispose } from './layers.js';
 import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
+import { hdDraw } from './hands.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
 const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, lens: 1, script: 1 };
@@ -157,7 +160,9 @@ export function createLayerKit() {
       if (l.follow === 'none') { if (springs.has(l.id)) { springs.delete(l.id); env.override(l.id, 'x', null); env.override(l.id, 'y', null); } continue; }
       let s = springs.get(l.id);
       if (!s) { s = { x: l.x, y: l.y, vx: 0, vy: 0 }; springs.set(l.id, s); }
-      const target = l.follow === 'mouse' ? (pointer.over ? pointer : null) : nullPos(record, { value: (n, k) => (springs.has(n.id) && n.id !== l.id ? springs.get(n.id)[k] : env.value(n, k)) }, l.followId);
+      const target = l.follow === 'mouse' ? (pointer.over ? pointer : null)
+        : l.follow === 'hand' ? (env.hand ? env.hand(l.handSide, l.handPoint) : null)
+        : nullPos(record, { value: (n, k) => (springs.has(n.id) && n.id !== l.id ? springs.get(n.id)[k] : env.value(n, k)) }, l.followId);
       if (target) {
         const k = 4 + Math.pow(env.value(l, 'spring'), 2) * 400, zeta = 1 - Math.min(0.95, env.value(l, 'wobble') * 0.95), c = 2 * zeta * Math.sqrt(k);
         for (let i = 0; i < 4; i++) {
@@ -564,7 +569,8 @@ export function createLayerKit() {
       } else if (l.kind === 'camera') report(env, l.id + '::motion', cam ? motion : 0);
     }
 
-    // 7. Null markers on top of everything.
+    // 7. Null markers on top of everything, and the tracked hands' skeleton (a setup aid) with them.
+    if (env.markers && env.hands) hdDraw(ctx, env.hands.state, W, H, dpr, env.hands.colour);
     if (env.markers) for (const l of vis) if (l.kind === 'null') klDrawNull(ctx, l, env.value(l, 'x'), env.value(l, 'y'), env.value(l, 'size'), dpr, W, H, l.role && l.role !== 'none' ? env.value(l, 'radius') * H : 0);
   }
 

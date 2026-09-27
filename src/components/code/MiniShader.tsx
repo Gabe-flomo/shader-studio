@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
+import { onRebuild } from '../../lib/rebuild';
 
 const VERT = 'attribute vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }';
 
@@ -29,6 +30,18 @@ export function MiniShader({ source, size = 180, onError }: { source: string | n
   // canvas dead (a lost context never comes back), so only the program changes with the source.
   const glRef = useRef<WebGLRenderingContext | null>(null);
   useEffect(() => () => { glRef.current?.getExtension('WEBGL_lose_context')?.loseContext(); glRef.current = null; }, []);
+
+  // Rebuild, or the context coming back after a GPU reset: the program and buffer are made again.
+  const [generation, setGeneration] = useState(0);
+  useEffect(() => {
+    const canvas = ref.current;
+    const renew = () => setGeneration(g => g + 1);
+    const lost = (e: Event) => e.preventDefault(); // so the browser gives it back
+    canvas?.addEventListener('webglcontextlost', lost);
+    canvas?.addEventListener('webglcontextrestored', renew);
+    const unregister = onRebuild(() => { renew(); return []; });
+    return () => { unregister(); canvas?.removeEventListener('webglcontextlost', lost); canvas?.removeEventListener('webglcontextrestored', renew); };
+  }, []);
 
   useEffect(() => {
     const canvas = ref.current; if (!canvas || !source) return;
@@ -56,7 +69,7 @@ export function MiniShader({ source, size = 180, onError }: { source: string | n
     };
     tick();
     return () => { alive = false; cancelAnimationFrame(raf); gl.deleteProgram(prog); gl.deleteBuffer(buf); };
-  }, [source, onError]);
+  }, [source, onError, generation]);
 
   return (
     <div style={{ position: 'relative', width: size, height: size, borderRadius: radius.md, overflow: 'hidden', background: '#0d0d12', flexShrink: 0 }}>

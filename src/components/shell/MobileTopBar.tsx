@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { rebuildWithToast } from './rebuildAction';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -109,6 +110,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
           onClose={() => setMenu(null)}
           items={[
             { label: 'Record', icon: 'record', onSelect: onRecord },
+            { label: 'Rebuild the preview', icon: 'rebuild', hint: 'Recompile the shader and reset the GPU. The graph, time and Play setup stay.', onSelect: () => { void rebuildWithToast(); } },
             page === 'play'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: hasPlay ? 'Play this graph · set up' : 'Play this graph', icon: 'play', onSelect: () => onPageChange('play') },

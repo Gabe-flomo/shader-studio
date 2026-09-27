@@ -53,6 +53,9 @@ interface PlayUi {
   /** Null markers, handles, zone outlines and field guides on the picture. */
   guides: boolean;
   toggleGuides: () => void;
+  /** The Play page is showing (the picture's hand-tracking pill offers Enable only there). */
+  performing: boolean;
+  setPerforming: (on: boolean) => void;
   /** Soloed layer and mapping ids (empty = no solo). */
   soloLayers: ReadonlySet<string>;
   soloMappings: ReadonlySet<string>;
@@ -87,6 +90,8 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
     try { localStorage.setItem(GUIDES_KEY, guides ? '1' : '0'); } catch { /* preference only */ }
     set({ guides });
   },
+  performing: false,
+  setPerforming: performing => set({ performing }),
   soloLayers: NONE,
   soloMappings: NONE,
   toggleSolo: (kind, id) => {
