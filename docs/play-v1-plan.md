@@ -82,7 +82,7 @@ The kinds:
 
 **The Layers node** (Sources → Layers) is the other direction: what the layers draw becomes a texture the shader reads (Color, Alpha) plus a signed **Distance** to them in UV units, so SDF Glow makes particles, text and strokes glow, and anything a texture can feed works. It reads the previous frame. Each layer's "Seen by the Layers node" switch chooses what it sees; the app binds it in `src/play/layersTexture.ts`, the web runtime binds it too.
 
-- **Picture: Shown / Layers only** (`display` in the record). Layers only covers the shader with a backdrop colour; it keeps rendering underneath, so a Reveal matte shows it inside text or images and masked particles show it where they are.
+- **Background: Shader / Image / Video / Colour**, with **Layers only** (`display` in the record). Image, Video and Colour replace the shader on the Play page: the graph stops running there (play/background.ts), the layer kit paints the background and every layer that reads the picture reads it. Layers only covers the picture with a backdrop colour; it keeps rendering underneath, so a Reveal matte shows it inside text or images and masked particles show it where they are.
 - **Help.** Every built-in field has a tooltip. Controls show the param's hint from its node definition and the comment written on the node in the graph (the ⓘ next to the label).
 - **Recording.** Videos (both paths) and screenshots include the layers.
 - **Examples**: see *The Play folder* below. Particle Glow, Flow Around Words and Letter Drop are its last three: bigger pieces that combine several techniques.

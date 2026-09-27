@@ -11,6 +11,7 @@ import { midiEngine } from '../lib/midiEngine';
 import { layerAudio } from '../lib/layerAudio';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
+import { playBackground, planFrame } from '../play/background';
 import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
 import { layersUniforms, setLayersTap } from '../play/layersTexture';
@@ -468,6 +469,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const unsubRender = useNodeGraphStore.subscribe(() => requestRender());
     // An input arriving while the loop sleeps (MIDI, a Play key or the pointer) draws a frame.
     const unsubWake = inputBus.onWake(requestRender);
+    // Play's background: opening or leaving the Play page, a new source, a video's first frame.
+    const unsubBackground = playBackground.onChange(requestRender);
     // Hidden container (another page is showing) → treat like a hidden tab.
     const io = typeof IntersectionObserver !== 'undefined'
       ? new IntersectionObserver(entries => {
@@ -1208,14 +1211,26 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // or a recording holds a lease. Otherwise draw only when asked to.
       const playing = timePlayingRef.current;
       const videoActive = videoIdsRef.current.some(id => videoEngine.isPlaying(id));
-      const dynamic = renderKeepAlive.active() || (playing && (
+      const shaderMoving = playing && (
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 ||
         audioAmps.size > 0 || liveValues.size > 0 || videoActive || isStatefulRef.current || echoRef.current !== null ||
         scopeIdsRef.current.size > 0 || previewNodeIdRef.current !== null
         || midiEngine.hasFile()
-      )) || playOverlay.isAnimated() || playEngine.isAnimating();
-      const doRender = dynamic || needsRender;
-      if (doRender) {
+      );
+      // Play with an image, a video or a colour in place of the shader: the graph doesn't run at all.
+      const background = playBackground.active();
+      if (background) playBackground.follow(elapsed, playing);
+      const plan = planFrame({
+        background, shaderMoving, needsRender,
+        layersMoving: renderKeepAlive.active() || playOverlay.isAnimated() || playEngine.isAnimating() || playBackground.moving(playing) || (playing && midiEngine.hasFile()),
+      });
+      const dynamic = plan.dynamic;
+      if (plan.layersOnly) {
+        needsRender = false;
+        idleFrames = 0;
+        frameCount++;
+        playOverlay.draw(renderer.domElement, elapsed, dt);
+      } else if (plan.shader) {
         needsRender = false;
         idleFrames = 0;
         if (isStatefulRef.current) {
@@ -1896,6 +1911,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       unregisterRebuild();
       unsubRender();
       unsubWake();
+      unsubBackground();
       io?.disconnect();
       ro.disconnect();
       renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
