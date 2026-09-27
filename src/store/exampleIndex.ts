@@ -12,7 +12,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 import { ctp } from '../theme/palette';
 import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
-import { LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS } from './learnExampleIndex';
+import { LEARN_COLOR_KEYS, LEARN_CURVES_KEYS, LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS, LEARN_GRID_KEYS, LEARN_MOVED_INDEX } from './learnExampleIndex';
 import { LEARN3D_EXAMPLE_INDEX, LEARN3D_EXAMPLE_KEYS } from './learn3dExampleIndex';
 import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
@@ -151,6 +151,8 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   ...PLAY_EXAMPLE_INDEX,
   // The Learn folder: the Book of Shaders course as graphs (learnExampleIndex.ts).
   ...LEARN_EXAMPLE_INDEX,
+  // Earlier Learn lessons the Book doesn't cover, now in Curves & Shapes, Color & Lighting and Grid.
+  ...LEARN_MOVED_INDEX,
   // The Learn 3D folder: ray marching one idea at a time (learn3dExampleIndex.ts).
   ...LEARN3D_EXAMPLE_INDEX,
   // Node Combos built from the definitions (comboExamples.ts): the Grid Pattern → shape → Grid Paint flow, and field sockets.
@@ -178,10 +180,11 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Play",              color: ctp.pink, keys: PLAY_EXAMPLE_KEYS },
   { label: "Learn",             color: ctp.lavender, keys: LEARN_EXAMPLE_KEYS },
   { label: "Learn 3D",          color: ctp.lavender, keys: LEARN3D_EXAMPLE_KEYS },
-  { label: "Color & Lighting",  color: ctp.peach, keys: ['neonGlow','colorStopsCycle'] },
+  { label: "Curves & Shapes",   color: ctp.lavender, keys: LEARN_CURVES_KEYS },
+  { label: "Color & Lighting",  color: ctp.peach, keys: [...LEARN_COLOR_KEYS, 'neonGlow','colorStopsCycle'] },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel'] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
-  { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
+  { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
   { label: "Matrices",          color: ctp.peach, keys: MATRIX_EXAMPLE_KEYS },
   { label: "Halftone",          color: '#a6e3d5', keys: ['cmykNoise','webcamCmyk'] },
   { label: "Rings",             color: ctp.red, keys: ['fractalRings'] },

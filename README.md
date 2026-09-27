@@ -23,7 +23,7 @@ The node system covers:
 - **Effects** — iterative accumulation loops, domain transformations, gravitational lensing
 - **Output** — vec3 and vec4 color outputs
 
-The **Learn** folder in Examples is a Book of Shaders-style course in graphs: 18 numbered examples from a single colour to a first ray march, each with notes on the Play page that say what it shows, how it is built and what to try.
+The **Learn** folder in Examples is [The Book of Shaders](https://thebookofshaders.com/) as graphs: 42 numbered lessons that follow the Book chapter by chapter (hello world, uniforms, shaping functions, colours, shapes, matrices, patterns, random, noise, cellular noise, fractal Brownian motion, fractals), one idea each, plus a first ray march as an extra. Each has 1–3 Play sliders and notes on the Play page that say what it shows, how it is built and what to try, and link the chapter it follows. See [LEARN.md](LEARN.md#the-learn-folder-the-book-of-shaders-as-graphs).
 
 ---
 
