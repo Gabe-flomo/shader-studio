@@ -74,6 +74,10 @@ import { Menu } from '../ui/Menu';
 import { computeNodeSlug } from '../../compiler/nodeSlug';
 import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
 import { DocText } from '../ui/DocText';
+import { InsertLinkButton, LinkedText } from '../ui/Links';
+import { CreditLink } from '../ui/Credit';
+import { CreditEditor } from '../ui/CreditEditor';
+import { parseSourceCredit } from '../../types/credit';
 import { canRandomize, randomizableParams, randomizeAmount, randomizeExcluded } from '../../nodes/randomizeParams';
 import { useFoldState } from './foldState';
 import { RandomizeMenu } from './RandomizeMenu';
@@ -86,7 +90,7 @@ import { ctp } from '../../theme/palette';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { Button } from '../ui/Button';
+import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
@@ -658,6 +662,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // Comment text lives in node.params.__comment — same "__-prefixed metadata,
   // not a real shader param" convention already used by __codeOverride.
   const nodeComment = typeof node.params.__comment === 'string' ? (node.params.__comment as string) : '';
+  // A credit for the comment (where the idea or the code comes from), in node.params.__credit.
+  const nodeCredit = useMemo(() => parseSourceCredit(node.params.__credit), [node.params.__credit]);
+  const [commentCreditOpen, setCommentCreditOpen] = useState(false);
+  const commentFieldRef = useRef<HTMLTextAreaElement>(null);
   // Close the comment editor; a comment that's only whitespace is removed rather than kept
   const finishComment = () => {
     if (typeof node.params.__comment === 'string' && !node.params.__comment.trim()) updateNodeParams(node.id, { __comment: undefined });
@@ -2929,7 +2937,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       }}
     >
       {/* Comment preview — appears above the card on hover; click to open the full editor */}
-      {showCommentPreview && nodeComment && !showCommentEditor && (
+      {showCommentPreview && (nodeComment || nodeCredit) && !showCommentEditor && (
         <div
           onMouseDown={e => e.stopPropagation()}
           onClick={e => { e.stopPropagation(); setShowCommentEditor(true); setShowCommentPreview(false); }}
@@ -2939,7 +2947,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             fontSize: 12, lineHeight: 1.45, color: tk.text.muted, whiteSpace: 'pre-wrap', cursor: 'pointer',
           }}
         >
-          {nodeComment}
+          {nodeComment && <LinkedText text={nodeComment} linkStyle={{ color: tk.accent.text }} />}
+          {nodeCredit && <CreditLink source={nodeCredit} style={{ marginTop: nodeComment ? 6 : 0, whiteSpace: 'normal' }} />}
         </div>
       )}
       {/* Header — drag handle; double-click toggles collapse (enters a scene group) */}
@@ -4362,10 +4371,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {showCommentEditor && !collapsed && (
         <div style={{ padding: '10px 12px', borderTop: `1px solid ${tk.border.subtle}` }} onMouseDown={e => e.stopPropagation()}>
           <textarea
+            ref={commentFieldRef}
             autoFocus
             aria-label="Node comment"
             value={nodeComment}
-            placeholder="Describe what this node does…"
+            placeholder="Describe what this node does… [words](https://…) makes a link"
             onChange={e => updateNodeParams(node.id, { __comment: e.target.value })}
             onKeyDown={e => {
               e.stopPropagation();
@@ -4380,12 +4390,25 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
             {nodeComment && (
               <Button size="sm" variant="ghost" icon="trash" style={{ color: tk.status.danger }}
-                onClick={() => { updateNodeParams(node.id, { __comment: undefined }); setShowCommentEditor(false); }}>Delete</Button>
+                onClick={() => { updateNodeParams(node.id, { __comment: undefined, __credit: undefined }); setShowCommentEditor(false); }}>Delete</Button>
             )}
             <span style={{ flex: 1 }} />
+            <InsertLinkButton fieldRef={commentFieldRef} value={nodeComment} onChange={v => updateNodeParams(node.id, { __comment: v })} />
+            <IconButton icon="book" size="sm" active={!!nodeCredit} label={nodeCredit ? 'Edit the source / credit' : 'Add a source / credit (where this comes from)'}
+              onMouseDown={e => e.preventDefault()} onClick={() => setCommentCreditOpen(true)} />
             <Button size="sm" variant="primary" onClick={finishComment} title="Done (⌘↵)">Done</Button>
           </div>
         </div>
+      )}
+
+      {commentCreditOpen && (
+        <CreditEditor
+          what="this node"
+          initial={nodeCredit}
+          onSave={credit => updateNodeParams(node.id, { __credit: credit }, { immediate: true })}
+          onRemove={() => updateNodeParams(node.id, { __credit: undefined }, { immediate: true })}
+          onClose={() => setCommentCreditOpen(false)}
+        />
       )}
 
       {/* ── Generated GLSL code (read-only, hidden when collapsed) ── */}

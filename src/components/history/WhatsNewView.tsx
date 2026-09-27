@@ -90,7 +90,11 @@ function ReleaseCard({ r, open, isNew, onToggle, compact }: { r: Release; open: 
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
-    <li style={{ borderRadius: radius.md, border: `1px solid ${open ? tk.border.default : 'transparent'}`, background: open ? tk.bg.panel : 'transparent' }}>
+    <li style={{
+      borderRadius: radius.md + 2, border: `1px solid ${isNew ? alpha(tk.accent.base, 0.4) : hover && !open ? tk.border.strong : tk.border.default}`,
+      background: open ? tk.bg.panel : hover ? tk.bg.hover : alpha(tk.text.primary, 0.022),
+      boxShadow: isNew ? `inset 3px 0 0 ${tk.accent.base}` : 'none',
+    }}>
       <button
         type="button"
         onClick={onToggle}
@@ -99,11 +103,14 @@ function ReleaseCard({ r, open, isNew, onToggle, compact }: { r: Release; open: 
         onMouseLeave={() => setHover(false)}
         style={{
           width: '100%', border: 0, cursor: 'pointer', textAlign: 'left', borderRadius: radius.md,
-          background: !open && hover ? tk.bg.hover : 'transparent',
-          padding: compact ? '10px 8px' : '8px 8px', display: 'flex', alignItems: 'flex-start', gap: 6,
+          background: 'transparent', color: 'inherit',
+          padding: compact ? '11px 10px' : '9px 10px', display: 'flex', alignItems: 'flex-start', gap: 10,
         }}
       >
-        <Icon name={open ? 'chevD' : 'chevR'} size={13} style={{ color: tk.text.faint, marginTop: 2, flexShrink: 0 }} />
+        <span aria-hidden style={{
+          width: compact ? 30 : 28, height: compact ? 30 : 28, borderRadius: 8, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          background: alpha(tk.accent.base, 0.15), color: tk.accent.base, boxShadow: `inset 0 0 0 1px ${alpha(tk.accent.base, 0.22)}`,
+        }}><Icon name="spark" size={15} /></span>
         <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ font: `600 ${compact ? 13.5 : 12.5}px/1.35 ${fontFamily.ui}`, color: tk.text.primary, overflowWrap: 'anywhere' }}>{r.title}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, font: `11px ${fontFamily.ui}`, color: tk.text.faint }}>
@@ -114,9 +121,10 @@ function ReleaseCard({ r, open, isNew, onToggle, compact }: { r: Release; open: 
             {!open && <><span aria-hidden>·</span><span>{r.highlights.length} {r.highlights.length === 1 ? 'change' : 'changes'}</span></>}
           </span>
         </span>
+        <Icon name={open ? 'chevD' : 'chevR'} size={13} style={{ color: tk.text.faint, marginTop: 8, flexShrink: 0 }} />
       </button>
       {open && (
-        <ul style={{ listStyle: 'none', margin: 0, padding: `0 10px ${compact ? 12 : 10}px 27px`, display: 'flex', flexDirection: 'column', gap: compact ? 10 : 8 }}>
+        <ul style={{ listStyle: 'none', margin: 0, padding: `2px 12px ${compact ? 12 : 10}px 12px`, display: 'flex', flexDirection: 'column', gap: compact ? 10 : 8 }}>
           {r.highlights.map((h, i) => (
             <li key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3, font: `${compact ? 13 : 12}px/1.45 ${fontFamily.ui}`, color: tk.text.secondary }}>
               <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>

@@ -22,6 +22,8 @@ export interface SourceCredit {
   chapterTitle?: string;
   /** The most specific heading inside it the example follows. */
   section?: string;
+  /** Terms it's shared under, as written: "CC BY-NC-SA 4.0", "MIT". */
+  licence?: string;
 }
 
 const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
@@ -33,12 +35,50 @@ export function parseSourceCredit(v: unknown): SourceCredit | undefined {
   const title = str(r.title, 160), url = str(r.url, 500);
   if (!title || !url || !/^https:\/\/[^\s"'<>]+$/.test(url)) return undefined;
   const out: SourceCredit = { title, url };
-  const author = str(r.author, 160), chapterTitle = str(r.chapterTitle, 160), section = str(r.section, 160);
+  const author = str(r.author, 160), chapterTitle = str(r.chapterTitle, 160), section = str(r.section, 160), licence = str(r.licence, 160);
   if (author) out.author = author;
   if (typeof r.chapter === 'number' && Number.isInteger(r.chapter) && r.chapter > 0 && r.chapter < 1000) out.chapter = r.chapter;
   if (chapterTitle) out.chapterTitle = chapterTitle;
   if (section) out.section = section;
+  if (licence) out.licence = licence;
   return out;
+}
+
+/** What the "Add source / credit" form holds: plain text fields. */
+export interface CreditForm {
+  title: string;
+  author: string;
+  url: string;
+  /** Chapter or section, free text: "Ch. 9 · Patterns". */
+  detail: string;
+  licence: string;
+}
+
+/** A credit's fields for the form (its chapter and section joined into one "detail"). */
+export function creditToForm(s: SourceCredit | undefined): CreditForm {
+  return { title: s?.title ?? '', author: s?.author ?? '', url: s?.url ?? '', detail: s ? creditPlace(s).join(' · ') : '', licence: s?.licence ?? '' };
+}
+
+/**
+ * The form back to a credit, or the reason it can't be one. An address typed
+ * without a scheme gets https://; any other scheme (http:// included) is
+ * refused, as parseSourceCredit would. When the detail wasn't touched, the
+ * original's chapter fields are kept as they were.
+ */
+export function creditFromForm(f: CreditForm, original?: SourceCredit): { credit: SourceCredit } | { error: string } {
+  const title = f.title.trim();
+  if (!title) return { error: 'Give the source a title.' };
+  let url = f.url.trim();
+  if (!url) return { error: 'Add the address where people can find it.' };
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`;
+  if (!/^https:\/\//i.test(url)) return { error: 'The address has to start with https://.' };
+  const detail = f.detail.trim();
+  const keepPlace = !!original && detail === creditToForm(original).detail;
+  const credit = parseSourceCredit({
+    title, url, author: f.author, licence: f.licence,
+    ...(keepPlace ? { chapter: original.chapter, chapterTitle: original.chapterTitle, section: original.section } : { section: detail }),
+  });
+  return credit ? { credit } : { error: 'That address doesn’t look right (no spaces or quotes).' };
 }
 
 /**

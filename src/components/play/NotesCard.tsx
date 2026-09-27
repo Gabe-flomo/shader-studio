@@ -7,21 +7,26 @@
  * The text is plain with a few marks: a blank line starts a paragraph, a line
  * starting with "• " (or "- ") is a bullet, **bold** is bold, and
  * [[layer:<id>]] / [[control:<id>]] is a link (noteRefs.ts): drag a layer or
- * a control onto the card to add one, click it to go there. An https://
- * address becomes a link that opens in a new tab.
+ * a control onto the card to add one, click it to go there. A web address
+ * (bare, or Markdown [words](https://…)) becomes a link that opens in a new
+ * tab (utils/links.ts: http(s) only).
  *
  * A setup that comes from somewhere (a Learn lesson's chapter of The Book of
  * Shaders) shows that as a linked credit line under the header, open or
- * closed, so the notes themselves don't need a source line.
+ * closed, so the notes themselves don't need a source line. The editor can
+ * add or change that credit ("Add source / credit…").
  */
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { NOTE_REF_RE, NOTE_REF_TYPE, type NoteRefKind } from './noteRefs';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { CreditLink } from '../ui/Credit';
-import { openExternal } from '../../utils/openExternal';
+import { parseLinks } from '../../utils/links';
+import { ExternalLink, InsertLinkButton } from '../ui/Links';
+import { CreditEditor } from '../ui/CreditEditor';
+import { Button } from '../ui/Button';
 import type { SourceCredit } from '../../types/credit';
 
 const OPEN_KEY = 'shader-studio:play:notesOpen';
@@ -34,11 +39,11 @@ export interface NoteTargets {
 
 type Chip = (kind: NoteRefKind, id: string, key: string) => ReactNode;
 
-/** Plain text with any https:// address made a link that opens in a new tab. */
+/** Plain text with its [words](https://…) and bare http(s) addresses made links (a new tab, or the system browser). */
 function withUrls(text: string, key: string): ReactNode[] {
-  return text.split(/(https:\/\/[^\s)]*[^\s).,;:])/g).filter(Boolean).map((s, j) => s.startsWith('https://')
-    ? <a key={`${key}:${j}`} href={s} target="_blank" rel="noopener noreferrer" onClick={e => openExternal(s, e)} style={{ color: 'inherit', textDecoration: 'underline' }}>{s.replace(/^https:\/\//, '')}</a>
-    : s);
+  return parseLinks(text).map((s, j) => s.url
+    ? <ExternalLink key={`${key}:${j}`} url={s.url}>{s.text}</ExternalLink>
+    : s.text);
 }
 
 /** **bold** runs → <strong>, links → chips, web addresses → links. */
@@ -83,7 +88,7 @@ function parseNotes(notes: string): Block[] {
   return blocks;
 }
 
-export function NotesCard({ notes, title, source, editing, targets, onEdit, onChange, onOpen }: {
+export function NotesCard({ notes, title, source, editing, targets, onEdit, onChange, onSourceChange, onOpen }: {
   notes: string;
   /** Where the setup comes from: a linked credit line under the header. */
   source?: SourceCredit;
@@ -93,6 +98,8 @@ export function NotesCard({ notes, title, source, editing, targets, onEdit, onCh
   targets: NoteTargets;
   onEdit: (on: boolean) => void;
   onChange: (notes: string) => void;
+  /** The credit was added, edited or removed (undefined). Absent: the credit can't be edited here. */
+  onSourceChange?: (source: SourceCredit | undefined) => void;
   /** A link was clicked. */
   onOpen: (kind: NoteRefKind, id: string) => void;
 }) {
@@ -136,6 +143,8 @@ export function NotesCard({ notes, title, source, editing, targets, onEdit, onCh
     return !o;
   });
   const [draft, setDraft] = useState(notes);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const [creditOpen, setCreditOpen] = useState(false);
   const startEdit = () => { setDraft(notes); if (!open) toggle(); onEdit(true); };
   const done = () => { onChange(draft.trim()); onEdit(false); };
 
@@ -166,13 +175,23 @@ export function NotesCard({ notes, title, source, editing, targets, onEdit, onCh
       {source && <CreditLink source={source} style={{ margin: '0 10px 8px', flexShrink: 0 }} />}
       {editing ? (
         <div style={{ minHeight: 0, overflowY: 'auto', padding: '0 10px 10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', margin: '0 0 6px' }}>
+            <InsertLinkButton fieldRef={fieldRef} value={draft} onChange={setDraft} labelled />
+            {onSourceChange && (
+              <Button size="sm" variant="ghost" icon="book" onMouseDown={e => e.preventDefault()} onClick={() => setCreditOpen(true)}
+                title="Credit where this setup comes from: a book chapter, an article, someone else's shader">
+                {source ? 'Edit source / credit…' : 'Add source / credit…'}
+              </Button>
+            )}
+          </div>
           <textarea
+            ref={fieldRef}
             autoFocus
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => { if (e.key === 'Escape') onEdit(false); if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) done(); }}
             rows={big ? 24 : Math.min(14, Math.max(5, draft.split('\n').length + 1))}
-            placeholder={'What this setup shows and how to play it.\n\nA blank line starts a paragraph. Start a line with • for a bullet, and wrap words in **stars** for bold.'}
+            placeholder={'What this setup shows and how to play it.\n\nA blank line starts a paragraph. Start a line with • for a bullet, wrap words in **stars** for bold, and write [words](https://…) for a link.'}
             style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical', borderRadius: 8, border: 0, padding: '8px 10px', background: tk.bg.field, color: tk.text.primary, font: `12.5px/1.5 ${fontFamily.ui}` }}
           />
           <div style={{ color: tk.text.faint, fontSize: 11, marginTop: 4 }}>Drag a layer or a control here to link it · ⌘/Ctrl + Enter to save · Esc to cancel</div>
@@ -183,6 +202,9 @@ export function NotesCard({ notes, title, source, editing, targets, onEdit, onCh
             ? <p key={i} style={{ margin: '0 0 6px' }}>{b.lines.map((l, j) => <span key={j}>{j > 0 && <br />}{inline(l, chip)}</span>)}</p>
             : <ul key={i} style={{ margin: '0 0 6px', paddingLeft: 18 }}>{b.items.map((it, j) => <li key={j} style={{ margin: '1px 0' }}>{inline(it, chip)}</li>)}</ul>)}
         </div>
+      )}
+      {creditOpen && onSourceChange && (
+        <CreditEditor initial={source} onSave={onSourceChange} onRemove={() => onSourceChange(undefined)} onClose={() => setCreditOpen(false)} />
       )}
     </div>
   );

@@ -77,6 +77,7 @@ export function CreditLink({ source, style }: { source: SourceCredit; style?: CS
         {/* The author wraps as a whole, so a name never splits across lines. */}
         {source.author && <> <span style={{ color: tk.text.faint, whiteSpace: 'nowrap' }}>by {source.author}</span></>}
         {place.length > 0 && <span style={{ display: 'block', color: tk.accent.text }}>{place.join(' · ')}</span>}
+        {source.licence && <span style={{ display: 'block', color: tk.text.faint, fontSize: 10.5 }}>Licence: {source.licence}</span>}
       </span>
       <Icon name="popout" size={12} style={{ flexShrink: 0, marginTop: 2, color: tk.text.faint }} />
     </a>

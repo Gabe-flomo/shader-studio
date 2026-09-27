@@ -96,6 +96,7 @@ export function valueText(node: GraphNode, key: string, v: unknown): string | nu
 
 function paramLabel(node: GraphNode, key: string): string {
   if (key === '__comment') return 'Comment';
+  if (key === '__credit') return 'Source credit';
   if (key === 'label') return 'Name';
   const pd = getNodeDefinitionFor(node)?.paramDefs?.[key];
   if (pd?.label) return pd.label;
@@ -168,7 +169,7 @@ function computeDiff(before: GraphNode[], after: GraphNode[]): StepDiff {
     // Params (a group's inside is compared node by node, not as one blob)
     const keys = new Set([...Object.keys(na.params ?? {}), ...Object.keys(nb.params ?? {})]);
     for (const k of keys) {
-      if (k === 'subgraph' || (k.startsWith('_') && k !== '__comment')) continue;
+      if (k === 'subgraph' || (k.startsWith('_') && k !== '__comment' && k !== '__credit')) continue;
       const va = na.params?.[k], vb = nb.params?.[k];
       if (same(va, vb)) continue;
       const color = isColorParam(nb, k) && Array.isArray(va) && Array.isArray(vb);
