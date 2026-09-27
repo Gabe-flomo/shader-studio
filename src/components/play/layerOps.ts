@@ -84,6 +84,24 @@ export function addNullFor(p: PlayRecord, layerId: string, key: string): { play:
   return { play: { ...p, layers: [...layers, nul] }, id };
 }
 
+/**
+ * Two nulls that follow the index fingertips (right and left hand), for hand
+ * tracking in one step. A side that already has a null following its index
+ * tip isn't added again.
+ */
+export function addFingertipNulls(p: PlayRecord): PlayRecord {
+  const have = (side: 'right' | 'left') => p.layers.some(l => l.kind === 'null' && (l as NullLayer).follow === 'hand' && (l as NullLayer).handSide === side && (l as NullLayer).handPoint === 8);
+  const added: PlayLayer[] = [];
+  for (const side of ['right', 'left'] as const) {
+    if (have(side)) continue;
+    const nul = defaultLayer('null', playId('layer'), side === 'right' ? 'Right index tip' : 'Left index tip') as NullLayer;
+    nul.follow = 'hand'; nul.handSide = side; nul.handPoint = 8;
+    nul.x = side === 'right' ? 0.62 : 0.38; nul.y = 0.5;
+    added.push(nul);
+  }
+  return added.length ? { ...p, layers: [...p.layers, ...added] } : p;
+}
+
 /** The same three things the picture's right-click menu offers. */
 export function layerMenuItems({ onDuplicate, onReset, onRemove }: { onDuplicate: () => void; onReset: () => void; onRemove: () => void }) {
   return [
