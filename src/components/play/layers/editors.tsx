@@ -5,8 +5,17 @@
  * actions a trigger would fire (burst, drop, next line, clear).
  */
 import { useRef, useState, type ReactNode } from 'react';
-import type { ActionKind, NullLayer, ParticleField, PlayLayer, ZoneAction } from '../../../types/play';
-import { Button } from '../../ui/Button';
+import type { ActionKind, NullLayer, ParticleField, PlayLayer, PlayRecord, ZoneAction } from '../../../types/play';
+import { Button, IconButton } from '../../ui/Button';
+import { Icon } from '../../ui/Icon';
+import { Menu } from '../../ui/Menu';
+import { toast } from '../../ui/toastStore';
+import { askConfirm } from '../../ui/dialogStore';
+import { useThemeMode } from '../../../theme/themeStore';
+import { accentColor } from '../../../theme/categories';
+import { kindOf, newLayerKindId } from '../../../types/layerKinds';
+import { detachLayer, editKind, kindUses, layerKindRegistry, removeKind, restyleKind, saveLayerAsKind, useInstalledKinds, type KindLook } from '../../../play/layerKinds';
+import { KindDialog } from './KindDialog';
 import { Field } from '../../ui/Field';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { CameraChip } from '../chips';
@@ -15,14 +24,14 @@ import { ImagePicker, SpritePicker } from './pickers';
 import { FIELD_HELP, ZONE_HELP } from './help';
 import { Section } from './Section';
 import { AudioSourceRows, FontRow } from './rows';
-import { SCRIPT_EXAMPLES } from './scriptExamples';
+import { SCRIPT_EXAMPLES, extractScriptParams } from './scriptExamples';
 import { controlCandidate, makeControl } from './scriptTools';
 import { scriptPatch, type ApplyOptions } from './scriptApply';
 import { ScriptControls } from './ScriptControls';
 import { ScriptModal } from './ScriptModal';
 import { useScriptStatus } from '../../../play/scriptStatus';
 import { selectTokenOnDoubleClick, wrapOnKeyDown } from '../../code/editKeys';
-import { fontFamily, radius } from '../../../theme/tokens';
+import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import type { ScriptLayer, ScriptParamDef } from '../../../types/playLayers';
 
 export interface EditorContext {
@@ -35,6 +44,9 @@ export interface EditorContext {
   cancelDrawing: () => void;
   /** Add a null (placed on this layer) and point `key` at it. */
   createNull: (key: string) => void;
+  /** The whole record, and a way to change it: a layer kind's edit reaches every layer made from it. */
+  play: PlayRecord;
+  changePlay: (fn: (p: PlayRecord) => PlayRecord) => void;
 }
 
 const MATTES: Choice[] = [
@@ -528,7 +540,7 @@ export function BodiesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 export function ClonerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const g = f.get;
   const arrange = g<string>('arrange');
-  const sources = ctx.layers.filter(x => x.id !== f.l.id && (x.kind === 'shape' || x.kind === 'text' || x.kind === 'image' || x.kind === 'camera' || x.kind === 'null'));
+  const sources = ctx.layers.filter(x => x.id !== f.l.id && (x.kind === 'shape' || x.kind === 'text' || x.kind === 'image' || x.kind === 'camera' || x.kind === 'null' || x.kind === 'script'));
   const brushes = ctx.layers.filter(x => x.kind === 'brush');
   const particles = ctx.layers.filter(x => x.kind === 'particles');
   const effectorLayers = ctx.layers.filter(x => x.id !== f.l.id && (x.kind === 'null' || x.kind === 'shape'));
@@ -546,7 +558,7 @@ export function ClonerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   return (
     <>
       <Section kind="cloner" title="Source">
-        {f.pick('Copies of', 'sourceId', sources, 'Add a Shape, Text, Image or Null layer first', 'The layer that is copied. It keeps its own settings; the copies take its look and add their own place, size, turn and fade.')}
+        {f.pick('Copies of', 'sourceId', sources, 'Add a Shape, Text, Image, Null or Script layer first', 'The layer that is copied. It keeps its own settings; the copies take its look and add their own place, size, turn and fade. A Script layer (or a kind you saved) is copied whole, centred on the middle of the picture.')}
         {f.toggle('Original', 'hideSource', 'Hide the original, draw the copies only')}
       </Section>
       <Section kind="cloner" title="Arrangement">
@@ -595,10 +607,15 @@ export function ClonerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
  */
 export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const l = f.l as ScriptLayer;
+  const kind = kindOf(l, ctx.play.layerKinds);
   const [draft, setDraft] = useState(l.code);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [big, setBig] = useState(false);
-  // Another layer selected, or the code changed from outside (undo, a loaded file): show that code.
+  const [dialog, setDialog] = useState<'save' | 'restyle' | null>(null);
+  const [kindMenu, setKindMenu] = useState<{ x: number; y: number } | null>(null);
+  const installed = useInstalledKinds();
+  const mode = useThemeMode();
+  // Another layer selected, or the code changed from outside (undo, a loaded file, the kind edited from another layer): show that code.
   const [seen, setSeen] = useState({ id: l.id, code: l.code });
   if (seen.id !== l.id || seen.code !== l.code) { setSeen({ id: l.id, code: l.code }); setDraft(l.code); setApplyError(null); }
   const runError = useScriptStatus(l.id);
@@ -613,7 +630,13 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
     const r = scriptPatch(l, code, opts);
     if (!r.ok) { setApplyError(r.error); return false; }
     setApplyError(null);
-    f.set(r.patch);
+    if (!kind) { f.set(r.patch); return true; }
+    // Editing the kind: every layer of it gets the code; this layer also takes the values the edit asked for.
+    ctx.changePlay(p => {
+      const next = editKind(p, kind.id, code, r.defs).play;
+      return { ...next, layers: next.layers.map(x => (x.id === l.id ? { ...x, ...r.patch } as PlayLayer : x)) };
+    });
+    if (layerKindRegistry.get(kind.id)) layerKindRegistry.register({ ...kind, code, paramDefs: r.defs, version: kind.version + 1 }, 'saved');
     return true;
   };
   const turnInto = () => {
@@ -636,15 +659,123 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
     }
     wrap(e);
   };
+
+  // ── Layer kinds ───────────────────────────────────────────────────────────
+  const saveAsKind = (look: KindLook) => {
+    // The draft is what gets saved: apply it first so the layer and the kind agree.
+    const r = scriptPatch(l, draft);
+    if (!r.ok) { setApplyError(r.error); toast.error('Fix the sketch first', { message: r.error }); return; }
+    const id = newLayerKindId(look.name);
+    const withDraft = (p: PlayRecord): PlayRecord => ({ ...p, layers: p.layers.map(x => (x.id === l.id ? { ...x, ...r.patch } as PlayLayer : x)) });
+    const made = saveLayerAsKind(withDraft(ctx.play), l.id, look, id).kind;
+    ctx.changePlay(p => saveLayerAsKind(withDraft(p), l.id, look, id).play);
+    if (made) layerKindRegistry.register(made, 'saved');
+    toast.success(`Saved “${look.name.trim()}” as a layer kind`, { message: 'It is in Add layer, here and in your other files. Edit the kind to change every layer made from it.' });
+  };
+  const restyle = (look: KindLook) => {
+    if (!kind) return;
+    const r = restyleKind(ctx.play, kind.id, look);
+    ctx.changePlay(p => restyleKind(p, kind.id, look).play);
+    if (r.kind && layerKindRegistry.get(kind.id)) layerKindRegistry.register(r.kind, 'saved');
+  };
+  const editThisLayerOnly = () => {
+    const others = kind ? kindUses(ctx.play, kind.id) - 1 : 0;
+    ctx.changePlay(p => detachLayer(p, l.id));
+    toast.info(`“${l.label}” has its own code now`, { message: `It is a plain Script layer${others ? `; the other ${kind?.name} layers are unchanged` : ''}. Undo makes it one of the kind again.` });
+    setBig(true);
+  };
+  const removeFromFile = async () => {
+    if (!kind) return;
+    const n = kindUses(ctx.play, kind.id);
+    const ok = await askConfirm(`Remove “${kind.name}” from this file?`, { message: `Its ${n} layer${n === 1 ? '' : 's'} keep their code as plain Script layers.${layerKindRegistry.get(kind.id) ? ' It stays in your list, so Add layer still offers it.' : ''}`, confirmLabel: 'Remove', danger: true });
+    if (ok) ctx.changePlay(p => removeKind(p, kind.id));
+  };
+
   const error = applyError ? `Compile: ${applyError}` : runError;
   const defs: ScriptParamDef[] = l.paramDefs ?? [];
   const kindWord = candidate ? { slider: 'slider', toggle: 'toggle', button: 'button' }[candidate.kind] : '';
+  const kindColour = kind ? accentColor(kind.colour, mode) : f.tk.accent.base;
+  const uses = kind ? kindUses(ctx.play, kind.id) : 0;
+  const inList = kind ? installed.some(k => k.def.id === kind.id) : false;
+  const takenNames = [...(ctx.play.layerKinds ?? []), ...installed.map(k => k.def)].filter(k => k.id !== kind?.id).map(k => k.name);
+
+  const canvas = (
+    <Section kind="script" title="Canvas">
+      {f.toggle('Clear', 'clear', 'Clear the canvas every frame', 'Off keeps what was drawn, for trails; the script can fade it itself.')}
+      {f.toggle('Picture', 'readPicture', 'Let the script read the picture’s brightness', 'Samples the shader at low resolution each frame for s.picture.brightness(x, y).')}
+      {f.props('opacity')}
+      {f.select('Blend', 'blend', BLENDS, BLEND_HINT)}
+    </Section>
+  );
+  const modal = big && (
+    <ScriptModal
+      l={l} f={f} act={ctx.act} layers={ctx.layers as ReadonlyArray<{ id: string; kind: string; label: string; code?: string }>}
+      draft={draft} setDraft={setDraft} apply={apply} applyError={applyError} runError={runError}
+      kind={kind ? { name: kind.name, icon: kind.icon, colour: kindColour, uses } : undefined}
+      onSaveAsKind={kind ? undefined : () => setDialog('save')}
+      onClose={() => setBig(false)}
+    />
+  );
+  const dialogs = (
+    <>
+      {dialog === 'save' && (
+        <KindDialog title="Save as a layer kind" confirmLabel="Save kind" controls={extractCount(draft, defs.length)} taken={takenNames}
+          initial={{ name: l.label.replace(/\s+\d+$/, '') || 'Sketch', hint: '', icon: 'code', colour: 'mauve' }}
+          onDone={look => { setDialog(null); if (look) saveAsKind(look); }} />
+      )}
+      {dialog === 'restyle' && kind && (
+        <KindDialog title={`Change “${kind.name}”`} confirmLabel="Save" controls={defs.length} uses={uses} taken={takenNames}
+          initial={{ name: kind.name, hint: kind.hint, icon: kind.icon, colour: kind.colour }}
+          onDone={look => { setDialog(null); if (look) restyle(look); }} />
+      )}
+    </>
+  );
+
+  if (kind) {
+    return (
+      <>
+        <Section kind="script" title="Kind" hint="This layer is made from a sketch saved as a layer kind. Its controls are its properties; the code belongs to the kind.">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px 8px 10px', borderRadius: radius.md, background: f.tk.bg.field, marginTop: 4 }}>
+            <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(kindColour, 0.14), color: kindColour }}>
+              <Icon name={kind.icon} size={16} />
+            </span>
+            <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <b style={{ font: `650 12.5px ${fontFamily.ui}`, color: f.tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kind.name}</b>
+              <span style={{ fontSize: 11, color: f.tk.text.muted }}>{`Layer kind · ${uses} layer${uses === 1 ? '' : 's'} in this file`}</span>
+            </span>
+            <IconButton icon="more" size="sm" label="Name, icon and colour; your list; remove" tooltip={false} onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setKindMenu({ x: r.right - 260, y: r.bottom + 4 }); }} />
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            <Button size="sm" variant="primary" icon="popout" onClick={() => setBig(true)} title={`Open the code of ${kind.name}: what you apply changes all ${uses} of its layers`}>Edit the kind</Button>
+            <Button size="sm" icon="edit" onClick={editThisLayerOnly} title="Give this layer its own copy of the code, as a plain Script layer, and open it">Edit this layer only</Button>
+          </div>
+          {f.note(<><b>Edit the kind</b> changes the code of every {kind.name} layer ({uses}). <b>Edit this layer only</b> turns this one into a plain Script layer with its own copy; the others stay as they are.</>)}
+          {error && <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: f.tk.status.danger }}>{error}</div>}
+          {kindMenu && <Menu x={kindMenu.x} y={kindMenu.y} minWidth={260} onClose={() => setKindMenu(null)} items={[
+            { label: 'Name, icon and colour…', icon: 'edit', onSelect: () => setDialog('restyle') },
+            inList
+              ? { label: 'Remove from your list', icon: 'minus', hint: 'Your other files stop offering it in Add layer. This file keeps it.', onSelect: () => { layerKindRegistry.unregister(kind.id); toast.info(`“${kind.name}” is out of your list`); } }
+              : { label: 'Add to your list', icon: 'plus', hint: 'Offer it in Add layer in your other files too.', onSelect: () => { layerKindRegistry.register(kind, 'saved'); toast.success(`“${kind.name}” is in your list`); } },
+            'separator',
+            { label: 'Remove from this file…', icon: 'trash', danger: true, onSelect: () => { void removeFromFile(); } },
+          ]} />}
+        </Section>
+        <Section kind="script" title="Properties" hint="The sliders, toggles and buttons the kind declares. Each layer of the kind has its own values. Right-click a slider to make it a Play control or drive it with a null.">
+          {defs.length ? <ScriptControls f={f} l={l} act={ctx.act} /> : f.note('This kind declares no controls. Edit the kind and add a params object, or turn a variable into a slider.')}
+        </Section>
+        {canvas}
+        {modal}
+        {dialogs}
+      </>
+    );
+  }
 
   return (
     <>
       <Section kind="script" title="Code" hint="A sketch: setup(s) runs once, draw(s) every frame, on a 2D canvas the size of the picture. p5-style helpers work as plain names. Declare controls in a params object, or turn a variable into one.">
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 6px 0' }}>
           <Button size="sm" variant="primary" icon="popout" onClick={() => setBig(true)} title="The big editor: highlighting, autocomplete, a scratch run, the reference, patterns to insert">Open editor</Button>
+          <Button size="sm" icon="save" onClick={() => setDialog('save')} title="Save this sketch as a layer kind of its own: it joins Add layer with its own name, icon and colour, and its controls become the layer's properties">Save as kind</Button>
           <span style={{ flex: 1 }} />
           {SCRIPT_EXAMPLES.map(ex => (
             <Button key={ex.name} size="sm" variant="ghost" title={ex.hint} onClick={() => { setDraft(ex.code); apply(ex.code, { settings: ex.settings }); }}>{ex.name}</Button>
@@ -683,19 +814,15 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           <ScriptControls f={f} l={l} act={ctx.act} />
         </Section>
       )}
-      <Section kind="script" title="Canvas">
-        {f.toggle('Clear', 'clear', 'Clear the canvas every frame', 'Off keeps what was drawn, for trails; the script can fade it itself.')}
-        {f.toggle('Picture', 'readPicture', 'Let the script read the picture’s brightness', 'Samples the shader at low resolution each frame for s.picture.brightness(x, y).')}
-        {f.props('opacity')}
-        {f.select('Blend', 'blend', BLENDS, BLEND_HINT)}
-      </Section>
-      {big && (
-        <ScriptModal
-          l={l} f={f} act={ctx.act} layers={ctx.layers as ReadonlyArray<{ id: string; kind: string; label: string; code?: string }>}
-          draft={draft} setDraft={setDraft} apply={apply} applyError={applyError} runError={runError}
-          onClose={() => setBig(false)}
-        />
-      )}
+      {canvas}
+      {modal}
+      {dialogs}
     </>
   );
+}
+
+/** How many controls the draft declares (the applied count when it does not compile). */
+function extractCount(code: string, fallback: number): number {
+  const r = extractScriptParams(code);
+  return r.ok ? r.defs.length : fallback;
 }

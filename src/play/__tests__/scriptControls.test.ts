@@ -4,7 +4,7 @@ import { controlCandidate, makeControl } from '../../components/play/layers/scri
 import { extractScriptParams } from '../../components/play/layers/scriptExamples';
 import { tokenizeJsLine } from '../../components/code/jsSyntax';
 import { scriptFunctions } from '../savedScripts';
-import { actionsForLayer, parseActionTarget, actionTarget, scriptActionKey } from '../../types/play';
+import { actionsForLayer, parseActionTarget, actionTarget, scriptActionKey, parsePlayRecord } from '../../types/play';
 import { defaultLayer, layerNumericProps, type ScriptLayer } from '../../types/playLayers';
 import { scriptCompletions } from '../../components/play/layers/scriptCompletions';
 
@@ -28,6 +28,12 @@ describe('param kinds', () => {
     expect(parseActionTarget(t)).toEqual({ layerId: 'L', do: 'script:wipe' });
     expect(parseActionTarget('act:L::script:not valid')).toBeNull();
     expect(scriptActionKey('burst')).toBeNull();
+  });
+  it('an action that presses a script button survives the record parser (a key or beat bound to it)', () => {
+    const l = { ...defaultLayer('script', 'L', 'Sketch'), paramDefs: [{ key: 'wipe', label: 'Wipe', kind: 'button', value: 0, min: 0, max: 1 }] } as ScriptLayer;
+    const act = { id: 'a1', trigger: { on: 'key', code: 'KeyW' }, do: 'script:wipe', layerId: 'L', amount: 2, enabled: true };
+    const rec = parsePlayRecord({ version: 1, controls: [], mappings: [], layers: [l], actions: [act, { ...act, id: 'a2', do: 'script:not valid' }] });
+    expect(rec.actions).toEqual([act]);
   });
 });
 

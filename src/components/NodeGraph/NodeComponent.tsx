@@ -31,7 +31,7 @@ import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
 import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
 import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
 import { constantsItems } from '../../nodes/definitions/constants';
-import { canHaveInputExpr, getInputExpr } from '../../glsl/inputExpr';
+import { canHaveInputExpr, getInputExpr, getInputKnobs, isKnobParamKey, knobParamKey, type InputKnob } from '../../glsl/inputExpr';
 import { selectTokenOnDoubleClick, wrapOnKeyDown } from '../code/editKeys';
 import { InputExprPopover } from './InputExprPopover';
 import type { BezierEditorModal as BezierEditorModalT } from './BezierEditorModal';
@@ -2721,6 +2721,50 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     if (!isNaN(v)) updateNodeParams(node.id, { [key]: v }, { immediate: true });
   };
 
+  // One knob of an input expression (glsl/inputExpr): a slider under its expression row. Its value
+  // is an ordinary float param, so it's a uniform, right-click offers Play, and ◆ keys it.
+  const renderKnobRow = (inputKey: string, k: InputKnob) => {
+    const pKey = knobParamKey(inputKey, k.name);
+    const drive = playDriven.get(`${node.id}::${pKey}`);
+    const hasKf = socketHasKeyframes(node, pKey);
+    const keyed = hasKf && !isKeyframeBypassed(node, pKey);
+    const label = def.paramDefs?.[pKey]?.label ?? k.name;
+    const step = Math.min(0.01, (k.max - k.min) / 200);
+    const val = typeof node.params[pKey] === 'number' ? node.params[pKey] as number : 0;
+    return (
+      <div
+        key={pKey}
+        data-param-key={pKey}
+        title={`${label}: a knob in the expression. Right-click to add it to Play.`}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: isTouchDevice ? 40 : 32, padding: '2px 12px 2px 16px' }}
+        onMouseDown={e => e.stopPropagation()}
+      >
+        <span style={{
+          minWidth: 66, maxWidth: 92, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden',
+          color: tk.kind.expr, font: `500 ${isTouchDevice ? 13 : 12}px ${fontFamily.mono}`,
+        }}>
+          <span style={{ width: 8, height: 1, background: alpha(tk.kind.expr, 0.5), flexShrink: 0 }} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.name}</span>
+        </span>
+        {drive && <PlayDriveChip drive={drive} />}
+        {keyed ? (
+          <KeyframedRuler node={node} socketKey={pKey} label={label} min={k.min} max={k.max} step={step} touch={isTouchDevice} />
+        ) : (
+          <RulerSlider
+            value={val} min={k.min} max={k.max} step={adaptiveStep(val, step)} defaultValue={(k.min + k.max) / 2}
+            onChange={v => setFloat(pKey, String(v))} ariaLabel={label} touch={isTouchDevice} disabled={!!drive}
+          />
+        )}
+        <div style={{ display: 'flex', marginRight: -6 }}>
+          <CardButton icon="kf" tint="warning" on={hasKf}
+            label={hasKf ? `Keyframes on ${k.name}: click to edit, right-click for options` : `Add keyframes to ${k.name}`}
+            onClick={() => setKfModalKey(pKey)}
+            onContextMenu={e => setKfMenu({ x: e.clientX, y: e.clientY, key: pKey })} />
+        </div>
+      </div>
+    );
+  };
+
   const setVec3Component = (key: string, idx: number, raw: string) => {
     const v = parseFloat(raw);
     if (isNaN(v)) return;
@@ -2729,7 +2773,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     updateNodeParams(node.id, { [key]: current }, { immediate: true });
   };
 
-  const paramDefs = def.paramDefs ?? {};
+  // An expression's knobs are drawn under their input row (renderKnobRow), not with the sliders.
+  const paramDefs = Object.fromEntries(Object.entries(def.paramDefs ?? {}).filter(([k]) => !isKnobParamKey(node, k)));
   // Hairline between the sockets, params and outputs sections
   const sectionRule = <div aria-hidden style={{ height: 1, background: tk.border.subtle, margin: '6px 0' }} />;
 
@@ -3250,9 +3295,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           const exprEligible = !isExternal && canHaveInputExpr(node, key, def);
           const showExprMark = exprEligible && (!!inExpr || hoveredRowKey === key || exprEditKey === key || isTouchDevice);
 
+          const knobs = inExpr && !collapsed ? getInputKnobs(node, key) : [];
+
           return (
+            <React.Fragment key={key}>
             <div
-              key={key}
               style={{ display: 'flex', alignItems: 'center', minHeight: isTouchDevice ? 40 : 26, padding: '0 8px 0 0', position: 'relative' }}
               onMouseEnter={exprEligible ? () => setHoveredRowKey(key) : undefined}
               onMouseLeave={exprEligible ? () => setHoveredRowKey(k => (k === key ? null : k)) : undefined}
@@ -3473,6 +3520,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 </span>
               )}
             </div>
+            {/* The expression's knobs: a slider each, right under the row they belong to */}
+            {knobs.map(k => renderKnobRow(key, k))}
+            </React.Fragment>
           );
         })}
 
@@ -3650,7 +3700,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {/* ── Vector type selector (vectorizable math nodes) ── */}
         {!collapsed && node.type in VECTORIZABLE_NODES && (() => {
           const info = VECTORIZABLE_NODES[node.type];
-          const current = (node.params.outputType as string) || 'float';
+          // Length, Dot and Normalize take a vec2 unless the card says otherwise.
+          const current = (node.params.outputType as string) || (def?.defaultParams?.outputType as string | undefined) || 'float';
           return (
             <div
               style={{ padding: '3px 10px 4px', display: 'flex', gap: '4px', alignItems: 'center' }}
@@ -4043,7 +4094,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           }
 
           if (paramDef.type === 'bool') {
-            const val = node.params[key] !== false;
+            // A switch an older save never had reads as its default (Divide's Exact is off, most are on).
+            const val = (node.params[key] ?? def?.defaultParams?.[key]) !== false;
             return (
               <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
                 <ParamLabel>{paramDef.label}</ParamLabel>

@@ -159,6 +159,7 @@ export type {
 } from './playLayers';
 export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer } from './playLayers';
 import { parseLayer, type PlayLayer } from './playLayers';
+import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 
 // ── Actions (a trigger does something to a layer) ─────────────────────────────
 
@@ -256,6 +257,12 @@ export interface PlayRecord {
   controls: PlayControl[];
   mappings: PlayMapping[];
   layers: PlayLayer[];
+  /**
+   * Sketches saved as layer kinds (types/layerKinds.ts): what Add layer offers
+   * beside the built-in kinds, and what layers with a `kindId` are made from.
+   * Absent = none.
+   */
+  layerKinds?: LayerKindDef[];
   /** Triggers that do something to a layer (burst, next line, drop…). Absent = none. */
   actions?: PlayAction[];
   /**
@@ -428,7 +435,8 @@ function parseAction(raw: unknown): PlayAction | null {
   const a = raw as Record<string, unknown>;
   const id = str(a.id), layerId = str(a.layerId);
   const trigger = parseTrigger(a.trigger);
-  const kind = typeof a.do === 'string' && (ACTION_KINDS as readonly string[]).includes(a.do) ? (a.do as ActionKind) : null;
+  // A built-in action, or a button a Script layer declares (`script:<key>`).
+  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || scriptActionKey(a.do)) ? (a.do as ActionKind) : null;
   if (!id || !layerId || !trigger || !kind) return null;
   return { id, trigger, do: kind, layerId, amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
 }
@@ -584,7 +592,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
       if (parsed && !seenM.has(parsed.id)) { seenM.add(parsed.id); mappings.push(parsed); }
     }
   }
-  const layers: PlayLayer[] = [];
+  let layers: PlayLayer[] = [];
   const seenL = new Set<string>();
   if (Array.isArray(r.layers)) {
     for (const l of r.layers) {
@@ -592,6 +600,9 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
       if (parsed && !seenL.has(parsed.id)) { seenL.add(parsed.id); layers.push(parsed); }
     }
   }
+  // Layers made from a kind take its code; a kind the file lacks leaves a plain Script layer with the code it kept.
+  const layerKinds = parseLayerKinds(r.layerKinds);
+  layers = syncLayerKinds(layers, layerKinds);
   // Controls on a layer property need that layer; mappings reading a null need that null.
   const layerIds = new Set(layers.map(l => l.id));
   const keptControls = controls.filter(c => { const lt = parseLayerTarget(c.target) ?? parseActionTarget(c.target); return !lt || layerIds.has(lt.layerId); });
@@ -604,6 +615,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     && layerOk(m.source)
     && (m.source.kind !== 'trigger' || triggerOk(m.source.trigger)));
   const out: PlayRecord = { version: PLAY_VERSION, controls: keptControls, mappings: keptMappings, layers };
+  if (layerKinds.length) out.layerKinds = layerKinds;
   if (Array.isArray(r.actions)) {
     const seenA = new Set<string>();
     const actions: PlayAction[] = [];
@@ -708,5 +720,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && (play.display?.picture ?? true));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && (play.display?.picture ?? true));
 }

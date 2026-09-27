@@ -18,6 +18,8 @@ import { Button, IconButton } from '../../ui/Button';
 import { Segmented } from '../../ui/Choice';
 import { Field } from '../../ui/Field';
 import { Icon } from '../../ui/Icon';
+import type { IconName } from '../../ui/iconPaths';
+import { alpha } from '../../../theme/tokens';
 import { Menu, type MenuItem } from '../../ui/Menu';
 import { Modal } from '../../ui/Modal';
 import { toast } from '../../ui/toastStore';
@@ -49,7 +51,7 @@ function useNarrow(px: number) {
   return narrow;
 }
 
-export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyError, runError, onClose }: {
+export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyError, runError, kind, onSaveAsKind, onClose }: {
   l: ScriptLayer;
   f: FieldKit;
   act: (kind: ActionKind, amount?: number) => void;
@@ -61,6 +63,10 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
   apply: (code: string, opts?: ApplyOptions) => boolean;
   applyError: string | null;
   runError: string | null;
+  /** Editing a layer kind: Apply changes every layer made from it. */
+  kind?: { name: string; icon: IconName; colour: string; uses: number };
+  /** A plain Script layer: save the sketch as a layer kind. */
+  onSaveAsKind?: () => void;
   onClose: () => void;
 }) {
   const tk = useTokens();
@@ -252,10 +258,10 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
 
   return (
     <Modal
-      title="Script editor"
-      subtitle={`${l.label} · JavaScript on a canvas over the picture`}
-      icon="code"
-      iconColor={tk.kind.fn}
+      title={kind ? kind.name : 'Script editor'}
+      subtitle={kind ? `Layer kind · ${kind.uses} layer${kind.uses === 1 ? '' : 's'}` : narrow ? l.label : `${l.label} · JavaScript on a canvas over the picture`}
+      icon={kind ? kind.icon : 'code'}
+      iconColor={kind ? kind.colour : tk.kind.fn}
       width={1200}
       height={860}
       onClose={onClose}
@@ -272,16 +278,18 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
               <IconButton icon="code" label="Starters: built-in sketches and ones you saved" onClick={e => openMenu(e, startersMenu())} />
               <IconButton icon="import" label="Import from another script layer or a saved sketch" onClick={e => openMenu(e, importMenu())} />
               <IconButton icon="star" label="Save as a starter of your own" onClick={saveAsStarter} />
+              {onSaveAsKind && <IconButton icon="save" label="Save as a layer kind: its own entry in Add layer" onClick={onSaveAsKind} />}
             </>
           ) : (
             <>
               <Button icon="code" onClick={e => openMenu(e, startersMenu())}>Starters</Button>
               <Button icon="import" onClick={e => openMenu(e, importMenu())}>Import</Button>
               <Button icon="star" onClick={saveAsStarter} title="Keep this sketch as a starter of your own; other script layers can import it">Save as starter</Button>
+              {onSaveAsKind && <Button icon="save" onClick={onSaveAsKind} title="Save this sketch as a layer kind of its own: its own entry in Add layer, its controls as the layer's properties">Save as kind</Button>}
             </>
           )}
           <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, lineHeight: 1.35, color: error ? tk.status.danger : tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }} title={error ?? undefined}>
-            {error ?? (narrow ? '' : dirty ? 'Edited · Apply to run it on the picture' : `Running on the picture · ${(l.paramDefs ?? []).length} control${(l.paramDefs ?? []).length === 1 ? '' : 's'}`)}
+            {error ?? (narrow ? '' : dirty ? (kind ? `Edited · Apply changes every ${kind.name} layer (${kind.uses})` : 'Edited · Apply to run it on the picture') : `Running on the picture · ${(l.paramDefs ?? []).length} control${(l.paramDefs ?? []).length === 1 ? '' : 's'}`)}
           </span>
           {dirty && !narrow && <Button variant="ghost" onClick={() => commit(l.code)}>Revert</Button>}
           <Button variant={dirty ? 'primary' : 'secondary'} icon="play" disabled={!dirty} onClick={() => apply(draft)} title="⌘/Ctrl+Enter">Apply</Button>
@@ -291,6 +299,12 @@ export function ScriptModal({ l, f, act, layers, draft, setDraft, apply, applyEr
     >
       <div style={{ display: 'flex', flexDirection: narrow ? 'column' : 'row', height: '100%', minHeight: 0 }}>
         <div style={{ flex: 1, minWidth: 0, minHeight: narrow ? 320 : 0, display: 'flex', flexDirection: 'column', padding: 12, gap: 8 }}>
+          {kind && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, background: alpha(kind.colour, 0.1), boxShadow: `inset 0 0 0 1px ${alpha(kind.colour, 0.35)}`, fontSize: 12, lineHeight: 1.4, color: tk.text.secondary }}>
+              <Icon name={kind.icon} size={14} style={{ color: kind.colour, flexShrink: 0 }} />
+              <span style={{ minWidth: 0 }}>You are editing the layer kind <b>{kind.name}</b>. Apply changes all {kind.uses} of its layers; each keeps its own control values.</span>
+            </div>
+          )}
           {/* The selection: a variable that can become a control */}
           <div style={{ minHeight: 30, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {candidate ? (

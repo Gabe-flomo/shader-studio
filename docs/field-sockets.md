@@ -29,8 +29,10 @@ Three levels of shape on a grid:
 | One wire | Circle SDF (or anything) → Grid Pattern's **Shape**. |
 | Two nodes | Grid Pattern's Cell UV → anything → **Grid Paint**. |
 
-Examples: *Combo: Grid Pattern + Shape by wire* and *Combo: Array of stars*
-in Node Combos.
+Examples: *Combo: Grid Pattern + Shape by wire*, *Combo: Array of stars*,
+*Combo: Grid Pattern + grouped flower* (a Group as the shape) and *Combo:
+Array of grouped moons* (a chain crossing into a group through a port) in
+Node Combos.
 
 ## How it compiles
 
@@ -42,7 +44,7 @@ shared bits in `src/compiler/fieldSockets.ts`.
   return type, so the wire checks are the ordinary ones.
 - When a node with a wired field socket compiles, the assembler collects the
   **field chain** (the wired node and everything upstream of it) and compiles
-  it a second time, through the ordinary per-node path, into
+  it a second time, through the same per-node paths as `main()`, into
 
   ```glsl
   float fieldfn_<slug>_<output>(vec2 g_uv, vec2 fieldCell, float fieldInfluence, float fieldIndex) {
@@ -69,16 +71,52 @@ shared bits in `src/compiler/fieldSockets.ts`.
   Shape) produce nested functions, inner first.
 - Nodes that are not a pure function of position are rejected with a
   message on the card: anything that reads the previous frame (Echo,
-  Previous Frame, the blurs, Bloom…), Play Layers, particles, and groups.
+  Previous Frame, the blurs, Bloom…), Play Layers, particles, and the 3D
+  groups (Scene, March Loop, GI, Space Warp). A Group is allowed when
+  nothing inside it is rejected; otherwise the message is on the group
+  ("it contains Echo, which reads the previous frame").
 - A field socket takes no input expression (the popover does not offer
   one; a stored one is ignored), and a bypassed node ignores its field
   sockets.
 
 Nodes read a field socket through `fieldFn(inputVars.key)` from
 `src/nodes/definitions/helpers.ts`, which returns the name only when it
-really is a field function. Inside a group the subgraph is compiled by the
-group's own path, which does not build field functions yet; there the
-socket reads as unwired and the built-in behaviour is drawn.
+really is a field function.
+
+## Groups
+
+Field sockets work across groups. Every node compiled into `main()`
+registers a **unit** (`FieldUnit` in `shaderAssembler.ts`): top-level nodes
+under their own id, nodes inside a group under the prefixed id the group
+compiler gave them (`grid_0_g_circ_0`). A unit records which units its code
+reads, with group input ports already followed out to whatever is wired
+into them, and how to re-emit itself. A field chain is collected over those
+units and re-emitted in `main()` order. Group slugs are computed once per
+group and reused, so a re-emitted node declares the same variable names and
+reads the same `u_p_*` uniforms as its `main()` copy (sliders stay live).
+
+- **A Group as the shape.** A Group wired into a field socket (or anywhere
+  in a chain) is compiled whole inside the function, through the ordinary
+  group path. A single-pass group compiles only the nodes that feed the
+  outputs the chain reads, so a group with Distance and Colour outputs
+  wired into Shape and Picture gives two functions, each with only its
+  half.
+- **A field socket inside a group.** Grid Pattern or Array inside a group
+  builds its function from the group's own nodes.
+- **Across the boundary.** A chain wired in through a group input port
+  (any port type: float, vec2, vec3) is followed out of the group, through
+  nested groups too, so the function contains the outside nodes.
+- **Iterated groups.** An iterated group in a chain is compiled with its
+  loop inside the function. A field socket inside an iterated group works
+  when its chain doesn't read the loop; a chain that reads Loop Index, a
+  carried port, a carry-mode or accumulating node is rejected on that node
+  ("it reads a value carried round an iterated group's loop"): the function
+  is defined once, outside the loop, and can't see the loop's variables.
+- **Nested groups** work at the two levels the group compiler inlines.
+- **Loose groups** are visual only and don't reach the compiler.
+- Inside a chain the UV node and the Cell node are told they are in a field
+  function on every path, including inside groups (the UV node used to read
+  `vUv` there).
 
 ## Grid Pattern's Overflow
 
@@ -111,6 +149,10 @@ costs 9× or 25× the shape evaluations.
 
 ## Not yet
 
-- Field sockets inside groups (the group compile paths would need to build
-  field functions from their own subgraph, including group ports).
-- Iterated groups inside a field chain.
+- A chain that reads an iterated group's loop from inside that group (see
+  Groups above). Build the loop-dependent part outside the chain, or set
+  the group's iterations to 1.
+- A field socket inside a group that is published as a node, whose shape
+  comes in through the published node's input: that input is a function
+  argument, which the field function can't see. It is reported on the
+  card.

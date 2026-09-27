@@ -12,6 +12,7 @@ import { NumberInput } from './NumberInput';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
+import { ColorSwatch } from '../ui/ColorPicker';
 import { Toggle } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Modal } from '../ui/Modal';
@@ -26,8 +27,6 @@ const slug = (label: string, taken: Set<string>): string => {
   while (taken.has(k)) k = `${base}_${i++}`;
   return k;
 };
-const hex = (v: number[]) => '#' + v.map(c => Math.round(Math.max(0, Math.min(1, c)) * 255).toString(16).padStart(2, '0')).join('');
-const fromHex = (h: string): number[] | null => { const m = /^#?([0-9a-f]{6})$/i.exec(h.trim()); if (!m) return null; return [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255); };
 
 export function ConstantsModal({ node, onClose }: { node: GraphNode; onClose: () => void }) {
   const tk = useTokens();
@@ -68,15 +67,17 @@ export function ConstantsModal({ node, onClose }: { node: GraphNode; onClose: ()
         </div>
       }
     >
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 1.2fr) 96px minmax(180px, 2fr) 72px 28px', gap: '6px 8px', alignItems: 'center' }}>
+      <div style={{ padding: '14px 20px 18px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) 104px minmax(214px, 1.3fr) auto 28px', gap: '8px 10px', alignItems: 'center' }}>
         <span style={cell}>Name</span><span style={cell}>Type</span><span style={cell}>Value</span><span style={cell}>Live</span><span />
         {items.map((it, i) => (
           <RowFragment key={i} it={it} onLabel={l => rename(i, l)} onType={t => retype(i, t)} onValue={v => update(i, { value: v })} onSlider={on => update(i, { slider: on, ...(on && it.type === 'float' && it.min === undefined ? rangeFor(it.value as number) : {}) })} onRemove={() => setItems(items.filter((_, k) => k !== i))} />
         ))}
       </div>
-      {items.length === 0 && <div style={{ color: tk.text.faint, padding: '14px 0 4px' }}>No values yet. Add one.</div>}
+      {items.length === 0 && <div style={{ color: tk.text.faint, padding: '10px 0 2px' }}>No values yet. Add one.</div>}
       <div style={{ marginTop: 14, padding: '8px 10px', borderRadius: radius.md, background: tk.bg.subtle, color: tk.text.muted, fontSize: 11.5, lineHeight: 1.5 }}>
         A fixed value is baked into the shader and only changes here. A live value gets a slider on the card, can be keyframed, and can be a Play control. This card takes no inputs.
+      </div>
       </div>
     </Modal>
   );
@@ -85,18 +86,19 @@ export function ConstantsModal({ node, onClose }: { node: GraphNode; onClose: ()
 function RowFragment({ it, onLabel, onType, onValue, onSlider, onRemove }: { it: ConstantsItem; onLabel: (l: string) => void; onType: (t: ConstantsItemType) => void; onValue: (v: number | number[]) => void; onSlider: (on: boolean) => void; onRemove: () => void }) {
   const tk = useTokens();
   const vals = Array.isArray(it.value) ? it.value : [it.value];
-  const num = { width: 62, height: 28, borderRadius: radius.md, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.mono}`, textAlign: 'center' as const };
+  const num = { width: 64, height: 30, borderRadius: radius.md, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.mono}`, textAlign: 'center' as const };
   return (
     <>
       <Field value={it.label} height={30} onChange={e => onLabel(e.target.value)} aria-label="Name" placeholder="name" />
       <Select ariaLabel="Type" value={it.type} height={30} onChange={v => onType(v as ConstantsItemType)} options={TYPES} />
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-        {it.type === 'color' && <input type="color" aria-label="Colour" value={hex(vals)} onChange={e => { const c = fromHex(e.target.value); if (c) onValue(c); }} style={{ width: 34, height: 28, padding: 0, border: 0, borderRadius: radius.md, background: 'transparent', cursor: 'pointer' }} />}
-        {vals.map((v, k) => (
+        {/* A colour is picked, not typed as three numbers. */}
+        {it.type === 'color' && <ColorSwatch label={it.label || 'Colour'} value={[vals[0] ?? 0, vals[1] ?? 0, vals[2] ?? 0]} onChange={rgb => onValue([...rgb])} style={{ flex: 1 }} />}
+        {it.type !== 'color' && vals.map((v, k) => (
           <NumberInput key={k} value={v} step={it.type === 'color' ? 0.01 : undefined} onCommit={n => onValue(vals.length === 1 ? n : vals.map((x, j) => (j === k ? n : x)))} format={n => (Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/, '').replace(/\.$/, ''))} style={num} aria-label={`Value ${k + 1}`} />
         ))}
       </div>
-      <Toggle checked={it.slider} onChange={onSlider} label={it.slider ? 'live' : 'fixed'} />
+      <div style={{ minWidth: 72 }}><Toggle checked={it.slider} onChange={onSlider} label={it.slider ? 'live' : 'fixed'} /></div>
       <IconButton icon="trash" label="Remove" size="sm" tone="danger" onClick={onRemove} />
     </>
   );

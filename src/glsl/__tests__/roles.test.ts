@@ -70,7 +70,7 @@ describe('preview shader', () => {
     }
     const pal = by('palette');
     const pr = previewShaderFor(pal, inferParamRoles(pal), inferReturnRole(pal), inferParamRoles(pal).map(defaultBinding));
-    if (pr.ok) { expect(pr.source).toContain('palette(u_time)'); expect(pr.source).toContain('#define TAU'); }
+    if (pr.ok) { expect(pr.source).toContain('palette(pv_time)'); expect(pr.source).toContain('#define TAU'); }
   });
   it('refuses what it can’t run and says why', () => {
     const g = discoverInSource({ id: 'g', name: 'G', code: 'uniform sampler2D tex;\nvec4 tap(vec2 uv) { return texture2D(tex, uv); }\nvoid split(vec2 p, out float a) { a = p.x; }' });

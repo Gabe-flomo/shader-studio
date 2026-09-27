@@ -518,6 +518,12 @@ export interface ScriptLayer extends LayerBase {
   readPicture: boolean;
   opacity: number;
   blend: string;
+  /**
+   * The layer kind this layer is made from (a sketch saved as a kind, see
+   * types/layerKinds.ts): the kind's code and params, copied here so the
+   * layer still runs as a plain Script layer when the kind is missing.
+   */
+  kindId?: string;
   [param: `p_${string}`]: number;
 }
 
@@ -739,10 +745,12 @@ export function parseLayer(raw: unknown): PlayLayer | null {
   for (const [key, field] of Object.entries(LAYER_SCHEMA[kind])) out[key] = coerce(l[key], field, d[key]);
   // A script's slider values are dynamic keys: keep every finite `p_<key>` number.
   if (kind === 'script') for (const [k, v] of Object.entries(l)) if (k.startsWith('p_') && typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+  // Made from a layer kind: the id (parsePlayRecord checks the file has it).
+  if (kind === 'script' && typeof l.kindId === 'string' && /^[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]{1,80}$/.test(l.kindId)) out.kindId = l.kindId;
   return out as unknown as PlayLayer;
 }
 
-function isScriptParamDef(d: unknown): d is ScriptParamDef {
+export function isScriptParamDef(d: unknown): d is ScriptParamDef {
   if (!d || typeof d !== 'object') return false;
   const o = d as Record<string, unknown>;
   return typeof o.key === 'string' && /^[A-Za-z_]\w{0,30}$/.test(o.key) && typeof o.label === 'string' && (o.kind === undefined || o.kind === 'slider' || o.kind === 'toggle' || o.kind === 'button')

@@ -9,26 +9,30 @@
  *                Vec3, `p.x` → Split Vec2… A literal operand becomes that
  *                node's slider, so `uv * 4.0` is a Multiply with B = 4 you
  *                can drag.
- *   2. a block   anything rung 1 can't express (abs, pow of a signed base,
- *                a swizzle like .xyx, a ternary) becomes an Expression Block
+ *   2. a block   anything rung 1 can't express (a ternary, fwidth, a matrix
+ *                that isn't a rotation) becomes an Expression Block
  *                whose inputs are the live variables it reads and whose
  *                expression is the original sub-expression, verbatim.
  *   3. a region  a helper function call, or a loop the converter can't unroll,
  *                becomes a Custom Function node carrying that code.
  *
  * `report` says what landed on which rung and why, for the preview step.
- * Constructs nothing can hold (discard, textures, unknown uniforms) are
+ * Constructs nothing can hold (textures, a uniform a helper reads, uint) are
  * reported as unsupported and the caller keeps the whole-shader import.
+ * `discard` is alpha 0 through an RGBA Output; a uniform no node stands for
+ * is a live Constants entry and a Play control (`controls`).
  */
 import { parser, generate } from '@shaderfrog/glsl-parser';
 import { GROUP_PORT_SENTINEL, type GraphNode, type InputSocket, type DataType, type GroupInputPort, type GroupOutputPort } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
+import { swizzleIndices } from '../nodes/definitions/math';
 import { layoutByRank } from '../store/graphLayout';
 import { translateToStudio, dialectLabel } from '../glsl/dialects';
 import { threadGlobals } from './threadGlobals';
 import { stripComments } from '../glsl/comments';
 import { ES3_INTEGER, ES3_INTEGER_NOTE } from '../glsl/dialects';
 import type { ConstantsItem } from '../nodes/definitions/constants';
+import type { PlayControl } from '../types/play';
 import { ALWAYS_HELPERS_GLSL } from '../compiler/shaderAssembler';
 
 type T = 'float' | 'vec2' | 'vec3' | 'vec4';
@@ -38,6 +42,11 @@ interface Val {
   ref?: Ref; lit?: number; type: T; ast: Ast;
   /** The variable a literal initialised, so its slider can carry the name. */ name?: string;
   /** An `int` in the shader. The graph carries it as a float (the same number); code kept as text gets it back as an int. */ int?: boolean;
+  /**
+   * A mat2 that is a rotation by `angle`: `dir` 1 when m * v turns v by +angle (mat2(c, s, -s, c)), -1 when
+   * by -angle (mat2(c, -s, s, c)). Times a vec2 it is a Rotate 2D node; `ref` is the matrix as code, for anything else.
+   */
+  rot?: { angle: Val; dir: 1 | -1 };
 }
 type Ast = Record<string, unknown> & { type: string };
 interface UserFn { name: string; ret: string; params: { name: string; type: string; qual: 'in' | 'out' | 'inout' }[]; source: string; body: string; /** Every definition under this name (overloads), this one included. */ overloads: UserFn[] }
@@ -48,6 +57,20 @@ const LIT = '__lit__';
 export interface ConversionOptions {
   /** Warned expressions (by `ConversionWarning.id`) to keep as Expression Blocks instead of the inexact node. */
   asBlock?: ReadonlySet<string>;
+  /**
+   * Saved Custom Function presets (the Functions library). A call to a helper
+   * whose code is the same as a preset's function (and everything it calls)
+   * becomes that preset's node, its arguments wired in as nodes, instead of a
+   * region that carries the whole call as code.
+   */
+  library?: readonly LibraryFunction[];
+}
+
+/** What the converter needs of a saved function preset. */
+export interface LibraryFunction {
+  id: string; label: string; comment?: string;
+  inputs: ReadonlyArray<{ name: string; type: string }>;
+  outputType: string; body: string; glslFunctions: string;
 }
 
 /** A node that isn't quite GLSL: offered with a warning, and the choice to keep the code instead. */
@@ -64,17 +87,27 @@ export interface ConversionReport {
   notes: string[];
   warnings: ConversionWarning[];
   /** Sub-expressions that became Expression Blocks, with why. */
-  blocks: { code: string; why: string }[];
+  blocks: { code: string; why: string; nodeId?: string }[];
   /** Statement regions that became Custom Function nodes. */
-  regions: { code: string; why: string }[];
+  regions: { code: string; why: string; nodeId?: string }[];
+  /** Helper calls that became a saved function from the library: the helper's name and the preset's. */
+  reused?: { fn: string; presetId: string; label: string }[];
   /** Why the shader can't be a graph at all (empty when it can). */
   unsupported: string[];
   /** When the shader doesn't parse: the line of the paste the parser stopped at. */
   errorLine?: number;
   stats: { nodes: number; blocks: number; regions: number; sliders: number; loops: number };
+  /** Uniforms that became Play controls, with their starting values. */
+  uniforms?: ConvertedUniform[];
 }
 
-export interface ConversionResult { nodes: GraphNode[]; report: ConversionReport }
+export interface ConversionResult {
+  nodes: GraphNode[]; report: ConversionReport;
+  /** A Play control for each uniform the shader declared that no node stands for (see `ConversionReport.uniforms`). */
+  controls?: PlayControl[];
+}
+/** A uniform no node stands for, now a live entry on the Constants card; `value` is what it starts at (the check sets the original's uniform to it). */
+export interface ConvertedUniform { name: string; type: 'float' | 'int' | 'vec2' | 'vec3'; value: number | number[]; min: number; max: number; step: number; colour: boolean }
 
 class Unmapped extends Error { why: string; constructor(why: string) { super(why); this.why = why; } }
 class Unsupported extends Error { why: string; constructor(why: string) { super(why); this.why = why; } }
@@ -101,21 +134,24 @@ const POLY: Record<string, string[]> = {
   sin: ['input', 'output'], cos: ['input', 'output'], tan: ['input', 'output'], exp: ['input', 'output'], negate: ['input', 'output'],
   floor: ['input', 'output'], fractRaw: ['input', 'output'], clamp: ['input', 'result'], mix: ['a', 'b', 'result'],
   smoothstep: ['value', 'result'], mod: ['input', 'output'], sign: ['value', 'result'], sqrt: ['input', 'output'],
+  abs: ['input', 'output'], ceil: ['input', 'output'], tanh: ['input', 'output'], pow: ['base', 'result'],
+  // B (min/max), the edge (step) and the exponent (pow) stay float unless the shader gives a vector: see `retype`.
+  minMath: ['a', 'result'], max: ['a', 'result'], step: ['x', 'result'],
+  // Any vector in, a float out: outputType is the input's type.
+  length: ['input'], dot: ['a', 'b'], normalizeVec2: ['v', 'result'],
 };
+/** The converter's Divide, Pow and Square Root are the plain GLSL call (their Exact switch on), so the picture is the code's. */
+const EXACT = new Set(['divide', 'pow', 'sqrt']);
+/** Whether the pixel is kept so far (1) or has been discarded (0): a value like any other, merged by if/else. */
+const KEPT = 'kept_';
+/** The patterns the Vec2 / Vec3 Swizzle cards offer; anything else is a general Swizzle card. */
+const SWIZZLE_MODES: Record<number, string[]> = { 2: ['yx', 'xx', 'yy'], 3: ['yzx', 'zxy', 'xxy', 'xyy', 'xxx', 'yyy', 'zzz', 'zyx'] };
 
 export function glslToGraph(source: string, options: ConversionOptions = {}): ConversionResult {
   const report: ConversionReport = { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0, loops: 0 } };
-  const seen = new Map<string, number>();
-  /** An inexact mapping: the node with a warning, unless the user asked for the code. Returns the warning to attach, or null for "make a block". */
-  const inexact = (a: Ast, why: string): ConversionWarning | null => {
-    const code = generate(a as never).replace(/\s+/g, ' ').trim();
-    const k = (seen.get(code) ?? 0) + 1; seen.set(code, k);
-    const w: ConversionWarning = { id: `${code}#${k}`, code, why };
-    report.warnings.push(w);
-    if (options.asBlock?.has(w.id)) return null;
-    return w;
-  };
-  const warned = (v: Val, w: ConversionWarning): Val => { const n = sink.find(x => x.id === v.ref?.nodeId); if (n) { n.params.__importWarning = w.why; w.nodeId = n.id; } return v; };
+  // Divide, Pow and Square Root come out with their Exact switch on (the plain GLSL call), so no
+  // expression is offered as an inexact node any more; `warnings` and `options.asBlock` stay for the page.
+  void options;
   const nodes: GraphNode[] = [];
   /** Where new nodes go: the graph, or the subgraph of the loop group being built. */
   let sink: GraphNode[] = nodes;
@@ -144,15 +180,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   const consts: ConstDecl[] = [];
   for (const st of ast.program) {
     if (st.type === 'function') {
-      const proto = st.prototype as Ast; const header = proto.header as Ast;
-      const name = ((header.name as Ast).identifier as string);
-      const ret = tokenOf((header.returnType as Ast).specifier as Ast);
-      const params = ((proto.parameters as Ast[] | undefined) ?? []).map(p => ({
-        name: (p.identifier as Ast)?.identifier as string ?? '', type: tokenOf((p.specifier as Ast) ?? (p.declaration as Ast)),
-        qual: ((((p.qualifier as Ast[] | undefined) ?? []).map(q => q.token as string).find(q => q === 'out' || q === 'inout') ?? 'in') as 'in' | 'out' | 'inout'),
-      }));
-      const body = generate(st.body as never).trim().replace(/^\{/, '').replace(/\}$/, '').trim();
-      const f: UserFn = { name, ret, params, source: generate(st as never), body, overloads: [] };
+      const f = userFnOf(st);
+      const name = f.name;
       const prev = fns.get(name);
       if (prev) { prev.overloads.push(f); f.overloads = prev.overloads; } else { f.overloads.push(f); fns.set(name, f); }
     } else if (st.type === 'declaration_statement') {
@@ -177,7 +206,16 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   /** The program's const declarations, as text every region carries (the assembler emits repeats once). */
   const constText = consts.map(c => c.text).join('\n');
   const withConsts = (helpers: string) => [constText, helpers].filter(Boolean).join('\n\n');
-  for (const [u, ty] of uniforms) if (!SOURCES[u] && !['sampler2D', 'samplerCube'].includes(ty)) report.unsupported.push(`Uniform ${ty} ${u} has no source node (only time, resolution, mouse, fragCoord are known)`);
+  // A uniform no node stands for is a slider: a live entry on the Constants card, and a Play control.
+  // Only main() can read it that way; a helper function would need it passed along.
+  const live: ConvertedUniform[] = [];
+  for (const [u, ty] of uniforms) {
+    if (SOURCES[u] || ['sampler2D', 'samplerCube'].includes(ty)) continue;
+    if (!['float', 'int', 'vec2', 'vec3'].includes(ty)) { report.unsupported.push(`Uniform ${ty} ${u} has no source node (only time, resolution, mouse, fragCoord are known; a float, int, vec2 or vec3 uniform becomes a Play control)`); continue; }
+    const reader = [...fns.values()].find(f => f.name !== 'main' && f.overloads.some(o => new RegExp(`\\b${u}\\b`).test(o.source)));
+    if (reader) { report.unsupported.push(`Uniform ${ty} ${u} is read inside ${reader.name}(), which can’t reach a Play control; pass it to the function as a parameter, or make it a constant`); continue; }
+    live.push(uniformDefault(u, ty as ConvertedUniform['type']));
+  }
   for (const [u, ty] of uniforms) if (['sampler2D', 'samplerCube'].includes(ty)) report.unsupported.push(`Texture ${u}: textures can't be imported yet`);
   if (globals.size) report.unsupported.push(`Global ${[...globals].join(', ')}: a global array (or struct) that a function reads can't be passed along yet. Give the function what it needs as a parameter, or keep the shader as one node.`);
   const main = ast.program.find(st => st.type === 'function' && (((st.prototype as Ast).header as Ast).name as Ast).identifier === 'main');
@@ -216,11 +254,96 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     const poly = POLY[type];
     const t = params.outputType as T | undefined;
     if (poly && t) for (const k of poly) { if (inputs[k]) inputs[k].type = t as DataType; if (outputs[k]) outputs[k].type = t as DataType; }
-    const node = { id: id(type), type, position: { x: 0, y: 0 }, inputs, outputs, params: { ...(def?.defaultParams ?? {}), ...params } } as GraphNode;
+    const node = { id: id(type), type, position: { x: 0, y: 0 }, inputs, outputs, params: { ...(def?.defaultParams ?? {}), ...params, ...(EXACT.has(type) ? { exact: true } : {}) } } as GraphNode;
     sink.push(node);
     return node;
   }
   const ref = (n: GraphNode, out: string, t: T): Ref => ({ nodeId: n.id, outputKey: out, type: t });
+  /** Component i of a vector, through one shared Split card per vector per scope (p.x + p.y reads the same card twice). */
+  function component(v: Val, i: number): Ref {
+    const n = N_OF[v.type];
+    const src = asRef(v); const key = `${src.nodeId}:${src.outputKey}`;
+    let scope = splits.get(sink); if (!scope) { scope = new Map(); splits.set(sink, scope); }
+    let split = scope.get(key); if (!split) { split = mk(`splitVec${n}`, {}, { v: src }); scope.set(key, split); }
+    return ref(split, 'xyzw'[i], 'float');
+  }
+  /** Make Vec2/3/4 from components (a literal one becomes that card's slider). */
+  function makeVec(n: number, parts: Ref[]): Val {
+    if (n === 2) return typed('makeVec2', {}, { x: parts[0], y: parts[1] }, 'xy', 'vec2');
+    if (n === 3) return typed('makeVec3', {}, { r: parts[0], g: parts[1], b: parts[2] }, 'rgb', 'vec3');
+    return typed('makeVec4', {}, { x: parts[0], y: parts[1], z: parts[2], w: parts[3] }, 'xyzw', 'vec4');
+  }
+  /**
+   * Is mat2(a, b, c, d) a rotation: cos and sin of one angle, as mat2(c, -s, s, c) or mat2(c, s, -s, c)?
+   * The trig was just built as Cos / Sin cards (freq 1, amp 1), so "one angle" is one wire into them.
+   */
+  function rotationOf(vs: Val[]): Val['rot'] | null {
+    const trig = (v: Val) => {
+      let n = sink.find(x => x.id === v.ref?.nodeId); let neg = false;
+      if (n?.type === 'negate' && (n.params.outputType ?? 'float') === 'float') { const c = n.inputs.input?.connection; neg = true; n = c ? sink.find(x => x.id === c.nodeId) : undefined; }
+      if (!n || (n.type !== 'sin' && n.type !== 'cos') || n.params.freq !== 1 || n.params.amp !== 1 || (n.params.outputType ?? 'float') !== 'float') return null;
+      const c = n.inputs.input?.connection;
+      const angle: Val = c ? { ref: { nodeId: c.nodeId, outputKey: c.outputKey, type: 'float' }, type: 'float', ast: { type: 'made' } } : { lit: Number(n.params.input ?? 0), type: 'float', ast: { type: 'made' } };
+      return { fn: n.type, neg, key: c ? `${c.nodeId}:${c.outputKey}` : `=${angle.lit}`, angle };
+    };
+    const t = vs.map(v => (v.type === 'float' ? trig(v) : null));
+    if (t.some(x => !x) || new Set(t.map(x => x!.key)).size !== 1) return null;
+    const sig = t.map(x => `${x!.neg ? '-' : ''}${x!.fn}`).join(',');
+    if (sig === 'cos,-sin,sin,cos') return { angle: t[0]!.angle, dir: -1 };
+    if (sig === 'cos,sin,-sin,cos') return { angle: t[0]!.angle, dir: 1 };
+    return null;
+  }
+  /** v turned by the rotation (`sign` 1 for m * v, -1 for v * m, which is the transpose): a Rotate 2D node. */
+  function rotate2d(v: Val, rot: NonNullable<Val['rot']>, sign: 1 | -1): Val {
+    const a = rot.angle;
+    const angle: Val = sign * rot.dir === 1 ? a : anon(a) ? { lit: -a.lit, type: 'float', ast: a.ast } : typed('negate', {}, { input: asRef(a) }, 'output', 'float');
+    if (anon(angle)) report.stats.sliders++;
+    return { ref: ref(mk('rotate2d', {}, { input: asRef(v), angle: asRef(angle) }), 'output', 'vec2'), type: 'vec2', ast: { type: 'made' } };
+  }
+  /**
+   * A helper that does nothing but build a rotation from its one float parameter: -1 or 1 as in
+   * `rotationOf`, else null. Its body is `return mat2(…)` of cos(p) / sin(p), or of floats first set to them.
+   */
+  function rotationFn(f: UserFn): 1 | -1 | null {
+    if (f.ret !== 'mat2' || f.overloads.length > 1 || f.params.length !== 1 || f.params[0].type !== 'float' || f.params[0].qual !== 'in') return null;
+    const P = f.params[0].name;
+    let fnAst: Ast;
+    try { fnAst = parser.parse(f.source, { quiet: true }).program[0] as unknown as Ast; } catch { return null; }
+    const body = ((fnAst.body as Ast)?.statements as Ast[] | undefined) ?? [];
+    const named = new Map<string, string>();
+    const trigOfP = (e: Ast): string | null => {
+      while (e.type === 'group') e = e.expression as Ast;
+      if (e.type !== 'function_call') return null;
+      const c = calleeOf(e.identifier as Ast); const args = ((e.args as Ast[] | undefined) ?? []).filter(x => x.type !== 'literal');
+      return !c.ctor && (c.name === 'sin' || c.name === 'cos') && args.length === 1 && args[0].type === 'identifier' && args[0].identifier === P ? c.name : null;
+    };
+    for (const st of body.slice(0, -1)) {
+      if (st.type !== 'declaration_statement') return null;
+      for (const d of (((st.declaration as Ast).declarations as Ast[] | undefined) ?? [])) {
+        const fn = d.initializer ? trigOfP(d.initializer as Ast) : null;
+        if (!fn) return null;
+        named.set((d.identifier as Ast).identifier as string, fn);
+      }
+    }
+    const ret = body[body.length - 1];
+    let m = ret?.type === 'return_statement' ? ret.expression as Ast : null;
+    while (m?.type === 'group') m = m.expression as Ast;
+    if (!m || m.type !== 'function_call' || tokenOf(m.identifier as Ast) !== 'mat2') return null;
+    const sig = ((m.args as Ast[]) ?? []).filter(x => x.type !== 'literal').map(x0 => {
+      let x = x0, neg = '';
+      while (x.type === 'group') x = x.expression as Ast;
+      if (x.type === 'unary' && (x.operator as Ast).literal === '-') { neg = '-'; x = x.expression as Ast; while (x.type === 'group') x = x.expression as Ast; }
+      const fn = x.type === 'identifier' ? named.get(x.identifier as string) : trigOfP(x);
+      return fn ? `${neg}${fn}` : '?';
+    }).join(',');
+    return sig === 'cos,-sin,sin,cos' ? -1 : sig === 'cos,sin,-sin,cos' ? 1 : null;
+  }
+  /** A socket the shader feeds with a vector where the card's is a float (pow's exponent, min's B, step's edge): typed to match. */
+  function retype(v: Val, key: string, t: T): Val {
+    const n = sink.find(x => x.id === v.ref?.nodeId);
+    if (n?.inputs[key] && t !== 'float') n.inputs[key].type = t as DataType;
+    return v;
+  }
   const isLit = (r: Ref | undefined): r is Ref & { lit: number } => !!r && r.nodeId === LIT;
   /**
    * A literal as a real output: an entry on the scope's one Constants card,
@@ -438,25 +561,15 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         const v = build(a.expression as Ast, env);
         const n = N_OF[v.type];
         const comps = 'xyzw';
-        // One Split per vector per scope: p.x + p.y reads the same card twice.
-        const component = (i: number): Ref => {
-          const src = asRef(v); const key = `${src.nodeId}:${src.outputKey}`;
-          let scope = splits.get(sink); if (!scope) { scope = new Map(); splits.set(sink, scope); }
-          let split = scope.get(key); if (!split) { split = mk(`splitVec${n}`, {}, { v: src }); scope.set(key, split); }
-          return ref(split, comps[i], 'float');
-        };
-        const idx = [...sw].map(c => 'xyzwrgbastpq'.indexOf(c) % 4);
-        if (idx.some(i => i < 0 || i >= n)) throw new Unmapped(`swizzle .${sw} on a ${v.type}`);
-        if (sw.length === 1 && n > 1) return { ref: component(idx[0]), type: 'float', ast: a };
+        const idx = swizzleIndices(sw);
+        if (!n || n < 2 || !idx || idx.some(i => i >= n)) throw new Unmapped(`swizzle .${sw} on a ${v.type}`);
+        if (sw.length === 1) return { ref: component(v, idx[0]), type: 'float', ast: a };
         if (sw.length === n && idx.every((c, i) => c === i)) return { ...v, ast: a };
-        if ((n === 2 || n === 3) && sw.length === n) {
-          const mode = idx.map(i => comps[i]).join('');
-          return typed(`vec${n}Swizzle`, { mode }, { input: asRef(v) }, 'output', v.type);
-        }
-        // Part of a longer vector (`.xy` of a vec3, `.zx` of a vec4): its components, made into a vector.
-        if (sw.length === 2 && n > 2) return typed('makeVec2', {}, { x: component(idx[0]), y: component(idx[1]) }, 'xy', 'vec2');
-        if (sw.length === 3 && n > 3) return typed('makeVec3', {}, { r: component(idx[0]), g: component(idx[1]), b: component(idx[2]) }, 'rgb', 'vec3');
-        throw new Unmapped(`swizzle .${sw} on a ${v.type}`);
+        const mode = idx.map(i => comps[i]).join('');
+        // The swap and the cyclic patterns keep their own cards (they say what they do); any other pattern is a Swizzle.
+        if (sw.length === n && SWIZZLE_MODES[n]?.includes(mode)) return typed(`vec${n}Swizzle`, { mode }, { input: asRef(v) }, 'output', v.type);
+        const outT = VEC_T[sw.length];
+        return { ref: ref(mk('swizzle', { inputType: v.type, pattern: mode }, { input: asRef(v) }, { inputs: { input: { type: v.type as DataType, label: 'Input' } }, outputs: { output: { type: outT as DataType, label: 'Output' } } }), 'output', outT), type: outT, ast: a };
       }
       case 'function_call': return call(a, env);
       case 'ternary': throw new Unmapped('ternary');
@@ -471,26 +584,17 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     // `7 / 2` between ints is 3: a Divide node would give 3.5.
     if (op === '/' && isIntExpr(a, env)) throw new Unmapped('integer division');
     const L = build(a.left as Ast, env), R = build(a.right as Ast, env);
-    // A matrix (`v * m`, `m * v`) has no node: code.
+    // A rotation matrix times a vec2 (either side) is a Rotate 2D node; any other matrix product is code.
+    if (op === '*' && L.rot && R.type === 'vec2') return rotate2d(R, L.rot, 1);
+    if (op === '*' && R.rot && L.type === 'vec2') return rotate2d(L, R.rot, -1);
     if (!(L.type in N_OF) || !(R.type in N_OF)) throw new Unmapped('matrix arithmetic');
     if (anon(L) && anon(R)) {
       const f = { '+': L.lit + R.lit, '-': L.lit - R.lit, '*': L.lit * R.lit, '/': L.lit / R.lit }[op];
       if (f !== undefined) return { lit: f, type: 'float', ast: a };
     }
     const t: T = N_OF[L.type] >= N_OF[R.type] ? L.type : R.type;
-    if (t === 'vec4') throw new Unmapped('vec4 arithmetic');
     const kind = { '+': 'add', '-': 'subtract', '*': 'multiply', '/': 'divide' }[op];
     if (!kind) throw new Unmapped(`operator ${op}`);
-    // Divide guards its divisor with max(b, 0.0001): only the same as GLSL for a positive divisor.
-    // Known-positive divisors: a positive literal, the resolution, or one of its components.
-    const resId = sourceRefs.get('u_resolution')?.nodeId;
-    const fromRes = (r?: Ref) => !!r && (r.nodeId === resId || sink.find(n => n.id === r.nodeId)?.inputs.v?.connection?.nodeId === resId);
-    const positive = (R.lit !== undefined && R.lit > 0) || fromRes(R.ref);
-    if (kind === 'divide' && !positive) {
-      const w = inexact(a, 'The Divide node guards its divisor with max(b, 0.0001): the same as GLSL only while b stays positive');
-      if (!w) throw new Unmapped('a / b kept as code (your choice)');
-      return warned(typed(kind, {}, { a: asRef(L), b: asRef(R) }, 'result', t), w);
-    }
     if (anon(R)) { report.stats.sliders++; return typed(kind, { b: R.lit }, { a: asRef(L) }, 'result', t); }
     if (anon(L) && (kind === 'add' || kind === 'multiply')) { report.stats.sliders++; return typed(kind, { b: L.lit }, { a: asRef(R) }, 'result', t); }
     return typed(kind, {}, { a: asRef(L), b: asRef(R) }, 'result', t);
@@ -512,61 +616,68 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         if (!whole) throw new Unmapped('int() drops the fraction');
         return { ...vs[0], int: true, ast: a };
       }
-      if (tk === 'vec2' && vs.length === 2 && vs.every(v => v.type === 'float')) return typed('makeVec2', {}, { x: asRef(vs[0]), y: asRef(vs[1]) }, 'xy', 'vec2');
+      if (tk === 'mat2' && vs.length === 4) { const r = rotationOf(vs); if (r) return { ...block(a, env, 'a rotation matrix, kept as code where it isn’t turning a vec2'), rot: r }; }
+      if (tk !== 'vec2' && tk !== 'vec3' && tk !== 'vec4') throw new Unmapped(`constructor ${tk}(${vs.map(v => v.type).join(', ')})`);
+      const n = N_OF[tk];
       // Three numbers in 0..1 are a colour: the picker card, not three sliders.
       if (tk === 'vec3' && vs.length === 3 && vs.every(v => v.lit !== undefined && v.lit >= 0 && v.lit <= 1)) return { ref: ref(mk('colorPicker', { color: vs.map(v => v.lit) }, {}), 'rgb', 'vec3'), type: 'vec3', ast: a };
-      if (tk === 'vec3' && vs.length === 3 && vs.every(v => v.type === 'float')) return typed('makeVec3', {}, { r: asRef(vs[0]), g: asRef(vs[1]), b: asRef(vs[2]) }, 'rgb', 'vec3');
       if (tk === 'vec3' && vs.length === 1 && vs[0].type === 'float') return typed('floatToVec3', {}, { input: asRef(vs[0]) }, 'rgb', 'vec3');
-      if (tk === 'vec2' && vs.length === 1 && vs[0].type === 'float') { const r = asRef(vs[0]); return typed('makeVec2', {}, { x: r, y: r }, 'xy', 'vec2'); }
-      // Narrowing: vec2(vec3), vec3(vec4)… are the leading components, a swizzle.
-      const sw = (x: Ast, sel: string): Ast => ({ type: 'postfix', expression: x, postfix: { type: 'field_selection', selection: { type: 'identifier', identifier: sel } } });
-      if ((tk === 'vec2' || tk === 'vec3') && vs.length === 1 && N_OF[vs[0].type] > N_OF[tk as T]) return { ...build(sw(args[0], tk === 'vec2' ? 'xy' : 'xyz'), env), ast: a };
-      // Widening from a vector and numbers: vec3(vec2, f) is the vector's parts and the number.
-      if (tk === 'vec3' && vs.length === 2 && vs[0].type === 'vec2' && vs[1].type === 'float') return typed('makeVec3', {}, { r: asRef(build(sw(args[0], 'x'), env)), g: asRef(build(sw(args[0], 'y'), env)), b: asRef(vs[1]) }, 'rgb', 'vec3');
-      if (tk === 'vec3' && vs.length === 2 && vs[0].type === 'float' && vs[1].type === 'vec2') return typed('makeVec3', {}, { r: asRef(vs[0]), g: asRef(build(sw(args[1], 'x'), env)), b: asRef(build(sw(args[1], 'y'), env)) }, 'rgb', 'vec3');
-      throw new Unmapped(`constructor ${tk}(${vs.map(v => v.type).join(', ')})`);
+      if (vs.length === 1 && vs[0].type === 'float') { const r = asRef(vs[0]); return makeVec(n, Array(n).fill(r)); }
+      if (vs.length === 1 && vs[0].type === tk) return { ...vs[0], ast: a };
+      // Narrowing: vec2(vec3), vec3(vec4)… are the leading components; anything else is the parts in order.
+      const parts = vs.length === 1 ? Array.from({ length: n }, (_, i) => component(vs[0], i)) : vs.flatMap(v => (v.type === 'float' ? [asRef(v)] : Array.from({ length: N_OF[v.type] }, (_, i) => component(v, i))));
+      if (parts.length !== n || vs.some(v => !(v.type in N_OF))) throw new Unmapped(`constructor ${tk}(${vs.map(v => v.type).join(', ')})`);
+      return makeVec(n, parts);
     }
     const name = callee.name;
     const user = fns.get(name);
     if (user) {
       const o = overloadFor(user, args, env);
       if (o.params.some(p => p.qual !== 'in')) return outCall(a, env, o) ?? (() => { throw new Unmapped(`${name}() returns nothing`); })();
+      // A helper that only builds a rotation (`mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }`).
+      const dir = rotationFn(o);
+      if (dir && args.length === 1) {
+        const angle = build(args[0], env);
+        if (angle.type === 'float') {
+          const code = dir === -1 ? 'mat2(cos(a), -sin(a), sin(a), cos(a))' : 'mat2(cos(a), sin(a), -sin(a), cos(a))';
+          return { ...codeNode([{ name: 'a', val: angle }], 'mat2' as T, code, `${name}() builds a rotation matrix, kept as code where it isn’t turning a vec2`), ast: a, rot: { angle, dir } };
+        }
+      }
       if (!(o.ret in N_OF)) throw new Unmapped(`${name}() returns a ${o.ret}`);
+      const saved = libraryMatch(name);
+      if (saved) { const v = fromLibrary(a, env, name, saved); if (v) return v; }
       return region(a, env, `call to ${name}()`);
     }
     const vs = args.map(x => build(x, env));
     const t = vs.reduce<T>((m, v) => (N_OF[v.type] > N_OF[m] ? v.type : m), 'float');
     const one = (type: string, params: Record<string, unknown>, key: string, out: string) => typed(type, params, { [key]: asRef(vs[0]) }, out, t);
     const allF = vs.every(v => v.type === 'float');
+    /** A second argument that is a float or the first's own type (GLSL's min(vec3, float), pow(vec3, vec3)…). */
+    const second = vs.length === 2 && vs[0].type === t && (vs[1].type === 'float' || vs[1].type === t);
     switch (name) {
       case 'sin': case 'cos': case 'tan': return one(name, { freq: 1, amp: 1 }, 'input', 'output');
       case 'exp': return one('exp', { scale: 1 }, 'input', 'output');
       case 'floor': return one('floor', {}, 'input', 'output');
-      case 'ceil': if (t === 'float') return one('ceil', {}, 'input', 'output'); break;
+      case 'ceil': return one('ceil', {}, 'input', 'output');
+      case 'abs': return one('abs', {}, 'input', 'output');
       case 'fract': return one('fractRaw', {}, 'input', 'output');
       case 'sign': return typed('sign', {}, { value: asRef(vs[0]) }, 'result', t);
-      case 'tanh': if (t === 'float') return one('tanh', {}, 'input', 'output'); break;
-      case 'length': if (vs[0].type === 'vec2') return typed('length', { scale: 1 }, { input: asRef(vs[0]) }, 'output', 'float'); break;
-      case 'normalize': if (vs[0].type === 'vec2') return typed('normalizeVec2', {}, { v: asRef(vs[0]) }, 'result', 'vec2'); break;
-      case 'dot': if (vs.length === 2 && vs[0].type === 'vec2' && vs[1].type === 'vec2') return typed('dot', {}, { a: asRef(vs[0]), b: asRef(vs[1]) }, 'result', 'float'); break;
+      case 'tanh': return one('tanh', {}, 'input', 'output');
+      // Length, Normalize and Dot take any vector: the card's type is the input's.
+      case 'length': return { ref: ref(mk('length', { scale: 1, outputType: vs[0].type }, { input: asRef(vs[0]) }), 'output', 'float'), type: 'float', ast: a };
+      case 'normalize': return typed('normalizeVec2', {}, { v: asRef(vs[0]) }, 'result', vs[0].type);
+      case 'dot': if (vs.length === 2 && vs[0].type === vs[1].type) return { ref: ref(mk('dot', { outputType: vs[0].type }, { a: asRef(vs[0]), b: asRef(vs[1]) }), 'result', 'float'), type: 'float', ast: a }; break;
       case 'cross': if (vs.length === 2 && vs[0].type === 'vec3') return typed('crossProduct', {}, { a: asRef(vs[0]), b: asRef(vs[1]) }, 'result', 'vec3'); break;
-      case 'min': case 'max': if (vs.length === 2 && allF) { report.stats.sliders += anon(vs[1]) ? 1 : 0; return typed(name === 'min' ? 'minMath' : 'max', anon(vs[1]) ? { b: vs[1].lit } : {}, { a: asRef(vs[0]), ...(!anon(vs[1]) ? { b: asRef(vs[1]) } : {}) }, 'result', 'float'); } break;
+      case 'min': case 'max': if (second) { report.stats.sliders += anon(vs[1]) ? 1 : 0; return retype(typed(name === 'min' ? 'minMath' : 'max', anon(vs[1]) ? { b: vs[1].lit } : {}, { a: asRef(vs[0]), ...(!anon(vs[1]) ? { b: asRef(vs[1]) } : {}) }, 'result', t), 'b', vs[1].type); } break;
       case 'clamp': if (vs.length === 3 && vs[1].type === 'float' && vs[2].type === 'float') return typed('clamp', { ...(anon(vs[1]) ? { lo: vs[1].lit } : {}), ...(anon(vs[2]) ? { hi: vs[2].lit } : {}) }, { input: asRef(vs[0]), ...(!anon(vs[1]) ? { lo: asRef(vs[1]) } : {}), ...(!anon(vs[2]) ? { hi: asRef(vs[2]) } : {}) }, 'result', t); break;
       case 'mix': if (vs.length === 3 && vs[2].type === 'float' && vs[0].type === vs[1].type) return typed('mix', anon(vs[2]) ? { t: vs[2].lit } : {}, { a: asRef(vs[0]), b: asRef(vs[1]), ...(!anon(vs[2]) ? { t: asRef(vs[2]) } : {}) }, 'result', vs[0].type); break;
       case 'smoothstep': if (vs.length === 3 && vs[0].type === 'float' && vs[1].type === 'float') { report.stats.sliders += (anon(vs[0]) ? 1 : 0) + (anon(vs[1]) ? 1 : 0); return typed('smoothstep', { ...(anon(vs[0]) ? { edge0: vs[0].lit } : {}), ...(anon(vs[1]) ? { edge1: vs[1].lit } : {}) }, { value: asRef(vs[2]), ...(!anon(vs[0]) ? { edge0: asRef(vs[0]) } : {}), ...(!anon(vs[1]) ? { edge1: asRef(vs[1]) } : {}) }, 'result', vs[2].type); } break;
-      case 'step': if (vs.length === 2 && allF) return typed('step', {}, { edge: asRef(vs[0]), x: asRef(vs[1]) }, 'result', 'float'); break;
+      case 'step': if (vs.length === 2 && vs[1].type === t && (vs[0].type === 'float' || vs[0].type === t)) return retype(typed('step', {}, { edge: asRef(vs[0]), x: asRef(vs[1]) }, 'result', t), 'edge', vs[0].type); break;
       case 'mod': if (vs.length === 2 && vs[1].type === 'float') return typed('mod', anon(vs[1]) ? { period: vs[1].lit } : {}, { input: asRef(vs[0]), ...(!anon(vs[1]) ? { period: asRef(vs[1]) } : {}) }, 'output', vs[0].type); break;
       case 'atan': if (vs.length === 2 && allF) return typed('atan2', {}, { y: asRef(vs[0]), x: asRef(vs[1]) }, 'angle', 'float'); break;
-      case 'pow': if (vs.length === 2 && allF) {
-        const w = inexact(a, 'The Pow node clamps its base to ≥ 0 (GLSL leaves a negative base undefined)');
-        if (!w) throw new Unmapped('pow kept as code (your choice)');
-        return warned(typed('pow', anon(vs[1]) ? { exponent: vs[1].lit } : {}, { base: asRef(vs[0]), ...(!anon(vs[1]) ? { exponent: asRef(vs[1]) } : {}) }, 'result', 'float'), w);
-      } break;
-      case 'sqrt': {
-        const w = inexact(a, 'The Sqrt node clamps its input to ≥ 0 (GLSL leaves a negative input undefined)');
-        if (!w) throw new Unmapped('sqrt kept as code (your choice)');
-        return warned(one('sqrt', {}, 'input', 'output'), w);
-      }
+      // pow(vec, float) isn't GLSL, so a vector base comes with a vector exponent.
+      case 'pow': if (second && (vs[1].type === t || t === 'float')) return retype(typed('pow', anon(vs[1]) ? { exponent: vs[1].lit } : {}, { base: asRef(vs[0]), ...(!anon(vs[1]) ? { exponent: asRef(vs[1]) } : {}) }, 'result', t), 'exponent', vs[1].type); break;
+      case 'sqrt': return one('sqrt', {}, 'input', 'output');
     }
     throw new Unmapped(`${name}(${vs.map(v => v.type).join(', ')})`);
   }
@@ -613,7 +724,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     const lines = ints.map(i => ({ lhs: `int ${i.name}`, op: '=', rhs: `int(${i.from})` }));
     const n = mk('exprNode', { __importedCode: 'block', inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, lines, result: expr, expr }, wires,
       { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
-    report.blocks.push({ code: expr, why });
+    report.blocks.push({ code: expr, why, nodeId: n.id });
     return { ref: ref(n, 'result', t), type: t, ast: a };
   }
   /** Rung 1 with rung 2 as the net: an expression, one way or another. `hint` is the type its statement declares. */
@@ -736,6 +847,49 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     return withConsts([...fns.values()].filter(f => f.name !== 'main' && need.has(f.name)).flatMap(f => f.overloads.map(o => o.source)).join('\n\n'));
   }
 
+  // ── The Functions library: a helper the person already saved ──────────────
+  /** The saved preset that is this helper, by name; worked out once per conversion. */
+  let libraryByFn: Map<string, LibraryFunction> | null = null;
+  function libraryMatch(name: string): LibraryFunction | undefined {
+    if (!options.library?.length) return undefined;
+    if (!libraryByFn) {
+      libraryByFn = new Map();
+      const ours = closureKeys(fns);
+      for (const p of options.library) {
+        const m = presetCall(p);
+        if (!m) continue;
+        const theirs = presetClosureKeys(p.glslFunctions);
+        const called = theirs.has(m) ? m : theirs.has(`${m}_`) ? `${m}_` : null;
+        if (!called || !fns.has(called) || libraryByFn.has(called)) continue;
+        const f = fns.get(called)!;
+        if (f.overloads.length !== 1 || f.params.length !== p.inputs.length || f.ret !== p.outputType || f.params.some((q, i) => q.qual !== 'in' || q.type !== p.inputs[i].type)) continue;
+        if (ours.get(called) === theirs.get(called)) libraryByFn.set(called, p);
+      }
+    }
+    return libraryByFn.get(name);
+  }
+  /** A call to a saved function: its arguments as nodes wired into the preset's node. Null (and nothing kept) when an argument can't be built. */
+  function fromLibrary(a: Ast, env: Env, name: string, p: LibraryFunction): Val | null {
+    const args = (a.args as Ast[] | undefined ?? []).filter(x => x.type !== 'literal');
+    if (args.length !== p.inputs.length) return null;
+    const mark = sink.length, sliders = report.stats.sliders;
+    const undo = () => { sink.length = mark; report.stats.sliders = sliders; return null; };
+    let vs: Val[];
+    try { vs = args.map(x => build(x, env)); }
+    catch (e) { if (!(e instanceof Unmapped)) throw e; return undo(); }
+    if (vs.some((v, i) => v.type !== p.inputs[i].type)) return undo();
+    const t = p.outputType as T;
+    const inputs = p.inputs.map(i => ({ name: i.name, type: i.type as T }));
+    const n = mk('customFn', {
+      __fromPreset: p.id, label: p.label, ...(p.comment ? { __comment: p.comment } : {}),
+      inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t,
+      body: `${name}(${inputs.map(i => i.name).join(', ')})`, glslFunctions: helpersFor(a),
+    }, Object.fromEntries(inputs.map((i, k) => [i.name, asRef(vs[k])])),
+    { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
+    (report.reused ??= []).push({ fn: name, presetId: p.id, label: p.label });
+    return { ref: ref(n, 'result', t), type: t, ast: a };
+  }
+
   /**
    * A call to a function with `out` / `inout` parameters. GLSL wants variables
    * there, and a region's inputs are values, so the region declares locals for
@@ -786,7 +940,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     const body = prelude + (stmtCode ? `${stmtCode}\n  return ${outVar};` : `return ${isIntExpr(a, env) ? `float(${code})` : code};`);
     const n = mk('customFn', { __importedCode: 'region', label: why.replace(/^call to /, '').replace(/\(\)$/, '') || 'Region', inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: null })), outputType: t, body, glslFunctions: helpers }, { ...wires },
       { inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
-    report.regions.push({ code: stmtCode ?? code, why });
+    report.regions.push({ code: stmtCode ?? code, why, nodeId: n.id });
     return { ref: ref(n, 'result', t), type: t, ast: a };
   }
 
@@ -796,26 +950,16 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   function codeNode(ins: { name: string; val: Val }[], t: T, code: string, why: string): Val {
     const n = mk('exprNode', { __importedCode: 'block', inputs: ins.map(i => ({ name: i.name, type: i.val.type, slider: null })), outputType: t, lines: [], result: code, expr: code }, Object.fromEntries(ins.map(i => [i.name, asRef(i.val)])),
       { inputs: Object.fromEntries(ins.map(i => [i.name, { type: i.val.type as DataType, label: i.name }])), outputs: { result: { type: t as DataType, label: 'Result' } } });
-    report.blocks.push({ code, why });
+    report.blocks.push({ code, why, nodeId: n.id });
     return { ref: ref(n, 'result', t), type: t, ast: { type: 'made' } };
   }
-  /**
-   * `v.<mask> = nv`: v with those components replaced. A vec2 or vec3 is split and made
-   * again; a vec4 (there is no Make Vec4 node) is a block, `vec4(v.x, nv, v.z, v.w)`.
-   */
+  /** `v.<mask> = nv`: v with those components replaced, split and made again. */
   function withMask(v: Val, sw: string, nv: Val): Val {
     const n = N_OF[v.type];
     const idx = [...sw].map(c => 'xyzwrgbastpq'.indexOf(c) % 4);
     if (!n || n < 2 || idx.some(i => i < 0 || i >= n) || new Set(idx).size !== idx.length || N_OF[nv.type] !== idx.length) throw new Unmapped(`component write .${sw} on a ${v.type}`);
-    const comps = 'xyzw';
-    if (n <= 3) {
-      const split = mk(`splitVec${n}`, {}, { v: asRef(v) });
-      const nsplit = idx.length > 1 ? mk(`splitVec${idx.length}`, {}, { v: asRef(nv) }) : null;
-      const part = (k: number): Ref => { const j = idx.indexOf(k); return j < 0 ? ref(split, comps[k], 'float') : nsplit ? ref(nsplit, comps[j], 'float') : asRef(nv); };
-      return n === 2 ? typed('makeVec2', {}, { x: part(0), y: part(1) }, 'xy', 'vec2') : typed('makeVec3', {}, { r: part(0), g: part(1), b: part(2) }, 'rgb', 'vec3');
-    }
-    const parts = [0, 1, 2, 3].map(k => { const j = idx.indexOf(k); return j < 0 ? `v.${comps[k]}` : idx.length === 1 ? 'x' : `x.${comps[j]}`; });
-    return codeNode([{ name: 'v', val: v }, { name: 'x', val: nv }], 'vec4', `vec4(${parts.join(', ')})`, `a write to .${sw} of a vec4`);
+    const parts = Array.from({ length: n }, (_, k) => { const j = idx.indexOf(k); return j < 0 ? component(v, k) : idx.length > 1 ? component(nv, j) : asRef(nv); });
+    return makeVec(n, parts);
   }
   /** Is this name the shader's output (gl_FragColor, or the out parameter when it isn't kept as a local)? */
   const isOutput = (name: string, env: Env) => name === 'gl_FragColor' || (name === 'fragColor' && !env.has('fragColor'));
@@ -825,7 +969,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     if (!output || !c) throw new Unsupported('gl_FragColor is read before it is written');
     const t = (output.type === 'output' ? 'vec3' : 'vec4') as T;
     const v: Val = { ref: { nodeId: c.nodeId, outputKey: c.outputKey, type: t }, type: t, ast: { type: 'made' } };
-    return t === 'vec4' ? v : codeNode([{ name: 'rgb', val: v }], 'vec4', 'vec4(rgb, 1.0)', 'the colour so far, with alpha 1');
+    return t === 'vec4' ? v : makeVec(4, [component(v, 0), component(v, 1), component(v, 2), asRef({ lit: 1, type: 'float', ast: { type: 'made' } })]);
   }
   /** The last write wins: a second write replaces the Output node. */
   function setOutput(n: GraphNode): void {
@@ -875,7 +1019,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         if (rgb && rgb.type === 'float') return mk('output', {}, { color: asRef(typed('floatToVec3', {}, { input: asRef(rgb) }, 'rgb', 'vec3')) });
       }
     }
-    const v = block(right, env, 'the final colour with its own alpha');
+    const v = expr(right, env, 'vec4');
     return mk('vec4Output', {}, { color: asRef(v) });
   }
   /**
@@ -1171,7 +1315,13 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         if (hasAny(s.body, ['return_statement', 'discard_statement'])) throw new Unsupported('while in main() with a return or discard inside');
         return loopRegion(s, env, undefined);
       }
-      case 'return_statement': case 'discard_statement': case 'break_statement': case 'continue_statement': case 'do_statement': case 'switch_statement':
+      // `discard` is a value: kept_ is 0 from here on. if/else merges it like any variable; at the end the colour
+      // is multiplied by it, so a discarded pixel is transparent black, what a cleared canvas shows there.
+      case 'discard_statement':
+        if (loopCtx || !env.has(KEPT)) throw new Unsupported('discard inside a loop');
+        env.set(KEPT, { lit: 0, type: 'float', ast: s });
+        return;
+      case 'return_statement': case 'break_statement': case 'continue_statement': case 'do_statement': case 'switch_statement':
         throw new Unsupported(`${s.type.replace('_statement', '')} in main()`);
       default: throw new Unmapped(`statement ${s.type ?? JSON.stringify(s).slice(0, 120)}`);
     }
@@ -1179,6 +1329,23 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
 
   // ── Go ─────────────────────────────────────────────────────────────────────
   const env: Env = new Map();
+  // Uniforms no node stands for: live entries on the Constants card, each a Play control.
+  const uniformCard = live.length ? mk('constants', { items: [] }, {}, { inputs: {}, outputs: {} }) : null;
+  if (uniformCard) constantsCards.set(nodes, uniformCard);
+  for (const u of live) {
+    const items = uniformCard!.params.items as ConstantsItem[];
+    const type = u.colour ? 'color' : u.type === 'int' ? 'float' : u.type;
+    items.push({ key: u.name, label: u.name, type, value: u.value, slider: true, min: u.min, max: u.max, step: u.step });
+    if (Array.isArray(u.value) && !u.colour) u.value.forEach((x, i) => { uniformCard!.params[`${u.name}_${'xyz'[i]}`] = x; });
+    else uniformCard!.params[u.name] = u.value;
+    const t = (u.type === 'int' ? 'float' : u.type) as T;
+    uniformCard!.outputs[u.name] = { type: t as DataType, label: u.name };
+    env.set(u.name, { ref: { nodeId: uniformCard!.id, outputKey: u.name, type: t }, type: t, ast: { type: 'uniform' }, int: u.type === 'int' || undefined });
+    report.notes.push(`Uniform ${u.type} ${u.name} is a Play control on the Constants card: starts at ${Array.isArray(u.value) ? `(${u.value.join(', ')})` : u.value}, ${u.min} to ${u.max}`);
+  }
+  if (live.length) report.uniforms = live;
+  const discards = hasAny(((main!.body as Ast).statements as Ast[]), ['discard_statement']);
+  if (discards) env.set(KEPT, { lit: 1, type: 'float', ast: { type: 'zero' } });
   try {
     // Global consts are the shader's dials: values in the environment, so main() and blocks read them
     // (regions also get their text). One a graph can't hold (a matrix) stays text-only.
@@ -1189,6 +1356,13 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     }
     stmts(((main!.body as Ast).statements as Ast[]), env);
     if (!output) report.unsupported.push('main() never writes gl_FragColor');
+    const keep = env.get(KEPT);
+    if (output && keep && !(keep.lit === 1 && !keep.ref)) {
+      // Kept where nothing discarded (× 1), transparent black where something did (× 0): an RGBA Output.
+      const colour = outputValue();
+      setOutput(mk('vec4Output', {}, { color: asRef(typed('multiply', anon(keep) ? { b: keep.lit } : {}, { a: asRef(colour), ...(anon(keep) ? {} : { b: asRef(keep) }) }, 'result', 'vec4')) }));
+      report.notes.push('discard: the colour is multiplied by 0 where the shader discards, so those pixels are transparent black');
+    }
   } catch (e) {
     if (e instanceof Unsupported || e instanceof Unmapped) report.unsupported.push(e.why); else throw e;
   }
@@ -1197,10 +1371,39 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   // Nodes nothing reads (a const the shader never used, a split only half read) go.
   for (const g of nodes) if (g.type === 'group') { const sg = g.params.subgraph as { nodes: GraphNode[]; outputPorts: { fromNodeId: string }[] }; prune(sg.nodes, new Set(sg.outputPorts.map(p => p.fromNodeId))); }
   prune(nodes, new Set());
+  // Code that became unused (a rotation matrix a Rotate 2D node took the place of) isn't reported either.
+  const kept = new Set<string>();
+  const walk = (list: GraphNode[]) => { for (const n of list) { kept.add(n.id); if (n.type === 'group') walk((n.params.subgraph as { nodes: GraphNode[] }).nodes); } };
+  walk(nodes);
+  report.blocks = report.blocks.filter(b => !b.nodeId || kept.has(b.nodeId));
+  report.regions = report.regions.filter(r => !r.nodeId || kept.has(r.nodeId));
+  // One Play control per value a uniform holds (a colour is one control; a vec2 or vec3, one per component).
+  const controls: PlayControl[] = [];
+  if (uniformCard && kept.has(uniformCard.id)) for (const u of live) {
+    const at = (k: string) => `${uniformCard.id}::${k}`;
+    if (u.colour) controls.push({ id: `ctl_${u.name}`, target: at(u.name), kind: 'color', label: u.name, min: 0, max: 1 });
+    else if (Array.isArray(u.value)) u.value.forEach((_, i) => controls.push({ id: `ctl_${u.name}_${'xyz'[i]}`, target: at(`${u.name}_${'xyz'[i]}`), kind: 'float', label: `${u.name} ${'XYZ'[i]}`, min: u.min, max: u.max, step: u.step }));
+    else controls.push({ id: `ctl_${u.name}`, target: at(u.name), kind: 'float', label: u.name, min: u.min, max: u.max, step: u.step });
+  }
   layout(nodes);
   for (const sg of subgraphs) layout(sg);
   report.stats = { nodes: nodes.length, blocks: report.blocks.length, regions: report.regions.length, sliders: report.stats.sliders, loops: report.stats.loops };
-  return { nodes, report };
+  return { nodes, report, ...(controls.length ? { controls } : {}) };
+}
+
+/**
+ * A uniform's starting value and range, from its name: a scale-like name starts at 1, a colour at
+ * mid grey, anything else at 0 (what WebGL gives a uniform nobody sets). Deterministic.
+ */
+export function uniformDefault(name: string, type: ConvertedUniform['type']): ConvertedUniform {
+  const base = name.replace(/^(u_|i(?=[A-Z]))/, '');
+  const scaleLike = /speed|scale|zoom|size|intensity|amount|strength|gain|freq|density|bright|contrast|radius|width|thick|count|steps|iter|octave|mult|factor|amp|power|exposure|gamma/i.test(base);
+  if (type === 'vec3' && /col|rgb|tint|hue/i.test(base)) return { name, type, value: [0.5, 0.5, 0.5], min: 0, max: 1, step: 0.01, colour: true };
+  if (type === 'int') return { name, type, value: scaleLike ? 4 : 0, min: 0, max: scaleLike ? 16 : 10, step: 1, colour: false };
+  const v = scaleLike ? 1 : 0;
+  const range = scaleLike ? { min: 0, max: 2 } : { min: -1, max: 1 };
+  if (type === 'float') return { name, type, value: v, ...range, step: 0.01, colour: false };
+  return { name, type, value: Array(type === 'vec2' ? 2 : 3).fill(v), ...range, step: 0.01, colour: false };
 }
 
 /**
@@ -1341,6 +1544,75 @@ function hostToOurs(source: string, report: ConversionReport): { code: string; t
 
 /** The functions the compiled shader always defines; a user function of the same name is renamed on the way in. */
 const BUILTIN_HELPER_NAMES = new Set([...ALWAYS_HELPERS_GLSL().matchAll(/\b(?:float|vec[234]|mat[234]|int|bool|void)\s+([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]));
+
+/** The function a saved preset's body calls with its inputs in order (`fbm(p)`), or null for any other body. */
+function presetCall(p: LibraryFunction): string | null {
+  const m = /^\s*(?:return\s+)?([A-Za-z_]\w*)\s*\(([^;]*)\)\s*;?\s*$/.exec(p.body);
+  if (!m) return null;
+  const args = m[2].split(',').map(a => a.trim()).filter(Boolean);
+  return args.length === p.inputs.length && args.every((a, i) => a === p.inputs[i].name) ? m[1] : null;
+}
+
+/** The names of the functions a piece of code calls (constructors included; callers filter). */
+function callNames(a: unknown, out: Set<string>): void {
+  if (Array.isArray(a)) { for (const x of a) callNames(x, out); return; }
+  if (!a || typeof a !== 'object') return;
+  const n = a as Ast;
+  if (n.type === 'function_call') { const idn = n.identifier as Ast; const name = idn.type === 'identifier' ? idn.identifier as string : tokenOf(idn); if (name) out.add(name); }
+  for (const [k, v] of Object.entries(n)) if (k !== 'type') callNames(v, out);
+}
+
+/**
+ * Each function's code with everything it calls, in program order, as the
+ * parser prints it (so spacing, comments and #defines don't count): two
+ * functions with the same key are the same code.
+ */
+function closureKeys(fns: Map<string, UserFn>): Map<string, string> {
+  const calls = new Map<string, Set<string>>();
+  for (const [name, f] of fns) { const out = new Set<string>(); for (const o of f.overloads) callNames(parser.parse(o.source, { quiet: true }).program, out); calls.set(name, out); }
+  const keys = new Map<string, string>();
+  for (const name of fns.keys()) {
+    const need = new Set<string>(); const queue = [name];
+    while (queue.length) { const c = queue.pop()!; if (need.has(c) || !fns.has(c)) continue; need.add(c); for (const d of calls.get(c) ?? []) queue.push(d); }
+    keys.set(name, [...fns.values()].filter(f => need.has(f.name)).flatMap(f => f.overloads.map(o => o.source.replace(/\s+/g, ' ').replace(/ ?([^\w ]) ?/g, '$1').trim())).join('\n'));
+  }
+  return keys;
+}
+
+/** `closureKeys` of a preset's helper block, read the way a paste is (macros expanded, names that clash with the app's helpers renamed). */
+const presetKeyCache = new Map<string, Map<string, string>>();
+function presetClosureKeys(glsl: string): Map<string, string> {
+  const hit = presetKeyCache.get(glsl);
+  if (hit) return hit;
+  const fns = new Map<string, UserFn>();
+  try {
+    const { code } = normaliseHostShader(glsl);
+    const program = (parser.parse(code, { quiet: true }) as unknown as { program: Ast[] }).program;
+    for (const st of program) {
+      if (st.type !== 'function') continue;
+      const f = userFnOf(st);
+      const prev = fns.get(f.name);
+      if (prev) { prev.overloads.push(f); f.overloads = prev.overloads; } else { f.overloads.push(f); fns.set(f.name, f); }
+    }
+  } catch { /* a helper block that doesn't parse matches nothing */ }
+  const keys = closureKeys(fns);
+  if (presetKeyCache.size > 200) presetKeyCache.clear();
+  presetKeyCache.set(glsl, keys);
+  return keys;
+}
+
+/** A top-level function definition as the converter keeps it. */
+function userFnOf(st: Ast): UserFn {
+  const proto = st.prototype as Ast; const header = proto.header as Ast;
+  const name = ((header.name as Ast).identifier as string);
+  const ret = tokenOf((header.returnType as Ast).specifier as Ast);
+  const params = ((proto.parameters as Ast[] | undefined) ?? []).map(p => ({
+    name: (p.identifier as Ast)?.identifier as string ?? '', type: tokenOf((p.specifier as Ast) ?? (p.declaration as Ast)),
+    qual: ((((p.qualifier as Ast[] | undefined) ?? []).map(q => q.token as string).find(q => q === 'out' || q === 'inout') ?? 'in') as 'in' | 'out' | 'inout'),
+  }));
+  const body = generate(st.body as never).trim().replace(/^\{/, '').replace(/\}$/, '').trim();
+  return { name, ret, params, source: generate(st as never), body, overloads: [] };
+}
 
 /** A copy of the tree with one identifier renamed. */
 function renameId(a: Ast, from: string, to: string): Ast {

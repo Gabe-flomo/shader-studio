@@ -6,6 +6,7 @@ import { NodeBrowser } from './NodeBrowser';
 import { ImportGlslModal } from './ImportGlslModal';
 import { FolderableList } from './FolderableList';
 import type { CustomFnPreset } from '../../types/customFnPreset';
+import { FnThumbnail } from '../code/FnThumbnail';
 import type { GraphNode } from '../../types/nodeGraph';
 import type { ExprPreset } from '../../types/exprPreset';
 import type { GroupPreset } from '../../types/groupPreset';
@@ -56,8 +57,10 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
 ];
 
 // ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint, tag, extra }: {
+function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint, tag, extra, thumb }: {
   label: string; icon: IconName; color: string;
+  /** Drawn in place of the icon (a saved function's rendered thumbnail). */
+  thumb?: React.ReactNode;
   /** One line shown in the row's tooltip (an example's description) */
   hint?: string;
   /** Small pill after the name ("Play" for a graph that loads with a Play setup). */
@@ -88,7 +91,7 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
         background: selected ? tk.bg.selected : hovered ? tk.bg.hover : 'transparent',
       }}
     >
-      <Icon name={icon} size={15} style={{ color }} />
+      {thumb ?? <Icon name={icon} size={15} style={{ color }} />}
       <button
         type="button"
         // The second click of a double-click shouldn't collapse the preview it just opened
@@ -119,16 +122,29 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
  * Card under a selected saved item: its name and kind, a one-line signature, the comment it was
  * saved with, and Add to graph (double-clicking the row does the same).
  */
-function SavedItemPreview({ name, kind, signature, comment, onAdd }: {
+function SavedItemPreview({ name, kind, signature, comment, onAdd, picture }: {
   name: string; kind: string; signature?: string; comment?: string; onAdd: () => void;
+  /** A larger picture beside the name (a saved function's thumbnail). */
+  picture?: React.ReactNode;
 }) {
   const tk = useTokens();
   return (
     <div style={{ margin: '4px 2px 8px', padding: '10px 12px', borderRadius: radius.md, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <b style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</b>
-        <span style={{ fontSize: 11, color: tk.text.faint }}>{kind}</span>
-      </div>
+      {picture ? (
+        // The picture beside the name, with the kind under it: the sidebar is narrow, the name comes first.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {picture}
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <b style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, overflowWrap: 'anywhere' }}>{name}</b>
+            <span style={{ fontSize: 11, color: tk.text.faint }}>{kind}</span>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <b style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</b>
+          <span style={{ fontSize: 11, color: tk.text.faint }}>{kind}</span>
+        </div>
+      )}
       {signature && (
         <code style={{ font: `11.5px/1.5 ${fontFamily.mono}`, color: tk.text.secondary, background: tk.bg.field, borderRadius: 6, padding: '5px 8px', overflowWrap: 'anywhere' }}>{signature}</code>
       )}
@@ -639,8 +655,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 };
                 return (
                   <ItemRow label={p.label} icon="fn" color={tabColor('functions')}
+                    thumb={<FnThumbnail preset={p} size={22} />}
                     selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)} onDoubleClick={place}
-                    preview={<SavedItemPreview name={p.label} kind="Custom Function" signature={signatureOf(p.label, p.outputType, p.inputs)} comment={p.comment} onAdd={place} />}
+                    preview={<SavedItemPreview name={p.label} kind="Custom Function" signature={signatureOf(p.label, p.outputType, p.inputs)} comment={p.comment} onAdd={place} picture={<FnThumbnail preset={p} size={56} radius={radius.md} />} />}
                     onDelete={() => { deleteCustomFn(p.id); refreshPresets(); }} />
                 );
               }}

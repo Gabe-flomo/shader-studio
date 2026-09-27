@@ -12,6 +12,7 @@ const ROWS: Array<[string, string, string]> = [
   ['playLfo', 'LFOs and the clock', 'Oscillators that move controls on their own: free-running LFOs and a tempo-locked clock.'],
   ['playNoise', 'Noise: smooth, drift, random, stepped', 'Four kinds of random motion for controls.'],
   ['playCrossMod', 'Controls that drive controls', 'A control can be a source: move one slider and another follows.'],
+  ['playExprKnob', 'Expression knobs', 'A slider inside an input expression, driven by an LFO like any control.'],
   ['playColour', 'Colour channels', 'Mappings on a colour control: brightness, or one channel at a time.'],
   ['playKeys', 'Keys: hold and hit', 'A held key is a gate; a trigger plays an envelope each time you press.'],
   ['playTriggerModes', 'Triggers: toggle, step, random', 'Besides envelopes, a trigger can toggle, walk through steps, or pick a random value.'],
@@ -52,6 +53,15 @@ const ROWS: Array<[string, string, string]> = [
   ['playDrawnShapes', 'Drawn shapes and trim', 'Outlines you draw, drawn on over time with Trim.'],
   ['playPictureShape', 'The picture as a shape', 'The bright parts of the shader become solid.'],
   ['playGlowText', 'Glowing text and strokes', 'The Layers node: SDF Glow on whatever the layers draw.'],
+  ['scriptFirst', 'Script: a first sketch', 'A JavaScript sketch over the shader: setup and draw, with sliders it declares.'],
+  ['scriptMouse', 'Script: the mouse', 'A chain of beads chases s.mouse; hold the button to swell it.'],
+  ['scriptPicture', 'Script: reading the picture', 'Dots land where the shader is bright: s.picture.brightness makes a stipple.'],
+  ['scriptNulls', 'Script: nulls as handles', 'A string between two nulls, plucked by a third that follows the mouse.'],
+  ['scriptButtons', 'Script: buttons on keys and beats', 'Buttons a sketch declares are actions: a beat and keys fire rings.'],
+  ['scriptParticles', 'Script: particles in plain JS', 'Spawn, move, draw, die: a spark fountain in forty lines.'],
+  ['scriptP5', 'Script: a p5 sketch, pasted in', 'p5 vocabulary as plain names; its variables become sliders.'],
+  ['scriptGlow', 'Script: the shader glows around it', 'The Layers node reads the sketch back, and SDF Glow turns its lines to neon.'],
+  ['playTake', 'A recorded take', 'Ships with an 8-second performance: watch it back and Render it without playing.'],
   // Bigger pieces that put several techniques together (their graphs live in exampleGraphs.ts).
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],
   ['flowAroundWords', 'Flow Around Words', 'Particles over an FBM landscape part around a word that acts as a wall.'],
@@ -74,6 +84,8 @@ const GROUP_STARTS: Array<[string, string]> = [
   ['Layers', 'playTextMattes'],
   ['Particles', 'playFlow'],
   ['Shapes and zones', 'playWalls'],
+  ['Scripts', 'scriptFirst'],
+  ['Recording', 'playTake'],
   ['Bigger pieces', 'particleGlow'],
 ];
 export const PLAY_EXAMPLE_GROUPS: Array<{ label: string; keys: string[] }> = GROUP_STARTS.map(([label, first], i) => {

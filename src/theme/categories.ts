@@ -38,3 +38,9 @@ export function categoryColor(category: string, mode: ThemeMode): string {
   if (!accent) return mode === 'dark' ? MOCHA.overlay0 : LATTE.overlay0;
   return (mode === 'dark' ? MOCHA : LATTE)[accent];
 }
+
+/** A named accent (blue, peach, mauve…) in the theme's shade: what a saved layer kind is tinted with. */
+export function accentColor(name: string, mode: ThemeMode): string {
+  const set = mode === 'dark' ? MOCHA : LATTE;
+  return (set as Record<string, string>)[name] ?? set.mauve;
+}

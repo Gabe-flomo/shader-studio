@@ -63,8 +63,11 @@ export function missingMedia(s: PresentSource): string[] {
   const out: string[] = [];
   const noImage = Object.keys(f.textureUniforms).filter(u => !m?.textures?.[u]?.src).length;
   const noVideo = Object.keys(f.videoUniforms).filter(u => !m?.videos?.[u]?.src).length;
+  const songs = new Set(Object.values(f.audioUniforms ?? {}));
+  const noSong = [...songs].filter(id => !m?.audio?.some(a => a.id === id && a.src)).length;
   if (noImage) out.push(noImage === 1 ? 'an image' : `${noImage} images`);
   if (noVideo) out.push(noVideo === 1 ? 'a video' : `${noVideo} videos`);
+  if (noSong) out.push(noSong === 1 ? 'a song' : `${noSong} songs`);
   return out;
 }
 

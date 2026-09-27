@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { KL_SKETCH_NAMES, klSketchCompile, klSketchPress, klSketchStep } from '../kit/layers.js';
-import { addControl, placeCode, topLevelNames } from '../../components/play/layers/scriptTools';
+import { addControl, makeControl, placeCode, topLevelNames } from '../../components/play/layers/scriptTools';
 import { extractScriptParams } from '../../components/play/layers/scriptExamples';
 import { SCRIPT_REFERENCE, refInsert, refSignature } from '../../components/play/layers/scriptReference';
-import { SCRIPT_SNIPPETS } from '../../components/play/layers/scriptSnippets';
+import { SCRIPT_SNIPPETS, SNIPPET_GROUPS } from '../../components/play/layers/scriptSnippets';
+import { IDIOM_BASE, SCRIPT_IDIOMS } from '../../components/play/layers/scriptIdioms';
 import { scriptCompletions } from '../../components/play/layers/scriptCompletions';
 import { changedLines } from '../../components/code/lineDiff';
 
 // A canvas context that accepts anything: every property is a callable that returns the same thing (gradients, measureText…).
 const anyCtx = (): CanvasRenderingContext2D => {
-  const p: unknown = new Proxy(function () {}, { get: () => p, set: () => true, apply: () => p });
+  // Used as a number (measureText(…).width), it is 10.
+  const p: unknown = new Proxy(function () {}, { get: (_, k) => (k === Symbol.toPrimitive ? () => 10 : p), set: () => true, apply: () => p });
   return p as CanvasRenderingContext2D;
 };
 const frame = (ctx: CanvasRenderingContext2D, params: Record<string, number>, i: number) => ({
@@ -243,5 +245,57 @@ describe('changedLines', () => {
     expect(changedLines('a\nb\nc', 'z\na\nb\nq\nc')).toEqual([[0, 0], [3, 3]]);
     expect(changedLines('a\nb', 'a\nb')).toEqual([]);
     expect(changedLines('a\n}\nb\n}', 'a\n  x\n}\nb\n}')).toEqual([[1, 1]]);
+  });
+});
+
+describe('idioms', () => {
+  const shapes = [SKETCH, 'function draw(s) { background(0); }\n', 'function setup(s) {}\nfunction draw(s) {}\n', 'let a = 1;\nfunction draw(p) {\n  background(0);\n  return;\n}\n'];
+  it('are grouped by intent, 30 to 45 of them, each with an example', () => {
+    expect(SCRIPT_IDIOMS.length).toBeGreaterThanOrEqual(30);
+    expect(SCRIPT_IDIOMS.length).toBeLessThanOrEqual(45);
+    for (const g of SNIPPET_GROUPS) expect(SCRIPT_SNIPPETS.some(sn => sn.group === g), g).toBe(true);
+    expect(new Set(SCRIPT_SNIPPETS.map(sn => sn.name)).size).toBe(SCRIPT_SNIPPETS.length);
+    for (const sn of SCRIPT_SNIPPETS) expect(sn.example.trim(), sn.name).not.toBe('');
+  });
+  it('every idiom’s example runs, and one without its own example is the idiom as Insert places it', () => {
+    for (const id of SCRIPT_IDIOMS) {
+      const sn = SCRIPT_SNIPPETS.find(x => x.name === id.name)!;
+      expect(runs(sn.example), id.name).toBeNull();
+      if (!id.example) expect(sn.example).toBe(placeCode(id.base ?? IDIOM_BASE, id.where, id.code));
+    }
+  });
+  it('every idiom goes into every sketch shape and still runs', () => {
+    for (const id of SCRIPT_IDIOMS) for (const shape of shapes) expect(runs(placeCode(shape, id.where, id.code)), `${id.name} in ${JSON.stringify(shape)}`).toBeNull();
+  });
+  it('all of them in one sketch still run (no clashing names), with their settings declared once', () => {
+    let code = SKETCH;
+    for (const id of SCRIPT_IDIOMS) code = placeCode(code, id.where, id.code);
+    expect(runs(code)).toBeNull();
+    for (const name of ['boxW', 'bpm', 'tile', 'gravity', 'hueSpeed']) expect(code.match(new RegExp(`^let ${name} =`, 'gm')), name).toHaveLength(1);
+  });
+  it('their settings are sliders Make a slider recognises', () => {
+    let withSettings = 0;
+    for (const id of SCRIPT_IDIOMS) {
+      const code = placeCode(IDIOM_BASE, id.where, id.code);
+      for (const m of id.code.matchAll(/^let\s+(.*?);/gm)) for (const part of m[1].split(',')) {
+        const name = /^\s*([A-Za-z_$][\w$]*)\s*=\s*-?\d/.exec(part)?.[1];
+        if (!name) continue;
+        withSettings++;
+        const made = makeControl(code, name);
+        expect(made?.kind, `${id.name}: ${name}`).toBe('slider');
+        expect(runs(made!.code), `${id.name}: ${name}`).toBeNull();
+      }
+    }
+    expect(withSettings).toBeGreaterThan(40);
+  });
+  it('a draw pattern that declares params puts them at the top when the sketch has none, and merges them when it has', () => {
+    const pulse = SCRIPT_IDIOMS.find(id => id.name === 'Pulse on a beat')!;
+    const fresh = placeCode('function draw(s) {\n  background(0);\n}\n', pulse.where, pulse.code);
+    expect(fresh.startsWith("const params = {\n  beat: { kind: 'button', label: 'Beat' },\n};\n\nlet decay = 4;")).toBe(true);
+    expect(fresh).not.toMatch(/function draw[\s\S]*const params/);
+    const merged = placeCode(SKETCH, pulse.where, pulse.code);
+    expect(merged.match(/const params/g)).toHaveLength(1);
+    const r = extractScriptParams(merged);
+    expect(r.ok && r.defs.map(d => d.key)).toEqual(['speed', 'beat']);
   });
 });

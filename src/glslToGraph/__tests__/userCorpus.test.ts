@@ -5,7 +5,8 @@
  * or is refused with its reason. That the pictures match needs a browser: the
  * pixel check over this folder is described in docs/glsl-to-nodes.md; at the
  * time of writing 41 of the 44 that convert give the same picture and the other
- * three differ in a handful of pixels of a sin-hash. With the page's fix-ups
+ * three differ in a handful of pixels of a sin-hash (26 expression blocks among
+ * them, down from 127 before the phase 2 nodes). With the page's fix-ups
  * applied, 45 of the 50 give the same picture as the shader as pasted.
  */
 import { describe, it, expect } from 'vitest';

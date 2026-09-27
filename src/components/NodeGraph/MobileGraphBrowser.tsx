@@ -54,6 +54,8 @@ import { Toggle } from '../ui/Choice';
 import { playDrivenMap } from '../../play/playDriven';
 import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
+import { InputExprPopover } from './InputExprPopover';
+import { canHaveInputExpr, getInputExpr } from '../../glsl/inputExpr';
 
 /** Breadcrumb segment in the phone graph header: the current one is bold and dark. */
 const crumbStyle = (tk: Tokens, current: boolean): React.CSSProperties => ({
@@ -1561,6 +1563,8 @@ export function MobileGraphBrowser() {
   // Wiring list at once — deliberately not reset per node (a view
   // preference, not per-node state) the way the row accordion is.
   const [wireExpandedKey, setWireExpandedKey] = useState<string | null>(null);
+  // The input expression being edited, in a sheet (the ƒ chip on a wiring row opens it).
+  const [exprEdit, setExprEdit] = useState<{ nodeId: string; key: string } | null>(null);
   const [wireAddNewFor, setWireAddNewFor] = useState<string | null>(null);
   const [wiringSectionOpen, setWiringSectionOpen] = useState(true);
   // Same whole-section fold as wiringSectionOpen, for the VALUES list below it.
@@ -2323,6 +2327,9 @@ export function MobileGraphBrowser() {
       const sourcePort = isPortSourced ? activeGroupInputPorts.find(p => p.key === inp.connection!.outputKey) : undefined;
       const upstream = (inp.connection && !isPortSourced) ? nodes.find(n => n.id === inp.connection!.nodeId) : undefined;
       const isExpanded = wireExpandedKey === key;
+      // Input expressions (glsl/inputExpr): same eligibility as the desktop card, not on a wire from outside the group.
+      const exprEligible = !isPortSourced && canHaveInputExpr(node, key, def);
+      const inExpr = exprEligible ? getInputExpr(node, key) : null;
       // Capped to the top 3 — already sorted exact-type-match first (see
       // allConnectCandidatesFor), so these are the most sensible matches; a
       // long candidate list buried the actually-useful ones in scroll. Search
@@ -2351,10 +2358,11 @@ export function MobileGraphBrowser() {
       );
       return (
         <div key={key} style={{ borderBottom: isLast ? 'none' : `1px solid ${tk.border.subtle}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', height: 48, minWidth: 0 }}>
           <button
             onClick={() => setWireExpandedKey(k => k === key ? null : key)}
             aria-expanded={isExpanded}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 48, padding: '0 12px 0 14px', background: 'none', border: 'none', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left', minWidth: 0 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, height: '100%', padding: `0 ${exprEligible ? 6 : 0}px 0 14px`, background: 'none', border: 'none', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left', minWidth: 0 }}
           >
             <span style={{
               width: 11, height: 11, borderRadius: '50%', boxSizing: 'border-box', flexShrink: 0,
@@ -2365,6 +2373,31 @@ export function MobileGraphBrowser() {
               title="Double-tap to hide"
               style={{ flex: 1, minWidth: 0, font: `500 13.5px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
             >{inp.label}</span>
+          </button>
+          {/* Input expression: the ƒ chip (the expression itself when set). Tapping it opens the editor as a sheet. */}
+          {exprEligible && (
+            <button
+              type="button"
+              onClick={() => setExprEdit({ nodeId: node.id, key })}
+              aria-label={inExpr ? `Edit the expression on ${inp.label}: ${inExpr}` : `Add an expression on ${inp.label}`}
+              style={{
+                height: 30, minWidth: 30, maxWidth: 112, padding: inExpr ? '0 8px' : 0, marginRight: 2, border: 0, borderRadius: 8, flexShrink: 1,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', touchAction: 'manipulation',
+                background: inExpr ? `${tk.kind.expr}24` : 'transparent', color: inExpr ? tk.kind.expr : tk.text.faint,
+                font: `500 12px ${fontFamily.mono}`,
+              }}
+            >
+              <Icon name="fn" size={13} style={{ flexShrink: 0 }} />
+              {inExpr && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{inExpr}</span>}
+            </button>
+          )}
+          {/* The rest of the row toggles too; the first button carries the label and state for assistive tech. */}
+          <button
+            onClick={() => setWireExpandedKey(k => k === key ? null : key)}
+            tabIndex={-1}
+            aria-hidden
+            style={{ display: 'flex', alignItems: 'center', gap: 10, height: '100%', padding: '0 12px 0 4px', background: 'none', border: 'none', cursor: 'pointer', touchAction: 'manipulation', minWidth: 0, flexShrink: 1 }}
+          >
             {!isExpanded && upstream && (
               <span style={{ font: `500 12px ${fontFamily.mono}`, color: tk.accent.text, background: tk.bg.selected, borderRadius: 7, padding: '3px 8px', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130, whiteSpace: 'nowrap' }}>{labelFor(upstream)}</span>
             )}
@@ -2376,6 +2409,7 @@ export function MobileGraphBrowser() {
             )}
             <span style={{ display: 'flex', color: tk.text.disabled, flexShrink: 0 }}><Icon name={isExpanded ? 'chevD' : 'chevR'} size={14} /></span>
           </button>
+          </div>
           {isExpanded && (
             <div style={{ background: tk.bg.subtle, padding: '8px 12px 10px 35px', display: 'flex', flexDirection: 'column', gap: 8, borderTop: `1px solid ${tk.border.subtle}` }}>
               {upstream && (
@@ -3044,6 +3078,9 @@ export function MobileGraphBrowser() {
         </div>
 
         {renderSocketOverlays(node)}
+        {exprEdit && exprEdit.nodeId === node.id && node.inputs[exprEdit.key] && (
+          <InputExprPopover sheet node={node} inputKey={exprEdit.key} onClose={() => setExprEdit(null)} />
+        )}
       </div>
     );
   }

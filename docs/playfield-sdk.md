@@ -3,6 +3,20 @@
 > Update: the **Script layer** (`docs/js-layers.md`) is a working prototype of
 > `defineLayer` below: a sketch with `setup`/`draw`, declared sliders, and a
 > capability object instead of app internals.
+>
+> Update 2: step 1 of the layer path is built for sketches. A Script layer
+> can be **saved as a layer kind** ("Layer kinds" in `docs/js-layers.md`):
+> it gets a name, icon and colour in Add layer, its declared params are the
+> layer's properties, and every layer of the kind updates when the kind is
+> edited. What a plugin layer will reuse: the **registry**
+> (`createLayerKindRegistry` in `src/play/layerKinds.ts`, with a `source`
+> of `saved` or `plugin`), the **namespaced id** on each layer (`kindId`),
+> the definitions **stored in the play file** (`play.layerKinds`, validated
+> by `parsePlayRecord`, carried by web exports), and the **fallback** when a
+> kind is missing (the layer keeps running as a plain Script layer with its
+> copy of the code). Still to do for `defineLayer` proper: packaging (a
+> manifest, imports), channels beyond the 2D canvas, and the worker
+> sandbox.
 
 A note to think with, not a build plan. The question: what would it take for
 other people (and other companies) to add to Playfield reliably, the way they
@@ -133,7 +147,9 @@ used it keep their nodes as placeholders with the plugin id shown.
    Move two built-in nodes and one built-in layer behind `defineNode` /
    `defineLayer` to find out what the API is missing. No new surface yet.
 2. **Layers as plugins.** Give layers the capability context and the
-   channel declarations; port the built-in layers to it one by one. This is
+   channel declarations; port the built-in layers to it one by one. (Sketch
+   layer kinds already have the registry, the Add layer entry and the
+   missing-kind fallback this step needs.) This is
    the largest piece and the one with the most value: it's where video
    feeds, camera effects and custom compositing live.
 3. **Mappings and feeds.** Smaller, mostly plumbing onto Play's existing
