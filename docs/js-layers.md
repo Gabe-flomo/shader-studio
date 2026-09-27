@@ -252,12 +252,98 @@ keeps the value it had; loading a starter resets them.
   sees it, Solo and visibility work, it records and exports, it is in play
   files, and a Cloner can copy it.
 
+### 3D Script: the same layer, drawn with WebGL
+
+A Script layer has a **Mode**: **2D canvas** (everything above) or **3D
+(WebGL)**. Add layer offers both, as **Script** and **3D Script** (Code
+group); the Mode row in the layer's Canvas settings (and on the big
+editor's Controls tab) switches an existing one. Switching keeps your code,
+except that an untouched starter is swapped for the other mode's starter,
+and a layer still called "Script 2" becomes "3D Script 2". A 2D helper
+called in 3D (and a 3D name called in 2D) stops the sketch with a message
+naming the setting.
+
+In 3D the sketch is the same `setup(s)` / `draw(s)` with the same `s`
+(params, state, time, mouse, nulls, presses, seeded `random`) and the same
+controls, but `s.ctx` is `null`: it draws with p5's WEBGL names on three.js,
+into a transparent canvas the size of the picture, which is then copied into
+the layer's own canvas. So Opacity, Blend, Clear (off keeps trails), order,
+mattes, Solo, the Cloner and the Layers node all treat it like a 2D sketch.
+
+Coordinates are p5's: the origin in the middle of the picture, x right, **y
+down**, z toward you, one unit a pixel at z = 0 (the camera sits on the z
+axis, 60° tall, as p5 places it).
+
+| Group | Names |
+|---|---|
+| Shapes | `box(w, h, d)`, `sphere(r, detailX, detailY)`, `ellipsoid(rx, ry, rz)`, `torus(r, tube)`, `cylinder(r, h)`, `cone(r, h)`, `plane(w, h)`, `line(x1, y1, z1, x2, y2, z2)` |
+| Transform | `push`, `pop`, `translate(x, y, z)`, `rotateX/Y/Z(a)`, `rotate(a, [axis])`, `scale(x, y, z)`, `resetMatrix` |
+| Look | `fill`, `noFill`, `stroke` (edges as line segments), `noStroke`, `normalMaterial`, `ambientMaterial`, `specularMaterial`, `emissiveMaterial`, `shininess`, `texture(t)` |
+| Lights | `ambientLight(c)`, `directionalLight(c, dx, dy, dz)`, `pointLight(c, x, y, z)`; 255 is full strength, as in p5 |
+| Camera | `camera(eye, centre, up)`, `perspective(fovy, …)`, `ortho(…)`, `orbitControl()` (drag on the picture, or the Run preview, to orbit) |
+| Background | none by default: the shader is the background. `background(c)` paints the layer for that frame; `clear()` undoes it. |
+
+As in p5, `fill` without any light in the frame is flat and becomes shaded
+(Lambert) once the frame calls a light; lights last for the frame they are
+called in; fill, stroke and material carry over between frames; the camera
+stays where `camera()` or `orbitControl()` put it. WebGL lines are one pixel
+wide, so `strokeWeight` does nothing in 3D.
+
+**Two styles.** Immediate, like p5: call shapes every frame in `draw`.
+Retained, like three.js: `s.three` is `{ THREE, scene, camera, renderer,
+root }`; build meshes in `setup`, add them to `scene` (three's usual y-up
+world) or `root` (the p5 shapes' y-down world, lit by the p5 lights), change
+them in `draw`. Whatever setup added is taken out before setup runs again (a
+resize, a code change), so nothing doubles. `s.three.camera` can be replaced
+with a camera of your own; the renderer is shared by every 3D layer.
+
+**The picture as a texture.** `s.picture.texture` is the picture under the
+layer, this frame, as a three.js texture (`texture(s.picture.texture)` skins
+the next shapes with the live shader). It is the canvas the kit reads as
+"the picture", uploaded only on frames that read it.
+
+**How it stays fast.** Immediate mode allocates nothing per shape: each
+shape kind and look (material, alpha, texture) is one `InstancedMesh` whose
+instance matrices and colours are written in place, so 500 boxes in
+different colours are one draw call; batches, the edge buffer and the lights
+are pools on the sketch, reset each frame and trimmed to what the frame used
+(an unused light stays at zero intensity so shaders are not rebuilt). Unit
+geometries are shared by every sketch and scaled per instance. A few WebGL
+renderers are shared by the page, one per size in use (picture, Run preview,
+an export). Measured in Chrome on an M-series Mac at 2080 × 1612: 500 lit,
+individually coloured boxes cost 0.6 ms of JavaScript a frame, one draw
+call; 5,000 cost about 6 ms.
+
+**three.js itself.** `src/play/kit/three-slim.js` lists the part of three
+a sketch gets (renderer, scene, cameras, the geometries, materials, lights,
+textures, maths). A Vite plugin (`virtual:three-slim-source` in
+`vite.config.ts`) bundles it into one script defining `SSThree`, 550 KB
+(140 KB gzipped) against 700 KB for all of three. An exported page carries
+it only when it has a 3D Script layer, and the export dialog lists what it
+adds; the app loads the same script on first need
+(`src/play/threeSource.ts`), so the app and the page run one build and the
+app's own three chunk is unchanged. `sketch3d.js` holds the helpers and
+takes THREE as an argument, so it inlines into the web kit like the other
+kit files.
+
+Everything else carries over: params and Make a slider, the Controls tab,
+the Reference (a 3D section with every signature and an example), autocomplete
+(3D names in 3D, no `ctx.`), the Patterns tab (a 3D group: spinning shape,
+grid of boxes from noise, orbiting spheres, the picture on a cube, particles
+as spheres, a terrain from noise, a three.js object), Starters (Boxes,
+Picture cube, three.js; the other mode's starters switch the layer), saved
+starters (they remember their mode), layer kinds (a kind stores its mode;
+editing the kind can change it), takes and frame-by-frame renders (the 3D
+layer renders inside each frame), web exports and the Present page. The
+Scripts topic has two examples: **3D Script: shapes over the shader** and
+**3D Script: the shader on a cube**, beside **Script: 3D on a 2D canvas**.
+
 ### What it does not do yet
 
 - **No imports.** The sketch is one file; the p5 vocabulary is built in
   rather than loaded from a CDN, so exported websites stay self-contained
-  and work offline. Loading a library (three, a font, a data file) is the
-  plugin step below.
+  and work offline. three.js comes with 3D mode (above); loading any other
+  library (a font, a data file) is the plugin step below.
 - **No reuse of the built-in layers' code yet.** The particle, bodies and
   flocking code lives in the kit; the Patterns tab carries small
   re-writes of the common behaviours (spawn and move, bounce, flock,
@@ -332,6 +418,11 @@ someone to package for.
   `layers/KindDialog.tsx`; the Kind card in `ScriptEditor`.
 - Idioms: `src/components/play/layers/scriptIdioms.ts`, merged into the
   Patterns list by `scriptSnippets.ts`.
+- 3D: the helpers, pools and shared renderers in `src/play/kit/sketch3d.js`
+  (`k3Helpers`, `k3Begin`/`k3End`, `k3Render`); the three.js set in
+  `src/play/kit/three-slim.js`; loading it in `src/play/threeSource.ts`;
+  the 3D reference (`SCRIPT_REFERENCE_3D`, `referenceFor`) and patterns
+  (`scriptSnippets3d.ts`); tests in `src/play/__tests__/script3d.test.ts`.
 - Tests: `src/play/__tests__/scriptLayer.test.ts`,
   `src/play/__tests__/scriptControls.test.ts`,
   `src/play/__tests__/scriptEditorTools.test.ts` (patterns and idioms),

@@ -504,7 +504,7 @@ function draw(s) {
     rotateX(time * 0.7 + i);
     rotateY(time * 0.9 + i * 0.5);
     fill(hsl(200 + (i / params.count) * 160, 70, 62));
-    if (params.shiny) { specularMaterial(255); shininess(50); }
+    if (params.shiny) { specularMaterial(170); shininess(60); }
     const d = u * params.size;
     const k = i % 5;
     if (k === 0) box(d * 1.4);
@@ -520,7 +520,7 @@ function draw(s) {
 /** 3D Script layer: the picture as a texture (s.picture.texture) on a cube. */
 export const SKETCH_3D_TEXTURE = `// The shader on a cube. s.picture.texture is the picture under this layer, this
 // frame, as a texture; texture() wraps it round the shapes that follow. The cube
-// wears the very picture it floats over, live.
+// wears the very picture it floats over, live; two lights shade its faces apart.
 // Drag on the picture to turn the camera.
 const params = {
   size:  { value: 0.42, min: 0.1, max: 0.8, step: 0.01, label: 'Size' },
@@ -533,6 +533,8 @@ function draw(s) {
   const { params, time } = s;
   orbitControl();
   const u = min(width, height);
+  ambientLight(120);
+  directionalLight(255, 250, 240, -0.5, 0.6, -0.7);
   push();
   rotateX(params.tilt + sin(time * 0.4) * 0.15);
   rotateY(time * params.spin);

@@ -12,6 +12,7 @@ import { SCRIPT_SNIPPETS_3D, snippetsFor } from '../../components/play/layers/sc
 import { extractScriptParams, SCRIPT_EXAMPLES } from '../../components/play/layers/scriptExamples';
 import { scriptCompletions } from '../../components/play/layers/scriptCompletions';
 import { addKindLayer, editKind, saveLayerAsKind } from '../layerKinds';
+import { placeCode } from '../../components/play/layers/scriptTools';
 import { parseLayerKind } from '../../types/layerKinds';
 
 const W = 640, H = 360;
@@ -166,11 +167,18 @@ describe('3D Script: p5-style shapes on three.js', () => {
     expect(g.scene.children.length).toBe(2);
     expect((g.scene.children[1] as THREE.Mesh).rotation.y).toBeCloseTo(2 / 60);
     expect(g.api.THREE).toBe(THREE);
+    // A resize runs setup again: what the last setup added goes first, so nothing doubles (the pools stay).
+    klSketchStep(st, { ...frame(3), width: 800, state: st.state }, [], true);
+    expect(g.scene.children.length).toBe(2);
+    expect(g.root.children.every(c => c.userData.k3)).toBe(true);
   });
 
   it('says so when a 2D helper is called on a 3D layer', () => {
     const st = compile3d('function draw(s) { circle(0, 0, 10); }');
     expect(step(st, 0)).toMatch(/circle\(\) draws on the 2D canvas/);
+    // And the other way: a 3D name on a 2D layer names the setting.
+    const flat = klSketchCompile('function draw(s) { box(10); }');
+    expect(klSketchStep(flat, { ...frame(0), ctx: new Proxy({}, { get: () => () => undefined }) }, [], true)).toMatch(/box\(\) draws in 3D: set the layer’s Mode to 3D/);
   });
 
   it('without three.js the sketch reports it instead of running', () => {
@@ -292,6 +300,13 @@ describe('3D Script: the editor', () => {
     }
     expect(snippetsFor('3d').every(sn => sn.group === '3D' || sn.group === 'Sketch basics')).toBe(true);
     expect(snippetsFor('2d').some(sn => sn.group === '3D')).toBe(false);
+  });
+
+  it('all the 3D patterns inserted into one sketch still run together', () => {
+    let code = 'function draw(s) {\n  orbitControl();\n}\n';
+    for (const sn of SCRIPT_SNIPPETS_3D) code = placeCode(code, sn.where, sn.code);
+    const st = compile3d(code);
+    for (let i = 0; i < 3; i++) expect(step(st, i)).toBeNull();
   });
 
   it('500 boxes are one instanced mesh', () => {

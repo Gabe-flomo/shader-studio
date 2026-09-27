@@ -699,6 +699,9 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
     const starter = l.code === (sketchMode === '3d' ? DEFAULT_SCRIPT_3D : DEFAULT_SCRIPT) && !dirty;
     const next: Record<string, unknown> = !starter ? { mode: m } : m === '3d' ? script3dDefaults()
       : { mode: '2d', code: DEFAULT_SCRIPT, paramDefs: DEFAULT_SCRIPT_PARAMS.map(d => ({ ...d })), ...Object.fromEntries(DEFAULT_SCRIPT_PARAMS.map(d => [`p_${d.key}`, d.value])) };
+    // A layer still called “Script 2” or “3D Script 2” follows the switch.
+    const named = /^(?:3D )?Script (\d+)$/.exec(l.label);
+    if (named) next.label = `${m === '3d' ? '3D Script' : 'Script'} ${named[1]}`;
     if (!kind) { f.set(next); return; }
     const code = (next.code as string | undefined) ?? l.code, defs = (next.paramDefs as ScriptParamDef[] | undefined) ?? l.paramDefs;
     ctx.changePlay(p => editKind(p, kind.id, code, defs, m).play);

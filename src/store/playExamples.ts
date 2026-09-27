@@ -948,12 +948,12 @@ Actions use them like keys, and they work on websites too (a background can reac
     controls: [ctl('size', 'layer:cube::p_size', 'Cube · Size', 0.1, 0.8), ctl('spin', 'layer:cube::p_spin', 'Cube · Spin', -2, 2), ctl('tilt', 'layer:cube::p_tilt', 'Cube · Tilt', -1.5, 1.5)],
     notes: `**What it shows.** \`s.picture.texture\` is the picture under a 3D Script layer, this frame, as a texture. \`texture(s.picture.texture)\` skins the next shapes with it, so the cube wears the live shader it floats over.
 
-**How it's built.** The picture is an ordinary graph: FBM noise through a palette. The layer turns a box and calls \`texture\` before it; with no lights the texture shows at full brightness. The picture is copied to the GPU only on frames that read it.
+**How it's built.** The picture is an ordinary graph: FBM noise through a palette. The layer turns a box and calls \`texture\` before it. An ambient and a directional light shade the faces so the cube reads against the same picture behind it; without lights the texture shows flat, at full brightness. The picture is copied to the GPU only on frames that read it.
 
 **Try this.**
 • Drag on the picture to orbit; Tilt and Spin turn the cube.
 • Open the Studio and change the palette: the cube changes with it.
-• In the editor, draw \`sphere(…)\` or \`plane(…)\` after \`texture\`, or add lights to shade the faces.`,
+• In the editor, draw \`sphere(…)\` or \`plane(…)\` after \`texture\`, or take the lights out to see it flat.`,
   })),
   ex('scriptMouse', glowGraph({ radius: 0.04, falloff: 30, tint: [0.3, 0.35, 0.6] }), play({
     layers: [scriptLayer('chain', 'Chain', SKETCH_MOUSE)],

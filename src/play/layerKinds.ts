@@ -131,7 +131,7 @@ export function saveLayerAsKind(play: PlayRecord, layerId: string, look: KindLoo
   };
   const next = withKind(play, kind);
   // A layer still called "Script 2" takes the kind's name; one you named keeps yours.
-  const label = /^Script \d+$/.test(l.label) ? `${kind.name} 1` : l.label;
+  const label = /^(3D )?Script \d+$/.test(l.label) ? `${kind.name} 1` : l.label;
   return { play: { ...next, layers: next.layers.map(x => (x.id === layerId ? { ...x, label, kindId: id } as PlayLayer : x)) }, kind };
 }
 

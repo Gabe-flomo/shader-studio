@@ -284,10 +284,11 @@ function k3StyleKey(g) {
 }
 function k3MakeBatch(g, gg, cap) {
   const T = g.T, s = g.style, alpha = s.fill[3], transparent = alpha < 0.999;
-  const common = { transparent, opacity: alpha, side: gg.double ? T.DoubleSide : T.FrontSide };
+  // Faces sit a hair behind their depth, so stroke() edges drawn on them do not flicker.
+  const common = { transparent, opacity: alpha, side: gg.double ? T.DoubleSide : T.FrontSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 };
   if (s.tex) common.map = s.tex;
   const b = { key: '', n: 0, cap, mesh: null, flat: null, lit: null, mat: null, geo: gg };
-  if (s.mat === 'normal') b.mat = new T.MeshNormalMaterial({ transparent, opacity: alpha, side: common.side });
+  if (s.mat === 'normal') b.mat = new T.MeshNormalMaterial({ transparent, opacity: alpha, side: common.side, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
   else if (s.mat === 'specular') b.mat = new T.MeshPhongMaterial(Object.assign({ specular: new T.Color().setRGB(s.spec[0], s.spec[1], s.spec[2], T.SRGBColorSpace), shininess: s.shin }, common));
   else if (s.mat === 'emissive') b.mat = new T.MeshLambertMaterial(Object.assign({ emissive: new T.Color().setRGB(s.emis[0], s.emis[1], s.emis[2], T.SRGBColorSpace) }, common));
   else if (s.mat === 'ambient') b.mat = new T.MeshLambertMaterial(common);

@@ -7,7 +7,7 @@
  * up and are flipped here.
  */
 import { paletteCssAt, paletteColour } from '../particle-sim.js';
-import { k3Create, k3Helpers, k3Setup, k3Begin, k3End, k3Dispose } from './sketch3d.js';
+import { K3_SKETCH_NAMES, k3Create, k3Helpers, k3Setup, k3Begin, k3End, k3Dispose } from './sketch3d.js';
 
 export const KL_BLEND = {
   normal: 'source-over', multiply: 'multiply', screen: 'screen', overlay: 'overlay', lighten: 'lighten', darken: 'darken',
@@ -1019,6 +1019,10 @@ export function klSketchStep(st, s, defs, clear) {
     return null;
   } catch (e) {
     if (g3) { try { k3End(g3); } catch (x) { /* already broken */ } }
-    st.error = 'Runtime: ' + ((e && e.message) || e); return st.error;
+    st.error = 'Runtime: ' + ((e && e.message) || e);
+    // A 3D name on a 2D layer: say which setting it needs.
+    const m = !g3 && e instanceof ReferenceError && /^(\w+) is not defined/.exec(e.message);
+    if (m && K3_SKETCH_NAMES.indexOf(m[1]) >= 0 && KL_SKETCH_NAMES.indexOf(m[1]) < 0) st.error += '. ' + m[1] + '() draws in 3D: set the layer’s Mode to 3D (Canvas settings).';
+    return st.error;
   }
 }
