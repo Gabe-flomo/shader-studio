@@ -170,6 +170,8 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: 
   // Datasets travel as their results: a dataset never run has none, and notebooks and files stay in the app.
   const sets = Object.values(opts.datasets ?? {});
   for (const d of sets) if (!d.result) out.push({ what: `The dataset “${d.name}”`, why: 'It has no result yet (its notebook hasn’t run), so on the page its Data nodes read 0 and its Data layers draw nothing. Open it, press Run all, and export again.' });
+  // Live datasets: frozen at their window, or reconnecting (and so needing the network).
+  for (const d of sets) if (d.note) out.push(d.note);
   if (sets.some(d => d.result)) out.push({ what: sets.length === 1 ? `The notebook and file of “${sets[0].name}”` : `The notebooks and files of ${sets.length} datasets`, why: 'The page carries each dataset’s result as it is now, not the notebook or the file it came from. Change them in the app and export again to update the page.' });
   // A Background layer: its videos too big to keep, and graphs that weren't compiled (an example still loading, one that doesn't compile).
   const queue = backgroundLayerOf(play);

@@ -15,6 +15,8 @@
  *   events    actions that fired (bursts, drops, Next line, script buttons)
  *   audio frames  what audio layers drew (their sound's waveform or spectrum),
  *             only while one is showing (takeAudio.ts)
+ *   data      live datasets' rows as they came in (data/streams/takeData.ts);
+ *             replay and rendering feed these instead of the stream
  *
  * A take also keeps a seed. Recording starts the layers over with it, and so
  * do playing back and rendering, so every random choice the layers make
@@ -41,6 +43,8 @@ import { AUDIO_GAP, AudioFrameBuffer, audioNeeds, audioSourceOf, takeAudioAt, ta
 import { liveAudio } from './liveAudio';
 import { layerAudio } from './layerAudio';
 import { toast } from '../components/ui/toastStore';
+import { streamHub } from '../data/streams/streamHub';
+import { DataFeedCapture, DataFeedPlayer } from '../data/streams/takeData';
 
 export { takeEventsBetween, takeMouseAt, takePointerAt, takeValuesAt, type Take } from './takePlayback';
 
@@ -76,6 +80,7 @@ export class TakeCapture {
   private seed: number;
   private audio = new Map<string, AudioFrameBuffer>();
   private audioKept = -Infinity;
+  private data = new DataFeedCapture(fn => streamHub.onRows(fn));
 
   /** `keep`: seconds to hold (the rolling buffer); older samples are dropped. `seed`: the layers' (0: one is made on save). */
   constructor(play: PlayRecord, keep = Infinity, seed = 0) {
@@ -85,7 +90,7 @@ export class TakeCapture {
     this.offAct = playOverlay.onAct(a => this.pending.push({ do: a.do, layerId: a.layerId, amount: a.amount }));
   }
 
-  dispose(): void { this.offAct(); }
+  dispose(): void { this.offAct(); this.data.dispose(); }
 
   /** Clock time of the first sample (null before any). */
   start(): number | null { return this.first; }
@@ -94,6 +99,7 @@ export class TakeCapture {
   private reset(): void {
     this.tracks.clear(); this.events = []; this.first = null; this.last = -Infinity; this.kept = -Infinity;
     this.audio.clear(); this.audioKept = -Infinity;
+    this.data.reset();
   }
 
   private push(kind: TakeTrack['kind'], id: string, label: string, t: number, v: number | number[], extra: Partial<TakeTrack> = {}): void {
@@ -114,6 +120,7 @@ export class TakeCapture {
     this.last = time;
     if (this.first === null) this.first = time;
     this.flushEvents(time);
+    this.data.sample(time);
     if (time - this.kept < MIN_GAP) return;
     this.kept = time;
     const { nodes, play } = useNodeGraphStore.getState();
@@ -178,6 +185,7 @@ export class TakeCapture {
     }
     this.events = this.events.filter(e => e.t >= from);
     for (const a of this.audio.values()) a.trim(from);
+    this.data.trim(from);
     if (this.first !== null && this.first < from) this.first = from;
   }
 
@@ -193,6 +201,7 @@ export class TakeCapture {
     if (length < 0.1) return null;
     const raw = [...this.tracks.values()];
     const seed = this.seed || newSeed();
+    const dataFeeds = this.data.toFeeds(from, length);
     const build = (precision: number, stride = 1, audioStride = 1): PlayTake => ({
       id: `take-${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`,
       name, from, length,
@@ -213,6 +222,7 @@ export class TakeCapture {
       events: this.events.filter(e => e.t >= from && e.t <= from + length).map(e => ({ t: e.t - from, ...e.a })),
       seed,
       ...this.audioTracks(from, length, audioStride),
+      ...(dataFeeds.length ? { dataFeeds } : {}),
     });
     // Over budget (a lot of noise-driven controls, a long audio layer): loosen the tolerance and
     // thin the audio frames to 15 a second, then thin everything to 30, 15… per second; last, drop the audio.
@@ -278,6 +288,9 @@ function releaseLayers(keys: Set<string>): void {
 export function takeApplier(take: PlayTake, handle: { setUniform: (name: string, value: number | number[]) => void; width: number; height: number }) {
   const layerKeys = new Set<string>();
   let lastTime = -Infinity;
+  // Live datasets: the take's rows, run through their notebooks in place so each frame has them.
+  const data = new DataFeedPlayer(take.dataFeeds ?? [], (id, t) => streamHub.feed(id, t, { sync: true }));
+  if (data.active) streamHub.setMuted(true);
   const out = {
     param: (key: string, v: number | number[]) => { const u = inputBus.paramUniform(key); if (u) handle.setUniform(u, v); },
     bus: (key: string, v: number) => { const u = inputBus.liveUniform(key); if (u) handle.setUniform(u, v); },
@@ -287,6 +300,7 @@ export function takeApplier(take: PlayTake, handle: { setUniform: (name: string,
   return {
     apply(time: number): KitAction[] {
       applyTake(take, time, out);
+      data.apply(time - take.from);
       const m = takeMouseAt(take, time);
       if (m) handle.setUniform('u_mouse', [m[0] * handle.width, m[1] * handle.height]);
       const acts = takeEventsBetween(take, lastTime, time);
@@ -298,7 +312,7 @@ export function takeApplier(take: PlayTake, handle: { setUniform: (name: string,
     audio: (time: number) => takeAudioFor(take, time),
     /** The layers' seed, for a render that starts them over. */
     seed: take.seed ?? 0,
-    release() { releaseLayers(layerKeys); },
+    release() { releaseLayers(layerKeys); if (data.active) streamHub.setMuted(false); },
   };
 }
 
@@ -316,9 +330,13 @@ class Replay implements InputSource {
   private detach: () => void;
   readonly take: PlayTake;
   private audioTime = 0;
+  private data: DataFeedPlayer;
   constructor(take: PlayTake) {
     this.take = take;
     playEngine.setMuted(true);
+    // Live datasets get the take's rows; their connections keep running out of sight.
+    this.data = new DataFeedPlayer(take.dataFeeds ?? [], (id, t) => streamHub.feed(id, t));
+    if (this.data.active) streamHub.setMuted(true);
     playOverlay.setReplaying(true, take.seed ?? 0);
     // Audio layers hear the take's sound at the frame being drawn.
     playOverlay.setReplayAudio(take.audioFrames?.length ? l => takeAudioAt(take, this.audioTime, audioSourceOf(l)) : null);
@@ -338,6 +356,7 @@ class Replay implements InputSource {
       if (time - take.from >= 0.02) this.fastForward(take.from, time);
     } else if (Number.isFinite(this.lastTime) && time - this.lastTime > SEEK_JUMP) this.fastForward(this.lastTime, time);
     this.audioTime = time;
+    this.data.apply(time - take.from);
     applyTake(take, time, {
       show: (id, v) => playEngine.showLive(id, v),
       param: (key, v) => write(paramChannelKey(key), v),
@@ -380,6 +399,7 @@ class Replay implements InputSource {
   end(): void {
     this.detach();
     releaseLayers(this.layerKeys);
+    if (this.data.active) streamHub.setMuted(false);
     inputBus.setMouseOverride(null);
     playOverlay.setReplaying(false);
     playEngine.setMuted(false);

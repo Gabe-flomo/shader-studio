@@ -233,11 +233,11 @@ export function formatFor(filename: string, text: string): DatasetFormat {
   const ext = /\.([a-z0-9]+)$/i.exec(filename)?.[1]?.toLowerCase();
   if (ext === 'csv') return 'csv';
   if (ext === 'tsv' || ext === 'tab') return 'tsv';
-  if (ext === 'json' || ext === 'geojson') return 'json';
+  if (ext === 'json' || ext === 'geojson' || ext === 'jsonl' || ext === 'ndjson') return 'json';
   if (ext === 'txt' || ext === 'md') return 'text';
   const t = text.trimStart();
   if (t.startsWith('[') || t.startsWith('{')) { try { JSON.parse(t); return 'json'; } catch { /* not JSON */ } }
-  const firstLines = t.split(/\r?\n/, 3);
+  const firstLines = t.split(/\r?\n/, 50).filter(l => l.trim()).slice(0, 3);
   if (firstLines.length > 1 && firstLines.every(l => l.includes('\t'))) return 'tsv';
   if (firstLines.length > 1 && firstLines.every(l => /[,;|]/.test(l))) return 'csv';
   return 'text';

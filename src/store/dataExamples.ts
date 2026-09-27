@@ -4,6 +4,9 @@
  *
  *   1  Index driven by Time steps a glow through a year of weather
  *   2  an iterated group draws every row of a route as a glowing point
+ *   3–6  the Data layer on Play: bars, a route drawn on, a poem, a sketch reading s.data()
+ *   7  a typed-in table (a constellation) drawn star by star, joined by a line
+ *   8  a live stream (the built-in demo feed) drawn as a moving trail
  *
  * Each dataset carries its CSV, its notebook and the notebook's result,
  * worked out here when the examples load (the same code the editor runs).
@@ -17,7 +20,10 @@ import { DATA_EXAMPLE_INDEX } from './dataExampleIndex';
 import { retypeDataNode } from '../nodes/definitions/data';
 import { computeDataset } from '../data/compute';
 import { cityClimateCsv, spiralRouteCsv, tideNotesText } from '../data/samples';
-import type { Dataset, DatasetFormat, DatasetsRecord } from '../data/types';
+import { manualToTable } from '../data/manualTable';
+import { demoRow } from '../data/streams/backoff';
+import { applyRows, emptyTable, tableToCsv } from '../data/streams/window';
+import type { Dataset, DatasetFormat, DatasetsRecord, ManualColumn } from '../data/types';
 
 const note = (text: string) => ({ __comment: text });
 const playRecord = (controls: PlayControl[], notes: string): PlayRecord => ({ version: 1, controls, mappings: [], layers: [], notes });
@@ -91,6 +97,27 @@ function draw(s) {
   cities.forEach((c, i) => { fill(hsl(i * 68 + 12, 80, 66)); text(c, 16 * s.dpr, (22 + i * 18) * s.dpr); });
 }
 `;
+/** A typed-in dataset (the spreadsheet), with its result computed now. */
+function manualDataset(id: string, name: string, columns: ManualColumn[], rows: string[][], cells: string[]): Dataset {
+  const cellList = cells.map((code, i) => ({ id: `${id}${i + 1}`, code }));
+  const source = { kind: 'manual' as const, columns, rows };
+  const table = manualToTable(source);
+  const out = computeDataset({ text: '', format: 'csv', table, cells: cellList });
+  if (!out.run?.result) throw new Error(`dataExamples: the ${id} notebook failed: ${out.run?.error ?? JSON.stringify(out.run?.cells)}`);
+  return { id, name, source, cells: cellList, normalize: false, result: out.run.result };
+}
+
+/** A live dataset on the built-in demo feed: its first `rows` rows are kept, so the graph shows something before it connects. */
+function demoStreamDataset(id: string, name: string, rate: number, window: number, cells: string[]): Dataset {
+  const cellList = cells.map((code, i) => ({ id: `${id}${i + 1}`, code }));
+  const first = applyRows(emptyTable(), Array.from({ length: window }, (_, i) => demoRow(i, rate)), 'append', window);
+  const out = computeDataset({ text: '', format: 'csv', table: first, cells: cellList });
+  if (!out.run?.result) throw new Error(`dataExamples: the ${id} notebook failed: ${out.run?.error ?? JSON.stringify(out.run?.cells)}`);
+  return {
+    id, name, cells: cellList, normalize: false, result: out.run.result,
+    source: { kind: 'stream', transport: 'demo', address: 'demo', window, mode: 'append', interval: rate, autoConnect: true, onExport: 'freeze', text: tableToCsv(first) },
+  };
+}
 
 /** A Data node with its sockets in step with its settings, as the card keeps them. */
 function dataNode(id: string, x: number, y: number, params: Record<string, unknown>, wires: Record<string, [string, string]> = {}): GraphNode {
@@ -252,6 +279,79 @@ The columns reach the shader as a float texture (one row per texel, four columns
 
 **Try.** Open the sketch (the code button on the layer) and read the draw function. Open the dataset from a Data layer or Data node and change the notebook, say \`df.where('city != "Cairo"')\`: the rings follow at once. Add a Data layer on the same dataset, step it with Next, and use \`d.current\` in the sketch to follow its row.`,
   }));
+  // ── 7 · A constellation, typed in ─────────────────────────────────────────
+  const stars = manualDataset('stars', 'Big Dipper', [
+    { name: 'star', type: 'text' }, { name: 'x', type: 'number' }, { name: 'y', type: 'number' }, { name: 'mag', type: 'number' },
+  ], [
+    ['Alkaid', '-0.53', '0.15', '1.86'],
+    ['Mizar', '-0.31', '0.22', '2.23'],
+    ['Alioth', '-0.09', '0.18', '1.77'],
+    ['Megrez', '0.12', '0.09', '3.31'],
+    ['Phecda', '0.17', '-0.15', '2.44'],
+    ['Merak', '0.49', '-0.21', '2.37'],
+    ['Dubhe', '0.54', '0.07', '1.79'],
+  ], [
+    '// A lower magnitude is a brighter star: turn it into a glow size\ndf.assign({ glow: r => 1.6 - r.mag * 0.35 })',
+  ]);
+  const starCount = 7;
+  add('dataTypedStars', [
+    uv(40, 220),
+    group('dots', 320, 160, {
+      label: 'Every star', iterations: starCount,
+      inputs: [{ key: 'p', type: 'vec2', label: 'UV', from: ['uv', 'uv'] }],
+      outputs: [{ key: 'col', type: 'vec3', label: 'Glow', from: ['lamp', 'tinted'] }],
+      nodes: [
+        n('loopIndex', 'li', 40, 160, note('The pass number: 0, 1… 6, one per typed-in row.')),
+        dataNode('row', 280, 160, { dataset: 'stars', blend: false, edge: 'clamp', outputs: [{ key: 'o1', columns: ['x', 'y'] }, { key: 'o2', columns: ['glow'] }],
+          ...note('Row i of the typed-in table: x, y as the star’s place and glow (worked out in the notebook from mag) as its size.') }, { index: ['li', 'i'] }),
+        n('multiply', 'size', 540, 360, { b: 0.012 }, { a: ['row', 'o2'] }),
+        n('circleSDF', 'dot', 780, 100, { radius: 0.01 }, { position: port('p'), offset: ['row', 'o1'], radius: ['size', 'result'] }),
+        { ...n('light', 'lamp', 1020, 160, { mode: 'glow', brightness: 70, tint: [0.95, 0.92, 0.8], ...note('+= : each pass adds its star.') }, { distance: ['dot', 'distance'] }), assignOp: '+=' as const },
+      ],
+    }),
+    dataNode('line', 320, 480, { dataset: 'stars', mode: 'points', shape: 'path', pointColumns: ['x', 'y'], radius: 0.0, maxPoints: 16,
+      ...note('The same rows used as Points in Path mode: the stars joined in the order they’re typed. Reorder the rows in the table and the line follows.') }, {}),
+    n('light', 'lines', 620, 480, { mode: 'glow', brightness: 140, tint: [0.3, 0.4, 0.7] }, { distance: ['line', 'distance'] }),
+    vec3Op(n('add', 'sum', 880, 300, {}, { a: ['dots', 'col'], b: ['lines', 'tinted'] })),
+    out(['sum', 'result'], 1120, 300),
+  ], { stars }, playRecord([], `**What it shows.** Data you type in yourself. The dataset isn't a file: it's a small table made in the Data editor (**New dataset › Type it in**) with four columns, star (text), x, y and mag (numbers), and a row per star of the Big Dipper.
+
+**How it is built.** The group **Every star** runs once per row: Loop Index → the Data node's **Index**, so pass *i* draws row *i* as a glowing dot at its x, y. The notebook adds a **glow** column from the magnitude (brighter stars have lower magnitudes), which sets each dot's size. A second Data node **used as Points** in **Path** mode joins the rows in order: the line of the constellation.
+
+**Try.** Open a Data node's editor (the grid button). Click a cell and type a new value, or press Tab and Enter to move on; the picture follows at once. Add a row (Enter on the last row, or the row menu), then raise the group's iterations to draw it. Copy a block of cells from a spreadsheet and paste it into the table: it grows to fit. ⌘Z undoes.`));
+
+  // ── 8 · A live feed ───────────────────────────────────────────────────────
+  const feedWindow = 160;
+  const feed = demoStreamDataset('feed', 'Demo feed', 20, feedWindow, [
+    '// x, y arrive as 0–1: put them around the middle of the picture\ndf.assign({ px: r => (r.x - 0.5) * 1.5, py: r => (r.y - 0.5) * 1.5 })',
+  ]);
+  add('dataLiveFeed', [
+    uv(40, 240),
+    dataNode('trail', 320, 80, { dataset: 'feed', mode: 'points', shape: 'path', pointColumns: ['px', 'py'], radius: 0.0, maxPoints: 256,
+      ...note(`The stream's window (its last ${feedWindow} rows) joined in order: a trail behind the moving point. Every new row re-uploads the data texture; the shader is never rebuilt.`) }, {}),
+    n('light', 'trailGlow', 620, 80, { mode: 'glow', brightness: 120, tint: [0.25, 0.55, 0.9] }, { distance: ['trail', 'distance'] }),
+    dataNode('head', 320, 400, { dataset: 'feed', index: 100000, edge: 'clamp', blend: false, outputs: [{ key: 'o1', columns: ['px', 'py'] }, { key: 'o2', columns: ['level'] }],
+      ...note('Index past the end, with the ends clamped: always the newest row. px, py place the dot; level (0–1) sets its size.') }, {}),
+    n('remap', 'size', 620, 520, { inMin: 0, inMax: 1, outMin: 0.01, outMax: 0.06 }, { value: ['head', 'o2'] }),
+    n('circleSDF', 'dot', 860, 400, { radius: 0.03 }, { position: ['uv', 'uv'], offset: ['head', 'o1'], radius: ['size', 'result'] }),
+    n('light', 'dotGlow', 1100, 400, { mode: 'glow', brightness: 90, tint: [1, 0.75, 0.4] }, { distance: ['dot', 'distance'] }),
+    vec3Op(n('add', 'sum', 1340, 240, {}, { a: ['trailGlow', 'tinted'], b: ['dotGlow', 'tinted'] })),
+    out(['sum', 'result'], 1580, 240),
+  ], { feed }, playRecord([], `**What it shows.** A live dataset. Rows arrive while you watch, and the picture follows them without the shader being rebuilt.
+
+**Where the rows come from.** This one uses the **Demo stream**, a feed made up inside the app so the example works offline: 20 rows a second of a point wandering on a curve (x, y), a rising and falling **level**, and a **kind** (calm, busy, peak). It connects when the graph opens; the status chip in the Data editor shows it live, with rows per second and the last row. **Pause** holds the picture; **Disconnect** stops it and keeps the last rows with the graph.
+
+**How it is built.** The stream keeps a rolling window of its last ${feedWindow} rows. The notebook moves x, y to the middle of the picture (it runs on the window a few times a second). One Data node, **used as Points** in **Path** mode, draws the window as a trail; another reads the **newest row** (Index past the end, clamped) for the bright dot, sized by level.
+
+**Point it at a real feed.** Open a Data node's editor, open **Settings** under the status chip and change **Transport**:
+- **WebSocket**: a ws:// or wss:// address that sends JSON objects such as {"x": 0.4, "y": 0.7, "level": 0.2} (or arrays of them, or CSV lines).
+- **Poll a URL**: a link to JSON or CSV fetched every few seconds; choose **Replace the table** when it sends its whole latest state.
+- **Server-Sent Events**: an event stream whose messages are JSON or CSV.
+- **OSC**: TouchOSC, Max or Ableton through the OSC listener; each message is a row (address, value, value2…).
+
+Keep the column names (x, y, level), or change the notebook to make them from the feed's own fields: nothing else in the graph needs to change. In a browser, some feeds refuse to be read from another site; the desktop app can poll any public link.
+
+**Takes.** Record a performance while it streams: the take keeps the rows with their times, and playing it back or rendering it feeds those rows instead of the live feed, so a render comes out the same every time.`));
 
   return graphs;
 }

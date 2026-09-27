@@ -293,6 +293,7 @@ export type {
   PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind, DataLayer, DataView, DataSplit, TrackMatte, LayerMask, MaskShape, MaskOp, MaskProp,
 } from './playLayers';
 export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot } from './playLayers';
+import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataTypes';
 import { parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 import { parseSourceCredit, type SourceCredit } from './credit';
@@ -553,6 +554,8 @@ export interface PlayTake {
   seed?: number;
   /** Audio layers' sound, frame by frame (absent: none was showing). */
   audioFrames?: TakeAudioTrack[];
+  /** Live datasets' rows as they came (absent: no stream was connected). Replay feeds these instead of the stream. */
+  dataFeeds?: TakeDataFeed[];
 }
 
 /** A performance runs up to a minute. */
@@ -1038,12 +1041,14 @@ export function parseTake(raw: unknown): PlayTake | null {
     events.push({ t: at, do: x.do as ActionKind, layerId: x.layerId, amount: amount ?? 1 });
   }
   events.sort((a, b) => a.t - b.t);
+  const dataFeeds = parseTakeDataFeeds(t.dataFeeds, length);
   return {
     id: t.id.slice(0, 80),
     name: typeof t.name === 'string' && t.name.trim() ? t.name.slice(0, 80) : 'Take',
     from, length, tracks, events,
     ...(num(t.seed) !== null && (t.seed as number) > 0 ? { seed: Math.round(t.seed as number) } : {}),
     ...(audioFrames.length ? { audioFrames } : {}),
+    ...(dataFeeds.length ? { dataFeeds } : {}),
   };
 }
 

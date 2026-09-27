@@ -26,3 +26,8 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 ffmpeg-sidecar = "2"
+# Fetching data from a link (the Data editor): https, no cookies, capped.
+ureq = "3"
+base64 = "0.22"
+# The Kaggle API key, in the system keychain.
+keyring = { version = "3", features = ["apple-native", "windows-native"] }

@@ -7,6 +7,9 @@
  *
  * bundle:  { title, fragmentShader, uniforms, paramBindings, play, aspect, passes?, media? }
  *   passes: { stateful, echo: { copies, delay } | null, particles: [{ vertexShader, fragmentShader, count, shape }] }
+ *   datasets: { [id]: { name, result, stream? } }  each dataset's frozen result; `stream`
+ *             ({ transport: 'poll' | 'websocket' | 'sse', address, interval, mode, window, format?,
+ *             normalize }) makes the page reconnect to a live feed and add its rows (needs the network)
  *   media:  { textures: { uniform: { src } }, videos: { uniform: { src, loop, speed } },
  *             audio: [{ id, src, uniforms, bands, range, mode }] }   (src: a data URL, or null)
  *   play.display.source 'image' | 'video' | 'colour': that background (display.image,
@@ -563,10 +566,126 @@ void main() {
       const seenU = new Set();
       let m;
       const reT = /uniform\s+sampler2D\s+(u_ds_\w+)\s*;\s*\/\/\s*data-columns\s+([a-z][a-z0-9]*)\s+(\S*)/g;
-      while ((m = reT.exec(B.fragmentShader))) { if (seenU.has(m[1])) continue; seenU.add(m[1]); dataTex.push({ name: m[1], tex: dataTexture(m[2], m[3] ? m[3].split(',').map(c => decodeURIComponent(c)) : []) }); }
+      while ((m = reT.exec(B.fragmentShader))) { if (seenU.has(m[1])) continue; seenU.add(m[1]); const cols = m[3] ? m[3].split(',').map(c => decodeURIComponent(c)) : []; dataTex.push({ name: m[1], id: m[2], cols, tex: dataTexture(m[2], cols) }); }
       const reN = /uniform\s+float\s+(u_ds_\w+_n)\s*;\s*\/\/\s*data-count\s+([a-z][a-z0-9]*)/g;
-      while ((m = reN.exec(B.fragmentShader))) { if (seenU.has(m[1])) continue; seenU.add(m[1]); const r = dsResult(m[2]); dataCounts.push({ name: m[1], n: r && r.kind === 'table' ? r.rows : 0 }); }
+      while ((m = reN.exec(B.fragmentShader))) { if (seenU.has(m[1])) continue; seenU.add(m[1]); const r = dsResult(m[2]); dataCounts.push({ name: m[1], id: m[2], n: r && r.kind === 'table' ? r.rows : 0 }); }
     }
+
+    // Live datasets (a stream exported with Reconnect): the page connects to the same feed and adds each
+    // message's rows to the window it carried (or replaces it), as the app's stream does (src/data/streams).
+    // Data layers and s.data() read the new result; Data nodes' textures and counts are made again.
+    const feedClosers = [];
+    const liveFeeds = () => {
+      const records = r => {
+        if (!r || r.kind !== 'table') return [];
+        return Array.from({ length: r.rows }, (_, i) => { const o = {}; for (const c of r.columns) o[c.name] = c.values[i] == null ? null : c.values[i]; return o; });
+      };
+      const column = (name, values) => {
+        const present = values.filter(v => v != null);
+        if (present.every(v => typeof v === 'number' && isFinite(v))) {
+          let min = Infinity, max = -Infinity;
+          for (const v of present) { if (v < min) min = v; if (v > max) max = v; }
+          if (min === Infinity) { min = 0; max = 0; }
+          return { name, type: 'number', values: values.map(v => (typeof v === 'number' && isFinite(v) ? v : null)), min, max };
+        }
+        if (present.every(v => typeof v === 'string' || typeof v === 'boolean')) return { name, type: 'category', values: values.map(v => (v == null ? null : String(v))) };
+        return { name, type: 'other', values };
+      };
+      const toTable = (rows, normalize) => {
+        const names = [];
+        for (const r of rows) for (const k in r) if (!names.includes(k)) names.push(k);
+        let columns = names.map(n => column(n, rows.map(r => (r[n] === undefined ? null : r[n]))));
+        // Normalize 0–1 as the app does: each number column from its min…max, unless it's already within 0–1.
+        if (normalize) columns = columns.map(c => (c.type !== 'number' || (c.min >= 0 && c.max <= 1)) ? c : { ...c, values: c.values.map(v => (v == null ? null : c.max > c.min ? (v - c.min) / (c.max - c.min) : 0)), min: 0, max: c.max > c.min ? 1 : 0 });
+        return { kind: 'table', rows: rows.length, columns };
+      };
+      const flat = o => { const out = {}; for (const k in o) { const v = o[k]; if (v && typeof v === 'object' && !Array.isArray(v)) { for (const k2 in v) out[k + '.' + k2] = v[k2]; } else out[k] = v; } return out; };
+      const isRec = v => v && typeof v === 'object' && !Array.isArray(v);
+      const jsonRows = v => {
+        if (Array.isArray(v)) return v.length && v.every(x => typeof x === 'number' || x === null) ? [Object.fromEntries(v.map((x, i) => ['c' + (i + 1), x]))] : v.filter(isRec).map(flat);
+        if (isRec(v)) {
+          const arrays = Object.entries(v).filter(([, a]) => Array.isArray(a) && a.length && a.every(isRec));
+          const pick = arrays.find(([k]) => ['rows', 'data', 'records', 'items', 'results', 'features'].includes(k)) || (arrays.length === 1 ? arrays[0] : null);
+          if (pick) return pick[1].map(r => flat(pick[0] === 'features' && isRec(r.properties) ? r.properties : r));
+          return [flat(v)];
+        }
+        return typeof v === 'number' ? [{ value: v }] : [];
+      };
+      const field = f => { const t = f.trim(); if (t === '' || /^(na|n\/a|nan|null|none|-)$/i.test(t)) return null; const n = Number(t.replace(/,(?=\d{3}\b)/g, '')); return isFinite(n) && /\d/.test(t) ? n : t === 'true' ? true : t === 'false' ? false : t; };
+      const messageRows = (text, st, format) => {
+        text = String(text).trim();
+        if (!text) return [];
+        if (format === 'text') return text.split(/\r?\n/).filter(Boolean).map(line => ({ text: line }));
+        if (format !== 'csv' && format !== 'tsv' && (format === 'json' || text[0] === '{' || text[0] === '[')) {
+          try { return jsonRows(JSON.parse(text)); } catch (e) {
+            try { return text.split(/\r?\n/).filter(l => l.trim()).flatMap(l => jsonRows(JSON.parse(l))); } catch (e2) { if (format === 'json') return []; }
+          }
+        }
+        const d = format === 'tsv' || text.includes('\t') ? '\t' : ',';
+        const out = [];
+        for (const line of text.split(/\r?\n/)) {
+          if (!line.trim()) continue;
+          const f = line.split(d);
+          if (st.header && f.length === st.header.length && f.every((x, i) => x.trim() === st.header[i])) continue;
+          if (!st.header && f.every(x => x.trim() !== '' && field(x) !== null && typeof field(x) !== 'number')) { st.header = f.map((x, i) => x.trim() || 'c' + (i + 1)); continue; }
+          const names = st.header || f.map((_, i) => 'c' + (i + 1));
+          const row = {};
+          f.forEach((x, i) => { row[names[i] || 'c' + (i + 1)] = field(x); });
+          out.push(row);
+        }
+        return out;
+      };
+      for (const id in datasets) {
+        const cfg = datasets[id].stream;
+        if (!cfg || !cfg.address) continue;
+        // A live dataset's window comes raw (not normalized), so new rows can join it; Normalize is applied here.
+        let rows = records(datasets[id].result);
+        const st = { header: null };
+        const windowN = Math.max(1, cfg.window || 1000);
+        const show = () => {
+          const r = toTable(rows, cfg.normalize);
+          datasets[id].result = r;
+          for (const d of dataTex) if (d.id === id) { gl.deleteTexture(d.tex); d.tex = dataTexture(id, d.cols); }
+          for (const c of dataCounts) if (c.id === id) c.n = r.rows;
+        };
+        const put = got => {
+          if (!got.length) return;
+          rows = cfg.mode === 'replace' ? got.slice(-windowN) : rows.concat(got).slice(-windowN);
+          show();
+        };
+        if (cfg.normalize) show();
+        const onMessage = data => { try { put(messageRows(data, st, cfg.format)); } catch (e) { /* a message that doesn't read is skipped */ } };
+        let attempt = 0, timer = 0, sock = null, closed = false;
+        const retry = go => { if (closed) return; const wait = Math.min(30000, 1000 * Math.pow(2, attempt++)) * (0.8 + Math.random() * 0.4); timer = setTimeout(go, wait); };
+        if (cfg.transport === 'poll') {
+          const tick = () => {
+            if (closed) return;
+            fetch(cfg.address, { cache: 'no-store', credentials: 'omit' }).then(r => (r.ok ? r.text() : Promise.reject(new Error(r.status)))).then(t => { attempt = 0; onMessage(t); timer = setTimeout(tick, Math.max(0.5, cfg.interval || 5) * 1000); }, () => retry(tick));
+          };
+          tick();
+        } else if (cfg.transport === 'websocket' && typeof WebSocket !== 'undefined') {
+          const open = () => {
+            if (closed) return;
+            try { sock = new WebSocket(cfg.address); } catch (e) { return; }
+            sock.onopen = () => { attempt = 0; };
+            sock.onmessage = e => { if (typeof e.data === 'string') onMessage(e.data); else if (e.data && e.data.text) e.data.text().then(onMessage); };
+            sock.onclose = () => { sock = null; retry(open); };
+          };
+          open();
+        } else if (cfg.transport === 'sse' && typeof EventSource !== 'undefined') {
+          const open = () => {
+            if (closed) return;
+            try { sock = new EventSource(cfg.address); } catch (e) { return; }
+            sock.onopen = () => { attempt = 0; };
+            sock.onmessage = e => onMessage(e.data);
+            sock.onerror = () => { if (sock && sock.readyState === 2) { sock = null; retry(open); } };
+          };
+          open();
+        }
+        feedClosers.push(() => { closed = true; clearTimeout(timer); if (sock) { sock.onclose = null; sock.onerror = null; try { sock.close(); } catch (e) { /* closed */ } } });
+      }
+    };
+    liveFeeds();
 
     // Render targets for feedback and echo: half float where the GPU can draw into it (as the app), else 8 bit.
     let rtFormat = gl.RGBA, rtType = gl.UNSIGNED_BYTE, rtFilter = gl.LINEAR;
@@ -1396,6 +1515,7 @@ void main() {
     return {
       destroy() {
         alive = false;
+        for (const close of feedClosers) close();
         cancelAnimationFrame(raf);
         ro.disconnect();
         if (io) io.disconnect();

@@ -12,9 +12,17 @@ import { dataBindingsFromShader } from '../data/dataGlsl';
 import { normalizeTable } from '../data/normalize';
 import type { DatasetResult, DatasetsRecord } from '../data/types';
 import type { PlayRecord } from '../types/play';
+import { streamExportPlan, type StreamExport } from '../data/streams/exportPlan';
 
-/** A dataset as a page carries it. */
-export interface WebDataset { name: string; result: DatasetResult | null }
+/** A live feed a page connects to itself (a stream set to Reconnect): the runtime adds its rows to the carried window. */
+export type WebStream = NonNullable<StreamExport['connect']> & { normalize: boolean };
+
+/**
+ * A dataset as a page carries it. A live dataset carries its window as it is
+ * now; `stream` when the page reconnects to the feed, and `note` (for the
+ * export's list) either way.
+ */
+export interface WebDataset { name: string; result: DatasetResult | null; stream?: WebStream; note?: { what: string; why: string } }
 export type WebDatasets = Record<string, WebDataset>;
 
 const quoted = (code: string, name: string) => {
@@ -42,13 +50,24 @@ export function datasetsUsed(datasets: DatasetsRecord, play: PlayRecord, shaders
   return [...out].sort();
 }
 
-/** The datasets a page needs, as it carries them: the result readers see (Normalize applied) and the name. */
-export function datasetsForWeb(datasets: DatasetsRecord, play: PlayRecord, shaders: readonly string[] = []): WebDatasets {
+/**
+ * The datasets a page needs, as it carries them: the result readers see
+ * (Normalize applied) and the name. `live` gives a stream's result now (its
+ * window isn't saved on every message); a stream's own export setting says
+ * whether the page reconnects or keeps that window (streams/exportPlan.ts).
+ */
+export function datasetsForWeb(datasets: DatasetsRecord, play: PlayRecord, shaders: readonly string[] = [], opts: { live?: (id: string) => DatasetResult | null } = {}): WebDatasets {
   const out: WebDatasets = {};
   for (const id of datasetsUsed(datasets, play, shaders)) {
     const d = datasets[id];
-    const r = d.result;
-    out[id] = { name: d.name, result: r && r.kind === 'table' && d.normalize ? normalizeTable(r) : r };
+    const plan = d.source.kind === 'stream' ? streamExportPlan(d, opts.live?.(id) ?? null) : null;
+    const r = plan ? plan.result : d.result;
+    out[id] = {
+      // A stream the page reconnects to carries its window raw: the page adds rows to it, then normalizes.
+      name: d.name, result: r && r.kind === 'table' && d.normalize && !plan?.connect ? normalizeTable(r) : r,
+      ...(plan?.connect ? { stream: { ...plan.connect, normalize: d.normalize } } : {}),
+      ...(plan ? { note: plan.note } : {}),
+    };
   }
   return out;
 }

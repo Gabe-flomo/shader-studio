@@ -1,6 +1,6 @@
 # Data layer: a plan
 
-Plan, not built. Written 26 Sep 2026 from a voice note, so a later session can
+Plan, now mostly built. Written 26 Sep 2026 from a voice note, so a later session can
 pick it up. Section 6 records the decisions (settled the same day).
 
 ## 1. The idea
@@ -250,6 +250,49 @@ Data layer, mapping sources) works the same whichever it is.
      "needs the network") or freeze the last window.
    - This is the plugin plan's `defineMapping` / `defineFeed` idea, done for
      data.
+
+*Milestones 6–8 built* (27 Sep 2026). New datasets start from the editor's
+empty view or its … menu: **Import a file**, **Type it in**, **From a link**,
+**From Kaggle**, **Live stream**.
+
+- **Typed in** (`src/data/manualTable.ts`, `ManualSheet.tsx`): cells are kept
+  as typed and read per column type (number, category, text) when the
+  notebook runs; bad numbers show red and read as empty. Keys: arrows, Tab,
+  Enter, typing, Delete, ⌥↑/↓ to move a row, ⌘Z / ⇧⌘Z (the sheet's own
+  undo). Pasting a block grows the table; into an empty one a header row
+  becomes the names and each column is typed from its values. Rows are
+  windowed, so a 20 000-row table stays quick. **Edit a copy by hand** makes
+  a typed-in table from any table dataset.
+- **Links** (`urlSource.ts`, `urlFetch.ts`, `LinkImport.tsx`): GitHub and
+  Gist pages, Google Sheets (published or shared), Hugging Face and Dropbox
+  links are rewritten to the file; zips are opened (fflate); ndjson becomes
+  an array; a web page instead of data is refused with a hint. The desktop
+  app fetches through `fetch_url` (`src-tauri/src/data_fetch.rs`, ureq: https
+  only, or http to this computer; no cookies; 25 MB; 30 s). **Kaggle**: the
+  username and key go to the system keychain (`keyring`), and Rust adds them
+  to kaggle.com requests itself; in a browser they're in localStorage, with a
+  warning, and Kaggle's API usually refuses the page anyway (CORS).
+  **Parquet and Excel are not read** (they get a message pointing to CSV);
+  `hyparquet` would add Parquet.
+- **Streams** (`src/data/streams/`): `streamHub` keeps one connection per
+  stream dataset, retries with backoff, and publishes each window through the
+  notebook (in the worker, newest window wins; skipped when the notebook only
+  shows `df`) to `datasetStore.replaceResult`. Transports: Poll, WebSocket,
+  SSE, OSC (the Play OSC client: the desktop listener or the browser bridge;
+  one row per message: address, value, value2…) and a **Demo stream** made up
+  in the app. Pause or Disconnect keeps the window with the dataset (as CSV)
+  and its result, so the graph opens with them; **Connect when the graph
+  opens** reconnects on load. Takes record each stream's rows (the window at
+  the start, then every message with its time, `PlayTake.dataFeeds`); replay
+  and rendering mute the hub and feed those rows instead.
+- **Website export**: a stream set to **Freeze** carries its live window; one
+  set to **Reconnect** carries it raw plus the feed, and the page's runtime
+  connects (poll, WebSocket, SSE) and adds rows itself (listed as needing
+  the network). OSC, the demo and feeds shaped by a notebook are always
+  frozen, and the export says why (`streams/exportPlan.ts`,
+  `play/dataExport.ts`).
+- **Examples**: Data 7 (a constellation typed in) and Data 8 (a live feed on
+  the demo stream, with notes on pointing it at a real feed).
 
 ## 9. The Data node's "Use as" modes (added 26 Sep 2026)
 
