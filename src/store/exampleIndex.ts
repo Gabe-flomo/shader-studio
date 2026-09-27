@@ -198,5 +198,5 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
   { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },
   { label: "From the Internet",    color: ctp.yellow, keys: ['fcTrippyNoise','fcSolar','fcPillars','fcGradient4','fcGrainGradient','fcTiling','fcTheScreen','fcShield','fcMainFrame','fcAtlantic','fcOrb','fcBitshift'] },
-  { label: "Node Combos",        color: ctp.flamingo, keys: ['comboChaosStars','comboRepeatCellHash','comboTurbulenceGlow','comboBloomDots','comboDomeRepeat','comboVoxelSpheres','comboGridPaintShapes','comboGridPaintPictures','comboGridPaintGlow','comboGridShapeByWire','comboArrayStars'] },
+  { label: "Node Combos",        color: ctp.flamingo, keys: ['comboChaosStars','comboRepeatCellHash','comboTurbulenceGlow','comboBloomDots','comboDomeRepeat','comboVoxelSpheres','comboGridPaintShapes','comboGridPaintPictures','comboGridPaintGlow','comboGridShapeByWire','comboArrayStars','comboGridGroupFlower','comboArrayGroupMoons'] },
 ];

@@ -108,6 +108,9 @@ describe('bundled examples', () => {
     const expected: Record<string, string[]> = {
       comboGridShapeByWire: ['fieldfn_circ_0_distance', 'fieldfn_pal_0_color'],
       comboArrayStars: ['fieldfn_shape_0_distance', 'fieldfn_pal_0_color'],
+      // The group's own Array calls the petal function; Picture only needs the hash → palette.
+      comboGridGroupFlower: ['fieldfn_flower_0_g_circ_0_distance', 'fieldfn_flower_0_d', 'fieldfn_flower_0_c'],
+      comboArrayGroupMoons: ['fieldfn_moon_0_d', 'fieldfn_pal_0_color'],
     };
     for (const [k, fns] of Object.entries(expected)) {
       const r = compileGraph({ nodes: resolveNodeAliases(EXAMPLE_GRAPHS[k].nodes, getNodeDefinition) });

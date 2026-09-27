@@ -10,13 +10,15 @@
  *
  * A node can only be part of a chain if it is a pure function of position,
  * time and uniforms. Nodes that read the previous frame, render their own
- * passes, or are containers compiled by their own paths are rejected.
+ * passes, or are 3D containers compiled by their own paths are rejected.
+ * A Group is allowed (its subgraph is compiled into the function, iterations
+ * and all) as long as nothing inside it is rejected.
  */
-import type { GraphNode, NodeDefinition } from '../types/nodeGraph';
+import type { GraphNode, NodeDefinition, SubgraphData } from '../types/nodeGraph';
 import { PARTICLE_PIPELINE_TYPES } from './particleAssembler';
 
 const READS_FRAME = 'it reads the previous frame';
-const CONTAINER = 'groups can’t be part of a field chain yet';
+const CONTAINER = 'a 3D group renders its own scene, not a function of 2D position';
 
 /** Node type → why it can't be part of a field chain. */
 export const FIELD_IMPURE: Record<string, string> = {
@@ -33,13 +35,40 @@ export const FIELD_IMPURE: Record<string, string> = {
   depthOfField: READS_FRAME,
   playLayers: 'it composites Play layers, which are whole pictures, not a function of position',
   vParticles: 'particles are drawn in their own pass',
-  group: CONTAINER,
   sceneGroup: CONTAINER,
   marchLoopGroup: CONTAINER,
   giLitMarchGroup: CONTAINER,
   spaceWarpGroup: CONTAINER,
 };
 for (const t of PARTICLE_PIPELINE_TYPES) FIELD_IMPURE[t] = 'particles are drawn in their own pass';
+
+/**
+ * The first node inside `group`'s subgraph (nested groups included) that can't
+ * be part of a field chain, with the reason, or null when the whole group can.
+ */
+export function impureInsideGroup(group: GraphNode, defOf: (n: GraphNode) => NodeDefinition | undefined): { label: string; reason: string } | null {
+  const sub = group.params.subgraph as SubgraphData | undefined;
+  for (const n of sub?.nodes ?? []) {
+    const reason = FIELD_IMPURE[n.type];
+    if (reason) return { label: (typeof n.params.label === 'string' && n.params.label.trim()) || defOf(n)?.label || n.type, reason };
+    if (n.type === 'group') {
+      const hit = impureInsideGroup(n, defOf);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/** Why `n` can't be part of a field chain, or undefined when it can. */
+export function fieldProblemOf(n: GraphNode, defOf: (n: GraphNode) => NodeDefinition | undefined): string | undefined {
+  const reason = FIELD_IMPURE[n.type];
+  if (reason) return reason;
+  if (n.type === 'group') {
+    const hit = impureInsideGroup(n, defOf);
+    if (hit) return `it contains ${hit.label}, ${hit.reason.startsWith('it ') ? `which ${hit.reason.slice(3)}` : `and ${hit.reason}`}`;
+  }
+  return undefined;
+}
 
 /** Input keys of a definition that are field sockets. */
 export function fieldInputKeys(def: NodeDefinition | undefined): string[] {
@@ -80,7 +109,7 @@ export function fieldChainProblems(
   const out: string[] = [];
   for (const id of collectFieldChain(conn.nodeId, nodeMap)) {
     const n = nodeMap.get(id)!;
-    const reason = FIELD_IMPURE[n.type];
+    const reason = fieldProblemOf(n, defOf);
     if (!reason) continue;
     const label = (typeof n.params.label === 'string' && n.params.label.trim()) || defOf(n)?.label || n.type;
     out.push(`Node ${n.id}: ${label} can't be part of a shape wired into ${consumerLabel}'s ${socketLabel}: ${reason}.`);

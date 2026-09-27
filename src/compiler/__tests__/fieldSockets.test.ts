@@ -6,7 +6,7 @@
 import { describe, it, expect, vi } from 'vitest';
 vi.hoisted(() => vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} }));
 import { compileGraph } from '../graphCompiler';
-import { n, out, group } from '../../store/graphBuilder';
+import { n, out } from '../../store/graphBuilder';
 import { canHaveInputExpr } from '../../glsl/inputExpr';
 import { getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -208,21 +208,6 @@ describe('field sockets', () => {
     // The Array inside the outer function calls the inner one, at the cell's coordinates.
     expect(fns[1].body).toContain('fieldfn_circ_0_distance(arr_0_l, ');
     expect(fns[1].body).toMatch(/vec2 {2}arr_0_p {4}= g_uv;/);
-  });
-
-  it('inside a group a field socket falls back to the built-in shape instead of breaking the shader', () => {
-    const inner: GraphNode[] = [
-      n('circleSDF', 'circ', 0, 0, { radius: 0.2 }),
-      n('gridPattern', 'gp', 200, 0, {}, { shape: ['circ', 'distance'] }),
-    ];
-    const nodes: GraphNode[] = [
-      group('g1', 0, 0, { label: 'Grid', iterations: 1, inputs: [], outputs: [{ key: 'color', type: 'vec3', label: 'Color', from: ['gp', 'color'] }], nodes: inner }),
-      out(['g1', 'color'], 400),
-    ];
-    const r = compileGraph({ nodes });
-    expect(r.errors ?? []).toEqual([]);
-    expect(r.fragmentShader).toContain('gpShape(');
-    expect(fieldFns(r.fragmentShader)).toHaveLength(0);
   });
 
   it('a field socket takes no input expression', () => {

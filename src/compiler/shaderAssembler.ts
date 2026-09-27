@@ -2,7 +2,7 @@ import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { GraphNode, DataType, InputSocket, NodeDefinition, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { f as formatFloat, FIELD_FN_PREFIX } from '../nodes/definitions/helpers';
-import { collectFieldChain, fieldChainProblems, fieldInputKeys, FIELD_IMPURE } from './fieldSockets';
+import { fieldInputKeys, fieldProblemOf, FIELD_IMPURE } from './fieldSockets';
 import { topologicalSort } from './topoSort';
 import { defaultGlslVal, patchNodeParamsForUniforms } from './uniformPatcher';
 import { computeNodeSlug } from './nodeSlug';
@@ -508,6 +508,34 @@ export function pruneUnusedGlslFunctions(blocks: string[], rootText: string): st
 
 // ── Main assembler ────────────────────────────────────────────────────────────
 
+type Wire = { nodeId: string; outputKey: string };
+/** Where an input's value comes from, in compiled ids: a wire, nothing, or a
+ *  value that only exists inside an iterated group's loop (a carried port). */
+type WireSource = Wire | 'loop' | undefined;
+
+/**
+ * One compiled node, as a field function can re-emit it. Every node compiled
+ * into main() registers one: top-level nodes under their own id, nodes inside
+ * a group under the prefixed id the group compiler gave them. `deps` are the
+ * units whose variables its code reads, with group ports already followed to
+ * whatever is wired into them outside, so a field chain can be collected
+ * across group boundaries. Variable names only depend on slugs, which are
+ * reused, so a re-emitted unit declares the same names as its main() copy.
+ */
+interface FieldUnit {
+  node: GraphNode;
+  /** The id the store knows the node by, for error messages. */
+  origId: string;
+  slug: string;
+  order: number;
+  deps: Wire[];
+  /** Reads a loop variable of an iterated group (Loop Index, a carried port or value). */
+  loop: boolean;
+  /** Re-emit into the current buffer. A group is given the outputs the chain reads,
+   *  so a single-pass group compiles only what feeds them. */
+  recompile: (outputs: Set<string>) => void;
+}
+
 
 export interface ShaderAssemblerOptions {
   /** Output variables for node ids that exist outside the compiled node list. */
@@ -546,6 +574,13 @@ export class ShaderAssembler {
   private fieldFnNames = new Set<string>();
   /** > 0 while a field function's body is being compiled. */
   private fieldDepth = 0;
+  /** Compiled id → how to re-emit it inside a field function (see FieldUnit). */
+  private units = new Map<string, FieldUnit>();
+  /** Slug maps of group subgraphs, keyed by the group's prefix, so a group re-emitted
+   *  inside a field function names its nodes (and their uniforms) as main() did. */
+  private groupSlugs = new Map<string, Map<string, string>>();
+  /** Set by a group unit's recompile for compileGroupNode (see FieldUnit.recompile). */
+  private groupOutputsWanted: Set<string> | undefined;
 
   constructor(sortedNodes: GraphNode[], allNodes: GraphNode[], opts?: ShaderAssemblerOptions) {
     this.sortedNodes = sortedNodes;
@@ -671,15 +706,17 @@ export class ShaderAssembler {
           this.nodeSlugMap.set(node.id, nodeSlug);
         }
 
-        // Field sockets: a wired one receives the upstream chain as a function
-        // (its name, in inputVars); an unwired one stays undefined.
-        for (const key of fieldInputKeys(def)) {
-          if (node.inputs[key]?.connection && !node.bypassed) inputVars[key] = this.compileFieldFunction(node, key, def.inputs[key].type);
-          else delete inputVars[key];
+        if (!inField) {
+          const deps = Object.values(node.inputs).flatMap(i => (i.connection ? [i.connection] : []));
+          this.registerUnit(node.id, {
+            node, origId: node.id, slug: nodeSlug, deps, loop: false,
+            recompile: outputs => {
+              this.groupOutputsWanted = node.type === 'group' ? outputs : undefined;
+              try { this.compileNode(node); } finally { this.groupOutputsWanted = undefined; }
+            },
+          });
         }
-        // Inside a chain, the UV node is the function's position and the Cell node
-        // its cell parameters; outside, the canvas UV and zeros.
-        if (inField && (node.type === 'fieldCell' || node.type === 'uv')) inputVars.__inField = '1';
+        this.applyFieldSockets(node, node.id, def, inputVars, k => node.inputs[k]?.connection);
 
         // Register sampler uniforms using slug so GLSL name matches what generateGLSL emits
         if (node.type === 'textureInput') {
@@ -716,13 +753,50 @@ export class ShaderAssembler {
     this.compileStandardNode(node, inputVars, nodeSlug, def);
   }
 
+  /** Slugs for a group's subgraph nodes, computed once per group prefix and reused after. */
+  private slugsFor(prefix: string, nodes: GraphNode[]): Map<string, string> {
+    let m = this.groupSlugs.get(prefix);
+    if (!m) {
+      m = new Map(nodes.map(sn => [sn.id, computeNodeSlug(sn, this.usedSlugs)]));
+      this.groupSlugs.set(prefix, m);
+    }
+    return m;
+  }
+
+  private registerUnit(id: string, u: Omit<FieldUnit, 'order'>): void {
+    if (this.fieldDepth > 0 || this.units.has(id)) return;
+    this.units.set(id, { ...u, order: this.units.size });
+  }
+
   /**
-   * Compile the chain wired into `consumer`'s field socket `key` as a GLSL
-   * function of position and return its name.
+   * Resolve `node`'s field sockets in `inputVars`: a wired one gets the name of
+   * the field function built from its chain, an unwired one (or any on a
+   * bypassed node) is removed. Inside a field function the UV node is told it
+   * is the function's position and the Cell node that it is the cell's
+   * parameters; outside, they are the canvas UV and zeros.
+   */
+  private applyFieldSockets(node: GraphNode, origId: string, def: NodeDefinition, inputVars: Record<string, string>, sourceOf: (key: string) => WireSource): void {
+    for (const key of fieldInputKeys(def)) {
+      const src = node.bypassed ? undefined : sourceOf(key);
+      if (!src) { delete inputVars[key]; continue; }
+      const label = (typeof node.params.label === 'string' && node.params.label.trim()) || def.label;
+      const where = `${label}'s ${def.inputs[key]?.label ?? key}`;
+      if (src === 'loop') throw new Error(`Node ${origId}: the shape wired into ${where} is a value carried round an iterated group's loop, which can't be evaluated per cell. Build the shape inside the group instead.`);
+      inputVars[key] = this.compileFieldFunction(origId, where, src, def.inputs[key].type);
+    }
+    if (this.fieldDepth > 0 && (node.type === 'fieldCell' || node.type === 'uv')) inputVars.__inField = '1';
+  }
+
+  /**
+   * Compile the chain wired into a field socket as a GLSL function of
+   * position and return its name. `consumerId` and `where` ("Grid Pattern's
+   * Shape") are for error messages; `src` is the wire, in compiled ids.
    *
-   * The chain (the wired node and everything upstream of it) is compiled a
-   * second time, through the ordinary per-node path, into a separate buffer
-   * that becomes the body of
+   * The chain is the source unit and every unit it depends on, following
+   * group ports out to whatever is wired into them and taking a Group in the
+   * chain whole (iterations included). It is compiled a second time, through
+   * the same per-node paths as main(), into a separate buffer that becomes
+   * the body of
    *
    *   T fieldfn_<slug>_<output>(vec2 g_uv, vec2 fieldCell, float fieldInfluence, float fieldIndex)
    *
@@ -735,17 +809,31 @@ export class ShaderAssembler {
    * compiler drops what nothing uses). One function per source output and
    * return type, however many field sockets it feeds.
    */
-  private compileFieldFunction(consumer: GraphNode, key: string, socketType: DataType): string {
-    const conn = consumer.inputs[key].connection!;
+  private compileFieldFunction(consumerId: string, where: string, src: Wire, socketType: DataType): string {
     const ret = socketType === 'vec2' || socketType === 'vec3' || socketType === 'vec4' ? socketType : 'float';
-    const cacheKey = `${conn.nodeId}::${conn.outputKey}::${ret}`;
+    const cacheKey = `${src.nodeId}::${src.outputKey}::${ret}`;
     const cached = this.fieldFns.get(cacheKey);
     if (cached) return cached;
 
-    const problems = fieldChainProblems(consumer, key, this.nodeMap, getNodeDefinitionFor);
-    if (problems.length) throw new Error(problems[0]);
-    const chainIds = collectFieldChain(conn.nodeId, this.nodeMap);
-    const chain = this.sortedNodes.filter(n => chainIds.has(n.id));
+    const chain = new Map<string, FieldUnit>();
+    const wanted = new Map<string, Set<string>>();
+    const stack: Wire[] = [src];
+    while (stack.length) {
+      const w = stack.pop()!;
+      const id = w.nodeId;
+      if (!wanted.has(id)) wanted.set(id, new Set());
+      wanted.get(id)!.add(w.outputKey);
+      if (chain.has(id)) continue;
+      const u = this.units.get(id);
+      if (!u) throw new Error(`Node ${consumerId}: the shape wired into ${where} reads a value that only exists at this pixel (a loop variable or a published node's input), so it can't be evaluated per cell.`);
+      const label = (typeof u.node.params.label === 'string' && u.node.params.label.trim()) || getNodeDefinitionFor(u.node)?.label || u.node.type;
+      if (u.loop) throw new Error(`Node ${u.origId}: ${label} can't be part of a shape wired into ${where}: it reads a value carried round an iterated group's loop.`);
+      const problem = fieldProblemOf(u.node, getNodeDefinitionFor);
+      if (problem) throw new Error(`Node ${u.origId}: ${label} can't be part of a shape wired into ${where}: ${problem}.`);
+      chain.set(id, u);
+      stack.push(...u.deps);
+    }
+    const ordered = [...chain.values()].sort((a, b) => a.order - b.order);
 
     const savedCode = this.mainCode;
     const savedOutputs = this.nodeOutputs;
@@ -755,22 +843,21 @@ export class ShaderAssembler {
     let body: string;
     let srcVar: string | undefined;
     try {
-      for (const n of chain) this.compileNode(n);
+      for (const u of ordered) u.recompile(wanted.get(u.node.id)!);
       body = this.mainCode.join('');
-      srcVar = this.nodeOutputs.get(conn.nodeId)?.[conn.outputKey];
+      srcVar = this.nodeOutputs.get(src.nodeId)?.[src.outputKey];
     } finally {
       this.mainCode = savedCode;
       this.nodeOutputs = savedOutputs;
       this.fieldDepth--;
     }
-    const label = getNodeDefinitionFor(consumer)?.inputs[key]?.label ?? key;
-    if (!srcVar) throw new Error(`Node ${consumer.id}: the node wired into ${label} has no output "${conn.outputKey}".`);
+    if (!srcVar) throw new Error(`Node ${consumerId}: the node wired into ${where} has no output "${src.outputKey}".`);
 
-    const src = this.nodeMap.get(conn.nodeId)!;
-    const srcType = src.outputs[conn.outputKey]?.type ?? getNodeDefinitionFor(src)?.outputs[conn.outputKey]?.type ?? ret;
+    const srcUnit = chain.get(src.nodeId)!;
+    const srcType = srcUnit.node.outputs[src.outputKey]?.type ?? getNodeDefinitionFor(srcUnit.node)?.outputs[src.outputKey]?.type ?? ret;
     const retExpr = coerce(srcVar, srcType, ret) ?? coerceLossy(srcVar, srcType, ret);
 
-    const base = `${FIELD_FN_PREFIX}${this.topSlugs.get(conn.nodeId) ?? 'n'}_${conn.outputKey.replace(/\W/g, '')}`;
+    const base = `${FIELD_FN_PREFIX}${srcUnit.slug}_${src.outputKey.replace(/\W/g, '')}`;
     let name = base;
     for (let i = 2; this.fieldFnNames.has(name); i++) name = `${base}_${ret}${i > 2 ? i : ''}`;
     this.fieldFnNames.add(name);
@@ -790,18 +877,30 @@ export class ShaderAssembler {
             typeof node.params.iterations === 'number' ? node.params.iterations : 1,
           )));
 
-          // Build slug map for ALL subgraph nodes BEFORE building prefixedNodes
-          const subSlugMap = new Map<string, string>();
-          for (const subNode of subgraph.nodes) {
-            subSlugMap.set(subNode.id, computeNodeSlug(subNode, this.usedSlugs));
+          // Build slug map for ALL subgraph nodes BEFORE building prefixedNodes.
+          // Inside a field function the group is compiled again under the same slugs.
+          const subSlugMap = this.slugsFor(`${nodeSlug}_g_`, subgraph.nodes);
+
+          // Field sockets: where each of the group's inputs comes from, in compiled ids.
+          // In an iterated group a port carried round the loop has no wire outside it.
+          const carriedIn = new Set<string>();
+          if (iters > 1) {
+            const ins = subgraph.inputPorts ?? [], outs = subgraph.outputPorts ?? [];
+            for (let i = 0; i < Math.min(ins.length, outs.length); i++) if (ins[i].type === outs[i].type) carriedIn.add(ins[i].key);
           }
+          const groupSource = (k: string): WireSource => (carriedIn.has(k) ? 'loop' : node.inputs[k]?.connection);
 
           /**
            * Compile one pass of the subgraph using the given port overrides and ID prefix.
            * portInputOverrides keys must use SLUG-based IDs (i.e. `slug:inputKey`).
            * carryModeNaturalVars keys are ORIGINAL node IDs (pre-slug, used to look up subgraph.nodes).
            */
-          const compileSubgraphPass = (iterPrefix: string, portInputOverrides: Map<string, string>, carryModeNaturalVars: Map<string, string> = new Map(), exprBlockCarryVars: Map<string, Map<string, string>> = new Map()) => {
+          // Inside a field function a single-pass group compiles only the nodes that
+          // feed the outputs the chain reads (a Picture chain skips the Shape's nodes).
+          const wantedOutputs = this.groupOutputsWanted;
+          this.groupOutputsWanted = undefined;
+
+          const compileSubgraphPass = (iterPrefix: string, portInputOverrides: Map<string, string>, carryModeNaturalVars: Map<string, string> = new Map(), exprBlockCarryVars: Map<string, Map<string, string>> = new Map(), onlyFeeding?: Set<string>) => {
             const prefixedNodes: GraphNode[] = subgraph.nodes.map(subNode => {
               const subSlug = subSlugMap.get(subNode.id)!;
               // Apply group-level param overrides: group.params stores `innerNodeId::paramKey` → value
@@ -843,29 +942,60 @@ export class ShaderAssembler {
             // Exclude loopCarry nodes from the topo sort — they're pre-injected into this.nodeOutputs
             // and their next→value feedback creates a cycle that would throw in Kahn's algorithm.
             const sortedSub = topologicalSort(prefixedNodes.filter(sn => sn.type !== 'loopCarry'));
-            for (const subNode of sortedSub) {
+
+            // ── Field sockets: where each input of a node in this pass comes from ──
+            // A wire from inside the group is a prefixed id; a wire from a group port
+            // is followed out to what the group's input is wired to.
+            const portOf = (sn: GraphNode, k: string, prefix: string): string | undefined => {
+              const c = sn.inputs[k]?.connection;
+              return c && c.nodeId === prefix + GROUP_PORT_SENTINEL ? c.outputKey : undefined;
+            };
+            const sourceOf = (sn: GraphNode, k: string): WireSource => {
+              const pk = portOf(sn, k, iterPrefix);
+              // An override that isn't a port is a carry-mode node's own value.
+              if (portInputOverrides.has(`${sn.id.slice(iterPrefix.length)}:${k}`)) return pk !== undefined ? groupSource(pk) : 'loop';
+              return pk !== undefined ? undefined : sn.inputs[k]?.connection;
+            };
+            const register = (sn: GraphNode, origId: string, sources: WireSource[], loop: boolean, recompile: () => void) => {
+              const deps = sources.flatMap(w => (w && w !== 'loop' ? [w] : []));
+              this.registerUnit(sn.id, { node: sn, origId, slug: sn.id, deps, loop: loop || sources.includes('loop'), recompile });
+            };
+
+            const compileOne = (subNode: GraphNode): void => {
               const subDef = getNodeDefinitionFor(subNode);
-              if (!subDef) continue;
+              if (!subDef) return;
               // Skip nodes already pre-computed before this pass (e.g. loopIndex nodes
               // whose output was pre-injected with the real loop variable before the pass ran).
-              if (this.nodeOutputs.has(subNode.id)) continue;
+              if (this.nodeOutputs.has(subNode.id)) return;
+              const slugOfSub = subNode.id.slice(iterPrefix.length);
+              const origOfSub = subgraph.nodes.find(sn => subSlugMap.get(sn.id) === slugOfSub)?.id ?? slugOfSub;
+              const origSub = subgraph.nodes.find(sn => sn.id === origOfSub);
+              register(
+                subNode, origOfSub,
+                [
+                  ...Object.keys(subNode.inputs).map(k => sourceOf(subNode, k)),
+                  // ps_ sockets on the group feed this node's params
+                  ...Object.keys(subDef.paramDefs ?? {}).map(pk => (inputVars[`ps_${origOfSub}_${pk}`] ? groupSource(`ps_${origOfSub}_${pk}`) : undefined)),
+                  // … and, for a nested group, its inner nodes' params (two levels)
+                  ...(subNode.type === 'group' ? Object.keys(node.inputs).filter(k => k.startsWith(`ps_${origOfSub}_`)).map(groupSource) : []),
+                ],
+                iters > 1 && !!origSub && (!!origSub.carryMode || (!!origSub.assignOp && origSub.assignOp !== '=') || exprBlockCarryVars.has(origOfSub)),
+                () => compileOne(subNode),
+              );
 
               // ── Nested group: recursively inline its subgraph (max 2 levels) ─────────
               if (subNode.type === 'group') {
                 const innerSubgraph = subNode.params.subgraph as SubgraphData | undefined;
                 if (!innerSubgraph || innerSubgraph.nodes.length === 0) {
                   this.nodeOutputs.set(subNode.id, {});
-                  continue;
+                  return;
                 }
                 const innerPrefix = `${subNode.id}_g_`;
                 // nestedSlug = slug portion of subNode.id (already slug-based after prefix)
                 const nestedSlug = subNode.id.slice(iterPrefix.length);
 
                 // Build inner slug map for the nested group's subgraph nodes
-                const innerSlugMap = new Map<string, string>();
-                for (const inn of innerSubgraph.nodes) {
-                  innerSlugMap.set(inn.id, computeNodeSlug(inn, this.usedSlugs));
-                }
+                const innerSlugMap = this.slugsFor(innerPrefix, innerSubgraph.nodes);
 
                 // Resolve the nested group's own input vars from portInputOverrides + this.nodeOutputs
                 const nestedInputVars: Record<string, string> = {};
@@ -968,10 +1098,23 @@ export class ShaderAssembler {
                   };
                 });
                 const sortedInner = topologicalSort(innerPrefixedNodes.filter(inn => inn.type !== 'loopCarry'));
-                for (const inn of sortedInner) {
-                  if (this.nodeOutputs.has(inn.id)) continue;
+                const innerSourceOf = (inn: GraphNode, k: string): WireSource => {
+                  const pk = portOf(inn, k, innerPrefix);
+                  if (innerPortOverrides.has(`${inn.id.slice(innerPrefix.length)}:${k}`)) return pk !== undefined ? sourceOf(subNode, pk) : undefined;
+                  return pk !== undefined ? undefined : inn.inputs[k]?.connection;
+                };
+                const compileInner = (inn: GraphNode): void => {
+                  if (this.nodeOutputs.has(inn.id)) return;
                   const innDef = getNodeDefinitionFor(inn);
-                  if (!innDef) continue;
+                  if (!innDef) return;
+                  const innOrig = innOrigIds.get(inn.id) ?? inn.id;
+                  register(inn, innOrig, [
+                    ...Object.keys(inn.inputs).map(k => innerSourceOf(inn, k)),
+                    ...Object.keys(innDef.paramDefs ?? {}).flatMap(pk => [
+                      inputVars[`ps_${nestedOrigId}_${innOrig}_${pk}`] ? groupSource(`ps_${nestedOrigId}_${innOrig}_${pk}`) : undefined,
+                      subNode.inputs[`ps_${innOrig}_${pk}`] ? sourceOf(subNode, `ps_${innOrig}_${pk}`) : undefined,
+                    ]),
+                  ], false, () => compileInner(inn));
                   // innSlugId = slug portion of inn.id (already slug after innerPrefix)
                   const innSlugId = inn.id.slice(innerPrefix.length);
                   const innInputVars: Record<string, string> = {};
@@ -988,13 +1131,15 @@ export class ShaderAssembler {
                       if (fb) innInputVars[k] = fb;
                     }
                   }
-                  const { patchedNode: patchedInn, uniforms: innUniforms, bindings: innBindings } = patchNodeParamsForUniforms(inn, innDef, fn => this.functions.add(fn), innOrigIds.get(inn.id) ?? inn.id);
+                  this.applyFieldSockets(inn, innOrig, innDef, innInputVars, k => innerSourceOf(inn, k));
+                  const { patchedNode: patchedInn, uniforms: innUniforms, bindings: innBindings } = patchNodeParamsForUniforms(inn, innDef, fn => this.functions.add(fn), innOrig);
                   Object.assign(this.paramUniforms, innUniforms);
                   Object.assign(this.paramBindings, innBindings);
                   const innResult = innDef.generateGLSL(patchedInn, innInputVars);
                   this.mainCode.push(innResult.code);
                   this.nodeOutputs.set(inn.id, innResult.outputVars);
-                }
+                };
+                for (const inn of sortedInner) compileInner(inn);
                 // Map inner group output ports → compiled vars (using slug-based ids)
                 const innerGroupOutVars: Record<string, string> = {};
                 for (const port of innerSubgraph.outputPorts) {
@@ -1003,7 +1148,7 @@ export class ShaderAssembler {
                   if (fromOut?.[port.fromOutputKey]) innerGroupOutVars[port.key] = fromOut[port.fromOutputKey];
                 }
                 this.nodeOutputs.set(subNode.id, innerGroupOutVars);
-                continue;
+                return;
               }
 
               if (subDef.glslFunction) this.functions.add(subDef.glslFunction);
@@ -1032,6 +1177,7 @@ export class ShaderAssembler {
                   if (fb) subInputVars[k] = fb;
                 }
               }
+              this.applyFieldSockets(subNode, originalId, subDef, subInputVars, k => sourceOf(subNode, k));
               // ── Bypass: pass first input through to all outputs ─────────────────
               if (subNode.bypassed) {
                 const bypassInputEntries = Object.entries(subInputVars);
@@ -1059,7 +1205,7 @@ export class ShaderAssembler {
                 }
                 this.mainCode.push(bypassCode);
                 this.nodeOutputs.set(subNode.id, bypassOutVars);
-                continue;
+                return;
               }
 
               // Apply __param_X input connections as param overrides (string GLSL vars skip uniform patching)
@@ -1117,7 +1263,21 @@ export class ShaderAssembler {
               }
               this.mainCode.push(codeToEmit);
               this.nodeOutputs.set(subNode.id, subResult.outputVars);
+            };
+            let keep: Set<string> | undefined;
+            if (onlyFeeding) {
+              const byId = new Map(prefixedNodes.map(sn => [sn.id, sn]));
+              keep = new Set();
+              const todo = (subgraph.outputPorts ?? []).filter(pt => onlyFeeding.has(pt.key)).map(pt => iterPrefix + (subSlugMap.get(pt.fromNodeId) ?? pt.fromNodeId));
+              while (todo.length) {
+                const id = todo.pop()!;
+                const sn = byId.get(id);
+                if (!sn || keep.has(id)) continue;
+                keep.add(id);
+                for (const inp of Object.values(sn.inputs)) if (inp.connection) todo.push(inp.connection.nodeId);
+              }
             }
+            for (const subNode of sortedSub) if (!keep || keep.has(subNode.id)) compileOne(subNode);
           };
 
           if (iters <= 1) {
@@ -1129,7 +1289,7 @@ export class ShaderAssembler {
               if (outerVar) portValues.set(port.key, outerVar);
             }
             const portInputOverrides = resolveGroupPortOverrides(subgraph.nodes, portValues, subSlugMap);
-            compileSubgraphPass(prefix, portInputOverrides);
+            compileSubgraphPass(prefix, portInputOverrides, undefined, undefined, wantedOutputs);
             for (const [sid, sslug] of subSlugMap) this.nodeSlugMap.set(sid, prefix + sslug);
             const groupOutputVars: Record<string, string> = {};
             for (const port of (subgraph.outputPorts ?? [])) {
