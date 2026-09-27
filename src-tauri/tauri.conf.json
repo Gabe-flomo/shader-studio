@@ -37,6 +37,21 @@
     ],
     "macOS": {
       "entitlements": "./Entitlements.plist"
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": ["playfile"],
+        "name": "Playfield file",
+        "description": "Playfield file",
+        "role": "Editor",
+        "rank": "Owner",
+        "mimeType": "application/x-playfile+zip",
+        "contentTypes": ["com.shaderstudio.playfile"],
+        "exportedType": {
+          "identifier": "com.shaderstudio.playfile",
+          "conformsTo": ["public.zip-archive", "public.data"]
+        }
+      }
+    ]
   }
 }

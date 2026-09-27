@@ -18,6 +18,7 @@ import type { UserNodeDefinition, UserNodeExport } from '../../types/userNode';
 import { PresetManager } from '../../store/managers/PresetManager';
 import type { FileResult } from '../../utils/fileIO';
 import { p } from '../definitions/helpers';
+import { sealDefinition, storedForm, unsealDefinition } from '../../playfile/sealing';
 
 export const USER_NODE_PREFIX = 'shader-studio:un:';
 export const USER_NODE_CHANGED_EVENT = 'usernode-changed';
@@ -36,11 +37,13 @@ function ensureLoaded(): void {
   if (loaded) return;
   loaded = true;
   if (!hasStorage()) return;
-  for (const def of manager.load()) {
-    if (isValidDefinition(def)) {
-      defs.set(def.id, def);
-      compiled.set(def.id, userNodeToDefinition(def));
-    }
+  for (const stored of manager.load()) {
+    if (!isValidDefinition(stored)) continue;
+    // A sealed node's code is filled back in here, in memory only (src/playfile/sealing.ts).
+    let def: UserNodeDefinition;
+    try { def = unsealDefinition(stored); } catch (e) { console.warn(`[userNodes] couldn’t open the sealed node “${stored.label}”`, e); continue; }
+    defs.set(def.id, def);
+    compiled.set(def.id, userNodeToDefinition(def));
   }
 }
 
@@ -86,13 +89,60 @@ export function getAllUserNodeDefinitions(): NodeDefinition[] {
 }
 
 /** Register (or replace) a definition. Persists when storage is available. */
-export async function registerUserNode(def: UserNodeDefinition, { persist = true }: { persist?: boolean } = {}): Promise<FileResult> {
+export async function registerUserNode(given: UserNodeDefinition, { persist = true }: { persist?: boolean } = {}): Promise<FileResult> {
   ensureLoaded();
+  // A sealed definition arrives in its stored form (code in the blob): open it for the compiler.
+  let def: UserNodeDefinition;
+  try { def = given.sealed && !given.functionCode ? unsealDefinition(given) : given; } catch (e) { return { ok: false, error: `The sealed node “${given.label}” couldn’t be opened: ${e instanceof Error ? e.message : String(e)}` }; }
   defs.set(def.id, def);
   compiled.set(def.id, userNodeToDefinition(def));
   notify();
-  if (persist && hasStorage()) return manager.save(def);
+  // Only the stored form is ever saved: a sealed node's code stays encrypted at rest.
+  if (persist && hasStorage()) return manager.save(storedForm(def));
   return { ok: true };
+}
+
+/** Is this node type from a sealed pack? */
+export function isSealedUserNode(id: string): boolean {
+  ensureLoaded();
+  return !!defs.get(id)?.sealed;
+}
+
+/**
+ * Does this (new) definition carry a sealed node's code? Publishing a group
+ * built with sealed nodes flattens their functions into the new node's
+ * helpers, so the new node has to be sealed too (it can't make them editable).
+ */
+export function containsSealedCode(def: UserNodeDefinition): string[] {
+  ensureLoaded();
+  const text = [def.functionCode, ...def.helperFunctions, ...Object.values(def.iterations?.functions ?? {})].join('\n');
+  const out: string[] = [];
+  for (const d of defs.values()) {
+    if (!d.sealed || d.id === def.id) continue;
+    if ([d.functionCode, ...Object.values(d.iterations?.functions ?? {})].some(b => b.trim() && text.includes(b))) out.push(d.label);
+  }
+  return out;
+}
+
+/**
+ * A generated shader for showing (the code panel, the GLSL page): every
+ * sealed node's code replaced by a comment, line for line so line numbers
+ * (and the error marks on them) still match what the GPU compiled.
+ */
+export function redactSealedCode(glsl: string): string {
+  ensureLoaded();
+  let out = glsl;
+  for (const d of defs.values()) {
+    if (!d.sealed) continue;
+    const blocks = [d.functionCode, ...d.helperFunctions, ...Object.values(d.iterations?.functions ?? {})].filter(b => b.trim().length > 0);
+    for (const b of blocks) {
+      if (!out.includes(b)) continue;
+      const lines = b.split('\n').length;
+      const note = `// Sealed node pack: ${d.label.replace(/[\r\n]/g, ' ')} (its code isn’t shown)`;
+      out = out.split(b).join([note, ...Array.from({ length: lines - 1 }, () => '//')].join('\n'));
+    }
+  }
+  return out;
 }
 
 /**
@@ -144,10 +194,11 @@ export function resetUserNodesForTests(): void {
 // from one project works in any other copy of Playfield. The source
 // subgraph travels with it so the recipient can open and re-publish it.
 
-export function exportUserNodes(ids?: string[]): UserNodeExport {
+export function exportUserNodes(ids?: string[], opts: { seal?: boolean } = {}): UserNodeExport {
   ensureLoaded();
   const nodes = (ids ? ids.map(id => defs.get(id)).filter((d): d is UserNodeDefinition => !!d) : getAllUserNodes());
-  return { version: 1, nodes };
+  // A sealed node only ever leaves sealed; the others are sealed when asked.
+  return { version: 1, nodes: nodes.map(d => (opts.seal || d.sealed ? sealDefinition(d) : storedForm(d))) };
 }
 
 export interface ImportUserNodesResult {
