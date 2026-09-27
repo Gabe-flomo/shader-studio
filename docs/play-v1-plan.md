@@ -7,7 +7,7 @@
 ## Where it stands
 
 - **Step 1, the input bus: done.** It also carries Play's param writes (`param:nodeId::key`, resolved through the compiler's binding map), tells the render loop when a value actually moved, and wakes a sleeping loop when an input arrives.
-- **Step 2, the MIDI Input node: done.** Web MIDI plus the QWERTY stand-in. The Tauri/macOS bridge (`midir`) is still to do.
+- **Step 2, the MIDI Input node: done.** Web MIDI plus the QWERTY stand-in, and in the desktop app a native bridge (`midir` on CoreMIDI, src-tauri/src/midi.rs + src/lib/midiTauri.ts; see docs/midi.md, Desktop app).
 - **Step 3, the Play page: done** (`src/components/play/PlayPage.tsx`, `src/lib/playEngine.ts`, `src/play/`). Controls from the candidate list (floats and colours), a mappings drawer with range, curve, smoothing and colour channel, collapsible rows, Learn. Bool toggles are not offered: a `bool` param bakes into the shader, so it can't be a live control.
 - **Play files.** There is no second file. A graph carries its Play setup under the top-level `play` key, so Save in the top bar, Export, Import and the saved-graphs list all keep the panel and the mappings with the graph. Open a saved graph, go to the Play tab, and the setup is there. "Export play file" on the Play page writes the same graph with a `kind` marker (so importing it opens on Play) and with driven controls baked at their live value, so it opens looking exactly as the picture did.
 - **Layers: done.** Twelve kinds drawn over the picture by one shared layer kit (`src/play/kit/`, `src/play/particle-sim.js`) that the app (`src/play/overlay.ts`) and web exports both run; types and file schema in `src/types/playLayers.ts`, editors in `src/components/play/layers/`. Zones, actions, sensors and the graph's Layers node tie them to everything else; see the Layers section below.
@@ -41,7 +41,7 @@ A mapping is `source → range → curve → smoothing → control`. Every sourc
 | Trigger | a key, a click on the picture, a beat, a MIDI note, an OSC message, an audio hit, a shape, a hand gesture or two things coming close → envelope / toggle / step / random | presses are counted, so a quick tap is never missed; row Learn picks what fires it; **Fires** picks once, continuously, every N or on release |
 | Live audio in | level, bass, low-mid, high-mid, treble of a mic or a virtual cable | Listen asks for the microphone; pick BlackHole / CABLE Output for Ableton |
 | OSC | one argument of an OSC address, scaled from min..max | needs `npm run osc-bridge`; Learn picks the next address |
-| MIDI CC, note, velocity, gate, bend | Web MIDI or the keyboard stand-in | Learn takes the next message |
+| MIDI CC, note, velocity, gate, bend | Web MIDI, the desktop app's native bridge, or the keyboard stand-in | Learn takes the next message |
 | Hands | any of 21 landmarks (X, Y, Z), pinch, openness, palm centre, roll, nearness, in view, a gesture held, the distance between the hands | camera + hand tracking (Enable); Learn takes the landmark that moved most |
 
 Every mapping's curve can also be **drawn**: pick Draw and drag across the pad; the samples are stored with the mapping.
