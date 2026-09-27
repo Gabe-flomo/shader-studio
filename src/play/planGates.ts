@@ -10,7 +10,7 @@
  * record, and `playableForPlan` is only the copy that plays, so nothing is
  * ever dropped from a file.
  */
-import type { PlayMapping, PlayRecord, PlaySource, TriggerSpec } from '../types/play';
+import type { PlayMapping, PlayPairMapping, PlayRecord, PlaySource, TriggerSpec } from '../types/play';
 import { canOn, type Plan } from '../lib/plan';
 
 /** Sources Free can map from. `control` is another slider on the panel: controls are Free. */
@@ -41,6 +41,12 @@ export function mappingAllowed(m: PlayMapping, plan: Plan | null): boolean {
   return canOn(plan, 'play.sources') || !sourceNeedsPro(m.source);
 }
 
+/** A pair mapping on Free: the pointer as a position, or a Free source, with no conditions or swap signals (those are Pro sources). */
+export function pairMappingNeedsPro(m: PlayPairMapping): boolean {
+  if (m.source.kind === 'position' ? m.source.anchor !== 'mouse' : sourceNeedsPro(m.source.source)) return true;
+  return !!(m.a.when || m.b.when || m.swap?.signal || m.swap?.backSignal);
+}
+
 const cache = new WeakMap<PlayRecord, PlayRecord>();
 
 /**
@@ -55,6 +61,7 @@ export function playableForPlan(record: PlayRecord, plan: Plan | null): PlayReco
   const out: PlayRecord = {
     ...record,
     mappings: record.mappings.filter(m => mappingAllowed(m, plan)),
+    pairMappings: canOn(plan, 'play.sources') ? record.pairMappings : record.pairMappings?.filter(m => !pairMappingNeedsPro(m)),
     layers: [],
     groups: undefined,
     actions: undefined,
@@ -71,7 +78,7 @@ export function proOnlyParts(record: PlayRecord, plan: Plan | null): string[] {
   const out: string[] = [];
   if (!canOn(plan, 'play.layers') && record.layers.length) out.push(`${record.layers.length} layer${record.layers.length === 1 ? '' : 's'}`);
   if (!canOn(plan, 'play.layers') && record.actions?.length) out.push(`${record.actions.length} action${record.actions.length === 1 ? '' : 's'}`);
-  const locked = record.mappings.filter(m => !mappingAllowed(m, plan)).length;
+  const locked = record.mappings.filter(m => !mappingAllowed(m, plan)).length + (canOn(plan, 'play.sources') ? 0 : (record.pairMappings ?? []).filter(pairMappingNeedsPro).length);
   if (locked) out.push(`${locked} mapping${locked === 1 ? '' : 's'}`);
   if (!canOn(plan, 'play.backgrounds') && record.display?.source && record.display.source !== 'shader') out.push('the background');
   if (!canOn(plan, 'play.midiFile') && record.midiFile) out.push('the MIDI file');

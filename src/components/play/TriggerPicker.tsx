@@ -38,6 +38,7 @@ import { audioReaderBank } from '../../lib/audioReaderBank';
 import { useReadersPanel } from './readersPanelUi';
 import { Button } from '../ui/Button';
 import { ReaderMeter } from './AudioReadersPanel';
+import { ConditionFields, SignalPicker } from './ConditionFields';
 import type { AudioReader } from '../../types/play';
 
 export interface TriggerLayerRef { id: string; label: string; kind: string }
@@ -53,6 +54,7 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
   const hint = (text: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{text}</span>;
   const shapes = layers.filter(l => l.kind === 'shape');
   const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
+  const signals = useNodeGraphStore(s => s.play.signals) ?? NO_SIGNAL_LIST;
   // Free: key, click and audio triggers; the rest say Pro and open the Pro sheet (play/planGates.ts).
   const allSources = useCan('play.sources');
   const kinds = useMemo(() => triggerKindSections(!allSources), [allSources]);
@@ -60,7 +62,7 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
     <>
       <GroupedPicker ariaLabel="Trigger" value={t.on} sections={kinds} width={290} onChange={v => {
         if (!allSources && !FREE_TRIGGER_ONS.has(v as TriggerSpec['on'])) { openProSheet('play.sources'); return; }
-        onChange(triggerFromKind(v as TriggerSpec['on'], t, layers, readers[0]?.id ?? ''));
+        onChange(triggerFromKind(v as TriggerSpec['on'], t, layers, readers[0]?.id ?? '', signals[0]?.id ?? ''));
       }} height={26} />
       {t.on === 'key' && <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(t.code)}</span>}
       {t.on === 'note' && <>
@@ -103,12 +105,18 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
       </>}
       {t.on === 'proximity' && <ProximityFields trigger={t} layers={layers} onChange={onChange} />}
       {t.on === 'reader' && <ReaderFields trigger={t} readers={readers} onChange={onChange} />}
+      {t.on === 'value' && <ConditionFields cond={t} isOpen={() => playEngine.conditionOpen(t)} onChange={c => onChange(withFire({ on: 'value', ...c }, t.fire))} />}
+      {t.on === 'signal' && <>
+        <SignalPicker value={t.signal} onChange={signal => onChange({ ...t, signal })} />
+        {hint('sent by a Send a signal action, or an axis swap')}
+      </>}
       {(t.on === 'key' || t.on === 'note' || t.on === 'osc' || t.on === 'mouse') && hint(`${triggerLabel(t)} · Learn to change`)}
     </>
   );
 }
 
 const NO_READERS: AudioReader[] = [];
+const NO_SIGNAL_LIST: NonNullable<import('../../types/play').PlayRecord['signals']> = [];
 
 /** An audio reader trigger: which reader, the level it fires at, how far it falls before it can fire again, and the level now. */
 function ReaderFields({ trigger: t, readers, onChange }: {

@@ -142,7 +142,7 @@
     return x;
   }
   function triggerKey(t) {
-    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; }
+    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; case 'value': return 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance; case 'signal': return 'sig:' + t.signal; }
     return '';
   }
   // Firing modes (once, held, every N frames or seconds, on release): how many times a trigger fires this frame.
@@ -170,11 +170,8 @@
     map.set(id, made);
     return { slot: made, fresh: true };
   }
-  function proximityGate(open, d, when, distance, margin) {
-    if (d === null) return false;
-    if (when === 'closer') return open ? d <= distance + margin : d < distance;
-    return open ? d >= distance - margin : d > distance;
-  }
+  // A proximity trigger is the distance case of a condition (the kit's signals.js): below or above, the margin its hysteresis.
+  function proximityCondition(t) { return { value: 'dist:' + t.a + '|' + t.b, cmp: t.when === 'closer' ? 'below' : 'above', threshold: t.distance, hysteresis: t.margin, tolerance: 0 }; }
   function handAnchorOf(ref) { const m = /^hand:(left|right|any):(\d{1,2})$/.exec(ref); return m && +m[2] <= 20 ? { side: m[1], point: +m[2] } : null; }
   function beatAt(bpm, beats, time) {
     const period = (60 / Math.max(1, bpm)) * Math.max(0.0625, beats);
@@ -1106,7 +1103,13 @@ void main() {
     const layerValue = (id, key, fb) => { const k = id + '::' + key; let v = overrides.get(k); if (v === undefined) v = layerLive.get(k); return v === undefined ? fb : v; };
     const value = (l, k) => layerValue(l.id, k, l[k]);
     const actions = (play.actions || []).filter(a => a.enabled);
-    const allTriggers = play.mappings.filter(m => m.enabled && m.source.kind === 'trigger').map(m => m.source.trigger).concat(actions.map(a => a.trigger));
+    // Conditions, signals and axis swaps: the kit's signals.js, the same code the app runs.
+    const SG = typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals : null;
+    const pairs = new Map((play.pairs || []).map(p => [p.id, p]));
+    const pairMappings = (play.pairMappings || []).filter(m => m.enabled && pairs.has(m.pairId));
+    const pairState = new Map();
+    const allTriggers = play.mappings.filter(m => m.enabled && m.source.kind === 'trigger').map(m => m.source.trigger).concat(actions.map(a => a.trigger))
+      .concat(pairMappings.filter(m => m.source.kind === 'value' && m.source.source.kind === 'trigger').map(m => m.source.source.trigger));
     const gamepad = i => (navigator.getGamepads ? navigator.getGamepads()[i] : null);
     const keysUsed = new Set();
     for (const m of play.mappings) {
@@ -1115,6 +1118,7 @@ void main() {
       if (m.source.kind === 'trigger' && m.source.trigger.on === 'key') keysUsed.add(m.source.trigger.code);
     }
     for (const a of actions) if (a.trigger.on === 'key') keysUsed.add(a.trigger.code);
+    for (const m of pairMappings) { const s = m.source.kind === 'value' ? m.source.source : null; if (s && s.kind === 'key') keysUsed.add(s.code); if (s && s.kind === 'trigger' && s.trigger.on === 'key') keysUsed.add(s.trigger.code); }
     function readSource(s) {
       switch (s.kind) {
         case 'mouse': return s.axis === 'x' ? mouse.x : s.axis === 'y' ? mouse.y : mouse.down;
@@ -1158,6 +1162,9 @@ void main() {
     const anchorLookup = id => { const l = layersById.get(id); return l ? { layer: l, value: k => value(l, k) } : null; };
     const reported = k => sensors.get(k);
     function anchorAt(ref) {
+      if (ref === 'mouse') return { x: mouse.x, y: mouse.y };
+      const pt = SG ? SG.point(ref) : null;
+      if (pt) return pt;
       const h = handAnchorOf(ref);
       if (h) return handSt && usesHands ? HK.point(handSt, h.side, h.point) : null;
       const l = layersById.get(ref);
@@ -1166,6 +1173,17 @@ void main() {
     function anchorGap(a, b) {
       const pa = anchorAt(a), pb = anchorAt(b);
       return pa && pb ? Math.hypot((pa.x - pb.x) * glCanvas.width / Math.max(1, glCanvas.height), pa.y - pb.y) : null;
+    }
+    // A condition's value now (the kit's sgParseValueRef): a control, a layer's or Finish number, a mapping's source, the pointer, a distance.
+    function readValue(ref) {
+      const r = SG ? SG.parseRef(ref) : null;
+      if (!r) return null;
+      if (r.kind === 'control') { const c = controls.get(r.id); const v = !c ? undefined : live.has(c.id) ? live.get(c.id) : base.get(c.id); return v === undefined ? null : Array.isArray(v) ? (v[0] + v[1] + v[2]) / 3 : v; }
+      if (r.kind === 'mapping') { const m = play.mappings.find(x => x.id === r.id); if (!m) return null; if (m.source.kind === 'trigger') { const st = trig.get(m.id); return st ? st.value : 0; } return readSource(m.source); }
+      if (r.kind === 'mouse') return r.axis === 'x' ? mouse.x : mouse.y;
+      if (r.kind === 'distance') return anchorGap(r.a, r.b);
+      const l = layersById.get(r.layerId);
+      return l && typeof l[r.key] === 'number' ? layerValue(r.layerId, r.key, l[r.key]) : null;
     }
     function triggerInput(t) {
       if (t.on === 'beat') { const b = beatAt(t.bpm, t.beats, time); return { presses: b.count, gate: b.gate }; }
@@ -1230,16 +1248,28 @@ void main() {
       }
     }
     // Shape enter / fill triggers: a sensor crossing its threshold is a press (80% hysteresis).
-    const zoneGates = new Set(), proxGates = new Set();
-    // Proximity: A and B closer (or farther) than the distance is a press; past the margin it lets go.
-    function tickProximityTriggers() {
+    const zoneGates = new Set();
+    // Conditions, proximity among them: becoming true is a press, false again its release; a crossing is both at once.
+    const condStates = new Map();
+    function tickConditionTriggers() {
+      if (!SG) return;
+      const seen = new Set();
       for (const t of allTriggers) {
-        if (t.on !== 'proximity') continue;
-        const k = triggerKey(t), open = proxGates.has(k), on = proximityGate(open, anchorGap(t.a, t.b), t.when, t.distance, t.margin);
-        if (on && !open) { proxGates.add(k); press(k); }
-        else if (!on && open) { proxGates.delete(k); release(k); }
+        if (t.on !== 'proximity' && t.on !== 'value') continue;
+        const k = triggerKey(t);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const c = t.on === 'proximity' ? proximityCondition(t) : t;
+        let st = condStates.get(k);
+        if (!st) { st = SG.condNew(); condStates.set(k, st); }
+        const ev = SG.condStep(st, readValue(c.value), c);
+        if (ev === 'open') press(k);
+        else if (ev === 'close') release(k);
+        else if (ev === 'tap') { press(k); release(k); }
       }
     }
+    // A signal: its "When signal fires" triggers see a press and its release at once.
+    function emitSignal(id) { const k = 'sig:' + id; press(k); release(k); }
     function tickZoneTriggers() {
       for (const t of allTriggers) {
         if (t.on !== 'zone' || t.event === 'click') continue;
@@ -1252,9 +1282,12 @@ void main() {
     const HK = typeof SSKit !== 'undefined' && SSKit.hands ? SSKit.hands : null;
     const handSt = HK ? HK.create() : null;
     const handSettings = Object.assign({ smoothing: 0.5, overlay: true, colour: [0.35, 1, 0.75], mirror: true }, play.hands || {});
-    const trigHands = t => t.on === 'hand' || (t.on === 'proximity' && (!!handAnchorOf(t.a) || !!handAnchorOf(t.b)));
+    // A condition on a distance to or from a hand point reads hands too.
+    const condHands = c => { if (!c || typeof c.value !== 'string' || c.value.indexOf('dist:') !== 0) return false; const i = c.value.indexOf('|'); return i > 0 && (!!handAnchorOf(c.value.slice(5, i)) || !!handAnchorOf(c.value.slice(i + 1))); };
+    const trigHands = t => t.on === 'hand' || (t.on === 'proximity' && (!!handAnchorOf(t.a) || !!handAnchorOf(t.b))) || (t.on === 'value' && condHands(t));
     const usesHands = play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && trigHands(m.source.trigger)) || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!handAnchorOf(m.source.otherId || '')))
-      || actions.some(a => trigHands(a.trigger)) || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
+      || actions.some(a => trigHands(a.trigger)) || play.layers.some(l => l.kind === 'null' && l.follow === 'hand')
+      || pairMappings.some(m => (m.source.kind === 'position' ? !!handAnchorOf(m.source.anchor) : m.source.source.kind === 'hand' || (m.source.source.kind === 'trigger' && trigHands(m.source.source.trigger))) || condHands(m.a.when) || condHands(m.b.when));
     if (usesHands && B.hands) { shared.hands.assets = B.hands; if (!shared.hands.options) shared.hands.options = HK.options(play.hands); }
     const handGates = new Set();
     let handSeq = -1;
@@ -1275,20 +1308,63 @@ void main() {
       }
     }
     // Actions (burst, next line, drop…): by their trigger's mode, once per press unless it says every frame, every N or on release.
+    // Send a signal passes its signal on down the chain in the same frame (each signal once a frame, a limited depth).
     function tickActions(dt) {
-      for (const a of actions) {
+      const fires = a => {
         const inp = triggerInput(a.trigger);
         const f = fireSlot(actionFire, a.id, a.trigger, inp.presses, inp.gate);
-        if (f.fresh || !K) continue;
-        const n = Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, dt));
-        for (let i = 0; i < n; i++) K.act(a);
+        return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, dt));
+      };
+      if (SG) { SG.runActions(actions, fires, a => { if (K) K.act(a); }, emitSignal); return; }
+      for (const a of actions) { const n = fires(a); if (a.do !== 'signal' && K) for (let i = 0; i < n; i++) K.act(a); }
+    }
+    // Pair mappings: a position drives both axes (x → A, y → B), a single source A, B or both, each axis with its own
+    // range, curve and smoothing; an axis whose condition doesn't hold keeps its last value; an axis swap moves between them.
+    let lastTime = -Infinity;
+    function writePlain(c, v, driven) {
+      const lt = layerTarget(c.target);
+      if (lt) layerLive.set(lt.layerId + '::' + lt.key, v);
+      else { const un = uniformFor(c); if (un) uniformValues[un] = v; }
+      live.set(c.id, v); driven.add(c.id);
+    }
+    function smoothAxis(prev, target, ax, dt) {
+      if (ax.smoothMs <= 0 || prev === undefined) return target;
+      const v = prev + (target - prev) * (1 - Math.exp(-(dt * 1000) / ax.smoothMs));
+      return Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(ax.outMax - ax.outMin)) ? target : v;
+    }
+    function tickPairs(dt, driven) {
+      if (!SG) return;
+      for (const m of pairMappings) {
+        const p = pairs.get(m.pairId), ca = controls.get(p.a), cb = controls.get(p.b);
+        if (!ca || !cb) continue;
+        let st = pairState.get(m.id);
+        if (!st) { st = { a: undefined, b: undefined, swap: SG.swapNew(), condA: SG.condNew(), condB: SG.condNew() }; pairState.set(m.id, st); }
+        let ua = null, ub = null;
+        if (m.source.kind === 'position') { const pt = anchorAt(m.source.anchor); if (pt) { ua = Math.max(0, Math.min(1, pt.x)); ub = Math.max(0, Math.min(1, pt.y)); } }
+        else { const src = m.source.source; ua = ub = src.kind === 'trigger' ? readTrigger({ id: m.id, source: src }, dt) : readSource(src); }
+        const swapping = !!m.swap && m.source.kind === 'value';
+        let useA = swapping ? st.swap.axis === 'a' : m.affect !== 'b', useB = swapping ? st.swap.axis === 'b' : m.affect !== 'a';
+        if (m.a.when) { SG.condStep(st.condA, readValue(m.a.when.value), m.a.when); if (!st.condA.open) useA = false; }
+        if (m.b.when) { SG.condStep(st.condB, readValue(m.b.when.value), m.b.when); if (!st.condB.open) useB = false; }
+        if (useA && ua !== null) st.a = smoothAxis(st.a, m.a.outMin + (m.a.outMax - m.a.outMin) * curve(ua, m.a), m.a, dt);
+        if (useB && ub !== null) st.b = smoothAxis(st.b, m.b.outMin + (m.b.outMax - m.b.outMin) * curve(ub, m.b), m.b, dt);
+        if (st.a !== undefined && (swapping || m.affect !== 'b')) writePlain(ca, st.a, driven);
+        if (st.b !== undefined && (swapping || m.affect !== 'a')) writePlain(cb, st.b, driven);
+        if (swapping) {
+          const ev = SG.swapStep(st.swap, useA && ua !== null ? st.a : null, useB && ub !== null ? st.b : null, m.swap);
+          if (ev === 'toB' && m.swap.signal) emitSignal(m.swap.signal);
+          if (ev === 'toA' && m.swap.backSignal) emitSignal(m.swap.backSignal);
+        }
       }
     }
     function tickMappings(dt) {
       tickHands();
       tickAudioTriggers();
       tickZoneTriggers();
-      tickProximityTriggers();
+      // A clock sent back: axis swaps start on A again.
+      if (time < lastTime - 1e-6) for (const st of pairState.values()) st.swap = SG.swapNew();
+      lastTime = time;
+      tickConditionTriggers();
       tickActions(dt);
       const driven = new Set();
       let moved = false;
@@ -1323,6 +1399,7 @@ void main() {
         } else { uniformValues[un] = v; live.set(c.id, v); }
         driven.add(c.id);
       }
+      tickPairs(dt, driven);
       for (const id of [...live.keys()]) if (!driven.has(id)) {
         moved = true;
         actLevel.delete(id);
@@ -1773,7 +1850,7 @@ void main() {
         const steps = Array.isArray(o.steps) ? o.steps : [];
         if (K) K.reset(o.seed > 0 ? o.seed : 1);
         if (finishR) finishR.reset();
-        dropTargets(); frame = 0; smooth.clear(); trig.clear(); actLevel.clear(); overrides.clear();
+        dropTargets(); frame = 0; smooth.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); lastTime = -Infinity;
         for (const at of steps) { time = Math.max(0, +at || 0); frame++; tickMappings(fdt); paint(fdt, false); }
         time = Math.max(0, +t || 0); frame++; tickMappings(fdt); paint(fdt, false);
         return o.capture ? composite() : null;

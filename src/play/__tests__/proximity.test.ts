@@ -394,7 +394,9 @@ function runtimeFn<T>(name: string): T {
 describe('the web runtime', () => {
   it('fires by the same modes, gates proximity the same way, and keys it the same', () => {
     const rtFire = runtimeFn<typeof stepFire>('stepFire');
-    const rtGate = runtimeFn<typeof proximityGate>('proximityGate');
+    // The runtime gates proximity with the inlined kit's condition (signals.js), the same one the app runs.
+    const SG = (new Function(`${kitScript()}\nreturn SSKit;`)() as { signals: { gate: (open: boolean, v: number | null, cmp: string, th: number, h: number, tol: number) => boolean } }).signals;
+    const rtGate = (open: boolean, d: number | null, when: 'closer' | 'farther', distance: number, margin: number) => SG.gate(open, d, when === 'closer' ? 'below' : 'above', distance, margin, 0);
     const rtKey = runtimeFn<(t: TriggerSpec) => string>('triggerKey');
     const modes: Array<FireSpec | undefined> = [undefined, { mode: 'held', every: 1, unit: 'frames' }, every(3, 'frames'), every(0.05, 'seconds'), { mode: 'release', every: 1, unit: 'frames' }];
     for (const f of modes) {

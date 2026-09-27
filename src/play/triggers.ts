@@ -7,7 +7,16 @@
  * fires. The envelope finishes its attack even if the gate closed during it,
  * so a quick tap is a full hit rather than a flicker.
  */
-import type { FireSpec, NoiseType, TriggerMode, TriggerSpec } from '../types/play';
+import type { FireSpec, NoiseType, TriggerMode, TriggerSpec, ValueCondition } from '../types/play';
+import { sgGate, sgValueKey } from './kit/signals.js';
+
+/** Where a signal's fires are counted (a "When signal fires" trigger's key). */
+export function signalKey(id: string): string { return `sig:${id}`; }
+
+/** A proximity trigger as the distance condition it is: `dist:A|B` below (closer) or above (farther) the distance, the margin its hysteresis. */
+export function proximityCondition(t: { a: string; b: string; when: 'closer' | 'farther'; distance: number; margin: number }): ValueCondition {
+  return { value: `dist:${t.a}|${t.b}`, cmp: t.when === 'closer' ? 'below' : 'above', threshold: t.distance, hysteresis: t.margin, tolerance: 0 };
+}
 
 export interface TriggerParams {
   mode: TriggerMode;
@@ -47,6 +56,8 @@ export function triggerKey(t: TriggerSpec): string {
     case 'hand': return `hand:${t.side}:${t.gesture}`;
     case 'proximity': return `prox:${t.a}:${t.b}:${t.when}:${t.distance}:${t.margin}`;
     case 'reader': return `reader:${t.readerId}:${t.threshold}:${t.hysteresis}`;
+    case 'value': return sgValueKey(t);
+    case 'signal': return signalKey(t.signal);
   }
 }
 
@@ -117,9 +128,8 @@ export function firesWhileHeld(fire: FireSpec | undefined): boolean {
  * Farther: opens above `distance`, closes below `distance - margin`.
  */
 export function proximityGate(open: boolean, d: number | null, when: 'closer' | 'farther', distance: number, margin: number): boolean {
-  if (d === null) return false;
-  if (when === 'closer') return open ? d <= distance + margin : d < distance;
-  return open ? d >= distance - margin : d > distance;
+  // The distance case of a condition (play/kit/signals.js): below or above, with the margin as hysteresis.
+  return sgGate(open, d, when === 'closer' ? 'below' : 'above', distance, margin, 0);
 }
 
 /** Distance between two points on the picture (0..1, y up) in picture heights. */

@@ -9,7 +9,7 @@ import { playEngine, type ControlValue } from '../../lib/playEngine';
 /** What each driven control is right now (mappings applied), by control id. */
 export function useLiveValues(play: PlayRecord): Map<string, ControlValue> {
   const [values, setValues] = useState<Map<string, ControlValue>>(() => new Map());
-  const anyMapped = play.mappings.some(m => m.enabled);
+  const anyMapped = play.mappings.some(m => m.enabled) || !!play.pairMappings?.some(m => m.enabled);
   useEffect(() => {
     if (!anyMapped) return;
     let raf = 0;

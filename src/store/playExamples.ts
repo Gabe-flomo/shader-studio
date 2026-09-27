@@ -21,6 +21,7 @@ import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 import {
   defaultLayer, handAnchor, type ActionKind, type AudioReader, type PlayAudioReaders, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
+  type CondCmp, type PairAxis, type PlayPair, type PlayPairMapping, type PlaySignal,
 } from '../types/play';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 import type { GroupColour, LayerGroup } from '../types/layerGroups';
@@ -106,7 +107,7 @@ const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string
 /** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
 const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
-function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; notes: string }): PlayRecord {
+function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; signals?: PlaySignal[]; pairs?: PlayPair[]; pairMappings?: PlayPairMapping[]; notes: string }): PlayRecord {
   const out: PlayRecord = { version: 1, controls: p.controls ?? [], mappings: p.mappings ?? [], layers: p.layers ?? [] };
   if (p.groups?.length) out.groups = p.groups;
   if (p.actions?.length) out.actions = p.actions;
@@ -115,8 +116,17 @@ function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayC
   if (p.takes?.length) out.takes = p.takes;
   if (p.audioReaders) out.audioReaders = p.audioReaders;
   if (p.finish) out.finish = p.finish;
+  if (p.signals?.length) out.signals = p.signals;
+  if (p.pairs?.length) out.pairs = p.pairs;
+  if (p.pairMappings?.length) out.pairMappings = p.pairMappings;
   return out;
 }
+/** A condition on a value (sgParseValueRef paths), as a trigger. */
+const when = (value: string, cmp: CondCmp, threshold: number, hysteresis = 0, tolerance = 0.01): TriggerSpec => ({ on: 'value', value, cmp, threshold, hysteresis, tolerance });
+/** An action that sends a signal. */
+const send = (id: string, trigger: TriggerSpec, signal: string): PlayAction => ({ id, trigger, do: 'signal', layerId: '', amount: 1, enabled: true, signal });
+/** One axis of a pair mapping. */
+const axis = (outMin: number, outMax: number, o: Partial<PairAxis> = {}): PairAxis => ({ outMin, outMax, curve: 'linear', smoothMs: 0, ...o });
 /** A Finish effect at its defaults (every number filled in, as the parser keeps it), with `over` on top. Its id is its kind. */
 function fx(kind: FinishKind, over: Partial<FinishEffect> = {}): FinishEffect {
   return { ...newFinishEffect(kind, kind), ...over };
@@ -583,6 +593,79 @@ The glow's Radius reads the same distance as a sensor (Layer sensor → Cursor �
 • In Layers → Actions, open the Proximity trigger: the meter shows the distance now, and the shaded part is where it fires.
 • Set the sparks' Fires to **Continuously**, or to **Every 0.1 sec**.
 • Change Once to **On exit**: the burst comes when you leave.`,
+  })),
+  ex('playConditions', glowGraph({ radius: 0.08, falloff: 10, tint: [0.4, 0.75, 1] }), play({
+    layers: [
+      layer('null', 'goal', 'Goal', { x: 0.78, y: 0.5, size: 14, color: '#7cd4ff' }),
+      layer('null', 'cursor', 'Cursor', { x: 0.25, y: 0.5, follow: 'mouse', spring: 0.7, wobble: 0.2 }),
+      layer('particles', 'pop', 'Pop', { count: 1200, emit: 'burst', spawn: 'null', nullId: 'goal', spawnRadius: 0.02, field: 'none', speed: 1.3, life: 1.1, fade: 0.6, size: 2.2, sizeJitter: 0.6, colour: 'palette', palette: 3, paletteBy: 'age', trail: 0.4, blend: 'screen' }),
+      layer('text', 'words', 'Words', { text: 'REACH THE GOAL\nONE\nTWO\nTHREE\nAGAIN', x: 0.5, y: 0.12, size: 0.06, sequence: true, transition: 'rise' }),
+    ],
+    controls: [
+      ctl('radius', 'circ::radius', 'Radius', 0.04, 0.34),
+      colourCtl('tint', 'glow::tint', 'Tint (flashes)'),
+    ],
+    signals: [{ id: 'reached', name: 'Reached' }, { id: 'celebrate', name: 'Celebrate' }],
+    mappings: [
+      map('size', 'radius', S.mouse('y'), 0.04, 0.34, { smoothMs: 80 }),
+      map('flash', 'tint', S.trig({ on: 'signal', signal: 'celebrate' }, 'envelope', { attack: 10, decay: 350, sustain: 0.35, release: 500 }), 0.35, 1.6),
+    ],
+    actions: [
+      send('near', when('dist:cursor|goal', 'below', 0.1, 0.03), 'reached'),
+      send('big', when('ctl:radius', 'crossUp', 0.28, 0.04), 'reached'),
+      send('relay', { on: 'signal', signal: 'reached' }, 'celebrate'),
+      act('burst', { on: 'signal', signal: 'celebrate' }, 'burst', 'pop', 220),
+      act('line', { on: 'signal', signal: 'celebrate' }, 'next', 'words'),
+    ],
+    notes: `**What it shows.** **When a value…** triggers and **signals**. A trigger can watch any number: a control, a layer's property, a mapping's source, a Finish number, or the distance between two things. An action can **Send a signal** instead of changing a layer, and other actions and mappings fire on it.
+
+**How it's built.**
+• Cursor follows the mouse; Goal sits on the right. Action **near**: when the distance Cursor ↔ Goal goes **below** 0.1, send **Reached**.
+• Mouse Y drives the Radius. Action **big**: when Radius **crosses up** past 0.28, send **Reached** too.
+• **relay**: on Reached, send **Celebrate**. On Celebrate, burst the particles at Goal and step the words; a Trigger mapping on Celebrate flashes the tint.
+Signals pass along the chain in the same frame. Each signal fires at most once a frame and a chain stops after 8 links, so a loop can't lock up the page.
+
+**Try this.**
+• Move the mouse onto Goal, or up to the top of the picture.
+• Open an action's When: the meter shows the value now against the threshold; the lighter strip is the hysteresis it has to pass back through before it can fire again.
+• In Layers → Signals press ▶ on Reached: the chain runs without touching anything.
+• Record a take: what the chain did is recorded and renders the same every time.`,
+  })),
+  ex('playPairs', glowGraph({ radius: 0.12, falloff: 9, tint: [1, 0.55, 0.35] }), play({
+    controls: [
+      ctl('posX', 'circ::posX', 'Circle · X', -0.6, 0.6),
+      ctl('posY', 'circ::posY', 'Circle · Y', -0.6, 0.6),
+      ctl('radius', 'circ::radius', 'Radius', 0.04, 0.3),
+      ctl('falloff', 'glow::brightness', 'Falloff', 3, 24),
+      colourCtl('tint', 'glow::tint', 'Tint (flashes on a swap)'),
+    ],
+    pairs: [
+      { id: 'where', label: 'Circle', a: 'posX', b: 'posY', position: true },
+      { id: 'look', label: 'Size and glow', a: 'radius', b: 'falloff', position: false },
+    ],
+    signals: [{ id: 'turn', name: 'Turn' }],
+    pairMappings: [
+      {
+        id: 'walk', pairId: 'where', source: { kind: 'value', source: S.lfo('triangle', 0.12) }, affect: 'a',
+        a: axis(-0.5, 0.5, { smoothMs: 60 }), b: axis(-0.5, 0.5, { smoothMs: 60 }),
+        swap: { at: 0.4, dir: 'up', backAt: -0.4, backDir: 'down', signal: 'turn', backSignal: 'turn' }, enabled: true,
+      },
+      {
+        id: 'feel', pairId: 'look', source: { kind: 'value', source: S.mouse('y') }, affect: 'both',
+        a: axis(0.05, 0.28, { smoothMs: 80 }), b: axis(20, 4, { smoothMs: 80, curve: 'exp', when: { value: 'mouse:x', cmp: 'above', threshold: 0.5, hysteresis: 0.03, tolerance: 0.01 } }), enabled: true,
+      },
+    ],
+    mappings: [map('flash', 'tint', S.trig({ on: 'signal', signal: 'turn' }, 'envelope', { attack: 10, decay: 300, sustain: 0.3, release: 400 }), 0.4, 1.6)],
+    notes: `**What it shows.** **Pair controls** and **axis swap**. Two controls can play as one: two sliders, plus an XY pad when they are a position. The shader still sees two plain numbers.
+
+**How it's built.**
+• **Circle** pairs X and Y as a position (right-click a slider → **Add as position with Y**). A slow triangle LFO drives it with an **axis swap**: it moves X until X crosses 0.4, then moves Y until Y crosses −0.4 going down, then X again. The axis it leaves holds where it was, so the circle walks a staircase. Each swap sends **Turn**, which flashes the tint.
+• **Size and glow** pairs Radius with Falloff (right-click → **Pair with…**). Mouse Y drives both at once, each through its own range and curve. Falloff listens **only while** Mouse X is past the middle, and holds its value otherwise.
+
+**Try this.**
+• Drag the dot on the XY pad; the axis a mapping drives is locked while it drives it.
+• In Mappings → Pairs, change the walk's source to Mouse X, or its swap thresholds. Press **Start on A** to reset it (rewinding the clock does the same).
+• Change the walk to **Position** → Mouse: both axes follow the pointer at once.`,
   })),
   ex('playTextMattes', fbmGraph(), play({
     layers: [
