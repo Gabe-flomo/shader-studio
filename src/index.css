@@ -48,3 +48,23 @@ body {
      dvh support) on 100vh. */
   height: 100dvh;
 }
+
+/* Touch screens: a long press on the canvas, a picture, a card or a button shouldn't start
+   selecting text or bring up the copy / save-image callout. Text people might copy stays
+   selectable: fields, code, Present text outside Edit (data-reading), and anything marked
+   data-selectable (a Play's notes). */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, [data-selectable], [data-reading] .pp-md {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+:is([data-selectable], [data-reading] .pp-md) :is(button, canvas, img, video, [role="slider"]) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}

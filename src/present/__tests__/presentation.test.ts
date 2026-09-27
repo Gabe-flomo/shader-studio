@@ -216,6 +216,14 @@ describe('the samples that teach the app', () => {
     expect(SAMPLE_PRESENTATIONS).toContain(FIRST_SAMPLE);
   });
 
+  it('each show a picture from an example they are built from', async () => {
+    for (const s of SAMPLE_PRESENTATIONS) {
+      const p = await s.build(0);
+      const keys = p.sources.map(src => (src.from.kind === 'example' ? src.from.key : ''));
+      expect(keys, s.title).toContain(s.still);
+    }
+  });
+
   it('keep to 5–9 steps', async () => {
     for (const s of SAMPLE_PRESENTATIONS.filter(x => x.group === 'app' || x.title === BOOK_TITLE)) {
       const p = await s.build(0);

@@ -20,6 +20,8 @@ export interface SamplePresentation {
   hint: string;
   /** 'app': how to use Playfield; 'topic': a subject taught with it. */
   group: 'app' | 'topic';
+  /** The example (one it's built from) whose picture stands for it on the empty Present page. */
+  still?: string;
   build: (now?: number) => Promise<Presentation>;
 }
 
@@ -241,23 +243,23 @@ The code is live: change the colour line, or add a sideways kick to \`p.vx\`, an
 
 export const SAMPLE_PRESENTATIONS: SamplePresentation[] = [
   // Learn the app: how to use Playfield itself, alongside the Learn lessons.
-  { title: STUDIO_TITLE, group: 'app', hint: 'Nodes, wires, sliders, the code, groups, saving', build: buildStudioPresentation },
-  { title: FIRST_PLAY_TITLE, group: 'app', hint: 'Controls, the mouse, an LFO, a key, a layer, a take', build: buildFirstPlayPresentation },
-  { title: FIELD_TITLE, group: 'app', hint: 'Grid Pattern and Array with a shape of your own', build: buildFieldSocketsPresentation },
-  { title: CONVERT_TITLE, group: 'app', hint: 'The Convert page: paste a shader, get nodes', build: buildConvertPresentation },
-  { title: MAKING_TITLE, group: 'app', hint: 'Steps, blocks, snapshots, chips, live code, sharing', build: buildMakingPresentation },
+  { title: STUDIO_TITLE, group: 'app', hint: 'Nodes, wires, sliders, the code, groups, saving', still: 'learnLoop', build: buildStudioPresentation },
+  { title: FIRST_PLAY_TITLE, group: 'app', hint: 'Controls, the mouse, an LFO, a key, a layer, a take', still: 'playLfo', build: buildFirstPlayPresentation },
+  { title: FIELD_TITLE, group: 'app', hint: 'Grid Pattern and Array with a shape of your own', still: 'comboArrayStars', build: buildFieldSocketsPresentation },
+  { title: CONVERT_TITLE, group: 'app', hint: 'The Convert page: paste a shader, get nodes', still: 'convertCircleOptimised', build: buildConvertPresentation },
+  { title: MAKING_TITLE, group: 'app', hint: 'Steps, blocks, snapshots, chips, live code, sharing', still: 'learnPalette', build: buildMakingPresentation },
   // Topics: shaders themselves.
-  { title: BOOK_TITLE, group: 'topic', hint: 'The Book of Shaders, chapter by chapter through Learn', build: buildBookPresentation },
-  { title: SAMPLE_TITLE, group: 'topic', hint: 'Built from the Learn 3D lessons', build: buildSamplePresentation },
-  { title: MATRICES_TITLE, group: 'topic', hint: 'Built from the Matrices folder', build: buildMatricesPresentation },
-  { title: PLAYING_TITLE, group: 'topic', hint: 'Controls, mappings, LFOs, keys, nulls, layers', build: buildPlayingPresentation },
-  { title: SKETCHING_TITLE, group: 'topic', hint: 'Script layers, with live code', build: buildSketchingPresentation },
+  { title: BOOK_TITLE, group: 'topic', hint: 'The Book of Shaders, chapter by chapter through Learn', still: 'learnFBM', build: buildBookPresentation },
+  { title: SAMPLE_TITLE, group: 'topic', hint: 'Built from the Learn 3D lessons', still: 'learn3dLight', build: buildSamplePresentation },
+  { title: MATRICES_TITLE, group: 'topic', hint: 'Built from the Matrices folder', still: 'matrixFoldFractal', build: buildMatricesPresentation },
+  { title: PLAYING_TITLE, group: 'topic', hint: 'Controls, mappings, LFOs, keys, nulls, layers', still: 'playGlowText', build: buildPlayingPresentation },
+  { title: SKETCHING_TITLE, group: 'topic', hint: 'Script layers, with live code', still: 'scriptGlow', build: buildSketchingPresentation },
 ];
 
 /** The groups the menus show the samples in, in order. */
-export const SAMPLE_GROUPS: { id: SamplePresentation['group']; label: string }[] = [
-  { id: 'app', label: 'Learn the app' },
-  { id: 'topic', label: 'Topics' },
+export const SAMPLE_GROUPS: { id: SamplePresentation['group']; label: string; blurb: string }[] = [
+  { id: 'app', label: 'Learn the app', blurb: 'How Playfield works, taught with its own pictures' },
+  { id: 'topic', label: 'Topics', blurb: 'Shader ideas, one step at a time' },
 ];
 
 /** The sample the empty page offers first. */

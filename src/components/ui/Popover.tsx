@@ -35,6 +35,7 @@ export function Popover({
     const a = anchorRef.current?.getBoundingClientRect();
     const p = ref.current?.getBoundingClientRect();
     if (!a || !p) return;
+    const vh = window.innerHeight;
     let left = align === 'start' ? a.left : align === 'end' ? a.right - p.width : a.left + a.width / 2 - p.width / 2;
     let top = a.bottom + GAP;
     const c = clearRef?.current?.getBoundingClientRect();
@@ -42,9 +43,15 @@ export function Popover({
       if (c.right + GAP + p.width <= window.innerWidth - MARGIN) { left = c.right + GAP; top = a.top; }
       else if (c.left - GAP - p.width >= MARGIN) { left = c.left - GAP - p.width; top = a.top; }
       else top = c.bottom + GAP;
-      top = Math.max(MARGIN, Math.min(top, window.innerHeight - p.height - MARGIN));
-    } else if (top + p.height > window.innerHeight - MARGIN) {
-      top = Math.max(MARGIN, a.top - p.height - GAP);
+      top = Math.max(MARGIN, Math.min(top, vh - p.height - MARGIN));
+    } else if (top + p.height > vh - MARGIN) {
+      // No room below: above if it fits there, else on whichever side has more room, scrolling
+      // inside (a phone's short screen), so its bottom is never out of reach.
+      const below = vh - MARGIN - top;
+      const above = a.top - GAP - MARGIN;
+      if (p.height <= above) top = a.top - p.height - GAP;
+      else if (above > below) { top = MARGIN; ref.current!.style.maxHeight = `${above}px`; }
+      else ref.current!.style.maxHeight = `${Math.max(120, below)}px`;
     }
     left = Math.max(MARGIN, Math.min(left, window.innerWidth - p.width - MARGIN));
     // Measured after render, so place it directly rather than re-rendering.
@@ -77,7 +84,8 @@ export function Popover({
       ref={ref}
       data-popover=""
       style={{
-        position: 'fixed', left: -9999, top: -9999, zIndex: 9000, width, padding,
+        position: 'fixed', left: -9999, top: -9999, zIndex: 9000, width: width === undefined ? undefined : `min(${width}px, calc(100vw - ${MARGIN * 2}px))`, padding,
+        maxHeight: `calc(100dvh - ${MARGIN * 2}px)`, overflowX: 'hidden', overflowY: 'auto', overscrollBehavior: 'contain',
         background: tk.bg.panel, color: tk.text.primary, borderRadius: radius.lg, boxShadow: tk.shadow.popover,
         font: `12.5px ${fontFamily.ui}`,
       }}

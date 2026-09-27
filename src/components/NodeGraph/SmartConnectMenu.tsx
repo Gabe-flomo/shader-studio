@@ -89,7 +89,7 @@ export function SmartConnectMenu({ x, y, title, items, quickAdds = [], onPick, o
       data-captures-escape
       onMouseDown={e => e.stopPropagation()}
       style={{
-        position: 'fixed', left: x + 10, top: y + 10, zIndex: 400, width: 312, padding: 4, boxSizing: 'border-box',
+        position: 'fixed', left: x + 10, top: y + 10, zIndex: 400, width: 'min(312px, calc(100vw - 16px))', maxHeight: 'calc(100dvh - 16px)', overflowY: 'auto', padding: 4, boxSizing: 'border-box',
         background: tk.bg.panel, borderRadius: radius.lg, boxShadow: tk.shadow.popover, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`,
       }}
     >

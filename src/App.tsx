@@ -29,6 +29,8 @@ import { useNodeGraphStore, EXAMPLE_INDEX, EXAMPLE_FOLDERS, PLAY_SETUP_TOAST } f
 import { useToastStore } from './components/ui/toastStore';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
+import { SplitHandle } from './components/shell/PhoneSplit';
+import { PLAY_SPLIT, STUDIO_SPLIT, usePhoneSplit } from './components/shell/splitSize';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useTimeHotkeys } from './hooks/useTimeHotkeys';
 import { useCtp, type CtpPalette } from './theme/nodePalette';
@@ -90,9 +92,6 @@ function getPaletteWidth(bp: ReturnType<typeof useBreakpoint>) {
 
 const MIN_PREVIEW = 200;
 const MIN_GRAPH   = 280;
-// Mobile split mode: default canvas-pane height, restored by double-
-// tapping/double-clicking the drag divider between the two panes.
-const MOBILE_CANVAS_VH_DEFAULT = 42;
 
 // ── Button style helper ───────────────────────────────────────────────────────
 const btnStyle = (tc: CtpPalette, active = false): React.CSSProperties => ({
@@ -488,18 +487,12 @@ function App() {
 
   // Mobile: canvas-only / split / graph-only layout mode
   const [mobileLayout, setMobileLayout] = useState<'canvas' | 'split' | 'graph' | 'code'>('split');
-  // Mobile split mode: how much vertical space (in vh) the canvas pane gets
-  // — used to be a fixed 42vh with no way to change it. Now draggable via
-  // the divider between the two panes (see mobileSplitDragRef below), with
-  // the canvas itself always kept square by capping its width to the same
-  // vh value, so a shorter canvas pane doesn't stretch it wide.
-  const [mobileCanvasVh, setMobileCanvasVh] = useState(MOBILE_CANVAS_VH_DEFAULT);
-  const mobileSplitDragRef = useRef(false);
-  // Double-tap/double-click the divider to snap back to the default split.
-  // Manual timing (not just onDoubleClick) since iOS Safari doesn't reliably
-  // synthesize a second-tap dblclick — same fallback pattern used for
-  // slider reset in MobileGraphBrowser.tsx.
-  const lastDividerTapRef = useRef(0);
+  // Phones: how much of the screen (in vh) the picture gets above the graph (Studio) or the
+  // panels (Play), set by dragging the seam between them and remembered per page on this
+  // device. The Studio's canvas stays square by capping its width to the same vh value.
+  const studioSplit = usePhoneSplit(STUDIO_SPLIT);
+  const playSplit = usePhoneSplit(PLAY_SPLIT);
+  const mobileCanvasVh = studioSplit.vh;
   // Tablet: palette sidebar expanded or icon-only
   const [paletteExpanded, setPaletteExpanded] = useState(false);
 
@@ -830,38 +823,7 @@ function App() {
               aspect ratio. Only shown in split mode — canvas-only/graph-only
               already give one pane the full remaining space. */}
           {showCanvasPane && showGraphPane && (
-            <div
-              onPointerDown={e => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                mobileSplitDragRef.current = true;
-              }}
-              onPointerMove={e => {
-                if (!mobileSplitDragRef.current) return;
-                const vh = (e.clientY / window.innerHeight) * 100;
-                setMobileCanvasVh(Math.max(15, Math.min(75, vh)));
-              }}
-              onPointerUp={e => {
-                mobileSplitDragRef.current = false;
-                if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-                const now = Date.now();
-                if (now - lastDividerTapRef.current < 400) {
-                  setMobileCanvasVh(MOBILE_CANVAS_VH_DEFAULT);
-                  lastDividerTapRef.current = 0;
-                } else {
-                  lastDividerTapRef.current = now;
-                }
-              }}
-              onPointerCancel={() => { mobileSplitDragRef.current = false; }}
-              onDoubleClick={() => setMobileCanvasVh(MOBILE_CANVAS_VH_DEFAULT)}
-              title="Double-tap to reset to the default split"
-              style={{
-                flexShrink: 0, height: '18px', margin: '-9px 0', zIndex: 23, position: 'relative',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'ns-resize', touchAction: 'none',
-              }}
-            >
-              <div style={{ width: 40, height: 4, borderRadius: 2, background: tk.border.strong }} />
-            </div>
+            <SplitHandle split={studioSplit} label="Resize the preview" />
           )}
 
           {showGraphPane && (
@@ -1043,12 +1005,13 @@ function App() {
       <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
         <ThemeOverrideContext.Provider value="dark">
-          <div style={{ position: 'relative', height: `${mobileCanvasVh}vh`, flexShrink: 0, background: tk.bg.render, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-            <div style={{ position: 'relative', width: `min(100vw, ${mobileCanvasVh}vh)`, height: '100%' }}>
+          <div style={{ position: 'relative', height: `${playSplit.vh}vh`, flexShrink: 0, background: tk.bg.render, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <div style={{ position: 'relative', width: `min(100vw, ${playSplit.vh}vh)`, height: '100%' }}>
               <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
             </div>
           </div>
         </ThemeOverrideContext.Provider>
+        <SplitHandle split={playSplit} label="Resize the picture" />
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <PlayPage compact />
         </div>

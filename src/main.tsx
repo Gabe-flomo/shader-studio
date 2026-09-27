@@ -10,6 +10,7 @@ import { compileGraph } from './compiler/graphCompiler'
 import { nodePreviewRenderer } from './lib/nodePreviewRenderer'
 import { loadExampleGraphs } from './store/exampleIndex'
 import { installCameraKeeper } from './lib/cameraKeeper'
+import { installTouchGuards } from './lib/touchGuards'
 import { resolveNodeAliases } from './nodes/definitions/aliases'
 import { getNodeDefinition } from './nodes/definitions'
 import { watchForStaleBuild } from './lib/staleBuild'
@@ -21,6 +22,8 @@ import { playEngine } from './lib/playEngine'
 
 // The webcam turns off as soon as no layer or hand tracking uses it.
 installCameraKeeper()
+// Long presses on touch screens: no browser menu over the app's own.
+installTouchGuards()
 
 const root = createRoot(document.getElementById('root')!)
 watchForStaleBuild()
