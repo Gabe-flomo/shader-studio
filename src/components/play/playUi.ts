@@ -42,6 +42,9 @@ interface PlayUi {
   /** Bumped when something asks for the selected layer to be shown: the list opens it and scrolls to it. */
   revealTick: number;
   select: (id: string) => void;
+  /** The selected layer's mask being edited on the picture ('' = the layer itself). */
+  mask: string;
+  setMask: (id: string) => void;
   /** Open the Layers tab at this layer: selected, expanded and scrolled into view. */
   reveal: (id: string) => void;
   /** Folded editor sections, keyed `<kind>:<section>`. */
@@ -80,8 +83,10 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   setTab: tab => set({ tab }),
   selected: '',
   revealTick: 0,
-  select: id => set({ selected: id }),
-  reveal: id => set({ tab: 'layers', selected: id, revealTick: get().revealTick + 1 }),
+  select: id => set(get().selected === id ? { selected: id } : { selected: id, mask: '' }),
+  reveal: id => set({ tab: 'layers', selected: id, revealTick: get().revealTick + 1, ...(get().selected === id ? {} : { mask: '' }) }),
+  mask: '',
+  setMask: mask => set({ mask }),
   panel: loadPanel(),
   setPanel: panel => { try { localStorage.setItem(PANEL_KEY, panel); } catch { /* preference only */ } set({ panel }); },
   guides: loadGuides(),
