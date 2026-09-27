@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
 mod data_fetch;
+mod playfile;
 mod workspace;
 mod osc_listener;
 
@@ -243,6 +244,7 @@ pub fn run() {
         .manage(FfmpegState(Mutex::new(None)))
         .manage(OscState(Mutex::new(None)))
         .manage(workspace::WatchState(Mutex::new(None)))
+        .manage(playfile::OpenedFiles(Mutex::new(Vec::new())))
         .invoke_handler(tauri::generate_handler![
             start_ffmpeg_encode,
             send_frame_rgba,
@@ -263,6 +265,10 @@ pub fn run() {
             workspace::ws_watch,
             workspace::ws_unwatch,
             workspace::ws_reveal,
+            playfile::opened_files_take,
+            playfile::open_file_read,
+            playfile::signing_key_get,
+            playfile::signing_key_save,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -274,6 +280,21 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, _event| {
+            // A .playfile opened with the app (Finder, the Dock): kept for the web side to take
+            // at launch, and announced for when it's already running (src/playfile.rs).
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            if let tauri::RunEvent::Opened { urls } = &_event {
+                use tauri::Manager;
+                let paths = playfile::container_paths(urls);
+                if !paths.is_empty() {
+                    if let Ok(mut v) = _app.state::<playfile::OpenedFiles>().0.lock() {
+                        v.extend(paths.iter().cloned());
+                    }
+                    let _ = _app.emit("open-files", paths);
+                }
+            }
+        });
 }

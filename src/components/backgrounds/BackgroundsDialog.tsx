@@ -6,6 +6,7 @@
  * Import an image sit at the top. Opened with `pick`, choosing an item
  * answers the caller instead (openBackgrounds in backgroundsUi.ts).
  */
+import { exportPlayfile } from '../../playfile/app';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -124,7 +125,8 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
     ...(picking && pick !== 'palette' ? [{ label: 'Use it', icon: 'check' as const, onSelect: () => onDone({ kind: 'image', image: m }) }, 'separator' as const] : []),
     { label: 'Rename…', icon: 'edit', onSelect: async () => { const t = (await askText('Rename background', { label: 'Name', initial: m.name, confirmLabel: 'Rename' }))?.trim(); if (t && t !== m.name) await renameImage(m.id, t); } },
     { label: getFolderForItem(IMAGE_FOLDER_SCOPE, m.id) ? 'Move to another folder…' : 'Move to a folder…', icon: 'folder', onSelect: later(() => openMenu(el, moveItems(IMAGE_FOLDER_SCOPE, m.id, moveImage))) },
-    { label: 'Download', icon: 'export', hint: `The picture file, ${m.width} × ${m.height}`, onSelect: async () => {
+    { label: 'Download as .playfile', icon: 'export', hint: 'Opens straight into someone’s backgrounds library', onSelect: () => { void exportPlayfile([`ext:backgrounds:${m.id}`], { fileName: m.name, dependencies: false, success: `Saved “${m.name}”` }).then(r => { if (!r.ok && !r.cancelled) toast.error('Couldn’t download it', { message: r.error }); }); } },
+    { label: 'Download the picture', icon: 'camera', hint: `The picture file, ${m.width} × ${m.height}`, onSelect: async () => {
       const img = await getImage(m.id);
       if (!img) return;
       const ext = img.type === 'image/jpeg' ? 'jpg' : img.type.split('/')[1]?.replace('svg+xml', 'svg') ?? 'png';

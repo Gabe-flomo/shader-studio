@@ -8,6 +8,7 @@
  * is the same store write a Studio slider makes, and a mapping is a per-frame
  * uniform write on the input bus (lib/playEngine.ts).
  */
+import { offerPlayExport } from '../playfile/exportMenus';
 import { can, openProSheet, requireFeature, useCan, usePlanName } from '../../lib/plan';
 import { sourceNeedsPro, sourceTypeNeedsPro, triggerNeedsPro, proOnlyParts } from '../../play/planGates';
 import { ProBadge, ProLock } from '../account/ProSheet';
@@ -124,7 +125,6 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const nodes = useNodeGraphStore(s => s.nodes);
   const paramBindings = useNodeGraphStore(s => s.paramBindings);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
-  const exportPlayFile = useNodeGraphStore(s => s.exportPlayFile);
   const [embedOpen, setEmbedOpen] = useState(false);
   const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
 
@@ -342,7 +342,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       <>
         <OpenPlayableButton compact={compact} />
         <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
-        <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
+        <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now (.playfile, or readable JSON)" disabled={play.controls.length === 0} onClick={e => offerPlayExport(e.currentTarget)} />
         {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
         <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
         <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />

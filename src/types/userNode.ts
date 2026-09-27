@@ -95,8 +95,27 @@ export interface UserNodeDefinition {
   /** Published without its source: whoever has the node can use it but not open
    *  the graph or GLSL it was built from (`source` is then left out). */
   sourceHidden?: boolean;
+  /**
+   * From a sealed node pack (docs/playfield-format.md): the GLSL (`functionCode`,
+   * `helperFunctions`, the iteration variants) is stored and shared only inside
+   * this encrypted blob, and is filled back in memory when the node is loaded.
+   * A sealed node never has a `source`, and is only ever exported sealed.
+   */
+  sealed?: SealedBlob;
+  /** Who signed the node pack it came in (shown on its card), when it was signed. */
+  signedBy?: { name: string; fingerprint: string };
   version: 1;
   savedAt: number;
+}
+
+/** A sealed node's code, encrypted (AES-256-GCM); see src/playfield/sealing.ts. */
+export interface SealedBlob {
+  v: 1;
+  alg: 'A256GCM';
+  /** base64: the per-node salt the key is derived with, the GCM nonce, and the ciphertext (+ tag). */
+  salt: string;
+  iv: string;
+  data: string;
 }
 
 /** Shape of the JSON export file for user nodes. */

@@ -1,3 +1,4 @@
+import { offerCustomFunctionsExport } from '../playfile/exportMenus';
 import { ProBadgeFor } from '../account/ProSheet';
 import { useCan } from '../../lib/plan';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -239,7 +240,6 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const loadSavedGraph          = useNodeGraphStore(s => s.loadSavedGraph);
   const deleteSavedGraph        = useNodeGraphStore(s => s.deleteSavedGraph);
   const deleteCustomFn          = useNodeGraphStore(s => s.deleteCustomFn);
-  const exportCustomFns         = useNodeGraphStore(s => s.exportCustomFns);
   const importCustomFnsFromFile = useNodeGraphStore(s => s.importCustomFnsFromFile);
   const loadCustomFnsFromDisk   = useNodeGraphStore(s => s.loadCustomFnsFromDisk);
   const swapTargetNodeId        = useNodeGraphStore(s => s.swapTargetNodeId);
@@ -271,6 +271,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const importUserNodes = async () => {
     const r = await importUserNodesFromFile();
     if (!r.ok) { reportFileResult(r, { failTitle: 'Couldn’t import node types' }); return; }
+    if (r.deferred) return; // a .playfile: its preview dialog imports
     const parts = [
       r.imported?.length ? `${r.imported.length} new: ${r.imported.join(', ')}` : '',
       r.replaced?.length ? `${r.replaced.length} updated: ${r.replaced.join(', ')}` : '',
@@ -566,9 +567,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
             </div>
             <TabSectionHeader label="My nodes" action={
               <span style={{ display: 'flex', gap: 2 }}>
-                <IconButton icon="import" label="Import node types from a .json file" size="sm" onClick={importUserNodes} />
+                <IconButton icon="import" label="Import node types: a node pack (.playfile) or an older .json" size="sm" onClick={importUserNodes} />
                 {userNodes.length > 0 && (
-                  <IconButton icon="export" label={canPack ? 'Export all node types as one .json file' : 'Export all node types as one .json file (Pro: making node packs)'} size="sm"
+                  <IconButton icon="export" label={canPack ? 'Export node types as a node pack (.playfile, signed, optionally sealed)' : 'Export node types as a node pack (Pro: making node packs)'} size="sm"
                     onClick={async () => reportFileResult(await exportUserNodes(), { failTitle: 'Couldn’t export node types' })} />
                 )}
               </span>
@@ -581,7 +582,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 const d = userNodes.find(u => u.id === item.id);
                 if (!d) return null;
                 return (
-                  <ItemRow label={d.label} icon="spark" color={tk.kind.fn}
+                  <ItemRow label={d.label} icon="spark" color={tk.kind.fn} tag={d.sealed ? 'Sealed' : undefined}
                     onClick={() => { addNode(d.id, spawnPoint()); onNodeAdded?.(); }}
                     onEdit={d.source ? () => {
                       if (d.source?.kind === 'code') { setPublishExisting(d.id); setPublishSource({ kind: 'code', code: d.source.code, entry: d.source.entry, label: d.label }); return; }
@@ -651,7 +652,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
         return (
           <>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-              {userPresets.length > 0 && <Button size="sm" icon="export" onClick={() => exportCustomFns()}>Export</Button>}
+              {userPresets.length > 0 && <Button size="sm" icon="export" onClick={e => offerCustomFunctionsExport(e.currentTarget)}>Export</Button>}
               <Button size="sm" icon="import" onClick={async () => { await importCustomFnsFromFile(); await refreshPresets(); }}>Import</Button>
             </div>
             <FolderableList

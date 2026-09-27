@@ -1,3 +1,4 @@
+import { offerGraphExport } from './components/playfile/exportMenus';
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { lazyWithSuspense, preloadLazyComponents, type PropsOf } from './components/lazyWithSuspense';
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
@@ -461,6 +462,13 @@ function App() {
     return useToastStore.subscribe(clear);
   }, [page]);
 
+  // Opening a .playfile shows what came in on its page (src/playfile/app.ts).
+  useEffect(() => {
+    const go = (e: Event) => { const p = (e as CustomEvent<Page>).detail; if (p) setPage(p); };
+    window.addEventListener('playfile-open-page', go);
+    return () => window.removeEventListener('playfile-open-page', go);
+  }, [setPage]);
+
   // The Library's "Manage in Files" opens the Files page.
   useEffect(() => {
     const go = () => setPage('files');
@@ -574,7 +582,7 @@ function App() {
 
   const shortcutHandlers = useMemo(() => ({
     undo:           unlessScratch(() => undo()),
-    export:         unlessScratch(() => exportGraph()),
+    export:         unlessScratch(() => offerGraphExport(null)),
     import:         unlessScratch(() => { void importAnyFile(setPage); }),
     fitView:        () => _fitViewCallback?.(),
     toggleCode:     () => setShowCode(v => !v),

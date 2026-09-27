@@ -3,6 +3,8 @@
  * a selection (with its versions and what it uses, optionally), and install
  * a profile (preview by section → Merge or Replace everything → result).
  */
+import { reportFileResult } from '../shell/reportFileResult';
+import { exportPlayfile } from '../../playfile/app';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -70,16 +72,24 @@ export function DownloadDialog({ inv, ids, onClose }: { inv: Inventory; ids: str
   const plain = useMemo(() => selectionSummary(inv, ids, { versions: false, dependencies: true }), [inv, ids]);
   const hasVersions = sum.items.some(n => n.extraRefs?.length);
   const go = async (target: SaveTarget) => { setBusy(true); await downloadSelection(inv, ids, { versions, dependencies: deps }, target); setBusy(false); onClose(); };
+  const goPlayfile = async () => {
+    setBusy(true);
+    const single = sum.items.length === 1 ? sum.items[0].label : `Playfield selection ${new Date().toISOString().slice(0, 10)}`;
+    const r = await exportPlayfile(ids, { fileName: single, dependencies: deps });
+    setBusy(false);
+    if (reportFileResult(r, { failTitle: 'Couldn’t save that' })) onClose();
+  };
   const bySection = new Map<SectionId, number>();
   for (const n of sum.items) bySection.set(n.section, (bySection.get(n.section) ?? 0) + 1);
 
   return (
-    <Modal title={`Download ${plural(sum.items.length, 'item')}`} subtitle="A ZIP that Install (or the Library’s Import) reads back" icon="export" onClose={onClose} width={480}
+    <Modal title={`Download ${plural(sum.items.length, 'item')}`} subtitle="A .playfile that opens anywhere, or a ZIP that Install reads back" icon="export" onClose={onClose} width={480}
       footer={<>
         <span style={{ flex: 1, font: `500 12px ${fontFamily.mono}`, color: tk.text.muted }}>≈ {formatSize(sum.size)}</span>
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
         {isTauri() && <Button disabled={busy || !sum.items.length} icon="folder" onClick={() => { void go('folder'); }}>Save to folder…</Button>}
-        <Button variant="primary" disabled={busy || !sum.items.length} icon="export" onClick={() => { void go('download'); }}>{isTauri() ? 'Save ZIP…' : 'Download ZIP'}</Button>
+        <Button disabled={busy || !sum.items.length} icon="folder" onClick={() => { void go('download'); }}>{isTauri() ? 'Save ZIP…' : 'ZIP'}</Button>
+        <Button variant="primary" disabled={busy || !sum.items.length} icon="export" onClick={() => { void goPlayfile(); }}>{isTauri() ? 'Save .playfile…' : '.playfile'}</Button>
       </>}>
       <div style={{ padding: '14px 20px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

@@ -3,6 +3,7 @@
  * maths as MathML or KaTeX's HTML) or as a `.present.json` file, with what
  * the page leaves behind.
  */
+import { offerPresentationExport } from '../playfile/exportMenus';
 import { useEffect, useMemo, useState } from 'react';
 import { withEmbeddedAssets } from '../../present/presentAssets';
 import type { Presentation } from '../../types/presentation';
@@ -18,7 +19,7 @@ import { toast } from '../ui/toastStore';
 import { reportFileResult } from '../shell/reportFileResult';
 import { loadMarkdown } from './useMarkdown';
 import { usePresentation } from './presentationStore';
-import { exportPresentationFile, fileBase } from './presentationFiles';
+import { fileBase } from './presentationFiles';
 import { STYLE_WARN_BYTES, sizeLabel, styleBytes } from '../../types/presentationStyle';
 
 /** KaTeX's stylesheet with its fonts (woff2) inlined as data URLs, so the exported page needs nothing else. */
@@ -86,7 +87,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     <Modal
       title="Export the presentation" subtitle={doc.title} icon="export" onClose={onClose} width={500}
       footer={<>
-        <Button variant="ghost" icon="export" onClick={() => { void exportPresentationFile(); onClose(); }} title="The presentation with every Play in it, to open in Playfield anywhere">Presentation file</Button>
+        <Button variant="ghost" icon="export" onClick={e => { offerPresentationExport(e.currentTarget); }} title="The presentation with every Play in it, to open in Playfield anywhere: a .playfile, or a readable .present.json">Presentation file</Button>
         <span style={{ flex: 1 }} />
         <Button variant="primary" icon="code" disabled={busy || !ready} onClick={save}>{busy ? 'Building…' : !ready ? 'Gathering pictures…' : 'Save the web page'}</Button>
       </>}
