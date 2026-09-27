@@ -2,18 +2,39 @@
  * CodeView — a Present code block as read: highlighted GLSL (the code
  * panel's tokenizer) or JavaScript (the Script editor's), line numbers as in
  * the full text, marked lines, gaps where a node's slice skips lines, and a
- * Copy button.
+ * Copy button. Code picked in the Add code chooser names where it came from
+ * in the header and carries its credit under it (CodeCredit), the same in
+ * every kind of code block.
  */
 import { useState } from 'react';
 import { C, C_LIGHT, tokenizeLine } from '../glslSyntax';
 import { tokenizeJsLine } from '../code/jsSyntax';
 import type { ResolvedCode } from '../../present/code';
+import type { CodeOrigin } from '../../types/presentation';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
+import { CreditCaption } from '../ui/Credit';
 
-export function CodeView({ code, caption, maxHeight = 460 }: { code: ResolvedCode; caption?: string; maxHeight?: number }) {
+/** Where picked code came from: its note ("Found in “Waves”, lines 3–9") and a linked credit. Nothing for typed code. */
+export function CodeCredit({ origin }: { origin: CodeOrigin | undefined }) {
+  const tk = useTokens();
+  if (!origin || (!origin.note && !origin.credit)) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 2px' }}>
+      {origin.note && (
+        <div data-code-note="" style={{ display: 'flex', gap: 6, alignItems: 'baseline', color: `var(--pp-muted, ${tk.text.muted})`, font: `500 12px/1.45 ${fontFamily.ui}` }}>
+          <Icon name={origin.kind === 'node' ? 'nodes' : origin.kind === 'discovery' ? 'fn' : 'code'} size={12} style={{ flexShrink: 0, position: 'relative', top: 2, color: tk.accent.base }} />
+          <span>{origin.note}</span>
+        </div>
+      )}
+      {origin.credit && <CreditCaption source={origin.credit} align="left" style={{ color: `var(--pp-muted, ${tk.text.muted})` }} />}
+    </div>
+  );
+}
+
+export function CodeView({ code, caption, origin, maxHeight = 460 }: { code: ResolvedCode; caption?: string; origin?: CodeOrigin; maxHeight?: number }) {
   const tk = useTokens();
   const pal = useThemeMode() === 'light' ? C_LIGHT : C;
   const [copied, setCopied] = useState(false);
@@ -22,8 +43,8 @@ export function CodeView({ code, caption, maxHeight = 460 }: { code: ResolvedCod
   };
   const width = String(code.rows.reduce((m, r) => ('n' in r ? Math.max(m, r.n) : m), 1)).length;
   const tokenize = code.language === 'js' ? tokenizeJsLine : tokenizeLine;
-  return (
-    <figure style={{ margin: 0, borderRadius: `var(--pp-radius, ${radius.lg}px)`, border: `1px solid ${tk.border.default}`, background: `var(--pp-code-bg, ${tk.bg.subtle})`, overflow: 'hidden' }}>
+  const figure = (
+    <figure style={{ margin: 0, borderRadius: `var(--pp-radius, ${radius.lg}px)`, border: `1px solid ${tk.border.default}`, background: `var(--pp-code-bg, ${tk.bg.subtle})`, overflow: 'hidden', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: `var(--pp-surface, ${tk.bg.panel})` }}>
         <span style={{ font: `650 10.5px ${fontFamily.mono}`, letterSpacing: '0.04em', color: tk.text.faint, textTransform: 'uppercase' }}>{code.language === 'js' ? 'JS' : 'GLSL'}</span>
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tk.text.muted, font: `500 12px ${fontFamily.ui}` }}>{code.from}</span>
@@ -51,4 +72,6 @@ export function CodeView({ code, caption, maxHeight = 460 }: { code: ResolvedCod
       {caption && <figcaption style={{ padding: '7px 12px 8px', borderTop: `1px solid ${tk.border.subtle}`, color: tk.text.muted, font: `500 12.5px/1.4 ${fontFamily.ui}` }}>{caption}</figcaption>}
     </figure>
   );
+  if (!origin?.note && !origin?.credit) return figure;
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{figure}<CodeCredit origin={origin} /></div>;
 }

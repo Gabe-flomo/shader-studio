@@ -41,6 +41,8 @@ export interface PresentationHtmlOptions {
   math: 'mathml' | 'html';
   /** KaTeX's stylesheet with its fonts inlined, for math: 'html'. */
   katexCss?: string;
+  /** Code blocks' live previews as still pictures (present/previewStills.ts), by block id. */
+  stills?: Record<string, string>;
 }
 
 type Render = (text: string, opts: MarkdownOptions) => string;
@@ -63,6 +65,8 @@ export function exportNotes(p: Presentation): ExportNote[] {
     if (limits.length) out.push({ what: `“${s.title}” is a still`, why: `The web player can’t run ${limits.join(', ')} yet.` });
     for (const l of leftBehind(s.bundle.play, undefined, { graphs: s.bundle.backgroundGraphs ?? {}, datasets: s.bundle.datasets })) if (!/notes/i.test(l.what)) out.push({ what: `${l.what} in “${s.title}”`, why: l.why });
   }
+  const previews = p.steps.flatMap(s => s.blocks).filter(b => b.type === 'code' && b.language === 'glsl' && b.preview).length;
+  if (previews) out.push({ what: previews === 1 ? 'The code block’s preview' : `The ${previews} code blocks’ previews`, why: 'They go in as still pictures: editing the code and moving its sliders works in Playfield.' });
   // Pictures and fonts embedding couldn't find (withEmbeddedAssets leaves them without src).
   const shown = usedImages(p.style, p.steps);
   for (const img of p.images ?? []) {
@@ -80,7 +84,25 @@ function liveCodeHtml(b: Extract<Block, { type: 'code' }> & { from: { source: st
   return `<figure class="pp-code pp-live" data-source="${esc(b.from.source)}" data-layer="${esc(b.from.layerId)}"><div class="pp-code-head"><b>JS</b><span>${esc(r.from)}</span><em class="pp-live-tag" title="Edit it and the picture on this step runs your version">LIVE</em><button type="button" class="pp-reset"${b.edited !== undefined && b.edited !== r.original ? '' : ' hidden'}>Reset</button><button type="button" class="pp-copy">Copy</button></div><textarea class="pp-edit" rows="${lines}" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Script code, live: ${esc(r.from)}">${esc(r.text)}</textarea><div class="pp-status">Change the code: the picture on this step runs your version.</div>${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ''}<textarea class="pp-original" hidden>${esc(r.original ?? '')}</textarea></figure>`;
 }
 
-function codeHtml(b: Extract<Block, { type: 'code' }>, sources: ReadonlyMap<string, PresentSource>, dark = false): string {
+/** Where picked code came from, under it: its note and a linked credit (as CodeCredit in the app). */
+function codeCreditHtml(b: Extract<Block, { type: 'code' }>): string {
+  const o = b.origin;
+  if (!o) return '';
+  const note = o.note ? `<p class="pp-code-note">${esc(o.note)}</p>` : '';
+  const c = o.credit;
+  const credit = c ? `<p class="pp-credit pp-left">${BOOK_SVG}From <a href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" title="${esc(creditSentence(c))}">${esc(c.title)}</a>${creditPlace(c).length ? `, ${esc(creditPlace(c).join(' · '))}` : ''}</p>` : '';
+  return note + credit;
+}
+
+function codeHtml(b: Extract<Block, { type: 'code' }>, sources: ReadonlyMap<string, PresentSource>, dark = false, stills: Record<string, string> = {}): string {
+  const inner = codeFigureHtml(b, sources, dark);
+  const still = stills[b.id];
+  const credit = codeCreditHtml(b);
+  if (!still) return credit ? `<div class="pp-code-wrap">${inner}${credit}</div>` : inner;
+  return `<div class="pp-code-wrap"><div class="pp-code-pair">${inner}<figure class="pp-code-still"><img src="${still}" alt="What the code draws" loading="lazy"><figcaption>A still of its live preview: in Playfield you can edit the code and watch it change.</figcaption></figure></div>${credit}</div>`;
+}
+
+function codeFigureHtml(b: Extract<Block, { type: 'code' }>, sources: ReadonlyMap<string, PresentSource>, dark = false): string {
   const r = resolveCode(b, sources);
   if (isLiveScript(b) && !r.problem) return liveCodeHtml(b, r);
   const tok = r.language === 'js' ? tokenizeJsLine : tokenizeLine;
@@ -151,7 +173,7 @@ function interactiveHtml(b: Extract<Block, { type: 'interactive' }>, s: PresentS
     : `<div class="pp-inter pp-side">${canvas}<div class="pp-side-col">${text}${panel}</div></div>`;
 }
 
-function blockHtml(b: Block, sources: ReadonlyMap<string, PresentSource>, render: Render, math: MarkdownOptions['math'], dark = false): string {
+function blockHtml(b: Block, sources: ReadonlyMap<string, PresentSource>, render: Render, math: MarkdownOptions['math'], dark = false, stills: Record<string, string> = {}): string {
   switch (b.type) {
     case 'text': return b.markdown.trim() ? `<div class="pp-md">${render(b.markdown, { math })}</div>` : '';
     case 'render': {
@@ -160,7 +182,7 @@ function blockHtml(b: Block, sources: ReadonlyMap<string, PresentSource>, render
       return `<figure class="pp-render" style="--w:${w}%">${canvasHtml(b.id, s, aspectRatio(b.aspect), b.pointer, b.startTime, b.paused)}${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ''}${creditHtml(s)}</figure>`;
     }
     case 'interactive': return interactiveHtml(b, sources.get(b.source), render, math);
-    case 'code': return codeHtml(b, sources, dark);
+    case 'code': return codeHtml(b, sources, dark, stills);
   }
 }
 
@@ -226,6 +248,9 @@ figure{margin:0}
 .pp-mark{background:#3a6ff71f;box-shadow:inset 3px 0 0 #3a6ff7}.pp-mark i{color:#3a6ff7}.pp-gap{color:#9a9da8;font:500 11px system-ui,sans-serif;padding:2px 0}
 .pp-code figcaption{padding:7px 12px 8px;border-top:1px solid var(--pp-rule,#eef0f3);color:var(--pp-muted,#6b6f7a);font-size:13px}
 .pp-code-problem{padding:14px;color:#8a5d05;font-size:13px}
+.pp-code-wrap{display:flex;flex-direction:column;gap:8px}.pp-code-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;align-items:start}.pp-code-pair>.pp-code{min-width:0}
+.pp-code-still{margin:0;display:flex;flex-direction:column;gap:6px}.pp-code-still img{display:block;width:100%;height:auto;border-radius:var(--pp-radius,12px);border:1px solid var(--pp-rule,#eef0f3)}.pp-code-still figcaption{color:var(--pp-muted,#6b6f7a);font:500 12px/1.4 system-ui,sans-serif}
+.pp-code-note{margin:0;color:var(--pp-muted,#6b6f7a);font:500 12px/1.45 system-ui,sans-serif}.pp-credit.pp-left{text-align:left;margin:0}
 .pp-live:focus-within{border-color:#3a6ff7;box-shadow:0 0 0 3px #3a6ff72e}
 .pp-live-tag{flex-shrink:0;padding:1px 7px;border-radius:9px;background:#3a6ff724;color:#2f5fe0;font:650 10px system-ui,sans-serif;letter-spacing:.05em;font-style:normal}
 .pp-reset{border:0;background:none;color:var(--pp-body,#3a3d47);font:500 12px system-ui,sans-serif;cursor:pointer;padding:4px 8px;border-radius:6px}.pp-reset:hover{background:#f2f3f6}
@@ -319,7 +344,7 @@ export function buildPresentationHtml(p: Presentation, render: Render, opts: Pre
   const numbers = themeLook(p.style?.theme, false).spec.number;
   const steps = p.steps.map((s, i) => {
     const blocks = s.blocks.map(b => {
-      const html = blockHtml(b, sources, render, math, style.dark);
+      const html = blockHtml(b, sources, render, math, style.dark, opts.stills);
       return html ? `<div class="pp-block${b.type === 'interactive' || s.columns === 1 ? ' pp-wide' : ''}">${html}</div>` : '';
     }).join('\n');
     const num = numbers === 'meta' ? `<span>Step ${i + 1}<i> of ${total}</i></span>` : `<span>${String(i + 1).padStart(2, '0')}<i> / ${String(total).padStart(2, '0')}</i></span>`;

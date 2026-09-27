@@ -18,7 +18,7 @@
  * Canvases carry a Stage button: that snapshot on the Stage (stageHandoff).
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { aspectRatio, type Block, type CodeBlock, type InteractiveBlock, type PresentSource, type RenderBlock, type Step, type TextBlock } from '../../types/presentation';
+import { aspectRatio, type Block, type CodeBlock, type CodePreview as CodePreviewSettings, type InteractiveBlock, type PresentSource, type RenderBlock, type Step, type TextBlock } from '../../types/presentation';
 import { baseValue, mappingsByControl } from '../../present/controls';
 import { resolveCode, type ResolvedCode } from '../../present/code';
 import { isLiveScript, linkedCanvases, stepScriptEdits } from '../../present/liveScript';
@@ -29,7 +29,10 @@ import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
 import { ColourPad } from '../play/ColourPad';
-import { CodeView } from './CodeView';
+import { CodeCredit, CodeView } from './CodeView';
+import { CodePreviewPane } from './CodePreview';
+import { buildCompletions } from '../code/glslReference';
+import { contextFromShader, type SnippetContext } from '../../present/snippetHarness';
 import { CodeField } from '../code/CodeField';
 import { tokenizeJsLine } from '../code/jsSyntax';
 import { scriptCompletions } from '../play/layers/scriptCompletions';
@@ -364,18 +367,114 @@ function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: Bl
 // ── Code ────────────────────────────────────────────────────────────────────
 
 function CodeBlockView({ block, ctx, selected }: { block: CodeBlock; ctx: BlockContext; selected: boolean }) {
+  const tk = useTokens();
   const patchBlock = usePresentation(s => s.patchBlock);
   const resolved = useMemo(() => resolveCode(block, ctx.sources), [block, ctx.sources]);
   if (isLiveScript(block) && !resolved.problem) return <LiveCodeView block={block} ctx={ctx} resolved={resolved} />;
+  if (block.language === 'glsl' && block.preview && !resolved.problem) return <PreviewCodeView block={block as CodeBlock & { preview: CodePreviewSettings }} ctx={ctx} selected={selected} resolved={resolved} />;
   if (ctx.editing && selected && !block.from) {
+    const js = block.language === 'js';
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <GrowingText mono autoFocus value={block.code ?? ''} onChange={code => patchBlock(block.id, { code })} placeholder={block.language === 'js' ? '// JavaScript' : '// GLSL'} minRows={4} />
-        <CodeView code={resolved} caption={block.caption} />
-      </div>
+      <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }} onKeyDown={e => e.stopPropagation()}>
+        <CodeField
+          title={<CodeTitle language={block.language} from={resolved.from} />}
+          ariaLabel={js ? 'JavaScript' : 'GLSL'}
+          value={block.code ?? ''}
+          onChange={code => patchBlock(block.id, { code })}
+          completions={js ? NO_COMPLETIONS : GLSL_COMPLETIONS}
+          tokenize={js ? tokenizeJsLine : undefined}
+          autoIndent
+          placeholder={js ? '// JavaScript' : '// GLSL: a function, a few lines from main(), or a whole shader'}
+          minHeight={120}
+          maxHeight={ctx.large ? 520 : 420}
+        />
+        <CodeCredit origin={block.origin} />
+        {block.caption && <figcaption style={{ padding: '0 2px', color: `var(--pp-muted, ${tk.text.muted})`, font: `500 12.5px/1.4 var(--pp-font-body, ${fontFamily.ui})` }}>{block.caption}</figcaption>}
+      </figure>
     );
   }
-  return <CodeView code={resolved} caption={block.caption} maxHeight={ctx.large ? 560 : 460} />;
+  return <CodeView code={resolved} caption={block.caption} origin={block.origin} maxHeight={ctx.large ? 560 : 460} />;
+}
+
+const NO_COMPLETIONS: never[] = [];
+const GLSL_COMPLETIONS = buildCompletions([]);
+
+function CodeTitle({ language, from, tag }: { language: 'glsl' | 'js'; from: string; tag?: string }) {
+  const tk = useTokens();
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <span style={{ font: `650 10.5px ${fontFamily.mono}`, letterSpacing: '0.04em', color: tk.text.faint }}>{language === 'js' ? 'JS' : 'GLSL'}</span>
+      {from && <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tk.text.muted, fontWeight: 500 }}>{from}</span>}
+      {tag && <span style={{ flexShrink: 0, padding: '1px 7px', borderRadius: 9, background: alpha(tk.accent.base, 0.14), color: tk.accent.text, font: `650 10px ${fontFamily.ui}`, letterSpacing: '0.05em' }}>{tag}</span>}
+    </span>
+  );
+}
+
+/** A value that follows `value` once it has stopped changing for `ms`. */
+function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  useEffect(() => { const t = window.setTimeout(() => setV(value), ms); return () => window.clearTimeout(t); }, [value, ms]);
+  return v;
+}
+
+const NO_CONTEXT: SnippetContext = {};
+
+/**
+ * A GLSL block with its live preview: the code (an editor for readers, whose
+ * edits aren't kept; the author's own typed code while the block is selected)
+ * beside the picture it makes, side by side when there's room.
+ */
+function PreviewCodeView({ block, ctx, selected, resolved }: { block: CodeBlock & { preview: CodePreviewSettings }; ctx: BlockContext; selected: boolean; resolved: ResolvedCode }) {
+  const tk = useTokens();
+  const patchBlock = usePresentation(s => s.patchBlock);
+  const authoring = ctx.editing && selected && !block.from;
+  const original = resolved.text;
+  const [draft, setDraft] = useState<string | null>(null);
+  const [readerSettings, setReaderSettings] = useState<CodePreviewSettings | null>(null);
+  // New code under it (a refreshed snapshot, the author's edit) starts the reader's copy again.
+  const [draftOf, setDraftOf] = useState(original);
+  if (draftOf !== original) { setDraftOf(original); setDraft(null); }
+  const text = authoring ? (block.code ?? '') : (draft ?? original);
+  const debounced = useDebounced(text, 250);
+  const settings = ctx.editing ? block.preview : readerSettings ?? block.preview;
+  const onSettings = (p: CodePreviewSettings) => (ctx.editing ? patchBlock(block.id, { preview: p }) : setReaderSettings(p));
+  const sourceId = block.from?.source ?? block.origin?.source;
+  const src = sourceId ? ctx.sources.get(sourceId) : undefined;
+  const context = useMemo(() => (src ? contextFromShader(src.bundle.fragmentShader, src.bundle.uniforms) : NO_CONTEXT), [src]);
+  const changed = draft !== null && draft !== original;
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1400); } catch { /* still selectable */ }
+  };
+  // In Edit, an unselected block reads as it will; selecting it makes the code editable.
+  const staticCode = ctx.editing && !selected;
+  return (
+    <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }} onKeyDown={e => e.stopPropagation()}>
+      <div style={{ display: 'grid', gridTemplateColumns: ctx.compact ? 'minmax(0, 1fr)' : 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 14, alignItems: 'start' }}>
+        {staticCode ? <CodeView code={resolved} maxHeight={ctx.large ? 520 : 420} /> : (
+          <CodeField
+            title={<CodeTitle language="glsl" from={resolved.from} tag={authoring ? undefined : changed ? 'EDITED' : 'TRY IT'} />}
+            actions={(
+              <>
+                {changed && <Button size="sm" variant="ghost" icon="reset" onClick={() => setDraft(null)} title="Back to the code as it was" style={{ height: 26 }}>Reset</Button>}
+                <Button size="sm" variant="ghost" icon={copied ? 'check' : 'copy'} onClick={copy} style={{ height: 26 }}>{copied ? 'Copied' : 'Copy'}</Button>
+              </>
+            )}
+            ariaLabel={`GLSL${resolved.from ? `: ${resolved.from}` : ''}`}
+            value={text}
+            onChange={v => (authoring ? patchBlock(block.id, { code: v }) : setDraft(v === original ? null : v))}
+            completions={GLSL_COMPLETIONS}
+            autoIndent
+            minHeight={120}
+            maxHeight={ctx.large ? 520 : 420}
+          />
+        )}
+        <CodePreviewPane code={debounced} settings={settings} context={context} onSettings={onSettings} compact={ctx.compact} />
+      </div>
+      <CodeCredit origin={block.origin} />
+      {block.caption && <figcaption style={{ padding: '0 2px', color: `var(--pp-muted, ${tk.text.muted})`, font: `500 12.5px/1.4 var(--pp-font-body, ${fontFamily.ui})`, textShadow: 'var(--pp-shadow, none)' }}>{block.caption}</figcaption>}
+    </figure>
+  );
 }
 
 /**

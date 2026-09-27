@@ -7,7 +7,8 @@ import { offerPresentationExport } from '../playfile/exportMenus';
 import { useEffect, useMemo, useState } from 'react';
 import { withEmbeddedAssets } from '../../present/presentAssets';
 import type { Presentation } from '../../types/presentation';
-import { buildPresentationHtml, exportNotes } from '../../present/exportPresentation';
+import { buildPresentationHtml, exportNotes, styleSheet } from '../../present/exportPresentation';
+import { codePreviewStills } from '../../present/previewStills';
 import { saveTextFile } from '../../utils/fileIO';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -72,7 +73,9 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
       const md = await loadMarkdown();
       const katexCss = math === 'html' ? await katexCssInline() : undefined;
       const full = ready ?? (await withEmbeddedAssets(doc)).doc;
-      const html = buildPresentationHtml(full, md.renderMarkdown, { layout, math, katexCss });
+      // Code previews go in as stills, drawn in the page's light or dark.
+      const stills = codePreviewStills(full, styleSheet(full, layout).dark);
+      const html = buildPresentationHtml(full, md.renderMarkdown, { layout, math, katexCss, stills });
       const r = await saveTextFile(html, `${fileBase(doc.title)}${layout === 'scroll' ? '' : '-slides'}.html`, 'text/html');
       reportFileResult(r, { failTitle: 'Couldn’t save the page', success: `Saved the page (${Math.round(html.length / 1024)} KB)` });
       if (r.ok) onClose();

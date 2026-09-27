@@ -35,6 +35,7 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'toggleRecord',      label: 'Record video',          group: 'View',       defaultCombo: 'cmd+r',       description: 'Open the video recorder' },
   // ⌘⇧↵, not ⌘⇧R: that one is a hard reload in browsers. Works from the code editors too, and on the GLSL and Convert pages.
   { id: 'rebuild',           label: 'Rebuild the preview',   group: 'View',       defaultCombo: 'cmd+shift+enter', description: 'Recompile the shader and reset the GPU; the graph, time and Play setup stay', inEditors: true },
+  { id: 'fullscreen',        label: 'Full screen',           group: 'View',       defaultCombo: 'cmd+shift+f', description: 'The picture on its own (Studio and Play preview), or the presentation (Present). F alone does it too on Play and in Present’s Slides and Scroll. Esc leaves', inEditors: true },
   // Play
   { id: 'playSplit',         label: 'Split the Play view',   group: 'View',       defaultCombo: 'cmd+shift+l', description: 'On the Play page: the picture beside a big Controls, Layers or Mappings panel, or back to the full picture' },
   // Node graph — add nodes

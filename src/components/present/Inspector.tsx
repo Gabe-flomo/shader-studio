@@ -4,10 +4,13 @@
  * with nothing selected, the step's title and columns and the presentation's
  * sources. On phones it opens as a sheet.
  */
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { AddCodeDialog } from './AddCodeDialog';
+import { initialPreview } from '../../present/codePick';
+import { analyzeSnippet, contextFromShader } from '../../present/snippetHarness';
 import { create } from 'zustand';
-import { BLOCK_ASPECTS, type Block, type BlockAspect, type CodeBlock, type InteractiveBlock, type InteractiveControl, type PresentSource, type RenderBlock, type TextBlock } from '../../types/presentation';
-import { formatLineRanges, parseLineRanges } from '../../present/code';
+import { BLOCK_ASPECTS, type Block, type BlockAspect, type CodeBlock, type CodePreview, type InteractiveBlock, type InteractiveControl, type PresentSource, type RenderBlock, type TextBlock } from '../../types/presentation';
+import { formatLineRanges, parseLineRanges, resolveCode } from '../../present/code';
 import { mappingsByControl } from '../../present/controls';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -180,9 +183,20 @@ function CodeSettings({ block, compact }: { block: CodeBlock; compact: boolean }
   const what = !block.from ? 'typed' : 'layerId' in block.from ? 'layer' : block.from.node ? 'node' : 'shader';
   const scripts = source?.bundle.play.layers.filter(l => l.kind === 'script') ?? [];
   const firstSource = sources?.[0];
+  const [choosing, setChoosing] = useState(false);
   return (
     <>
-      <Section title="Code">
+      <Section title="Code" extra={<Button size="sm" variant="ghost" icon="edit" onClick={() => setChoosing(true)} title="Write new code, or take it from a function, a node or a shader">Replace…</Button>}>
+        {choosing && (
+          <AddCodeDialog compact={compact} replacing initial="write" onClose={() => setChoosing(false)}
+            onPick={p => put({ type: 'code', id: block.id, ...(block.highlightLines ? { highlightLines: block.highlightLines } : {}), ...p, caption: p.caption ?? block.caption })} />
+        )}
+        {block.origin?.label && !block.from && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', font: `500 11.5px/1.45 ${fontFamily.ui}`, opacity: 0.8 }}>
+            <Icon name="info" size={12} style={{ flexShrink: 0, position: 'relative', top: 2 }} />
+            <span>{block.origin.label}{block.origin.note ? `. ${block.origin.note}` : ''}</span>
+          </div>
+        )}
         <Segmented fill size="sm" ariaLabel="Where the code comes from" value={block.from ? 'source' : 'typed'} onChange={v => {
           if (v === 'typed') put({ ...block, from: undefined, code: block.code ?? '' });
           else if (firstSource) put({ ...block, from: { source: firstSource.id }, language: 'glsl' });
@@ -223,6 +237,7 @@ function CodeSettings({ block, compact }: { block: CodeBlock; compact: boolean }
           </>
         )}
       </Section>
+      {block.language === 'glsl' && <PreviewSettings block={block} />}
       <Section title="Marks">
         {/* A live block is an editor: its lines move as the reader types, so there's nothing to mark. */}
         {!block.live && (
@@ -233,6 +248,78 @@ function CodeSettings({ block, compact }: { block: CodeBlock; compact: boolean }
         <Row label="Caption"><Field height={32} value={block.caption ?? ''} placeholder="Under the code" onChange={e => put({ ...block, caption: e.target.value || undefined })} /></Row>
       </Section>
     </>
+  );
+}
+
+/** A number box for the plot's range: commits on blur or Enter, ignores what isn't a number. */
+function NumBox({ value, onCommit, label }: { value: number; onCommit: (v: number) => void; label: string }) {
+  const [text, setText] = useState(String(value));
+  const [seen, setSeen] = useState(value);
+  if (seen !== value) { setSeen(value); setText(String(value)); }
+  const commit = () => { const n = Number(text); if (text.trim() && Number.isFinite(n)) onCommit(n); else setText(String(value)); };
+  return <Field height={30} mono aria-label={label} value={text} onChange={e => setText(e.target.value)} onBlur={commit} onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') commit(); }} style={{ flex: 1, minWidth: 0 }} />;
+}
+
+/** A GLSL block's live preview: on or off, what it shows and how; a plot's axes; the sliders back to where they started. */
+function PreviewSettings({ block }: { block: CodeBlock }) {
+  const tk = useTokens();
+  const replaceBlock = usePresentation(s => s.replaceBlock);
+  const sources = usePresentation(s => s.doc?.sources);
+  const map = useMemo(() => new Map((sources ?? []).map(s => [s.id, s])), [sources]);
+  const resolved = useMemo(() => resolveCode(block, map), [block, map]);
+  const src = map.get(block.from?.source ?? block.origin?.source ?? '');
+  const context = useMemo(() => (src ? contextFromShader(src.bundle.fragmentShader, src.bundle.uniforms) : {}), [src]);
+  const analysis = useMemo(() => { try { return analyzeSnippet(resolved.text, context); } catch { return null; } }, [resolved.text, context]);
+  const p = block.preview;
+  const put = (preview: CodePreview | undefined) => replaceBlock({ ...block, preview });
+  const drawable = !!analysis && analysis.options.length > 0;
+  const show = analysis?.options.find(o => o.id === (p?.show ?? analysis.defaultShow));
+  const plotting = !!p && p.mode === 'plot' && !!show?.plottable;
+  const range = p?.range ?? { x: [0, 1] as [number, number], y: [0, 1] as [number, number] };
+  const setRange = (axis: 'x' | 'y', i: 0 | 1, v: number) => {
+    const next = { x: [...range.x] as [number, number], y: [...range.y] as [number, number] };
+    next[axis][i] = v;
+    if (next[axis][0] < next[axis][1] && p) put({ ...p, range: next });
+  };
+  return (
+    <Section title="Preview">
+      <Row label="Live preview" hint={drawable ? 'The picture of what the code does, beside it. Readers can edit the code and move the sliders; their changes aren’t kept.' : 'Nothing here to draw yet: no function returning a float or a vector, and no variables.'}>
+        <Toggle checked={!!p} disabled={!drawable && !p} onChange={on => put(on ? initialPreview(resolved.text, context) ?? { mode: 'field' } : undefined)} label="Show it beside the code" />
+      </Row>
+      {p && analysis && drawable && (
+        <>
+          <Row label="Show">
+            <Select ariaLabel="What the preview shows" mono value={show?.id ?? ''} onChange={v => put({ ...p, show: v })} options={analysis.options.map(o => ({ value: o.id, label: `${o.label} · ${o.type}` }))} />
+          </Row>
+          {show?.plottable && (
+            <Row label="Draw it as">
+              <Segmented fill size="sm" ariaLabel="Draw it as" value={p.mode} onChange={mode => put({ ...p, mode })} options={[{ value: 'plot', label: 'Plot' }, { value: 'field', label: 'Field' }]} />
+            </Row>
+          )}
+          {show?.type === 'vec2' && (
+            <Row label="A vec2 as">
+              <Segmented fill size="sm" ariaLabel="A vec2 as" value={p.view ?? 'color'} onChange={view => put({ ...p, view })} options={[{ value: 'color', label: 'Colour' }, { value: 'grid', label: 'Grid' }, { value: 'arrows', label: 'Arrows' }]} />
+            </Row>
+          )}
+          {!plotting && (
+            <Row label="uv runs" hint="Centred like the Studio, or 0 to 1 like The Book of Shaders">
+              <Segmented fill size="sm" ariaLabel="uv runs" value={p.coords ?? 'centered'} onChange={coords => put({ ...p, coords })} options={[{ value: 'centered', label: '−1 to 1' }, { value: 'unit', label: '0 to 1' }]} />
+            </Row>
+          )}
+          {plotting && (
+            <Row label="Axes" hint="x across, y up">
+              <div style={{ display: 'grid', gridTemplateColumns: '14px 1fr 1fr', gap: 6, alignItems: 'center', color: tk.text.muted, font: `600 11px ${fontFamily.mono}` }}>
+                <span>x</span><NumBox label="x from" value={range.x[0]} onCommit={v => setRange('x', 0, v)} /><NumBox label="x to" value={range.x[1]} onCommit={v => setRange('x', 1, v)} />
+                <span>y</span><NumBox label="y from" value={range.y[0]} onCommit={v => setRange('y', 0, v)} /><NumBox label="y to" value={range.y[1]} onCommit={v => setRange('y', 1, v)} />
+              </div>
+            </Row>
+          )}
+          {p.values && Object.keys(p.values).length > 0 && (
+            <Button size="sm" variant="ghost" icon="reset" onClick={() => { const { values: _v, ...rest } = p; void _v; put(rest); }}>Sliders back to the code’s values</Button>
+          )}
+        </>
+      )}
+    </Section>
   );
 }
 
