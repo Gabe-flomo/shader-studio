@@ -12,8 +12,11 @@
  * what's kept. Every still frame is drawn with mount.renderAt: the same time
  * gives the same picture, and layers that simulate (particles, sketches,
  * feedback) are stepped from 0 to that time first at a fixed step
- * (captureSteps). While you drag, the warm-up is coarse; it settles exactly
- * a moment after you let go, and always before a capture.
+ * (captureSteps). While you drag, the warm-up is coarse and drawn at the
+ * preview's own size; the exact settle runs when you let go (or after a
+ * moment's pause), in chunks that keep the page moving, and a settle the
+ * slider has moved on from is dropped (lib/captureScrub.ts). A capture
+ * always settles fully, at its full size.
  */
 import { openProSheet, requireFeature, useCan } from '../../lib/plan';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -37,12 +40,14 @@ import { baseValue } from '../../present/controls';
 import { EXAMPLE_INDEX } from '../../store/exampleIndex';
 import type { PlayHtmlInput } from '../../play/exportHtml';
 import { addImage, captureName, captureSteps, clampCaptureSize, sizeForAspect, CAPTURE_MAX_SIDE, type CaptureSource } from '../../lib/backgroundLibrary';
-import { captureControls, captureInput, hasPlayPicture, needsWarmup, type CaptureMode } from '../../lib/backgroundCapture';
+import { captureControls, captureInput, hasPlayPicture, needsWarmup, previewPixelSize, type CaptureMode } from '../../lib/backgroundCapture';
+import { createScrubScheduler } from '../../lib/captureScrub';
 
 type Value = number | number[];
 interface Loaded { row: PlayableRow; input: PlayHtmlInput }
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 720;
+const TOUCH = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
 const SIZES: Array<{ id: string; w: number; h: number; label: string }> = [
   { id: '1920x1080', w: 1920, h: 1080, label: '1920 × 1080 (HD, 16:9)' },
   { id: '2560x1440', w: 2560, h: 1440, label: '2560 × 1440 (16:9)' },
@@ -54,10 +59,14 @@ const SIZES: Array<{ id: string; w: number; h: number; label: string }> = [
 ];
 const fmtTime = (t: number) => (t < 100 ? t.toFixed(2) : t.toFixed(1));
 
-/** Seconds of full warm-up at most (at 60 steps a second): beyond it the step grows. */
+/** Steps of full warm-up at most for a capture (60 a second): beyond it the step grows. Never changes: the same time gives the same picture. */
 const FULL_STEPS = 1800;
+/** The preview's settle: fewer steps on a phone, where each costs more. */
+const PREVIEW_STEPS = TOUCH ? 600 : FULL_STEPS;
 /** While dragging: a quick, coarse warm-up. */
-const DRAG_STEPS = 120;
+const DRAG_STEPS = TOUCH ? 30 : 120;
+/** A settle running longer than this shows how far it is. */
+const SLOW_MS = 1500;
 
 export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
   aspect?: number;
@@ -81,6 +90,8 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
   const [name, setName] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [settling, setSettling] = useState(false);
+  /** 0..1 while a slow settle runs, else null. */
+  const [progress, setProgress] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pickRef = useRef<HTMLButtonElement>(null);
@@ -125,53 +136,81 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
   const timeRef = useRef(time);
   const valuesRef = useRef(values);
   const warmRef = useRef(warm);
-  useEffect(() => { timeRef.current = time; valuesRef.current = values; warmRef.current = warm; });
-  const settleTimer = useRef(0);
-  const frameReq = useRef(0);
+  const playingRef = useRef(playing);
+  useEffect(() => { timeRef.current = time; valuesRef.current = values; warmRef.current = warm; playingRef.current = playing; });
+  // The preview draws at the size it is shown (density included), never more than the capture; the capture draws at full size.
+  const pv = useMemo(() => previewPixelSize(size, k, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, TOUCH), [size, k]);
+  const pvRef = useRef(pv);
+  pvRef.current = pv;
+  const savingRef = useRef(false);
 
-  /** Draw the frame at the current time: coarse warm-up (dragging) or exact. */
-  const draw = useCallback((exact: boolean, capture = false): HTMLCanvasElement | null => {
+  /** The quick picture at `t`: a coarse warm-up at most, at the preview's size (never while a capture draws). */
+  const quick = useCallback((t: number) => {
     const m = mount.current;
-    if (!m?.renderAt) return null;
-    const plan = warmRef.current ? captureSteps(timeRef.current, { maxSteps: exact ? FULL_STEPS : DRAG_STEPS }) : { dt: 1 / 60, steps: [] as number[] };
-    return m.renderAt(timeRef.current, { steps: plan.steps, dt: plan.dt, seed: 1, capture }) ?? null;
+    if (!m?.renderAt || savingRef.current) return;
+    const plan = warmRef.current ? captureSteps(t, { maxSteps: DRAG_STEPS }) : { dt: 1 / 60, steps: [] as number[] };
+    m.renderAt(t, { steps: plan.steps, dt: plan.dt, seed: 1 });
   }, []);
-  /** Seek the video layers to the moment (renderAt draws whatever frame they show), then draw it exactly. */
-  const settle = useCallback(async (capture = false): Promise<HTMLCanvasElement | null> => {
+  /**
+   * The exact picture at `t`, in chunks: the videos at their frames first,
+   * then the layers stepped from 0 (PREVIEW_STEPS at most), yielding to the
+   * page between chunks; after SLOW_MS the badge shows how far it is.
+   * Resolves null when it was superseded.
+   */
+  const settle = useCallback(async (t: number, signal: AbortSignal, o: { capture?: boolean; maxSteps?: number } = {}): Promise<HTMLCanvasElement | true | null> => {
     const m = mount.current;
-    if (m?.seekVideos) { try { await m.seekVideos(timeRef.current); } catch { /* draw what's there */ } }
-    if (mount.current !== m) return null;
-    return draw(true, capture);
-  }, [draw]);
-  const redraw = useCallback(() => {
-    cancelAnimationFrame(frameReq.current);
-    frameReq.current = requestAnimationFrame(() => draw(false));
-    window.clearTimeout(settleTimer.current);
-    if (warmRef.current) setSettling(true);
-    // Settled: the videos at their exact frames first, then the moment exactly.
-    settleTimer.current = window.setTimeout(() => { void settle().then(() => setSettling(false)); }, 260);
-  }, [draw, settle]);
+    if (!m?.renderAtAsync) return null;
+    if (m.seekVideos) { try { await m.seekVideos(t); } catch { /* draw what's there */ } }
+    if (mount.current !== m || signal.aborted) return null;
+    const plan = warmRef.current ? captureSteps(t, { maxSteps: o.maxSteps ?? PREVIEW_STEPS }) : { dt: 1 / 60, steps: [] as number[] };
+    const start = performance.now();
+    let shown = -1;
+    const canvas = await m.renderAtAsync(t, {
+      steps: plan.steps, dt: plan.dt, seed: 1, capture: !!o.capture, signal,
+      onProgress: (done, total) => {
+        if (performance.now() - start < SLOW_MS) return;
+        const p = Math.floor(done / total * 100);
+        if (p !== shown) { shown = p; setProgress(p / 100); }
+      },
+    });
+    if (signal.aborted) return null;
+    return o.capture ? canvas : true;
+  }, []);
+  const sched = useMemo(() => createScrubScheduler<HTMLCanvasElement | true>({
+    quick, settle: (t, signal) => settle(t, signal),
+    onBusy: b => { if (b) { if (warmRef.current) setSettling(true); } else { setSettling(false); setProgress(null); } },
+  }), [quick, settle]);
+  useEffect(() => () => sched.cancel(), [sched]);
 
   useEffect(() => {
     const el = hostRef.current;
     if (!el || !input) return;
     let m: PlayMount | null = null;
     try {
-      m = mountPlay(el, input, { panel: false, pointer: false, markers: false, maxDpr: 1, fit: 'cover', paused: true, startTime: timeRef.current, pixelSize: { w: size.w, h: size.h } });
+      m = mountPlay(el, input, { panel: false, pointer: false, markers: false, maxDpr: 1, fit: 'cover', paused: true, startTime: timeRef.current, pixelSize: pvRef.current });
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); return; }
     mount.current = m;
     for (const [id, v] of Object.entries(valuesRef.current)) m.set?.(id, v);
     // Give images and fonts a moment to arrive, then draw the moment exactly.
-    const t = window.setTimeout(() => { void settle(); }, 350);
-    return () => { window.clearTimeout(t); mount.current = null; m?.destroy(); };
-  }, [input, size.w, size.h, settle]);
+    const t = window.setTimeout(() => { if (!playingRef.current) sched.commit(timeRef.current); }, 350);
+    return () => { window.clearTimeout(t); sched.cancel(); mount.current = null; m?.destroy(); };
+  }, [input, size.w, size.h, sched]);
 
-  // Scrubbing and control changes redraw the still (while paused).
-  useEffect(() => { if (!playing) redraw(); }, [time, values, playing, redraw]);
-
-  // Playing: the player's own clock runs; the scrubber follows it.
+  // The preview's size changed (the window, the box): draw that many pixels and settle again.
   useEffect(() => {
-    if (!playing) return;
+    const m = mount.current;
+    if (!m?.setPixelSize) return;
+    m.setPixelSize(pv);
+    if (!playingRef.current) sched.commit(timeRef.current);
+  }, [pv, sched]);
+
+  // A control moved (while paused): the quick picture now, the exact one after a pause.
+  useEffect(() => { if (!playingRef.current) sched.move(timeRef.current); }, [values, sched]);
+
+  // Playing: the player's own clock runs; the scrubber follows it. Pausing settles where it stopped.
+  useEffect(() => {
+    if (!playing) { sched.commit(timeRef.current); return; }
+    sched.cancel();
     const m = mount.current;
     m?.play?.();
     const t0 = timeRef.current, start = performance.now();
@@ -179,9 +218,12 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
     const step = () => { const t = t0 + (performance.now() - start) / 1000; setTime(t); if (t > range) setRange(Math.ceil(t * 1.5)); raf = requestAnimationFrame(step); };
     raf = requestAnimationFrame(step);
     return () => { cancelAnimationFrame(raf); m?.pause?.(); };
-  }, [playing, range]);
+  }, [playing, range, sched]);
 
-  useEffect(() => () => { window.clearTimeout(settleTimer.current); cancelAnimationFrame(frameReq.current); }, []);
+  /** The slider moved: its value and readout now, the quick picture this frame, the settle later. */
+  const scrubTo = (t: number) => { setPlaying(false); setTime(t); sched.move(t); };
+  /** A discrete change (typed, reset): settle straight away. */
+  const jumpTo = (t: number) => { setPlaying(false); setTime(t); sched.commit(t); };
 
   const setValue = (id: string, v: Value) => { setValues(s => ({ ...s, [id]: v })); mount.current?.set?.(id, v); };
   const valueOf = (id: string): Value | undefined => {
@@ -200,10 +242,15 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
     if (!loaded) return;
     setPlaying(false);
     setSaving(true);
+    savingRef.current = true;
+    sched.cancel();
+    const m = mount.current;
     try {
       await new Promise(r => requestAnimationFrame(r));
-      let canvas = await settle(true);
-      if (!canvas) throw new Error('The picture isn’t ready yet. Try again in a moment.');
+      // Full size, every step: the same time gives the same picture, whatever the preview showed.
+      m?.setPixelSize?.({ w: size.w, h: size.h });
+      let canvas = await settle(time, new AbortController().signal, { capture: true, maxSteps: FULL_STEPS });
+      if (!canvas || canvas === true) throw new Error('The picture isn’t ready yet. Try again in a moment.');
       if (canvas.width !== size.w || canvas.height !== size.h) {
         // A browser zoomed out (fewer device pixels than CSS pixels) draws smaller: bring it to the size asked for.
         const c = document.createElement('canvas');
@@ -221,7 +268,12 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
       onDone(meta.id);
     } catch (e) {
       toast.error('Couldn’t capture it', { message: e instanceof Error ? e.message : String(e) });
-    } finally { setSaving(false); }
+    } finally {
+      savingRef.current = false;
+      setSaving(false); setProgress(null);
+      // Back to the preview's size, settled there.
+      if (mount.current === m) { m?.setPixelSize?.(pvRef.current); sched.commit(timeRef.current); }
+    }
   };
 
   // ── Pieces ────────────────────────────────────────────────────────────────
@@ -266,20 +318,21 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
           </div>
         )}
         {loaded && (settling || saving) && (
-          <span style={{ position: 'absolute', right: 10, top: 10, padding: '3px 8px', borderRadius: 10, background: alpha('#000000', 0.55), color: '#fff', font: `600 11px ${fontFamily.ui}` }}>{saving ? 'Capturing…' : 'Settling the layers…'}</span>
+          <span style={{ position: 'absolute', right: 10, top: 10, padding: '3px 8px', borderRadius: 10, background: alpha('#000000', 0.55), color: '#fff', font: `600 11px ${fontFamily.ui}` }}>{saving ? 'Capturing…' : 'Settling the layers…'}{progress !== null ? ` ${Math.round(progress * 100)}%` : ''}</span>
         )}
         {error && loaded && <span style={{ position: 'absolute', left: 10, right: 10, bottom: 10, padding: '8px 10px', borderRadius: radius.md, background: alpha(tk.status.danger, 0.92), color: '#fff', font: `500 12px ${fontFamily.ui}` }}>{error}</span>}
       </div>
       {loaded && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <IconButton icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play from here'} onClick={() => setPlaying(p => !p)} style={compact ? { width: 40, height: 40 } : undefined} />
-          <input type="range" aria-label="Time" min={0} max={range} step={0.01} value={Math.min(time, range)}
-            onChange={e => { setPlaying(false); setTime(Number(e.target.value)); }}
+          <input type="range" aria-label="Time" min={0} max={range} step={0.01} value={Math.min(time, range)} disabled={saving}
+            onChange={e => scrubTo(Number(e.target.value))}
+            onPointerUp={() => sched.release()} onPointerCancel={() => sched.release()} onKeyUp={() => sched.release()} onBlur={() => sched.release()}
             style={{ flex: 1, minWidth: 0, accentColor: tk.accent.base, height: compact ? 32 : 22 }} />
           <Field aria-label="Time in seconds" height={30} style={{ width: 92 }} suffix="s" inputMode="decimal" mono
             value={fmtTime(time)}
-            onChange={e => { const v = Number(e.target.value); if (!Number.isFinite(v) || v < 0) return; setPlaying(false); setTime(v); if (v > range) setRange(Math.ceil(v * 1.25)); }} />
-          <IconButton icon="reset" label="Back to 0 s" onClick={() => { setPlaying(false); setTime(0); }} />
+            onChange={e => { const v = Number(e.target.value); if (!Number.isFinite(v) || v < 0) return; jumpTo(v); if (v > range) setRange(Math.ceil(v * 1.25)); }} />
+          <IconButton icon="reset" label="Back to 0 s" onClick={() => jumpTo(0)} />
         </div>
       )}
     </div>

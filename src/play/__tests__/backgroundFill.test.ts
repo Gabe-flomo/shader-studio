@@ -12,7 +12,7 @@ import { klFillAt, klFillColourAt, klFillT } from '../kit/layers.js';
 import { playBackground } from '../background';
 import { sampleFill } from '../../lib/backgroundLibrary';
 import { STOP_PALETTE_MAX } from '../../nodes/definitions/color';
-import { captureControls, captureInput, hasPlayPicture, needsWarmup } from '../../lib/backgroundCapture';
+import { captureControls, captureInput, hasPlayPicture, needsWarmup, previewPixelSize } from '../../lib/backgroundCapture';
 import { buildPlayHtml, type PlayHtmlInput } from '../exportHtml';
 
 const BW: BackgroundFill = { style: 'gradient', angle: 180, stops: [{ pos: 0, color: [0, 0, 0] }, { pos: 1, color: [1, 1, 1] }] };
@@ -142,8 +142,37 @@ describe('what the capture window mounts', () => {
   });
 
   it('warms up only what depends on earlier frames', () => {
-    expect(needsWarmup(input(), 'play')).toBe(true);
+    // A text layer swung by an LFO is a function of the time: no warm-up.
+    expect(needsWarmup(input(), 'play')).toBe(false);
     expect(needsWarmup(input(), 'graph')).toBe(false);
     expect(needsWarmup({ ...input(), passes: { stateful: true, echo: null, particles: [] } }, 'graph')).toBe(true);
+    // Layers that simulate do.
+    const particles = input(); particles.play.layers.push(defaultLayer('particles', 'p1', 'Dust'));
+    expect(needsWarmup(particles, 'play')).toBe(true);
+    expect(needsWarmup(particles, 'graph')).toBe(false);
+    for (const kind of ['brush', 'bodies', 'script'] as const) {
+      const i = input(); i.play.layers = [defaultLayer(kind, 'x', kind)];
+      expect(needsWarmup(i, 'play')).toBe(true);
+    }
+    // So does a static layer driven with a memory: smoothing, or a trigger's envelope.
+    const smoothed = input(); smoothed.play.mappings[1].smoothMs = 200;
+    expect(needsWarmup(smoothed, 'play')).toBe(true);
+    const triggered = input(); triggered.play.mappings[1].source = { kind: 'trigger', on: 'key', key: 'a', mode: 'envelope', attack: 10, decay: 100, sustain: 0.5, release: 200 } as unknown as PlayRecord['mappings'][number]['source'];
+    expect(needsWarmup(triggered, 'play')).toBe(true);
+    expect(needsWarmup({ ...input(), play: { ...input().play, layers: [] } }, 'play')).toBe(false);
+  });
+
+  it('previews at the shown size, no bigger than the capture or 1280 a side', () => {
+    const hd = { w: 1920, h: 1080 };
+    expect(previewPixelSize(hd, 0.25, 2, false)).toEqual({ w: 960, h: 540 });
+    // A phone: 1.5× density at most.
+    expect(previewPixelSize(hd, 0.2, 3, true)).toEqual({ w: 576, h: 324 });
+    // Shown large on a dense screen: capped by the side.
+    expect(previewPixelSize(hd, 0.5, 2, false)).toEqual({ w: 1280, h: 720 });
+    // Never more than the capture; a shape kept.
+    expect(previewPixelSize({ w: 600, h: 400 }, 1, 2, false)).toEqual({ w: 600, h: 400 });
+    expect(previewPixelSize({ w: 1080, h: 1920 }, 0.3, 2, false)).toEqual({ w: 648, h: 1152 });
+    // Unmeasured yet: the capture's shape at the cap.
+    expect(previewPixelSize({ w: 3840, h: 2160 }, 0, 2, false)).toEqual({ w: 1280, h: 720 });
   });
 });
