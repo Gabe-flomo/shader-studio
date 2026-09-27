@@ -137,19 +137,35 @@ flashes in the editor and scrolls into view. Beside it, four tabs:
   declares are pressable under it. Nothing reaches the picture until Apply.
 - **Reference**: everything the sketch can call, grouped, one line each;
   open an entry for its parameters, return value and an example.
-- **Patterns**: the pieces sketches are made of, ready to insert: a params block with every kind, a
-  particle system in three functions, bounce and wrap, ease and spring
-  follows, orbit, a noise flow field, a flock in two rules, a grid loop,
-  polygons, trails, gradients, text, mouse and click handling, reading the
-  picture, attaching to a null. Each says where it belongs and Insert puts
-  it there: top-level code before `setup`/`draw` (after the params and
-  declarations), `setup` and `draw` code at the end of that function (made
-  if the sketch has none; a blank line under the caret inside it wins). A
-  params pattern merges into your params; a pattern's settings (`let
-  radius = 120;`) go to the top once, so Make a slider works on them.
-  **See it used** runs a small complete sketch with the pattern in it,
-  which **Load as the sketch** puts in the editor. (`scriptSnippets.ts`;
-  placement is `placeCode` in `scriptTools.ts`.)
+- **Patterns**: about 65 pieces sketches are made of, ready to insert,
+  grouped by what you want to do, each group with a line saying what it is
+  for: Sketch basics, Add a shape, Follow the mouse, React to the beat,
+  Trails and fades, Grids and tiling, Noise motion, Motion paths,
+  Physics-lite, Text, Colour palettes, Read the picture. The well-known p5
+  and canvas idioms are in there (rounded box, ring, pie slice, dashed
+  line, glow, bezier; point at the mouse, drag a thing, push away; pulse
+  on a beat, tempo clock, follow a level, step on each beat; history
+  trails, fade to a colour, zoom echo; Truchet, checkerboard, hex grid,
+  ripples; wander, noise wave, wobbly blob; Lissajous; gravity, pendulum,
+  a Verlet rope, orbits; typewriter, text round a circle, wavy letters,
+  fit to width; cosine palettes, a fixed palette, blends, hue cycles;
+  brightest spot, scanlines, climb toward the light). Each says where it
+  belongs and Insert puts it there: top-level code before `setup`/`draw`
+  (after the params and declarations), `setup` and `draw` code at the end
+  of that function (made if the sketch has none; a blank line under the
+  caret inside it wins). A params block in a pattern merges into your
+  params, or becomes the sketch's params at the top of the file when it has
+  none, even from a draw pattern (the beat patterns declare their button
+  this way). A pattern's settings (`let radius = 120, speed = 1;`) go to
+  the top once, one `let` each, so Make a slider works on them; the filter
+  matches names, descriptions and group names. **See it used** runs a
+  small complete sketch with the pattern in it, which **Load as the
+  sketch** puts in the editor; an idiom without a hand-written example is
+  shown placed into a bare draw exactly as Insert would place it.
+  (`scriptSnippets.ts` and `scriptIdioms.ts`; placement is `placeCode` in
+  `scriptTools.ts`. A test inserts every idiom into four sketch shapes,
+  all of them into one sketch together, and turns every setting into a
+  slider, and checks each still runs.)
 - **Controls**: the declared controls as rows (sliders, switches, Press
   buttons) with their + for the Play panel; **New control**, which writes
   a slider, toggle or button into `params` (and a `let` it drives) from a
@@ -163,6 +179,50 @@ saved), **Import** (another script layer in this file, or a saved sketch:
 everything, its functions only, or one function; appended under a
 comment), and **Save as starter** (this sketch, by name, in localStorage:
 `src/play/savedScripts.ts`). On a phone the panel stacks under the editor.
+
+### Layer kinds: save a sketch, use it like a built-in layer
+
+**Save as kind** (on the layer, and in the big editor's footer) turns a
+sketch into a layer kind of its own: a name, a line saying what it does,
+an icon and a colour (from the theme's accents, so it reads in light and
+dark). The dialog shows how it will look in Add layer, and warns when the
+name matches a kind you already have. The layer becomes the kind's first
+layer (a layer still called "Script 2" takes the kind's name).
+
+- **Add layer** lists the file's kinds under the built-in ones, then the
+  rest of your list ("from your list"). Adding one makes a Script layer
+  with `kindId` pointing at the kind, the kind's code, and each declared
+  slider and toggle at its declared value.
+- **Its properties.** A layer of a kind shows a Kind card (icon, name,
+  how many layers use it) and a Properties section with the kind's
+  sliders, toggles and buttons; the code is not on the layer. Those
+  properties are `p_<key>` numbers like any script param, so controls,
+  mappings, keyframes, nulls, Duplicate and Reset (back to the kind's
+  values) work as they do on built-in layers. Other layers treat it as
+  built in: the Cloner copies it (the whole sketch canvas, placed from the
+  picture's middle; the sketch runs once a frame however many copies there
+  are), the Layers node reads it, Solo and visibility apply.
+- **Edit the kind vs. this layer.** **Edit the kind** opens the big editor
+  titled with the kind's name and a banner saying Apply changes all N of
+  its layers; each layer keeps its own values for params it had, new
+  params start at their declared value. **Edit this layer only** turns
+  that one layer into a plain Script layer with its own copy of the code
+  (Undo makes it one of the kind again). The Kind card's menu renames or
+  restyles the kind, adds it to or removes it from your list, or removes it
+  from the file (its layers keep their code as plain Script layers).
+- **Where kinds live.** In the play file, `play.layerKinds` holds each
+  kind the file uses (id, name, hint, icon, colour, code, params, canvas
+  settings, version), so the file, its copies and exported websites carry
+  them. Each layer also keeps a copy of the code: `parsePlayRecord` gives a
+  layer of a kind the file has the kind's code (the kind is the source of
+  truth), and turns a layer whose kind is missing into a plain Script
+  layer that still runs. Your list is the **layer-kind registry**
+  (`createLayerKindRegistry` in `src/play/layerKinds.ts`: list, get,
+  register, unregister, subscribe, with a source of `saved` or, later,
+  `plugin`); the app's copy persists your saved kinds in localStorage, so
+  every file's Add layer offers them.
+- Ids are namespaced: `sketch:<slug>-<suffix>` for saved sketches, and a
+  plugin's layers will be `<plugin id>:<name>` in the same field.
 
 ### Sliders you declare
 
@@ -202,8 +262,8 @@ keeps the value it had; loading a starter resets them.
   flocking code lives in the kit; the Patterns tab carries small
   re-writes of the common behaviours (spawn and move, bounce, flock,
   springs) rather than a way to import the kit's own functions piecemeal.
-  That, and saving a sketch as a layer kind of its own, is `defineLayer`
-  below.
+  A sketch can be saved as a layer kind (above), which is `defineLayer`
+  with no packaging; importing the kit's functions is still to come.
 - **No workers.** The script runs on the main thread inside the frame; an
   infinite loop hangs the page like any script would. Fine for your own
   sketches, not for code from strangers.
@@ -227,7 +287,11 @@ else. Turning it into a plugin API means:
 2. **Give it a name in the UI.** Registered layers appear in the Layers
    panel's Add list under the plugin's name; nodes in the palette; sources
    in the mapping picker; feeds in Texture/Video Input. Saved graphs store
-   the namespaced id, so a missing plugin says what to install.
+   the namespaced id, so a missing plugin says what to install. For layers
+   this is built for sketches: layer kinds (above) have a registry, an Add
+   layer entry with an icon and colour, a namespaced `kindId` on each
+   layer, and a fallback when the kind is missing. A plugin layer
+   registers into the same registry with `source: 'plugin'`.
 3. **Add the two missing channels.** `defineMapping` (`open(ctx) → { read(),
    close() }`) turns a script's numbers into sources; `defineFeed`
    publishes a texture with size and timestamp. The YouTube importer is a
@@ -261,5 +325,14 @@ someone to package for.
   (`src/types/play.ts`: `actionsForLayer`, `scriptActionKey`), labelled by
   `actionLabel` in `layers/help.ts`; the kit queues a press and delivers it
   on the layer's next frame.
+- Layer kinds: the schema and file gates in `src/types/layerKinds.ts`
+  (`parseLayerKinds`, `syncLayerKinds`, called by `parsePlayRecord`); the
+  registry and the record operations (save, add, edit, detach, restyle,
+  remove, reset) in `src/play/layerKinds.ts`; the dialog in
+  `layers/KindDialog.tsx`; the Kind card in `ScriptEditor`.
+- Idioms: `src/components/play/layers/scriptIdioms.ts`, merged into the
+  Patterns list by `scriptSnippets.ts`.
 - Tests: `src/play/__tests__/scriptLayer.test.ts`,
-  `src/play/__tests__/scriptControls.test.ts`.
+  `src/play/__tests__/scriptControls.test.ts`,
+  `src/play/__tests__/scriptEditorTools.test.ts` (patterns and idioms),
+  `src/play/__tests__/layerKinds.test.ts`.

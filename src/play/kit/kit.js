@@ -128,7 +128,9 @@ export function createLayerKit() {
     return c;
   }
 
+  let frameNo = 0;
   function frame(ctx, record, env) {
+    frameNo++;
     const W = env.W, H = env.H, dpr = env.dpr || 1, time = env.time, dt = Math.min(0.1, Math.max(0, env.dt));
     const aspect = W / H, gl = env.gl, pointer = env.pointer || { x: 0.5, y: 0.5, over: false, down: false };
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -173,6 +175,7 @@ export function createLayerKit() {
       else if (l.kind === 'shape' && l.shape === 'picture') needs.coarse = true;
       else if (l.kind === 'brush' && l.colour === 'picture') needs.coarse = true;
       else if (l.kind === 'script' && l.readPicture) needs.coarse = true;
+      else if (l.kind === 'cloner') { const src = layers.find(x => x.id === l.sourceId); if (src && src.kind === 'script' && src.readPicture) needs.coarse = true; }
       else if (l.kind === 'contours') { if (l.readFrom === 'camera') { needs.cam = true; needs.camFine = needs.camFine || l.detail === 'fine'; } else if (l.detail === 'fine') needs.fine = true; else needs.coarse = true; }
       else if (l.kind === 'camera') needs.cam = true;
     }
@@ -289,17 +292,22 @@ export function createLayerKit() {
      * the layer's opacity and blend. A broken script reports its error and draws nothing until the
      * code changes; the other layers carry on.
      */
-    function drawScript(c, l, v) {
+    // A sketch runs once a frame into its own canvas; the layer and any cloner copying it both use that canvas.
+    function stepScript(l) {
       let st = scripts.get(l.id);
       if (!st || st.code !== l.code) {
         st = klSketchCompile(l.code);
         scripts.set(l.id, st);
         if (env.scriptStatus) env.scriptStatus(l.id, st.error);
       }
+      const buf = klCanvas(pool, 'script_' + l.id, W, H);
+      if (st.steppedAt === frameNo) return st.error ? null : buf;
+      st.steppedAt = frameNo;
       const presses = scriptPresses.get(l.id);
       if (presses) { for (const k in presses) klSketchPress(st, k, presses[k]); scriptPresses.delete(l.id); }
-      if (st.error) return;
-      const buf = klCanvas(pool, 'script_' + l.id, W, H), bx = buf.getContext('2d');
+      if (st.error) return null;
+      const v = k => env.value(l, k);
+      const bx = buf.getContext('2d');
       const params = {};
       for (const d of l.paramDefs || []) { const val = v('p_' + d.key); params[d.key] = typeof val === 'number' && isFinite(val) ? val : d.value; }
       const s = {
@@ -317,7 +325,12 @@ export function createLayerKit() {
         random: rngFor(l.id, 'script'),
       };
       const err = klSketchStep(st, s, l.paramDefs || [], l.clear);
-      if (err) { if (env.scriptStatus) env.scriptStatus(l.id, err); return; }
+      if (err) { if (env.scriptStatus) env.scriptStatus(l.id, err); return null; }
+      return buf;
+    }
+    function drawScript(c, l, v) {
+      const buf = stepScript(l);
+      if (!buf) return;
       c.globalAlpha = v('opacity'); c.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
       c.drawImage(buf, 0, 0);
       c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
@@ -344,8 +357,15 @@ export function createLayerKit() {
         else if (e.kind === 'shape') effectors.push({ x: env.value(e, 'x'), y: env.value(e, 'y'), rx: (env.value(e, 'w') / 2) / aspect, ry: env.value(e, 'h') / 2 });
       }
       const copies = klClonerCopies(l, v, aspect, layout, effectors);
-      const sx = vs('x') * W, sy = (1 - vs('y')) * H;
       c.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
+      if (src.kind === 'script') {
+        // A sketch has no position of its own: the copies place its whole canvas, centred on the picture's middle.
+        const buf = stepScript(src);
+        if (buf) for (const cp of copies) klDrawCopy(c, Object.assign({}, cp, { alpha: cp.alpha * vs('opacity') }), W / 2, H / 2, W, H, buf, null);
+        c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+        return;
+      }
+      const sx = vs('x') * W, sy = (1 - vs('y')) * H;
       if (src.kind === 'null') {
         for (const cp of copies) if (!cp.hidden && cp.alpha > 0) { c.globalAlpha = cp.alpha; klDrawNull(c, src, cp.x, cp.y, vs('size') * cp.scale, dpr, W, H, 0); }
         c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
