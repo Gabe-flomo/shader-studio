@@ -20,3 +20,28 @@ export function geoAnchor(
   lookup: (id: string) => { layer: { id: string; kind: string } & Record<string, unknown>; value: (key: string) => number } | null,
   depth?: number,
 ): { x: number; y: number } | null;
+
+/** A path shape's geometry (see geoPathBuild): outline and links in picture heights, readings raw. */
+export interface GeoPath {
+  style: GeoPathStyle;
+  closed: boolean;
+  pts: number[];
+  segs: number[];
+  alphas: number[];
+  cx: number; cy: number;
+  x0: number; y0: number; x1: number; y1: number;
+  area: number; perimeter: number; spread: number;
+  /** Set by the kit: how far the shape has faded in (On lost: Fade), 0..1. */
+  alpha?: number;
+}
+export type GeoPathStyle = 'fill' | 'smooth' | 'circle' | 'lines' | 'web';
+export const GEO_PATH_STYLES: GeoPathStyle[];
+export const GEO_PATH_FADE_S: number;
+export function geoHull(points: [number, number][]): [number, number][];
+export function geoCatmullRom(points: [number, number][], steps: number): [number, number][];
+export function geoPolyArea(pts: number[]): number;
+export function geoPolyLength(pts: number[], closed: boolean): number;
+export function geoPathNodes(nodes: { x: number; y: number; lost?: boolean }[], onLost: string): { pts: { x: number; y: number }[]; target: 0 | 1 };
+export function geoPathFade(prev: number | undefined, target: number, dt: number): number;
+export function geoPathBuild(points: { x: number; y: number }[], aspect: number, o: { style: string; hull?: boolean; circleMode?: string; webReach?: number; lineR?: number }): GeoPath;
+export function geoPathReadings(geo: GeoPath, aspect: number): { area: number; perimeter: number; spread: number };

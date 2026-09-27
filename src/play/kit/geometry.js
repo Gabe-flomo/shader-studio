@@ -33,6 +33,14 @@ export function geoCompile(shape, aspect) {
       break;
     }
     case 'field': d = shape.field ? (x, y) => geoFieldAt(shape.field, x, y) : () => 1; break;
+    case 'path': {
+      // A shape made from nulls (geoPathBuild): closed outlines are polygons, lines and webs thick strokes.
+      const g = shape.pathGeo;
+      if (g && g.closed && g.pts.length >= 6) d = (x, y) => sdfPolygon(x * aspect, y, g.pts);
+      else if (g && g.segs.length) d = (x, y) => sdfSegments(x * aspect, y, g.segs);
+      else d = () => 1;
+      break;
+    }
     default: d = (x, y) => { const p = local(x, y); return sdfBox(p[0], p[1], hw, hh, round); };
   }
   const dist = inv < 0 ? (x, y) => -d(x, y) : d;
@@ -199,7 +207,7 @@ export function geoFieldFromAlpha(data, gw, gh) {
  * A layer's anchor: the point proximity triggers and distance sensors measure
  * from, 0..1 across and up the picture. Always the layer's centre:
  *   null, text, image, camera, lens, audio   its position (text and images are drawn centred on it)
- *   shape      box, circle and line: its position; a polygon: its bounds' centre after rotation;
+ *   shape      box, circle and line: its position; a polygon: its bounds' centre after rotation; a path: its points' centre (reported);
  *              a layer's shape: that layer's anchor; the picture's bright parts: their centroid (reported)
  *   cloner     grid and ring: the centre; line: its middle; path and points: the copies' centroid (reported)
  *   particles, bodies, brush   the centroid of what is alive (reported), none until something is
@@ -221,6 +229,7 @@ export function geoAnchor(layer, value, aspect, reported, lookup, depth) {
         return src ? geoAnchor(src.layer, src.value, aspect, reported, lookup, (depth || 0) + 1) : at();
       }
       if (layer.shape === 'picture') return rep() || { x: 0.5, y: 0.5 };
+      if (layer.shape === 'path') return rep() || at();
       const pts = layer.points || [];
       if (layer.shape !== 'polygon' || pts.length < 6) return at();
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -241,4 +250,184 @@ export function geoAnchor(layer, value, aspect, reported, lookup, depth) {
     default:
       return null;
   }
+}
+
+// ── Paths: shapes made from nulls (a quad between two hands, a web between fingertips) ──
+//
+// A path shape takes its corners from nulls, in order, every frame. The
+// points arrive as { x, y, lost } (0..1 across and up; `lost`: the null
+// follows a hand that is out of view) and the geometry is built in picture
+// heights (x × aspect, y), like every distance here.
+
+export const GEO_PATH_STYLES = ['fill', 'smooth', 'circle', 'lines', 'web'];
+/** Seconds a path with On lost: Fade takes to fade out (and back in). */
+export const GEO_PATH_FADE_S = 0.35;
+const GEO_SMOOTH_STEPS = 10, GEO_CIRCLE_STEPS = 72;
+
+/** The convex hull of [[x, y], …], anticlockwise with y up, without collinear points. Fewer than 3 distinct points (or all in a line): the ends. */
+export function geoHull(points) {
+  const p = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const uniq = [];
+  for (const q of p) { const l = uniq[uniq.length - 1]; if (!l || Math.abs(l[0] - q[0]) > 1e-9 || Math.abs(l[1] - q[1]) > 1e-9) uniq.push(q); }
+  if (uniq.length < 3) return uniq;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [], upper = [];
+  for (const q of uniq) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 1e-12) lower.pop(); lower.push(q); }
+  for (let i = uniq.length - 1; i >= 0; i--) { const q = uniq[i]; while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 1e-12) upper.pop(); upper.push(q); }
+  const hull = lower.slice(0, -1).concat(upper.slice(0, -1));
+  // All in a line: its two ends.
+  return hull.length >= 3 ? hull : [uniq[0], uniq[uniq.length - 1]];
+}
+
+/**
+ * A closed centripetal Catmull-Rom curve through [[x, y], …]: `steps` samples
+ * per span, starting on each point, so the curve passes through every one and
+ * never loops or cusps between close points. Returns [[x, y], …].
+ */
+export function geoCatmullRom(points, steps) {
+  const n = points.length;
+  if (n < 3) return points.slice();
+  const k = Math.max(1, steps | 0), out = [];
+  const knot = (a, b) => Math.max(1e-6, Math.sqrt(Math.hypot(b[0] - a[0], b[1] - a[1])));
+  for (let i = 0; i < n; i++) {
+    const p0 = points[(i - 1 + n) % n], p1 = points[i], p2 = points[(i + 1) % n], p3 = points[(i + 2) % n];
+    const t0 = 0, t1 = t0 + knot(p0, p1), t2 = t1 + knot(p1, p2), t3 = t2 + knot(p2, p3);
+    for (let s = 0; s < k; s++) {
+      const t = t1 + (t2 - t1) * (s / k);
+      const mix = (a, b, ta, tb) => { const u = (t - ta) / (tb - ta); return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]; };
+      const a1 = mix(p0, p1, t0, t1), a2 = mix(p1, p2, t1, t2), a3 = mix(p2, p3, t2, t3);
+      const b1 = mix(a1, a2, t0, t2), b2 = mix(a2, a3, t1, t3);
+      out.push(mix(b1, b2, t1, t2));
+    }
+  }
+  return out;
+}
+
+/** Area of a closed outline (flat [x0, y0, …]), whichever way round it goes. */
+export function geoPolyArea(pts) {
+  const n = pts.length >> 1;
+  let s = 0;
+  for (let i = 0, j = n - 1; i < n; j = i++) s += pts[j * 2] * pts[i * 2 + 1] - pts[i * 2] * pts[j * 2 + 1];
+  return Math.abs(s) / 2;
+}
+
+/** Length of a line through flat [x0, y0, …], back to the start when `closed`. */
+export function geoPolyLength(pts, closed) {
+  const n = pts.length >> 1;
+  let s = 0;
+  for (let i = 1; i < n; i++) s += Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]);
+  if (closed && n > 2) s += Math.hypot(pts[0] - pts[n * 2 - 2], pts[1] - pts[n * 2 - 1]);
+  return s;
+}
+
+/**
+ * Which points a path uses now, and where its fade is heading.
+ *   drop  a lost point is left out (four corners become a triangle, then a line)
+ *   hold  a lost point stays where it was last seen (its null waits there)
+ *   fade  every point stays; the whole shape fades out while any is lost
+ * Returns { pts: [{ x, y }], target: 0 | 1 }.
+ */
+export function geoPathNodes(nodes, onLost) {
+  const anyLost = nodes.some(n => n.lost);
+  const pts = (onLost === 'drop' ? nodes.filter(n => !n.lost) : nodes).map(n => ({ x: n.x, y: n.y }));
+  return { pts, target: onLost === 'fade' && anyLost ? 0 : 1 };
+}
+
+/** A fade one frame on: from `prev` toward `target` (0 or 1), a full fade taking GEO_PATH_FADE_S. No `prev` yet: already there. */
+export function geoPathFade(prev, target, dt) {
+  const a = typeof prev === 'number' && isFinite(prev) ? prev : target, step = Math.max(0, dt) / GEO_PATH_FADE_S;
+  return target > a ? Math.min(target, a + step) : Math.max(target, a - step);
+}
+
+/**
+ * A path shape's geometry from its points (0..1, y up), in picture heights:
+ *   o.style      fill (a polygon through the points) · smooth (a closed curve through them) ·
+ *                circle · lines (joined in order, open) · web (every pair joined)
+ *   o.hull       fill and smooth: go round the outside (the convex hull), so points that cross don't make a bow-tie
+ *   o.circleMode spread: centre the points' middle, radius their mean distance from it ·
+ *                first: centre the first point, radius the mean distance of the others (two points: the second sets it)
+ *   o.webReach   web: join only points closer than this (picture heights); 0 joins all. Links fade as they stretch toward it
+ *   o.lineR      lines and web: half the stroke's thickness (picture heights), for particle walls
+ * Returns { style, closed, pts (flat outline), segs ([x0, y0, x1, y1, r, …]: lines, webs and two-point
+ * paths), alphas (per web link), cx, cy (its centre, 0..1), x0, y0, x1, y1 (bounds, picture
+ * heights), area, perimeter, spread } — the last three raw, in picture heights (geoPathReadings
+ * makes them 0..1).
+ */
+export function geoPathBuild(points, aspect, o) {
+  const P = points.map(p => [p.x * aspect, p.y]);
+  const n = P.length;
+  const style = GEO_PATH_STYLES.includes(o.style) ? o.style : 'fill';
+  const out = { style, closed: false, pts: [], segs: [], alphas: [], cx: 0.5, cy: 0.5, x0: 0, y0: 0, x1: 0, y1: 0, area: 0, perimeter: 0, spread: 0 };
+  if (!n) return out;
+  let mx = 0, my = 0;
+  for (const p of P) { mx += p[0]; my += p[1]; }
+  mx /= n; my /= n;
+  out.cx = mx / aspect; out.cy = my;
+  let sd = 0;
+  for (const p of P) sd += Math.hypot(p[0] - mx, p[1] - my);
+  out.spread = sd / n;
+  const r = Math.max(0, o.lineR || 0);
+  const flat = list => { const f = []; for (const p of list) f.push(p[0], p[1]); return f; };
+  const chain = list => { const s = []; for (let i = 0; i + 1 < list.length; i++) s.push(list[i][0], list[i][1], list[i + 1][0], list[i + 1][1], r); return s; };
+  if (style === 'circle') {
+    let c, R = 0;
+    if (o.circleMode === 'first') {
+      c = P[0];
+      for (let i = 1; i < n; i++) R += Math.hypot(P[i][0] - c[0], P[i][1] - c[1]);
+      R = n > 1 ? R / (n - 1) : 0;
+    } else { c = [mx, my]; R = out.spread; }
+    if (R > 1e-6) {
+      const ring = [];
+      for (let i = 0; i < GEO_CIRCLE_STEPS; i++) { const t = (i / GEO_CIRCLE_STEPS) * Math.PI * 2; ring.push([c[0] + Math.cos(t) * R, c[1] + Math.sin(t) * R]); }
+      out.closed = true; out.pts = flat(ring);
+      out.area = Math.PI * R * R; out.perimeter = 2 * Math.PI * R;
+    }
+    out.cx = c[0] / aspect; out.cy = c[1];
+  } else if (style === 'web') {
+    const reach = Math.max(0, o.webReach || 0);
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+      const d = Math.hypot(P[j][0] - P[i][0], P[j][1] - P[i][1]);
+      if (reach > 0 && d > reach) continue;
+      out.segs.push(P[i][0], P[i][1], P[j][0], P[j][1], r);
+      out.alphas.push(reach > 0 ? Math.max(0, 1 - d / reach) : 1);
+      out.perimeter += d;
+    }
+    const h = geoHull(P);
+    if (h.length >= 3) out.area = geoPolyArea(flat(h));
+    out.pts = flat(P);
+  } else if (style === 'lines') {
+    out.pts = flat(P);
+    out.segs = chain(P);
+    out.perimeter = geoPolyLength(out.pts, false);
+    const h = geoHull(P);
+    if (h.length >= 3) out.area = geoPolyArea(flat(h));
+  } else {
+    // fill · smooth
+    let list = o.hull ? geoHull(P) : P;
+    if (list.length >= 3) {
+      if (style === 'smooth') list = geoCatmullRom(list, GEO_SMOOTH_STEPS);
+      out.closed = true; out.pts = flat(list);
+      out.area = geoPolyArea(out.pts); out.perimeter = geoPolyLength(out.pts, true);
+    } else if (list.length === 2) {
+      // Two points: a line between them.
+      out.pts = flat(list); out.segs = chain(list); out.perimeter = geoPolyLength(out.pts, false);
+    }
+  }
+  if (out.pts.length) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < out.pts.length; i += 2) { x0 = Math.min(x0, out.pts[i]); x1 = Math.max(x1, out.pts[i]); y0 = Math.min(y0, out.pts[i + 1]); y1 = Math.max(y1, out.pts[i + 1]); }
+    out.x0 = x0; out.y0 = y0; out.x1 = x1; out.y1 = y1;
+  }
+  return out;
+}
+
+/**
+ * A path's readings, 0..1, for mappings:
+ *   area       the share of the picture it covers (lines and webs: the area their points span)
+ *   perimeter  its outline's length (a web: all its links) against the picture's own edge
+ *   spread     the points' mean distance from their centre; 1 is half a picture height or more
+ */
+export function geoPathReadings(geo, aspect) {
+  const c = v => Math.max(0, Math.min(1, isFinite(v) ? v : 0));
+  return { area: c(geo.area / Math.max(1e-6, aspect)), perimeter: c(geo.perimeter / (2 * (aspect + 1))), spread: c(geo.spread / 0.5) };
 }

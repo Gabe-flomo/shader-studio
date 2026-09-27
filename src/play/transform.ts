@@ -39,7 +39,8 @@ export function layerBounds(l: PlayLayer, v: Value, m: Measure): Bounds | null {
   const x = v(l, 'x'), y = v(l, 'y');
   switch (l.kind) {
     case 'shape':
-      if (l.shape === 'layer' || l.shape === 'picture') return null;
+      // A layer's shape, the picture's and a path (its nulls place it) have no box of their own.
+      if (l.shape === 'layer' || l.shape === 'picture' || l.shape === 'path') return null;
       return { x, y, w: v(l, 'w'), h: v(l, 'h'), rot: v(l, 'rotation'), uniform: false, turns: true };
     case 'text': {
       const size = v(l, 'size'), lines = String(l.sequence ? l.text.split('\n')[0] ?? '' : l.text).split('\n');

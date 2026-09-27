@@ -35,6 +35,8 @@ export interface KitEnv {
   scriptStatus?: (layerId: string, error: string | null) => void;
   /** Hand tracking: a landmark on the picture for a null following a hand (null while that hand is out of view). */
   hand?: (side: string, point: number) => { x: number; y: number } | null;
+  /** Hand tracking is running (has seen a camera frame): a hand out of view is then "lost" for path shapes. Without it, a hand null that never saw its hand rests where it was placed. */
+  handsLive?: boolean;
   /** Hand tracking: draw the hands' skeleton with the markers (null or absent: don't). */
   hands?: { state: HdState; colour: [number, number, number] } | null;
   /**

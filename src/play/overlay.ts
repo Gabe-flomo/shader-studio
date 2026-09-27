@@ -453,7 +453,8 @@ class PlayOverlay {
         const hit = n ?? (this.editing && this.writer ? this.layerAt(u) : null);
         if (hit) {
           if (this.editing) for (const cb of this.selectListeners) cb(hit.id);
-          this.drag = { id: hit.id, dx: this.value(hit, 'x') - u.x, dy: this.value(hit, 'y') - u.y };
+          // A path is placed by its nulls: a press picks it, and dragging moves nothing (drag its nulls).
+          if (!(hit.kind === 'shape' && hit.shape === 'path')) this.drag = { id: hit.id, dx: this.value(hit, 'x') - u.x, dy: this.value(hit, 'y') - u.y };
         } else {
           const id = this.kit.shapeAt(this.record, u.x, u.y, u.w / Math.max(1, u.h), value);
           if (!id) return;
@@ -589,6 +590,7 @@ class PlayOverlay {
       override: forExport || this.replaying ? () => {} : (id, k, v) => playEngine.setOverride(id, k, v),
       // Hands: live only. A take playing back or rendering puts following nulls where it recorded them.
       hand: forExport || this.replaying ? undefined : (side, point) => playEngine.handPoint(side as 'left' | 'right' | 'any', point),
+      handsLive: !forExport && !this.replaying && playEngine.handState().live,
       hands: this.handsOverlay(forExport),
       // The graph's Layers node can't read the layers while the graph isn't running.
       shaderTap: forExport || playBackground.active() || (playBackground.layerActive() && !planShowsThis(this.lastQueue)) ? undefined : this.shaderTap ?? undefined,

@@ -374,12 +374,14 @@ export function repeatHint(what: ActionKind | `mode:${TriggerMode}`, fire: FireS
   return REPEAT_HINTS[what] ?? null;
 }
 
-export const SENSOR_LABELS: Record<SensorRead, string> = { fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance', level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble' };
+export const SENSOR_LABELS: Record<SensorRead, string> = { fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance', level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble', area: 'Area', perimeter: 'Perimeter' };
 export const SENSOR_HINTS: Record<SensorRead, string> = {
   fill: 'How full of particles the shape is: 0.5 is as dense as average, 1 is twice that or more.',
   hover: '1 while the pointer is over the shape, else 0.',
   speed: 'How fast the particles are moving on average, against their Speed setting.',
-  spread: 'How spread out the particles are: near 0 in a clump, near 1 everywhere.',
+  spread: 'Particles: how spread out they are, near 0 in a clump, near 1 everywhere. A path shape: its points’ mean distance from their centre, 1 at half a picture height or more.',
+  area: 'A path shape: the share of the picture it covers, 0 to 1 (lines and webs: the area their points span). Fades with the shape.',
+  perimeter: 'A path shape: its outline’s length (a web: all its links), 1 as long as the picture’s own edge.',
   motion: 'How much is moving in front of the camera.',
   distance: 'How far this layer’s centre is from another layer or a point on a hand: 0 touching, 1 a picture height or more.',
   level: 'How loud the layer’s sound is overall (its Gain scales it).',

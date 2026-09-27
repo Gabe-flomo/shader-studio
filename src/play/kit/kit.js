@@ -26,6 +26,9 @@
  *   sensor(key, value)     report a sensor reading (`layerId::read`)
  *   override(layerId, key, value|null)  where a following null is now
  *   hand(side, point)      a tracked hand's landmark on the picture ({ x, y }) or null (optional)
+ *   handsLive  hand tracking is running (it has seen a camera frame): a hand null whose hand is
+ *              out of view is then "lost" (a path shape's Hand lost) even before it first saw it;
+ *              without tracking, one that never saw its hand rests where it was placed
  *   hands      { state, colour } to draw the hands' skeleton, or null (optional; the host decides when: the app has its own switch for it, apart from the guides)
  *   three      three.js (three-slim.js) for 3D Script layers, or null
  *   data(ref)  a dataset by id or name: { id, name, result } (its frozen result,
@@ -36,7 +39,7 @@
  * are queued with kit.act() and applied on the next frame.
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, stringSeed, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
-import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments } from './geometry.js';
+import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments, geoPathNodes, geoPathFade, geoPathBuild, geoPathReadings } from './geometry.js';
 import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klPaintBackground, klSketchDispose } from './layers.js';
 import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
@@ -52,6 +55,8 @@ export function createLayerKit() {
   const pool = {};
   const parts = new Map(), bodies = new Map(), brushes = new Map(), springs = new Map(), texts = new Map(), audios = new Map(), masks = new Map(), scripts = new Map();
   const scriptPresses = new Map(); // layer id → { key: amount }: script buttons pressed since the layer's last frame
+  // Path shapes: each one's geometry last frame (for picking on the picture) and its fade (On lost: Fade).
+  const paths = new Map(), pathFades = new Map();
   const frozen = new Set(), shown = new Map(), lastVisible = new Map();
   // Data layers: each one's stepping, and per dataset the current row of the first Data layer showing it (for s.data()).
   const dStates = new Map(), dsCurrent = new Map();
@@ -247,7 +252,7 @@ export function createLayerKit() {
       try { ctx.drawImage(env.gl, 0, 0, W, H); } catch (err) { /* no picture to copy yet */ }
     }
     const ids = new Set(layers.map(l => l.id));
-    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
+    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates, paths, pathFades]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
     // Sketch sources that left the queue (or whose layer did) stop keeping state.
     if (bqSketches.size) { const inQueue = new Set(bq ? record.layers[0].sources.map(s => s.id) : []); for (const id of [...bqSketches.keys()]) if (!inQueue.has(id)) { klSketchDispose(bqSketches.get(id)); bqSketches.delete(id); } }
     // A visibility change in the panel wins over an earlier show/hide action.
@@ -263,14 +268,23 @@ export function createLayerKit() {
     const live = matteSources.size ? layers.filter(l => isVisible(l) || matteSources.has(l.id)) : vis;
 
     // 1. Nulls that follow something ride a spring; their position is reported back to the host.
+    // A null following a hand that is out of view is lost (path shapes read it) once tracking runs or
+    // once it has seen the hand; before, it rests where it was placed (a setup made for hands still shows,
+    // and its points can be dragged).
+    const handsLive = !!env.handsLive && !!env.hand, handLost = new Set();
     for (const l of layers) {
       if (l.kind !== 'null') continue;
       if (l.follow === 'none') { if (springs.has(l.id)) { springs.delete(l.id); env.override(l.id, 'x', null); env.override(l.id, 'y', null); } continue; }
       let s = springs.get(l.id);
       if (!s) { s = { x: l.x, y: l.y, vx: 0, vy: 0 }; springs.set(l.id, s); }
-      const target = l.follow === 'mouse' ? (pointer.over ? pointer : null)
+      let target = l.follow === 'mouse' ? (pointer.over ? pointer : null)
         : l.follow === 'hand' ? (env.hand ? env.hand(l.handSide, l.handPoint) : null)
         : nullPos(record, { value: (n, k) => (springs.has(n.id) && n.id !== l.id ? springs.get(n.id)[k] : env.value(n, k)) }, l.followId);
+      if (l.follow === 'hand') {
+        if (target) s.seen = true;
+        else if (handsLive || s.seen) handLost.add(l.id);
+        else target = { x: l.x, y: l.y };
+      }
       if (target) {
         const k = 4 + Math.pow(env.value(l, 'spring'), 2) * 400, zeta = 1 - Math.min(0.95, env.value(l, 'wobble') * 0.95), c = 2 * zeta * Math.sqrt(k);
         for (let i = 0; i < 4; i++) {
@@ -281,6 +295,26 @@ export function createLayerKit() {
       }
       env.override(l.id, 'x', s.x); env.override(l.id, 'y', s.y);
     }
+
+    // Path shapes: their corners are nulls, where they are now (after the springs above). Their
+    // readings (area, perimeter, spread) fade with them; their centre is their anchor.
+    const pathGeos = new Map();
+    for (const l of layers) {
+      if (l.kind !== 'shape' || l.shape !== 'path') continue;
+      const nodes = [];
+      for (const id of l.pointIds || []) { const n = byId.get(id); if (n && n.kind === 'null') nodes.push({ x: env.value(n, 'x'), y: env.value(n, 'y'), lost: handLost.has(n.id) }); }
+      const pick = geoPathNodes(nodes, l.onLost);
+      const alpha = geoPathFade(pathFades.get(l.id), pick.target, dt);
+      pathFades.set(l.id, alpha);
+      const geo = geoPathBuild(pick.pts, aspect, { style: l.pathStyle, hull: l.hull, circleMode: l.circleMode, webReach: env.value(l, 'webReach'), lineR: Math.max(0.004, (env.value(l, 'strokeWidth') * dpr) / 2 / H) });
+      geo.alpha = alpha;
+      pathGeos.set(l.id, geo); paths.set(l.id, geo);
+      const r = geoPathReadings(geo, aspect);
+      report(env, l.id + '::area', r.area * alpha); report(env, l.id + '::perimeter', r.perimeter * alpha); report(env, l.id + '::spread', r.spread * alpha);
+      report(env, l.id + '::ax', geo.pts.length ? geo.cx : NaN); report(env, l.id + '::ay', geo.pts.length ? geo.cy : NaN);
+    }
+    /** A shape as the drawing code takes it: a path carries its geometry this frame. */
+    const drawable = l => (l.kind === 'shape' && l.shape === 'path' ? Object.assign({}, l, { pathGeo: pathGeos.get(l.id) || null }) : l);
 
     // 2. Read the picture (and the camera) at the resolutions anything needs.
     const needs = { coarse: false, fine: false, cam: false, camFine: false };
@@ -330,6 +364,11 @@ export function createLayerKit() {
       const v = k => env.value(l, k);
       const spec = { id: l.id, shape: l.shape, x: v('x'), y: v('y'), w: v('w'), h: v('h'), rotation: v('rotation'), round: v('round'), points: l.points, invert: l.invert,
         action: l.action, strength: v('strength'), reach: v('reach'), bounce: v('bounce'), angle: v('angle'), targetId: l.targetId, tint: l.tint, scale: v('scale'), tilt: v('tilt'), affects: l.affects };
+      if (l.shape === 'path') {
+        const g = pathGeos.get(l.id);
+        if (!g || !g.pts.length || !(g.alpha > 0)) continue;
+        spec.pathGeo = g; spec.x = (g.x0 + g.x1) / 2 / aspect; spec.y = (g.y0 + g.y1) / 2; spec.w = Math.max(0.001, g.x1 - g.x0); spec.h = Math.max(0.001, g.y1 - g.y0); spec.rotation = 0;
+      }
       if (l.shape === 'picture' || l.shape === 'layer') {
         let field = null;
         if (l.shape === 'picture') { if (coarse) field = geoFieldFromBrightness(coarse, KIT_COARSE_W, KIT_COARSE_H, v('threshold')); }
@@ -590,7 +629,9 @@ export function createLayerKit() {
         c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
         return;
       }
-      const sx = vs('x') * W, sy = (1 - vs('y')) * H;
+      // Copies sit relative to the source's place: a path's is its centre.
+      const pg = src.kind === 'shape' && src.shape === 'path' ? pathGeos.get(src.id) : null;
+      const sx = (pg ? pg.cx : vs('x')) * W, sy = (1 - (pg ? pg.cy : vs('y'))) * H;
       if (src.kind === 'null') {
         for (const cp of copies) if (!cp.hidden && cp.alpha > 0) { c.globalAlpha = cp.alpha; klDrawNull(c, src, cp.x, cp.y, vs('size') * cp.scale, dpr, W, H, 0); }
         c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
@@ -601,10 +642,13 @@ export function createLayerKit() {
       let box = null;
       if (src.kind === 'shape') {
         s.setTransform(1, 0, 0, 1, 0, 0); s.clearRect(0, 0, W, H);
-        klDrawShape(s, src, vs, W, H, dpr, maskShows.get(src.id) || null, false, false);
-        const ext = (Math.hypot(vs('w'), vs('h')) / 2) * H + vs('strokeWidth') * dpr + 4;
-        box = { x: Math.max(0, Math.floor(sx - ext)), y: Math.max(0, Math.floor(sy - ext)), w: 0, h: 0 };
-        box.w = Math.min(W, Math.ceil(sx + ext)) - box.x; box.h = Math.min(H, Math.ceil(sy + ext)) - box.y;
+        klDrawShape(s, drawable(src), vs, W, H, dpr, maskShows.get(src.id) || null, false, false);
+        // A path has no box of its own: the whole canvas is blitted.
+        if (src.shape !== 'path') {
+          const ext = (Math.hypot(vs('w'), vs('h')) / 2) * H + vs('strokeWidth') * dpr + 4;
+          box = { x: Math.max(0, Math.floor(sx - ext)), y: Math.max(0, Math.floor(sy - ext)), w: 0, h: 0 };
+          box.w = Math.min(W, Math.ceil(sx + ext)) - box.x; box.h = Math.min(H, Math.ceil(sy + ext)) - box.y;
+        }
       } else if (src.kind === 'text' || src.kind === 'image' || src.kind === 'camera') {
         const img = src.kind === 'image' ? env.image(src.src) : src.kind === 'camera' ? cam : null;
         if (src.kind !== 'text' && !img) return;
@@ -648,7 +692,7 @@ export function createLayerKit() {
             break;
           }
           case 'shape':
-            klDrawShape(c, l, v, W, H, dpr, maskShows.get(l.id) || null, env.editing && guides, env.selectedId === l.id);
+            klDrawShape(c, drawable(l), v, W, H, dpr, maskShows.get(l.id) || null, env.editing && guides, env.selectedId === l.id);
             break;
           case 'cloner': drawCloner(c, l, v); break;
           case 'script': drawScript(c, l, v); break;
@@ -920,6 +964,8 @@ export function createLayerKit() {
         if (l.kind !== 'shape' || !(shown.has(l.id) ? shown.get(l.id) : l.visible) || l.shape === 'picture') continue;
         const v = k => value(l, k);
         if (l.shape === 'layer') { const m = masks.get(l.id); if (m && geoCompile({ id: l.id, shape: 'field', field: m.field, invert: l.invert, x: 0, y: 0, w: 1, h: 1 }, aspect).dist(x, y) < 0) return l.id; continue; }
+        // A path: its outline (or its lines, a little thick to hit) as last drawn.
+        if (l.shape === 'path') { const g = paths.get(l.id); if (g && g.pts.length && (g.alpha == null || g.alpha > 0) && geoCompile({ id: l.id, shape: 'path', pathGeo: g.closed ? g : Object.assign({}, g, { segs: g.segs.map((n, i) => (i % 5 === 4 ? Math.max(n, 0.012) : n)) }), invert: l.invert, x: 0, y: 0, w: 1, h: 1 }, aspect).dist(x, y) < 0) return l.id; continue; }
         const z = geoCompile({ id: l.id, shape: l.shape, x: v('x'), y: v('y'), w: v('w'), h: v('h'), rotation: v('rotation'), round: v('round'), points: l.points, invert: l.invert }, aspect);
         if (z.dist(x, y) < Math.max(0.01, 0)) return l.id;
       }
@@ -937,6 +983,6 @@ export function createLayerKit() {
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
     background,
-    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
+    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
   };
 }

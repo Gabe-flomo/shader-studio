@@ -1473,6 +1473,7 @@ void main() {
         audio: L.status === 'on' ? { wave: L.wave, freq: L.freq, sampleRate: L.sr } : null,
         camera: camVideo || shared.camera, image: img,
         hand: handSt && usesHands ? (side, point) => HK.point(handSt, side, point) : undefined,
+        handsLive: !!(handSt && usesHands && handSt.live),
         // The skeleton is a setup aid: a page shows it only with its markers on.
         hands: handSt && usesHands && markers && handSettings.overlay && handSt.live ? { state: handSt, colour: handSettings.colour } : null,
         // three.js for 3D Script layers: the page carries it (SSThree) only when it has one.

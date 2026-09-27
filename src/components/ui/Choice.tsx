@@ -62,10 +62,11 @@ export interface SegmentOption<T extends string> {
 
 /**
  * 2–5 mutually exclusive options. `fill` stretches the segments across the container; `sm` is
- * the compact form for card headers.
+ * the compact form for card headers; `wrap` lets a long row of options break onto a second line
+ * when its container is narrow (a phone) instead of pushing past it.
  */
 export function Segmented<T extends string>({
-  options, value, onChange, fill = false, size = 'md', ariaLabel,
+  options, value, onChange, fill = false, size = 'md', ariaLabel, wrap = false,
 }: {
   options: readonly SegmentOption<T>[];
   value: T;
@@ -73,6 +74,7 @@ export function Segmented<T extends string>({
   fill?: boolean;
   size?: 'sm' | 'md';
   ariaLabel?: string;
+  wrap?: boolean;
 }) {
   const sm = size === 'sm';
   const tk = useTokens();
@@ -80,7 +82,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      style={{ display: fill ? 'flex' : 'inline-flex', flexShrink: sm ? 0 : undefined, gap: 2, padding: sm ? 2 : 3, borderRadius: sm ? radius.md : radius.control, background: tk.bg.field }}
+      style={{ display: fill ? 'flex' : 'inline-flex', flexShrink: sm && !wrap ? 0 : undefined, gap: 2, padding: sm ? 2 : 3, borderRadius: sm ? radius.md : radius.control, background: tk.bg.field, ...(wrap ? { flexWrap: 'wrap' as const, maxWidth: '100%', minWidth: 0 } : {}) }}
     >
       {options.map(o => {
         const on = o.value === value;

@@ -25,7 +25,8 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { backgroundLayerOf, layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, parseActionTarget, parseLayerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { buildTree, childrenOf, containerOf, groupLayerIds, groupOfLayer, groupPath, type ItemRef, type LayerGroup, type TreeNode } from '../../types/layerGroups';
 import { playId } from '../../play/playControls';
-import { addNullFor, backgroundMenuItems, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, removeLayer, renameLayer, resetLayer } from './layerOps';
+import { handFeed } from '../../lib/handFeed';
+import { addHandPath, addNullFor, backgroundMenuItems, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, removeLayer, renameLayer, resetLayer } from './layerOps';
 import { addToGroup, canMove, createGroup, duplicateGroup, moveItem, moveItemTo, orderedItems, removeGroup, takeOutOfGroup, ungroup } from './groupOps';
 import { BackgroundEditor } from './layers/BackgroundEditor';
 import { GroupCard } from './layers/GroupCard';
@@ -114,6 +115,14 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
       const id = playId('layer');
       onChange(p => addBackground(p, [thisGraphSource()], id).play);
       enter('');
+      setSelected(id);
+      return;
+    }
+    // A hand path: fingertip nulls (the missing ones) and a filled path between them; tracking starts.
+    if (variant === 'handPath') {
+      const id = playId('layer');
+      onChange(p => { const next = addHandPath(p, id).play; return entered ? addToGroup(next, id, entered) : next; });
+      if (handFeed.getStatus() === 'off') void handFeed.start();
       setSelected(id);
       return;
     }

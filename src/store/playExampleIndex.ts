@@ -75,6 +75,7 @@ const ROWS: Array<[string, string, string]> = [
   ['handPinch', 'Hands: pinch, point and fist', 'Pinch drives a slider, a fist fires a burst, pointing toggles a setting.'],
   ['handTwoHands', 'Hands: two at once', 'How far apart your hands are zooms the picture; their heights mix the colour.'],
   ['handProximity', 'Hands: touch a shape', 'A fingertip near a circle steps the text to its next line and flashes the glow.'],
+  ['handPaths', 'Hand paths', 'A shape between four fingertips: a window through ASCII that moves with your hands, strung with a web. Works without a camera too.'],
   ['playTake', 'A recorded take', 'Ships with an 8-second performance: watch it back and Render it without playing.'],
   // Bigger pieces that put several techniques together (their graphs live in exampleGraphs.ts).
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],
