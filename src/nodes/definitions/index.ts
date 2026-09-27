@@ -152,7 +152,7 @@ export {
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
-  Vec2SwizzleNode, Vec3SwizzleNode,
+  Vec2SwizzleNode, Vec3SwizzleNode, SwizzleNode, MakeVec4Node,
   SplitVec2Node, SplitVec3Node, SplitVec4Node,
 } from './math';
 
@@ -251,7 +251,7 @@ import {
   AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
-  Vec2SwizzleNode, Vec3SwizzleNode,
+  Vec2SwizzleNode, Vec3SwizzleNode, SwizzleNode, MakeVec4Node,
   SplitVec2Node, SplitVec3Node, SplitVec4Node,
   TransformVecNode,
 } from './math';
@@ -650,6 +650,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   select: SelectNode,
   vec2Swizzle: Vec2SwizzleNode,
   vec3Swizzle: Vec3SwizzleNode,
+  swizzle: SwizzleNode,
+  makeVec4: MakeVec4Node,
   // Halftone
   gridUV:       GridUVNode,
   pixelate:     PixelateNode,

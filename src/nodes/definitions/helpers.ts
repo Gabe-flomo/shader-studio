@@ -54,6 +54,7 @@ export function vec4Str(v: number[]): string {
 export function zeroFor(type: string): string {
   if (type === 'vec2') return 'vec2(0.0)';
   if (type === 'vec3') return 'vec3(0.0)';
+  if (type === 'vec4') return 'vec4(0.0)';
   return '0.0';
 }
 

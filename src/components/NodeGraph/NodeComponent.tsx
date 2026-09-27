@@ -3650,7 +3650,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {/* ── Vector type selector (vectorizable math nodes) ── */}
         {!collapsed && node.type in VECTORIZABLE_NODES && (() => {
           const info = VECTORIZABLE_NODES[node.type];
-          const current = (node.params.outputType as string) || 'float';
+          // Length, Dot and Normalize take a vec2 unless the card says otherwise.
+          const current = (node.params.outputType as string) || (def?.defaultParams?.outputType as string | undefined) || 'float';
           return (
             <div
               style={{ padding: '3px 10px 4px', display: 'flex', gap: '4px', alignItems: 'center' }}
@@ -4043,7 +4044,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           }
 
           if (paramDef.type === 'bool') {
-            const val = node.params[key] !== false;
+            // A switch an older save never had reads as its default (Divide's Exact is off, most are on).
+            const val = (node.params[key] ?? def?.defaultParams?.[key]) !== false;
             return (
               <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
                 <ParamLabel>{paramDef.label}</ParamLabel>
