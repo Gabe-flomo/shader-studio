@@ -61,6 +61,8 @@ export function rangeEdges(value: number, min: number, max: number, unit: number
   return { lo: lo > -reach ? lo : null, hi: hi < reach ? hi : null };
 }
 
+export { niceCeil, rangeIncluding } from '../../lib/rangeMath';
+
 export function clampToStep(n: number, min: number, max: number, step: number): number {
   const clamped = Math.min(max, Math.max(min, n));
   const stepped = step > 0 ? Math.round(clamped / step) * step : clamped;
@@ -80,6 +82,16 @@ export const COUNT_MAX_MARKS = 96;
 /** Count after dragging by `dx` px — right adds items. ⇧ slows it to a third. */
 export function countAfterDrag(start: number, dx: number, fine: boolean): number {
   return start + (dx / COUNT_PX_PER_STEP) * (fine ? 1 / 3 : 1);
+}
+
+/**
+ * One pointer move of a drag, relative to where the drag has got to (`acc`, which starts at the
+ * value itself): never an absolute position on the track, so the first move can't jump. Kept
+ * inside `range`, the slider's range widened to hold the value (rangeIncluding).
+ */
+export function dragStep(acc: number, dx: number, range: { min: number; max: number }, unit: number, integer: boolean, fine: boolean): number {
+  const moved = integer ? countAfterDrag(acc, dx, fine) : valueAfterDrag(acc, dx, unit, fine);
+  return Math.min(range.max, Math.max(range.min, moved));
 }
 
 export function formatValue(v: number, step: number, integer = false): string {

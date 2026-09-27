@@ -78,7 +78,8 @@ export const SOFT_CIRCLE_AS_WRITTEN: GraphNode[] = [
     "params": {
       "b": 1,
       "exact": true,
-      "outputType": "vec2"
+      "outputType": "vec2",
+      "label": "uv"
     }
   },
   {
@@ -142,7 +143,8 @@ export const SOFT_CIRCLE_AS_WRITTEN: GraphNode[] = [
     },
     "params": {
       "scale": 1,
-      "outputType": "vec2"
+      "outputType": "vec2",
+      "label": "d"
     }
   },
   {
@@ -179,7 +181,8 @@ export const SOFT_CIRCLE_AS_WRITTEN: GraphNode[] = [
     "params": {
       "edge0": 0.31,
       "edge1": 0.3,
-      "outputType": "float"
+      "outputType": "float",
+      "label": "m"
     }
   },
   {
@@ -432,17 +435,17 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
         "type": "float",
         "label": "subtract_b"
       },
-      "length_scale": {
+      "d_scale": {
         "type": "float",
-        "label": "length_scale"
+        "label": "d_scale"
       },
-      "smoothstep_edge0": {
+      "m_edge0": {
         "type": "float",
-        "label": "smoothstep_edge0"
+        "label": "m_edge0"
       },
-      "smoothstep_edge1": {
+      "m_edge1": {
         "type": "float",
-        "label": "smoothstep_edge1"
+        "label": "m_edge1"
       }
     },
     "outputs": {
@@ -477,7 +480,7 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
           }
         },
         {
-          "name": "length_scale",
+          "name": "d_scale",
           "type": "float",
           "slider": {
             "min": -10,
@@ -485,7 +488,7 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
           }
         },
         {
-          "name": "smoothstep_edge0",
+          "name": "m_edge0",
           "type": "float",
           "slider": {
             "min": -2,
@@ -493,7 +496,7 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
           }
         },
         {
-          "name": "smoothstep_edge1",
+          "name": "m_edge1",
           "type": "float",
           "slider": {
             "min": -2,
@@ -504,29 +507,29 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
       "outputType": "vec3",
       "lines": [
         {
-          "lhs": "vec2 n1_result",
+          "lhs": "vec2 uv",
           "op": "=",
           "rhs": "pixel_coordinates / resolution_res"
         },
         {
           "lhs": "vec2 n2_result",
           "op": "=",
-          "rhs": "n1_result - vec2(subtract_b)"
+          "rhs": "uv - vec2(subtract_b)"
         },
         {
-          "lhs": "float n3_output",
+          "lhs": "float d",
           "op": "=",
-          "rhs": "length(n2_result) * length_scale"
+          "rhs": "length(n2_result) * d_scale"
         },
         {
-          "lhs": "float n4_result",
+          "lhs": "float m",
           "op": "=",
-          "rhs": "smoothstep(smoothstep_edge0, smoothstep_edge1, n3_output)"
+          "rhs": "smoothstep(m_edge0, m_edge1, d)"
         },
         {
           "lhs": "vec3 n5_rgb",
           "op": "=",
-          "rhs": "vec3(n4_result)"
+          "rhs": "vec3(m)"
         },
         {
           "lhs": "vec3 n6_result",
@@ -544,11 +547,11 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
         "subtract_4",
         "divide_3"
       ],
-      "__foldedLabel": "Divide → Subtract → Length → Smoothstep → Float → Color → Multiply",
+      "__foldedLabel": "uv → Subtract → d → m → Float → Color → Multiply",
       "subtract_b": 0.5,
-      "length_scale": 1,
-      "smoothstep_edge0": 0.31,
-      "smoothstep_edge1": 0.3
+      "d_scale": 1,
+      "m_edge0": 0.31,
+      "m_edge1": 0.3
     }
   }
 ];

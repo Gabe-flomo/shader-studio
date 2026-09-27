@@ -9,6 +9,7 @@
 import type { NodeDefinition, GraphNode, ParamDef, OutputSocket, DataType } from '../../types/nodeGraph';
 import { p, pv3 } from './helpers';
 import { currentParamValue, currentVectorValue, type CurrentValueSources } from '../../lib/currentValue';
+import { rangeForValue } from '../../lib/rangeMath';
 
 export type ConstantsItemType = 'float' | 'vec2' | 'vec3' | 'color';
 export interface ConstantsItem {
@@ -44,12 +45,9 @@ export function constantsItems(node: GraphNode): ConstantsItem[] {
   return out;
 }
 
-/** A slider range that shows a value comfortably. */
+/** A slider range that shows a value comfortably (the importer's rule: 0 to about twice it, on a round number). */
 export function rangeFor(v: number): { min: number; max: number; step: number } {
-  const a = Math.abs(v);
-  if (a <= 1) return { min: v < 0 ? -1 : 0, max: 1, step: 0.01 };
-  const top = Math.pow(10, Math.ceil(Math.log10(a * 2)));
-  return { min: v < 0 ? -top : 0, max: top, step: top >= 100 ? 1 : 0.01 };
+  return rangeForValue(v);
 }
 
 /** The param keys an entry's value lives under: `key` for a float or colour, `key_x`… for a vector. */

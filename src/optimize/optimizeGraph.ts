@@ -33,6 +33,7 @@ import { topologicalSort } from '../compiler/topoSort';
 import { isParamVisible } from '../compiler/uniformPatcher';
 import type { PlayRecord } from '../types/play';
 import { canHaveInputExpr, getInputExpr, inputExprKey } from '../glsl/inputExpr';
+import { rangeIncluding } from '../lib/rangeMath';
 
 export interface OptimizeOptions {
   /** Fold a run only when it has at least this many cards (default 3). */
@@ -73,6 +74,18 @@ const MAX_EXPR_LEN = 110;
 const slug = (s: string) => {
   const k = s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').replace(/^(\d)/, '_$1') || 'v';
   return RESERVED.has(k) || /^(gl_|u_)/.test(k) ? `${k}_v` : k;
+};
+/**
+ * A card's name for the code, plus an optional suffix (`_b` for its B slider): its own title as
+ * written when that is already an identifier starting in lower case (the importer titles cards
+ * with the shader's variable names, `electricField`), else a slug of the title or the card's type
+ * with the suffix, as before.
+ */
+const nameOf = (n: GraphNode, def: NodeDefinition | undefined, suffix = ''): string => {
+  const own = typeof n.params.label === 'string' ? n.params.label.trim() : '';
+  const named = `${own}${suffix ? `_${slug(suffix)}` : ''}`;
+  if (/^[a-z][A-Za-z0-9]*(_[A-Za-z0-9]+)*$/.test(own) && !RESERVED.has(named) && !/^(gl_|u_)/.test(named)) return named;
+  return slug(`${own || def?.label || n.type}${suffix ? `_${suffix}` : ''}`);
 };
 
 /** The card ids Play controls point at, at any depth: those keep their sliders. */
@@ -178,7 +191,7 @@ function optimizeList(nodes: GraphNode[], opts: OptimizeOptions & { protect: Rea
       const key = `${conn.nodeId}:${conn.outputKey}`;
       if (extName.has(key)) continue;
       const src = byId.get(conn.nodeId);
-      const base = src ? (src.type === 'constants' ? conn.outputKey : slug(`${(typeof src.params.label === 'string' && src.params.label) || getNodeDefinitionFor(src)?.label || src.type}${Object.keys(src.outputs).length > 1 ? `_${conn.outputKey}` : ''}`)) : slug(conn.outputKey);
+      const base = src ? (src.type === 'constants' ? conn.outputKey : nameOf(src, getNodeDefinitionFor(src), Object.keys(src.outputs).length > 1 ? conn.outputKey : '')) : slug(conn.outputKey);
       const name = unique(base);
       const type = extSocketType(conn, s.type);
       extName.set(key, name);
@@ -189,6 +202,7 @@ function optimizeList(nodes: GraphNode[], opts: OptimizeOptions & { protect: Rea
     // Members in order: sliders become inputs, code becomes lines.
     const lines: Array<{ lhs: string; op: string; rhs: string }> = [];
     let sliders = 0; let ok = true; let seq = 0;
+    const titled: Array<{ from: string; to: string }> = [];
     for (const m of memberNodes) {
       const def = defs.get(m.id)!;
       const localId = `n${++seq}`;
@@ -199,8 +213,9 @@ function optimizeList(nodes: GraphNode[], opts: OptimizeOptions & { protect: Rea
         if (m.inputs[key]?.connection) continue; // a wire took this slider over
         const v = p[key];
         if (typeof v !== 'number') continue;
-        const name = unique(slug(`${(typeof m.params.label === 'string' && m.params.label) || def.label}_${key}`));
-        inputs.push({ name, type: 'float', slider: { min: pd.min ?? Math.min(0, v), max: pd.max ?? Math.max(1, v * 2) } });
+        const name = unique(nameOf(m, def, key));
+        // The slider holds the card's value: a 107 on a 0–1 param widens the range, never the reverse.
+        inputs.push({ name, type: 'float', slider: rangeIncluding(v, pd.min ?? Math.min(0, v), pd.max ?? Math.max(1, v * 2)) });
         sockets[name] = { type: 'float', label: name };
         params[name] = v; p[key] = name; sliders++;
       }
@@ -209,8 +224,22 @@ function optimizeList(nodes: GraphNode[], opts: OptimizeOptions & { protect: Rea
       if (!e) { ok = false; break; }
       for (const l of e.lines) lines.push({ lhs: l.lhs, op: '=', rhs: l.rhs });
       outputsFor.set(m.id, e.outputs);
+      // A titled card's one result is named after it inside the block (below).
+      const outs = Object.values(e.outputs);
+      if (typeof m.params.label === 'string' && m.params.label.trim() && outs.length === 1) titled.push({ from: outs[0], to: nameOf(m, def) });
     }
     if (!ok) { for (const m of c.members) taken.delete(m); continue; }
+    // The shader's names for the block's locals: `vec3 electricField = …` where the card was titled
+    // electricField, when that name is free (not an input, not the block's own t and p, not anything
+    // the lines already mention, such as a function they call); else a numbered one.
+    for (const r of titled) {
+      const mentioned = (k: string) => usedNames.has(k) || k === 't' || k === 'p' || lines.some(l => new RegExp(`\\b${k}\\b`).test(`${l.lhs} ${l.rhs}`));
+      let to = r.to; for (let i = 2; mentioned(to); i++) to = `${r.to}_${i}`;
+      usedNames.add(to);
+      const re = new RegExp(`\\b${r.from}\\b`, 'g');
+      for (const l of lines) { l.lhs = l.lhs.replace(re, to); l.rhs = l.rhs.replace(re, to); }
+      for (const o of outputsFor.values()) for (const k of Object.keys(o)) if (o[k] === r.from) o[k] = to;
+    }
     const exit = byId.get(c.exit)!;
     const resultVar = outputsFor.get(c.exit)![c.outputKey];
     const outType = (exit.outputs[c.outputKey]?.type ?? 'float') as DataType;
@@ -220,7 +249,8 @@ function optimizeList(nodes: GraphNode[], opts: OptimizeOptions & { protect: Rea
     blocks.push({
       id: blockId, type: 'exprNode', position: { ...exit.position },
       inputs: sockets, outputs: { result: { type: outType, label: `Result (${outType})` } },
-      params: { inputs, outputType: outType, lines, result: resultVar, expr: resultVar, __foldedFrom: c.members, __foldedLabel: label, ...params },
+      // A block ending in a titled card (the importer's `glowColour`) keeps that title.
+      params: { ...(typeof exit.params.label === 'string' && exit.params.label.trim() ? { label: exit.params.label } : {}), inputs, outputType: outType, lines, result: resultVar, expr: resultVar, __foldedFrom: c.members, __foldedLabel: label, ...params },
     });
     for (const m of c.members) replaced.set(m, { blockId });
     folds.push({ blockId, nodeIds: c.members, label, sliders, scope, kind: 'block' });

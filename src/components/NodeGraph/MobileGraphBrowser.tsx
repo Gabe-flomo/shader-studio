@@ -50,6 +50,8 @@ import { suggestConnections } from './smartConnect';
 import { suggestQuickAdds } from './quickAdds';
 import { wirePath } from './wirePath';
 import { RulerSlider } from '../ui/RulerSlider';
+import { rangeIncluding } from '../ui/rulerMath';
+import { hasCustomRange, paramSliderRange, rangePatch, resetRangePatch } from '../../nodes/sliderRange';
 import { PlayParamActions } from '../play/PlayParamActions';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
@@ -2570,10 +2572,8 @@ export function MobileGraphBrowser() {
           )}
           {pd && (() => {
             const bidir = node.params[`__scBidir_${key}`] === true;
-            const customMax = typeof node.params[`__scMax_${key}`] === 'number' ? node.params[`__scMax_${key}`] as number : null;
-            const baseMax = pd.max ?? 1;
-            const effMax = customMax ?? baseMax;
-            const effMin = bidir ? -effMax : (customMax != null ? 0 : (pd.min ?? 0));
+            const customMax = hasCustomRange(node.params, key) ? true : null;
+            const { min: effMin, max: effMax } = paramSliderRange(node.params, key, pd);
             const defVal = getNodeDefinitionFor(node)?.defaultParams?.[key];
             const setCustomMax = (n: number) => {
               const absN = Math.abs(n);
@@ -2596,6 +2596,7 @@ export function MobileGraphBrowser() {
                       if (Math.abs(n) > effMax) setCustomMax(n);
                       updateNodeParams(node.id, { [key]: n }, { immediate: true });
                     }}
+                    onRange={(lo, hi) => updateNodeParams(node.id, rangePatch(key, lo, hi), { immediate: true })}
                     ariaLabel={inp.label}
                   />
                 </div>
@@ -2603,12 +2604,12 @@ export function MobileGraphBrowser() {
                   <div style={{ background: tk.bg.subtle, borderRadius: 12, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {cfgRow('Value', <NumberInput step={pd.step ?? 0.01} value={val} style={cfgField}
                       onCommit={n => { if (Math.abs(n) > effMax) setCustomMax(n); updateNodeParams(node.id, { [key]: n }, { immediate: true }); }} />)}
-                    {cfgRow('Bidirectional', <Toggle checked={bidir} onChange={on => updateNodeParams(node.id, { [`__scBidir_${key}`]: on }, { immediate: true })} />)}
+                    {cfgRow('Bidirectional', <Toggle checked={bidir} onChange={on => updateNodeParams(node.id, { [`__scBidir_${key}`]: on, [`__scMin_${key}`]: null }, { immediate: true })} />)}
                     {cfgRow('Max', (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {customMax != null && (
                           <button
-                            onClick={() => updateNodeParams(node.id, { [`__scMax_${key}`]: null }, { immediate: true })}
+                            onClick={() => updateNodeParams(node.id, resetRangePatch(key), { immediate: true })}
                             style={{ height: 34, padding: '0 10px', border: 0, borderRadius: 9, background: 'none', color: tk.text.muted, cursor: 'pointer', font: `500 12.5px ${fontFamily.ui}` }}
                           >Reset</button>
                         )}
@@ -2763,7 +2764,8 @@ export function MobileGraphBrowser() {
                   <AxisDot />
                   <input
                     type="range"
-                    min={min} max={max} step={step}
+                    // A value past the range widens it, so the browser doesn't draw (and the first touch set) a clamped one.
+                    min={rangeIncluding(val, min, max).min} max={rangeIncluding(val, min, max).max} step={step}
                     value={val}
                     onChange={e => {
                       const next = [...vals];

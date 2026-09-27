@@ -11,6 +11,8 @@
 
 import type { SubgraphData, GraphNode, ParamDef } from '../../types/nodeGraph';
 import { getNodeDefinitionFor } from '../definitions';
+import { paramSliderRange } from '../sliderRange';
+import { rangeIncluding } from '../../lib/rangeMath';
 import { isParamVisible } from '../../compiler/uniformPatcher';
 
 export interface ParamCandidate {
@@ -61,14 +63,18 @@ export function collectParamCandidates(subgraph: SubgraphData): ParamCandidate[]
         if (!eligible(node, key, pd)) continue;
         const overridden = overrides[`${node.id}::${key}`];
         const value = numberOr(overridden, numberOr(node.params[key], numberOr(def.defaultParams?.[key], 0)));
+        // The card's range (its own, if it has one), widened to hold the value: a control made from
+        // a slider set to 107 on a 0–1 param must not start by clamping it.
+        const card = paramSliderRange(node.params, key, pd);
+        const { min, max } = rangeIncluding(value, card.min, card.max);
         out.push({
           sourcePath: `${prefix}${node.id}::${key}`,
           nodeLabel: labelOf(node),
           groupLabel,
           paramKey: key,
           paramLabel: pd.label,
-          min: pd.min ?? 0,
-          max: pd.max ?? 1,
+          min,
+          max,
           step: pd.step,
           hint: pd.hint,
           value,

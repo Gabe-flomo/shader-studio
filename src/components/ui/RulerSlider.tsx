@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import {
-  COUNT_MAX_MARKS, TICK_HEIGHT, TICK_WIDTH, clampToStep, countAfterDrag, formatValue, rangeEdges, rulerTicks, rulerUnit,
+  COUNT_MAX_MARKS, TICK_HEIGHT, TICK_WIDTH, clampToStep, countAfterDrag, dragStep, formatValue, rangeEdges, rangeIncluding, rulerTicks, rulerUnit,
   valueAfterDrag,
 } from './rulerMath';
 import { Tooltip } from './Tooltip';
@@ -50,7 +50,7 @@ function installWheelGestures(): void {
 
 export function RulerSlider({
   value, min, max, step = 0.01, defaultValue, onChange, integer = false, keyframed, disabled = false,
-  ariaLabel, touch = false, onType,
+  ariaLabel, touch = false, onType, onRange,
 }: {
   value: number;
   min: number;
@@ -70,9 +70,23 @@ export function RulerSlider({
    * a typed value past the range widen it.
    */
   onType?: (value: number) => void;
+  /**
+   * Makes the range editable right on the slider: the min and max show faintly at the track's
+   * ends; double-click one (long-press on a phone, or right-click the track) to type a new one.
+   */
+  onRange?: (min: number, max: number) => void;
 }) {
   const tk = useTokens();
   const locked = disabled || !!keyframed;
+  // The value shown is the real one, and a drag starts from it: a value past the declared range
+  // widens the range around it rather than being clamped back on the first touch. While a drag
+  // is on, the range it started with holds, so the ruler's scale doesn't change under the pointer.
+  const [held, setHeld] = useState<{ min: number; max: number } | null>(null);
+  const [rangeEdit, setRangeEdit] = useState<'min' | 'max' | null>(null);
+  // The ends shown at the track's ends (and edited there) are this range too, so they never
+  // contradict the value; editing one end keeps the other as shown.
+  const range = held ?? rangeIncluding(value, min, max);
+  ({ min, max } = range);
   const unit = rulerUnit(min, max, integer);
   const effectiveStep = integer ? 1 : step;
   const h = touch ? 36 : 28;
@@ -124,19 +138,19 @@ export function RulerSlider({
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.focus();
     drag.current = { lastX: e.clientX, acc: value };
+    setHeld(range);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = drag.current;
     if (!d) return;
     // Integrate per event so pressing/releasing ⇧ mid-drag changes speed without a jump.
     const dx = e.clientX - d.lastX;
-    const moved = integer ? countAfterDrag(d.acc, dx, e.shiftKey) : valueAfterDrag(d.acc, dx, unit, e.shiftKey);
-    d.acc = Math.min(max, Math.max(min, moved));
+    d.acc = dragStep(d.acc, dx, range, unit, integer, e.shiftKey);
     d.lastX = e.clientX;
     const next = clampToStep(d.acc, min, max, effectiveStep);
     if (next !== value) onChange(next);
   };
-  const endDrag = () => { drag.current = null; };
+  const endDrag = () => { drag.current = null; setHeld(null); };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (locked) return;
@@ -189,6 +203,7 @@ export function RulerSlider({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onDoubleClick={() => { if (!locked && defaultValue !== undefined) onChange(defaultValue); }}
+      onContextMenu={onRange && !locked ? e => { e.preventDefault(); e.stopPropagation(); setRangeEdit('min'); } : undefined}
       onKeyDown={onKeyDown}
       style={{
         position: 'relative', flex: 1, minWidth: 0, height: h, borderRadius: h / 2, overflow: 'hidden', outline: 'none',
@@ -215,6 +230,20 @@ export function RulerSlider({
       ))}
       <span style={{ position: 'absolute', left: '50%', top: 3, bottom: 3, width: 2, marginLeft: -1, borderRadius: 1, background: needle }} />
       </>}
+      {onRange && (['min', 'max'] as const).map(end => (
+        <RangeEnd
+          key={end}
+          end={end}
+          value={range[end]}
+          other={range[end === 'min' ? 'max' : 'min']}
+          editing={rangeEdit !== null}
+          focus={rangeEdit === end}
+          locked={locked}
+          onOpen={() => setRangeEdit(end)}
+          onDone={() => setRangeEdit(null)}
+          onCommit={v => { if (end === 'min') onRange(v, range.max); else onRange(range.min, v); }}
+        />
+      ))}
     </div>
   );
 
@@ -254,3 +283,87 @@ export function RulerSlider({
   );
 }
 
+/** Long-press on a touch screen stands in for the double-click. */
+const LONG_PRESS_MS = 500;
+
+/**
+ * One end of an editable range: the number, faint, at the track's edge. Double-click it (or
+ * long-press on a phone) to turn both ends into fields: Enter or clicking away commits, Esc
+ * cancels, Tab goes to the other end. A min at or above the max (or the reverse) is refused.
+ * Pressing on the number doesn't drag the slider, so a double-click there is the number's.
+ */
+function RangeEnd({ end, value, other, editing, focus, locked, onOpen, onDone, onCommit }: {
+  end: 'min' | 'max'; value: number; other: number; editing: boolean; focus: boolean; locked: boolean;
+  onOpen: () => void; onDone: () => void; onCommit: (v: number) => void;
+}) {
+  const tk = useTokens();
+  const shown = +value.toPrecision(4);
+  const press = useRef<number | null>(null);
+  useEffect(() => () => { if (press.current !== null) window.clearTimeout(press.current); }, []);
+  const side: CSSProperties = end === 'min' ? { left: 5 } : { right: 5 };
+  if (editing) return <RangeField end={end} value={value} other={other} focus={focus} side={side} onDone={onDone} onCommit={onCommit} />;
+  const clear = () => { if (press.current !== null) { window.clearTimeout(press.current); press.current = null; } };
+  return (
+    <span
+      data-range-label={end}
+      title={locked ? undefined : `${end === 'min' ? 'Minimum' : 'Maximum'}: double-click to change the range`}
+      onPointerDown={e => {
+        if (locked) return;
+        e.stopPropagation();
+        if (e.pointerType !== 'mouse') { clear(); press.current = window.setTimeout(() => { press.current = null; onOpen(); }, LONG_PRESS_MS); }
+      }}
+      onPointerUp={clear}
+      onPointerCancel={clear}
+      onPointerLeave={clear}
+      onDoubleClick={e => { e.stopPropagation(); if (!locked) onOpen(); }}
+      onContextMenu={e => { if (e.nativeEvent instanceof PointerEvent && e.nativeEvent.pointerType !== 'mouse') e.preventDefault(); }}
+      style={{
+        position: 'absolute', top: '50%', ...side, transform: 'translateY(-50%)', padding: '2px 3px', cursor: locked ? 'inherit' : 'text',
+        color: tk.text.faint, font: `500 9.5px ${fontFamily.mono}`, fontVariantNumeric: 'tabular-nums', userSelect: 'none', WebkitUserSelect: 'none',
+        pointerEvents: locked ? 'none' : 'auto',
+      }}
+    >{shown}</span>
+  );
+}
+
+/** The field one end turns into while the range is being edited (mounted fresh each time, so it starts from the current value). */
+function RangeField({ end, value, other, focus, side, onDone, onCommit }: {
+  end: 'min' | 'max'; value: number; other: number; focus: boolean; side: CSSProperties; onDone: () => void; onCommit: (v: number) => void;
+}) {
+  const tk = useTokens();
+  const [text, setText] = useState(() => String(+value.toPrecision(4)));
+  const cancelled = useRef(false);
+  const commit = () => {
+    if (cancelled.current) return;
+    const n = parseFloat(text);
+    if (Number.isFinite(n) && n !== value && (end === 'min' ? n < other : n > other)) onCommit(n);
+  };
+  return (
+    <input
+      autoFocus={focus}
+      aria-label={end === 'min' ? 'Slider minimum' : 'Slider maximum'}
+      inputMode="decimal"
+      data-range-end={end}
+      value={text}
+      onChange={e => setText(e.target.value)}
+      onFocus={e => e.currentTarget.select()}
+      onPointerDown={e => e.stopPropagation()}
+      onDoubleClick={e => e.stopPropagation()}
+      onKeyDown={e => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { commit(); cancelled.current = true; onDone(); }
+        else if (e.key === 'Escape') { cancelled.current = true; onDone(); }
+      }}
+      onBlur={e => {
+        commit();
+        // Tabbing to the other end keeps the editor open.
+        if (!(e.relatedTarget as HTMLElement | null)?.dataset?.rangeEnd) onDone();
+      }}
+      style={{
+        position: 'absolute', top: '50%', ...side, width: 46, height: 20, marginTop: -10, zIndex: 1, boxSizing: 'border-box',
+        padding: '0 4px', border: 0, borderRadius: 5, outline: `1.5px solid ${tk.accent.base}`, textAlign: 'center',
+        background: tk.bg.panel, color: tk.text.primary, font: `500 10.5px ${fontFamily.mono}`,
+      }}
+    />
+  );
+}

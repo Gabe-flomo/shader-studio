@@ -864,11 +864,12 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
               disabled={!exists || driven}
               onChange={onChange}
               onType={onChange}
+              // The range's ends show at the track's ends: double-click one (long-press on a phone) to change it.
+              onRange={onRange}
               ariaLabel={control.label}
               touch={touch}
             />
           </div>
-          {hover && !touch && !details && <RangeEditor min={control.min} max={control.max} onRange={onRange} />}
         </div>
       )}
       {!exists && fate && (
