@@ -99,6 +99,7 @@ import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { PaletteTools } from './PaletteTools';
+import { StopPaletteStops } from './StopPaletteStops';
 import { toRgb } from '../../lib/colorMath';
 import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip } from './NodeCardParts';
 import { driveKey, playDrivenMap } from '../../play/playDriven';
@@ -3861,6 +3862,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {/* ── Params (hidden when collapsed) ── */}
         {!collapsed && node.type !== 'matConst' && Object.keys(paramDefs).length > 0 && Object.keys(node.inputs).length > 0 && sectionRule}
         {!collapsed && node.type !== 'matConst' && Object.entries(paramDefs).map(([key, paramDef]) => {
+          // A Stops Palette's count and colours are one gradient bar with the stops built in, not a row each.
+          if (node.type === 'stopPalette') {
+            if (key === 'stops') return <StopPaletteStops key={key} node={node} touch={isTouchDevice} />;
+            if (/^color\d+$/.test(key)) return null;
+          }
           // showWhen — conditionally hide params based on another param's value
           if (paramDef.showWhen) {
             // A gate param an older save never had reads as its default (same rule as isParamVisible)

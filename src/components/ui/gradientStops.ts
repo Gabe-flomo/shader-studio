@@ -20,12 +20,17 @@ export const clamp01 = (v: number): number => Math.max(0, Math.min(1, Number.isF
 
 const rgb = (c: readonly number[]): RGB => [clamp01(c[0] ?? 0), clamp01(c[1] ?? 0), clamp01(c[2] ?? 0)];
 
+/** Stops sorted by place (stable, so equal places keep their order) and, per sorted stop, which one it was. */
+function sortTracked(stops: readonly GradientStop[]): { stops: GradientStop[]; from: number[] } {
+  const order = stops
+    .map((s, i) => ({ s: { pos: clamp01(s.pos), color: rgb(s.color) }, i }))
+    .sort((a, b) => a.s.pos - b.s.pos || a.i - b.i);
+  return { stops: order.map(x => x.s), from: order.map(x => x.i) };
+}
+
 /** Stops sorted by place (stable, so equal places keep their order), clamped to 0..1. */
 export function sortStops(stops: readonly GradientStop[]): GradientStop[] {
-  return stops
-    .map((s, i) => ({ s: { pos: clamp01(s.pos), color: rgb(s.color) }, i }))
-    .sort((a, b) => a.s.pos - b.s.pos || a.i - b.i)
-    .map(x => x.s);
+  return sortTracked(stops).stops;
 }
 
 /** Where evenly spaced stops sit: n places from 0 to 1 (one stop sits at 0). */
@@ -71,8 +76,8 @@ export function addStop(stops: readonly GradientStop[], pos: number, max: number
   if (stops.length >= max) return null;
   const sorted = sortStops(stops);
   const s: GradientStop = { pos: clamp01(pos), color: color ? rgb(color) : colourAt(sorted, clamp01(pos), style) };
-  const next = sortStops([...sorted, s]);
-  return { stops: next, index: next.indexOf(s) };
+  const next = sortTracked([...sorted, s]);
+  return { stops: next.stops, index: next.from.indexOf(sorted.length) };
 }
 
 /** Add a stop halfway between stop `i` and its next neighbour (or the one before it, at the end). */
@@ -99,9 +104,8 @@ export function moveStop(stops: readonly GradientStop[], i: number, pos: number)
 /** Put stop `i` at an exact place (typed, or nudged), re-sorting; the change says where it went. */
 export function setStopPos(stops: readonly GradientStop[], i: number, pos: number): StopsChange {
   if (i < 0 || i >= stops.length) return { stops: sortStops(stops), index: Math.max(0, Math.min(i, stops.length - 1)) };
-  const moved: GradientStop = { ...stops[i], pos: clamp01(pos) };
-  const next = sortStops(stops.map((s, j) => (j === i ? moved : s)));
-  return { stops: next, index: next.indexOf(moved) };
+  const next = sortTracked(stops.map((s, j) => (j === i ? { ...s, pos: clamp01(pos) } : s)));
+  return { stops: next.stops, index: next.from.indexOf(i) };
 }
 
 /** Nudge stop `i` by `delta` (1% a step, 10% with Shift). */
@@ -177,3 +181,19 @@ export function insertColourAt(colors: readonly RGB[], t: number, max: number, s
   next.splice(index, 0, c);
   return { colors: next, index };
 }
+
+// ─── Drawing ──────────────────────────────────────────────────────────────────
+
+/** A colour as CSS. */
+export const rgbCss = (c: readonly number[]): string => `rgb(${c.map(v => Math.round(clamp01(v) * 255)).join(' ')})`;
+
+/** A CSS gradient painting sorted stops left to right, bands as hard edges. */
+export function gradientCss(stops: readonly GradientStop[], style: GradientStyle = 'gradient'): string {
+  if (!stops.length) return 'transparent';
+  if (stops.length === 1) return rgbCss(stops[0].color);
+  const parts = style === 'bands'
+    ? stops.map((s, i) => `${rgbCss(s.color)} ${i === 0 ? 0 : s.pos * 100}% ${(i + 1 < stops.length ? stops[i + 1].pos : 1) * 100}%`)
+    : stops.map(s => `${rgbCss(s.color)} ${s.pos * 100}%`);
+  return `linear-gradient(90deg, ${parts.join(', ')})`;
+}
+

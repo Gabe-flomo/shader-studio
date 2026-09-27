@@ -28,21 +28,9 @@ import { Popover } from './Popover';
 import { toast } from './toastStore';
 import { hexToRgb, rgbToHex } from '../../lib/colorMath';
 import {
-  addStop, addStopBeside, colourAt, evenPositions, evenStops, insertColourAt, moveStop, nudgeStop, removeStop,
-  reorderColours, setStopColour, setStopPos, slotAt, type GradientStop, type GradientStyle, type RGB,
+  addStop, addStopBeside, evenStops, gradientCss, insertColourAt, moveStop, nudgeStop, removeStop,
+  reorderColours, rgbCss as css, setStopColour, setStopPos, slotAt, type GradientStop, type GradientStyle, type RGB,
 } from './gradientStops';
-
-const css = (c: readonly number[]) => `rgb(${c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(' ')})`;
-
-/** A CSS gradient painting sorted stops left to right, bands as hard edges. */
-export function gradientCss(stops: readonly GradientStop[], style: GradientStyle = 'gradient'): string {
-  if (!stops.length) return 'transparent';
-  if (stops.length === 1) return css(stops[0].color);
-  const parts = style === 'bands'
-    ? stops.map((s, i) => `${css(s.color)} ${i === 0 ? 0 : s.pos * 100}% ${(i + 1 < stops.length ? stops[i + 1].pos : 1) * 100}%`)
-    : stops.map(s => `${css(s.color)} ${s.pos * 100}%`);
-  return `linear-gradient(90deg, ${parts.join(', ')})`;
-}
 
 /** The handle's hit area (touch-friendly) and the visible dot inside it. */
 const HANDLE = 28;
@@ -286,6 +274,3 @@ export function GradientStopsEditor({
     </div>
   );
 }
-
-/** The colour a set of stops shows at `t`: re-exported for callers adding stops themselves. */
-export { colourAt, evenPositions };
