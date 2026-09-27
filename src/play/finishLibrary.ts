@@ -13,11 +13,11 @@
  * folder, and show on the Files page (Presets). Pure functions over a KV so
  * the tests and the importers can use them without a browser.
  */
-import { safeSetItem, type FileResult } from '../../../utils/fileIO';
+import { safeSetItem, type FileResult } from '../utils/fileIO';
 import {
   FINISH_CUSTOM_MAX_CODE, finishEffectId, finishHostLabel, isSealedBlob, parseFinish, type FinishEffect, type PlayFinish,
-} from '../../../types/playFinish';
-import type { SealedBlob } from '../../../types/userNode';
+} from '../types/playFinish';
+import type { SealedBlob } from '../types/userNode';
 
 export const FINISH_PRESETS_KEY = 'shader-studio:finish-presets';
 export const FINISH_EFFECTS_KEY = 'shader-studio:finish-effects';

@@ -34,7 +34,7 @@ import { deleteLook, loadSavedLooks, saveLook, SAVED_LOOKS_CHANGED, type SavedLo
 import {
   applyStackPreset, deleteStackPreset, EFFECT_TEMPLATE, FINISH_LIBRARY_CHANGED, loadSavedEffects, loadStackPresets, renameStackPreset, saveEffect, saveStackPreset,
   type StackPreset,
-} from './finishLibrary';
+} from '../../../play/finishLibrary';
 import { GlslEditor } from '../../code/GlslEditor';
 import type { PlayControl, PlayRecord } from '../../../types/play';
 import {

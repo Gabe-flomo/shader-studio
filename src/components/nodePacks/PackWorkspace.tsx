@@ -12,6 +12,7 @@
  * Function or an Expression Block; or a node type you've already published.
  * Every edit is saved as you go (nodePacks/projects.ts).
  */
+import { loadSavedEffects } from '../../play/finishLibrary';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -196,7 +197,7 @@ type Publishing = { source: PublishSource; origin: PackNodeOrigin; existingId?: 
 type Picking =
   | { what: 'graph-node' } | { what: 'graph-group' } | { what: 'group-in'; graph: string } | { what: 'group-preset' }
   | { what: 'custom-fn' } | { what: 'expr' } | { what: 'published' }
-  | { what: 'extra-graph' } | { what: 'extra-presentation' } | { what: 'extra-glsl' } | { what: 'extra-background'; items: PickItem[] };
+  | { what: 'extra-graph' } | { what: 'extra-presentation' } | { what: 'extra-glsl' } | { what: 'extra-finish' } | { what: 'extra-background'; items: PickItem[] };
 
 function PackEditor({ initial, narrow }: { initial: PackProject; narrow: boolean }) {
   const tk = useTokens();
@@ -277,6 +278,7 @@ function PackEditor({ initial, narrow }: { initial: PackProject; narrow: boolean
         { label: 'A saved graph…', icon: 'graphs', hint: 'An example of the nodes in use', onSelect: () => setPicking({ what: 'extra-graph' }) },
         { label: 'A presentation…', icon: 'slides', onSelect: () => setPicking({ what: 'extra-presentation' }) },
         { label: 'A GLSL shader…', icon: 'code', hint: 'From the GLSL page', onSelect: () => setPicking({ what: 'extra-glsl' }) },
+        { label: 'A Finish effect…', icon: 'sliders', hint: 'A custom effect from Your effects (Play → Finish)', onSelect: () => setPicking({ what: 'extra-finish' }) },
         { label: 'A background image…', icon: 'overlay', onSelect: () => { void listImages().then(list => setPicking({ what: 'extra-background', items: list.map(m => ({ id: m.id, label: m.name, detail: `${m.width}×${m.height}`, icon: 'overlay' as IconName, disabled: p.extras.some(x => x.kind === 'background' && x.id === m.id) })) })).catch(() => toast.error('Couldn’t read the backgrounds library')); } },
         { label: 'Notes (markdown)', icon: 'text', hint: 'A readme: what the nodes do, how to use them', onSelect: () => update(x => ({ ...x, extras: [...x.extras, { kind: 'note', id: `note_${Date.now().toString(36)}`, name: x.extras.some(e => e.kind === 'note') ? 'Notes' : 'Read me', text: `# ${x.name}\n\n` }] })) },
       ],
@@ -349,6 +351,11 @@ function PackEditor({ initial, narrow }: { initial: PackProject; narrow: boolean
         try { list = JSON.parse(localStorage.getItem(GLSL_KEY) ?? '[]'); } catch { /* none */ }
         return <PickerModal title="Add a GLSL shader" icon="code" items={list.map(s => ({ id: s.id, label: s.name, detail: s.group, icon: 'code', disabled: p.extras.some(x => x.kind === 'glsl' && x.id === s.id) }))}
           empty="No shaders on the GLSL page yet." onClose={close} onPick={it => { addExtra({ kind: 'glsl', id: it.id, name: it.label }); close(); }} />;
+      }
+      case 'extra-finish': {
+        const list = loadSavedEffects();
+        return <PickerModal title="Add a Finish effect" icon="sliders" items={list.map(fx => ({ id: fx.id, label: fx.name, detail: fx.sealed ? 'Sealed' : `${fx.code.split('\n').length} lines`, icon: 'sliders' as IconName, disabled: p.extras.some(x => x.kind === 'finishEffect' && x.id === fx.id) }))}
+          empty="No effects in Your effects yet: write one in Play → Finish → + Add effect → New effect code, then Save to Your effects." onClose={close} onPick={it => { addExtra({ kind: 'finishEffect', id: it.id, name: it.label }); close(); }} />;
       }
       case 'extra-background':
         return <PickerModal title="Add a background image" icon="overlay" items={pk.items} empty="No images in the backgrounds library yet." onClose={close}
@@ -601,8 +608,8 @@ function NodeCard({ r, finalLabel, check, issues, first, last, onRename, onMove,
   );
 }
 
-const EXTRA_ICON: Record<PackExtra['kind'], IconName> = { graph: 'graphs', presentation: 'slides', glsl: 'code', background: 'overlay', note: 'text' };
-const EXTRA_WORD: Record<PackExtra['kind'], string> = { graph: 'Example graph', presentation: 'Presentation', glsl: 'GLSL shader', background: 'Background image', note: 'Notes' };
+const EXTRA_ICON: Record<PackExtra['kind'], IconName> = { graph: 'graphs', presentation: 'slides', glsl: 'code', background: 'overlay', note: 'text', finishEffect: 'sliders' };
+const EXTRA_WORD: Record<PackExtra['kind'], string> = { graph: 'Example graph', presentation: 'Presentation', glsl: 'GLSL shader', background: 'Background image', note: 'Notes', finishEffect: 'Finish effect' };
 
 function ExtraRow({ extra, issues, onChange, onRemove, onFixUnresolved }: { extra: PackExtra; issues: Issue[]; onChange: (e: PackExtra) => void; onRemove: () => void; onFixUnresolved?: () => void }) {
   const tk = useTokens();
