@@ -73,7 +73,7 @@ import { MidiSourceOptions, PadSourceOptions } from './MidiSourceOptions';
 import { PadGridCard } from './PadGridCard';
 import { AnchorPicker, FirePicker, TriggerPicker, type TriggerLayerRef } from './TriggerPicker';
 import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, parsePropTarget, type ActionKind } from '../../types/play';
-import { AUDIO_FX_EFFECTS, audioFxEffect, audioFxParam, parseAudioFxTarget, patchAudioFxEffect } from '../../types/playAudioFx';
+import { AUDIO_FX_EFFECTS, audioFxControlFor, audioFxEffect, audioFxHosts, audioFxParam, parseAudioFxTarget, patchAudioFxEffect, readAudioFxValue } from '../../types/playAudioFx';
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf, finishTarget, parseFinishTarget, patchFinishEffect, readFinishValue } from '../../types/playFinish';
 import { playBackground } from '../../play/background';
 import { BackgroundRow } from './BackgroundRow';
@@ -201,6 +201,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // What this plan runs (play/planGates.ts). Locked parts stay visible, and nothing in the record is removed.
   const layersOk = useCan('play.layers');
   const finishOk = useCan('play.finish');
+  const audioFxOk = useCan('play.audioFx');
   const backgroundsOk = useCan('play.backgrounds');
   const websiteOk = useCan('export.website');
   const takesOk = useCan('play.takes');
@@ -275,6 +276,20 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     update(p => (p.controls.some(c => c.target === target) ? p : { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'float', label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [play.finish, update]);
+  // The audio effects' numbers (types/playAudioFx.ts): targets `audiofx:<chain>:<effect>::<key>`; a host's id is the part before `::`.
+  const soundCandidates = useMemo<LayerCandidates[]>(() => audioFxHosts(play.audioFx, play.layers).map(h => ({
+    id: h.id, label: `Sound · ${h.label}`,
+    props: h.params.map(d => ({ key: d.key, label: d.label, hint: d.hint || undefined, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
+    actions: [],
+  })), [play.audioFx, play.layers]);
+  const addSoundControl = useCallback((hostId: string, key: string, withNull: boolean) => {
+    const target = `${hostId}::${key}`;
+    const c = audioFxControlFor(play.audioFx, play.layers, target);
+    if (!c) return;
+    if (withNull) { addWithNull([{ target, label: c.label, min: c.min, max: c.max, ...(c.step ? { step: c.step } : {}), value: readAudioFxValue(play.audioFx, target) ?? c.min, axis: 'x' }], `${c.label} null`); return; }
+    update(p => (p.controls.some(x => x.target === target) ? p : { ...p, controls: [...p.controls, { id: playId('ctl'), ...c }] }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [play.audioFx, play.layers, update]);
   // A layer's actions (Drop again, Burst…) as buttons on the panel, which mappings can press.
   const addActionControl = useCallback((layerId: string, kind: ActionKind) => {
     update(p => {
@@ -404,7 +419,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
         <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
         <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
-        <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} finish={finishOk ? finishCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddFinish={addFinishControl} onAddAction={addActionControl} onAddNull={addWithNull} />
+        <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} finish={finishOk ? finishCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddFinish={addFinishControl} sound={audioFxOk ? soundCandidates : NO_LAYER_CANDIDATES} onAddSound={addSoundControl} onAddAction={addActionControl} onAddNull={addWithNull} />
       </>
     )}
   />;
@@ -700,7 +715,7 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 /** A layer's numbers, for the Add control menu. */
 interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number }>; actions: ActionKind[] }
 
-function AddControlButton({ candidates, layers, finish, layerById, taken, onAdd, onAddLayer, onAddFinish, onAddAction, onAddNull, compact = false }: {
+function AddControlButton({ candidates, layers, finish, sound, layerById, taken, onAdd, onAddLayer, onAddFinish, onAddSound, onAddAction, onAddNull, compact = false }: {
   /** Phones: the button is an icon, so the header's row of tools fits. */
   compact?: boolean;
   candidates: PlayCandidate[];
@@ -712,6 +727,9 @@ function AddControlButton({ candidates, layers, finish, layerById, taken, onAdd,
   /** The Finish stack's effects and their numbers. */
   finish: LayerCandidates[];
   onAddFinish: (effectId: string, key: string, withNull: boolean) => void;
+  /** The audio effects and their numbers (a host's id is its target before `::`). */
+  sound: LayerCandidates[];
+  onAddSound: (hostId: string, key: string, withNull: boolean) => void;
   onAddAction: (layerId: string, kind: ActionKind) => void;
   /** Add the slider (and its X/Y partner) with a Null layer that drives it. */
   onAddNull: (drives: NullDrive[], label: string) => void;
@@ -747,6 +765,8 @@ function AddControlButton({ candidates, layers, finish, layerById, taken, onAdd,
   const layerCount = layerShown.reduce((n, l) => n + l.props.length + l.actions.length, 0);
   const finishShown = finish.map(f => ({ ...f, props: f.props.filter(pr => (withNull || !taken.has(finishTarget(f.id, pr.key))) && (!q || `${f.label} ${pr.label}`.toLowerCase().includes(q))) })).filter(f => f.props.length > 0);
   const finishCount = finishShown.reduce((n, f) => n + f.props.length, 0);
+  const soundShown = sound.map(f => ({ ...f, props: f.props.filter(pr => (withNull || !taken.has(`${f.id}::${pr.key}`)) && (!q || `${f.label} ${pr.label}`.toLowerCase().includes(q))) })).filter(f => f.props.length > 0);
+  const soundCount = soundShown.reduce((n, f) => n + f.props.length, 0);
   // While searching every folder with a match is open.
   const isOpen = (k: string) => !!q || unfolded.has(k);
   const itemStyle: React.CSSProperties = {
@@ -765,7 +785,7 @@ function AddControlButton({ candidates, layers, finish, layerById, taken, onAdd,
       <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{count}</span>
     </button>
   );
-  const nothing = candidates.length === 0 && layers.every(l => l.props.length + l.actions.length === 0) && finish.every(f => f.props.length === 0);
+  const nothing = candidates.length === 0 && layers.every(l => l.props.length + l.actions.length === 0) && finish.every(f => f.props.length === 0) && sound.every(f => f.props.length === 0);
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
       {compact
@@ -781,7 +801,7 @@ function AddControlButton({ candidates, layers, finish, layerById, taken, onAdd,
             </Tooltip>
           </div>
           <div style={{ maxHeight: 400, overflowY: 'auto', marginTop: 6 }}>
-            {graphShown.length === 0 && layerCount === 0 && finishCount === 0 && (
+            {graphShown.length === 0 && layerCount === 0 && finishCount === 0 && soundCount === 0 && (
               <div style={{ padding: '10px 8px', color: tk.text.faint }}>{q ? 'No match.' : 'Everything is already on the panel.'}</div>
             )}
             {graphShown.length > 0 && folder('graph', 'From the graph', graphShown.length)}
@@ -823,6 +843,19 @@ function AddControlButton({ candidates, layers, finish, layerById, taken, onAdd,
                     <Icon name="curve" size={13} style={{ color: tk.text.faint }} />
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.label}</span>
                     {withNull && taken.has(finishTarget(f.id, pr.key)) && <span style={{ color: tk.text.faint, fontSize: 10.5 }}>on panel</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {soundCount > 0 && folder('sound', 'From the sound effects', soundCount)}
+            {soundCount > 0 && isOpen('sound') && soundShown.map(f => (
+              <div key={f.id}>
+                {folder(f.id, f.label, f.props.length, 14)}
+                {isOpen(f.id) && f.props.map(pr => (
+                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { onAddSound(f.id, pr.key, withNull); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
+                    <Icon name="wave" size={13} style={{ color: tk.text.faint }} />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.label}</span>
+                    {withNull && taken.has(`${f.id}::${pr.key}`) && <span style={{ color: tk.text.faint, fontSize: 10.5 }}>on panel</span>}
                   </button>
                 ))}
               </div>

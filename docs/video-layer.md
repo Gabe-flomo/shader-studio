@@ -50,7 +50,10 @@ deleting one a Video layer uses says which and asks first (those layers then
 ask for their file again; Undo puts it back). **Clean up** deletes the videos
 nothing uses. The Library panel counts videos with the backgrounds.
 
-On the Files page they're under **Backgrounds → Videos** (`files/videosSource.ts`):
+Drum pad samples are kept in the same store but have a **Sounds** tab of their
+own (docs/drum-pads.md); the Videos tab lists only videos.
+
+On the Files page they're under **Backgrounds → Videos** (`files/videosSource.ts`; samples under **Backgrounds → Sounds**):
 sizes, posters, "used by" (a layer points at its video rather than keeping a
 copy, so removing one is flagged as breaking those setups), unused ones in
 Clean up, and in downloads and installs.

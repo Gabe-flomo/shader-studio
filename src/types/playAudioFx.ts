@@ -11,7 +11,7 @@
  *   layer:<id>    an audio layer's song, or a Video layer's sound
  *   node:<id>     an Audio Input node's song
  */
-import { AF_EFFECTS, AF_KINDS, afNewEffect, afNormaliseEffect, type AfEffect, type AfKind, type AfParam } from '../play/kit/audioFx.js';
+import { AF_EFFECTS, AF_KINDS, afNewEffect, afNormaliseEffect, afShownParams, type AfEffect, type AfKind, type AfParam } from '../play/kit/audioFx.js';
 
 export type AudioFxKind = AfKind;
 export type AudioFxEffect = AfEffect;
@@ -90,6 +90,43 @@ export function audioFxTargetLabel(fx: PlayAudioFx | undefined, target: string):
   const e = t ? audioFxEffect(fx, t.chainId, t.effectId) : undefined;
   if (!t || !e) return null;
   return { effect: AF_EFFECTS[e.kind].label, param: audioFxParam(e.kind, t.key)?.label ?? t.key };
+}
+
+/** A chain's name in words: "Master", "MIDI synth", a layer's label, "Audio Input · <node>". */
+export function audioFxChainLabel(chainId: string, layers?: ReadonlyArray<{ id: string; label: string }>): string {
+  if (chainId === MASTER_CHAIN) return 'Master';
+  if (chainId === SYNTH_CHAIN) return 'MIDI synth';
+  if (chainId.startsWith('layer:')) return layers?.find(l => l.id === chainId.slice(6))?.label ?? 'Missing layer';
+  if (chainId.startsWith('node:')) return `Audio Input · ${chainId.slice(5)}`;
+  return chainId;
+}
+
+/** An effect as a host of mappable numbers, for the Map… menu, Add control and the condition value picker. */
+export interface AudioFxHost {
+  chainId: string;
+  effect: AudioFxEffect;
+  /** The prop id its numbers live under (audioFxPropId); a number's target is `${id}::${key}`. */
+  id: string;
+  /** "Master · Echo". */
+  label: string;
+  params: AfParam[];
+}
+
+export function audioFxHosts(fx: PlayAudioFx | undefined, layers?: ReadonlyArray<{ id: string; label: string }>): AudioFxHost[] {
+  return audioFxEffects(fx).map(({ chainId, effect }) => ({
+    chainId, effect, id: audioFxPropId(chainId, effect.id),
+    label: `${audioFxChainLabel(chainId, layers)} · ${AF_EFFECTS[effect.kind].label}`,
+    params: afShownParams(effect),
+  }));
+}
+
+/** A panel control (without its id) for one of an effect's numbers, labelled like the + on the card; null when the effect or number is gone. */
+export function audioFxControlFor(fx: PlayAudioFx | undefined, layers: ReadonlyArray<{ id: string; label: string }> | undefined, target: string): { target: string; kind: 'float'; label: string; min: number; max: number; step?: number } | null {
+  const t = parseAudioFxTarget(target);
+  const e = t ? audioFxEffect(fx, t.chainId, t.effectId) : undefined;
+  const p = t && e ? audioFxParam(e.kind, t.key) : undefined;
+  if (!t || !e || !p) return null;
+  return { target, kind: 'float', label: `${audioFxChainLabel(t.chainId, layers)} · ${AF_EFFECTS[e.kind].label} · ${p.label}`, min: p.min, max: p.max, ...(p.step ? { step: p.step } : {}) };
 }
 
 // ── Editing ─────────────────────────────────────────────────────────────────

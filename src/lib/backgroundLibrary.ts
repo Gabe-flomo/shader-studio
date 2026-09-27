@@ -715,6 +715,8 @@ export async function addVideoFile(file: Blob & { name?: string }, o: { name?: s
   await tx('readwrite', s => s.put(rec), VIDEO_STORE);
   emit();
   if (rec.thumb === undefined && canPoster()) void ensureVideoPoster(rec.id).catch(() => {});
+  // A sound's waveform, for the Library's Sounds.
+  if (isAudioType(type) && !rec.thumb && canPoster()) void ensureSoundWave(rec.id).catch(() => {});
   return videoMeta(rec);
 }
 
@@ -829,6 +831,59 @@ export function ensureVideoPoster(id: string): Promise<LibraryVideoMeta | null> 
   return work;
 }
 
+// ── Sounds (drum pad samples, kept in the same store) ───────────────────────
+
+/** A sound's outline: the loudest level (0..1) in each of `n` equal slices. */
+export function wavePeaks(samples: ArrayLike<number>, n: number): number[] {
+  const out: number[] = [];
+  const len = samples.length;
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor((i * len) / n), b = Math.max(a + 1, Math.floor(((i + 1) * len) / n));
+    let m = 0;
+    for (let j = a; j < b && j < len; j++) { const v = Math.abs(samples[j]); if (v > m) m = v; }
+    out.push(Math.min(1, m));
+  }
+  return out;
+}
+
+/** Peaks as a small PNG (a bar per peak, mirrored about the middle), or '' when there's no canvas. */
+export function waveThumbOf(peaks: readonly number[], w = 160, h = 90, color = '#8fa8ff'): string {
+  if (typeof document === 'undefined') return '';
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  if (!g) return '';
+  const top = Math.max(1e-6, ...peaks);
+  const bw = w / Math.max(1, peaks.length);
+  g.fillStyle = color;
+  peaks.forEach((p, i) => { const bh = Math.max(1, (p / top) * (h * 0.8)); g.fillRect(i * bw + bw * 0.15, (h - bh) / 2, Math.max(1, bw * 0.7), bh); });
+  try { return c.toDataURL('image/png'); } catch { return ''; }
+}
+
+const waveWork = new Map<string, Promise<LibraryVideoMeta | null>>();
+const waveTried = new Set<string>();
+/** Give a kept sound a waveform thumbnail and its length (browser only; tried once a session). The meta; null when it's gone. */
+export function ensureSoundWave(id: string): Promise<LibraryVideoMeta | null> {
+  const had = waveWork.get(id);
+  if (had) return had;
+  const work = (async () => {
+    const v = await getVideo(id);
+    if (!v) return null;
+    const { blob, ...meta } = v;
+    if (!isAudioType(meta.type) || meta.thumb || waveTried.has(id)) return meta;
+    waveTried.add(id);
+    const Ctx = typeof OfflineAudioContext !== 'undefined' ? OfflineAudioContext : null;
+    if (!Ctx) return meta;
+    try {
+      const buf = await new Ctx(1, 1, 44100).decodeAudioData(await blob.arrayBuffer());
+      const thumb = waveThumbOf(wavePeaks(buf.getChannelData(0), 48));
+      return (await patchVideo(id, { ...(thumb ? { thumb } : {}), ...(buf.duration > 0 ? { duration: buf.duration } : {}) })) ?? meta;
+    } catch { return meta; }
+  })().finally(() => { waveWork.delete(id); });
+  waveWork.set(id, work);
+  return work;
+}
+
 // ── Videos in ZIPs and folders ──────────────────────────────────────────────
 
 export interface VideosManifest {
@@ -844,10 +899,11 @@ export interface VideosManifest {
  * for ZIPs people open) or its id (`id`, stable for a folder written again
  * and again). All of them, or those with these ids. Empty without videos.
  */
-export async function videoZipFiles(ids: readonly string[] | null = null, o: { naming?: 'name' | 'id' } = {}): Promise<Record<string, Uint8Array>> {
+export async function videoZipFiles(ids: readonly string[] | null = null, o: { naming?: 'name' | 'id'; only?: 'video' | 'audio' } = {}): Promise<Record<string, Uint8Array>> {
   let metas: LibraryVideoMeta[];
   try { metas = await listVideos(); } catch { return {}; }
   if (ids) { const want = new Set(ids); metas = metas.filter(m => want.has(m.id)); }
+  if (o.only) metas = metas.filter(m => isAudioType(m.type) === (o.only === 'audio'));
   if (!metas.length) return {};
   const out: Record<string, Uint8Array> = {};
   const manifest: VideosManifest = { kind: VIDEOS_MANIFEST_KIND, version: 1, videos: [] };
@@ -881,13 +937,26 @@ export function findVideosManifest(files: Record<string, Uint8Array>): { root: s
   } catch { return null; }
 }
 
+/** Is a manifest entry a sound (by its type, or its file's extension)? */
+export const manifestEntryIsAudio = (e: { type?: unknown; file?: unknown }) => isAudioType((typeof e.type === 'string' && e.type) || (typeof e.file === 'string' ? videoMimeOf(e.file) : ''));
+
+/** Two `backgrounds/videos.json` manifests as one (the videos and the sounds sources each write theirs into a ZIP). */
+export function mergeVideosManifests(a: Uint8Array, b: Uint8Array): Uint8Array {
+  try {
+    const ma = JSON.parse(strFromU8(a)) as VideosManifest, mb = JSON.parse(strFromU8(b)) as VideosManifest;
+    const seen = new Set(ma.videos.map(v => v.id));
+    return strToU8(JSON.stringify({ ...ma, videos: [...ma.videos, ...mb.videos.filter(v => !seen.has(v.id))] }, null, 1));
+  } catch { return b; }
+}
+
 /** Bring videos back from a ZIP's (or folder's) files. Ids are kept; one already here is counted as `same` and left. */
-export async function importVideoFiles(files: Record<string, Uint8Array>): Promise<{ added: number; same: number; skipped: number }> {
+export async function importVideoFiles(files: Record<string, Uint8Array>, o: { only?: 'video' | 'audio' } = {}): Promise<{ added: number; same: number; skipped: number }> {
   const r = { added: 0, same: 0, skipped: 0 };
   const found = findVideosManifest(files);
   if (!found) return r;
   for (const e of found.manifest.videos) {
     if (!e || typeof e.id !== 'string' || typeof e.file !== 'string') { r.skipped++; continue; }
+    if (o.only && manifestEntryIsAudio(e) !== (o.only === 'audio')) continue;
     const data = files[found.root + e.file];
     if (!data) { r.skipped++; continue; }
     if (await hasVideo(e.id)) { r.same++; continue; }

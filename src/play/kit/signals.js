@@ -146,6 +146,7 @@ export function sgSwapStep(st, va, vb, sw) {
  *   ctl:<controlId>            a control on the panel, in its own units
  *   layer:<id>::<key>          a layer's property (a mapping may drive it)
  *   finish:<effect>::<key>     a Finish effect's number
+ *   audiofx:<chain>:<effect>::<key>  an audio effect's number (kept under 'audiofx:<chain>:<effect>')
  *   map:<mappingId>            a mapping's source reading, 0..1
  *   mouse:x · mouse:y          the pointer, 0..1 (y up)
  *   dist:<A>|<B>               how far apart two anchors are, in picture heights
@@ -168,6 +169,11 @@ export function sgParseValueRef(ref) {
     const i = rest.lastIndexOf('::');
     if (i <= 0 || i + 2 >= rest.length) return null;
     return { kind: 'prop', layerId: (fin ? 'finish:' : '') + rest.slice(0, i), key: rest.slice(i + 2) };
+  }
+  if (ref.startsWith('audiofx:')) {
+    const i = ref.lastIndexOf('::');
+    if (i <= 8 || i + 2 >= ref.length) return null;
+    return { kind: 'prop', layerId: ref.slice(0, i), key: ref.slice(i + 2) };
   }
   return null;
 }

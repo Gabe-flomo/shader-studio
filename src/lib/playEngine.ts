@@ -41,7 +41,7 @@ import { pickLearned, readerGate } from '../play/audioReaders';
 import { handFeed } from './handFeed';
 import { readDataSource } from '../play/dataLayer';
 import { hdAge, hdCreate, hdGate, hdPlacement, hdPoint, hdRead, hdTrackerOptions, hdUpdate, type HdState } from '../play/kit/hands.js';
-import { DEFAULT_HANDS, parseHandAnchor, usesHands, type FireMode, type HandGesture, type HandSide, type PlayLayer } from '../types/play';
+import { DEFAULT_HANDS, PAD_ANCHOR, parseHandAnchor, usesHands, type FireMode, type HandGesture, type HandSide, type PlayLayer } from '../types/play';
 
 /** A trigger's firing-mode state, with the mode it was made for (a changed mode starts afresh). */
 interface FireSlot { mode: FireMode; st: FireState; count: number }
@@ -487,6 +487,10 @@ class PlayEngine implements InputSource {
    */
   anchorAt(ref: string): { x: number; y: number } | null {
     if (ref === 'mouse') return { x: this.mouseX, y: this.mouseY };
+    if (ref === PAD_ANCHOR) {
+      const x = padGrid.read('x', 0, 0), y = padGrid.read('y', 0, 0);
+      return x === null || y === null ? null : { x, y };
+    }
     const pt = sgScreenPoint(ref);
     if (pt) return pt;
     const hand = parseHandAnchor(ref);

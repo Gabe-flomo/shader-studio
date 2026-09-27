@@ -15,6 +15,7 @@ import { SENSOR_HINTS, SENSOR_LABELS } from '../../play/playSources';
 import { playEngine } from '../../lib/playEngine';
 import { layerNumericProps, sensorReadsFor, layerTarget, type PlayLayer, type PlaySource, type SensorRead } from '../../types/play';
 import { finishHostLabel, finishHosts, finishNumericProps, finishTarget } from '../../types/playFinish';
+import { audioFxHosts } from '../../types/playAudioFx';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
@@ -43,6 +44,7 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
   const graph = open ? collectPlayCandidates(nodes, bindings).filter(c => c.kind === 'float' && !taken.has(c.target) && match(candidateLabel(c))) : [];
   const layers = play.layers.map(l => ({ l, props: layerNumericProps(l).filter(d => !taken.has(layerTarget(l.id, d.key)) && match(`${l.label} ${d.label}`)) })).filter(x => x.props.length);
   const finish = finishHosts(play.finish).map(e => ({ e, label: finishHostLabel(e), props: finishNumericProps(e).filter(d => !taken.has(finishTarget(e.id, d.key)) && match(`${finishHostLabel(e)} ${d.label}`)) })).filter(x => x.props.length);
+  const sound = audioFxHosts(play.audioFx, play.layers).map(h => ({ h, props: h.params.filter(d => !taken.has(`${h.id}::${d.key}`) && match(`${h.label} ${d.label}`)) })).filter(x => x.props.length);
   const isOpen = (k: string) => !!query || unfolded.has(k);
   const flip = (k: string) => setUnfolded(p => { const n = new Set(p); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
@@ -69,7 +71,7 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
     </button>
   );
-  const empty = controls.length + graph.length + layers.length + finish.length === 0;
+  const empty = controls.length + graph.length + layers.length + finish.length + sound.length === 0;
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
       <Button size="sm" variant="ghost" icon="plus" onClick={() => setOpen(o => !o)} title={`Map ${label} onto a control`}>Map…</Button>
@@ -95,6 +97,13 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
               <div key={e.id}>
                 {folder(`finish:${e.id}`, fl, props.length, 14)}
                 {isOpen(`finish:${e.id}`) && props.map(d => row(d.key, d.label, () => pick({ effectId: e.id, key: d.key }), 40, d.hint || undefined))}
+              </div>
+            ))}
+            {sound.length > 0 && folder('sound', 'From the sound effects', sound.reduce((n, x) => n + x.props.length, 0))}
+            {sound.length > 0 && isOpen('sound') && sound.map(({ h, props }) => (
+              <div key={h.id}>
+                {folder(h.id, h.label, props.length, 14)}
+                {isOpen(h.id) && props.map(d => row(d.key, d.label, () => pick({ audioFx: `${h.id}::${d.key}` }), 40, d.hint || undefined))}
               </div>
             ))}
           </div>
