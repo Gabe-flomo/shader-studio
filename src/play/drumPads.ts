@@ -31,6 +31,7 @@ import { padGrid } from '../lib/padGrid';
 import { padSound, type PadSoundState } from '../lib/padSound';
 import { can } from '../lib/plan';
 import { kmLayoutOf, kmPadOf } from './kit/midi.js';
+import { audioAccept } from '../lib/audioAccept';
 import {
   DP_PADS, dpCreateSampler, dpHitNumbers, dpKey, dpPadOfCell, dpPadOfKey, dpPadOfNote, dpPeaks, dpSynthBuffer, type DpSampler,
 } from './kit/drumPads.js';
@@ -48,8 +49,8 @@ export const sampleKey = (p: DrumPad | undefined): string => (!p ? '' : p.sample
 export const sampleMediaKey = (sampleId: string) => `dsample:${sampleId}`;
 
 /** Audio files a pad takes. */
-export const SAMPLE_ACCEPT = 'audio/*,.wav,.mp3,.ogg,.m4a,.aac,.flac,.aif,.aiff,.weba';
-export function isAudioFile(f: File): boolean { return /^audio\//.test(f.type) || /\.(wav|mp3|ogg|oga|m4a|aac|flac|aif|aiff|weba)$/i.test(f.name); }
+export const SAMPLE_ACCEPT = audioAccept();
+export { isAudioFile } from '../lib/audioAccept';
 
 class PlayDrumPads {
   private layers: DrumPadLayer[] = [];
