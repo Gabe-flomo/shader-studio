@@ -43,6 +43,7 @@ import { requestConvert } from './components/convert/convertHandoff';
 import { useStage } from './components/play/stageStore';
 import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './components/KeyboardShortcutsModal';
 import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
+import type { FilesPage as FilesPageT } from './components/files/FilesPage';
 import type { GLSLPage as GLSLPageT } from './components/GLSLPage';
 import type { PlayPage as PlayPageT } from './components/play/PlayPage';
 import type { PresentPage as PresentPageT } from './components/present/PresentPage';
@@ -60,6 +61,7 @@ import { useUnseenActivity } from './components/ui/activityStore';
 // the rest of the app.
 
 const KeyboardShortcutsModal = lazyWithSuspense<PropsOf<typeof KeyboardShortcutsModalT>>(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
+const FilesPage              = lazyWithSuspense<PropsOf<typeof FilesPageT>>(() => import('./components/files/FilesPage').then(m => ({ default: m.FilesPage })));
 const ShortcutsPage          = lazyWithSuspense<PropsOf<typeof ShortcutsPageT>>(() => import('./components/ShortcutsPage').then(m => ({ default: m.ShortcutsPage })));
 const GLSLPage               = lazyWithSuspense<PropsOf<typeof GLSLPageT>>(() => import('./components/GLSLPage').then(m => ({ default: m.GLSLPage })));
 const Stage                  = lazyWithSuspense<PropsOf<typeof StageT>>(() => import('./components/play/Stage').then(m => ({ default: m.Stage })));
@@ -446,6 +448,13 @@ function App() {
     clear();
     return useToastStore.subscribe(clear);
   }, [page]);
+
+  // The Library's "Manage in Files" opens the Files page.
+  useEffect(() => {
+    const go = () => setPage('files');
+    window.addEventListener('open-files-page', go);
+    return () => window.removeEventListener('open-files-page', go);
+  }, []);
 
   // Navigate to Function Builder when an ExprBlock requests it
   useEffect(() => {
@@ -1061,6 +1070,15 @@ function App() {
     );
   }
 
+  if (mobile && page === 'files') {
+    return (
+      <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
+        <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><FilesPage compact onNavigate={setPage} /></div>
+      </div>
+    );
+  }
+
   if (mobile && page === 'present') {
     return (
       <div style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
@@ -1099,6 +1117,7 @@ function App() {
         <DesktopTopNav compact page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
 
         {page === 'shortcuts' && <ShortcutsPage />}
+        {page === 'files' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><FilesPage onNavigate={setPage} /></div>}
         {page === 'glsl' && <GLSLPage onConvert={openConvertWith} />}
         {page === 'convert' && <div style={{ flex: 1, position: 'relative', minWidth: 0 }}><ConvertPage onMaterialized={openStudioFitted} /></div>}
         {page === 'present' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage onNavigate={setPage} /></div>}
@@ -1200,6 +1219,7 @@ function App() {
       <DesktopTopNav page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
 
       {page === 'shortcuts' && <ShortcutsPage />}
+      {page === 'files' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><FilesPage onNavigate={setPage} /></div>}
       {page === 'present' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><PresentPage onNavigate={setPage} /></div>}
       {page === 'fn' && (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>

@@ -113,6 +113,15 @@ export function unregisterUserNode(id: string): void {
   notify();
 }
 
+/** Read the published nodes again from storage (after the Files page removed, restored or installed some). */
+export function reloadUserNodesFromStorage(): void {
+  loaded = false;
+  defs.clear();
+  compiled.clear();
+  ensureLoaded();
+  notify();
+}
+
 export function subscribeUserNodes(cb: () => void): () => void {
   listeners.add(cb);
   return () => { listeners.delete(cb); };

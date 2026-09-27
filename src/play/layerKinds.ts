@@ -68,6 +68,13 @@ export const layerKindRegistry = createLayerKindRegistry(loadSaved(), all => {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(all.filter(k => k.source === 'saved').map(k => k.def))); } catch { /* storage full or blocked: the list still works for this session */ }
 });
 
+/** Match the registry to storage again (after the Files page changed the saved kinds). */
+export function reloadInstalledKinds(): void {
+  const stored = loadSaved();
+  for (const k of layerKindRegistry.list()) if (k.source === 'saved' && !stored.some(s => s.def.id === k.def.id)) layerKindRegistry.unregister(k.def.id);
+  for (const k of stored) if (JSON.stringify(layerKindRegistry.get(k.def.id)?.def) !== JSON.stringify(k.def)) layerKindRegistry.register(k.def, 'saved');
+}
+
 export function useInstalledKinds(): RegisteredKind[] {
   return useSyncExternalStore(layerKindRegistry.subscribe, layerKindRegistry.list, layerKindRegistry.list);
 }

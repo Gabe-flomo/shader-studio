@@ -88,9 +88,14 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
         </div>
         {used > 0.8 && <div style={{ ...note, color: tk.status.warningText, marginTop: 4 }}>The browser’s room for saved work is nearly full. Export everything, then delete old versions or graphs you don’t need.</div>}
       </div>
-      <button type="button" onClick={() => setShowAll(v => !v)} style={{ alignSelf: 'flex-start', border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: `500 12px ${fontFamily.ui}` }}>
-        {showAll ? 'Hide the breakdown' : 'What takes the room'}
-      </button>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => setShowAll(v => !v)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: `500 12px ${fontFamily.ui}` }}>
+          {showAll ? 'Hide the breakdown' : 'What takes the room'}
+        </button>
+        <button type="button" onClick={() => window.dispatchEvent(new Event('open-files-page'))} title="Everything saved, item by item: sizes, what uses what, clean up, download and install" style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: `500 12px ${fontFamily.ui}` }}>
+          Manage in Files →
+        </button>
+      </div>
       {showAll && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           {kinds.map(x => (
