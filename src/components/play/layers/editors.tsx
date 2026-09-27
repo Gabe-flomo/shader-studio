@@ -37,6 +37,10 @@ import { useScriptStatus } from '../../../play/scriptStatus';
 import { selectTokenOnDoubleClick, wrapOnKeyDown } from '../../code/editKeys';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { DEFAULT_SCRIPT, DEFAULT_SCRIPT_3D, DEFAULT_SCRIPT_PARAMS, script3dDefaults, type ScriptLayer, type ScriptMode, type ScriptParamDef } from '../../../types/playLayers';
+import { useTokens } from '../../../theme/themeStore';
+import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { handFeed } from '../../../lib/handFeed';
+import { addFingertipNulls } from '../layerOps';
 
 export interface EditorContext {
   layers: PlayLayer[];
@@ -185,6 +189,26 @@ export function ImageEditor({ f, pictureHidden }: { f: FieldKit; pictureHidden: 
   );
 }
 
+/** Hand tracking from the camera this layer shows: one click, plus nulls on the fingertips. */
+function CameraHands() {
+  const tk = useTokens();
+  const setPlay = useNodeGraphStore(s => s.setPlay);
+  const hasTipNulls = useNodeGraphStore(s => s.play.layers.some(l => l.kind === 'null' && (l as NullLayer).follow === 'hand'));
+  return (
+    <Section kind="camera" title="Hand tracking">
+      <div style={{ margin: '2px 0 6px' }}><HandsChip /></div>
+      <div style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}`, margin: '0 0 6px' }}>
+        Follows your hands in this camera. Every finger point, pinches and gestures become sources in Mappings, triggers can fire <b>On: Hand gesture</b>, and a Null can follow a hand point.
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <Button size="sm" icon="plus" onClick={() => { setPlay(p => addFingertipNulls(p)); if (handFeed.getStatus() === 'off') void handFeed.start(); }}>
+          {hasTipNulls ? 'Add fingertip nulls (missing ones)' : 'Add fingertip nulls'}
+        </Button>
+      </div>
+    </Section>
+  );
+}
+
 export function CameraEditor({ f, pictureHidden }: { f: FieldKit; pictureHidden: boolean }) {
   return (
     <>
@@ -192,6 +216,7 @@ export function CameraEditor({ f, pictureHidden }: { f: FieldKit; pictureHidden:
         {f.row('Camera', <CameraChip />, 'The webcam. Browsers ask the first time. Its motion is a sensor source, and particles, glyphs and contours can read it instead of the shader.')}
         {f.toggle('Mirror', 'mirror', 'Flip left to right (like a mirror)')}
       </Section>
+      <CameraHands />
       <Section kind="camera" title="Position">
         {f.props('x', 'y', 'scale', 'rotation')}
       </Section>

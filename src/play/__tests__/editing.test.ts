@@ -236,3 +236,13 @@ describe('a control whose node was grouped', () => {
     expect(locateTarget(nodes, 'g1::c1::radius').status).toBe('ok');
   });
 });
+
+describe('fingertip nulls for hand tracking', () => {
+  it('adds a right and a left index-tip null once', async () => {
+    const { addFingertipNulls } = await import('../../components/play/layerOps');
+    const once = addFingertipNulls(emptyPlayRecord());
+    const nulls = once.layers.filter(l => l.kind === 'null') as unknown as Array<{ follow: string; handSide: string; handPoint: number }>;
+    expect(nulls.map(n => [n.follow, n.handSide, n.handPoint])).toEqual([['hand', 'right', 8], ['hand', 'left', 8]]);
+    expect(addFingertipNulls(once).layers.length).toBe(once.layers.length);
+  });
+});
