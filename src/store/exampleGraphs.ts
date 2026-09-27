@@ -1986,7 +1986,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cell_size: { type: 'float', label: 'Cell Size' },
           aspect_ratio: { type: 'float', label: 'Aspect Ratio' },
         },
-        params: { columns: 12 },
+        params: { columns: 24, _schemaVersion: 2 },
       },
       {
         id: 'box',
@@ -2320,7 +2320,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cell_size: { type: 'float', label: 'Cell Size' },
           aspect_ratio: { type: 'float', label: 'Aspect Ratio' },
         },
-        params: { columns: 10 },
+        params: { columns: 20, _schemaVersion: 2 },
       },
       {
         id: 'box',
@@ -5639,7 +5639,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 280, y: 260 },
         inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'gm_uv', outputKey: 'uv' } } },
         outputs: { cellID: { type: 'vec2', label: 'Cell ID' }, grid_pos: { type: 'vec2', label: 'Grid Pos' } },
-        params: { columns: 8 },
+        params: { columns: 16, _schemaVersion: 2 },
       },
       {
         id: 'gm_sdf',
@@ -5729,7 +5729,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cell_size: { type: 'float', label: 'Cell Size' },
           aspect_ratio: { type: 'float', label: 'Aspect Ratio' },
         },
-        params: { columns: 8 },
+        params: { columns: 16, _schemaVersion: 2 },
       },
       {
         id: 'acc',
@@ -5812,7 +5812,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cell_size: { type: 'float', label: 'Cell Size' },
           aspect_ratio: { type: 'float', label: 'Aspect Ratio' },
         },
-        params: { columns: 14 },
+        params: { columns: 28, _schemaVersion: 2 },
       },
       {
         id: 'gd_draw',
@@ -6058,7 +6058,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cell_size: { type: 'float', label: 'Cell Size' },
           aspect_ratio: { type: 'float', label: 'Aspect Ratio' },
         },
-        params: { columns: 10 },
+        params: { columns: 20, _schemaVersion: 2 },
       },
       {
         id: 'disp',
@@ -6415,7 +6415,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cell_size: { type: 'float', label: 'Cell Size' },
           aspect_ratio: { type: 'float', label: 'Aspect Ratio' },
         },
-        params: { columns: 6 },
+        params: { columns: 12, _schemaVersion: 2 },
       },
       {
         id: 'split',
@@ -7774,7 +7774,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cell_size: { type: 'float', label: 'Cell Size' },
           aspect_ratio: { type: 'float', label: 'Aspect Ratio' },
         },
-        params: { columns: 8 },
+        params: { columns: 16, _schemaVersion: 2 },
       },
       {
         id: 'box',
@@ -10998,7 +10998,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cell_size: { type: 'float', label: 'Cell Size' },
           aspect_ratio: { type: 'float', label: 'Aspect Ratio' },
         },
-        params: { columns: 8 },
+        params: { columns: 16, _schemaVersion: 2 },
       },
       {
         id: 'bd_r',

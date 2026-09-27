@@ -46,6 +46,14 @@ to its neighbours (in cell units, so centres stay 1 apart):
 | Triangles | (√3, 0), (√3⁄2, 3⁄2) | each rhombus split into an up and a down triangle; the down one is turned 180° so a built-in triangle fits |
 | Custom | the **Basis** input | any mat2 from matrix nodes |
 
+A cell unit is the width of the picture divided by **Columns** (the UV is
+2 × aspect wide, so a cell is 2 × aspect ÷ Columns), the same as the Grid
+node's. Columns 4 is four cells across. Before this was fixed both nodes drew
+twice the count they were set to; graphs saved then are migrated on load (their
+Columns, keyframes, group overrides and Play control ranges are doubled, and a
+wired Columns is doubled in the compiled code), so they look as they did. See
+`src/nodes/definitions/gridColumns.ts`.
+
 Every non-square lattice finds a pixel's cell as its nearest lattice centre
 (checking the 3×3 lattice points around it), then carries on exactly like the
 square grid: jitter, pattern, affect, field sockets and Overflow all work.

@@ -520,7 +520,7 @@ lesson('learnBricks', [
 
 lesson('learnTruchet', [
   uv(),
-  n('constant', 'cols', 40, 440, { value: 8 }),
+  n('constant', 'cols', 40, 440, { value: 16 }),
   n('gridLayout', 'grid', 280, 220, { ...note('Cell UV: coordinates inside each cell. Cell ID: which cell, as whole numbers.') }, { uv: ['uv', 'uv'], columns: ['cols', 'value'] }),
   n('splitVec2', 'id', 520, 400, {}, { v: ['grid', 'cellID'] }),
   n('mod', 'mx', 760, 340, { period: 2, ...note('Odd or even column?') }, { input: ['id', 'x'] }),
@@ -533,7 +533,7 @@ lesson('learnTruchet', [
   n('step', 'half', 2200, 220, { ...note('step(x, y): 1 above the diagonal, 0 below. One triangle, the whole tile design.') }, { edge: ['c', 'x'], x: ['c', 'y'] }),
   n('colorize', 'paint', 2440, 220, { color: [0.96, 0.86, 0.62], background: [0.1, 0.3, 0.35] }, { field: ['half', 'result'] }),
   out(['paint', 'color'], 2680),
-], [ctl('n', 'cols::value', 'Columns', 2, 24, 1), ctl('t', 'turn::b', 'Turn per index', 0, 3.1416, 0.01)], `**What it shows.** Truchet tiles: one simple tile design, here a square cut into two triangles along its diagonal, turned four different ways. Turning each cell by a quarter turn per its place in a 2×2 block makes big patterns (diamonds, zigzags, arrows) out of that one triangle.
+], [ctl('n', 'cols::value', 'Columns', 4, 48, 1), ctl('t', 'turn::b', 'Turn per index', 0, 3.1416, 0.01)], `**What it shows.** Truchet tiles: one simple tile design, here a square cut into two triangles along its diagonal, turned four different ways. Turning each cell by a quarter turn per its place in a 2×2 block makes big patterns (diamonds, zigzags, arrows) out of that one triangle.
 
 **How it is built.** **Grid** gives each cell its coordinates and its ID. Mod 2 of the ID's x and y (x + 2y) numbers the cells 0–3 in every 2×2 block; × π/2 is the cell's rotation; Rotate 2D turns the Cell UV; Step(x, y) draws the triangle.
 
@@ -569,7 +569,7 @@ lesson('learnRandomGrid', [
 
 lesson('learnMaze', [
   uv(),
-  n('constant', 'cols', 40, 440, { value: 14 }),
+  n('constant', 'cols', 40, 440, { value: 28 }),
   n('gridLayout', 'grid', 280, 220, {}, { uv: ['uv', 'uv'], columns: ['cols', 'value'] }),
   n('noiseFloat', 'rnd', 520, 400, { mode: 'hash', scale: 1, speed: 0, ...note('One random number per cell.') }, { uv: ['grid', 'cellID'] }),
   n('step', 'flip', 760, 400, { edge: 0.5, ...note('Heads or tails: which way this cell\'s line leans.') }, { x: ['rnd', 'value'] }),
@@ -582,7 +582,7 @@ lesson('learnMaze', [
   n('compare', 'ink', 1960, 300, { operator: '<', smoothing: 0.02 }, { a: ['dist', 'output'], b: ['w', 'value'] }),
   n('colorize', 'paint', 2200, 220, { color: [0.35, 0.85, 1.0], background: [0.05, 0.06, 0.16] }, { field: ['ink', 'mask'] }),
   out(['paint', 'color'], 2440),
-], [ctl('n', 'cols::value', 'Columns', 2, 40, 1), ctl('p', 'flip::edge', 'Chance', 0, 1, 0.01), ctl('w', 'w::value', 'Line width', 0.01, 0.3, 0.005)], `**What it shows.** The Book's version of *10 PRINT*, a one-line program from the Commodore 64 that prints ╱ or ╲ at random, over and over. Each cell tosses a coin and draws one diagonal or the other. The lines meet at the corners, and a maze appears out of nothing but coin tosses.
+], [ctl('n', 'cols::value', 'Columns', 4, 80, 1), ctl('p', 'flip::edge', 'Chance', 0, 1, 0.01), ctl('w', 'w::value', 'Line width', 0.01, 0.3, 0.005)], `**What it shows.** The Book's version of *10 PRINT*, a one-line program from the Commodore 64 that prints ╱ or ╲ at random, over and over. Each cell tosses a coin and draws one diagonal or the other. The lines meet at the corners, and a maze appears out of nothing but coin tosses.
 
 **How it is built.** **Grid** → Cell ID → Noise Float (Hash) → Step 0.5 is the coin → Remap to −1 or +1. In the Cell UV, |±x − y| is zero along one diagonal or the other; Compare against the Width draws it.
 
@@ -841,7 +841,7 @@ lesson('learnPalette', [
 
 lesson('learnGrid', [
   uv(),
-  n('gridLayout', 'grid', 280, 220, { columns: 6 }, { uv: ['uv', 'uv'] }),
+  n('gridLayout', 'grid', 280, 220, { columns: 12 }, { uv: ['uv', 'uv'] }),
   n('noiseFloat', 'hash', 540, 400, { mode: 'hash', scale: 1, speed: 0 }, { uv: ['grid', 'cellID'] }),
   n('remap', 'rad', 780, 400, { inMin: 0, inMax: 1, outMin: 0.1, outMax: 0.42 }, { value: ['hash', 'value'] }),
   n('palette', 'pal', 780, 560, { preset: '4', scale: 1 }, { value: ['hash', 'value'] }),
@@ -857,7 +857,7 @@ lesson('learnGrid', [
 lesson('learnGridPattern', [
   uv(),
   n('mouse', 'mouse', 40, 420),
-  n('gridPattern', 'gp', 320, 220, { columns: 8, shape: 'circle', size: 0.3, pattern: 'checker', affect: 'grow', affectRadius: 0.7, affectSoftness: 0.8 }, { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'] }),
+  n('gridPattern', 'gp', 320, 220, { columns: 16, shape: 'circle', size: 0.3, pattern: 'checker', affect: 'grow', affectRadius: 0.7, affectSoftness: 0.8 }, { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'] }),
   out(['gp', 'color'], 620),
 ], [ctl('s', 'gp::size', 'Size', 0.05, 0.6, 0.01), ctl('r', 'gp::affectRadius', 'Mouse radius', 0.1, 2, 0.01), ctl('a', 'gp::affectAmount', 'Mouse strength', 0, 2, 0.01)], `**What it shows.** The whole *Grid: Cell ID and hash* example in one node. **Grid Pattern** cuts the UV into cells, puts a shape in each, decides which cells get one (every cell, every other column or row, a checkerboard, diagonals, random), and lets a point affect the shapes near it. Here the mouse makes the dots grow.
 
@@ -868,7 +868,7 @@ lesson('learnGridPattern', [
 lesson('learnGridSpread', [
   uv(),
   n('mouse', 'mouse', 40, 420),
-  n('gridPattern', 'gp', 300, 220, { columns: 10, pattern: 'all', affect: 'pull', affectRadius: 1.1, affectSoftness: 1.0, affectAmount: 1.2 }, { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'] }),
+  n('gridPattern', 'gp', 300, 220, { columns: 20, pattern: 'all', affect: 'pull', affectRadius: 1.1, affectSoftness: 1.0, affectAmount: 1.2 }, { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'] }),
   n('shapeSDF', 'star', 600, 160, { shape: 'box', wx: 0.22, wy: 0.22 }, { p: ['gp', 'cellUV'] }),
   n('palette', 'pal', 600, 400, { preset: '5', scale: 1 }, { value: ['gp', 'influence'] }),
   n('gridPaint', 'paint', 880, 220, { background: [0.05, 0.05, 0.08] }, { distance: ['star', 'distance'], color: ['pal', 'color'], placed: ['gp', 'placed'] }),

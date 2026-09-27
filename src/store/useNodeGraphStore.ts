@@ -11,6 +11,8 @@ import { buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricR
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord, type PlayControl } from '../types/play';
+import { migratePlayRecord } from './migratePlay';
+import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
 import { buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia } from '../play/exportHtml';
@@ -159,6 +161,15 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
  */
 export function migrateLoadedNodes(nodes: GraphNode[]): GraphNode[] {
   return upgradeExprNodes(resolveNodeAliases(nodes, getNodeDefinition)).map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
+}
+
+/**
+ * A saved graph's Play record brought along with its node migrations (control
+ * ranges on a param whose units changed, see store/migratePlay.ts). Takes the
+ * nodes as saved, before migrateLoadedNodes.
+ */
+export function migrateLoadedPlay(play: PlayRecord, savedNodes: GraphNode[]): PlayRecord {
+  return migratePlayRecord(play, resolveNodeAliases(savedNodes, getNodeDefinition), getNodeDefinition);
 }
 
 /** Convert a label to a filesystem-safe slug. Used by the generic graph-save
@@ -2662,9 +2673,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const preset = { label, subgraph, description };
     undoManager.push(nodes);
 
-    // Re-ID all subgraph nodes to avoid collisions
+    // Re-ID all subgraph nodes to avoid collisions. A preset saved a while
+    // ago is migrated like a loaded graph (e.g. Grid's Columns units).
     const idMap = new Map<string, string>();
-    const newSubNodes = preset.subgraph.nodes.map(n => {
+    const newSubNodes = preset.subgraph.nodes.map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition)).map(n => {
       const newId = idGenerator.next();
       idMap.set(n.id, newId);
       return { ...n, id: newId };
@@ -3602,7 +3614,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           nodes: state.nodes.map(n => {
             if (n.id !== targetNodeId) return n;
             return {
-              ...n,
+              ...clearLegacyColumnsWire(n, targetInputKey),
               inputs: {
                 ...n.inputs,
                 [targetInputKey]: {
@@ -3633,7 +3645,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const newActiveNodes = activeNodes.map(sn => {
         if (sn.id !== targetNodeId) return sn;
         return {
-          ...sn,
+          ...clearLegacyColumnsWire(sn, targetInputKey),
           inputs: {
             ...sn.inputs,
             [targetInputKey]: {
@@ -3665,7 +3677,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             if (n.id !== nodeId) return n;
             const newInput = { ...n.inputs[inputKey] };
             delete newInput.connection;
-            return { ...n, inputs: { ...n.inputs, [inputKey]: newInput } };
+            return { ...clearLegacyColumnsWire(n, inputKey), inputs: { ...n.inputs, [inputKey]: newInput } };
           }),
         };
       }
@@ -3678,7 +3690,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         if (sn.id !== nodeId) return sn;
         const newInput = { ...sn.inputs[inputKey] };
         delete newInput.connection;
-        return { ...sn, inputs: { ...sn.inputs, [inputKey]: newInput } };
+        return { ...clearLegacyColumnsWire(sn, inputKey), inputs: { ...sn.inputs, [inputKey]: newInput } };
       });
       const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
       return { nodes: newTop ?? state.nodes };
@@ -4611,7 +4623,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Example graphs don't carry their own loose groups yet — reset rather
     // than leave a previous graph's groups referencing node ids that don't
     // exist in this one.
-    const play = graph.play ? parsePlayRecord(graph.play) : emptyPlayRecord();
+    const play = graph.play ? migrateLoadedPlay(parsePlayRecord(graph.play), rawNodes) : emptyPlayRecord();
     set(st => ({ nodes, looseGroups: [], play, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
     // An example is not a saved project: saving it asks for a name.
@@ -4801,6 +4813,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         }
         return n;
       });
+      play = migrateLoadedPlay(play, sanitized);
       nodes = upgradeExprNodes(resolveNodeAliases(sanitized, getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
       if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
@@ -4858,6 +4871,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       looseGroups = parsed.looseGroups;
       play = parsePlayRecord(parsed.play);
       isPlayFile = parsed.kind === PLAY_FILE_KIND;
+      play = migrateLoadedPlay(play, parsed.nodes as GraphNode[]);
       nodes = upgradeExprNodes(resolveNodeAliases(parsed.nodes as GraphNode[], getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
       if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
