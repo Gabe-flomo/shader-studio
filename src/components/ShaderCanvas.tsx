@@ -11,6 +11,7 @@ import { inputBus } from '../lib/inputBus';
 import { playEngine } from '../lib/playEngine';
 import { midiEngine } from '../lib/midiEngine';
 import { layerAudio } from '../lib/layerAudio';
+import { audioFxHost } from '../lib/audioFx';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
 import { CompareHandle } from './play/finish/CompareHandle';
@@ -169,6 +170,8 @@ function buildFontTexture(): THREE.CanvasTexture {
   return tex;
 }
 const FONT_TEXTURE = buildFontTexture();
+/** An audio effect's number as mappings drive it now (audioFxHost.frame). */
+const fxValueOf = (id: string, key: string, base: number) => playEngine.layerValue(id, key, base);
 
 // Minimal fallback shaders so Three.js doesn't throw on first render
 const FALLBACK_VERTEX = `
@@ -1241,8 +1244,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const elapsed = virtualTime;
       // Songs in audio layers play on this clock (seeks, pauses and ↺ move them too).
       {
-        const layers = useNodeGraphStore.getState().play.layers;
+        const play = useNodeGraphStore.getState().play;
+        const layers = play.layers;
         if (layers.some(l => l.kind === 'audio')) layerAudio.followClock(layers.filter(l => l.kind === 'audio' && l.input === 'file').map(l => l.id), elapsed, timePlayingRef.current);
+        // Audio effects: the chains follow the record as it plays (Free: none), their numbers the mappings (lib/audioFx.ts).
+        audioFxHost.frame(playEngine.getRecord().audioFx, fxValueOf);
       }
       material.uniforms.u_time.value = elapsed;
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
@@ -2126,6 +2132,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       const shown = applySolo(applyGroupVisibility(playableForPlan(lastPlay, currentPlan())), ui.soloLayers, ui.soloMappings);
       playEngine.setRecord(shown);
       playOverlay.setRecord(shown);
+      // The chains change at once (frames may be paused), then follow their numbers every frame.
+      audioFxHost.frame(shown.audioFx, fxValueOf);
       requestRenderRef.current();
     };
     feedPlay();

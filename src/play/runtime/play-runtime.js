@@ -197,8 +197,10 @@
     if (st.stage === 'sustain' && level === 0) st.stage = 'idle';
     return st.value;
   }
-  // A layer property (layer:<id>::<key>), or a Finish effect's number (finish:<effectId>::<key>, kept under the id 'finish:<effectId>').
+  // A layer property (layer:<id>::<key>), a Finish effect's number (finish:<effectId>::<key>, kept under the id 'finish:<effectId>'),
+  // or an audio effect's (audiofx:<chainId>:<effectId>::<key>, kept under 'audiofx:<chainId>:<effectId>').
   function layerTarget(t) {
+    if (t.startsWith('audiofx:')) { const i = t.lastIndexOf('::'); return i > 8 ? { layerId: t.slice(0, i), key: t.slice(i + 2) } : null; }
     const fin = t.startsWith('finish:');
     if (!fin && !t.startsWith('layer:')) return null;
     const r = t.slice(fin ? 7 : 6); const i = r.lastIndexOf('::');
@@ -951,6 +953,9 @@ void main() {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return;
         vSound.ctx = new AC();
+        // Every video's sound → the master chain → the speakers.
+        vSound.bus = vSound.ctx.createGain();
+        afxAttach(vSound.ctx, 'master', vSound.bus, vSound.ctx.destination, null);
       }
       if (vSound.ctx.state === 'suspended') vSound.ctx.resume();
       if (vSound.started) return;
@@ -961,7 +966,8 @@ void main() {
           const src = vSound.ctx.createMediaElementSource(v.el);
           const an = vSound.ctx.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0.8;
           const g = vSound.ctx.createGain(); g.gain.value = l.sound === 'play' ? Math.max(0, Math.min(1, l.volume)) : 0;
-          src.connect(an); an.connect(g); g.connect(vSound.ctx.destination);
+          afxAttach(vSound.ctx, 'layer:' + l.id, src, g, an);
+          g.connect(vSound.bus);
           v.an = an; v.freq = new Float32Array(an.frequencyBinCount); v.gain = g;
           v.el.muted = false; v.el.removeAttribute('muted');
         } catch (e) { /* this browser won't route the video's sound */ }
@@ -1103,6 +1109,26 @@ void main() {
     if (finish) for (const e of finish.effects) layersById.set('finish:' + e.id, e);
     // The before/after wipe's numbers are driven the same way (finish:compare::pos).
     if (finish && finish.compare) layersById.set('finish:compare', finish.compare);
+    // Audio effects (the kit's audioFx.js): each effect's numbers are driven like layer properties too, under 'audiofx:<chain>:<effect>'.
+    const AFK = typeof SSKit !== 'undefined' && SSKit.audioFx ? SSKit.audioFx : null;
+    const afxChains = play.audioFx && play.audioFx.chains ? play.audioFx.chains : {};
+    const afxPre = !!(play.audioFx && play.audioFx.analyse === 'pre');
+    for (const cid of Object.keys(afxChains)) for (const e of afxChains[cid].effects || []) layersById.set('audiofx:' + cid + ':' + e.id, e);
+    const afxSlots = [];
+    const afxUpdate = sl => sl.c.update(afxChains[sl.chainId], (e, k) => layerValue('audiofx:' + sl.chainId + ':' + e.id, k, e[k]), sl.ctx.currentTime);
+    // A sound through its chain: inlet → chain → outlet (null: only analysed), the analyser after the chain (or before).
+    function afxAttach(ctx, chainId, inlet, outlet, an) {
+      if (!AFK) { if (outlet) inlet.connect(outlet); if (an) inlet.connect(an); return; }
+      const rec = afxChains[chainId];
+      if (rec && AFK.needsWorklet([rec])) AFK.loadWorklet(ctx);
+      const c = AFK.chain(ctx);
+      inlet.connect(c.input);
+      if (outlet) c.output.connect(outlet);
+      if (an) (afxPre ? inlet : c.output).connect(an);
+      const sl = { ctx, chainId, c };
+      afxSlots.push(sl);
+      afxUpdate(sl);
+    }
     const base = new Map(), live = new Map(), layerLive = new Map(), smooth = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0, playing = !opts.paused, lastNow = 0, frame = 0;
@@ -1447,6 +1473,9 @@ void main() {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return;
         song.ctx = new AC(); song.out = song.ctx.createGain(); song.out.connect(song.ctx.destination);
+        // The songs → the master chain → the volume.
+        song.bus = song.ctx.createGain();
+        afxAttach(song.ctx, 'master', song.bus, song.out, null);
       }
       song.out.gain.value = audible ? 0.7 : 0;
       if (song.ctx.state === 'suspended' && playing) song.ctx.resume();
@@ -1457,7 +1486,7 @@ void main() {
           if (!alive) return;
           const src = song.ctx.createBufferSource(); src.buffer = buf; src.loop = true;
           const an = song.ctx.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0.8;
-          src.connect(an); an.connect(song.out); src.start();
+          afxAttach(song.ctx, 'node:' + a.id, src, song.bus, an); src.start();
           a.an = an; a.freq = new Float32Array(an.frequencyBinCount); a.via = song.ctx;
         }, () => { /* not decodable in this browser */ });
       }
@@ -1786,6 +1815,7 @@ void main() {
       if (bg && followPage) clampedMouse(shared.pageX, shared.pageY);
       tickAudioNodes();
       const moved = tickMappings(dt);
+      for (const sl of afxSlots) afxUpdate(sl);
       // Feedback and echo change with every frame drawn, so while paused they draw only when something changes (as in the app).
       if (!playing && (stateful || echoCfg) && !needsDraw && !moved && frame > 1) { refreshPanel(now); return; }
       paint(dt, running);

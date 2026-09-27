@@ -9,10 +9,13 @@
  *
  * Module singleton. Subscribes to midiEngine lazily on first enable; the
  * AudioContext is created on the first note (a key press counts as the user
- * gesture browsers require).
+ * gesture browsers require). Its sound goes through the Play record's synth
+ * chain, then that context's copy of the master chain (lib/audioFx.ts).
  */
 
 import { midiEngine, type MidiEvent } from './midiEngine';
+import { audioFxHost } from './audioFx';
+import { MASTER_CHAIN, SYNTH_CHAIN } from '../types/playAudioFx';
 
 const STORAGE_KEY = 'shader-studio:midiSound';
 
@@ -94,13 +97,17 @@ class ToneSynth {
       const tone = ctx.createBiquadFilter();
       tone.type = 'lowpass';
       tone.frequency.value = 1800;
-      master.connect(ctx.destination);
-      master.connect(delay);
+      // voices → master → [synth chain] → post → (and its soft delay) → bus → [master chain] → speakers (lib/audioFx.ts).
+      const post = ctx.createGain(), bus = ctx.createGain();
+      audioFxHost.attach(ctx, SYNTH_CHAIN, master, post);
+      audioFxHost.attach(ctx, MASTER_CHAIN, bus, ctx.destination);
+      post.connect(bus);
+      post.connect(delay);
       delay.connect(tone);
       tone.connect(feedback);
       feedback.connect(delay);
       tone.connect(wet);
-      wet.connect(ctx.destination);
+      wet.connect(bus);
       this.ctx = ctx;
       this.master = master;
     }

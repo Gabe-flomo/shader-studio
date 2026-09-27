@@ -16,6 +16,7 @@ import { encodeKeys } from '../lib/takePlayback';
 import { P5_EXAMPLE_SKETCHES } from './p5ExampleSketches';
 import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIREFLIES, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE, SKETCH_HALATION, SKETCH_ORBIT } from './playSketches';
 import { GRADE_LOOKS, applyLook, newFinishEffect, type FinishEffect, type FinishKind, type PlayFinish } from '../types/playFinish';
+import { newAudioFxEffect, type AudioFxEffect, type AudioFxKind, type PlayAudioFx } from '../types/playAudioFx';
 // An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 import {
@@ -108,7 +109,7 @@ const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string
 /** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
 const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
-function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; padGrid?: PlayPadGrid; signals?: PlaySignal[]; pairs?: PlayPair[]; pairMappings?: PlayPairMapping[]; notes: string }): PlayRecord {
+function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; audioFx?: PlayAudioFx; padGrid?: PlayPadGrid; signals?: PlaySignal[]; pairs?: PlayPair[]; pairMappings?: PlayPairMapping[]; notes: string }): PlayRecord {
   const out: PlayRecord = { version: 1, controls: p.controls ?? [], mappings: p.mappings ?? [], layers: p.layers ?? [] };
   if (p.groups?.length) out.groups = p.groups;
   if (p.actions?.length) out.actions = p.actions;
@@ -117,6 +118,7 @@ function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayC
   if (p.takes?.length) out.takes = p.takes;
   if (p.audioReaders) out.audioReaders = p.audioReaders;
   if (p.finish) out.finish = p.finish;
+  if (p.audioFx) out.audioFx = p.audioFx;
   if (p.signals?.length) out.signals = p.signals;
   if (p.pairs?.length) out.pairs = p.pairs;
   if (p.pairMappings?.length) out.pairMappings = p.pairMappings;
@@ -132,6 +134,10 @@ const axis = (outMin: number, outMax: number, o: Partial<PairAxis> = {}): PairAx
 /** A Finish effect at its defaults (every number filled in, as the parser keeps it), with `over` on top. Its id is its kind. */
 function fx(kind: FinishKind, over: Partial<FinishEffect> = {}): FinishEffect {
   return { ...newFinishEffect(kind, kind), ...over };
+}
+/** An audio effect at its defaults with `over` on top, under `id`. */
+function afx(kind: AudioFxKind, id: string, over: Record<string, unknown> = {}): AudioFxEffect {
+  return { ...newAudioFxEffect(kind, id), ...over } as AudioFxEffect;
 }
 /** A grade set to one of the built-in looks, then `over`. */
 function lookFx(lookId: string, over: Partial<FinishEffect> = {}): FinishEffect {
@@ -1699,6 +1705,48 @@ Distance reads only while both hands are in view, so the rings hold their size w
 • Move the mouse up and down: Frames back follows it.
 • Turn Direction to 0 for a sideways scan, or pick another Map on the Time displacement card (Brightness, Noise, Radial, or a layer).
 • Set Quality to High for 64 frames of history.`,
+  })),
+  ex('audioEffects', glowGraph({ radius: 0.12, falloff: 12, tint: [1, 0.6, 0.3] }), play({
+    audioFx: {
+      chains: {
+        master: {
+          on: true,
+          effects: [
+            afx('filter', 'sweep', { cutoff: 2500, resonance: 6 }),
+            afx('echo', 'echo', { sync: '1/8d', bpm: 120, feedback: 0.35, tone: 3000, mix: 0.25, pingpong: true }),
+          ],
+        },
+      },
+    },
+    audioReaders: {
+      input: '',
+      readers: [
+        reader('lows', 'Lows', 70, 1, 25, 2, 160, [1, 0.5, 0.35]),
+        reader('highs', 'Highs', 6000, 1.5, 40, 2, 120, [0.4, 0.8, 1]),
+      ],
+    },
+    layers: [layer('audio', 'bars', 'Spectrum', { style: 'bars', y: 0.14, w: 1.7, h: 0.2, bars: 64, colour: 'palette', palette: 1, opacity: 0.85, toShader: false })],
+    controls: [
+      ctl('cutoff', 'audiofx:master:sweep::cutoff', 'Master · Filter · Cutoff', 20, 20000, 1),
+      ctl('res', 'audiofx:master:sweep::resonance', 'Master · Filter · Resonance', 0.1, 20),
+      ctl('echoMix', 'audiofx:master:echo::mix', 'Master · Echo · Mix', 0, 1),
+      ctl('radius', 'circ::radius', 'Glow (the highs)', 0.05, 0.4),
+    ],
+    mappings: [
+      map('sweep', 'cutoff', S.mouse('x'), 150, 14000, { curve: 'exp', smoothMs: 60 }),
+      map('ring', 'res', S.mouse('y'), 0.7, 14, { smoothMs: 60 }),
+      map('glow', 'radius', { kind: 'reader', readerId: 'highs' }, 0.06, 0.3, { smoothMs: 30 }),
+    ],
+    notes: `**What it shows.** Audio effects on the sound, played by the mouse: a **Filter** on the master bus, swept by mouse X, its resonance on mouse Y, then a ping-pong **Echo** synced to dotted eighths. The Highs reader hears the sound after the effects, so the glow shrinks as the filter closes.
+
+**How it's built.** Finish → **Sound** holds a chain per sound (audio layers, Video layers, Audio Input songs, the MIDI synth) and one on the **Master**. The filter's Cutoff and Resonance and the echo's Mix are controls (the + beside each number), mapped like any slider: Cutoff through an **Exp** curve so the sweep is even to the ear. Every number glides, so the sweep never clicks.
+
+**Try this.**
+• Nothing plays by itself: open **Spectrum** (the Audio readers panel) and press **Play test loop**, then move the mouse left and right.
+• Finish → Sound → Filter: try **High-pass** or **Band-pass**, or give it an **LFO**.
+• Add a **Reverb** (Hall) or a **Distortion** (Wavefold, Bitcrush) after the filter, and drag the cards to change the order.
+• Readers hear → **Before**: the glow stops following the filter.
+• Record a take and render it: the render's sound has the sweep as you played it.`,
   })),
 ];
 

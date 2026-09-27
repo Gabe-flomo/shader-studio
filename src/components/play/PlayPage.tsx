@@ -73,6 +73,7 @@ import { MidiSourceOptions, PadSourceOptions } from './MidiSourceOptions';
 import { PadGridCard } from './PadGridCard';
 import { AnchorPicker, FirePicker, TriggerPicker, type TriggerLayerRef } from './TriggerPicker';
 import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, parsePropTarget, type ActionKind } from '../../types/play';
+import { AUDIO_FX_EFFECTS, audioFxEffect, audioFxParam, parseAudioFxTarget, patchAudioFxEffect } from '../../types/playAudioFx';
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf, finishTarget, parseFinishTarget, patchFinishEffect, readFinishValue } from '../../types/playFinish';
 import { playBackground } from '../../play/background';
 import { BackgroundRow } from './BackgroundRow';
@@ -177,6 +178,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       if (typeof value === 'number') setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, ft.effectId, { [ft.key]: value }) }));
       return;
     }
+    const at = parseAudioFxTarget(control.target);
+    if (at) {
+      if (typeof value === 'number') setPlay(p => ({ ...p, audioFx: patchAudioFxEffect(p.audioFx, at.chainId, at.effectId, { [at.key]: value }) }));
+      return;
+    }
     const lt = parseLayerTarget(control.target);
     if (lt) {
       if (typeof value === 'number') setPlay(p => ({ ...p, layers: p.layers.map(l => l.id === lt.layerId ? { ...l, [lt.key]: value } as typeof l : l) }));
@@ -219,6 +225,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     if (at) {
       const l = play.layers.find(x => x.id === at.layerId);
       return { kind: 'layer', title: l?.label ?? 'a deleted layer', param: actionLabel(at.do, l), missing: !l, go: () => { if (l) revealLayerFor(l.id); } };
+    }
+    const af = parseAudioFxTarget(c.target);
+    if (af) {
+      const e = audioFxEffect(play.audioFx, af.chainId, af.effectId);
+      return { kind: 'layer', title: e ? `Sound · ${AUDIO_FX_EFFECTS[e.kind].label}` : 'a removed audio effect', param: (e && audioFxParam(e.kind, af.key)?.label) ?? af.key, missing: !e, go: () => { if (e) usePlayUi.getState().revealAudioFx(e.id); } };
     }
     const ft = parseFinishTarget(c.target);
     if (ft) {
@@ -599,7 +610,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           options={[
             ...(compact || sideView.tabs.includes('controls') ? [{ value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` }] : []),
             ...(compact || sideView.tabs.includes('layers') ? [{ value: 'layers' as const, label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}${layersOk ? '' : ' · Pro'}` }] : []),
-            ...(compact || sideView.tabs.includes('finish') ? [{ value: 'finish' as const, label: `Finish${play.finish?.effects.length ? ` · ${play.finish.effects.length}` : ''}${finishOk ? '' : ' · Pro'}`, title: 'Grade, lens, film and time effects over the whole picture' }] : []),
+            ...(compact || sideView.tabs.includes('finish') ? [{ value: 'finish' as const, label: `Finish${play.finish?.effects.length ? ` · ${play.finish.effects.length}` : ''}${finishOk ? '' : ' · Pro'}`, title: 'Grade, lens, film and time effects over the whole picture, and effects on the sound' }] : []),
             ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length + (play.pairMappings?.length ?? 0) ? ` · ${play.mappings.length + (play.pairMappings?.length ?? 0)}` : ''}` }] : []),
           ]}
         />

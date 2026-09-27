@@ -37,6 +37,7 @@ import midiSource from './kit/midi.js?raw';
 import kitSource from './kit/kit.js?raw';
 import finishGlslSource from './kit/finishGlsl.js?raw';
 import finishSource from './kit/finish.js?raw';
+import audioFxSource from './kit/audioFx.js?raw';
 import signalsSource from './kit/signals.js?raw';
 import { renderableFinish } from '../types/playFinish';
 import { applyGroupVisibility } from '../types/layerGroups';
@@ -336,10 +337,10 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, audioFxSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH } };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH } };\n})();\n`;
 }
 
 /**

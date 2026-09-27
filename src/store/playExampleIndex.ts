@@ -89,6 +89,7 @@ const ROWS: Array<[string, string, string]> = [
   ['finishScreen', 'Finish: CRT, bloom, grain and shake', 'A curved CRT with its shadow mask and glow, bloom, grain and flicker; Space shakes the camera.'],
   ['finishHalation', 'Finish: halation', 'Film’s red-to-white halo on a test scene: lamps halate and grow, paper and teal don’t.'],
   ['finishTime', 'Finish: time displacement', 'Slit-scan: the top of the picture is 30 frames behind the bottom, over a drifting shader and a comet layer.'],
+  ['audioEffects', 'Audio effects', 'A filter swept by the mouse and a ping-pong echo on the master bus, with a reader hearing the result. Press Play test loop.'],
   // Bigger pieces that put several techniques together (their graphs live in exampleGraphs.ts).
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],
   ['flowAroundWords', 'Flow Around Words', 'Particles over an FBM landscape part around a word that acts as a wall.'],

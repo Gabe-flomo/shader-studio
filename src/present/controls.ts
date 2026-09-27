@@ -7,12 +7,14 @@
 import { keyName, sourceLabel, triggerLabel } from '../play/playSources';
 import { parseLayerTarget, type PlayControl, type PlayMapping, type PlayRecord } from '../types/play';
 import { readFinishValue, parseFinishTarget } from '../types/playFinish';
+import { readAudioFxValue, parseAudioFxTarget } from '../types/playAudioFx';
 import type { PlayHtmlInput } from '../play/exportHtml';
 
 /** The value a control starts at in this bundle (undefined for actions and unknown targets). */
 export function baseValue(bundle: PlayHtmlInput, c: PlayControl): number | number[] | undefined {
   if (c.kind === 'action') return undefined;
   if (parseFinishTarget(c.target)) return readFinishValue(bundle.play.finish, c.target);
+  if (parseAudioFxTarget(c.target)) return readAudioFxValue(bundle.play.audioFx, c.target);
   const lt = parseLayerTarget(c.target);
   if (lt) {
     const l = bundle.play.layers.find(x => x.id === lt.layerId) as Record<string, unknown> | undefined;

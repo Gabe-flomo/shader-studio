@@ -2,9 +2,9 @@
  * audioEngine.ts — module-level singleton for Web Audio API.
  * No React, no Zustand. Pattern mirrors scopeRegistry.ts.
  *
- * Audio graph per node:
- *   AudioBufferSourceNode → AnalyserNode → masterGainNode → ctx.destination
- *                                       ↘ recordBus → (a recording's audio track)
+ * Audio graph per node (the effect chains: lib/audioFx.ts):
+ *   AudioBufferSourceNode → inlet → [its chain] → mix → [master chain] → post → masterGainNode → ctx.destination
+ *                                  ↘ AnalyserNode (after its chain, or before)       ↘ recordBus → (a recording's audio track)
  *
  * The record bus carries every song at full level, whatever the listening
  * volume, and only songs: the live microphone has its own context
@@ -13,11 +13,20 @@
 
 import { audioUniformNamesByNode } from '../compiler/audioUniformNames';
 import { forgetMedia, mediaSource, rememberMedia, restoreMedia } from './mediaSources';
+import { audioFxHost } from './audioFx';
+import { layerChainId, nodeChainId } from '../types/playAudioFx';
+
+/** The effect chain a track goes through: an audio layer's (`layer:<id>`) or an Audio Input node's. */
+export const trackChainId = (key: string) => (key.startsWith('layer:') ? layerChainId(key.slice(6)) : nodeChainId(key));
 
 interface AudioNodeState {
   buffer: AudioBuffer;
   source: AudioBufferSourceNode | null;
   analyser: AnalyserNode;
+  /** The source plays into this; its effect chain takes it to the mix. */
+  inlet: GainNode;
+  /** Takes the track's chain out again. */
+  unplug: () => void;
   freqData: Float32Array;
   isPlaying: boolean;
   fileName: string;
@@ -35,6 +44,8 @@ interface AudioNodeState {
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGainNode: GainNode | null = null;
+  /** Every track and outside source sums here, before the master chain. */
+  private mix: GainNode | null = null;
   private recordBus: GainNode | null = null;
   private recordDest: MediaStreamAudioDestinationNode | null = null;
   private masterVolume = 0.7;
@@ -53,6 +64,12 @@ class AudioEngine {
       this.masterGainNode.gain.value = this.masterVolume;
       this.masterGainNode.connect(this.ctx.destination);
       this.recordBus = this.ctx.createGain();
+      // mix → master chain → post: heard through the master volume, and recorded at full level.
+      this.mix = this.ctx.createGain();
+      const post = this.ctx.createGain();
+      post.connect(this.masterGainNode);
+      post.connect(this.recordBus);
+      audioFxHost.attach(this.ctx, 'master', this.mix, post);
     }
     return this.ctx;
   }
@@ -92,11 +109,17 @@ class AudioEngine {
       try { existing.source.stop(); } catch (_) { /* already stopped */ }
       existing.source.disconnect();
     }
+    existing?.unplug();
+
+    const inlet = audioCtx.createGain();
+    const unplug = audioFxHost.attach(audioCtx, trackChainId(nodeId), inlet, this.mix!, analyser);
 
     this.nodes.set(nodeId, {
       buffer,
       source: null,
       analyser,
+      inlet,
+      unplug,
       freqData,
       isPlaying: false,
       fileName,
@@ -130,10 +153,8 @@ class AudioEngine {
     source.buffer = state.buffer;
     source.loop = true;
 
-    // Source → Analyser → MasterGain → destination
-    source.connect(state.analyser);
-    state.analyser.connect(this.masterGainNode!);
-    state.analyser.connect(this.recordBus!);
+    // Source → inlet → its chain → the mix (the analyser taps the chain: audioFx.ts)
+    source.connect(state.inlet);
 
     const dur = state.buffer.duration;
     const off = dur > 0 ? ((offset % dur) + dur) % dur : 0;
@@ -158,16 +179,14 @@ class AudioEngine {
    */
   connectOutside(node: AudioNode): () => void {
     this.getCtx();
-    node.connect(this.masterGainNode!);
-    node.connect(this.recordBus!);
+    node.connect(this.mix!);
     this.outside++;
     let done = false;
     return () => {
       if (done) return;
       done = true;
       this.outside = Math.max(0, this.outside - 1);
-      try { node.disconnect(this.masterGainNode!); } catch { /* already off */ }
-      try { node.disconnect(this.recordBus!); } catch { /* already off */ }
+      try { node.disconnect(this.mix!); } catch { /* already off */ }
     };
   }
 
@@ -204,6 +223,7 @@ class AudioEngine {
     this.stopAudio(nodeId);
     const state = this.nodes.get(nodeId);
     if (state) {
+      state.unplug();
       state.analyser.disconnect();
     }
     this.nodes.delete(nodeId);

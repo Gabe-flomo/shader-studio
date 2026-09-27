@@ -43,6 +43,8 @@ Built: knob lock, note ranges and the pad grid (Push, Launchpad, learned grids; 
 
 ## Audio
 
+Built: effect chains (filter, echo, reverb, distortion, compressor) on each sound and the master bus, mappable, in renders and website exports. See `audio-effects.md`. Still to do: the rest of this section.
+
 - **Built-in effects** on the app's audio (audio layers, video sound, Audio Input songs, the MIDI synth), as an ordered chain:
   - reverb (room, hall, plate);
   - echo (feedback, ping-pong, tempo sync);

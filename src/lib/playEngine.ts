@@ -27,6 +27,7 @@ import { oscClient, oscNumber, type OscMessage } from './oscClient';
 import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
 import { sgCondNew, sgCondStep, sgParseValueRef, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
 import { readFinishValue } from '../types/playFinish';
+import { AUDIO_FX_TARGET_PREFIX, readAudioFxValue } from '../types/playAudioFx';
 import { signalNames } from '../play/signalNames';
 import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../types/play';
 import { geoAnchor } from '../play/kit/geometry.js';
@@ -543,7 +544,9 @@ class PlayEngine implements InputSource {
       case 'prop': {
         const base = r.layerId.startsWith('finish:')
           ? readFinishValue(this.record.finish, `${r.layerId}::${r.key}`) ?? null
-          : this.layerBase(r.layerId, r.key);
+          : r.layerId.startsWith(AUDIO_FX_TARGET_PREFIX)
+            ? readAudioFxValue(this.record.audioFx, `${r.layerId}::${r.key}`) ?? null
+            : this.layerBase(r.layerId, r.key);
         return base === null ? null : this.layerValue(r.layerId, r.key, base);
       }
     }

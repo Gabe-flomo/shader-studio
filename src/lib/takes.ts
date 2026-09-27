@@ -40,6 +40,7 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { readControlValue } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
 import { readFinishValue } from '../types/playFinish';
+import { readAudioFxValue } from '../types/playAudioFx';
 import { layerTarget, parseActionTarget, parsePropTarget, TAKE_MAX_SECONDS, TAKES_MAX, type ActionKind, type PlayRecord, type PlayTake, type TakeTrack } from '../types/play';
 import { encodeKeys, takeEventsBetween, takeMouseAt, takePointerAt, takeSize, trackAt } from './takePlayback';
 import { AUDIO_GAP, AudioFrameBuffer, audioNeeds, audioSourceOf, takeAudioAt, takeAudioFor } from './takeAudio';
@@ -135,7 +136,7 @@ export class TakeCapture {
       if (lt) {
         // A layer property, or a Finish effect's number (its base from the record).
         const layer = play.layers.find(l => l.id === lt.layerId) as unknown as Record<string, number> | undefined;
-        const base = layer?.[lt.key] ?? readFinishValue(play.finish, c.target) ?? 0;
+        const base = layer?.[lt.key] ?? readFinishValue(play.finish, c.target) ?? readAudioFxValue(play.audioFx, c.target) ?? 0;
         this.push('control', c.id, c.label, time, playEngine.layerValue(lt.layerId, lt.key, base), { target: c.target });
         continue;
       }
