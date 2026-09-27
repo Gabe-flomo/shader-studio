@@ -68,8 +68,12 @@ const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
 // so it is opt-in: VITE_USE_POLLING=1 npm run dev
 const usePolling = process.env.VITE_USE_POLLING === '1';
 
+// The desktop app's version, stamped into profile ZIPs (Files page) so an install can say where one came from.
+const appVersion = (JSON.parse(readFileSync(fileURLToPath(new URL('./src-tauri/tauri.conf.json', import.meta.url)), 'utf8')) as { version?: string }).version ?? '0.0.0'
+
 export default defineConfig({
   plugins: [react(), mediapipeWasm(), threeSlimSource()],
+  define: { __APP_VERSION__: JSON.stringify(appVersion) },
   // The hand tracker's worker imports MediaPipe as an ES module.
   worker: { format: 'es' },
   base: isTauri ? '/' : '/shader-studio/',

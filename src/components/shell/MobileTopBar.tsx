@@ -78,11 +78,11 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
           />
         </span>
       ) : (
-        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'glsl' ? 'GLSL' : page === 'convert' ? 'Convert' : 'Builder'}</span>
+        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'files' ? 'Files' : page === 'glsl' ? 'GLSL' : page === 'convert' ? 'Convert' : 'Builder'}</span>
       )}
       <span style={{ flex: 1 }} />
       {/* The graph's own actions; Present has its own file actions in its header. */}
-      {page !== 'present' && <>
+      {page !== 'present' && page !== 'files' && <>
         <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 34, height: 40 }} />
         <IconButton icon="redo" label="Redo" tooltip={false} onClick={redo} style={{ width: 34, height: 40 }} />
         <span style={{ width: 1, height: 20, flexShrink: 0, background: tk.border.default, margin: '0 1px' }} />
@@ -122,7 +122,10 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
             { label: 'Convert GLSL to nodes', icon: 'nodes', hint: 'Paste a shader, preview the nodes it becomes, make it real', onSelect: () => onPageChange('convert') },
             { label: 'Export this graph', icon: 'export', onSelect: async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); } },
-            { label: 'Library…', icon: 'folder', hint: 'What’s saved, export and import, backup and recordings', onSelect: () => setLibrary(true) },
+            page === 'files'
+              ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
+              : { label: 'Files', icon: 'folder', hint: 'Everything saved: sizes, clean up, download and install', onSelect: () => onPageChange('files') },
+            { label: 'Library…', icon: 'folder', hint: 'Backup folder, export and import, recordings', onSelect: () => setLibrary(true) },
             { label: 'Export everything', icon: 'export', hint: 'Every graph, presentation, preset and setting as one ZIP', onSelect: () => { void exportEverything(); } },
             { label: 'Import a library', icon: 'import', hint: 'A library ZIP: adds to what you have', onSelect: () => { void importEverything(); } },
             'separator',
