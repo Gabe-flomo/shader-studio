@@ -60,7 +60,7 @@ describe('the App settings group', () => {
     const app = inv.byId.get(APP_SETTINGS_ID)!;
     expect(app.treeLeaf).toBe(true);
     expect(app.children!.map(c => c.label)).toEqual(['Appearance and keys', 'Studio', 'Play', 'Present', 'Camera, MIDI and OSC', 'Other']);
-    expect(countLeaves(app.children)).toBe(8);
+    expect(countLeaves(app.children)).toBe(7);
     // Readable names, never the raw key as the detail.
     const shortcuts = inv.byId.get('setting:shader-studio:shortcuts')!;
     expect(shortcuts).toMatchObject({ label: 'Keyboard shortcuts', detail: '2 custom shortcuts' });
