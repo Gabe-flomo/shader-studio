@@ -100,6 +100,20 @@ function glowGraph(o: { radius?: number; posX?: number; posY?: number; falloff?:
   ];
 }
 
+/** The glowing circle with an expression on its Radius that has two knobs, `wob` and `speed` (glsl/inputExpr). */
+function exprKnobGraph(): GraphNode[] {
+  const nodes = glowGraph({ radius: 0.28, falloff: 12, tint: [0.55, 0.45, 1] });
+  const circ = nodes.find(n => n.id === 'circ')!;
+  circ.params = {
+    ...circ.params,
+    __inExpr_radius: 'input * (1.0 + wob * sin(t * speed))',
+    __inKnobs_radius: [{ name: 'wob', min: 0, max: 0.5 }, { name: 'speed', min: 0, max: 20 }],
+    knob_radius_wob: 0.2,
+    knob_radius_speed: 6,
+  };
+  return nodes;
+}
+
 /** A slowly drifting FBM landscape: a picture with plenty of light and dark for layers to read. */
 function fbmGraph(o: { scale?: number; timeScale?: number; preset?: string } = {}): GraphNode[] {
   return [
@@ -240,6 +254,18 @@ const LIST: Ex[] = [
 • Drag Radius and watch Falloff follow (its slider is locked while driven).
 • Map an LFO onto Radius: now both move.
 • Chain a third control from Falloff.`,
+  })),
+  ex('playExprKnob', exprKnobGraph(), play({
+    controls: [ctl('wob', 'circ::knob_radius_wob', 'Wobble (knob)', 0, 0.5), ctl('speed', 'circ::knob_radius_speed', 'Speed (knob)', 0, 20)],
+    mappings: [map('swell', 'wob', S.lfo('sine', 0.12), 0, 0.35, { smoothMs: 60 })],
+    notes: `**What it shows.** A knob is a slider inside an input expression. Circle SDF's Radius has the expression **input * (1.0 + wob * sin(t * speed))**, and wob and speed are its knobs: sliders under the expression on the card, and Play controls here.
+
+**How it's built.** In the Studio, the ƒ chip on Radius opens the expression. Typing a new name offers "Make it a knob"; "Add a knob" puts one in at the cursor. On the Play page, Wobble has a slow LFO mapped onto it, so the wobble swells and fades; Speed is free.
+
+**Try this.**
+• Drag Speed: the wobble quickens with no recompile (a knob is a uniform).
+• Map Mouse X onto Speed, or a MIDI knob onto Wobble.
+• In the Studio, right-click a knob's slider for Play, or ◆ to keyframe it.`,
   })),
   ex('playColour', glowGraph({ tint: [0.3, 0.5, 1] }), play({
     controls: [colourCtl('tint', 'glow::tint', 'Tint')],
