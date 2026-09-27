@@ -1,19 +1,20 @@
 /**
  * LibraryPanel — everything Playfield keeps in this browser, at a glance:
  * how many graphs, versions, presets and published nodes, how much room they
- * take against the browser's limit, export/import of all of it, the backup
- * folder that keeps a copy outside the browser (utils/backupFolder.ts), and
- * where recordings are saved (utils/recordingsFolder.ts).
+ * take against the browser's limit, export/import of all of it, the workspace
+ * folder that holds it all as files (workspace/workspace.ts), and where
+ * recordings are saved (utils/recordingsFolder.ts).
  */
 import { useEffect, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
-import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
 import { Menu } from '../ui/Menu';
 import { exportEverything, exportSet, importEverything } from '../../utils/libraryActions';
-import { backupNow, backupStatus, chooseBackupFolder, onBackupStatus, reconnectBackupFolder, resetBackupFolder, restoreFromFolder, stopBrowserBackups } from '../../utils/backupFolder';
+import { onWorkspaceStatus, useWorkspaceStatus } from '../../workspace/workspace';
+import { WorkspaceView } from '../workspace/WorkspacePanel';
+import { summary } from '../workspace/workspaceUi';
 import { countInSet, DOWNLOAD_SETS, formatSize, LIBRARY_REFRESH_EVENTS, libraryStats, STORAGE_LIMIT, takeSnapshot, type LibraryKind, type LibraryStats } from '../../utils/library';
-import { whenSaved } from '../../store/graphVersions';
 import { toast } from '../ui/toastStore';
 import { RecordingsSetting } from './RecordingsSetting';
 import { openBackgrounds, openCapture } from '../backgrounds/backgroundsUi';
@@ -33,7 +34,7 @@ function useLibraryStats(): LibraryStats {
   useEffect(() => {
     const refresh = () => setS(libraryStats(takeSnapshot()));
     for (const ev of LIBRARY_REFRESH_EVENTS) window.addEventListener(ev, refresh);
-    const off = onBackupStatus(refresh);
+    const off = onWorkspaceStatus(refresh);
     const id = window.setInterval(refresh, 5000);
     return () => { for (const ev of LIBRARY_REFRESH_EVENTS) window.removeEventListener(ev, refresh); off(); window.clearInterval(id); };
   }, []);
@@ -44,14 +45,12 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
   const tk = useTokens();
   const dlRef = useRef<HTMLSpanElement>(null);
   const [dlMenu, setDlMenu] = useState<{ x: number; y: number } | null>(null);
-  const [st, setSt] = useState(backupStatus);
   const stats = useLibraryStats();
   const { images } = useBackgroundImages();
   const imageCount = images?.length ?? 0;
   const imageBytes = (images ?? []).reduce((n, m) => n + m.bytes, 0);
   const [showAll, setShowAll] = useState(false);
   const [, tick] = useState(0);
-  useEffect(() => onBackupStatus(setSt), []);
   useEffect(() => { const id = window.setInterval(() => tick(n => n + 1), 15000); return () => window.clearInterval(id); }, []);
   const label = { color: tk.text.secondary, font: `650 11px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' as const };
   const note = { color: tk.text.faint, font: `12px/1.5 ${fontFamily.ui}` };
@@ -126,38 +125,8 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
         <Button size="sm" icon="camera" onClick={() => { void openCapture(); }} title="Render a saved graph or an example at a moment you choose and keep it as an image background">Capture from a graph…</Button>
       </div>
 
-      <span style={{ ...label, marginTop: 8 }}>Backup folder</span>
-      {st.support === 'none' ? (
-        <span style={note}>This browser can’t keep a folder up to date (Safari, Firefox and phones can’t write to folders). Use Export everything now and then. On a computer, Chrome, Edge or the desktop app keep a backup folder for you.</span>
-      ) : !st.folder ? (
-        <>
-          <span style={note}>Keep a copy of everything in a folder on this computer, updated a few seconds after each save. If this browser’s data is ever cleared, restore from it.</span>
-          <div style={row}><Button size="sm" variant="primary" icon="folder" onClick={run(chooseBackupFolder)}>Choose a backup folder…</Button></div>
-        </>
-      ) : st.needsPermission ? (
-        <>
-          <span style={note}>The browser asks again on each visit before Playfield can write to “{st.folder}”.</span>
-          <div style={row}>
-            <Button size="sm" variant="primary" icon="folder" onClick={run(reconnectBackupFolder)}>Allow “{st.folder}” again</Button>
-            <Button size="sm" variant="ghost" onClick={run(stopBrowserBackups)}>Stop backing up</Button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div style={{ padding: '8px 10px', borderRadius: radius.md, background: alpha(tk.status.success, 0.1), display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ color: tk.text.primary, font: `600 12px ${fontFamily.ui}`, wordBreak: 'break-all' }}>{st.folder}</span>
-            <span style={note}>{st.lastBackup ? `Backed up ${whenSaved(st.lastBackup)}` : 'Not backed up yet'} · library.json, a daily copy in history/, and everything as files in folders</span>
-          </div>
-          <div style={row}>
-            <Button size="sm" icon="save" onClick={run(() => backupNow(true))}>Back up now</Button>
-            <Button size="sm" icon="import" onClick={run(restoreFromFolder)} title="Add what's in the folder's library.json back into Playfield (never overwrites)">Restore from it</Button>
-            <Button size="sm" variant="ghost" icon="folder" onClick={run(chooseBackupFolder)}>Change…</Button>
-            <Button size="sm" variant="ghost" icon="reset" onClick={run(resetBackupFolder)} title={st.support === 'desktop' ? 'Back to Documents/Shader Studio' : 'Forget this folder'}>{st.support === 'desktop' ? 'Default' : 'Stop'}</Button>
-          </div>
-        </>
-      )}
-      {st.canRestore && <span style={{ ...note, color: tk.status.warningText }}>Playfield’s storage is empty but the folder has your library: Restore from it.</span>}
-      {st.error && <span style={{ ...note, color: tk.status.danger }}>Couldn’t write the backup: {st.error}</span>}
+      <span style={{ ...label, marginTop: 8 }}>Workspace folder</span>
+      <WorkspaceView inSettings />
 
       <span style={{ ...label, marginTop: 8 }}>Save recordings to</span>
       <RecordingsSetting />
@@ -168,29 +137,24 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
 const OPEN_KEY = 'shader-studio:settings:libraryOpen';
 
 /**
- * The Library in the Graphs sidebar: one line saying where the backup is (or
- * that there isn't one), opening into the whole panel.
+ * The Library in the Graphs sidebar: one line saying how the workspace folder
+ * is doing (or that there isn't one), opening into the whole panel.
  */
 export function LibraryCard() {
   const tk = useTokens();
   const [open, setOpen] = useState(() => { try { return localStorage.getItem(OPEN_KEY) === '1'; } catch { return false; } });
-  const [st, setSt] = useState(backupStatus);
-  useEffect(() => onBackupStatus(setSt), []);
+  const st = useWorkspaceStatus();
   const toggle = () => setOpen(o => { try { localStorage.setItem(OPEN_KEY, o ? '0' : '1'); } catch { /* preference only */ } return !o; });
-  const ok = st.folder && !st.needsPermission && !st.error;
+  const ws = summary(st);
   const stats = useLibraryStats();
   const pres = stats.kinds.presentations.count;
   const counts = `${stats.kinds.graphs.count} graph${stats.kinds.graphs.count === 1 ? '' : 's'}${pres ? ` · ${pres} presentation${pres === 1 ? '' : 's'}` : ''} · ${formatSize(stats.total)}`;
-  const line = `${counts} · ${st.support === 'none' ? 'no backup folder here'
-    : !st.folder ? 'no backup folder yet'
-    : st.needsPermission ? 'allow the backup folder again'
-    : st.error ? 'backup failed'
-    : `backed up${st.lastBackup ? ` ${whenSaved(st.lastBackup)}` : ''}`}`;
+  const line = `${counts} · ${st.state === 'off' ? (st.support === 'none' ? 'kept in this browser' : 'no workspace folder yet') : ws.line.toLowerCase()}`;
   return (
     <div style={{ marginBottom: 8, borderRadius: radius.md, background: tk.bg.field }}>
       <button type="button" onClick={toggle} aria-expanded={open} title={st.folder ?? undefined}
         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', border: 0, background: 'none', cursor: 'pointer', color: tk.text.primary, font: `600 12px ${fontFamily.ui}`, textAlign: 'left' }}>
-        <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: ok ? tk.status.success : st.error || st.canRestore ? tk.status.danger : st.needsPermission ? tk.status.warning : tk.text.disabled }} />
+        <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: ws.tone === 'ok' ? tk.status.success : ws.tone === 'bad' ? tk.status.danger : ws.tone === 'warn' ? tk.status.warning : ws.tone === 'busy' ? tk.accent.base : tk.text.disabled }} />
         <span>Library</span>
         <span style={{ flex: 1, minWidth: 0, color: tk.text.faint, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line}</span>
         <span style={{ color: tk.text.faint }}>{open ? '▾' : '▸'}</span>
