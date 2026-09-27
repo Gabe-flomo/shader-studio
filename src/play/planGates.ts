@@ -59,6 +59,7 @@ export function playableForPlan(record: PlayRecord, plan: Plan | null): PlayReco
     groups: undefined,
     actions: undefined,
     midiFile: undefined,
+    padGrid: canOn(plan, 'play.sources') ? record.padGrid : undefined,
     finish: canOn(plan, 'play.finish') ? record.finish : undefined,
     display: record.display ? { picture: true, backdrop: record.display.backdrop } : undefined,
   };

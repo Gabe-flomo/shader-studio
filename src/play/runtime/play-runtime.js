@@ -318,7 +318,9 @@ void main() {
   const shared = {
     keysHeld: new Set(),
     presses: new Map(), held: new Map(), velocities: new Map(),
-    midi: Array.from({ length: 17 }, () => ({ note: 60, vel: 0, held: new Set(), bend: 0, cc: new Float32Array(128), seenNote: false, seenBend: false, seenCc: new Uint8Array(128) })),
+    midi: Array.from({ length: 17 }, () => ({ note: 60, vel: 0, held: new Set(), bend: 0, cc: new Float32Array(128), seenNote: false, seenBend: false, seenCc: new Uint8Array(128), noteSeq: new Float64Array(128), noteVel: new Uint8Array(128) })),
+    // Knob locks: every CC move under its device and channel (and "any"), kit/midi.js kmLockRecord.
+    midiLocks: new Map(), midiSeq: 0,
     tilt: { got: false, alpha: 0, beta: 0, gamma: 0 },
     osc: new Map(), oscHeld: new Set(), oscWs: null, oscStatus: 'off',
     pageX: 0, pageY: 0,
@@ -329,11 +331,14 @@ void main() {
   };
   function press(key, vel) { shared.presses.set(key, (shared.presses.get(key) || 0) + 1); shared.held.set(key, (shared.held.get(key) || 0) + 1); shared.velocities.set(key, vel == null ? 1 : vel); }
   function release(key) { const n = (shared.held.get(key) || 0) - 1; if (n > 0) shared.held.set(key, n); else shared.held.delete(key); }
-  function onMidi(data) {
+  function onMidi(data, device) {
     const type = data[0] & 0xf0, chn = (data[0] & 0x0f) + 1;
     const noteOn = type === 0x90 && data[2] > 0, noteOff = type === 0x80 || (type === 0x90 && data[2] === 0);
+    const seq = ++shared.midiSeq, KM = typeof SSKit !== 'undefined' && SSKit.midi ? SSKit.midi : null;
+    if (type === 0xb0 && KM) KM.lockRecord(shared.midiLocks, device || '', chn, data[1] & 127, data[2], seq);
+    if (type >= 0x80 && type <= 0xe0) for (const inst of shared.instances) if (inst.pad) inst.pad(data[0], data[1] || 0, data[2] || 0, device || '');
     for (const ch of [shared.midi[0], shared.midi[chn]]) {
-      if (noteOn) { ch.note = data[1]; ch.vel = data[2]; ch.held.add(data[1]); ch.seenNote = true; }
+      if (noteOn) { ch.note = data[1]; ch.vel = data[2]; ch.held.add(data[1]); ch.seenNote = true; ch.noteSeq[data[1] & 127] = seq; ch.noteVel[data[1] & 127] = data[2]; }
       else if (noteOff) ch.held.delete(data[1]);
       else if (type === 0xb0) { ch.cc[data[1] & 127] = data[2]; ch.seenCc[data[1] & 127] = 1; }
       else if (type === 0xe0) { ch.bend = Math.max(-1, Math.min(1, (((data[2] << 7) | data[1]) - 8192) / 8192)); ch.seenBend = true; }
@@ -1038,6 +1043,17 @@ void main() {
       gl.disable(gl.BLEND);
       gl.disableVertexAttribArray(1);
     };
+    // The pad grid (play.padGrid, kit/midi.js): pads from the shared MIDI listener, applied on this player's clock.
+    const KM = typeof SSKit !== 'undefined' && SSKit.midi ? SSKit.midi : null;
+    const padCfg = play.padGrid && KM ? play.padGrid : null;
+    const padG = padCfg ? KM.gridFit(null, padCfg) : null;
+    // The Pad Grid node's texture (one texel per cell), filled before each frame.
+    const padTex = !bgOnly && padG && /\bu_padGrid\b/.test(B.fragmentShader) ? gl.createTexture() : null;
+    const padBytes = padTex ? new Uint8Array(padCfg.cols * padCfg.rows * 4) : null;
+    if (padTex) {
+      gl.bindTexture(gl.TEXTURE_2D, padTex);
+      for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    }
     // The graph's Layers node: the layers' colour and distance field, uploaded after each frame's layers are drawn.
     const usesLayersNode = !bgOnly && /\bu_layers(Field)?\b/.test(B.fragmentShader);
     let layersTap = null, layersColourTex = null, layersFieldTex = null, layersFieldSize = [0, 0];
@@ -1108,6 +1124,8 @@ void main() {
     const actions = (play.actions || []).filter(a => a.enabled);
     const allTriggers = play.mappings.filter(m => m.enabled && m.source.kind === 'trigger').map(m => m.source.trigger).concat(actions.map(a => a.trigger));
     const gamepad = i => (navigator.getGamepads ? navigator.getGamepads()[i] : null);
+    const padQueue = [];
+    function tickPads() { if (!padG) return; for (const m of padQueue.splice(0)) KM.gridMessage(padG, padCfg, m[0], m[1], m[2], m[3], time); }
     const keysUsed = new Set();
     for (const m of play.mappings) {
       if (!m.enabled) continue;
@@ -1124,7 +1142,13 @@ void main() {
         case 'clock': return lfo(s.shape, time * (s.bpm / 60 / Math.max(0.0625, s.beats)));
         case 'tilt': { const t = shared.tilt; if (!t.got) return null; if (s.axis === 'alpha') return ((t.alpha % 360) + 360) % 360 / 360; const v = Math.max(-90, Math.min(90, s.axis === 'beta' ? t.beta : t.gamma)); return (v + 90) / 180; }
         case 'gamepad': { const p = gamepad(s.pad); if (!p) return null; if (s.control === 'axis') { const a = p.axes[s.index]; return a === undefined ? null : Math.max(0, Math.min(1, (a + 1) / 2)); } const b = p.buttons[s.index]; return b ? b.value : null; }
-        case 'midi': { const ch = shared.midi[Math.max(0, Math.min(16, s.channel))]; switch (s.signal) { case 'note': return ch.seenNote ? ch.note / 127 : null; case 'velocity': return ch.seenNote ? ch.vel / 127 : null; case 'gate': return ch.seenNote ? (ch.held.size ? 1 : 0) : null; case 'bend': return ch.seenBend ? (ch.bend + 1) / 2 : null; case 'cc': { const n = (s.cc || 1) & 127; return ch.seenCc[n] ? ch.cc[n] / 127 : null; } } return null; }
+        case 'pad': return padG ? KM.gridRead(padG, padCfg, s.read, s.col, s.row, time) : null;
+        case 'midi': {
+          // Locked knobs (whichever moved last) and note ranges, as the app reads them (kit/midi.js).
+          if (KM && s.signal === 'cc' && s.locks && s.locks.length) { const v = KM.lockRead(shared.midiLocks, s.locks); return v === null ? null : v / 127; }
+          const chr = shared.midi[Math.max(0, Math.min(16, s.channel))];
+          if (KM && s.range && (s.signal === 'note' || s.signal === 'velocity' || s.signal === 'gate')) { const r = KM.rangeRead(chr.noteSeq, chr.noteVel, chr.held, s.range); if (r.note < 0) return null; return s.signal === 'note' ? KM.noteUnit(s.range, r.note) : s.signal === 'velocity' ? r.vel / 127 : r.gate ? 1 : 0; }
+          const ch = chr; switch (s.signal) { case 'note': return ch.seenNote ? ch.note / 127 : null; case 'velocity': return ch.seenNote ? ch.vel / 127 : null; case 'gate': return ch.seenNote ? (ch.held.size ? 1 : 0) : null; case 'bend': return ch.seenBend ? (ch.bend + 1) / 2 : null; case 'cc': { const n = (s.cc || 1) & 127; return ch.seenCc[n] ? ch.cc[n] / 127 : null; } } return null; }
         case 'audio': { const a = audioById.get(s.nodeId); if (!a || !a.an) return null; const v = a.levels[s.band]; return v === undefined ? null : v; }
         case 'live': { if (shared.live.status !== 'on') return null; updateLive(); return Math.max(0, Math.min(1, shared.live.v[s.band] * s.gain)); }
         case 'reader': { updateReaders(); return readers.ok && readers.levels.has(s.readerId) ? readers.levels.get(s.readerId) : null; }
@@ -1285,6 +1309,7 @@ void main() {
       }
     }
     function tickMappings(dt) {
+      tickPads();
       tickHands();
       tickAudioTriggers();
       tickZoneTriggers();
@@ -1426,7 +1451,7 @@ void main() {
 
     // Panel (player only)
     const readouts = new Map();
-    const usesMidi = play.mappings.some(m => m.source.kind === 'midi' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'));
+    const usesMidi = !!play.padGrid || play.mappings.some(m => m.source.kind === 'midi' || m.source.kind === 'pad' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'));
     const usesOsc = play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc'));
     const usesTilt = play.mappings.some(m => m.source.kind === 'tilt');
     // Readers on the live input (or on a node whose song stayed out of the page, which listens to the input instead) need it too.
@@ -1460,7 +1485,7 @@ void main() {
       }
       if (usesMidi && navigator.requestMIDIAccess) {
         const b = el('button', 'ssp-btn', 'Enable MIDI');
-        b.onclick = () => navigator.requestMIDIAccess().then(a => { a.inputs.forEach(i => { i.onmidimessage = e => onMidi(e.data); }); b.textContent = 'MIDI on'; b.disabled = true; }, () => { b.textContent = 'MIDI refused'; });
+        b.onclick = () => navigator.requestMIDIAccess().then(a => { a.inputs.forEach(i => { i.onmidimessage = e => onMidi(e.data, i.name || i.id || ''); }); b.textContent = 'MIDI on'; b.disabled = true; }, () => { b.textContent = 'MIDI refused'; });
         tools.append(b);
       }
       if (usesOsc) {
@@ -1609,7 +1634,7 @@ void main() {
     if (io) io.observe(root);
     const reduced = stillForReducedMotion && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    const inst = { mode, claimsKey: code => keysUsed.has(code) };
+    const inst = { mode, claimsKey: code => keysUsed.has(code), pad: padG ? (st, d1, d2, dev) => { padQueue.push([st, d1, d2, dev]); } : null };
     shared.instances.add(inst);
 
     let raf = 0, alive = true;
@@ -1636,6 +1661,15 @@ void main() {
       setUniform('u_resolution', [W, H]);
       setUniform('u_mouse', [mouse.x * W, mouse.y * H]);
       for (const k in uniformValues) setUniform(k, uniformValues[k]);
+      if (padTex) {
+        // The Pad Grid node: the cells' levels (kit/midi.js kmGridFill), the grid's size and the last pad.
+        KM.gridFill(padG, padCfg, time, padBytes);
+        gl.bindTexture(gl.TEXTURE_2D, padTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, padCfg.cols, padCfg.rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, padBytes);
+        bindSampler('u_padGrid', padTex);
+        setUniform('u_padGridSize', [padCfg.cols, padCfg.rows]);
+        setUniform('u_padLast', [padG.last.cx, padG.last.cy, padG.last.vel, padG.last.pressure]);
+      }
       bindSampler('u_fontTexture', fontTex);
       if (usesLayersNode) {
         bindSampler('u_layers', layersColourTex); bindSampler('u_layersField', layersFieldTex);
@@ -1933,7 +1967,7 @@ void main() {
   // For a host drawing its own panel: what the panel's Enable MIDI and Listen buttons do, for every mount on the page.
   function enableMidi() {
     if (!navigator.requestMIDIAccess) return Promise.resolve(false);
-    return navigator.requestMIDIAccess().then(a => { a.inputs.forEach(i => { i.onmidimessage = e => onMidi(e.data); }); return true; }, () => false);
+    return navigator.requestMIDIAccess().then(a => { a.inputs.forEach(i => { i.onmidimessage = e => onMidi(e.data, i.name || i.id || ''); }); return true; }, () => false);
   }
   // The camera, once for the page: every mount with a camera layer reads it. Browsers ask first, after a click.
   function enableCamera() {

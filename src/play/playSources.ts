@@ -10,11 +10,13 @@ import { datasetStore } from '../data/datasetStore';
 import { DATA_ROW_COLUMN } from '../types/play';
 import { audioReaderBank } from '../lib/audioReaderBank';
 import { readerLabel } from './audioReaders';
+import type { PadGridRead } from '../types/playMidi';
+import { kmNoteName } from './kit/midi.js';
 
 export type HandSourceType = `hand:${HandRead}`;
 /** `reader:<id>`: one audio reader. */
 export type ReaderSourceType = `reader:${string}`;
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'data' | HandSourceType | ReaderSourceType;
+export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | HandSourceType | ReaderSourceType;
 /** Not a source: the picker's entry that opens the Audio readers panel. */
 export const OPEN_READERS = 'readers:open';
 
@@ -59,6 +61,7 @@ export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[
   { value: 'midi:velocity', label: 'MIDI velocity' },
   { value: 'midi:gate', label: 'MIDI gate' },
   { value: 'midi:bend', label: 'Pitch bend' },
+  { value: 'pad', label: 'Pad grid (Push, Launchpad)' },
   { value: 'hand:point', label: 'Fingertip or joint (X, Y, Z)', group: 'Hands' },
   { value: 'hand:pinch', label: 'Pinch (thumb to a finger)', group: 'Hands' },
   { value: 'hand:open', label: 'Openness (fist to open hand)', group: 'Hands' },
@@ -166,11 +169,14 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
   if (t.startsWith('hand:')) return handSource(t.slice(5) as HandRead, prev);
   if (t.startsWith('reader:')) return { kind: 'reader', readerId: t.slice(7) };
   const channel = prev.kind === 'midi' ? prev.channel : 0;
+  // A note range carries over between note, velocity and gate; locks stay with a CC.
+  const range = prev.kind === 'midi' && prev.range ? { range: prev.range } : {};
   switch (t) {
-    case 'midi:cc': return { kind: 'midi', signal: 'cc', channel, cc: prev.kind === 'midi' && prev.cc !== undefined ? prev.cc : 1 };
-    case 'midi:note': return { kind: 'midi', signal: 'note', channel };
-    case 'midi:velocity': return { kind: 'midi', signal: 'velocity', channel };
-    case 'midi:gate': return { kind: 'midi', signal: 'gate', channel };
+    case 'midi:cc': return { kind: 'midi', signal: 'cc', channel, cc: prev.kind === 'midi' && prev.cc !== undefined ? prev.cc : 1, ...(prev.kind === 'midi' && prev.locks ? { locks: prev.locks } : {}) };
+    case 'midi:note': return { kind: 'midi', signal: 'note', channel, ...range };
+    case 'midi:velocity': return { kind: 'midi', signal: 'velocity', channel, ...range };
+    case 'midi:gate': return { kind: 'midi', signal: 'gate', channel, ...range };
+    case 'pad': return prev.kind === 'pad' ? prev : { kind: 'pad', read: 'x', col: 0, row: 0 };
     case 'midi:bend': return { kind: 'midi', signal: 'bend', channel };
     case 'mouse:x': return { kind: 'mouse', axis: 'x' };
     case 'mouse:y': return { kind: 'mouse', axis: 'y' };
@@ -212,14 +218,23 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'tilt') return `Tilt ${s.axis === 'beta' ? 'front/back' : s.axis === 'gamma' ? 'left/right' : 'compass'}`;
   if (s.kind === 'gamepad') return `Pad ${s.pad + 1} ${s.control} ${s.index}`;
   if (s.kind === 'hand') return handSourceLabel(s);
+  if (s.kind === 'pad') return padSourceLabel(s);
   const ch = s.channel === 0 ? '' : ` · ch. ${s.channel}`;
+  const range = s.range ? ` ${kmNoteName(s.range[0])}–${kmNoteName(s.range[1])}` : '';
   switch (s.signal) {
-    case 'cc': return `CC ${s.cc ?? 1}${ch}`;
-    case 'note': return `Note${ch}`;
-    case 'velocity': return `Velocity${ch}`;
-    case 'gate': return `Gate${ch}`;
+    case 'cc': return s.locks?.length ? `CC ${s.locks.map(l => l.cc).join(', ')} · locked` : `CC ${s.cc ?? 1}${ch}`;
+    case 'note': return `Note${range}${ch}`;
+    case 'velocity': return `Velocity${range}${ch}`;
+    case 'gate': return `Gate${range}${ch}`;
     case 'bend': return `Bend${ch}`;
   }
+}
+
+const PAD_LABELS: Record<PadGridRead, string> = { x: 'Pad X', y: 'Pad Y', velocity: 'Pad velocity', pressure: 'Pad pressure', gate: 'Pad gate', cell: 'Pad cell' };
+/** "Pad X", "Pad cell 3, 5". */
+export function padSourceLabel(s: Extract<PlaySource, { kind: 'pad' }>): string {
+  if (s.read === 'cell') return `Pad cell ${s.col + 1}, ${s.row + 1}`;
+  return PAD_LABELS[s.read];
 }
 
 /** "Data · City climate · current · temp_c" (the row position reads "row"). */

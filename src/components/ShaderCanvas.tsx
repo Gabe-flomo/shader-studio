@@ -22,6 +22,7 @@ import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { layersUniforms, setLayersTap } from '../play/layersTexture';
+import { padGridUniforms } from '../lib/padGrid';
 import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
@@ -565,7 +566,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
       u_fontTexture: { value: FONT_TEXTURE },
       // The graph's Layers node (play/layersTexture.ts); shared objects, refreshed in place each frame.
-      ...layersUniforms,
+      ...layersUniforms, ...padGridUniforms,
     };
     for (const [name, value] of Object.entries(pu))  initialUniforms[name] = { value };
     for (const name of Object.keys(tu))              initialUniforms[name] = { value: null };
@@ -722,7 +723,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         const uniforms: Record<string, THREE.IUniform> = {
           u_time: { value: 0 }, u_resolution: shared.u_resolution, u_mouse: shared.u_mouse, u_prevFrame: { value: null },
           ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
-          u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms,
+          u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms, ...padGridUniforms,
         };
         for (const [name, value] of Object.entries(c.uniforms)) uniforms[name] = { value: Array.isArray(value) ? [...value] : value };
         const m = new THREE.ShaderMaterial({ vertexShader: c.vertexShader, fragmentShader: c.fragmentShader, uniforms });
@@ -1885,7 +1886,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const buildUniforms = (prev: Record<string, THREE.IUniform>) => buildPreviewUniforms(
       useNodeGraphStore.getState(), prev,
       { width: renderer.domElement.width, height: renderer.domElement.height },
-      { u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms },
+      { u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms, ...padGridUniforms },
     );
     /** Compile a material off to the side; null (and the errors reported) when it doesn't link. */
     const compileFresh = async (vsSrc: string, fsSrc: string, uniforms: Record<string, THREE.IUniform>): Promise<THREE.ShaderMaterial | null> => {

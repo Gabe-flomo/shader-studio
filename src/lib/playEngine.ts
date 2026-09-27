@@ -20,6 +20,8 @@
 
 import { inputBus, paramChannelKey, type InputSource, type InputWriter } from './inputBus';
 import { midiEngine, type MidiEvent } from './midiEngine';
+import { padGrid } from './padGrid';
+import { kmNoteUnit } from '../play/kit/midi.js';
 import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
 import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityGate, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
@@ -297,6 +299,7 @@ class PlayEngine implements InputSource {
     this.record = record;
     // The record's MIDI file plays through the MIDI engine, like a controller would.
     midiEngine.setFile(record.midiFile);
+    padGrid.setConfig(record.padGrid);
     this.controls.clear();
     for (const c of record.controls) this.controls.set(c.id, c);
     this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse');
@@ -607,6 +610,14 @@ class PlayEngine implements InputSource {
   readSource(source: PlaySource): number | null {
     switch (source.kind) {
       case 'midi': {
+        // Locked knobs: whichever locked control moved last, on any channel setting.
+        if (source.signal === 'cc' && source.locks?.length) { const v = midiEngine.readLocked(source.locks); return v === null ? null : v / 127; }
+        // A note range: only notes inside it count, and a note reads 0..1 across it.
+        if (source.range && (source.signal === 'note' || source.signal === 'velocity' || source.signal === 'gate')) {
+          const r = midiEngine.readRange(source.channel, source.range);
+          if (r.note < 0) return null;
+          return source.signal === 'note' ? kmNoteUnit(source.range, r.note) : source.signal === 'velocity' ? r.vel / 127 : r.gate ? 1 : 0;
+        }
         const ch = midiEngine.channelState(source.channel);
         switch (source.signal) {
           case 'note': return ch.seenNote ? ch.lastNote / 127 : null;
@@ -617,6 +628,8 @@ class PlayEngine implements InputSource {
         }
         return null;
       }
+      case 'pad':
+        return padGrid.read(source.read, source.col, source.row);
       case 'mouse':
         return source.axis === 'x' ? this.mouseX : source.axis === 'y' ? this.mouseY : this.mouseDown;
       case 'key':

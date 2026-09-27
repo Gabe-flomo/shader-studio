@@ -22,6 +22,7 @@ import {
   defaultLayer, handAnchor, type ActionKind, type AudioReader, type PlayAudioReaders, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
 } from '../types/play';
+import { DEFAULT_PAD_GRID, type PlayPadGrid } from '../types/playMidi';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 import type { GroupColour, LayerGroup } from '../types/layerGroups';
 
@@ -106,7 +107,7 @@ const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string
 /** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
 const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
-function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; notes: string }): PlayRecord {
+function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; padGrid?: PlayPadGrid; notes: string }): PlayRecord {
   const out: PlayRecord = { version: 1, controls: p.controls ?? [], mappings: p.mappings ?? [], layers: p.layers ?? [] };
   if (p.groups?.length) out.groups = p.groups;
   if (p.actions?.length) out.actions = p.actions;
@@ -115,6 +116,7 @@ function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayC
   if (p.takes?.length) out.takes = p.takes;
   if (p.audioReaders) out.audioReaders = p.audioReaders;
   if (p.finish) out.finish = p.finish;
+  if (p.padGrid) out.padGrid = p.padGrid;
   return out;
 }
 /** A Finish effect at its defaults (every number filled in, as the parser keeps it), with `over` on top. Its id is its kind. */
@@ -161,6 +163,29 @@ function glowGraph(o: { radius?: number; posX?: number; posY?: number; falloff?:
     glowNode('circ', 'distance', o),
     ...toneOut('glow', 'tinted', 1320),
   ];
+}
+
+/**
+ * UV → Pad Grid → Circle SDF (one per cell, on the cell's Local position, its
+ * radius growing with the cell's Level) → SDF Glow → Tone Map → Output.
+ */
+function padGridGraph(): GraphNode[] {
+  const nodes = glowGraph({ falloff: 26, tint: [0.35, 0.75, 1] });
+  const circ = nodes.find(n => n.id === 'circ')!;
+  circ.inputs.position.connection = { nodeId: 'pads', outputKey: 'local' };
+  circ.inputs.radius.connection = { nodeId: 'pads', outputKey: 'level' };
+  circ.params = { ...circ.params, radius: 0, __inExpr_radius: 'max(0.012, input * 0.1)' };
+  const pads: GraphNode = {
+    id: 'pads', type: 'padGrid', position: { x: 240, y: 200 },
+    inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } }, cell: { type: 'vec2', label: 'Cell' } },
+    outputs: {
+      level: { type: 'float', label: 'Level' }, velocity: { type: 'float', label: 'Velocity' }, pressure: { type: 'float', label: 'Pressure' }, held: { type: 'float', label: 'Held' },
+      cellID: { type: 'vec2', label: 'Cell ID' }, local: { type: 'vec2', label: 'Local' }, cellSize: { type: 'vec2', label: 'Cell Size' },
+      lastPad: { type: 'vec2', label: 'Last Pad' }, lastVelocity: { type: 'float', label: 'Last Velocity' },
+    },
+    params: { __comment: 'Each cell of the Play page\'s pad grid: Level grows the circle drawn in that cell.' },
+  };
+  return [nodes[0], pads, ...nodes.slice(1)];
 }
 
 /** The glowing circle with an expression on its Radius that has two knobs, `wob` and `speed` (glsl/inputExpr). */
@@ -482,6 +507,19 @@ A little smoothing turns the jumps into glides.
 • Drag a dot sideways to retune it, up or down to change how loud reads as full. Watch its column fill.
 • Click the spectrum to add a reader, then pick it as a mapping's source (**Reader · name**).
 • On a mapping, press Learn (✦) and play a sound: it picks the band or reader that moved most.`,
+  })),
+  ex('playPadGrid', padGridGraph(), play({
+    padGrid: { ...DEFAULT_PAD_GRID, mode: 'hold', release: 0.6 },
+    controls: [ctl('tight', 'glow::brightness', 'Glow tightness (pad velocity)', 8, 40)],
+    mappings: [map('vel', 'tight', { kind: 'pad', read: 'velocity', col: 0, row: 0 }, 34, 16, { smoothMs: 60 })],
+    notes: `**What it shows.** A grid controller as a grid shader: hitting a pad lights and grows the matching cell. Without a controller, click the cells in the **Pad grid** card (under the mappings).
+
+**How it's built.** The Play page's **Pad grid** reads a Push (notes 36–99) or Launchpad's pads as columns and rows, lines them up with the shader's 8 × 8 cells, and keeps a level per cell (Hold: lit while held, then fading over Release). The graph's **Pad Grid** node reads that level for the cell under each pixel and its Local position, so one Circle SDF draws every cell. A **Pad grid** mapping source reads the last hit's velocity.
+
+**Try this.**
+• Plug in a Push 2/3 (User mode) or a Launchpad (programmer mode) and pick it under Pads, or press **Learn the grid** and tap the bottom-left, then the top-right pad.
+• Switch A hit to **Latch** to toggle cells, or **Decay** for flashes.
+• Set Cells to 16 × 16 and Scale to 2: each pad lights a 2 × 2 block.`,
   })),
   ex('playMidi', glowGraph(), play({
     controls: [ctl('radius', 'circ::radius', 'Radius (CC 1, mod wheel)', 0.05, 0.7), ctl('x', 'circ::posX', 'X (note)', -1, 1), ctl('flash', 'glow::brightness', 'Flash (note on)', 2, 20)],

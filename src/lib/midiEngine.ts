@@ -19,21 +19,38 @@
 import { inputBus, type InputSource, type InputWriter } from './inputBus';
 import { midiCcList, midiCcKey, liveChannelKey } from './midiOutputs';
 import { base64ToBytes, eventIndexAt, parseMidiFile, type MidiFileData } from './midiFile';
-import type { PlayMidiFile } from '../types/play';
+import type { MidiLock, PlayMidiFile } from '../types/play';
+import { parseMidiLocks } from '../types/playMidi';
+import { kmLockRead, kmLockRecord, kmRangeRead, type KmLockEntry } from '../play/kit/midi.js';
 
 /** A seek further ahead than this skips to the new spot instead of firing everything in between. */
 const FILE_SKIP_S = 2;
 
 // ─── Message model ────────────────────────────────────────────────────────────
 
+/** `device`: the input's name ('' for the keyboard stand-in and a MIDI file). */
 export type MidiEvent =
-  | { kind: 'noteOn';  channel: number; note: number; velocity: number }
-  | { kind: 'noteOff'; channel: number; note: number }
-  | { kind: 'cc';      channel: number; cc: number; value: number }
-  | { kind: 'bend';    channel: number; value: number }   // -1..1
+  | { kind: 'noteOn';  channel: number; note: number; velocity: number; device?: string }
+  | { kind: 'noteOff'; channel: number; note: number; device?: string }
+  | { kind: 'cc';      channel: number; cc: number; value: number; device?: string }
+  | { kind: 'bend';    channel: number; value: number; device?: string }   // -1..1
   | { kind: 'devices'; inputs: string[] };
 
 export type MidiListener = (e: MidiEvent) => void;
+/** Every channel message as it came, with the input's name (pad grids read aftertouch here too). */
+export type MidiRawListener = (status: number, d1: number, d2: number, device: string) => void;
+
+/** The control touched last, for the "Active input" readouts and Lock. */
+export interface MidiActiveInput {
+  kind: 'cc' | 'note' | 'bend';
+  device: string;
+  channel: number;
+  /** The CC or note number (bend: 0). */
+  number: number;
+  /** 0..127 (bend: −1..1). */
+  value: number;
+  at: number;
+}
 
 export type MidiBackendStatus = 'unsupported' | 'idle' | 'requesting' | 'ready' | 'denied';
 
@@ -43,6 +60,9 @@ class ChannelState {
   lastNote = 60;      // MIDI note number of the most recent note-on
   lastVelocity = 0;   // 0..127 of the most recent note-on
   held = new Set<number>();
+  /** Per note: the engine's message count at its last note-on (0 = never) and its velocity, for note ranges. */
+  noteSeq = new Float64Array(128);
+  noteVel = new Uint8Array(128);
   bend = 0;           // -1..1
   cc = new Float32Array(128); // 0..127 raw
   // "Has this ever been received?" — a Play mapping only takes a param over
@@ -55,6 +75,8 @@ class ChannelState {
 interface NodeState {
   channel: number;    // 0 = omni, 1..16
   ccs: number[];
+  /** CC outputs locked to exact controls (device + channel). */
+  locks: MidiLock[];
   smoothMs: number;
   /** channel key → smoothed value */
   smoothed: Map<string, number>;
@@ -87,6 +109,11 @@ export class MidiEngine implements InputSource {
   private channels: ChannelState[] = Array.from({ length: 17 }, () => new ChannelState());
   private nodes = new Map<string, NodeState>();
   private listeners = new Set<MidiListener>();
+  private rawListeners = new Set<MidiRawListener>();
+  /** Every CC move under its device and channel (and "any"), for knob locks. */
+  private lockStore = new Map<string, KmLockEntry>();
+  private seq = 0;
+  private active: MidiActiveInput | null = null;
 
   // Web MIDI backend
   private access: MIDIAccess | null = null;
@@ -98,7 +125,8 @@ export class MidiEngine implements InputSource {
   private permissionWatched = false;
   private onMidiMessage = (e: Event) => {
     const data = (e as MIDIMessageEvent).data;
-    if (data && data.length >= 1) this.handleBytes(data[0], data[1] ?? 0, data[2] ?? 0);
+    const input = e.target as MIDIInput | null;
+    if (data && data.length >= 1) this.handleBytes(data[0], data[1] ?? 0, data[2] ?? 0, input?.name ?? input?.id ?? '');
   };
 
   // Keyboard stand-in backend
@@ -149,13 +177,15 @@ export class MidiEngine implements InputSource {
     const channel = typeof rawCh === 'number' ? rawCh : typeof rawCh === 'string' ? parseInt(rawCh, 10) || 0 : 0;
     const smoothMs = typeof params?.smooth_ms === 'number' ? Math.max(0, params.smooth_ms) : 0;
     const ccs = midiCcList(params);
+    const locks = parseMidiLocks(params?._ccLocks) ?? [];
     const existing = this.nodes.get(nodeId);
     if (existing) {
       existing.channel = Math.max(0, Math.min(16, channel));
       existing.smoothMs = smoothMs;
       existing.ccs = ccs;
+      existing.locks = locks;
     } else {
-      this.nodes.set(nodeId, { channel: Math.max(0, Math.min(16, channel)), smoothMs, ccs, smoothed: new Map() });
+      this.nodes.set(nodeId, { channel: Math.max(0, Math.min(16, channel)), smoothMs, ccs, locks, smoothed: new Map() });
     }
   }
 
@@ -178,30 +208,56 @@ export class MidiEngine implements InputSource {
     for (const l of this.listeners) l(e);
   }
 
+  /** Raw channel messages with the device they came from (the pad grid). */
+  subscribeRaw(listener: MidiRawListener): () => void {
+    this.rawListeners.add(listener);
+    return () => { this.rawListeners.delete(listener); };
+  }
+
+  /** The knob, key or wheel touched last (any device), or null before anything. */
+  activeInput(): MidiActiveInput | null {
+    return this.active;
+  }
+
+  /** The value (0..127) of whichever locked control moved last, or null while none has. */
+  readLocked(locks: readonly MidiLock[]): number | null {
+    return kmLockRead(this.lockStore, locks);
+  }
+
+  /**
+   * Note sources inside a range on a channel (0 = all): the latest note in it
+   * (-1 while none has played), its velocity and whether one is held.
+   */
+  readRange(channel: number, range: readonly [number, number] | null | undefined): { note: number; vel: number; gate: boolean } {
+    const ch = this.channels[Math.max(0, Math.min(16, channel))];
+    return kmRangeRead(ch.noteSeq, ch.noteVel, ch.held, range);
+  }
+
   // ── Message ingestion (all backends end up here) ─────────────────────────
 
   /** Raw 3-byte message, as delivered by Web MIDI or a native bridge. */
-  handleBytes(status: number, d1: number, d2: number): void {
+  handleBytes(status: number, d1: number, d2: number, device = ''): void {
     const type = status & 0xf0;
     const channel = (status & 0x0f) + 1;
+    if (type >= 0x80 && type <= 0xe0) for (const l of this.rawListeners) l(status, d1, d2, device);
     switch (type) {
       case 0x90:
-        if (d2 > 0) this.handleMessage({ kind: 'noteOn', channel, note: d1, velocity: d2 });
-        else this.handleMessage({ kind: 'noteOff', channel, note: d1 });
+        if (d2 > 0) this.handleMessage({ kind: 'noteOn', channel, note: d1, velocity: d2, device });
+        else this.handleMessage({ kind: 'noteOff', channel, note: d1, device });
         break;
       case 0x80:
-        this.handleMessage({ kind: 'noteOff', channel, note: d1 });
+        this.handleMessage({ kind: 'noteOff', channel, note: d1, device });
         break;
       case 0xb0:
-        this.handleMessage({ kind: 'cc', channel, cc: d1, value: d2 });
+        this.handleMessage({ kind: 'cc', channel, cc: d1, value: d2, device });
         break;
       case 0xe0: {
         const raw = ((d2 << 7) | d1) - 8192; // -8192..8191
-        this.handleMessage({ kind: 'bend', channel, value: Math.max(-1, Math.min(1, raw / 8192)) });
+        this.handleMessage({ kind: 'bend', channel, value: Math.max(-1, Math.min(1, raw / 8192)), device });
         break;
       }
       default:
-        break; // aftertouch, program change, clock… not modelled yet
+        break; // aftertouch (the pad grid reads it raw), program change, clock… not modelled here
     }
   }
 
@@ -209,6 +265,13 @@ export class MidiEngine implements InputSource {
     if (e.kind === 'devices') { this.emit(e); return; }
     // A note-off says less than the note-on before it: keep that one on show.
     if (e.kind !== 'noteOff') this.lastMessage = { text: describeMidiEvent(e), at: Date.now() };
+    const seq = ++this.seq;
+    const device = e.device ?? '';
+    if (e.kind === 'cc') {
+      kmLockRecord(this.lockStore, device, e.channel, e.cc & 127, e.value, seq);
+      this.active = { kind: 'cc', device, channel: e.channel, number: e.cc, value: e.value, at: Date.now() };
+    } else if (e.kind === 'noteOn') this.active = { kind: 'note', device, channel: e.channel, number: e.note, value: e.velocity, at: Date.now() };
+    else if (e.kind === 'bend') this.active = { kind: 'bend', device, channel: e.channel, number: 0, value: e.value, at: Date.now() };
     const targets = [this.channels[OMNI], this.channels[Math.max(1, Math.min(16, e.channel))]];
     for (const ch of targets) {
       switch (e.kind) {
@@ -216,6 +279,8 @@ export class MidiEngine implements InputSource {
           ch.lastNote = e.note;
           ch.lastVelocity = e.velocity;
           ch.held.add(e.note);
+          ch.noteSeq[e.note & 127] = seq;
+          ch.noteVel[e.note & 127] = e.velocity;
           ch.seenNote = true;
           break;
         case 'noteOff':
@@ -258,7 +323,11 @@ export class MidiEngine implements InputSource {
       this.write(write, st, nodeId, 'velocity', ch.lastVelocity / 127, alpha);
       this.write(write, st, nodeId, 'gate', ch.held.size > 0 ? 1 : 0, alpha);
       this.write(write, st, nodeId, 'bend', ch.bend, alpha);
-      for (const cc of st.ccs) this.write(write, st, nodeId, midiCcKey(cc), ch.cc[cc] / 127, alpha);
+      for (const cc of st.ccs) {
+        const locks = st.locks.length ? st.locks.filter(l => l.cc === cc) : st.locks;
+        const v = locks.length ? this.readLocked(locks) ?? 0 : ch.cc[cc];
+        this.write(write, st, nodeId, midiCcKey(cc), v / 127, alpha);
+      }
     }
   }
 
@@ -278,6 +347,13 @@ export class MidiEngine implements InputSource {
   }
 
   // ── Web MIDI backend ─────────────────────────────────────────────────────
+
+  /** Web MIDI outputs with this name (lighting a controller's pads); none without Web MIDI. */
+  outputsNamed(name: string): MIDIOutput[] {
+    const out: MIDIOutput[] = [];
+    this.access?.outputs.forEach(o => { if (o.state === 'connected' && (o.name ?? o.id) === name) out.push(o); });
+    return out;
+  }
 
   webMidi(): { status: MidiBackendStatus; inputs: string[]; busy: string[] } {
     return { status: this.webMidiStatus, inputs: this.inputNames, busy: this.busyNames };

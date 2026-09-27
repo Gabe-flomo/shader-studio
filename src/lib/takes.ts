@@ -45,6 +45,7 @@ import { encodeKeys, takeEventsBetween, takeMouseAt, takePointerAt, takeSize, tr
 import { AUDIO_GAP, AudioFrameBuffer, audioNeeds, audioSourceOf, takeAudioAt, takeAudioFor } from './takeAudio';
 import { liveAudio } from './liveAudio';
 import { audioReaderBank } from './audioReaderBank';
+import { padGrid } from './padGrid';
 import { layerAudio } from './layerAudio';
 import { toast } from '../components/ui/toastStore';
 import { streamHub } from '../data/streams/streamHub';
@@ -101,7 +102,7 @@ export class TakeCapture {
   seconds(): number { return this.first === null ? 0 : this.last - this.first; }
 
   private reset(): void {
-    this.tracks.clear(); this.events = []; this.first = null; this.last = -Infinity; this.kept = -Infinity;
+    this.tracks.clear(); this.events = []; this.first = null; this.last = -Infinity; this.kept = -Infinity; this.padKept = -Infinity;
     this.audio.clear(); this.audioKept = -Infinity;
     this.data.reset();
   }
@@ -152,6 +153,7 @@ export class TakeCapture {
     for (const [key, v] of busNow) this.push('bus', key, key.split('::').pop() ?? key, time, v);
     for (const [name, v] of audioEngine.lastAmps()) this.push('audio', name, name, time, v);
     for (const r of this.play.audioReaders?.readers ?? []) this.push('reader', r.id, `Reader · ${r.name}`, time, audioReaderBank.value(r.id) ?? 0);
+    this.samplePads(time);
     const m = inputBus.mouseNow();
     this.push('mouse', 'x', 'Mouse x', time, m[0]);
     this.push('mouse', 'y', 'Mouse y', time, m[1]);
@@ -163,6 +165,29 @@ export class TakeCapture {
     this.sampleAudio(time, play);
     if (this.keep < Infinity && time - this.lastTrim > 2) { this.lastTrim = time; this.trim(time - this.keep); }
   }
+
+  /**
+   * The pad grid: each cell's level from the first time it lights (a 0 just
+   * before, so it is dark until then), and the last pad once one is hit.
+   */
+  private samplePads(time: number): void {
+    const pad = this.play.padGrid ? padGrid.snapshot() : null;
+    if (!pad) return;
+    const prev = this.padKept;
+    this.padKept = time;
+    for (let i = 0; i < pad.cells.length; i++) {
+      const has = this.tracks.has(`pad\u0000c${i}`);
+      if (!has && pad.cells[i] <= 0) continue;
+      if (!has && prev > -Infinity) this.push('pad', `c${i}`, `Pad cell ${i}`, prev, 0);
+      this.push('pad', `c${i}`, `Pad cell ${i}`, time, pad.cells[i]);
+    }
+    if (pad.x < 0) return;
+    this.push('pad', 'x', 'Pad x', time, pad.x, { step: true });
+    this.push('pad', 'y', 'Pad y', time, pad.y, { step: true });
+    this.push('pad', 'v', 'Pad velocity', time, pad.v, { step: true });
+    this.push('pad', 'p', 'Pad pressure', time, pad.p);
+  }
+  private padKept = -Infinity;
 
   /** Audio layers' sound, about 30 frames a second, while one is showing. */
   private sampleAudio(time: number, play: PlayRecord): void {
@@ -269,6 +294,8 @@ function applyTake(take: PlayTake, time: number, out: {
   audio: (uniform: string, v: number) => void;
   /** An audio reader's recorded level (the live preview shows it on the readers panel). */
   reader?: (readerId: string, v: number) => void;
+  /** The pad grid's recorded cell levels and last pad. */
+  pad?: (id: string, v: number) => void;
   layerKeys: Set<string>;
 }): void {
   const s = time - take.from;
@@ -282,6 +309,7 @@ function applyTake(take: PlayTake, time: number, out: {
     } else if (tr.kind === 'bus') out.bus(tr.id, num(trackAt(tr, s)));
     else if (tr.kind === 'audio') out.audio(tr.id, num(trackAt(tr, s)));
     else if (tr.kind === 'reader') out.reader?.(tr.id, num(trackAt(tr, s)));
+    else if (tr.kind === 'pad') out.pad?.(tr.id, num(trackAt(tr, s)));
   }
 }
 
@@ -305,11 +333,13 @@ export function takeApplier(take: PlayTake, handle: { setUniform: (name: string,
     param: (key: string, v: number | number[]) => { const u = inputBus.paramUniform(key); if (u) handle.setUniform(u, v); },
     bus: (key: string, v: number) => { const u = inputBus.liveUniform(key); if (u) handle.setUniform(u, v); },
     audio: (name: string, v: number) => handle.setUniform(name, v),
+    pad: (id: string, v: number) => padGrid.setPlayback(id, v),
     layerKeys,
   };
   return {
     apply(time: number): KitAction[] {
       applyTake(take, time, out);
+      padGrid.flush();
       data.apply(time - take.from);
       const m = takeMouseAt(take, time);
       if (m) handle.setUniform('u_mouse', [m[0] * handle.width, m[1] * handle.height]);
@@ -322,7 +352,7 @@ export function takeApplier(take: PlayTake, handle: { setUniform: (name: string,
     audio: (time: number) => takeAudioFor(take, time),
     /** The layers' seed, for a render that starts them over. */
     seed: take.seed ?? 0,
-    release() { releaseLayers(layerKeys); if (data.active) streamHub.setMuted(false); },
+    release() { releaseLayers(layerKeys); padGrid.clearPlayback(); if (data.active) streamHub.setMuted(false); },
   };
 }
 
@@ -373,8 +403,10 @@ class Replay implements InputSource {
       bus: (key, v) => write(key, v),
       audio: (name, v) => inputBus.writeUniform(name, v),
       reader: (id, v) => audioReaderBank.setPlayback(id, v),
+      pad: (id, v) => padGrid.setPlayback(id, v),
       layerKeys: this.layerKeys,
     });
+    if (padGrid.flush()) inputBus.writeUniform('u_padGridStamp', time);
     inputBus.setMouseOverride(takeMouseAt(take, time));
     playOverlay.setReplayPointer(takePointerAt(take, time));
     for (const e of takeEventsBetween(take, this.lastTime, time)) playOverlay.replayAct(e);
@@ -413,6 +445,7 @@ class Replay implements InputSource {
     if (this.data.active) streamHub.setMuted(false);
     inputBus.setMouseOverride(null);
     audioReaderBank.clearPlayback();
+    padGrid.clearPlayback();
     playOverlay.setReplaying(false);
     playEngine.setMuted(false);
   }
