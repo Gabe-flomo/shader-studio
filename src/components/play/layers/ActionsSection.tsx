@@ -84,6 +84,10 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
               {(a.do === 'burst' || a.do === 'scatter') && (
                 <NumberInput value={a.amount} min={0} max={a.do === 'burst' ? 5000 : 10} step={a.do === 'burst' ? 10 : 0.5} title={a.do === 'burst' ? 'How many particles' : 'How hard'} onCommit={n => update(a.id, { amount: Math.max(0, n) })} style={numStyle} />
               )}
+              {a.do === 'goto' && layer?.kind === 'data' && (
+                // Go to row N, counting from 1.
+                <NumberInput value={Math.max(1, Math.round(a.amount))} min={1} max={100000} step={1} title="Which row, counting from 1" onCommit={n => update(a.id, { amount: Math.max(1, Math.round(n)) })} style={numStyle} />
+              )}
               {a.do === 'goto' && layer?.kind === 'background' && (
                 // Go to N: which source, counting from 1 (the queue's numbers).
                 <Select ariaLabel="Which source" value={String(Math.max(1, Math.round(a.amount)))} height={26}

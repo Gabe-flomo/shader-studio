@@ -13,6 +13,8 @@ import { unsupportedFeatures, type GraphFeatures, type PlayHtmlInput, type PlayM
 import { bakeLayerValues } from './playControls';
 import type { PlayRecord } from '../types/play';
 import type { PreviewAspect } from '../utils/graphImportPlan';
+import type { DatasetsRecord } from '../data/types';
+import { datasetsForWeb } from './dataExport';
 
 /** The parts of a compile the web page uses. */
 export interface CompiledForWeb {
@@ -44,7 +46,7 @@ export function graphFeatures(c: CompiledForWeb, play: PlayRecord): GraphFeature
  * now (control id → value): driven uniforms and layer values are baked at them.
  * `media` is the graph's input files, when they're loaded (the open graph).
  */
-export function webInputFrom(c: CompiledForWeb, play: PlayRecord, opts: { title: string; aspect: PreviewAspect; live?: ReadonlyMap<string, number | number[]>; media?: PlayMedia; backgroundGraphs?: PlayHtmlInput['backgroundGraphs'] }): { input: PlayHtmlInput; missing: string[] } {
+export function webInputFrom(c: CompiledForWeb, play: PlayRecord, opts: { title: string; aspect: PreviewAspect; live?: ReadonlyMap<string, number | number[]>; media?: PlayMedia; backgroundGraphs?: PlayHtmlInput['backgroundGraphs']; datasets?: DatasetsRecord }): { input: PlayHtmlInput; missing: string[] } {
   const live = opts.live ?? new Map<string, number | number[]>();
   // Uniforms at their current values, with driven ones at their live value.
   const uniforms: Record<string, number | number[]> = { ...c.paramUniforms };
@@ -63,5 +65,10 @@ export function webInputFrom(c: CompiledForWeb, play: PlayRecord, opts: { title:
   };
   if (opts.media) input.media = opts.media;
   if (opts.backgroundGraphs && Object.keys(opts.backgroundGraphs).length) input.backgroundGraphs = opts.backgroundGraphs;
+  // The datasets the page reads (Data nodes in the shader, Data layers, data mappings, s.data()): their results only.
+  if (opts.datasets) {
+    const sets = datasetsForWeb(opts.datasets, play, [c.fragmentShader]);
+    if (Object.keys(sets).length) input.datasets = sets;
+  }
   return { input, missing: unsupportedFeatures(graphFeatures(c, play)) };
 }

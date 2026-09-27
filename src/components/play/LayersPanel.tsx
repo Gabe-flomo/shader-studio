@@ -41,6 +41,7 @@ import {
   AudioEditor, BodiesEditor, BrushEditor, CameraEditor, ContoursEditor, GlyphsEditor, ImageEditor, LensEditor, NullEditor, ParticlesEditor, ShapeEditor, TextEditor,
   type EditorContext, ClonerEditor, ScriptEditor } from './layers/editors';
 import { ActionsSection } from './layers/ActionsSection';
+import { DataLayerEditor } from './layers/DataLayerEditor';
 import { MatteMaskBar } from './layers/MatteMask';
 import { matteMaskSummary } from '../../play/mattes';
 import { matteUsers } from '../../types/playLayers';
@@ -254,6 +255,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
     case 'cloner': body = <ClonerEditor f={f} ctx={ctx} />; break;
     case 'script': body = <ScriptEditor f={f} ctx={ctx} />; break;
     case 'background': body = <BackgroundEditor f={f} ctx={ctx} />; break;
+    case 'data': body = <DataLayerEditor f={f} ctx={ctx} />; break;
   }
   // The Background layer stays at the bottom: it doesn't move, and there is only one.
   const isBackground = l.kind === 'background';

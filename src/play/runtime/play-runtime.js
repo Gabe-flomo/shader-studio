@@ -522,6 +522,52 @@ void main() {
     let fontTex = !bgOnly && (B.fragmentShader.match(/\bu_fontTexture\b/g) || []).length > 1 ? texture(gl.LINEAR) : white;
     if (fontTex !== white) upload(fontTex, fontAtlas(), false);
 
+    // Datasets (B.datasets: each one's frozen result and name, never the notebook). Data layers and
+    // s.data() read them by id or name; Data nodes read their columns as float textures.
+    const datasets = B.datasets || {};
+    const dsEntry = ref => {
+      if (ref == null) return null;
+      const key = String(ref);
+      if (datasets[key]) return { id: key, name: datasets[key].name, result: datasets[key].result || null };
+      const want = key.trim().toLowerCase();
+      for (const id in datasets) if (String(datasets[id].name || '').trim().toLowerCase() === want) return { id, name: datasets[id].name, result: datasets[id].result || null };
+      return null;
+    };
+    const dsResult = id => (datasets[id] && datasets[id].result) || null;
+    // A Data node's columns, four to a texel, row i at texel (i % 1024, i / 1024), as the app packs them
+    // (src/data/texturePack.ts): numbers as they are, a category as its place among the values, the rest 0.
+    const dataTexture = (id, cols) => {
+      const r = dsResult(id), rows = r && r.kind === 'table' ? r.rows : 0;
+      const w = Math.min(Math.max(1, rows), 1024), h = Math.ceil(Math.max(1, rows) / 1024);
+      const data = new Float32Array(w * h * 4);
+      cols.slice(0, 4).forEach((name, ch) => {
+        const c = r && r.kind === 'table' ? r.columns.find(x => x.name === name) : null;
+        if (!c) return;
+        const codes = new Map();
+        for (let i = 0; i < rows; i++) {
+          const v = c.values[i];
+          if (v == null) continue;
+          if (c.type === 'number') data[i * 4 + ch] = +v || 0;
+          else if (c.type === 'category') { let k = codes.get(v); if (k === undefined) { k = codes.size; codes.set(v, k); } data[i * 4 + ch] = k; }
+        }
+      });
+      const t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, h, 0, gl.RGBA, gl.FLOAT, data);
+      return t;
+    };
+    const dataTex = [], dataCounts = [];
+    if (!bgOnly && gl2 && /u_ds_/.test(B.fragmentShader)) {
+      const seenU = new Set();
+      let m;
+      const reT = /uniform\s+sampler2D\s+(u_ds_\w+)\s*;\s*\/\/\s*data-columns\s+([a-z][a-z0-9]*)\s+(\S*)/g;
+      while ((m = reT.exec(B.fragmentShader))) { if (seenU.has(m[1])) continue; seenU.add(m[1]); dataTex.push({ name: m[1], tex: dataTexture(m[2], m[3] ? m[3].split(',').map(c => decodeURIComponent(c)) : []) }); }
+      const reN = /uniform\s+float\s+(u_ds_\w+_n)\s*;\s*\/\/\s*data-count\s+([a-z][a-z0-9]*)/g;
+      while ((m = reN.exec(B.fragmentShader))) { if (seenU.has(m[1])) continue; seenU.add(m[1]); const r = dsResult(m[2]); dataCounts.push({ name: m[1], n: r && r.kind === 'table' ? r.rows : 0 }); }
+    }
+
     // Render targets for feedback and echo: half float where the GPU can draw into it (as the app), else 8 bit.
     let rtFormat = gl.RGBA, rtType = gl.UNSIGNED_BYTE, rtFilter = gl.LINEAR;
     if (stateful || echoCfg) {
@@ -823,6 +869,17 @@ void main() {
         case 'osc': { const a = shared.osc.get(s.address); if (!a) return null; const raw = a[s.arg]; const v = typeof raw === 'number' ? raw : typeof raw === 'boolean' ? (raw ? 1 : 0) : null; return v === null ? null : Math.max(0, Math.min(1, (v - s.min) / (s.max - s.min))); }
         case 'null': { const l = layersById.get(s.layerId); if (!l) return null; return Math.max(0, Math.min(1, layerValue(l.id, s.axis, l[s.axis]))); }
         case 'hand': return handSt ? HK.read(handSt, s.side, s.read, s.point, s.axis, s.gesture) : null;
+        case 'data': {
+          // A dataset's current row (a Data layer's, or the first one showing it): the column there, 0..1 over its min..max.
+          const r = dsResult(s.dataset);
+          if (!r) return null;
+          const at = s.layerId ? s.layerId : 'ds:' + s.dataset;
+          const row = sensors.has(at + '::row') ? sensors.get(at + '::row') : 0, rows = sensors.get(at + '::rows');
+          const n = rows != null ? rows : r.kind === 'table' ? r.rows : 0;
+          if (s.column === '#row') return n > 1 ? Math.max(0, Math.min(1, row / (n - 1))) : 0;
+          if (r.kind !== 'table' || !(r.rows > 0) || typeof SSKit === 'undefined' || !SSKit.data) return null;
+          return SSKit.data.unit(SSKit.data.column(r, s.column), Math.max(0, Math.min(r.rows - 1, Math.round(row))));
+        }
         case 'sensor': {
           if (s.read === 'distance') {
             const d = s.otherId ? anchorGap(s.layerId, s.otherId) : null;
@@ -1236,6 +1293,7 @@ void main() {
         sensor: (k, v) => sensors.set(k, v),
         override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },
         shaderTap: layersTap || undefined,
+        data: dsEntry,
       });
     }
 
@@ -1281,6 +1339,8 @@ void main() {
       if (echoCfg) for (let i = 0; i < 6; i++) bindSampler('u_echo' + i, echoRing[i] ? echoRing[i].tex : blank);
       for (const [n, t] of imageTex) bindSampler(n, t);
       for (const v of videos) bindSampler(v.name, v.tex);
+      for (const d of dataTex) bindSampler(d.name, d.tex);
+      for (const c of dataCounts) setUniform(c.name, c.n);
       drawQuad();
       if (target) {
         if (echoCfg) captureEcho(target);

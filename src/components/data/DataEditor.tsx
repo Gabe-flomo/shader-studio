@@ -3,6 +3,9 @@
  * function and keyframe editors. Import a file (picker or drop), shape it in
  * the notebook, check the table, choose how the node uses it.
  *
+ * A Data layer on Play opens the same window for its dataset (`dataset`
+ * instead of `node`): everything but the node's Outputs tab.
+ *
  * The notebook runs in a worker as you type (after a short pause) and on
  * ⌘/Ctrl+Enter; a successful run replaces the dataset's frozen result, which
  * the node's textures follow without a shader rebuild.
@@ -66,14 +69,17 @@ function pickFile(): Promise<File | null> {
   });
 }
 
-export function DataEditor({ node, onClose }: { node: GraphNode; onClose: () => void }) {
+/** A Data layer's dataset: which one it reads, and how the window picks another. */
+export interface DatasetTarget { id: string; onPick: (id: string) => void }
+
+export function DataEditor({ node, dataset, onClose }: { node?: GraphNode; dataset?: DatasetTarget; onClose: () => void }) {
   const tk = useTokens();
   const narrow = useNarrow(820);
   const { datasets, setDataset, updateDataset, removeDataset, updateNodeParams, disconnectOutput } = useNodeGraphStore(useShallow(s => ({
     datasets: s.datasets, setDataset: s.setDataset, updateDataset: s.updateDataset, removeDataset: s.removeDataset,
     updateNodeParams: s.updateNodeParams, disconnectOutput: s.disconnectOutput,
   })));
-  const dsId = dataDataset(node);
+  const dsId = node ? dataDataset(node) : dataset?.id ?? '';
   const ds: Dataset | undefined = dsId ? datasets[dsId] : undefined;
 
   const [side, setSide] = useState<Side>('table');
@@ -126,6 +132,7 @@ export function DataEditor({ node, onClose }: { node: GraphNode; onClose: () => 
   // ── The node ─────────────────────────────────────────────────────────────
   /** Change the node's settings; wires out of outputs that go away or change type are removed first. */
   const applyNode = useCallback((patch: Record<string, unknown>) => {
+    if (!node) return;
     const next = { ...node, params: { ...node.params, ...patch } };
     const want = dataSockets(next).outputs;
     for (const [k, s] of Object.entries(node.outputs)) if (!want[k] || want[k].type !== s.type) disconnectOutput(node.id, k);
@@ -139,21 +146,23 @@ export function DataEditor({ node, onClose }: { node: GraphNode; onClose: () => 
   // A node picking up its first table gets outputs to start from.
   const seeded = useRef(false);
   useEffect(() => {
-    if (seeded.current || !effective || !dsId) return;
+    if (seeded.current || !effective || !dsId || !node) return;
     seeded.current = true;
     const hasAny = Array.isArray(node.params.outputs) && (node.params.outputs as unknown[]).length > 0;
     if (!hasAny && node.params.mode !== 'points') applyNode({ outputs: defaultOutputs(effective.columns) });
-  }, [effective, dsId, node.params.outputs, node.params.mode, applyNode]);
+  }, [effective, dsId, node, applyNode]);
 
   // ── Datasets ─────────────────────────────────────────────────────────────
+  /** Read another dataset: the node's setting, or the layer's. */
+  const onPick = dataset?.onPick;
+  const pick = useCallback((id: string) => { seeded.current = false; if (node) applyNode({ dataset: id }); else onPick?.(id); }, [node, applyNode, onPick]);
   const adopt = useCallback((d: Dataset) => {
     setDataset(d);
-    seeded.current = false;
-    applyNode({ dataset: d.id });
+    pick(d.id);
     void run(d.id, true);
     setSide('table');
     setPhoneTab('notebook');
-  }, [setDataset, applyNode, run]);
+  }, [setDataset, pick, run]);
 
   const importFile = useCallback(async (file: File | null, replace: boolean) => {
     if (!file) return;
@@ -198,10 +207,12 @@ export function DataEditor({ node, onClose }: { node: GraphNode; onClose: () => 
   };
   const remove = async () => {
     if (!ds) return;
-    const users = countUsers(useNodeGraphStore.getState().nodes, ds.id);
-    const ok = await askConfirm(`Remove “${ds.name}”?`, { message: `The file, its notebook and its result leave this graph.${users > 1 ? ` ${users} Data nodes read it; they will read nothing.` : ''}`, confirmLabel: 'Remove', danger: true });
+    const st = useNodeGraphStore.getState();
+    const users = countUsers(st.nodes, ds.id), layers = st.play.layers.filter(l => l.kind === 'data' && l.dataset === ds.id).length;
+    const readers = [users ? `${users} Data node${users === 1 ? '' : 's'}` : '', layers ? `${layers} Data layer${layers === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ');
+    const ok = await askConfirm(`Remove “${ds.name}”?`, { message: `The file, its notebook and its result leave this graph.${users + layers > 1 ? ` ${readers} read it; they will read nothing.` : ''}`, confirmLabel: 'Remove', danger: true });
     if (!ok) return;
-    applyNode({ dataset: '' });
+    pick('');
     removeDataset(ds.id);
   };
 
@@ -223,7 +234,7 @@ export function DataEditor({ node, onClose }: { node: GraphNode; onClose: () => 
   // ── Pieces ───────────────────────────────────────────────────────────────
   // Only worth showing when there is a choice (the title already names the one there is).
   const datasetPicker = list.length > 1 && (
-    <Select ariaLabel="Dataset" value={dsId} onChange={v => { if (v) { seeded.current = false; applyNode({ dataset: v }); } }} style={{ width: narrow ? '100%' : 200 }}
+    <Select ariaLabel="Dataset" value={dsId} onChange={v => { if (v) pick(v); }} style={{ width: narrow ? '100%' : 200 }}
       options={[...(dsId ? [] : [{ value: '', label: 'Choose a dataset' }]), ...list.map(d => ({ value: d.id, label: d.name }))]} />
   );
 
@@ -245,7 +256,7 @@ export function DataEditor({ node, onClose }: { node: GraphNode; onClose: () => 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase' }}>In this graph</span>
             {list.map(d => (
-              <RowButton key={d.id} icon="grid" title={d.name} detail={d.result?.kind === 'table' ? `${d.result.rows} rows · ${d.result.columns.map(c => c.name).join(', ')}` : d.result?.kind ?? 'not run yet'} onClick={() => { seeded.current = false; applyNode({ dataset: d.id }); }} />
+              <RowButton key={d.id} icon="grid" title={d.name} detail={d.result?.kind === 'table' ? `${d.result.rows} rows · ${d.result.columns.map(c => c.name).join(', ')}` : d.result?.kind ?? 'not run yet'} onClick={() => pick(d.id)} />
             ))}
           </div>
         )}
@@ -264,7 +275,7 @@ export function DataEditor({ node, onClose }: { node: GraphNode; onClose: () => 
       onCells={setCells} onHeader={setHeader} onReplaceFile={() => { void pickFile().then(f => importFile(f, true)); }} onRun={() => { window.clearTimeout(timer.current); void run(ds.id, true); }} />
   );
   const preview = ds && <DataPreview dataset={ds} onNormalize={on => updateDataset(ds.id, { normalize: on })} />;
-  const outputs = <DataOutputsPanel node={node} columns={columns} onChange={applyNode} />;
+  const outputs = node ? <DataOutputsPanel node={node} columns={columns} onChange={applyNode} /> : null;
   const reference = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Field leading={<Icon name="search" size={15} style={{ color: tk.text.faint }} />} placeholder="Filter the reference…" aria-label="Filter the reference" value={filter} onChange={e => setFilter(e.target.value)} height={30} style={{ background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }} />
@@ -290,7 +301,7 @@ export function DataEditor({ node, onClose }: { node: GraphNode; onClose: () => 
           {datasetPicker}
           {ds ? (<>
             <Segmented fill value={phoneTab} onChange={setPhoneTab} ariaLabel="Editor section" options={[
-              { value: 'notebook', label: 'Notebook' }, { value: 'table', label: 'Table' }, { value: 'outputs', label: 'Outputs' }, { value: 'reference', label: 'Help' },
+              { value: 'notebook', label: 'Notebook' }, { value: 'table', label: 'Table' }, ...(node ? [{ value: 'outputs' as const, label: 'Outputs' }] : []), { value: 'reference', label: 'Help' },
             ]} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: parseError || Object.values(cellOut).some(c => !c.ok) ? tk.status.danger : tk.text.muted }}>{status}</span>
@@ -310,13 +321,13 @@ export function DataEditor({ node, onClose }: { node: GraphNode; onClose: () => 
   // ── Desktop: a window ────────────────────────────────────────────────────
   const tabs = (
     <Segmented size="sm" fill ariaLabel="Side panel" value={side} onChange={setSide} options={[
-      { value: 'table', label: 'Table' }, { value: 'outputs', label: 'Outputs' }, { value: 'reference', label: 'Reference' },
+      { value: 'table', label: 'Table' }, ...(node ? [{ value: 'outputs' as const, label: 'Outputs' }] : []), { value: 'reference', label: 'Reference' },
     ]} />
   );
   return (
     <Modal
       title="Data"
-      subtitle={ds ? `${ds.name} · ${summary}` : 'Import a file to read it in the shader'}
+      subtitle={ds ? `${ds.name} · ${summary}` : node ? 'Import a file to read it in the shader' : 'Import a file to draw it on the picture'}
       icon="grid"
       width={1180}
       height={820}

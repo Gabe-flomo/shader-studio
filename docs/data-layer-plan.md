@@ -163,8 +163,7 @@ dataset and passes numbers into the shader:
      same way.
    - Parsing is `parseSourceText(text, format)` (`src/data/parse.ts`), a pure
      function of text, so fetched or streamed text goes through it unchanged.
-   - Exports and Present don't carry datasets yet: their Data nodes read 0
-     and the export lists "Data node values" as left behind.
+   - Exports and Present didn't carry datasets at first (built in 1–3 below).
 1. **The layer, CSV.** Import, parse (types sniffed per column), table
    views: points, path, bars, pie, lines; axes modes; column → property
    mapping; offset/window stepping and actions; `s.data()`; data sources.
@@ -172,6 +171,40 @@ dataset and passes numbers into the shader:
    text style.
 3. **JSON views, exports and Present, examples** (a small CSV of city
    temperatures, a route, a poem stepped word by word).
+
+   *Milestones 1–3 built* (JSON views aside: a JSON value is for scripts).
+   The layer is `DataLayer` in `src/types/playLayers.ts`, drawn by
+   `src/play/kit/data.js` (pure layout, stepping and text functions, then
+   the drawing); its editor is `src/components/play/layers/DataLayerEditor.tsx`
+   and it opens the dataset window (the Data node's, without Outputs).
+   - **Views:** points (size, colour as RGB columns or through a palette,
+     opacity, rotation, label), path (Trim, a dot on its head), bars (grow
+     from 0 over the whole column, so a window keeps its scale), pie, lines
+     (a series per category). A caption column writes the current row's
+     value above the view. Same scale keeps maps and routes in shape.
+   - **Axes:** centred (range or zero) or corner; the picture (with a margin)
+     or a region moved and sized with the transform handles; axis lines,
+     grid, tick numbers and labels in the layer's text style.
+   - **Text:** lines, a separator, words, letters or N-character chunks; as
+     written, most frequent or A to Z, with counts; drawn with the Text
+     layer's renderer and mattes, wrapped and shrunk to fit.
+   - **Stepping:** Show all, a range or a window; Offset; Next, Previous,
+     Random (another page when it steps by windows), Go to row, Reset; cut or
+     fade. The layer reports `<id>::row` / `::rows` and, for the first layer
+     on a dataset, `ds:<id>::row`; its anchor is the current row (a path's
+     head), so proximity triggers and distance sensors work on it.
+   - **Everywhere else:** `s.data(name)` in 2D and 3D sketches (and
+     Background sketches); the mapping source `{ kind: 'data', dataset,
+     column, layerId }` ("Data · <dataset> · current · <column>", `#row` for
+     how far through), which reads `datasetStore.effective()` so a new result
+     or a live replacement shows at once.
+   - **Exports and Present** carry `datasets` in the bundle
+     (`src/play/dataExport.ts`): results with Normalize applied and names,
+     for what the page reads (Data layers, data mappings, Data nodes'
+     textures, sketches naming a dataset in quotes). The runtime binds Data
+     node textures (RGBA32F) itself. Left behind: the notebooks and files,
+     and datasets never run.
+   - **Examples:** Data 3–6 in the Data folder.
 
 ## 8. Later milestones: more ways data comes in (added 26 Sep 2026)
 

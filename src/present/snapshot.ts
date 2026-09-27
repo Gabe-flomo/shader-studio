@@ -18,6 +18,7 @@ import { parsePlayRecord, type PlayRecord } from '../types/play';
 import { newId, type PresentSource, type SourceFeatures, type SourceNode, type SourceOrigin } from '../types/presentation';
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
 import type { PreviewAspect } from '../utils/graphImportPlan';
+import { parseDatasetsRecord, type DatasetsRecord } from '../data/types';
 
 export type SnapshotResult = { ok: true; source: PresentSource } | { ok: false; error: string };
 
@@ -74,12 +75,12 @@ export function missingMedia(s: PresentSource): string[] {
 }
 
 /** Compile `nodes` + `play` into a source. Pure apart from the id and the clock. */
-export function snapshotFromGraph(nodes: GraphNode[], play: PlayRecord, meta: { title: string; from: SourceOrigin; id?: string; aspect?: PreviewAspect; now?: number; media?: PlayMedia }): SnapshotResult {
+export function snapshotFromGraph(nodes: GraphNode[], play: PlayRecord, meta: { title: string; from: SourceOrigin; id?: string; aspect?: PreviewAspect; now?: number; media?: PlayMedia; datasets?: DatasetsRecord }): SnapshotResult {
   let result;
   try { result = compileGraph({ nodes }); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
   if (!result.success || !result.fragmentShader) return { ok: false, error: result.errors?.join('; ') || 'The graph did not compile' };
   const compiled: CompiledForWeb = { ...result, particleSystems: result.particleSystems ?? [] };
-  const { input, missing } = webInputFrom(compiled, play, { title: meta.title, aspect: meta.aspect ?? 'free', media: meta.media ?? { textures: {}, videos: {}, audio: [] }, backgroundGraphs: queueGraphsForWeb(play).graphs });
+  const { input, missing } = webInputFrom(compiled, play, { title: meta.title, aspect: meta.aspect ?? 'free', media: meta.media ?? { textures: {}, videos: {}, audio: [] }, backgroundGraphs: queueGraphsForWeb(play).graphs, datasets: meta.datasets });
   const byId = allNodes(nodes);
   const shaderNodes: SourceNode[] = [];
   for (const [id, slug] of result.nodeSlugMap ?? []) {
@@ -98,7 +99,7 @@ export function snapshotFromGraph(nodes: GraphNode[], play: PlayRecord, meta: { 
 
 /** A saved graph, read from storage without loading it. */
 export function snapshotSaved(name: string, id?: string): SnapshotResult {
-  let parsed: { nodes?: unknown; play?: unknown; savedAt?: unknown } | null;
+  let parsed: { nodes?: unknown; play?: unknown; savedAt?: unknown; datasets?: unknown } | null;
   try { parsed = JSON.parse(localStorage.getItem(`shader-studio:${name}`) ?? 'null'); } catch { parsed = null; }
   if (!parsed || !Array.isArray(parsed.nodes)) return { ok: false, error: `No saved graph named “${name}”` };
   const nodes = migrateLoadedNodes(parsed.nodes as GraphNode[]);
@@ -106,7 +107,7 @@ export function snapshotSaved(name: string, id?: string): SnapshotResult {
   // The graph's image, video and song files exist only while it's open: take them when it is, as saved.
   const st = useNodeGraphStore.getState();
   const media = st.currentGraph?.name === name && !st.graphDirty ? st.playWebInput(name).input.media : undefined;
-  return snapshotFromGraph(nodes, migrateLoadedPlay(parsePlayRecord(parsed.play), parsed.nodes as GraphNode[]), { title: name, from: { kind: 'saved', name, savedAt }, id, media });
+  return snapshotFromGraph(nodes, migrateLoadedPlay(parsePlayRecord(parsed.play), parsed.nodes as GraphNode[]), { title: name, from: { kind: 'saved', name, savedAt }, id, media, datasets: parseDatasetsRecord(parsed.datasets) });
 }
 
 /** A bundled example (its chunk loads on first use). */
@@ -118,7 +119,7 @@ export async function snapshotExample(key: string, id?: string): Promise<Snapsho
   // Its Background layer's example graphs compile from the same chunk.
   await preloadQueueExamples();
   const title = EXAMPLE_INDEX[key]?.label ?? g.label;
-  return snapshotFromGraph(migrateLoadedNodes(g.nodes), migrateLoadedPlay(parsePlayRecord(g.play ?? null), g.nodes), { title, from: { kind: 'example', key }, id });
+  return snapshotFromGraph(migrateLoadedNodes(g.nodes), migrateLoadedPlay(parsePlayRecord(g.play ?? null), g.nodes), { title, from: { kind: 'example', key }, id, datasets: g.datasets });
 }
 
 /** A new copy of a source from where it came from, keeping its id (Refresh from graph). */

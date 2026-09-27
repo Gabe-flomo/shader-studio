@@ -51,6 +51,8 @@ export function layerBounds(l: PlayLayer, v: Value, m: Measure): Bounds | null {
       return a > 0 ? { x, y, w: h * a, h, rot: v(l, 'rotation'), uniform: true, turns: true } : null;
     }
     case 'audio': return { x, y, w: v(l, 'w'), h: v(l, 'h'), rot: 0, uniform: false, turns: false };
+    // A Data layer drawn into a region: move and size the region.
+    case 'data': return l.fit === 'region' ? { x, y, w: v(l, 'w'), h: v(l, 'h'), rot: 0, uniform: false, turns: false } : null;
     case 'lens': return l.follow === 'none' ? { x, y, w: v(l, 'radius') * 2, h: v(l, 'radius') * 2, rot: 0, uniform: true, turns: false } : null;
     default: return null;
   }
@@ -149,7 +151,7 @@ export function patchFor(l: PlayLayer, start: Bounds, b: Bounds, v: Value): Reco
       break;
     case 'text': out.size = r4(v(l, 'size') * ky); break;
     case 'image': case 'camera': out.scale = r4(v(l, 'scale') * ky); break;
-    case 'audio': out.w = r4(b.w); out.h = r4(b.h); break;
+    case 'audio': case 'data': out.w = r4(b.w); out.h = r4(b.h); break;
     case 'lens': out.radius = r4(v(l, 'radius') * kx); break;
   }
   return out;

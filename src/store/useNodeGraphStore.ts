@@ -4585,7 +4585,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (v !== undefined) live.set(c.id, v);
     }
     // A Background layer's other graphs, compiled for the page (examples that haven't loaded yet are listed as left behind).
-    return webInputFrom(st, st.play, { title, aspect: st.previewAspect, live, media: webMedia(st), backgroundGraphs: queueGraphsForWeb(st.play).graphs });
+    return webInputFrom(st, st.play, { title, aspect: st.previewAspect, live, media: webMedia(st), backgroundGraphs: queueGraphsForWeb(st.play).graphs, datasets: st.datasets });
   },
 
   exportPlayHtml: async (options, title, extras) => {

@@ -6,9 +6,11 @@
 import type { ActionKind, FireMode, FireSpec, HandGesture, HandRead, HandSide, LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySource, SensorRead, TriggerMode, TriggerSpec } from '../types/play';
 import { ANCHOR_KINDS, DEFAULT_FIRE, handAnchor, parseHandAnchor } from '../types/play';
 import { HD_POINT_NAMES } from './kit/hands.js';
+import { datasetStore } from '../data/datasetStore';
+import { DATA_ROW_COLUMN } from '../types/play';
 
 export type HandSourceType = `hand:${HandRead}`;
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | HandSourceType;
+export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'data' | HandSourceType;
 
 /** In the order the drop-down shows them: what everyone has first, MIDI hardware last, then hand tracking under its own heading. */
 export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[] = [
@@ -20,6 +22,7 @@ export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[
   { value: 'control', label: 'Another control' },
   { value: 'null', label: 'Null position' },
   { value: 'sensor', label: 'Layer sensor (zone fill, speed…)' },
+  { value: 'data', label: 'Data (the current row of a dataset)' },
   { value: 'lfo', label: 'LFO' },
   { value: 'noise', label: 'Noise' },
   { value: 'clock', label: 'Clock (BPM)' },
@@ -135,7 +138,7 @@ export function sourceType(s: PlaySource): SourceType {
 }
 
 /** `otherControlId` is the first control a new control source may point at (not the mapping's own target); `nullId` the first null layer; `sensor` the first layer that measures something. */
-export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId = '', nullId = '', sensor: { layerId: string; read: SensorRead } | null = null): PlaySource {
+export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId = '', nullId = '', sensor: { layerId: string; read: SensorRead } | null = null, dataset = ''): PlaySource {
   if (t.startsWith('hand:')) return handSource(t.slice(5) as HandRead, prev);
   const channel = prev.kind === 'midi' ? prev.channel : 0;
   switch (t) {
@@ -160,6 +163,7 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
     case 'audio': return { kind: 'audio', nodeId: prev.kind === 'audio' ? prev.nodeId : '', band: 0 };
     case 'tilt': return { kind: 'tilt', axis: 'gamma' };
     case 'gamepad': return { kind: 'gamepad', pad: 0, control: 'axis', index: 0 };
+    case 'data': return prev.kind === 'data' ? prev : { kind: 'data', dataset, column: DATA_ROW_COLUMN, layerId: '' };
     default: return prev;
   }
 }
@@ -169,6 +173,7 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'mouse') return s.axis === 'down' ? 'Mouse button' : `Mouse ${s.axis.toUpperCase()}`;
   if (s.kind === 'null') return `${layers.find(l => l.id === s.layerId)?.label ?? 'Null'} ${s.axis.toUpperCase()}`;
   if (s.kind === 'sensor') return `${layers.find(l => l.id === s.layerId)?.label ?? 'Layer'} ${SENSOR_LABELS[s.read].toLowerCase()}${s.read === 'distance' && s.otherId ? ` to ${anchorLabel(s.otherId, layers)}` : ''}`;
+  if (s.kind === 'data') return dataSourceLabel(s);
   if (s.kind === 'key') return `Key ${keyName(s.code)}`;
   if (s.kind === 'control') return `← ${controls.find(c => c.id === s.controlId)?.label ?? 'control'}`;
   if (s.kind === 'lfo') return `LFO ${s.shape} ${s.rate} Hz`;
@@ -189,6 +194,12 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
     case 'gate': return `Gate${ch}`;
     case 'bend': return `Bend${ch}`;
   }
+}
+
+/** "Data · City climate · current · temp_c" (the row position reads "row"). */
+export function dataSourceLabel(s: Extract<PlaySource, { kind: 'data' }>): string {
+  const name = datasetStore.get(s.dataset)?.name ?? (s.dataset || 'no dataset');
+  return `Data · ${name} · current · ${s.column === DATA_ROW_COLUMN ? 'row' : s.column}`;
 }
 
 export function keyName(code: string): string {
@@ -317,9 +328,9 @@ export function fireLabel(t: TriggerSpec): string {
 const REPEAT_HINTS: Record<string, string> = {
   toggle: 'A toggle fired every frame flickers on and off. Use Once, or Every N with a longer gap.',
   freeze: 'Freeze flips between frozen and moving each time it fires, so repeating it stutters. Use Once.',
-  next: 'Each fire moves on (another line, another background), so repeating it races through them and cuts crossfades short. Every N seconds reads better.',
-  prev: 'Each fire moves back (another line, another background), so repeating it races through them and cuts crossfades short. Every N seconds reads better.',
-  shuffle: 'Each fire picks another line or background, so repeating it flickers. Every N seconds reads better.',
+  next: 'Each fire moves on (another line, row or background), so repeating it races through them and cuts crossfades short. Every N seconds reads better.',
+  prev: 'Each fire moves back (another line, row or background), so repeating it races through them and cuts crossfades short. Every N seconds reads better.',
+  shuffle: 'Each fire picks another line, row or background, so repeating it flickers. Every N seconds reads better.',
   // goto: repeating Go to N shows the same source again, which changes nothing.
   drop: 'Each fire drops the bodies from the top again, so repeating it keeps them in the air.',
   reset: 'Each fire starts the layer over, so repeating it holds it at the start.',
