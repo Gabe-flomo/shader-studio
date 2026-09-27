@@ -22,17 +22,18 @@ export function StepView({ step, index, ctx, total }: { step: Step; index: numbe
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: ctx.large ? 26 : 22 }}>
       <header style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-        <span style={{ color: tk.accent.text, font: `700 ${ctx.large ? 13 : 12}px ${fontFamily.ui}`, letterSpacing: '0.06em', flexShrink: 0 }}>{String(index + 1).padStart(2, '0')}<span style={{ color: tk.text.faint, fontWeight: 500 }}> / {String(total).padStart(2, '0')}</span></span>
+        <span style={{ color: `var(--pp-accent, ${tk.accent.text})`, font: `700 ${ctx.large ? 13 : 12}px ${fontFamily.ui}`, letterSpacing: '0.06em', flexShrink: 0, textShadow: 'var(--pp-shadow, none)' }}>{String(index + 1).padStart(2, '0')}<span style={{ color: `var(--pp-muted, ${tk.text.faint})`, fontWeight: 500 }}> / {String(total).padStart(2, '0')}</span></span>
         {ctx.editing ? (
           <input
             value={step.title ?? ''}
             placeholder="Step title"
             onChange={e => patchStep(index, { title: e.target.value || undefined })}
             onKeyDown={e => e.stopPropagation()}
-            style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', padding: 0, color: tk.text.primary, font: `700 ${ctx.compact ? 22 : 26}px/1.2 ${fontFamily.ui}`, letterSpacing: '-0.015em' }}
+            className="pp-title"
+            style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', padding: 0, fontSize: `calc(${ctx.compact ? 22 : 26}px * var(--pp-scale, 1))` }}
           />
         ) : step.title ? (
-          <h2 style={{ margin: 0, color: tk.text.primary, font: `700 ${ctx.compact ? 22 : ctx.large ? 32 : 26}px/1.2 ${fontFamily.ui}`, letterSpacing: '-0.015em' }}>{step.title}</h2>
+          <h2 className="pp-title" style={{ margin: 0, fontSize: `calc(${ctx.compact ? 22 : ctx.large ? 32 : 26}px * var(--pp-scale, 1))` }}>{step.title}</h2>
         ) : null}
       </header>
       {step.blocks.length > 0 && (
@@ -63,9 +64,9 @@ function AddBlockBar({ compact, empty }: { compact: boolean; empty: boolean }) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: empty ? '36px 16px' : '14px 12px', borderRadius: radius.lg,
-      border: `1.5px dashed ${tk.border.strong}`, background: empty ? alpha(tk.accent.base, 0.03) : 'transparent',
+      border: `1.5px dashed var(--pp-rule, ${tk.border.strong})`, background: empty ? alpha(tk.accent.base, 0.03) : 'transparent',
     }}>
-      {empty && <div style={{ color: tk.text.muted, font: `500 13px ${fontFamily.ui}` }}>An empty step. Add a block:</div>}
+      {empty && <div style={{ color: `var(--pp-muted, ${tk.text.muted})`, font: `500 13px ${fontFamily.ui}` }}>An empty step. Add a block:</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
         {types.map(t => (
           <button

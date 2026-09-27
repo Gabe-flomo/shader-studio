@@ -16,6 +16,7 @@ import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
 import type { PlayHtmlInput, PlayMedia, PlayMediaFile, PlayPasses } from '../play/exportHtml';
 import type { WebDatasets } from '../play/dataExport';
 import { parseDatasetResult } from '../data/types';
+import { parseBackground, parseFontFaces, parseImages, parseStyle, usedImages, neededFonts, type EmbeddedFontFace, type PresentBackground, type PresentImage, type PresentStyle } from './presentationStyle';
 
 export const PRESENTATION_FILE_KIND = 'shader-studio-presentation';
 export const PRESENTATION_VERSION = 1 as const;
@@ -119,6 +120,8 @@ export interface Step {
   /** 2: blocks sit side by side in two columns on wide screens (an interactive block always spans both). */
   columns: 1 | 2;
   blocks: Block[];
+  /** Its own background (presentationStyle.ts); absent: the presentation's. */
+  background?: PresentBackground;
 }
 
 export interface Presentation {
@@ -131,6 +134,12 @@ export interface Presentation {
    * code, so canvases that have them run in a sandboxed frame.
    */
   origin?: 'imported';
+  /** Backgrounds and typography (presentationStyle.ts). Absent: the page's own look. */
+  style?: PresentStyle;
+  /** Image backgrounds the style and steps use, each once. */
+  images?: PresentImage[];
+  /** The chosen fonts' faces, embedded. */
+  fonts?: EmbeddedFontFace[];
   createdAt: number;
   updatedAt: number;
 }
@@ -428,7 +437,7 @@ function parseBlock(v: unknown, sources: ReadonlyMap<string, PresentSource>): Bl
   }
 }
 
-function parseStep(v: unknown, sources: ReadonlyMap<string, PresentSource>): Step | null {
+function parseStep(v: unknown, sources: ReadonlyMap<string, PresentSource>, images: ReadonlySet<string>): Step | null {
   if (!isObj(v)) return null;
   const id = idOf(v.id);
   if (!id) return null;
@@ -441,6 +450,8 @@ function parseStep(v: unknown, sources: ReadonlyMap<string, PresentSource>): Ste
   const step: Step = { id, columns: v.columns === 2 ? 2 : 1, blocks: blocks.slice(0, MAX_BLOCKS) };
   const title = str(v.title, 200);
   if (title && title.trim()) step.title = title;
+  const bg = parseBackground(v.background, images);
+  if (bg) step.background = bg;
   return step;
 }
 
@@ -458,10 +469,12 @@ export function parsePresentation(raw: unknown): Presentation | null {
     const p = parseSource(s);
     if (p && !byId.has(p.id)) { byId.set(p.id, p); sources.push(p); }
   }
+  const allImages = parseImages(raw.images);
+  const imageIds = new Set(allImages.map(i => i.id));
   const steps: Step[] = [];
   const seen = new Set<string>();
   for (const s of raw.steps.slice(0, MAX_STEPS)) {
-    const p = parseStep(s, byId);
+    const p = parseStep(s, byId, imageIds);
     if (p && !seen.has(p.id)) { seen.add(p.id); steps.push(p); }
   }
   if (!steps.length) steps.push(newStep());
@@ -474,5 +487,14 @@ export function parsePresentation(raw: unknown): Presentation | null {
     updatedAt: num(raw.updatedAt) ?? now,
   };
   if (raw.origin === 'imported') out.origin = 'imported';
+  const style = parseStyle(raw.style, imageIds);
+  if (style) out.style = style;
+  // Images nothing uses, and faces of fonts no role uses, aren't kept.
+  const used = usedImages(style, steps);
+  const images = allImages.filter(i => used.has(i.id));
+  if (images.length) out.images = images;
+  const families = neededFonts(style?.typography);
+  const fonts = parseFontFaces(raw.fonts).filter(f => families.has(f.family));
+  if (fonts.length) out.fonts = fonts;
   return out;
 }

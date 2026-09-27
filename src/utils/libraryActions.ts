@@ -2,6 +2,8 @@
  * libraryActions.ts — the buttons' side of library.ts: export everything to a
  * ZIP, import one back, and say what happened.
  */
+import { internStoredPresentations } from '../present/presentAssets';
+import { savePresentation } from '../present/storage';
 import { toast } from '../components/ui/toastStore';
 import { buildLibraryZip, buildSetZip, countInSet, describeSnapshot, DOWNLOAD_SETS, importLibrary, LIBRARY_REFRESH_EVENTS, libraryZipName, readLibrary, takeSnapshot, type DownloadSetId } from './library';
 import { errorMessage, openBinaryFile, saveBinaryFile } from './fileIO';
@@ -69,6 +71,8 @@ export async function importLibraryBytes(fileName: string, bytes: Uint8Array): P
   try {
     const r = importLibrary(readLibrary(picked.bytes));
     const img = await importImagesFrom(picked.bytes);
+    // Presentations that came in with their pictures and fonts embedded keep references to the library instead.
+    await internStoredPresentations(savePresentation).catch(() => []);
     for (const ev of LIBRARY_REFRESH_EVENTS) window.dispatchEvent(new Event(ev));
     const parts = [
       r.added ? `${r.added} added` : '',

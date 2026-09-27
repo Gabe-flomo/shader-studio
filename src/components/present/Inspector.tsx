@@ -4,7 +4,8 @@
  * with nothing selected, the step's title and columns and the presentation's
  * sources. On phones it opens as a sheet.
  */
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState } from 'react';
+import { create } from 'zustand';
 import { BLOCK_ASPECTS, type Block, type BlockAspect, type CodeBlock, type InteractiveBlock, type InteractiveControl, type PresentSource, type RenderBlock, type TextBlock } from '../../types/presentation';
 import { formatLineRanges, parseLineRanges } from '../../present/code';
 import { mappingsByControl } from '../../present/controls';
@@ -21,30 +22,8 @@ import { Poster, SourceCard, SourcePicker } from './Sources';
 import { originText } from './sourceActions';
 import { usePresentation } from './presentationStore';
 import { useMarkdownModule } from './useMarkdown';
-
-function Section({ title, children, extra }: { title: string; children: ReactNode; extra?: ReactNode }) {
-  const tk = useTokens();
-  return (
-    <section style={{ padding: '14px 16px', borderBottom: `1px solid ${tk.border.subtle}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ flex: 1, color: tk.text.faint, font: `700 10.5px ${fontFamily.ui}`, letterSpacing: '0.07em', textTransform: 'uppercase' }}>{title}</span>
-        {extra}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
-    </section>
-  );
-}
-
-function Row({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
-  const tk = useTokens();
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={{ color: tk.text.secondary, font: `600 12px ${fontFamily.ui}` }}>{label}</span>
-      {children}
-      {hint && <span style={{ color: tk.text.faint, font: `500 11.5px/1.4 ${fontFamily.ui}` }}>{hint}</span>}
-    </div>
-  );
-}
+import { Row, Section } from './InspectorParts';
+import { PresentationStyleSettings, StepBackgroundSettings } from './StyleSettings';
 
 function TextArea({ value, onChange, rows = 8, mono = true, placeholder }: { value: string; onChange: (v: string) => void; rows?: number; mono?: boolean; placeholder?: string }) {
   const tk = useTokens();
@@ -271,6 +250,7 @@ function StepSettings({ navigate, compact }: { navigate: (p: Page) => void; comp
         <Row label="Title"><Field height={32} value={step.title ?? ''} placeholder="Shown above the step" onChange={e => patchStep(stepIdx, { title: e.target.value || undefined })} /></Row>
         <Row label="Columns" hint="Two puts blocks side by side on wide screens"><Segmented fill size="sm" ariaLabel="Columns" value={String(step.columns) as '1' | '2'} onChange={v => patchStep(stepIdx, { columns: v === '2' ? 2 : 1 })} options={[{ value: '1', label: 'One' }, { value: '2', label: 'Two' }]} /></Row>
       </Section>
+      <StepBackgroundSettings compact={compact} />
       <Section title="Sources" extra={<span ref={anchor} style={{ display: 'inline-flex' }}><Button size="sm" variant="ghost" icon="plus" onClick={() => setAdding(a => !a)}>Add</Button></span>}>
         {adding && <SourcePicker anchorRef={anchor} compact={compact} onPick={() => setAdding(false)} onClose={() => setAdding(false)} />}
         {doc.sources.length === 0 && <div style={{ color: tk.text.muted, font: `500 12px/1.5 ${fontFamily.ui}` }}>The Plays this presentation shows. Each is a copy taken when it’s added, so editing the graph later changes nothing here until you Refresh it.</div>}
@@ -280,11 +260,16 @@ function StepSettings({ navigate, compact }: { navigate: (p: Page) => void; comp
   );
 }
 
+/** Which settings show with no block selected (kept while the sheet closes and opens on phones). */
+const useInspectorTab = create<{ tab: 'step' | 'style' }>(() => ({ tab: 'step' }));
+
 export function Inspector({ navigate, compact = false }: { navigate: (p: Page) => void; compact?: boolean }) {
   const tk = useTokens();
   const selected = usePresentation(s => s.selected);
   const block = usePresentation(s => (s.selected ? s.doc?.steps.flatMap(st => st.blocks).find(b => b.id === s.selected) : undefined));
   const select = usePresentation(s => s.select);
+  const tab = useInspectorTab(s => s.tab);
+  const setTab = (t: 'step' | 'style') => useInspectorTab.setState({ tab: t });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {block && !compact && (
@@ -296,7 +281,17 @@ export function Inspector({ navigate, compact = false }: { navigate: (p: Page) =
           <Button size="sm" variant="ghost" onClick={() => select(null)}>Done</Button>
         </div>
       )}
-      {selected && block ? <BlockSettings block={block} compact={compact} /> : <StepSettings navigate={navigate} compact={compact} />}
+      {selected && block ? <BlockSettings block={block} compact={compact} /> : (
+        <>
+          <div style={{ padding: '12px 16px 2px' }}>
+            <Segmented fill size="sm" ariaLabel="Settings" value={tab} onChange={setTab} options={[
+              { value: 'step', label: 'This step', title: 'Its title, columns and background, and the sources' },
+              { value: 'style', label: 'Style', title: 'Every step: the background, fonts, text size and colours' },
+            ]} />
+          </div>
+          {tab === 'style' ? <PresentationStyleSettings compact={compact} /> : <StepSettings navigate={navigate} compact={compact} />}
+        </>
+      )}
     </div>
   );
 }

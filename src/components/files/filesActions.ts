@@ -4,6 +4,8 @@
  * download in the browser, a save dialog or a folder in the desktop app),
  * and installing a profile.
  */
+import { internStoredPresentations } from '../../present/presentAssets';
+import { savePresentation } from '../../present/storage';
 import { toast } from '../ui/toastStore';
 import { LIBRARY_REFRESH_EVENTS, formatSize, libraryZipName } from '../../utils/library';
 import { errorMessage, saveBinaryFile } from '../../utils/fileIO';
@@ -157,6 +159,8 @@ export async function runInstall(profile: Profile, mode: 'merge' | 'replace'): P
     // Images and other IndexedDB stores' files go through their store.
     if (mode === 'merge') summary = await installSources(profile, 'merge', installMerge(profile, localMutableKV));
     else summary = await installReplace(profile, localMutableKV, async zip => (await saveBinaryFile(zip.bytes, zip.name, 'application/zip')).ok);
+    // Presentations that came in with their pictures and fonts embedded keep references to the library instead.
+    await internStoredPresentations(savePresentation).catch(() => []);
     syncApp(summary.changedKeys);
     return summary;
   } catch (e) {

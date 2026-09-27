@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { cloneBlock, cloneStep, emptyPresentation, newStep, type Block, type Presentation, type PresentSource, type Step } from '../../types/presentation';
 import { deletePresentation, freeName, loadPresentation, rememberLast, renamePresentation, savePresentation, type DeletedPresentation } from '../../present/storage';
 import { toast } from '../ui/toastStore';
+import { internPresentation } from '../../present/presentAssets';
 
 export type PresentMode = 'edit' | 'slides' | 'scroll';
 
@@ -78,6 +79,25 @@ export const usePresentation = create<PresentationState>((set, get) => {
     set({ status: 'pending' });
   };
   const saveNow = () => { if (timer) { clearTimeout(timer); flush(); } };
+  /**
+   * Embedded pictures and font files (an imported file, a sample, a
+   * presentation from before) move into the library and the font cache; the
+   * open presentation keeps references, so what's saved here stays small.
+   */
+  const internOpen = async () => {
+    const { doc, name } = get();
+    if (!doc) return;
+    let next: Presentation | null = null;
+    try { next = await internPresentation(doc); } catch (e) { console.warn('[present] couldn’t move the pictures into the library', e); return; }
+    if (!next || get().name !== name) return;
+    const images = new Map((next.images ?? []).map(i => [i.id, i]));
+    const fonts = next.fonts ?? [];
+    get().update(p => ({
+      ...p,
+      ...(p.images ? { images: p.images.map(i => images.get(i.id) ?? i) } : {}),
+      ...(p.fonts ? { fonts: p.fonts.map(f => (f.src ? fonts.find(g => g.family === f.family && g.weight === f.weight && g.style === f.style && g.unicodeRange === f.unicodeRange) ?? f : f)) } : {}),
+    }));
+  };
   const mapSteps = (fn: (s: Step, i: number) => Step) => get().update(p => ({ ...p, steps: p.steps.map(fn) }));
 
   return {
@@ -89,6 +109,7 @@ export const usePresentation = create<PresentationState>((set, get) => {
       if (!doc) return false;
       rememberLast(name);
       set({ name, doc, step: 0, selected: null, status: 'saved', savedAt: doc.updatedAt });
+      void internOpen();
       return true;
     },
     adopt(doc) {
@@ -98,6 +119,7 @@ export const usePresentation = create<PresentationState>((set, get) => {
       const r = savePresentation(name, p);
       if (!r.ok) toast.error('Couldn’t save the presentation', { message: r.error });
       set({ name, doc: p, step: 0, selected: null, status: r.ok ? 'saved' : 'failed', savedAt: r.ok ? Date.now() : 0, mode: 'edit' });
+      void internOpen();
       return name;
     },
     create(title) {

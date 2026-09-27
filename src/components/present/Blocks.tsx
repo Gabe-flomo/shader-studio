@@ -198,8 +198,8 @@ function RenderBlockView({ block, ctx }: { block: RenderBlock; ctx: BlockContext
           scripts={links.scripts} onScript={links.onScript} onStage={links.onStage} compact={ctx.compact}
           style={ctx.large ? { maxWidth: `calc(52vh * ${aspectRatio(block.aspect)})`, margin: '0 auto' } : undefined} />
       </div>
-      {block.caption && <figcaption style={{ width: `${pct}%`, maxWidth: '100%', color: tk.text.muted, font: `500 13px/1.45 ${fontFamily.ui}`, textAlign: 'center' }}>{block.caption}</figcaption>}
-      {credit && <CreditCaption source={credit} style={{ width: `${pct}%`, maxWidth: '100%', marginTop: block.caption ? -4 : 0 }} />}
+      {block.caption && <figcaption style={{ width: `${pct}%`, maxWidth: '100%', color: `var(--pp-muted, ${tk.text.muted})`, font: `500 13px/1.45 var(--pp-font-body, ${fontFamily.ui})`, textAlign: 'center', textShadow: 'var(--pp-shadow, none)' }}>{block.caption}</figcaption>}
+      {credit && <CreditCaption source={credit} style={{ width: `${pct}%`, maxWidth: '100%', marginTop: block.caption ? -4 : 0, color: `var(--pp-muted, ${tk.text.muted})` }} />}
     </figure>
   );
 }
@@ -281,7 +281,7 @@ function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: Bl
     scripts={links.scripts} onScript={links.onScript} onStage={links.onStage} compact={ctx.compact} />;
   const credit = play?.source;
   const canvas = credit
-    ? <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>{picture}<CreditCaption source={credit} align="left" /></figure>
+    ? <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>{picture}<CreditCaption source={credit} align="left" style={{ color: `var(--pp-muted, ${tk.text.muted})` }} /></figure>
     : picture;
   const panel = (
     <div style={{ display: 'grid', gridTemplateColumns: stacked && !ctx.compact ? 'repeat(auto-fill, minmax(220px, 1fr))' : '1fr', gap: 10 }}>
@@ -439,7 +439,7 @@ function LiveCodeView({ block, ctx, resolved }: { block: CodeBlock & { from: { s
               ? line('check', tk.text.muted, changed ? 'Your edit is running in the picture on this step.' : 'Running in the picture on this step. Change the code and watch it.')
               : line('info', tk.text.muted, 'Change the code: the picture on this step runs your version once it’s playing.')}
       </div>
-      {block.caption && <figcaption style={{ padding: '0 2px', color: tk.text.muted, font: `500 12.5px/1.4 ${fontFamily.ui}` }}>{block.caption}</figcaption>}
+      {block.caption && <figcaption style={{ padding: '0 2px', color: `var(--pp-muted, ${tk.text.muted})`, font: `500 12.5px/1.4 var(--pp-font-body, ${fontFamily.ui})`, textShadow: 'var(--pp-shadow, none)' }}>{block.caption}</figcaption>}
     </figure>
   );
 }

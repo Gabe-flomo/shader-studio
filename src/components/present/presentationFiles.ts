@@ -6,6 +6,7 @@
  * frame.
  */
 import { presentationFileJson } from '../../present/exportPresentation';
+import { withEmbeddedAssets } from '../../present/presentAssets';
 import { deletePresentation, loadPresentation, restorePresentation } from '../../present/storage';
 import { PRESENTATION_FILE_KIND, parsePresentation, type Presentation } from '../../types/presentation';
 import { openTextFile, saveTextFile } from '../../utils/fileIO';
@@ -21,7 +22,10 @@ export async function exportPresentationFile(name?: string): Promise<void> {
   const st = usePresentation.getState();
   const doc: Presentation | null = name === undefined || name === st.name ? st.doc : loadPresentation(name);
   if (!doc) { toast.error('Couldn’t download it', { message: 'That presentation isn’t readable.' }); return; }
-  reportFileResult(await saveTextFile(presentationFileJson(doc), `${fileBase(doc.title)}.present.json`), { failTitle: 'Couldn’t download the presentation', success: `Downloaded “${doc.title}”` });
+  // The file carries its pictures and fonts (from the library and the font cache), so it opens anywhere.
+  const { doc: full, missingImages } = await withEmbeddedAssets(doc);
+  const left = missingImages.length ? ` ${missingImages.length === 1 ? 'One image background isn’t' : `${missingImages.length} image backgrounds aren’t`} in this browser’s library, so only a preview went in.` : '';
+  reportFileResult(await saveTextFile(presentationFileJson(full), `${fileBase(doc.title)}.present.json`), { failTitle: 'Couldn’t download the presentation', success: `Downloaded “${doc.title}”${left}` });
 }
 
 /** Every saved presentation as one ZIP of .present.json files (plus a library.json that imports them back). */

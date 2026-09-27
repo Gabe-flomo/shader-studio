@@ -532,7 +532,13 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
         const needle = `"${ext.refField}":${JSON.stringify(it.id)}`;
         const usedBy: UsedBy[] = [];
         for (const g of graphs) { const c = g.raw.split(needle).length - 1; if (c) usedBy.push({ id: g.id, label: g.name, where: `${c === 1 ? 'Its Play setup' : `${c} places in its Play setup`} (a copy)` }); }
-        for (const p of presentations) { const c = p.raw.split(needle).length - 1; if (c) usedBy.push({ id: p.node.id, label: p.name, where: `${c === 1 ? 'A Play in it' : `${c} places in it`} (a copy)` }); }
+        for (const p of presentations) {
+          // Step backgrounds point at a library image (by reference); anything else that names it is a Play's copy.
+          const bg = presentationBackgroundUse(p.parsed, ext.refField, it.id);
+          const c = p.raw.split(needle).length - 1 - bg.images;
+          if (bg.where) usedBy.push({ id: p.node.id, label: p.name, where: bg.where });
+          if (c > 0) usedBy.push({ id: p.node.id, label: p.name, where: `${c === 1 ? 'A Play in it' : `${c} places in it`} (a copy)` });
+        }
         n.usedBy = usedBy;
         if (!usedBy.length) n.unused = 'No Play setup or presentation uses it';
       }
@@ -714,6 +720,22 @@ function graphNode(name: string, raw: string, g: Obj, historyRaw: string | null)
 function pathRef(key: string, path: Array<string | number>): StoreRef {
   const last = path[path.length - 1];
   return { t: 'part', key, path: typeof last === 'number' ? path.slice(0, -1) : path, ...(typeof last === 'number' ? { match: { field: '#', value: last } } : {}) };
+}
+
+/**
+ * Where a presentation shows a library image as a background: its images
+ * that name the id (`images` counts them, to tell them from Plays' copies)
+ * and the steps and default that use those ("Background of steps 1, 3").
+ */
+export function presentationBackgroundUse(p: Obj, field: string, id: string): { images: number; where: string } {
+  const imgs = arr(p.images).map(obj).filter((x): x is Obj => !!x && x[field] === id);
+  if (!imgs.length) return { images: 0, where: '' };
+  const ids = new Set(imgs.map(x => str(x.id)));
+  const steps = arr(p.steps).map((st, i) => (ids.has(str(obj(obj(st)?.background)?.image)) ? i + 1 : 0)).filter(Boolean);
+  const byDefault = ids.has(str(obj(obj(obj(p.style)?.background))?.image));
+  const parts = [byDefault ? 'the default background' : '', steps.length ? `the background of step${steps.length === 1 ? '' : 's'} ${steps.join(', ')}` : ''].filter(Boolean);
+  const where = parts.length ? parts.join(' and ') : 'a background no step shows';
+  return { images: imgs.length, where: where[0].toUpperCase() + where.slice(1) };
 }
 
 function presentationNode(name: string, key: string, raw: string, p: Obj | undefined): FileNode {

@@ -46,8 +46,8 @@ describe('presentation web page', () => {
     const html = buildPresentationHtml(sample, renderMarkdown, { layout: 'slides', math: 'mathml' });
     const used = new Set(sample.steps.flatMap(s => s.blocks.flatMap(b => (b.type === 'render' || b.type === 'interactive' ? [b.source] : []))));
     for (const id of used) expect(html).toContain(`"${id}":{`);
-    expect((html.match(/<section class="pp-step"/g) ?? []).length).toBe(sample.steps.length);
-    expect((html.match(/<section class="pp-step"[^>]* hidden/g) ?? []).length).toBe(sample.steps.length - 1);
+    expect((html.match(/<section class="pp-step[ "]/g) ?? []).length).toBe(sample.steps.length);
+    expect((html.match(/<section class="pp-step[^>]* hidden/g) ?? []).length).toBe(sample.steps.length - 1);
     expect(html).toContain('class="pp-chip" data-control="z"');
     expect(html).toContain('LFO 0.25 Hz');
   });
