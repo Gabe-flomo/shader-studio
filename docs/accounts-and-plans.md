@@ -184,8 +184,21 @@ Today there are several: `.present.json`, play files, library ZIPs, graph JSON,
      so it simply isn't there to patch.
    - This means the Pro features have to be split into their own
      separately-loaded code chunks. That's part of the feature-gates milestone.
-11. **Still open:** a trial for Pro? (Suggestion: 14 days of full Pro on the
-   first sign-in, once per account.)
+11. **No trial; discount codes instead.** Lemon Squeezy discount codes cover
+   this with no code of ours:
+   - a percentage or a fixed amount off;
+   - on subscriptions, for **once**, **N months** or **forever**. For example,
+     "$1 a month for the first 3 months" is $7 off, repeating for 3 months;
+   - an optional expiry date, a maximum number of uses, and limited to the
+     monthly plan, the one-time plan, or both.
+   - Codes are made in the Lemon Squeezy dashboard and typed in at checkout on
+     the store site.
+   - A share link can put the code in the checkout URL so it's applied
+     automatically.
+   - **In the app:** the licence service can serve a small "current offer" note,
+     such as "Pro is $1/month for 3 months, until 31 Oct" with a link to the
+     store. The Pro sheet and Settings → Plan show it when there is one. It's
+     optional and off unless an offer is set.
 
 ## 9. How far protection can go
 
