@@ -297,6 +297,8 @@ import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataT
 import { parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 import { parseSourceCredit, type SourceCredit } from './credit';
+import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
+export type { LayerGroup } from './layerGroups';
 
 // ── Actions (a trigger does something to a layer) ─────────────────────────────
 
@@ -456,6 +458,11 @@ export interface PlayRecord {
   controls: PlayControl[];
   mappings: PlayMapping[];
   layers: PlayLayer[];
+  /**
+   * Groups in the layer list (types/layerGroups.ts): organisation only, except
+   * that a hidden group hides its layers. Absent = none.
+   */
+  groups?: LayerGroup[];
   /**
    * Sketches saved as layer kinds (types/layerKinds.ts): what Add layer offers
    * beside the built-in kinds, and what layers with a `kindId` are made from.
@@ -950,7 +957,10 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     && (m.source.kind !== 'control' || keptIds.has(m.source.controlId))
     && layerOk(m.source)
     && (m.source.kind !== 'trigger' || triggerOk(m.source.trigger)));
-  const out: PlayRecord = { version: PLAY_VERSION, controls: keptControls, mappings: keptMappings, layers };
+  let out: PlayRecord = { version: PLAY_VERSION, controls: keptControls, mappings: keptMappings, layers };
+  // Groups: their members kept together (a hand-edited file may have split them).
+  const groups = parseLayerGroups(r.groups, layers);
+  if (groups.length) out = tidyGroups({ ...out, groups });
   if (layerKinds.length) out.layerKinds = layerKinds;
   if (Array.isArray(r.actions)) {
     const seenA = new Set<string>();

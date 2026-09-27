@@ -59,10 +59,15 @@ interface PlayUi {
   /** The Play page is showing (the picture's hand-tracking pill offers Enable only there). */
   performing: boolean;
   setPerforming: (on: boolean) => void;
+  /** The layer group whose layers the Layers tab shows ('' = the whole list). */
+  entered: string;
+  enter: (groupId: string) => void;
   /** Soloed layer and mapping ids (empty = no solo). */
   soloLayers: ReadonlySet<string>;
   soloMappings: ReadonlySet<string>;
   toggleSolo: (kind: 'layer' | 'mapping', id: string) => void;
+  /** Solo (or unsolo) several layers at once: a group's. */
+  soloLayersSet: (ids: readonly string[], on: boolean) => void;
   clearSolo: () => void;
 }
 
@@ -97,12 +102,19 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   },
   performing: false,
   setPerforming: performing => set({ performing }),
+  entered: '',
+  enter: entered => set({ entered }),
   soloLayers: NONE,
   soloMappings: NONE,
   toggleSolo: (kind, id) => {
     const next = new Set(kind === 'layer' ? get().soloLayers : get().soloMappings);
     if (next.has(id)) next.delete(id); else next.add(id);
     set(kind === 'layer' ? { soloLayers: next } : { soloMappings: next });
+  },
+  soloLayersSet: (ids, on) => {
+    const next = new Set(get().soloLayers);
+    for (const id of ids) if (on) next.add(id); else next.delete(id);
+    set({ soloLayers: next });
   },
   clearSolo: () => set({ soloLayers: NONE, soloMappings: NONE }),
   folded: loadFolded(),

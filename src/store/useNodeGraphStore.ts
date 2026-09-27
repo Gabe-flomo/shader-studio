@@ -11,6 +11,7 @@ import { buildMarchRig, buildMarchSubgraph, buildSceneSubgraph, buildVolumetricR
 import { randomizedParams } from '../nodes/randomizeParams';
 import { upgradeLegacyNode } from './legacyLabels';
 import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, usesHands, type PlayRecord, type PlayControl } from '../types/play';
+import { tidyGroups } from '../types/layerGroups';
 import { isDatasetsEmpty, parseDatasetsRecord, type Dataset, type DatasetsRecord } from '../data/types';
 import { datasetStore } from '../data/datasetStore';
 import { retypeDataNode } from '../nodes/definitions/data';
@@ -4554,7 +4555,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   setPlay: (next) => set(state => {
-    const play = typeof next === 'function' ? next(state.play) : next;
+    // Layer groups stay whole: a member removed, moved or duplicated elsewhere never splits one.
+    const play = tidyGroups(typeof next === 'function' ? next(state.play) : next);
     return play === state.play ? state : { play };
   }),
 

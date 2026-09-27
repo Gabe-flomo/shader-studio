@@ -21,6 +21,7 @@ import {
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
 } from '../types/play';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
+import type { GroupColour, LayerGroup } from '../types/layerGroups';
 
 // ── Record helpers ───────────────────────────────────────────────────────────
 
@@ -89,9 +90,12 @@ const T = {
 /** The same trigger, firing by a mode other than Once. */
 const firing = (t: TriggerSpec, fire: FireSpec): TriggerSpec => ({ ...t, fire });
 const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string, amount = 1): PlayAction => ({ id, trigger, do: kind, layerId, amount, enabled: true });
+/** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
+const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
-function play(p: { layers?: PlayLayer[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; notes: string }): PlayRecord {
+function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; notes: string }): PlayRecord {
   const out: PlayRecord = { version: 1, controls: p.controls ?? [], mappings: p.mappings ?? [], layers: p.layers ?? [] };
+  if (p.groups?.length) out.groups = p.groups;
   if (p.actions?.length) out.actions = p.actions;
   out.notes = p.notes;
   if (p.display) out.display = p.display;
@@ -832,6 +836,7 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
       layer('shape', 'honey', 'Drag', { shape: 'box', x: 0.85, w: 0.4, h: 1.1, action: 'drag', strength: 2, fillOpacity: 0.06, fill: [1, 0.8, 0.3], stroke: [1, 0.8, 0.3] }),
       layer('particles', 'air', 'Air', { count: 1400, field: 'noise', speed: 0.8, size: 1.3, trail: 0.7, colour: 'palette', palette: 1, paletteBy: 'speed', blend: 'screen' }),
     ],
+    groups: [grp('zones', 'Force zones', 'teal', ['wind', 'swirl', 'honey'])],
     controls: [ctl('tilt', 'layer:swirl::tilt', 'Vortex · Tilt', 0, 85, 1)],
     mappings: [map('lean', 'tilt', S.lfo('sine', 0.05), 0, 70)],
     notes: `**What it shows.** Force zones act on particles inside (or near) a shape:
@@ -839,7 +844,7 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
 • **Vortex** swirls them around it, within Reach. **Tilt** leans the swirl back like a disc seen from the side: orbits become ellipses, and particles grow on the near side and shrink on the far side.
 • **Drag** slows them, like honey.
 
-**How it's built.** A slow LFO leans the vortex between flat (0°) and 70°.
+**How it's built.** A slow LFO leans the vortex between flat (0°) and 70°. The three zones are one group in Layers, **Force zones**: its switch hides them all, and opening its card shows the live Tilt.
 
 **Try this.**
 • Change the wind's angle.
@@ -883,6 +888,7 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
       layer('null', 'drain', 'Drain', { x: 0.85, y: 0.3, size: 7 }),
       layer('text', 'msg', 'Message', { text: 'CLICK THE CIRCLE\nHOVER THE SQUARE\nTHE BUCKET IS FULL', y: 0.85, size: 0.08, sequence: true, transition: 'rise' }),
     ],
+    groups: [grp('triggers', 'Triggers', 'peach', ['button', 'pad', 'bucket']), grp('effects', 'Effects', 'sky', ['fx', 'sand', 'drain'])],
     actions: [
       act('click', T.zone('button', 'click'), 'burst', 'fx', 120),
       act('enter', T.zone('pad', 'enter'), 'next', 'msg'),
@@ -894,7 +900,7 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
 • **Fill** when particles crowd it past a level.
 Actions use them like keys, and they work on websites too (a background can react to parts of the page).
 
-**How it's built.** Clicking the circle bursts sparks. Hovering the square steps the message. Sand pulled into the bucket fills it, and when full it scatters.
+**How it's built.** Clicking the circle bursts sparks. Hovering the square steps the message. Sand pulled into the bucket fills it, and when full it scatters. In Layers, the three shapes sit in a group, **Triggers**, and what they set off in another, **Effects**: open one to see its layers.
 
 **Try this.**
 • Click, hover, and wait for the bucket.
