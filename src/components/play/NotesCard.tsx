@@ -7,7 +7,8 @@
  * The text is plain with a few marks: a blank line starts a paragraph, a line
  * starting with "• " (or "- ") is a bullet, **bold** is bold, and
  * [[layer:<id>]] / [[control:<id>]] is a link (noteRefs.ts): drag a layer or
- * a control onto the card to add one, click it to go there.
+ * a control onto the card to add one, click it to go there. An https://
+ * address becomes a link that opens in a new tab.
  */
 import { useState, type ReactNode } from 'react';
 import { NOTE_REF_RE, NOTE_REF_TYPE, type NoteRefKind } from './noteRefs';
@@ -26,7 +27,14 @@ export interface NoteTargets {
 
 type Chip = (kind: NoteRefKind, id: string, key: string) => ReactNode;
 
-/** **bold** runs → <strong>, links → chips. */
+/** Plain text with any https:// address made a link that opens in a new tab (the Learn notes credit their source this way). */
+function withUrls(text: string, key: string): ReactNode[] {
+  return text.split(/(https:\/\/[^\s)]*[^\s).,;:])/g).filter(Boolean).map((s, j) => s.startsWith('https://')
+    ? <a key={`${key}:${j}`} href={s} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{s.replace(/^https:\/\//, '')}</a>
+    : s);
+}
+
+/** **bold** runs → <strong>, links → chips, web addresses → links. */
 function inline(text: string, chip: Chip): ReactNode[] {
   const out: ReactNode[] = [];
   text.split(/(\*\*[^*]+\*\*)/g).filter(Boolean).forEach((part, i) => {
@@ -35,11 +43,11 @@ function inline(text: string, chip: Chip): ReactNode[] {
     const bits: ReactNode[] = [];
     let last = 0, k = 0;
     for (const m of body.matchAll(NOTE_REF_RE)) {
-      if (m.index! > last) bits.push(body.slice(last, m.index));
+      if (m.index! > last) bits.push(...withUrls(body.slice(last, m.index), `${i}:${k++}`));
       bits.push(chip(m[1] as NoteRefKind, m[2], `${i}:${k++}`));
       last = m.index! + m[0].length;
     }
-    if (last < body.length) bits.push(body.slice(last));
+    if (last < body.length) bits.push(...withUrls(body.slice(last), `${i}:${k++}`));
     out.push(bold ? <strong key={i}>{bits}</strong> : <span key={i}>{bits}</span>);
   });
   return out;

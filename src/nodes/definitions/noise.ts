@@ -74,7 +74,8 @@ float voronoi(vec2 p, float jitter) {
     for (int y = -1; y <= 1; y++) {
         for (int x = -1; x <= 1; x++) {
             vec2 neighbor = vec2(float(x), float(y));
-            vec2 point = noiseHash2(fract(i + neighbor));
+            // One random point per cell, from the cell's own integer coordinates (fract() of them was always 0, so every cell had the same point).
+            vec2 point = noiseHash2(i + neighbor);
             point = 0.5 + 0.5 * sin(jitter * 6.2831853 * point);
             vec2 diff = neighbor + point - f;
             float dist = length(diff);

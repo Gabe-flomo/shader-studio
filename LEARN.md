@@ -27,6 +27,7 @@ This document explores the technical foundations underlying each node type, the 
 8. [Domain Transformation Operations](#domain-transformation-operations)
 9. [Advanced Composition Techniques](#advanced-composition-techniques)
 10. [Complete Effect Architectures](#complete-effect-architectures)
+11. [The Learn Folder: the Book of Shaders as Graphs](#the-learn-folder-the-book-of-shaders-as-graphs)
 
 ---
 
@@ -1973,6 +1974,65 @@ Returns fractional part [0, 1).
 floor(x)    // Largest integer ≤ x
 ceil(x)     // Smallest integer ≥ x
 ```
+
+---
+
+## The Learn Folder: the Book of Shaders as Graphs
+
+The **Learn** folder in Examples follows [The Book of Shaders](https://thebookofshaders.com/) by Patricio Gonzalez Vivo and Jen Lowe, chapter by chapter and in the Book's order. Each lesson is one idea from its chapter, built from ordinary nodes so the graph itself shows how it works, with 1–3 Play sliders that make the idea visible and notes (What it shows / How it is built / Try) that credit and link the chapter. The notes are our own summaries; read the Book for the full text and its live code editors.
+
+Most of chapter 5 and parts of chapters 6 and 10–13 draw *plots*: the Book's `st` (Pixel Coordinates ÷ Resolution, 0…1 across the screen) is split into x and y, a function of x is computed with nodes, its value is painted as brightness, and **Compare** in ≈ mode draws the line where the value equals y (the Book's `plot()`). Swap the function node and the plot draws something else.
+
+| # | Lesson | Book chapter | The idea |
+|---|---|---|---|
+| 01 | Hello colour | 2 Hello world | one colour for every pixel |
+| 02 | Uniforms: time | 3 Uniforms | Time, bent by Sin, blends two colours |
+| 03 | Where am I? st | 3 Uniforms | Pixel Coordinates ÷ Resolution as red and green |
+| 04 | Plot a function | 5 Shaping functions | the plot frame; y = slope·x + offset |
+| 05 | Pow and friends | 5 | pow(x, n) against √x |
+| 06 | Step and smoothstep | 5 | a hard switch and an S-shaped ramp |
+| 07 | Sin and cos | 5 | frequency, amplitude, travelling waves |
+| 08 | Fract and floor | 5 | sawtooth and staircase; mod, abs, sign, clamp in the notes |
+| 09 | Shaping functions by hand | 5 | Golan Levin's exponential sigmoid, Inigo Quilez's impulse |
+| 10 | Mix and gradients | 6 Colors | a different shaping curve per channel |
+| 11 | HSB colour | 6 | hue across, brightness up |
+| 12 | Polar colour wheel | 6 | angle as hue, radius as saturation |
+| 13 | Rectangle from step | 7 Shapes | four edge tests multiplied (AND) |
+| 14 | Circle from distance | 7 | the distance cone, cut at the radius |
+| 15 | Distance fields | 7 | a box's field as contour rings |
+| 16 | Polar shapes | 7 | radius as a function of angle |
+| 17 | Polygons: polar + distance | 7 | the Book's polygon formula in an Expression Block |
+| 18 | Combining shapes | 7 | min/max of distance fields, smooth union |
+| 19 | Translate | 8 2D Matrices | move the space, not the shape |
+| 20 | Rotate with a matrix | 8 | Rotation Matrix × UV |
+| 21 | Scale with a matrix | 8 | Scale Matrix × UV |
+| 22 | Move, turn, scale in one node | 8 | UV Transform 2D |
+| 23 | YUV: a matrix on colour | 8 | a 3×3 matrix from YUV to RGB |
+| 24 | Tiling | 9 Patterns | Tile (fract of the UV) |
+| 25 | Transforms inside the tiles | 9 | a rotation after Tile |
+| 26 | Offset patterns: bricks | 9 | mod and step find odd rows |
+| 27 | Truchet tiles | 9 | one triangle turned by cell index |
+| 28 | Random from a sine | 10 Random | fract(sin(x) × big) |
+| 29 | Random cells | 10 | hash of floor(st × n) |
+| 30 | A random maze (10 PRINT) | 10 | a coin toss per cell picks a diagonal |
+| 31 | Smooth random: 1D noise | 11 Noise | random at integers, eased in between |
+| 32 | 2D noise | 11 | value and gradient noise |
+| 33 | Noise at work: wood grain | 11 | noise turns the space before stripes |
+| 34 | Distance to the nearest point | 12 Cellular noise | min of distances to four points |
+| 35 | Cellular noise | 12 | one point per tile, nine tiles checked |
+| 36 | Octaves: fractal noise | 13 Fractal Brownian Motion | FBM as a line; gain and lacunarity |
+| 37 | Fractal noise (FBM) in 2D | 13 | FBM through a palette |
+| 38 | Turbulence and ridges | 13 | abs per octave, flipped into ridges |
+| 39 | Domain warp | 13 | FBM of warped coordinates |
+| 40 | Fractals: the Mandelbrot set | 14 Fractals (unwritten) | z = z² + c |
+| 41 | A fractal by hand: Loop Carry | 14 | an iterated group folding its own result |
+| 42 | Extra: first ray march | (3D chapters unwritten) | a camera, a scene group, a march loop |
+
+The Book's later parts (image processing, simulation, 3D) are not written yet; the Learn 3D folder continues with ray marching one idea at a time.
+
+Earlier Learn lessons that teach something the Book doesn't kept their keys and notes and moved to the folders they fit: **Curves & Shapes** (Bezier shaping curve; SDF: Circle SDF + SDF Fill; SDF: distance as light), **Color & Lighting** (Cosine palettes) and **Grid** (Grid: Cell ID and hash; Grid: Grid Pattern and the mouse; Grid: Effects across the grid).
+
+The graphs are built in `src/store/learnExamples.ts` from the node definitions (so they can't drift from the nodes), listed in `src/store/learnExampleIndex.ts`, and tested in `src/store/__tests__/learnExamples.test.ts` (every lesson compiles, has notes and a chapter link, and 1–3 sliders that reach live params).
 
 ---
 
