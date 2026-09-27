@@ -19,6 +19,8 @@ import { ThemeOverrideContext, useTokens } from './theme/themeStore';
 import { AspectPicker, PreviewFooter, PreviewHeader } from './components/shell/PreviewChrome';
 import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
+import { PlaySplitArea, SplitButton } from './components/play/PlaySplitArea';
+import { usePlaySplit } from './components/play/playSplit';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './components/shell/rebuildAction';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
@@ -449,6 +451,8 @@ function App() {
     if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 4000 }); else window.setTimeout(run, 2000);
   }, []);
   const playWidth = PANEL_WIDTHS[usePlayUi(s => s.panel)];
+  // Play's split view can hide the sidebar (the panel column), leaving the picture and the big panel.
+  const playSidebarHidden = usePlaySplit(s => s.on && s.available && s.sidebarHidden);
   // "This graph has a Play setup · Open Play" means nothing while Play is already open.
   useEffect(() => {
     if (page !== 'play') return;
@@ -613,6 +617,7 @@ function App() {
     filterUVInputs: () => setNodeHighlightFilter('uv-in'),
     filterUVOutputs:() => setNodeHighlightFilter('uv-out'),
     shortcuts:      () => setPage(p => p === 'shortcuts' ? 'studio' : 'shortcuts'),
+    playSplit:      () => { const sp = usePlaySplit.getState(); if (sp.available) sp.toggle(); },
   }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll, setPage]);
 
   const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);
@@ -1131,7 +1136,7 @@ function App() {
 
           {/* Play: the control panel takes the graph's place, the picture gets the rest */}
           {page === 'play' && (
-            <div style={{ width: `min(${playWidth}px, 50vw)`, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }}>
+            <div style={playSidebarHidden ? { width: 0, flexShrink: 0, position: 'relative', overflow: 'hidden' } : { width: `min(${playWidth}px, 50vw)`, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }}>
               <PlayPage canvasRow />
             </div>
           )}
@@ -1163,7 +1168,9 @@ function App() {
 
           {/* Right: Preview */}
           <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
+            <PlaySplitArea active={page === 'play'}>
+              <div style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
+            </PlaySplitArea>
             <div style={{ background: tc.mantle, borderTop: `1px solid ${tc.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: tc.surface2, minHeight: '28px', flexShrink: 0 }}>
               <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for color · click node to probe" />
               <div style={{ flex: 1 }} />
@@ -1231,7 +1238,7 @@ function App() {
 
         {/* Center content. On Play the panel is a fixed column and the picture takes the rest. */}
         <div style={page === 'play'
-          ? { width: playWidth, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }
+          ? (playSidebarHidden ? { width: 0, flexShrink: 0, position: 'relative', overflow: 'hidden' } : { width: playWidth, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` })
           : { flex: 1, position: 'relative', minWidth: 0 }}>
           {page === 'play' && <PlayPage />}
           {page === 'studio' && (
@@ -1273,14 +1280,17 @@ function App() {
               <PreviewHeader>
                 <AspectPicker />
                 {page === 'play' && <GuidesToggle />}
+                {page === 'play' && <SplitButton />}
                 {page === 'play' && <Button size="sm" variant="ghost" icon="play" onClick={() => useStage.getState().open('full')} title="Stage: the picture and its controls on their own, as people will play with it (Full or Exact, phone or screen, fullscreen, Record)">Stage</Button>}
                 <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
                 <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
               </PreviewHeader>
-              <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-                <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
-                {showHistogram && histData && <HistogramOverlay data={histData} />}
-              </div>
+              <PlaySplitArea active={page === 'play'}>
+                <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+                  <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
+                  {showHistogram && histData && <HistogramOverlay data={histData} />}
+                </div>
+              </PlaySplitArea>
               <PreviewFooter idleHint="Hover for colour · select a node to probe" />
             </div>
           </ThemeOverrideContext.Provider>

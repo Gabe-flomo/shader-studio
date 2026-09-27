@@ -66,7 +66,7 @@ let draggingRow: ItemRef | null = null;
 const sameItem = (a: ItemRef, b: ItemRef) => a.kind === b.kind && a.id === b.id;
 const nodeItem = (n: TreeNode): ItemRef => (n.kind === 'layer' ? { kind: 'layer', id: n.layer.id } : { kind: 'group', id: n.group.id });
 
-export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, top }: {
+export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, top, split = false }: {
   play: PlayRecord;
   touch: boolean;
   /** Targets that already have a control (their + is shown pressed). */
@@ -76,6 +76,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   onExpose: (control: PlayControl) => void;
   /** Scrolls with the list, above the layers (phones put the notes here). */
   top?: ReactNode;
+  /** Wide (the Play split view's big panel): the list of layers on the left, the selected layer's editor on the right. */
+  split?: boolean;
 }) {
   const tk = useTokens();
   const mode = useThemeMode();
@@ -260,6 +262,62 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const [dropAt, setDropAt] = useState<{ key: string; where: 'before' | 'after' } | null>(null);
   const layerCount = play.layers.length;
 
+  // A layer's card: its row in the list and, split, its editor beside the list.
+  const rowProps = (l: PlayLayer, nested: boolean): LayerRowProps => {
+    const it: ItemRef = { kind: 'layer', id: l.id };
+    return {
+      layer: l,
+      layers: play.layers,
+      play,
+      onChangePlay: onChange,
+      canUp: canMove(play, it, -1),
+      canDown: canMove(play, it, 1),
+      touch,
+      selected: selected === l.id,
+      stripe,
+      dim: hiddenAbove,
+      pictureHidden: isPictureHidden(play.display),
+      drawing: drawing?.layerId === l.id && !drawing.mask ? drawing.mode : null,
+      maskDrawing: drawing?.layerId === l.id && drawing.mask ? drawing.mode : null,
+      matteOf: matteUsers(play.layers, l.id),
+      nested,
+      exposedTargets,
+      onSelect: () => setSelected(l.id),
+      onPatch: fn => patch(l.id, fn),
+      revealTick: selected === l.id ? revealTick : 0,
+      onRemove: () => remove(l.id),
+      onRename: label => onChange(p => renameLayer(p, l.id, label)),
+      onDuplicate: () => duplicate(l.id),
+      onReset: () => reset(l.id),
+      onCreateNull: key => createNull(l.id, key),
+      onMove: dir => onChange(p => moveItem(p, it, dir)),
+      groupItems: l.kind === 'background' ? [] : [
+        { label: 'Group', hint: `${MOD}G · in a new group of its own`, onSelect: () => onChange(p => createGroup(p, [it]).play) },
+        ...(entered ? [{ label: 'Take out of group', hint: `Into ${path.length > 1 ? `“${path[path.length - 2].label}”` : 'the main list'}`, onSelect: () => onChange(p => takeOutOfGroup(p, l.id)) }] : []),
+      ],
+      onExpose: key => expose(l, key),
+      onExposeControl: onExpose,
+      onDriveNull: key => driveNull(l, key),
+    };
+  };
+
+  // Split: the list beside the selected layer's editor.
+  const editing = split ? play.layers.find(l => l.id === selected) : undefined;
+  const wrapSplit = (list: ReactNode) => !split ? list : (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      {list}
+      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '6px 16px 16px' }}>
+        {editing
+          ? <LayerRow key={editing.id} {...rowProps(editing, false)} />
+          : (
+            <div style={{ margin: '18px 4px', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, lineHeight: 1.5 }}>
+              {play.layers.length ? 'Pick a layer in the list to edit it here.' : 'Add a layer and edit it here.'}
+            </div>
+          )}
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 0 14px', borderBottom: `1px solid ${tk.border.default}`, background: tk.bg.panel }}>
@@ -286,7 +344,9 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
           <Button size="sm" variant="ghost" onClick={clearPicks}>{selectMode ? 'Done' : 'Clear'}</Button>
         </div>
       )}
-      <div ref={listRef} style={{ flex: 1, minHeight: play.notes && !top ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+      {wrapSplit(<div ref={listRef} style={split
+        ? { width: 'clamp(280px, 38%, 420px)', flexShrink: 0, overflowY: 'auto', padding: '6px 12px 12px 16px', borderRight: `1px solid ${tk.border.default}` }
+        : { flex: 1, minHeight: play.notes && !top ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {top && <div style={{ margin: '0 -12px' }}>{top}</div>}
         <SoloStrip kind="layer" total={play.layers.filter(l => l.kind !== 'null').length} />
         {inside && (
@@ -345,53 +405,19 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
                 />
               ) : (() => {
                 const l = n.layer;
-                const it: ItemRef = { kind: 'layer', id: l.id };
-                return (
-                  <LayerRow
-                    layer={l}
-                    layers={play.layers}
-                    play={play}
-                    onChangePlay={onChange}
-                    canUp={canMove(play, it, -1)}
-                    canDown={canMove(play, it, 1)}
-                    touch={touch}
-                    selected={selected === l.id}
-                    stripe={stripe}
-                    dim={hiddenAbove}
-                    pictureHidden={isPictureHidden(play.display)}
-                    drawing={drawing?.layerId === l.id && !drawing.mask ? drawing.mode : null}
-                    maskDrawing={drawing?.layerId === l.id && drawing.mask ? drawing.mode : null}
-                    matteOf={matteUsers(play.layers, l.id)}
-                    nested={prev?.kind === 'layer' && prev.layer.trackMatte?.id === l.id}
-                    exposedTargets={exposedTargets}
-                    onSelect={() => setSelected(l.id)}
-                    onPatch={fn => patch(l.id, fn)}
-                    revealTick={selected === l.id ? revealTick : 0}
-                    onRemove={() => remove(l.id)}
-                    onRename={label => onChange(p => renameLayer(p, l.id, label))}
-                    onDuplicate={() => duplicate(l.id)}
-                    onReset={() => reset(l.id)}
-                    onCreateNull={key => createNull(l.id, key)}
-                    onMove={dir => onChange(p => moveItem(p, it, dir))}
-                    groupItems={l.kind === 'background' ? [] : [
-                      { label: 'Group', hint: `${MOD}G · in a new group of its own`, onSelect: () => onChange(p => createGroup(p, [it]).play) },
-                      ...(entered ? [{ label: 'Take out of group', hint: `Into ${path.length > 1 ? `“${path[path.length - 2].label}”` : 'the main list'}`, onSelect: () => onChange(p => takeOutOfGroup(p, l.id)) }] : []),
-                    ]}
-                    onExpose={key => expose(l, key)}
-                    onExposeControl={onExpose}
-                    onDriveNull={key => driveNull(l, key)}
-                  />
-                );
+                return <LayerRow {...rowProps(l, prev?.kind === 'layer' && prev.layer.trackMatte?.id === l.id)} headerOnly={split} />;
               })()}
             </RowShell>
           );
         })}
         {!entered && <ActionsSection play={play} onChange={onChange} />}
-      </div>
+      </div>)}
       {duplicating && <DuplicateGroupDialog group={duplicating} play={play} onPick={w => duplicateGroupAs(duplicating, w)} onClose={() => setDuplicating(null)} />}
     </>
   );
 }
+
+type LayerRowProps = Omit<Parameters<typeof LayerRow>[0], 'headerOnly'>;
 
 const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 
@@ -492,7 +518,7 @@ function DuplicateGroupDialog({ group, play, onPick, onClose }: { group: LayerGr
   );
 }
 
-function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch, selected, stripe, dim, groupItems, pictureHidden, drawing, maskDrawing, matteOf, nested, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull }: {
+function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch, selected, stripe, dim, groupItems, pictureHidden, drawing, maskDrawing, matteOf, nested, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull, headerOnly = false }: {
   layer: PlayLayer;
   layers: PlayLayer[];
   play: PlayRecord;
@@ -529,6 +555,8 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   onExpose: (key: string) => void;
   onExposeControl: (control: PlayControl) => void;
   onDriveNull: (key: string) => void;
+  /** Just the card's header: the split view lists layers this way and edits the selected one beside the list. */
+  headerOnly?: boolean;
 }) {
   const tk = useTokens();
   const [editing, setEditing] = useState(false);
@@ -577,7 +605,8 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   // The Background layer stays at the bottom: it doesn't move, and there is only one.
   const isBackground = l.kind === 'background';
 
-  const summary = !open ? matteMaskSummary(play, l) : '';
+  const shows = open && !headerOnly;
+  const summary = !shows ? matteMaskSummary(play, l) : '';
   const reveal = usePlayUi(s => s.reveal);
 
   return (
@@ -600,19 +629,20 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
         title="Drag to move it in the list, or onto the notes to link it"
         style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26 }}
       >
-        <IconButton icon={open ? 'chevD' : 'chevR'} label={open ? 'Collapse layer' : 'Expand layer'} size="sm" tooltip={false} onClick={() => setOpen(o => !o)} style={{ marginLeft: -6 }} />
+        {!headerOnly && <IconButton icon={open ? 'chevD' : 'chevR'} label={open ? 'Collapse layer' : 'Expand layer'} size="sm" tooltip={false} onClick={() => setOpen(o => !o)} style={{ marginLeft: -6 }} />}
         <Tooltip label={look.label} description={look.hint}><Icon name={look.icon} size={14} style={{ color: look.color, flexShrink: 0 }} /></Tooltip>
         {editing ? (
           <Field autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(l.label); setEditing(false); } }} height={26} style={{ flex: 1 }} />
         ) : (
-          <button type="button" title="Rename" onClick={() => { setDraft(l.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'text', color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.label}</button>
+          <button type="button" title={headerOnly ? 'Edit' : 'Rename'} onClick={() => { if (headerOnly) return; setDraft(l.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: headerOnly ? 'pointer' : 'text', color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.label}</button>
         )}
         {l.kind !== 'null' && !isBackground && <SoloButton kind="layer" id={l.id} />}
         <span title={matteOf.length ? (l.visible ? 'Showing on its own too. Off: only as the matte' : 'Hidden, working as the matte. On: show it on its own too') : l.visible ? 'Hide' : 'Show'} style={{ display: 'inline-flex' }}>
           <Toggle checked={l.visible} onChange={visible => set({ visible })} />
         </span>
-        {!isBackground && <IconButton icon="chevU" label="Move up (drawn earlier)" size="sm" disabled={!canUp} tooltip={false} onClick={() => onMove(-1)} />}
-        {!isBackground && <IconButton icon="chevD" label="Move down (drawn later, on top)" size="sm" disabled={!canDown} tooltip={false} onClick={() => onMove(1)} />}
+        {/* A header-only row leaves moving to dragging and to the editor beside it, so the name has room. */}
+        {!isBackground && !headerOnly && <IconButton icon="chevU" label="Move up (drawn earlier)" size="sm" disabled={!canUp} tooltip={false} onClick={() => onMove(-1)} />}
+        {!isBackground && !headerOnly && <IconButton icon="chevD" label="Move down (drawn later, on top)" size="sm" disabled={!canDown} tooltip={false} onClick={() => onMove(1)} />}
         <span ref={moreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More: duplicate, reset, delete" size="sm" tooltip={false} onClick={() => { const r = moreRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 220, y: r.bottom + 4 } : null); }} />
         </span>
@@ -639,7 +669,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{summary}</span>
         </div>
       )}
-      {open && (
+      {shows && (
         <>
           <MatteMaskBar f={f} play={play} changePlay={onChangePlay} drawing={maskDrawing} onSelect={onSelect} />
           {body}
