@@ -42,6 +42,9 @@ import {
   type EditorContext, ClonerEditor, ScriptEditor } from './layers/editors';
 import { ActionsSection } from './layers/ActionsSection';
 import { DataLayerEditor } from './layers/DataLayerEditor';
+import { MatteMaskBar } from './layers/MatteMask';
+import { matteMaskSummary } from '../../play/mattes';
+import { matteUsers } from '../../types/playLayers';
 
 const KIND = BUILTIN_LAYER;
 
@@ -60,8 +63,11 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const addRef = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState(false);
   const selected = usePlayUi(s => s.selected), setSelected = usePlayUi(s => s.select), revealTick = usePlayUi(s => s.revealTick);
+  const mask = usePlayUi(s => s.mask);
   const [drawing, setDrawing] = useState<ShapeDrawing | null>(null);
-  useEffect(() => { playOverlay.setEditing(true, selected); }, [selected]);
+  useEffect(() => { playOverlay.setEditing(true, selected, mask); }, [selected, mask]);
+  // A mask picked (or drawn) on the picture opens in its layer's card.
+  useEffect(() => playOverlay.onMaskSelect((layerId, maskId) => { const ui = usePlayUi.getState(); if (ui.selected !== layerId) ui.select(layerId); ui.setMask(maskId); }), []);
   useEffect(() => () => { playOverlay.setEditing(false); playOverlay.cancelDrawing(); }, []);
   useEffect(() => playOverlay.onDrawing(d => setDrawing(d ? { ...d } : null)), []);
   // A layer clicked on the picture is selected here too.
@@ -147,7 +153,10 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             touch={touch}
             selected={selected === l.id}
             pictureHidden={isPictureHidden(play.display)}
-            drawing={drawing?.layerId === l.id ? drawing.mode : null}
+            drawing={drawing?.layerId === l.id && !drawing.mask ? drawing.mode : null}
+            maskDrawing={drawing?.layerId === l.id && drawing.mask ? drawing.mode : null}
+            matteOf={matteUsers(play.layers, l.id)}
+            nested={i > 0 && play.layers[i - 1].trackMatte?.id === l.id}
             exposedTargets={exposedTargets}
             onSelect={() => setSelected(l.id)}
             onPatch={fn => patch(l.id, fn)}
@@ -169,7 +178,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   );
 }
 
-function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, selected, pictureHidden, drawing, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull }: {
+function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, selected, pictureHidden, drawing, maskDrawing, matteOf, nested, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull }: {
   layer: PlayLayer;
   layers: PlayLayer[];
   play: PlayRecord;
@@ -180,6 +189,12 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
   selected: boolean;
   pictureHidden: boolean;
   drawing: 'polygon' | 'lasso' | null;
+  /** A mask outline is being drawn for this layer. */
+  maskDrawing: 'polygon' | 'lasso' | null;
+  /** The layers using this one as their matte. */
+  matteOf: PlayLayer[];
+  /** It sits right after the layer it is the matte of: shown tucked under it. */
+  nested: boolean;
   exposedTargets: Set<string>;
   onSelect: () => void;
   onPatch: (fn: (l: PlayLayer) => PlayLayer) => void;
@@ -246,12 +261,22 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
   const isBackground = l.kind === 'background';
   const floor = layers[0]?.kind === 'background' ? 1 : 0;
 
+  const summary = !open ? matteMaskSummary(play, l) : '';
+  const reveal = usePlayUi(s => s.reveal);
+
   return (
     <div
       data-layer-id={l.id}
       onPointerDownCapture={onSelect}
-      style={{ padding: '8px 10px 10px', marginTop: 6, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 ${selected ? 1.5 : 1}px ${selected ? tk.accent.base : tk.border.default}`, opacity: l.visible ? 1 : 0.6 }}
+      style={{
+        position: 'relative', padding: '8px 10px 10px', marginTop: nested ? 4 : 6, marginLeft: nested ? 18 : 0, borderRadius: radius.card, background: tk.bg.panel,
+        boxShadow: `inset 0 0 0 ${selected ? 1.5 : 1}px ${selected ? tk.accent.base : tk.border.default}`,
+        // A hidden matte is still at work: it isn't dimmed like a hidden layer.
+        opacity: l.visible || matteOf.length ? 1 : 0.6,
+      }}
     >
+      {/* Tucked under the layer it is the matte of, joined by an elbow (After Effects' track matte column). */}
+      {nested && <span aria-hidden style={{ position: 'absolute', left: -12, top: -5, width: 11, height: 23, borderLeft: `1.5px solid ${tk.text.faint}`, borderBottom: `1.5px solid ${tk.text.faint}`, borderBottomLeftRadius: 7, opacity: 0.7 }} />}
       <div
         draggable={!editing}
         onDragStart={e => { e.dataTransfer.setData(NOTE_REF_TYPE, noteRef('layer', l.id)); e.dataTransfer.setData('text/plain', noteRef('layer', l.id)); e.dataTransfer.effectAllowed = 'copy'; }}
@@ -266,7 +291,9 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
           <button type="button" title="Rename" onClick={() => { setDraft(l.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'text', color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.label}</button>
         )}
         {l.kind !== 'null' && !isBackground && <SoloButton kind="layer" id={l.id} />}
-        <Toggle checked={l.visible} onChange={visible => set({ visible })} />
+        <span title={matteOf.length ? (l.visible ? 'Showing on its own too. Off: only as the matte' : 'Hidden, working as the matte. On: show it on its own too') : l.visible ? 'Hide' : 'Show'} style={{ display: 'inline-flex' }}>
+          <Toggle checked={l.visible} onChange={visible => set({ visible })} />
+        </span>
         {!isBackground && <IconButton icon="chevU" label="Move up (drawn earlier)" size="sm" disabled={index <= floor} tooltip={false} onClick={() => onMove(-1)} />}
         {!isBackground && <IconButton icon="chevD" label="Move down (drawn later, on top)" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />}
         <span ref={moreRef} style={{ display: 'inline-flex' }}>
@@ -274,8 +301,30 @@ function LayerRow({ layer: l, layers, play, onChangePlay, index, count, touch, s
         </span>
         {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={isBackground ? backgroundMenuItems({ onReset, onRemove }) : layerMenuItems({ onDuplicate, onReset, onRemove })} />}
       </div>
+      {matteOf.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '2px 0 0 20px', color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, minWidth: 0 }}>
+          <Icon name="link" size={13} style={{ color: tk.accent.base }} />
+          <span style={{ whiteSpace: 'nowrap' }}>Matte for</span>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {matteOf.map((u, k) => (
+              <span key={u.id}>
+                {k > 0 && ', '}
+                <button type="button" onClick={() => reveal(u.id)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: 'inherit' }}>{u.label}</button>
+              </span>
+            ))}
+          </span>
+          {!l.visible && <span style={{ whiteSpace: 'nowrap' }}>· hidden</span>}
+        </div>
+      )}
+      {summary && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '2px 0 0 20px', color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+          <Icon name={l.trackMatte ? 'link' : 'mask'} size={13} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{summary}</span>
+        </div>
+      )}
       {open && (
         <>
+          <MatteMaskBar f={f} play={play} changePlay={onChangePlay} drawing={maskDrawing} onSelect={onSelect} />
           {body}
           {SENSOR_READS_FOR[l.kind] && l.kind !== 'null' && (
             <Section kind={l.kind} title={l.kind === 'audio' ? 'Bands' : 'Readings'} hint={l.kind === 'audio'

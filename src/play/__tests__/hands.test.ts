@@ -10,7 +10,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 vi.hoisted(() => {
   (globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} };
 });
-import { hdCreate, hdEuroStep, hdGate, hdPlacement, hdPoint, hdRead, hdToPicture, hdUpdate, HD_HOLD_MS, type HdFrame } from '../kit/hands.js';
+import { hdCreate, hdEuroParams, hdEuroStep, hdGate, hdPlacement, hdPoint, hdRead, hdToPicture, hdTrackerOptions, hdTracks, hdUpdate, HD_APPEAR_FRAMES, HD_HOLD_MS, HD_SIDE_SWITCH_MS, type HdFrame, type HdUpdateOptions } from '../kit/hands.js';
 import { createLayerKit, type KitEnv } from '../kit/kit.js';
 import { handFeed } from '../../lib/handFeed';
 import { inputBus } from '../../lib/inputBus';
@@ -21,7 +21,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { handSourceLabel, sourceFromType, sourceLabel, sourceType, triggerLabel } from '../playSources';
 import { triggerKey } from '../triggers';
 import { leftBehind, mediaCarried, playBundle } from '../exportHtml';
-import { DEFAULT_HANDS, defaultLayer, emptyPlayRecord, parsePlayRecord, usesHands, type PlayLayer, type PlayRecord, type PlaySource } from '../../types/play';
+import { DEFAULT_HANDS, defaultLayer, emptyPlayRecord, oneHandUsed, parsePlayRecord, usesHands, type PlayLayer, type PlayRecord, type PlaySource } from '../../types/play';
 
 // ── Synthetic hands ──────────────────────────────────────────────────────────
 
@@ -86,7 +86,8 @@ function frame(hands: { side: 'left' | 'right'; pose: Pose }[], dt = 33): HdFram
 
 const PIC = 16 / 9;
 const place = hdPlacement(null, null, CAM_ASPECT, PIC, true);
-const update = (st: ReturnType<typeof hdCreate>, f: HdFrame, smoothing = 0) => hdUpdate(st, f, { picAspect: PIC, place, smoothing });
+/** Readings tests: a hand counts from its first frame (the appearing debounce has its own tests below). */
+const update = (st: ReturnType<typeof hdCreate>, f: HdFrame, smoothing = 0, more: Partial<HdUpdateOptions> = {}) => hdUpdate(st, f, { picAspect: PIC, place, smoothing, appearFrames: 1, ...more });
 
 // ── Pure hands.js ────────────────────────────────────────────────────────────
 
@@ -202,6 +203,165 @@ describe('hands on the picture', () => {
   });
 });
 
+// ── Steady hands: tracks, sides, phantoms ────────────────────────────────────
+
+/** A detection as the tracker sends it: the classifier's side and score, landmarks for a pose. */
+const det = (side: 'left' | 'right', pose: Pose, score = 0.95) => ({ side, score, lm: handLm(pose) });
+/** A frame of detections, 33 ms after the last (about 30 a second). */
+const at = (hands: ReturnType<typeof det>[], dt = 33): HdFrame => ({ t: (clock += dt), w: CAM_W, h: CAM_H, hands });
+/** Default settings: the appearing debounce on, as the app runs it. */
+const live = (st: ReturnType<typeof hdCreate>, f: HdFrame, more: Partial<HdUpdateOptions> = {}) => hdUpdate(st, f, { picAspect: PIC, place, smoothing: 0, ...more });
+const sides = (st: ReturnType<typeof hdCreate>) => (['left', 'right'] as const).filter(s => st[s].present);
+
+describe('steady hands', () => {
+  it('keep a hand’s side while the classifier wavers, and change it only after it disagrees surely for a while', () => {
+    const st = hdCreate();
+    for (let i = 0; i < 5; i++) live(st, at([det('right', OPEN)]));
+    expect(sides(st)).toEqual(['right']);
+    const id = st.right.track;
+    // A few frames labelled Left, even surely: still the right hand, same track.
+    for (let i = 0; i < 6; i++) live(st, at([det('left', OPEN, 0.97)]));
+    for (let i = 0; i < 3; i++) live(st, at([det('right', OPEN)]));
+    expect(sides(st)).toEqual(['right']);
+    expect(st.right.track).toBe(id);
+    // Unsure disagreement never changes it, however long.
+    for (let i = 0; i < 60; i++) live(st, at([det('left', OPEN, 0.6)]));
+    expect(sides(st)).toEqual(['right']);
+    // Sure, and for longer than HD_SIDE_SWITCH_MS: it is the left hand after all.
+    const frames = Math.ceil(HD_SIDE_SWITCH_MS / 33) + 1;
+    for (let i = 0; i < frames - 2; i++) live(st, at([det('left', OPEN, 0.95)]));
+    expect(sides(st)).toEqual(['right']);
+    for (let i = 0; i < 3; i++) live(st, at([det('left', OPEN, 0.95)]));
+    expect(sides(st)).toEqual(['left']);
+    expect(st.left.track).toBe(id); // the same hand, relabelled; nothing held over on the right
+  });
+
+  it('follow two hands by position when the classifier swaps their labels', () => {
+    const st = hdCreate();
+    // Your right hand on the image's left (an unmirrored camera), your left on its right.
+    const R = { ...OPEN, cx: 0.3 }, L = { ...OPEN, cx: 0.7 };
+    for (let i = 0; i < 4; i++) live(st, at([det('right', R), det('left', L)]));
+    const ids = { right: st.right.track, left: st.left.track };
+    const rx = hdRead(st, 'right', 'palm', 0, 'x', 'pinch')!;
+    // Both labels flip for a handful of frames, in either order.
+    for (let i = 0; i < 8; i++) live(st, at(i % 2 ? [det('left', R), det('right', L)] : [det('right', L), det('left', R)]));
+    expect({ right: st.right.track, left: st.left.track }).toEqual(ids);
+    expect(hdRead(st, 'right', 'palm', 0, 'x', 'pinch')).toBeCloseTo(rx, 5);
+    // Swapped for good (the camera was mirrored all along): both change together.
+    for (let i = 0; i < Math.ceil(HD_SIDE_SWITCH_MS / 33) + 2; i++) live(st, at([det('left', R), det('right', L)]));
+    expect({ right: st.right.track, left: st.left.track }).toEqual({ right: ids.left, left: ids.right });
+  });
+
+  it('ignore a second hand that flickers in for a frame or two, and show one that stays', () => {
+    const st = hdCreate();
+    const counts: number[] = [];
+    const R = { ...OPEN, cx: 0.3 }, ghost = { ...OPEN, cx: 0.75, s: 0.3 };
+    for (let i = 0; i < 4; i++) { live(st, at([det('right', R)])); counts.push(st.count); }
+    // A phantom for 1 frame, then 2 frames, then gone.
+    for (const n of [1, 0, 0, 2, 0, 0, 0]) {
+      for (let k = 0; k < Math.max(1, n); k++) { live(st, at(n ? [det('right', R), det('left', ghost, 0.7)] : [det('right', R)])); counts.push(st.count); }
+    }
+    expect(counts.slice(4).every(c => c === 1)).toBe(true);
+    expect(st.left.ever).toBe(false); // never appeared, so it never "left" either
+    expect(hdGate(st, 'left', 'leave')).toBe(false);
+    // A real second hand: counts from its HD_APPEAR_FRAMES-th frame.
+    const seen: number[] = [];
+    for (let i = 0; i < HD_APPEAR_FRAMES; i++) { live(st, at([det('right', R), det('left', ghost)])); seen.push(st.count); }
+    expect(seen).toEqual([...Array(HD_APPEAR_FRAMES - 1).fill(1), 2]);
+    expect(sides(st)).toEqual(['left', 'right']);
+  });
+
+  it('with Max hands 1, never show a second hand', () => {
+    const st = hdCreate();
+    for (let i = 0; i < 20; i++) live(st, at([det('right', { ...OPEN, cx: 0.3 }, 0.9), det('left', { ...OPEN, cx: 0.7 }, 0.8)]), { maxHands: 1 });
+    expect(st.count).toBe(1);
+    expect(sides(st)).toEqual(['right']); // the surer one
+    expect(hdTracks(st).tracks).toHaveLength(1);
+    expect(hdTrackerOptions({ maxHands: 1 }).numHands).toBe(1);
+    expect(hdTrackerOptions({}).numHands).toBe(2);
+  });
+
+  it('give a newcomer the other side when its label is taken', () => {
+    const st = hdCreate();
+    for (let i = 0; i < 4; i++) live(st, at([det('right', { ...OPEN, cx: 0.3 })]));
+    for (let i = 0; i < 4; i++) live(st, at([det('right', { ...OPEN, cx: 0.3 }), det('right', { ...OPEN, cx: 0.75 }, 0.7)]));
+    expect(sides(st)).toEqual(['left', 'right']);
+    expect(hdRead(st, 'right', 'palm', 0, 'x', 'pinch')).toBeGreaterThan(0.5); // the first hand kept Right (mirrored: image left is picture right)
+  });
+
+  it('drop hands too small or off the frame to be real', () => {
+    const st = hdCreate();
+    for (let i = 0; i < 5; i++) live(st, at([det('right', { ...OPEN, s: 0.05 })]));
+    expect(st.count).toBe(0);
+    expect(hdTracks(st)).toMatchObject({ raw: 0, rejected: 1 });
+    for (let i = 0; i < 5; i++) live(st, at([det('right', { ...OPEN, cx: 1.3 })]));
+    expect(st.count).toBe(0);
+    for (let i = 0; i < 5; i++) live(st, at([det('right', { ...OPEN, cx: 0.95 })])); // at the edge, partly out: fine
+    expect(st.count).toBe(1);
+  });
+
+  it('swap left and right when asked', () => {
+    const st = hdCreate();
+    for (let i = 0; i < 4; i++) live(st, at([det('right', OPEN)]), { swap: true });
+    expect(sides(st)).toEqual(['left']);
+  });
+
+  it('describe what it sees for the readout', () => {
+    const st = hdCreate();
+    live(st, at([det('right', OPEN, 0.9)]));
+    expect(hdTracks(st).tracks).toEqual([{ id: 1, side: 'right', said: 'right', score: 0.9, shown: false, held: false }]);
+    for (let i = 0; i < 3; i++) live(st, at([det('right', OPEN, 0.9)]));
+    live(st, at([]));
+    expect(hdTracks(st).tracks[0]).toMatchObject({ shown: true, held: true });
+  });
+});
+
+describe('the one-euro filter', () => {
+  /** Feed a still value with ±`noise` jitter, then a fast ramp; return the worst jitter left and the lag at the ramp's end. */
+  function run(smoothing: number, responsiveness: number) {
+    const { minCutoff, beta } = hdEuroParams(smoothing, responsiveness);
+    const f = { x: 0, dx: 0, t: -1 };
+    let t = 0, jitter = 0;
+    for (let i = 0; i < 90; i++) { t += 33; const v = hdEuroStep(f, 0.5 + (i % 2 ? 0.004 : -0.004), t, minCutoff, beta); if (i > 45) jitter = Math.max(jitter, Math.abs(v - 0.5)); }
+    // A quick move: 0.5 → 0.9 in 5 frames (about 2.4 picture widths a second).
+    let target = 0.5;
+    for (let i = 0; i < 5; i++) { t += 33; target += 0.08; hdEuroStep(f, target, t, minCutoff, beta); }
+    return { jitter, lag: target - f.x };
+  }
+
+  it('calms a still hand more as Smoothing rises, and 0 passes straight through', () => {
+    const lo = run(0.2, 0.5), mid = run(0.5, 0.5), hi = run(0.9, 0.5);
+    expect(mid.jitter).toBeLessThan(lo.jitter);
+    expect(hi.jitter).toBeLessThan(mid.jitter);
+    expect(mid.jitter).toBeLessThan(0.0015); // ±0.004 down to under 0.0015
+    expect(hdEuroParams(0, 0.5).minCutoff).toBeGreaterThan(8);
+  });
+
+  it('follows a fast move closely with Responsiveness, and lags without it', () => {
+    const none = run(0.5, 0), mid = run(0.5, 0.5), high = run(0.5, 1);
+    expect(none.lag).toBeGreaterThan(0.15); // a plain low-pass trails far behind
+    expect(mid.lag).toBeLessThan(0.05);
+    expect(high.lag).toBeLessThan(mid.lag);
+    // Responsiveness doesn't disturb a still hand: the speed term is near zero there.
+    expect(Math.abs(mid.jitter - none.jitter)).toBeLessThan(0.001);
+  });
+});
+
+describe('tracker options', () => {
+  it('map Strictness onto the three thresholds, a notch stricter than MediaPipe by default', () => {
+    const d = hdTrackerOptions(undefined);
+    expect(d.detection).toBeGreaterThan(0.5);
+    expect(d.presence).toBeGreaterThan(0.5);
+    expect(d.tracking).toBeGreaterThan(0.5);
+    const lax = hdTrackerOptions({ strictness: 0 }), strict = hdTrackerOptions({ strictness: 1 });
+    expect(lax.detection).toBeLessThan(d.detection);
+    expect(strict.detection).toBeGreaterThan(d.detection);
+    expect(strict.detection).toBeLessThanOrEqual(0.9);
+    // Set by hand (Advanced): used as they are.
+    expect(hdTrackerOptions({ strictness: 1, confidence: { detection: 0.4, presence: 0.5, tracking: 0.6 } })).toEqual({ numHands: 2, detection: 0.4, presence: 0.5, tracking: 0.6 });
+  });
+});
+
 // ── Names ────────────────────────────────────────────────────────────────────
 
 describe('hand sources and triggers, by name', () => {
@@ -238,6 +398,10 @@ function push(hands: { side: 'left' | 'right'; pose: Pose }[]) {
   clock = Math.max(clock + 33, performance.now());
   handFeed.push({ t: clock, w: CAM_W, h: CAM_H, hands: hands.map(h => ({ side: h.side, score: 0.9, lm: handLm(h.pose) })) });
 }
+/** A hand coming into view: seen for the frames it takes to count (ticking the engine at `at` seconds). */
+function arrive(hands: { side: 'left' | 'right'; pose: Pose }[], at: number) {
+  for (let i = 0; i < HD_APPEAR_FRAMES - 1; i++) { push(hands); inputBus.tick(1 / 60, at + i / 100); }
+}
 
 afterEach(() => {
   useTakes.getState().endReplay();
@@ -253,6 +417,7 @@ describe('the Play engine with hands', () => {
     playEngine.setAspect(PIC);
     playEngine.setRecord(engineRecord({ mappings: [{ id: 'm', controlId: 'c', source: { kind: 'hand', side: 'right', read: 'open', point: 8, axis: 'x', gesture: 'fist' }, outMin: 0, outMax: 10, curve: 'linear', smoothMs: 0, enabled: true }] }));
     inputBus.setParamBindings({ 'n::amount': 'u_amount' });
+    arrive([{ side: 'right', pose: OPEN }], 0.9);
     push([{ side: 'right', pose: OPEN }]);
     expect(inputBus.tick(1 / 60, 1).get('u_amount')).toBeGreaterThan(9);
     push([{ side: 'right', pose: FIST }]);
@@ -270,6 +435,7 @@ describe('the Play engine with hands', () => {
     }));
     inputBus.setParamBindings({ 'n::amount': 'u_amount' });
     let t = 2, last = 0;
+    arrive([{ side: 'right', pose: OPEN }], 1.9);
     for (const pose of [OPEN, FIST, FIST, { curl: [0.7, 0.7, 0.7, 0.7] } as Pose, FIST, OPEN, FIST]) {
       push([{ side: 'right', pose }]);
       last = inputBus.tick(1 / 60, (t += 1 / 60)).get('u_amount') as number;
@@ -284,6 +450,7 @@ describe('the Play engine with hands', () => {
     playEngine.setRecord(engineRecord({}));
     vi.spyOn(handFeed, 'isOn').mockReturnValue(true);
     let learned: PlaySource | null = null;
+    arrive([{ side: 'right', pose: { ...OPEN, cy: 0.5 } }], 2.9);
     const stop = playEngine.startLearn(s => { learned = s; });
     push([{ side: 'right', pose: { ...OPEN, cy: 0.5 } }]);
     inputBus.tick(1 / 60, 3);
@@ -430,6 +597,24 @@ describe('hands in a play file', () => {
     expect(r.hands).toEqual({ smoothing: 1, overlay: true, colour: [0.35, 1, 0.75], mirror: true });
   });
 
+  it('round-trips the newer settings, and reads an older file’s settings back as they were', () => {
+    const newer: PlayRecord = { ...record, hands: { ...record.hands!, responsiveness: 0.7, swap: true, maxHands: 1, strictness: 0.8, confidence: { detection: 0.7, presence: 0.6, tracking: 0.5 } } };
+    expect(parsePlayRecord(JSON.parse(JSON.stringify(newer)))).toEqual(newer);
+    const old = parsePlayRecord(JSON.parse(JSON.stringify(record)));
+    expect(Object.keys(old.hands!).sort()).toEqual(['colour', 'mirror', 'overlay', 'smoothing']);
+    const mended = parsePlayRecord({ ...record, hands: { ...record.hands, maxHands: 3, strictness: 7, swap: 'yes', confidence: { detection: 2 } } });
+    expect(mended.hands).toEqual({ ...record.hands, strictness: 1, confidence: { detection: 0.95, presence: 0.6, tracking: 0.6 } });
+  });
+
+  it('knows when a setup reads only one hand', () => {
+    expect(oneHandUsed(record)).toBeNull(); // either, left and right
+    const tip = (side: 'left' | 'right' | 'any') => ({ ...defaultLayer('null', 'n' + side, 'Tip'), follow: 'hand', handSide: side, handPoint: 8 } as PlayLayer);
+    expect(oneHandUsed({ ...emptyPlayRecord(), layers: [tip('right')] })).toBe('right');
+    expect(oneHandUsed({ ...emptyPlayRecord(), layers: [tip('right'), tip('left')] })).toBeNull();
+    expect(oneHandUsed({ ...emptyPlayRecord(), layers: [tip('any')] })).toBeNull();
+    expect(oneHandUsed(emptyPlayRecord())).toBeNull();
+  });
+
   it('leaves hand tracking out of a web page unless asked, and says so', () => {
     const input = { title: 't', fragmentShader: '', uniforms: {}, paramBindings: {}, play: record, aspect: '16:9' as const };
     expect(leftBehind(record).map(x => x.what)).toContain('Hand tracking');
@@ -452,5 +637,22 @@ describe('the overlay', () => {
     const exported = (playOverlay as unknown as { env: (...a: unknown[]) => KitEnv }).env(fakeCanvas(null), 160, 90, 1, 0, 1 / 60, true);
     expect(exported.hand).toBeUndefined();
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the hand on the picture', () => {
+  it('has its own switch: shown with the guides hidden, hidden by Show hand on picture', () => {
+    const st = hdCreate(); st.live = true;
+    vi.spyOn(playEngine, 'handState').mockReturnValue(st);
+    const o = playOverlay as unknown as { record: PlayRecord; env: (...a: unknown[]) => KitEnv };
+    const envOf = () => o.env(fakeCanvas(null), 160, 90, 1, 0, 1 / 60, false);
+    const before = o.record;
+    try {
+      playOverlay.setGuides(false);
+      o.record = { ...emptyPlayRecord(), hands: { ...DEFAULT_HANDS, overlay: true } };
+      expect(envOf().hands).toMatchObject({ state: st });
+      o.record = { ...emptyPlayRecord(), hands: { ...DEFAULT_HANDS, overlay: false } };
+      expect(envOf().hands).toBeNull();
+    } finally { o.record = before; playOverlay.setGuides(true); }
   });
 });

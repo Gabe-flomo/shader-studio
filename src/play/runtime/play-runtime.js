@@ -960,7 +960,7 @@ void main() {
     const trigHands = t => t.on === 'hand' || (t.on === 'proximity' && (!!handAnchorOf(t.a) || !!handAnchorOf(t.b)));
     const usesHands = play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && trigHands(m.source.trigger)) || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!handAnchorOf(m.source.otherId || '')))
       || actions.some(a => trigHands(a.trigger)) || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
-    if (usesHands && B.hands) shared.hands.assets = B.hands;
+    if (usesHands && B.hands) { shared.hands.assets = B.hands; if (!shared.hands.options) shared.hands.options = HK.options(play.hands); }
     const handGates = new Set();
     let handSeq = -1;
     function tickHands() {
@@ -969,7 +969,7 @@ void main() {
       if (H.frame && H.seq !== handSeq) {
         handSeq = H.seq;
         const picAspect = glCanvas.width / Math.max(1, glCanvas.height), camAspect = H.frame.w / Math.max(1, H.frame.h);
-        HK.update(handSt, H.frame, { picAspect, place: HK.placement(play, value, camAspect, picAspect, handSettings.mirror), smoothing: handSettings.smoothing });
+        HK.update(handSt, H.frame, { picAspect, place: HK.placement(play, value, camAspect, picAspect, handSettings.mirror), smoothing: handSettings.smoothing, responsiveness: handSettings.responsiveness, maxHands: handSettings.maxHands, swap: handSettings.swap });
       }
       HK.age(handSt, performance.now());
       for (const t of allTriggers) {
@@ -1135,7 +1135,8 @@ void main() {
     const usesTilt = play.mappings.some(m => m.source.kind === 'tilt');
     const usesLive = play.mappings.some(m => m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio'))
       || actions.some(a => a.trigger.on === 'audio') || play.layers.some(l => l.kind === 'audio' && l.visible) || audioNodes.some(a => !a.src);
-    const usesCamera = play.layers.some(l => l.visible && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
+    const matteIds = new Set(play.layers.map(l => (l.trackMatte ? l.trackMatte.id : '')));
+    const usesCamera = play.layers.some(l => (l.visible || matteIds.has(l.id)) && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
     let camVideo = null;
     const fmt = (v, step) => { const d = step && step >= 1 ? 0 : step && step >= 0.1 ? 1 : step && step >= 0.01 ? 2 : 3; return Number(v).toFixed(d); };
     const hex = c => '#' + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
@@ -1284,7 +1285,8 @@ void main() {
         audio: L.status === 'on' ? { wave: L.wave, freq: L.freq, sampleRate: L.sr } : null,
         camera: camVideo || shared.camera, image: img,
         hand: handSt && usesHands ? (side, point) => HK.point(handSt, side, point) : undefined,
-        hands: handSt && usesHands && handSettings.overlay && handSt.live ? { state: handSt, colour: handSettings.colour } : null,
+        // The skeleton is a setup aid: a page shows it only with its markers on.
+        hands: handSt && usesHands && markers && handSettings.overlay && handSt.live ? { state: handSt, colour: handSettings.colour } : null,
         // three.js for 3D Script layers: the page carries it (SSThree) only when it has one.
         three: typeof SSThree !== 'undefined' ? SSThree : (window.SSThree || null),
         scriptStatus: (id, err) => { const e = err || null; if (scriptErrors.get(id) === e) return; scriptErrors.set(id, e); if (onScript) { try { onScript(id, e); } catch (x) { /* the host's problem */ } } },
@@ -1449,7 +1451,7 @@ void main() {
   }
 
   // The worker that runs the Hand Landmarker (mirrors src/lib/handWorker.ts): MediaPipe's ES module and
-  // its WebAssembly come in as blob URLs, the model as bytes. MediaPipe's "Left" is the performer's right hand.
+  // its WebAssembly come in as blob URLs, the model as bytes. MediaPipe's "Right" is the performer's right hand (unmirrored frames).
   const HAND_WORKER = [
     'let lm = null, lastT = 0;',
     'self.onmessage = async e => {',
@@ -1457,7 +1459,8 @@ void main() {
     '  if (d.type === "init") {',
     '    try {',
     '      const V = await import(d.bundle);',
-    '      const make = del => V.HandLandmarker.createFromOptions({ wasmLoaderPath: d.loader, wasmBinaryPath: d.wasm }, { baseOptions: { modelAssetBuffer: d.model, delegate: del }, runningMode: "VIDEO", numHands: 2 });',
+    '      const o = d.options || { numHands: 2, detection: 0.6, presence: 0.57, tracking: 0.55 };',
+    '      const make = del => V.HandLandmarker.createFromOptions({ wasmLoaderPath: d.loader, wasmBinaryPath: d.wasm }, { baseOptions: { modelAssetBuffer: d.model, delegate: del }, runningMode: "VIDEO", numHands: o.numHands, minHandDetectionConfidence: o.detection, minHandPresenceConfidence: o.presence, minTrackingConfidence: o.tracking });',
     '      try { lm = await make("GPU"); } catch (x) { lm = await make("CPU"); }',
     '      self.postMessage({ type: "ready" });',
     '    } catch (x) { self.postMessage({ type: "failed", message: String(x) }); }',
@@ -1469,7 +1472,7 @@ void main() {
     '      const t = Math.max(lastT + 1, Math.round(d.t)); lastT = t;',
     '      try {',
     '        const r = lm.detectForVideo(d.bitmap, t);',
-    '        hands = r.landmarks.map((p, i) => { const c = (r.handedness[i] || [])[0] || {}; const f = new Float32Array(63); for (let j = 0; j < 21; j++) { f[j * 3] = p[j].x; f[j * 3 + 1] = p[j].y; f[j * 3 + 2] = p[j].z; } return { side: c.categoryName === "Left" ? "right" : "left", score: c.score || 0, lm: f }; });',
+    '        hands = r.landmarks.map((p, i) => { const c = (r.handedness[i] || [])[0] || {}; const f = new Float32Array(63); for (let j = 0; j < 21; j++) { f[j * 3] = p[j].x; f[j * 3 + 1] = p[j].y; f[j * 3 + 2] = p[j].z; } return { side: c.categoryName === "Left" ? "left" : "right", score: c.score || 0, lm: f }; });',
     '      } catch (x) { /* a bad frame: none this time */ }',
     '    }',
     '    d.bitmap.close();',
@@ -1479,7 +1482,7 @@ void main() {
   ].join('\n');
 
   // One tracker for the page: every mount with hand mappings reads its frames.
-  shared.hands = { status: 'off', frame: null, seq: 0, count: 0, busy: false, sent: 0, worker: null, assets: null, listeners: new Set() };
+  shared.hands = { status: 'off', frame: null, seq: 0, count: 0, busy: false, sent: 0, worker: null, assets: null, options: null, listeners: new Set() };
   function setHandStatus(s) { shared.hands.status = s; shared.hands.listeners.forEach(f => f(s)); }
   function gunzip(b64) {
     const bin = atob(b64), u8 = new Uint8Array(bin.length);
@@ -1519,7 +1522,7 @@ void main() {
           }
         };
         w.onerror = () => { H.worker = null; setHandStatus('error'); resolve('error'); };
-        w.postMessage({ type: 'init', bundle: url(bundle, 'text/javascript'), loader: url(loader, 'text/javascript'), wasm: url(wasm, 'application/wasm'), model: new Uint8Array(model) }, [model]);
+        w.postMessage({ type: 'init', bundle: url(bundle, 'text/javascript'), loader: url(loader, 'text/javascript'), wasm: url(wasm, 'application/wasm'), model: new Uint8Array(model), options: H.options }, [model]);
       }));
     }).catch(() => { setHandStatus('error'); return 'error'; });
   }

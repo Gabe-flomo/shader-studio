@@ -27,7 +27,10 @@ import type { BqPlan } from './kit/queue.js';
 import { setScriptStatus } from './scriptStatus';
 import { kitDataset } from './dataLayer';
 import { klFontFor } from './kit/layers.js';
-import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
+import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, maskBounds, maskPatchFor, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
+import { kmMaskLocal, kmMaskPath, kmMaskPlacement } from './kit/mattes.js';
+import { matteUsers } from '../types/playLayers';
+import { addMask, maskFromOutline } from './mattes';
 
 type KitAction = { do: ActionKind; layerId: string; amount: number };
 /** An audio layer's sound from a take: a frame, null (the input was off), or undefined (not recorded: the live sound). */
@@ -37,8 +40,13 @@ export type LayerWriter = (layerId: string, patch: Partial<PlayLayer>) => void;
 export type { ShaderTap } from './kit/kit.js';
 import type { ShaderTap } from './kit/kit.js';
 
-/** Drawing a shape's outline on the picture: click corners (polygon) or drag freehand (lasso). */
-export interface ShapeDrawing { layerId: string; mode: 'polygon' | 'lasso'; pts: number[] }
+/** Drawing a shape's outline on the picture: click corners (polygon) or drag freehand (lasso). With `mask`, the outline becomes a new mask on that layer. */
+export interface ShapeDrawing { layerId: string; mode: 'polygon' | 'lasso'; pts: number[]; mask?: boolean }
+
+/** Mask outlines and handles on the picture: amber, apart from the layers' blue. */
+const MASK_COLOUR = '#f5c542';
+
+type MaskDrag = { id: string; maskId: string; handle: Handle | null; start: Bounds; layer: PlayLayer; grab: { x: number; y: number } };
 
 class PlayOverlay {
   private canvas: HTMLCanvasElement | null = null;
@@ -48,7 +56,10 @@ class PlayOverlay {
   private images = new Map<string, HTMLImageElement>();
   private kit: LayerKit = createLayerKit();
   private pointer: KitPointer = { x: 0.5, y: 0.5, over: false, down: false };
-  private drag: { id: string; dx: number; dy: number } | { id: string; handle: Handle; start: Bounds; layer: PlayLayer } | null = null;
+  private drag: { id: string; dx: number; dy: number } | { id: string; handle: Handle; start: Bounds; layer: PlayLayer } | MaskDrag | null = null;
+  /** The mask being edited on the selected layer ('' = the layer itself). */
+  private selectedMask = '';
+  private maskListeners = new Set<(layerId: string, maskId: string) => void>();
   private selectListeners = new Set<(id: string) => void>();
   private menuListeners = new Set<(m: { layerId: string; x: number; y: number }) => void>();
   private measure: CanvasRenderingContext2D | null = null;
@@ -191,8 +202,15 @@ class PlayOverlay {
   /** Where drags and drawn shapes go (the store's setPlay). */
   setWriter(fn: LayerWriter | null): void { this.writer = fn; }
 
-  /** The Layers tab is open: shapes can be dragged and invisible zones are outlined. */
-  setEditing(on: boolean, selectedId = ''): void { this.editing = on; this.selectedId = selectedId; }
+  /** The Layers tab is open: shapes can be dragged and invisible zones are outlined. `maskId`: that mask of the selected layer gets the handles. */
+  setEditing(on: boolean, selectedId = '', maskId = ''): void { this.editing = on; this.selectedId = selectedId; this.selectedMask = maskId; }
+
+  /** A mask picked on the picture (a press on its outline) or made by drawing. Returns an unsubscribe. */
+  onMaskSelect(cb: (layerId: string, maskId: string) => void): () => void { this.maskListeners.add(cb); return () => { this.maskListeners.delete(cb); }; }
+  private emitMask(layerId: string, maskId: string): void { this.selectedMask = maskId; for (const cb of this.maskListeners) cb(layerId, maskId); }
+
+  /** Can this layer be picked and dragged on the picture: shown, or hidden because it is another layer's matte. */
+  private handled(l: PlayLayer): boolean { return l.visible || matteUsers(this.record.layers, l.id).length > 0; }
 
   /** Draw the guides (null markers, handles, zone outlines, fields) or just the picture. */
   setGuides(on: boolean): void { this.guides = on; }
@@ -216,6 +234,9 @@ class PlayOverlay {
   private value = (l: PlayLayer, k: string) => playEngine.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]);
 
   /** A layer's box on the picture (see transform.ts), or null for layers without one. */
+  /** Width / height of the picture as last drawn. */
+  pictureAspect(): number { return this.aspect; }
+
   bounds(l: PlayLayer): Bounds | null {
     return layerBounds(l, this.value, {
       textWidth: (layer, line) => {
@@ -252,19 +273,62 @@ class PlayOverlay {
     return id ? this.record.layers.find(x => x.id === id) ?? null : null;
   }
 
+  /**
+   * A press on one of the layer's masks: a handle or the inside of the mask
+   * being edited, or the outline of another (which picks it). Null elsewhere.
+   */
+  private maskPress(l: PlayLayer, u: { x: number; y: number; w: number; h: number }, radius: number): { maskId: string; handle: Handle | null; bounds: Bounds } | null {
+    if (!l.masks?.length) return null;
+    const aspect = u.w / Math.max(1, u.h), px = u.x * u.w, py = (1 - u.y) * u.h;
+    const active = this.activeMask(l);
+    if (active) {
+      const b = maskBounds(l, active, this.value, aspect);
+      const handle = handleAt(b, px, py, u.w, u.h, radius);
+      if (handle || insideBounds(b, px, py, u.w, u.h)) return { maskId: active.id, handle, bounds: b };
+    }
+    const m = this.measure ?? (this.measure = document.createElement('canvas').getContext('2d'));
+    if (!m) return null;
+    m.lineWidth = radius * 1.4;
+    for (let i = l.masks.length - 1; i >= 0; i--) {
+      const mk = l.masks[i];
+      if (mk === active) continue;
+      const path = kmMaskPath(mk, kmMaskPlacement(l as never, mk, k => this.value(l, k), aspect), u.w, u.h);
+      if (m.isPointInStroke(path, px, py)) return { maskId: mk.id, handle: null, bounds: maskBounds(l, mk, this.value, aspect) };
+    }
+    return null;
+  }
+
+  /** The selected layer's mask being edited, if any. */
+  private activeMask(l: PlayLayer | undefined) { return l && this.selectedMask ? l.masks?.find(m => m.id === this.selectedMask) : undefined; }
+
   private drawHandles(ctx: CanvasRenderingContext2D, W: number, H: number, dpr: number): void {
     const l = this.record.layers.find(x => x.id === this.selectedId);
-    const b = l && l.visible ? this.bounds(l) : null;
+    if (!l || !this.handled(l)) return;
+    const active = this.activeMask(l);
+    // The layer's masks: every outline in amber, the one being edited solid.
+    if (l.masks?.length) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      for (const m of l.masks) {
+        const path = kmMaskPath(m, kmMaskPlacement(l as never, m, k => this.value(l, k), W / H), W, H);
+        ctx.lineWidth = (m === active ? 1.5 : 1.25) * dpr; ctx.strokeStyle = MASK_COLOUR; ctx.globalAlpha = m === active ? 1 : 0.75;
+        ctx.setLineDash(m === active ? [] : [5 * dpr, 4 * dpr]);
+        ctx.stroke(path);
+      }
+      ctx.restore();
+    }
+    const b = active ? maskBounds(l, active, this.value, W / H) : this.bounds(l);
     if (!b) return;
+    const accent = active ? MASK_COLOUR : '#5b8cff';
     const cw = W / dpr, ch = H / dpr;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(91,140,255,0.9)'; ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1; ctx.strokeStyle = active ? 'rgba(245,197,66,0.9)' : 'rgba(91,140,255,0.9)'; ctx.setLineDash([4, 3]);
     const o = outlinePoints(b, cw, ch);
     ctx.beginPath(); o.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.stroke();
     ctx.setLineDash([]);
     for (const p of handlePoints(b, cw, ch)) {
-      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#5b8cff'; ctx.lineWidth = 1.5;
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = accent; ctx.lineWidth = 1.5;
       ctx.beginPath();
       if (p.handle.kind === 'rotate') {
         // A stem from the middle of the top edge.
@@ -279,7 +343,7 @@ class PlayOverlay {
 
   // ── Drawing a shape outline ────────────────────────────────────────────────
 
-  startDrawing(layerId: string, mode: 'polygon' | 'lasso'): void { this.drawing = { layerId, mode, pts: [] }; this.emitDrawing(); }
+  startDrawing(layerId: string, mode: 'polygon' | 'lasso', mask = false): void { this.drawing = { layerId, mode, pts: [], ...(mask ? { mask: true } : {}) }; this.emitDrawing(); }
   cancelDrawing(): void { this.drawing = null; this.emitDrawing(); }
   onDrawing(cb: (d: ShapeDrawing | null) => void): () => void { this.drawingListeners.add(cb); return () => { this.drawingListeners.delete(cb); }; }
   private emitDrawing(): void { for (const cb of this.drawingListeners) cb(this.drawing); }
@@ -290,6 +354,21 @@ class PlayOverlay {
     this.drawing = null;
     this.emitDrawing();
     if (!d || d.pts.length < 6 || !this.writer) return;
+    if (d.mask) {
+      // A mask on the layer: its box around the outline, in the layer's own frame.
+      const l = this.record.layers.find(x => x.id === d.layerId);
+      if (!l) return;
+      const place = maskFromOutline(d.pts, this.aspect, (x, y, r) => kmMaskLocal(l as never, k => this.value(l, k), this.aspect, x, y, r));
+      if (!place) return;
+      const r = addMask(this.record, d.layerId, 'polygon', place);
+      const made = r.play.layers.find(x => x.id === d.layerId);
+      if (!r.maskId || !made) return;
+      const patch: Record<string, unknown> = { masks: made.masks };
+      for (const [k, v] of Object.entries(made)) if (k.startsWith(`mask_${r.maskId}_`)) patch[k] = v;
+      this.writer(d.layerId, patch as Partial<PlayLayer>);
+      this.emitMask(d.layerId, r.maskId);
+      return;
+    }
     let cx = 0, cy = 0, minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     const n = d.pts.length / 2;
     for (let i = 0; i < d.pts.length; i += 2) { cx += d.pts[i]; cy += d.pts[i + 1]; }
@@ -353,13 +432,23 @@ class PlayOverlay {
         e.preventDefault(); e.stopPropagation();
         return;
       }
-      // The selected layer's handles come first, while editing.
-      const sel = this.editing && this.writer ? this.record.layers.find(x => x.id === this.selectedId && x.visible) : undefined;
-      const sb = sel ? this.bounds(sel) : null;
+      // The selected layer's handles come first, while editing: its mask being edited, a press on another mask's
+      // outline (which picks that mask), then the layer's own.
+      const sel = this.editing && this.writer ? this.record.layers.find(x => x.id === this.selectedId && this.handled(x)) : undefined;
+      const onMask = sel ? this.maskPress(sel, u, e.pointerType === 'touch' ? 20 : 9) : null;
+      const sb = sel && !onMask && !this.activeMask(sel) ? this.bounds(sel) : null;
       const grab = sel && sb ? handleAt(sb, u.x * u.w, (1 - u.y) * u.h, u.w, u.h, e.pointerType === 'touch' ? 20 : 9) : null;
-      if (sel && sb && grab) {
+      if (sel && onMask) {
+        if (onMask.maskId !== this.selectedMask) this.emitMask(sel.id, onMask.maskId);
+        this.drag = { id: sel.id, maskId: onMask.maskId, handle: onMask.handle, start: onMask.bounds, layer: sel, grab: { x: u.x, y: u.y } };
+      } else if (sel && sb && grab) {
         this.drag = { id: sel.id, handle: grab, start: sb, layer: sel };
+      } else if (sel && sb && !sel.visible && insideBounds(sb, u.x * u.w, (1 - u.y) * u.h, u.w, u.h)) {
+        // A hidden matte can't be clicked on the picture, but once it is selected, dragging inside its box moves it.
+        this.drag = { id: sel.id, dx: this.value(sel, 'x') - u.x, dy: this.value(sel, 'y') - u.y };
       } else {
+        // Anywhere else lets go of the mask being edited.
+        if (sel && this.selectedMask) this.emitMask(sel.id, '');
         const n = this.writer ? hitNull(u) : null;
         const hit = n ?? (this.editing && this.writer ? this.layerAt(u) : null);
         if (hit) {
@@ -389,7 +478,15 @@ class PlayOverlay {
       }
       if (this.drag) {
         const dr = this.drag;
-        if ('handle' in dr) {
+        if ('maskId' in dr) {
+          const m = dr.layer.masks?.find(x => x.id === dr.maskId);
+          if (m) {
+            const b = dr.handle
+              ? dragHandle(dr.start, dr.handle, u.x * u.w, (1 - u.y) * u.h, u.w, u.h, { proportional: e.shiftKey, centred: e.altKey, snap: e.shiftKey })
+              : { ...dr.start, x: dr.start.x + u.x - dr.grab.x, y: dr.start.y + u.y - dr.grab.y };
+            this.writer?.(dr.id, maskPatchFor(dr.layer, m, b, this.value, u.w / Math.max(1, u.h)) as Partial<PlayLayer>);
+          }
+        } else if ('handle' in dr) {
           const b = dragHandle(dr.start, dr.handle, u.x * u.w, (1 - u.y) * u.h, u.w, u.h, { proportional: e.shiftKey, centred: e.altKey, snap: e.shiftKey });
           this.writer?.(dr.id, patchFor(dr.layer, dr.start, b, this.value) as Partial<PlayLayer>);
         } else this.writer?.(dr.id, { x: Math.max(0, Math.min(1, u.x + dr.dx)), y: Math.max(0, Math.min(1, u.y + dr.dy)) } as Partial<PlayLayer>);
@@ -398,9 +495,11 @@ class PlayOverlay {
       }
       if (this.drawing) { container.style.cursor = 'crosshair'; return; }
       const overNull = hitNull(u);
-      const sel = this.editing ? this.record.layers.find(x => x.id === this.selectedId && x.visible) : undefined;
-      const sb = sel ? this.bounds(sel) : null;
+      const sel = this.editing ? this.record.layers.find(x => x.id === this.selectedId && this.handled(x)) : undefined;
+      const am = this.activeMask(sel);
+      const sb = sel ? (am ? maskBounds(sel, am, this.value, u.w / Math.max(1, u.h)) : this.bounds(sel)) : null;
       const h = sb ? handleAt(sb, u.x * u.w, (1 - u.y) * u.h, u.w, u.h) : null;
+      if (sel && !h && sel.masks?.length && this.maskPress(sel, u, 9)) { container.style.cursor = 'move'; return; }
       if (h && sb) {
         if (h.kind === 'rotate') { container.style.cursor = 'crosshair'; return; }
         // Resize cursors follow the handle's direction on screen, turned with the layer.
@@ -501,9 +600,13 @@ class PlayOverlay {
     };
   }
 
-  /** The hands' skeleton over the picture: live, with guides showing and the setup's Show hands on. */
+  /**
+   * The hands' skeleton over the picture: live, with the setup's Show hand on
+   * picture on. Its own switch, apart from the guides: H hides the guides and
+   * leaves the hands to it, so they can be shown just for a moment.
+   */
   private handsOverlay(forExport: boolean): KitEnv['hands'] {
-    if (forExport || this.replaying || !this.guides) return null;
+    if (forExport || this.replaying) return null;
     const st = playEngine.handState();
     if (!st.live) return null;
     const h = this.record.hands ?? DEFAULT_HANDS;
@@ -535,12 +638,12 @@ class PlayOverlay {
     const d = this.drawing!;
     if (d.pts.length < 2) return;
     ctx.save();
-    ctx.strokeStyle = '#5b8cff'; ctx.fillStyle = 'rgba(91,140,255,0.15)'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([6 * dpr, 4 * dpr]);
+    ctx.strokeStyle = d.mask ? MASK_COLOUR : '#5b8cff'; ctx.fillStyle = d.mask ? 'rgba(245,197,66,0.15)' : 'rgba(91,140,255,0.15)'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([6 * dpr, 4 * dpr]);
     ctx.beginPath();
     for (let i = 0; i < d.pts.length; i += 2) { const x = d.pts[i] * W, y = (1 - d.pts[i + 1]) * H; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
     if (d.mode === 'polygon' && this.pointer.over) ctx.lineTo(this.pointer.x * W, (1 - this.pointer.y) * H);
     ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#5b8cff';
+    ctx.fillStyle = d.mask ? MASK_COLOUR : '#5b8cff';
     for (let i = 0; i < d.pts.length && d.mode === 'polygon'; i += 2) { ctx.beginPath(); ctx.arc(d.pts[i] * W, (1 - d.pts[i + 1]) * H, 4 * dpr, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore();
   }

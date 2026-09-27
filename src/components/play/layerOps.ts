@@ -8,6 +8,7 @@
 import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type TriggerSpec } from '../../types/play';
 import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
 import { resetKindLayer } from '../../play/layerKinds';
+import { dropMatteRefs } from '../../play/mattes';
 
 /** Remove a layer and the controls, mappings and actions that read or drive it. */
 export function removeLayer(p: PlayRecord, id: string): PlayRecord {
@@ -15,7 +16,8 @@ export function removeLayer(p: PlayRecord, id: string): PlayRecord {
   const ids = new Set(controls.map(c => c.id));
   const out: PlayRecord = {
     ...p,
-    layers: p.layers.filter(l => l.id !== id),
+    // A layer that used it as its matte goes back to no matte.
+    layers: dropMatteRefs(p.layers.filter(l => l.id !== id), id),
     controls,
     mappings: p.mappings.filter(m => ids.has(m.controlId)
       && !((m.source.kind === 'null' || m.source.kind === 'sensor') && m.source.layerId === id)
@@ -45,14 +47,22 @@ export function duplicateLayer(p: PlayRecord, id: string): { play: PlayRecord; i
   return { play: { ...p, layers }, id: copy.id as string };
 }
 
-/** Every setting back to the kind's default; the name, the id (so controls and mappings still reach it) and visibility stay. */
+/** Every setting back to the kind's default; the name, the id (so controls and mappings still reach it), visibility, the matte and the masks stay. */
 export function resetLayer(p: PlayRecord, id: string): PlayRecord {
   return {
     ...p,
     // A layer of a saved kind goes back to that kind's code and values, not to the starter sketch.
     // A Background layer keeps its queue, a Data layer its dataset: they are what it is, not a setting.
-    layers: p.layers.map(l => (l.id === id ? resetKindLayer(p, l) ?? { ...defaultLayer(l.kind, l.id, l.label), visible: l.visible, ...(l.kind === 'background' ? { sources: l.sources } : l.kind === 'data' ? { dataset: l.dataset } : {}) } as PlayLayer : l)),
+    layers: p.layers.map(l => (l.id === id ? keepMatteAndMasks(l, resetKindLayer(p, l) ?? { ...defaultLayer(l.kind, l.id, l.label), visible: l.visible, ...(l.kind === 'background' ? { sources: l.sources } : l.kind === 'data' ? { dataset: l.dataset } : {}) } as PlayLayer) : l)),
   };
+}
+
+/** A layer's matte, masks and mask numbers carried onto `to`. */
+function keepMatteAndMasks(from: PlayLayer, to: PlayLayer): PlayLayer {
+  if (!from.trackMatte && !from.masks?.length) return to;
+  const out = { ...to } as Record<string, unknown>;
+  for (const [k, v] of Object.entries(from)) if (k === 'trackMatte' || k === 'masks' || k.startsWith('mask_')) out[k] = v;
+  return out as unknown as PlayLayer;
 }
 
 export function moveLayer(p: PlayRecord, id: string, dir: -1 | 1): PlayRecord {

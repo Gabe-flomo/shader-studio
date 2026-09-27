@@ -19,7 +19,7 @@ import { addKindToList, applyKindLook, removeKindFromFile, removeKindFromList } 
 import { Field } from '../../ui/Field';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { CameraChip } from '../chips';
-import { HandsChip } from '../HandsChip';
+import { HandsChip, ShowHandToggle } from '../HandsChip';
 import { Select } from '../../ui/Select';
 import { HAND_POINT_OPTIONS, HAND_SIDES } from '../../../play/playSources';
 import { BLENDS, BLEND_HINT, type Choice, type FieldKit } from './fields';
@@ -197,6 +197,7 @@ function CameraHands() {
   return (
     <Section kind="camera" title="Hand tracking">
       <div style={{ margin: '2px 0 6px' }}><HandsChip /></div>
+      <div style={{ margin: '0 0 8px' }}><ShowHandToggle /></div>
       <div style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}`, margin: '0 0 6px' }}>
         Follows your hands in this camera. Every finger point, pinches and gestures become sources in Mappings, triggers can fire <b>On: Hand gesture</b>, and a Null can follow a hand point.
       </div>

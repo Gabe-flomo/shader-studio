@@ -29,6 +29,7 @@ import layersSource from './kit/layers.js?raw';
 import bodiesSource from './kit/bodies.js?raw';
 import handsSource from './kit/hands.js?raw';
 import queueSource from './kit/queue.js?raw';
+import mattesSource from './kit/mattes.js?raw';
 import dataSource from './kit/data.js?raw';
 import kitSource from './kit/kit.js?raw';
 import { BACKGROUND_VIDEO_KEEP, backgroundLayerOf, usesHands, type PlayRecord } from '../types/play';
@@ -152,7 +153,9 @@ const sizeText = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 10
 
 /** Does a Play read the camera (a Camera layer, or particles, glyphs or contours reading from it)? As the runtime decides. */
 export function playUsesCamera(play: PlayRecord): boolean {
-  return play.layers.some(l => l.visible && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
+  // A hidden layer still reads the camera when it is another layer's matte.
+  const mattes = new Set(play.layers.map(l => l.trackMatte?.id ?? ''));
+  return play.layers.some(l => (l.visible || mattes.has(l.id)) && (l.kind === 'camera' || ((l.kind === 'particles' || l.kind === 'glyphs' || l.kind === 'contours') && l.readFrom === 'camera')));
 }
 
 /**
@@ -291,10 +294,10 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, layersSource, bodiesSource, handsSource, queueSource, dataSource, kitSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, dataSource, kitSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement }, data: { unit: kdUnit, column: kdColumn } };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn } };\n})();\n`;
 }
 
 /**
