@@ -22,6 +22,8 @@ export interface FilesSource {
   folderScope?: string;
   /** The JSON field saved things use to point at one of its items ("libraryId"), for Used by. */
   refField?: string;
+  /** What names an item points at it (a Video layer's `videoId`) instead of keeping a copy: removing it breaks them. */
+  refIsLink?: boolean;
   list(): Promise<ExternalItem[]>;
   /** Its files for a ZIP (paths from the ZIP's root), for these items or all (null). Empty when it has none. */
   zipFiles(ids: string[] | null): Promise<Record<string, Uint8Array>>;
@@ -48,7 +50,7 @@ export function filesSource(id: string): FilesSource | undefined { return regist
 export async function listExternal(sources: FilesSource[] = filesSources()): Promise<ExternalListing[]> {
   const out: ExternalListing[] = [];
   for (const s of sources) {
-    try { out.push({ source: s.id, section: s.section, group: s.group, folderScope: s.folderScope, refField: s.refField, items: await s.list() }); } catch { /* unreadable store: not shown */ }
+    try { out.push({ source: s.id, section: s.section, group: s.group, folderScope: s.folderScope, refField: s.refField, ...(s.refIsLink ? { refIsLink: true } : {}), items: await s.list() }); } catch { /* unreadable store: not shown */ }
   }
   return out;
 }

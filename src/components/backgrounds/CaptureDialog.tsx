@@ -136,13 +136,21 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
     const plan = warmRef.current ? captureSteps(timeRef.current, { maxSteps: exact ? FULL_STEPS : DRAG_STEPS }) : { dt: 1 / 60, steps: [] as number[] };
     return m.renderAt(timeRef.current, { steps: plan.steps, dt: plan.dt, seed: 1, capture }) ?? null;
   }, []);
+  /** Seek the video layers to the moment (renderAt draws whatever frame they show), then draw it exactly. */
+  const settle = useCallback(async (capture = false): Promise<HTMLCanvasElement | null> => {
+    const m = mount.current;
+    if (m?.seekVideos) { try { await m.seekVideos(timeRef.current); } catch { /* draw what's there */ } }
+    if (mount.current !== m) return null;
+    return draw(true, capture);
+  }, [draw]);
   const redraw = useCallback(() => {
     cancelAnimationFrame(frameReq.current);
     frameReq.current = requestAnimationFrame(() => draw(false));
     window.clearTimeout(settleTimer.current);
     if (warmRef.current) setSettling(true);
-    settleTimer.current = window.setTimeout(() => { draw(true); setSettling(false); }, 260);
-  }, [draw]);
+    // Settled: the videos at their exact frames first, then the moment exactly.
+    settleTimer.current = window.setTimeout(() => { void settle().then(() => setSettling(false)); }, 260);
+  }, [draw, settle]);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -154,9 +162,9 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
     mount.current = m;
     for (const [id, v] of Object.entries(valuesRef.current)) m.set?.(id, v);
     // Give images and fonts a moment to arrive, then draw the moment exactly.
-    const t = window.setTimeout(() => { draw(true); }, 350);
+    const t = window.setTimeout(() => { void settle(); }, 350);
     return () => { window.clearTimeout(t); mount.current = null; m?.destroy(); };
-  }, [input, size.w, size.h, draw]);
+  }, [input, size.w, size.h, settle]);
 
   // Scrubbing and control changes redraw the still (while paused).
   useEffect(() => { if (!playing) redraw(); }, [time, values, playing, redraw]);
@@ -194,7 +202,7 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
     setSaving(true);
     try {
       await new Promise(r => requestAnimationFrame(r));
-      let canvas = draw(true, true);
+      let canvas = await settle(true);
       if (!canvas) throw new Error('The picture isn’t ready yet. Try again in a moment.');
       if (canvas.width !== size.w || canvas.height !== size.h) {
         // A browser zoomed out (fewer device pixels than CSS pixels) draws smaller: bring it to the size asked for.

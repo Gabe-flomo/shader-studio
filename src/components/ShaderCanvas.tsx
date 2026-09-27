@@ -21,6 +21,7 @@ import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { layersUniforms, setLayersTap } from '../play/layersTexture';
+import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick } from '../lib/timeTick';
@@ -2351,6 +2352,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const el = canvasRef.current;
     if (!el) return;
     return playOverlay.attachPointer(el);
+  }, []);
+  // Image and video files dropped on the picture become layers where they land (while the Play page takes them).
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    return attachLayerDrop(el);
   }, []);
   const [fit, setFit] = useState<{ width: number; height: number } | null>(null);
   useEffect(() => {

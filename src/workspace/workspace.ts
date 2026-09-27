@@ -90,6 +90,21 @@ async function appImages(): Promise<ImageStore> {
   };
 }
 
+/** The Video layers' videos (the backgrounds library's `videos` store), as the folder sees them. */
+async function appVideos(): Promise<ImageStore> {
+  const lib = await import('../lib/backgroundLibrary');
+  return {
+    list: async () => (await lib.listVideos()).map(v => ({ id: v.id, name: v.name, type: v.type, bytes: v.bytes, createdAt: v.createdAt, width: v.width ?? 0, height: v.height ?? 0, ...(v.duration ? { duration: v.duration } : {}) })),
+    async read(id) { const v = await lib.getVideo(id); return v ? new Uint8Array(await v.blob.arrayBuffer()) : null; },
+    async put(meta, data) {
+      const copy = new Uint8Array(data.byteLength); copy.set(data);
+      await lib.addVideoFile(new Blob([copy.buffer], { type: meta.type }), { id: meta.id, name: meta.name, createdAt: meta.createdAt, poster: { width: meta.width, height: meta.height, duration: meta.duration } });
+    },
+    rename: (id, name) => lib.renameVideo(id, name),
+    async remove(id) { await lib.deleteVideo(id); },
+  };
+}
+
 /** Tell the app what the folder changed, so lists refresh (and offer to reopen a changed open graph). */
 async function refreshApp(keys: string[], images: boolean): Promise<void> {
   if (!keys.length && !images) return;
@@ -114,6 +129,7 @@ let config: WorkspaceConfig | null = null;
 let fs: WsFs | null = null;
 let engine: SyncEngine | null = null;
 let images: ImageStore | null = null;
+let videos: ImageStore | null = null;
 let unwatch: (() => void) | null = null;
 let lastProblems: string[] = [];
 
@@ -144,7 +160,7 @@ async function ensureMarker(f: WsFs, firstTime: boolean): Promise<string | null>
   await f.write(WORKSPACE_FILE, JSON.stringify({
     kind: 'shader-studio-workspace', format: 1, id, created: new Date().toISOString(),
     app: { name: 'Shader Studio', version: APP_VERSION, where: support === 'desktop' ? 'desktop app' : 'browser' },
-    about: 'Shader Studio keeps graphs, presentations, shaders, functions, presets and backgrounds here as files. See docs/workspace-folder.md.',
+    about: 'Shader Studio keeps graphs, presentations, shaders, functions, presets, backgrounds and videos here as files. See docs/workspace-folder.md.',
   }, null, 2));
   return id;
 }
@@ -158,7 +174,8 @@ async function attach(firstTime: boolean): Promise<boolean> {
   }
   const state: SyncState = (await loadSyncState(id)) ?? newState(id);
   images ??= await appImages().catch(() => null);
-  engine = new SyncEngine({ kv: localMutableKV, images, fs, state, saveState: s => saveSyncState(s).then(() => undefined) });
+  videos ??= await appVideos().catch(() => null);
+  engine = new SyncEngine({ kv: localMutableKV, images, videos, fs, state, saveState: s => saveSyncState(s).then(() => undefined) });
   if (config.workspaceId !== id) { config = { ...config, workspaceId: id }; await saveConfig(config); }
   set({ conflicts: state.conflicts, lastSyncAt: state.lastSyncAt });
   await startWatch();

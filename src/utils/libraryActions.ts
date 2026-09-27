@@ -10,12 +10,13 @@ import { errorMessage, openBinaryFile, saveBinaryFile } from './fileIO';
 import { unzipSync } from 'fflate';
 import { requireFeature } from '../lib/plan';
 import { backgroundZipFiles, importBackgroundFiles, listImages } from '../lib/backgroundLibrary';
+import { askVideosInZip, importVideosFrom, videoFilesForZip } from './libraryVideos';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-export function librarySummary(images = 0): string {
+export function librarySummary(images = 0, videos = 0): string {
   const d = describeSnapshot(takeSnapshot());
-  return [plural(d.graphs, 'graph'), ...(d.presentations ? [plural(d.presentations, 'presentation')] : []), plural(d.presets, 'preset'), ...(d.nodes ? [plural(d.nodes, 'published node')] : []), ...(images ? [plural(images, 'image background')] : [])].join(' · ');
+  return [plural(d.graphs, 'graph'), ...(d.presentations ? [plural(d.presentations, 'presentation')] : []), plural(d.presets, 'preset'), ...(d.nodes ? [plural(d.nodes, 'published node')] : []), ...(images ? [plural(images, 'image background')] : []), ...(videos ? [plural(videos, 'video')] : [])].join(' · ');
 }
 
 /** The image backgrounds' files for a ZIP (none when IndexedDB can't be read). */
@@ -28,9 +29,11 @@ export async function exportEverything(): Promise<void> {
   const snap = takeSnapshot();
   const d = describeSnapshot(snap);
   const images = await imageFiles();
-  if (d.graphs + d.presets + d.nodes + d.presentations + images.count === 0) { toast.info('Nothing to export yet', { message: 'Save a graph, a presentation or a preset first.' }); return; }
-  const res = await saveBinaryFile(buildLibraryZip(snap, undefined, images.files), libraryZipName(), 'application/zip');
-  if (res.ok) toast.success('Library exported', { message: `${librarySummary(images.count)}, with their versions, folders and your settings.` });
+  const videos = await videoFilesForZip(await askVideosInZip());
+  if (videos === null) return;
+  if (d.graphs + d.presets + d.nodes + d.presentations + images.count + videos.count === 0) { toast.info('Nothing to export yet', { message: 'Save a graph, a presentation or a preset first.' }); return; }
+  const res = await saveBinaryFile(buildLibraryZip(snap, undefined, { ...images.files, ...videos.files }), libraryZipName(), 'application/zip');
+  if (res.ok) toast.success('Library exported', { message: `${librarySummary(images.count, videos.count)}, with their versions, folders and your settings.` });
   else if (!res.cancelled) toast.error('Couldn’t export the library', { message: res.error });
 }
 
@@ -40,9 +43,11 @@ export async function exportSet(set: DownloadSetId): Promise<void> {
   const snap = takeSnapshot();
   const def = DOWNLOAD_SETS.find(d => d.id === set)!;
   const images = set === 'backgrounds' ? await imageFiles() : { files: {}, count: 0 };
-  const n = countInSet(snap, set) + images.count;
+  const videos = set === 'backgrounds' ? await videoFilesForZip(await askVideosInZip()) : { files: {}, count: 0 };
+  if (videos === null) return;
+  const n = countInSet(snap, set) + images.count + videos.count;
   if (n === 0) { toast.info(`Nothing to download yet`, { message: `${def.label.replace(/^Only /, '')}: none saved so far.` }); return; }
-  const { bytes, name } = buildSetZip(snap, set, images.files);
+  const { bytes, name } = buildSetZip(snap, set, { ...images.files, ...videos.files });
   const res = await saveBinaryFile(bytes, name, 'application/zip');
   if (res.ok) toast.success(`Downloaded ${n} ${n === 1 ? 'item' : 'items'}`, { message: `${name}: the files in folders, plus a library.json that imports them back.` });
   else if (!res.cancelled) toast.error('Couldn’t download', { message: res.error });
@@ -75,12 +80,14 @@ export async function importLibraryBytes(fileName: string, bytes: Uint8Array): P
   try {
     const r = importLibrary(readLibrary(picked.bytes));
     const img = await importImagesFrom(picked.bytes);
+    const vid = await importVideosFrom(picked.bytes);
     // Presentations that came in with their pictures and fonts embedded keep references to the library instead.
     await internStoredPresentations(savePresentation).catch(() => []);
     for (const ev of LIBRARY_REFRESH_EVENTS) window.dispatchEvent(new Event(ev));
     const parts = [
       r.added ? `${r.added} added` : '',
       img.added ? `${plural(img.added, 'image background')} added` : '',
+      vid.added ? `${plural(vid.added, 'video')} added` : '',
       r.renamed.length ? `${plural(r.renamed.length, 'graph')} already here under the same name came in as “… (imported)”` : '',
       r.renamedPresentations.length ? `${plural(r.renamedPresentations.length, 'presentation')} whose name was taken came in as ${r.renamedPresentations.map(n => `“${n}”`).join(', ')}` : '',
       r.skipped ? `${plural(r.skipped, 'presentation')} that couldn’t be read left out` : '',
