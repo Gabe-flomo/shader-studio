@@ -73,6 +73,8 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:performance-rolling': S('Rolling performance takes', 'play', { data: true }),
   // Finish and looks
   'shader-studio:finish-looks': S('Saved looks', 'finish', { data: true }),
+  'shader-studio:finish-presets': S('Finish stack presets', 'finish', { data: true }),
+  'shader-studio:finish-effects': S('Your Finish effects', 'finish', { data: true }),
   // Present
   'shader-studio:settings:linkedOpen': S('Opening a linked presentation', 'present', { hint: 'Asks again next time' }),
   'shader-studio:settings:lastPresentation': S('Last open presentation', 'present'),
