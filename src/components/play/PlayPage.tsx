@@ -12,6 +12,7 @@ import { can, openProSheet, requireFeature, useCan, usePlanName } from '../../li
 import { sourceNeedsPro, sourceTypeNeedsPro, triggerNeedsPro, proOnlyParts } from '../../play/planGates';
 import { ProBadge, ProLock } from '../account/ProSheet';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { DataSourceOptions } from './DataSourceOptions';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
@@ -48,6 +49,8 @@ import { LayerContextMenu } from './LayerContextMenu';
 import { driveWithNull, graphNullDrives, layerNullDrives, pairedKey, type NullDrive } from './layerOps';
 import { toast } from '../ui/toastStore';
 import { usePlayUi, type PanelSize } from './playUi';
+import { sidebarView, useBigTab, usePlaySplit } from './playSplit';
+import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
 import { HandsButton, HandsChip } from './HandsChip';
@@ -261,6 +264,14 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // Phones: Controls and Mappings are tabs instead of stacked panes.
   const tab = usePlayUi(s => s.tab), setTab = usePlayUi(s => s.setTab);
   const panel = usePlayUi(s => s.panel), setPanel = usePlayUi(s => s.setPanel);
+  // Split view (playSplit.ts): a big panel beside the picture shows one section, which the sidebar then leaves out.
+  const bigTab = useBigTab();
+  const big = compact ? null : bigTab;
+  const splitHost = usePlaySplit(s => s.host);
+  const splitWide = usePlaySplit(s => s.wide);
+  const sidebarGone = usePlaySplit(s => s.sidebarHidden) && big !== null;
+  const sideView = sidebarView(tab, big);
+  const shown = compact ? tab : sideView.tab;
   const nullLayers = useMemo(() => play.layers.filter(l => l.kind === 'null').map(l => ({ id: l.id, label: l.label })), [play.layers]);
   const [notesEditing, setNotesEditing] = useState(false);
   // Links in the notes: what they can point at, and going there.
@@ -271,7 +282,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     setTab('controls');
     // After the tab renders: scroll to the control and flash it.
     requestAnimationFrame(() => {
-      const el = rootRef.current?.querySelector<HTMLElement>(`[data-control-id="${CSS.escape(id)}"]`);
+      const sel = `[data-control-id="${CSS.escape(id)}"]`;
+      const el = rootRef.current?.querySelector<HTMLElement>(sel) ?? usePlaySplit.getState().host?.querySelector<HTMLElement>(sel);
       if (!el) return;
       el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       const was = el.style.boxShadow;
@@ -323,6 +335,143 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     />
   ) : null;
 
+  const controlsHeader = <PanelHeader
+    title="Controls"
+    hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
+    extra={(
+      <>
+        <OpenPlayableButton compact={compact} />
+        <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
+        <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
+        {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
+        <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
+        <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
+        <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
+        <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
+      </>
+    )}
+  />;
+  const renderControls = (inPanel: boolean) => (
+    <div style={{ flex: 1, minHeight: play.notes && !compact && !inPanel ? 110 : 0, overflowY: 'auto', padding: inPanel ? '8px 16px 16px' : '6px 12px 12px' }}>
+      {compact && (
+        // Phones: everything scrolls together under the picture, notes first.
+        <div style={{ margin: '0 -12px 6px' }}>
+          {notesCard}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', overflowX: 'auto' }}>
+            <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
+            <AspectPicker onPanel />
+            <GuidesToggle onPanel />
+          </div>
+          {backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />}
+        </div>
+      )}
+      {lockedParts.length > 0 && (
+        <button type="button" onClick={() => openProSheet('play.layers')} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', margin: '4px 0 8px', padding: '8px 10px', border: 0, borderRadius: radius.md, cursor: 'pointer', background: alpha(tk.accent.base, 0.08), color: tk.text.secondary, font: `11.5px/1.45 ${fontFamily.ui}`, textAlign: 'left' }}>
+          <ProBadge />
+          <span style={{ flex: 1, minWidth: 0 }}>This setup has {joinParts(lockedParts)} that need Pro. They’re kept as they are, and the rest plays on Free.</span>
+        </button>
+      )}
+      {(() => {
+        // Several controls whose nodes were grouped together: relink them in one go.
+        const moved = play.controls.flatMap(c => {
+          if (controlExists(nodes, c, play) || parseLayerTarget(c.target) || parseActionTarget(c.target)) return [];
+          const f = locateTarget(nodes, c.target);
+          return f.status === 'moved' ? [{ id: c.id, target: f.target }] : [];
+        });
+        if (moved.length < 2) return null;
+        const to = new Map(moved.map(m => [m.id, m.target]));
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
+            <span style={{ flex: 1, minWidth: 0 }}>{moved.length} controls lost their sliders when their nodes were grouped.</span>
+            <Button size="sm" variant="primary" onClick={() => update(p => ({ ...p, controls: p.controls.map(x => (to.has(x.id) ? { ...x, target: to.get(x.id)! } : x)) }))} title="Point each control at its slider inside the group">Relink all</Button>
+          </div>
+        );
+      })()}
+      {play.controls.length === 0 ? (
+        <EmptyState
+          title="No controls yet"
+          body={candidates.length === 0
+            ? 'Add a node with a slider or a colour in the Studio first. Any live slider can be a control.'
+            : 'Pick sliders and colours from the graph to build your panel. Then map MIDI, the mouse or keys onto them below.'}
+        />
+      ) : <div style={inPanel ? PANEL_GRID : undefined}>{play.controls.map((c, i) => (
+        <ControlRow
+          key={c.id}
+          control={c}
+          index={i}
+          count={play.controls.length}
+          exists={controlExists(nodes, c, play)}
+          fate={controlExists(nodes, c, play) ? undefined : parseLayerTarget(c.target) || parseActionTarget(c.target) ? { status: 'deleted' } : locateTarget(nodes, c.target)}
+          onRelink={target => update(p => ({ ...p, controls: p.controls.map(x => (x.id === c.id ? { ...x, target } : x)) }))}
+          help={controlHelp(nodes, c.target, play)}
+          source={sourceOf(c)}
+          onMap={() => addMapping(c.kind === 'action' ? { kind: 'mouse', axis: 'down' } : { kind: 'mouse', axis: 'x' }, c.id)}
+          onNull={c.kind === 'float' ? () => {
+            const v = readControlValue(nodes, c.target, play);
+            const key = parseLayerTarget(c.target)?.key ?? targetParts(c.target).paramKey;
+            addWithNull([{ target: c.target, label: c.label, min: c.min, max: c.max, value: typeof v === 'number' ? v : c.min, axis: pairedKey(key)?.axis ?? 'x' }], `${c.label} null`);
+          } : undefined}
+          onAmount={amount => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, amount } : x) }))}
+          value={readControlValue(nodes, c.target, play)}
+          live={liveValues.get(c.id)}
+          drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers))}
+          touch={compact}
+          onChange={v => writeControl(c, v)}
+          onRename={label => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }))}
+          onRange={(min, max) => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, min, max } : x) }))}
+          onMove={dir => update(p => {
+            const j = i + dir;
+            if (j < 0 || j >= p.controls.length) return p;
+            const controls = [...p.controls];
+            [controls[i], controls[j]] = [controls[j], controls[i]];
+            return { ...p, controls };
+          })}
+          onRemove={() => update(p => ({ ...p, controls: p.controls.filter(x => x.id !== c.id), mappings: p.mappings.filter(m => m.controlId !== c.id) }))}
+        />
+      ))}</div>}
+    </div>
+  );
+  const renderMappings = (inPanel: boolean) => (
+    <MappingsDrawer
+      play={play}
+      mode={compact || inPanel ? 'tab' : 'drawer'}
+      grid={inPanel}
+      height={drawerH}
+      onResizeStart={startDrawerResize}
+      open={compact || inPanel || drawerOpen}
+      onToggle={() => setDrawerOpen(o => !o)}
+      onAdd={addMapping}
+      onUpdate={(id, patch) => update(p => ({ ...p, mappings: p.mappings.map(m => m.id === id ? { ...m, ...patch } : m) }))}
+      onRemove={id => update(p => ({ ...p, mappings: p.mappings.filter(m => m.id !== id) }))}
+      audioNodes={audioNodes}
+      nullLayers={nullLayers}
+      layerRefs={layerRefs}
+    />
+  );
+  // The big panel's section, rendered into the split view's panel (PlaySplitArea.tsx).
+  const bigPanel = big && splitHost ? createPortal(
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {big === 'controls' && <>{controlsHeader}{renderControls(true)}</>}
+      {big === 'layers' && (layersOk
+        ? <LayersPanel play={play} touch={false} split={splitWide} exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))} />
+        : <LockedLayers play={play} />)}
+      {big === 'mappings' && renderMappings(true)}
+    </div>,
+    splitHost,
+  ) : null;
+
+  // The sidebar hidden beside the big panel: only the panel's section and what floats (dialogs, menus) stay.
+  if (sidebarGone) {
+    return (
+      <div ref={rootRef} style={{ position: 'absolute', inset: 0 }}>
+        {bigPanel}
+        {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
+        <AudioReadersHost compact={compact} />
+        <LayerContextMenu play={play} onChange={update} />
+      </div>
+    );
+  }
+
   return (
     <div ref={rootRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
       {/* Sections. Desktop keeps Mappings as a drawer underneath; phones make it a third tab. */}
@@ -331,11 +480,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         <Segmented
           fill
           ariaLabel="Play section"
-          value={compact || tab !== 'mappings' ? tab : 'controls'}
+          value={shown}
           onChange={setTab}
           options={[
-            { value: 'controls', label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` },
-            { value: 'layers', label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}${layersOk ? '' : ' · Pro'}` },
+            ...(compact || sideView.tabs.includes('controls') ? [{ value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` }] : []),
+            ...(compact || sideView.tabs.includes('layers') ? [{ value: 'layers' as const, label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}${layersOk ? '' : ' · Pro'}` }] : []),
             ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length ? ` · ${play.mappings.length}` : ''}` }] : []),
           ]}
         />
@@ -343,8 +492,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         {!compact && <Segmented size="sm" ariaLabel="Panel width" value={panel} onChange={v => setPanel(v as PanelSize)} options={[{ value: 's', label: 'S', title: 'Narrow panel' }, { value: 'm', label: 'M', title: 'Medium panel' }, { value: 'l', label: 'L', title: 'Wide panel' }]} />}
       </div>
       {!compact && notesCard}
-      {tab === 'layers' && !layersOk && <LockedLayers play={play} />}
-      {tab === 'layers' && layersOk && (
+      {shown === 'layers' && !layersOk && <LockedLayers play={play} />}
+      {shown === 'layers' && layersOk && (
         <LayersPanel
           top={compact ? notesCard : undefined}
           play={play}
@@ -354,123 +503,20 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))}
         />
       )}
-      {tab === 'controls' && <PanelHeader
-        title="Controls"
-        hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
-        extra={(
-          <>
-            <OpenPlayableButton compact={compact} />
-            <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
-            <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
-            {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
-            <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
-            <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
-            <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
-            <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
-          </>
-        )}
-      />}
+      {shown === 'controls' && controlsHeader}
       {canvasRow && !compact && (
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel, overflowX: 'auto' }}>
           <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
           <AspectPicker onPanel />
           <GuidesToggle onPanel />
+          <SplitButton />
         </div>
       )}
       {!compact && (backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />)}
-      {tab === 'controls' && <div style={{ flex: 1, minHeight: play.notes && !compact ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
-        {compact && (
-          // Phones: everything scrolls together under the picture, notes first.
-          <div style={{ margin: '0 -12px 6px' }}>
-            {notesCard}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', overflowX: 'auto' }}>
-              <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
-              <AspectPicker onPanel />
-              <GuidesToggle onPanel />
-            </div>
-            {backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />}
-          </div>
-        )}
-        {lockedParts.length > 0 && (
-          <button type="button" onClick={() => openProSheet('play.layers')} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', margin: '4px 0 8px', padding: '8px 10px', border: 0, borderRadius: radius.md, cursor: 'pointer', background: alpha(tk.accent.base, 0.08), color: tk.text.secondary, font: `11.5px/1.45 ${fontFamily.ui}`, textAlign: 'left' }}>
-            <ProBadge />
-            <span style={{ flex: 1, minWidth: 0 }}>This setup has {joinParts(lockedParts)} that need Pro. They’re kept as they are, and the rest plays on Free.</span>
-          </button>
-        )}
-        {(() => {
-          // Several controls whose nodes were grouped together: relink them in one go.
-          const moved = play.controls.flatMap(c => {
-            if (controlExists(nodes, c, play) || parseLayerTarget(c.target) || parseActionTarget(c.target)) return [];
-            const f = locateTarget(nodes, c.target);
-            return f.status === 'moved' ? [{ id: c.id, target: f.target }] : [];
-          });
-          if (moved.length < 2) return null;
-          const to = new Map(moved.map(m => [m.id, m.target]));
-          return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
-              <span style={{ flex: 1, minWidth: 0 }}>{moved.length} controls lost their sliders when their nodes were grouped.</span>
-              <Button size="sm" variant="primary" onClick={() => update(p => ({ ...p, controls: p.controls.map(x => (to.has(x.id) ? { ...x, target: to.get(x.id)! } : x)) }))} title="Point each control at its slider inside the group">Relink all</Button>
-            </div>
-          );
-        })()}
-        {play.controls.length === 0 ? (
-          <EmptyState
-            title="No controls yet"
-            body={candidates.length === 0
-              ? 'Add a node with a slider or a colour in the Studio first. Any live slider can be a control.'
-              : 'Pick sliders and colours from the graph to build your panel. Then map MIDI, the mouse or keys onto them below.'}
-          />
-        ) : play.controls.map((c, i) => (
-          <ControlRow
-            key={c.id}
-            control={c}
-            index={i}
-            count={play.controls.length}
-            exists={controlExists(nodes, c, play)}
-            fate={controlExists(nodes, c, play) ? undefined : parseLayerTarget(c.target) || parseActionTarget(c.target) ? { status: 'deleted' } : locateTarget(nodes, c.target)}
-            onRelink={target => update(p => ({ ...p, controls: p.controls.map(x => (x.id === c.id ? { ...x, target } : x)) }))}
-            help={controlHelp(nodes, c.target, play)}
-            source={sourceOf(c)}
-            onMap={() => addMapping(c.kind === 'action' ? { kind: 'mouse', axis: 'down' } : { kind: 'mouse', axis: 'x' }, c.id)}
-            onNull={c.kind === 'float' ? () => {
-              const v = readControlValue(nodes, c.target, play);
-              const key = parseLayerTarget(c.target)?.key ?? targetParts(c.target).paramKey;
-              addWithNull([{ target: c.target, label: c.label, min: c.min, max: c.max, value: typeof v === 'number' ? v : c.min, axis: pairedKey(key)?.axis ?? 'x' }], `${c.label} null`);
-            } : undefined}
-            onAmount={amount => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, amount } : x) }))}
-            value={readControlValue(nodes, c.target, play)}
-            live={liveValues.get(c.id)}
-            drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers))}
-            touch={compact}
-            onChange={v => writeControl(c, v)}
-            onRename={label => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }))}
-            onRange={(min, max) => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, min, max } : x) }))}
-            onMove={dir => update(p => {
-              const j = i + dir;
-              if (j < 0 || j >= p.controls.length) return p;
-              const controls = [...p.controls];
-              [controls[i], controls[j]] = [controls[j], controls[i]];
-              return { ...p, controls };
-            })}
-            onRemove={() => update(p => ({ ...p, controls: p.controls.filter(x => x.id !== c.id), mappings: p.mappings.filter(m => m.controlId !== c.id) }))}
-          />
-        ))}
-      </div>}
+      {shown === 'controls' && renderControls(false)}
 
-      {(!compact || tab === 'mappings') && <MappingsDrawer
-        play={play}
-        mode={compact ? 'tab' : 'drawer'}
-        height={drawerH}
-        onResizeStart={startDrawerResize}
-        open={compact || drawerOpen}
-        onToggle={() => setDrawerOpen(o => !o)}
-        onAdd={addMapping}
-        onUpdate={(id, patch) => update(p => ({ ...p, mappings: p.mappings.map(m => m.id === id ? { ...m, ...patch } : m) }))}
-        onRemove={id => update(p => ({ ...p, mappings: p.mappings.filter(m => m.id !== id) }))}
-        audioNodes={audioNodes}
-        nullLayers={nullLayers}
-        layerRefs={layerRefs}
-      />}
+      {(compact ? tab === 'mappings' : sideView.drawer) && renderMappings(false)}
+      {bigPanel}
       {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
       <AudioReadersHost compact={compact} />
       <LayerContextMenu play={play} onChange={update} />
@@ -479,6 +525,9 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
 }
 
 const DRAWER_HEIGHT_KEY = 'shader-studio:play:drawerHeight';
+/** The split view's big panel lays cards out in as many columns as fit. */
+const PANEL_GRID: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', columnGap: 10, alignItems: 'start' };
+const PANEL_GRID_WIDE: React.CSSProperties = { ...PANEL_GRID, gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))' };
 
 // ── Header + empty state ─────────────────────────────────────────────────────
 
@@ -827,10 +876,12 @@ function RangeEditor({ min, max, onRange }: { min: number; max: number; onRange:
 
 interface AudioNodeOption { id: string; label: string; bands: number }
 
-function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, audioNodes, nullLayers, layerRefs }: {
+function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, audioNodes, nullLayers, layerRefs }: {
   play: PlayRecord;
-  /** `drawer`: folds under the controls with a draggable top edge. `tab`: fills the page (phones). */
+  /** `drawer`: folds under the controls with a draggable top edge. `tab`: fills the page (phones, the split view's panel). */
   mode: 'drawer' | 'tab';
+  /** The rows as cards in columns (the split view's panel). */
+  grid?: boolean;
   height: number;
   onResizeStart: (e: React.PointerEvent) => void;
   open: boolean;
@@ -925,7 +976,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
         )}
       />
       {open && (
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: grid ? '8px 16px 16px' : '6px 12px 12px' }}>
           {(learnFor || usesMidi(play)) && (
             <div style={{ margin: '4px 0 6px', padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field }}>
               <MidiStatusChip />
@@ -953,7 +1004,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
                 ? 'Add a control first, then map an input onto it.'
                 : `Press Learn and move a knob or a key, or add a row by hand. ${midiEngine.blockReason() ?? (midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}.` : '')} Connecting Ableton, a controller, OSC or live audio for the first time? The ⓘ button above walks you through it.`}
             />
-          ) : play.mappings.map(m => (
+          ) : <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => (
             <MappingRow
               key={m.id}
               mapping={m}
@@ -970,7 +1021,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               onUpdate={patch => onUpdate(m.id, patch)}
               onRemove={() => onRemove(m.id)}
             />
-          ))}
+          ))}</div>}
           {!play.midiFile && <MidiFileSlot />}
         </div>
       )}

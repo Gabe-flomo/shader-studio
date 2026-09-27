@@ -59,6 +59,13 @@ export const ICONS = {
   layoutCanvas: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><rect x='4.5' y='5' width='7' height='6' rx='1' fill='currentColor' stroke='none'/>" },
   layoutSplit: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><path d='M2 8h12'/>" },
   layoutGraph: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><path d='M5 6h6M5 9h4'/>" },
+  // The Play page's split view: the picture beside a big panel, and where the panel sits.
+  splitPanel: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><path d='M8.6 2.5v11'/><path d='M10.6 5.6h1.4M10.6 8h1.4M10.6 10.4h1.4'/>" },
+  panelLeft: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><rect x='3.8' y='4.3' width='3.4' height='7.4' rx='0.8' fill='currentColor' stroke='none'/>" },
+  panelRight: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><rect x='8.8' y='4.3' width='3.4' height='7.4' rx='0.8' fill='currentColor' stroke='none'/>" },
+  panelTop: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><rect x='3.8' y='4.3' width='8.4' height='3' rx='0.8' fill='currentColor' stroke='none'/>" },
+  panelBottom: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><rect x='3.8' y='8.7' width='8.4' height='3' rx='0.8' fill='currentColor' stroke='none'/>" },
+  sidebar: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><path d='M6 2.5v11'/><path d='M3.6 5.3h.9M3.6 7.5h.9'/>" },
   overlay: { sw: 1.5, body: "<rect x='1.8' y='2.8' width='12.4' height='10.4' rx='2'/><circle cx='5.5' cy='7' r='1.3'/><circle cx='10.5' cy='9.5' r='1.3'/><path d='M6.7 7.6l2.6 1.3'/>" },
   more: { sw: 1.5, body: "<circle cx='3.5' cy='8' r='1.4' fill='currentColor' stroke='none'/><circle cx='8' cy='8' r='1.4' fill='currentColor' stroke='none'/><circle cx='12.5' cy='8' r='1.4' fill='currentColor' stroke='none'/>" },
   record: { sw: 1.5, body: "<circle cx='8' cy='8' r='5.8'/><circle cx='8' cy='8' r='2.7' fill='currentColor' stroke='none'/>" },
