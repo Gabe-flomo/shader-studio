@@ -5,7 +5,7 @@
  * draw order, make a null for a property that follows one, and make a null
  * that drives a control.
  */
-import { FINISH_EFFECTS, finishParam, finishTarget } from '../../types/playFinish';
+import { finishHost, finishHostLabel, finishParamOf, finishTarget } from '../../types/playFinish';
 import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type ShapeLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type TriggerSpec } from '../../types/play';
 import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
 import { resetKindLayer } from '../../play/layerKinds';
@@ -300,11 +300,11 @@ export function addLayerPropControl(p: PlayRecord, layerId: string, key: string)
 
 /** A Finish effect's number as a panel control (unchanged when it's already one). */
 export function addFinishPropControl(p: PlayRecord, effectId: string, key: string): PlayRecord {
-  const e = p.finish?.effects.find(x => x.id === effectId);
-  const d = e && finishParam(e.kind, key);
+  const e = finishHost(p.finish, effectId);
+  const d = e && finishParamOf(e, key);
   const target = finishTarget(effectId, key);
   if (!e || !d || p.controls.some(c => c.target === target)) return p;
-  return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'float', label: `${FINISH_EFFECTS[e.kind].label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
+  return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'float', label: `${finishHostLabel(e)} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
 }
 
 /** Map `source` onto the control at `target` (made first if needed), across its whole range. Returns the record and the control. */

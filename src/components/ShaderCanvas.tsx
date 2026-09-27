@@ -2133,7 +2133,6 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const unsubSolo = usePlayUi.subscribe((ui, prev) => {
       if (ui.soloLayers !== prev.soloLayers || ui.soloMappings !== prev.soloMappings) feedPlay();
       if (ui.guides !== prev.guides) { playOverlay.setGuides(ui.guides); requestRenderRef.current(); }
-      if (ui.compare !== prev.compare) { playOverlay.setCompare(ui.compare); requestRenderRef.current(); }
     });
     playOverlay.setWriter((layerId, patch) => useNodeGraphStore.getState().setPlay(p => ({ ...p, layers: p.layers.map(l => l.id === layerId ? { ...l, ...patch } as typeof l : l) })));
     playEngine.setBaseValues(readBaseValues(lastPlayNodes, lastPlay));

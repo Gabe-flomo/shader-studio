@@ -36,6 +36,7 @@ import dataSource from './kit/data.js?raw';
 import kitSource from './kit/kit.js?raw';
 import finishGlslSource from './kit/finishGlsl.js?raw';
 import finishSource from './kit/finish.js?raw';
+import { renderableFinish } from '../types/playFinish';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { BACKGROUND_VIDEO_KEEP, backgroundLayerOf, usesHands, type PlayRecord } from '../types/play';
 import type { HandAssets } from './handExport';
@@ -284,6 +285,11 @@ export function playBundle(input: PlayHtmlInput) {
   delete play.source;
   // Takes are for rendering in the app; the page never plays them back.
   delete play.takes;
+  // Custom Finish effects from a sealed pack go in as code: the page compiles them (a shader reaches the GPU as text anyway).
+  if (play.finish) {
+    const fin = renderableFinish(play.finish)!;
+    play.finish = fin === play.finish ? fin : { ...fin, effects: fin.effects.map(e => { if (!e.sealed) return e; const c = { ...e }; delete c.sealed; return c; }) };
+  }
   // The background carries only the file it shows: an image kept for later isn't needed with a video (or the shader) showing.
   // A Background layer decides instead of the header's setting, whose files then stay out altogether.
   const queue = backgroundLayerOf(play);
