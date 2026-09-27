@@ -11,7 +11,7 @@ import { Button } from '../../ui/Button';
 import { Segmented } from '../../ui/Choice';
 import { Field } from '../../ui/Field';
 import { NumberInput } from '../../NodeGraph/NumberInput';
-import { klParseFontUrl } from '../../../play/kit/layers.js';
+import { klParseFontUrl } from '../../../play/kit/fonts.js';
 import { layerAudio } from '../../../lib/layerAudio';
 import { toast } from '../../ui/toastStore';
 import { LiveAudioChip } from '../chips';

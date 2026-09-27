@@ -8,6 +8,10 @@
  * Tick things anywhere (a whole section or folder too) to download or remove
  * them together.
  */
+import { exportEverythingPlayfile } from '../playfile/exportMenus';
+import { openPlayfileBytes } from '../../playfile/app';
+import { CONTAINER_ACCEPT } from '../../playfile/format';
+import { isPlayfile } from '../../playfile/reader';
 import { ProBadgeFor } from '../account/ProSheet';
 import { requireFeature } from '../../lib/plan';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
@@ -117,6 +121,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   };
 
   const preview = async (picked: { name: string; bytes: Uint8Array }) => {
+    // A .playfile opens its own preview (importing one is Free; a profile inside it needs Pro there).
+    if (isPlayfile(picked.bytes)) { await openPlayfileBytes(picked.name, picked.bytes); return; }
     if (!requireFeature('files.install')) return;
     try {
       const profile = readProfile(picked.bytes);
@@ -126,7 +132,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   const startInstall = async () => {
     if (!requireFeature('files.install')) return;
     let picked: Awaited<ReturnType<typeof openBinaryFile>>;
-    try { picked = await openBinaryFile('.zip,.json'); } catch (e) { toast.error('Couldn’t open that file', { message: errorMessage(e) }); return; }
+    try { picked = await openBinaryFile(`${CONTAINER_ACCEPT},.zip,.json`); } catch (e) { toast.error('Couldn’t open that file', { message: errorMessage(e) }); return; }
     if (picked) await preview(picked);
   };
   // A profile ZIP dropped anywhere on the page opens the same preview.
@@ -151,14 +157,14 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   const everything = (target: SaveTarget) => { if (requireFeature('files.everything')) void downloadEverything(target); };
   const downloadMenu = (x: number, y: number) => {
     if (!requireFeature('files.everything')) return;
-    if (!isTauri()) { everything('download'); return; }
     setMenu({ node: null, x, y });
   };
 
   const menuItems = (n: FileNode | null): MenuItem[] => {
     if (!n) return [
+      { label: 'Save as a .playfile…', icon: 'export', hint: 'One file: open it here or on another computer, see what’s inside, pick what comes in', onSelect: () => { void exportEverythingPlayfile(); } },
       { label: 'Save as a ZIP…', icon: 'export', hint: 'One file: install it here or on another computer', onSelect: () => everything('download') },
-      { label: 'Save to a folder…', icon: 'folder', hint: 'The same files, unpacked into a folder you choose', onSelect: () => everything('folder') },
+      ...(isTauri() ? [{ label: 'Save to a folder…', icon: 'folder' as const, hint: 'The same files, unpacked into a folder you choose', onSelect: () => everything('folder') }] : []),
     ];
     const items: MenuItem[] = [];
     const scopeOf = n.membership?.scope;
@@ -266,7 +272,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <Button icon="import" onClick={() => { void startInstall(); }}>Install…<ProBadgeFor feature="files.install" /></Button>
-                <Button variant="primary" icon="export" onClick={() => everything('download')}>Download all<ProBadgeFor feature="files.everything" /></Button>
+                <Button variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.left, r.bottom + 4); }}>Download all<ProBadgeFor feature="files.everything" /></Button>
               </div>
               <CleanUpEntry count={cleanupCount} onClick={() => setView('cleanup')} />
               <WorkspaceEntry active={false} dense={false} onClick={() => setView('workspace')} />
@@ -307,8 +313,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
               : view === 'workspace' ? <Breadcrumbs path={crumb('Workspace folder')} onOpen={open} />
               : <Breadcrumbs path={path} onOpen={open} />}
           </div>
-          <Button size="sm" icon="import" onClick={() => { void startInstall(); }} title="Open a profile or partial ZIP: see what’s inside, then merge it or replace everything">Install…<ProBadgeFor feature="files.install" /></Button>
-          <Button size="sm" variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.right - 260, r.bottom + 4); }} title="One ZIP of everything saved here, with a manifest">Download everything<ProBadgeFor feature="files.everything" /></Button>
+          <Button size="sm" icon="import" onClick={() => { void startInstall(); }} title="Open a .playfile, a profile or a partial ZIP: see what’s inside, then bring it in">Install…<ProBadgeFor feature="files.install" /></Button>
+          <Button size="sm" variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.right - 260, r.bottom + 4); }} title="Everything saved here: one .playfile, or one ZIP with a manifest">Download everything<ProBadgeFor feature="files.everything" /></Button>
           </>}
         </div>
         {banner}

@@ -43,10 +43,15 @@ export function originText(s: PresentSource): string {
   return `${s.from.kind === 'saved' ? 'Saved graph' : 'Example'}${when ? ` · copied ${when}` : ''}`;
 }
 
+/** True when nothing unsaved would be lost by opening another graph, or the user says to go ahead. */
+export async function confirmReplaceGraph(): Promise<boolean> {
+  return !useNodeGraphStore.getState().graphDirty || askConfirm('Open this graph?', { message: 'The graph open in the Studio has changes that aren’t saved. Opening another one replaces it.', confirmLabel: 'Open it' });
+}
+
 /** Open a source's graph in the Studio or on the Play page (asks first if that would replace unsaved work). */
 export async function openSourceGraph(s: PresentSource, page: Page, navigate: (p: Page) => void): Promise<void> {
+  if (!(await confirmReplaceGraph())) return;
   const st = useNodeGraphStore.getState();
-  if (st.graphDirty && !(await askConfirm('Open this graph?', { message: 'The graph open in the Studio has changes that aren’t saved. Opening another one replaces it.', confirmLabel: 'Open it' }))) return;
   if (s.from.kind === 'saved') {
     const r = st.loadSavedGraph(s.from.name);
     if (!r.ok) { toast.error('Couldn’t open it', { message: r.error }); return; }

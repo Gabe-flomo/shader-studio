@@ -320,7 +320,11 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
       )}
       {userNode && !isGlsl && (
         <div style={{ display: 'flex', gap: 6, paddingTop: 6, borderTop: `1px solid ${tk.border.subtle}`, flexWrap: 'wrap' }}>
-          {userNode.sourceHidden && (
+          {userNode.sealed ? (
+            <span title="From a sealed node pack: its GLSL is encrypted and never shown" style={{ flexBasis: '100%', color: tk.text.faint, fontSize: 11.5 }}>
+              Sealed node pack{userNode.signedBy ? `, signed by ${userNode.signedBy.name} (${userNode.signedBy.fingerprint})` : ''}: it can be used, not opened or shared unsealed.
+            </span>
+          ) : userNode.sourceHidden && (
             <span title="Published without its source graph: it can be used, not opened" style={{ flexBasis: '100%', color: tk.text.faint, fontSize: 11.5 }}>
               Source not included: this node can be used but not opened.
             </span>
@@ -331,7 +335,7 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
               Open source graph
             </Button>
           )}
-          <Button size="sm" icon="export" title="Save this node type as a .json file you can share or import into another project"
+          <Button size="sm" icon="export" title="Save this node type as a signed node pack (.playfile), optionally sealed, to share or import into another project"
             onClick={() => exportUserNodes([userNode.id])}>
             Export
           </Button>

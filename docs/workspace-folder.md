@@ -100,6 +100,10 @@ backgrounds/videos.json                          their names, sizes and lengths
   no `.glsl.json` beside it, a picture in `backgrounds/images/`…). A file renamed
   in Finder renames the thing (a graph keeps its earlier versions when only its
   name changed; files starting with a dot are ignored).
+- Links between a graph and a presentation (`linkedPresentations` in the
+  graph file, `linkedGraphs` in the presentation file, by name; see
+  docs/present-guide.md) are part of the files, so they sync like the rest.
+  A link whose other side is missing is ignored.
 - Anything else in the folder is left alone, including the old backup folder's
   `library.json`, `history/` and `README.txt`.
 - The order of list-like things (GLSL shaders, sketches…) isn't in the folder:

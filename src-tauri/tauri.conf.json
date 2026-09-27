@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Playfield",
-  "version": "0.1.0",
+  "version": "2026.9.7",
   "identifier": "com.shaderstudio.app",
   "build": {
     "frontendDist": "../dist",
@@ -37,6 +37,21 @@
     ],
     "macOS": {
       "entitlements": "./Entitlements.plist"
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": ["playfile"],
+        "name": "Playfield file",
+        "description": "Playfield file",
+        "role": "Editor",
+        "rank": "Owner",
+        "mimeType": "application/x-playfile+zip",
+        "contentTypes": ["com.shaderstudio.playfile"],
+        "exportedType": {
+          "identifier": "com.shaderstudio.playfile",
+          "conformsTo": ["public.zip-archive", "public.data"]
+        }
+      }
+    ]
   }
 }

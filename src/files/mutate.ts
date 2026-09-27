@@ -9,10 +9,16 @@
  */
 import type { KV } from '../utils/library';
 import { FOLDERS_KEY, parseJson, walk, type FileNode, type Inventory, type StoreRef } from './inventory';
+import { GRAPH_LINK_FIELD, graphDeleted, graphKey, normalizeLinks, presentationDeleted, presentationKey, PRESENTATION_LINK_FIELD } from '../present/links';
 
-export interface MutableKV extends KV { remove(key: string): void }
+export interface MutableKV extends KV {
+  remove(key: string): void;
+  /** The app's own storage (links then reach the open presentation through the Present page). */
+  local?: boolean;
+}
 
 export const localMutableKV: MutableKV = {
+  local: true,
   keys: () => { const out: string[] = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k) out.push(k); } return out; },
   get: k => localStorage.getItem(k),
   set: (k, v) => localStorage.setItem(k, v),
@@ -69,6 +75,16 @@ export function removeNodes(kv: MutableKV, nodes: FileNode[]): RemovalResult {
   }
   const touched = new Set<string>();
   for (const r of refs) if (r.t === 'key' || r.t === 'part') touched.add(r.key);
+  // A graph or presentation that goes takes its links with it: the other side stays, without the link (and Undo puts that back too).
+  const unlinks: Array<{ kind: 'graph' | 'presentation'; name: string; partners: string[] }> = [];
+  for (const n of nodes) {
+    if (n.ref?.t !== 'key' || (n.kind !== 'graph' && n.kind !== 'presentation')) continue;
+    const o = parseJson(kv.get(n.ref.key)) as Record<string, unknown> | undefined;
+    const partners = normalizeLinks(o?.[n.kind === 'graph' ? GRAPH_LINK_FIELD : PRESENTATION_LINK_FIELD]);
+    if (!partners.length) continue;
+    unlinks.push({ kind: n.kind, name: n.label, partners });
+    for (const p of partners) touched.add(n.kind === 'graph' ? presentationKey(p) : graphKey(p));
+  }
   if (memberships.length || refs.some(r => r.t === 'folder')) touched.add(FOLDERS_KEY);
   const before = new Map<string, string | null>();
   for (const k of touched) before.set(k, kv.get(k));
@@ -78,6 +94,7 @@ export function removeNodes(kv: MutableKV, nodes: FileNode[]): RemovalResult {
   const parts = new Map<string, Array<Extract<StoreRef, { t: 'part' }>>>();
   for (const r of refs) if (r.t === 'part' && !wholeKeys.has(r.key)) { const l = parts.get(r.key) ?? []; l.push(r); parts.set(r.key, l); }
 
+  for (const u of unlinks) (u.kind === 'graph' ? graphDeleted : presentationDeleted)(u.name, kv, u.partners);
   for (const k of wholeKeys) kv.remove(k);
   for (const [key, list] of parts) {
     const root = parseJson(kv.get(key));

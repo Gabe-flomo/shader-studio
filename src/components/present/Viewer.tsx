@@ -12,8 +12,7 @@
  * Esc goes back to Edit.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { paperStyle } from './paper';
-import { useThemeStore, useTokens } from '../../theme/themeStore';
+import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import type { BlockContext } from './Blocks';
@@ -21,7 +20,7 @@ import { StepView } from './StepView';
 import { usePresentation } from './presentationStore';
 import { openOnStage } from './stageHandoff';
 import { Backdrop } from './Backdrop';
-import { COLUMN, lookVars, useImageMap, useStepLook } from './presentLook';
+import { lookVars, ThemeScope, useColumn, useImageMap, usePageBackground, useStepLook } from './presentLook';
 import { stepLook, type StepLook } from '../../types/presentationStyle';
 import type { Step } from '../../types/presentation';
 
@@ -51,8 +50,8 @@ function NavBar({ index, total, titles, onGo, fullscreen, onFullscreen, onStage,
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10, padding: floating ? '6px 8px' : '10px 16px',
       ...(floating
-        ? { borderRadius: 22, background: tk.bg.panel, boxShadow: tk.shadow.popover, border: `1px solid ${tk.border.default}` }
-        : { borderTop: `1px solid ${tk.border.default}`, background: tk.bg.panel }),
+        ? { borderRadius: 22, background: `var(--pp-surface, ${tk.bg.panel})`, boxShadow: tk.shadow.popover, border: `1px solid ${tk.border.default}` }
+        : { borderTop: `1px solid ${tk.border.default}`, background: `var(--pp-surface, ${tk.bg.panel})` }),
     }}>
       <IconButton icon="chevL" label="Previous step (←)" disabled={index <= 0} onClick={() => onGo(index - 1)} />
       {!floating && (
@@ -60,7 +59,7 @@ function NavBar({ index, total, titles, onGo, fullscreen, onFullscreen, onStage,
           {Array.from({ length: total }, (_, i) => (
             <button key={i} type="button" role="tab" aria-selected={i === index} title={`${i + 1}. ${titles[i] || 'Untitled step'}`} onClick={() => onGo(i)}
               style={{ flex: 1, height: 18, padding: 0, border: 0, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-              <span style={{ width: '100%', height: 4, borderRadius: 2, background: i <= index ? tk.accent.base : tk.border.strong, opacity: i === index ? 1 : i < index ? 0.55 : 1, transition: 'background .2s' }} />
+              <span style={{ width: '100%', height: 4, borderRadius: 2, background: i <= index ? `var(--pp-accent, ${tk.accent.base})` : tk.border.strong, opacity: i === index ? 1 : i < index ? 0.55 : 1, transition: 'background .2s' }} />
             </button>
           ))}
         </div>
@@ -74,8 +73,6 @@ function NavBar({ index, total, titles, onGo, fullscreen, onFullscreen, onStage,
 }
 
 export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' | 'editing' | 'large'>; rootRef: React.RefObject<HTMLElement | null> }) {
-  const tk = useTokens();
-  const dark = useThemeStore(s => s.mode) === 'dark';
   const doc = usePresentation(s => s.doc);
   const index = usePresentation(s => s.step);
   const setStep = usePresentation(s => s.setStep);
@@ -94,6 +91,8 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
   const toggleFs = () => { if (document.fullscreenElement) void document.exitFullscreen(); else void rootRef.current?.requestFullscreen?.().catch(() => {}); };
   const step = doc?.steps[index];
   const look = useStepLook(step);
+  const pageBg = usePageBackground(true);
+  const column = useColumn('slides');
   if (!doc || !step) return null;
   const full: BlockContext = { ...ctx, editing: false, active: true, large: !ctx.compact };
   // The step's first canvas, for the Stage button.
@@ -101,27 +100,28 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
   const firstSource = first && (first.type === 'render' || first.type === 'interactive') ? ctx.sources.get(first.source) : undefined;
   const onStage = firstSource ? () => openOnStage(doc, firstSource, step) : undefined;
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark) }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', ...pageBg }}>
       <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
         {/* Keyed by step: the next background fades in over the last. */}
-        <Backdrop key={step.id} look={look} column={COLUMN.slides} style={{ animation: 'pp-fade .35s ease-out' }} />
+        <Backdrop key={step.id} look={look} column={column} style={{ animation: 'pp-fade .35s ease-out' }} />
         <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto', position: 'relative', zIndex: 1, ...lookVars(look) }}>
           <div key={step.id} style={{
-            maxWidth: 1180, margin: '0 auto', boxSizing: 'border-box', minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center',
+            maxWidth: column + 112, margin: '0 auto', boxSizing: 'border-box', minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center',
             padding: ctx.compact ? '22px 16px 28px' : '44px 56px 44px', animation: 'pp-in .28s ease-out',
           }}>
-            <StepView step={step} index={index} total={total} ctx={full} />
+            <ThemeScope><StepView step={step} index={index} total={total} ctx={full} /></ThemeScope>
           </div>
         </div>
       </div>
-      <NavBar index={index} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={i => setStep(i)} fullscreen={fs} onFullscreen={ctx.compact ? undefined : toggleFs} onStage={onStage} />
+      <ThemeScope><NavBar index={index} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={i => setStep(i)} fullscreen={fs} onFullscreen={ctx.compact ? undefined : toggleFs} onStage={onStage} /></ThemeScope>
     </div>
   );
 }
 
 export function ScrollView({ ctx }: { ctx: Omit<BlockContext, 'active' | 'editing' | 'large'> }) {
   const tk = useTokens();
-  const dark = useThemeStore(s => s.mode) === 'dark';
+  const pageBg = usePageBackground(true);
+  const column = useColumn('scroll');
   const doc = usePresentation(s => s.doc);
   const setMode = usePresentation(s => s.setMode);
   const scroller = useRef<HTMLDivElement>(null);
@@ -164,19 +164,19 @@ export function ScrollView({ ctx }: { ctx: Omit<BlockContext, 'active' | 'editin
   if (!doc) return null;
   const c: BlockContext = { ...ctx, editing: false, active: true, large: false };
   return (
-    <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark) }}>
+    <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', ...pageBg }}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, zIndex: 3, background: alpha(tk.accent.base, 0.12) }}>
-        <div style={{ width: `${progress * 100}%`, height: '100%', background: tk.accent.base, transition: 'width .08s linear' }} />
+        <div style={{ width: `${progress * 100}%`, height: '100%', background: `var(--pp-accent, ${tk.accent.base})`, transition: 'width .08s linear' }} />
       </div>
       <div ref={scroller} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', ['--pp-vh' as string]: viewH ? `${viewH}px` : '100vh' }}>
         {doc.steps.map((s, i) => (
-          <ScrollSection key={s.id} step={s} index={i} total={total} ctx={c} look={looks[i]} prevBg={i > 0 && !!looks[i - 1].bg} last={i === total - 1}
+          <ScrollSection key={s.id} step={s} index={i} total={total} ctx={c} look={looks[i]} column={column} prevBg={i > 0 && !!looks[i - 1].bg} last={i === total - 1}
             title={i === 0 ? doc.title : undefined}
             sectionRef={el => { if (el) sections.current.set(i, el); else sections.current.delete(i); }} />
         ))}
       </div>
       <div style={{ position: 'absolute', bottom: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 3 }}>
-        <NavBar floating index={current} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={jump} />
+        <ThemeScope><NavBar floating index={current} total={total} titles={doc.steps.map(s => s.title ?? '')} onGo={jump} /></ThemeScope>
       </div>
     </div>
   );
@@ -187,31 +187,31 @@ export function ScrollView({ ctx }: { ctx: Omit<BlockContext, 'active' | 'editin
  * edge; the background is sticky (it stays put while a long step scrolls by,
  * then leaves with it) and clipped to the step. The first carries the title.
  */
-function ScrollSection({ step, index, total, ctx, look, prevBg, last, title, sectionRef }: {
-  step: Step; index: number; total: number; ctx: BlockContext; look: StepLook; prevBg: boolean; last: boolean; title?: string;
+function ScrollSection({ step, index, total, ctx, look, column, prevBg, last, title, sectionRef }: {
+  step: Step; index: number; total: number; ctx: BlockContext; look: StepLook; column: number; prevBg: boolean; last: boolean; title?: string;
   sectionRef: (el: HTMLElement | null) => void;
 }) {
   const tk = useTokens();
   const bg = !!look.bg;
-  const pad = ctx.compact ? 44 : 64;
+  const pad = `calc(${ctx.compact ? 44 : 64}px * var(--pp-space, 1))`;
   // Two plain steps in a row get a rule between them, as on paper; a background is its own divider.
   const rule = index > 0 && !bg && !prevBg;
   return (
     <section ref={sectionRef} style={{ position: 'relative', clipPath: bg ? 'inset(0)' : undefined, scrollMarginTop: 0, ...lookVars(look) }}>
       {bg && (
         <div style={{ position: 'sticky', top: 0, height: 'var(--pp-vh, 100vh)', marginBottom: 'calc(-1 * var(--pp-vh, 100vh))', zIndex: 0 }}>
-          <Backdrop look={look} column={COLUMN.scroll} />
+          <Backdrop look={look} column={column} />
         </div>
       )}
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 920, margin: '0 auto', boxSizing: 'border-box', padding: ctx.compact ? '0 16px' : '0 48px' }}>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: column + 96, margin: '0 auto', boxSizing: 'border-box', padding: ctx.compact ? '0 16px' : '0 48px' }}>
         <div style={{ borderTop: rule ? `1px solid var(--pp-rule, ${tk.border.default})` : undefined, paddingTop: title ? (ctx.compact ? 26 : 56) : pad, paddingBottom: last ? (ctx.compact ? 120 : 160) : pad }}>
           {title && (
             <>
-              <h1 className="pp-title" style={{ margin: '0 0 8px', fontSize: `calc(${ctx.compact ? 28 : 38}px * var(--pp-scale, 1))`, letterSpacing: '-0.02em', lineHeight: 1.15 }}>{title}</h1>
+              <h1 className="pp-title" style={{ margin: '0 0 8px', fontSize: `calc(${ctx.compact ? 28 : 38}px * var(--pp-scale, 1) * var(--pp-title, 1))`, letterSpacing: 'var(--pp-track, -0.02em)', lineHeight: 1.15 }}>{title}</h1>
               <div style={{ color: `var(--pp-muted, ${tk.text.faint})`, font: `500 13px ${fontFamily.ui}`, marginBottom: ctx.compact ? 30 : 48 }}>{total} step{total === 1 ? '' : 's'}</div>
             </>
           )}
-          <StepView step={step} index={index} total={total} ctx={ctx} />
+          <ThemeScope><StepView step={step} index={index} total={total} ctx={ctx} /></ThemeScope>
         </div>
       </div>
     </section>

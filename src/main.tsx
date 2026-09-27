@@ -4,6 +4,7 @@ import App from './App.tsx'
 import { Toaster } from './components/ui/Toaster'
 import { DialogHost } from './components/ui/DialogHost'
 import { ProSheetHost } from './components/account/ProSheet'
+import { PlayfileHost } from './components/playfile/PlayfileHost'
 import { SignInPage } from './components/account/SignInPage'
 import { GATE_USERS, OPEN_SESSION, isGateOn, rememberSignIn, restoreSignIn, sessionFor, verifyLogin } from './auth/gate'
 import { usePlan } from './lib/plan'
@@ -63,7 +64,7 @@ if (import.meta.env.DEV) {
 // Dev-only component gallery for the redesign primitives: open the app with #ui.
 // import.meta.env.DEV is false in production builds, so the gallery isn't bundled.
 function startApp() {
-  root.render(<><App /><Toaster /><BackgroundsHost /><DialogHost /><ProSheetHost /><PerformanceBar /></>)
+  root.render(<><App /><Toaster /><BackgroundsHost /><DialogHost /><ProSheetHost /><PlayfileHost /><PerformanceBar /></>)
   // Songs stop when the graph that owns them is closed or they're deleted.
   void import('./lib/audioSync').then(m => m.startAudioSync())
   // The workspace folder (desktop app; a picked folder in Chrome/Edge) starts once the app is up;

@@ -5,6 +5,9 @@
  * download, copy, rename, file or delete it (with Undo). New, Import and
  * Download all sit at the top.
  */
+import { reportFileResult } from '../shell/reportFileResult';
+import { offerSetExport } from '../playfile/exportMenus';
+import { exportPresentationPlayfile } from '../../playfile/app';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -22,7 +25,10 @@ import { createFolder, loadFolders, moveItemsToFolder, removeItemsFromFolders, g
 import { PRESENTATION_FOLDER_SCOPE } from '../../utils/library';
 import { loadPresentation, renamePresentation, type PresentationEntry } from '../../present/storage';
 import { usePresentation } from './presentationStore';
-import { deleteWithUndo, downloadAllPresentations, exportPresentationFile, importPresentationFile } from './presentationFiles';
+import { deleteWithUndo, exportPresentationFile, importPresentationFile } from './presentationFiles';
+import { announcePresentationOpened } from './linkActions';
+import { LinkBadge } from '../shell/GraphLinks';
+import { usePresentationLinks } from '../shell/linkHooks';
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -46,6 +52,7 @@ function Row({ entry, current, compact, onOpen, onMenu }: { entry: PresentationE
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   const menuRef = useRef<HTMLSpanElement>(null);
+  const linked = usePresentationLinks(entry.name);
   return (
     <div
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -60,6 +67,7 @@ function Row({ entry, current, compact, onOpen, onMenu }: { entry: PresentationE
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', font: `600 13px ${fontFamily.ui}` }}>{entry.name}</span>
             {current && <span style={{ flexShrink: 0, padding: '1px 6px', borderRadius: radius.sm, background: alpha(tk.accent.base, 0.16), color: tk.accent.text, font: `600 10.5px ${fontFamily.ui}` }}>Open</span>}
+            <LinkBadge partners={linked} kind="graph" compact={compact} />
           </span>
           <span style={{ color: tk.text.muted, font: `500 11.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {plural(entry.steps, 'step')} · {plural(entry.sources, 'Play')}{entry.updatedAt ? ` · ${whenSaved(entry.updatedAt)}` : ''}
@@ -89,6 +97,7 @@ export function PresentationsDialog({ list, compact, onClose, onNew }: { list: P
   const open = (name: string) => {
     if (!usePresentation.getState().open(name)) { toast.error(`Couldn’t open “${name}”`, { message: 'It isn’t readable.' }); return; }
     onClose();
+    announcePresentationOpened(name);
   };
   const byName = useMemo(() => new Map(list.map(e => [e.name, e])), [list]);
   const items = useMemo(() => list.map(e => ({ id: e.name, label: e.name })), [list]);
@@ -99,7 +108,8 @@ export function PresentationsDialog({ list, compact, onClose, onNew }: { list: P
     const inFolder = getFolderForItem(PRESENTATION_FOLDER_SCOPE, name);
     return [
       { label: 'Open', icon: 'slides', onSelect: () => open(name) },
-      { label: 'Download', icon: 'export', hint: 'A .present.json file with every Play in it', onSelect: () => void exportPresentationFile(name) },
+      { label: 'Download as .playfile', icon: 'export', hint: 'With its Plays, pictures, fonts and the graphs it was made from', onSelect: () => void exportPresentationPlayfile(name).then(r => reportFileResult(r, { failTitle: 'Couldn’t download it' })) },
+      { label: 'Download as .present.json', icon: 'code', hint: 'A readable file with every Play in it', onSelect: () => void exportPresentationFile(name) },
       { label: 'Make a copy', icon: 'copy', onSelect: () => { duplicateSaved(name); onClose(); } },
       { label: 'Rename…', icon: 'edit', onSelect: () => void renameSaved(name) },
       { label: inFolder ? 'Move to another folder…' : 'Move to a folder…', icon: 'folder', onSelect: () => { const at = menu; if (at) setTimeout(() => setMenu({ ...at, move: true }), 0); } },
@@ -130,8 +140,8 @@ export function PresentationsDialog({ list, compact, onClose, onNew }: { list: P
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: compact ? '0 0 10px' : '14px 18px 10px', borderBottom: `1px solid ${tk.border.subtle}` }}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <Button size="sm" variant="primary" icon="plus" onClick={() => { onClose(); onNew(); }}>New</Button>
-        <Button size="sm" icon="import" onClick={() => { void importPresentationFile().then(onClose); }} title="Open a .present.json file as a new presentation">Import…</Button>
-        <Button size="sm" variant="ghost" icon="export" disabled={!list.length} onClick={() => void downloadAllPresentations()} title="Every presentation as .present.json files in one ZIP, in their folders (with a library.json that imports them all back)">Download all</Button>
+        <Button size="sm" icon="import" onClick={() => { void importPresentationFile().then(onClose); }} title="Open a .playfile or a .present.json file as a new presentation">Import…</Button>
+        <Button size="sm" variant="ghost" icon="export" disabled={!list.length} onClick={e => offerSetExport(e.currentTarget, 'presentations')} title="Every presentation in one .playfile, or as .present.json files in a ZIP (with a library.json that imports them all back)">Download all</Button>
       </div>
       {list.length > 3 && (
         <Field aria-label="Search presentations" placeholder="Search presentations" height={32} value={q} onChange={e => setQ(e.target.value)}

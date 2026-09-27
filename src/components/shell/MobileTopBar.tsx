@@ -1,3 +1,4 @@
+import { offerGraphExport } from '../playfile/exportMenus';
 import { useRef, useState } from 'react';
 import { rebuildWithToast } from './rebuildAction';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -9,7 +10,7 @@ import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { Menu } from '../ui/Menu';
 import { LoadGraphButton, SaveGraphButton } from './DesktopTopNav';
-import { reportFileResult, reportGlslImport } from './reportFileResult';
+import { reportGlslImport } from './reportFileResult';
 import { importAnyFile } from './importAnyFile';
 import { isPlayRecordEmpty } from '../../types/play';
 import { exportEverything, importEverything } from '../../utils/libraryActions';
@@ -37,7 +38,6 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
   const toggleTheme = useThemeStore(s => s.toggle);
   const undo = useNodeGraphStore(s => s.undo);
   const redo = useNodeGraphStore(s => s.redo);
-  const exportGraph = useNodeGraphStore(s => s.exportGraph);
   const importGlslFromFile = useNodeGraphStore(s => s.importGlslFromFile);
   const hasPlay = useNodeGraphStore(s => !isPlayRecordEmpty(s.play));
   const moreRef = useRef<HTMLSpanElement>(null);
@@ -126,10 +126,10 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             page === 'present'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Present', icon: 'slides', hint: 'Teach with your Plays: steps of text, pictures, sliders and code', onSelect: () => onPageChange('present') },
-            { label: 'Import a file', icon: 'import', hint: 'A graph, or a .present.json (opens on Present)', onSelect: () => { void importAnyFile(onPageChange); } },
+            { label: 'Import a file', icon: 'import', hint: 'A .playfile, a graph, or a .present.json (opens on Present)', onSelect: () => { void importAnyFile(onPageChange); } },
             { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
             { label: `Convert GLSL to nodes${pro('convert')}`, icon: 'nodes', hint: 'Paste a shader, preview the nodes it becomes, make it real', onSelect: () => onPageChange('convert') },
-            { label: 'Export this graph', icon: 'export', onSelect: async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); } },
+            { label: 'Export this graph', icon: 'export', hint: 'A .playfile, or readable JSON', onSelect: () => offerGraphExport(null) },
             page === 'files'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Files', icon: 'folder', hint: 'Everything saved: sizes, clean up, download and install', onSelect: () => onPageChange('files') },

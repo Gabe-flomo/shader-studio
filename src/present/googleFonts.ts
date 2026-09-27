@@ -13,6 +13,7 @@
  * names, for showing each family in itself in the picker.
  */
 import type { EmbeddedFontFace, FontCategory } from '../types/presentationStyle';
+import { klParseFontUrl } from '../play/kit/fonts.js';
 
 export interface GoogleFont { family: string; category: FontCategory; weights: number[] }
 
@@ -108,6 +109,64 @@ export function findFont(family: string): GoogleFont | undefined {
 /** The family's weight nearest to `w`. */
 export function nearestWeight(font: Pick<GoogleFont, 'weights'>, w: number): number {
   return font.weights.reduce((best, x) => (Math.abs(x - w) < Math.abs(best - w) ? x : best), font.weights[0] ?? 400);
+}
+
+/** A pasted Google Fonts source, read: the family, its kind, and the weights the link names (none: ask for what's needed). */
+export interface FontLink { family: string; category: FontCategory; weights: number[] }
+
+/** Presentation fonts are Google families with plain names (types/presentationStyle.ts). */
+const PLAIN_FAMILY = /^[A-Za-z0-9 ]{1,60}$/;
+
+/** A family's kind from its name, for one outside the list: the fallback fonts behind it. */
+export function guessCategory(family: string): FontCategory {
+  if (/\b(mono|code)\b/i.test(family)) return 'mono';
+  if (/\bserif\b/i.test(family) && !/\bsans\b/i.test(family)) return 'serif';
+  if (/\b(display|poster)\b/i.test(family)) return 'display';
+  if (/\b(hand|script)\b/i.test(family)) return 'handwriting';
+  return 'sans';
+}
+
+/** The weights a css2 link's family asks for: `:wght@400;700`, `:wght@300..700`, `:ital,wght@0,400;1,700`. */
+export function linkWeights(css: string): number[] {
+  const m = /[?&]family=[^&:]+:([^&]+)/.exec(css.replace(/%3A/gi, ':').replace(/%40/gi, '@').replace(/%3B/gi, ';').replace(/%2C/gi, ','));
+  if (!m) return [];
+  const [axes, values] = m[1].split('@');
+  if (!values) return [];
+  const names = axes.split(',');
+  const wi = names.indexOf('wght');
+  if (wi < 0) return [];
+  const out = new Set<number>();
+  for (const tuple of values.split(';')) {
+    const w = tuple.split(',')[wi];
+    if (!w) continue;
+    const range = /^(\d{3})\.\.(\d{3,4})$/.exec(w);
+    if (range) {
+      const lo = Number(range[1]), hi = Math.min(1000, Number(range[2]));
+      for (let x = Math.ceil(lo / 100) * 100; x <= hi; x += 100) out.add(x);
+    } else if (/^\d{3}$/.test(w)) out.add(Number(w));
+  }
+  return [...out].filter(x => x >= 100 && x <= 900).sort((a, b) => a - b);
+}
+
+/**
+ * A pasted Google Fonts link or family name, for a presentation font: a
+ * fonts.google.com/specimen/… page, a fonts.googleapis.com/css2?family=… link
+ * (or the <link> tag holding it), or a plain name. Font file URLs aren't
+ * Google families, and names with other characters aren't kept, so both are
+ * null (as is anything else). Reads links the Text layer's way (klParseFontUrl).
+ */
+export function parseFontLink(input: string): FontLink | null {
+  const r = klParseFontUrl(input);
+  if (!r || r.file || !r.css) return null;
+  let family = r.family.trim().replace(/\s+/g, ' ');
+  // Google's names are capitalised ("bebas neue" is Bebas Neue).
+  if (family === family.toLowerCase()) family = family.replace(/\b[a-z]/g, c => c.toUpperCase());
+  if (!PLAIN_FAMILY.test(family)) return null;
+  // A family in the list keeps its proper name, kind and weights.
+  const known = GOOGLE_FONTS.find(f => f.family.toLowerCase() === family.toLowerCase());
+  const asked = linkWeights(r.css);
+  if (known) return { family: known.family, category: known.category, weights: asked.length ? asked.filter(w => known.weights.includes(w)) : [] };
+  return { family, category: guessCategory(family), weights: asked };
 }
 
 const API = 'https://fonts.googleapis.com/css2';

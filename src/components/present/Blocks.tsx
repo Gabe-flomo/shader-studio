@@ -24,7 +24,7 @@ import { resolveCode, type ResolvedCode } from '../../present/code';
 import { isLiveScript, linkedCanvases, stepScriptEdits } from '../../present/liveScript';
 import { playRuntime, type PlayMount } from '../../present/runtimeHost';
 import { useTokens } from '../../theme/themeStore';
-import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { alpha, fontFamily, radius, type Tokens } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { RulerSlider } from '../ui/RulerSlider';
@@ -183,6 +183,9 @@ function TextBlockView({ block, ctx, selected }: { block: TextBlock; ctx: BlockC
 
 // ── Render ──────────────────────────────────────────────────────────────────
 
+/** A primary button in the theme's shape and colour (pill or square; the app's accent under Classic). */
+const themedButton = (tk: Tokens) => ({ borderRadius: `var(--pp-btn-radius, ${radius.md}px)`, background: `var(--pp-btn, ${tk.ink.base})`, color: `var(--pp-on-btn, ${tk.ink.text})`, border: `1px solid var(--pp-btn, ${tk.ink.base})` });
+
 const WIDTH_PCT = { full: 100, half: 50, third: 100 / 3 } as const;
 
 function RenderBlockView({ block, ctx }: { block: RenderBlock; ctx: BlockContext }) {
@@ -191,7 +194,7 @@ function RenderBlockView({ block, ctx }: { block: RenderBlock; ctx: BlockContext
   const pct = ctx.compact ? 100 : WIDTH_PCT[block.width];
   const credit = ctx.sources.get(block.source)?.bundle.play.source;
   return (
-    <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+    <figure className="pp-render" style={{ margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
       <div style={{ width: `${pct}%`, minWidth: ctx.compact ? 0 : 200, maxWidth: '100%' }}>
         {/* On a slide the picture fits the screen's height too. */}
         <PlayCanvas slotId={block.id} source={ctx.sources.get(block.source)} aspect={block.aspect} pointer={block.pointer} startTime={block.startTime} paused={block.paused} active={ctx.active} sandbox={ctx.sandbox}
@@ -298,7 +301,7 @@ function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: Bl
             onMouseEnter={() => setHot(c.id)}
             onMouseLeave={() => setHot(h => (h === c.id ? null : h))}
             style={{
-              padding: '10px 12px 11px', borderRadius: radius.lg, background: tk.bg.panel, border: `1px solid ${lit ? tk.accent.base : tk.border.default}`,
+              padding: '10px 12px 11px', borderRadius: `var(--pp-radius, ${radius.lg}px)`, background: `var(--pp-surface, ${tk.bg.panel})`, border: `1px solid ${lit ? tk.accent.base : tk.border.default}`,
               boxShadow: lit ? `0 0 0 3px ${alpha(tk.accent.base, 0.18)}` : 'none', transition: 'border-color .15s, box-shadow .15s', minWidth: 0,
             }}
           >
@@ -307,7 +310,7 @@ function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: Bl
               {driven && <span title="A mapping is moving it" style={{ color: tk.accent.text, font: `650 10px ${fontFamily.ui}`, letterSpacing: '0.05em' }}>LIVE</span>}
             </div>
             {c.kind === 'action' ? (
-              <Button size="sm" variant="primary" icon="play" onClick={() => mount.current?.fire?.(c.id)} style={{ width: '100%' }}>{labels[c.id]}</Button>
+              <Button size="sm" variant="primary" icon="play" onClick={() => mount.current?.fire?.(c.id)} style={{ width: '100%', ...themedButton(tk) }}>{labels[c.id]}</Button>
             ) : c.kind === 'color' ? (
               <ColourPad value={Array.isArray(values[c.id]) ? values[c.id] as number[] : (Array.isArray(baseValue(source!.bundle, c)) ? baseValue(source!.bundle, c) as number[] : [0, 0, 0])} live={driven && Array.isArray(v) ? v : undefined} disabled={false} onChange={nv => write(c.id, nv)} />
             ) : (
@@ -331,8 +334,8 @@ function InteractiveBlockView({ block, ctx }: { block: InteractiveBlock; ctx: Bl
       })}
       {(needs.has('midi') || needs.has('audio')) && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {needs.has('midi') && <Button size="sm" icon="spark" disabled={midi === 'on'} onClick={async () => setMidi(await playRuntime().enableMidi?.() ? 'on' : 'refused')}>{midi === 'on' ? 'MIDI on' : midi === 'refused' ? 'MIDI refused' : 'Enable MIDI'}</Button>}
-          {needs.has('audio') && <Button size="sm" icon="wave" disabled={audio === 'on'} onClick={async () => setAudio(await playRuntime().listen?.() ?? 'unsupported')}>{audio === 'on' ? 'Listening' : audio === 'denied' ? 'Audio blocked' : audio === 'off' ? 'Listen' : 'No audio input'}</Button>}
+          {needs.has('midi') && <Button size="sm" icon="spark" style={{ borderRadius: `var(--pp-btn-radius, ${radius.md}px)` }} disabled={midi === 'on'} onClick={async () => setMidi(await playRuntime().enableMidi?.() ? 'on' : 'refused')}>{midi === 'on' ? 'MIDI on' : midi === 'refused' ? 'MIDI refused' : 'Enable MIDI'}</Button>}
+          {needs.has('audio') && <Button size="sm" icon="wave" style={{ borderRadius: `var(--pp-btn-radius, ${radius.md}px)` }} disabled={audio === 'on'} onClick={async () => setAudio(await playRuntime().listen?.() ?? 'unsupported')}>{audio === 'on' ? 'Listening' : audio === 'denied' ? 'Audio blocked' : audio === 'off' ? 'Listen' : 'No audio input'}</Button>}
         </div>
       )}
     </div>

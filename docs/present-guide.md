@@ -56,6 +56,67 @@ first Play, how many steps and Plays it has, and when it last changed.
   Delete. Delete has **Undo** in the notice that follows.
 - The five most recent are also at the top of the title menu.
 
+## Linking a presentation and a graph
+
+A presentation and a graph (or Play) stay separate things: a presentation
+carries its own copies of the Plays it shows, and a graph works without any
+presentation. A **link** only says they go together, so opening one can
+bring the other along.
+
+- **From the Studio or Play**: the save popover (the save button in the top
+  bar, with a saved graph open) has a line *Presentation: none · Link…*.
+  **Link…** offers **New presentation from this graph** (a first step
+  showing the graph, with its first controls when it has a Play setup; it
+  opens on Present) or any presentation saved here. A linked one has
+  **Open** and **Unlink**.
+- **From Present**: with no block selected, the settings panel's *This
+  step* tab ends with **Linked graphs**: each with **Load** (makes it the
+  open graph in the Studio and on Play, asking first if that would replace
+  unsaved changes) and unlink, and **Link…** for any saved graph. When the
+  presentation's Plays were copied from saved graphs that aren't linked yet,
+  **Link the graphs used here** links them in one go.
+- A graph can have several presentations and a presentation several graphs;
+  usually it's one.
+- A small link mark shows on linked graphs (the Studio's saved graphs, the
+  Open menu, Play's Open list, the Files page) and presentations (Open, the
+  Files page); hovering it names the other side.
+
+**When you open one.** The **Linked presentations** setting (Library panel)
+decides what happens when you load a graph that has a linked presentation,
+and when you open a presentation that has a linked graph:
+
+| Setting | Graph loaded | Presentation opened |
+|---|---|---|
+| **Ask** (the default) | a notice “Has a presentation · Open” | a notice “This presentation has a graph · Load it” |
+| **Always** | it opens on Present too; you stay where you are (the notice has **Go to Present**) | its graph loads, unless the open graph has unsaved changes: then it only offers |
+| **Never** | nothing | nothing |
+
+Nothing happens when the other side is already the one open. Opening a
+presentation's graph never replaces unsaved changes without the usual
+“Open this graph?” question.
+
+**Examples** come linked to the sample presentation that teaches them (the
+Matrices examples → *Transforms with matrices*, the Learn 3D lessons → *Ray
+marching, step by step*, the Play course → *Playing a shader*, and so on).
+Opening such an example offers its sample: the one saved here under that
+name, or a fresh one built like the Present page's sample cards.
+
+**Where links live.** Both sides: a saved graph's record has
+`linkedPresentations` (presentation names), a presentation has
+`linkedGraphs` (saved graph names); `src/present/links.ts` keeps them in
+step. So they travel with the workspace folder, Export everything, library
+and profile ZIPs; an import that brings things in under new names (“Rings
+(imported)”, “Lesson (2)”) keeps them linked to each other.
+
+- **Deleting** one side (Present, the Studio, the Files page) keeps the other
+  and only removes the link; Undo puts it back.
+- **Renaming** a presentation keeps its graphs pointing at it.
+- **Copies** start unlinked: Save a copy, Make a copy, Save as a new graph,
+  a sample, and a single `.present.json` imported on its own (its graphs
+  aren't in the file).
+- A link whose other side is gone (deleted in Finder, say) is simply not
+  shown.
+
 ## Import and download one
 
 - **Download** (title menu or a row's ⋯) saves a `.present.json` file: the
@@ -75,6 +136,62 @@ first Play, how many steps and Plays it has, and when it last changed.
 one HTML file with everything in it: slides or one long page, maths as
 MathML or KaTeX. Put it on any website or open it from your computer. The
 same window has **Presentation file** for the `.present.json`.
+
+## How it looks: themes, colours and fonts
+
+The settings panel's **Style** tab (with no block selected) decides the look
+of the whole presentation: in Edit, Slides and Scroll, and in the exported
+web page, which looks the same.
+
+**Theme** comes first. Each is a small live preview; click one to use it.
+
+| Theme | Looks like | What defines it |
+| --- | --- | --- |
+| **Classic** | The Present page as it always was | The app's colours (light or dark with the app), paper grain, system fonts, "01 / 07" step numbers. Every presentation made before themes is Classic and looks exactly as it did. |
+| **Landing** | Play's *Landing page* website | Warm off-white, ink headlines set big, bold and tight, the step number as an eyebrow pill above the title, pill buttons, generous spacing. |
+| **Article** | Play's *Blog post* website | Georgia headings and body, a narrow reading column (680 px), relaxed line height, the step number as a byline ("Step 2 of 7"). |
+| **Portfolio** | Play's *Portfolio* website | Near-black, clean sans set tight, pictures on rounded tiles, white pill buttons. |
+
+Under the previews, every setting the theme decides can be changed, and each
+one changed shows **Reset to theme** to go back:
+
+- **Colours**: Light, Dark, or **Match** (with the app here; in an exported
+  page, with the reader's system). Then **Background**, **Cards** (controls,
+  code headers, Portfolio's tiles), **Text** (headings and body; captions
+  follow it), **Accent** (step numbers, chips, buttons, the progress bar) and
+  **Links**.
+- **Corner radius** of pictures, cards and code; **Column width** of the
+  reading column (Edit, Scroll and exports; slides stay at least as wide as
+  they were); **Spacing** between blocks and around steps.
+- **Reset all** (beside the section's title) drops every change, including
+  the fonts and text size below.
+- **Save as my theme** keeps the theme with its changes and fonts under a
+  name. Your themes are listed after the built-ins (marked *Yours*), for any
+  presentation; the × on one deletes it (with Undo). They're kept with your
+  palettes in this browser and travel in library backups.
+
+A step's own background (the **Step** tab), and the presentation's
+**Background of every step**, sit on top of the theme, with their legibility
+effects: text over a picture or a dark gradient still turns light.
+
+### Fonts
+
+**Typography** has Headings, Body and Code. Until you choose one, each uses
+the theme's font (system fonts: nothing is downloaded). To choose:
+
+- Pick from the list (search, or filter by Sans, Serif, Display…), or
+- **Paste a Google Fonts link or family name** at the bottom of the picker:
+  a font's page (`https://fonts.google.com/specimen/Space+Grotesk`), a
+  `https://fonts.googleapis.com/css2?family=…` link (or the whole `<link>`
+  tag Google gives you), or just a name like `Bebas Neue`. The weights the
+  link names are used; a heading takes the one nearest bold. Typing a name
+  that isn't in the list into the search offers the same.
+
+The font is downloaded from Google Fonts once, kept in this browser's font
+cache, and embedded only when you export or download the presentation, so it
+works offline and anywhere. If Google can't be reached, nothing changes and a
+notice says so. **Reset to theme** beside a font goes back to the theme's.
+Text size and line height start at the theme's and reset the same way.
 
 ## Moving presentations between machines
 

@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { redactSealedCode } from '../nodes/userNodes/userNodeRegistry';
+import { useUserNodesVersion } from '../nodes/userNodes/useUserNodes';
 import { C, C_LIGHT, tokenizeLine } from './glslSyntax';
 import { nodeSlicePrefix } from './code/nodeSlice';
 import { useThemeMode, useTokens } from '../theme/themeStore';
@@ -24,8 +26,11 @@ const MIN_HEIGHT = 120;
 const MAX_HEIGHT = 0.85; // fraction of window height
 const LS_KEY = 'codePanel_height';
 
-export function CodePanel({ code, onClose, highlightNodeId, nodeSlugMap, docked = false }: Props) {
+export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMap, docked = false }: Props) {
   const tk = useTokens();
+  // Sealed node packs' code is shown as a comment (line for line, so error marks still line up).
+  const userNodesVersion = useUserNodesVersion();
+  const code = useMemo(() => (compiled ? redactSealedCode(compiled) : compiled), [compiled, userNodesVersion]);
   const mode = useThemeMode();
   const pal = mode === 'dark' ? C : C_LIGHT;
   const [copied, setCopied] = useState(false);
