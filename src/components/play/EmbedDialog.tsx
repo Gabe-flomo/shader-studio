@@ -34,7 +34,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const exportPlayHtml = useNodeGraphStore(s => s.exportPlayHtml);
   const hasNulls = useNodeGraphStore(s => s.play.layers.some(l => l.kind === 'null'));
   const usesOsc = useNodeGraphStore(s => s.play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')));
-  const needsGesture = useNodeGraphStore(s => s.play.mappings.some(m => m.enabled && (m.source.kind === 'midi' || m.source.kind === 'live' || m.source.kind === 'reader' || (m.source.kind === 'trigger' && (m.source.trigger.on === 'note' || m.source.trigger.on === 'audio' || m.source.trigger.on === 'reader')))));
+  const needsGesture = useNodeGraphStore(s => !!s.play.padGrid || s.play.mappings.some(m => m.enabled && (m.source.kind === 'midi' || m.source.kind === 'pad' || m.source.kind === 'live' || m.source.kind === 'reader' || (m.source.kind === 'trigger' && (m.source.trigger.on === 'note' || m.source.trigger.on === 'audio' || m.source.trigger.on === 'reader')))));
   const hands = useNodeGraphStore(s => usesHands(s.play));
   // Hand tracking's files are big (MediaPipe and the model): only in the page when asked for.
   const [includeHands, setIncludeHands] = useState(false);

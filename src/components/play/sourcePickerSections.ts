@@ -45,6 +45,7 @@ const SOURCE_GROUPS: { heading: string; entries: Entry[] }[] = [
     { value: 'midi:velocity', label: 'MIDI velocity', icon: 'piano', description: 'How hard the last note was hit' },
     { value: 'midi:gate', label: 'MIDI gate', icon: 'piano', description: 'On while a note is held' },
     { value: 'midi:bend', label: 'Pitch bend', icon: 'piano', description: 'The bend wheel', keywords: 'midi' },
+    { value: 'pad', label: 'Pad grid', icon: 'grid', description: 'Push, Launchpad: the last pad, or one cell', keywords: 'midi launchpad push pads' },
     { value: 'osc', label: 'OSC', icon: 'antenna', description: 'Ableton, TouchOSC…', keywords: 'network' },
     { value: 'gamepad', label: 'Gamepad', icon: 'gamepad', description: 'A stick axis or a button', keywords: 'controller joystick' },
     { value: 'tilt', label: 'Phone tilt', icon: 'phone', description: 'Tip the phone forward or sideways', keywords: 'gyro orientation' },

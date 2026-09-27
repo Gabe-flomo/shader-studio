@@ -10,6 +10,8 @@ import { startNodeMouseDrag } from './nodeDrag';
 import { toneSynth } from '../../lib/toneSynth';
 import { midiEngine, midiNoteName, type MidiEvent } from '../../lib/midiEngine';
 import { midiCcList, midiOutputSockets } from '../../lib/midiOutputs';
+import { parseMidiLocks, type MidiLock } from '../../types/playMidi';
+import { activeLabel, lockLabel, sameLock, useActiveInput } from '../play/midiUi';
 
 const getZoom = () => getView().zoom;
 
@@ -40,12 +42,14 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
   const channel  = typeof node.params.channel === 'string' ? node.params.channel : 'all';
   const smoothMs = typeof node.params.smooth_ms === 'number' ? node.params.smooth_ms : 20;
   const ccs      = midiCcList(node.params);
+  const locks    = parseMidiLocks(node.params._ccLocks) ?? [];
+  const active   = useActiveInput();
 
   // ── Engine sync ────────────────────────────────────────────────────────────
   useEffect(() => {
     midiEngine.updateNode(node.id, node.params);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.id, node.params.channel, node.params.smooth_ms, node.params._ccs]);
+  }, [node.id, node.params.channel, node.params.smooth_ms, node.params._ccs, node.params._ccLocks]);
   useEffect(() => () => { midiEngine.removeNode(node.id); }, [node.id]);
 
   // ── Backend status + activity (event driven) ──────────────────────────────
@@ -94,6 +98,14 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
   const setCcs = (next: number[]) => {
     updateNodeParams(node.id, { _ccs: next }, { immediate: true });
     updateNodeOutputs(node.id, midiOutputSockets({ _ccs: next }));
+  };
+  const setLocks = (next: MidiLock[]) => updateNodeParams(node.id, { _ccLocks: next }, { immediate: true });
+  /** Lock a CC output to the knob touched last (its device and channel), adding the output if it isn't there. */
+  const lockActive = () => {
+    if (active?.kind !== 'cc') return;
+    const l: MidiLock = { device: active.device, channel: active.channel, cc: active.number };
+    if (!locks.some(x => sameLock(x, l))) setLocks([...locks, l]);
+    if (!ccs.includes(l.cc) && ccs.length < 16) setCcs([...ccs, l.cc]);
   };
   const addCc = () => {
     let cc = 1;
@@ -183,6 +195,15 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
             style={{ flex: 1, accentColor: tc.sky, cursor: 'pointer' }} />
           <span style={{ fontSize: 10, color: tc.overlay0, fontFamily: 'monospace', width: 42, textAlign: 'right' }}>{smoothMs} ms</span>
         </div>
+        <div style={rowStyle}>
+          <span style={labelStyle}>Active</span>
+          <span data-testid="midi-card-active" style={{ flex: 1, minWidth: 0, fontSize: 10, fontFamily: 'monospace', color: active ? tc.text : tc.overlay0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title="The control touched last, on any device">
+            {active ? activeLabel(active) : 'touch a knob…'}
+          </span>
+          <button onClick={lockActive} disabled={active?.kind !== 'cc'}
+            title={active?.kind === 'cc' ? `Lock a CC output to ${lockLabel({ device: active.device, channel: active.channel, cc: active.number })}: other devices and channels are ignored` : 'Turn a knob first'}
+            style={{ background: 'none', border: `1px solid ${tc.surface1}`, color: active?.kind === 'cc' ? tc.sky : tc.surface1, fontSize: 10, borderRadius: 4, padding: '2px 6px', cursor: active?.kind === 'cc' ? 'pointer' : 'default' }}>Lock</button>
+        </div>
         {/* CC list */}
         {ccs.map((cc, i) => (
           <div key={i} style={rowStyle}>
@@ -193,7 +214,14 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
                 setCcs(ccs.map((c, idx) => idx === i ? n : c));
               }}
               style={{ ...fieldStyle, width: 56, flex: 'none', fontFamily: 'monospace' }} />
-            <span style={{ flex: 1 }} />
+            <span style={{ flex: 1, minWidth: 0, display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {locks.filter(l => l.cc === cc).map(l => (
+                <button key={`${l.device}|${l.channel}`} onClick={() => setLocks(locks.filter(x => !sameLock(x, l)))} title={`Locked to ${lockLabel(l)}. Click to unlock`}
+                  style={{ background: tc.surface0, border: `1px solid ${tc.sky}`, color: tc.sky, fontSize: 9, borderRadius: 4, padding: '1px 5px', cursor: 'pointer', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  locked · ch {l.channel}{l.device ? ` · ${l.device}` : ''} ×
+                </button>
+              ))}
+            </span>
             <button onClick={() => setCcs(ccs.filter((_, idx) => idx !== i))} disabled={ccs.length <= 1} title="Remove CC output"
               style={{ background: 'none', border: 'none', color: ccs.length <= 1 ? tc.surface1 : tc.surface2, cursor: ccs.length <= 1 ? 'default' : 'pointer', fontSize: 11, padding: 0, lineHeight: 1 }}>×</button>
           </div>

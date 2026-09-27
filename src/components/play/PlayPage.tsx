@@ -69,6 +69,8 @@ import { SoloButton, SoloStrip } from './Solo';
 import { GuidesToggle } from './GuidesToggle';
 import { OpenPlayableButton } from './OpenPlayable';
 import { MidiFileCard } from './MidiFileCard';
+import { MidiSourceOptions, PadSourceOptions } from './MidiSourceOptions';
+import { PadGridCard } from './PadGridCard';
 import { AnchorPicker, FirePicker, TriggerPicker, type TriggerLayerRef } from './TriggerPicker';
 import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, parsePropTarget, type ActionKind } from '../../types/play';
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf, finishTarget, parseFinishTarget, patchFinishEffect, readFinishValue } from '../../types/playFinish';
@@ -668,7 +670,7 @@ function PanelHeader({ title, hint, extra, onClick, chevron }: { title: string; 
 
 /** Does anything in the setup listen to MIDI (a MIDI source, a note trigger or an action fired by a note)? */
 function usesMidi(play: PlayRecord): boolean {
-  return play.mappings.some(m => m.source.kind === 'midi' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'))
+  return !!play.padGrid || play.mappings.some(m => m.source.kind === 'midi' || m.source.kind === 'pad' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'))
     || (play.actions ?? []).some(a => a.trigger.on === 'note');
 }
 
@@ -1163,6 +1165,7 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
             <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
           )}
           {!play.midiFile && <MidiFileSlot />}
+          <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><PadGridCard /></ProLock>
         </div>
       )}
       {guideOpen && <ConnectGuide onClose={() => setGuideOpen(false)} />}
@@ -1429,7 +1432,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <span style={{ flex: 1 }} />
         <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} label={m.enabled ? 'On' : 'Off'} />
       </div>
-      {m.source.kind === 'midi' && m.source.signal === 'note' && (
+      {m.source.kind === 'midi' && m.source.signal === 'note' && !m.source.range && (
         <div style={{ marginTop: 6, color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Note number scaled 0–1 (last note: {midiNoteName(midiEngine.channelState(m.source.channel).lastNote)}).</div>
       )}
     </div>
@@ -1581,6 +1584,10 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
       );
     case 'data':
       return <DataSourceOptions source={source} labelStyle={labelStyle} onChange={onChange} />;
+    case 'midi':
+      return <MidiSourceOptions source={source} labelStyle={labelStyle} numStyle={numStyle} onChange={onChange} />;
+    case 'pad':
+      return <PadSourceOptions source={source} labelStyle={labelStyle} numStyle={numStyle} onChange={onChange} />;
     case 'sensor': {
       const sensing = layerRefs.filter(l => sensorReadsFor(l).length);
       if (!sensing.length) return row(hint('Add a layer first: a shape, particles, a null…'));

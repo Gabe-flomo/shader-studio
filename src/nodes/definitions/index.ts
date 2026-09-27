@@ -19,6 +19,7 @@ export { DataNode };
 export { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
 export { ConstantsNode } from './constants';
 export { PlayLayersNode } from './playLayers';
+export { PadGridNode } from './padGrid';
 
 // Grid
 export { GridPatternNode } from './gridPattern';
@@ -172,6 +173,7 @@ export {
 import { UVNode, TimeNode, PixelUVNode, ConstantNode, MouseNode, TextureInputNode, PrevFrameNode, LoopIndexNode, AudioInputNode, FragCoordNode, ResolutionNode } from './sources';
 import { ConstantsNode } from './constants';
 import { PlayLayersNode } from './playLayers';
+import { PadGridNode } from './padGrid';
 import { EchoNode } from './echo';
 import { GridPatternNode } from './gridPattern';
 import { GridPaintNode } from './gridPaint';
@@ -286,6 +288,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   midiInput: MidiInputNode,
   data: DataNode,
   playLayers: PlayLayersNode,
+  padGrid: PadGridNode,
   // Transforms
   fract: FractNode,
   rotate2d: Rotate2DNode,

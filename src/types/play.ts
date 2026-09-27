@@ -330,8 +330,14 @@ export type NoiseType = 'smooth' | 'drift' | 'random' | 'stepped';
 export type LfoShape = 'sine' | 'triangle' | 'saw' | 'square' | 'random';
 
 export type PlaySource =
-  /** A MIDI stream: `channel` 0 = all, `cc` only for the `cc` signal. Outputs 0..1 (bend −1..1). */
-  | { kind: 'midi'; signal: MidiSignal; channel: number; cc?: number }
+  /**
+   * A MIDI stream: `channel` 0 = all, `cc` only for the `cc` signal. Outputs 0..1 (bend −1..1).
+   * `locks` (cc): only these exact controls drive it, whichever moved last (types/playMidi.ts).
+   * `range` (note, velocity, gate): only notes lo..hi count, and a note reads 0..1 across it.
+   */
+  | { kind: 'midi'; signal: MidiSignal; channel: number; cc?: number; locks?: MidiLock[]; range?: [number, number] }
+  /** The pad grid (record.padGrid): the last pad's column, row, velocity or pressure, any pad held, or one cell's level. */
+  | { kind: 'pad'; read: PadGridRead; col: number; row: number }
   /** Pointer position over the window (0..1, `y` up) or 1 while a button is held. Active on the Play page. */
   | { kind: 'mouse'; axis: 'x' | 'y' | 'down' }
   /** 1 while a keyboard key (KeyboardEvent.code) is held. Active on the Play page. */
@@ -445,6 +451,8 @@ import { parseSourceCredit, type SourceCredit } from './credit';
 import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
 import { finishHosts, finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
 import { sgParseValueRef } from '../play/kit/signals.js';
+import { PAD_GRID_MAX, PAD_GRID_READS, parseMidiLocks, parseNoteRange, parsePadGrid, type MidiLock, type PadGridRead, type PlayPadGrid } from './playMidi';
+export type { MidiLock, PadGridRead, PlayPadGrid } from './playMidi';
 export type { LayerGroup } from './layerGroups';
 
 // ── Actions (a trigger does something to a layer) ─────────────────────────────
@@ -685,6 +693,8 @@ export interface PlayRecord {
   display?: PlayDisplay;
   /** A MIDI file that plays on the graph clock as if a controller sent it. Absent = none. */
   midiFile?: PlayMidiFile;
+  /** The pad grid: a Push or Launchpad's pads as a grid shader's cells (types/playMidi.ts). Absent = none. */
+  padGrid?: PlayPadGrid;
   /** Recorded performances (see lib/takes.ts), oldest first. Absent = none. */
   takes?: PlayTake[];
   /** Hand tracking settings (smoothing, the skeleton overlay). Absent = DEFAULT_HANDS. */
@@ -715,8 +725,9 @@ export interface PlayRecord {
  *   pointer  the pointer over the layers (x, y, over, down), which Script layers,
  *            particles and brushes read
  *   reader   an audio reader's level (its id), shown on the Audio readers panel
+ *   pad      the pad grid: a cell's level (`c<index>`) or the last pad (`x`, `y`, `v`, `p`)
  */
-export type TakeTrackKind = 'control' | 'bus' | 'audio' | 'mouse' | 'pointer' | 'reader';
+export type TakeTrackKind = 'control' | 'bus' | 'audio' | 'mouse' | 'pointer' | 'reader' | 'pad';
 
 export interface TakeTrack {
   kind: TakeTrackKind;
@@ -1097,7 +1108,15 @@ function parseSource(raw: unknown): PlaySource | null {
       const channel = Math.max(0, Math.min(16, Math.round(num(s.channel, 0))));
       const out: PlaySource = { kind: 'midi', signal: signal as MidiSignal, channel };
       if (signal === 'cc') out.cc = Math.max(0, Math.min(127, Math.round(num(s.cc, 1))));
+      const locks = signal === 'cc' ? parseMidiLocks(s.locks) : undefined;
+      if (locks) out.locks = locks;
+      const range = signal === 'note' || signal === 'velocity' || signal === 'gate' ? parseNoteRange(s.range) : undefined;
+      if (range) out.range = range;
       return out;
+    }
+    case 'pad': {
+      const read = PAD_GRID_READS.some(r => r.value === s.read) ? (s.read as PadGridRead) : 'x';
+      return { kind: 'pad', read, col: Math.max(0, Math.min(PAD_GRID_MAX - 1, Math.round(num(s.col, 0)))), row: Math.max(0, Math.min(PAD_GRID_MAX - 1, Math.round(num(s.row, 0)))) };
     }
     case 'mouse': {
       const axis = s.axis;
@@ -1331,6 +1350,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
       offset: typeof mf.offset === 'number' && Number.isFinite(mf.offset) ? Math.max(-3600, Math.min(3600, mf.offset)) : 0,
     };
   }
+  const padGrid = parsePadGrid(r.padGrid);
+  if (padGrid) out.padGrid = padGrid;
   const disp = parseDisplay(r.display);
   if (disp) out.display = disp;
   const hands = parseHands(r.hands);
@@ -1418,7 +1439,7 @@ function parsePairMapping(raw: unknown): PlayPairMapping | null {
   return out;
 }
 
-const TAKE_TRACK_KINDS: ReadonlySet<string> = new Set<TakeTrackKind>(['control', 'bus', 'audio', 'mouse', 'pointer', 'reader']);
+const TAKE_TRACK_KINDS: ReadonlySet<string> = new Set<TakeTrackKind>(['control', 'bus', 'audio', 'mouse', 'pointer', 'reader', 'pad']);
 const KEYS_TEXT = /^-?[0-9.e+-]*(,-?[0-9.e+-]+)*$/;
 
 /** One take, or null when it is malformed or too big. Tracks and events that don't parse are dropped. */
@@ -1490,5 +1511,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish));
 }
