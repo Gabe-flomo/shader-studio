@@ -88,13 +88,13 @@ export function MidiStatusChip() {
     const off = midiEngine.subscribe(e => { if (e.kind === 'devices') setWm(midiEngine.webMidi()); });
     return () => { window.clearInterval(id); off(); };
   }, []);
-  const { status, inputs, busy } = wm;
-  const ok = status === 'ready' && inputs.length > busy.length;
+  const { status, inputs, busy, off, transport } = wm;
+  const ok = status === 'ready' && inputs.length > busy.length + inputs.filter(n => off.includes(n)).length;
   const colour = ok ? tk.status.success : status === 'requesting' ? tk.status.warning : status === 'denied' || busy.length ? tk.status.danger : tk.text.disabled;
   const text = status === 'ready'
     ? (inputs.length ? inputs.join(', ') : 'No MIDI devices found. Plug one in: it shows up here.')
-    : status === 'requesting' ? 'Waiting for the browser’s MIDI permission…'
-    : status === 'denied' ? (EMBEDDED ? 'MIDI blocked by this page' : 'MIDI access refused')
+    : status === 'requesting' ? (transport === 'native' ? 'Opening MIDI devices…' : 'Waiting for the browser’s MIDI permission…')
+    : status === 'denied' ? (transport === 'native' ? 'MIDI couldn’t start' : EMBEDDED ? 'MIDI blocked by this page' : 'MIDI access refused')
     : status === 'unsupported' ? 'No Web MIDI in this browser (use Chrome or Edge)'
     : 'MIDI not connected';
   const why = midiEngine.blockReason();
@@ -110,6 +110,20 @@ export function MidiStatusChip() {
         )}
       </span>
       {why && status !== 'unsupported' && <span style={{ color: tk.status.danger, font: `11px/1.4 ${fontFamily.ui}` }}>{why}</span>}
+      {status === 'ready' && inputs.length > 1 && (
+        <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {inputs.map(name => {
+            const on = !off.includes(name);
+            return (
+              <button key={name} onClick={() => { midiEngine.setDeviceEnabled(name, !on); setWm(midiEngine.webMidi()); }}
+                title={on ? `Listening to ${name}: click to ignore it` : `Ignoring ${name}: click to listen again`}
+                style={{ background: 'none', border: `1px solid ${on ? tk.status.success : tk.text.disabled}`, color: on ? tk.text.secondary : tk.text.disabled, textDecoration: on ? 'none' : 'line-through', borderRadius: 4, padding: '1px 6px', font: `10.5px ${fontFamily.ui}`, cursor: 'pointer' }}>
+                {name}
+              </button>
+            );
+          })}
+        </span>
+      )}
       {status === 'ready' && inputs.length > 0 && (
         <span style={{ color: last && ago < 3 ? tk.text.secondary : tk.text.faint, font: `500 10.5px ${fontFamily.mono}` }}>
           {last ? `Last: ${last.text}${ago >= 3 ? ` · ${ago < 60 ? `${ago}s` : `${Math.round(ago / 60)} min`} ago` : ''}` : 'Nothing received yet: move a knob or play a note.'}

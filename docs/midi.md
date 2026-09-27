@@ -1,7 +1,7 @@
 # MIDI: knob locks, note ranges and pad grids
 
 The Play page's MIDI sources (CC, note, velocity, gate, bend) read every
-controller the browser can see. Three additions make a busy rig manageable:
+controller the browser (or the desktop app) can see. Three additions make a busy rig manageable:
 lock a mapping to one knob, give note sources a key range, and use a grid
 controller (Push, Launchpad) as the cells of a grid shader.
 
@@ -67,7 +67,7 @@ Stored as `range: [lo, hi]` on the source. Middle C (60) is C4.
   scales the level by how hard the pad was hit.
 - **Light the pads** sends each pad's state back as a note on the output with
   the same name as the device (Launchpad green, Push white), where the browser
-  has Web MIDI output: lit while on (Latch), or while held (Hold, Decay).
+  has Web MIDI output or in the desktop app: lit while on (Latch), or while held (Hold, Decay).
 - The picture of the cells lights live and can be clicked like pads (Shift for
   full velocity), so the grid works with no controller attached. Cells no pad
   reaches are faint.
@@ -117,6 +117,38 @@ level by column and row.
 
 ## Desktop app
 
-The macOS app runs in WKWebView, which has no Web MIDI: controllers don't
-reach it yet (a native `midir` bridge is still to do, docs/play-v1-plan.md).
-The keyboard stand-in, MIDI files, OSC and the on-screen pads work there.
+The macOS app runs in WKWebView, which has no Web MIDI, so it reads MIDI
+natively: `src-tauri/src/midi.rs` uses the `midir` crate (CoreMIDI), and
+`src/lib/midiTauri.ts` is its web half. `src/lib/midiTransport.ts` picks Web
+MIDI in a browser and the bridge in the app (`__TAURI_INTERNALS__`), so the
+engine, knob locks, note ranges and pad grids work the same in both.
+
+- **Commands**: `midi_list` (inputs and outputs, `{ id, name }`),
+  `midi_open_input` / `midi_close_input`, `midi_open_output` /
+  `midi_close_output`, `midi_send` (one channel message; opens the output on
+  first use; sysex is refused).
+- **Messages** arrive as `midi://message` events `{ device, bytes, timestamp }`
+  from midir's callback thread, one per message (a CoreMIDI packet carrying
+  several, or running status, is split in Rust). Sysex, clock and active
+  sensing are ignored.
+- **Devices**: every input is opened when MIDI is first used (a MIDI node, or
+  a MIDI mapping on the Play page). The port list is read again every 2 s
+  while the window is visible, so plugging a controller in or out is picked
+  up on its own; Connect re-scans at once.
+- **Per device**: with two or more inputs, the Play page's MIDI status lists
+  them; click one to ignore it (and click again to listen). The desktop app
+  closes an ignored port; a browser drops its messages. Remembered on this
+  computer (`shader-studio:midi:off`), in both.
+- **Pad lights** go to the output with the same name as the grid's device.
+- **Names** are CoreMIDI's port names. They're usually what Chrome shows,
+  but a lock taken in the browser may name a device slightly differently;
+  if a locked knob stops responding in the app, lock it again there.
+
+No capability entries are needed: the app's own commands aren't gated by the
+capability file (there is no app permission manifest), and events use
+`core:default`. macOS asks for no permission to read MIDI.
+
+To try it without hardware, turn on the IAC Driver (Audio MIDI Setup → MIDI
+Studio → IAC Driver → Device is online) and send to it from a DAW; or call
+`__shaderStudioDev.midiEngine.handleBytes(0xb0, 21, 64, 'Test')` in the
+devtools console.

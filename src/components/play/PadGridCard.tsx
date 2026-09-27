@@ -147,7 +147,7 @@ function PadGridEditor({ pg }: { pg: PlayPadGrid }) {
         <Toggle checked={pg.velocity} onChange={velocity => patch({ velocity })} label="Velocity" />
         <Toggle checked={pg.light} onChange={light => patch({ light })} label="Light the pads" />
         {pg.light && !pg.device && hint('Pick the device to light its pads')}
-        {pg.light && pg.device && !midiEngine.outputsNamed(pg.device).length && hint('No MIDI out with that name here (Chrome and Edge only)')}
+        {pg.light && pg.device && !midiEngine.outputsNamed(pg.device).length && hint('No MIDI out with that name here (Chrome, Edge or the desktop app)')}
       </div>
       <CellPicture pg={pg} />
       <div style={{ marginTop: 6, color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>

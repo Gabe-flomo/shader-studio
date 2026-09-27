@@ -8,7 +8,8 @@
  *     Safari, Firefox, phones, and testing without hardware
  *   - a MIDI file (the Play record's midiFile), played on the graph clock, so
  *     a performance can be recorded to video in sync without a DAW attached
- *   - later: a Tauri plugin on macOS (WKWebView has no Web MIDI)
+ *   - the desktop app's native bridge (midir on CoreMIDI; WKWebView has no
+ *     Web MIDI). midiTransport.ts picks it or Web MIDI.
  *
  * State is kept per MIDI channel (1–16) plus an "omni" merge of all of them,
  * so a node set to "All" and a node set to channel 3 read different things.
@@ -21,6 +22,7 @@ import { midiCcList, midiCcKey, liveChannelKey } from './midiOutputs';
 import { base64ToBytes, eventIndexAt, parseMidiFile, type MidiFileData } from './midiFile';
 import type { MidiLock, PlayMidiFile } from '../types/play';
 import { parseMidiLocks } from '../types/playMidi';
+import { selectMidiTransport, type MidiBackendStatus, type MidiOutPort, type MidiTransport } from './midiTransport';
 import { kmLockRead, kmLockRecord, kmRangeRead, type KmLockEntry } from '../play/kit/midi.js';
 
 /** A seek further ahead than this skips to the new spot instead of firing everything in between. */
@@ -52,7 +54,7 @@ export interface MidiActiveInput {
   at: number;
 }
 
-export type MidiBackendStatus = 'unsupported' | 'idle' | 'requesting' | 'ready' | 'denied';
+export type { MidiBackendStatus };
 
 const OMNI = 0;
 
@@ -115,19 +117,19 @@ export class MidiEngine implements InputSource {
   private seq = 0;
   private active: MidiActiveInput | null = null;
 
-  // Web MIDI backend
-  private access: MIDIAccess | null = null;
-  private webMidiStatus: MidiBackendStatus = typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator ? 'idle' : 'unsupported';
-  private inputNames: string[] = [];
-  /** Inputs the browser lists but couldn't open (on Windows: another app, like Ableton, has it). */
-  private busyNames: string[] = [];
+  // Hardware MIDI: Web MIDI in a browser, the Rust bridge in the desktop app (midiTransport.ts).
+  private transport: MidiTransport;
+  /** Inputs switched off by name: their messages are dropped (and the desktop app closes them). */
+  private offDevices = new Set<string>(loadOffDevices());
   private lastMessage: { text: string; at: number } | null = null;
-  private permissionWatched = false;
-  private onMidiMessage = (e: Event) => {
-    const data = (e as MIDIMessageEvent).data;
-    const input = e.target as MIDIInput | null;
-    if (data && data.length >= 1) this.handleBytes(data[0], data[1] ?? 0, data[2] ?? 0, input?.name ?? input?.id ?? '');
-  };
+
+  constructor(opts: { tauri?: boolean } = {}) {
+    this.transport = selectMidiTransport({
+      bytes: (status, d1, d2, device) => { if (!this.offDevices.has(device)) this.handleBytes(status, d1, d2, device); },
+      devices: inputs => this.emit({ kind: 'devices', inputs }),
+    }, opts);
+    for (const name of this.offDevices) this.transport.setDeviceEnabled(name, false);
+  }
 
   // Keyboard stand-in backend
   private keyboardEnabled = false;
@@ -346,17 +348,28 @@ export class MidiEngine implements InputSource {
     write(key, v);
   }
 
-  // ── Web MIDI backend ─────────────────────────────────────────────────────
+  // ── Hardware MIDI (Web MIDI or the desktop bridge) ──────────────────────
 
-  /** Web MIDI outputs with this name (lighting a controller's pads); none without Web MIDI. */
-  outputsNamed(name: string): MIDIOutput[] {
-    const out: MIDIOutput[] = [];
-    this.access?.outputs.forEach(o => { if (o.state === 'connected' && (o.name ?? o.id) === name) out.push(o); });
-    return out;
+  /** Outputs with this name (lighting a controller's pads); none without MIDI out. */
+  outputsNamed(name: string): MidiOutPort[] {
+    return this.transport.outputsNamed(name);
   }
 
-  webMidi(): { status: MidiBackendStatus; inputs: string[]; busy: string[] } {
-    return { status: this.webMidiStatus, inputs: this.inputNames, busy: this.busyNames };
+  /**
+   * The hardware backend's state: Web MIDI in a browser, the native bridge
+   * (`transport: 'native'`) in the desktop app. `off`: inputs switched off.
+   */
+  webMidi(): { status: MidiBackendStatus; inputs: string[]; busy: string[]; off: string[]; transport: 'web' | 'native' } {
+    return { status: this.transport.status(), inputs: this.transport.inputs(), busy: this.transport.busy(), off: [...this.offDevices], transport: this.transport.kind };
+  }
+
+  /** Listen to (or ignore) one input by name. Remembered on this computer. */
+  setDeviceEnabled(name: string, on: boolean): void {
+    if (on === !this.offDevices.has(name)) return;
+    if (on) this.offDevices.delete(name); else this.offDevices.add(name);
+    saveOffDevices([...this.offDevices]);
+    this.transport.setDeviceEnabled(name, on);
+    this.emit({ kind: 'devices', inputs: this.transport.inputs() });
   }
 
   /** The newest message from any backend ("CC 21 = 64 · ch 1"), and when it came. */
@@ -370,94 +383,17 @@ export class MidiEngine implements InputSource {
    * browser refuses without asking, so nothing shows up.
    */
   blockReason(): string | null {
-    if (this.webMidiStatus === 'unsupported') return 'This browser has no Web MIDI (Chrome, Edge and Opera have it; Safari does not). The keyboard stand-in on a MIDI Input node still works.';
-    const embedded = typeof window !== 'undefined' && window.self !== window.top;
-    const policy = typeof document !== 'undefined'
-      ? ((document as unknown as { permissionsPolicy?: { allowsFeature(f: string): boolean }; featurePolicy?: { allowsFeature(f: string): boolean } }).permissionsPolicy
-        ?? (document as unknown as { featurePolicy?: { allowsFeature(f: string): boolean } }).featurePolicy)
-      : undefined;
-    const allowed = policy ? policy.allowsFeature('midi') : true;
-    if (embedded && (!allowed || this.webMidiStatus === 'denied')) return 'This page is running inside another site (like a preview on claude.ai), and that site doesn\'t allow MIDI. Open Playfield in its own tab or the desktop app to use a controller.';
-    if (this.webMidiStatus === 'denied') return 'The browser refused MIDI access. Allow MIDI for this site (the icon left of the address bar), then press Connect.';
-    if (this.busyNames.length) return `Couldn't open ${this.busyNames.join(', ')}: another app is probably using it (on Windows only one app can hold a MIDI device). Turn it off in Ableton's MIDI preferences or close the app, then press Connect.`;
-    return null;
+    return this.transport.blockReason();
   }
 
   /**
-   * Ask the browser for MIDI access and listen to every input. Safe to call
-   * repeatedly. A refusal sticks (asking again on every render would nag),
-   * except when `retry` is set: a click on Connect or Learn asks again, and
-   * re-opens devices that another app was holding.
+   * Ask for MIDI access and listen to every input (Web MIDI, or the desktop
+   * app's bridge). Safe to call repeatedly. A refusal sticks, except when
+   * `retry` is set: a click on Connect or Learn asks again, and re-opens
+   * devices that another app was holding.
    */
-  async connectWebMidi(opts: { retry?: boolean } = {}): Promise<MidiBackendStatus> {
-    if (this.webMidiStatus === 'unsupported') return 'unsupported';
-    if (this.access) {
-      if (opts.retry && this.busyNames.length) this.bindInputs();
-      return 'ready';
-    }
-    if (this.webMidiStatus === 'requesting') return this.pending ?? 'requesting';
-    if (this.webMidiStatus === 'denied' && !opts.retry) return 'denied';
-    this.webMidiStatus = 'requesting';
-    this.emit({ kind: 'devices', inputs: this.inputNames });
-    this.watchPermission();
-    this.pending = (async () => {
-      try {
-        const access = await navigator.requestMIDIAccess({ sysex: false });
-        this.access = access;
-        this.webMidiStatus = 'ready';
-        access.addEventListener('statechange', () => this.bindInputs());
-        this.bindInputs();
-      } catch (e) {
-        console.warn('[midi] The browser refused MIDI access:', e);
-        this.webMidiStatus = 'denied';
-        this.emit({ kind: 'devices', inputs: [] });
-      }
-      this.pending = null;
-      return this.webMidiStatus;
-    })();
-    return this.pending;
-  }
-  private pending: Promise<MidiBackendStatus> | null = null;
-
-  /** Allowing MIDI in the site settings after a refusal connects without a reload. */
-  private watchPermission(): void {
-    if (this.permissionWatched || typeof navigator === 'undefined' || !navigator.permissions?.query) return;
-    this.permissionWatched = true;
-    navigator.permissions.query({ name: 'midi' as PermissionName }).then(p => {
-      p.addEventListener('change', () => {
-        if (p.state === 'granted' && !this.access) void this.connectWebMidi({ retry: true });
-      });
-    }).catch(() => { /* no MIDI permission in this browser's Permissions API */ });
-  }
-
-  private bindInputs(): void {
-    if (!this.access) return;
-    const names: string[] = [];
-    const busy: string[] = [];
-    const opening: Promise<unknown>[] = [];
-    this.access.inputs.forEach(input => {
-      // Assigning the handler is idempotent; statechange fires on every plug/unplug.
-      input.onmidimessage = this.onMidiMessage;
-      if (input.state !== 'connected') return;
-      const name = input.name ?? input.id;
-      names.push(name);
-      // The handler opens the port implicitly, but silently: opening it ourselves says when that fails.
-      if (input.connection !== 'open' && typeof input.open === 'function') {
-        opening.push(input.open().then(() => {}, err => {
-          console.warn(`[midi] Couldn't open "${name}" (is another app using it?):`, err);
-          busy.push(name);
-        }));
-      }
-    });
-    this.inputNames = names;
-    this.busyNames = [];
-    console.info(names.length ? `[midi] Listening to ${names.join(', ')}` : '[midi] Access granted, but no MIDI inputs are connected');
-    this.emit({ kind: 'devices', inputs: names });
-    if (opening.length) void Promise.all(opening).then(() => {
-      if (!busy.length) return;
-      this.busyNames = busy;
-      this.emit({ kind: 'devices', inputs: names });
-    });
+  connectWebMidi(opts: { retry?: boolean } = {}): Promise<MidiBackendStatus> {
+    return this.transport.connect(opts);
   }
 
   // ── MIDI file backend ────────────────────────────────────────────────────
@@ -597,6 +533,17 @@ export function describeMidiEvent(e: MidiEvent): string {
     case 'bend': return `bend ${e.value.toFixed(2)} · ch ${e.channel}`;
     case 'devices': return 'devices changed';
   }
+}
+
+const OFF_KEY = 'shader-studio:midi:off';
+function loadOffDevices(): string[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(OFF_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch { return []; }
+}
+function saveOffDevices(names: string[]): void {
+  try { localStorage.setItem(OFF_KEY, JSON.stringify(names)); } catch { /* preference only */ }
 }
 
 export const midiEngine = new MidiEngine();

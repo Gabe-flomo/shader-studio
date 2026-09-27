@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
 mod data_fetch;
+mod midi;
 mod playfile;
 mod workspace;
 mod osc_listener;
@@ -243,6 +244,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(FfmpegState(Mutex::new(None)))
         .manage(OscState(Mutex::new(None)))
+        .manage(midi::MidiState::default())
         .manage(workspace::WatchState(Mutex::new(None)))
         .manage(playfile::OpenedFiles(Mutex::new(Vec::new())))
         .invoke_handler(tauri::generate_handler![
@@ -251,6 +253,12 @@ pub fn run() {
             stop_ffmpeg_encode,
             osc_start,
             osc_stop,
+            midi::midi_list,
+            midi::midi_open_input,
+            midi::midi_close_input,
+            midi::midi_open_output,
+            midi::midi_close_output,
+            midi::midi_send,
             open_url,
             data_fetch::fetch_url,
             data_fetch::kaggle_account,

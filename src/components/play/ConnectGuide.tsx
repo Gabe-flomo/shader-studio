@@ -113,10 +113,10 @@ function Which({ onPick }: { onPick: (t: Topic) => void }) {
     <>
       <P>MIDI, OSC and audio carry different things. MIDI is notes and knobs, not sound. Audio is the sound itself, turned into loudness per band. You can use all three at once.</P>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {row('midi', 'Ableton → MIDI', 'notes (which, how hard), knobs as CC 0–127, pitch bend', 'hitting notes to fire envelopes; drawing CC automation', 'a free virtual MIDI port (built into macOS; loopMIDI on Windows), Chrome or Edge')}
+        {row('midi', 'Ableton → MIDI', 'notes (which, how hard), knobs as CC 0–127, pitch bend', 'hitting notes to fire envelopes; drawing CC automation', isDesktopApp ? 'a free virtual MIDI port (built into macOS: the IAC Driver)' : 'a free virtual MIDI port (built into macOS; loopMIDI on Windows), Chrome or Edge')}
         {row('osc', 'Ableton → OSC', 'any number from any knob or fader in Live, at full resolution', 'mapping many Live parameters, smooth sweeps, TouchOSC on a phone', isDesktopApp ? 'Max for Live (Suite) with the free Connection Kit; the app listens with one click' : 'Max for Live (Suite) with the free Connection Kit, and the small bridge (one download, one command)')}
         {row('audio', 'Ableton → Audio', 'the actual sound: level, bass, low-mid, high-mid, treble, plus hits', 'visuals that react to the music; kick-driven flashes', 'a free virtual audio cable (BlackHole on Mac, VB-CABLE on Windows), or just a microphone')}
-        {row('controller', 'A MIDI controller', 'the keys, knobs and pads of any USB MIDI controller', 'playing the visuals by hand', 'Chrome or Edge; no Ableton needed')}
+        {row('controller', 'A MIDI controller', 'the keys, knobs and pads of any USB MIDI controller', 'playing the visuals by hand', isDesktopApp ? 'nothing else: the desktop app reads it directly' : 'Chrome or Edge; no Ableton needed')}
       </div>
     </>
   );
@@ -149,7 +149,7 @@ function AbletonMidi({ os }: { os: Platform }) {
       </Steps>
       <Note>A track sending to the virtual port has no instrument, so it's silent. To hear the part as well, make a second MIDI track with an instrument, set its <B>MIDI From</B> to the first track and its Monitor to <B>In</B>.</Note>
       <InShaderStudio>
-        <li>Open Playfield in <B>Chrome or Edge</B>. Safari has no Web MIDI. Firefox asks you to install a site permission first.</li>
+        <li>{isDesktopApp ? <>The desktop app reads MIDI itself: nothing to allow.</> : <>Open Playfield in <B>Chrome or Edge</B> (or the desktop app). Safari has no Web MIDI. Firefox asks you to install a site permission first.</>}</li>
         <li>Play page → Mappings → <B>Learn</B>, then play a note or move the CC in Ableton. The browser asks to use MIDI devices: allow.</li>
         <li>A note gives a velocity source. For a hit that fades, choose source <B>Trigger</B>, then <B>On: MIDI note</B>, press the row's Learn and hit the note, and pick <B>Envelope</B>.</li>
         <li>Keep tempo in step with a <B>Clock</B> source (or Trigger → Beat) at Ableton's BPM. MIDI clock sync isn't supported yet.</li>
@@ -245,7 +245,7 @@ function Controller({ os }: { os: Platform }) {
     <>
       <P>Any class-compliant USB MIDI controller (keys, pads, knob boxes) works directly. You don't need Ableton.</P>
       <InShaderStudio>
-        <li>Plug the controller in, then open Playfield in <B>Chrome or Edge</B>.</li>
+        <li>{isDesktopApp ? <>Plug the controller in: it shows up within a couple of seconds.</> : <>Plug the controller in, then open Playfield in <B>Chrome or Edge</B> (or the desktop app).</>}</li>
         <li>Play page → Mappings → <B>Learn</B>, then turn a knob or hit a pad. Allow MIDI when the browser asks.</li>
         <li>Knobs give CC sources, keys give velocity, the wheel gives pitch bend. For pads, use <B>Trigger</B> → <B>On: MIDI note</B> with an <B>Envelope</B>, <B>Toggle</B> or <B>Step</B>.</li>
         <li>No controller handy? Add a <B>MIDI Input</B> node in the Studio and turn on its keyboard stand-in: two octaves on your QWERTY keys.</li>
