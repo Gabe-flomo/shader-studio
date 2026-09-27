@@ -25,7 +25,7 @@ import { askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import type { Page } from '../page';
 import { listPresentations, lastPresentation, PRESENTATIONS_CHANGED, type PresentationEntry } from '../../present/storage';
-import { SAMPLE_PRESENTATIONS, type SamplePresentation } from '../../present/samples';
+import { FIRST_SAMPLE, SAMPLE_GROUPS, SAMPLE_PRESENTATIONS, type SamplePresentation } from '../../present/samples';
 import { usePresentation, type PresentMode } from './presentationStore';
 import { Inspector } from './Inspector';
 import { StepsList, StepsStrip } from './StepsList';
@@ -126,7 +126,12 @@ function Header({ compact, list, onExport, onBrowse }: { compact: boolean; list:
     'separator',
     { label: 'New presentation…', icon: 'plus', onSelect: () => void newPresentation() },
     { label: 'Import a .present.json file…', icon: 'import', onSelect: () => void importPresentationFile() },
-    ...SAMPLE_PRESENTATIONS.map(sample => ({ label: `Sample: ${sample.title}`, icon: 'spark' as const, hint: sample.hint, onSelect: () => void openSample(sample) })),
+    // The samples, under a heading per group.
+    ...SAMPLE_GROUPS.flatMap(g => [
+      'separator' as const,
+      { heading: `Samples: ${g.label.toLowerCase()}` },
+      ...SAMPLE_PRESENTATIONS.filter(sample => sample.group === g.id).map(sample => ({ label: sample.title, icon: 'spark' as const, hint: sample.hint, onSelect: () => void openSample(sample) })),
+    ]),
     ...(doc ? [
       'separator' as const,
       { label: 'Rename…', icon: 'edit' as const, onSelect: async () => {
@@ -206,7 +211,7 @@ function SaveStatus({ compact }: { compact: boolean }) {
 function EmptyState({ compact }: { compact: boolean }) {
   const tk = useTokens();
   const [busy, setBusy] = useState<string | null>(null);
-  const [first, ...more] = SAMPLE_PRESENTATIONS;
+  const first = FIRST_SAMPLE;
   const open = async (sample: SamplePresentation) => { setBusy(sample.title); await openSample(sample); setBusy(null); };
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -223,13 +228,18 @@ function EmptyState({ compact }: { compact: boolean }) {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginTop: 4 }}>
           <span style={{ color: tk.text.faint, font: `600 11px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>More samples</span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {more.map(sample => (
-              <Button key={sample.title} size="sm" variant="ghost" icon="slides" disabled={!!busy} title={sample.hint} onClick={() => void open(sample)}>
-                {busy === sample.title ? 'Building it…' : sample.title}
-              </Button>
-            ))}
-          </div>
+          {SAMPLE_GROUPS.map(g => (
+            <div key={g.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, marginTop: 4 }}>
+              <span style={{ color: tk.text.muted, font: `600 12px ${fontFamily.ui}` }}>{g.label}</span>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+                {SAMPLE_PRESENTATIONS.filter(sample => sample.group === g.id && sample !== first).map(sample => (
+                  <Button key={sample.title} size="sm" variant="ghost" icon="slides" disabled={!!busy} title={sample.hint} onClick={() => void open(sample)}>
+                    {busy === sample.title ? 'Building it…' : sample.title}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

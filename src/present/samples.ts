@@ -1,74 +1,24 @@
 /**
- * samples.ts — the presentations the Present page offers ready-made: ray
- * marching (sample.ts), matrices, playing a shader, and sketching over a
- * shader with Script layers. Each is built from bundled examples, so a
- * sample is always in step with the examples it quotes.
+ * samples.ts — the presentations the Present page offers ready-made, in two
+ * groups. Learn the app (teachingSamples.ts): the Studio, a first Play, field
+ * sockets, the Convert page, making a lesson. Topics: the Book of Shaders path
+ * (teachingSamples.ts), ray marching (sample.ts), matrices, playing a shader,
+ * and sketching over a shader with Script layers. Each is built from bundled
+ * examples, so a sample is always in step with the examples it quotes.
  */
-import { snapshotExample } from './snapshot';
 import { buildSamplePresentation, SAMPLE_TITLE } from './sample';
 import { SKETCH_BUTTONS, SKETCH_FIRST, SKETCH_MOUSE, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE } from '../store/playSketches';
-import { PRESENTATION_VERSION, newId, type Block, type BlockAspect, type CodeBlock, type InteractiveBlock, type InteractiveControl, type Presentation, type PresentSource, type RenderBlock, type Step } from '../types/presentation';
+import { blocks, linesBetween, presentation, sources, step } from './sampleKit';
+import type { BlockAspect, Presentation, Step } from '../types/presentation';
+import { BOOK_TITLE, CONVERT_TITLE, FIELD_TITLE, FIRST_PLAY_TITLE, MAKING_TITLE, STUDIO_TITLE, buildBookPresentation, buildConvertPresentation, buildFieldSocketsPresentation, buildFirstPlayPresentation, buildMakingPresentation, buildStudioPresentation } from './teachingSamples';
 
 export interface SamplePresentation {
   title: string;
   /** One line for the menu: what it's built from. */
   hint: string;
+  /** 'app': how to use Playfield; 'topic': a subject taught with it. */
+  group: 'app' | 'topic';
   build: (now?: number) => Promise<Presentation>;
-}
-
-// ── Building blocks ─────────────────────────────────────────────────────────
-
-/** Snapshot every example a sample reads from, by key. */
-async function sources(keys: readonly string[]): Promise<Record<string, PresentSource>> {
-  const out: Record<string, PresentSource> = {};
-  for (const k of keys) {
-    const r = await snapshotExample(k);
-    if (!r.ok) throw new Error(`${k}: ${r.error}`);
-    out[k] = r.source;
-  }
-  return out;
-}
-
-function blocks(src: Record<string, PresentSource>) {
-  return {
-    text: (markdown: string): Block => ({ type: 'text', id: newId('b'), markdown }),
-    render: (k: string, caption: string, more: Partial<RenderBlock> = {}): Block =>
-      ({ type: 'render', id: newId('b'), source: src[k].id, aspect: '16:9', width: 'full', pointer: true, caption, ...more }),
-    interactive: (k: string, markdown: string, controls: Array<[id: string, label?: string, hint?: string]>, more: Partial<InteractiveBlock> = {}): Block => ({
-      type: 'interactive', id: newId('b'), source: src[k].id, markdown, layout: 'side', aspect: '4:3', pointer: true,
-      controls: controls.map(([controlId, label, hint]): InteractiveControl => ({ controlId, showMappings: true, ...(label ? { label } : {}), ...(hint ? { hint } : {}) })),
-      ...more,
-    }),
-    /** One node's lines of a source's shader (nothing when the node has no lines there). */
-    nodeCode: (k: string, nodeId: string, caption: string): Block[] =>
-      src[k].shader.nodes.some(n => n.id === nodeId) ? [{ type: 'code', id: newId('b'), language: 'glsl', from: { source: src[k].id, node: nodeId }, caption }] : [],
-    glsl: (code: string, caption: string, highlightLines?: [number, number][]): Block =>
-      ({ type: 'code', id: newId('b'), language: 'glsl', code, caption, ...(highlightLines ? { highlightLines } : {}) }),
-    /** A Script layer's code; `live` lets the reader edit it and see the edit in this step's canvases. */
-    script: (k: string, layerId: string, caption: string, o: { live?: boolean; highlightLines?: [number, number][] } = {}): Block => {
-      const b: CodeBlock = { type: 'code', id: newId('b'), language: 'js', from: { source: src[k].id, layerId }, caption };
-      if (o.highlightLines) b.highlightLines = o.highlightLines;
-      if (o.live) b.live = true;
-      return b;
-    },
-  };
-}
-
-const step = (title: string, content: Block[], columns: 1 | 2 = 1): Step => ({ id: newId('s'), title, columns, blocks: content });
-
-/** The 1-based line range from the first line containing `from` to the first after it containing `to` (or just that line). */
-export function linesBetween(code: string, from: string, to?: string): [number, number][] {
-  const lines = code.split('\n');
-  const a = lines.findIndex(l => l.includes(from));
-  if (a < 0) throw new Error(`samples: no line with “${from}”`);
-  if (to === undefined) return [[a + 1, a + 1]];
-  const b = lines.findIndex((l, i) => i >= a && l.includes(to));
-  if (b < 0) throw new Error(`samples: no line with “${to}” after “${from}”`);
-  return [[a + 1, b + 1]];
-}
-
-function presentation(title: string, keys: readonly string[], src: Record<string, PresentSource>, steps: Step[], now: number): Presentation {
-  return { version: PRESENTATION_VERSION, title, steps, sources: keys.map(k => src[k]), createdAt: now, updatedAt: now };
 }
 
 // ── Transforms with matrices ────────────────────────────────────────────────
@@ -284,8 +234,25 @@ The code is live: change the colour line, or add a sideways kick to \`p.vx\`, an
 // ── The list the Present page offers ────────────────────────────────────────
 
 export const SAMPLE_PRESENTATIONS: SamplePresentation[] = [
-  { title: SAMPLE_TITLE, hint: 'Built from the Learn 3D lessons', build: buildSamplePresentation },
-  { title: MATRICES_TITLE, hint: 'Built from the Matrices folder', build: buildMatricesPresentation },
-  { title: PLAYING_TITLE, hint: 'Controls, mappings, LFOs, keys, nulls, layers', build: buildPlayingPresentation },
-  { title: SKETCHING_TITLE, hint: 'Script layers, with live code', build: buildSketchingPresentation },
+  // Learn the app: how to use Playfield itself, alongside the Learn lessons.
+  { title: STUDIO_TITLE, group: 'app', hint: 'Nodes, wires, sliders, the code, groups, saving', build: buildStudioPresentation },
+  { title: FIRST_PLAY_TITLE, group: 'app', hint: 'Controls, the mouse, an LFO, a key, a layer, a take', build: buildFirstPlayPresentation },
+  { title: FIELD_TITLE, group: 'app', hint: 'Grid Pattern and Array with a shape of your own', build: buildFieldSocketsPresentation },
+  { title: CONVERT_TITLE, group: 'app', hint: 'The Convert page: paste a shader, get nodes', build: buildConvertPresentation },
+  { title: MAKING_TITLE, group: 'app', hint: 'Steps, blocks, snapshots, chips, live code, sharing', build: buildMakingPresentation },
+  // Topics: shaders themselves.
+  { title: BOOK_TITLE, group: 'topic', hint: 'The Book of Shaders, chapter by chapter through Learn', build: buildBookPresentation },
+  { title: SAMPLE_TITLE, group: 'topic', hint: 'Built from the Learn 3D lessons', build: buildSamplePresentation },
+  { title: MATRICES_TITLE, group: 'topic', hint: 'Built from the Matrices folder', build: buildMatricesPresentation },
+  { title: PLAYING_TITLE, group: 'topic', hint: 'Controls, mappings, LFOs, keys, nulls, layers', build: buildPlayingPresentation },
+  { title: SKETCHING_TITLE, group: 'topic', hint: 'Script layers, with live code', build: buildSketchingPresentation },
 ];
+
+/** The groups the menus show the samples in, in order. */
+export const SAMPLE_GROUPS: { id: SamplePresentation['group']; label: string }[] = [
+  { id: 'app', label: 'Learn the app' },
+  { id: 'topic', label: 'Topics' },
+];
+
+/** The sample the empty page offers first. */
+export const FIRST_SAMPLE = SAMPLE_PRESENTATIONS.find(s => s.title === SAMPLE_TITLE)!;

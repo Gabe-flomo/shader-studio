@@ -17,6 +17,7 @@ import { LEARN3D_EXAMPLE_INDEX, LEARN3D_EXAMPLE_KEYS } from './learn3dExampleInd
 import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
 import { GRID_EXAMPLE_INDEX, GRID_EXAMPLE_KEYS } from './gridExamples';
+import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleIndex';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -161,6 +162,8 @@ export const EXAMPLE_INDEX: Record<string, { label: string; description?: string
   ...MATRIX_EXAMPLE_INDEX,
   // The numbered Grid tour (gridExamples.ts): every way to build a grid, and the controls over it.
   ...GRID_EXAMPLE_INDEX,
+  // The Convert folder (convertExampleIndex.ts, graphs in convertExamples.ts): what the Convert page makes of its Soft circle, as written and optimised.
+  ...CONVERT_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -201,5 +204,6 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
   { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },
   { label: "From the Internet",    color: ctp.yellow, keys: ['fcTrippyNoise','fcSolar','fcPillars','fcGradient4','fcGrainGradient','fcTiling','fcTheScreen','fcShield','fcMainFrame','fcAtlantic','fcOrb','fcBitshift'] },
+  { label: "Convert",            color: ctp.yellow, keys: CONVERT_EXAMPLE_KEYS },
   { label: "Node Combos",        color: ctp.flamingo, keys: ['comboChaosStars','comboRepeatCellHash','comboTurbulenceGlow','comboBloomDots','comboDomeRepeat','comboVoxelSpheres','comboGridPaintShapes','comboGridPaintPictures','comboGridPaintGlow','comboGridShapeByWire','comboArrayStars','comboGridGroupFlower','comboArrayGroupMoons'] },
 ];
