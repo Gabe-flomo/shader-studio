@@ -45,7 +45,11 @@ export const ROLE_INFO: Record<ValueRole, RoleInfo> = {
 };
 
 export interface RoleGuess { role: ValueRole; confidence: number; because: string[] }
-export interface ParamRole extends RoleGuess { name: string; type: string }
+export interface ParamRole extends RoleGuess {
+  name: string; type: string;
+  /** Set when a remembered choice decided the role: that memory entry's key, so it can be forgotten. */
+  learned?: string;
+}
 
 type Score = Partial<Record<ValueRole, { s: number; why: string[] }>>;
 const add = (sc: Score, role: ValueRole, s: number, why: string) => { const e = (sc[role] ??= { s: 0, why: [] }); e.s += s; if (!e.why.includes(why)) e.why.push(why); };
@@ -70,13 +74,17 @@ export function roleOfExpression(expr: string): Score {
 const short = (e: string) => (e.length > 24 ? `${e.slice(0, 22)}…` : e);
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** What the body does with a parameter. */
+/** What the body does with a parameter: its name, then how it is used. */
 function roleOfUse(name: string, type: string, body: string): Score {
+  const sc = roleOfName(name);
+  const use = roleOfUsage(name, type, body);
+  for (const [role, e] of Object.entries(use) as Array<[ValueRole, { s: number; why: string[] }]>) for (const w of e.why) add(sc, role, e.s / e.why.length, w);
+  return sc;
+}
+
+/** Name alone carries a lot in shader culture. */
+function roleOfName(name: string): Score {
   const sc: Score = {};
-  const n = esc(name);
-  const has = (re: RegExp) => re.test(body);
-  const rx = (t: string) => new RegExp(t.replace(/NAME/g, n));
-  // Name alone carries a lot in shader culture.
   if (/^(uv|st|p|pos|pt|q|coord|fragCoord|position)$/i.test(name)) add(sc, 'position', 2, `named ${name}`);
   if (/^(t|time|iTime|phase)$/i.test(name)) add(sc, 'time', 2.5, `named ${name}`);
   if (/^(d|dist|sd|sdf)$/i.test(name)) add(sc, 'distance', 2, `named ${name}`);
@@ -86,7 +94,15 @@ function roleOfUse(name: string, type: string, body: string): Score {
   if (/^(seed|h|hash|id|cell)$/i.test(name)) add(sc, 'seed', 1.5, `named ${name}`);
   if (/^(a|ang|angle|theta|phi|rot)$/i.test(name)) add(sc, 'angle', 1.5, `named ${name}`);
   if (/^(r|rad|radius|s|size|scale|k|freq|amp|w|width|strength|amount)$/i.test(name)) add(sc, 'scale', 1.5, `named ${name}`);
-  // Usage.
+  return sc;
+}
+
+/** How the body uses a parameter, whatever it is called. */
+function roleOfUsage(name: string, type: string, body: string): Score {
+  const sc: Score = {};
+  const n = esc(name);
+  const has = (re: RegExp) => re.test(body);
+  const rx = (t: string) => new RegExp(t.replace(/NAME/g, n));
   if (has(rx(String.raw`\blength\s*\(\s*NAME\b`)) || has(rx(String.raw`\bdistance\s*\(\s*NAME\b`))) add(sc, 'position', 2, `length(${name})`);
   if (has(rx(String.raw`\bfract\s*\(\s*NAME\b`)) || has(rx(String.raw`\bfloor\s*\(\s*NAME\b`))) add(sc, type === 'float' ? 'seed' : 'position', 1, `fract/floor(${name})`);
   if (has(rx(String.raw`\bNAME\s*\.\s*[xy]\b`)) && (type === 'vec2' || type === 'vec3')) add(sc, 'position', 1, `${name}.x / .y`);
@@ -117,9 +133,47 @@ function pick(sc: Score, fallback: ValueRole): RoleGuess {
 
 const fallbackFor = (type: string): ValueRole => (type === 'vec2' ? 'position' : type === 'vec3' ? 'colour' : type === 'float' ? 'scalar' : 'unknown');
 
-/** A role for each parameter, from its name, how the body uses it, and what the file passes to it. */
-export function inferParamRoles(fn: DiscoveredFn): ParamRole[] {
+/** The roles a value of this type can play (the rest are ruled out by the type). */
+export function rolesFor(type: string): ValueRole[] {
+  if (type === 'float') return ['time', 'distance', 'angle', 'scale', 'seed', 'scalar', 'unknown'];
+  if (type === 'vec2') return ['position', 'uv01', 'direction', 'seed', 'unknown'];
+  return ['position', 'uv01', 'colour', 'direction', 'normal', 'seed', 'unknown'];
+}
+
+/**
+ * A role the person chose for a parameter, remembered by the parameter's
+ * type, its name and its usage pattern (how the body uses it, whatever it is
+ * called), so the next function that looks the same starts from their choice.
+ * `rejected` holds the guesses they turned down.
+ */
+export interface LearnedRole { type: string; name: string; pattern: string; role: ValueRole; rejected: ValueRole[]; count: number; at: number }
+/** Learned roles by `learnedKey`. */
+export type RoleMemory = Record<string, LearnedRole>;
+export const learnedKey = (type: string, name: string, pattern: string) => `${type}|${name}|${pattern}`;
+export const LEARNED_WHY = 'learned from your choice';
+
+/**
+ * How a body uses a parameter, with its name taken out: `length(·) ; inside
+ * sin/cos with ·`. Two parameters with the same pattern are used the same
+ * way; empty when nothing in the body says anything.
+ */
+export function usagePattern(name: string, type: string, body: string): string {
+  const re = new RegExp(`\\b${esc(name)}\\b`, 'g');
+  return Object.values(roleOfUsage(name, type, body)).flatMap(e => e?.why ?? []).map(w => w.replace(re, '·')).sort().join(' ; ');
+}
+
+/** How much a remembered choice leans on a guess when it isn't an exact match: the same name used another way, or the same use under another name. */
+const LEAN_NAME = 1.25, LEAN_PATTERN = 2.5;
+
+/**
+ * A role for each parameter, from its name, how the body uses it, what the
+ * file passes to it, and what the person chose before (`memory`): the same
+ * name used the same way takes their choice outright; a partial match leans
+ * the guess towards their choice and away from the roles they turned down.
+ */
+export function inferParamRoles(fn: DiscoveredFn, memory: RoleMemory = {}): ParamRole[] {
   const body = fn.text.slice(fn.text.indexOf('{'));
+  const learned = Object.values(memory);
   return fn.params.map((p, i) => {
     const sc = roleOfUse(p.name, p.type, body);
     for (const site of fn.callSites) {
@@ -129,13 +183,49 @@ export function inferParamRoles(fn: DiscoveredFn): ParamRole[] {
       for (const [role, e] of Object.entries(from) as Array<[ValueRole, { s: number; why: string[] }]>) add(sc, role, e.s * 0.6, e.why[0]);
     }
     // Types rule some roles out.
-    for (const role of Object.keys(sc) as ValueRole[]) {
-      if (p.type === 'float' && (role === 'position' || role === 'colour' || role === 'direction' || role === 'normal' || role === 'uv01')) delete sc[role];
-      if (p.type !== 'float' && (role === 'time' || role === 'distance' || role === 'angle' || role === 'scale' || role === 'scalar')) delete sc[role];
-      if (p.type === 'vec2' && (role === 'colour' || role === 'normal')) delete sc[role];
+    const allowed = rolesFor(p.type);
+    for (const role of Object.keys(sc) as ValueRole[]) if (!allowed.includes(role)) delete sc[role];
+    const base = { name: p.name, type: p.type };
+    if (!learned.length) return { ...base, ...pick(sc, fallbackFor(p.type)) };
+    const pattern = usagePattern(p.name, p.type, body);
+    const key = learnedKey(p.type, p.name, pattern);
+    const exact = memory[key];
+    if (exact && allowed.includes(exact.role)) return { ...base, role: exact.role, confidence: 1, because: [LEARNED_WHY], learned: key };
+    let near: { e: LearnedRole; w: number } | null = null;
+    for (const e of learned) {
+      if (e.type !== p.type || !allowed.includes(e.role)) continue;
+      const w = e.name === p.name ? LEAN_NAME : pattern && e.pattern === pattern ? LEAN_PATTERN : 0;
+      if (w && (!near || w > near.w || (w === near.w && e.at > near.e.at))) near = { e, w };
     }
-    return { name: p.name, type: p.type, ...pick(sc, fallbackFor(p.type)) };
+    if (!near) return { ...base, ...pick(sc, fallbackFor(p.type)) };
+    const { e, w } = near;
+    for (const r of e.rejected) { const s = sc[r]; if (s && r !== e.role) s.s = Math.max(0, s.s - w); }
+    add(sc, e.role, w, LEARNED_WHY);
+    const g = pick(sc, fallbackFor(p.type));
+    if (g.role !== e.role) return { ...base, ...g, because: g.because.filter(x => x !== LEARNED_WHY) };
+    return { ...base, ...g, because: [LEARNED_WHY, ...g.because.filter(x => x !== LEARNED_WHY)].slice(0, 3), learned: learnedKey(e.type, e.name, e.pattern) };
   });
+}
+
+/** The memory after the person picked `chosen` for a parameter the app had guessed was `guess`. */
+export function learnRole(memory: RoleMemory, fn: DiscoveredFn, paramIndex: number, guess: ValueRole, chosen: ValueRole, now = Date.now()): RoleMemory {
+  const p = fn.params[paramIndex];
+  if (!p) return memory;
+  const pattern = usagePattern(p.name, p.type, fn.text.slice(fn.text.indexOf('{')));
+  const key = learnedKey(p.type, p.name, pattern);
+  const prev = memory[key];
+  const rejected = new Set(prev?.rejected ?? []);
+  if (guess !== chosen) rejected.add(guess);
+  rejected.delete(chosen);
+  return { ...memory, [key]: { type: p.type, name: p.name, pattern, role: chosen, rejected: [...rejected], count: (prev?.count ?? 0) + 1, at: now } };
+}
+
+/** The memory without one entry, or without every entry when `key` is omitted. */
+export function forgetRole(memory: RoleMemory, key?: string): RoleMemory {
+  if (key === undefined) return {};
+  const next = { ...memory };
+  delete next[key];
+  return next;
 }
 
 /** What the function returns: a distance, a colour, a position, a plain number. */

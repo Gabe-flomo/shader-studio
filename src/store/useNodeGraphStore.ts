@@ -223,11 +223,16 @@ const keyframePresetManager  = new PresetManager<KeyframePreset>({ localStorageP
 /** Fired when a saved graph is added or removed, so every list of them (sidebar, top bar) refreshes */
 export const SAVED_GRAPHS_CHANGED = 'saved-graphs-changed';
 
+/** A new preset id: the time, and a counter so several saved in one millisecond don't overwrite each other. */
+let cfpSeq = 0;
+const newCfpId = () => `cfp_${Date.now()}${cfpSeq++ ? `_${cfpSeq}` : ''}`;
+
 export function saveCustomFnPreset(
-  data: { label: string; inputs: CustomFnPreset['inputs']; outputType: CustomFnPreset['outputType']; body: string; glslFunctions: string; comment?: string },
+  data: { label: string; inputs: CustomFnPreset['inputs']; outputType: CustomFnPreset['outputType']; body: string; glslFunctions: string; comment?: string; preview?: CustomFnPreset['preview'] },
 ): Promise<FileResult> {
   const preset: CustomFnPreset = {
-    id: `cfp_${Date.now()}`,
+    id: newCfpId(),
+    ...(data.preview ? { preview: data.preview } : {}),
     label: data.label || 'Custom Function',
     inputs: data.inputs ?? [],
     outputType: data.outputType ?? 'float',
@@ -4940,7 +4945,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     }
     if (!node || node.type !== 'customFn') return { ok: false, error: 'Node is not a Custom Function node' };
     const preset: CustomFnPreset = {
-      id: `cfp_${Date.now()}`,
+      id: newCfpId(),
       label: (node.params.label as string) || 'Custom Function',
       inputs: (node.params.inputs as CustomFnPreset['inputs']) ?? [],
       outputType: (node.params.outputType as CustomFnPreset['outputType']) ?? 'float',

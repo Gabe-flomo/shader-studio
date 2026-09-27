@@ -15,6 +15,11 @@
  * Materialize keeps the scratch graph as the real one (undoable) and opens the
  * Studio. "Keep as one node" is the older import: the whole shader as a single
  * code node.
+ *
+ * Functions: the paste's helper functions, found as the GLSL page's Discover
+ * functions finds them, with the same preview and roles, saved to the
+ * Functions library from here. A helper already in the library converts to
+ * that saved node (its arguments wired in) instead of a region of code.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -45,6 +50,11 @@ import { getCardSize, getView, subscribeCardSizes } from '../NodeGraph/socketReg
 import { GlslEditor } from '../code/GlslEditor';
 import { kindOf, labelOf } from './outlineKinds';
 import { RenderPair, type PairDiff } from './RenderPair';
+import { libraryForConversion, pastedFunctions } from './convertFunctions';
+import { savedLookup } from '../../glsl/discover';
+import { DiscoverResults } from '../code/DiscoverResults';
+import { saveLabel, useDiscoverPicks } from '../code/useDiscoverPicks';
+import { loadCustomFns } from '../../store/useNodeGraphStore';
 
 const PublishNodeModal = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('../NodeGraph/PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 
@@ -163,12 +173,25 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   /** The shader from before the first fix-up applied to it (the check compares with this); null when none was. */
   const [checkAgainst, setCheckAgainst] = useState<string | null>(null);
   // On a phone the page is one pane at a time: the code, the graph, or the check.
-  const [pane, setPane] = useState<'code' | 'graph' | 'check'>('code');
+  const [pane, setPane] = useState<'code' | 'graph' | 'check' | 'fns'>('code');
+  /** Desktop: what the section under the editor shows. */
+  const [lower, setLower] = useState<'check' | 'fns'>('check');
+  // The Functions library, for a paste whose helpers are already saved (refreshed when it changes).
+  const [savedFns, setSavedFns] = useState(() => loadCustomFns());
+  useEffect(() => {
+    const refresh = () => setSavedFns(loadCustomFns());
+    window.addEventListener('customfn-changed', refresh);
+    return () => window.removeEventListener('customfn-changed', refresh);
+  }, []);
+  const library = useMemo(() => libraryForConversion(savedFns), [savedFns]);
   useEffect(() => { try { localStorage.setItem(CODE_KEY, code); } catch { /* preference only */ } }, [code]);
   useEffect(() => onHandoff(c => { setCode(c); setSource(c); setAsBlock(new Set()); setSelected(null); setCheckAgainst(null); setPane('graph'); }), []);
   const empty = !source.trim();
 
-  const raw: ConversionResult = useMemo(() => (source.trim() ? glslToGraph(source, { asBlock }) : EMPTY), [source, asBlock]);
+  const raw: ConversionResult = useMemo(() => (source.trim() ? glslToGraph(source, { asBlock, library }) : EMPTY), [source, asBlock, library]);
+  const found = useMemo(() => pastedFunctions(source), [source]);
+  const savedAs = useMemo(() => savedLookup(savedFns), [savedFns]);
+  const picks = useDiscoverPicks(found.matches);
   // Rewrites that take a refusal away (fix-ups.ts). Applying one puts the rewrite in the editor; the check then
   // compares the graph with the shader from before the first fix, so a rewrite that changed the picture shows.
   const fixups = useMemo(() => (raw.report.unsupported.length ? suggestFixups(source, raw.report) : []), [source, raw]);
@@ -334,7 +357,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
   const check = (
     <div style={compact
       ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle }
-      : { borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, flexShrink: 0, maxHeight: '46%', display: 'flex', flexDirection: 'column' }}>
+      : { background: tk.bg.subtle, flexShrink: 0, maxHeight: '46%', display: 'flex', flexDirection: 'column' }}>
       {compact && <div style={{ padding: '10px 14px 0', display: 'flex', gap: 8, alignItems: 'center' }}>{formSwitch}</div>}
       {empty ? (
         <div style={{ padding: '14px', color: tk.text.faint, lineHeight: 1.5 }}>Paste a fragment shader, or pick an example, and press Convert. The check compares the original with the graph here.</div>
@@ -424,10 +447,32 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
             </div>
           </>
         )}
+        {(report.reused?.length ?? 0) > 0 && (
+          <>
+            {heading('From your Functions', report.reused!.length)}
+            <div style={{ color: tk.text.muted, lineHeight: 1.5, fontSize: 11.5 }}>
+              {report.reused!.map((r, i) => <div key={i}><span style={{ fontFamily: fontFamily.mono, color: tk.text.primary }}>{r.fn}()</span> is your saved “{r.label}”: it became that node, with its arguments wired in.</div>)}
+            </div>
+          </>
+        )}
         {report.notes.length > 0 && <>{heading('Notes')}<div style={{ color: tk.text.muted, lineHeight: 1.5, fontSize: 11.5 }}>{report.notes.join(' · ')}</div></>}
       </div>
     </div>
   );
+
+  const fnsEmpty = empty ? 'Paste a shader and press Convert to list its functions.' : found.total ? 'Only main() here: no helper functions to keep.' : 'No functions besides main() in this shader.';
+  const functions = (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: tk.bg.panel }}>
+      <DiscoverResults picks={picks} narrow savedAs={savedAs} listTitle={found.matches.length ? `${found.matches.length} ${found.matches.length === 1 ? 'function' : 'functions'} in this shader` : 'Functions in this shader'} empty={fnsEmpty} />
+      {found.matches.length > 0 && (
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderTop: `1px solid ${tk.border.subtle}` }}>
+          <span style={{ flex: 1, minWidth: 0, color: tk.text.muted, fontSize: 11.5 }}>{picks.shownSelected.length ? `${picks.shownSelected.length} selected` : 'Tick the ones to keep'}</span>
+          <Button size="sm" variant="primary" icon="save" disabled={!picks.shownSelected.length || picks.saving} onClick={() => { void picks.save(); }}>{saveLabel(picks.shownSelected.length)}</Button>
+        </div>
+      )}
+    </div>
+  );
+  const fnsLabel = found.matches.length ? `Functions · ${found.matches.length}` : 'Functions';
 
   // The editor's tools. A desktop pane narrower than all of them in one row (the default 360 is) puts the title and
   // Convert on one row and the rest under it, so Convert is never clipped; on a phone Convert sits in the top bar.
@@ -499,7 +544,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
     return (
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }} onKeyDownCapture={onPaneKey}>
         <div style={{ height: 48, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', borderBottom: `1px solid ${tk.border.subtle}` }}>
-          <Segmented size="sm" ariaLabel="Convert view" value={pane} onChange={setPane} options={[{ value: 'code', label: 'Code' }, { value: 'graph', label: conv.nodes.length ? `Graph · ${conv.nodes.length}` : 'Graph' }, { value: 'check', label: blocked && !empty ? 'Check !' : 'Check' }]} />
+          <Segmented size="sm" ariaLabel="Convert view" value={pane} onChange={setPane} options={[{ value: 'code', label: 'Code' }, { value: 'graph', label: conv.nodes.length ? `Graph · ${conv.nodes.length}` : 'Graph' }, { value: 'check', label: blocked && !empty ? 'Check !' : 'Check' }, { value: 'fns', label: 'Fns' }]} />
           <span style={{ flex: 1 }} />
           {convertButton}
         </div>
@@ -510,6 +555,7 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
         </div>
         {pane === 'graph' && canvas}
         {pane === 'check' && check}
+        {pane === 'fns' && functions}
         <div style={{ height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderTop: `1px solid ${tk.border.subtle}` }}>
           <Button size="sm" variant="ghost" onClick={keepAsOne} disabled={!code.trim()} title="The older import: the whole shader as one code node">Keep as one node…</Button>
           <span style={{ flex: 1 }} />
@@ -526,7 +572,10 @@ export function ConvertPage({ onMaterialized, compact = false }: { onMaterialize
       <div style={{ width: paneW, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, minWidth: 0, position: 'relative' }} onKeyDownCapture={onPaneKey}>
         {editorHead}
         {editor}
-        {check}
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px 0', borderTop: `1px solid ${tk.border.subtle}`, background: lower === 'check' ? tk.bg.subtle : tk.bg.panel }}>
+          <Segmented size="sm" ariaLabel="Under the editor" value={lower} onChange={setLower} options={[{ value: 'check', label: blocked && !empty ? 'Check !' : 'Check' }, { value: 'fns', label: fnsLabel }]} />
+        </div>
+        {lower === 'check' ? check : <div style={{ height: '58%', flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>{functions}</div>}
         <div onMouseDown={startPaneResize} title="Drag to resize" style={{ position: 'absolute', top: 0, bottom: 0, right: -3, width: 6, cursor: 'col-resize', zIndex: 5 }} />
       </div>
 
