@@ -113,17 +113,29 @@ export type HandRead = 'point' | 'palm' | 'pinch' | 'open' | 'roll' | 'size' | '
 export type HandGesture = 'pinch' | 'pinchMiddle' | 'pinchRing' | 'pinchPinky' | 'fist' | 'open' | 'point' | 'appear' | 'leave';
 export const HAND_GESTURES: readonly HandGesture[] = ['pinch', 'pinchMiddle', 'pinchRing', 'pinchPinky', 'fist', 'open', 'point', 'appear', 'leave'];
 
-/** Hand tracking's settings for a setup. Absent = the defaults. */
+/** Hand tracking's settings for a setup. Absent = the defaults. The optional ones are left out of a file until changed. */
 export interface PlayHands {
-  /** 0 raw landmarks … 1 very smooth (and a little late). */
+  /** 0 raw landmarks … 1 very smooth (and a little late): the one-euro filter's cutoff when still. */
   smoothing: number;
-  /** Draw the hands' skeleton over the picture while guides are showing. */
+  /** Show hand on picture: the skeleton over the picture. Its own switch, apart from the guides (H). */
   overlay: boolean;
   colour: [number, number, number];
   /** Selfie view: your right hand moves right on the picture. A Camera layer's own Mirror wins when there is one. */
   mirror: boolean;
+  /** 0..1: how much a fast move opens the filter up (the one-euro filter's beta). Default 0.5. */
+  responsiveness?: number;
+  /** Swap left and right: for a camera that already sends a mirrored picture. */
+  swap?: boolean;
+  /** Hands to look for (MediaPipe's numHands). Default 2. */
+  maxHands?: 1 | 2;
+  /** 0 lenient … 1 strict: the three confidence thresholds together. Default 0.5 (a notch stricter than MediaPipe's own). */
+  strictness?: number;
+  /** The three thresholds set by hand (Advanced), instead of Strictness. */
+  confidence?: { detection: number; presence: number; tracking: number };
 }
 export const DEFAULT_HANDS: PlayHands = { smoothing: 0.5, overlay: true, colour: [0.35, 1, 0.75], mirror: true };
+export const DEFAULT_HAND_RESPONSIVENESS = 0.5;
+export const DEFAULT_HAND_STRICTNESS = 0.5;
 
 /** Does a setup read hands anywhere: a hand source, a gesture trigger (mapping or action), or a null following a hand? */
 export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'>): boolean {
@@ -131,6 +143,30 @@ export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layer
     || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId)))
     || (play.actions ?? []).some(a => triggerUsesHands(a.trigger))
     || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
+}
+
+/**
+ * The one hand a setup reads, when it reads only one ('left' or 'right'), or
+ * null (both, either, the distance between them, or none). Max hands uses it
+ * to suggest 1.
+ */
+export function oneHandUsed(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'>): 'left' | 'right' | null {
+  const sides = new Set<HandSide>();
+  const trig = (t: TriggerSpec) => {
+    if (t.on === 'hand') sides.add(t.side);
+    if (t.on === 'proximity') for (const r of [t.a, t.b]) { const h = parseHandAnchor(r); if (h) sides.add(h.side); }
+  };
+  for (const m of play.mappings) {
+    const s = m.source;
+    if (s.kind === 'hand') { if (s.read === 'spread') { sides.add('left'); sides.add('right'); } else sides.add(s.side); }
+    else if (s.kind === 'trigger') trig(s.trigger);
+    else if (s.kind === 'sensor' && s.read === 'distance') { const h = parseHandAnchor(s.otherId); if (h) sides.add(h.side); }
+  }
+  for (const a of play.actions ?? []) trig(a.trigger);
+  for (const l of play.layers) if (l.kind === 'null' && l.follow === 'hand') sides.add(l.handSide);
+  if (sides.size !== 1) return null;
+  const only = [...sides][0];
+  return only === 'any' ? null : only;
 }
 
 /** A gesture trigger, or a proximity trigger measuring from a hand. */
@@ -676,12 +712,24 @@ function handGesture(v: unknown): HandGesture { return typeof v === 'string' && 
 function parseHands(v: unknown): PlayHands | null {
   if (!v || typeof v !== 'object') return null;
   const h = v as Record<string, unknown>;
-  return {
-    smoothing: Math.max(0, Math.min(1, num(h.smoothing, DEFAULT_HANDS.smoothing))),
+  const unit = (x: unknown, d: number) => Math.max(0, Math.min(1, num(x, d)));
+  const out: PlayHands = {
+    smoothing: unit(h.smoothing, DEFAULT_HANDS.smoothing),
     overlay: h.overlay !== false,
     colour: rgb(h.colour, DEFAULT_HANDS.colour),
     mirror: h.mirror !== false,
   };
+  // Newer settings, only when a file has them (older files read back unchanged).
+  if (typeof h.responsiveness === 'number') out.responsiveness = unit(h.responsiveness, DEFAULT_HAND_RESPONSIVENESS);
+  if (h.swap === true) out.swap = true;
+  if (h.maxHands === 1 || h.maxHands === 2) out.maxHands = h.maxHands;
+  if (typeof h.strictness === 'number') out.strictness = unit(h.strictness, DEFAULT_HAND_STRICTNESS);
+  const c = h.confidence as Record<string, unknown> | undefined;
+  if (c && typeof c === 'object') {
+    const t = (x: unknown) => Math.max(0.05, Math.min(0.95, num(x, 0.6)));
+    out.confidence = { detection: t(c.detection), presence: t(c.presence), tracking: t(c.tracking) };
+  }
+  return out;
 }
 
 const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble']);

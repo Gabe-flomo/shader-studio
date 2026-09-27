@@ -12,23 +12,39 @@ A setup that reads hands shows **Enable hand tracking** on the picture, and a **
 |---|---|
 | Hands: off | Not running. **Enable** opens the camera (the browser asks the first time) and starts the tracker. |
 | Hands: starting… | The model is loading (the first time in a session, about a second). |
-| Hands: tracking 2 hands | Running; the number is the hands in view. Hover it for the frame rate and timings. |
+| Hands: tracking 2 hands | Running; the number is the hands shown (a hand still appearing, or one ignored, doesn't count). Hover it for the frame rate and timings. |
 | Hands: none in view | Running, nobody's hands in the picture. |
 | Hands: camera blocked | The browser or macOS refused the camera. Allow it and press **Try again**. |
 
 Browsers only open the camera after a click, which is why there is a button. The camera is the same one a Camera layer shows: one stream, shared. Tracking works with no Camera layer, or with it hidden.
 
-The sliders button beside the status holds the settings, saved with the setup (`PlayRecord.hands`):
+The **eye** beside the status shows or hides the hand on the picture in one click. Tracking keeps going while it's hidden: sources, gestures and nulls carry on.
 
-- **Smoothing**: low follows every twitch, high is steady but a little late (a one-euro filter).
-- **Show hands on the picture**: the skeleton and landmark dots, in a colour you pick. They are a guide: H hides them with the other guides.
-- **Mirror, like a selfie**: your right hand moves right on the picture. With a Camera layer, that layer's own Mirror decides, so the dots sit on your hands in its image.
+The sliders button holds the settings, saved with the setup (`PlayRecord.hands`; the newer ones are written only once changed, so older files read back as they were):
+
+- **Show hand on picture**: the skeleton and landmark dots, in a colour you pick (also in a Camera layer's Hand tracking section). It has its own switch, apart from the guides: **H hides the other guides and leaves the hand to this switch**, so you can hide the hand all the time and show it only for a moment. Web pages still show it only with their markers on.
+- **Hands to track: 1 or 2** (MediaPipe's `numHands`, default 2). With 1 a second hand can never appear, and Distance between the hands reads nothing. The default stays 2 even when a setup reads only one hand: with 1, MediaPipe follows whichever hand it finds first and keeps it, so a right-hand setup would go dead while your left hand is the one it latched onto. The setting says when a setup reads only one hand and suggests 1 if you keep the other out of view.
+- **Strictness**: MediaPipe's three confidence thresholds together, from lenient to strict. The default (0.5) is a notch stricter than MediaPipe's own 0.5s: detection 0.6, presence 0.57, tracking 0.55 (0 is 0.3 each; 1 is 0.9, 0.84, 0.8). **Advanced** sets the three by hand (Finding, Keeping and Following a hand); **Use Strictness again** goes back.
+- **Smoothing** and **Responsiveness**: a one-euro filter on every landmark. Smoothing sets how calm a still hand is (its cutoff: 0 passes landmarks straight through, 0.5 is 1.6 Hz, 1 is 0.3 Hz); Responsiveness how much a fast move opens the filter up (its beta: 0 is a plain low-pass that lags, 0.5 follows a quick move within a frame or two), so a still hand is calm and a fast one doesn't trail.
+- **Mirror, like a selfie**: your right hand moves right on the picture. With a Camera layer, that layer's own Mirror decides, so the dots sit on your hands in its image. Mirror moves the dots; it never changes which hand is which.
+- **Swap left and right**: for a camera that already sends a mirrored picture (some virtual cameras do), where Right would otherwise be your left hand.
+- **What the tracker sees**: while tracking, the frame rate and model time, how many hands MediaPipe found and how many were ignored, each hand followed (its number, its side, what the model said this frame and how sure it was, whether it is still appearing or held), and the thresholds in use. Handy when a hand misbehaves.
 
 ## Where a hand is on the picture
 
 Landmarks are placed where the camera image is: under a Camera layer, exactly where that layer shows it (its position, scale, rotation and mirror); with none, the camera covers the picture so a hand can reach every edge. X and Y are 0 to 1 across the picture with Y up, the same as nulls and the mouse.
 
-**Left and right mean the performer's own hands.** MediaPipe labels hands as if the image were a mirrored selfie; the tracker undoes that, so "Right" is always your right hand, mirrored view or not.
+**Left and right mean the performer's own hands.** MediaPipe Tasks labels a hand as it is in the image it's given, and camera frames reach it unmirrored, so its "Right" is your right hand and is used as it is; mirroring the picture (the Camera layer's Mirror, or the selfie default) moves the dots but never the labels. (Checked with a photo of a right hand: MediaPipe says Right, and Left once the photo is flipped. The older MediaPipe Hands docs describe the opposite, for selfie images; following them was why early builds had the hands the wrong way round.)
+
+## Steady hands
+
+MediaPipe looks at each frame on its own, so its left/right label can flip for a frame, and a shadow or a face can pass for a hand for a frame or two. The tracker (`hdUpdate` in `play/kit/hands.js`) smooths that out:
+
+- **Believable hands only**: a detection smaller than 6% of the frame's height, or whose palm is off the frame, is ignored.
+- **Tracks**: each hand is followed from frame to frame by where its palm is (the nearest within a gate that grows with the hand's size; the model's label breaks a near tie). A hand keeps its side while the model wavers. The side changes only after the model has said the other side, at 80% or surer, for 0.7 s; if both hands say they're the other one, they swap together.
+- **Appearing**: a new hand counts once it's been seen 3 frames running (about 0.1 s), so a phantom for a frame or two never appears, and never fires Comes into view or Leaves view. If both hands are already shown, a newcomer waits.
+- **Two hands, one side**: if the model calls both hands Right, the one already shown keeps Right and the newcomer is Left.
+- **Holding**: a hand that drops out is held for 250 ms (below).
 
 ## Sources (the Hands group in the source list)
 
@@ -79,7 +95,8 @@ Takes record hands like everything else: controls driven by hand sources and ges
 - **Files**: the model is in `public/mediapipe/`; MediaPipe's WebAssembly is served from the npm package at `<base>mediapipe/wasm/` (`vite.config.ts` serves it in dev and copies it into a build). The app never fetches anything from the internet for hand tracking.
 - **Loading**: nothing loads until hands are first enabled. `lib/handFeed.ts` (status, the newest frame) is tiny and in the main bundle; it imports `lib/handTracker.ts` on demand, which starts `lib/handWorker.ts` in a module worker holding MediaPipe.
 - **Frames**: about 30 a second, never more than one in flight, the camera frame scaled to 480 px wide as an ImageBitmap and handed to the worker. The model runs there, GPU first (WebGL2 on an OffscreenCanvas), falling back to the CPU. The render loop never waits on it.
-- **Meaning**: `play/kit/hands.js` turns landmarks into hands on the picture (placement, mirroring, one-euro smoothing, the hold), readings and gestures. The same file runs in web exports.
+- **Meaning**: `play/kit/hands.js` turns landmarks into hands on the picture (plausibility, tracks and steady sides, placement, mirroring, one-euro smoothing, the hold), readings and gestures. The same file runs in web exports, with the setup's settings (the page's tracker takes Hands to track and the thresholds when it starts).
+- **Settings reach the model live**: the engine hands `hdTrackerOptions(settings)` to `handFeed.configure`, which passes a change to the running worker (`HandLandmarker.setOptions`).
 - **Engine**: `lib/playEngine.ts` takes in each new frame once per tick, reads hand sources, turns gestures into presses on the trigger hub (so envelopes, toggles and actions work as they do for keys), and feeds Learn. The overlay (`play/overlay.ts`) hands the kit the points nulls follow and the skeleton.
 
 Measured on this machine in the browser preview (Chrome, GPU delegate): 30 frames a second, the model about 19 ms a frame in the worker, 24 ms from camera frame to landmarks.

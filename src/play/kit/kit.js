@@ -26,7 +26,7 @@
  *   sensor(key, value)     report a sensor reading (`layerId::read`)
  *   override(layerId, key, value|null)  where a following null is now
  *   hand(side, point)      a tracked hand's landmark on the picture ({ x, y }) or null (optional)
- *   hands      { state, colour } to draw the hands' skeleton with the markers, or null (optional)
+ *   hands      { state, colour } to draw the hands' skeleton, or null (optional; the host decides when: the app has its own switch for it, apart from the guides)
  *   three      three.js (three-slim.js) for 3D Script layers, or null
  *
  * The kit keeps per-layer state (particles, bodies, strokes, springs, text
@@ -680,8 +680,8 @@ export function createLayerKit() {
       }
     }
 
-    // 7. Null markers on top of everything, and the tracked hands' skeleton (a setup aid) with them.
-    if (env.markers && env.hands) hdDraw(ctx, env.hands.state, W, H, dpr, env.hands.colour);
+    // 7. Null markers on top of everything, and the tracked hands' skeleton (a setup aid) when the host asks for it.
+    if (env.hands) hdDraw(ctx, env.hands.state, W, H, dpr, env.hands.colour);
     if (env.markers) for (const l of vis) if (l.kind === 'null') klDrawNull(ctx, l, env.value(l, 'x'), env.value(l, 'y'), env.value(l, 'size'), dpr, W, H, l.role && l.role !== 'none' ? env.value(l, 'radius') * H : 0);
   }
 

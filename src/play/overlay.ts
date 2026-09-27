@@ -498,9 +498,13 @@ class PlayOverlay {
     };
   }
 
-  /** The hands' skeleton over the picture: live, with guides showing and the setup's Show hands on. */
+  /**
+   * The hands' skeleton over the picture: live, with the setup's Show hand on
+   * picture on. Its own switch, apart from the guides: H hides the guides and
+   * leaves the hands to it, so they can be shown just for a moment.
+   */
   private handsOverlay(forExport: boolean): KitEnv['hands'] {
-    if (forExport || this.replaying || !this.guides) return null;
+    if (forExport || this.replaying) return null;
     const st = playEngine.handState();
     if (!st.live) return null;
     const h = this.record.hands ?? DEFAULT_HANDS;
