@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "output",
+  "description": "The output window (docs/projection.md): events to and from the main window, nothing else",
+  "windows": [
+    "output"
+  ],
+  "permissions": [
+    "core:default"
+  ]
+}

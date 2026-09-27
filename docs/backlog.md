@@ -10,7 +10,7 @@ Collected from the owner's notes on 27 September 2026. Each item is planned, not
 4. **Actions and controls:** done (condition triggers, signals, pair controls, axis swap); what's left is under its heading.
 5. **MIDI:** knob lock, key-press note ranges, grid controllers (Push, Launchpad).
 6. **Audio:** built-in effects → a drum pad sampler layer → Audio Unit hosting → VST3 hosting.
-7. **Older open items:** a pop-out Present/Stage window, GPU recovery on Present/Stage, undo for Play, live sliders inside 3D groups.
+7. **Older open items:** the pop-out window is built as the output window (`projection.md`: a projector or second display, projection mapping, the Stage's Present canvas on it); left: test it on real projectors, a camera of its own for Camera layers there. GPU recovery on Present/Stage, undo for Play, live sliders inside 3D groups.
 8. **Waiting on the owner:** the licence service, payments and hosting (see `accounts-and-plans.md`), encrypted Pro code, the paper texture image.
 
 ## Finish stack follow-ups

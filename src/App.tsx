@@ -50,6 +50,7 @@ import type { Stage as StageT } from './components/play/Stage';
 import type { ConvertPage as ConvertPageT } from './components/convert/ConvertPage';
 import { requestConvert } from './components/convert/convertHandoff';
 import { useStage } from './components/play/stageStore';
+import { OutputButton } from './components/output/OutputButton';
 import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './components/KeyboardShortcutsModal';
 import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
 import type { FilesPage as FilesPageT } from './components/files/FilesPage';
@@ -1369,6 +1370,7 @@ function App() {
                 {page === 'play' && <GuidesToggle />}
                 {page === 'play' && <SplitButton />}
                 {page === 'play' && <Button size="sm" variant="ghost" icon="play" onClick={() => useStage.getState().open('full')} title="Stage: the picture and its controls on their own, as people will play with it (Full or Exact, phone or screen, fullscreen, Record)">Stage</Button>}
+                {page === 'play' && <OutputButton />}
                 <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
                 <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
               </PreviewHeader>

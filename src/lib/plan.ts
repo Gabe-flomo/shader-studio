@@ -49,6 +49,8 @@ export const FEATURES = {
   'play.audioFx': { plan: 'pro', label: 'Audio effects: reverb, echo, filter, distortion and compression on the sounds and the master bus' },
   'play.takes': { plan: 'pro', label: 'Recording performances as takes and rendering them frame by frame' },
   'play.midiFile': { plan: 'pro', label: 'Playing a MIDI file into Play' },
+  'play.output': { plan: 'pro', label: 'The output window: the picture alone on a projector or second display, full screen, in step with the app' },
+  'play.projection': { plan: 'pro', label: 'Projection mapping: corner pins, mesh warps, masks, edge blends and test patterns on the output' },
   convert: { plan: 'pro', label: 'Convert: GLSL into nodes' },
   'export.hires': { plan: 'pro', label: '2K and 4K video and image export' },
   'export.website': { plan: 'pro', label: 'Putting it on a website' },
