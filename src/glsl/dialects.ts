@@ -135,6 +135,21 @@ function matchParen(s: string, open: number): number { let d = 0; for (let i = o
 function matchBrace(s: string, open: number): number { let d = 0; for (let i = open; i < s.length; i++) { if (s[i] === '{') d++; else if (s[i] === '}' && --d === 0) return i; } return -1; }
 function splitTop(s: string, sep: string): string[] { const out: string[] = []; let d = 0, cur = ''; for (const c of s) { if (c === '(' || c === '[') d++; else if (c === ')' || c === ']') d--; if (c === sep && d === 0) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out; }
 
+/** Shadertoy uniforms as Studio expressions, applied in order (the swizzled forms first): pattern, replacement, note. */
+export const SHADERTOY_RENAMES: ReadonlyArray<readonly [RegExp, string, string]> = [
+  [/\biResolution\.xy\b/g, 'u_resolution', 'iResolution'],
+  [/\biResolution\.([xy])\b/g, 'u_resolution.$1', 'iResolution'],
+  [/\biResolution\b/g, 'vec3(u_resolution, 1.0)', 'iResolution'],
+  [/\biTime\b/g, 'u_time', 'iTime'],
+  [/\biGlobalTime\b/g, 'u_time', 'iGlobalTime'],
+  [/\biTimeDelta\b/g, '(1.0 / 60.0)', 'iTimeDelta (as 1/60)'],
+  [/\biFrame\b/g, 'int(u_time * 60.0)', 'iFrame (as an int, time × 60)'],
+  [/\biMouse\.xy\b/g, 'u_mouse', 'iMouse'],
+  [/\biMouse\.zw\b/g, 'vec2(0.0)', 'iMouse'],
+  [/\biMouse\b/g, 'vec4(u_mouse, 0.0, 0.0)', 'iMouse'],
+  [/\biDate\b/g, 'vec4(0.0)', 'iDate (as zero)'],
+];
+
 export function translateToStudio(source: string, options: TranslateOptions = {}): Translation {
   const dialect = detectDialect(source);
   const notes: string[] = []; const unsupported: string[] = [];
@@ -159,18 +174,7 @@ export function translateToStudio(source: string, options: TranslateOptions = {}
   // ── Shadertoy ─────────────────────────────────────────────────────────────
   if (dialect === 'shadertoy') {
     const renamed: string[] = [];
-    const rename = (re: RegExp, to: string, note: string) => { if (re.test(s)) { s = s.replace(re, to); renamed.push(note); } };
-    rename(/\biResolution\.xy\b/g, 'u_resolution', 'iResolution');
-    rename(/\biResolution\.([xy])\b/g, 'u_resolution.$1', 'iResolution');
-    rename(/\biResolution\b/g, 'vec3(u_resolution, 1.0)', 'iResolution');
-    rename(/\biTime\b/g, 'u_time', 'iTime');
-    rename(/\biGlobalTime\b/g, 'u_time', 'iGlobalTime');
-    rename(/\biTimeDelta\b/g, '(1.0 / 60.0)', 'iTimeDelta (as 1/60)');
-    rename(/\biFrame\b/g, 'int(u_time * 60.0)', 'iFrame (as an int, time × 60)');
-    rename(/\biMouse\.xy\b/g, 'u_mouse', 'iMouse');
-    rename(/\biMouse\.zw\b/g, 'vec2(0.0)', 'iMouse');
-    rename(/\biMouse\b/g, 'vec4(u_mouse, 0.0, 0.0)', 'iMouse');
-    rename(/\biDate\b/g, 'vec4(0.0)', 'iDate (as zero)');
+    for (const [re, to, note] of SHADERTOY_RENAMES) if (re.test(s)) { s = s.replace(re, to); renamed.push(note); }
     if (has(s, /\biChannel\d\b/)) {
       s = blackTextures(s).replace(/\biChannelResolution\b/g, 'vec3[4](vec3(1.0), vec3(1.0), vec3(1.0), vec3(1.0))');
       unsupported.push('iChannel textures read as black (no texture inputs yet)');

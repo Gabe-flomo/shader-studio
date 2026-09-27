@@ -26,10 +26,21 @@ then classified:
   and `u_mouse`, which every Studio shader has) is not self-contained. It is
   hidden unless *Allow shader globals* is on, and even then it can't be saved
   as it is: a library function has nowhere to get that state from. Const
-  globals don't count.
-- **#defines**: object-like macros a function uses (`PI`, a tuning constant,
-  and any macro those mention) are collected and prepended when it is saved.
-  Function-like macros are left where they are.
+  globals don't count (they travel with it, below).
+- **#defines and consts**: object-like macros and top-level `const`
+  declarations a function or its helpers use (`PI`, `const float F3 = …`, a
+  rotation matrix), and any macro or const those mention, are collected and
+  prepended when it is saved: defines first, then consts, each in file order.
+  A statement declaring several consts comes along whole. Function-like
+  macros are left where they are.
+- **Shadertoy uniforms**: a paste that reads `iTime`, `iResolution`,
+  `iMouse`, `iFrame`, `iTimeDelta`, `iDate` or `iGlobalTime` without declaring
+  them is still self-contained: the saved text rewrites them to the Studio
+  names the same way the Shadertoy import does (`iTime` → `u_time`,
+  `iResolution.xy` → `u_resolution`…). `iChannel0–3` and the other texture
+  inputs have no Studio counterpart and count as globals. A shader that
+  declares its own `uniform float iTime;` gets no rewrite: that is an ordinary
+  global.
 
 Byte-identical repeats across shaders (the same `hash()` pasted into ten
 files) are shown once; the subtitle says how many were hidden. `main` and
@@ -50,7 +61,7 @@ files) are shown once; the subtitle says how many were hidden. `main` and
 
 Each match shows its signature, a level badge (`L0`, `L1`… or `rec`), a
 *globals* badge when it reads its shader's state, and the shader it came
-from. Click a row to preview it: the code with its `#define`s and helpers
+from. Click a row to preview it: the code with its `#define`s, consts and helpers
 in file order, a name for the library, a comment (by default where it was
 found and what it brings), **Show in file** (opens that shader in the editor
 with the function selected) and **Keep**. Tick the ones to keep, or Select
@@ -59,7 +70,7 @@ all, then **Save N to Functions**.
 Saving makes one Custom Function preset per function
 (`saveCustomFnPreset` in the store): the node's inputs are the parameters,
 its output the return type, its body the call, and its helper block the
-defines, dependencies and the function itself. They appear in the palette's
+defines, consts, dependencies and the function itself. They appear in the palette's
 Functions section and in a Custom Function node's presets, like any preset
 saved from a node. A function can't be saved when it returns something other
 than float/vec2/vec3/vec4, takes a parameter type that can't be a socket

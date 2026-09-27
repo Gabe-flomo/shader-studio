@@ -54,6 +54,7 @@ const ROWS: Array<[string, string, string]> = [
   ['playPictureShape', 'The picture as a shape', 'The bright parts of the shader become solid.'],
   ['playGlowText', 'Glowing text and strokes', 'The Layers node: SDF Glow on whatever the layers draw.'],
   ['scriptFirst', 'Script: a first sketch', 'A JavaScript sketch over the shader: setup and draw, with sliders it declares.'],
+  ['script3D', 'Script: 3D on a 2D canvas', 'A lit torus, ball or cube turning over SDF Glow, projected and sorted in plain JavaScript.'],
   ['scriptMouse', 'Script: the mouse', 'A chain of beads chases s.mouse; hold the button to swell it.'],
   ['scriptPicture', 'Script: reading the picture', 'Dots land where the shader is bright: s.picture.brightness makes a stipple.'],
   ['scriptNulls', 'Script: nulls as handles', 'A string between two nulls, plucked by a third that follows the mouse.'],

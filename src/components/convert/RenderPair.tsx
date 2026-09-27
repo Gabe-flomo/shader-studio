@@ -17,7 +17,8 @@
  * every change (as this once did) left both pictures black from the second
  * shader on.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { onRebuild } from '../../lib/rebuild';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 
@@ -30,7 +31,7 @@ const ES3_PREFIX = ['#version 300 es', 'precision highp float;', 'precision high
 /** The prefix's lines come before line 1 of the shader: error lines are given back in the shader's own numbering. */
 const PREFIX_LINES = ES3_PREFIX.split('\n').length - 1;
 
-interface Side { gl: WebGLRenderingContext | WebGL2RenderingContext; es3: boolean; prog: WebGLProgram | null; error: string | null; locs: Map<string, WebGLUniformLocation | null>; ints: Set<string> }
+interface Side { gl: WebGLRenderingContext | WebGL2RenderingContext; es3: boolean; buf: WebGLBuffer | null; prog: WebGLProgram | null; error: string | null; locs: Map<string, WebGLUniformLocation | null>; ints: Set<string> }
 
 function context(canvas: HTMLCanvasElement): Side | null {
   const opts: WebGLContextAttributes = { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false };
@@ -39,7 +40,7 @@ function context(canvas: HTMLCanvasElement): Side | null {
   if (!gl) return null;
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   gl.disable(gl.DITHER);
-  return { gl, es3: !!gl2, prog: null, error: null, locs: new Map(), ints: new Set() };
+  return { gl, es3: !!gl2, buf, prog: null, error: null, locs: new Map(), ints: new Set() };
 }
 
 /** Compile `frag` into the side's program, replacing the previous one; null clears it. */
@@ -95,12 +96,36 @@ export function RenderPair({ original, graph, uniforms, originalUniforms, onDiff
   const a = useRef<HTMLCanvasElement>(null), b = useRef<HTMLCanvasElement>(null);
   const sides = useRef<{ A: Side | null; B: Side | null }>({ A: null, B: null });
 
+  // Bumped when both sides are built again from scratch (Rebuild, or a lost context coming back):
+  // the programs below follow it.
+  const [generation, setGeneration] = useState(0);
+
   // One context per canvas for the component's life.
   useEffect(() => {
     const s = sides.current;
     if (a.current && !s.A) s.A = context(a.current);
     if (b.current && !s.B) s.B = context(b.current);
+    // Everything made on a context (buffer, program) is made again; the context itself is kept.
+    const renew = () => {
+      for (const [key, canvas] of [['A', a.current], ['B', b.current]] as const) {
+        const old = s[key];
+        if (old && !old.gl.isContextLost()) { program(old, null); old.gl.deleteBuffer(old.buf); }
+        s[key] = canvas && !(old?.gl.isContextLost()) ? context(canvas) : old;
+      }
+      setGeneration(g => g + 1);
+    };
+    const unregister = onRebuild(() => { renew(); return ['the side-by-side previews']; });
+    // A lost context comes back only when the loss is prevented; then everything is made again.
+    const lost = (e: Event) => {
+      e.preventDefault();
+      // Its buffer and program went with the context: nothing to delete on restore.
+      for (const side of [s.A, s.B]) if (side && side.gl.canvas === e.target) { side.prog = null; side.buf = null; }
+    };
+    const canvases = [a.current, b.current].filter((c): c is HTMLCanvasElement => !!c);
+    for (const c of canvases) { c.addEventListener('webglcontextlost', lost); c.addEventListener('webglcontextrestored', renew); }
     return () => {
+      unregister();
+      for (const c of canvases) { c.removeEventListener('webglcontextlost', lost); c.removeEventListener('webglcontextrestored', renew); }
       for (const side of [s.A, s.B]) { if (side) { program(side, null); side.gl.getExtension('WEBGL_lose_context')?.loseContext(); } }
       s.A = null; s.B = null;
     };
@@ -142,7 +167,7 @@ export function RenderPair({ original, graph, uniforms, originalUniforms, onDiff
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [original, graph, uniforms, originalUniforms, size, onDiff]);
+  }, [original, graph, uniforms, originalUniforms, size, onDiff, generation]);
 
   const frame = { width: size, height: size, borderRadius: radius.md, background: '#000', display: 'block' } as const;
   const cap = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginTop: 4 };

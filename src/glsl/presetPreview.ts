@@ -49,7 +49,7 @@ export function presetRoles(p: PresetLike, memory: RoleMemory = {}): { roles: Pa
     id: 'preset', sourceId: 'preset', sourceName: 'preset', name: 'pv_preset', returnType: p.outputType,
     params: p.inputs.map(i => ({ name: i.name, type: i.type, qualifier: 'in' as const })),
     signature: '', text: `${p.outputType} pv_preset() {\n${p.body}\n}`, start: 0, end: 0, startLine: 1, endLine: 1,
-    calls: [], dependencies: [], level: 0, globals: [], defines: [], selfContained: true, callSites: [],
+    calls: [], dependencies: [], level: 0, globals: [], defines: [], consts: [], shadertoy: [], selfContained: true, callSites: [],
   };
   // The helper's own parameter names and body say more than the call does (roles go by position).
   const fn = helper ?? wrapper;

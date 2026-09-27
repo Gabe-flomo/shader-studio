@@ -64,9 +64,10 @@ import type { GroupPreset } from '../types/groupPreset';
 import type { SubgraphData } from '../types/nodeGraph';
 import { buildUserNodeDefinition, CODE_RETURN_PORT, type PublishUserNodeSpec, type PublishSource } from '../nodes/userNodes/publishUserNode';
 import { USER_NODE_DEFAULT_CATEGORY } from '../types/userNode';
-import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes } from '../nodes/userNodes/userNodeRegistry';
+import { registerUserNode, unregisterUserNode, getUserNode, exportUserNodes, importUserNodes, recompileUserNodes } from '../nodes/userNodes/userNodeRegistry';
+import { runRebuildHandlers } from '../lib/rebuild';
 import type { KeyframePreset } from '../types/keyframePreset';
-import { getNodeDefinition, getNodeDefinitionFor, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams } from '../nodes/definitions';
+import { getNodeDefinition, getNodeDefinitionFor, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams, clearNodeDefinitionCache } from '../nodes/definitions';
 import { paletteNodeCoeffs, STOP_PALETTE_MAX } from '../nodes/definitions/color';
 import { autoFitCosineStops, fitCosineStops } from '../lib/palette';
 import { compileGraph } from '../compiler/graphCompiler';
@@ -786,7 +787,21 @@ interface NodeGraphState {
   /** Undo (or redo) several steps in one go — one render and compile. Returns how many were taken. */
   undoSteps: (count: number) => number;
   redoSteps: (count: number) => number;
-  compile: () => void;
+  /**
+   * Compile the graph into the preview's shader. `force` (Rebuild) starts from scratch: the
+   * per-node definition cache and user nodes' compiled definitions are built again first, and
+   * every compile output is written even when the shader text came out the same.
+   */
+  compile: (opts?: { force?: boolean }) => void;
+  /**
+   * Rebuild: recompile the whole graph with every cache bypassed, clear the error board, then
+   * reset each live preview's GPU state (program, render targets, feedback/echo history,
+   * particles, textures). The graph, the clock, the Play setup and its layers are kept.
+   * Resolves to what was reset and the compile errors, if any.
+   */
+  rebuild: () => Promise<{ reset: string[]; errors: string[] }>;
+  /** Bumped by every rebuild() */
+  rebuildEpoch: number;
   loadExampleGraph: (name?: string) => Promise<void>;
   /** Put a graph built elsewhere (the GLSL → nodes converter) in place of the current one, undoably. */
   replaceGraph: (nodes: GraphNode[]) => void;
@@ -1473,6 +1488,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   glContextLost: false,
   previewStale: false,
   previewEpoch: 0,
+  rebuildEpoch: 0,
   pixelSample: null,
   hoveredParamHint: null,
   currentTime: 0,
@@ -4387,10 +4403,16 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
-  compile: () => {
+  compile: (opts) => {
     // A structural compile supersedes any debounced one still on the timer;
     // without this the timer fires later and runs an identical second compile.
     compilationService.cancelPending();
+    const force = opts?.force === true;
+    if (force) {
+      // From scratch: nothing the compiler reads is taken from an earlier compile.
+      clearNodeDefinitionCache();
+      recompileUserNodes();
+    }
     const { nodes, previewNodeId, activeGroupId } = get();
     let graphNodes: GraphNode[];
     if (previewNodeId) {
@@ -4487,9 +4509,18 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       particleSystems: result.particleSystems ?? [],
       nodeSlugMap: result.nodeSlugMap ?? new Map(),
       // Probe values are read from the compiled program, so they only go
-      // stale when the shader itself changed.
-      ...(shaderChanged ? { nodeProbeValues: null } : {}),
+      // stale when the shader itself changed (or the program is rebuilt).
+      ...(shaderChanged || force ? { nodeProbeValues: null } : {}),
     });
+  },
+
+  rebuild: async () => {
+    // The error board starts empty: what is left after this is what the rebuild found.
+    set(s => ({ glslErrors: [], glslErrorSource: null, previewStale: false, rebuildEpoch: s.rebuildEpoch + 1 }));
+    get().compile({ force: true });
+    const reset = await runRebuildHandlers();
+    const { compilationErrors, glslErrors } = get();
+    return { reset, errors: [...compilationErrors, ...glslErrors] };
   },
 
   updateParamUniforms: (updates) => {

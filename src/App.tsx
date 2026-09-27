@@ -20,6 +20,7 @@ import { AspectPicker, PreviewFooter, PreviewHeader } from './components/shell/P
 import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
+import { REBUILD_TOOLTIP, rebuildWithToast } from './components/shell/rebuildAction';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/page';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
@@ -563,6 +564,7 @@ function App() {
     fitView:        () => _fitViewCallback?.(),
     toggleCode:     () => setShowCode(v => !v),
     toggleRecord:   () => setShowExport(v => !v),
+    rebuild:        () => { void rebuildWithToast(); },
     addNode:        unlessScratch(() => setSearchPaletteOpen(true)),
     groupSelected:  unlessScratch(() => {
       const ids = useNodeGraphStore.getState().selectedNodeIds;
@@ -742,6 +744,7 @@ function App() {
           {glslErrors.map((err, i) => <div key={i} style={{ paddingLeft: '6px' }}>{err}</div>)}
         </div>
       )}
+      <Button size="sm" variant="ghost" icon="rebuild" title={REBUILD_TOOLTIP} onClick={() => { void rebuildWithToast(); }} style={{ marginTop: 6 }}>Rebuild</Button>
     </div>
   ) : null;
 
