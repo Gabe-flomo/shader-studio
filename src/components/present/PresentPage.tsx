@@ -18,6 +18,7 @@ import { exportPresentationPlayfile } from '../../playfile/app';
 import { openBackgrounds, openCapture } from '../backgrounds/backgroundsUi';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { paperStyle } from './paper';
+import { exitFullscreen, registerFullscreenTarget, useFullscreen } from '../../lib/fullscreen';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
@@ -81,6 +82,13 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
   const mode = usePresentation(s => s.mode);
   const list = usePresentationList();
   const rootRef = useRef<HTMLDivElement>(null);
+  // Full screen is the page itself, without its header; from Edit it opens Slides first. Back in Edit, or leaving the page, ends it.
+  const fullscreen = useFullscreen(s => s.target === 'present');
+  useEffect(() => {
+    registerFullscreenTarget('present', rootRef.current, () => { if (usePresentation.getState().mode === 'edit') usePresentation.getState().setMode('slides'); });
+    return () => { registerFullscreenTarget('present', null); if (useFullscreen.getState().target === 'present') void exitFullscreen(); };
+  }, []);
+  useEffect(() => { if (mode === 'edit' && useFullscreen.getState().target === 'present') void exitFullscreen(); }, [mode]);
   const [exporting, setExporting] = useState(false);
   const [browsing, setBrowsing] = useState(false);
 
@@ -113,8 +121,8 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
     <div ref={rootRef} {...(doc ? page.attrs : {})} style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark), color: tk.text.primary, font: `13px ${fontFamily.ui}`, ...(doc ? page.style : {}) }}>
       <style>{css}</style>
       {fonts && <style>{fonts}</style>}
-      <Header compact={compact} list={list} onExport={() => setExporting(true)} onBrowse={() => setBrowsing(true)} />
-      {!doc ? <EmptyState compact={compact} /> : mode === 'slides' ? <SlidesView ctx={ctx} rootRef={rootRef} /> : mode === 'scroll' ? <ScrollView ctx={ctx} /> : compact ? <EditPhone ctx={ctx} onNavigate={onNavigate} /> : <EditDesktop ctx={ctx} onNavigate={onNavigate} />}
+      {!fullscreen && <Header compact={compact} list={list} onExport={() => setExporting(true)} onBrowse={() => setBrowsing(true)} />}
+      {!doc ? <EmptyState compact={compact} /> : mode === 'slides' ? <SlidesView ctx={ctx} /> : mode === 'scroll' ? <ScrollView ctx={ctx} /> : compact ? <EditPhone ctx={ctx} onNavigate={onNavigate} /> : <EditDesktop ctx={ctx} onNavigate={onNavigate} />}
       {exporting && doc && <ExportDialog onClose={() => setExporting(false)} />}
       {browsing && <PresentationsDialog list={list} compact={compact} onClose={() => setBrowsing(false)} onNew={() => void newPresentation()} />}
     </div>

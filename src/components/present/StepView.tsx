@@ -4,11 +4,11 @@
  * also has the bar that adds blocks.
  */
 import { useMemo, useState } from 'react';
-import { newBlock, type BlockType, type PresentSource, type Step } from '../../types/presentation';
+import { newBlock, newId, type BlockType, type PresentSource, type Step } from '../../types/presentation';
+import { AddCodeDialog, type CodePick, type CodeRoute } from './AddCodeDialog';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
-import { Menu } from '../ui/Menu';
 import { BlockView, type BlockContext } from './Blocks';
 import { BLOCK_META } from './blockMeta';
 import { SourcePicker } from './Sources';
@@ -54,19 +54,35 @@ export function StepView({ step, index, ctx, total }: { step: Step; index: numbe
   );
 }
 
-/** Text, Render, Interactive, Code. The two canvas kinds ask which Play first. */
+/** What each button in the add bar says it makes. */
+const ADD_HINTS: Record<BlockType, string> = {
+  text: 'Words and maths',
+  render: 'A Play’s picture',
+  interactive: 'Picture, text and sliders',
+  code: 'GLSL with a live preview',
+};
+
+const CODE_ROUTES: Array<{ route: CodeRoute; label: string }> = [
+  { route: 'write', label: 'write your own' },
+  { route: 'functions', label: 'a function' },
+  { route: 'nodes', label: 'a node’s code' },
+  { route: 'shader', label: 'part of a shader' },
+];
+
+/** Text, Render, Interactive, Code. The canvas kinds ask which Play first; Code opens the Add code chooser. */
 function AddBlockBar({ compact, empty }: { compact: boolean; empty: boolean }) {
   const tk = useTokens();
   const addBlock = usePresentation(s => s.addBlock);
-  const sources = usePresentation(s => s.doc?.sources);
   const [picking, setPicking] = useState<BlockType | null>(null);
-  const [codeMenu, setCodeMenu] = useState<{ x: number; y: number } | null>(null);
+  const [coding, setCoding] = useState<CodeRoute | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const add = (type: BlockType, s?: PresentSource) => addBlock(newBlock(type, s));
+  const addCode = (p: CodePick) => addBlock({ type: 'code', id: newId('b'), ...p });
   const types: BlockType[] = ['text', 'render', 'interactive', 'code'];
+  const big = empty && !compact;
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: empty ? '36px 16px' : '14px 12px', borderRadius: radius.lg,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: empty ? '32px 16px' : '14px 12px', borderRadius: radius.lg,
       border: `1.5px dashed var(--pp-rule, ${tk.border.strong})`, background: empty ? alpha(tk.accent.base, 0.03) : 'transparent',
     }}>
       {empty && <div style={{ color: `var(--pp-muted, ${tk.text.muted})`, font: `500 13px ${fontFamily.ui}` }}>An empty step. Add a block:</div>}
@@ -76,20 +92,34 @@ function AddBlockBar({ compact, empty }: { compact: boolean; empty: boolean }) {
             key={t} type="button" title={BLOCK_META[t].hint}
             onClick={e => {
               if (t === 'text') add('text');
-              else if (t === 'code') { setAnchor(e.currentTarget); const r = e.currentTarget.getBoundingClientRect(); setCodeMenu({ x: r.left, y: r.bottom + 6 }); }
+              else if (t === 'code') setCoding('write');
               else { setAnchor(e.currentTarget); setPicking(t); }
             }}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 7, height: 34, padding: '0 13px 0 10px', borderRadius: radius.control, cursor: 'pointer',
-              border: `1px solid ${tk.border.default}`, background: tk.bg.panel, color: tk.text.secondary, font: `600 12.5px ${fontFamily.ui}`,
+              display: 'inline-flex', alignItems: 'center', gap: 7, height: big ? 48 : 34, padding: big ? '0 16px 0 12px' : '0 13px 0 10px', borderRadius: radius.control, cursor: 'pointer',
+              border: `1px solid ${tk.border.default}`, background: tk.bg.panel, color: tk.text.secondary, font: `600 12.5px ${fontFamily.ui}`, textAlign: 'left',
             }}
           >
             <Icon name="plus" size={13} style={{ color: tk.text.faint }} />
             <Icon name={BLOCK_META[t].icon} size={14} style={{ color: tk.accent.base }} />
-            {BLOCK_META[t].label}
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {BLOCK_META[t].label}
+              {big && <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>{ADD_HINTS[t]}</span>}
+            </span>
           </button>
         ))}
       </div>
+      {empty && (
+        <div style={{ color: `var(--pp-muted, ${tk.text.faint})`, font: `500 12px ${fontFamily.ui}`, textAlign: 'center' }}>
+          Or start with code:{' '}
+          {CODE_ROUTES.map((r, i) => (
+            <span key={r.route}>
+              {i > 0 && ' · '}
+              <button type="button" onClick={() => setCoding(r.route)} style={{ border: 0, padding: 0, background: 'none', cursor: 'pointer', color: `var(--pp-link, ${tk.accent.text})`, font: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}>{r.label}</button>
+            </span>
+          ))}
+        </div>
+      )}
       {picking && (
         <SourcePicker
           anchorRef={{ current: anchor }}
@@ -98,13 +128,9 @@ function AddBlockBar({ compact, empty }: { compact: boolean; empty: boolean }) {
           onClose={() => setPicking(null)}
         />
       )}
-      {codeMenu && (
-        <Menu x={codeMenu.x} y={codeMenu.y} onClose={() => setCodeMenu(null)} items={[
-          { label: 'Type it in', icon: 'edit', hint: 'GLSL or JavaScript of your own', onSelect: () => add('code') },
-          ...(sources?.length ? [{ label: 'From a source’s shader', icon: 'code' as const, hint: 'The generated GLSL, one node’s part of it, or a Script layer', onSelect: () => add('code', sources[sources.length - 1]) }] : []),
-          { label: 'From another Play…', icon: 'folder', onSelect: () => setPicking('code') },
-        ]} />
-      )}
+      {/* Clicks in the dialog (a portal) still bubble through here: keep them from the page, which would deselect the new block. */}
+      {coding && <span onClick={e => e.stopPropagation()}><AddCodeDialog compact={compact} initial={coding} onPick={addCode} onClose={() => setCoding(null)} /></span>}
     </div>
   );
 }
+

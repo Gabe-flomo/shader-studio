@@ -12,6 +12,7 @@
  * (a block whose source is gone, a malformed step) rather than failing.
  */
 import { parsePlayRecord, type PlayRecord } from './play';
+import { parseSourceCredit, type SourceCredit } from './credit';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
 import type { PlayHtmlInput, PlayMedia, PlayMediaFile, PlayPasses } from '../play/exportHtml';
 import type { WebDatasets } from '../play/dataExport';
@@ -109,6 +110,40 @@ export interface CodeBlock {
   live?: boolean;
   /** The edited code (live blocks), kept with the presentation; Reset drops it. */
   edited?: string;
+  /** Where typed-in code was taken from (the Add code chooser): shown in its header, with the credit under it. */
+  origin?: CodeOrigin;
+  /** A live picture of what the code does (present/snippetHarness.ts); absent: none. */
+  preview?: CodePreview;
+}
+
+/** Where a code block's text came from, when it was picked rather than typed. */
+export interface CodeOrigin {
+  kind: 'typed' | 'discovery' | 'node' | 'shader';
+  /** For the header: "fbm() · Functions library", "Circle SDF · node", "noise() · Rings". */
+  label?: string;
+  /** A line of credit under the code: "Found in “Waves”, lines 3–9". */
+  note?: string;
+  /** A linked credit (a Book of Shaders chapter), carried from the source it was taken from. */
+  credit?: SourceCredit;
+  /** The source it was quoted from: its uniforms and functions help the preview. */
+  source?: string;
+  /** The node type it shows. */
+  nodeType?: string;
+}
+
+/** A code block's preview: a graph of a float function, or its result as colour. */
+export interface CodePreview {
+  mode: 'plot' | 'field';
+  /** What to show: `fn:name`, `var:name` or `frag`; absent: the best guess. */
+  show?: string;
+  /** A vec2 drawn as red/green, a warped grid or arrows. */
+  view?: 'color' | 'grid' | 'arrows';
+  /** `uv` centred like the Studio, or 0 to 1 like The Book of Shaders. */
+  coords?: 'centered' | 'unit';
+  /** A plot's axes. */
+  range?: { x: [number, number]; y: [number, number] };
+  /** The sliders' values, by uniform. */
+  values?: Record<string, number>;
 }
 
 export type Block = TextBlock | RenderBlock | InteractiveBlock | CodeBlock;
@@ -372,6 +407,46 @@ function parseLines(v: unknown): [number, number][] | undefined {
   return out.length ? out.slice(0, 20) : undefined;
 }
 
+const ORIGIN_KINDS = new Set(['typed', 'discovery', 'node', 'shader']);
+function parseOrigin(v: unknown, sources: ReadonlyMap<string, PresentSource>): CodeOrigin | undefined {
+  if (!isObj(v) || typeof v.kind !== 'string' || !ORIGIN_KINDS.has(v.kind)) return undefined;
+  const o: CodeOrigin = { kind: v.kind as CodeOrigin['kind'] };
+  const label = str(v.label, 200), note = str(v.note, 400), nodeType = str(v.nodeType, 100);
+  if (label) o.label = label;
+  if (note) o.note = note;
+  if (nodeType) o.nodeType = nodeType;
+  const credit = parseSourceCredit(v.credit);
+  if (credit) o.credit = credit;
+  const source = idOf(v.source);
+  if (source && sources.has(source)) o.source = source;
+  return o;
+}
+
+function parseRange(v: unknown): [number, number] | null {
+  if (!Array.isArray(v) || v.length !== 2) return null;
+  const a = num(v[0]), b = num(v[1]);
+  return a !== null && b !== null && a < b ? [a, b] : null;
+}
+
+function parsePreview(v: unknown): CodePreview | undefined {
+  if (!isObj(v) || (v.mode !== 'plot' && v.mode !== 'field')) return undefined;
+  const p: CodePreview = { mode: v.mode };
+  const show = str(v.show, 200);
+  if (show) p.show = show;
+  if (v.view === 'color' || v.view === 'grid' || v.view === 'arrows') p.view = v.view;
+  if (v.coords === 'centered' || v.coords === 'unit') p.coords = v.coords;
+  if (isObj(v.range)) {
+    const x = parseRange(v.range.x), y = parseRange(v.range.y);
+    if (x && y) p.range = { x, y };
+  }
+  if (isObj(v.values)) {
+    const values: Record<string, number> = {};
+    for (const [k, x] of Object.entries(v.values).slice(0, 64)) { const n = num(x); if (n !== null && /^[A-Za-z_]\w{0,80}$/.test(k)) values[k] = n; }
+    if (Object.keys(values).length) p.values = values;
+  }
+  return p;
+}
+
 function parseBlock(v: unknown, sources: ReadonlyMap<string, PresentSource>): Block | null {
   if (!isObj(v)) return null;
   const id = idOf(v.id);
@@ -435,6 +510,10 @@ function parseBlock(v: unknown, sources: ReadonlyMap<string, PresentSource>): Bl
       if (lines) b.highlightLines = lines;
       const caption = str(v.caption, 400);
       if (caption) b.caption = caption;
+      const origin = parseOrigin(v.origin, sources);
+      if (origin) b.origin = origin;
+      const preview = b.language === 'glsl' ? parsePreview(v.preview) : undefined;
+      if (preview) b.preview = preview;
       // Live only for a Script layer's code; the edit travels with it.
       if (v.live === true && b.from && 'layerId' in b.from) {
         b.live = true;

@@ -5,5 +5,5 @@ export const BLOCK_META: Record<Block['type'], { label: string; icon: 'text' | '
   text: { label: 'Text', icon: 'text', hint: 'Markdown with $maths$' },
   render: { label: 'Render', icon: 'layoutCanvas', hint: 'A Play’s picture, no controls' },
   interactive: { label: 'Interactive', icon: 'sliders', hint: 'Text, a picture and some of its controls' },
-  code: { label: 'Code', icon: 'code', hint: 'GLSL or JavaScript, typed or from a Play' },
+  code: { label: 'Code', icon: 'code', hint: 'GLSL or JavaScript: write it, or take it from a function, a node or a shader, with a live preview' },
 };
