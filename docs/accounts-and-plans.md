@@ -159,7 +159,16 @@ Today there are several: `.present.json`, play files, library ZIPs, graph JSON,
 9. **Browser:** signing in on the web app is a session, so it doesn't use up
    one of the 5 device activations. It re-verifies on each visit, and the Pro
    code is served only after sign-in (section 9).
-10. **Still open:** a trial for Pro? (Suggestion: 14 days of full Pro on the
+10. **Encrypt the Pro code: yes.**
+   - **Desktop:** the build ships the Pro-only parts encrypted: Play layers and
+     the full Play sources, Convert, the 2K/4K and website exporters, node
+     publishing and pack sealing. The Rust side decrypts them only while the
+     licence token is valid (layers 2 and 3 in section 9).
+   - **Browser:** the web app never downloads Pro code until you've signed in,
+     so it simply isn't there to patch.
+   - This means the Pro features have to be split into their own
+     separately-loaded code chunks. That's part of the feature-gates milestone.
+11. **Still open:** a trial for Pro? (Suggestion: 14 days of full Pro on the
    first sign-in, once per account.)
 
 ## 9. How far protection can go
@@ -219,6 +228,9 @@ sign-in.
    link to the store.
 2. **Feature gates:** a single `can(feature)` check with Pro badges, the Pro
    sheet, the video-resolution cap, locked Play sources and layers, and Convert.
+   Pro features move into their own lazily-loaded code chunks. The desktop
+   build encrypts those chunks, and Rust decrypts them for a valid licence.
+   The web app serves them only after sign-in.
 3. **The `.playfield` container:** manifest, open-anything, bundles, and
    migration of the old formats (they still open).
 4. **Node packs:** export with signing and optional sealing; import on Free.
