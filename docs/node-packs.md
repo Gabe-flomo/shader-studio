@@ -59,7 +59,10 @@ type is deleted.
   stays), or *Edit* (reopens the node builder on its source; publishing again
   updates the node type in place).
 - **Extras:** saved graphs (examples), presentations, GLSL shaders from the
-  GLSL page, background images, and notes (markdown). The workspace
+  GLSL page, background images, notes (markdown), and **Finish effects** (custom
+  effects from Your effects, carried in the nodes item's `finishEffects`,
+  sealed when the pack is; see finish-stack.md). A pack can hold only Finish
+  effects. The workspace
   **suggests** the graphs the nodes came from (*Include the graphs these nodes
   came from*) and the presentations linked to included or suggested graphs
   (`linkedPresentations`, by id or name).

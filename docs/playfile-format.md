@@ -39,7 +39,7 @@ README.txt                         a note for someone who unzips it
 graphs/<Name>.graph.json           a graph file, exactly what "Export as readable JSON" writes
 plays/<Name>.play.json             a Play file (a graph with kind "shader-studio-play")
 presentations/<Title>.present.json a presentation, pictures and fonts embedded
-nodes/<Pack>.nodes.json            a node pack: { "version": 1, "nodes": [UserNodeDefinition…] }
+nodes/<Pack>.nodes.json            a node pack: { "version": 1, "nodes": [UserNodeDefinition…], "finishEffects"?: [custom Finish effects] }
 glsl/<Name>.glsl                   a GLSL shader, plain text
 backgrounds/<Name>.<png|jpg|…>     a background image, as the picture file
 library/<Name>.library.json        a Library snapshot: presets, functions, scripts, palettes…
@@ -87,7 +87,7 @@ for a path, but the item's real name is the manifest's `name`.
 | `graph` | saved graph; opened in the Studio when it's the file's one graph | keep both (`Name (2)`) or replace (yours becomes an earlier version) |
 | `play` | saved graph; opened on Play | the same |
 | `presentation` | saved presentation, marked as imported (its Script layers run sandboxed); embedded pictures move into the backgrounds library | keep both or replace |
-| `nodes` | each node type registered (sealed ones stay sealed); rows per node type | replace (updating a node you have, the default) or keep both (a new id and GLSL function name) |
+| `nodes` | each node type registered (sealed ones stay sealed); rows per node type. Custom Finish effects in its `finishEffects` go into Your effects (a row each, "Finish effect") | replace (updating a node you have, the default) or keep both (a new id and GLSL function name; an effect gets a new id and name) |
 | `glsl` | added to the GLSL page's list, with its note and folder | keep both or replace the code |
 | `background` | added to the backgrounds library | — (same name and size is "already here") |
 | `library` | merged like Install's Merge: nothing of yours is overwritten, clashing presets come in as `Name (2)` | automatic |
