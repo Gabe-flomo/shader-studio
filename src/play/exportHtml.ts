@@ -31,6 +31,7 @@ import handsSource from './kit/hands.js?raw';
 import queueSource from './kit/queue.js?raw';
 import mattesSource from './kit/mattes.js?raw';
 import kitSource from './kit/kit.js?raw';
+import { applyGroupVisibility } from '../types/layerGroups';
 import { BACKGROUND_VIDEO_KEEP, backgroundLayerOf, usesHands, type PlayRecord } from '../types/play';
 import type { HandAssets } from './handExport';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
@@ -237,7 +238,9 @@ function runtimeMedia(m: PlayMedia) {
 export function playBundle(input: PlayHtmlInput) {
   const aspect = PREVIEW_ASPECTS.find(a => a.id === input.aspect);
   // Notes are for the author and learners in the app; the website player never shows them.
-  const play = { ...input.play };
+  // Layer groups are for the list: the page gets their one effect (a hidden group's layers are hidden) and not the groups.
+  const play = { ...applyGroupVisibility(input.play) };
+  delete play.groups;
   delete play.notes;
   // The credit is printed into the page's HTML where the page shows it (a presentation); the player never reads it.
   delete play.source;

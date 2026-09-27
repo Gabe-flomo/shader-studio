@@ -16,6 +16,7 @@ import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
 import type { BackgroundItem } from '../types/play';
 import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
+import { applyGroupVisibility } from '../types/layerGroups';
 import { layersUniforms, setLayersTap } from '../play/layersTexture';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
@@ -2110,7 +2111,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // What plays is the record with any solo applied (the Play page's S buttons); the store keeps the real one.
     const feedPlay = () => {
       const ui = usePlayUi.getState();
-      const shown = applySolo(lastPlay, ui.soloLayers, ui.soloMappings);
+      const shown = applySolo(applyGroupVisibility(lastPlay), ui.soloLayers, ui.soloMappings);
       playEngine.setRecord(shown);
       playOverlay.setRecord(shown);
       requestRenderRef.current();

@@ -12,7 +12,7 @@ import { dropMatteRefs } from '../../play/mattes';
 
 /** Remove a layer and the controls, mappings and actions that read or drive it. */
 export function removeLayer(p: PlayRecord, id: string): PlayRecord {
-  const controls = p.controls.filter(c => !c.target.startsWith(`layer:${id}::`));
+  const controls = p.controls.filter(c => !c.target.startsWith(`layer:${id}::`) && !c.target.startsWith(`act:${id}::`));
   const ids = new Set(controls.map(c => c.id));
   const out: PlayRecord = {
     ...p,
@@ -44,7 +44,9 @@ export function duplicateLayer(p: PlayRecord, id: string): { play: PlayRecord; i
   if (typeof copy.x === 'number' && typeof copy.y === 'number') { copy.x = Math.min(1, (copy.x as number) + 0.03); copy.y = Math.max(0, (copy.y as number) - 0.03); }
   const layers = [...p.layers];
   layers.splice(i + 1, 0, copy as unknown as PlayLayer);
-  return { play: { ...p, layers }, id: copy.id as string };
+  // In a group, the copy joins it.
+  const groups = p.groups?.map(g => (g.layers.includes(id) ? { ...g, layers: [...g.layers, copy.id as string] } : g));
+  return { play: { ...p, layers, ...(groups ? { groups } : {}) }, id: copy.id as string };
 }
 
 /** Every setting back to the kind's default; the name, the id (so controls and mappings still reach it), visibility, the matte and the masks stay. */
@@ -65,6 +67,7 @@ function keepMatteAndMasks(from: PlayLayer, to: PlayLayer): PlayLayer {
   return out as unknown as PlayLayer;
 }
 
+/** One step in the flat draw order. With groups in the list, use moveItem (groupOps.ts), which moves among neighbours. */
 export function moveLayer(p: PlayRecord, id: string, dir: -1 | 1): PlayRecord {
   const i = p.layers.findIndex(l => l.id === id), j = i + dir;
   if (i < 0 || j < 0 || j >= p.layers.length) return p;

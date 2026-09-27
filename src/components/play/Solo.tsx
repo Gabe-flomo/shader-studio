@@ -10,16 +10,27 @@ import { Tooltip } from '../ui/Tooltip';
 import { usePlayUi } from './playUi';
 
 export function SoloButton({ kind, id }: { kind: 'layer' | 'mapping'; id: string }) {
-  const tk = useTokens();
   const on = usePlayUi(s => (kind === 'layer' ? s.soloLayers : s.soloMappings).has(id));
   const toggle = usePlayUi(s => s.toggleSolo);
+  return <SoloKey on={on} onClick={() => toggle(kind, id)} description={kind === 'layer' ? 'Show only soloed layers (nulls stay). Just for looking: nothing is saved.' : 'Run only soloed mappings. Just for looking: nothing is saved.'} />;
+}
+
+/** A group's S: solos every layer in it (on when they all are). */
+export function GroupSoloButton({ ids }: { ids: readonly string[] }) {
+  const on = usePlayUi(s => ids.length > 0 && ids.every(id => s.soloLayers.has(id)));
+  const set = usePlayUi(s => s.soloLayersSet);
+  return <SoloKey on={on} onClick={() => set(ids, !on)} description="Show only this group’s layers (and anything else soloed). Just for looking: nothing is saved." />;
+}
+
+function SoloKey({ on, onClick, description }: { on: boolean; onClick: () => void; description: string }) {
+  const tk = useTokens();
   return (
-    <Tooltip label={on ? 'Unsolo' : 'Solo'} description={kind === 'layer' ? 'Show only soloed layers (nulls stay). Just for looking: nothing is saved.' : 'Run only soloed mappings. Just for looking: nothing is saved.'}>
+    <Tooltip label={on ? 'Unsolo' : 'Solo'} description={description}>
       <button
         type="button"
         aria-pressed={on}
         aria-label={on ? 'Unsolo' : 'Solo'}
-        onClick={() => toggle(kind, id)}
+        onClick={onClick}
         style={{
           width: 22, height: 22, flexShrink: 0, border: 0, borderRadius: 5, cursor: 'pointer', padding: 0,
           background: on ? tk.status.warning : tk.bg.field, color: on ? '#1b1b1b' : tk.text.muted, font: `700 10.5px ${fontFamily.ui}`,
