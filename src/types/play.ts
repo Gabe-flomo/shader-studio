@@ -425,7 +425,35 @@ export interface BackgroundImage {
   name: string;
   /** A data URL (PNG, JPEG or WebP), scaled to BACKGROUND_IMAGE_SIDE at most. */
   src: string;
+  /**
+   * The image background it came from (lib/backgroundLibrary.ts), when it came
+   * from the library: the picture itself is always embedded in `src` (so a
+   * shared setup works anywhere); the id relinks it where that library is.
+   */
+  libraryId?: string;
 }
+
+/** One colour stop of a gradient or palette: where it sits (0..1) and its colour (0..1 RGB). */
+export interface ColourStop { pos: number; color: [number, number, number] }
+
+/**
+ * A gradient or a palette painted in place of the flat Colour background:
+ * `style` gradient blends between the stops, bands holds each stop's colour
+ * up to the next one; `angle` is CSS's (0 = bottom to top, 90 = left to
+ * right, 180 = top to bottom). At most PLAY_FILL_STOPS_MAX stops.
+ */
+export interface BackgroundFill {
+  style: 'gradient' | 'bands';
+  stops: ColourStop[];
+  angle: number;
+  /** The library palette (or built-in preset) it was picked from, for the picker to show it chosen. */
+  paletteId?: string;
+  /** That palette's name when picked. */
+  name?: string;
+}
+
+/** Stops a Play background's gradient or palette keeps (the Studio's Palette node keeps its own 32). */
+export const PLAY_FILL_STOPS_MAX = 8;
 
 export interface BackgroundVideo {
   name: string;
@@ -451,6 +479,13 @@ export interface PlayDisplay {
   fit?: BackgroundFit;
   image?: BackgroundImage;
   video?: BackgroundVideo;
+  /**
+   * With source 'colour': paint `fill` as a gradient or as a palette (picked
+   * from the library) instead of the flat backdrop colour. Absent = solid.
+   * The fill is kept while Solid is chosen, so switching back finds it.
+   */
+  colourMode?: 'gradient' | 'palette';
+  fill?: BackgroundFill;
 }
 
 export interface PlayRecord {
@@ -607,6 +642,46 @@ export function pictureHidden(display: PlayDisplay | undefined): boolean {
   return display?.picture === false && backgroundSource(display) !== 'colour';
 }
 
+/** The fill the Colour background paints now, or null for the flat colour. */
+export function activeFill(display: PlayDisplay | undefined): BackgroundFill | null {
+  return display && backgroundSource(display) === 'colour' && display.colourMode && display.fill && display.fill.stops.length ? display.fill : null;
+}
+
+/**
+ * At most `max` stops: more are resampled evenly along the same colours (so a
+ * 32-stop palette keeps its look in 8), sorted by position, clamped to 0..1.
+ */
+export function fitStops(stops: readonly ColourStop[], max = PLAY_FILL_STOPS_MAX): ColourStop[] {
+  const sorted = stops
+    .filter(s => s && Array.isArray(s.color))
+    .map(s => ({ pos: Math.max(0, Math.min(1, Number.isFinite(s.pos) ? s.pos : 0)), color: rgb(s.color, [0, 0, 0]) }))
+    .sort((a, b) => a.pos - b.pos);
+  if (sorted.length <= max) return sorted;
+  const at = (t: number): [number, number, number] => {
+    if (t <= sorted[0].pos) return [...sorted[0].color];
+    for (let i = 1; i < sorted.length; i++) {
+      const a = sorted[i - 1], b = sorted[i];
+      if (t <= b.pos) { const k = b.pos > a.pos ? (t - a.pos) / (b.pos - a.pos) : 1; return [0, 1, 2].map(j => a.color[j] + (b.color[j] - a.color[j]) * k) as [number, number, number]; }
+    }
+    return [...sorted[sorted.length - 1].color];
+  };
+  const lo = sorted[0].pos, hi = sorted[sorted.length - 1].pos;
+  return Array.from({ length: max }, (_, i) => { const pos = lo + ((hi - lo) * i) / Math.max(1, max - 1); return { pos, color: at(pos) }; });
+}
+
+/** A fill from a file, or undefined when it has no usable stops. At most `max` stops (resampled). */
+export function parseFill(raw: unknown, max = PLAY_FILL_STOPS_MAX): BackgroundFill | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const f = raw as Record<string, unknown>;
+  const stops = fitStops(Array.isArray(f.stops) ? (f.stops as unknown[]).filter((s): s is ColourStop => !!s && typeof s === 'object' && Array.isArray((s as ColourStop).color)).map(s => ({ pos: typeof s.pos === 'number' ? s.pos : 0, color: s.color })) : [], max);
+  if (!stops.length) return undefined;
+  const angle = typeof f.angle === 'number' && Number.isFinite(f.angle) ? ((f.angle % 360) + 360) % 360 : 180;
+  const out: BackgroundFill = { style: f.style === 'bands' ? 'bands' : 'gradient', stops, angle };
+  if (typeof f.paletteId === 'string' && f.paletteId) out.paletteId = f.paletteId.slice(0, 80);
+  if (typeof f.name === 'string' && f.name.trim()) out.name = f.name.slice(0, 120);
+  return out;
+}
+
 /** Where a video background is at `time` seconds of the graph clock. */
 export function videoTimeAt(time: number, duration: number, rate: number, loop: boolean): number {
   if (!(duration > 0) || !Number.isFinite(duration)) return 0;
@@ -628,7 +703,11 @@ export function parseDisplay(raw: unknown): PlayDisplay | undefined {
   const im = d.image as Record<string, unknown> | undefined;
   if (im && typeof im === 'object' && typeof im.src === 'string' && im.src.length <= BACKGROUND_IMAGE_MAX && DATA_IMAGE.test(im.src)) {
     out.image = { name: typeof im.name === 'string' && im.name.trim() ? im.name.slice(0, 120) : 'Image', src: im.src };
+    if (typeof im.libraryId === 'string' && im.libraryId) out.image.libraryId = im.libraryId.slice(0, 80);
   }
+  const fill = parseFill(d.fill);
+  if (fill) out.fill = fill;
+  if (fill && (d.colourMode === 'gradient' || d.colourMode === 'palette')) out.colourMode = d.colourMode;
   const vi = d.video as Record<string, unknown> | undefined;
   if (vi && typeof vi === 'object' && typeof vi.name === 'string' && vi.name) {
     const src = typeof vi.src === 'string' && vi.src.length <= BACKGROUND_VIDEO_MAX && DATA_VIDEO.test(vi.src) ? vi.src : '';
@@ -643,7 +722,7 @@ export function parseDisplay(raw: unknown): PlayDisplay | undefined {
 
 /** Nothing to save: the shader, shown, on black, with no media kept. */
 export function isDefaultDisplay(d: PlayDisplay): boolean {
-  return d.picture && !d.source && !d.image && !d.video && !d.fit && d.backdrop.every((v, i) => v === DEFAULT_DISPLAY.backdrop[i]);
+  return d.picture && !d.source && !d.image && !d.video && !d.fit && !d.fill && !d.colourMode && d.backdrop.every((v, i) => v === DEFAULT_DISPLAY.backdrop[i]);
 }
 
 export const PLAY_VERSION = 1 as const;

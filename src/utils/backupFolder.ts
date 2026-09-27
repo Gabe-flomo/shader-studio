@@ -19,6 +19,7 @@
  */
 import { describeSnapshot, importLibrary, isLibraryKey, isSnapshot, LIBRARY_FILE, LIBRARY_REFRESH_EVENTS, readableFiles, takeSnapshot, type ImportResult, type LibrarySnapshot } from './library';
 import { toast } from '../components/ui/toastStore';
+import { backgroundZipFiles, backgroundsSignature, importBackgroundFiles, subscribe as onBackgroundsChange, BACKGROUNDS_MANIFEST } from '../lib/backgroundLibrary';
 
 export type BackupSupport = 'desktop' | 'browser' | 'none';
 
@@ -38,7 +39,9 @@ const DIR_KEY = 'shader-studio:settings:backupDir';
 const HISTORY_KEEP = 14;
 const DEBOUNCE_MS = 4000;
 /** Top-level entries the readable files use: cleared before rewriting so deleted things don't linger. */
-const READABLE_ROOTS = ['graphs', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'presentations', 'palettes.json', 'glsl shaders.json', 'settings.json'];
+const READABLE_ROOTS = ['graphs', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'presentations', 'palettes.json', 'background palettes.json', 'glsl shaders.json', 'settings.json'];
+/** Image backgrounds (IndexedDB, not library.json): their manifest and files, rewritten when the list changes. */
+const BACKGROUNDS_DIR = 'backgrounds';
 const README = `Playfield backup
 
 Playfield keeps this folder up to date with everything you save.
@@ -46,6 +49,7 @@ Playfield keeps this folder up to date with everything you save.
 library.json      everything, exactly: Preferences → Library → Restore reads it
 history/          a copy of library.json per day, the last ${HISTORY_KEEP} days
 graphs/ …         the same things as separate files, to browse or share
+backgrounds/      image backgrounds as picture files (Restore brings them back too)
 
 Don't edit library.json by hand; the readable files are copies.
 `;
@@ -58,6 +62,9 @@ export interface Target {
   read(path: string): Promise<string | null>;
   remove(path: string): Promise<void>;
   list(dir: string): Promise<string[]>;
+  /** Binary files (image backgrounds). A target without them skips those. */
+  writeBytes?(path: string, bytes: Uint8Array): Promise<void>;
+  readBytes?(path: string): Promise<Uint8Array | null>;
 }
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -77,6 +84,12 @@ async function desktopTarget(base: string): Promise<Target> {
     async read(p) { const f = await full(p); return (await fs.exists(f)) ? fs.readTextFile(f) : null; },
     async remove(p) { const f = await full(p); if (await fs.exists(f)) await fs.remove(f, { recursive: true }); },
     async list(dir) { const f = await full(dir); return (await fs.exists(f)) ? (await fs.readDir(f)).map(e => e.name) : []; },
+    async writeBytes(p, bytes) {
+      const parts = p.split('/');
+      if (parts.length > 1) await fs.mkdir(await join(base, ...parts.slice(0, -1)), { recursive: true });
+      await fs.writeFile(await full(p), bytes);
+    },
+    async readBytes(p) { const f = await full(p); return (await fs.exists(f)) ? fs.readFile(f) : null; },
   };
 }
 
@@ -84,7 +97,7 @@ async function desktopTarget(base: string): Promise<Target> {
 export interface DirHandle {
   name: string;
   getDirectoryHandle(name: string, o?: { create?: boolean }): Promise<DirHandle>;
-  getFileHandle(name: string, o?: { create?: boolean }): Promise<{ getFile(): Promise<File>; createWritable(): Promise<{ write(d: string): Promise<void>; close(): Promise<void> }> }>;
+  getFileHandle(name: string, o?: { create?: boolean }): Promise<{ getFile(): Promise<File>; createWritable(): Promise<{ write(d: string | BufferSource | Blob): Promise<void>; close(): Promise<void> }> }>;
   removeEntry(name: string, o?: { recursive?: boolean }): Promise<void>;
   keys(): AsyncIterable<string>;
   queryPermission(o: { mode: 'readwrite' }): Promise<PermissionState>;
@@ -115,6 +128,17 @@ function browserTarget(root: DirHandle): Target {
     },
     async list(dir) {
       try { const d = await dirOf(dir.split('/'), false); const out: string[] = []; for await (const k of d.keys()) out.push(k); return out; } catch { return []; }
+    },
+    async writeBytes(p, bytes) {
+      const parts = p.split('/');
+      const d = await dirOf(parts.slice(0, -1), true);
+      const w = await (await d.getFileHandle(parts[parts.length - 1], { create: true })).createWritable();
+      const copy = new Uint8Array(bytes.byteLength); copy.set(bytes);
+      await w.write(copy);
+      await w.close();
+    },
+    async readBytes(p) {
+      try { const parts = p.split('/'); const d = await dirOf(parts.slice(0, -1), false); return new Uint8Array(await (await (await d.getFileHandle(parts[parts.length - 1])).getFile()).arrayBuffer()); } catch { return null; }
     },
   };
 }
@@ -154,6 +178,7 @@ export function onBackupStatus(cb: (s: BackupStatus) => void): () => void { list
 let timer = 0;
 let lastLibrary = '';
 let lastReadable = '';
+let lastBackgrounds = '';
 let writing = false;
 let again = false;
 
@@ -193,6 +218,7 @@ export async function backupNow(force = false): Promise<void> {
       lastReadable = readableSig;
     }
     if (settingsFile) await target.write('settings.json', settingsFile);
+    await writeBackgrounds(force);
     const old = (await target.list('history')).filter(n => /^library-\d{4}-\d{2}-\d{2}\.json$/.test(n)).sort().slice(0, -HISTORY_KEEP);
     for (const n of old) await target.remove(`history/${n}`);
     lastLibrary = libText;
@@ -204,6 +230,36 @@ export async function backupNow(force = false): Promise<void> {
     writing = false;
     if (again) { again = false; schedule(); }
   }
+}
+
+/** The image backgrounds' files, when they changed since the last write (or `force`). */
+async function writeBackgrounds(force: boolean): Promise<void> {
+  if (!target?.writeBytes) return;
+  const sig = await backgroundsSignature();
+  if (!force && sig === lastBackgrounds) return;
+  const files = await backgroundZipFiles();
+  // Never clear the folder's images because this browser's list came back empty (a store that couldn't open).
+  if (!Object.keys(files).length && sig === '[]' && !force) { lastBackgrounds = sig; return; }
+  await target.remove(BACKGROUNDS_DIR);
+  for (const [p, b] of Object.entries(files)) await target.writeBytes(p, b);
+  lastBackgrounds = sig;
+}
+
+/** The folder's image backgrounds back into this browser (ids kept; ones already here left alone). */
+async function restoreBackgrounds(): Promise<number> {
+  if (!target?.readBytes) return 0;
+  const m = await target.readBytes(BACKGROUNDS_MANIFEST);
+  if (!m) return 0;
+  const files: Record<string, Uint8Array> = { [BACKGROUNDS_MANIFEST]: m };
+  try {
+    const manifest = JSON.parse(new TextDecoder().decode(m)) as { images?: Array<{ file?: string }> };
+    for (const e of manifest.images ?? []) {
+      if (typeof e?.file !== 'string') continue;
+      const b = await target.readBytes(`${BACKGROUNDS_DIR}/${e.file}`);
+      if (b) files[`${BACKGROUNDS_DIR}/${e.file}`] = b;
+    }
+  } catch { return 0; }
+  return (await importBackgroundFiles(files)).added;
 }
 
 function schedule(): void {
@@ -221,11 +277,13 @@ function hookStorage(): void {
   Storage.prototype.setItem = function (this: Storage, k: string, v: string) { setItem.call(this, k, v); if (this === localStorage && isLibraryKey(k) && k !== DIR_KEY) schedule(); };
   Storage.prototype.removeItem = function (this: Storage, k: string) { removeItem.call(this, k); if (this === localStorage && isLibraryKey(k)) schedule(); };
   window.addEventListener('pagehide', () => { if (timer) { window.clearTimeout(timer); void backupNow(); } });
+  // Image backgrounds are in IndexedDB, which Storage doesn't see: they say when they change.
+  onBackgroundsChange(schedule);
 }
 
 async function connect(t: Target): Promise<void> {
   target = t;
-  lastLibrary = ''; lastReadable = '';
+  lastLibrary = ''; lastReadable = ''; lastBackgrounds = '';
   set({ folder: t.label, needsPermission: false, error: null });
   hookStorage();
   await backupNow();
@@ -324,10 +382,12 @@ export async function restoreFromFolder(): Promise<ImportResult | null> {
   const lib = await folderLibrary();
   if (!lib) { toast.error('No library in the backup folder yet'); return null; }
   const r = importLibrary(lib);
+  let images = 0;
+  try { images = await restoreBackgrounds(); } catch (e) { console.warn('[backup] restoring image backgrounds failed', e); }
   for (const ev of LIBRARY_REFRESH_EVENTS) window.dispatchEvent(new Event(ev));
   set({ canRestore: false });
   toast.success('Restored from the backup folder', {
-    message: `${r.added} added${r.renamed.length ? `, ${r.renamed.length} as “… (imported)”` : ''}. Reload to load published nodes and settings.`,
+    message: `${r.added} added${images ? ` and ${images} image background${images === 1 ? '' : 's'}` : ''}${r.renamed.length ? `, ${r.renamed.length} as “… (imported)”` : ''}. Reload to load published nodes and settings.`,
     action: { label: 'Reload', onClick: () => location.reload() },
     sticky: true,
   });

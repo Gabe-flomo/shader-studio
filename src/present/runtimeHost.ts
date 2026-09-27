@@ -24,6 +24,8 @@ export interface PlayMountOptions {
   paused?: boolean;
   pauseOffscreen?: boolean;
   maxDpr?: number;
+  /** Draw exactly this many pixels, however big the box is on screen (a capture shown scaled down). */
+  pixelSize?: { w: number; h: number };
   /** Each Script layer's state after it compiles or runs: null when fine, else what broke. */
   onScript?: (layerId: string, error: string | null) => void;
 }
@@ -41,6 +43,13 @@ export interface PlayMount {
   usesCamera?: boolean;
   /** Replace one Script layer's code in this mount only. */
   setScript?(layerId: string, code: string): void;
+  /**
+   * Draw the frame at `t` seconds, deterministically: the clock stops and the
+   * picture holds until play(). Layers and feedback start over and are stepped
+   * through `steps` (captureSteps in lib/backgroundLibrary.ts) at `dt` first.
+   * With `capture`, returns the picture with its layers as one canvas.
+   */
+  renderAt?(t: number, o?: { steps?: number[]; dt?: number; seed?: number; capture?: boolean }): HTMLCanvasElement | null;
 }
 
 interface PlayRuntime {
@@ -59,7 +68,7 @@ declare global {
 
 /** The runtime, evaluated on first use. */
 export function playRuntime(): PlayRuntime {
-  if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 5) {
+  if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 7) {
     // The same text the web export inlines: the kit first, then the player.
     new Function(`${kitScript()}\n${runtimeSource}`)();
   }

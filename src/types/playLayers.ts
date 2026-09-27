@@ -621,6 +621,8 @@ export interface BackgroundItem {
   mode?: '2d' | '3d';
   /** image, video: the file as a data URL (a video too big to keep has '' and plays this session only). */
   src?: string;
+  /** image: the image background it came from (lib/backgroundLibrary.ts), kept for relinking; `src` always carries the picture. */
+  libraryId?: string;
   /** video: its size in bytes, and how it plays. */
   bytes?: number;
   loop?: boolean;
@@ -685,7 +687,11 @@ function parseBackgroundItem(raw: unknown): BackgroundItem | null {
       break;
     }
     case 'script': out.code = typeof r.code === 'string' ? r.code.slice(0, 200_000) : ''; if (r.mode === '3d') out.mode = '3d'; break;
-    case 'image': if (typeof r.src !== 'string' || r.src.length > BACKGROUND_IMAGE_MAX || !DATA_IMAGE.test(r.src)) return null; out.src = r.src; break;
+    case 'image':
+      if (typeof r.src !== 'string' || r.src.length > BACKGROUND_IMAGE_MAX || !DATA_IMAGE.test(r.src)) return null;
+      out.src = r.src;
+      if (typeof r.libraryId === 'string' && r.libraryId) out.libraryId = r.libraryId.slice(0, 80);
+      break;
     case 'video': {
       out.src = typeof r.src === 'string' && r.src.length <= BACKGROUND_VIDEO_MAX && DATA_VIDEO.test(r.src) ? r.src : '';
       out.bytes = typeof r.bytes === 'number' && Number.isFinite(r.bytes) && r.bytes > 0 ? Math.round(r.bytes) : 0;

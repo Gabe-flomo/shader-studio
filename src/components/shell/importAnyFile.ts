@@ -35,7 +35,7 @@ export async function importText(text: string, navigate: (p: Page) => void, file
     return 'presentation';
   }
   if (kind === 'library') {
-    importLibraryBytes(fileName, new TextEncoder().encode(text));
+    void importLibraryBytes(fileName, new TextEncoder().encode(text));
     return 'library';
   }
   const ok = reportFileResult(useNodeGraphStore.getState().importGraph(text), { failTitle: 'Couldn’t import that file' });

@@ -3,7 +3,8 @@
  * singleton, no React. Two ways to set it:
  *
  *   The header's Background (PlayDisplay.source): the shader, an image, a
- *   video or a flat colour, as the setup's one picture.
+ *   video or a colour (flat, or a gradient or palette: PlayDisplay.fill,
+ *   painted by the kit's klPaintBackground), as the setup's one picture.
  *
  *   A Background layer (types/playLayers.ts BackgroundLayer): a queue of
  *   sources, one showing at a time. While a setup has one it decides, and
@@ -26,7 +27,7 @@
  * a session copy (`setSessionVideo`); the record keeps its name and size so
  * the page can ask for it again after a reload.
  */
-import { backgroundLayerOf, backgroundSource, pictureHidden, replacesShader, videoTimeAt, type BackgroundItem, type BackgroundLayer, type PlayDisplay, type PlayRecord } from '../types/play';
+import { activeFill, backgroundLayerOf, backgroundSource, pictureHidden, replacesShader, videoTimeAt, type BackgroundItem, type BackgroundLayer, type PlayDisplay, type PlayRecord } from '../types/play';
 import type { KitBackground } from './kit/layers.js';
 import type { BqPlan } from './kit/queue.js';
 
@@ -128,7 +129,7 @@ class PlayBackground {
     const d = this.display!;
     const src = backgroundSource(d);
     const el = src === 'image' ? this.readyImage() : src === 'video' ? this.video : null;
-    return { el, fit: d.fit ?? 'cover', colour: d.backdrop };
+    return { el, fit: d.fit ?? 'cover', colour: d.backdrop, fill: activeFill(d) };
   }
 
   /** The video element playing now (for the panel: its duration, whether it loaded). */

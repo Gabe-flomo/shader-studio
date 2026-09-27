@@ -36,17 +36,19 @@ function saveOpen(open: Set<string>) {
   try { localStorage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch { /* not remembered */ }
 }
 
-/** Saved graphs whose stored record has a Play setup, read without loading them. */
-function savedPlayable(names: string[]): Row[] {
+/** Saved graphs whose stored record has a Play setup (or, with `all`, every one), read without loading them. */
+function savedPlayable(names: string[], all = false): Row[] {
   const out: Row[] = [];
   for (const name of names) {
     try {
       const raw = localStorage.getItem(`shader-studio:${name}`);
       if (!raw) continue;
       const play = (JSON.parse(raw) as { play?: { controls?: unknown[]; layers?: unknown[]; mappings?: unknown[]; notes?: string } }).play;
-      if (!play) continue;
-      const c = play.controls?.length ?? 0, l = play.layers?.length ?? 0, m = play.mappings?.length ?? 0;
-      if (!c && !l && !m && !play.notes) continue;
+      const c = play?.controls?.length ?? 0, l = play?.layers?.length ?? 0, m = play?.mappings?.length ?? 0;
+      if (!play || (!c && !l && !m && !play.notes)) {
+        if (all) out.push({ kind: 'saved', id: name, label: name, hint: 'No Play setup', folder: 'Saved graphs' });
+        continue;
+      }
       const parts = [c && `${c} control${c === 1 ? '' : 's'}`, l && `${l} layer${l === 1 ? '' : 's'}`, m && `${m} mapping${m === 1 ? '' : 's'}`].filter(Boolean) as string[];
       out.push({ kind: 'saved', id: name, label: name, hint: parts.join(' · ') || 'notes', folder: 'Saved graphs' });
     } catch { /* an unreadable record is simply not offered */ }
@@ -70,7 +72,7 @@ function savedSections(rows: Row[]): Section[] {
   return out;
 }
 
-function exampleSections(): Section[] {
+function exampleSections(all = false): Section[] {
   const sections: Section[] = [];
   const inPlayCourse = new Set(PLAY_EXAMPLE_KEYS);
   // The Play course is long, so it comes as one folder per topic.
@@ -78,7 +80,7 @@ function exampleSections(): Section[] {
     ? PLAY_EXAMPLE_GROUPS.map(g => ({ ...f, label: `Play · ${g.label}`, keys: g.keys }))
     : [f]);
   for (const f of folders) {
-    const rows = f.keys.filter(k => EXAMPLE_INDEX[k]?.play).map(k => ({ kind: 'example' as const, id: k, label: EXAMPLE_INDEX[k].label, hint: EXAMPLE_INDEX[k].description, folder: f.label, source: EXAMPLE_INDEX[k].source }));
+    const rows = f.keys.filter(k => EXAMPLE_INDEX[k] && (all || EXAMPLE_INDEX[k].play)).map(k => ({ kind: 'example' as const, id: k, label: EXAMPLE_INDEX[k].label, hint: EXAMPLE_INDEX[k].description, folder: f.label, source: EXAMPLE_INDEX[k].source }));
     if (rows.length) sections.push({ key: `example:${f.label}`, kind: 'example', folder: f.label, color: f.color, rows });
   }
   return sections;
@@ -88,7 +90,13 @@ function exampleSections(): Section[] {
  * The list itself. Picking a row opens it (loads the graph), or, with `onPick`,
  * hands the row over instead (the Present page takes a snapshot of it).
  */
-export function PlayableList({ onDone, onPick, current: currentOverride }: { onDone: () => void; onPick?: (row: PlayableRow) => void; current?: string | null }) {
+export function PlayableList({ onDone, onPick, current: currentOverride, all = false }: {
+  onDone: () => void;
+  onPick?: (row: PlayableRow) => void;
+  current?: string | null;
+  /** Every saved graph and example, with a Play setup or not (the capture window renders any graph). */
+  all?: boolean;
+}) {
   const tk = useTokens();
   const getSavedGraphNames = useNodeGraphStore(s => s.getSavedGraphNames);
   const loadSavedGraph = useNodeGraphStore(s => s.loadSavedGraph);
@@ -102,15 +110,15 @@ export function PlayableList({ onDone, onPick, current: currentOverride }: { onD
     return () => window.removeEventListener(SAVED_GRAPHS_CHANGED, onChange);
   }, [getSavedGraphNames]);
   const [q, setQ] = useState('');
-  const all = useMemo(() => [...savedSections(savedPlayable(names)), ...exampleSections()], [names]);
+  const everything = useMemo(() => [...savedSections(savedPlayable(names, all)), ...exampleSections(all)], [names, all]);
   const searching = q.trim() !== '';
   const sections = useMemo(() => {
     const w = q.trim().toLowerCase();
-    if (!w) return all;
-    return all.map(s => ({ ...s, rows: s.rows.filter(r => `${r.label} ${r.hint ?? ''} ${r.folder} ${r.source ? creditSentence(r.source) : ''}`.toLowerCase().includes(w)) })).filter(s => s.rows.length);
-  }, [all, q]);
+    if (!w) return everything;
+    return everything.map(s => ({ ...s, rows: s.rows.filter(r => `${r.label} ${r.hint ?? ''} ${r.folder} ${r.source ? creditSentence(r.source) : ''}`.toLowerCase().includes(w)) })).filter(s => s.rows.length);
+  }, [everything, q]);
   // Saved folders start open, example folders closed; the folder holding the open graph is always open.
-  const [open, setOpen] = useState<Set<string>>(() => loadOpen() ?? new Set(all.filter(s => s.kind === 'saved').map(s => s.key)));
+  const [open, setOpen] = useState<Set<string>>(() => loadOpen() ?? new Set(everything.filter(s => s.kind === 'saved').map(s => s.key)));
   const holdsCurrent = (s: Section) => s.kind === 'saved' && s.rows.some(r => r.id === current);
   const isOpen = (s: Section) => searching || open.has(s.key) || holdsCurrent(s);
   const toggle = (s: Section) => setOpen(prev => {

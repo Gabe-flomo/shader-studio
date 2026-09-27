@@ -16,12 +16,14 @@ import { countInSet, DOWNLOAD_SETS, formatSize, LIBRARY_REFRESH_EVENTS, libraryS
 import { whenSaved } from '../../store/graphVersions';
 import { toast } from '../ui/toastStore';
 import { RecordingsSetting } from './RecordingsSetting';
+import { openBackgrounds, openCapture } from '../backgrounds/backgroundsUi';
+import { useBackgroundImages } from '../backgrounds/useBackgrounds';
 
 const run = (fn: () => Promise<unknown>) => () => { fn().catch(e => toast.error('That didn’t work', { message: e instanceof Error ? e.message : String(e) })); };
 
 const KIND_LABELS: Record<LibraryKind, string> = {
   graphs: 'Graphs', versions: 'Earlier versions', 'group presets': 'Group presets', functions: 'Functions', expressions: 'Expressions',
-  transforms: 'Transforms', 'keyframe presets': 'Keyframe presets', 'published nodes': 'Published nodes', presentations: 'Presentations', palettes: 'Palettes', 'glsl shaders': 'GLSL shaders', settings: 'Settings',
+  transforms: 'Transforms', 'keyframe presets': 'Keyframe presets', 'published nodes': 'Published nodes', presentations: 'Presentations', palettes: 'Palettes', 'glsl shaders': 'GLSL shaders', backgrounds: 'Background palettes', settings: 'Settings',
 };
 const PRESET_KINDS: LibraryKind[] = ['group presets', 'functions', 'expressions', 'transforms', 'keyframe presets'];
 
@@ -44,6 +46,9 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
   const [dlMenu, setDlMenu] = useState<{ x: number; y: number } | null>(null);
   const [st, setSt] = useState(backupStatus);
   const stats = useLibraryStats();
+  const { images } = useBackgroundImages();
+  const imageCount = images?.length ?? 0;
+  const imageBytes = (images ?? []).reduce((n, m) => n + m.bytes, 0);
   const [showAll, setShowAll] = useState(false);
   const [, tick] = useState(0);
   useEffect(() => onBackupStatus(setSt), []);
@@ -59,6 +64,7 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
     ['Presentations', `${k.presentations.count}`, k.presentations.count ? `${formatSize(k.presentations.size)}, Plays included` : 'none yet'],
     ['Presets', `${presets}`, PRESET_KINDS.filter(x => k[x].count).map(x => `${k[x].count} ${KIND_LABELS[x].toLowerCase()}`).join(' · ') || 'none yet'],
     ['Published nodes', `${k['published nodes'].count}`, `${k.palettes.count} palette${k.palettes.count === 1 ? '' : 's'} · ${k['glsl shaders'].count} GLSL`],
+    ['Backgrounds', `${imageCount + k.backgrounds.count}`, imageCount + k.backgrounds.count ? `${imageCount} image${imageCount === 1 ? '' : 's'} (${formatSize(imageBytes)}) · ${k.backgrounds.count} palette${k.backgrounds.count === 1 ? '' : 's'}` : 'none yet'],
     ['Saved data', formatSize(stats.total), `${Math.round(used * 100)}% of the browser’s ~5 MB`],
   ];
   const kinds = (Object.keys(k) as LibraryKind[]).filter(x => k[x].size > 0).sort((a, b) => k[b].size - k[a].size);
@@ -108,9 +114,16 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
         </span>
         {dlMenu && (
           <Menu x={dlMenu.x} y={dlMenu.y} minWidth={280} onClose={() => setDlMenu(null)}
-            items={DOWNLOAD_SETS.map(d => { const n = d.id === 'everything' ? 0 : countInSet(takeSnapshot(), d.id); return { label: d.id === 'everything' ? d.label : `${d.label} (${n})`, hint: d.hint, icon: 'export' as const, disabled: d.id !== 'everything' && n === 0, onSelect: () => { void exportSet(d.id); } }; })} />
+            items={DOWNLOAD_SETS.map(d => { const n = d.id === 'everything' ? 0 : countInSet(takeSnapshot(), d.id) + (d.id === 'backgrounds' ? imageCount : 0); return { label: d.id === 'everything' ? d.label : `${d.label} (${n})`, hint: d.hint, icon: 'export' as const, disabled: d.id !== 'everything' && n === 0, onSelect: () => { void exportSet(d.id); } }; })} />
         )}
         <Button size="sm" icon="import" onClick={run(importEverything)} title="A library ZIP or library.json (older Backup ZIPs work too). Adds to what you have; never overwrites.">Import a library…</Button>
+      </div>
+
+      <span style={{ ...label, marginTop: 8 }}>Backgrounds</span>
+      <span style={note}>Pictures and palettes for Play’s Background and for presentations. Capture a still from any graph (at any moment, with or without its layers), or import a picture.</span>
+      <div style={row}>
+        <Button size="sm" icon="overlay" onClick={() => { void openBackgrounds(); }} title="Image backgrounds and palettes: folders, rename, download, delete">Backgrounds{imageCount + k.backgrounds.count ? ` (${imageCount + k.backgrounds.count})` : ''}…</Button>
+        <Button size="sm" icon="camera" onClick={() => { void openCapture(); }} title="Render a saved graph or an example at a moment you choose and keep it as an image background">Capture from a graph…</Button>
       </div>
 
       <span style={{ ...label, marginTop: 8 }}>Backup folder</span>
