@@ -25,6 +25,7 @@ import runtimeSource from './runtime/play-runtime.js?raw';
 import particleSource from './particle-sim.js?raw';
 import geometrySource from './kit/geometry.js?raw';
 import sketch3dSource from './kit/sketch3d.js?raw';
+import p5Source from './kit/p5.js?raw';
 import fontsSource from './kit/fonts.js?raw';
 import layersSource from './kit/layers.js?raw';
 import bodiesSource from './kit/bodies.js?raw';
@@ -325,7 +326,7 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, fontsSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, dataSource, kitSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, handsSource, queueSource, dataSource, kitSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
   return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn } };\n})();\n`;

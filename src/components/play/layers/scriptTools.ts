@@ -79,7 +79,7 @@ export function declaredParams(code: string): string[] {
   return out;
 }
 
-function paramsBlock(code: string): { start: number; open: number; close: number } | null {
+export function paramsBlock(code: string): { start: number; open: number; close: number } | null {
   const m = /^[ \t]*(?:const|let|var)\s+params\s*=\s*\{/m.exec(code);
   if (!m) return null;
   const open = m.index + m[0].length - 1;
@@ -104,7 +104,7 @@ export function guessRange(v: number): { min: number; max: number; step?: number
 const num = (n: number) => (Number.isInteger(n) ? `${n}` : `${+n.toFixed(4)}`);
 
 /** The sketch with `entry` added to its params object (created at the top if there is none). */
-function addParamEntry(code: string, entry: string): string {
+export function addParamEntry(code: string, entry: string): string {
   const block = paramsBlock(code);
   if (!block) return `const params = {\n  ${entry},\n};\n\n${code}`;
   const inner = code.slice(block.open + 1, block.close);
@@ -156,7 +156,7 @@ export function makeControl(code: string, name: string, kind?: ControlKind): { c
 export type Where = 'top' | 'setup' | 'draw';
 
 /** The index of the brace closing the one at `open`, skipping strings and comments; -1 when unbalanced. */
-function matchBrace(code: string, open: number): number {
+export function matchBrace(code: string, open: number): number {
   let depth = 0;
   for (let i = open; i < code.length; i++) {
     const c = code[i];
@@ -413,4 +413,29 @@ for (const it of s.state.${arr}) circle(it.x, it.y, 10);`);
     if (helper === 'if') out = placeCode(out, 'draw', `if (s.pressed('${key}')) {\n  // once, on the frame ${label} is pressed\n}`);
   }
   return { code: out, entry, startAt };
+}
+
+// ── The layer card's glimpse of the sketch ───────────────────────────────────
+
+/**
+ * The first lines of the sketch's draw function's body, dedented, for the
+ * layer card: `function draw(…) {`, `draw = function / (…) => {`, or an
+ * instance-mode `p.draw = …`, in the main file or any other. Without a draw,
+ * the main file's first lines. `more` says whether it goes on.
+ */
+export function drawPreviewLines(files: ReadonlyArray<{ name: string; code: string }>, max = 8): { file: string; lines: string[]; more: boolean } {
+  const re = /(?:^|[^\w$.])function\s+draw\s*\([^)]*\)\s*\{|(?:^|[^\w$])(?:[A-Za-z_$][\w$]*\.)?draw\s*=\s*(?:function\s*\([^)]*\)|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)\s*\{/m;
+  for (const f of files) {
+    const m = re.exec(f.code);
+    if (!m) continue;
+    const open = m.index + m[0].length - 1;
+    const close = matchBrace(f.code, open);
+    const body = f.code.slice(open + 1, close < 0 ? undefined : close).replace(/^[ \t]*\n/, '').replace(/\s+$/, '');
+    const all = body.split('\n');
+    const indent = Math.min(99, ...all.filter(l => l.trim()).map(l => /^[ \t]*/.exec(l)![0].length));
+    const lines = all.map(l => l.slice(Math.min(indent, /^[ \t]*/.exec(l)![0].length)));
+    return { file: f.name, lines: lines.slice(0, max), more: lines.length > max };
+  }
+  const lines = (files[0]?.code ?? '').replace(/^\s*\n/, '').split('\n');
+  return { file: files[0]?.name ?? 'sketch.js', lines: lines.slice(0, max), more: lines.length > max };
 }

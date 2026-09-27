@@ -9,6 +9,7 @@
 import { paletteCssAt, paletteColour } from '../particle-sim.js';
 import { klParseFontUrl } from './fonts.js';
 import { K3_SKETCH_NAMES, k3Create, k3Helpers, k3Setup, k3Begin, k3End, k3Dispose } from './sketch3d.js';
+import { kp5Detect, kp5Host, kp5Helpers, kp5Webgl, kp5Step, kp5HasDraw, kp5Console } from './p5.js';
 
 export const KL_BLEND = {
   normal: 'source-over', multiply: 'multiply', screen: 'screen', overlay: 'overlay', lighten: 'lighten', darken: 'darken',
@@ -1028,6 +1029,7 @@ export const KL_SKETCH_NAMES = [
   'color', 'hsl', 'lerpColor', 'map', 'lerp', 'constrain', 'dist', 'mag', 'norm', 'radians', 'degrees', 'random', 'noise', 'noiseSeed', 'floor', 'ceil', 'round', 'abs', 'min', 'max', 'sqrt', 'pow', 'sin', 'cos', 'tan', 'atan2',
   'PI', 'TWO_PI', 'HALF_PI',
   'width', 'height', 'mouseX', 'mouseY', 'mouseIsPressed', 'frameCount', 'deltaTime', 'millis',
+  'print', 'watch', 'console',
 ];
 
 function klCssColor(args) {
@@ -1131,41 +1133,183 @@ export function klSketchHelpers(get) {
  * Compile a sketch. The code runs inside `with (P)` so the helpers are plain
  * names; setup/draw/params are read back from inside the same block, and
  * `set(name, value)` assigns a top-level variable of the sketch (how a
- * declared slider drives a plain `let`), via a direct eval in that scope.
+ * declared slider drives a plain `let`), via a direct eval in that scope;
+ * `fn(name)` reads one of its functions (p5's event handlers).
  */
 export function klCompileSketch(code, P) {
-  const make = new Function('P', `with (P) {\n${code}\n;\nreturn {\n  setup: typeof setup === 'function' ? setup : null,\n  draw: typeof draw === 'function' ? draw : null,\n  params: typeof params === 'object' && params ? params : {},\n  has: function (k) { try { return eval('typeof ' + k) !== 'undefined' && !(k in P); } catch (e) { return false; } },\n  set: function (k, v) { try { eval(k + ' = v;'); } catch (e) { /* not a plain variable */ } },\n};\n}`);
+  const make = new Function('P', `with (P) {\n${code}\n;\nreturn {\n  setup: typeof setup === 'function' ? setup : null,\n  draw: typeof draw === 'function' ? draw : null,\n  params: typeof params === 'object' && params ? params : {},\n  has: function (k) { try { return eval('typeof ' + k) !== 'undefined' && !(k in P); } catch (e) { return false; } },\n  set: function (k, v) { try { eval(k + ' = v;'); } catch (e) { /* not a plain variable */ } },\n  fn: function (k) { try { return eval('typeof ' + k + " === 'function' && !(" + JSON.stringify(k) + " in P) ? " + k + ' : null'); } catch (e) { return null; } },\n};\n}\n//# sourceURL=${KL_SKETCH_URL}`);
   return make(P);
+}
+
+// ── Several files, one scope ─────────────────────────────────────────────────
+// A sketch is its main file (sketch.js, the layer's code) and any extra files
+// (tabs). They run as one program, extra files first in their order, so what
+// one declares at its top level every other sees, as classic <script>s do.
+// `import` / `export` between them are dropped (the names are shared anyway).
+
+/** The name compiled sketches carry in stack traces, so an error's line can be found. */
+export const KL_SKETCH_URL = 'playfield-sketch.js';
+/** The main file's name. */
+export const KL_MAIN_FILE = 'sketch.js';
+
+/** One file with its `import … from …` lines blanked and `export` dropped (lines stay where they were). */
+export function klStripModules(code) {
+  return String(code)
+    .replace(/^[ \t]*import\s+(?:[\w*{}\s,$]+\s+from\s+)?['"][^'"\n]+['"][ \t]*;?[ \t]*$/gm, '')
+    .replace(/^([ \t]*)export\s+default\s+(?=(?:async\s+)?(?:function|class)\b)/gm, '$1')
+    .replace(/^([ \t]*)export\s+default\s+/gm, '$1void ')
+    .replace(/^([ \t]*)export\s+(?=(?:async\s+)?(?:function|class|const|let|var)\b)/gm, '$1')
+    .replace(/^[ \t]*export\s*\{[^}]*\}(?:\s*from\s*['"][^'"\n]+['"])?[ \t]*;?[ \t]*$/gm, '');
+}
+
+/**
+ * The files as one program: `text`, and where each file's lines start in it
+ * (`map`, 1-based lines of the text), so an error's line can be put back in
+ * its file.
+ */
+export function klSketchSource(code, files) {
+  const parts = [];
+  for (const f of Array.isArray(files) ? files : []) if (f && typeof f.code === 'string') parts.push({ name: String(f.name || 'file.js'), code: f.code });
+  parts.push({ name: KL_MAIN_FILE, code: String(code || '') });
+  const map = [];
+  let line = 1, text = '';
+  for (const p of parts) {
+    const body = klStripModules(p.code);
+    const n = body.split('\n').length;
+    map.push({ name: p.name, from: line, to: line + n - 1 });
+    text += body + '\n';
+    line += n;
+  }
+  return { text, map };
+}
+
+// Where the sketch's first line sits in a stack trace (the Function wrapper adds lines above it): measured once.
+let klLineOffset = null;
+function klLineFromStack(e) {
+  const stack = e && typeof e.stack === 'string' ? e.stack : '';
+  const re = new RegExp(KL_SKETCH_URL.replace(/\./g, '\\.') + ':(\\d+)(?::(\\d+))?');
+  const m = re.exec(stack);
+  if (m) return +m[1];
+  if (e && typeof e.line === 'number' && e.sourceURL === KL_SKETCH_URL) return e.line;
+  return null;
+}
+function klOffset() {
+  if (klLineOffset !== null) return klLineOffset;
+  klLineOffset = NaN;
+  try { klCompileSketch('throw new Error("probe");', {}); } catch (e) { const l = klLineFromStack(e); if (l !== null) klLineOffset = l - 1; }
+  return klLineOffset;
+}
+/** The file and line an error was thrown at, from its stack, or null when the engine does not say. */
+export function klErrorAt(e, map) {
+  const l = klLineFromStack(e), off = klOffset();
+  if (l === null || !isFinite(off) || !map) return null;
+  const at = l - off;
+  const f = map.find(x => at >= x.from && at <= x.to);
+  return f ? { file: f.name, line: at - f.from + 1 } : null;
+}
+/** Which file fails to compile on its own (a syntax error's file), or null. */
+function klBadFile(code, files) {
+  const all = [...(Array.isArray(files) ? files : []), { name: KL_MAIN_FILE, code }];
+  for (const f of all) { try { new Function(klStripModules(f.code)); } catch (e) { return f.name; } }
+  return null;
+}
+
+/**
+ * A declared control's value as the sketch sees it: a number, a toggle's
+ * true/false, a colour's '#rrggbb' (or [r, g, b] when declared as an array),
+ * a choice's option.
+ */
+export function klParamValue(d, raw) {
+  if (!d) return raw;
+  if (d.kind === 'toggle') return raw >= 0.5;
+  if (d.kind === 'colour') {
+    const n = Math.max(0, Math.min(0xffffff, Math.round(+raw || 0)));
+    const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    return d.as === 'array' ? rgb : '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+  if (d.kind === 'choice') {
+    const opts = Array.isArray(d.options) ? d.options : [];
+    return opts.length ? opts[Math.max(0, Math.min(opts.length - 1, Math.round(+raw || 0)))] : '';
+  }
+  return raw;
 }
 
 /**
  * A compiled sketch and what the runner keeps between frames. Shared by the
  * layer kit and the editor's scratch preview, so both run the same thing.
+ *
+ * opts: mode ('2d' | '3d'), three (three.js for 3D), files (extra files, run
+ * before the code), p5 (run the p5 way; a sketch that calls createCanvas or
+ * `new p5(` is one anyway), assets (the project's files for loadImage,
+ * loadJSON…), log (where console output goes, else the page's console),
+ * makeCanvas (tests).
  */
 export function klSketchCompile(code, opts) {
-  const mode = opts && opts.mode === '3d' ? '3d' : '2d';
-  const st = { code, mode, setup: null, draw: null, set: null, has: null, params: {}, vars: null, error: null, state: {}, frame: 0, w: 0, h: 0, ready: false, s: null, pressed: {}, g3: null };
+  const o = opts || {};
+  const mode = o.mode === '3d' ? '3d' : '2d';
+  const files = Array.isArray(o.files) ? o.files.filter(f => f && typeof f.code === 'string') : [];
+  const src = klSketchSource(code, files);
+  const st = { code, files, mode, setup: null, draw: null, set: null, has: null, fn: null, params: {}, vars: null, error: null, errorAt: null, state: {}, frame: 0, w: 0, h: 0, ready: false, s: null, pressed: {}, g3: null, p5: null, map: src.map, restartVals: null, wantRestart: false };
+  st.console = kp5Console(typeof o.log === 'function' ? o.log : null);
   try {
-    let P = klSketchHelpers(() => st.s);
+    const base = klSketchHelpers(() => st.s);
+    let P = base;
+    const isP5 = o.p5 === true || kp5Detect(src.text);
     if (mode === '3d') {
       // 3D: the same sketch, drawn with three.js (sketch3d.js). The 2D helpers stay for maths and colours.
-      const T = opts && opts.three;
+      const T = o.three;
       if (!T) { st.error = 'This 3D sketch needs three.js, which is not loaded here.'; return st; }
       st.g3 = k3Create(T);
-      P = k3Helpers(st.g3, P, () => st.s);
     }
-    const r = klCompileSketch(code, P);
-    st.setup = r.setup; st.draw = r.draw; st.set = r.set; st.has = r.has; st.params = r.params || {};
-    if (!st.draw) st.error = 'The script needs a draw(s) function.';
-  } catch (e) { st.error = 'Compile: ' + ((e && e.message) || e); }
+    if (isP5) {
+      st.p5 = kp5Host({ g3: !!st.g3, assets: o.assets, makeCanvas: o.makeCanvas, console: st.console, usesPixels: /\b(loadPixels|updatePixels)\s*\(/.test(src.text) });
+      P = kp5Helpers(base, () => st.s, st.p5);
+    }
+    if (st.g3) {
+      P = k3Helpers(st.g3, P, () => st.s);
+      if (st.p5) P = kp5Webgl(P, st.p5);
+    }
+    // The console goes to the editor (or the page); watch(name, value) keeps one live line.
+    P.console = st.console;
+    P.print = (...a) => st.console.log(...a);
+    P.watch = (name, value) => { st.console.watch(name, value); return value; };
+    const r = klCompileSketch(src.text, P);
+    st.setup = r.setup; st.draw = r.draw; st.set = r.set; st.has = r.has; st.fn = r.fn; st.params = r.params || {};
+    if (!st.draw && !st.p5) st.error = 'The script needs a draw(s) function.';
+    if (st.p5 && !st.setup && !kp5HasDraw(st)) st.error = 'The sketch needs a setup() or a draw() function (or new p5(…) with them).';
+  } catch (e) {
+    const at = klErrorAt(e, src.map);
+    const file = at ? at.file : e instanceof SyntaxError ? klBadFile(code, files) : null;
+    st.errorAt = at || (file ? { file, line: 0 } : null);
+    st.error = 'Compile' + (at ? ` (${at.file}:${at.line})` : file && files.length ? ` (${file})` : '') + ': ' + ((e && e.message) || e);
+  }
   return st;
 }
 
 /** Let a compiled sketch's GPU resources go (3D only; a 2D sketch holds none). */
 export function klSketchDispose(st) { if (st && st.g3) { k3Dispose(st.g3); st.g3 = null; } }
 
-/** A button param was pressed: next frame `s.pressed(key)` is true, `s.params[key]` is the amount, and a handler in params runs. */
-export function klSketchPress(st, key, amount) { st.pressed[key] = typeof amount === 'number' ? amount : 1; }
+/**
+ * A button param was pressed: next frame `s.pressed(key)` is true, `s.params[key]` is the amount, and a handler in params runs.
+ * The key `__restart` starts the sketch over instead (the host compiles it again).
+ */
+export function klSketchPress(st, key, amount) {
+  if (key === '__restart') { st.wantRestart = true; return; }
+  st.pressed[key] = typeof amount === 'number' ? amount : 1;
+}
+
+/**
+ * Should the host compile this sketch again: its code, files or mode changed,
+ * or it asked to start over (a control marked restart moved, or Run).
+ */
+export function klSketchStale(st, code, files, mode, three) {
+  if (!st) return true;
+  if (st.wantRestart || st.code !== code || st.mode !== mode || (mode === '3d' && st.three !== three)) return true;
+  const a = st.files || [], b = Array.isArray(files) ? files : [];
+  if (a.length !== b.length) return true;
+  for (let i = 0; i < a.length; i++) if (a[i].code !== b[i].code || a[i].name !== b[i].name) return true;
+  return false;
+}
 
 /**
  * One frame. `s` is the frame object (ctx, width, height, params, state, frame…).
@@ -1178,15 +1322,42 @@ export function klSketchStep(st, s, defs, clear) {
   const W = s.width, H = s.height, g3 = st.g3, bx = g3 ? null : s.ctx;
   // 3D: no 2D context; s.three is the scene, camera and renderer (sketch3d.js).
   if (g3) { s.ctx = null; s.three = g3.api; }
-  st.s = s;
   const pressed = st.pressed; st.pressed = {};
   s.pressed = k => Object.prototype.hasOwnProperty.call(pressed, k);
   const list = defs || [];
-  for (const d of list) if (d.kind === 'button') s.params[d.key] = s.pressed(d.key) ? pressed[d.key] : 0;
+  for (const d of list) {
+    if (d.kind === 'button') s.params[d.key] = s.pressed(d.key) ? pressed[d.key] : 0;
+    else if (d.kind === 'colour' || d.kind === 'choice') s.params[d.key] = klParamValue(d, s.params[d.key]);
+  }
+  // A control marked restart (read only in setup, like a count) starts the sketch over when it moves.
+  const rs = list.filter(d => d.restart);
+  if (rs.length) {
+    const now = rs.map(d => JSON.stringify(s.params[d.key])).join('|');
+    if (st.restartVals !== null && st.restartVals !== now && st.ready) { st.wantRestart = true; return null; }
+    st.restartVals = now;
+  }
   // A declared slider or toggle whose name is also a top-level variable of the sketch drives that variable.
   if (!st.vars) { st.vars = {}; for (const d of list) st.vars[d.key] = d.kind !== 'button' && !!(st.has && st.has(d.key)); }
-  for (const d of list) if (st.vars[d.key] && st.set) st.set(d.key, d.kind === 'toggle' ? s.params[d.key] >= 0.5 : s.params[d.key]);
+  // (A toggle stays 0 / 1 in s.params, as it always was; its variable gets true / false.)
+  const drive = () => { for (const d of list) if (st.vars[d.key] && st.set) st.set(d.key, d.kind === 'toggle' ? klParamValue(d, s.params[d.key]) : s.params[d.key]); };
   try {
+    if (st.p5) {
+      // p5: the sketch sees its own canvas's size and its mouse; kp5Step does the rest.
+      const h = st.p5, ps = Object.create(s);
+      Object.defineProperty(ps, 'width', { get: () => (g3 ? h.lw : h.sf.w) });
+      Object.defineProperty(ps, 'height', { get: () => (g3 ? h.lh : h.sf.h) });
+      Object.defineProperty(ps, 'ctx', { get: () => (g3 ? null : h.sf.ctx) });
+      Object.defineProperty(ps, 'mouse', { get: () => ({ x: h.mouseX, y: h.mouseY, over: !!(s.mouse && s.mouse.over), down: h.down }) });
+      st.s = ps;
+      if (!st.ready) st.state = {};
+      ps.state = st.state;
+      for (const k in pressed) { const fn = st.params[k]; if (typeof fn === 'function') fn(ps, pressed[k]); }
+      kp5Step(st, s, drive);
+      st.frame = h.frameCount;
+      return null;
+    }
+    st.s = s;
+    drive();
     if (!st.ready || st.w !== W || st.h !== H) {
       st.w = W; st.h = H; st.state = {}; s.state = st.state; st.frame = 0; s.frame = 0;
       if (g3) { k3Setup(g3, W, H); k3Begin(g3, W, H); }
@@ -1203,11 +1374,14 @@ export function klSketchStep(st, s, defs, clear) {
     st.frame++;
     return null;
   } catch (e) {
-    if (g3) { try { k3End(g3); } catch (x) { /* already broken */ } }
-    st.error = 'Runtime: ' + ((e && e.message) || e);
+    if (g3 && !st.p5) { try { k3End(g3); } catch (x) { /* already broken */ } }
+    const at = klErrorAt(e, st.map);
+    st.errorAt = at;
+    st.error = 'Runtime' + (at ? ` (${at.file}:${at.line})` : '') + ': ' + ((e && e.message) || e);
     // A 3D name on a 2D layer: say which setting it needs.
     const m = !g3 && e instanceof ReferenceError && /^(\w+) is not defined/.exec(e.message);
     if (m && K3_SKETCH_NAMES.indexOf(m[1]) >= 0 && KL_SKETCH_NAMES.indexOf(m[1]) < 0) st.error += '. ' + m[1] + '() draws in 3D: set the layer’s Mode to 3D (Canvas settings).';
+    st.console.error(st.error);
     return st.error;
   }
 }

@@ -36,7 +36,7 @@ const K3_FLAT_ONLY = ['circle', 'ellipse', 'rect', 'square', 'point', 'triangle'
 // strings (hex, rgb(), hsl() with commas or spaces, names), to 0–1 sRGB.
 const K3_CSS = new Map();
 let k3CssCtx = null;
-function k3ParseCss(str, out) {
+export function k3ParseCss(str, out) {
   let hit = K3_CSS.get(str);
   if (!hit) {
     hit = [1, 1, 1, 1];

@@ -144,7 +144,9 @@ describe('bundled examples', () => {
         if (l.kind !== 'script') continue;
         count++;
         // A 3D sketch runs on the app's three.js set (no renderer here: the scene is built, not drawn).
-        const st = klSketchCompile(l.code, { mode: l.mode, three: threeSlim });
+        // A p5 sketch draws on a canvas of its own: here one that draws nothing.
+        const makeCanvas = (width: number, height: number) => ({ width, height, getContext: () => ctx });
+        const st = klSketchCompile(l.code, { mode: l.mode, three: threeSlim, files: l.files, p5: l.p5, assets: l.assets, makeCanvas, log: () => {} });
         expect(st.error, `${k}/${l.id}`).toBeNull();
         const values = l as unknown as Record<string, number>;
         for (let f = 0; f < 90; f++) {

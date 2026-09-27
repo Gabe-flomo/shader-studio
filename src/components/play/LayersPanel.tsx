@@ -20,6 +20,8 @@ import { accentColor } from '../../theme/categories';
 import type { LayerKindDef } from '../../types/layerKinds';
 import { addKindLayer } from '../../play/layerKinds';
 import { AddLayerMenu } from './layers/AddLayerMenu';
+import { P5ImportDialog, type P5ImportResult } from './layers/P5Import';
+import { p5LayerRecord } from './layers/p5Layer';
 import { BUILTIN_LAYER, type BuiltinVariant } from './layers/addLayerCatalog';
 import { script3dDefaults } from '../../types/playLayers';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -84,6 +86,16 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const mode = useThemeMode();
   const addRef = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState(false);
+  const [importingP5, setImportingP5] = useState(false);
+  const addP5 = (r: P5ImportResult) => {
+    setImportingP5(false);
+    const id = playId('layer');
+    let made: PlayLayer;
+    try { made = p5LayerRecord(r.patch, r.startAt, id); } catch (e) { toast.error('The sketch does not compile', { message: (e as Error)?.message ?? String(e) }); return; }
+    onChange(p => { const next = { ...p, layers: [...p.layers, made] }; return entered ? addToGroup(next, id, entered) : next; });
+    setSelected(id);
+    toast.success(`Imported “${r.title}”`, { message: `${1 + (r.patch.files.length)} file${r.patch.files.length ? 's' : ''} · open the Sketch editor from the layer to see its code and console.` });
+  };
   const selected = usePlayUi(s => s.selected), setSelected = usePlayUi(s => s.select), revealTick = usePlayUi(s => s.revealTick);
   const mask = usePlayUi(s => s.mask);
   const [drawing, setDrawing] = useState<ShapeDrawing | null>(null);
@@ -129,6 +141,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
       setSelected(id);
       return;
     }
+    // A p5.js sketch: the importer says what it will be first.
+    if (variant === 'p5import') { setImportingP5(true); return; }
     // A 3D Script is a Script layer in 3D, starting from the 3D starter.
     const is3d = variant === 'script3d';
     const n = play.layers.filter(l => l.kind === kind && (kind !== 'script' || (l.kind === 'script' && (l.mode === '3d') === is3d))).length + 1;
@@ -334,6 +348,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
           <Button size="sm" icon="plus" aria-expanded={menu} onClick={() => setMenu(m => !m)}>Add layer</Button>
         </span>
         {menu && <AddLayerMenu play={play} touch={touch} anchorRef={addRef} onAdd={add} onAddKind={addKind} onChange={onChange} onClose={() => setMenu(false)} />}
+        {importingP5 && <P5ImportDialog onCreate={addP5} onClose={() => setImportingP5(false)} />}
       </div>
       {(picked.length > 0 || selectMode) && (
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 14px', borderBottom: `1px solid ${tk.border.default}`, background: alpha(tk.accent.base, 0.08) }}>

@@ -173,6 +173,26 @@ export const SCRIPT_REFERENCE: RefGroup[] = [
     val('deltaTime', 'number', 'Milliseconds since the last frame (s.dt × 1000).', 'x += speed * deltaTime / 1000;'),
     fn('millis', [], 'number', 'The Play clock in milliseconds (s.time × 1000).', 'const blink = floor(millis() / 500) % 2;', { returns: 'Milliseconds.' }),
   ] },
+  { title: 'Console', items: [
+    fn('print', [['value', 'any', 'What to show; several values print on one line.']], 'nothing', 'Shows values in the editor’s Console (p5’s name for console.log). Lines repeated every frame fold into one with a count.', 'print(\'hello\', frameCount);', { insert: 'print()' }),
+    fn('watch', [['name', 'string', 'The label on the line.'], ['value', 'any', 'The value now.']], 'the value', 'One live line in the Console for a value, with a small graph for numbers, instead of a new line every frame.', 'watch(\'speed\', speed);', { returns: 'The value, so it can wrap an expression.' }),
+    val('console', 'object', 'console.log, warn, error and table: they show in the editor’s Console (in an exported page, the browser’s).', 'console.log({ x: mouseX, y: mouseY });'),
+  ] },
+  { title: 'p5.js sketches', items: [
+    fn('createCanvas', [['w', 'number', 'The sketch’s width in its own pixels.'], ['h', 'number', 'Its height.'], ['renderer?', 'WEBGL', 'WEBGL draws in 3D (set the layer’s Mode to 3D).']], 'canvas',
+      'Makes the sketch a p5 sketch: it draws on a canvas of this size that keeps what was drawn, fitted into the picture. mouseX and width are in its pixels. Without it, p5 sketches get the picture’s size.', 'function setup() {\n  createCanvas(400, 400);\n}'),
+    fn('preload', [], 'nothing', 'You write this one (p5 sketches). Runs before setup; setup waits for the images, fonts and files it loads.', 'let img;\nfunction preload() {\n  img = loadImage(\'cat.png\');\n}\nfunction setup() {\n  createCanvas(400, 400);\n}', { insert: 'function preload() {\n  \n}\n' }),
+    fn('mousePressed', [], 'nothing', 'You write this one (p5 sketches). Runs when the mouse goes down over the picture; mouseReleased, mouseDragged, mouseMoved and doubleClicked work the same way.', 'function setup() { createCanvas(400, 400); }\nfunction mousePressed() {\n  background(random(255));\n}', { insert: 'function mousePressed() {\n  \n}\n' }),
+    fn('keyPressed', [], 'nothing', 'You write this one (p5 sketches). Runs when a key goes down (not while you type in the editor); key and keyCode say which.', 'function setup() { createCanvas(400, 400); }\nfunction keyPressed() {\n  if (key === \' \') background(0);\n}', { insert: 'function keyPressed() {\n  \n}\n' }),
+    fn('control', [['key', 'string', 'A control the sketch declares in params.']], 'control', 'What createSlider and the other page controls become when a p5 sketch is imported: .value() reads the layer’s control, .checked() a toggle, .color() a colour.', 'const params = { speed: { value: 2, min: 0, max: 10, label: \'Speed\' } };\nlet speedSlider = control(\'speed\');\nfunction setup() { createCanvas(400, 400); }\nfunction draw() {\n  circle(200, 200, speedSlider.value() * 10);\n}'),
+    fn('frameRate', [['fps?', 'number', 'Frames a second for draw (at most the picture’s).']], 'number', 'Slows draw down (p5 sketches); with no argument, how fast it runs now.', 'function setup() {\n  createCanvas(400, 400);\n  frameRate(12);\n}', { returns: 'The frame rate now.' }),
+    fn('noLoop', [], 'nothing', 'Stops calling draw (p5 sketches); loop() starts it again and redraw() draws once.', 'function setup() {\n  createCanvas(400, 400);\n  noLoop();\n}'),
+    fn('colorMode', [['mode', 'RGB | HSB | HSL', 'How colour numbers read.'], ['max?', 'number', 'The largest number for every part.']], 'nothing', 'p5 sketches: colours in hue, saturation and brightness (HSB) or lightness (HSL); hue runs to 360 unless max says otherwise.', 'function setup() {\n  createCanvas(400, 400);\n  colorMode(HSB);\n  fill(200, 80, 90);\n}'),
+    fn('createVector', [['x?', 'number', 'x.'], ['y?', 'number', 'y.'], ['z?', 'number', 'z.']], 'p5.Vector', 'A p5.Vector (p5 sketches): add, sub, mult, mag, normalize, limit, heading, rotate and the rest; p5.Vector.fromAngle and random2D too.', 'let v;\nfunction setup() {\n  createCanvas(400, 400);\n  v = createVector(1, 0).rotate(PI / 4).mult(10);\n}'),
+    fn('createGraphics', [['w', 'number', 'Width.'], ['h', 'number', 'Height.']], 'graphics', 'An offscreen canvas with the drawing names of its own (p5 sketches); draw it with image().', 'let g;\nfunction setup() {\n  createCanvas(400, 400);\n  g = createGraphics(100, 100);\n  g.background(255, 0, 0);\n}\nfunction draw() {\n  image(g, 0, 0);\n}'),
+    fn('loadImage', [['path', 'string', 'A file the imported sketch brought (its path in the project).']], 'p5.Image', 'An image from the sketch’s files (p5 sketches); call it in preload so setup has it. Draw it with image(img, x, y).', 'let img;\nfunction preload() {\n  img = loadImage(\'assets/cat.png\');\n}\nfunction setup() {\n  createCanvas(400, 400);\n}'),
+    fn('loadJSON', [['path', 'string', 'A .json file the imported sketch brought.']], 'object', 'The file’s data at once (p5 sketches); loadStrings gives a text file’s lines and loadTable a CSV.', 'let data;\nfunction preload() {\n  data = loadJSON(\'data.json\');\n}\nfunction setup() {\n  createCanvas(400, 400);\n}'),
+  ] },
 ];
 
 // ── 3D ───────────────────────────────────────────────────────────────────────
@@ -249,7 +269,7 @@ export const SCRIPT_REFERENCE_3D: RefGroup[] = [
 /** The groups a sketch's mode shows: 2D as ever; 3D the 3D groups, then what still applies (the sketch, the frame, maths, colours). */
 export function referenceFor(mode: '2d' | '3d'): RefGroup[] {
   if (mode !== '3d') return SCRIPT_REFERENCE;
-  const keep = new Set(['Sketch', 'The frame (s)', 'Maths and random', 'Math shortcuts', 'p5 names']);
+  const keep = new Set(['Sketch', 'The frame (s)', 'Maths and random', 'Math shortcuts', 'p5 names', 'Console', 'p5.js sketches']);
   const colours = new Set(['color', 'hsl', 'lerpColor']);
   return [
     ...SCRIPT_REFERENCE_3D,

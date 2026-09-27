@@ -56,6 +56,7 @@ import { savedLookup } from '../../glsl/discover';
 import { DiscoverResults } from '../code/DiscoverResults';
 import { saveLabel, useDiscoverPicks } from '../code/useDiscoverPicks';
 import { loadCustomFns } from '../../store/useNodeGraphStore';
+import { P5Convert } from './P5Convert';
 
 const PublishNodeModal = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('../NodeGraph/PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 
@@ -110,7 +111,7 @@ function optimisedNote(r: OptimizeReport): string {
 }
 const OPT_KEY = 'shader-studio:convert:optimised';
 
-export function ConvertPage({ onMaterialized, compact = false }: { onMaterialized: () => void; compact?: boolean }) {
+function GlslConvert({ onMaterialized, compact = false }: { onMaterialized: () => void; compact?: boolean }) {
   const tk = useTokens();
   const setScratchNodes = useNodeGraphStore(s => s.setScratchNodes);
   const endScratch = useNodeGraphStore(s => s.endScratch);
@@ -568,6 +569,28 @@ function Detail({ node, nodes, report, asBlock, onToggleBlock, onClose }: { node
       {warning && (
         <Segmented size="sm" ariaLabel="Node or code" value={asBlock.has(warning.id) ? 'block' : 'node'} onChange={() => onToggleBlock(warning.id)} options={[{ value: 'node', label: 'Keep the node ≈' }, { value: 'block', label: 'Expression Block instead' }]} />
       )}
+    </div>
+  );
+}
+
+const SOURCE_KEY = 'shader-studio:convert:source';
+/**
+ * The Convert page: GLSL into nodes, or a p5.js sketch into a Script layer,
+ * each with its paste, preview, report and make-it-real.
+ */
+export function ConvertPage({ onMaterialized, compact = false }: { onMaterialized: () => void; compact?: boolean }) {
+  const tk = useTokens();
+  const [source, setSourceState] = useState<'glsl' | 'p5'>(() => { try { return localStorage.getItem(SOURCE_KEY) === 'p5' ? 'p5' : 'glsl'; } catch { return 'glsl'; } });
+  const setSource = (v: 'glsl' | 'p5') => { setSourceState(v); try { localStorage.setItem(SOURCE_KEY, v); } catch { /* remembered for this visit only */ } };
+  return (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.panel }}>
+      <div style={{ height: 40, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderBottom: `1px solid ${tk.border.default}` }}>
+        <Segmented size="sm" ariaLabel="What to convert" value={source} onChange={setSource} options={[{ value: 'glsl', label: 'GLSL → nodes' }, { value: 'p5', label: 'p5.js → Script layer' }]} />
+        {!compact && <span style={{ fontSize: 11.5, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{source === 'glsl' ? 'A fragment shader becomes a graph you can open in the Studio.' : 'A p5.js sketch or project becomes a Script layer on the Play page.'}</span>}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        {source === 'glsl' ? <GlslConvert onMaterialized={onMaterialized} compact={compact} /> : <P5Convert compact={compact} />}
+      </div>
     </div>
   );
 }

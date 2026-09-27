@@ -4,7 +4,7 @@
  * under the choices that change behaviour, and "try it" buttons for the
  * actions a trigger would fire (burst, drop, next line, clear).
  */
-import { useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { ActionKind, NullLayer, ParticleField, PlayLayer, PlayRecord, ZoneAction } from '../../../types/play';
 import { Button, IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
@@ -27,16 +27,17 @@ import { ImagePicker, SpritePicker } from './pickers';
 import { FIELD_HELP, ZONE_HELP } from './help';
 import { Section } from './Section';
 import { AudioSourceRows, FontRow } from './rows';
-import { examplesFor, extractScriptParams } from './scriptExamples';
+import { extractScriptParams } from './scriptExamples';
 import { Segmented } from '../../ui/Choice';
-import { controlCandidate, makeControl } from './scriptTools';
-import { scriptPatch, type ApplyOptions } from './scriptApply';
+import { layerFiles, sameFiles, scriptPatch, type ApplyOptions } from './scriptApply';
+import { DrawGlimpse, FileChips, ScriptStatusLine } from './ScriptCard';
+import { P5ImportDialog, type P5ImportResult } from './P5Import';
+import { replaceWithP5 } from './p5Layer';
 import { ScriptControls } from './ScriptControls';
 import { ScriptModal } from './ScriptModal';
 import { useScriptStatus } from '../../../play/scriptStatus';
-import { selectTokenOnDoubleClick, wrapOnKeyDown } from '../../code/editKeys';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
-import { DEFAULT_SCRIPT, DEFAULT_SCRIPT_3D, DEFAULT_SCRIPT_PARAMS, script3dDefaults, type ScriptLayer, type ScriptMode, type ScriptParamDef } from '../../../types/playLayers';
+import { DEFAULT_SCRIPT, DEFAULT_SCRIPT_3D, DEFAULT_SCRIPT_PARAMS, SCRIPT_MAIN_FILE, script3dDefaults, type ScriptFile, type ScriptLayer, type ScriptMode, type ScriptParamDef } from '../../../types/playLayers';
 import { useTokens } from '../../../theme/themeStore';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { handFeed } from '../../../lib/handFeed';
@@ -728,77 +729,58 @@ export function ClonerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 // ── Script ─────────────────────────────────────────────────────────────────
 
 /**
- * A sketch in JavaScript: the code, the sliders it declares, and how it is
- * composited. The code is applied on Apply (or ⌘/Ctrl+Enter), not per
- * keystroke, so half-typed lines don't flash errors; the kit reports compile
- * and runtime errors back here.
+ * A sketch in JavaScript. The card keeps to a glimpse of draw(), the sketch's
+ * files and its status; the code lives in the Sketch editor (ScriptModal),
+ * with its tabs, console and controls. Code is applied on Apply or Run (or
+ * ⌘/Ctrl+Enter), not per keystroke, so half-typed lines don't flash errors;
+ * the kit reports compile and runtime errors back here.
  */
 export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const l = f.l as ScriptLayer;
   const kind = kindOf(l, ctx.play.layerKinds);
-  const [draft, setDraft] = useState(l.code);
+  // The drafts: sketch.js first, then the other tabs. A kind is one file.
+  const [drafts, setDrafts] = useState<ScriptFile[]>(() => layerFiles(l));
   const [applyError, setApplyError] = useState<string | null>(null);
   const [big, setBig] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [dialog, setDialog] = useState<'save' | 'restyle' | null>(null);
   const [kindMenu, setKindMenu] = useState<{ x: number; y: number } | null>(null);
   const installed = useInstalledKinds();
   const mode = useThemeMode();
   // Another layer selected, or the code changed from outside (undo, a loaded file, the kind edited from another layer): show that code.
-  const [seen, setSeen] = useState({ id: l.id, code: l.code });
-  if (seen.id !== l.id || seen.code !== l.code) { setSeen({ id: l.id, code: l.code }); setDraft(l.code); setApplyError(null); }
+  const appliedKey = `${l.id}\u0000${l.code}\u0000${JSON.stringify(l.files ?? [])}`;
+  const [seen, setSeen] = useState(appliedKey);
+  if (seen !== appliedKey) { setSeen(appliedKey); setDrafts(layerFiles(l)); setApplyError(null); }
   const runError = useScriptStatus(l.id);
-  const dirty = draft !== l.code;
-  const wrap = wrapOnKeyDown(setDraft);
-  const ta = useRef<HTMLTextAreaElement>(null);
-  const [selected, setSelected] = useState('');
-  const candidate = controlCandidate(draft, selected);
-  const readSelection = () => { const el = ta.current; if (!el) return; setSelected(el.value.slice(el.selectionStart, el.selectionEnd)); };
+  const files = layerFiles(l);
 
-  const apply = (code: string, opts?: ApplyOptions): boolean => {
-    const r = scriptPatch(l, code, opts);
+  const apply = (next: readonly ScriptFile[], opts?: ApplyOptions): boolean => {
+    const r = scriptPatch(l, kind ? next.slice(0, 1) : next, opts);
     if (!r.ok) { setApplyError(r.error); return false; }
     setApplyError(null);
     if (!kind) { f.set(r.patch); return true; }
+    const code = next[0]?.code ?? '';
     // Editing the kind: every layer of it gets the code; this layer also takes the values the edit asked for.
     ctx.changePlay(p => {
-      const next = editKind(p, kind.id, code, r.defs, opts?.settings?.mode).play;
-      return { ...next, layers: next.layers.map(x => (x.id === l.id ? { ...x, ...r.patch } as PlayLayer : x)) };
+      const out = editKind(p, kind.id, code, r.defs, opts?.settings?.mode).play;
+      return { ...out, layers: out.layers.map(x => (x.id === l.id ? { ...x, ...r.patch } as PlayLayer : x)) };
     });
     if (layerKindRegistry.get(kind.id)) layerKindRegistry.register({ ...kind, mode: opts?.settings?.mode ?? kind.mode, code, paramDefs: r.defs, version: kind.version + 1 }, 'saved');
     return true;
   };
-  const turnInto = () => {
-    if (!candidate) return;
-    const r = makeControl(draft, candidate.name);
-    if (!r) return;
-    // The control starts at the variable's own value, even when an earlier sketch left a value under the same key.
-    const startAt = candidate.kind === 'slider' ? { [candidate.name]: candidate.value as number } : candidate.kind === 'toggle' ? { [candidate.name]: candidate.value ? 1 : 0 } : undefined;
-    setDraft(r.code); apply(r.code, { startAt }); setSelected('');
-  };
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); apply(draft); return; }
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const ta = e.currentTarget, a = ta.selectionStart, b = ta.selectionEnd;
-      const next = `${draft.slice(0, a)}  ${draft.slice(b)}`;
-      setDraft(next);
-      requestAnimationFrame(() => ta.setSelectionRange(a + 2, a + 2));
-      return;
-    }
-    wrap(e);
-  };
 
   // ── Layer kinds ───────────────────────────────────────────────────────────
   const saveAsKind = (look: KindLook) => {
-    // The draft is what gets saved: apply it first so the layer and the kind agree.
-    const r = scriptPatch(l, draft);
+    // A kind is one file: the other tabs go in front of sketch.js, each under its name.
+    const one = drafts.length > 1 ? [...drafts.slice(1), drafts[0]].map(x => `// ── ${x.name} ──\n${x.code.replace(/\s+$/, '')}`).join('\n\n') + '\n' : drafts[0].code;
+    const r = scriptPatch(l, [{ name: SCRIPT_MAIN_FILE, code: one }]);
     if (!r.ok) { setApplyError(r.error); toast.error('Fix the sketch first', { message: r.error }); return; }
     const id = newLayerKindId(look.name);
     const withDraft = (p: PlayRecord): PlayRecord => ({ ...p, layers: p.layers.map(x => (x.id === l.id ? { ...x, ...r.patch } as PlayLayer : x)) });
     const made = saveLayerAsKind(withDraft(ctx.play), l.id, look, id).kind;
     ctx.changePlay(p => saveLayerAsKind(withDraft(p), l.id, look, id).play);
     if (made) layerKindRegistry.register(made, 'saved');
-    toast.success(`Saved “${look.name.trim()}” as a layer kind`, { message: 'It is in Add layer, here and in your other files. Edit the kind to change every layer made from it.' });
+    toast.success(`Saved “${look.name.trim()}” as a layer kind`, { message: `It is in Add layer, here and in your other files. Edit the kind to change every layer made from it.${drafts.length > 1 ? ' Its files were joined into one.' : ''}` });
   };
   const restyle = (look: KindLook) => { if (kind) applyKindLook(kind, true, look, ctx.changePlay); };
   const editThisLayerOnly = () => {
@@ -814,7 +796,7 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const setSketchMode = (m: ScriptMode) => {
     if (m === sketchMode) return;
     // An untouched starter swaps for the other mode's starter; your own code stays (a 2D helper then says it needs 2D).
-    const starter = l.code === (sketchMode === '3d' ? DEFAULT_SCRIPT_3D : DEFAULT_SCRIPT) && !dirty;
+    const starter = l.code === (sketchMode === '3d' ? DEFAULT_SCRIPT_3D : DEFAULT_SCRIPT) && !l.files?.length && sameFiles(drafts, files);
     const next: Record<string, unknown> = !starter ? { mode: m } : m === '3d' ? script3dDefaults()
       : { mode: '2d', code: DEFAULT_SCRIPT, paramDefs: DEFAULT_SCRIPT_PARAMS.map(d => ({ ...d })), ...Object.fromEntries(DEFAULT_SCRIPT_PARAMS.map(d => [`p_${d.key}`, d.value])) };
     // A layer still called “Script 2” or “3D Script 2” follows the switch.
@@ -828,18 +810,29 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const modeRow = f.row('Mode', <Segmented size="sm" ariaLabel="Draw in 2D or 3D" value={sketchMode} onChange={setSketchMode} options={[{ value: '2d', label: '2D canvas' }, { value: '3d', label: '3D (WebGL)' }]} />,
     kind ? `Changes every ${kind.name} layer. 2D draws on a canvas (s.ctx); 3D draws shapes, lights and a camera with WebGL (three.js).` : '2D draws on a canvas (s.ctx). 3D draws shapes, lights and a camera with WebGL (three.js), still over the picture. The untouched starter swaps for the other one.');
 
+  // ── An imported p5 sketch in place of this one ────────────────────────────
+  const importInto = (r: P5ImportResult) => {
+    setImporting(false);
+    try {
+      const next = replaceWithP5(l, r.patch, r.startAt);
+      ctx.changePlay(p => ({ ...p, layers: p.layers.map(x => (x.id === l.id ? next : x)) }));
+      toast.success(`Imported “${r.title}”`, { message: `${1 + (next.files?.length ?? 0)} file${next.files?.length ? 's' : ''}, ${next.paramDefs.length} control${next.paramDefs.length === 1 ? '' : 's'}. Undo brings the old sketch back.` });
+    } catch (e) { toast.error('The sketch does not compile', { message: (e as Error)?.message ?? String(e) }); }
+  };
+
   const error = applyError ? `Compile: ${applyError}` : runError;
   const defs: ScriptParamDef[] = l.paramDefs ?? [];
-  const kindWord = candidate ? { slider: 'slider', toggle: 'toggle', button: 'button' }[candidate.kind] : '';
   const kindColour = kind ? accentColor(kind.colour, mode) : f.tk.accent.base;
   const uses = kind ? kindUses(ctx.play, kind.id) : 0;
   const inList = kind ? installed.some(k => k.def.id === kind.id) : false;
   const takenNames = [...(ctx.play.layerKinds ?? []), ...installed.map(k => k.def)].filter(k => k.id !== kind?.id).map(k => k.name);
+  const dirty = !sameFiles(drafts, kind ? files.slice(0, 1) : files) && !(kind && sameFiles(drafts.slice(0, 1), files.slice(0, 1)));
 
   const canvas = (
     <Section kind="script" title="Canvas">
       {modeRow}
-      {f.toggle('Clear', 'clear', 'Clear the canvas every frame', 'Off keeps what was drawn, for trails; the script can fade it itself.')}
+      {!l.p5 && f.toggle('Clear', 'clear', 'Clear the canvas every frame', 'Off keeps what was drawn, for trails; the script can fade it itself.')}
+      {l.p5 && f.note('A p5 sketch keeps what it drew between frames, as p5 does, on a canvas of its own fitted into the picture.')}
       {f.toggle('Picture', 'readPicture', 'Let the script read the picture’s brightness', 'Samples the shader at low resolution each frame for s.picture.brightness(x, y).')}
       {f.props('opacity')}
       {f.select('Blend', 'blend', BLENDS, BLEND_HINT)}
@@ -848,9 +841,10 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const modal = big && (
     <ScriptModal
       l={l} f={f} act={ctx.act} layers={ctx.layers as ReadonlyArray<{ id: string; kind: string; label: string; code?: string }>}
-      draft={draft} setDraft={setDraft} apply={apply} applyError={applyError} runError={runError}
+      drafts={kind ? drafts.slice(0, 1) : drafts} setDrafts={setDrafts} apply={apply} applyError={applyError} runError={runError}
       kind={kind ? { name: kind.name, icon: kind.icon, colour: kindColour, uses } : undefined}
       onSaveAsKind={kind ? undefined : () => setDialog('save')}
+      onImport={kind ? undefined : () => setImporting(true)}
       mode={sketchMode} onMode={setSketchMode}
       onClose={() => setBig(false)}
     />
@@ -858,7 +852,7 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const dialogs = (
     <>
       {dialog === 'save' && (
-        <KindDialog title="Save as a layer kind" confirmLabel="Save kind" controls={extractCount(draft, defs.length)} taken={takenNames}
+        <KindDialog title="Save as a layer kind" confirmLabel="Save kind" controls={extractCount(drafts, defs.length)} taken={takenNames}
           initial={{ name: l.label.replace(/\s+\d+$/, '') || 'Sketch', hint: '', icon: sketchMode === '3d' ? 'cube' : 'code', colour: 'mauve' }}
           onDone={look => { setDialog(null); if (look) saveAsKind(look); }} />
       )}
@@ -866,6 +860,10 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         <KindDialog title={`Change “${kind.name}”`} confirmLabel="Save" controls={defs.length} uses={uses} taken={takenNames}
           initial={{ name: kind.name, hint: kind.hint, icon: kind.icon, colour: kind.colour }}
           onDone={look => { setDialog(null); if (look) restyle(look); }} />
+      )}
+      {importing && (
+        <P5ImportDialog title="Import p5.js sketch into this layer" createLabel="Replace this sketch" note="The layer takes the imported sketch, its files and its controls; undo brings this one back."
+          onCreate={importInto} onClose={() => setImporting(false)} />
       )}
     </>
   );
@@ -911,42 +909,15 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 
   return (
     <>
-      <Section kind="script" title="Code" hint={sketchMode === '3d' ? 'A 3D sketch: setup(s) runs once, draw(s) every frame, drawing with WebGL over the picture. p5’s 3D names (box, sphere, lights, camera, orbitControl) work as plain names; s.three is three.js itself. Declare controls in a params object, or turn a variable into one.' : 'A sketch: setup(s) runs once, draw(s) every frame, on a 2D canvas the size of the picture. p5-style helpers work as plain names. Declare controls in a params object, or turn a variable into one.'}>
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 6px 0' }}>
-          <Button size="sm" variant="primary" icon="popout" onClick={() => setBig(true)} title="The big editor: highlighting, autocomplete, a scratch run, the reference, patterns to insert">Open editor</Button>
-          <Button size="sm" icon="save" onClick={() => setDialog('save')} title="Save this sketch as a layer kind of its own: it joins Add layer with its own name, icon and colour, and its controls become the layer's properties">Save as kind</Button>
-          <span style={{ flex: 1 }} />
-          {examplesFor(sketchMode).map(ex => (
-            <Button key={ex.name} size="sm" variant="ghost" title={ex.hint} onClick={() => { setDraft(ex.code); apply(ex.code, { settings: { ...ex.settings, mode: sketchMode } }); }}>{ex.name}</Button>
-          ))}
+      <Section kind="script" title="Code" hint={sketchMode === '3d' ? 'A 3D sketch: setup(s) runs once, draw(s) every frame, drawing with WebGL over the picture. The Sketch editor has the code, its files, the console, the reference and patterns.' : 'A sketch: setup(s) runs once, draw(s) every frame, on a canvas over the picture. p5.js sketches run too. The Sketch editor has the code, its files, the console, the reference and patterns.'}>
+        <DrawGlimpse files={files} onOpen={() => setBig(true)} error={!!error} />
+        <FileChips files={files} />
+        <ScriptStatusLine layerId={l.id} error={error} running={dirty ? 'Edited in the Sketch editor: Apply there to run it.' : `Running${l.p5 ? ' (p5.js)' : ''} · ${defs.length} control${defs.length === 1 ? '' : 's'}`} />
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+          <Button size="sm" variant="primary" icon="popout" onClick={() => setBig(true)} title="The Sketch editor: the code and its files, the console, the reference, patterns and a scratch run">Open in sketch editor</Button>
+          <Button size="sm" icon="import" onClick={() => setImporting(true)} title="Bring in a p5.js sketch: paste it, or open its files, a folder or a .zip">Import p5.js…</Button>
+          <Button size="sm" variant="ghost" icon="save" onClick={() => setDialog('save')} title="Save this sketch as a layer kind of its own: it joins Add layer with its own name, icon and colour, and its controls become the layer's properties">Save as kind</Button>
         </div>
-        <textarea
-          ref={ta}
-          aria-label="Script code"
-          value={draft}
-          onSelect={readSelection}
-          onKeyUp={readSelection}
-          onMouseUp={readSelection}
-          spellCheck={false}
-          onChange={e => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
-          onDoubleClick={selectTokenOnDoubleClick}
-          style={{
-            display: 'block', width: '100%', boxSizing: 'border-box', minHeight: 160, height: Math.min(360, 60 + draft.split('\n').length * 17), resize: 'vertical',
-            border: 0, outline: 'none', borderRadius: radius.md, padding: '8px 10px', background: f.tk.bg.field, color: f.tk.text.primary,
-            font: `12px/1.45 ${fontFamily.mono}`, tabSize: 2, whiteSpace: 'pre', overflow: 'auto',
-            boxShadow: error ? `inset 0 0 0 1.5px ${f.tk.status.danger}` : dirty ? `inset 0 0 0 1.5px ${f.tk.accent.base}` : 'none',
-          }}
-        />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-          <Button size="sm" variant={dirty ? 'primary' : undefined} disabled={!dirty} onClick={() => apply(draft)} title="⌘/Ctrl+Enter">Apply</Button>
-          {dirty && <Button size="sm" variant="ghost" onClick={() => { setDraft(l.code); setApplyError(null); }}>Revert</Button>}
-          {candidate && <Button size="sm" icon="plus" title={candidate.kind === 'button' ? `Add ${candidate.name} to params: a button on the layer that runs it, and an action Play can press` : `Add ${candidate.name} to params (starting at ${String(candidate.value)}) and let the ${kindWord} drive the variable each frame`} onClick={turnInto}>{`Make ‘${candidate.name}’ a ${kindWord}`}</Button>}
-          <span style={{ flex: 1, minWidth: 0, fontSize: 11, lineHeight: 1.4, color: error ? f.tk.status.danger : f.tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis' }} title={error ?? undefined}>
-            {error ?? (dirty ? 'Edited: Apply to run it.' : `Running · ${defs.length} control${defs.length === 1 ? '' : 's'}`)}
-          </span>
-        </div>
-        {f.note(<>Select a variable like <code>let speed = 2;</code>, <code>let on = false;</code> or a function’s name and press <b>Make</b> to control it from the panel and from Play. The big editor has the reference, patterns to insert and a scratch run.</>)}
       </Section>
       {defs.length > 0 && (
         <Section kind="script" title="Controls" hint="Declared by the script. Sliders and toggles: right-click one to make it a Play control or drive it with a null. Buttons: + puts them on the Play panel, where a key, a click, a beat or a note can press them.">
@@ -960,8 +931,8 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   );
 }
 
-/** How many controls the draft declares (the applied count when it does not compile). */
-function extractCount(code: string, fallback: number): number {
-  const r = extractScriptParams(code);
+/** How many controls the drafts declare (the applied count when they do not compile). */
+function extractCount(files: readonly ScriptFile[], fallback: number): number {
+  const r = extractScriptParams(files[0]?.code ?? '', files.slice(1));
   return r.ok ? r.defs.length : fallback;
 }

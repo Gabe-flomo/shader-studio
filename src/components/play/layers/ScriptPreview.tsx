@@ -25,8 +25,17 @@ function glowCanvas(): HTMLCanvasElement {
   return glow;
 }
 
-export function ScriptPreview({ code, defs, values, clear, mode = '2d', ratio = 16 / 9, width = 320 }: {
+export function ScriptPreview({ code, files, p5, assets, defs, values, clear, mode = '2d', ratio = 16 / 9, width = 320, onLog }: {
+  /** The main file (sketch.js). */
   code: string;
+  /** The sketch's other files, run first in the same scope. */
+  files?: ReadonlyArray<{ name: string; code: string }>;
+  /** Run the p5 way (its own canvas, fitted in). */
+  p5?: boolean;
+  /** Files an imported p5 project loads (images, JSON…). */
+  assets?: ReadonlyArray<{ name: string; kind: string; data: string }>;
+  /** Where its console goes; without it, nowhere (the layer's own run fills the Console). */
+  onLog?: (level: string, args: unknown[]) => void;
   /** 3D: the sketch draws with three.js (a shared WebGL renderer), copied onto this canvas each frame. */
   mode?: '2d' | '3d';
   defs: ScriptParamDef[];
@@ -44,6 +53,9 @@ export function ScriptPreview({ code, defs, values, clear, mode = '2d', ratio = 
   const mouse = useRef({ x: 0, y: 0, over: false, down: false });
   const [error, setError] = useState<string | null>(null);
   const [run, setRun] = useState(0);
+  const filesKey = JSON.stringify(files ?? []);
+  const logRef = useRef(onLog);
+  logRef.current = onLog;
   const height = Math.round(width / ratio);
   // 3D: three.js loads on first use; the run starts once it is here.
   const three = useThreeRuntime(mode === '3d');
@@ -55,7 +67,7 @@ export function ScriptPreview({ code, defs, values, clear, mode = '2d', ratio = 
     const W = Math.round(width * dpr), H = Math.round(height * dpr);
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d'); if (!ctx) return;
-    const st = klSketchCompile(code, { mode, three });
+    const st = klSketchCompile(code, { mode, three, files: JSON.parse(filesKey), p5: !!p5, assets: assets as never, log: (level, args) => { if (logRef.current) logRef.current(level, args); } });
     stRef.current = st;
     setError(st.error);
     if (st.error) return;
@@ -65,6 +77,8 @@ export function ScriptPreview({ code, defs, values, clear, mode = '2d', ratio = 
       if (!alive) return;
       const dt = Math.min(0.1, (now - last) / 1000); last = now;
       const { defs, values, clear } = latest.current;
+      // A control marked restart moved (or Run): start over.
+      if (st.wantRestart) { setRun(n => n + 1); return; }
       const params: Record<string, number> = {};
       for (const d of defs) { const v = values[d.key]; params[d.key] = typeof v === 'number' && Number.isFinite(v) ? v : d.value; }
       const m = mouse.current;
@@ -81,15 +95,18 @@ export function ScriptPreview({ code, defs, values, clear, mode = '2d', ratio = 
       const err = klSketchStep(st, s, defs, clear);
       if (err) { setError(err); return; }
       if (st.g3) {
-        const out = k3Render(st.g3, k3Renderer(three, W, H), W, H);
-        if (clear || st.frame <= 1) ctx.clearRect(0, 0, W, H);
-        if (out) ctx.drawImage(out, 0, 0);
+        // A p5 sketch renders at its own canvas's shape, fitted in.
+        const v = st.p5 && st.p5.view;
+        const vw = v ? Math.max(1, Math.round(v.w)) : W, vh = v ? Math.max(1, Math.round(v.h)) : H;
+        const out = st.waiting ? null : k3Render(st.g3, k3Renderer(three, vw, vh), vw, vh);
+        if (clear || st.frame <= 1 || st.p5) ctx.clearRect(0, 0, W, H);
+        if (out) ctx.drawImage(out, v ? Math.round(v.x) : 0, v ? Math.round(v.y) : 0);
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => { alive = false; cancelAnimationFrame(raf); klSketchDispose(st); };
-  }, [code, mode, three, waiting, width, height, run]);
+  }, [code, filesKey, p5, assets, mode, three, waiting, width, height, run]);
 
   const buttons = defs.filter(d => d.kind === 'button');
   return (

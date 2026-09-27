@@ -27,6 +27,7 @@ import { playVideoLayers } from './videoLayers';
 import { klVideoFit } from './kit/layers.js';
 import type { BqPlan } from './kit/queue.js';
 import { setScriptStatus } from './scriptStatus';
+import { logScript } from './scriptConsole';
 import { kitDataset } from './dataLayer';
 import { klFontFor } from './kit/layers.js';
 import { dragHandle, handleAt, handlePoints, insideBounds, layerBounds, maskBounds, maskPatchFor, outlinePoints, patchFor, type Bounds, type Handle } from './transform';
@@ -601,6 +602,8 @@ class PlayOverlay {
       // The graph's Layers node can't read the layers while the graph isn't running.
       shaderTap: forExport || playBackground.active() || (playBackground.layerActive() && !planShowsThis(this.lastQueue)) ? undefined : this.shaderTap ?? undefined,
       scriptStatus: forExport ? undefined : setScriptStatus,
+      // A sketch's console goes to the Sketch editor's Console (and nowhere while rendering an export).
+      scriptLog: forExport ? () => {} : logScript,
       // three.js for 3D Script layers, once loaded (they wait until then).
       three: threeRuntime(),
       // Datasets for Data layers and s.data() in sketches (their frozen results, Normalize applied).
