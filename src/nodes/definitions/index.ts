@@ -7,7 +7,7 @@ export type { NodeAlias } from './aliases';
 
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { getUserNodeDefinition, getAllUserNodeDefinitions } from '../userNodes/userNodeRegistry';
-import { withInputExpressions } from '../../glsl/inputExpr';
+import { knobParamDefs, withInputExpressions } from '../../glsl/inputExpr';
 import { VideoInputNode } from './sources';
 export { VideoInputNode };
 import { MidiInputNode } from './midi';
@@ -681,10 +681,14 @@ export function getNodeDefinition(type: string): NodeDefinition | undefined {
 const perNodeDefs = new WeakMap<GraphNode, NodeDefinition>();
 export function getNodeDefinitionFor(node: GraphNode): NodeDefinition | undefined {
   const def = getNodeDefinition(node.type);
-  if (!def?.paramDefsFor) return def;
+  if (!def) return def;
   let d = perNodeDefs.get(node);
   if (!d) {
-    d = { ...def, paramDefs: { ...(def.paramDefs ?? {}), ...def.paramDefsFor(node) }, outputs: Object.keys(node.outputs).length ? node.outputs : def.outputs };
+    // An input expression's knobs (glsl/inputExpr) are float params of this instance.
+    const knobs = knobParamDefs(node);
+    d = !def.paramDefsFor && !knobs ? def : def.paramDefsFor
+      ? { ...def, paramDefs: { ...(def.paramDefs ?? {}), ...def.paramDefsFor(node), ...knobs }, outputs: Object.keys(node.outputs).length ? node.outputs : def.outputs }
+      : { ...def, paramDefs: { ...(def.paramDefs ?? {}), ...knobs } };
     perNodeDefs.set(node, d);
   }
   return d;

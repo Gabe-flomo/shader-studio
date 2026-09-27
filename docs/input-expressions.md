@@ -16,6 +16,10 @@ check as you type, Enter or **Done** applies, **Remove** clears. When an
 expression is set, the row shows it as a purple chip; click the chip to edit,
 and the socket tooltip lists it. Setting and removing are undo steps.
 
+On a phone, the node view's Wiring list shows the same ƒ on every eligible
+input row: faint when unset, the expression as a purple chip when set. Tapping
+it opens the same editor as a bottom sheet, knobs included.
+
 Names an expression may use:
 
 | name | what it is |
@@ -26,12 +30,57 @@ Names an expression may use:
 | `res` | the canvas size in pixels; `mouse` the mouse in 0..1 |
 | the card's other float inputs | by socket key, as they arrive (before their own expressions) |
 | the card's float sliders | by param key |
+| the input's knobs | by the names you gave them (below) |
 
 plus GLSL's built-in functions (`sin`, `cos`, `fract`, `floor`, `abs`, `pow`,
 `mix`, `clamp`, `smoothstep`, `step`, `mod`, `min`, `max`, `length`…),
 `PI`, `TAU`, and the ternary. Not allowed: `;`, braces, assignment, unknown
 names (the editor says which), and functions the check doesn't know (the
 compiler would reject them with the line marked anyway).
+
+## Knobs
+
+A knob is a name of the expression's own that is a slider: `wob` in
+`input * (1.0 + wob * sin(t * 6.0))`. Two ways to make one in the editor:
+
+- Type a name that isn't known yet. Instead of an error, the check line says
+  "`wob` is new here" with a **Make wob a knob** button (one per new name).
+- **Add a knob** (the dashed chip after the names) makes `k` (then `k2`, `k3`…)
+  and puts it in at the cursor; after a value (`input`, `2.0`, a `)`) it goes
+  in as `* k`, so the line stays valid.
+
+A new knob starts at 1 with a range of 0 to 2. The editor lists the knobs
+under the names, each with a value slider, **Min** and **Max** fields and a ×
+that removes it (and takes it out of the line where it stands alone as a
+factor). A knob the expression no longer mentions is dimmed and is dropped on
+**Done**. Dragging an applied knob's slider in the editor moves it live.
+
+On the card each knob is a slider right under its expression's row, named in
+purple. It behaves like any float slider: dragging is a uniform write (no
+recompile); right-click it for **Add to Play controls** (the control reads
+"Radius · wob"), so Play mappings (MIDI, LFOs, the mouse…) drive it; the ◆
+button keys it, and a keyed knob shows its curve on the ruler. On a phone the
+knobs are also in the node view's value list, as "Radius · wob".
+
+Knob names follow the same rules as any name here: a letter, then letters,
+digits or single underscores, up to 16 characters. Reserved, and so never
+offered: `input`, `t`/`time`, `uv`, `res`/`resolution`, `mouse`, `PI`, `TAU`,
+GLSL keywords, types and the functions above, anything starting `gl_`, `u_`
+or `kf_`, and names the card already has (its inputs and sliders).
+
+Stored as: `params["__inKnobs_<inputKey>"] = [{ name, min, max }]` and each
+value in `params["knob_<inputKey>_<name>"]` (underscores in the input key
+become `x`, so the uniform name never holds `__`). `getNodeDefinitionFor`
+declares each value param as a float paramDef (`knobParamDefs`), which is all
+the uniform patcher, keyframes, Play candidates and group overrides need; the
+binder reads what the patcher left in the param (a uniform name, a keyframe
+call, or a number on a card that stays baked). Removing the expression, or a
+knob, clears its value and keyframes. A Play control on a knob that was
+removed shows as missing, like any control whose param went away. Old
+expressions have no knob list and compile exactly as before.
+
+Try the Play example **Expression knobs**: Circle SDF's Radius wobbles by
+`wob * sin(t * speed)`, with an LFO on Wobble and Speed left free.
 
 ## How it works
 
@@ -72,13 +121,14 @@ is at 17 of 17 identical.
   in; a vectorised math card (Add set to vec2) accepts an expression on its
   float-declared sockets and GLSL type-checks it, which is right for `input *
   2.0` and wrong for `input + 1.0`.
-- No sliders of its own: a number in an expression is a number. To keep a knob,
-  keep the card (turn the absorb strategy off) or reference one of the card's
-  sliders by name.
+- A number in an expression is still a number; make it a knob to get a
+  slider. The optimiser's absorb pass writes plain numbers (the sliders of the
+  cards it absorbs are baked, as before), and when it absorbs a card that had
+  knobs of its own, their current values are baked too.
+- A knob's name can't be changed in place: edit the line and make the new name
+  a knob (its value starts over).
 - Wired-slider display and the "Play control from upstream" flow read the raw
   socket, as they should; an expression is visible on the row and in the
   tooltip, not in the slider.
 - Next: the same affordance on an Expression Block's input rows is already
-  there (blocks are cards); a per-expression slider (`k` in `input * k`) would
-  need a param slot per expression, which is the natural next step if the
-  no-knob limit bites.
+  there (blocks are cards).

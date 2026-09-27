@@ -12,6 +12,7 @@ const ROWS: Array<[string, string, string]> = [
   ['playLfo', 'LFOs and the clock', 'Oscillators that move controls on their own: free-running LFOs and a tempo-locked clock.'],
   ['playNoise', 'Noise: smooth, drift, random, stepped', 'Four kinds of random motion for controls.'],
   ['playCrossMod', 'Controls that drive controls', 'A control can be a source: move one slider and another follows.'],
+  ['playExprKnob', 'Expression knobs', 'A slider inside an input expression, driven by an LFO like any control.'],
   ['playColour', 'Colour channels', 'Mappings on a colour control: brightness, or one channel at a time.'],
   ['playKeys', 'Keys: hold and hit', 'A held key is a gate; a trigger plays an envelope each time you press.'],
   ['playTriggerModes', 'Triggers: toggle, step, random', 'Besides envelopes, a trigger can toggle, walk through steps, or pick a random value.'],
