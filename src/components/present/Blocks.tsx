@@ -84,7 +84,7 @@ function BlockFrame({ block, selected, editing, children }: { block: Block; sele
   // A block just added (or picked from afar) comes into view.
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => { if (selected && editing) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, [selected, editing]);
-  if (!editing) return <div className="pp-block">{children}</div>;
+  if (!editing) return <div className="pp-block" data-reading="">{children}</div>;
   return (
     <div
       ref={ref}

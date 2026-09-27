@@ -178,7 +178,7 @@ export function NotesCard({ notes, title, source, editing, targets, onEdit, onCh
           <div style={{ color: tk.text.faint, fontSize: 11, marginTop: 4 }}>Drag a layer or a control here to link it · ⌘/Ctrl + Enter to save · Esc to cancel</div>
         </div>
       ) : open && (
-        <div style={{ minHeight: 0, maxHeight: big ? 'none' : 240, flex: big ? 1 : undefined, overflowY: 'auto', padding: '0 12px 10px 12px', color: tk.text.secondary, lineHeight: 1.5 }}>
+        <div data-selectable="" style={{ minHeight: 0, maxHeight: big ? 'none' : 240, flex: big ? 1 : undefined, overflowY: 'auto', padding: '0 12px 10px 12px', color: tk.text.secondary, lineHeight: 1.5 }}>
           {parseNotes(notes).map((b, i) => b.kind === 'p'
             ? <p key={i} style={{ margin: '0 0 6px' }}>{b.lines.map((l, j) => <span key={j}>{j > 0 && <br />}{inline(l, chip)}</span>)}</p>
             : <ul key={i} style={{ margin: '0 0 6px', paddingLeft: 18 }}>{b.items.map((it, j) => <li key={j} style={{ margin: '1px 0' }}>{inline(it, chip)}</li>)}</ul>)}

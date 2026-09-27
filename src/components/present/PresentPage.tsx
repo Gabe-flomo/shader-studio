@@ -28,7 +28,7 @@ import { toast } from '../ui/toastStore';
 import type { Page } from '../page';
 import { listPresentations, lastPresentation, savePresentation, PRESENTATIONS_CHANGED, type PresentationEntry } from '../../present/storage';
 import { internStoredPresentations } from '../../present/presentAssets';
-import { FIRST_SAMPLE, SAMPLE_GROUPS, SAMPLE_PRESENTATIONS, type SamplePresentation } from '../../present/samples';
+import { SAMPLE_GROUPS, SAMPLE_PRESENTATIONS, type SamplePresentation } from '../../present/samples';
 import { usePresentation, type PresentMode } from './presentationStore';
 import { Inspector } from './Inspector';
 import { StepsList, StepsStrip } from './StepsList';
@@ -37,6 +37,7 @@ import { ScrollView, SlidesView } from './Viewer';
 import { loadMarkdown } from './useMarkdown';
 import { presentCss } from './presentCss';
 import { usePosters } from './usePosters';
+import { useSampleStills } from './useSampleStills';
 import { ExportDialog } from './ExportDialog';
 import { deleteWithUndo, exportPresentationFile, importPresentationFile, saveCopy } from './presentationFiles';
 import { PresentationsDialog } from './PresentationsDialog';
@@ -189,7 +190,7 @@ function Header({ compact, list, onExport, onBrowse }: { compact: boolean; list:
       {doc && <Segmented size={compact ? 'sm' : 'md'} ariaLabel="View" value={mode} onChange={setMode} options={modes} />}
       {doc && !compact && <Button size="sm" icon="export" onClick={onExport} title="A web page (slides or scroll) or a presentation file">Export</Button>}
       {doc && compact && <IconButton icon="export" label="Export" tooltip={false} onClick={onExport} style={{ width: 34, height: 36 }} />}
-      {menu && <Menu x={menu.x} y={menu.y} minWidth={270} items={items} onClose={() => setMenu(null)} />}
+      {menu && <Menu x={menu.x} y={menu.y} minWidth={270} title="Presentations" items={items} onClose={() => setMenu(null)} />}
     </div>
   );
 }
@@ -226,38 +227,71 @@ function SaveStatus({ compact }: { compact: boolean }) {
 function EmptyState({ compact }: { compact: boolean }) {
   const tk = useTokens();
   const [busy, setBusy] = useState<string | null>(null);
-  const first = FIRST_SAMPLE;
+  const stills = useSampleStills(SAMPLE_PRESENTATIONS);
   const open = async (sample: SamplePresentation) => { setBusy(sample.title); await openSample(sample); setBusy(null); };
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ maxWidth: 520, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-        <span style={{ width: 52, height: 52, borderRadius: radius.lg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: alpha(tk.accent.base, 0.12), color: tk.accent.base }}><Icon name="slides" size={26} /></span>
-        <h2 style={{ margin: 0, font: `720 ${compact ? 22 : 26}px/1.2 ${fontFamily.ui}`, letterSpacing: '-0.015em', color: tk.text.primary }}>Teach with your Plays</h2>
-        <p style={{ margin: 0, color: tk.text.muted, font: `500 14px/1.6 ${fontFamily.ui}` }}>
-          Build a lesson step by step: text with maths, the pictures your graphs make, sliders to try, and the code behind them. Show it as slides in the room or as one page to read, or export it as a web page.
-        </p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 6 }}>
-          <Button variant="primary" icon="spark" disabled={!!busy} onClick={() => void open(first)}>{busy === first.title ? 'Building it…' : `Open the sample: ${first.title}`}</Button>
-          <Button icon="plus" onClick={() => void newPresentation()}>New presentation</Button>
-          <Button variant="ghost" icon="import" onClick={() => void importPresentationFile()}>Import a file</Button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, marginTop: 4 }}>
-          <span style={{ color: tk.text.faint, font: `600 11px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>More samples</span>
-          {SAMPLE_GROUPS.map(g => (
-            <div key={g.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, marginTop: 4 }}>
-              <span style={{ color: tk.text.muted, font: `600 12px ${fontFamily.ui}` }}>{g.label}</span>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
-                {SAMPLE_PRESENTATIONS.filter(sample => sample.group === g.id && sample !== first).map(sample => (
-                  <Button key={sample.title} size="sm" variant="ghost" icon="slides" disabled={!!busy} title={sample.hint} onClick={() => void open(sample)}>
-                    {busy === sample.title ? 'Building it…' : sample.title}
-                  </Button>
-                ))}
-              </div>
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto', padding: compact ? '28px 16px 48px' : '56px 40px 72px', display: 'flex', flexDirection: 'column', gap: compact ? 30 : 44 }}>
+        <section style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12, maxWidth: 620 }}>
+          <span style={{ width: 44, height: 44, borderRadius: radius.lg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: alpha(tk.accent.base, 0.12), color: tk.accent.base }}><Icon name="slides" size={22} /></span>
+          <h2 style={{ margin: 0, font: `720 ${compact ? 24 : 30}px/1.15 ${fontFamily.ui}`, letterSpacing: '-0.02em', color: tk.text.primary }}>Teach with your Plays</h2>
+          <p style={{ margin: 0, color: tk.text.muted, font: `500 ${compact ? 14 : 15}px/1.6 ${fontFamily.ui}` }}>
+            Build a lesson step by step: text with maths, the pictures your graphs make, sliders to try, and the code behind them. Show it as slides in the room, or as one page to read.
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+            <Button variant="primary" icon="plus" onClick={() => void newPresentation()}>New presentation</Button>
+            <Button icon="import" onClick={() => void importPresentationFile()} title="Open a .present.json file">Import a file</Button>
+            <Button variant="ghost" icon="camera" onClick={() => { void openCapture({ aspect: 16 / 9 }); }} title="A still from any graph, 1920 × 1080 or up to 4K, kept in the Library for step backgrounds">Capture a background</Button>
+          </div>
+        </section>
+        {SAMPLE_GROUPS.map(g => (
+          <section key={g.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px 10px', flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0, font: `680 ${compact ? 15 : 16}px ${fontFamily.ui}`, color: tk.text.primary }}>{g.label}</h3>
+              <span style={{ color: tk.text.faint, font: `500 12.5px ${fontFamily.ui}` }}>{g.blurb}</span>
             </div>
-          ))}
-        </div>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? 150 : 170}px, 1fr))`, gap: compact ? 10 : 14 }}>
+              {SAMPLE_PRESENTATIONS.filter(sample => sample.group === g.id).map(sample => (
+                <SampleCard key={sample.title} sample={sample} still={stills[sample.title]} compact={compact}
+                  busy={busy === sample.title} disabled={!!busy} onOpen={() => void open(sample)} />
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
+  );
+}
+
+function SampleCard({ sample, still, compact, busy, disabled, onOpen }: { sample: SamplePresentation; still: string | null | undefined; compact: boolean; busy: boolean; disabled: boolean; onOpen: () => void }) {
+  const tk = useTokens();
+  const [hover, setHover] = useState(false);
+  const lift = hover && !disabled;
+  return (
+    <button
+      type="button" disabled={disabled} onClick={onOpen} title={`Open the sample “${sample.title}”`}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', flexDirection: 'column', minWidth: 0, padding: 0, textAlign: 'left', cursor: disabled ? 'default' : 'pointer',
+        border: `1px solid ${lift ? tk.border.strong : tk.border.default}`, borderRadius: radius.card, overflow: 'hidden',
+        background: tk.bg.panel, color: tk.text.primary, font: 'inherit',
+        boxShadow: lift ? tk.shadow.popover : 'none', transform: lift ? 'translateY(-1px)' : 'none',
+        transition: 'box-shadow 120ms ease, transform 120ms ease, border-color 120ms ease', opacity: disabled && !busy ? 0.6 : 1,
+      }}
+    >
+      <span style={{ position: 'relative', display: 'block', aspectRatio: '16 / 9', background: `linear-gradient(135deg, ${tk.bg.render}, ${alpha(tk.accent.base, 0.35)})`, overflow: 'hidden' }}>
+        {still
+          ? <img src={still} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          : <Icon name="slides" size={22} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', color: alpha('#ffffff', still === undefined ? 0.25 : 0.45) }} />}
+        {busy && (
+          <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)', color: '#fff', font: `600 12.5px ${fontFamily.ui}` }}>Building it…</span>
+        )}
+      </span>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: compact ? '9px 10px 11px' : '11px 13px 13px' }}>
+        <span style={{ font: `640 ${compact ? 13 : 13.5}px/1.3 ${fontFamily.ui}` }}>{sample.title}</span>
+        <span style={{ color: tk.text.muted, font: `500 ${compact ? 11.5 : 12}px/1.4 ${fontFamily.ui}`, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{sample.hint}</span>
+      </span>
+    </button>
   );
 }
 
