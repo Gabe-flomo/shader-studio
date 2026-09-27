@@ -8,6 +8,7 @@ import { useNodeGraphStore } from './store/useNodeGraphStore'
 import { compileGraph } from './compiler/graphCompiler'
 import { nodePreviewRenderer } from './lib/nodePreviewRenderer'
 import { loadExampleGraphs } from './store/exampleIndex'
+import { installCameraKeeper } from './lib/cameraKeeper'
 import { resolveNodeAliases } from './nodes/definitions/aliases'
 import { getNodeDefinition } from './nodes/definitions'
 import { watchForStaleBuild } from './lib/staleBuild'
@@ -16,6 +17,9 @@ import { playOverlay } from './play/overlay'
 import { playBackground } from './play/background'
 import { handFeed } from './lib/handFeed'
 import { playEngine } from './lib/playEngine'
+
+// The webcam turns off as soon as no layer or hand tracking uses it.
+installCameraKeeper()
 
 const root = createRoot(document.getElementById('root')!)
 watchForStaleBuild()

@@ -44,7 +44,7 @@ import { toast } from '../ui/toastStore';
 import { usePlayUi, type PanelSize } from './playUi';
 import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
-import { HandsChip } from './HandsChip';
+import { HandsButton, HandsChip } from './HandsChip';
 import { handFeed } from '../../lib/handFeed';
 import { usesHands, type HandGesture } from '../../types/play';
 import { ColourPad } from './ColourPad';
@@ -885,6 +885,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               />
             )}
             <IconButton icon="info" label="Connect Ableton, a MIDI controller, OSC or live audio: step-by-step" onClick={() => setGuideOpen(true)} />
+            <HandsButton />
             <Button size="sm" icon="spark" variant={learnFor === 'new' ? 'primary' : 'secondary'} disabled={noControls} onClick={() => setLearnFor(l => (l === 'new' ? null : 'new'))}>
               {learnFor === 'new' ? 'Listening…' : 'Learn'}
             </Button>

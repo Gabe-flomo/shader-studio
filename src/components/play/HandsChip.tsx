@@ -145,3 +145,35 @@ export function HandsPill() {
     </button>
   );
 }
+
+/**
+ * HandsButton — hand tracking's way in, always in the Mappings header:
+ * a hand icon (with a dot while tracking) that opens the chip with Enable,
+ * Stop and the settings, plus how to use hands once they're on.
+ */
+export function HandsButton() {
+  const tk = useTokens();
+  const { status } = useHands();
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLSpanElement>(null);
+  if (status === 'unsupported') return null;
+  const on = status === 'on';
+  return (
+    <span ref={anchor} style={{ position: 'relative', display: 'inline-flex' }}>
+      <IconButton icon="hand" label={on ? 'Hand tracking is on' : 'Hand tracking: follow your hands with the camera'} active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
+      {on && <span aria-hidden style={{ position: 'absolute', top: 5, right: 5, width: 6, height: 6, borderRadius: '50%', background: tk.status.success, pointerEvents: 'none' }} />}
+      {open && (
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={320} padding={0}>
+          <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <HandsChip />
+            <div style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
+              {on
+                ? <>Now press <b>Learn</b> and move a finger or pinch, or pick a source from the <b>Hands</b> group in a mapping. Triggers can fire <b>On: Hand gesture</b>, and a Null can follow a hand point.</>
+                : <>Turn it on to use your hands as a controller: every finger point, pinches and gestures become sources. It runs on this computer; nothing is uploaded.</>}
+            </div>
+          </div>
+        </Popover>
+      )}
+    </span>
+  );
+}
