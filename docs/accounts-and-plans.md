@@ -156,9 +156,25 @@ Today there are several: `.present.json`, play files, library ZIPs, graph JSON,
    - Nothing is lost when that happens. Files stay, and Pro-only things (Play
      layers, sealed packs) still open to view but can't be edited or exported
      until Pro is back.
-9. **Browser:** signing in on the web app is a session, so it doesn't use up
-   one of the 5 device activations. It re-verifies on each visit, and the Pro
-   code is served only after sign-in (section 9).
+9. **An activation is a physical device, not an app.** The browser version and
+   the desktop app on the same Mac count as **one** activation, verified once.
+   A phone signing in is another activation. A browser can't read a hardware
+   id, so the two are matched like this:
+   - **Desktop first:** the desktop app activates with a device id from the
+     machine, kept in the keychain.
+   - **Linking the browser on that machine:** when you sign in on the web on a
+     computer where the desktop app is installed, the browser offers "Link to
+     Playfield on this Mac". That opens a `playfield://link?code=…` link, the
+     already-activated desktop app confirms the code with the licence service,
+     and the browser session joins that device's activation. It uses no new
+     slot and needs no second check.
+   - **Browser only** (no desktop app, or a phone): the browser gets its own
+     device id stored in the browser and uses one slot. If site data is
+     cleared, the service tries to recognise the device by its browser, OS and
+     rough network (the same account, the same browser and OS, and the same
+     network within a short window), so it doesn't burn a new slot. The
+     account page lists devices with "last seen", so freeing one is one click.
+   - Each device then follows the weekly check with the 30-day grace.
 10. **Encrypt the Pro code: yes.**
    - **Desktop:** the build ships the Pro-only parts encrypted: Play layers and
      the full Play sources, Convert, the 2K/4K and website exporters, node
