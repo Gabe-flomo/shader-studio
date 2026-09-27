@@ -262,6 +262,8 @@ class PlayDrumPads {
 
   /** Everything sounding stops (the card's Stop). */
   stopAll(layerId: string): void { this.kits.get(layerId)?.sampler.stopAll(); }
+  /** Voices sounding on a kit right now (0 before any hit, or once they've faded). */
+  playing(layerId: string): number { return this.kits.get(layerId)?.sampler.playing() ?? 0; }
 
   analyser(layerId: string): AnalyserNode | null {
     const l = this.layers.find(x => x.id === layerId);
