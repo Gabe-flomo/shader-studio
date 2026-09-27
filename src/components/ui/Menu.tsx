@@ -8,7 +8,9 @@ import { portalGuard } from './portalGuard';
 
 export type MenuItem =
   | { label: string; icon?: IconName; /** Tints the icon (a saved layer kind's colour). */ iconColor?: string; hint?: string; danger?: boolean; disabled?: boolean; onSelect: () => void }
-  | 'separator';
+  | 'separator'
+  /** A small caps label over the items that follow it (not selectable). */
+  | { heading: string };
 
 const MARGIN = 8;
 
@@ -29,7 +31,7 @@ export function Menu({ x, y, items, onClose, minWidth = 190, maxWidth = 360 }: {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
   const [active, setActive] = useState(-1);
-  const selectable = items.map((it, i) => (it !== 'separator' && !it.disabled ? i : -1)).filter(i => i >= 0);
+  const selectable = items.map((it, i) => (it !== 'separator' && !('heading' in it) && !it.disabled ? i : -1)).filter(i => i >= 0);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -54,7 +56,7 @@ export function Menu({ x, y, items, onClose, minWidth = 190, maxWidth = 360 }: {
       }
       if (e.key === 'Enter' && active >= 0) {
         const it = items[active];
-        if (it !== 'separator') { it.onSelect(); onClose(); }
+        if (it !== 'separator' && !('heading' in it)) { it.onSelect(); onClose(); }
       }
     };
     window.addEventListener('pointerdown', onDown, true);
@@ -77,6 +79,7 @@ export function Menu({ x, y, items, onClose, minWidth = 190, maxWidth = 360 }: {
     >
       {items.map((it, i) => {
         if (it === 'separator') return <div key={i} style={{ height: 1, background: tk.border.subtle, margin: '4px 2px' }} />;
+        if ('heading' in it) return <div key={i} role="presentation" style={{ padding: '8px 10px 3px', color: tk.text.faint, font: `700 10px ${fontFamily.ui}`, letterSpacing: '0.07em', textTransform: 'uppercase' }}>{it.heading}</div>;
         // A short hint (a shortcut, "Rotation 0°") sits at the right; a sentence goes under the label.
         const long = !!it.hint && it.hint.length > 28;
         return (
