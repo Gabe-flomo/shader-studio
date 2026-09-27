@@ -8,6 +8,7 @@ import { toast } from '../components/ui/toastStore';
 import { buildLibraryZip, buildSetZip, countInSet, describeSnapshot, DOWNLOAD_SETS, importLibrary, LIBRARY_REFRESH_EVENTS, libraryZipName, readLibrary, takeSnapshot, type DownloadSetId } from './library';
 import { errorMessage, openBinaryFile, saveBinaryFile } from './fileIO';
 import { unzipSync } from 'fflate';
+import { requireFeature } from '../lib/plan';
 import { backgroundZipFiles, importBackgroundFiles, listImages } from '../lib/backgroundLibrary';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -23,6 +24,7 @@ async function imageFiles(): Promise<{ files: Record<string, Uint8Array>; count:
 }
 
 export async function exportEverything(): Promise<void> {
+  if (!requireFeature('files.everything')) return;
   const snap = takeSnapshot();
   const d = describeSnapshot(snap);
   const images = await imageFiles();
@@ -47,6 +49,7 @@ export async function exportSet(set: DownloadSetId): Promise<void> {
 }
 
 export async function importEverything(): Promise<void> {
+  if (!requireFeature('files.install')) return;
   let picked: Awaited<ReturnType<typeof openBinaryFile>>;
   try { picked = await openBinaryFile('.zip,.json'); } catch (e) { toast.error('Couldn’t open that file', { message: errorMessage(e) }); return; }
   if (!picked) return;
@@ -67,6 +70,7 @@ async function importImagesFrom(bytes: Uint8Array): Promise<{ added: number; sam
 
 /** Merge a library ZIP or library.json (already read) into this browser and say what came in. */
 export async function importLibraryBytes(fileName: string, bytes: Uint8Array): Promise<void> {
+  if (!requireFeature('files.install')) return;
   const picked = { name: fileName, bytes };
   try {
     const r = importLibrary(readLibrary(picked.bytes));

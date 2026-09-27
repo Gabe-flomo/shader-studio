@@ -1,3 +1,5 @@
+import { playableForPlan } from '../play/planGates';
+import { currentPlan, usePlan } from '../lib/plan';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
@@ -2112,13 +2114,15 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // What plays is the record with any solo applied (the Play page's S buttons); the store keeps the real one.
     const feedPlay = () => {
       const ui = usePlayUi.getState();
-      const shown = applySolo(applyGroupVisibility(lastPlay), ui.soloLayers, ui.soloMappings);
+      // On Free, only what Free runs plays (play/planGates.ts); the store keeps the whole record.
+      const shown = applySolo(applyGroupVisibility(playableForPlan(lastPlay, currentPlan())), ui.soloLayers, ui.soloMappings);
       playEngine.setRecord(shown);
       playOverlay.setRecord(shown);
       requestRenderRef.current();
     };
     feedPlay();
     playOverlay.setGuides(usePlayUi.getState().guides);
+    const unsubPlan = usePlan.subscribe((st, prev) => { if (st.session !== prev.session) feedPlay(); });
     const unsubSolo = usePlayUi.subscribe((ui, prev) => {
       if (ui.soloLayers !== prev.soloLayers || ui.soloMappings !== prev.soloMappings) feedPlay();
       if (ui.guides !== prev.guides) { playOverlay.setGuides(ui.guides); requestRenderRef.current(); }
@@ -2145,7 +2149,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     previewNodeIdRef.current    = s.previewNodeId;
     nodeOutputVarMapRef.current = s.nodeOutputVarMap;
     syncNodes(s.nodes);
-    return () => { unsub(); unsubSolo(); };
+    return () => { unsub(); unsubSolo(); unsubPlan(); };
   }, []);
 
   // Update shader when compiled output changes — flush old errors first.

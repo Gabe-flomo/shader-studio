@@ -12,6 +12,10 @@ import type { Page } from '../page';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
+import { Menu } from '../ui/Menu';
+import { ProBadgeFor } from '../account/ProSheet';
+import { accountMenuItems, signedInLabel } from '../account/accountMenu';
+import { usePlan } from '../../lib/plan';
 import { Tooltip } from '../ui/Tooltip';
 import { WorkspaceChip } from '../workspace/WorkspacePanel';
 import { HandsLive } from '../play/HandsChip';
@@ -63,11 +67,11 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         font: `12.5px ${fontFamily.ui}`, userSelect: 'none',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: compact ? 'auto' : 250, flexShrink: 0 }}>
-        <span style={{ width: 26, height: 26, borderRadius: radius.md, background: tk.ink.base, color: tk.ink.text, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: compact ? 'auto' : 250, flexShrink: compact ? 0 : 1, minWidth: compact ? undefined : 36, overflow: 'hidden' }}>
+        <span style={{ width: 26, height: 26, flexShrink: 0, borderRadius: radius.md, background: tk.ink.base, color: tk.ink.text, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="presets" size={13} />
         </span>
-        {!compact && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em' }}>Playfield</span>}
+        {!compact && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Playfield</span>}
       </div>
 
       <div role="tablist" style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover }}>
@@ -82,10 +86,11 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
               style={{
                 padding: compact ? '6px 10px' : '6px 14px', borderRadius: 7, border: 0, cursor: 'pointer',
                 background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
-                color: on ? tk.text.primary : tk.text.faint, font: `${on ? 600 : 500} 13px ${fontFamily.ui}`,
+                color: on ? tk.text.primary : tk.text.faint, font: `${on ? 600 : 500} 13px ${fontFamily.ui}`, whiteSpace: 'nowrap',
               }}
             >
               {t.label}
+              {t.page === 'convert' && <ProBadgeFor feature="convert" style={{ marginLeft: 6 }} />}
               {t.page === 'play' && hasPlay && <span aria-label="This graph has a Play setup" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: tk.accent.base, marginLeft: 6, verticalAlign: 'middle' }} />}
             </button>
           );
@@ -144,8 +149,30 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
             {!compact && 'Record'}
           </button>
         </Tooltip>
+        <AccountButton />
       </div>
     </div>
+  );
+}
+
+/** The account menu (desktop's More): who is signed in and on which plan, and Sign out. Absent with no sign-in. */
+function AccountButton() {
+  const session = usePlan(s => s.session);
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const items = accountMenuItems(session);
+  if (!items.length) return null;
+  return (
+    <span ref={anchor} style={{ display: 'inline-flex', marginLeft: 2 }}>
+      <IconButton
+        icon="more"
+        label={signedInLabel(session) ?? 'More'}
+        active={!!menu}
+        tooltip={!menu}
+        onClick={() => { const r = anchor.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 240, y: r.bottom + 6 } : null); }}
+      />
+      {menu && <Menu x={menu.x} y={menu.y} minWidth={240} onClose={() => setMenu(null)} items={items} />}
+    </span>
   );
 }
 

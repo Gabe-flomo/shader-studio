@@ -8,6 +8,8 @@
  * Tick things anywhere (a whole section or folder too) to download or remove
  * them together.
  */
+import { ProBadgeFor } from '../account/ProSheet';
+import { requireFeature } from '../../lib/plan';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -115,12 +117,14 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   };
 
   const preview = async (picked: { name: string; bytes: Uint8Array }) => {
+    if (!requireFeature('files.install')) return;
     try {
       const profile = readProfile(picked.bytes);
       setInstall({ name: picked.name, profile, preview: await previewInstall(profile, localMutableKV) });
     } catch (e) { toast.error(`Couldn’t read “${picked.name}”`, { message: errorMessage(e) }); }
   };
   const startInstall = async () => {
+    if (!requireFeature('files.install')) return;
     let picked: Awaited<ReturnType<typeof openBinaryFile>>;
     try { picked = await openBinaryFile('.zip,.json'); } catch (e) { toast.error('Couldn’t open that file', { message: errorMessage(e) }); return; }
     if (picked) await preview(picked);
@@ -142,8 +146,11 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     const r = st.loadSavedGraph(name);
     if (r.ok) onNavigate?.('studio'); else toast.error('Couldn’t open it', { message: r.error });
   };
-  const everything = (target: SaveTarget) => { void downloadEverything(target); };
+  // Download everything, and ZIPs of chosen items, are Pro; so is installing (docs/accounts-and-plans.md §4).
+  const openDownload = (ids: string[]) => { if (requireFeature('files.everything')) setDownload(ids); };
+  const everything = (target: SaveTarget) => { if (requireFeature('files.everything')) void downloadEverything(target); };
   const downloadMenu = (x: number, y: number) => {
+    if (!requireFeature('files.everything')) return;
     if (!isTauri()) { everything('download'); return; }
     setMenu({ node: null, x, y });
   };
@@ -164,7 +171,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     }
     if (items.length) items.push('separator');
     const downloadable = !n.private && (n.kind === 'section' || n.kind === 'group' || n.kind === 'folder' ? countLeaves(n.children) > 0 : true);
-    if (downloadable) items.push({ label: n.part ? 'Download its item…' : n.kind === 'section' || n.kind === 'group' || n.kind === 'folder' ? `Download all ${countLeaves(n.children)}…` : 'Download…', icon: 'export', onSelect: () => setDownload([n.id]) });
+    if (downloadable) items.push({ label: n.part ? 'Download its item…' : n.kind === 'section' || n.kind === 'group' || n.kind === 'folder' ? `Download all ${countLeaves(n.children)}…` : 'Download…', icon: 'export', onSelect: () => openDownload([n.id]) });
     // Move between the list's folders.
     if (scopeOf && inv) {
       const folders = loadFolders(scopeOf);
@@ -203,7 +210,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
       actions={<>
         {node.kind === 'graph' && <Button size="sm" icon="nodes" onClick={() => { void openGraph(node.label); }}>Open in the Studio</Button>}
         {node.kind === 'presentation' && <Button size="sm" icon="slides" onClick={() => { rememberLast(node.label); onNavigate?.('present'); }}>Open on Present</Button>}
-        {!node.private && !node.part && <Button size="sm" icon="export" onClick={() => setDownload([node.id])}>Download…</Button>}
+        {!node.private && !node.part && <Button size="sm" icon="export" onClick={() => openDownload([node.id])}>Download…</Button>}
         {node.ref && <Button size="sm" variant="ghost" icon="trash" onClick={() => { void remove([node.id], node.size > 40_000); }}>Remove…</Button>}
       </>} />
   ) : null;
@@ -221,10 +228,10 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
       <span style={{ flex: 1 }} />
       {compact ? <>
         <IconButton icon="trash" label="Remove" tone="danger" tooltip={false} onClick={() => { void remove(selection.ids, true); }} />
-        <IconButton icon="export" label="Download" tooltip={false} disabled={!selection.items.some(n => !n.private)} onClick={() => setDownload(selection.ids)} />
+        <IconButton icon="export" label="Download" tooltip={false} disabled={!selection.items.some(n => !n.private)} onClick={() => openDownload(selection.ids)} />
       </> : <>
         <Button size="sm" icon="trash" onClick={() => { void remove(selection.ids, true); }}>Remove…</Button>
-        <Button size="sm" variant="primary" icon="export" disabled={!selection.items.some(n => !n.private)} onClick={() => setDownload(selection.ids)}>Download…</Button>
+        <Button size="sm" variant="primary" icon="export" disabled={!selection.items.some(n => !n.private)} onClick={() => openDownload(selection.ids)}>Download…</Button>
       </>}
     </div>
   );
@@ -258,8 +265,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
                 <SpaceMeter inv={inv} estimate={estimate} compact onCleanUp={() => setView('cleanup')} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <Button icon="import" onClick={() => { void startInstall(); }}>Install…</Button>
-                <Button variant="primary" icon="export" onClick={() => everything('download')}>Download all</Button>
+                <Button icon="import" onClick={() => { void startInstall(); }}>Install…<ProBadgeFor feature="files.install" /></Button>
+                <Button variant="primary" icon="export" onClick={() => everything('download')}>Download all<ProBadgeFor feature="files.everything" /></Button>
               </div>
               <CleanUpEntry count={cleanupCount} onClick={() => setView('cleanup')} />
               <WorkspaceEntry active={false} dense={false} onClick={() => setView('workspace')} />
@@ -300,8 +307,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
               : view === 'workspace' ? <Breadcrumbs path={crumb('Workspace folder')} onOpen={open} />
               : <Breadcrumbs path={path} onOpen={open} />}
           </div>
-          <Button size="sm" icon="import" onClick={() => { void startInstall(); }} title="Open a profile or partial ZIP: see what’s inside, then merge it or replace everything">Install…</Button>
-          <Button size="sm" variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.right - 260, r.bottom + 4); }} title="One ZIP of everything saved here, with a manifest">Download everything</Button>
+          <Button size="sm" icon="import" onClick={() => { void startInstall(); }} title="Open a profile or partial ZIP: see what’s inside, then merge it or replace everything">Install…<ProBadgeFor feature="files.install" /></Button>
+          <Button size="sm" variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.right - 260, r.bottom + 4); }} title="One ZIP of everything saved here, with a manifest">Download everything<ProBadgeFor feature="files.everything" /></Button>
           </>}
         </div>
         {banner}

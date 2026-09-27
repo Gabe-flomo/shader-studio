@@ -10,6 +10,8 @@
  * while held, every N frames or seconds, on release), with a hint when the
  * thing it fires doesn't like being repeated.
  */
+import { openProSheet, useCan } from '../../lib/plan';
+import { FREE_TRIGGER_ONS } from '../../play/planGates';
 import { useEffect, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -48,9 +50,15 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
   const hint = (text: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{text}</span>;
   const shapes = layers.filter(l => l.kind === 'shape');
   const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
+  // Free: key, click and audio triggers; the rest say Pro and open the Pro sheet (play/planGates.ts).
+  const allSources = useCan('play.sources');
+  const kinds = allSources ? TRIGGER_KINDS : TRIGGER_KINDS.map(k => (FREE_TRIGGER_ONS.has(k.value) ? k : { ...k, label: `${k.label} · Pro` }));
   return (
     <>
-      <Select ariaLabel="Trigger" value={t.on} options={TRIGGER_KINDS} onChange={v => onChange(triggerFromKind(v as TriggerSpec['on'], t, layers, readers[0]?.id ?? ''))} height={26} />
+      <Select ariaLabel="Trigger" value={t.on} options={kinds} onChange={v => {
+        if (!allSources && !FREE_TRIGGER_ONS.has(v as TriggerSpec['on'])) { openProSheet('play.sources'); return; }
+        onChange(triggerFromKind(v as TriggerSpec['on'], t, layers, readers[0]?.id ?? ''));
+      }} height={26} />
       {t.on === 'key' && <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(t.code)}</span>}
       {t.on === 'note' && <>
         <NumberInput value={t.note} min={-1} max={127} step={1} title="Note number, -1 for any note" onCommit={n => onChange({ ...t, note: Math.max(-1, Math.min(127, Math.round(n))) })} style={{ ...numStyle, width: 44 }} />

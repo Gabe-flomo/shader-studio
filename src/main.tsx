@@ -3,6 +3,10 @@ import './index.css'
 import App from './App.tsx'
 import { Toaster } from './components/ui/Toaster'
 import { DialogHost } from './components/ui/DialogHost'
+import { ProSheetHost } from './components/account/ProSheet'
+import { SignInPage } from './components/account/SignInPage'
+import { GATE_USERS, OPEN_SESSION, isGateOn, rememberSignIn, restoreSignIn, sessionFor, verifyLogin } from './auth/gate'
+import { usePlan } from './lib/plan'
 import { BackgroundsHost } from './components/backgrounds/BackgroundsHost'
 import { PerformanceBar } from './components/PerformanceBar'
 import { useNodeGraphStore } from './store/useNodeGraphStore'
@@ -58,13 +62,36 @@ if (import.meta.env.DEV) {
 
 // Dev-only component gallery for the redesign primitives: open the app with #ui.
 // import.meta.env.DEV is false in production builds, so the gallery isn't bundled.
-if (import.meta.env.DEV && location.hash === '#ui') {
-  import('./components/ui/UiGallery').then(({ UiGallery }) => root.render(<UiGallery />))
-} else {
-  root.render(<><App /><Toaster /><BackgroundsHost /><DialogHost /><PerformanceBar /></>)
+function startApp() {
+  root.render(<><App /><Toaster /><BackgroundsHost /><DialogHost /><ProSheetHost /><PerformanceBar /></>)
   // Songs stop when the graph that owns them is closed or they're deleted.
   void import('./lib/audioSync').then(m => m.startAudioSync())
   // The workspace folder (desktop app; a picked folder in Chrome/Edge) starts once the app is up;
   // without one, the old backup folder keeps its copy.
   window.setTimeout(() => { void import('./workspace/workspace').then(m => m.startWorkspace()) }, 1500)
+}
+
+if (import.meta.env.DEV && location.hash === '#ui') {
+  import('./components/ui/UiGallery').then(({ UiGallery }) => root.render(<UiGallery />))
+} else if (!isGateOn()) {
+  // No sign-in gate (no users in src/auth/gateUsers.json, or VITE_GATE=off): everyone is Pro.
+  usePlan.getState().setSession(OPEN_SESSION)
+  startApp()
+} else {
+  // The sign-in gate (docs/sign-in-gate.md): nothing of the app mounts until someone signs in.
+  const remembered = restoreSignIn(GATE_USERS)
+  if (remembered) {
+    usePlan.getState().setSession(sessionFor(remembered))
+    startApp()
+  } else {
+    usePlan.getState().setSession({ status: 'signed-out' })
+    root.render(<SignInPage onSignIn={async (username, password, stay) => {
+      const user = await verifyLogin(GATE_USERS, username, password)
+      if (!user) return null
+      rememberSignIn(user, stay)
+      usePlan.getState().setSession(sessionFor(user))
+      startApp()
+      return user
+    }} />)
+  }
 }

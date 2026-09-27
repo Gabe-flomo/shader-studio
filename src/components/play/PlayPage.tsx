@@ -8,6 +8,9 @@
  * is the same store write a Studio slider makes, and a mapping is a per-frame
  * uniform write on the input bus (lib/playEngine.ts).
  */
+import { can, openProSheet, requireFeature, useCan, usePlanName } from '../../lib/plan';
+import { sourceNeedsPro, sourceTypeNeedsPro, triggerNeedsPro, proOnlyParts } from '../../play/planGates';
+import { ProBadge, ProLock } from '../account/ProSheet';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { DataSourceOptions } from './DataSourceOptions';
@@ -160,6 +163,13 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   }, [updateNodeParams, setPlay]);
 
   const update = useCallback((fn: (p: PlayRecord) => PlayRecord) => setPlay(fn), [setPlay]);
+  // What this plan runs (play/planGates.ts). Locked parts stay visible, and nothing in the record is removed.
+  const layersOk = useCan('play.layers');
+  const backgroundsOk = useCan('play.backgrounds');
+  const websiteOk = useCan('export.website');
+  const takesOk = useCan('play.takes');
+  const plan = usePlanName();
+  const lockedParts = useMemo(() => proOnlyParts(play, plan), [play, plan]);
 
   const addControl = useCallback((c: PlayCandidate) => {
     update(p => ({
@@ -224,6 +234,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
 
   // A slider (or an X/Y pair) with a Null on the picture that drives it.
   const addWithNull = useCallback((drives: NullDrive[], label: string) => {
+    // A null is a layer: Pro.
+    if (!requireFeature('play.layers')) return;
     let made = '';
     update(p => { const r = driveWithNull(p, drives, label); made = r.nullId; return r.play; });
     if (made) toast.success(`Added “${label}”`, { message: 'Drag the dot on the picture to change the value.' });
@@ -321,7 +333,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           onChange={setTab}
           options={[
             { value: 'controls', label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` },
-            { value: 'layers', label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}` },
+            { value: 'layers', label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}${layersOk ? '' : ' · Pro'}` },
             ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length ? ` · ${play.mappings.length}` : ''}` }] : []),
           ]}
         />
@@ -329,7 +341,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         {!compact && <Segmented size="sm" ariaLabel="Panel width" value={panel} onChange={v => setPanel(v as PanelSize)} options={[{ value: 's', label: 'S', title: 'Narrow panel' }, { value: 'm', label: 'M', title: 'Medium panel' }, { value: 'l', label: 'L', title: 'Wide panel' }]} />}
       </div>
       {!compact && notesCard}
-      {tab === 'layers' && (
+      {tab === 'layers' && !layersOk && <LockedLayers play={play} />}
+      {tab === 'layers' && layersOk && (
         <LayersPanel
           top={compact ? notesCard : undefined}
           play={play}
@@ -348,10 +361,10 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
             <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
             {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
-            <IconButton icon="code" label="Put it on a website: a player with controls, or the picture as a background, as a snippet or a page" onClick={() => setEmbedOpen(true)} />
-            <IconButton icon="record" label="Record a performance: play for up to a minute, watch it back, render it frame by frame" onClick={() => useTakes.getState().openPerformance()} />
+            <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
+            <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
             <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
-            <AddControlButton compact={compact} candidates={candidates} layers={layerCandidates} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
+            <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
           </>
         )}
       />}
@@ -362,7 +375,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           <GuidesToggle onPanel />
         </div>
       )}
-      {!compact && <BackgroundRow play={play} onChange={update} />}
+      {!compact && (backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />)}
       {tab === 'controls' && <div style={{ flex: 1, minHeight: play.notes && !compact ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
         {compact && (
           // Phones: everything scrolls together under the picture, notes first.
@@ -373,8 +386,14 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
               <AspectPicker onPanel />
               <GuidesToggle onPanel />
             </div>
-            <BackgroundRow play={play} onChange={update} />
+            {backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />}
           </div>
+        )}
+        {lockedParts.length > 0 && (
+          <button type="button" onClick={() => openProSheet('play.layers')} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', margin: '4px 0 8px', padding: '8px 10px', border: 0, borderRadius: radius.md, cursor: 'pointer', background: alpha(tk.accent.base, 0.08), color: tk.text.secondary, font: `11.5px/1.45 ${fontFamily.ui}`, textAlign: 'left' }}>
+            <ProBadge />
+            <span style={{ flex: 1, minWidth: 0 }}>This setup has {joinParts(lockedParts)} that need Pro. They’re kept as they are, and the rest plays on Free.</span>
+          </button>
         )}
         {(() => {
           // Several controls whose nodes were grouped together: relink them in one go.
@@ -572,7 +591,7 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
         <Popover anchorRef={anchor} onClose={close} align="end" width={320} padding={8}>
           <Field autoFocus placeholder="Search sliders, colours and layers" value={query} onChange={e => setQuery(e.target.value)} height={30} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px 2px' }}>
-            <Toggle checked={withNull} onChange={setWithNull} label="Drive with a null" />
+            <Toggle checked={withNull} onChange={v => { if (!v || requireFeature('play.layers')) setWithNull(v); }} label={can('play.layers') ? 'Drive with a null' : 'Drive with a null · Pro'} />
             <Tooltip label="Drive with a null" description="Adds the slider and a Null on the picture that drives it: drag the dot to change the value. The dot's left-to-right is the slider's range. An X/Y pair (Position X and Y) shares one null that starts where the thing is.">
               <span style={{ display: 'inline-flex', color: tk.text.faint, cursor: 'help' }}><Icon name="info" size={13} /></span>
             </Tooltip>
@@ -835,12 +854,15 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
     if (row?.source.kind === 'trigger') {
       const src = row.source;
       return playEngine.startLearnTrigger(trigger => {
+        if (triggerNeedsPro(trigger) && !can('play.sources')) { setLearnFor(null); openProSheet('play.sources'); return; }
         // Learn picks what fires it; how it fires (once, every frame…) stays.
         onUpdate(row.id, { source: { ...src, trigger: withFire(trigger, src.trigger.fire) } });
         setLearnFor(null);
       });
     }
     const stop = playEngine.startLearn(source => {
+      // Free learns the mouse, keys and audio; a knob or a note says what Pro adds instead.
+      if (sourceNeedsPro(source) && !can('play.sources')) { setLearnFor(null); openProSheet('play.sources'); return; }
       if (learnFor === 'new') onAdd(source);
       else onUpdate(learnFor, { source });
       setLearnFor(null);
@@ -856,6 +878,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
   }, [learnFor]);
 
   const noControls = play.controls.length === 0;
+  const allSources = useCan('play.sources');
   const learnTrigger = !!learnFor && learnFor !== 'new' && play.mappings.find(m => m.id === learnFor)?.source.kind === 'trigger';
   const midi = midiEngine.webMidi();
   // Collapsed rows show one line: source → control, the meter and the switch. UI state only.
@@ -891,11 +914,11 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               />
             )}
             <IconButton icon="info" label="Connect Ableton, a MIDI controller, OSC or live audio: step-by-step" onClick={() => setGuideOpen(true)} />
-            <HandsButton />
+            <ProLock feature="play.sources" badge={false}><HandsButton /></ProLock>
             <Button size="sm" icon="spark" variant={learnFor === 'new' ? 'primary' : 'secondary'} disabled={noControls} onClick={() => setLearnFor(l => (l === 'new' ? null : 'new'))}>
               {learnFor === 'new' ? 'Listening…' : 'Learn'}
             </Button>
-            <Button size="sm" icon="plus" disabled={noControls} onClick={() => onAdd({ kind: 'midi', signal: 'cc', channel: 0, cc: 1 })}>Add</Button>
+            <Button size="sm" icon="plus" disabled={noControls} onClick={() => onAdd(allSources ? { kind: 'midi', signal: 'cc', channel: 0, cc: 1 } : { kind: 'mouse', axis: 'x' })}>Add</Button>
           </>
         )}
       />
@@ -920,7 +943,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
             </div>
           )}
           <SoloStrip kind="mapping" total={play.mappings.length} />
-          {play.midiFile && <MidiFileCard />}
+          {play.midiFile && <MidiFileSlot />}
           {play.mappings.length === 0 ? (
             <EmptyState
               title="Nothing mapped"
@@ -946,7 +969,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
               onRemove={() => onRemove(m.id)}
             />
           ))}
-          {!play.midiFile && <MidiFileCard />}
+          {!play.midiFile && <MidiFileSlot />}
         </div>
       )}
       {guideOpen && <ConnectGuide onClose={() => setGuideOpen(false)} />}
@@ -955,6 +978,64 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
 }
 
 const EMPTY_MAPPINGS: PlayMapping[] = [];
+const NO_LAYER_CANDIDATES: LayerCandidates[] = [];
+
+function joinParts(parts: string[]): string {
+  return parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/** Free's Layers tab: what layers do, the setup's own layers listed dimmed (kept, not run), and the way to Pro. */
+function LockedLayers({ play }: { play: PlayRecord }) {
+  const tk = useTokens();
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 12px' }}>
+      <div style={{ padding: '14px 14px 12px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="lock" size={15} style={{ color: tk.text.faint }} />
+          <b style={{ font: `650 13px ${fontFamily.ui}`, color: tk.text.primary }}>Layers are part of Pro</b>
+          <ProBadge />
+        </div>
+        <span style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
+          Shapes, particles, text, images, the camera, scripts and nulls on top of the picture, with their actions and groups.
+          {play.layers.length > 0 ? ' This setup’s layers are kept as they are: they show here, and play again with Pro.' : ''}
+        </span>
+        <div><Button size="sm" variant="primary" icon="spark" onClick={() => openProSheet('play.layers')}>See what Pro adds</Button></div>
+      </div>
+      {play.layers.length > 0 && (
+        <div style={{ marginTop: 10, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden' }}>
+          {play.layers.map((l, i) => (
+            <div key={l.id} title="Needs Pro" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 34, padding: '0 12px', borderTop: i ? `1px solid ${tk.border.subtle}` : undefined, opacity: 0.55 }}>
+              <Icon name="layoutCanvas" size={14} style={{ color: tk.text.faint }} />
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tk.text.primary }}>{l.label}</span>
+              <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{l.kind} · needs Pro</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Free's Background row: the shader, with backgrounds shown as Pro. */
+function LockedBackground() {
+  const tk = useTokens();
+  return (
+    <button type="button" onClick={() => openProSheet('play.backgrounds')} style={{
+      flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 12px', border: 0, borderBottom: `1px solid ${tk.border.subtle}`,
+      background: tk.bg.panel, cursor: 'pointer', color: tk.text.muted, font: `12px ${fontFamily.ui}`, textAlign: 'left',
+    }}>
+      <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Background</span>
+      <span style={{ flex: 1 }}>The shader</span>
+      <span style={{ color: tk.text.faint }}>Images, video, gradients</span>
+      <ProBadge />
+    </button>
+  );
+}
+
+/** The MIDI file card, locked on Free (a file made on Pro stays, shown dimmed). */
+function MidiFileSlot() {
+  return <ProLock feature="play.midiFile" style={{ display: 'flex', width: '100%', alignItems: 'flex-start' }}><MidiFileCard /></ProLock>;
+}
 const NO_READERS: AudioReader[] = [];
 
 function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
@@ -975,7 +1056,12 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   const tk = useTokens();
   const type = sourceType(m.source);
   const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
+  // Free maps from the mouse, keys and audio (play/planGates.ts). A Pro source made on Pro stays as it is, marked, and doesn't run.
+  const allSources = useCan('play.sources');
+  const locked = !allSources && sourceNeedsPro(m.source);
+  const options = allSources ? sourceOptions(readers) : sourceOptions(readers).map(o => (sourceTypeNeedsPro(o.value) ? { ...o, label: `${o.label} · Pro` } : o));
   const pickSource = (v: string) => {
+    if (!allSources && sourceTypeNeedsPro(v)) { openProSheet('play.sources'); return; }
     if (v === OPEN_READERS) { useReadersPanel.getState().show({ mappingId: m.id, focus: m.source.kind === 'reader' ? m.source.readerId : '' }); return; }
     onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs), firstDataset()) });
   };
@@ -1004,6 +1090,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
             <Icon name="chevR" size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: tk.text.secondary }}>{control?.label ?? 'missing control'}</span>
           </button>
+          {locked && <ProBadge title="This source needs Pro: kept, but it doesn't run on Free" />}
           <SoloButton kind="mapping" id={m.id} />
           <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} />
         </div>
@@ -1018,7 +1105,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {chevron}
         <span style={{ ...labelStyle, width: 40 }}>Source</span>
-        <Select ariaLabel="Source" value={type} options={sourceOptions(readers)} onChange={pickSource} height={26} style={{ flex: 1, minWidth: 0 }} />
+        <Select ariaLabel="Source" value={type} options={options} onChange={pickSource} height={26} style={{ flex: 1, minWidth: 0 }} />
         {m.source.kind === 'null' && (
           nullLayers.length === 0
             ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a Null layer first</span>
@@ -1045,6 +1132,12 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
         <IconButton icon="trash" label="Remove mapping" size="sm" tone="danger" onClick={onRemove} />
       </div>
+      {locked && (
+        <button type="button" onClick={() => openProSheet('play.sources')} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', margin: '6px 0 0', padding: '6px 8px', border: 0, borderRadius: radius.md, cursor: 'pointer', background: alpha(tk.accent.base, 0.08), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}`, textAlign: 'left' }}>
+          <ProBadge />
+          <span style={{ flex: 1, minWidth: 0 }}>This source needs Pro. It’s kept as it is but doesn’t run on Free.</span>
+        </button>
+      )}
       {/* Meter */}
       <MappingMeter input={meter} output={shaped} on={m.enabled} margin="6px 0 8px 60px" />
       <SourceOptions source={m.source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={source => onUpdate({ source })} />

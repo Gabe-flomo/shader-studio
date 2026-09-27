@@ -1,3 +1,4 @@
+import { ProBadgeFor } from './account/ProSheet';
 import { exportSet } from '../utils/libraryActions';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
@@ -376,7 +377,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
             <Button size="sm" variant="primary" icon="plus" onClick={() => { setShowSaveInput(true); setSaveNameVal(''); }}>Save</Button>
           )}
           <Button size="sm" variant="ghost" onClick={tidy} title="Rewrite the text as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
-          {onConvert && <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)} title="Open this shader on the Convert page and see the nodes it would become">Convert</Button>}
+          {onConvert && <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)} title="Open this shader on the Convert page and see the nodes it would become">Convert<ProBadgeFor feature="convert" /></Button>}
           <IconButton icon="copy" label="Copy the whole shader" size="sm" onClick={() => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); }} />
           <IconButton icon="search" label="Discover functions: extract from this file, or search the saved shaders" size="sm" onClick={() => setDiscoverOpen(true)} />
           <IconButton icon="export" label="Download every saved shader as a .glsl file, in a ZIP (notes as a comment at the top): easy to share or to send for help" size="sm" onClick={() => { void exportSet('glsl'); }} />

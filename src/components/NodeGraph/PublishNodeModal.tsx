@@ -8,6 +8,7 @@
  * into the flattened GLSL function. A live preview compiles the node as you
  * edit, using a transient definition that is never listed or saved.
  */
+import { openProSheet, useCan } from '../../lib/plan';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { USER_NODE_DEFAULT_CATEGORY } from '../../types/userNode';
@@ -90,7 +91,19 @@ vec3 my_node(vec2 uv, float radius) {
     return vec3(glow);
 }`;
 
-export function PublishNodeModal({ source: initialSource, onClose, onPublished, existingId }: Props) {
+/**
+ * Publishing a node is Pro (lib/plan.ts, 'nodes.publish'). Every way in (the Builder tab, a group's ✦,
+ * a Custom Function or Expression Block's ✦, the phone browser) opens this, so the gate lives here:
+ * on Free it shows the Pro sheet instead.
+ */
+export function PublishNodeModal(props: Props) {
+  const allowed = useCan('nodes.publish');
+  const { onClose } = props;
+  useEffect(() => { if (!allowed) { openProSheet('nodes.publish'); onClose(); } }, [allowed, onClose]);
+  return allowed ? <PublishNodeModalInner {...props} /> : null;
+}
+
+function PublishNodeModalInner({ source: initialSource, onClose, onPublished, existingId }: Props) {
   const tk = useTokens();
   // Phones: one column, preview under the fields, full-height dialog
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);

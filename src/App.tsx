@@ -23,6 +23,7 @@ import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './components/shell/rebuildAction';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import type { Page } from './components/page';
+import { can, openProSheet, requireFeature } from './lib/plan';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useShallow } from 'zustand/react/shallow';
 import { useNodeGraphStore, EXAMPLE_INDEX, EXAMPLE_FOLDERS, PLAY_SETUP_TOAST } from './store/useNodeGraphStore';
@@ -431,7 +432,15 @@ function App() {
   const [previewWidth, setPreviewWidth] = useState(() => getDefaultPreviewWidth(bp));
   const [isDragging, setIsDragging]     = useState(false);
   const [showCode, setShowCode]         = useState(false);
-  const [page, setPage]                 = useState<Page>('studio');
+  const [page, setPageRaw]              = useState<Page>('studio');
+  // Every page switch goes through the plan: Convert is Pro, and on Free asking for it opens the Pro sheet instead.
+  const setPage = useCallback((next: Page | ((p: Page) => Page)) => {
+    setPageRaw(prev => {
+      const p = typeof next === 'function' ? next(prev) : next;
+      if (p === 'convert' && !can('convert')) { queueMicrotask(() => openProSheet('convert')); return prev; }
+      return p;
+    });
+  }, []);
   // Once the app is idle, fetch the on-demand pages and dialogs (twice: loaded chunks can
   // declare more), so opening one later never waits on React's lowest-priority work.
   useEffect(() => {
@@ -453,7 +462,7 @@ function App() {
     const go = () => setPage('files');
     window.addEventListener('open-files-page', go);
     return () => window.removeEventListener('open-files-page', go);
-  }, []);
+  }, [setPage]);
 
   // Navigate to Function Builder when an ExprBlock requests it
   useEffect(() => {
@@ -463,7 +472,7 @@ function App() {
         useFunctionBuilder.getState().clearNavRequest();
       }
     });
-  }, []);
+  }, [setPage]);
   // "Go to source" on a Play control opens the Studio (NodeGraph centres on the node).
   useEffect(() => {
     let last = useNodeGraphStore.getState().focusNodeRequest?.n ?? 0;
@@ -471,14 +480,14 @@ function App() {
       const n = s.focusNodeRequest?.n ?? 0;
       if (n !== last) { last = n; setPage('studio'); }
     });
-  }, []);
+  }, [setPage]);
   // An imported play file opens on the Play page.
   useEffect(() => {
     let last = useNodeGraphStore.getState().playOpenRequest;
     return useNodeGraphStore.subscribe(s => {
       if (s.playOpenRequest !== last) { last = s.playOpenRequest; setPage('play'); }
     });
-  }, []);
+  }, [setPage]);
   const [previewFloated, setPreviewFloated] = useState(false);
   const [floatPos, setFloatPos]   = useState({ x: 40, y: 60 });
   const [floatSize, setFloatSize] = useState({ w: 480, h: 360 });
@@ -505,8 +514,8 @@ function App() {
     return () => window.removeEventListener('open-record', open);
   }, []);
   // After Materialize on the Convert page: the Studio, with the new graph in view.
-  const openStudioFitted = useCallback(() => { setPage('studio'); setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(), 80); }, []);
-  const openConvertWith = useCallback((code: string) => { requestConvert(code); setPage('convert'); }, []);
+  const openStudioFitted = useCallback(() => { setPage('studio'); setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(), 80); }, [setPage]);
+  const openConvertWith = useCallback((code: string) => { if (!requireFeature('convert')) return; requestConvert(code); setPage('convert'); }, [setPage]);
   // Stage › Exact records the website player's canvas instead of the app's.
   const [recordSource, setRecordSource]       = useState<HTMLCanvasElement | null>(null);
   const stageMode = useStage(s => s.mode);
@@ -604,7 +613,7 @@ function App() {
     filterUVInputs: () => setNodeHighlightFilter('uv-in'),
     filterUVOutputs:() => setNodeHighlightFilter('uv-out'),
     shortcuts:      () => setPage(p => p === 'shortcuts' ? 'studio' : 'shortcuts'),
-  }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll]);
+  }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll, setPage]);
 
   const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);
   const holdHandlers = useMemo(() => ({

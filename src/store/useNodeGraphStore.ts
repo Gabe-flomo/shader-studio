@@ -1,3 +1,4 @@
+import { requireFeature } from '../lib/plan';
 import { create } from 'zustand';
 import type { GraphNode, InputSocket, OutputSocket, DataType } from '../types/nodeGraph';
 import { VECTORIZABLE_NODES, swizzleTypes } from '../nodes/definitions/math';
@@ -2803,6 +2804,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   publishUserNode: async (source, spec) => {
+    if (!requireFeature('nodes.publish')) return { ok: false, cancelled: true, error: 'Publishing nodes is part of Pro' };
     let resolved: PublishSource;
     if (typeof source === 'string') {
       const { nodes, activeGroupPath } = get();
@@ -2850,6 +2852,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   exportUserNodes: async (ids) => {
+    // Sharing nodes as a file is making a node pack: Pro. Importing one is Free.
+    if (!requireFeature('nodes.pack')) return { ok: false, cancelled: true, error: 'Making node packs is part of Pro' };
     const payload = exportUserNodes(ids);
     if (payload.nodes.length === 0) return { ok: false, error: 'No node types to export yet.' };
     const name = payload.nodes.length === 1 ? `${labelToSlug(payload.nodes[0].label)}.node.json` : 'my-nodes.json';
