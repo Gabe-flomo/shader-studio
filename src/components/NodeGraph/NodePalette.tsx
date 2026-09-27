@@ -38,8 +38,9 @@ import { spawnPoint } from './spawnPoint';
 import { LibraryCard } from '../shell/LibraryPanel';
 import { CreditTag } from '../ui/Credit';
 import { creditSentence, type SourceCredit } from '../../types/credit';
-import { HistoryPanel, CountBadge } from '../history/HistoryPanel';
+import { HistoryPanel, CountBadge, UnreadDot } from '../history/HistoryPanel';
 import { useUnseenActivity } from '../ui/activityStore';
+import { OPEN_WHATS_NEW, useWhatsNewUnread } from '../../changelog/releaseNotes';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes' | 'history';
@@ -792,8 +793,16 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
   });
   const [drawerQuery, setDrawerQuery] = useState('');
   const unseen = useUnseenActivity();
+  const unreadRelease = useWhatsNewUnread();
   const [panes, setPanes]             = useState<ContentPaneState[]>(() => [mkPane('nodes')]);
   const [focusedPaneId, setFocusedPaneId] = useState(() => panes[0].id);
+  // "What's new" on the Updated notice: show the History tab (the panel picks What's new itself).
+  useEffect(() => {
+    if (mode === 'drawer') return;
+    const open = () => setPanes(prev => (prev.some(p => p.activeTab === 'history') ? prev : prev.map(p => (p.id === focusedPaneId ? { ...p, activeTab: 'history' } : p))));
+    window.addEventListener(OPEN_WHATS_NEW, open);
+    return () => window.removeEventListener(OPEN_WHATS_NEW, open);
+  }, [mode, focusedPaneId]);
 
   const nodeButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const panesContainerRef = useRef<HTMLDivElement>(null);
@@ -897,6 +906,7 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
         {SIDEBAR_TABS.map(({ id, label, icon }) => (
           <RailButton key={id} icon={icon} label={label} active={focusedPane.activeTab === id}
             badge={id === 'history' && unseen.count > 0 ? unseen : undefined}
+            dot={id === 'history' && unreadRelease}
             onClick={() => updatePane(focusedPane.id, { activeTab: id })} />
         ))}
         {onCollapse && (
@@ -948,10 +958,12 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
   );
 }
 
-function RailButton({ icon, label, active, onClick, badge }: {
+function RailButton({ icon, label, active, onClick, badge, dot = false }: {
   icon: IconName; label: string; active: boolean; onClick: () => void;
   /** New notices in the Activity log (History tab). */
   badge?: { count: number; error: boolean };
+  /** Release notes not seen yet (History tab's What's new); the count badge wins when both. */
+  dot?: boolean;
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
@@ -959,7 +971,7 @@ function RailButton({ icon, label, active, onClick, badge }: {
     <Tooltip label={label} placement="right">
       <button
         onClick={onClick}
-        aria-label={badge ? `${label}, ${badge.count} new ${badge.count === 1 ? 'notice' : 'notices'}` : label}
+        aria-label={`${label}${badge ? `, ${badge.count} new ${badge.count === 1 ? 'notice' : 'notices'}` : ''}${dot ? ', new release notes' : ''}`}
         aria-pressed={active}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
@@ -972,6 +984,7 @@ function RailButton({ icon, label, active, onClick, badge }: {
       >
         <Icon name={icon} />
         {badge && <CountBadge count={badge.count} error={badge.error} style={{ position: 'absolute', top: 1, right: 0, boxShadow: `0 0 0 2px ${tk.bg.subtle}` }} />}
+        {dot && !badge && <UnreadDot label="" style={{ position: 'absolute', top: 5, right: 5, width: 8, height: 8, boxShadow: `0 0 0 2px ${tk.bg.subtle}` }} />}
       </button>
     </Tooltip>
   );
