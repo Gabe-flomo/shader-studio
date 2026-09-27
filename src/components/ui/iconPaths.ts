@@ -46,6 +46,7 @@ export const ICONS = {
   info: { sw: 1.4, body: "<circle cx='8' cy='8' r='6'/><path d='M8 7.3V11'/><circle cx='8' cy='5' r='0.5' fill='currentColor'/>" },
   lock: { sw: 1.4, body: "<rect x='3.5' y='7' width='9' height='6.5' rx='1.5'/><path d='M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7'/>" },
   warning: { sw: 1.4, body: "<path d='M8 2.2L14 13H2L8 2.2Z'/><path d='M8 6.5v3'/><circle cx='8' cy='11.2' r='0.4' fill='currentColor'/>" },
+  rebuild: { sw: 1.5, body: "<path d='M13 6.5A5.2 5.2 0 0 0 3.6 5'/><path d='M3 2.8v2.6h2.6'/><path d='M3 9.5a5.2 5.2 0 0 0 9.4 1.5'/><path d='M13 13.2v-2.6h-2.6'/>" },
   resetParams: { sw: 1.4, body: "<path d='M3.2 8a4.8 4.8 0 1 0 1.4-3.4'/><path d='M3.2 3v2.6h2.6'/>" },
   pause: { sw: 0, body: "<rect x='4' y='3' width='3' height='10' rx='1'/><rect x='9' y='3' width='3' height='10' rx='1'/>", fill: true },
   play: { sw: 0, body: "<path d='M5 3.5v9l7-4.5z'/>", fill: true },

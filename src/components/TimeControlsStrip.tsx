@@ -1,6 +1,8 @@
 import type React from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { useCtp, type CtpPalette } from '../theme/nodePalette';
+import { Icon } from './ui/Icon';
+import { REBUILD_TOOLTIP, rebuildWithToast } from './shell/rebuildAction';
 
 const btnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
   background: `${tc.base}99`,
@@ -46,6 +48,14 @@ export function TimeControlsStrip({ direction = 'row' }: { direction?: 'row' | '
         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.yellow; }}
         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.surface2; }}
       >↺</button>
+      <button
+        onClick={() => { void rebuildWithToast(); }}
+        title={REBUILD_TOOLTIP}
+        aria-label={REBUILD_TOOLTIP}
+        style={btnStyleFor(tc)}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.blue; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.surface2; }}
+      ><Icon name="rebuild" size={13} /></button>
     </div>
   );
 }

@@ -16,6 +16,8 @@ export interface ShortcutAction {
   group: string;
   defaultCombo: string;
   description?: string;
+  /** Also fires while typing in a text field or code editor (a combo no editor uses itself). */
+  inEditors?: boolean;
 }
 
 export type ShortcutMap = Record<string, string>; // actionId → combo
@@ -31,6 +33,8 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'fitView',           label: 'Fit view',              group: 'View',       defaultCombo: 'f',           description: 'Fit all nodes in view' },
   { id: 'toggleCode',        label: 'Toggle GLSL code',      group: 'View',       defaultCombo: 'cmd+\\',      description: 'Show/hide GLSL output panel' },
   { id: 'toggleRecord',      label: 'Record video',          group: 'View',       defaultCombo: 'cmd+r',       description: 'Open the video recorder' },
+  // ⌘⇧↵, not ⌘⇧R: that one is a hard reload in browsers. Works from the code editors too, and on the GLSL and Convert pages.
+  { id: 'rebuild',           label: 'Rebuild the preview',   group: 'View',       defaultCombo: 'cmd+shift+enter', description: 'Recompile the shader and reset the GPU; the graph, time and Play setup stay', inEditors: true },
   // Node graph — add nodes
   { id: 'addNode',           label: 'Open node palette',     group: 'Add Nodes',  defaultCombo: 'a',           description: 'Open the add-node palette' },
   { id: 'addUV',             label: 'Add UV node',           group: 'Add Nodes',  defaultCombo: 'u',           description: 'Instantly add a UV node' },
@@ -131,10 +135,25 @@ export function displayCombo(combo: string): string {
         case 'space': return '␣';
         case 'backspace': return '⌫';
         case 'escape': return 'Esc';
+        case 'enter': return '↵';
         default:      return p.toUpperCase();
       }
     })
     .join('');
+}
+
+/**
+ * The action a key press triggers, if any. In a text field or code editor only the actions
+ * marked `inEditors` count, so typing never fires a graph shortcut.
+ */
+export function findShortcut(map: ShortcutMap, combo: string, editable = false): string | null {
+  const pressed = normaliseCombo(combo);
+  for (const [actionId, bound] of Object.entries(map)) {
+    if (normaliseCombo(bound) !== pressed) continue;
+    if (editable && !DEFAULT_ACTIONS.find(a => a.id === actionId)?.inEditors) return null;
+    return actionId;
+  }
+  return null;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -170,22 +189,16 @@ export function useShortcuts(
       if (e.repeat) return;
 
       const tag      = (e.target as HTMLElement)?.tagName;
-      const editable = (e.target as HTMLElement)?.isContentEditable;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || editable) return;
+      const editable = tag === 'INPUT' || tag === 'TEXTAREA' || !!(e.target as HTMLElement)?.isContentEditable;
 
-      const combo = comboFromEvent(e);
-      const map   = loadShortcutMap();
-
-      for (const [actionId, bound] of Object.entries(map)) {
-        if (normaliseCombo(bound) === normaliseCombo(combo)) {
-          e.preventDefault();
-          dispatch(actionId);
-          // If this is a hold action, remember the combo so keyup can match it
-          if (holdHandlerRef.current?.ids.has(actionId)) {
-            heldComboRef.current = normaliseCombo(combo);
-          }
-          return;
-        }
+      const combo    = comboFromEvent(e);
+      const actionId = findShortcut(loadShortcutMap(), combo, editable);
+      if (!actionId) return;
+      e.preventDefault();
+      dispatch(actionId);
+      // If this is a hold action, remember the combo so keyup can match it
+      if (holdHandlerRef.current?.ids.has(actionId)) {
+        heldComboRef.current = normaliseCombo(combo);
       }
     };
 
