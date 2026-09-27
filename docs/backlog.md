@@ -7,7 +7,7 @@ Collected from the owner's notes on 27 September 2026. Each item is planned, not
 1. **Finish what's paused:** p5.js import with multi-file scripts and a Console; the pop-out node pack builder (including `.playfile` carrying videos).
 2. **Finish stack follow-ups:** custom effects from a graph (the Picture node and Publish as Finish effect), multi-pass custom effects, shader HDR for halation and bloom.
 3. **Files page:** a Notes section; tidy the settings entries.
-4. **Actions and controls:** condition triggers, "send a signal" actions, pair/position controls, axis swap.
+4. **Actions and controls:** done (condition triggers, signals, pair controls, axis swap); what's left is under its heading.
 5. **MIDI:** knob lock, key-press note ranges, grid controllers (Push, Launchpad).
 6. **Audio:** built-in effects → a drum pad sampler layer → Audio Unit hosting → VST3 hosting.
 7. **Older open items:** a pop-out Present/Stage window, GPU recovery on Present/Stage, undo for Play, live sliders inside 3D groups.
@@ -28,11 +28,10 @@ Done: the animatable before/after wipe (`finish.compare`), stack presets, and cu
 
 ## Actions and controls
 
-- **Condition triggers on any value:** when a layer property, control, source or distance (shape↔null, shape↔shape, layer↔screen point) is below, above, equal to (within a tolerance) or crosses a number. This generalises the proximity triggers, with the same firing modes and hysteresis.
-- **"Send a signal" action:** instead of changing a property, emit a named signal. Other actions and mappings can trigger on "when signal X fires", which chains conditions. Signals appear in Learn and the source picker.
-- **Pair controls:** right-click any value → **Pair with…** / **Add as position with Y** to make a two-value control (x,y, or any two values such as radius and glow). It keeps a slider per value, disabled while mapped, and shows an XY pad for positions. Layers and graphs still see plain values.
-- **Pair mappings:** Affect A / Affect B / Affect both, with per-axis range, curve, smoothing and an optional per-axis condition. Position sources include the mouse, a null, a hand point, a grid pad and a layer centre. A position condition: "when A is within d of B".
-- **Axis swap:** while driving A, switch to B when A crosses a swap threshold; a separate swap-back threshold returns it. It resets on rewind and can send a signal on each swap.
+Done: condition triggers on any value ("When a value…", proximity is its distance case), "Send a signal" actions and "When a signal fires" triggers (in Learn and the source picker, with a loop guard), pair controls (Pair with…, Add as position, the XY pad), pair mappings (position or one source, Affect A / B / both, per-axis range, curve, smoothing and condition) and axis swap, in takes, renders and website exports. See `conditions-and-signals.md`.
+
+- **A grid pad as a position source** (with the MIDI grid controllers below).
+- **The XY pad on the Stage and in the website player's panel** (both show a pair's two sliders for now).
 
 ## MIDI
 

@@ -79,6 +79,13 @@ import { AudioReadersHost } from './AudioReadersPanel';
 import { useReadersPanel } from './readersPanelUi';
 import { formatHz, formatWidth } from '../../play/audioReaders';
 import type { AudioReader } from '../../types/play';
+import type { PlayPairMapping } from '../../types/play';
+import { ContextMenuArea } from '../ui/ContextMenuArea';
+import type { MenuItem } from '../ui/Menu';
+import { PairCard, PairMappingRow, pairMappingLabel } from './PairControls';
+import { makePair, newPairMapping, pairOf, partnerTarget, positionPair, unpair } from '../../play/pairs';
+import { pairDrives, signalSource } from '../../lib/playEngine';
+import { SIGNAL_SOURCE } from './sourcePickerSections';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
 
@@ -388,6 +395,39 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       </>
     )}
   />;
+  // Pairs: right-click a slider (or its ⋯) to pair it with another, or with its X/Y partner as a position.
+  const resolveGraphTarget = (target: string) => {
+    const c = candidates.find(x => x.target === target && x.kind === 'float');
+    return c ? { label: candidateLabel(c), min: c.min, max: c.max, ...(c.step ? { step: c.step } : {}) } : null;
+  };
+  const addPairMapping = (pairId: string) => {
+    if (!requireFeature('play.sources')) return;
+    update(p => { const m = newPairMapping(p, pairId); return m ? { ...p, pairMappings: [...(p.pairMappings ?? []), m] } : p; });
+    setDrawerOpen(true);
+    if (compact) setTab('mappings');
+  };
+  const controlMenu = (id: string): MenuItem[] => {
+    const c = play.controls.find(x => x.id === id);
+    if (!c || c.kind !== 'float') return [{ label: 'Only sliders pair', disabled: true, onSelect: () => {} }];
+    const partner = partnerTarget(c.target);
+    const others = play.controls.filter(x => x.id !== id && x.kind === 'float' && !pairOf(play, x.id));
+    const items: MenuItem[] = [];
+    if (partner) items.push({
+      label: `Add as position with ${partner.axis === 'y' ? 'Y' : 'X'}`, icon: 'target', hint: 'Its X/Y partner too, as one control with an XY pad',
+      onSelect: () => { let ok = ''; update(p => { const r = positionPair(p, id, resolveGraphTarget); ok = r.pairId; return r.play; }); if (!ok) toast.info('No partner slider found for it'); },
+    });
+    items.push({ heading: 'Pair with…' });
+    if (!others.length) items.push({ label: 'Add another slider first', disabled: true, onSelect: () => {} });
+    for (const o of others) {
+      items.push({ label: o.label, icon: 'sliders', hint: 'Two sliders played together; map both at once, or one then the other', onSelect: () => update(p => makePair(p, id, o.id, false).play) });
+      if (items.length > 14) break;
+    }
+    return items;
+  };
+  const pairMenu = (pairId: string): MenuItem[] => [
+    { label: 'Map onto the pair', icon: 'plus', onSelect: () => addPairMapping(pairId) },
+    { label: 'Unpair', icon: 'close', hint: 'Two separate sliders again; its pair mappings go', onSelect: () => update(p => unpair(p, pairId)) },
+  ];
   const renderControls = (inPanel: boolean) => (
     <div style={{ flex: 1, minHeight: play.notes && !compact && !inPanel ? 110 : 0, overflowY: 'auto', padding: inPanel ? '8px 16px 16px' : '6px 12px 12px' }}>
       {compact && (
@@ -432,7 +472,35 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             ? 'Add a node with a slider or a colour in the Studio first. Any live slider can be a control.'
             : 'Pick sliders and colours from the graph to build your panel. Then map MIDI, the mouse or keys onto them below.'}
         />
-      ) : <div style={inPanel ? PANEL_GRID : undefined}>{play.controls.map((c, i) => (
+      ) : <div style={inPanel ? PANEL_GRID : undefined}>{play.controls.map((c, i) => {
+        const pair = pairOf(play, c.id);
+        if (pair) {
+          // A pair shows once, where its A is; B's own row is inside it.
+          if (c.id !== pair.a) return null;
+          const cb = play.controls.find(x => x.id === pair.b);
+          if (!cb) return null;
+          const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
+          const pms = (play.pairMappings ?? []).filter(m => m.enabled && m.pairId === pair.id);
+          return (
+            <ContextMenuArea key={c.id} items={() => pairMenu(pair.id)}>
+              <PairCard
+                pair={pair} a={c} b={cb} touch={compact}
+                values={[num(readControlValue(nodes, c.target, play)), num(readControlValue(nodes, cb.target, play))]}
+                live={[liveValues.get(c.id), liveValues.get(cb.id)]}
+                drivenA={pms.some(m => pairDrives(m, pair, c.id)) || play.mappings.some(m => m.enabled && m.controlId === c.id)}
+                drivenB={pms.some(m => pairDrives(m, pair, cb.id)) || play.mappings.some(m => m.enabled && m.controlId === cb.id)}
+                drivenBy={[...pms.map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === c.id || m.controlId === cb.id)).map(m => sourceLabel(m.source, play.controls, play.layers))]}
+                onChange={(ctl, v) => writeControl(ctl, v)}
+                onRename={label => update(p => ({ ...p, pairs: (p.pairs ?? []).map(x => (x.id === pair.id ? { ...x, label } : x)) }))}
+                onPosition={position => update(p => ({ ...p, pairs: (p.pairs ?? []).map(x => (x.id === pair.id ? { ...x, position } : x)) }))}
+                onUnpair={() => update(p => unpair(p, pair.id))}
+                onMap={() => addPairMapping(pair.id)}
+              />
+            </ContextMenuArea>
+          );
+        }
+        return (
+        <ContextMenuArea key={c.id} items={() => controlMenu(c.id)}>
         <ControlRow
           key={c.id}
           control={c}
@@ -466,7 +534,9 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           })}
           onRemove={() => update(p => ({ ...p, controls: p.controls.filter(x => x.id !== c.id), mappings: p.mappings.filter(m => m.controlId !== c.id) }))}
         />
-      ))}</div>}
+        </ContextMenuArea>
+        );
+      })}</div>}
     </div>
   );
   const renderMappings = (inPanel: boolean) => (
@@ -481,6 +551,9 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       onAdd={addMapping}
       onUpdate={(id, patch) => update(p => ({ ...p, mappings: p.mappings.map(m => m.id === id ? { ...m, ...patch } : m) }))}
       onRemove={id => update(p => ({ ...p, mappings: p.mappings.filter(m => m.id !== id) }))}
+      onAddPair={addPairMapping}
+      onUpdatePair={(id, patch) => update(p => ({ ...p, pairMappings: (p.pairMappings ?? []).map(m => (m.id === id ? { ...m, ...patch } : m)) }))}
+      onRemovePair={id => update(p => { const rest = (p.pairMappings ?? []).filter(m => m.id !== id); const out: PlayRecord = { ...p, pairMappings: rest }; if (!rest.length) delete out.pairMappings; return out; })}
       audioNodes={audioNodes}
       nullLayers={nullLayers}
       layerRefs={layerRefs}
@@ -525,7 +598,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             ...(compact || sideView.tabs.includes('controls') ? [{ value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` }] : []),
             ...(compact || sideView.tabs.includes('layers') ? [{ value: 'layers' as const, label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}${layersOk ? '' : ' · Pro'}` }] : []),
             ...(compact || sideView.tabs.includes('finish') ? [{ value: 'finish' as const, label: `Finish${play.finish?.effects.length ? ` · ${play.finish.effects.length}` : ''}${finishOk ? '' : ' · Pro'}`, title: 'Grade, lens, film and time effects over the whole picture' }] : []),
-            ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length ? ` · ${play.mappings.length}` : ''}` }] : []),
+            ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length + (play.pairMappings?.length ?? 0) ? ` · ${play.mappings.length + (play.pairMappings?.length ?? 0)}` : ''}` }] : []),
           ]}
         />
         </div>
@@ -937,7 +1010,7 @@ function RangeEditor({ min, max, onRange }: { min: number; max: number; onRange:
 
 interface AudioNodeOption { id: string; label: string; bands: number }
 
-function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, audioNodes, nullLayers, layerRefs }: {
+function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, onAddPair, onUpdatePair, onRemovePair, audioNodes, nullLayers, layerRefs }: {
   play: PlayRecord;
   /** `drawer`: folds under the controls with a draggable top edge. `tab`: fills the page (phones, the split view's panel). */
   mode: 'drawer' | 'tab';
@@ -950,6 +1023,9 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
   onAdd: (source: PlaySource, controlId?: string) => void;
   onUpdate: (id: string, patch: Partial<PlayMapping>) => void;
   onRemove: (id: string) => void;
+  onAddPair: (pairId: string) => void;
+  onUpdatePair: (id: string, patch: Partial<PlayPairMapping>) => void;
+  onRemovePair: (id: string) => void;
   audioNodes: AudioNodeOption[];
   nullLayers: { id: string; label: string }[];
   layerRefs: LayerRef[];
@@ -1051,8 +1127,8 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
           {learnFor && (
             <div style={{ margin: '6px 0 2px', padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 12px ${fontFamily.ui}` }}>
               {learnTrigger
-                ? <>Press a key, hit a note{handFeed.isOn() ? ' or make a hand gesture' : ''}… </>
-                : <>Move a knob, hit a note, press a key{handFeed.isOn() ? ' or move a finger' : ''}… </>}
+                ? <>Press a key, hit a note{handFeed.isOn() ? ', make a hand gesture' : ''}{play.signals?.length ? ' or fire a signal' : ''}… </>
+                : <>Move a knob, hit a note, press a key{handFeed.isOn() ? ', move a finger' : ''}{play.signals?.length ? ' or fire a signal' : ''}… </>}
               <span style={{ fontWeight: 500, opacity: 0.8 }}>Esc to cancel</span>
             </div>
           )}
@@ -1083,6 +1159,9 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
               onRemove={() => onRemove(m.id)}
             />
           ))}</div>}
+          {!!play.pairs?.length && (
+            <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
+          )}
           {!play.midiFile && <MidiFileSlot />}
         </div>
       )}
@@ -1173,6 +1252,50 @@ function MidiFileSlot() {
 }
 const NO_READERS: AudioReader[] = [];
 
+/** Mappings onto pairs: a position (the pointer, a null, a fingertip) or one source onto two values, with axis swap. */
+function PairMappingsSection({ play, grid, audioNodes, layerRefs, onAdd, onUpdate, onRemove }: {
+  play: PlayRecord;
+  grid: boolean;
+  audioNodes: AudioNodeOption[];
+  layerRefs: LayerRef[];
+  onAdd: (pairId: string) => void;
+  onUpdate: (id: string, patch: Partial<PlayPairMapping>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const tk = useTokens();
+  const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
+  const allSources = useCan('play.sources');
+  const sections = useMemo(() => sourcePickerSections(readers, !allSources, play.signals), [readers, allSources, play.signals]);
+  const pms = play.pairMappings ?? [];
+  const numStyle = { width: 58, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' as const };
+  const labelStyle = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' as const, width: 54, flexShrink: 0 };
+  const firstPair = play.pairs?.[0]?.id ?? '';
+  const pick = (v: string, prev: PlaySource): PlaySource | null => {
+    if (!allSources && sourceTypeNeedsPro(v)) { openProSheet('play.sources'); return null; }
+    if (v === OPEN_READERS) { useReadersPanel.getState().show({ focus: '' }); return null; }
+    if (v.startsWith(SIGNAL_SOURCE)) return signalSource(v.slice(SIGNAL_SOURCE.length));
+    return sourceFromType(v as SourceType, prev, play.controls[0]?.id ?? '', play.layers.find(l => l.kind === 'null')?.id ?? '', firstSensor(layerRefs), firstDataset());
+  };
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 2px' }}>
+        <span style={{ font: `650 12px ${fontFamily.ui}`, color: tk.text.secondary }}>Pairs</span>
+        {pms.length > 0 && <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{pms.length}</span>}
+        <span style={{ flex: 1 }} />
+        <Button size="sm" icon="plus" onClick={() => firstPair && onAdd(firstPair)}>Map a pair</Button>
+      </div>
+      {pms.length === 0 && <div style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>Drive both values of a pair at once from a position (the pointer, a null, a fingertip), or one source onto A, B or both, with an axis swap.</div>}
+      <div style={grid ? PANEL_GRID_WIDE : undefined}>
+        {pms.map(m => (
+          <PairMappingRow key={m.id} mapping={m} play={play} sourceSections={sections} onPickSource={pick}
+            renderSourceOptions={(source, onChange) => <SourceOptions source={source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />}
+            onUpdate={patch => onUpdate(m.id, patch)} onRemove={() => onRemove(m.id)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
   mapping: PlayMapping;
   control: PlayControl | undefined;
@@ -1194,9 +1317,11 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   // Free maps from the mouse, keys and audio (play/planGates.ts). A Pro source made on Pro stays as it is, marked, and doesn't run.
   const allSources = useCan('play.sources');
   const locked = !allSources && sourceNeedsPro(m.source);
-  const sourceSections = useMemo(() => sourcePickerSections(readers, !allSources), [readers, allSources]);
+  const signals = useNodeGraphStore(s => s.play.signals);
+  const sourceSections = useMemo(() => sourcePickerSections(readers, !allSources, signals), [readers, allSources, signals]);
   const pickSource = (v: string) => {
     if (!allSources && sourceTypeNeedsPro(v)) { openProSheet('play.sources'); return; }
+    if (v.startsWith(SIGNAL_SOURCE)) { onUpdate({ source: signalSource(v.slice(SIGNAL_SOURCE.length)) }); return; }
     if (v === OPEN_READERS) { useReadersPanel.getState().show({ mappingId: m.id, focus: m.source.kind === 'reader' ? m.source.readerId : '' }); return; }
     onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs), firstDataset()) });
   };

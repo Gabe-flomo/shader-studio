@@ -55,6 +55,8 @@ import {
   AudioEditor, BodiesEditor, BrushEditor, CameraEditor, ContoursEditor, GlyphsEditor, ImageEditor, LensEditor, NullEditor, ParticlesEditor, ShapeEditor, TextEditor,
   type EditorContext, ClonerEditor, ScriptEditor } from './layers/editors';
 import { ActionsSection } from './layers/ActionsSection';
+import { SignalsList } from './ConditionFields';
+import { layerPositionPair } from '../../play/pairs';
 import { DataLayerEditor } from './layers/DataLayerEditor';
 import { MatteMaskBar } from './layers/MatteMask';
 import { matteMaskSummary } from '../../play/mattes';
@@ -327,6 +329,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
       onExpose: key => expose(l, key),
       onExposeControl: onExpose,
       onDriveNull: key => driveNull(l, key),
+      onPairXY: key => { onChange(p => layerPositionPair(p, l.id, key).play); toast.success('Added as a position', { message: 'Two sliders and an XY pad on the Controls tab; map the pointer or a null onto both.' }); },
     };
   };
 
@@ -455,6 +458,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
           );
         })}
         {!entered && <ActionsSection play={play} onChange={onChange} />}
+        {!entered && <SignalsList play={play} onChange={onChange} />}
       </div>)}
       {duplicating && <DuplicateGroupDialog group={duplicating} play={play} onPick={w => duplicateGroupAs(duplicating, w)} onClose={() => setDuplicating(null)} />}
     </>
@@ -562,7 +566,7 @@ function DuplicateGroupDialog({ group, play, onPick, onClose }: { group: LayerGr
   );
 }
 
-function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch, selected, stripe, dim, groupItems, pictureHidden, drawing, maskDrawing, matteOf, nested, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull, headerOnly = false }: {
+function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch, selected, stripe, dim, groupItems, pictureHidden, drawing, maskDrawing, matteOf, nested, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull, onPairXY, headerOnly = false }: {
   layer: PlayLayer;
   layers: PlayLayer[];
   play: PlayRecord;
@@ -599,6 +603,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   onExpose: (key: string) => void;
   onExposeControl: (control: PlayControl) => void;
   onDriveNull: (key: string) => void;
+  onPairXY: (key: string) => void;
   /** Just the card's header: the split view lists layers this way and edits the selected one beside the list. */
   headerOnly?: boolean;
 }) {
@@ -613,7 +618,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   if (revealTick !== seenTick) { setSeenTick(revealTick); if (revealTick) setOpen(true); }
   const commit = () => { setEditing(false); const t = draft.trim(); if (t && t !== l.label) onRename(t); else setDraft(l.label); };
   const set = (p: Record<string, unknown>) => onPatch(x => ({ ...x, ...p } as PlayLayer));
-  const f = makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onExposeControl, onDriveNull });
+  const f = makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onExposeControl, onDriveNull, onPairXY });
   const ctx: EditorContext = {
     layers,
     act: (kind, amount = 1) => playOverlay.act({ do: kind, layerId: l.id, amount }),

@@ -60,7 +60,7 @@ const COARSE = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer:
 const toHex = (v: RGB) => `#${v.map(c => Math.round(Math.max(0, Math.min(1, c)) * 255).toString(16).padStart(2, '0')).join('')}`;
 const fromHex = (h: string): RGB => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
 
-export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onExposeControl, onDriveNull }: {
+export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onExposeControl, onDriveNull, onPairXY }: {
   l: PlayLayer;
   tk: Tokens;
   touch: boolean;
@@ -70,6 +70,8 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
   onExposeControl: (control: PlayControl) => void;
   /** Make the property a control with a Null on the picture that drives it (its X/Y partner too). */
   onDriveNull?: (key: string) => void;
+  /** Make the property and its X/Y partner one position control (a pair with an XY pad). */
+  onPairXY?: (key: string) => void;
 }): FieldKit {
   const rec = l as unknown as Record<string, unknown>;
   // Double-clicking a ruler puts it back to the layer kind's default.
@@ -104,6 +106,12 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
         icon: 'target' as const,
         hint: 'A control, and a null on the picture that moves it: drag the dot',
         onSelect: () => onDriveNull(key),
+      }] : []),
+      ...(onPairXY && partner ? [{
+        label: `Add as position with ${partner.label}`,
+        icon: 'sliders' as const,
+        hint: 'Both as one control on the panel: two sliders and an XY pad',
+        onSelect: () => onPairXY(key),
       }] : []),
       'separator' as const,
       { label: 'Reset to default', icon: 'resetParams' as const, disabled: fallback === undefined || fallback === value, onSelect: () => set({ [key]: fallback }) },

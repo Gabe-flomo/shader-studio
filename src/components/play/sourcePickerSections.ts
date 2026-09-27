@@ -11,6 +11,9 @@ import type { TriggerSpec } from '../../types/play';
 import { HAND_POINT_OPTIONS, OPEN_READERS, sourceOptions, type SourceType } from '../../play/playSources';
 import { FREE_TRIGGER_ONS, sourceTypeNeedsPro } from '../../play/planGates';
 
+/** The picker's value for a signal: a trigger source on it. */
+export const SIGNAL_SOURCE = 'signal:';
+
 interface Entry { value: SourceType; label: string; icon: IconName; description?: string; keywords?: string }
 
 /** The short face label, icon and description of each source type, in the picker's order. */
@@ -63,12 +66,14 @@ const SOURCE_GROUPS: { heading: string; entries: Entry[] }[] = [
  * The Source picker's sections for a setup's readers. `locked` marks Pro on
  * the types the plan lacks (Free passes true).
  */
-export function sourcePickerSections(readers: ReadonlyArray<{ id: string; name: string }>, locked: boolean): PickerSection[] {
+export function sourcePickerSections(readers: ReadonlyArray<{ id: string; name: string }>, locked: boolean, signals: ReadonlyArray<{ id: string; name: string }> = []): PickerSection[] {
   // The live-audio run of the flat list: the band, the readers, then the way to the panel.
   const live = sourceOptions(readers).filter(o => o.group === 'Live audio' && o.value !== 'live');
   const item = (e: Entry): PickerItem => ({ value: e.value, label: e.label, icon: e.icon, description: e.description, keywords: e.keywords, pro: locked && sourceTypeNeedsPro(e.value) });
   return SOURCE_GROUPS.map(g => {
     const items = g.entries.map(item);
+    // Each signal is a trigger on it (an envelope each time it fires).
+    if (g.heading === 'From the setup') for (const s of signals) items.push({ value: `${SIGNAL_SOURCE}${s.id}`, label: `Signal · ${s.name}`, icon: 'spark', description: 'Fires when it is sent', keywords: 'signal event', pro: locked });
     if (g.heading === 'Live audio') {
       for (const o of live) {
         items.push(o.value === OPEN_READERS
@@ -101,6 +106,10 @@ const TRIGGER_GROUPS: { heading: string; kinds: { on: TriggerSpec['on']; label: 
     { on: 'zone', label: 'Shape', icon: 'layoutCanvas', description: 'A shape is clicked, entered or filled' },
     { on: 'hand', label: 'Hand gesture', icon: 'hand', description: 'Pinch, fist, point, open palm…' },
     { on: 'proximity', label: 'Proximity', icon: 'bidir', description: 'Two layers or hands come close' },
+  ] },
+  { heading: 'Conditions & signals', kinds: [
+    { on: 'value', label: 'When a value…', icon: 'curve', description: 'A control, a layer, a source or a distance goes below, above or crosses a number' },
+    { on: 'signal', label: 'When a signal fires', icon: 'spark', description: 'Sent by a Send a signal action or an axis swap' },
   ] },
 ];
 

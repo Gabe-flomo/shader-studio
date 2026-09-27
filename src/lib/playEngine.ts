@@ -22,7 +22,11 @@ import { inputBus, paramChannelKey, type InputSource, type InputWriter } from '.
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
-import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityGate, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
+import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
+import { sgCondNew, sgCondStep, sgParseValueRef, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
+import { readFinishValue } from '../types/playFinish';
+import { signalNames } from '../play/signalNames';
+import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../types/play';
 import { geoAnchor } from '../play/kit/geometry.js';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
@@ -119,6 +123,37 @@ interface MappingState {
   value: number | undefined;
 }
 
+/** A pair mapping between frames: each axis's last driven value (held while it isn't driven), the axis swap, the per-axis conditions. */
+interface PairState { a: number | undefined; b: number | undefined; swap: SgSwapState; condA: SgCondState; condB: SgCondState }
+
+/** Does a source move on its own (so the render loop keeps drawing)? */
+function sourceAnimates(s: PlaySource, triggerIdle: boolean): boolean {
+  return s.kind === 'noise'
+    || ((s.kind === 'live' || (s.kind === 'trigger' && s.trigger.on === 'audio')) && liveAudio.isOn())
+    || ((s.kind === 'reader' || (s.kind === 'trigger' && s.trigger.on === 'reader')) && audioReaderBank.live())
+    || (s.kind === 'trigger' && (s.trigger.on === 'beat' || !triggerIdle));
+}
+
+const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+
+/** Does a condition's value path read the pointer (mouse:x|y, or a distance to or from it)? */
+function readsMouse(ref: string | undefined): boolean {
+  const r = ref ? sgParseValueRef(ref) : null;
+  return !!r && (r.kind === 'mouse' || (r.kind === 'distance' && (r.a === 'mouse' || r.b === 'mouse')));
+}
+
+/** Does this pair mapping write this control (one of its pair's two)? A swap writes both. */
+export function pairDrives(m: PlayPairMapping, p: PlayPair, controlId: string): boolean {
+  if (p.a === controlId) return m.affect !== 'b' || !!m.swap;
+  if (p.b === controlId) return m.affect !== 'a' || !!m.swap;
+  return false;
+}
+
+/** The source a signal is as a mapping source: a trigger on it, a short envelope (Learn and the picker make this). */
+export function signalSource(id: string): PlaySource {
+  return { kind: 'trigger', trigger: { on: 'signal', signal: id }, mode: 'envelope', attack: 10, decay: 200, sustain: 0, release: 300, steps: 4, velocity: false };
+}
+
 class PlayEngine implements InputSource {
   private record: PlayRecord = emptyPlayRecord();
   private controls = new Map<string, PlayControl>();
@@ -168,8 +203,15 @@ class PlayEngine implements InputSource {
   private actionFire = new Map<string, FireSlot>();
   /** Each trigger mapping's firing mode state; its count of fires is what the envelope, toggle or step sees. */
   private mappingFire = new Map<string, FireSlot>();
-  /** Proximity triggers whose gate is open (A and B are close, or far). */
-  private proxGates = new Set<string>();
+  /** Condition triggers (proximity, "when a value…"): each one's gate and memory, by trigger key. */
+  private condStates = new Map<string, SgCondState>();
+  /** Pair controls by id, and each pair mapping's state. */
+  private pairs = new Map<string, PlayPair>();
+  private pairState = new Map<string, PairState>();
+  private pairMoving = false;
+  /** Graph clock at the last tick: a clock sent back (rewind) starts axis swaps over. */
+  private lastTime = -Infinity;
+  private signalListeners = new Set<(id: string) => void>();
   private actionListeners = new Set<(a: PlayAction) => void>();
   /** Action controls: the last mapped level, so a rise through 0.5 fires once. */
   private actionLevel = new Map<string, number>();
@@ -299,7 +341,14 @@ class PlayEngine implements InputSource {
     midiEngine.setFile(record.midiFile);
     this.controls.clear();
     for (const c of record.controls) this.controls.set(c.id, c);
-    this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse');
+    this.pairs.clear();
+    for (const p of record.pairs ?? []) this.pairs.set(p.id, p);
+    signalNames.set(record.signals);
+    for (const id of [...this.pairState.keys()]) if (!(record.pairMappings ?? []).some(m => m.id === id)) this.pairState.delete(id);
+    this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse')
+      || (record.pairMappings ?? []).some(m => m.enabled && (m.source.kind === 'position' ? m.source.anchor === 'mouse' : m.source.source.kind === 'mouse'))
+      || this.allTriggers().some(t => t.on === 'value' && readsMouse(t.value))
+      || (record.pairMappings ?? []).some(m => m.enabled && (readsMouse(m.a.when?.value) || readsMouse(m.b.when?.value)));
     this.tiltIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'tilt');
     this.gamepadIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'gamepad');
     this.handsBound = usesHands(record);
@@ -307,13 +356,14 @@ class PlayEngine implements InputSource {
     handFeed.configure(hdTrackerOptions(record.hands));
     this.triggerKeysBound = new Set(this.allTriggers().map(triggerKey));
     this.oscIsBound = record.mappings.some(m => m.enabled && (m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')))
+      || (record.pairMappings ?? []).some(m => m.enabled && m.source.kind === 'value' && (m.source.source.kind === 'osc' || (m.source.source.kind === 'trigger' && m.source.source.trigger.on === 'osc')))
       || (record.actions ?? []).some(a => a.enabled && a.trigger.on === 'osc');
     for (const id of [...this.actionFire.keys()]) if (!(record.actions ?? []).some(a => a.id === id)) this.actionFire.delete(id);
-    for (const id of [...this.mappingFire.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger')) this.mappingFire.delete(id);
-    const proxKeys = new Set(this.allTriggers().filter(t => t.on === 'proximity').map(triggerKey));
-    for (const k of [...this.proxGates]) if (!proxKeys.has(k)) { this.proxGates.delete(k); this.release(k); }
+    for (const id of [...this.mappingFire.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger') && !(record.pairMappings ?? []).some(m => m.id === id)) this.mappingFire.delete(id);
+    const condKeys = new Set(this.allTriggers().filter(t => t.on === 'proximity' || t.on === 'value').map(triggerKey));
+    for (const [k, st] of [...this.condStates]) if (!condKeys.has(k)) { this.condStates.delete(k); if (st.open) this.release(k); }
     oscClient.setWanted(this.oscIsBound || oscClient.getStatus() === 'connected');
-    for (const id of [...this.triggerStates.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger')) this.triggerStates.delete(id);
+    for (const id of [...this.triggerStates.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger') && !(record.pairMappings ?? []).some(m => m.id === id && m.source.kind === 'value' && m.source.source.kind === 'trigger')) this.triggerStates.delete(id);
     // Show the new state (a mapping added, removed or disabled) even while the clock is paused.
     inputBus.wake();
     // Drop state for mappings that are gone; keep the rest so a re-label doesn't jump.
@@ -337,6 +387,10 @@ class PlayEngine implements InputSource {
   /** Does an enabled mapping drive this control right now? */
   isDriven(controlId: string): boolean {
     for (const m of this.record.mappings) if (m.enabled && m.controlId === controlId) return true;
+    for (const m of this.record.pairMappings ?? []) {
+      const p = m.enabled ? this.pairs.get(m.pairId) : undefined;
+      if (p && pairDrives(m, p, controlId)) return true;
+    }
     return false;
   }
 
@@ -428,6 +482,9 @@ class PlayEngine implements InputSource {
    * of view, particles with none alive).
    */
   anchorAt(ref: string): { x: number; y: number } | null {
+    if (ref === 'mouse') return { x: this.mouseX, y: this.mouseY };
+    const pt = sgScreenPoint(ref);
+    if (pt) return pt;
     const hand = parseHandAnchor(ref);
     if (hand) return this.handPoint(hand.side, hand.point);
     const l = this.record.layers.find(x => x.id === ref);
@@ -454,7 +511,66 @@ class PlayEngine implements InputSource {
     const out: TriggerSpec[] = [];
     for (const m of this.record.mappings) if (m.enabled && m.source.kind === 'trigger') out.push(m.source.trigger);
     for (const a of this.record.actions ?? []) if (a.enabled) out.push(a.trigger);
+    for (const m of this.record.pairMappings ?? []) if (m.enabled && m.source.kind === 'value' && m.source.source.kind === 'trigger') out.push(m.source.source.trigger);
     return out;
+  }
+
+  /**
+   * A condition's value now (play/kit/signals.js sgParseValueRef): a control
+   * in its own units, a layer's or a Finish effect's number, a mapping's
+   * source (0..1), the pointer, or a distance in picture heights. Null while
+   * it has none (a hand out of view, something deleted).
+   */
+  readValue(ref: string): number | null {
+    const r = sgParseValueRef(ref);
+    if (!r) return null;
+    switch (r.kind) {
+      case 'control': {
+        const c = this.controls.get(r.id);
+        const v = c ? this.live.get(c.id) ?? this.base.get(c.id) : undefined;
+        if (v === undefined) return null;
+        return Array.isArray(v) ? (v[0] + v[1] + v[2]) / 3 : v;
+      }
+      case 'mapping': {
+        const m = this.record.mappings.find(x => x.id === r.id);
+        return m ? this.readMapping(m) : null;
+      }
+      case 'mouse': return r.axis === 'x' ? this.mouseX : this.mouseY;
+      case 'distance': return this.anchorGap(r.a, r.b);
+      case 'prop': {
+        const base = r.layerId.startsWith('finish:')
+          ? readFinishValue(this.record.finish, `${r.layerId}::${r.key}`) ?? null
+          : this.layerBase(r.layerId, r.key);
+        return base === null ? null : this.layerValue(r.layerId, r.key, base);
+      }
+    }
+  }
+
+  /** A condition trigger's state (for the editor's meter): is it met now. */
+  conditionOpen(t: TriggerSpec): boolean {
+    return this.condStates.get(triggerKey(t))?.open ?? false;
+  }
+
+  /** Listen for signals as they fire (the signals list flashes). */
+  onSignal(cb: (id: string) => void): () => void {
+    this.signalListeners.add(cb);
+    return () => { this.signalListeners.delete(cb); };
+  }
+
+  /** A signal fires: its "When signal fires" triggers see a press (and its release) at once. Learn takes it too. */
+  private emitSignal(id: string): void {
+    const key = signalKey(id);
+    this.press(key);
+    this.release(key);
+    for (const cb of this.signalListeners) cb(id);
+    if (this.learnTriggerCb) this.finishLearnTrigger({ on: 'signal', signal: id });
+    else if (this.learnCb) this.finishLearn(signalSource(id));
+  }
+
+  /** Fire a signal by hand (its button on the signals list): what listens for it sees it on the next frame. */
+  fireSignal(id: string): void {
+    this.emitSignal(id);
+    inputBus.wake();
   }
 
   /** Zone enter / fill triggers: a sensor crossing its threshold is a press; dropping below 80% of it releases. */
@@ -470,15 +586,25 @@ class PlayEngine implements InputSource {
     }
   }
 
-  /** Proximity triggers: A and B coming closer than (or going farther than) the distance is a press; the margin keeps it from flickering. */
-  private tickProximityTriggers(): void {
+  /**
+   * Condition triggers, proximity among them (a distance below or above, the
+   * margin its hysteresis): a condition becoming true is a press, false again
+   * its release; a crossing is a press and release in one frame.
+   */
+  private tickConditionTriggers(): void {
+    const seen = new Set<string>();
     for (const t of this.allTriggers()) {
-      if (t.on !== 'proximity') continue;
+      if (t.on !== 'proximity' && t.on !== 'value') continue;
       const key = triggerKey(t);
-      const open = this.proxGates.has(key);
-      const on = proximityGate(open, this.anchorGap(t.a, t.b), t.when, t.distance, t.margin);
-      if (on && !open) { this.proxGates.add(key); this.press(key); }
-      else if (!on && open) { this.proxGates.delete(key); this.release(key); }
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const c: ValueCondition = t.on === 'proximity' ? proximityCondition(t) : t;
+      let st = this.condStates.get(key);
+      if (!st) { st = sgCondNew(); this.condStates.set(key, st); }
+      const ev = sgCondStep(st, this.readValue(c.value), c);
+      if (ev === 'open') this.press(key);
+      else if (ev === 'close') this.release(key);
+      else if (ev === 'tap') { this.press(key); this.release(key); }
     }
   }
 
@@ -504,17 +630,21 @@ class PlayEngine implements InputSource {
     return { slot: made, fresh: true };
   }
 
-  /** Fire each action by its trigger's mode: once per press (the default), every frame or every N while held, or on release. */
+  /**
+   * Fire each action by its trigger's mode: once per press (the default), every
+   * frame or every N while held, or on release. Send a signal passes its signal
+   * on down the chain in the same frame (sgRunActions: each signal once a
+   * frame, a limited depth, so a loop can't hang).
+   */
   private tickActions(dt: number): void {
-    for (const a of this.record.actions ?? []) {
-      if (!a.enabled) continue;
+    const actions = (this.record.actions ?? []).filter(a => a.enabled);
+    if (!actions.length) return;
+    sgRunActions(actions, a => {
       const { presses, gate } = this.triggerInput(a.trigger);
       // A new action starts from "no presses yet"; a beat that jumped (a seek) fires once.
       const { slot, fresh } = this.fireSlot(this.actionFire, a.id, a.trigger, presses, gate);
-      if (fresh) continue;
-      const times = Math.min(4, stepFire(slot.st, a.trigger.fire, presses, gate, dt));
-      for (let i = 0; i < times; i++) for (const cb of this.actionListeners) cb(a);
-    }
+      return fresh ? 0 : Math.min(4, stepFire(slot.st, a.trigger.fire, presses, gate, dt));
+    }, a => { for (const cb of this.actionListeners) cb(a); }, id => this.emitSignal(id));
   }
 
   // ── Hands ─────────────────────────────────────────────────────────────────
@@ -790,7 +920,10 @@ class PlayEngine implements InputSource {
     if (this.learnCb || this.learnTriggerCb) this.learnAudio();
     this.tickAudioTriggers();
     this.tickZoneTriggers();
-    this.tickProximityTriggers();
+    // A clock sent back (rewind): axis swaps start on A again.
+    if (time < this.lastTime - 1e-6) for (const st of this.pairState.values()) st.swap = sgSwapNew();
+    this.lastTime = time;
+    this.tickConditionTriggers();
     this.tickActions(dt);
     if (this.learnCb && this.performing) this.pollGamepadLearn();
     // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.
@@ -826,17 +959,9 @@ class PlayEngine implements InputSource {
         driven.add(control.id);
         continue;
       }
-      const layerTarget = parsePropTarget(control.target);
-      if (layerTarget) {
-        // A layer property or a Finish effect's number: not a uniform. The overlay reads it after this tick.
-        const lk = `${layerTarget.layerId}::${layerTarget.key}`;
-        if (this.layerLive.get(lk) !== v) { this.layerLive.set(lk, v); this.layerMoved = true; }
-        this.live.set(control.id, v);
-        driven.add(control.id);
-        continue;
-      }
+      if (control.kind !== 'color') { this.writePlain(control, v, write, driven); continue; }
       const key = paramChannelKey(bindingKeyOf(control.target));
-      if (control.kind === 'color') {
+      {
         const buf = this.colourBuffer(control.id, driven.has(control.id));
         if (m.channel === undefined) {
           // Brightness: scale the base colour.
@@ -847,12 +972,11 @@ class PlayEngine implements InputSource {
         }
         write(key, buf);
         this.live.set(control.id, buf);
-      } else {
-        write(key, v);
-        this.live.set(control.id, v);
       }
       driven.add(control.id);
     }
+    // Pair mappings, after the plain ones: on a control both drive, the pair's wins.
+    this.tickPairs(dt, write, driven);
     // A control that was driven last frame and isn't now: put the slider's value back once.
     for (const id of this.drivenLastFrame) if (!driven.has(id)) this.restoreOnce.add(id);
     for (const id of this.restoreOnce) {
@@ -871,6 +995,97 @@ class PlayEngine implements InputSource {
     }
     this.restoreOnce.clear();
     this.drivenLastFrame = driven;
+  }
+
+  /** Write a number to a float control: a layer property or Finish number (the overlay reads it), or a uniform. */
+  private writePlain(control: PlayControl, v: number, write: InputWriter, driven: Set<string>): void {
+    const layerTarget = parsePropTarget(control.target);
+    if (layerTarget) {
+      // A layer property or a Finish effect's number: not a uniform. The overlay reads it after this tick.
+      const lk = `${layerTarget.layerId}::${layerTarget.key}`;
+      if (this.layerLive.get(lk) !== v) { this.layerLive.set(lk, v); this.layerMoved = true; }
+    } else {
+      write(paramChannelKey(bindingKeyOf(control.target)), v);
+    }
+    this.live.set(control.id, v);
+    driven.add(control.id);
+  }
+
+  /**
+   * Pair mappings: a position drives both axes at once (x → A, y → B), a
+   * single source drives A, B or both, each axis through its own range,
+   * curve and smoothing. An axis whose condition doesn't hold keeps its last
+   * value. With an axis swap the source drives A until A crosses the swap
+   * threshold, then B until B crosses back (play/kit/signals.js sgSwapStep);
+   * the axis not being driven holds where it was.
+   */
+  private tickPairs(dt: number, write: InputWriter, driven: Set<string>): void {
+    this.pairMoving = false;
+    for (const m of this.record.pairMappings ?? []) {
+      if (!m.enabled) continue;
+      const pair = this.pairs.get(m.pairId);
+      const ca = pair && this.controls.get(pair.a), cb = pair && this.controls.get(pair.b);
+      if (!ca || !cb) continue;
+      let st = this.pairState.get(m.id);
+      if (!st) { st = { a: undefined, b: undefined, swap: sgSwapNew(), condA: sgCondNew(), condB: sgCondNew() }; this.pairState.set(m.id, st); }
+      const { ua, ub } = this.pairReading(m, dt);
+      const swapping = !!m.swap && m.source.kind === 'value';
+      let useA = swapping ? st.swap.axis === 'a' : m.affect !== 'b';
+      let useB = swapping ? st.swap.axis === 'b' : m.affect !== 'a';
+      if (m.a.when) { sgCondStep(st.condA, this.readValue(m.a.when.value), m.a.when); if (!st.condA.open) useA = false; }
+      if (m.b.when) { sgCondStep(st.condB, this.readValue(m.b.when.value), m.b.when); if (!st.condB.open) useB = false; }
+      if (useA && ua !== null) st.a = this.smoothAxis(st.a, mapValue(ua, m.a), m.a, dt);
+      if (useB && ub !== null) st.b = this.smoothAxis(st.b, mapValue(ub, m.b), m.b, dt);
+      // Only the axes this mapping drives (an edit from Both to A lets B go back to its slider).
+      if (st.a !== undefined && (swapping || m.affect !== 'b')) this.writePlain(ca, st.a, write, driven);
+      if (st.b !== undefined && (swapping || m.affect !== 'a')) this.writePlain(cb, st.b, write, driven);
+      if (swapping && m.swap) {
+        const ev = sgSwapStep(st.swap, useA && ua !== null ? st.a : null, useB && ub !== null ? st.b : null, m.swap);
+        if (ev === 'toB' && m.swap.signal) this.emitSignal(m.swap.signal);
+        if (ev === 'toA' && m.swap.backSignal) this.emitSignal(m.swap.backSignal);
+      }
+    }
+  }
+
+  /** A pair mapping's 0..1 readings this frame for A and B (a position's x and y, or one source for both). */
+  private pairReading(m: PlayPairMapping, dt: number): { ua: number | null; ub: number | null } {
+    if (m.source.kind === 'position') {
+      const p = this.anchorAt(m.source.anchor);
+      return p ? { ua: clamp01(p.x), ub: clamp01(p.y) } : { ua: null, ub: null };
+    }
+    const src = m.source.source;
+    const u = src.kind === 'trigger' ? this.readTrigger({ id: m.id, source: src } as PlayMapping, dt) : this.readSource(src);
+    return { ua: u, ub: u };
+  }
+
+  /** One axis's value after smoothing (exponential, settling exactly like a mapping's). */
+  private smoothAxis(prev: number | undefined, target: number, ax: PairAxis, dt: number): number {
+    if (ax.smoothMs <= 0 || prev === undefined) return target;
+    const v = prev + (target - prev) * (1 - Math.exp(-(dt * 1000) / ax.smoothMs));
+    if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(ax.outMax - ax.outMin))) return target;
+    this.pairMoving = true;
+    return v;
+  }
+
+  /** For the editor: a pair mapping's readings now (not advancing anything) and the axis a swap is on. */
+  pairNow(m: PlayPairMapping): { ua: number | null; ub: number | null; axis: 'a' | 'b'; a: number | undefined; b: number | undefined } {
+    const st = this.pairState.get(m.id);
+    let ua: number | null = null, ub: number | null = null;
+    if (m.source.kind === 'position') { const p = this.anchorAt(m.source.anchor); if (p) { ua = clamp01(p.x); ub = clamp01(p.y); } }
+    else { ua = ub = m.source.source.kind === 'trigger' ? this.triggerStates.get(m.id)?.value ?? 0 : this.readSource(m.source.source); }
+    return { ua, ub, axis: st?.swap.axis ?? 'a', a: st?.a, b: st?.b };
+  }
+
+  /** Start every axis swap on A again (the editor's button; a rewind does it too). */
+  resetSwaps(): void {
+    for (const st of this.pairState.values()) st.swap = sgSwapNew();
+    inputBus.wake();
+  }
+
+  /** Is a pair mapping axis's condition met now (for the editor)? */
+  pairCondOpen(mappingId: string, axis: 'a' | 'b'): boolean {
+    const st = this.pairState.get(mappingId);
+    return !!st && (axis === 'a' ? st.condA.open : st.condB.open);
   }
 
   private baseColour(controlId: string): number[] {
@@ -958,12 +1173,16 @@ class PlayEngine implements InputSource {
       if (m.source.kind === 'trigger' && m.source.trigger.on === 'key' && m.source.trigger.code === code) return true;
     }
     for (const a of this.record.actions ?? []) if (a.enabled && a.trigger.on === 'key' && a.trigger.code === code) return true;
+    for (const m of this.record.pairMappings ?? []) {
+      const s = m.enabled && m.source.kind === 'value' ? m.source.source : null;
+      if (s && ((s.kind === 'key' && s.code === code) || (s.kind === 'trigger' && s.trigger.on === 'key' && s.trigger.code === code))) return true;
+    }
     return false;
   }
 
   /** Actions, layer-property mappings and Learn run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.isLearning() || this.allTriggers().some(t => t.on === 'proximity') || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null);
+    return !!this.record.actions?.length || this.isLearning() || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
@@ -977,12 +1196,10 @@ class PlayEngine implements InputSource {
     if (this.allTriggers().some(t => firesWhileHeld(t.fire) && this.triggerInput(t).gate)) return true;
     // Tracking hands: landmarks arrive about 30 times a second, and smoothing and springs ease between them.
     if (handFeed.isOn() && !handFeed.isPaused()) return true;
-    return this.record.mappings.some(m => m.enabled && (
-      m.source.kind === 'noise' ||
-      ((m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio')) && liveAudio.isOn()) ||
-      ((m.source.kind === 'reader' || (m.source.kind === 'trigger' && m.source.trigger.on === 'reader')) && audioReaderBank.live()) ||
-      (m.source.kind === 'trigger' && (m.source.trigger.on === 'beat' || (this.triggerStates.get(m.id)?.stage ?? 'idle') !== 'idle'))
-    ));
+    // An axis mid-smoothing keeps drawing until it settles.
+    if (this.pairMoving) return true;
+    return this.record.mappings.some(m => m.enabled && sourceAnimates(m.source, (this.triggerStates.get(m.id)?.stage ?? 'idle') === 'idle'))
+      || (this.record.pairMappings ?? []).some(m => m.enabled && m.source.kind === 'value' && sourceAnimates(m.source.source, (this.triggerStates.get(m.id)?.stage ?? 'idle') === 'idle'));
   }
 
   // ── Learn ─────────────────────────────────────────────────────────────────

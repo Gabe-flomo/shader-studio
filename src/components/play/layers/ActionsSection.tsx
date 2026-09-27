@@ -9,9 +9,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { fontFamily, radius } from '../../../theme/tokens';
-import { actionsForLayer, type ActionKind, type PlayAction, type PlayLayer, type PlayRecord, type TriggerSpec } from '../../../types/play';
+import { actionsForLayer, SIGNAL_ACTION, type ActionKind, type PlayAction, type PlayLayer, type PlayRecord, type TriggerSpec } from '../../../types/play';
+import { SignalPicker } from '../ConditionFields';
 import { playEngine } from '../../../lib/playEngine';
 import { playId } from '../../../play/playControls';
+import { addSignal } from '../../../play/pairs';
 import { Button, IconButton } from '../../ui/Button';
 import { Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
@@ -22,6 +24,13 @@ import { actionLabel } from './help';
 
 
 const actionsFor = (l: PlayLayer | undefined): readonly ActionKind[] => actionsForLayer(l);
+/** The first signal, made when the setup has none (a Send a signal action always sends one). */
+function withSignal(p: PlayRecord): { play: PlayRecord; signal: string } {
+  const first = p.signals?.[0]?.id;
+  if (first) return { play: p, signal: first };
+  const r = addSignal(p);
+  return { play: r.play, signal: r.id };
+}
 const defaultAction = (l: PlayLayer): ActionKind => actionsFor(l)[0];
 
 export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: PlayRecord) => PlayRecord) => void }) {
@@ -34,9 +43,27 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
   const remove = (id: string) => onChange(p => { const rest = (p.actions ?? []).filter(a => a.id !== id); const out: PlayRecord = { ...p, actions: rest }; if (!rest.length) delete out.actions; return out; });
   const add = () => {
     const l = play.layers[play.layers.length - 1];
+    // With no layers yet, an action can still send a signal.
+    const id = playId('act');
+    onChange(p => {
+      if (l) return { ...p, actions: [...(p.actions ?? []), { id, trigger: { on: 'key', code: 'Space' }, do: defaultAction(l), layerId: l.id, amount: 60, enabled: true }] };
+      const { play: q, signal } = withSignal(p);
+      return { ...q, actions: [...(q.actions ?? []), { id, trigger: { on: 'key', code: 'Space' }, do: SIGNAL_ACTION, layerId: '', amount: 1, enabled: true, signal }] };
+    });
+  };
+  // Do: a layer's actions, then Send a signal. Picking it clears the layer; picking a layer action brings one back.
+  const doOptions = (layer: PlayLayer | undefined, kinds: readonly ActionKind[]) => [...kinds.map(k => ({ value: k, label: actionLabel(k, layer) })), { value: SIGNAL_ACTION, label: 'Send a signal' }];
+  const setDo = (a: PlayAction, v: string) => {
+    if (v === SIGNAL_ACTION) {
+      onChange(p => {
+        const { play: q, signal } = withSignal(p);
+        return { ...q, actions: (q.actions ?? []).map(x => (x.id === a.id ? { ...x, do: SIGNAL_ACTION, layerId: '', amount: 1, signal: x.signal || signal } : x)) };
+      });
+      return;
+    }
+    const l = play.layers.find(x => x.id === a.layerId) ?? play.layers[play.layers.length - 1];
     if (!l) return;
-    const a: PlayAction = { id: playId('act'), trigger: { on: 'key', code: 'Space' }, do: defaultAction(l), layerId: l.id, amount: 60, enabled: true };
-    onChange(p => ({ ...p, actions: [...(p.actions ?? []), a] }));
+    update(a.id, { do: v as ActionKind, layerId: l.id, signal: undefined, ...(v === 'goto' ? { amount: 1 } : a.do === SIGNAL_ACTION ? { amount: 60 } : {}) });
   };
   const learn = (id: string) => {
     cancel.current?.();
@@ -55,11 +82,11 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
         <span style={{ font: `650 12.5px ${fontFamily.ui}` }}>Actions</span>
         {actions.length > 0 && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}` }}>{actions.length}</span>}
         <span style={{ flex: 1 }} />
-        <Button size="sm" icon="plus" disabled={!play.layers.length} onClick={add}>Add action</Button>
+        <Button size="sm" icon="plus" onClick={add}>Add action</Button>
       </div>
       {actions.length === 0 && (
         <div style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}`, padding: '2px 2px 6px' }}>
-          When something happens, do something to a layer: a key bursts particles, the kick drum steps a word to the next line, a click on a shape drops the letters again.
+          When something happens, do something to a layer: a key bursts particles, the kick drum steps a word to the next line, a click on a shape drops the letters again. Or send a signal that other actions and mappings listen for.
         </div>
       )}
       {actions.map(a => {
@@ -79,8 +106,10 @@ export function ActionsSection({ play, onChange }: { play: PlayRecord; onChange:
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
               <span style={label}>Do</span>
-              <Select ariaLabel="Action" value={kinds.includes(a.do) ? a.do : kinds[0]} options={kinds.map(k => ({ value: k, label: actionLabel(k, layer) }))} onChange={v => update(a.id, { do: v as ActionKind, ...(v === 'goto' ? { amount: 1 } : {}) })} height={26} />
-              <Select ariaLabel="Layer" value={a.layerId} options={play.layers.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const l = play.layers.find(x => x.id === v); update(a.id, { layerId: v, do: l && actionsFor(l).includes(a.do) ? a.do : l ? defaultAction(l) : a.do }); }} height={26} />
+              <Select ariaLabel="Action" value={a.do === SIGNAL_ACTION || kinds.includes(a.do) ? a.do : kinds[0]} options={layer || a.do !== SIGNAL_ACTION ? doOptions(layer, kinds) : doOptions(play.layers[play.layers.length - 1], play.layers.length ? actionsFor(play.layers[play.layers.length - 1]) : [])} onChange={v => setDo(a, v)} height={26} />
+              {a.do === SIGNAL_ACTION
+                ? <SignalPicker value={a.signal ?? ''} onChange={signal => update(a.id, { signal })} />
+                : <Select ariaLabel="Layer" value={a.layerId} options={play.layers.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const l = play.layers.find(x => x.id === v); update(a.id, { layerId: v, do: l && actionsFor(l).includes(a.do) ? a.do : l ? defaultAction(l) : a.do }); }} height={26} />}
               {(a.do === 'burst' || a.do === 'scatter') && (
                 <NumberInput value={a.amount} min={0} max={a.do === 'burst' ? 5000 : 10} step={a.do === 'burst' ? 10 : 0.5} title={a.do === 'burst' ? 'How many particles' : 'How hard'} onCommit={n => update(a.id, { amount: Math.max(0, n) })} style={numStyle} />
               )}

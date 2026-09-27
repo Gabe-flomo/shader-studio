@@ -96,7 +96,91 @@ export type TriggerOn =
    * open, it lets go only below `threshold - hysteresis`, so a ringing kick
    * doesn't fire twice.
    */
-  | { on: 'reader'; readerId: string; threshold: number; hysteresis: number };
+  | { on: 'reader'; readerId: string; threshold: number; hysteresis: number }
+  /**
+   * A value meeting a condition (see ValueCondition): a layer property, a
+   * control, a mapping's source, a Finish number or a distance going below,
+   * above, crossing or matching a number. Proximity is its distance case.
+   */
+  | ({ on: 'value' } & ValueCondition)
+  /** A named signal (PlaySignal) fired by a "Send a signal" action or an axis swap. */
+  | { on: 'signal'; signal: string };
+
+// ── Conditions and signals (play/kit/signals.js) ────────────────────────────
+
+/**
+ * How a condition compares its value with the threshold:
+ *   below / above   while it is under / over (held: a gate)
+ *   crossUp / crossDown   the moment it passes upward / downward (a tap)
+ *   equals          while it is within `tolerance` of the threshold
+ */
+export type CondCmp = 'below' | 'above' | 'crossUp' | 'crossDown' | 'equals';
+export const COND_CMPS: readonly CondCmp[] = ['below', 'above', 'crossUp', 'crossDown', 'equals'];
+
+/**
+ * A condition on any value. `value` is a path (sgParseValueRef in
+ * play/kit/signals.js): `ctl:<control>`, `layer:<id>::<key>`,
+ * `finish:<effect>::<key>`, `map:<mapping>` (its source, 0..1), `mouse:x|y`,
+ * or `dist:<A>|<B>` (anchors: a layer, `hand:<side>:<point>`, `mouse`,
+ * `pt:<x>,<y>`). Once met it lets go only `hysteresis` past the threshold.
+ */
+export interface ValueCondition {
+  value: string;
+  cmp: CondCmp;
+  threshold: number;
+  hysteresis: number;
+  /** equals: how close counts as equal. */
+  tolerance: number;
+}
+
+/** A named signal: actions send it, triggers listen for it. */
+export interface PlaySignal { id: string; name: string }
+export const SIGNALS_MAX = 64;
+
+// ── Pair controls (two values played as one) ────────────────────────────────
+
+/**
+ * Two controls played together: two sliders, and an XY pad when it is a
+ * position (`position`: A is X, B is Y). The controls stay ordinary controls,
+ * so layers and graphs still see two plain values.
+ */
+export interface PlayPair { id: string; label: string; a: string; b: string; position: boolean }
+
+/** How one axis of a pair mapping shapes its value, and when it listens. */
+export interface PairAxis {
+  outMin: number;
+  outMax: number;
+  curve: PlayCurve;
+  curveY?: number[];
+  smoothMs: number;
+  /** Only while this holds (below, above or equals); it keeps its last value meanwhile. */
+  when?: ValueCondition;
+}
+
+/**
+ * Axis swap: drive A until A's value crosses `at` (going `dir`), then drive B
+ * until B's crosses `backAt` (going `backDir`), then A again. Each swap can
+ * send a signal. Rewinding the clock starts on A again.
+ */
+export interface PairSwap { at: number; dir: 'up' | 'down'; backAt: number; backDir: 'up' | 'down'; signal?: string; backSignal?: string }
+
+/**
+ * What drives a pair: a position (both axes at once, 0..1 across and up the
+ * picture: `mouse`, a layer's centre or a null, a hand point) or any single
+ * source (a knob, an LFO…) sent to A, B or both.
+ */
+export type PairSource = { kind: 'position'; anchor: AnchorRef } | { kind: 'value'; source: PlaySource };
+
+export interface PlayPairMapping {
+  id: string;
+  pairId: string;
+  source: PairSource;
+  affect: 'a' | 'b' | 'both';
+  a: PairAxis;
+  b: PairAxis;
+  swap?: PairSwap;
+  enabled: boolean;
+}
 
 // ── Audio readers (dots on the live spectrum, play/audioReaders.ts) ─────────
 
@@ -176,8 +260,8 @@ export const DEFAULT_HAND_RESPONSIVENESS = 0.5;
 export const DEFAULT_HAND_STRICTNESS = 0.5;
 
 /** Does a setup read hands anywhere: a hand source, a gesture trigger (mapping or action), or a null following a hand? */
-export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'>): boolean {
-  return play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
+export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings'>>): boolean {
+  return (play.pairMappings ?? []).some(pairMappingUsesHands) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
     || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId)))
     || (play.actions ?? []).some(a => triggerUsesHands(a.trigger))
     || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
@@ -207,9 +291,23 @@ export function oneHandUsed(play: Pick<PlayRecord, 'mappings' | 'actions' | 'lay
   return only === 'any' ? null : only;
 }
 
-/** A gesture trigger, or a proximity trigger measuring from a hand. */
+/** A gesture trigger, or a proximity or distance condition measuring from a hand. */
 export function triggerUsesHands(t: TriggerSpec): boolean {
-  return t.on === 'hand' || (t.on === 'proximity' && (!!parseHandAnchor(t.a) || !!parseHandAnchor(t.b)));
+  return t.on === 'hand' || (t.on === 'proximity' && (!!parseHandAnchor(t.a) || !!parseHandAnchor(t.b))) || (t.on === 'value' && conditionUsesHands(t));
+}
+
+/** A condition on a distance to or from a hand point. */
+export function conditionUsesHands(c: ValueCondition | undefined): boolean {
+  if (!c) return false;
+  const r = sgParseValueRef(c.value);
+  return r?.kind === 'distance' && (!!parseHandAnchor(r.a) || !!parseHandAnchor(r.b));
+}
+
+/** A pair mapping that reads a hand: a hand point position, a hand source, or a condition on a hand. */
+export function pairMappingUsesHands(m: PlayPairMapping): boolean {
+  const s = m.source;
+  if (s.kind === 'position' ? !!parseHandAnchor(s.anchor) : s.source.kind === 'hand' || (s.source.kind === 'trigger' && triggerUsesHands(s.source.trigger))) return true;
+  return conditionUsesHands(m.a.when) || conditionUsesHands(m.b.when);
 }
 
 /**
@@ -346,6 +444,7 @@ import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds
 import { parseSourceCredit, type SourceCredit } from './credit';
 import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
 import { finishHosts, finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
+import { sgParseValueRef } from '../play/kit/signals.js';
 export type { LayerGroup } from './layerGroups';
 
 // ── Actions (a trigger does something to a layer) ─────────────────────────────
@@ -365,7 +464,9 @@ export type { LayerGroup } from './layerGroups';
  */
 export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto';
 /** A built-in action, or a button a Script layer declares (`script:<key>`). */
-export type ActionKind = BuiltinActionKind | `script:${string}`;
+export type ActionKind = BuiltinActionKind | 'signal' | `script:${string}`;
+/** The action that sends a signal (its `signal`) instead of doing something to a layer. */
+export const SIGNAL_ACTION = 'signal' as const;
 
 /** The param key behind a script action kind, or null for a built-in one. */
 export function scriptActionKey(kind: string): string | null {
@@ -376,10 +477,13 @@ export interface PlayAction {
   id: string;
   trigger: TriggerSpec;
   do: ActionKind;
+  /** The layer it acts on ('' for Send a signal). */
   layerId: string;
   /** burst: how many particles; scatter: how hard. */
   amount: number;
   enabled: boolean;
+  /** Send a signal: which one (a PlaySignal id). */
+  signal?: string;
 }
 
 export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear', 'goto'];
@@ -592,6 +696,12 @@ export interface PlayRecord {
    * and time displacement over the final picture. Absent = none.
    */
   finish?: PlayFinish;
+  /** Named signals that actions send and triggers listen for. Absent = none. */
+  signals?: PlaySignal[];
+  /** Pair controls: two controls played as one (two sliders, an XY pad). Absent = none. */
+  pairs?: PlayPair[];
+  /** Mappings onto pairs (both axes at once, A or B, with axis swap). Absent = none. */
+  pairMappings?: PlayPairMapping[];
 }
 
 // ── Takes: a performance recorded as keyframes ──────────────────────────────
@@ -860,8 +970,25 @@ function parseTriggerOn(raw: unknown): TriggerOn | null {
       const threshold = Math.max(0.01, Math.min(0.99, num(t.threshold, 0.6)));
       return { on: 'reader', readerId, threshold, hysteresis: Math.max(0, Math.min(threshold, num(t.hysteresis, 0.1))) };
     }
+    case 'value': {
+      const c = parseCondition(t);
+      return c ? { on: 'value', ...c } : null;
+    }
+    // An empty signal (none picked yet) is kept: it never fires, and the row survives a reload.
+    case 'signal': return typeof t.signal === 'string' ? { on: 'signal', signal: t.signal.slice(0, 80) } : null;
     default: return null;
   }
+}
+
+/** A condition from a file, or null when its value path isn't one (sgParseValueRef). */
+export function parseCondition(raw: unknown): ValueCondition | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const t = raw as Record<string, unknown>;
+  const value = str(t.value);
+  if (!value || value.length > 400 || !sgParseValueRef(value)) return null;
+  const cmp = typeof t.cmp === 'string' && (COND_CMPS as readonly string[]).includes(t.cmp) ? (t.cmp as CondCmp) : 'above';
+  const big = (x: number) => Math.max(-1e6, Math.min(1e6, x));
+  return { value, cmp, threshold: big(num(t.threshold, 0.5)), hysteresis: Math.max(0, big(num(t.hysteresis, 0))), tolerance: Math.max(0, big(num(t.tolerance, 0.01))) };
 }
 
 /** A trigger with its firing mode: the mode is kept only when it isn't the default (so old files save unchanged). */
@@ -950,7 +1077,12 @@ function parseAction(raw: unknown): PlayAction | null {
   const id = str(a.id), layerId = str(a.layerId);
   const trigger = parseTrigger(a.trigger);
   // A built-in action, or a button a Script layer declares (`script:<key>`).
-  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || scriptActionKey(a.do)) ? (a.do as ActionKind) : null;
+  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION) ? (a.do as ActionKind) : null;
+  if (kind === SIGNAL_ACTION) {
+    // Send a signal: no layer, a signal instead.
+    const signal = typeof a.signal === 'string' ? a.signal : null;
+    return id && trigger && signal !== null ? { id, trigger, do: kind, layerId: '', amount: 1, enabled: a.enabled !== false, signal: signal.slice(0, 80) } : null;
+  }
   if (!id || !layerId || !trigger || !kind) return null;
   return { id, trigger, do: kind, layerId, amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
 }
@@ -1169,10 +1301,24 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     const actions: PlayAction[] = [];
     for (const a of r.actions) {
       const parsed = parseAction(a);
-      if (parsed && !seenA.has(parsed.id) && layerIds.has(parsed.layerId) && triggerOk(parsed.trigger)) { seenA.add(parsed.id); actions.push(parsed); }
+      if (parsed && !seenA.has(parsed.id) && (parsed.do === SIGNAL_ACTION || layerIds.has(parsed.layerId)) && triggerOk(parsed.trigger)) { seenA.add(parsed.id); actions.push(parsed); }
     }
     if (actions.length) out.actions = actions;
   }
+  const signals = parseSignals(r.signals);
+  if (signals.length) out.signals = signals;
+  const pairs = parsePairs(r.pairs, keptControls);
+  if (pairs.length) out.pairs = pairs;
+  const pairIds = new Set(pairs.map(x => x.id));
+  const seenPm = new Set<string>();
+  const keptPm: PlayPairMapping[] = [];
+  for (const raw of Array.isArray(r.pairMappings) ? r.pairMappings : []) {
+    const m = parsePairMapping(raw);
+    if (!m || !pairIds.has(m.pairId) || seenPm.has(m.id)) continue;
+    const ok = m.source.kind === 'position' ? m.source.anchor === 'mouse' || anchorOk(m.source.anchor) : layerOk(m.source.source) && (m.source.source.kind !== 'trigger' || triggerOk(m.source.source.trigger));
+    if (ok) { seenPm.add(m.id); keptPm.push(m); }
+  }
+  if (keptPm.length) out.pairMappings = keptPm;
   if (typeof r.notes === 'string' && r.notes.trim()) out.notes = r.notes.slice(0, 8000);
   const credit = parseSourceCredit(r.source);
   if (credit) out.source = credit;
@@ -1199,6 +1345,75 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
       if (parsed && !seenT.has(parsed.id)) { seenT.add(parsed.id); takes.push(parsed); }
     }
     if (takes.length) out.takes = takes;
+  }
+  return out;
+}
+
+function parseSignals(raw: unknown): PlaySignal[] {
+  const out: PlaySignal[] = [];
+  const seen = new Set<string>();
+  for (const x of Array.isArray(raw) ? raw : []) {
+    if (out.length >= SIGNALS_MAX) break;
+    if (!x || typeof x !== 'object') continue;
+    const o = x as Record<string, unknown>;
+    const id = str(o.id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id: id.slice(0, 80), name: (typeof o.name === 'string' && o.name.trim() ? o.name : 'Signal').slice(0, 60) });
+  }
+  return out;
+}
+
+/** Pairs of two different float controls that exist; a control is in one pair at most. */
+function parsePairs(raw: unknown, controls: readonly PlayControl[]): PlayPair[] {
+  const floats = new Set(controls.filter(c => c.kind === 'float').map(c => c.id));
+  const used = new Set<string>();
+  const out: PlayPair[] = [];
+  const seen = new Set<string>();
+  for (const x of Array.isArray(raw) ? raw : []) {
+    if (!x || typeof x !== 'object') continue;
+    const o = x as Record<string, unknown>;
+    const id = str(o.id), a = str(o.a), b = str(o.b);
+    if (!id || !a || !b || a === b || seen.has(id) || !floats.has(a) || !floats.has(b) || used.has(a) || used.has(b)) continue;
+    seen.add(id); used.add(a); used.add(b);
+    out.push({ id, label: (typeof o.label === 'string' && o.label.trim() ? o.label : 'Pair').slice(0, 120), a, b, position: o.position === true });
+  }
+  return out;
+}
+
+function parsePairAxis(raw: unknown): PairAxis {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const curve = str(o.curve);
+  const out: PairAxis = { outMin: num(o.outMin, 0), outMax: num(o.outMax, 1), curve: curve && CURVES.has(curve) ? (curve as PlayCurve) : 'linear', smoothMs: Math.max(0, num(o.smoothMs, 0)) };
+  if (out.curve === 'custom') { const ys = curveY(o.curveY); if (ys) out.curveY = ys; else out.curve = 'linear'; }
+  const when = parseCondition(o.when);
+  if (when) out.when = when;
+  return out;
+}
+
+function parsePairMapping(raw: unknown): PlayPairMapping | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const m = raw as Record<string, unknown>;
+  const id = str(m.id), pairId = str(m.pairId);
+  if (!id || !pairId) return null;
+  const s = (m.source && typeof m.source === 'object' ? m.source : {}) as Record<string, unknown>;
+  let source: PairSource | null = null;
+  if (s.kind === 'position') { const anchor = str(s.anchor); if (anchor) source = { kind: 'position', anchor: anchor.slice(0, 200) }; }
+  else if (s.kind === 'value') { const src = parseSource(s.source); if (src) source = { kind: 'value', source: src }; }
+  if (!source) return null;
+  const out: PlayPairMapping = {
+    id, pairId, source,
+    affect: m.affect === 'a' || m.affect === 'b' ? m.affect : 'both',
+    a: parsePairAxis(m.a), b: parsePairAxis(m.b),
+    enabled: m.enabled !== false,
+  };
+  const w = m.swap as Record<string, unknown> | undefined;
+  if (w && typeof w === 'object' && source.kind === 'value') {
+    const swap: PairSwap = { at: num(w.at, 1), dir: w.dir === 'down' ? 'down' : 'up', backAt: num(w.backAt, 0), backDir: w.backDir === 'up' ? 'up' : 'down' };
+    const sig = str(w.signal), back = str(w.backSignal);
+    if (sig) swap.signal = sig.slice(0, 80);
+    if (back) swap.backSignal = back.slice(0, 80);
+    out.swap = swap;
   }
   return out;
 }
@@ -1275,5 +1490,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish));
 }
