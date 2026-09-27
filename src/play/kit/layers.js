@@ -364,6 +364,20 @@ export function klShapePath(l, v, W, H) {
   return { path, len };
 }
 
+let klInvCanvas = null;
+/** The fill colour over the whole picture with `mask`'s shape cut out; one canvas reused. */
+function klInvertedMask(mask, W, H, fill) {
+  if (!klInvCanvas) klInvCanvas = document.createElement('canvas');
+  const c = klInvCanvas;
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+  const x = c.getContext('2d');
+  x.globalCompositeOperation = 'source-over'; x.clearRect(0, 0, W, H);
+  x.fillStyle = fill; x.fillRect(0, 0, W, H);
+  x.globalCompositeOperation = 'destination-out'; x.drawImage(mask, 0, 0, W, H);
+  x.globalCompositeOperation = 'source-over';
+  return c;
+}
+
 /** Draw a shape layer: fill and trimmed outline, or a dashed guide when it is an invisible zone and you are editing. */
 export function klDrawShape(ctx, l, v, W, H, dpr, maskCanvas, editing, selected) {
   const isMask = l.shape === 'layer' || l.shape === 'picture';
@@ -371,11 +385,25 @@ export function klDrawShape(ctx, l, v, W, H, dpr, maskCanvas, editing, selected)
   if (l.show) {
     ctx.globalCompositeOperation = KL_BLEND[l.blend] || 'source-over';
     if (isMask) {
-      if (maskCanvas && v('fillOpacity') > 0) { ctx.globalAlpha = v('fillOpacity') * opacity; ctx.drawImage(maskCanvas, 0, 0, W, H); }
+      if (maskCanvas && v('fillOpacity') > 0) {
+        ctx.globalAlpha = v('fillOpacity') * opacity;
+        // Inverted: the fill everywhere except the shape (what a matte on this layer then reads).
+        if (l.invert) ctx.drawImage(klInvertedMask(maskCanvas, W, H, klCss(l.fill)), 0, 0, W, H);
+        else ctx.drawImage(maskCanvas, 0, 0, W, H);
+      }
     } else {
       const sp = klShapePath(l, v, W, H);
       const fillA = v('fillOpacity');
-      if (fillA > 0 && l.shape !== 'line') { ctx.globalAlpha = fillA; ctx.fillStyle = klCss(l.fill); ctx.fill(sp.path, 'evenodd'); }
+      if (fillA > 0 && l.shape !== 'line') {
+        ctx.globalAlpha = fillA; ctx.fillStyle = klCss(l.fill);
+        if (l.invert) {
+          // Inverted: fill the whole picture with the shape cut out (even-odd: the frame is one ring, the shape the hole).
+          const outside = new Path2D();
+          outside.rect(0, 0, W, H);
+          outside.addPath(sp.path);
+          ctx.fill(outside, 'evenodd');
+        } else ctx.fill(sp.path, 'evenodd');
+      }
       const sw = v('strokeWidth') * dpr, trim = Math.max(0, Math.min(1, v('trim')));
       const lineW = l.shape === 'line' ? Math.max(sw, v('h') * H) : sw;
       if (lineW > 0 && trim > 0) {
