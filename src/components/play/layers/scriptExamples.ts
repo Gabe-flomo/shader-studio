@@ -4,7 +4,8 @@
  * canvas kept between frames; picture readers need the picture sampled).
  */
 import { DEFAULT_SCRIPT, DEFAULT_SCRIPT_3D } from '../../../types/playLayers';
-import { KL_SKETCH_NAMES, klCompileSketch } from '../../../play/kit/layers.js';
+import { KL_SKETCH_NAMES, klCompileSketch, klSketchSource } from '../../../play/kit/layers.js';
+import { KP5_NAMES, KP5_STUBBED, KP5_UNSUPPORTED, KP5_WEBGL } from '../../../play/kit/p5.js';
 import { K3_SKETCH_NAMES } from '../../../play/kit/sketch3d.js';
 
 export interface ScriptExample { name: string; hint: string; code: string; settings: { clear: boolean; readPicture: boolean } }
@@ -179,19 +180,49 @@ export function examplesFor(mode: '2d' | '3d'): ScriptExample[] {
   return mode === '3d' ? SCRIPT_EXAMPLES_3D : SCRIPT_EXAMPLES;
 }
 
-/** The sliders a script declares, read by running its top level once (the kit does the same each time the code changes). */
-export function extractScriptParams(code: string): { ok: true; defs: import('../../../types/playLayers').ScriptParamDef[] } | { ok: false; error: string } {
+/** A value that takes any use at the top level (a call, a property, `new`) while params are read. */
+const NOOP: unknown = new Proxy(function () { /* nothing */ }, {
+  get: (_t, k) => (k === Symbol.toPrimitive ? () => 0 : k === 'then' ? undefined : NOOP),
+  apply: () => NOOP,
+  construct: () => NOOP as object,
+});
+
+/** A colour a params entry declares ('#rrggbb', 'rgb(…)', [r, g, b(, a)]) as 0xRRGGBB, with its alpha; null when it is not one. */
+export function parseParamColour(v: unknown): { rgb: number; array: boolean; alpha?: number } | null {
+  const c = (n: unknown) => Math.max(0, Math.min(255, Math.round(Number(n) || 0)));
+  if (Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every(n => typeof n === 'number')) {
+    return { rgb: (c(v[0]) << 16) | (c(v[1]) << 8) | c(v[2]), array: true, ...(typeof v[3] === 'number' ? { alpha: v[3] } : {}) };
+  }
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  let m = /^#([0-9a-f]{3})$/i.exec(s);
+  if (m) { const h = m[1]; return { rgb: parseInt(h[0] + h[0] + h[1] + h[1] + h[2] + h[2], 16), array: false }; }
+  m = /^#([0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(s);
+  if (m) return { rgb: parseInt(m[1], 16), array: false };
+  m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(s);
+  if (m) return { rgb: (c(m[1]) << 16) | (c(m[2]) << 8) | c(m[3]), array: false };
+  return null;
+}
+
+/**
+ * The controls a script declares, read by running its top level once (the kit does the same each
+ * time the code changes). `files` are the sketch's other tabs, run first in the same scope.
+ */
+export function extractScriptParams(code: string, files?: ReadonlyArray<{ name: string; code: string }> | null): { ok: true; defs: import('../../../types/playLayers').ScriptParamDef[] } | { ok: false; error: string } {
   let raw: unknown;
   try {
     // The same wrapper the kit uses, with helpers that do nothing, so a sketch that draws at its top level still parses.
     const stub: Record<string, unknown> = {};
-    // 2D and 3D names alike: reading params does not depend on the mode.
-    for (const n of [...KL_SKETCH_NAMES, ...K3_SKETCH_NAMES]) stub[n] = /^[A-Z_]+$/.test(n) ? 0 : (n === 'width' || n === 'height' || n.startsWith('mouse') || n === 'frameCount' || n === 'deltaTime') ? 0 : () => 0;
-    raw = klCompileSketch(code, stub).params;
+    // 2D, 3D and p5 names alike: reading params does not depend on the mode.
+    for (const n of [...KL_SKETCH_NAMES, ...K3_SKETCH_NAMES, ...KP5_NAMES, ...KP5_WEBGL, ...KP5_STUBBED, ...KP5_UNSUPPORTED, 'p5']) {
+      stub[n] = /^[A-Z_0-9]+$/.test(n) ? 0 : (n === 'width' || n === 'height' || n.startsWith('mouse') || n.startsWith('pmouse') || n.startsWith('window') || n === 'frameCount' || n === 'deltaTime' || n === 'key' || n === 'keyCode') ? 0 : NOOP;
+    }
+    raw = klCompileSketch(klSketchSource(code, files).text, stub).params;
   } catch (e) {
     return { ok: false, error: (e as Error)?.message ?? String(e) };
   }
   const defs: import('../../../types/playLayers').ScriptParamDef[] = [];
+  const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
   for (const [key, spec] of Object.entries((raw ?? {}) as Record<string, unknown>)) {
     if (!/^[A-Za-z_]\w{0,30}$/.test(key)) continue;
     // Shorthands: a number is a 0–1 slider, a boolean a toggle, a function a button that runs it when pressed.
@@ -200,16 +231,23 @@ export function extractScriptParams(code: string): { ok: true; defs: import('../
       : typeof spec === 'function' ? { kind: 'button' }
       : spec === 'button' || spec === 'toggle' ? { kind: spec }
       : ((spec && typeof spec === 'object' ? spec : {}) as Record<string, unknown>);
-    const kind = o.kind === 'toggle' || o.kind === 'button' ? o.kind : 'slider';
+    const kind = o.kind === 'toggle' || o.kind === 'button' || o.kind === 'colour' || o.kind === 'choice' ? o.kind : 'slider';
     const label = typeof o.label === 'string' && o.label.trim() ? o.label.trim() : key;
-    const hint = typeof o.hint === 'string' ? { hint: o.hint } : {};
+    const extra = { ...(typeof o.hint === 'string' ? { hint: o.hint } : {}), ...(o.restart === true ? { restart: true } : {}) };
     if (kind === 'slider') {
-      const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
       const min = num(o.min, 0), max = num(o.max, Math.max(1, min + 1));
-      defs.push({ key, label, value: Math.min(max, Math.max(min, num(o.value, min))), min, max, ...(typeof o.step === 'number' && o.step > 0 ? { step: o.step } : {}), ...hint });
+      defs.push({ key, label, value: Math.min(max, Math.max(min, num(o.value, min))), min, max, ...(typeof o.step === 'number' && o.step > 0 ? { step: o.step } : {}), ...extra });
+    } else if (kind === 'colour') {
+      const c = parseParamColour(o.value) ?? { rgb: 0xffffff, array: false };
+      defs.push({ key, label, kind, value: c.rgb, min: 0, max: 0xffffff, step: 1, ...(c.array ? { as: 'array' as const } : {}), ...(c.alpha !== undefined ? { alpha: c.alpha } : {}), ...extra });
+    } else if (kind === 'choice') {
+      const options = (Array.isArray(o.options) ? o.options : []).slice(0, 64).map(x => String(x));
+      if (!options.length) continue;
+      const at = typeof o.value === 'number' ? Math.round(o.value) : options.indexOf(String(o.value));
+      defs.push({ key, label, kind, value: Math.max(0, Math.min(options.length - 1, at < 0 ? 0 : at)), min: 0, max: options.length - 1, step: 1, options, ...extra });
     } else {
       const on = o.value === true || (typeof o.value === 'number' && o.value >= 0.5);
-      defs.push({ key, label, kind, value: kind === 'toggle' && on ? 1 : 0, min: 0, max: 1, step: 1, ...hint });
+      defs.push({ key, label, kind, value: kind === 'toggle' && on ? 1 : 0, min: 0, max: 1, step: 1, ...extra });
     }
     if (defs.length >= 32) break;
   }

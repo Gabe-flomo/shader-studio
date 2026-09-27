@@ -34,6 +34,10 @@
  *   three      three.js (three-slim.js) for 3D Script layers, or null
  *   data(ref)  a dataset by id or name: { id, name, result } (its frozen result,
  *              Normalize applied), or null (optional)
+ *   scriptStatus(layerId, error)   a Script layer compiled or broke (optional)
+ *   scriptLog(layerId, level, args) a Script layer's console output (optional; without
+ *              it the sketch's console is the page's): level is log, info, warn, error,
+ *              table, watch ([name, value]), clear, or run (it starts over)
  *   guides     a 2D context the size of the overlay: null markers and the hands' skeleton go there
  *              instead of `ctx` (optional; the Finish stack keeps them out of the finished picture)
  *   alphaLayers  ids of layers to draw alone as well (even hidden), for kit.layerCanvas(id) (optional)
@@ -44,7 +48,7 @@
  */
 import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, stringSeed, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments, geoPathNodes, geoPathFade, geoPathBuild, geoPathReadings } from './geometry.js';
-import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klPaintBackground, klSketchDispose } from './layers.js';
+import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klSketchStale, klPaintBackground, klSketchDispose } from './layers.js';
 import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 import { hdDraw } from './hands.js';
@@ -154,7 +158,7 @@ export function createLayerKit() {
     const mode = item.mode === '3d' ? '3d' : '2d', three = env.three || null;
     // A 3D sketch waits for three.js, as a 3D Script layer does.
     if (mode === '3d' && !three && !st) return null;
-    if (!st || st.code !== (item.code || '') || st.mode !== mode || (mode === '3d' && st.three !== three)) {
+    if (klSketchStale(st, item.code || '', null, mode, three)) {
       klSketchDispose(st);
       st = klSketchCompile(item.code || '', { mode, three });
       st.three = three;
@@ -551,12 +555,16 @@ export function createLayerKit() {
       const mode = l.mode === '3d' ? '3d' : '2d', three = env.three || null;
       // A 3D sketch waits for three.js (the host hands it over in env.three) rather than failing before it arrives.
       if (mode === '3d' && !three && !st) return null;
-      if (!st || st.code !== l.code || st.mode !== mode || (mode === '3d' && st.three !== three)) {
+      if (klSketchStale(st, l.code, l.files, mode, three)) {
         klSketchDispose(st);
-        st = klSketchCompile(l.code, { mode, three });
+        // The console goes to the host (the editor's pane) when it listens, else to the page's own.
+        const log = env.scriptLog ? (level, args) => env.scriptLog(l.id, level, args) : null;
+        if (log) log('run', []);
+        st = klSketchCompile(l.code, { mode, three, files: l.files, p5: !!l.p5, assets: l.assets, log });
         st.three = three;
         scripts.set(l.id, st);
         if (env.scriptStatus) env.scriptStatus(l.id, st.error);
+        if (st.error && log) log('error', [st.error]);
       }
       const buf = klCanvas(pool, 'script_' + l.id, W, H);
       if (st.steppedAt === frameNo) return st.error ? null : buf;
@@ -584,6 +592,7 @@ export function createLayerKit() {
         null: name => { const n = record.layers.find(x => x.kind === 'null' && (x.id === name || x.label === name)); return n ? { x: env.value(n, 'x') * W, y: (1 - env.value(n, 'y')) * H } : null; },
         random: rngFor(l.id, 'script'),
         data: scriptData,
+        audio: env.audioFor ? env.audioFor(l) : env.audio || null,
         // Where proximity triggers and distance sensors measure this layer from, in pixels. Kept between frames.
         anchor: st.anchor || null,
       };
@@ -596,10 +605,12 @@ export function createLayerKit() {
       if (st.g3) {
         // 3D: render the scene (a shared WebGL renderer) and copy it into the layer's canvas, so the
         // blend, the opacity, the Cloner and the Layers node treat it like any 2D sketch.
-        const out = k3Render(st.g3, k3Renderer(three, W, H), W, H);
+        // A p5 sketch renders at its own canvas's shape, fitted into the layer (st.p5.view).
+        const vw = st.p5 && st.p5.view ? Math.max(1, Math.round(st.p5.view.w)) : W, vh = st.p5 && st.p5.view ? Math.max(1, Math.round(st.p5.view.h)) : H;
+        const out = st.waiting ? null : k3Render(st.g3, k3Renderer(three, vw, vh), vw, vh);
         bx.setTransform(1, 0, 0, 1, 0, 0); bx.globalAlpha = 1; bx.globalCompositeOperation = 'source-over';
-        if (l.clear || st.frame <= 1) bx.clearRect(0, 0, W, H);
-        if (out) bx.drawImage(out, 0, 0);
+        if (l.clear || st.frame <= 1 || st.p5) bx.clearRect(0, 0, W, H);
+        if (out) bx.drawImage(out, st.p5 && st.p5.view ? Math.round(st.p5.view.x) : 0, st.p5 && st.p5.view ? Math.round(st.p5.view.y) : 0);
       }
       return buf;
     }

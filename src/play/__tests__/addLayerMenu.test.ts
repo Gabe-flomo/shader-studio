@@ -27,16 +27,16 @@ describe('Add layer: built-in groups', () => {
     expect(builtinGroups().map(g => g.label)).toEqual(BUILTIN_GROUPS.map(g => g.label));
   });
 
-  it('offers 3D Script beside Script, under Code', () => {
+  it('offers 3D Script and the p5.js importer beside Script, under Code', () => {
     const code = builtinGroups().find(g => g.key === 'builtin:code')!;
-    expect(code.items.map(i => [i.label, i.variant ?? null])).toEqual([['Script', null], ['3D Script', 'script3d']]);
-    expect(builtinGroups('webgl').flatMap(g => g.items.map(i => i.label))).toEqual(['3D Script']);
+    expect(code.items.map(i => [i.label, i.variant ?? null])).toEqual([['Script', null], ['3D Script', 'script3d'], ['Import p5.js sketch…', 'p5import']]);
+    expect(builtinGroups('webgl').flatMap(g => g.items.map(i => i.label))).toEqual(['3D Script', 'Import p5.js sketch…']);
   });
 
   it('drops a new built-in into its group without special cases', () => {
     const extra = [...BUILTIN_LAYERS, { kind: 'null' as const, group: 'code' as const, label: 'Code null', hint: 'A test', icon: 'code' as const }];
     const code = builtinGroups('', extra).find(g => g.key === 'builtin:code')!;
-    expect(code.items.map(i => i.label)).toEqual(['Script', '3D Script', 'Code null']);
+    expect(code.items.map(i => i.label)).toEqual(['Script', '3D Script', 'Import p5.js sketch…', 'Code null']);
   });
 });
 

@@ -13,6 +13,7 @@ import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_INDEX } from './playExampleIndex';
 import { extractScriptParams } from '../components/play/layers/scriptExamples';
 import { encodeKeys } from '../lib/takePlayback';
+import { P5_EXAMPLE_SKETCHES } from './p5ExampleSketches';
 import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIREFLIES, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE, SKETCH_HALATION, SKETCH_ORBIT } from './playSketches';
 import { GRADE_LOOKS, applyLook, newFinishEffect, type FinishEffect, type FinishKind, type PlayFinish } from '../types/playFinish';
 // An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
@@ -40,14 +41,20 @@ function masked(l: PlayLayer, id: string, shape: MaskShape, nums: Partial<Record
  * are read from the code the way Apply reads them, and each starts at its
  * declared value (or `values`).
  */
-function scriptLayer(id: string, label: string, code: string, over: { mode?: '2d' | '3d'; clear?: boolean; readPicture?: boolean; blend?: string; opacity?: number; toShader?: boolean; values?: Record<string, number> } = {}): PlayLayer {
-  const r = extractScriptParams(code);
+function scriptLayer(id: string, label: string, code: string, over: { mode?: '2d' | '3d'; clear?: boolean; readPicture?: boolean; blend?: string; opacity?: number; toShader?: boolean; values?: Record<string, number>; files?: { name: string; code: string }[]; p5?: true } = {}): PlayLayer {
+  const { values = {}, files, ...rest } = over;
+  const r = extractScriptParams(code, files);
   if (!r.ok) throw new Error(`playExamples: script ${id}: ${r.error}`);
-  const { values = {}, ...rest } = over;
   const base = Object.fromEntries(Object.entries(defaultLayer('script', id, label)).filter(([k]) => !k.startsWith('p_')));
-  const out: Record<string, unknown> = { ...base, code, paramDefs: r.defs, ...rest };
+  // Other tabs only when there are some (the parser leaves an empty list out).
+  const out: Record<string, unknown> = { ...base, code, ...(files?.length ? { files: files.map(f => ({ name: f.name, code: f.code })) } : {}), paramDefs: r.defs, ...rest };
   for (const d of r.defs) if (d.kind !== 'button') out[`p_${d.key}`] = values[d.key] ?? d.value;
   return out as unknown as PlayLayer;
+}
+/** A Script layer holding an imported p5 project (p5ExampleSketches.ts): its tabs, its mode, and each control where the import started it. */
+function p5Layer(id: string, key: string): PlayLayer {
+  const sk = P5_EXAMPLE_SKETCHES[key];
+  return scriptLayer(id, sk.label, sk.code, { files: sk.files, mode: sk.mode, p5: true, clear: false, values: sk.startAt });
 }
 const ctl = (id: string, target: string, label: string, min: number, max: number, step?: number): PlayControl =>
   ({ id, target, kind: 'float', label, min, max, ...(step ? { step } : {}) });
@@ -1160,6 +1167,47 @@ Actions use them like keys, and they work on websites too (a background can reac
 • Put \`background(0)\` back in place of \`clear()\` to see the sketch alone.
 • In the editor, double-click a number (like the 0.02 in \`noise\`), make it a variable, and use **Make it a slider**.
 • Paste a p5 sketch of your own and press Apply.`,
+  })),
+  ex('p5FlowField', quietGraph(), play({
+    layers: [p5Layer('flow', 'p5FlowField')],
+    controls: [ctl('count', 'layer:flow::p_count', 'Flow field · Count', 100, 3000, 100), ctl('scale', 'layer:flow::p_noiseScale', 'Flow field · Noise scale', 0.001, 0.02, 0.001)],
+    mappings: [map('drift', 'scale', S.lfo('sine', 0.03), 0.003, 0.012)],
+    display: { picture: true, backdrop: [0.056, 0.064, 0.08], source: 'colour' },
+    notes: `**What it shows.** A p5.js project brought in with **Import p5.js sketch…** (Layers → Script): an index.html and a sketch.js, as they would sit on disk. It runs as p5 wrote it: its own 720 × 405 canvas, fitted into the picture, keeping what was drawn between frames.
+
+**How it's built.** The importer read the script order from index.html and left p5 itself out (the layer has it built in). Each DOM control became a declared control: \`createSlider\` → \`control('count')\` plus an entry in \`params\`, the checkbox a toggle, the select a choice. \`.value()\` and \`.checked()\` work as before. Count is only read in setup, so it is marked **restart**: moving it starts the sketch over with that many particles. The background is set to a colour like the sketch's, so the graph is paused. An LFO drifts the noise scale.
+
+**Try this.**
+• Drag Count: the sketch starts over each time.
+• Turn Trails off on the layer, or pick another Palette.
+• In the editor, find \`restart: true\` in params and take it out: Count then does nothing until you press Run.`,
+  })),
+  ex('p5MultiFile', quietGraph(), play({
+    layers: [p5Layer('fountain', 'p5MultiFile')],
+    controls: [ctl('gravity', 'layer:fountain::p_gravity', 'Fountain · Gravity', 0, 0.4, 0.01)],
+    display: { picture: true, backdrop: [0.07, 0.078, 0.125], source: 'colour' },
+    notes: `**What it shows.** A p5 project in three files: \`particle.js\` (a Particle class), \`forces.js\` (gravity, a push from the mouse, bouncing) and \`sketch.js\`. They are three tabs in the editor, and they run in one shared scope, so sketch.js uses the class and functions as if they were written in it.
+
+**How it's built.** Imported with **Import p5.js sketch…**. The other tabs run first, in index.html's order; sketch.js is the main file and always the first tab. \`mousePressed\` and \`keyPressed\` work as in p5: clicking on the picture bursts particles, C clears them. The one slider became a Gravity control.
+
+**Try this.**
+• Click on the picture; press C.
+• Drag Gravity to 0 and watch the particles float.
+• Open the particle.js tab and change the fill: the sketch runs again with it.`,
+  })),
+  ex('p5Webgl', quietGraph(), play({
+    layers: [p5Layer('orbit', 'p5Webgl')],
+    controls: [ctl('speed', 'layer:orbit::p_speed', 'Shapes · Speed', 0, 3, 0.1)],
+    mappings: [map('pulse', 'speed', S.lfo('sine', 0.05), 0.4, 1.8)],
+    display: { picture: true, backdrop: [0.047, 0.055, 0.094], source: 'colour' },
+    notes: `**What it shows.** A p5 **WEBGL** sketch: \`createCanvas(600, 600, WEBGL)\` makes the layer a **3D** Script layer, drawn with three.js. \`box\`, \`torus\`, \`sphere\`, \`cone\`, \`cylinder\`, \`normalMaterial\`, \`specularMaterial\`, the lights and \`orbitControl\` work as plain names.
+
+**How it's built.** Imported with **Import p5.js sketch…**, which saw WEBGL and set the layer's Mode to 3D. The speed slider became a control; an LFO swings it. The middle box is coloured by its normals; the four shapes around it are lit by an ambient, a directional and an orange point light.
+
+**Try this.**
+• Drag on the picture to orbit (that is \`orbitControl()\`).
+• Take the pointLight line out in the editor and see what the orange was.
+• Change \`box(110)\` to \`torus(80, 25)\`.`,
   })),
   ex('scriptGlow', layersGlowGraph({ falloff: 60, tint: [0.35, 0.7, 1] }), play({
     layers: [scriptLayer('rose', 'Rose', SKETCH_GLOW)],

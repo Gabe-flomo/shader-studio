@@ -39,6 +39,8 @@ export interface KitEnv {
   shaderTap?: (tap: ShaderTap) => void;
   /** A Script layer compiled or ran: null clears its error, a string is the message shown under its code. */
   scriptStatus?: (layerId: string, error: string | null) => void;
+  /** A Script layer's console output (see kit.js); without it the sketch logs to the page's console. */
+  scriptLog?: (layerId: string, level: string, args: unknown[]) => void;
   /** Hand tracking: a landmark on the picture for a null following a hand (null while that hand is out of view). */
   hand?: (side: string, point: number) => { x: number; y: number } | null;
   /** Hand tracking is running (has seen a camera frame): a hand out of view is then "lost" for path shapes. Without it, a hand null that never saw its hand rests where it was placed. */

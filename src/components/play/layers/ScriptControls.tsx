@@ -9,6 +9,8 @@ import type { ScriptLayer } from '../../../types/playLayers';
 import { exposeScriptParam, scriptParamExposed } from './scriptExpose';
 import { Button, IconButton } from '../../ui/Button';
 import { Toggle } from '../../ui/Choice';
+import { ColorSwatch } from '../../ui/ColorPicker';
+import { Select } from '../../ui/Select';
 import type { FieldKit } from './fields';
 
 export function ScriptControls({ f, l, act }: { f: FieldKit; l: ScriptLayer; act: (kind: ActionKind, amount?: number) => void }) {
@@ -18,6 +20,18 @@ export function ScriptControls({ f, l, act }: { f: FieldKit; l: ScriptLayer; act
     <>
       {defs.map(d => {
         if (!d.kind || d.kind === 'slider') return <span key={d.key}>{f.prop(`p_${d.key}`)}</span>;
+        const raw = typeof values[`p_${d.key}`] === 'number' ? values[`p_${d.key}`] as number : d.value;
+        if (d.kind === 'colour') {
+          // Packed 0xRRGGBB on the layer; the sketch sees '#rrggbb' (or [r, g, b]).
+          const n = Math.max(0, Math.min(0xffffff, Math.round(raw)));
+          const rgb: [number, number, number] = [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+          const pack = (c: readonly number[]) => (Math.round(c[0] * 255) << 16) | (Math.round(c[1] * 255) << 8) | Math.round(c[2] * 255);
+          return <span key={d.key}>{f.row(d.label, <ColorSwatch value={rgb} label={d.label} size="sm" onChange={c => f.set({ [`p_${d.key}`]: pack(c) })} />, d.hint ?? `${d.label}: a colour the script declares.`)}</span>;
+        }
+        if (d.kind === 'choice') {
+          const opts = d.options ?? [];
+          return <span key={d.key}>{f.row(d.label, <Select ariaLabel={d.label} value={String(Math.round(raw))} height={28} onChange={v => f.set({ [`p_${d.key}`]: Number(v) })} options={opts.map((o, i) => ({ value: String(i), label: o }))} style={{ flex: 1 }} />, d.hint ?? `${d.label}: one of ${opts.join(', ')}.`)}</span>;
+        }
         const exposed = scriptParamExposed(f, l, d);
         const plus = (
           <IconButton icon={exposed ? 'check' : 'plus'} size="sm" active={exposed} disabled={exposed}

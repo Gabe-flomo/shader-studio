@@ -628,10 +628,34 @@ export interface ClonerLayer extends LayerBase {
 
 /** A slider a script declares: `params = { speed: { value: 1, min: 0, max: 5, step: 0.1, label: 'Speed' } }`. Its value lives on the layer as `p_<key>`. */
 /** What a declared param is on the panel: a slider (the default), an on/off toggle, or a button that presses (an action). */
-export type ScriptParamKind = 'slider' | 'toggle' | 'button';
+export type ScriptParamKind = 'slider' | 'toggle' | 'button' | 'colour' | 'choice';
 /** What a Script layer draws with: a 2D canvas, or WebGL through three.js. */
 export type ScriptMode = '2d' | '3d';
-export interface ScriptParamDef { key: string; label: string; kind?: ScriptParamKind; value: number; min: number; max: number; step?: number; hint?: string }
+export interface ScriptParamDef {
+  key: string; label: string; kind?: ScriptParamKind; value: number; min: number; max: number; step?: number; hint?: string;
+  /** choice: the options; the value is the chosen one's index, the sketch sees its text. */
+  options?: string[];
+  /** Read only in setup: changing it starts the sketch over. */
+  restart?: boolean;
+  /** colour: the value is 0xRRGGBB; the sketch sees '#rrggbb', or [r, g, b] ('array', with `alpha` as a fourth when it had one). */
+  as?: 'array';
+  alpha?: number;
+}
+
+/** A Script layer's main file: its code is the layer's `code`, and it runs after the other files. */
+export const SCRIPT_MAIN_FILE = 'sketch.js';
+/** One of a Script layer's other files (a tab): run before sketch.js, in order, in the same scope. */
+export interface ScriptFile { name: string; code: string }
+/** What a file a sketch loads is: images and fonts are data URLs, the rest text. */
+export type ScriptAssetKind = 'image' | 'font' | 'json' | 'text';
+/** A file an imported p5 project brought, by the path the sketch loads it with. */
+export interface ScriptAsset { name: string; kind: ScriptAssetKind; mime: string; data: string; libraryId?: string }
+export const SCRIPT_FILES_MAX = 24;
+export const SCRIPT_ASSETS_MAX = 64;
+/** Largest file a sketch keeps (data URL or text characters, about 3 MB of image). */
+export const SCRIPT_ASSET_MAX = 4_200_000;
+/** A file name a tab can have: letters, digits, dots, dashes, underscores and folders. */
+export const SCRIPT_FILE_NAME = /^[A-Za-z0-9_][\w.\- /]{0,79}$/;
 
 /**
  * A layer drawn by JavaScript you write: a `setup(s)` and a `draw(s)` on a 2D
@@ -646,7 +670,17 @@ export interface ScriptLayer extends LayerBase {
    * transparent canvas composited the same way. Files from before 3D have none: 2d.
    */
   mode: ScriptMode;
+  /** The main file, sketch.js (SCRIPT_MAIN_FILE). Files from before tabs have only this. */
   code: string;
+  /**
+   * The other files (tabs), run before sketch.js in this order, all in one scope: what one
+   * declares at its top level the others see, as p5 projects expect. Absent or empty: one file.
+   */
+  files?: ScriptFile[];
+  /** Files the sketch loads by name (loadImage, loadJSON…), from an imported p5 project. */
+  assets?: ScriptAsset[];
+  /** Run the p5.js way: its own canvas (createCanvas), p5's defaults and events (see kit/p5.js). */
+  p5?: boolean;
   /** Sliders the script declared the last time it compiled; controls target them as `p_<key>`. */
   paramDefs: ScriptParamDef[];
   /** Clear the canvas every frame; off keeps what was drawn (trails). */
@@ -1216,6 +1250,7 @@ export function parseLayer(raw: unknown): PlayLayer | null {
   for (const [key, field] of Object.entries(LAYER_SCHEMA[kind])) out[key] = coerce(l[key], field, d[key]);
   // A script's slider values are dynamic keys: keep every finite `p_<key>` number.
   if (kind === 'script') for (const [k, v] of Object.entries(l)) if (k.startsWith('p_') && typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+  if (kind === 'script') parseScriptExtras(l, out);
   // Made from a layer kind: the id (parsePlayRecord checks the file has it).
   if (kind === 'script' && typeof l.kindId === 'string' && /^[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]{1,80}$/.test(l.kindId)) out.kindId = l.kindId;
   if (canHaveMatte(kind)) {
@@ -1338,10 +1373,48 @@ export function repairMattes(layers: PlayLayer[]): PlayLayer[] {
 export function isScriptParamDef(d: unknown): d is ScriptParamDef {
   if (!d || typeof d !== 'object') return false;
   const o = d as Record<string, unknown>;
-  return typeof o.key === 'string' && /^[A-Za-z_]\w{0,30}$/.test(o.key) && typeof o.label === 'string' && (o.kind === undefined || o.kind === 'slider' || o.kind === 'toggle' || o.kind === 'button')
-    && [o.value, o.min, o.max].every(n => typeof n === 'number' && Number.isFinite(n)) && (o.step === undefined || typeof o.step === 'number');
+  return typeof o.key === 'string' && /^[A-Za-z_]\w{0,30}$/.test(o.key) && typeof o.label === 'string'
+    && (o.kind === undefined || o.kind === 'slider' || o.kind === 'toggle' || o.kind === 'button' || o.kind === 'colour' || o.kind === 'choice')
+    && [o.value, o.min, o.max].every(n => typeof n === 'number' && Number.isFinite(n)) && (o.step === undefined || typeof o.step === 'number')
+    && (o.options === undefined || (Array.isArray(o.options) && o.options.length <= 64 && o.options.every(x => typeof x === 'string')))
+    && (o.kind !== 'choice' || (Array.isArray(o.options) && o.options.length > 0))
+    && (o.restart === undefined || typeof o.restart === 'boolean') && (o.as === undefined || o.as === 'array') && (o.alpha === undefined || (typeof o.alpha === 'number' && Number.isFinite(o.alpha)));
 }
 
+
+/** A Script layer's other files, its loaded files and its p5 flag, from a file; bad entries are dropped. */
+function parseScriptExtras(l: Record<string, unknown>, out: Record<string, unknown>): void {
+  if (Array.isArray(l.files)) {
+    const seen = new Set<string>([SCRIPT_MAIN_FILE]);
+    const files: ScriptFile[] = [];
+    for (const f of l.files) {
+      if (!f || typeof f !== 'object') continue;
+      const { name, code } = f as Record<string, unknown>;
+      if (typeof name !== 'string' || typeof code !== 'string' || !SCRIPT_FILE_NAME.test(name) || seen.has(name)) continue;
+      seen.add(name);
+      files.push({ name, code: code.slice(0, 200_000) });
+      if (files.length >= SCRIPT_FILES_MAX) break;
+    }
+    if (files.length) out.files = files;
+  }
+  if (Array.isArray(l.assets)) {
+    const seen = new Set<string>();
+    const assets: ScriptAsset[] = [];
+    for (const a of l.assets) {
+      if (!a || typeof a !== 'object') continue;
+      const r = a as Record<string, unknown>;
+      const kind = r.kind === 'image' || r.kind === 'font' || r.kind === 'json' || r.kind === 'text' ? r.kind : null;
+      if (!kind || typeof r.name !== 'string' || !r.name || r.name.length > 200 || seen.has(r.name) || typeof r.data !== 'string' || r.data.length > SCRIPT_ASSET_MAX) continue;
+      // Images and fonts are data URLs; nothing else is fetched.
+      if ((kind === 'image' || kind === 'font') && !/^data:[\w.+-]+\/[\w.+-]+;base64,/.test(r.data)) continue;
+      seen.add(r.name);
+      assets.push({ name: r.name, kind, mime: typeof r.mime === 'string' ? r.mime.slice(0, 80) : '', data: r.data, ...(typeof r.libraryId === 'string' && r.libraryId ? { libraryId: r.libraryId.slice(0, 80) } : {}) });
+      if (assets.length >= SCRIPT_ASSETS_MAX) break;
+    }
+    if (assets.length) out.assets = assets;
+  }
+  if (l.p5 === true) out.p5 = true;
+}
 
 /** Files from before the particle system: `mode` was the field and `colorFromPicture` the colour; they had no size variety. */
 function migrateParticles(l: Record<string, unknown>): void {
@@ -1578,7 +1651,10 @@ function kindNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
   }
   if (l.kind !== 'script') return base;
   // Buttons are actions, not numbers; toggles are 0/1 numbers.
-  return [...l.paramDefs.filter(d => d.kind !== 'button').map(d => d.kind === 'toggle'
+  // A colour is a packed RGB, not a number to slide; a choice slides from option to option.
+  return [...l.paramDefs.filter(d => d.kind !== 'button' && d.kind !== 'colour').map(d => d.kind === 'choice'
+    ? { key: `p_${d.key}`, label: d.label, min: 0, max: Math.max(1, (d.options?.length ?? 1) - 1), step: 1, hint: d.hint ?? `${d.label}: ${(d.options ?? []).join(' · ')}` }
+    : d.kind === 'toggle'
     ? { key: `p_${d.key}`, label: d.label, min: 0, max: 1, step: 1, hint: d.hint ?? `${d.label}: an on/off toggle the script declares.` }
     : { key: `p_${d.key}`, label: d.label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), hint: d.hint ?? `${d.label}: a slider the script declares.` }), ...base];
 }

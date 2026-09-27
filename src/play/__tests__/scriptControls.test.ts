@@ -58,7 +58,7 @@ describe('klSketchStep', () => {
   it('reports a runtime error once and stops', () => {
     const st = klSketchCompile('function draw(s) { nope(); }');
     const err = klSketchStep(st, frame(fakeCtx(), {}), [], true);
-    expect(err).toMatch(/^Runtime: /);
+    expect(err).toMatch(/^Runtime \(sketch\.js:1\): nope is not defined/);
     expect(klSketchStep(st, frame(fakeCtx(), {}), [], true)).toBe(err);
   });
 });
