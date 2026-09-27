@@ -147,7 +147,7 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
   const select = (text: string, key: string, options: Choice[], hint?: string) =>
     row(text, <Select ariaLabel={text} value={String(get(key))} options={options} onChange={v => set({ [key]: v })} height={26} />, hint);
   const toggle = (text: string, key: string, what: string, hint?: string) =>
-    row(text, <Toggle checked={get<boolean>(key)} onChange={v => set({ [key]: v })} label={what} />, hint);
+    row(text, <Toggle checked={get<boolean>(key)} onChange={v => set({ [key]: v })} label={what} wrap />, hint);
   const pick = (text: string, key: string, layers: ReadonlyArray<{ id: string; label: string }>, empty: string, hint?: string, create?: () => void) =>
     row(text, layers.length
       ? <Select

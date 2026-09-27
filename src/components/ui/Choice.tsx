@@ -5,12 +5,14 @@ import { displayCombo } from '../../hooks/useShortcuts';
 
 /** On/off switch. Replaces checkboxes everywhere. */
 export function Toggle({
-  checked, onChange, label, disabled = false,
+  checked, onChange, label, disabled = false, wrap = false,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: ReactNode;
   disabled?: boolean;
+  /** Let a long label wrap: the toggle takes the row's free width and its text breaks inside it. */
+  wrap?: boolean;
 }) {
   const tk = useTokens();
   const dark = useThemeMode() === 'dark';
@@ -26,7 +28,8 @@ export function Toggle({
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 7, border: 0, background: 'none', padding: 0,
         font: `12px ${fontFamily.ui}`, color: tk.text.secondary, cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap',
+        opacity: disabled ? 0.45 : 1, whiteSpace: wrap ? 'normal' : 'nowrap',
+        ...(wrap && { flex: '1 1 0', minWidth: 0, textAlign: 'left' }),
       }}
     >
       <span
