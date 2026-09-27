@@ -12,8 +12,24 @@ export const FN_HUE_CURVES: readonly ['hueSat', 'hueHue', 'lumaSat'];
 
 export interface FnCurves { rgb: number[]; r: number[]; g: number[]; b: number[]; hueSat: number[]; hueHue: number[]; lumaSat: number[] }
 /** An effect as the renderer reads it: its kind, whether it's on, and its numbers (plus a grade's curves and tone, a time effect's map). */
-export interface FnEffect { id: string; kind: FnKind; enabled: boolean; [key: string]: unknown }
-export interface FnFinish { on: boolean; effects: readonly FnEffect[] }
+export interface FnEffect { id: string; kind: FnKind | 'custom'; enabled: boolean; [key: string]: unknown }
+/** The before/after wipe: on, where (0..1 along its direction), its angle in degrees (0 = upright, before on the left) and the blend's width. */
+export interface FnCompare { on: boolean; pos: number; angle: number; softness: number }
+export interface FnFinish { on: boolean; effects: readonly FnEffect[]; compare?: FnCompare }
+
+export const FN_COMPARE_ID: 'compare';
+export const FN_COMPARE_PARAMS: readonly FnParam[];
+export function fnDefaultCompare(): FnCompare;
+export function fnCompareOn(finish: FnFinish | null | undefined): boolean;
+
+/** A custom effect's setting: a number (float or int), or one channel of a colour (`<name>.r`…, hidden). */
+export interface FnCustomParam extends FnParam { type: 'float' | 'int' | 'colour'; colour?: string }
+export interface FnCustomParsed { params: FnCustomParam[]; colours: Array<{ name: string; label: string; keys: [string, string, string] }>; lines: string[]; error: string }
+export const FN_CUSTOM_RESERVED: readonly string[];
+export function fnParseCustom(code: string): FnCustomParsed;
+export function fnCustomDefaults(code: string): Record<string, number>;
+export function fnCustomErrors(log: string, stage: number): string;
+export function fnCheckCustom(code: string): string;
 
 export function fnDefaultCurves(): FnCurves;
 export function fnDefaultEffect(kind: FnKind, id: string): FnEffect;
@@ -39,7 +55,7 @@ export interface FnRing { readonly size: number; readonly count: number; readonl
 export function fnRing(size: number): FnRing;
 export function fnRingSize(quality: string, W: number, H: number): { frames: number; w: number; h: number; bytes: number };
 
-export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string }): { src: string; glow: boolean; time: boolean; lut: boolean };
+export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean }): { src: string; glow: boolean; time: boolean; lut: boolean; custom: string[] };
 
 export interface FnInput {
   finish: FnFinish;
@@ -51,10 +67,9 @@ export interface FnInput {
   height: number;
   time: number;
   first?: boolean;
-  compare?: number;
   pixels?: boolean;
 }
-export interface FnInfo { effects?: string[]; glow?: boolean; floatGlow?: boolean; ring?: { frames: number; w: number; h: number; bytes: number; count: number } | null; error: string }
+export interface FnInfo { effects?: string[]; glow?: boolean; floatGlow?: boolean; ring?: { frames: number; w: number; h: number; bytes: number; count: number } | null; error: string; custom?: Record<string, string> }
 export interface FnRenderer {
   ok: boolean;
   canvas: HTMLCanvasElement | null;

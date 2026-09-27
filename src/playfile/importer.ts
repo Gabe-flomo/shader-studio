@@ -28,6 +28,7 @@ import type { PlayfileContents, ReadItem, SignatureStatus } from './reader';
 import { sealDefinition, storedForm, unsealDefinition } from './sealing';
 import { videoFilesFor } from './bundle';
 import { readPackInfo, type InstalledPack, type PackInfo } from '../nodePacks/types';
+import { installEffects, loadSavedEffects, parseSavedEffect, type SavedEffect } from '../play/finishLibrary';
 
 export type RowStatus = 'new' | 'same' | 'conflict' | 'needs-pro' | 'unreadable';
 export type Choice = 'keep-both' | 'replace';
@@ -178,8 +179,17 @@ export async function planImport(contents: PlayfileContents, env: ImportEnv): Pr
         const info = readPackInfo(raw);
         // A pack's nodes are listed under the pack's name (docs/node-packs.md, "Namespacing").
         const defs = list.filter(isNodeDefinition).map(d => (info ? { ...d, category: info.name } : d));
-        if (!defs.length) { rows.push(bad('No node types in it')); break; }
+        // Custom Finish effects a pack carries (docs/finish-stack.md): into Your effects, sealed ones sealed.
+        const fxRaw = obj(raw)?.finishEffects;
+        const effects = (Array.isArray(fxRaw) ? fxRaw : []).map(parseSavedEffect).filter((x): x is SavedEffect => !!x).map(x => (info ? { ...x, pack: info.name } : x));
+        if (!defs.length && !effects.length) { rows.push(bad('No node types in it')); break; }
         if (info) packs.push({ path: it.path, info });
+        const haveFx = loadSavedEffects(env.kv);
+        for (const fx of effects) {
+          const mine = haveFx.find(x => x.id === fx.id);
+          const status: RowStatus = !mine ? 'new' : mine.code === fx.code && JSON.stringify(mine.sealed ?? null) === JSON.stringify(fx.sealed ?? null) ? 'same' : 'conflict';
+          rows.push({ ...base, id: `${it.path}#fx:${fx.id}`, name: fx.name, status, sealed: !!fx.sealed, detail: 'Finish effect', choice: 'replace', include: status !== 'same' && nodesOk, value: fx });
+        }
         for (const d of defs) {
           const mine = env.userNode(d.id);
           const status: RowStatus = !mine ? 'new' : nodeContent(mine) === nodeContent(d) ? 'same' : 'conflict';
@@ -289,6 +299,19 @@ export async function applyImport(plan: ImportPlan, picks: Record<string, Pick>,
           break;
         }
         case 'nodes': {
+          if (r.id.includes('#fx:')) {
+            // A Finish effect from a pack: kept both, it comes in under a new id and name.
+            let fx = { ...(r.value as SavedEffect), savedAt: now };
+            if (r.status === 'conflict' && !replace) {
+              const names = new Set(loadSavedEffects(env.kv).map(x => x.name));
+              fx = { ...fx, id: `${fx.id}_${now.toString(36)}`, name: freeName(fx.name, n => names.has(n)) };
+            }
+            const res = installEffects([fx], env.kv);
+            if (!res.ok) throw new Error(res.error);
+            sum.changedKeys.push('shader-studio:finish-effects');
+            record(sum, r, fx.name, replace);
+            break;
+          }
           let def = { ...(r.value as UserNodeDefinition), savedAt: now, ...(signedBy ? { signedBy } : {}) };
           if (!signedBy) delete def.signedBy;
           let name = def.label;
@@ -361,7 +384,7 @@ export async function applyImport(plan: ImportPlan, picks: Record<string, Pick>,
     const graphNames = new Set(graphsIn.map(g => g.name));
     const presNames = new Set(presIn);
     for (const { path, info } of plan.packs) {
-      const nodeIds = plan.rows.filter(r => r.kind === 'nodes' && r.id.startsWith(`${path}#`))
+      const nodeIds = plan.rows.filter(r => r.kind === 'nodes' && r.id.startsWith(`${path}#`) && !r.id.includes('#fx:'))
         .map(r => nodeIdsIn.get(r.id) ?? (r.status === 'same' ? (r.value as UserNodeDefinition).id : ''))
         .filter(Boolean);
       if (!nodeIds.length) continue;

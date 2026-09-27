@@ -35,7 +35,7 @@ import { kmMaskLocal, kmMaskPath, kmMaskPlacement } from './kit/mattes.js';
 import { matteUsers } from '../types/playLayers';
 import { addMask, maskFromOutline } from './mattes';
 import { fnActive, fnAnimated, fnCreate, type FnEffect, type FnRenderer } from './kit/finish.js';
-import { finishPropId } from '../types/playFinish';
+import { finishPropId, renderableFinish } from '../types/playFinish';
 
 type KitAction = { do: ActionKind; layerId: string; amount: number };
 /** An audio layer's sound from a take: a frame, null (the input was off), or undefined (not recorded: the live sound). */
@@ -166,14 +166,13 @@ class PlayOverlay {
   private exportFinish: FnRenderer | null = null;
   private finishEl: HTMLCanvasElement | null = null;
   private guidesEl: HTMLCanvasElement | null = null;
-  private compare: number | null = null;
 
+  /** The stack as the renderer reads it (sealed custom effects' code filled in, in memory). */
+  private get finish() { return renderableFinish(this.record.finish); }
   /** Is the Finish stack doing something (on, with an effect on)? */
-  hasFinish(): boolean { return fnActive(this.record.finish); }
+  hasFinish(): boolean { return fnActive(this.finish); }
   /** Does the stack change with the clock (grain, shake, flicker, time displacement)? The render loop keeps going while it plays. */
-  finishMoving(): boolean { return fnAnimated(this.record.finish); }
-  /** Before/after: the divider's place on the picture (0..1), or null. */
-  setCompare(x: number | null): void { this.compare = x; }
+  finishMoving(): boolean { return fnAnimated(this.finish); }
   /** The live Finish renderer's state (for the panel and the browser checks). */
   finishInfo() { return this.live?.info() ?? null; }
 
@@ -706,8 +705,8 @@ class PlayOverlay {
     // The finished frame is drawn at the overlay's size, up to about 1080p's worth of pixels (a retina preview would be 3 to 4 times that).
     const fs = Math.min(1, Math.sqrt(FINISH_MAX_PIXELS / (W * H)));
     const finished = finishing && !!this.live?.draw({
-      finish: this.record.finish!, value: this.finishValue, picture: gl, layers: canvas,
-      layerAlpha: id => this.kit.layerCanvas(id), width: Math.round(W * fs), height: Math.round(H * fs), time, compare: this.compare ?? -1,
+      finish: this.finish!, value: this.finishValue, picture: gl, layers: canvas,
+      layerAlpha: id => this.kit.layerCanvas(id), width: Math.round(W * fs), height: Math.round(H * fs), time,
     });
     this.showFinish(finished);
     if (this.composite) {
@@ -789,7 +788,7 @@ class PlayOverlay {
     if (!this.exportFinish) this.exportFinish = fnCreate(null);
     if (!this.exportFinish.ok) return;
     this.exportFinish.draw({
-      finish: this.record.finish!, value: this.finishValue, picture: { data: rgba, width, height }, pixels: true,
+      finish: this.finish!, value: this.finishValue, picture: { data: rgba, width, height }, pixels: true,
       layerAlpha: id => this.exportKit?.layerCanvas(id) ?? null, width, height, time, first,
     });
   }

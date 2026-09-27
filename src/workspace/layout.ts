@@ -87,6 +87,8 @@ const LIST_KINDS: ListKind[] = [
   { kind: 'builderFn', area: 'functions', key: BUILDER_FNS_KEY, root: 'functions/Function Builder', ext: '.builder.json', fixed: true, label: 'Function Builder function' },
   { kind: 'builderGroup', area: 'functions', key: BUILDER_GROUPS_KEY, root: 'functions/Function Builder', ext: '.builder-group.json', fixed: true, label: 'Function Builder group' },
   { kind: 'palettePreset', area: 'presets', key: PALETTE_PRESETS_KEY, root: 'presets/palettes', ext: '.palette.json', label: 'Palette preset' },
+  { kind: 'finishPreset', area: 'presets', key: 'shader-studio:finish-presets', root: 'presets/finish stacks', ext: '.finish.json', label: 'Finish stack preset' },
+  { kind: 'finishEffect', area: 'presets', key: 'shader-studio:finish-effects', root: 'presets/finish effects', ext: '.effect.json', label: 'Finish effect' },
 ];
 
 /** How the two sides' changes to a file combine when both changed it. */

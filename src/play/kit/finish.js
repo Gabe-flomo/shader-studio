@@ -190,6 +190,26 @@ export const FN_TIME_QUALITY = { low: { frames: 16, scale: 0.25, cap: 8e6 }, med
 export const FN_CURVE_CHANNELS = ['rgb', 'r', 'g', 'b'];
 export const FN_HUE_CURVES = ['hueSat', 'hueHue', 'lumaSat'];
 
+/**
+ * The before/after wipe (`finish.compare`): where the picture before the stack
+ * meets the finished one. Mappable like an effect's numbers, under the id
+ * 'compare' (`finish:compare::pos`).
+ */
+export const FN_COMPARE_ID = 'compare';
+export const FN_COMPARE_PARAMS = [
+  FN_P('pos', 'Position', 0, 1, 0.001, 0.5, 'Where the wipe is along its direction: 0 shows only the finished picture, 1 only the picture before the stack.'),
+  FN_P('angle', 'Angle', -180, 180, 1, 0, 'The divider’s angle in degrees: 0 is upright with the picture before the stack on the left, 90 is level with it below.'),
+  FN_P('softness', 'Softness', 0, 1, 0.01, 0, 'How wide the blend between the two is (0 is a hard edge).'),
+];
+/** A wipe at its defaults (off). */
+export function fnDefaultCompare() {
+  return { on: false, pos: 0.5, angle: 0, softness: 0 };
+}
+/** Is the wipe showing? */
+export function fnCompareOn(finish) {
+  return !!(finish && finish.compare && finish.compare.on);
+}
+
 /** A fresh set of curves: straight lines, and flat hue curves (none). */
 export function fnDefaultCurves() {
   return { rgb: [0, 0, 1, 1], r: [0, 0, 1, 1], g: [0, 0, 1, 1], b: [0, 0, 1, 1], hueSat: [], hueHue: [], lumaSat: [] };
@@ -205,20 +225,174 @@ export function fnDefaultEffect(kind, id) {
   return e;
 }
 
+/** Can this effect run: a built-in kind, or a custom effect with code. */
+function fnRunnable(e) {
+  return !!e && !!e.enabled && (e.kind === 'custom' ? typeof e.code === 'string' && e.code.trim().length > 0 : !!FN_EFFECTS[e.kind]);
+}
 /** Is there anything to do: the stack on, with an effect on. */
 export function fnActive(finish) {
-  return !!finish && finish.on !== false && Array.isArray(finish.effects) && finish.effects.some(e => e && e.enabled && FN_EFFECTS[e.kind]);
+  return !!finish && finish.on !== false && Array.isArray(finish.effects) && finish.effects.some(fnRunnable);
 }
-/** The effects that run, in order (first of each kind only). */
+/** The effects that run, in order (first of each built-in kind only; custom effects as many as there are). */
 export function fnRunning(finish) {
   if (!fnActive(finish)) return [];
   const seen = new Set(), out = [];
-  for (const e of finish.effects) if (e && e.enabled && FN_EFFECTS[e.kind] && !seen.has(e.kind)) { seen.add(e.kind); out.push(e); }
+  for (const e of finish.effects) {
+    if (!fnRunnable(e)) continue;
+    if (e.kind === 'custom') { out.push(e); continue; }
+    if (!seen.has(e.kind)) { seen.add(e.kind); out.push(e); }
+  }
   return out;
 }
 /** Does the stack change with the clock (so a paused shader still needs frames drawn while the clock runs)? */
 export function fnAnimated(finish) {
-  return fnRunning(finish).some(e => (e.kind === 'grain' && e.fps > 0) || e.kind === 'shake' || e.kind === 'flicker' || e.kind === 'time' || (e.kind === 'crt' && e.pulse > 0));
+  return fnRunning(finish).some(e => (e.kind === 'grain' && e.fps > 0) || e.kind === 'shake' || e.kind === 'flicker' || e.kind === 'time' || (e.kind === 'crt' && e.pulse > 0) || (e.kind === 'custom' && /\btime\b/.test(e.code)));
+}
+
+// ── Custom effects (effect code) ─────────────────────────────────────────────
+
+/**
+ * A custom effect is a snippet of GLSL ES 3.00 run as one more colour step of
+ * the Finish pass:
+ *
+ *   uniform float amount; // 0..1 = 0.5
+ *   uniform vec3 tint;    // color = #ff8800
+ *   vec3 effect(vec2 uv, vec3 color) { return mix(color, tint * picture(uv), amount); }
+ *
+ * `uv` is the point on the picture (0..1), `color` the colour so far (after
+ * the stack's colour steps above it). Helpers: `picture(uv)` reads the
+ * picture as it came in (the shader and the layers, before the stack), `px`
+ * is one pixel in uv units, `time` the clock in seconds, `resolution` the
+ * output size in pixels, `aspect` its width over height.
+ *
+ * Each `uniform float` (or `int`) becomes a slider and a control target; a
+ * comment after it gives `min..max = default`, optionally `step s` and a label
+ * (`// 2..16 = 6 step 1 Levels`). A `uniform vec3` is a colour
+ * (`// color = #rrggbb`), kept as three numbers `<name>.r`, `.g`, `.b`.
+ */
+export const FN_CUSTOM_RESERVED = ['id', 'kind', 'enabled', 'name', 'code', 'defId', 'sealed', 'source', 'look', 'tone', 'curves', 'map', 'layerId', 'quality', 'uv', 'color', 'effect', 'picture', 'px', 'time', 'resolution', 'aspect', 'main'];
+const FN_CUSTOM_MAX_NUMBERS = 32;
+const FN_NUM = '[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?';
+
+function fnPretty(name) {
+  const w = name.replace(/_/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2').trim().toLowerCase();
+  return w ? w[0].toUpperCase() + w.slice(1) : name;
+}
+function fnHexRgb(hex) {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  return isFinite(n) && full.length === 6 ? [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255] : [1, 1, 1];
+}
+
+const fnCustomCache = new Map();
+/**
+ * An effect's code read for its settings: `params` (the numbers, in uniform
+ * order, as FN_P gives them, plus `colour: name` on a colour's three),
+ * `colours` ({ name, label, keys }), `lines` (the code with each uniform line
+ * blanked, so line numbers stay the user's), and `error` for what can be told
+ * without compiling (no effect function, a reserved or repeated name).
+ */
+export function fnParseCustom(code) {
+  const src = typeof code === 'string' ? code : '';
+  const hit = fnCustomCache.get(src);
+  if (hit) return hit;
+  const params = [], colours = [], errors = [];
+  const names = new Set();
+  const uniRe = /^\s*uniform\s+(?:(?:highp|mediump|lowp)\s+)?(float|int|vec3)\s+([A-Za-z_]\w*)\s*;\s*(?:\/\/\s*(.*))?$/;
+  const lines = src.split('\n').map((line, i) => {
+    const m = uniRe.exec(line);
+    if (!m) {
+      if (/^\s*uniform\b/.test(line)) errors.push(`Line ${i + 1}: only “uniform float”, “uniform int” and “uniform vec3” settings are supported, one per line.`);
+      return line;
+    }
+    const [, type, name, comment = ''] = m;
+    if (FN_CUSTOM_RESERVED.includes(name) || /^(fn|FN_|U_|u[A-Z])/.test(name)) { errors.push(`Line ${i + 1}: “${name}” is a name the Finish pass uses; call the setting something else.`); return ''; }
+    if (names.has(name)) { errors.push(`Line ${i + 1}: “${name}” is declared twice.`); return ''; }
+    names.add(name);
+    if (type === 'vec3') {
+      const hex = /#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/.exec(comment);
+      const rgb = hex ? fnHexRgb(hex[1]) : [1, 1, 1];
+      const label = comment.replace(/colou?r\s*=?\s*/i, '').replace(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/, '').trim() || fnPretty(name);
+      const keys = ['r', 'g', 'b'].map(c => `${name}.${c}`);
+      keys.forEach((k, j) => params.push(Object.assign(FN_P(k, `${label} ${'RGB'[j]}`, 0, 1, 0.01, rgb[j], '', true), { colour: name, type: 'colour' })));
+      colours.push({ name, label, keys });
+      return '';
+    }
+    let min = 0, max = 1, value = NaN, step = NaN;
+    let rest = comment.trim();
+    const range = new RegExp(`^(${FN_NUM})\\s*\\.\\.\\s*(${FN_NUM})`).exec(rest);
+    if (range) { min = +range[1]; max = +range[2]; rest = rest.slice(range[0].length).trim(); }
+    const def = new RegExp(`^=\\s*(${FN_NUM})`).exec(rest);
+    if (def) { value = +def[1]; rest = rest.slice(def[0].length).trim(); }
+    const st = new RegExp(`^step\\s+(${FN_NUM})`, 'i').exec(rest);
+    if (st) { step = Math.abs(+st[1]); rest = rest.slice(st[0].length).trim(); }
+    const label = rest.replace(/^[-:·—]\s*/, '').trim();
+    if (min > max) { const t = min; min = max; max = t; }
+    if (min === max) max = min + 1;
+    if (!isFinite(value)) value = type === 'int' ? Math.round((min + max) / 2) : (min + max) / 2;
+    const whole = type === 'int' || (!!range && !/\./.test(range[0]) && Number.isInteger(value) && max - min >= 2);
+    if (!isFinite(step) || step <= 0) step = whole ? 1 : Math.max(1e-4, +((max - min) / 100).toPrecision(2));
+    value = Math.max(min, Math.min(max, value));
+    params.push(Object.assign(FN_P(name, label || fnPretty(name), min, max, step, value, ''), { type }));
+    return '';
+  });
+  if (params.length > FN_CUSTOM_MAX_NUMBERS) errors.push(`At most ${FN_CUSTOM_MAX_NUMBERS} numbers (a colour is three).`);
+  if (!/\bvec3\s+effect\s*\(\s*(?:in\s+)?vec2\s+\w+\s*,\s*(?:in\s+)?vec3\s+\w+\s*\)/.test(src)) errors.push('The code needs a function “vec3 effect(vec2 uv, vec3 color)”.');
+  const out = { params: params.slice(0, FN_CUSTOM_MAX_NUMBERS), colours, lines, error: errors.join('\n') };
+  if (fnCustomCache.size > 64) fnCustomCache.delete(fnCustomCache.keys().next().value);
+  fnCustomCache.set(src, out);
+  return out;
+}
+
+/** A custom effect's numbers at their defaults, keyed as the effect keeps them. */
+export function fnCustomDefaults(code) {
+  const out = {};
+  for (const p of fnParseCustom(code).params) out[p.key] = p.value;
+  return out;
+}
+
+/** The source-string number a custom stage's code is compiled under (so an error names the stage). */
+const FN_CUSTOM_SOURCE = 1000;
+/** Every top-level function and constant a snippet declares (renamed per stage so two stages never clash). */
+function fnCustomNames(lines) {
+  const out = new Set();
+  let depth = 0;
+  for (const line of lines) {
+    if (depth === 0) {
+      const f = /^\s*(?:(?:highp|mediump|lowp)\s+)?(?:float|int|uint|bool|void|[biu]?vec[234]|mat[234](?:x[234])?)\s+([A-Za-z_]\w*)\s*\(/.exec(line);
+      if (f) out.add(f[1]);
+      const c = /^\s*const\s+(?:(?:highp|mediump|lowp)\s+)?\w+\s+([A-Za-z_]\w*)/.exec(line);
+      if (c) out.add(c[1]);
+    }
+    for (const ch of line.replace(/\/\/.*$/, '')) { if (ch === '{') depth++; else if (ch === '}') depth = Math.max(0, depth - 1); }
+  }
+  out.delete('effect');
+  return [...out];
+}
+
+/** One custom stage's GLSL: its numbers, the helpers, the code (as the user wrote it, line for line) and the call the pass makes. */
+function fnCustomStage(e, i) {
+  const parsed = fnParseCustom(e.code);
+  const U = `U_cx${i}`, n = Math.max(1, Math.ceil(parsed.params.length / 4));
+  const at = j => `${U}[${j >> 2}].${'xyzw'[j & 3]}`;
+  const defs = [];
+  parsed.params.forEach((p, j) => { if (!p.colour) defs.push([p.key, p.type === 'int' ? `int(floor(${at(j)} + 0.5))` : at(j)]); });
+  for (const c of parsed.colours) defs.push([c.name, `vec3(${c.keys.map(k => at(parsed.params.findIndex(p => p.key === k))).join(', ')})`]);
+  for (const name of fnCustomNames(parsed.lines)) defs.push([name, `${name}_cx${i}`]);
+  defs.push(['effect', `fnCx${i}`], ['picture', 'fnPicture'], ['px', '(1.0 / uRes)'], ['time', 'uTime'], ['resolution', 'uRes'], ['aspect', 'uAspect']);
+  return {
+    glsl: `uniform vec4 ${U}[${n}];\n${defs.map(([a, b]) => `#define ${a} ${b}`).join('\n')}\n#line 1 ${FN_CUSTOM_SOURCE + i}\n${parsed.lines.join('\n')}\n#line 1 0\n${defs.map(([a]) => `#undef ${a}`).join('\n')}\n`,
+    call: `c = fnCx${i}(p, c);`,
+  };
+}
+
+/** A compile log's errors that belong to custom stage `i`, with its own line numbers ("Line 3: …"). */
+export function fnCustomErrors(log, i) {
+  const re = new RegExp(`^ERROR:\\s*${FN_CUSTOM_SOURCE + i}:(\\d+):\\s*(.*)$`);
+  const out = [];
+  for (const l of String(log || '').split('\n')) { const m = re.exec(l.trim()); if (m) out.push(`Line ${m[1]}: ${m[2].trim()}`); }
+  return out.join('\n');
 }
 
 // ── Curves ───────────────────────────────────────────────────────────────────
@@ -632,8 +806,19 @@ export function fnBuildFinal(effects, opts = {}) {
   const glow = has('bloom') || has('halation') || (has('crt'));
   const time = has('time');
   let src = FN_COMMON;
-  for (const k of kinds) src += fnDefines(k);
-  src += `uniform float uOutFlip, uCompare, uLive;\nout vec4 fragColor;\nvec2 gPx;\nfloat gEdge = 1.0;\n`;
+  for (const k of kinds) if (FN_EFFECTS[k]) src += fnDefines(k);
+  src += `uniform float uOutFlip, uLive;\nuniform vec4 uWipe;\nout vec4 fragColor;\nvec2 gPx;\nfloat gEdge = 1.0;\n`;
+  // The before/after wipe: 1 where the finished picture shows, 0 where the picture before the stack does.
+  src += `float fnWipe(vec2 p) {
+  float a = radians(uWipe.z);
+  vec2 n = vec2(cos(a), sin(a));
+  vec2 v = (p - 0.5) * vec2(uAspect, 1.0);
+  float e = 0.5 * (abs(n.x) * uAspect + abs(n.y));
+  float t = dot(v, n) / max(e, 1e-4) * 0.5 + 0.5;
+  float s = uWipe.w * 0.5;
+  return s <= 0.0 ? step(uWipe.y, t) : smoothstep(uWipe.y - s, uWipe.y + s, t);
+}
+`;
   if (glow) src += `uniform sampler2D uQ0, uQ1, uE0, uE1, uG0, uG1;\nuniform float uGlowFloat;\nvec3 glowDec(vec3 v) { return uGlowFloat > 0.5 ? v : v / max(vec3(1e-4), 1.0 - v); }\n`;
   if (has('grade')) src += (opts.tone && opts.tone !== 'none' ? FN_TONE_GLSL + '\n' : '') + FN_GRADE(opts.tone || 'none', !!opts.hueCurves, opts.curves !== false || !!opts.hueCurves);
   if (has('crt')) src += FN_CRT_MASK_GLSL + '\n';
@@ -652,6 +837,13 @@ vec4 fetch(vec2 q) {
 }
 `;
   } else src += 'vec4 fetch(vec2 q) { return scene(q); }\n';
+  // Custom effects: each its own function (in the stack's order), called with the colour so far.
+  const customs = effects.filter(e => e.kind === 'custom');
+  const customCalls = new Map();
+  if (customs.length) {
+    src += 'vec3 fnPicture(vec2 uv) { vec4 s = scene(uv); return s.a > 1e-5 ? s.rgb / s.a : vec3(0.0); }\n';
+    customs.forEach((e, i) => { const st = fnCustomStage(e, i); src += st.glsl; customCalls.set(e, st.call); });
+  }
   // Geometry: each effect bends where the picture is read. Applied last-first, so the stack's first effect bends the picture first.
   const warps = [];
   for (const k of kinds) {
@@ -686,6 +878,7 @@ vec4 fetch(vec2 q) {
   const ops = [];
   for (const e of effects) {
     const k = e.kind;
+    if (k === 'custom') ops.push(customCalls.get(e));
     if (k === 'grade') ops.push('c = fnGrade(c);');
     if (k === 'vignette') ops.push(`{
     float rr = mix(1.0, uAspect, vignette_roundness);
@@ -748,11 +941,14 @@ vec4 fetch(vec2 q) {
   vec2 p = gl_FragCoord.xy / uRes;
   if (uOutFlip > 0.5) p.y = 1.0 - p.y;
   gPx = p * uRes;
-  if (uCompare >= 0.0 && p.x < uCompare) {
-    vec4 o = scene(p);
-    if (abs(p.x - uCompare) * uRes.x < 1.5) o = vec4(1.0);
-    fragColor = uLive > 0.5 ? vec4(o.rgb, 1.0) : vec4(o.a > 0.0 ? o.rgb / o.a : vec3(0.0), o.a);
-    return;
+  float wipe = 1.0;
+  if (uWipe.x > 0.5) {
+    wipe = fnWipe(p);
+    if (wipe <= 0.0) {
+      vec4 o = scene(p);
+      fragColor = uLive > 0.5 ? vec4(o.rgb, 1.0) : vec4(o.a > 0.0 ? o.rgb / o.a : vec3(0.0), o.a);
+      return;
+    }
   }
   vec2 q = p;
   ${warps.reverse().join('\n  ')}
@@ -762,11 +958,15 @@ vec4 fetch(vec2 q) {
   vec3 c = a > 1e-5 ? s.rgb / a : vec3(0.0);
   ${ops.join('\n  ')}
   c = clamp(c, 0.0, 1.0) * gEdge;
-  if (uCompare >= 0.0 && abs(p.x - uCompare) * uRes.x < 1.5) { c = vec3(1.0); a = 1.0; }
+  if (wipe < 1.0) {
+    vec4 o = scene(p);
+    c = mix(o.a > 1e-5 ? o.rgb / o.a : vec3(0.0), c, wipe);
+    a = mix(o.a, a, wipe);
+  }
   fragColor = uLive > 0.5 ? vec4(c * a, 1.0) : vec4(c, a);
 }
 `;
-  return { src, glow, time, lut: has('grade') };
+  return { src, glow, time, lut: has('grade'), custom: customs.map(e => e.id) };
 }
 
 const FN_PREFILTER = (bloom, halation, crtGlow) => `${FN_COMMON}
@@ -827,10 +1027,14 @@ void main() { fragColor = scene(gl_FragCoord.xy / uRes); }
  *       layerAlpha(id)                 a layer drawn alone (time displacement's Layer map), or null
  *       width, height, time            output size and the clock (seconds)
  *       first                          start the time ring over (an offline render's first frame)
- *       compare                        -1, or 0..1: left of it shows the picture before the stack
  *       pixels                         with a `{ data }` picture: finish it in place (straight alpha), the canvas untouched
  *     }
  *   reset()    empty the time ring        dispose()  let go of the GPU
+ *
+ * The before/after wipe comes from `finish.compare` ({ on, pos, angle,
+ * softness }, its numbers read through `value` under the id 'compare').
+ * A custom effect whose code doesn't compile is left out (its error is in
+ * info().custom[effectId]) and the rest of the stack still runs.
  */
 export function fnCreate(canvasIn) {
   const canvas = canvasIn || (typeof document !== 'undefined' ? document.createElement('canvas') : null);
@@ -869,6 +1073,24 @@ export function fnCreate(canvasIn) {
     return entry;
   }
   const loc = (e, n) => { if (!e.locs.has(n)) e.locs.set(n, gl.getUniformLocation(e.prog, n)); return e.locs.get(n); };
+  // Custom effects: each one's code compiled once on its own, so a broken one is left out instead of blanking the pass.
+  const customChecked = new Map();
+  function customError(e) {
+    const code = String(e.code || '');
+    if (customChecked.has(code)) return customChecked.get(code);
+    let err = fnParseCustom(code).error;
+    if (!err) {
+      const before = lastError;
+      lastError = '';
+      const ok = compile('check:' + code, fnBuildFinal([Object.assign({}, e, { id: 'check' })]).src);
+      err = ok ? '' : (fnCustomErrors(lastError, 0) || lastError || 'The code doesn’t compile.');
+      lastError = before;
+      if (ok) { gl.deleteProgram(ok.prog); programs.delete('check:' + code); }
+    }
+    if (customChecked.size > 64) customChecked.delete(customChecked.keys().next().value);
+    customChecked.set(code, err);
+    return err;
+  }
 
   // Textures are made and filled on a unit no pass samples from, so a pass's bindings are never disturbed.
   const scratch = () => gl.activeTexture(gl.TEXTURE15);
@@ -942,6 +1164,12 @@ export function fnCreate(canvasIn) {
     ps.forEach((p, i) => { const v = value ? value(effect, p.key) : effect[p.key]; out[i] = typeof v === 'number' && isFinite(v) ? v : p.value; });
     return out;
   };
+  const packedCustom = (effect, value) => {
+    const ps = fnParseCustom(effect.code).params;
+    const out = new Float32Array(Math.max(1, Math.ceil(ps.length / 4)) * 4);
+    ps.forEach((p, i) => { const v = value ? value(effect, p.key) : effect[p.key]; out[i] = typeof v === 'number' && isFinite(v) ? v : p.value; });
+    return out;
+  };
 
   function glowPasses(input, effects, W, H, pixelsMode, value) {
     const bloom = effects.find(e => e.kind === 'bloom'), hal = effects.find(e => e.kind === 'halation'), crt = effects.find(e => e.kind === 'crt');
@@ -1000,8 +1228,14 @@ export function fnCreate(canvasIn) {
   let lastInfo = null;
   function drawFrame(input) {
     if (gl.isContextLost()) return false;
-    const effects = fnRunning(input.finish);
-    if (!effects.length) return false;
+    const customErr = {};
+    const effects = fnRunning(input.finish).filter(e => {
+      if (e.kind !== 'custom') return true;
+      const err = customError(e);
+      if (err) customErr[e.id] = err;
+      return !err;
+    });
+    if (!effects.length) { lastInfo = { effects: [], glow: false, floatGlow, ring: null, custom: customErr }; return false; }
     const pixelsMode = !!(input.pixels && input.picture && input.picture.data);
     const W = Math.max(1, Math.round(input.width)), H = Math.max(1, Math.round(input.height));
     const value = input.value || null;
@@ -1016,10 +1250,19 @@ export function fnCreate(canvasIn) {
       if (k !== lutKey) { lutKey = k; scratch(); gl.bindTexture(gl.TEXTURE_2D, lutTex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 2, 0, gl.RGBA, gl.UNSIGNED_BYTE, fnBakeLut(grade.curves)); }
     }
     const opts = { tone: grade ? grade.tone || 'none' : 'none', curves: !!(grade && !fnCurvesNeutral(grade.curves)), hueCurves: !!(grade && fnHueCurvesUsed(grade.curves)), timeMap: time ? time.map || 'slit' : 'slit' };
-    const key = 'final:' + effects.map(e => e.kind).join(',') + `|${opts.tone}|${opts.curves}|${opts.hueCurves}|${opts.timeMap}`;
-    const built = fnBuildFinal(effects, opts);
-    const fin = compile(key, built.src);
+    const keyFor = list => 'final:' + list.map(e => (e.kind === 'custom' ? 'custom:' + e.code : e.kind)).join(',') + `|${opts.tone}|${opts.curves}|${opts.hueCurves}|${opts.timeMap}`;
+    let built = fnBuildFinal(effects, opts);
+    let fin = compile(keyFor(effects), built.src);
+    if (!fin && built.custom.length) {
+      // Each custom effect compiled alone but not together: run the stack without them.
+      for (const e of effects) if (e.kind === 'custom') customErr[e.id] = customErr[e.id] || 'It doesn’t compile together with the rest of the stack (a name used twice?).';
+      const plain = effects.filter(e => e.kind !== 'custom');
+      if (!plain.length) return false;
+      built = fnBuildFinal(plain, opts);
+      fin = compile(keyFor(plain), built.src);
+    }
     if (!fin) return false;
+    const ran = built.custom.length ? effects : effects.filter(e => e.kind !== 'custom');
     if (built.glow && !glowPasses(input, effects, W, H, pixelsMode, value)) return false;
     let ring = null;
     if (time) {
@@ -1034,10 +1277,19 @@ export function fnCreate(canvasIn) {
     // The final pass.
     gl.useProgram(fin.prog);
     common(fin, W, H, input, W, H, pixelsMode);
-    for (const e of effects) { const l = loc(fin, `U_${e.kind}`); if (l) gl.uniform4fv(l, packed(e, value)); }
+    let ci = 0;
+    for (const e of ran) {
+      if (e.kind === 'custom') { const l = loc(fin, `U_cx${ci++}`); if (l) gl.uniform4fv(l, packedCustom(e, value)); continue; }
+      const l = loc(fin, `U_${e.kind}`); if (l) gl.uniform4fv(l, packed(e, value));
+    }
     gl.uniform1f(loc(fin, 'uOutFlip'), pixelsMode ? 1 : 0);
     gl.uniform1f(loc(fin, 'uLive'), pixelsMode ? 0 : 1);
-    gl.uniform1f(loc(fin, 'uCompare'), !pixelsMode && typeof input.compare === 'number' && input.compare >= 0 ? input.compare : -1);
+    const cmp = input.finish.compare;
+    if (cmp && cmp.on) {
+      const host = Object.assign({ id: FN_COMPARE_ID, kind: 'compare', enabled: true }, cmp);
+      const cv = (k, d) => { const v = value ? value(host, k) : cmp[k]; return typeof v === 'number' && isFinite(v) ? v : d; };
+      gl.uniform4f(loc(fin, 'uWipe'), 1, Math.max(0, Math.min(1, cv('pos', 0.5))), cv('angle', 0), Math.max(0, Math.min(1, cv('softness', 0))));
+    } else gl.uniform4f(loc(fin, 'uWipe'), 0, 0.5, 0, 0);
     let unit = 2;
     if (grade) bindTex(fin, 'uLut', unit++, lutTex);
     if (built.glow) {
@@ -1074,7 +1326,7 @@ export function fnCreate(canvasIn) {
       }
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    lastInfo = { effects: effects.map(e => e.kind), glow: built.glow, floatGlow, ring: ring ? { frames: ring.ring.size, w: ring.w, h: ring.h, bytes: ring.bytes, count: ring.ring.count } : null };
+    lastInfo = { effects: ran.map(e => e.kind), glow: built.glow, floatGlow, ring: ring ? { frames: ring.ring.size, w: ring.w, h: ring.h, bytes: ring.bytes, count: ring.ring.count } : null, custom: customErr };
     return true;
   }
 
@@ -1095,4 +1347,33 @@ export function fnCreate(canvasIn) {
       if (lose) lose.loseContext();
     },
   };
+}
+
+let fnChecker = null;
+/**
+ * Does a custom effect's code compile? '' when it does, else its errors with
+ * the snippet's own line numbers. Compiled on a small WebGL2 context of its
+ * own (made on first use); without WebGL2 only the parse is checked.
+ */
+export function fnCheckCustom(code) {
+  const parsed = fnParseCustom(code);
+  if (parsed.error) return parsed.error;
+  if (typeof document === 'undefined') return '';
+  if (!fnChecker) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    fnChecker = { gl: c.getContext('webgl2'), cache: new Map() };
+  }
+  const { gl, cache } = fnChecker;
+  if (!gl || gl.isContextLost()) return '';
+  if (cache.has(code)) return cache.get(code);
+  const s = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(s, fnBuildFinal([{ id: 'check', kind: 'custom', enabled: true, code }]).src);
+  gl.compileShader(s);
+  const log = gl.getShaderParameter(s, gl.COMPILE_STATUS) ? '' : (gl.getShaderInfoLog(s) || 'The code doesn’t compile.');
+  gl.deleteShader(s);
+  const err = log ? (fnCustomErrors(log, 0) || log.trim()) : '';
+  if (cache.size > 64) cache.delete(cache.keys().next().value);
+  cache.set(code, err);
+  return err;
 }

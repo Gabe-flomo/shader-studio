@@ -7,10 +7,14 @@ every layer together. One ordered stack per Play record (`play.finish`).
 - Engine: `src/play/kit/finish.js` (+ `finishGlsl.js`, shared with the Studio's
   Tone Map and CRT Mask nodes). Part of the layer kit, so the app and exported
   pages run the same code.
-- Record, parsing, control targets, Looks: `src/types/playFinish.ts`.
+- Record, parsing, control targets, Looks, custom effects' records:
+  `src/types/playFinish.ts`.
+- Stack presets and Your effects (the device's lists): `src/play/finishLibrary.ts`.
 - UI: `src/components/play/finish/` (`FinishPanel`, `CurveEditor`,
   `ColourWheel`, `CompareHandle`, `savedLooks`).
-- Tests: `src/play/__tests__/finish.test.ts`.
+- Tests: `src/play/__tests__/finish.test.ts` and `finishFollowups.test.ts`
+  (the wipe, custom effects, presets, the library); node packs carrying
+  effects in `src/nodePacks/__tests__/nodePacks.test.ts`.
 
 ## Where it runs
 
@@ -38,7 +42,9 @@ effect), so dragging a slider or a mapping never recompiles.
 2. **Sampling**: chromatic aberration reads red and blue at offset points; time
    displacement chooses which frame each point reads.
 3. **Colour**, in the stack's order: grade, vignette, CRT mask, bloom, halation,
-   grain, flicker.
+   grain, flicker, and your own effects wherever they sit in the stack.
+4. **The before/after wipe**, last: where it shows the picture before the stack,
+   that is what is drawn (and the stack isn't run there at all).
 
 Extra work only when asked for:
 
@@ -146,14 +152,137 @@ Medium keeps 32 frames at 472 × 295 (18 MB). Frames back is capped by the frame
 kept. Offline renders start the ring over on their first frame and fill it in
 order (`fnRing`), so a render is identical every time.
 
+## The before/after wipe
+
+`finish.compare` is `{ on, pos, angle, softness }`: a divider across the
+picture with the picture **before** the stack on one side and the finished one
+on the other.
+
+- **Before / after** in the Finish tab turns it on and shows the **Before /
+  after wipe** card: Position (0..1 along its direction; 0 is all finished, 1
+  all before), Angle (degrees; 0 is upright with *before* on the left, 90 level
+  with *before* below) and Softness (the width of the blend).
+- It is part of the record: it is saved, and drawn in the preview, Stage,
+  recordings, takes, offline renders, stills, exported websites and Present.
+  Off, the pass skips it (`uWipe.x = 0`).
+- Its numbers are control targets under the id `compare`:
+  `finish:compare::pos`, `::angle`, `::softness`. An LFO on Position is a
+  moving wipe; the mouse, audio or a hand work as for any number.
+- The grip on the picture (`CompareHandle`, while the Finish tab is open) moves
+  `pos` along the wipe's direction and follows its angle. While a mapping
+  drives the position or angle, the grip hides (it would show where the wipe
+  rests, not where it is).
+- In the pass: `fnWipe(p)` measures `p` along the direction
+  `(cos angle, sin angle)` in the frame's aspect, 0..1 corner to corner (the
+  slit-scan map's measure), then `step` or `smoothstep` around `pos`.
+
+The editing-only divider it replaces (`uCompare`, the Play UI's `compare`
+state) is gone: the wipe is the one divider.
+
+## Stack presets
+
+**Presets** in the Finish tab:
+
+- **Save stack as preset…** keeps every effect in order with every setting:
+  curves, the grade's tone and look, custom effects with their code. The wipe
+  stays with the Play. The same name replaces the older preset.
+- Each preset has **Replace stack** (its effects, and nothing else), **Add to
+  stack** (after the stack's own; a built-in kind already in the stack is
+  skipped and named in a note, since the stack has one of each), **Rename…**
+  and **Delete**. Loaded effects get new ids, so they never collide with the
+  stack's effects or their controls.
+
+Stored in `localStorage` as a list, `shader-studio:finish-presets`
+(`{ id, name, savedAt, finish }`, checked with `parseFinish` when read).
+
+## Custom effects
+
+**+ Add effect → Your effects → New effect code…** adds a custom effect
+(`kind: 'custom'`) with a posterize to start from. Its card has an **Effect
+code** editor (the GLSL page's editor, with error marks):
+
+```glsl
+uniform float levels; // 2..16 = 5 Levels
+uniform float amount; // 0..1 = 1
+uniform vec3 tint;    // color = #ff8800 Warm tint
+
+vec3 effect(vec2 uv, vec3 color) {
+  vec3 steps = floor(color * levels + 0.5) / levels;
+  return mix(color, steps * tint, amount);
+}
+```
+
+- `effect` gets `uv` (the point on the picture, 0..1) and `color` (the colour so
+  far, after the colour steps above it) and returns the new colour.
+- Helpers: `picture(uv)` reads the picture as it came in (the shader and the
+  layers, before the stack: this is one pass, so a neighbour's colour doesn't
+  include the steps above), `px` is one pixel in uv units, `time` the clock in
+  seconds, `resolution` the size in pixels, `aspect` width over height.
+- Settings: each `uniform float name; // min..max = default` is a slider,
+  optionally with `step s` and a label after it; `uniform int` is a whole-number
+  slider; `uniform vec3 name; // color = #rrggbb` is a colour, kept as three
+  numbers `name.r`, `name.g`, `name.b`. No range means 0..1. Every one is a
+  control target (`finish:<effect>::levels`), mapped like any other. Changing the
+  code keeps the values of the settings that stay.
+- Names the pass uses can't be settings (`time`, `color`, `uv`, `picture`,
+  `px`, anything starting `fn`, `U_` or `u` + a capital…); the card says so.
+- Any number of custom effects can be in a stack (built-in kinds are one each).
+
+**In the pass** each is a function (`fnParseCustom`, `fnCustomStage`): its
+settings are `#define`d onto a `vec4` uniform array `U_cx<i>` (so a slider
+never recompiles), `effect` is renamed `fnCx<i>`, and every top-level function
+and constant it declares gets a `_cx<i>` suffix, so two effects can use the
+same helper names. The code is compiled under `#line 1 <1000 + i>`, so an
+error names the effect and the user's own line (`fnCustomErrors`), and every
+`#define` is `#undef`ined after it.
+
+**A broken effect never blanks the picture.** The card checks the code as you
+type (`fnCheckCustom`, on a small WebGL2 context of its own) and marks the
+lines. The renderer compiles each custom effect alone once before using it; one
+that fails is left out (its error in `info().custom[effectId]`) and the rest of
+the stack runs. If they compile alone but not together, the stack runs without
+them. Only broken effects: nothing is drawn and the picture shows unfinished.
+
+**Your effects.** The card's menu has **Save to Your effects** (and **Rename…**).
+Saved effects are listed under **+ Add effect → Your effects**, in
+`shader-studio:finish-effects` (`{ id, name, code, savedAt, sealed?, pack? }`).
+An effect in a stack keeps its own copy of the code (`defId` names the saved
+one it came from), so a Play file, a preset or a website carries it whole.
+
+**Sealed effects.** A node pack can carry effects (below); in a sealed pack
+their code is encrypted like a sealed node's (`sealCustomCode`, the same
+AES-256-GCM scheme). A sealed effect keeps `sealed` and an empty `code` in Your
+effects, in a stack's record, in presets and in files; the code is filled in
+only in memory (`finishCustomCode`, `renderableFinish`), and the card shows its
+settings but not its code. As with sealed nodes, a website export must contain
+the shader's text, so `playBundle` puts the code in.
+
+### From a graph (next step)
+
+Not built yet: a **Picture** source node in the Studio (the finished frame as
+a texture sample at a uv; a test image in the Studio's own preview) and
+**Publish as Finish effect** for a graph whose output depends on it. The
+compiler's output is GLSL ES 1.00 (`gl_FragColor`, `varying vUv`,
+`u_resolution`, `u_time`, parameter uniforms), so publishing would: compile the
+graph; rename `main` to `effect(vec2 vUv, vec3 color)` and turn the
+`gl_FragColor = …` into a `return`; map `u_resolution`/`u_time` to
+`resolution`/`time` and `texture2D(u_picture, x)` to `vec4(picture(x), 1.0)`;
+and write each exposed parameter (or Play control) as a
+`uniform float name; // min..max = value` line, so it becomes the effect's
+slider. The result is an ordinary custom effect, so everything above (the
+pass, errors, Your effects, packs, exports) applies unchanged.
+
+Multi-pass custom effects (their own blurs, feedback) come after that.
+
 ## Controls and mappings
 
-Every number is a control target: `finish:<effectId>::<key>`
+Every number is a control target: `finish:<effectId>::<key>` (the wipe's
+under the id `compare`; a custom effect's under its settings' names)
 (`finishTarget`, `parseFinishTarget`). The mapping engine treats it like a layer
 property under the id `finish:<effectId>` (`parsePropTarget`), so mice, keys,
 audio readers, LFOs, hands, takes and the website runtime all drive it. The +
 beside each slider makes one; **Add control → From the Finish stack** and **Map…**
-list them too. Removing an effect removes its controls and their mappings; a
+list them too (`finishHosts`: the effects, then the wipe when the record has one). Removing an effect removes its controls and their mappings; a
 file's control whose effect is gone is dropped on load.
 
 ## Record
@@ -165,14 +294,32 @@ file's control whose effect is gone is dropped on load.
     { "id": "grade", "kind": "grade", "enabled": true, "exposure": 0, …, "tone": "none",
       "curves": { "rgb": [0, 0, 1, 1], "r": […], "g": […], "b": […], "hueSat": [], "hueHue": [], "lumaSat": [] },
       "look": "teal-orange" },
-    { "id": "time", "kind": "time", "enabled": true, "amount": 16, …, "map": "slit", "layerId": "", "quality": "medium" }
-  ]
+    { "id": "time", "kind": "time", "enabled": true, "amount": 16, …, "map": "slit", "layerId": "", "quality": "medium" },
+    { "id": "fx_custom_…", "kind": "custom", "enabled": true, "name": "Posterize", "code": "uniform float levels; …",
+      "defId": "fx_…", "levels": 5, "tint.r": 1, "tint.g": 0.53, "tint.b": 0 }
+  ],
+  "compare": { "on": true, "pos": 0.5, "angle": 0, "softness": 0 }
 }
 ```
 
-`parseFinish` keeps known kinds only, one of each (the first), clamps every
-number to its range and fills missing ones with defaults. Older records have no
-`finish` and get none. Exports carry it as it is.
+`parseFinish` keeps known kinds only, one of each built-in kind (the first)
+and any number of custom effects (with code or a sealed blob), clamps every
+number to its range (a custom effect's ranges come from its code) and fills
+missing ones with defaults. `compare` is optional (off unless `on: true`).
+Older records have no `finish` and get none. Exports carry it as it is (sealed
+effects with their code).
+
+## In the library and files
+
+| Where | What |
+| --- | --- |
+| Library ZIPs (`library.json`, and readable `finish stack presets.json`, `finish effects.json`, `finish looks.json`) | the three lists, merged on import like palettes |
+| Profile ZIPs, Install | the same keys, merged as lists |
+| `.playfile` | a `library` item when chosen on the Files page (or a whole library); effects also inside node packs |
+| Files page | Presets → Finish stack presets, Finish effects (Your effects), Finish looks |
+| Workspace folder | `presets/finish stacks/<Name>.finish.json`, `presets/finish effects/<Name>.effect.json` |
+| Node packs | Builder → Node packs → Extras → **A Finish effect…**: carried in the `nodes` item's `finishEffects`, sealed with the pack; on import they go into Your effects (tagged with the pack) |
+
 
 ## Plans
 

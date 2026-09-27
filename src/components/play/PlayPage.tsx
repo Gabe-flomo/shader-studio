@@ -71,7 +71,7 @@ import { OpenPlayableButton } from './OpenPlayable';
 import { MidiFileCard } from './MidiFileCard';
 import { AnchorPicker, FirePicker, TriggerPicker, type TriggerLayerRef } from './TriggerPicker';
 import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, parsePropTarget, type ActionKind } from '../../types/play';
-import { FINISH_EFFECTS, finishNumericProps, finishParam, finishTarget, parseFinishTarget, patchFinishEffect, readFinishValue } from '../../types/playFinish';
+import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf, finishTarget, parseFinishTarget, patchFinishEffect, readFinishValue } from '../../types/playFinish';
 import { playBackground } from '../../play/background';
 import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
@@ -213,8 +213,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     }
     const ft = parseFinishTarget(c.target);
     if (ft) {
-      const e = play.finish?.effects.find(x => x.id === ft.effectId);
-      return { kind: 'layer', title: e ? `Finish · ${FINISH_EFFECTS[e.kind].label}` : 'a removed Finish effect', param: (e && finishParam(e.kind, ft.key)?.label) ?? ft.key, missing: !e, go: () => { if (e) usePlayUi.getState().revealFinish(e.id); } };
+      const e = finishHost(play.finish, ft.effectId);
+      return { kind: 'layer', title: e ? `Finish · ${finishHostLabel(e)}` : 'a removed Finish effect', param: (e && finishParamOf(e, ft.key)?.label) ?? ft.key, missing: !e, go: () => { if (e) usePlayUi.getState().revealFinish(e.id); } };
     }
     const lt = parseLayerTarget(c.target);
     if (lt) {
@@ -241,16 +241,16 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     actions: actionsForLayer(l),
   })), [play.layers]);
   // The Finish stack's numbers (types/playFinish.ts): targets `finish:<effect>::<key>`.
-  const finishCandidates = useMemo<LayerCandidates[]>(() => (play.finish?.effects ?? []).map(e => ({
-    id: e.id, label: `Finish · ${FINISH_EFFECTS[e.kind].label}`,
+  const finishCandidates = useMemo<LayerCandidates[]>(() => finishHosts(play.finish).map(e => ({
+    id: e.id, label: `Finish · ${finishHostLabel(e)}`,
     props: finishNumericProps(e).map(d => ({ key: d.key, label: d.label, hint: d.hint || undefined, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
     actions: [],
   })), [play.finish]);
   const addFinishControl = useCallback((effectId: string, key: string, withNull: boolean) => {
-    const e = play.finish?.effects.find(x => x.id === effectId);
-    const d = e && finishParam(e.kind, key);
+    const e = finishHost(play.finish, effectId);
+    const d = e && finishParamOf(e, key);
     if (!e || !d) return;
-    const target = finishTarget(effectId, key), label = `${FINISH_EFFECTS[e.kind].label} · ${d.label}`;
+    const target = finishTarget(effectId, key), label = `${finishHostLabel(e)} · ${d.label}`;
     if (withNull) { addWithNull([{ target, label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), value: readFinishValue(play.finish, target) ?? d.value, axis: 'x' }], `${label} null`); return; }
     update(p => (p.controls.some(c => c.target === target) ? p : { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'float', label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] }));
   // eslint-disable-next-line react-hooks/exhaustive-deps

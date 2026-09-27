@@ -395,6 +395,37 @@ describe('assembling and exporting a pack', () => {
     expect([...m.nodes.values()].map(d => d.label).sort()).toEqual(['Glow!', 'Stripe!', 'Waves!']);
     expect(installedPacks()[0]).toMatchObject({ version: '1.0.1', examples: ['Glow scene'] });
   });
+
+  it('carries custom Finish effects: sealed in a sealed pack, into Your effects on import, and they still run', async () => {
+    const w = world();
+    const code = 'uniform float levels; // 2..16 = 4\nvec3 effect(vec2 uv, vec3 color) { return floor(color * levels) / levels; }\n';
+    w.kv.set('shader-studio:finish-effects', JSON.stringify([{ id: 'fx_post', name: 'Posterize', code, savedAt: 1 }]));
+    const p: PackProject = { ...pack(w, { sealed: true }), extras: [{ kind: 'finishEffect', id: 'fx_post', name: 'Posterize' }] };
+    expect(validatePack(p, w.env).ok).toBe(true);
+    const a = await assemblePack(p, w.env);
+    expect(a.info.finishEffects).toEqual(['Posterize']);
+    const { bytes } = await writePlayfile(a.items, { author: 'Ada', signer: await signer() });
+    for (const [path, b] of Object.entries(unzipSync(bytes))) if (path.startsWith('nodes/')) expect(strFromU8(b)).not.toContain('floor(color');
+    const m = importEnv();
+    const plan = await planImport(await readPlayfile(bytes), m);
+    const row = plan.rows.find(r => r.id.includes('#fx:'))!;
+    expect(row).toMatchObject({ name: 'Posterize', status: 'new', sealed: true, detail: 'Finish effect' });
+    const sum = await applyImport(plan, {}, m);
+    expect(sum.failed).toEqual([]);
+    const saved = JSON.parse(m.kv.get('shader-studio:finish-effects')!);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ id: 'fx_post', name: 'Posterize', code: '', pack: 'Glow Kit' });
+    expect(JSON.stringify(saved)).not.toContain('floor(color');
+    // In a stack it is sealed in the record, but its settings and code are there in memory.
+    const { newCustomEffect, finishNumericProps, renderableFinish } = await import('../../types/playFinish');
+    const e = newCustomEffect({ name: saved[0].name, code: '', sealed: saved[0].sealed, defId: 'fx_post' });
+    expect(e.code).toBe('');
+    expect(finishNumericProps(e).map(x => x.key)).toEqual(['levels']);
+    expect(renderableFinish({ on: true, effects: [e] })!.effects[0].code).toBe(code);
+    // The same pack again: already here.
+    const again = await planImport(await readPlayfile(bytes), m);
+    expect(again.rows.find(r => r.id.includes('#fx:'))?.status).toBe('same');
+  });
 });
 
 // ── Videos in .playfile exports ─────────────────────────────────────────────

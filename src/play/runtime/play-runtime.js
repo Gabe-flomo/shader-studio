@@ -1086,8 +1086,10 @@ void main() {
     const controls = new Map(play.controls.map(c => [c.id, c]));
     const layersById = new Map(play.layers.map(l => [l.id, l]));
     // The Finish stack's effects are this mount's own copies too; their numbers are driven like layer properties.
-    const finish = play.finish && Array.isArray(play.finish.effects) ? { on: play.finish.on !== false, effects: play.finish.effects.map(e => Object.assign({}, e)) } : null;
+    const finish = play.finish && Array.isArray(play.finish.effects) ? { on: play.finish.on !== false, effects: play.finish.effects.map(e => Object.assign({}, e)), compare: play.finish.compare ? Object.assign({ id: 'compare' }, play.finish.compare) : undefined } : null;
     if (finish) for (const e of finish.effects) layersById.set('finish:' + e.id, e);
+    // The before/after wipe's numbers are driven the same way (finish:compare::pos).
+    if (finish && finish.compare) layersById.set('finish:compare', finish.compare);
     const base = new Map(), live = new Map(), layerLive = new Map(), smooth = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0, playing = !opts.paused, lastNow = 0, frame = 0;

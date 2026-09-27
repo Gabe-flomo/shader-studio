@@ -345,7 +345,7 @@ import { parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, D
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 import { parseSourceCredit, type SourceCredit } from './credit';
 import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
-import { finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
+import { finishHosts, finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
 export type { LayerGroup } from './layerGroups';
 
 // ── Actions (a trigger does something to a layer) ─────────────────────────────
@@ -1139,7 +1139,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   const layerIds = new Set(layers.map(l => l.id));
   // Controls on a Finish effect's number need that effect.
   const finish = parseFinish(r.finish);
-  const effectIds = new Set(finish?.effects.map(e => e.id) ?? []);
+  const effectIds = new Set(finishHosts(finish).map(e => e.id));
   const keptControls = controls.filter(c => {
     const ft = parseFinishTarget(c.target);
     if (ft) return effectIds.has(ft.effectId);

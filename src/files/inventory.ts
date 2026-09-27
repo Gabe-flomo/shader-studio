@@ -22,7 +22,7 @@ export const SECTIONS: ReadonlyArray<{ id: SectionId; label: string; hint: strin
   { id: 'presentations', label: 'Presentations', hint: 'Present page lessons and the Plays they show' },
   { id: 'glsl', label: 'GLSL shaders', hint: 'Shaders saved on the GLSL page' },
   { id: 'functions', label: 'Functions', hint: 'Custom function presets and the Builder’s saved functions' },
-  { id: 'presets', label: 'Presets', hint: 'Group, expression, transform, keyframe and Palette node presets' },
+  { id: 'presets', label: 'Presets', hint: 'Group, expression, transform, keyframe and Palette node presets, and the Finish stack’s presets, effects and looks' },
   { id: 'nodes', label: 'Published nodes', hint: 'Node types you published from a group or code' },
   { id: 'scripts', label: 'Scripts', hint: 'Saved sketches and layer kinds' },
   { id: 'backgrounds', label: 'Backgrounds', hint: 'The backgrounds library: images and palettes' },
@@ -129,6 +129,10 @@ export const VERSIONS_PREFIX = 'shader-studio-versions:';
 export const GLSL_KEY = 'shader-studio:glsl-shaders';
 /** The Studio's Palette node presets. */
 export const PALETTES_KEY = 'shader-studio:palette-presets';
+/** The Finish stack's lists (components/play/finish/finishLibrary.ts, savedLooks.ts). */
+export const FINISH_PRESETS_KEY = 'shader-studio:finish-presets';
+export const FINISH_EFFECTS_KEY = 'shader-studio:finish-effects';
+export const FINISH_LOOKS_KEY = 'shader-studio:finish-looks';
 /** The backgrounds library's palettes (lib/backgroundLibrary.ts); its images live in IndexedDB (backgroundsSource.ts). */
 export const BG_PALETTES_KEY = 'shader-studio-backgrounds:palettes';
 export const BG_PALETTE_SCOPE = 'backgrounds:palettes';
@@ -160,7 +164,7 @@ export function isOwnedKey(k: string): boolean {
 /** A saved graph: `shader-studio:<name>` whose value has a `nodes` array (and isn't a preset or a setting). */
 export function isGraphEntry(key: string, parsed: unknown): boolean {
   if (!key.startsWith(GRAPH_PREFIX) || key.startsWith(NODE_PREFIX) || PRESET_PREFIXES.some(p => key.startsWith(p.prefix))) return false;
-  if (key === GLSL_KEY || key === PALETTES_KEY || /^shader-studio:(settings|play|osc|theme|shortcuts|minimap|glsl-editor)\b/.test(key)) return false;
+  if (key === GLSL_KEY || key === PALETTES_KEY || key === FINISH_PRESETS_KEY || key === FINISH_EFFECTS_KEY || key === FINISH_LOOKS_KEY || /^shader-studio:(settings|play|osc|theme|shortcuts|minimap|glsl-editor)\b/.test(key)) return false;
   return !!parsed && typeof parsed === 'object' && Array.isArray((parsed as { nodes?: unknown }).nodes);
 }
 
@@ -344,6 +348,7 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
   const perPrefix = new Map<string, FileNode[]>();
   const publishedNodes: FileNode[] = [];
   const settings: FileNode[] = [];
+  let finishPresets: FileNode[] = [], finishEffects: FileNode[] = [], finishLooks: FileNode[] = [];
   let glsl: FileNode[] = [], palettes: FileNode[] = [], bgPalettes: FileNode[] = [], scripts: FileNode[] = [], kinds: FileNode[] = [], builderFns: FileNode[] = [], builderGroups: FileNode[] = [];
   const installedKinds: Array<{ id: string; node: FileNode }> = [];
   const cfpBodies: Array<{ body: string; node: FileNode }> = [];
@@ -398,6 +403,12 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
           hash: hashText(code), glslGroup: str(sh.group)?.trim() ?? '',
         } as FileNode & { glslGroup: string };
       });
+    } else if (key === FINISH_PRESETS_KEY) {
+      finishPresets = listItems(key, parsed, 'presets', 'preset', 'fstack', x => { const fx = arr(obj(x.finish)?.effects).map(obj); return fx.length ? fx.map(e => (str(e?.kind) === 'custom' ? str(e?.name) ?? 'Custom' : str(e?.kind) ?? '?')).join(', ') : 'Empty'; });
+    } else if (key === FINISH_EFFECTS_KEY) {
+      finishEffects = listItems(key, parsed, 'presets', 'preset', 'feffect', x => [x.sealed ? 'Sealed' : `${(str(x.code) ?? '').split('\n').length} lines`, str(x.pack) ? `from ${str(x.pack)}` : ''].filter(Boolean).join(' · '));
+    } else if (key === FINISH_LOOKS_KEY) {
+      finishLooks = listItems(key, parsed, 'presets', 'preset', 'flook', x => `${Object.keys(obj(x.values) ?? {}).length} settings${str(x.tone) && str(x.tone) !== 'none' ? ` · ${str(x.tone)}` : ''}`);
     } else if (key === PALETTES_KEY) {
       palettes = listItems(key, parsed, 'presets', 'palette', 'palette', x => `${str(x.kind) === 'stops' ? `${arr(x.stops).length} stops` : 'Cosine'}`);
     } else if (key === BG_PALETTES_KEY) {
@@ -520,6 +531,9 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
   }
 
   if (palettes.length) presetChildren.push(group('presets', 'section:presets', 'palettes', 'Palette node presets', palettes.sort(byName)));
+  if (finishPresets.length) presetChildren.push(group('presets', 'section:presets', 'finish-stacks', 'Finish stack presets', finishPresets.sort(byName)));
+  if (finishEffects.length) presetChildren.push(group('presets', 'section:presets', 'finish-effects', 'Finish effects (Your effects)', finishEffects.sort(byName)));
+  if (finishLooks.length) presetChildren.push(group('presets', 'section:presets', 'finish-looks', 'Finish looks', finishLooks.sort(byName)));
 
   const scriptChildren: FileNode[] = [];
   if (scripts.length) scriptChildren.push(group('scripts', 'section:scripts', 'sketches', 'Saved sketches', scripts.sort(byName)));
