@@ -16,7 +16,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
-import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_POINT_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, SOURCE_TYPES, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
+import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_POINT_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, sourceOptions, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import { SENSOR_READS_FOR, type SensorRead } from '../../types/play';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
@@ -61,6 +61,10 @@ import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, 
 import { playBackground } from '../../play/background';
 import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
+import { AudioReadersHost } from './AudioReadersPanel';
+import { useReadersPanel } from './readersPanelUi';
+import { formatHz, formatWidth } from '../../play/audioReaders';
+import type { AudioReader } from '../../types/play';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
 
@@ -447,6 +451,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         layerRefs={layerRefs}
       />}
       {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
+      <AudioReadersHost compact={compact} />
       <LayerContextMenu play={play} onChange={update} />
     </div>
   );
@@ -950,6 +955,7 @@ function MappingsDrawer({ play, mode, height, onResizeStart, open, onToggle, onA
 }
 
 const EMPTY_MAPPINGS: PlayMapping[] = [];
+const NO_READERS: AudioReader[] = [];
 
 function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
   mapping: PlayMapping;
@@ -968,6 +974,11 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
 }) {
   const tk = useTokens();
   const type = sourceType(m.source);
+  const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
+  const pickSource = (v: string) => {
+    if (v === OPEN_READERS) { useReadersPanel.getState().show({ mappingId: m.id, focus: m.source.kind === 'reader' ? m.source.readerId : '' }); return; }
+    onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs), firstDataset()) });
+  };
   const numStyle = { width: 58, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' as const };
   const labelStyle = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' as const, width: 54, flexShrink: 0 };
   const otherControls = controls.filter(c => c.id !== m.controlId);
@@ -1007,7 +1018,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {chevron}
         <span style={{ ...labelStyle, width: 40 }}>Source</span>
-        <Select ariaLabel="Source" value={type} options={SOURCE_TYPES} onChange={v => onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs), firstDataset()) })} height={26} style={{ flex: 1, minWidth: 0 }} />
+        <Select ariaLabel="Source" value={type} options={sourceOptions(readers)} onChange={pickSource} height={26} style={{ flex: 1, minWidth: 0 }} />
         {m.source.kind === 'null' && (
           nullLayers.length === 0
             ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a Null layer first</span>
@@ -1195,6 +1206,8 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
         {hint('×')}
         <LiveAudioChip />
       </>);
+    case 'reader':
+      return <ReaderSourceOptions source={source} row={row} hint={hint} onChange={onChange} />;
     case 'trigger':
       return <TriggerOptions source={source} layers={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={onChange} />;
     case 'hand':
@@ -1235,6 +1248,25 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
     default:
       return null;
   }
+}
+
+/** A reader source: which reader, what it reads, and the way to the spectrum. */
+function ReaderSourceOptions({ source, row, hint, onChange }: {
+  source: Extract<PlaySource, { kind: 'reader' }>;
+  row: (children: ReactNode) => ReactNode;
+  hint: (text: string) => ReactNode;
+  onChange: (source: PlaySource) => void;
+}) {
+  const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
+  const input = useNodeGraphStore(s => s.play.audioReaders?.input ?? '');
+  const r = readers.find(x => x.id === source.readerId);
+  const open = () => useReadersPanel.getState().show({ focus: source.readerId });
+  return row(<>
+    {readers.length > 1 && <Select ariaLabel="Reader" value={r ? r.id : ''} options={[...(r ? [] : [{ value: '', label: 'Missing reader' }]), ...readers.map(x => ({ value: x.id, label: x.name }))]} onChange={v => onChange({ kind: 'reader', readerId: v })} height={26} style={{ maxWidth: 150 }} />}
+    {r ? hint(`${formatHz(r.hz)} · ${formatWidth(r.width)} · ${r.gain > 0 ? '+' : ''}${Math.round(r.gain)} dB`) : hint('This reader was deleted')}
+    <Button size="sm" icon="wave" onClick={open}>Spectrum</Button>
+    {!input && <LiveAudioChip readers={false} />}
+  </>);
 }
 
 /** Where a trigger fires from and what it does. */

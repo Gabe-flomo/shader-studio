@@ -17,6 +17,7 @@ import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
 import { toast } from '../ui/toastStore';
+import { useReadersPanel } from './readersPanelUi';
 
 /**
  * Inside another site's frame (a preview on claude.ai, say) the browser refuses the camera,
@@ -118,7 +119,8 @@ export function MidiStatusChip() {
   );
 }
 
-export function LiveAudioChip() {
+/** `readers`: offer the Audio readers panel (off inside the panel itself). */
+export function LiveAudioChip({ readers = true }: { readers?: boolean } = {}) {
   const tk = useTokens();
   const [status, setStatus] = useState<LiveStatus>(() => liveAudio.getStatus());
   const [devices, setDevices] = useState<Array<{ id: string; label: string }>>([]);
@@ -136,6 +138,7 @@ export function LiveAudioChip() {
       )}
       {status !== 'on' && status !== 'unsupported' && <Button size="sm" onClick={() => void liveAudio.start(deviceId)}>Listen</Button>}
       {status === 'on' && <Button size="sm" variant="ghost" onClick={() => liveAudio.stop()}>Stop</Button>}
+      {readers && <Button size="sm" variant="ghost" icon="wave" onClick={() => useReadersPanel.getState().show()} title="See the live spectrum and place readers on it">Spectrum</Button>}
     </span>
   );
 }

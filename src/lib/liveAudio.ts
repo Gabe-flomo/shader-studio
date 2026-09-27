@@ -6,7 +6,11 @@
  * Never connected to the speakers, so there is no feedback. Echo
  * cancellation, noise suppression and auto gain are off: this is music, not
  * a call. One analysis per rendered frame (`update(frame)`), read by band.
+ *
+ * With no mic at hand, `startTest` listens to a synthesised loop (played
+ * aloud) or a tone (silent) instead.
  */
+import { renderTestLoop } from './testLoop';
 
 export type LiveBand = 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
 export type LiveStatus = 'off' | 'requesting' | 'on' | 'denied' | 'unsupported';
@@ -55,6 +59,9 @@ class LiveAudio {
   private deviceId = '';
   private label = '';
   private listeners = new Set<(s: LiveStatus) => void>();
+  /** A synthesised sound playing in place of an input (the test loop, or a tone), and how to stop it. */
+  private test: { kind: 'loop' | 'tone'; stop: () => void; setHz?: (hz: number) => void } | null = null;
+  private loopBuffer: AudioBuffer | null = null;
 
   getStatus(): LiveStatus { return this.status; }
   /** The device being listened to ("BlackHole 2ch", "CABLE Output"…). */
@@ -110,9 +117,62 @@ class LiveAudio {
     return this.status;
   }
 
+  /** Listening to the test loop or a test tone (not an input). */
+  testing(): 'loop' | 'tone' | null { return this.test?.kind ?? null; }
+
+  /**
+   * Listen to a synthesised sound instead of an input: `loop` the test loop
+   * (kick, snare, hi-hats and a voice, played aloud), or a sine tone at `hz`
+   * (silent: for checking readers). Call from a click (browsers start sound
+   * only after one).
+   */
+  async startTest(kind: 'loop' | 'tone', hz = 60): Promise<LiveStatus> {
+    if (typeof AudioContext === 'undefined') return this.status;
+    this.stop(false);
+    this.setStatus('requesting');
+    const ctx = this.ctx ?? new AudioContext();
+    this.ctx = ctx;
+    if (ctx.state === 'suspended') await ctx.resume();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.55;
+    if (kind === 'loop') {
+      this.loopBuffer ??= await renderTestLoop(ctx.sampleRate);
+      const src = ctx.createBufferSource(), vol = ctx.createGain();
+      src.buffer = this.loopBuffer; src.loop = true;
+      vol.gain.value = 0.6;
+      src.connect(analyser);
+      src.connect(vol).connect(ctx.destination);
+      src.start();
+      this.test = { kind, stop: () => { try { src.stop(); } catch { /* already stopped */ } src.disconnect(); vol.disconnect(); } };
+      this.label = 'Test loop';
+    } else {
+      const osc = ctx.createOscillator(), amp = ctx.createGain();
+      osc.frequency.value = hz; amp.gain.value = 0.3;
+      osc.connect(amp).connect(analyser);
+      osc.start();
+      this.test = {
+        kind, stop: () => { try { osc.stop(); } catch { /* already stopped */ } osc.disconnect(); amp.disconnect(); },
+        setHz: f => { osc.frequency.setValueAtTime(f, ctx.currentTime); this.label = `Test tone ${Math.round(f)} Hz`; },
+      };
+      this.label = `Test tone ${Math.round(hz)} Hz`;
+    }
+    this.analyser = analyser;
+    this.freq = new Float32Array(analyser.frequencyBinCount);
+    this.wave = new Float32Array(analyser.fftSize);
+    this.deviceId = '';
+    this.setStatus('on');
+    return this.status;
+  }
+
+  /** Retune the test tone (no-op otherwise). */
+  setTestHz(hz: number): void { this.test?.setHz?.(hz); }
+
   stop(announce = true): void {
     for (const t of this.stream?.getTracks() ?? []) t.stop();
     this.stream = null;
+    this.test?.stop();
+    this.test = null;
     this.analyser = null;
     this.values = { level: 0, bass: 0, lowmid: 0, highmid: 0, treble: 0 };
     if (announce && this.status !== 'unsupported') this.setStatus('off');
@@ -145,3 +205,6 @@ class LiveAudio {
 }
 
 export const liveAudio = new LiveAudio();
+
+// Development: drive the input from the console or a test (`__liveAudio.startTest('tone', 60)`).
+if (import.meta.env?.DEV && typeof window !== 'undefined') (window as unknown as { __liveAudio?: LiveAudio }).__liveAudio = liveAudio;

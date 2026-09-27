@@ -29,6 +29,8 @@ import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRec
 import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parseLayerTarget } from '../types/play';
 import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
+import { audioReaderBank } from './audioReaderBank';
+import { pickLearned, readerGate } from '../play/audioReaders';
 import { handFeed } from './handFeed';
 import { readDataSource } from '../play/dataLayer';
 import { hdAge, hdCreate, hdGate, hdPlacement, hdPoint, hdRead, hdTrackerOptions, hdUpdate, type HdState } from '../play/kit/hands.js';
@@ -301,6 +303,7 @@ class PlayEngine implements InputSource {
     this.tiltIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'tilt');
     this.gamepadIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'gamepad');
     this.handsBound = usesHands(record);
+    audioReaderBank.setConfig(record.audioReaders);
     handFeed.configure(hdTrackerOptions(record.hands));
     this.triggerKeysBound = new Set(this.allTriggers().map(triggerKey));
     this.oscIsBound = record.mappings.some(m => m.enabled && (m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')))
@@ -630,6 +633,9 @@ class PlayEngine implements InputSource {
         const v = liveAudio.value(source.band);
         return v === null ? null : Math.max(0, Math.min(1, v * source.gain));
       }
+      case 'reader':
+        audioReaderBank.update();
+        return audioReaderBank.value(source.readerId);
       case 'trigger':
         // Triggers keep per-mapping state; readMapping() reads it. A bare source reading is its gate.
         return (this.held.get(triggerKey(source.trigger)) ?? 0) > 0 ? 1 : 0;
@@ -715,20 +721,36 @@ class PlayEngine implements InputSource {
     return stepTrigger(st, src, slot.count, gate, dt, velocity);
   }
 
-  /** Audio-hit triggers: a band crossing its threshold is a press; falling below 80% of it releases (hysteresis). */
+  /**
+   * Audio-hit triggers: a band crossing its threshold is a press; falling below 80% of it releases (hysteresis).
+   * Reader triggers: a reader crossing its threshold, letting go below threshold − hysteresis. Mappings' and actions' alike.
+   */
   private audioGates = new Set<string>();
   private tickAudioTriggers(): void {
-    if (!liveAudio.isOn()) return;
-    liveAudio.update(this.frame);
-    for (const m of this.record.mappings) {
-      if (!m.enabled || m.source.kind !== 'trigger' || m.source.trigger.on !== 'audio') continue;
-      const t = m.source.trigger;
+    const live = liveAudio.isOn();
+    if (live) liveAudio.update(this.frame);
+    if (audioReaderBank.has()) audioReaderBank.update();
+    const seen = new Set<string>();
+    for (const t of this.allTriggers()) {
+      if (t.on !== 'audio' && t.on !== 'reader') continue;
       const key = triggerKey(t);
-      const v = liveAudio.value(t.band) ?? 0;
+      if (seen.has(key)) continue;
+      seen.add(key);
       const open = this.audioGates.has(key);
-      if (!open && v >= t.threshold) { this.audioGates.add(key); this.press(key, v); }
-      else if (open && v < t.threshold * 0.8) { this.audioGates.delete(key); this.release(key); }
+      if (t.on === 'audio') {
+        if (!live) continue;
+        const v = liveAudio.value(t.band) ?? 0;
+        if (!open && v >= t.threshold) { this.audioGates.add(key); this.press(key, v); }
+        else if (open && v < t.threshold * 0.8) { this.audioGates.delete(key); this.release(key); }
+      } else {
+        const v = audioReaderBank.value(t.readerId) ?? 0;
+        const on = readerGate(open, v, t.threshold, t.hysteresis);
+        if (on && !open) { this.audioGates.add(key); this.press(key, v); }
+        else if (!on && open) { this.audioGates.delete(key); this.release(key); }
+      }
     }
+    // A trigger removed while open lets go.
+    for (const k of [...this.audioGates]) if (!seen.has(k)) { this.audioGates.delete(k); this.release(k); }
   }
 
   /**
@@ -765,6 +787,7 @@ class PlayEngine implements InputSource {
       this.tickHandTriggers();
       if (this.learnCb || this.learnTriggerCb) this.learnHands();
     }
+    if (this.learnCb || this.learnTriggerCb) this.learnAudio();
     this.tickAudioTriggers();
     this.tickZoneTriggers();
     this.tickProximityTriggers();
@@ -938,14 +961,18 @@ class PlayEngine implements InputSource {
     return false;
   }
 
-  /** Actions and layer-property mappings run whatever the shader binds. */
+  /** Actions, layer-property mappings and Learn run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.allTriggers().some(t => t.on === 'proximity') || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parseLayerTarget(c.target) !== null);
+    return !!this.record.actions?.length || this.isLearning() || this.allTriggers().some(t => t.on === 'proximity') || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parseLayerTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
   isAnimating(): boolean {
     if ((this.record.actions ?? []).some(a => a.enabled && a.trigger.on === 'beat')) return true;
+    // Learning with sound listens every frame.
+    if ((this.learnCb || this.learnTriggerCb) && (liveAudio.isOn() || audioReaderBank.live())) return true;
+    // Sound that fires actions keeps being listened to.
+    if ((this.record.actions ?? []).some(a => a.enabled && ((a.trigger.on === 'audio' && liveAudio.isOn()) || (a.trigger.on === 'reader' && audioReaderBank.live())))) return true;
     // Held, or every N while held: keeps firing without anything else moving.
     if (this.allTriggers().some(t => firesWhileHeld(t.fire) && this.triggerInput(t).gate)) return true;
     // Tracking hands: landmarks arrive about 30 times a second, and smoothing and springs ease between them.
@@ -953,6 +980,7 @@ class PlayEngine implements InputSource {
     return this.record.mappings.some(m => m.enabled && (
       m.source.kind === 'noise' ||
       ((m.source.kind === 'live' || (m.source.kind === 'trigger' && m.source.trigger.on === 'audio')) && liveAudio.isOn()) ||
+      ((m.source.kind === 'reader' || (m.source.kind === 'trigger' && m.source.trigger.on === 'reader')) && audioReaderBank.live()) ||
       (m.source.kind === 'trigger' && (m.source.trigger.on === 'beat' || (this.triggerStates.get(m.id)?.stage ?? 'idle') !== 'idle'))
     ));
   }
@@ -1013,6 +1041,56 @@ class PlayEngine implements InputSource {
     this.learnTriggerCb = null;
     this.handLearnFrom = null;
     this.handLearnHeld = null;
+    this.audioLearn = null;
+  }
+
+  // ── Learn with sound ──────────────────────────────────────────────────────
+
+  /** Learn: the lowest each band and reader read since Learn began, and frames seen. */
+  private audioLearn: { low: Map<string, number>; frames: number; pick: { key: string; peak: number; frames: number } | null } | null = null;
+
+  /**
+   * Learn with sound: play something, and the band or reader that rose most
+   * (readers first, as the more specific) becomes the source, or the trigger
+   * at 60% of the way up its rise (followed to its peak, up to a few frames).
+   * Level is left out: it moves with everything.
+   */
+  private learnAudio(): void {
+    const live = liveAudio.isOn();
+    const readers = audioReaderBank.has();
+    if (!live && !readers) return;
+    if (live) liveAudio.update(this.frame);
+    if (readers) audioReaderBank.update();
+    const now = new Map<string, number>();
+    for (const r of audioReaderBank.readers()) { const v = audioReaderBank.value(r.id); if (v !== null) now.set(`reader:${r.id}`, v); }
+    if (live) for (const b of ['bass', 'lowmid', 'highmid', 'treble'] as const) now.set(`band:${b}`, liveAudio.value(b) ?? 0);
+    const st = this.audioLearn ?? (this.audioLearn = { low: new Map(), frames: 0, pick: null });
+    st.frames++;
+    if (!st.pick) for (const [k, v] of now) st.low.set(k, Math.min(st.low.get(k) ?? v, v));
+    // A few frames to find the quiet first.
+    if (st.frames < 6) return;
+    if (!st.pick) {
+      const key = pickLearned([...now].map(([k, v]) => ({ key: k, low: st.low.get(k) ?? v, now: v })));
+      if (!key) return;
+      st.pick = { key, peak: now.get(key) ?? 0, frames: 0 };
+      return;
+    }
+    // Follow the rise to its peak (it stops rising, or 8 frames), so the trigger's threshold sits under the hit, not under its first frame.
+    const p = st.pick;
+    const cur = now.get(p.key) ?? 0;
+    p.frames++;
+    if (cur > p.peak + 1e-3 && p.frames < 8) { p.peak = cur; return; }
+    const pick = p.key;
+    const v = Math.max(p.peak, cur), low = st.low.get(pick) ?? 0;
+    const threshold = Math.round(Math.max(0.05, Math.min(0.95, low + (v - low) * 0.6)) * 100) / 100;
+    const [kind, id] = [pick.slice(0, pick.indexOf(':')), pick.slice(pick.indexOf(':') + 1)];
+    if (this.learnTriggerCb) {
+      this.finishLearnTrigger(kind === 'reader'
+        ? { on: 'reader', readerId: id, threshold, hysteresis: Math.round(Math.min(threshold, 0.1) * 100) / 100 }
+        : { on: 'audio', band: id as LiveBand, threshold });
+    } else {
+      this.finishLearn(kind === 'reader' ? { kind: 'reader', readerId: id } : { kind: 'live', band: id as LiveBand, gain: 1 });
+    }
   }
 
   private finishLearn(source: PlaySource): void {

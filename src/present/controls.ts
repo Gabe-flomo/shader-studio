@@ -34,8 +34,13 @@ export function mappingWords(m: PlayMapping, play: PlayRecord): string {
     case 'clock': return `Clock ${s.bpm} BPM`;
     case 'noise': return `Noise ${round(s.rate)}/s`;
     case 'midi': return `MIDI ${sourceLabel(s)}`;
-    case 'trigger': return triggerLabel(s.trigger, play.layers);
+    case 'trigger': {
+      const t = s.trigger;
+      if (t.on === 'reader') return `Sound ${play.audioReaders?.readers.find(r => r.id === t.readerId)?.name ?? 'reader'} hit`;
+      return triggerLabel(t, play.layers);
+    }
     case 'live': return `Sound ${s.band === 'level' ? 'level' : s.band}`;
+    case 'reader': return `Sound ${play.audioReaders?.readers.find(r => r.id === s.readerId)?.name ?? 'reader'}`;
     default: return sourceLabel(s, play.controls, play.layers);
   }
 }
@@ -55,7 +60,7 @@ export function mappingsByControl(play: PlayRecord): Map<string, ControlMappings
     if (!e.words.includes(w)) e.words.push(w);
     const s = m.source;
     if (s.kind === 'midi' || (s.kind === 'trigger' && s.trigger.on === 'note')) e.needs.add('midi');
-    if (s.kind === 'live' || (s.kind === 'trigger' && s.trigger.on === 'audio')) e.needs.add('audio');
+    if (s.kind === 'live' || s.kind === 'reader' || (s.kind === 'trigger' && (s.trigger.on === 'audio' || s.trigger.on === 'reader'))) e.needs.add('audio');
     if (s.kind === 'key' || (s.kind === 'trigger' && s.trigger.on === 'key')) e.needs.add('keys');
     out.set(m.controlId, e);
   }

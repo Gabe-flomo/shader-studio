@@ -90,7 +90,45 @@ export type TriggerOn =
    * picture heights between their centres. Once open, it closes only past
    * `distance ± margin`, so a hand hovering at the edge doesn't flicker.
    */
-  | { on: 'proximity'; a: AnchorRef; b: AnchorRef; when: 'closer' | 'farther'; distance: number; margin: number };
+  | { on: 'proximity'; a: AnchorRef; b: AnchorRef; when: 'closer' | 'farther'; distance: number; margin: number }
+  /**
+   * An audio reader (see AudioReader) going above `threshold` (0..1). Once
+   * open, it lets go only below `threshold - hysteresis`, so a ringing kick
+   * doesn't fire twice.
+   */
+  | { on: 'reader'; readerId: string; threshold: number; hysteresis: number };
+
+// ── Audio readers (dots on the live spectrum, play/audioReaders.ts) ─────────
+
+/**
+ * A point on the spectrum that reads one frequency band as 0..1: a kick at
+ * 60 Hz, a hi-hat at 8 kHz. Each is a source (`reader`) and a trigger.
+ */
+export interface AudioReader {
+  id: string;
+  /** Shown as "Reader · <name>". Defaults to the frequency ("120 Hz"). */
+  name: string;
+  /** Centre frequency, 20..20000 Hz. */
+  hz: number;
+  /** Bandwidth in octaves (like Q): 1/3 is a third of an octave around `hz`. */
+  width: number;
+  /** dB: how much quieter than the reference the band may be and still read 1 (the dot's height on the spectrum). */
+  gain: number;
+  /** Smoothing: ms to rise and to fall. */
+  attack: number;
+  release: number;
+  colour: [number, number, number];
+}
+
+/**
+ * The readers of a setup and what they listen to: `input` '' is the live
+ * input (mic, interface, virtual cable), else the id of an Audio Input node
+ * in the graph (its song).
+ */
+export interface PlayAudioReaders {
+  input: string;
+  readers: AudioReader[];
+}
 
 // ── Hands (hand tracking, docs/hand-tracking.md) ────────────────────────────
 
@@ -222,6 +260,8 @@ export type PlaySource =
   | { kind: 'osc'; address: string; arg: number; min: number; max: number }
   /** A band of the live audio input (a mic, an interface, or Ableton through a virtual cable), times `gain`. */
   | { kind: 'live'; band: LiveAudioBand; gain: number }
+  /** An audio reader's level, 0..1 (see AudioReader). */
+  | { kind: 'reader'; readerId: string }
   /** Random motion on the graph clock. `seed` makes two noise rows differ. `steps` (stepped only) posterises the value, 0 = no snapping. */
   | { kind: 'noise'; type: NoiseType; rate: number; seed: number; steps: number }
   /** A trigger (key, note, click, OSC message, beat) driving an envelope, toggle, step or random value. */
@@ -525,6 +565,8 @@ export interface PlayRecord {
   takes?: PlayTake[];
   /** Hand tracking settings (smoothing, the skeleton overlay). Absent = DEFAULT_HANDS. */
   hands?: PlayHands;
+  /** Audio readers: dots on the live spectrum, each a source and a trigger. Absent = none. */
+  audioReaders?: PlayAudioReaders;
 }
 
 // ── Takes: a performance recorded as keyframes ──────────────────────────────
@@ -537,12 +579,13 @@ export interface PlayRecord {
  *   mouse    the shader's u_mouse (the Mouse node), 0..1 of the picture
  *   pointer  the pointer over the layers (x, y, over, down), which Script layers,
  *            particles and brushes read
+ *   reader   an audio reader's level (its id), shown on the Audio readers panel
  */
-export type TakeTrackKind = 'control' | 'bus' | 'audio' | 'mouse' | 'pointer';
+export type TakeTrackKind = 'control' | 'bus' | 'audio' | 'mouse' | 'pointer' | 'reader';
 
 export interface TakeTrack {
   kind: TakeTrackKind;
-  /** control: the control id; bus: the channel key; audio: the uniform name; mouse / pointer: x, y, over or down. */
+  /** control: the control id; bus: the channel key; audio: the uniform name; mouse / pointer: x, y, over or down; reader: the reader id. */
   id: string;
   /** control only: what it drives (a param path or a layer property). */
   target?: string;
@@ -786,6 +829,12 @@ function parseTriggerOn(raw: unknown): TriggerOn | null {
         distance: Math.max(0, Math.min(4, num(t.distance, 0.15))), margin: Math.max(0, Math.min(1, num(t.margin, 0.03))),
       };
     }
+    case 'reader': {
+      const readerId = str(t.readerId);
+      if (!readerId) return null;
+      const threshold = Math.max(0.01, Math.min(0.99, num(t.threshold, 0.6)));
+      return { on: 'reader', readerId, threshold, hysteresis: Math.max(0, Math.min(threshold, num(t.hysteresis, 0.1))) };
+    }
     default: return null;
   }
 }
@@ -806,6 +855,39 @@ function parseFire(v: unknown): FireSpec | null {
   const unit = f.unit === 'seconds' ? 'seconds' : 'frames';
   const every = unit === 'frames' ? Math.max(1, Math.min(600, Math.round(num(f.every, 3)))) : Math.max(0.01, Math.min(60, num(f.every, 0.25)));
   return { mode, every, unit };
+}
+
+/** Readers a setup keeps. */
+export const AUDIO_READERS_MAX = 16;
+
+/** The readers from a file, or undefined when there are none and no song is picked (so old files stay as they were). */
+export function parseAudioReaders(raw: unknown): PlayAudioReaders | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const a = raw as Record<string, unknown>;
+  const input = typeof a.input === 'string' ? a.input.slice(0, 80) : '';
+  const readers: AudioReader[] = [];
+  const seen = new Set<string>();
+  for (const x of Array.isArray(a.readers) ? a.readers : []) {
+    if (readers.length >= AUDIO_READERS_MAX) break;
+    if (!x || typeof x !== 'object') continue;
+    const o = x as Record<string, unknown>;
+    const id = str(o.id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const hz = Math.max(20, Math.min(20000, num(o.hz, 120)));
+    readers.push({
+      id: id.slice(0, 80),
+      name: (typeof o.name === 'string' && o.name.trim() ? o.name : `${Math.round(hz)} Hz`).slice(0, 60),
+      hz,
+      width: Math.max(0.05, Math.min(4, num(o.width, 1 / 3))),
+      gain: Math.max(-20, Math.min(80, num(o.gain, 20))),
+      attack: Math.max(0, Math.min(2000, num(o.attack, 5))),
+      release: Math.max(0, Math.min(5000, num(o.release, 150))),
+      colour: rgb(o.colour, [1, 0.6, 0.3]),
+    });
+  }
+  if (!readers.length && !input) return undefined;
+  return { input, readers };
 }
 
 const HAND_READS: ReadonlySet<string> = new Set<HandRead>(['point', 'palm', 'pinch', 'open', 'roll', 'size', 'present', 'spread', 'gesture']);
@@ -901,6 +983,10 @@ function parseSource(raw: unknown): PlaySource | null {
     case 'live': {
       const band = LIVE_BANDS_SET.has(s.band as string) ? (s.band as LiveAudioBand) : 'level';
       return { kind: 'live', band, gain: Math.max(0.1, Math.min(10, num(s.gain, 1))) };
+    }
+    case 'reader': {
+      const readerId = str(s.readerId);
+      return readerId ? { kind: 'reader', readerId } : null;
     }
     case 'noise': {
       const type = s.type === 'drift' || s.type === 'random' || s.type === 'stepped' ? s.type : 'smooth';
@@ -1031,9 +1117,13 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   // A trigger or sensor on a layer needs that layer too.
   const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId);
   const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref);
-  const triggerOk = (t: TriggerSpec) => t.on === 'zone' ? layerIds.has(t.layerId) : t.on === 'proximity' ? anchorOk(t.a) && anchorOk(t.b) : true;
+  // Readers first: a reader source or trigger needs its reader.
+  const audioReaders = parseAudioReaders(r.audioReaders);
+  const readerIds = new Set(audioReaders?.readers.map(x => x.id) ?? []);
+  const triggerOk = (t: TriggerSpec) => t.on === 'zone' ? layerIds.has(t.layerId) : t.on === 'proximity' ? anchorOk(t.a) && anchorOk(t.b) : t.on === 'reader' ? readerIds.has(t.readerId) : true;
   const keptMappings = mappings.filter(m => keptIds.has(m.controlId)
     && (m.source.kind !== 'control' || keptIds.has(m.source.controlId))
+    && (m.source.kind !== 'reader' || readerIds.has(m.source.readerId))
     && layerOk(m.source)
     && (m.source.kind !== 'trigger' || triggerOk(m.source.trigger)));
   let out: PlayRecord = { version: PLAY_VERSION, controls: keptControls, mappings: keptMappings, layers };
@@ -1066,6 +1156,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   if (disp) out.display = disp;
   const hands = parseHands(r.hands);
   if (hands) out.hands = hands;
+  if (audioReaders) out.audioReaders = audioReaders;
   if (Array.isArray(r.takes)) {
     const seenT = new Set<string>();
     const takes: PlayTake[] = [];
@@ -1078,7 +1169,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   return out;
 }
 
-const TAKE_TRACK_KINDS: ReadonlySet<string> = new Set<TakeTrackKind>(['control', 'bus', 'audio', 'mouse', 'pointer']);
+const TAKE_TRACK_KINDS: ReadonlySet<string> = new Set<TakeTrackKind>(['control', 'bus', 'audio', 'mouse', 'pointer', 'reader']);
 const KEYS_TEXT = /^-?[0-9.e+-]*(,-?[0-9.e+-]+)*$/;
 
 /** One take, or null when it is malformed or too big. Tracks and events that don't parse are dropped. */
@@ -1150,5 +1241,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && !play.hands && (!play.display || isDefaultDisplay(play.display)));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.midiFile && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && (!play.display || isDefaultDisplay(play.display)));
 }

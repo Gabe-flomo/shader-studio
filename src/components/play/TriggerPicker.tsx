@@ -1,9 +1,10 @@
 /**
  * TriggerPicker — what fires a trigger: a key, a click, a beat, an audio hit,
  * a MIDI note, an OSC message, a shape (clicked, entered, filled), a hand
- * gesture, or two things coming close (proximity). Used by trigger mappings
- * and by actions. Keys, notes, OSC addresses and clicks are usually set with
- * Learn; the fields here fine-tune them.
+ * gesture, two things coming close (proximity), or an audio reader crossing
+ * a level. Used by trigger mappings and by actions. Keys, notes, OSC
+ * addresses, clicks and sounds are usually set with Learn; the fields here
+ * fine-tune them.
  *
  * FirePicker is the row under it: when the trigger fires (once, every frame
  * while held, every N frames or seconds, on release), with a hint when the
@@ -27,6 +28,12 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { LiveAudioChip, OscStatusChip } from './chips';
 import { HandsChip } from './HandsChip';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { audioReaderBank } from '../../lib/audioReaderBank';
+import { useReadersPanel } from './readersPanelUi';
+import { Button } from '../ui/Button';
+import { ReaderMeter } from './AudioReadersPanel';
+import type { AudioReader } from '../../types/play';
 
 export interface TriggerLayerRef { id: string; label: string; kind: string }
 
@@ -40,9 +47,10 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
   const tk = useTokens();
   const hint = (text: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{text}</span>;
   const shapes = layers.filter(l => l.kind === 'shape');
+  const readers = useNodeGraphStore(s => s.play.audioReaders?.readers) ?? NO_READERS;
   return (
     <>
-      <Select ariaLabel="Trigger" value={t.on} options={TRIGGER_KINDS} onChange={v => onChange(triggerFromKind(v as TriggerSpec['on'], t, layers))} height={26} />
+      <Select ariaLabel="Trigger" value={t.on} options={TRIGGER_KINDS} onChange={v => onChange(triggerFromKind(v as TriggerSpec['on'], t, layers, readers[0]?.id ?? ''))} height={26} />
       {t.on === 'key' && <span style={{ height: 26, padding: '0 8px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: tk.bg.field, font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{keyName(t.code)}</span>}
       {t.on === 'note' && <>
         <NumberInput value={t.note} min={-1} max={127} step={1} title="Note number, -1 for any note" onCommit={n => onChange({ ...t, note: Math.max(-1, Math.min(127, Math.round(n))) })} style={{ ...numStyle, width: 44 }} />
@@ -83,8 +91,79 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
         <HandsChip settings={false} />
       </>}
       {t.on === 'proximity' && <ProximityFields trigger={t} layers={layers} onChange={onChange} />}
+      {t.on === 'reader' && <ReaderFields trigger={t} readers={readers} onChange={onChange} />}
       {(t.on === 'key' || t.on === 'note' || t.on === 'osc' || t.on === 'mouse') && hint(`${triggerLabel(t)} · Learn to change`)}
     </>
+  );
+}
+
+const NO_READERS: AudioReader[] = [];
+
+/** An audio reader trigger: which reader, the level it fires at, how far it falls before it can fire again, and the level now. */
+function ReaderFields({ trigger: t, readers, onChange }: {
+  trigger: Extract<TriggerSpec, { on: 'reader' }>;
+  readers: readonly AudioReader[];
+  onChange: (t: TriggerSpec) => void;
+}) {
+  const tk = useTokens();
+  const r = readers.find(x => x.id === t.readerId);
+  const [now, setNow] = useState<{ v: number | null; on: boolean }>({ v: null, on: false });
+  useEffect(() => {
+    let raf = 0, last = 0;
+    const tick = (ms: number) => {
+      raf = requestAnimationFrame(tick);
+      if (ms - last < 50) return;
+      last = ms;
+      audioReaderBank.update();
+      const x = audioReaderBank.value(t.readerId);
+      const v = x === null ? null : Math.round(x * 100) / 100;
+      const on = playEngine.isHeld(t);
+      setNow(p => (p.v === v && p.on === on ? p : { v, on }));
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [t]);
+  const open = () => useReadersPanel.getState().show({ focus: t.readerId });
+  const cap: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 58, flexShrink: 0 };
+  const line: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 };
+  const colour = r ? `rgb(${r.colour.map(c => Math.round(c * 255)).join(',')})` : tk.text.disabled;
+  if (!readers.length) {
+    return (
+      <div style={{ order: 1, flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2, color: tk.text.muted, font: `11.5px/1.4 ${fontFamily.ui}` }}>
+        No readers yet. Place one on the live spectrum first.
+        <Button size="sm" icon="wave" onClick={open}>Spectrum readers…</Button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ order: 1, flexBasis: '100%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2, padding: '8px 10px', borderRadius: radius.md, background: alpha(tk.text.primary, 0.03), boxShadow: `inset 0 0 0 1px ${tk.border.subtle}` }}>
+      <div style={line}>
+        <span style={cap}>Reader</span>
+        <Select ariaLabel="Reader" value={r ? r.id : ''} options={[...(r ? [] : [{ value: '', label: 'Pick one' }]), ...readers.map(x => ({ value: x.id, label: x.name }))]} onChange={readerId => onChange({ ...t, readerId })} height={26} style={{ maxWidth: 170 }} />
+        <Button size="sm" variant="ghost" icon="wave" onClick={open}>Spectrum</Button>
+      </div>
+      <div style={{ ...line, flexWrap: 'nowrap' }}>
+        <span style={cap} title="Fires when the reader goes above this (0–1)">Fires at</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <RulerSlider ariaLabel="Threshold" value={t.threshold} min={0.01} max={0.99} step={0.01} defaultValue={0.6} onChange={threshold => onChange({ ...t, threshold, hysteresis: Math.min(t.hysteresis, threshold) })} />
+        </div>
+      </div>
+      <div style={{ ...line, flexWrap: 'nowrap' }}>
+        <span style={cap}>Now</span>
+        <ReaderMeter level={now.v} thresholds={[t.threshold, Math.max(0, t.threshold - t.hysteresis)]} colour={colour} />
+        <span style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, width: 34, textAlign: 'right', flexShrink: 0 }}>{now.v === null ? '–' : now.v.toFixed(2)}</span>
+      </div>
+      <div style={{ ...line, justifyContent: 'space-between' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: now.on ? tk.accent.text : tk.text.muted, font: `500 11.5px ${fontFamily.ui}` }}>
+          <span style={{ width: 7, height: 7, borderRadius: 4, background: now.on ? tk.accent.base : tk.text.disabled }} />
+          {now.v === null ? 'No sound coming in' : now.on ? 'Above: firing' : 'Below'}
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }} title="It lets go only this far below the threshold, so a ringing sound doesn’t fire twice">Hysteresis</span>
+          <NumberInput value={t.hysteresis} min={0} max={t.threshold} step={0.01} title="How far below the threshold it has to fall before it can fire again (0–1)" onCommit={n => onChange({ ...t, hysteresis: Math.max(0, Math.min(t.threshold, n)) })} style={{ width: 44, height: 22, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}`, textAlign: 'center' }} />
+        </span>
+      </div>
+    </div>
   );
 }
 
