@@ -194,3 +194,28 @@ Data layer, mapping sources) works the same whichever it is.
      "needs the network") or freeze the last window.
    - This is the plugin plan's `defineMapping` / `defineFeed` idea, done for
      data.
+
+## 9. The Data node's "Use as" modes (added 26 Sep 2026)
+
+The same columns can be read three ways; the node's editor shows the settings
+for the chosen mode.
+
+1. **Values:** **Index** (with Blend) picks a row, and its values come out as
+   float or vec2/vec3/vec4.
+2. **Points → SDF:** a vec2 (or vec3) column group is a point cloud, read from
+   the data texture in a loop inside the shader.
+   - **Outputs:** **Distance** to the nearest point (an ordinary SDF: Glow,
+     Fill, Smooth Union), **Nearest index** (to colour each point from its own
+     row), and **Second-nearest distance** (for Voronoi-style cells).
+   - **Options:** a radius from a column or a slider, a smooth blend (smin),
+     and **Path** mode, which joins the rows in order as a polyline SDF.
+   - **Cost:** it's per pixel, so the point count is capped and the editor says
+     where.
+3. **Keyframes:** rows are keyframes.
+   - **Timing:** from a time column, or evenly spaced over a Duration.
+   - **Time input:** the clock by default, or wired or mapped.
+   - **Interpolation:** None (step), Linear, Smooth, Ease in, Ease out, Ease
+     in-out, Catmull-Rom (smooth through every point), and the app's keyframe
+     curve shapes, plus an optional Smoothing amount.
+   - **Ends:** Loop, Ping-pong or Hold.
+   - **Outputs:** the value (float/vecN), **Row** and **Progress**.
