@@ -24,9 +24,14 @@ export function CompareHandle() {
   const tab = usePlayUi(s => s.tab);
   const performing = usePlayUi(s => s.performing);
   const active = useNodeGraphStore(s => fnActive(renderableFinish(s.play.finish)));
+  // A mapping moves the wipe on its own: the divider here would show where it rests, not where it is.
+  const driven = useNodeGraphStore(s => {
+    const ids = new Set(s.play.controls.filter(c => c.target === 'finish:compare::pos' || c.target === 'finish:compare::angle').map(c => c.id));
+    return ids.size > 0 && s.play.mappings.some(m => m.enabled && ids.has(m.controlId));
+  });
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef(false);
-  if (!compare?.on || !performing || !active || tab !== 'finish') return null;
+  if (!compare?.on || !performing || !active || tab !== 'finish' || driven) return null;
   const set = (patch: Record<string, number>) => useNodeGraphStore.getState().setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, FINISH_COMPARE_ID, patch) }));
   const box = () => ref.current?.parentElement?.getBoundingClientRect();
   const at = (clientX: number, clientY: number) => {
