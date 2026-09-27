@@ -5,6 +5,7 @@ import { fontFamily } from '../../theme/tokens';
 import { Icon } from './Icon';
 import { toneStyle } from './tone';
 import { useToastStore, type Toast } from './toastStore';
+import { useActivityStore } from './activityStore';
 import { portalGuard } from './portalGuard';
 
 const AUTO_DISMISS_MS = 5000;
@@ -62,7 +63,7 @@ function ToastCard({ toast }: { toast: Toast }) {
           <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
             {toast.action && (
               <button type="button" style={{ ...btn, color: tk.accent.text }}
-                onClick={() => { toast.action?.onClick(); dismiss(toast.id); }}>{toast.action.label}</button>
+                onClick={() => { toast.action?.onClick(); if (toast.logId) useActivityStore.getState().markActionUsed(toast.logId); dismiss(toast.id); }}>{toast.action.label}</button>
             )}
             {toast.details && (
               <button type="button" style={{ ...btn, color: tk.text.muted }}

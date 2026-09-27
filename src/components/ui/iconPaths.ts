@@ -32,6 +32,7 @@ export const ICONS = {
   wave: { sw: 1.5, body: "<path d='M1.5 12.5h13'/><path d='M2 12c1.5 0 1.8-6 3.2-6s1.6 4 3 4 1.4-7.5 3-7.5 1.5 9.5 3 9.5'/>" },
   popout: { sw: 1.5, body: "<rect x='2' y='4' width='9' height='9.5' rx='1.8'/><path d='M8.5 2h5.5v5.5M14 2l-5.5 5.5'/>" },
   reset: { sw: 1.5, body: "<path d='M3.2 8a4.8 4.8 0 1 0 1.4-3.4'/><path d='M3.2 3v2.6h2.6'/>" },
+  history: { sw: 1.5, body: "<path d='M2.9 8a5.1 5.1 0 1 0 1.5-3.6'/><path d='M2.9 2.6v2.8h2.8'/><path d='M8 5.3V8l1.9 1.3'/>" },
   copy: { sw: 1.5, body: "<rect x='5.5' y='5.5' width='8' height='8' rx='1.8'/><path d='M10.5 5.5V4.3c0-1-.8-1.8-1.8-1.8H4.3c-1 0-1.8.8-1.8 1.8v4.4c0 1 .8 1.8 1.8 1.8h1.2'/>" },
   close: { sw: 1.5, body: "<path d='M4.5 4.5l7 7M11.5 4.5l-7 7'/>" },
   edit: { sw: 1.5, body: "<path d='M10.4 2.9l2.7 2.7-7.6 7.6-3.2.5.5-3.2z'/>" },

@@ -89,6 +89,7 @@ import { audioEngine } from '../lib/audioEngine';
 import { videoEngine } from '../lib/videoEngine';
 import { IdGenerator } from './managers/IdGenerator';
 import { UndoManager } from './managers/UndoManager';
+import { nodeName, nodesPhrase } from './historyLabels';
 import { PresetManager } from './managers/PresetManager';
 import { CompilationService } from './managers/CompilationService';
 
@@ -384,7 +385,7 @@ let _historyParamPending = false;
 
 // ── Undo history ──────────────────────────────────────────────────────────────
 // Stored outside Zustand state so pushing snapshots never triggers a re-render.
-const undoManager = new UndoManager();
+export const undoManager = new UndoManager();
 
 /** Shallow-deep equality for probe readouts: same output keys, same numbers. */
 function probeValuesEqual(a: Record<string, number[]>, b: Record<string, number[]>): boolean {
@@ -753,7 +754,7 @@ interface NodeGraphState {
    * one undo step, Play setup and saved identity kept, loose groups pruned of
    * members that no longer exist.
    */
-  setNodesRewritten: (nodes: GraphNode[]) => void;
+  setNodesRewritten: (nodes: GraphNode[], label?: string) => void;
 
   /** Change the vector type of a vectorizable math node (sin, cos, pow, etc.).
    *  Updates params.outputType plus the primary input and output socket types. */
@@ -783,6 +784,9 @@ interface NodeGraphState {
   renameLooseGroup: (groupId: string, label: string) => void;
   undo: () => void;
   redo: () => void;
+  /** Undo (or redo) several steps in one go — one render and compile. Returns how many were taken. */
+  undoSteps: (count: number) => number;
+  redoSteps: (count: number) => number;
   /**
    * Compile the graph into the preview's shader. `force` (Rebuild) starts from scratch: the
    * per-node definition cache and user nodes' compiled definitions are built again first, and
@@ -2131,7 +2135,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   duplicateGroup: (groupId) => {
     const { nodes, activeGroupPath } = get();
-    undoManager.push(nodes);
+    undoManager.push(nodes, { label: `Duplicated ${nodeName(nodeInScope(get(), groupId))}`, nodeIds: [groupId] });
     const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
     const groupNode = activeNodes.find(n => n.id === groupId);
     if (!groupNode || groupNode.type !== 'group') return null;
@@ -2154,7 +2158,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   duplicateNode: (nodeId) => {
     const { nodes, activeGroupPath } = get();
-    undoManager.push(nodes);
+    undoManager.push(nodes, { label: `Duplicated ${nodeName(nodeInScope(get(), nodeId))}`, nodeIds: [nodeId] });
     const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
     const node = activeNodes.find(n => n.id === nodeId);
     if (!node) return null;
@@ -2176,7 +2180,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   duplicateNodes: (nodeIds) => {
     const { nodes, activeGroupPath } = get();
-    undoManager.push(nodes);
+    undoManager.push(nodes, { label: `Duplicated ${nodeIds.length === 1 ? nodeName(nodeInScope(get(), nodeIds[0])) : `${nodeIds.length} nodes`}`, nodeIds });
     const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
     const newNodes = nodeIds.flatMap(nodeId => {
       const node = activeNodes.find(n => n.id === nodeId);
@@ -2236,7 +2240,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Reject if any output nodes are in the selection
     if (selectedNodes.some(n => n.type === 'output' || n.type === 'vec4Output')) return null;
 
-    undoManager.push(nodes);
+    undoManager.push(nodes, { label: `Grouped ${nodesPhrase(selectedNodes)}`, nodeIds });
 
     // ── Discover dangling connections ────────────────────────────────────────
     const inputPorts: import('../types/nodeGraph').GroupInputPort[] = [];
@@ -2486,7 +2490,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Iterated groups are ungrouped as a single-pass (iterations=1 equivalent).
     // The for-loop carry logic is discarded; connections from inputPorts are still repaired correctly.
 
-    undoManager.push(nodes);
+    undoManager.push(nodes, { label: `Ungrouped ${nodeName(groupNode)}`, nodeIds: [groupId] });
 
     if (!subgraph) {
       const newWorking = workingNodes.filter(n => n.id !== groupId);
@@ -2605,7 +2609,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const validIds = nodeIds.filter(id => activeNodes.some(n => n.id === id));
     if (validIds.length < 2) return null;
 
-    undoManager.push(nodes);
+    undoManager.push(nodes, { label: `Boxed ${validIds.length} nodes together`, nodeIds: validIds });
     const members = activeNodes.filter(n => validIds.includes(n.id));
     const xs = members.map(n => n.position.x), ys = members.map(n => n.position.y);
     const newGroup: import('../types/nodeGraph').LooseGroup = {
@@ -2625,7 +2629,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const { nodes, looseGroups, activeGroupPath } = get();
     const activeLoose = getActiveLooseGroups(nodes, looseGroups, activeGroupPath);
     if (!activeLoose.some(g => g.id === groupId)) return;
-    undoManager.push(nodes);
+    undoManager.push(nodes, { label: 'Removed a group box' });
     const { nodes: newNodes, looseGroups: newTopLoose } = setActiveLooseGroups(nodes, looseGroups, activeGroupPath, activeLoose.filter(g => g.id !== groupId));
     set({ nodes: newNodes, looseGroups: newTopLoose });
   },
@@ -2687,7 +2691,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   placeSubgraphAsGroup: (label, subgraph, position, description) => {
     const { nodes } = get();
     const preset = { label, subgraph, description };
-    undoManager.push(nodes);
+    undoManager.push(nodes, { label: `Added ${label}` });
 
     // Re-ID all subgraph nodes to avoid collisions. A preset saved a while
     // ago is migrated like a loaded graph (e.g. Grid's Columns units).
@@ -2852,7 +2856,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const def = getNodeDefinition(newType);
     if (!def) return;
 
-    undoManager.push(nodes);
+    undoManager.push(nodes, { label: `Swapped ${nodeName(oldNode)} for ${def.label}`, nodeIds: [nodeId] });
     const newId = idGenerator.next();
 
     // Build new inputs, carrying over connections where types are compatible
@@ -2946,25 +2950,38 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
-  undo: () => {
-    if (get().scratch) return;
-    const prev = undoManager.pop();
-    if (!prev) return;
-    undoManager.pushRedo(get().nodes);
+  undo: () => { get().undoSteps(1); },
+  redo: () => { get().redoSteps(1); },
+
+  undoSteps: (count) => {
+    if (get().scratch) return 0;
+    let nodes = get().nodes, n = 0;
+    for (; n < count; n++) {
+      const prev = undoManager.undo(nodes);
+      if (!prev) break;
+      nodes = prev;
+    }
+    if (!n) return 0;
     // Restore counter so new nodes after undo don't collide
-    idGenerator.syncFromGraph(prev);
-    set({ nodes: prev, nodeProbeValues: null });
+    idGenerator.syncFromGraph(nodes);
+    set({ nodes, nodeProbeValues: null });
     get().compile();
+    return n;
   },
 
-  redo: () => {
-    if (get().scratch) return;
-    const next = undoManager.popRedo();
-    if (!next) return;
-    undoManager.pushUndo(get().nodes);
-    idGenerator.syncFromGraph(next);
-    set({ nodes: next, nodeProbeValues: null });
+  redoSteps: (count) => {
+    if (get().scratch) return 0;
+    let nodes = get().nodes, n = 0;
+    for (; n < count; n++) {
+      const next = undoManager.redo(nodes);
+      if (!next) break;
+      nodes = next;
+    }
+    if (!n) return 0;
+    idGenerator.syncFromGraph(nodes);
+    set({ nodes, nodeProbeValues: null });
     get().compile();
+    return n;
   },
 
   addNode: (type, position, overrideParams?) => {
@@ -2989,7 +3006,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             .then(choice => {
               if (!choice) return;
               if (choice === 'clear') {
-                undoManager.push(get().nodes);
+                undoManager.push(get().nodes, { label: `Cleared ${twoD.length === 1 ? 'a 2D node' : `${twoD.length} 2D nodes`} for a 3D scene` });
                 const gone = new Set(twoD.map(n => n.id));
                 set({ nodes: get().nodes.filter(n => !gone.has(n.id)).map(n => ({
                   ...n,
@@ -3011,7 +3028,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         ? planSceneGroupAdd(get().nodes, position)
         : smartDef ? planSmart3DAdd(type, smartDef, get().nodes, position) : { kind: 'none' as const };
       if (smartDef && plan.kind === 'wrap-scene') {
-        undoManager.push(get().nodes);
+        undoManager.push(get().nodes, { label: `Added ${type === 'sceneGroup' ? 'a Scene Group' : smartDef.label}` });
         const nextId = () => idGenerator.next();
         // A Scene Group from the palette brings its default Sphere; a shape is wrapped in one.
         const isGroup = type === 'sceneGroup';
@@ -3049,7 +3066,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return group.id;
       }
       if (smartDef && plan.kind === 'wire-lighting') {
-        undoManager.push(get().nodes);
+        undoManager.push(get().nodes, { label: `Added ${smartDef.label}` });
         const node = instantiateNode(idGenerator.next(), type, smartDef, position);
         for (const w of plan.wires) {
           if (node.inputs[w.input]) node.inputs[w.input] = { ...node.inputs[w.input], connection: { nodeId: plan.marchId, outputKey: w.fromKey } };
@@ -3080,7 +3097,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (type === 'marchLoopGroup' || type === 'giLitMarchGroup' || type === 'marchCamera') {
         // A working scene in one go: March Camera → Scene Group (Sphere) → loop,
         // with the loop's Color on the Output (a new scene takes it over).
-        undoManager.push(get().nodes);
+        undoManager.push(get().nodes, { label: 'Added a 3D scene' });
         const at = type === 'marchCamera'
           ? { camera: position, scene: { x: position.x + 440, y: position.y }, loop: { x: position.x + 880, y: position.y } }
           : { camera: { x: position.x - 880, y: position.y }, scene: { x: position.x - 440, y: position.y }, loop: position };
@@ -3096,7 +3113,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return type === 'marchCamera' ? rig.camera.id : rig.loop.id;
       }
       if (type === 'volumetricScene') {
-        undoManager.push(get().nodes);
+        undoManager.push(get().nodes, { label: 'Added a volumetric scene' });
         const rig = buildVolumetricRig(() => idGenerator.next(), position);
         let nodes = [...get().nodes, rig.camera, rig.scene, rig.loop, rig.colour];
         const output = graphOutput(get().nodes);
@@ -3116,7 +3133,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         const mlg = existingNodes.find(n => n.type === 'marchLoopGroup');
         if (cam && mlg) {
           // Wire to existing march setup
-          undoManager.push(existingNodes);
+          undoManager.push(existingNodes, { label: `Added ${getNodeDefinition('glass3d')?.label ?? 'Glass'}` });
           const def = getNodeDefinition('glass3d')!;
           const nodeId = idGenerator.next();
           const inputs: Record<string, InputSocket> = {};
@@ -3184,7 +3201,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       toast.info('Volumetric Scene goes on the top level', { message: 'Leave this group and add it there.' });
       return undefined;
     }
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: `Added ${typeof overrideParams?.label === 'string' && overrideParams.label ? overrideParams.label : getNodeDefinition(NODE_ALIASES[type]?.to ?? type)?.label ?? type}` });
     // A merged (aliased) type is created as its canonical node, with the alias's defaults.
     const alias = NODE_ALIASES[type];
     if (alias) {
@@ -3284,7 +3301,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   spawnGraph: (origin, nodeSpecs, edges) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: `Added ${getNodeDefinition(nodeSpecs[nodeSpecs.length - 1]?.type ?? '')?.label ?? 'nodes'}${nodeSpecs.length > 1 ? ` and ${nodeSpecs.length - 1} more` : ''}` });
     const assignedIds: string[] = [];
     const newNodes: GraphNode[] = [];
 
@@ -3347,7 +3364,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   removeNodes: (nodeIds) => {
-    undoManager.batch(get().nodes, () => { for (const id of nodeIds) get().removeNode(id); });
+    undoManager.batch(get().nodes, () => { for (const id of nodeIds) get().removeNode(id); }, { label: `Removed ${nodeIds.length === 1 ? nodeName(nodeInScope(get(), nodeIds[0])) : `${nodeIds.length} nodes`}`, nodeIds });
   },
 
   removeNode: (nodeId) => {
@@ -3372,7 +3389,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
           // desktop's existing convention rather than inventing a new one.
           if (sgNode.params?._groupOriginal && getNodeDefinitionFor(sgNode)?.anchored) return;
 
-          undoManager.push(nodes);
+          undoManager.push(nodes, { label: `Removed ${nodeName(sgNode)}`, nodeIds: [nodeId] });
           const newSgNodes = removeNodeFromList(activeNodes, nodeId);
           set(state => {
             const newTop = setActiveNodes(state.nodes, activeGroupPath, newSgNodes);
@@ -3388,7 +3405,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
     }
 
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: `Removed ${nodeName(nodes.find(n => n.id === nodeId))}`, nodeIds: [nodeId] });
     const deletedNode = nodes.find(n => n.id === nodeId);
 
     // Clean up video resources if this was a videoInput node
@@ -3407,7 +3424,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   updateNodePosition: (nodeId, position) => {
     // Called once per drag, on release (the card moves imperatively while
     // dragging — see NodeGraph/nodeDrag.ts), so one call is one undo step.
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: `Moved ${nodeName(nodeInScope(get(), nodeId))}`, nodeIds: [nodeId] });
     set(state => {
       // Fast path: top-level node
       if (state.nodes.some(n => n.id === nodeId)) {
@@ -3428,7 +3445,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if ('tint' in params) suggestTintedOutput(nodeId);
     // Push history once at the start of an edit burst (debounced — not on every keystroke/tick)
     if (!_historyParamPending) {
-      undoManager.push(get().nodes);
+      undoManager.push(get().nodes, { nodeIds: [nodeId] });  // named from the diff once the burst ends ("Changed Radius 0.3 → 0.42")
       _historyParamPending = true;
     }
     if (_historyParamTimer) clearTimeout(_historyParamTimer);
@@ -3588,7 +3605,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const patch = randomizedParams(node, def);
     if (Object.keys(patch).length === 0) return;
     // Its own undo step, even when clicked again right away (the param-edit burst would merge them)
-    undoManager.push(nodes);
+    undoManager.push(nodes, { label: `Randomised ${nodeName(node)}`, nodeIds: [nodeId] });
     _historyParamPending = true;
     get().updateNodeParams(nodeId, patch, { immediate: true });
     if (_historyParamTimer) { clearTimeout(_historyParamTimer); _historyParamTimer = null; }
@@ -3614,7 +3631,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   connectNodes: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: `Connected ${nodeName(nodeInScope(get(), sourceNodeId))} → ${nodeName(nodeInScope(get(), targetNodeId))}`, nodeIds: [sourceNodeId, targetNodeId] });
     {
       // Replacing a wire: keep the old one so the node's menu can offer it back.
       const st = get();
@@ -3679,7 +3696,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   disconnectInput: (nodeId, inputKey) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: `Disconnected ${nodeName(nodeInScope(get(), nodeInScope(get(), nodeId)?.inputs[inputKey]?.connection?.nodeId ?? ''))} → ${nodeName(nodeInScope(get(), nodeId))}`, nodeIds: [nodeId] });
     {
       const st = get();
       const prev = nodeInScope(st, nodeId)?.inputs[inputKey]?.connection;
@@ -3776,7 +3793,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       outputs: { ...def.outputs },
       params,
     };
-    undoManager.push(st.nodes);
+    undoManager.push(st.nodes, { label: `Converted ${nodeName(old)} to colour stops`, nodeIds: [nodeId] });
     set(state => {
       const swap = (nodes: GraphNode[]) => nodes.map(n2 => (n2.id === nodeId ? converted : n2));
       if (state.activeGroupPath.length === 0) return { nodes: swap(state.nodes) };
@@ -3798,7 +3815,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
     }
     if (targets.length === 0) return 0;
-    undoManager.push(st.nodes);
+    undoManager.push(st.nodes, { label: `Disconnected ${targets.length === 1 ? 'a wire' : `${targets.length} wires`} from ${nodeName(nodeInScope(st, nodeId))}`, nodeIds: [nodeId, ...targets.map(t => t.id)] });
     let history = st.wireHistory;
     for (const t of targets) history = rememberWire(history, { fromNodeId: nodeId, fromOutputKey: outputKey, toNodeId: t.id, toInputKey: t.key });
     const strip = (nodes: GraphNode[]) => nodes.map(n => {
@@ -3821,7 +3838,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   clearDisconnectedNotice: () => set({ disconnectedNotice: null }),
 
   setGroupOutput: (groupId, outputPortKey, fromNodeId, fromOutputKey) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Changed a group output', nodeIds: [groupId] });
     const { activeGroupPath } = get();
     set(state => {
       // Find the group node at any depth
@@ -3888,7 +3905,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addMarchLoopInput: (groupNodeId, key, type, label) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: `Added loop input ${label ?? key}`, nodeIds: [groupNodeId] });
     set(state => {
       const nodes = state.nodes.map(n => {
         if (n.id !== groupNodeId) return n;
@@ -3915,7 +3932,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   removeMarchLoopInput: (groupNodeId, key) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Removed a loop input', nodeIds: [groupNodeId] });
     set(state => {
       const nodes = state.nodes.map(n => {
         if (n.id !== groupNodeId) return n;
@@ -3971,7 +3988,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addGroupInput: (groupId, type, label) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Added a group input', nodeIds: [groupId] });
     const { activeGroupPath } = get();
     set(state => {
       return {
@@ -3999,7 +4016,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   // toNodeId/toInputKey as a display-only "primary target" record (legacy
   // field, no longer read by the compiler for plain groups).
   rerouteGroupInput: (groupId, portKey, toNodeId, toInputKey) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Rerouted a group input', nodeIds: [groupId] });
     const { activeGroupPath } = get();
     set(state => {
       return {
@@ -4035,7 +4052,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   removeGroupInputPort: (groupId, portKey) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Removed a group input', nodeIds: [groupId] });
     const { activeGroupPath } = get();
     set(state => {
       return {
@@ -4059,7 +4076,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   exposeGroupInput: (groupId, toNodeId, toInputKey, type, label) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Exposed an input on the group', nodeIds: [groupId] });
     const { activeGroupPath } = get();
     set(state => ({
       nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
@@ -4092,7 +4109,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addGroupInputWithSource: (groupId, sourceNodeId, sourceOutputKey, type, label) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Added a group input', nodeIds: [groupId] });
     const { activeGroupPath } = get();
     set(state => ({
       nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
@@ -4114,7 +4131,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   exposeGroupOutput: (groupId, fromNodeId, fromOutputKey, type, label) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Exposed an output on the group', nodeIds: [groupId] });
     const { activeGroupPath } = get();
     set(state => ({
       nodes: updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
@@ -4136,7 +4153,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addGroupOutput: (groupId, type = 'float', label) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Added a group output', nodeIds: [groupId] });
     const { activeGroupPath } = get();
     set(state => {
       return {
@@ -4157,7 +4174,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   removeGroupOutput: (groupId, portKey) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Removed a group output', nodeIds: [groupId] });
     const { activeGroupPath } = get();
     set(state => {
       const newNodes = updateNodeInTree(state.nodes, groupId, activeGroupPath, n => {
@@ -4234,7 +4251,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   toggleBypass: (nodeId) => {
-    undoManager.push(get().nodes);
+    { const n = nodeInScope(get(), nodeId); undoManager.push(get().nodes, { label: n?.bypassed ? `Turned ${nodeName(n)} back on` : `Bypassed ${nodeName(n)}`, nodeIds: [nodeId] }); }
     set(state => {
       const path = state.activeGroupPath;
       if (path.length > 0) {
@@ -4249,15 +4266,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     get().compile();
   },
 
-  setNodesRewritten: (nodes) => {
-    undoManager.push(get().nodes);
+  setNodesRewritten: (nodes, label) => {
+    undoManager.push(get().nodes, { label: label ?? 'Optimised the graph' });
     const ids = new Set(nodes.map(n => n.id));
     set(st => ({ nodes, looseGroups: st.looseGroups.map(g => ({ ...g, memberIds: g.memberIds.filter(id => ids.has(id)) })).filter(g => g.memberIds.length > 1), selectedNodeId: st.selectedNodeId && ids.has(st.selectedNodeId) ? st.selectedNodeId : null, selectedNodeIds: st.selectedNodeIds.filter(id => ids.has(id)), nodeProbeValues: null }));
     get().compile();
   },
 
   setConstantsItems: (nodeId, items) => {
-    undoManager.push(get().nodes);
+    { const n = nodeInScope(get(), nodeId); undoManager.push(get().nodes, { label: nodeName(n) === 'Constants' ? 'Applied Constants' : `Applied constants on ${nodeName(n)}`, nodeIds: [nodeId] }); }
     const outputs = constantsOutputs(items);
     const rebuild = (list: GraphNode[]): GraphNode[] => list.map(n => {
       if (n.id === nodeId) {
@@ -4283,7 +4300,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   updateNodeSockets: (nodeId, inputDefs, outputType, extraOutputs = []) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: `Changed the inputs of ${nodeName(nodeInScope(get(), nodeId))}`, nodeIds: [nodeId] });
     const outputs: Record<string, { type: DataType; label: string }> = { result: { type: outputType, label: 'Result' } };
     for (const o of extraOutputs) if (o.name && o.name !== 'result' && !outputs[o.name]) outputs[o.name] = { type: o.type, label: o.name };
     /** A wire into an output that went away is dropped. */
@@ -4348,7 +4365,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   changeNodeVectorType: (nodeId, primaryInputKey, primaryOutputKey, outputType) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: `Made ${nodeName(nodeInScope(get(), nodeId))} a ${outputType}`, nodeIds: [nodeId] });
 
     const updater = (n: import('../types/nodeGraph').GraphNode): import('../types/nodeGraph').GraphNode => {
       const newInputs = { ...n.inputs };
@@ -4581,6 +4598,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const groupNode = nodes.find(n => n.id === activeGroupId);
       const sg = groupNode?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
       if (!sg || sg.nodes.length === 0) return;
+      undoManager.push(nodes, { label: 'Tidied the layout' });
       const newPositions = computeLayout(sg.nodes);
       set(state2 => ({
         nodes: state2.nodes.map(n => {
@@ -4604,6 +4622,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }));
     } else {
       // Top-level layout
+      undoManager.push(nodes, { label: 'Tidied the layout' });
       const newPositions = computeLayout(nodes);
       set(state2 => ({
         nodes: state2.nodes.map(n => ({
@@ -4620,7 +4639,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   clearToMinimal: () => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Cleared the graph' });
     const uv = instantiateNode(idGenerator.next(), 'uv', getNodeDefinition('uv')!, { x: 100, y: 240 });
     const out = instantiateNode(idGenerator.next(), 'output', getNodeDefinition('output')!, { x: 820, y: 240 });
     set({ nodes: [uv, out], looseGroups: [], previewNodeId: null, activeGroupId: null, activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [], nodeProbeValues: null });
@@ -4642,7 +4661,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       }
     }
     // Only now — nothing above touched the current graph or its history.
-    undoManager.clear();
+    undoManager.clear(example === 'blank' ? 'Started a new graph' : `Loaded example: ${graph.label}`);
     const { nodes: rawNodes } = graph;
 
     const nodes = spreadLegacyLayout(upgradeExprNodes(resolveNodeAliases(rawNodes, getNodeDefinition)).map(n => migrateNodeParams(
@@ -4663,7 +4682,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   replaceGraph: (rawNodes) => {
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: 'Replaced the graph' });
     const nodes = rawNodes.map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
     idGenerator.syncFromGraph(nodes);
     set(st => ({ nodes, looseGroups: [], play: emptyPlayRecord(), previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
@@ -4692,7 +4711,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const kept = get().scratch;
     if (!kept) return;
     if (commit) {
-      undoManager.push(kept.nodes);
+      undoManager.push(kept.nodes, { label: 'Converted GLSL (Materialize)' });
       set({ scratch: null, currentGraph: null, graphDirty: true });
       return;
     }
@@ -4851,7 +4870,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       console.error('[loadSavedGraph] saved graph is corrupt', name, e);
       return { ok: false, error: `Saved graph "${name}" is corrupt and could not be loaded: ${errorMessage(e)}` };
     }
-    undoManager.clear();
+    undoManager.clear(`Opened “${name}”${wanted ? ` (version ${wanted})` : ''}`);
     idGenerator.syncFromGraph(nodes);
     // Reset group navigation so a saved graph that was captured inside a
     // subgraph doesn't leave the editor stranded in a non-existent group.
@@ -4909,7 +4928,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       console.error('[importGraph] invalid graph file', e);
       return { ok: false, error: `Could not import graph: ${errorMessage(e)}` };
     }
-    undoManager.clear();
+    undoManager.clear(isPlayFile ? 'Imported a Play file' : 'Imported a graph file');
     idGenerator.syncFromGraph(nodes);
     set(state => ({
       nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play,
@@ -4948,7 +4967,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const reg = await registerUserNode(built.def);
     if (!reg.ok) return reg;
     // UV → shader → Output
-    undoManager.push(get().nodes);
+    undoManager.push(get().nodes, { label: `Imported shader: ${fileName}` });
     const uvDef = getNodeDefinition('uv')!, outDef = getNodeDefinition('output')!, def = getNodeDefinition(built.def.id)!;
     const uv = instantiateNode(idGenerator.next(), 'uv', uvDef, { x: 80, y: 220 });
     const shader = instantiateNode(idGenerator.next(), built.def.id, def, { x: 520, y: 200 });
