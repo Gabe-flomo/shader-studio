@@ -43,6 +43,7 @@ export const ICONS = {
   moon: { sw: 1.5, body: "<path d='M13 9.6A5.5 5.5 0 0 1 6.4 3a5.5 5.5 0 1 0 6.6 6.6Z'/>" },
   sun: { sw: 1.5, body: "<circle cx='8' cy='8' r='2.8'/><path d='M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1'/>" },
   eye: { sw: 1.4, body: "<path d='M1.5 8S3.9 3.5 8 3.5 14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8Z'/><circle cx='8' cy='8' r='2'/>" },
+  eyeOff: { sw: 1.4, body: "<path d='M6.3 3.8A6.6 6.6 0 0 1 8 3.5C12.1 3.5 14.5 8 14.5 8a11 11 0 0 1-1.7 2.3M10.4 11.9A6.4 6.4 0 0 1 8 12.5C3.9 12.5 1.5 8 1.5 8a11.3 11.3 0 0 1 2.9-3.5'/><path d='M6.6 6.6a2 2 0 0 0 2.8 2.8'/><path d='M2 2l12 12'/>" },
   bypass: { sw: 1.4, body: "<circle cx='8' cy='8' r='5.5'/><path d='M4.2 11.8L11.8 4.2'/>" },
   info: { sw: 1.4, body: "<circle cx='8' cy='8' r='6'/><path d='M8 7.3V11'/><circle cx='8' cy='5' r='0.5' fill='currentColor'/>" },
   lock: { sw: 1.4, body: "<rect x='3.5' y='7' width='9' height='6.5' rx='1.5'/><path d='M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7'/>" },

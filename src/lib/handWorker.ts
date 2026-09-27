@@ -5,10 +5,15 @@
  * ImageBitmaps; each comes back as up to two hands of 21 landmarks.
  *
  * GPU first (WebGL2 on an OffscreenCanvas), the CPU when that fails.
- * Handedness: MediaPipe labels hands as if the image were a mirrored selfie;
- * camera frames arrive unmirrored, so its "Left" is the performer's right
- * hand. The swap happens here, so everything downstream means the
- * performer's own hands.
+ * `options` changes how many hands it looks for and its confidence
+ * thresholds while it runs (the setup's Max hands and Strictness).
+ *
+ * Handedness: MediaPipe Tasks labels the hand as it is in the image it gets.
+ * Camera frames arrive unmirrored, so its "Right" is the performer's right
+ * hand, and it's passed on as it is. (Checked with a photo of a right hand:
+ * "Right", and "Left" once the photo is flipped. The older MediaPipe Hands
+ * docs say the opposite, for selfie images.) The label is one frame's vote:
+ * play/kit/hands.js keeps each hand's side steady across frames.
  */
 import { HandLandmarker, type HandLandmarkerResult } from '@mediapipe/tasks-vision';
 
@@ -18,16 +23,18 @@ const scope = self as unknown as { postMessage(message: unknown, transfer?: Tran
 let landmarker: HandLandmarker | null = null;
 let lastT = 0;
 
+/** How many hands, and the confidence thresholds (lib/handFeed.ts HandOptions). */
+interface Options { numHands: number; detection: number; presence: number; tracking: number }
+let options: Options = { numHands: 2, detection: 0.6, presence: 0.57, tracking: 0.55 };
+const mpOptions = (o: Options) => ({ numHands: o.numHands, minHandDetectionConfidence: o.detection, minHandPresenceConfidence: o.presence, minTrackingConfidence: o.tracking });
+
 async function create(wasm: string, model: string, delegate: 'GPU' | 'CPU'): Promise<HandLandmarker> {
   // The ES-module build of the loader: a module worker can import() it (importScripts can't).
   const fileset = { wasmLoaderPath: `${wasm}vision_wasm_module_internal.js`, wasmBinaryPath: `${wasm}vision_wasm_module_internal.wasm` };
   return HandLandmarker.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: model, delegate },
     runningMode: 'VIDEO',
-    numHands: 2,
-    minHandDetectionConfidence: 0.5,
-    minHandPresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+    ...mpOptions(options),
   });
 }
 
@@ -38,7 +45,7 @@ function toHands(res: HandLandmarkerResult) {
     const cat = (res.handedness[i] ?? res.handednesses?.[i])?.[0];
     const lm = new Float32Array(63);
     for (let j = 0; j < 21 && j < pts.length; j++) { lm[j * 3] = pts[j].x; lm[j * 3 + 1] = pts[j].y; lm[j * 3 + 2] = pts[j].z; }
-    out.push({ side: cat?.categoryName === 'Left' ? 'right' : 'left', score: cat?.score ?? 0, lm });
+    out.push({ side: cat?.categoryName === 'Left' ? 'left' : 'right', score: cat?.score ?? 0, lm });
   }
   return out;
 }
@@ -46,6 +53,7 @@ function toHands(res: HandLandmarkerResult) {
 scope.onmessage = async (e: MessageEvent) => {
   const d = e.data;
   if (d.type === 'init') {
+    if (d.options) options = d.options;
     try {
       let delegate: 'GPU' | 'CPU' = 'GPU';
       try { landmarker = await create(d.wasm, d.model, 'GPU'); }
@@ -67,6 +75,11 @@ scope.onmessage = async (e: MessageEvent) => {
     try { hands = toHands(landmarker.detectForVideo(bitmap, t)); } catch (err) { console.warn('[hands] detect failed', err); }
     bitmap.close();
     scope.postMessage({ type: 'result', t: d.t, w: d.w, h: d.h, ms: performance.now() - t0, hands }, hands.map(h => h.lm.buffer));
+    return;
+  }
+  if (d.type === 'options') {
+    options = d.options;
+    try { await landmarker?.setOptions(mpOptions(options)); } catch (err) { console.warn('[hands] could not change the tracker settings', err); }
     return;
   }
   if (d.type === 'close') { landmarker?.close(); landmarker = null; }

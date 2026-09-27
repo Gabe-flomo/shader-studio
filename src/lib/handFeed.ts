@@ -35,7 +35,11 @@ export type HandSource = HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
 export interface HandTrackerHandle {
   stop(): void;
   setPaused(on: boolean): void;
+  setOptions(o: HandOptions): void;
 }
+
+/** MediaPipe's settings: hands to look for and its three confidence thresholds (play/kit/hands.js hdTrackerOptions). */
+export interface HandOptions { numHands: 1 | 2; detection: number; presence: number; tracking: number }
 
 class HandFeed {
   private status: HandStatus = typeof window !== 'undefined' && typeof Worker !== 'undefined' ? 'off' : 'unsupported';
@@ -48,13 +52,20 @@ class HandFeed {
   private latest: HdFrame | null = null;
   private seq = 0;
   private count = 0;
+  private options: HandOptions = { numHands: 2, detection: 0.6, presence: 0.57, tracking: 0.55 };
   stats: HandStats = { fps: 0, inferMs: 0, latencyMs: 0, delegate: '' };
 
   getStatus(): HandStatus { return this.status; }
   /** Why it isn't running, in plain words (a blocked camera, a model that didn't load). */
   getMessage(): string { return this.message; }
-  /** Hands in view in the newest frame. */
+  /** Hands in view: those the Play engine shows (a phantom for a frame or two, or a rejected one, doesn't count). */
   handCount(): number { return this.count; }
+  /** The Play engine reports the hands it shows after each frame. */
+  setCount(n: number): void {
+    if (n === this.count) return;
+    this.count = n;
+    for (const l of this.listeners) l(this.status);
+  }
   isOn(): boolean { return this.status === 'on'; }
 
   onStatus(cb: (s: HandStatus) => void): () => void {
@@ -76,8 +87,6 @@ class HandFeed {
   push(frame: HdFrame): void {
     this.latest = frame;
     this.seq++;
-    const n = frame.hands.length;
-    if (n !== this.count) { this.count = n; for (const l of this.listeners) l(this.status); }
     inputBus.wake();
   }
 
@@ -107,6 +116,7 @@ class HandFeed {
           source: () => this.currentSource(),
           push: f => this.push(f),
           stats: s => { this.stats = s; },
+          options: this.options,
         });
         this.tracker.setPaused(this.paused);
         this.setStatus('on');
@@ -119,6 +129,15 @@ class HandFeed {
     })().finally(() => { this.starting = null; });
     return this.starting;
   }
+
+  /** The setup's Max hands and confidence thresholds: kept for the next start, and passed to a running tracker. */
+  configure(o: HandOptions): void {
+    const c = this.options;
+    if (c.numHands === o.numHands && c.detection === o.detection && c.presence === o.presence && c.tracking === o.tracking) return;
+    this.options = { ...o };
+    this.tracker?.setOptions(this.options);
+  }
+  getOptions(): HandOptions { return this.options; }
 
   /** Stop tracking. The camera turns off too unless a layer still uses it (lib/cameraKeeper.ts). */
   stop(): void {

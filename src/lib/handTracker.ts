@@ -14,7 +14,7 @@
  * npm package), so tracking works offline and no frame leaves the machine.
  */
 import type { HdFrame } from '../play/kit/hands.js';
-import type { HandSource, HandStats, HandTrackerHandle } from './handFeed';
+import type { HandOptions, HandSource, HandStats, HandTrackerHandle } from './handFeed';
 
 /** Frames a second to aim for. */
 const TARGET_FPS = 30;
@@ -30,6 +30,7 @@ export async function startHandTracker(o: {
   source: () => HandSource | null;
   push: (f: HdFrame) => void;
   stats: (s: HandStats) => void;
+  options: HandOptions;
 }): Promise<HandTrackerHandle> {
   const base = `${import.meta.env.BASE_URL}mediapipe/`;
   const abs = (p: string) => new URL(p, window.location.href).href;
@@ -41,7 +42,7 @@ export async function startHandTracker(o: {
     };
     worker.addEventListener('message', onMsg);
     worker.addEventListener('error', e => { worker.terminate(); reject(new Error(e.message || 'The hand tracker worker failed to load')); }, { once: true });
-    worker.postMessage({ type: 'init', wasm: abs(`${base}wasm/`), model: abs(`${base}hand_landmarker.task`) });
+    worker.postMessage({ type: 'init', wasm: abs(`${base}wasm/`), model: abs(`${base}hand_landmarker.task`), options: o.options });
   });
 
   let alive = true, paused = false, busy = false, timer = 0;
@@ -96,6 +97,7 @@ export async function startHandTracker(o: {
   return {
     stop() { alive = false; window.clearTimeout(timer); worker.postMessage({ type: 'close' }); window.setTimeout(() => worker.terminate(), 200); },
     setPaused(on) { paused = on; if (!on && !busy) schedule(0); },
+    setOptions(options) { worker.postMessage({ type: 'options', options }); },
   };
 }
 
