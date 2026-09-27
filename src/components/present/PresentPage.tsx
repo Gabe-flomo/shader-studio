@@ -14,7 +14,8 @@
  * sheet. Markdown and KaTeX load with this page, not with the app.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useTokens } from '../../theme/themeStore';
+import { paperStyle } from './paper';
+import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
@@ -67,6 +68,7 @@ async function newPresentation(): Promise<void> {
 
 export function PresentPage({ compact = false, onNavigate }: { compact?: boolean; onNavigate: (p: Page) => void }) {
   const tk = useTokens();
+  const dark = useThemeStore(s => s.mode) === 'dark';
   const doc = usePresentation(s => s.doc);
   const mode = usePresentation(s => s.mode);
   const list = usePresentationList();
@@ -96,7 +98,7 @@ export function PresentPage({ compact = false, onNavigate }: { compact?: boolean
   }), [doc?.sources, doc?.origin, compact]);
 
   return (
-    <div ref={rootRef} style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: tk.bg.app, color: tk.text.primary, font: `13px ${fontFamily.ui}` }}>
+    <div ref={rootRef} style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark), color: tk.text.primary, font: `13px ${fontFamily.ui}` }}>
       <style>{css}</style>
       <Header compact={compact} list={list} onExport={() => setExporting(true)} onBrowse={() => setBrowsing(true)} />
       {!doc ? <EmptyState compact={compact} /> : mode === 'slides' ? <SlidesView ctx={ctx} rootRef={rootRef} /> : mode === 'scroll' ? <ScrollView ctx={ctx} /> : compact ? <EditPhone ctx={ctx} onNavigate={onNavigate} /> : <EditDesktop ctx={ctx} onNavigate={onNavigate} />}

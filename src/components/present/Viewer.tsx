@@ -12,7 +12,8 @@
  * Esc goes back to Edit.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useTokens } from '../../theme/themeStore';
+import { paperStyle } from './paper';
+import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import type { BlockContext } from './Blocks';
@@ -70,6 +71,7 @@ function NavBar({ index, total, titles, onGo, fullscreen, onFullscreen, onStage,
 
 export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' | 'editing' | 'large'>; rootRef: React.RefObject<HTMLElement | null> }) {
   const tk = useTokens();
+  const dark = useThemeStore(s => s.mode) === 'dark';
   const doc = usePresentation(s => s.doc);
   const index = usePresentation(s => s.step);
   const setStep = usePresentation(s => s.setStep);
@@ -94,7 +96,7 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
   const firstSource = first && (first.type === 'render' || first.type === 'interactive') ? ctx.sources.get(first.source) : undefined;
   const onStage = firstSource ? () => openOnStage(doc, firstSource, step) : undefined;
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: tk.bg.app }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark) }}>
       <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         <div key={step.id} style={{
           maxWidth: 1180, margin: '0 auto', boxSizing: 'border-box', minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center',
@@ -110,6 +112,7 @@ export function SlidesView({ ctx, rootRef }: { ctx: Omit<BlockContext, 'active' 
 
 export function ScrollView({ ctx }: { ctx: Omit<BlockContext, 'active' | 'editing' | 'large'> }) {
   const tk = useTokens();
+  const dark = useThemeStore(s => s.mode) === 'dark';
   const doc = usePresentation(s => s.doc);
   const setMode = usePresentation(s => s.setMode);
   const scroller = useRef<HTMLDivElement>(null);
@@ -141,7 +144,7 @@ export function ScrollView({ ctx }: { ctx: Omit<BlockContext, 'active' | 'editin
   if (!doc) return null;
   const c: BlockContext = { ...ctx, editing: false, active: true, large: false };
   return (
-    <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', background: tk.bg.app }}>
+    <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', ...paperStyle(tk.bg.app, dark) }}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, zIndex: 3, background: alpha(tk.accent.base, 0.12) }}>
         <div style={{ width: `${progress * 100}%`, height: '100%', background: tk.accent.base, transition: 'width .08s linear' }} />
       </div>
