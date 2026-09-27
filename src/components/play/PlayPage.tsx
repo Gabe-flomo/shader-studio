@@ -598,7 +598,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             ...(compact || sideView.tabs.includes('controls') ? [{ value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` }] : []),
             ...(compact || sideView.tabs.includes('layers') ? [{ value: 'layers' as const, label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}${layersOk ? '' : ' · Pro'}` }] : []),
             ...(compact || sideView.tabs.includes('finish') ? [{ value: 'finish' as const, label: `Finish${play.finish?.effects.length ? ` · ${play.finish.effects.length}` : ''}${finishOk ? '' : ' · Pro'}`, title: 'Grade, lens, film and time effects over the whole picture' }] : []),
-            ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length ? ` · ${play.mappings.length}` : ''}` }] : []),
+            ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length + (play.pairMappings?.length ?? 0) ? ` · ${play.mappings.length + (play.pairMappings?.length ?? 0)}` : ''}` }] : []),
           ]}
         />
         </div>
@@ -1127,8 +1127,8 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
           {learnFor && (
             <div style={{ margin: '6px 0 2px', padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 12px ${fontFamily.ui}` }}>
               {learnTrigger
-                ? <>Press a key, hit a note{handFeed.isOn() ? ' or make a hand gesture' : ''}… </>
-                : <>Move a knob, hit a note, press a key{handFeed.isOn() ? ' or move a finger' : ''}… </>}
+                ? <>Press a key, hit a note{handFeed.isOn() ? ', make a hand gesture' : ''}{play.signals?.length ? ' or fire a signal' : ''}… </>
+                : <>Move a knob, hit a note, press a key{handFeed.isOn() ? ', move a finger' : ''}{play.signals?.length ? ' or fire a signal' : ''}… </>}
               <span style={{ fontWeight: 500, opacity: 0.8 }}>Esc to cancel</span>
             </div>
           )}

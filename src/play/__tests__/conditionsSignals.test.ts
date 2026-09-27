@@ -442,3 +442,28 @@ describe('the web runtime', () => {
     expect(app[app.length - 1][2]).toBe(1);
   });
 });
+
+// ── Pairing from the panel ───────────────────────────────────────────────────
+
+describe('making pairs', () => {
+  it('Add as position: finds or makes the X/Y partner and puts X on A', async () => {
+    const { positionPair, layerPositionPair, makePair, unpair, partnerTarget } = await import('../pairs');
+    expect(partnerTarget('circ::posX')).toEqual({ target: 'circ::posY', axis: 'y' });
+    expect(partnerTarget('layer:n::y')).toEqual({ target: 'layer:n::x', axis: 'x' });
+    const base: PlayRecord = { ...emptyPlayRecord(), controls: [control('y', { target: 'circ::posY', label: 'Pos Y' })] };
+    const r = positionPair(base, 'y', t => (t === 'circ::posX' ? { label: 'Pos X', min: -1, max: 1 } : null));
+    const made = r.play.controls.find(c => c.target === 'circ::posX')!;
+    expect(r.play.pairs).toEqual([{ id: r.pairId, label: 'Pos', a: made.id, b: 'y', position: true }]);
+    // From a layer's rows: both made.
+    const withNull: PlayRecord = { ...emptyPlayRecord(), layers: [{ ...defaultLayer('null', 'n', 'Dot'), x: 0.2, y: 0.3 } as PlayLayer] };
+    const l = layerPositionPair(withNull, 'n', 'y');
+    expect(l.play.controls.map(c => c.target)).toEqual(['layer:n::y', 'layer:n::x']);
+    expect(l.play.pairs![0].a).toBe(l.play.controls[1].id);
+    // Pairing a control again takes it out of its old pair (and that pair's mappings go).
+    const p1 = { ...pairRecord({}), controls: [...pairRecord({}).controls, control('c')] };
+    const again = makePair(p1, 'ax', 'c', false).play;
+    expect(again.pairs!.map(p => [p.a, p.b])).toEqual([['ax', 'c']]);
+    expect(again.pairMappings).toBeUndefined();
+    expect(unpair(again, again.pairs![0].id).pairs).toBeUndefined();
+  });
+});

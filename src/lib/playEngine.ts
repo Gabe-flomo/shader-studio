@@ -25,6 +25,7 @@ import { oscClient, oscNumber, type OscMessage } from './oscClient';
 import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
 import { sgCondNew, sgCondStep, sgParseValueRef, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
 import { readFinishValue } from '../types/playFinish';
+import { signalNames } from '../play/signalNames';
 import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../types/play';
 import { geoAnchor } from '../play/kit/geometry.js';
 import type { TriggerSpec } from '../types/play';
@@ -342,6 +343,7 @@ class PlayEngine implements InputSource {
     for (const c of record.controls) this.controls.set(c.id, c);
     this.pairs.clear();
     for (const p of record.pairs ?? []) this.pairs.set(p.id, p);
+    signalNames.set(record.signals);
     for (const id of [...this.pairState.keys()]) if (!(record.pairMappings ?? []).some(m => m.id === id)) this.pairState.delete(id);
     this.mouseIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'mouse')
       || (record.pairMappings ?? []).some(m => m.enabled && (m.source.kind === 'position' ? m.source.anchor === 'mouse' : m.source.source.kind === 'mouse'))

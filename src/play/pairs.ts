@@ -49,16 +49,17 @@ export function unpair(play: PlayRecord, pairId: string): PlayRecord {
 export interface ControlMaker { label: string; min: number; max: number; step?: number }
 
 /**
- * The X/Y partner of a control's target (`…x` ↔ `…y`), or null: a layer's
- * x and y, a node's centerX and centerY.
+ * The X/Y partner of a control's target (`…x` ↔ `…y`) and which axis the
+ * partner is, or null: a layer's x and y, a node's posX and posY.
  */
 export function partnerTarget(target: string): { target: string; axis: 'x' | 'y' } | null {
   const lt = parseLayerTarget(target);
-  if (lt) { const p = pairedKey(lt.key); return p ? { target: layerTarget(lt.layerId, p.other), axis: p.axis } : null; }
+  // `axis` is the partner's: Y for an X, X for a Y.
+  if (lt) { const p = pairedKey(lt.key); return p ? { target: layerTarget(lt.layerId, p.other), axis: p.axis === 'x' ? 'y' : 'x' } : null; }
   if (target.startsWith('finish:') || target.startsWith('act:')) return null;
   const { paramKey } = targetParts(target);
   const p = pairedKey(paramKey);
-  return p ? { target: target.slice(0, target.length - paramKey.length) + p.other, axis: p.axis } : null;
+  return p ? { target: target.slice(0, target.length - paramKey.length) + p.other, axis: p.axis === 'x' ? 'y' : 'x' } : null;
 }
 
 /**

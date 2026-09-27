@@ -8,6 +8,7 @@ import type { PlayFinish } from '../types/playFinish';
 import { finishTargetLabel } from '../types/playFinish';
 import { sgParseValueRef, sgScreenPoint } from './kit/signals.js';
 import { proximityCondition } from './triggers';
+import { signalNames } from './signalNames';
 import { ANCHOR_KINDS, DEFAULT_FIRE, handAnchor, parseHandAnchor } from '../types/play';
 import { HD_POINT_NAMES } from './kit/hands.js';
 import { datasetStore } from '../data/datasetStore';
@@ -286,8 +287,8 @@ export interface LabelContext {
 }
 
 /** A signal's name ("Missing signal" when it was deleted). */
-export function signalName(id: string, signals: ReadonlyArray<PlaySignal> = []): string {
-  return signals.find(x => x.id === id)?.name ?? (id ? 'Missing signal' : 'Pick one');
+export function signalName(id: string, signals?: ReadonlyArray<PlaySignal>): string {
+  return (signals ? signals.find(x => x.id === id)?.name : signalNames.get(id)) ?? (id ? 'Missing signal' : 'Pick one');
 }
 
 export const COND_LABELS: Record<CondCmp, { label: string; word: string; title: string }> = {
