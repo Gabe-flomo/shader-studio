@@ -23,6 +23,8 @@ import { loadGroupPresets, SAVED_GRAPHS_CHANGED, useNodeGraphStore } from '../..
 import { PALETTE_PRESETS_CHANGED } from '../../lib/palette';
 import { BACKGROUNDS_CHANGED, resetBackgroundCache } from '../../lib/backgroundLibrary';
 import { unzipSync } from 'fflate';
+import { useThemeStore } from '../../theme/themeStore';
+import { removeNote, type NoteEntry } from '../../files/notes';
 
 /** Fired after the Files page changed storage, so the page itself rebuilds. */
 export const FILES_CHANGED = 'files-changed';
@@ -42,6 +44,8 @@ export function syncApp(keys: string[]): void {
     if (any(k => k.startsWith('shader-studio:gp:'))) useNodeGraphStore.setState({ groupPresets: loadGroupPresets() });
     // The backgrounds library caches its image list; its palettes and folders are read fresh.
     if (any(k => k.startsWith('shader-studio-backgrounds:') || k === 'assetbrowser_folders')) resetBackgroundCache();
+    // The theme is read once at start: follow a reset (or its undo) now.
+    if (any(k => k === 'shader-studio:theme')) useThemeStore.setState({ mode: localStorage.getItem('shader-studio:theme') === 'dark' ? 'dark' : 'light' });
     const open = useNodeGraphStore.getState().currentGraph;
     if (open && localStorage.getItem(GRAPH_PREFIX + open.name) == null) useNodeGraphStore.setState({ currentGraph: null });
   } catch (e) { console.error('[files] refreshing the app after a change', e); }
@@ -88,6 +92,39 @@ export async function removeWithUndo(inv: Inventory, ids: string[], confirm: (c:
         toast.info(`Put back ${what}`);
       },
     },
+  });
+  return true;
+}
+
+/**
+ * Reset app settings to their defaults: their keys go (the app falls back to
+ * its default), with Undo. `what` names them in the toast.
+ */
+export function resetSettings(inv: Inventory, ids: string[], what: string): boolean {
+  const nodes = expandRemoval(inv, ids).filter(n => n.kind === 'setting');
+  if (!nodes.length) return false;
+  let res: ReturnType<typeof removeNodes>;
+  try { res = removeNodes(localMutableKV, nodes); } catch (e) { toast.error('Couldn’t reset that', { message: errorMessage(e) }); return false; }
+  syncApp(res.changedKeys);
+  let undone = false;
+  toast.success(`Reset ${what} to default`, {
+    message: 'Some settings take effect the next time the app opens.',
+    action: { label: 'Undo', stillValid: () => !undone, onClick: () => { if (undone) return; undone = true; res.undo(); syncApp(res.changedKeys); toast.info(`Put back ${what}`); } },
+  });
+  return true;
+}
+
+/** Take one note out of its saved graph, with Undo. */
+export function deleteNoteWithUndo(note: NoteEntry): boolean {
+  let undo: (() => void) | null;
+  try { undo = removeNote(localMutableKV, note); } catch (e) { toast.error('Couldn’t delete that note', { message: errorMessage(e) }); return false; }
+  if (!undo) { toast.warning('That note isn’t there any more'); return false; }
+  const key = GRAPH_PREFIX + note.graph;
+  syncApp([key]);
+  let undone = false;
+  const what = note.kind === 'play' ? `the Play notes of “${note.graphLabel}”` : `the comment on “${note.nodeLabel ?? 'a node'}”`;
+  toast.success(`Deleted ${what}`, {
+    action: { label: 'Undo', stillValid: () => !undone, onClick: () => { if (undone) return; undone = true; undo!(); syncApp([key]); toast.info('Put the note back'); } },
   });
   return true;
 }

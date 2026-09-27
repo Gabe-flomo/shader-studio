@@ -14,6 +14,7 @@
  */
 import { isLibraryKey, PRESENTATION_FOLDER_SCOPE, PRESENTATION_KEY_PREFIX, type KV } from '../utils/library';
 import { GRAPH_LINK_FIELD, normalizeLinks, PRESENTATION_LINK_FIELD } from '../present/links';
+import { describeSetting, groupSettings, settingLabel } from './appSettings';
 
 export type SectionId = 'graphs' | 'presentations' | 'glsl' | 'functions' | 'presets' | 'nodes' | 'scripts' | 'backgrounds' | 'settings';
 
@@ -26,7 +27,7 @@ export const SECTIONS: ReadonlyArray<{ id: SectionId; label: string; hint: strin
   { id: 'nodes', label: 'Published nodes', hint: 'Node types you published from a group or code' },
   { id: 'scripts', label: 'Scripts', hint: 'Saved sketches and layer kinds' },
   { id: 'backgrounds', label: 'Backgrounds', hint: 'The backgrounds library: images and palettes' },
-  { id: 'settings', label: 'Settings', hint: 'Preferences, learned roles, folders and sign-ins' },
+  { id: 'settings', label: 'Settings', hint: 'Folders, learned roles, sign-ins and app settings' },
 ];
 
 export type NodeKind =
@@ -92,6 +93,8 @@ export interface FileNode {
   thumb?: string;
   /** A graph's linked presentations, or a presentation's linked graphs, by name (present/links.ts). */
   linked?: string[];
+  /** The tree shows it as one row and doesn't open it (App settings: its own view lists what's inside). */
+  treeLeaf?: boolean;
 }
 
 export interface Inventory {
@@ -164,34 +167,10 @@ export function isGraphEntry(key: string, parsed: unknown): boolean {
   return !!parsed && typeof parsed === 'object' && Array.isArray((parsed as { nodes?: unknown }).nodes);
 }
 
-const SETTING_LABELS: Record<string, string> = {
-  'shader-studio:theme': 'Theme',
-  'shader-studio:shortcuts': 'Keyboard shortcuts',
-  'shader-studio:minimap': 'Graph minimap',
-  'shader-studio:midiSound': 'MIDI sound',
-  'shader-studio:performance-rolling': 'Rolling performance takes',
-  'shader-studio:cameraDevice': 'Camera',
-  'shader-studio:osc:port': 'OSC port',
-  'shader-studio:osc:udpPort': 'OSC UDP port',
-  'shader-studio:glsl-editor': 'GLSL editor: the open code',
-  'shader-studio:convert:code': 'Convert: the pasted shader',
-  'shader-studio:settings:recordings': 'Where recordings are saved',
-  'shader-studio:settings:backupDir': 'Backup folder',
-  'shader-studio:settings:recentColors': 'Recent colours',
-  'shader-studio:kaggle': 'Kaggle sign-in',
-  'nodepalette_favorites': 'Favourite nodes',
-  'codePanel_height': 'Code panel height',
-  'playfield:activity-log': 'Activity log',
-  [ROLES_KEY]: 'Learned parameter roles',
-  [FOLDERS_KEY]: 'Folders',
-};
+export { settingLabel };
 
-export function settingLabel(key: string): string {
-  if (SETTING_LABELS[key]) return SETTING_LABELS[key];
-  const tail = key.replace(/^shader-studio:(settings:)?|^playfield:|^glsl-editor:/, '');
-  const words = tail.replace(/[:_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim().toLowerCase();
-  return words ? words[0].toUpperCase() + words.slice(1) : key;
-}
+/** The App settings group's id (inside the Settings section): the Files page shows it as its own view. */
+export const APP_SETTINGS_ID = 'section:settings/app';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -415,7 +394,7 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
     } else {
       settings.push({
         id: `setting:${key}`, section: 'settings', kind: 'setting', label: settingLabel(key), size: s, ref: { t: 'key', key },
-        detail: key, ...(PRIVATE_KEYS.has(key) ? { private: true } : {}),
+        detail: describeSetting(key).hint ?? key, ...(PRIVATE_KEYS.has(key) ? { private: true } : {}),
       });
     }
     await pause();
@@ -574,23 +553,30 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
   const bgPaletteItems = inFolders('backgrounds', 'section:backgrounds/palettes', BG_PALETTE_SCOPE, bgPalettes.sort(byName), folders, membershipId);
   if (bgPaletteItems.length) bgChildren.push({ ...group('backgrounds', 'section:backgrounds', 'palettes', 'Palettes', bgPaletteItems), scope: BG_PALETTE_SCOPE });
 
-  const prefs = settings.filter(s => ![ROLES_KEY, FOLDERS_KEY, SHORTCUTS_KEY].includes((s.ref as { key: string }).key) && !s.private);
+  // App preferences (theme, shortcuts, panel sizes…) sit in one App settings group, by category, after the saved things.
+  const prefs = settings.filter(s => ![ROLES_KEY, FOLDERS_KEY].includes((s.ref as { key: string }).key) && !s.private);
   const settingsChildren: FileNode[] = [];
-  if (prefs.length) settingsChildren.push(group('settings', 'section:settings', 'prefs', 'Preferences', prefs.sort(byName)));
+  for (const s of prefs) {
+    const key = (s.ref as { key: string }).key;
+    s.detail = key === SHORTCUTS_KEY ? plural(Object.keys(obj(parseJson(kv.get(key))) ?? {}).length, 'custom shortcut') : describeSetting(key).hint;
+    if (!s.detail) delete s.detail;
+  }
+  const appCats = groupSettings(prefs.map(n => ({ key: (n.ref as { key: string }).key, size: n.size, node: n })))
+    .map(c => group('settings', APP_SETTINGS_ID, c.id, c.label, c.items.map(i => i.node)));
   for (const s of settings) {
     const key = (s.ref as { key: string }).key;
     if (key === FOLDERS_KEY) {
       const all = Object.values(folders).reduce((n, sc) => n + sc.folders.length, 0);
       s.detail = `${plural(all, 'folder')} across ${plural(Object.keys(folders).filter(k => folders[k].folders.length).length, 'list')}`;
       settingsChildren.push(s);
-    } else if (key === ROLES_KEY || key === SHORTCUTS_KEY) {
-      const o = obj(parseJson(kv.get(key)));
-      s.detail = key === ROLES_KEY ? plural(Object.keys(o ?? {}).length, 'learned role') : plural(Object.keys(o ?? {}).length, 'custom shortcut');
+    } else if (key === ROLES_KEY) {
+      s.detail = plural(Object.keys(obj(parseJson(kv.get(key))) ?? {}).length, 'learned role');
       settingsChildren.push(s);
     }
   }
   const privates = settings.filter(s => s.private);
   if (privates.length) settingsChildren.push(group('settings', 'section:settings', 'signins', 'Sign-ins', privates, { detail: 'Never downloaded' }));
+  if (appCats.length) settingsChildren.push(group('settings', 'section:settings', 'app', 'App settings', appCats, { detail: `${plural(prefs.length, 'preference')} · reset to default here`, treeLeaf: true }));
 
   const withExternal = (id: SectionId, list: FileNode[]) => (id === 'backgrounds' ? list : [...list, ...externalBySection.get(id) ?? []]);
   const sections: FileNode[] = [

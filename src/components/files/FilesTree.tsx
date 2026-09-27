@@ -28,7 +28,7 @@ export function FilesTree({ sections, current, expanded, onToggle, onSelect }: {
 function Row({ node, depth, current, expanded, onToggle, onSelect }: { node: FileNode; depth: number; current: string | null; expanded: Set<string>; onToggle: (id: string) => void; onSelect: (id: string) => void }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
-  const kids = node.children ?? [];
+  const kids = node.treeLeaf ? [] : node.children ?? [];
   const open = expanded.has(node.id);
   const active = current === node.id;
   const section = depth === 0;

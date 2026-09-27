@@ -19,6 +19,7 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
+import type { IconName } from '../ui/iconPaths';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
@@ -26,7 +27,11 @@ import type { Page } from '../page';
 import { formatSize } from '../../utils/library';
 import { errorMessage, openBinaryFile } from '../../utils/fileIO';
 import { createFolder, loadFolders, moveItemsToFolder, removeItemsFromFolders, renameFolder } from '../../utils/assetFolders';
-import { countLeaves, itemsOf, pathTo, walk, type FileNode } from '../../files/inventory';
+import { APP_SETTINGS_ID, countLeaves, itemsOf, pathTo, walk, type FileNode } from '../../files/inventory';
+import { collectNotes, type NoteEntry } from '../../files/notes';
+import { getNodeDefinition } from '../../nodes/definitions';
+import { NotesView } from './NotesView';
+import { AppSettingsView } from './AppSettingsView';
 import { cleanupSuggestions } from '../../files/cleanup';
 import { localMutableKV } from '../../files/mutate';
 import { previewInstall, readProfile, type InstallPreview, type Profile } from '../../files/profileZip';
@@ -38,7 +43,7 @@ import { SpaceMeter } from './SpaceMeter';
 import { Breadcrumbs, NodeView, type CheckState } from './NodeView';
 import { CleanUpView } from './CleanUpView';
 import { DownloadDialog, InstallDialog, RemoveDialog } from './FilesDialogs';
-import { deleteFolderKeepItems, downloadEverything, removeWithUndo, syncApp, type RemoveConfirm, type SaveTarget } from './filesActions';
+import { deleteFolderKeepItems, deleteNoteWithUndo, downloadEverything, removeWithUndo, syncApp, type RemoveConfirm, type SaveTarget } from './filesActions';
 import { Check, IconTile } from './fileUi';
 import { capsLabel } from './fileUiShared';
 import { WorkspaceBanner, WorkspaceEntry, WorkspaceView } from '../workspace/WorkspacePanel';
@@ -47,7 +52,7 @@ import { OPEN_WORKSPACE_VIEW, takeWorkspaceViewRequest } from '../workspace/work
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-type View = 'browse' | 'cleanup' | 'workspace';
+type View = 'browse' | 'cleanup' | 'workspace' | 'notes';
 
 export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: (p: Page) => void }) {
   const tk = useTokens();
@@ -146,12 +151,40 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     },
   };
 
-  const openGraph = async (name: string) => {
+  const openGraph = async (name: string, page: Page | null = 'studio') => {
     const st = useNodeGraphStore.getState();
-    if (st.graphDirty && !(await askConfirm(`Open “${name}”?`, { message: 'The graph open now has changes that aren’t saved; opening another one drops them.', confirmLabel: 'Open', danger: true }))) return;
+    if (st.graphDirty && !(await askConfirm(`Open “${name}”?`, { message: 'The graph open now has changes that aren’t saved; opening another one drops them.', confirmLabel: 'Open', danger: true }))) return false;
     const r = st.loadSavedGraph(name);
-    if (r.ok) onNavigate?.('studio'); else toast.error('Couldn’t open it', { message: r.error });
+    if (!r.ok) { toast.error('Couldn’t open it', { message: r.error }); return false; }
+    if (page) onNavigate?.(page);
+    return true;
   };
+  // Go to a note: its graph open (loaded when it isn't the open one), then its node shown in the Studio, or the Play page for Play notes.
+  const goToNote = async (n: NoteEntry) => {
+    const st = useNodeGraphStore.getState();
+    const isOpen = n.live || (n.graph != null && st.currentGraph?.name === n.graph);
+    if (!isOpen && (n.graph == null || !(await openGraph(n.graph, null)))) return;
+    if (n.kind === 'play') { onNavigate?.('play'); return; }
+    const s2 = useNodeGraphStore.getState();
+    if (s2.activeGroupPath.length) s2.exitToDepth(0);
+    // Enter the groups it sits in, as far as the Studio goes (two deep, not into sealed groups); past that, show the group.
+    let scope = s2.nodes, target = n.nodeId!;
+    const path: string[] = [];
+    for (const gid of n.groupPath ?? []) {
+      const g = scope.find(x => x.id === gid);
+      if (!g) break;
+      if (g.sealed || path.length >= 2) { target = gid; break; }
+      path.push(gid);
+      scope = (g.params.subgraph as { nodes?: typeof scope } | undefined)?.nodes ?? [];
+    }
+    if (!path.length) s2.focusNode(target);
+    else s2.revealNode(path, target);
+    onNavigate?.('studio');
+  };
+  const notesCount = useMemo(() => {
+    if (!inv) return 0;
+    try { return collectNotes(localMutableKV, { labelOf: t => getNodeDefinition(t)?.label }).notes.length; } catch { return 0; }
+  }, [inv]);
   // Download everything, and ZIPs of chosen items, are Pro; so is installing (docs/accounts-and-plans.md §4).
   const openDownload = (ids: string[]) => { if (requireFeature('files.everything')) setDownload(ids); };
   const everything = (target: SaveTarget) => { if (requireFeature('files.everything')) void downloadEverything(target); };
@@ -211,7 +244,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   }
 
   const path = node ? pathTo(inv, node.id) : [];
-  const nodeView = node ? (
+  const nodeView = node?.id === APP_SETTINGS_ID ? <AppSettingsView inv={inv} node={node} compact={compact} /> : node ? (
     <NodeView inv={inv} node={node} compact={compact} checkState={checkState} onCheck={onCheck} onOpen={open} onMenu={(n, at) => setMenu({ node: n, ...at })}
       actions={<>
         {node.kind === 'graph' && <Button size="sm" icon="nodes" onClick={() => { void openGraph(node.label); }}>Open in the Studio</Button>}
@@ -222,6 +255,9 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   ) : null;
   const cleanup = <CleanUpView inv={inv} compact={compact} onShow={open} onRemove={remove} />;
   const workspace = <WorkspaceView compact={compact} />;
+  const notes = <NotesView inv={inv} compact={compact} onGoTo={n => { void goToNote(n); }} onDelete={n => { deleteNoteWithUndo(n); }} />;
+  const special = (v: View) => (v === 'cleanup' ? cleanup : v === 'workspace' ? workspace : v === 'notes' ? notes : null);
+  const specialCrumb = (v: View) => crumb(v === 'cleanup' ? 'Clean up' : v === 'workspace' ? 'Workspace folder' : 'Notes');
   const banner = view !== 'workspace' && <WorkspaceBanner compact={compact} onOpen={() => setView('workspace')} />;
   const crumb = (label: string) => [{ id: view, label, kind: 'section' as const, section: 'graphs' as const, size: 0 }];
 
@@ -259,13 +295,13 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
           {selectionBar ?? <>
           <IconButton icon="chevL" label="Back" tooltip={false} onClick={() => { if (view !== 'browse') setView('browse'); else open(path.length > 1 ? path[path.length - 2].id : null); }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Breadcrumbs path={view === 'cleanup' ? crumb('Clean up') : view === 'workspace' ? crumb('Workspace folder') : path} onOpen={open} compact />
+            <Breadcrumbs path={view !== 'browse' ? specialCrumb(view) : path} onOpen={open} compact />
           </div>
           </>}
         </div>}
         {banner}
         <div ref={scroller} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          {view === 'cleanup' ? cleanup : view === 'workspace' ? workspace : node ? nodeView : (
+          {view !== 'browse' ? special(view) : node ? nodeView : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 12px 40px' }}>
               <div style={{ padding: '14px 14px 12px', borderRadius: radius.lg, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
                 <SpaceMeter inv={inv} estimate={estimate} compact onCleanUp={() => setView('cleanup')} />
@@ -275,6 +311,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
                 <Button variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.left, r.bottom + 4); }}>Download all<ProBadgeFor feature="files.everything" /></Button>
               </div>
               <CleanUpEntry count={cleanupCount} onClick={() => setView('cleanup')} />
+              <NotesEntry count={notesCount} onClick={() => setView('notes')} />
               <WorkspaceEntry active={false} dense={false} onClick={() => setView('workspace')} />
               <span style={{ ...capsLabel(tk), padding: '4px 4px 0' }}>Everything saved</span>
               <div style={{ borderRadius: radius.lg, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden' }}>
@@ -297,6 +334,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         </div>
         <div style={{ padding: '10px 10px 4px' }}>
           <CleanUpEntry count={cleanupCount} active={view === 'cleanup'} onClick={() => setView('cleanup')} dense />
+          <NotesEntry count={notesCount} active={view === 'notes'} onClick={() => setView('notes')} dense />
           <WorkspaceEntry active={view === 'workspace'} onClick={() => setView('workspace')} />
         </div>
         <div style={{ ...capsLabel(tk), padding: '12px 18px 6px' }}>Everything saved</div>
@@ -309,9 +347,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         <div style={{ height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: selection ? '0 16px 0 10px' : '0 16px 0 20px', borderBottom: `1px solid ${tk.border.default}`, background: selection ? tk.bg.selected : tk.bg.panel }}>
           {selectionBar ?? <>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {view === 'cleanup' ? <Breadcrumbs path={crumb('Clean up')} onOpen={open} />
-              : view === 'workspace' ? <Breadcrumbs path={crumb('Workspace folder')} onOpen={open} />
-              : <Breadcrumbs path={path} onOpen={open} />}
+            <Breadcrumbs path={view !== 'browse' ? specialCrumb(view) : path} onOpen={open} />
           </div>
           <Button size="sm" icon="import" onClick={() => { void startInstall(); }} title="Open a .playfile, a profile or a partial ZIP: see what’s inside, then bring it in">Install…<ProBadgeFor feature="files.install" /></Button>
           <Button size="sm" variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.right - 260, r.bottom + 4); }} title="Everything saved here: one .playfile, or one ZIP with a manifest">Download everything<ProBadgeFor feature="files.everything" /></Button>
@@ -319,7 +355,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         </div>
         {banner}
         <div ref={scroller} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          {view === 'cleanup' ? cleanup : view === 'workspace' ? workspace : nodeView}
+          {view !== 'browse' ? special(view) : nodeView}
         </div>
       </main>
       {dialogs}
@@ -329,6 +365,16 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
 
 function CleanUpEntry({ count, active = false, dense = false, onClick }: { count: number; active?: boolean; dense?: boolean; onClick: () => void }) {
   const tk = useTokens();
+  return <SideEntry icon="spark" tint={tk.status.success} label="Clean up" sub={count ? `${plural(count, 'suggestion')}: old versions, unused files, duplicates` : 'Nothing to clean up'} count={count} active={active} dense={dense} onClick={onClick} />;
+}
+
+function NotesEntry({ count, active = false, dense = false, onClick }: { count: number; active?: boolean; dense?: boolean; onClick: () => void }) {
+  const tk = useTokens();
+  return <SideEntry icon="comment" tint={tk.accent.base} label="Notes" sub={count ? `${plural(count, 'note')}: Play notes and node comments` : 'No notes yet'} count={count} active={active} dense={dense} onClick={onClick} />;
+}
+
+function SideEntry({ icon, tint, label, sub, count, active, dense, onClick }: { icon: IconName; tint: string; label: string; sub: string; count: number; active: boolean; dense: boolean; onClick: () => void }) {
+  const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
     <button type="button" onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} aria-current={active ? 'page' : undefined}
@@ -337,12 +383,12 @@ function CleanUpEntry({ count, active = false, dense = false, onClick }: { count
         background: active ? tk.bg.selected : dense ? (hover ? tk.bg.hover : 'transparent') : tk.bg.panel, boxShadow: dense ? 'none' : `inset 0 0 0 1px ${tk.border.default}`,
         color: active ? tk.accent.text : tk.text.primary, font: `600 12.5px ${fontFamily.ui}`,
       }}>
-      <span style={{ width: dense ? 22 : 32, height: dense ? 22 : 32, borderRadius: dense ? 6 : 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(tk.status.success, 0.14), color: tk.status.success, flexShrink: 0 }}>
-        <Icon name="spark" size={dense ? 13 : 16} />
+      <span style={{ width: dense ? 22 : 32, height: dense ? 22 : 32, borderRadius: dense ? 6 : 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(tint, 0.14), color: tint, flexShrink: 0 }}>
+        <Icon name={icon} size={dense ? 13 : 16} />
       </span>
       <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        Clean up
-        {!dense && <span style={{ fontWeight: 400, fontSize: 11.5, color: tk.text.muted }}>{count ? `${plural(count, 'suggestion')}: old versions, unused files, duplicates` : 'Nothing to clean up'}</span>}
+        {label}
+        {!dense && <span style={{ fontWeight: 400, fontSize: 11.5, color: tk.text.muted }}>{sub}</span>}
       </span>
       {count > 0 && <span style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: active ? tk.accent.base : tk.bg.field, color: active ? tk.bg.panel : tk.text.muted, font: `600 10.5px ${fontFamily.ui}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{count}</span>}
       {!dense && <Icon name="chevR" size={14} style={{ color: tk.text.faint }} />}
