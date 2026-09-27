@@ -50,10 +50,10 @@ customer portal.
    with the vendor's private key; the app ships the matching public key.
 2. **Every launch**: the app checks the token's signature locally. No network
    is needed, so it works fully offline.
-3. **Refresh**: when online, the app quietly refreshes the token, say every 30
-   days. If it can't reach the server for a long time (for example 90 days
-   offline), Pro keeps working through a grace period and then asks to go
-   online once.
+3. **Refresh**: when online, the app quietly refreshes the token about every
+   7 days. If it can't reach the server, Pro keeps working for 30 days after
+   the last good check, then drops to Free with the reason shown (see
+   decisions 7–8 in section 7).
 4. **Deactivate** from the app (Settings → This device) or from the account page.
 
 Honest limit: in an app that runs on your machine, a determined person can
@@ -137,8 +137,39 @@ Today there are several: `.present.json`, play files, library ZIPs, graph JSON,
      optionally sealed. Importing packs works on Free.
 6. **Sealed packs:** signature plus encryption at rest, and a little beyond
    "good enough"; see section 9 for how far protection can go.
-7. **Still open:** does the browser version count as an activation or sign in
-   each session? A trial for Pro?
+7. **Buying and signing in are separate.** Licences are sold on a separate
+   store website, not on the app's own domain. In the app you **sign in with
+   your account** and Pro unlocks. There's no key to paste. The only server
+   involved is the one that checks licences.
+   - Lemon Squeezy has no "sign in with Lemon Squeezy" for other apps, so this
+     needs a tiny service of ours, for example a Cloudflare Worker with a
+     key-value store. A Lemon Squeezy webhook records email → licence. Sign-in
+     is an emailed one-time code or link, so there are no passwords to store.
+     The service then issues the signed licence token from section 3.
+8. **Periodic checks, offline-friendly.**
+   - When online, the app re-verifies about **every 7 days**.
+   - Offline, Pro keeps working for **30 days** after the last good check.
+   - If a check fails, the app **drops to Free** and says why: "couldn't reach
+     the licence server for 30 days", "subscription ended on …", "licence
+     refunded", or "this device was deactivated". It offers **Check again** and
+     **Sign in**.
+   - Nothing is lost when that happens. Files stay, and Pro-only things (Play
+     layers, sealed packs) still open to view but can't be edited or exported
+     until Pro is back.
+9. **Browser:** signing in on the web app is a session, so it doesn't use up
+   one of the 5 device activations. It re-verifies on each visit, and the Pro
+   code is served only after sign-in (section 9).
+10. **Encrypt the Pro code: yes.**
+   - **Desktop:** the build ships the Pro-only parts encrypted: Play layers and
+     the full Play sources, Convert, the 2K/4K and website exporters, node
+     publishing and pack sealing. The Rust side decrypts them only while the
+     licence token is valid (layers 2 and 3 in section 9).
+   - **Browser:** the web app never downloads Pro code until you've signed in,
+     so it simply isn't there to patch.
+   - This means the Pro features have to be split into their own
+     separately-loaded code chunks. That's part of the feature-gates milestone.
+11. **Still open:** a trial for Pro? (Suggestion: 14 days of full Pro on the
+   first sign-in, once per account.)
 
 ## 9. How far protection can go
 
@@ -158,9 +189,8 @@ makes it impossible for software that runs on the buyer's machine.
    licence. This is the biggest practical step up.
 4. **Obfuscating the web bundle and integrity checks** (the app refuses to run
    if its files were modified): modest, and easy to overdo.
-5. **Periodic online checks** (say every 7–30 days): stronger against shared
-   licences, but it weakens "works offline". The plan keeps a long grace
-   period.
+5. **Periodic online checks** (decided: every 7 days, with a 30-day offline
+   grace): stronger against shared licences while keeping "works offline".
 
 Suggested: 1 + 2 + 3 for the desktop app. The browser version signs in and
 checks online each session, and gets its Pro code from the server only after
@@ -191,11 +221,16 @@ sign-in.
 
 ## 8. Milestones
 
-1. **Licence layer:** provider integration, the signed token, offline check,
-   activation and deactivation, the account page link, a Settings → Plan
-   screen.
+1. **Licence layer:** the licence service (Lemon Squeezy webhook, email
+   sign-in, token signing), the signed token, the Rust-side check, 7-day
+   re-verification with the 30-day grace, the "dropped to Free because …"
+   notice, activation and deactivation, and a Settings → Plan screen with a
+   link to the store.
 2. **Feature gates:** a single `can(feature)` check with Pro badges, the Pro
    sheet, the video-resolution cap, locked Play sources and layers, and Convert.
+   Pro features move into their own lazily-loaded code chunks. The desktop
+   build encrypts those chunks, and Rust decrypts them for a valid licence.
+   The web app serves them only after sign-in.
 3. **The `.playfield` container:** manifest, open-anything, bundles, and
    migration of the old formats (they still open).
 4. **Node packs:** export with signing and optional sealing; import on Free.
