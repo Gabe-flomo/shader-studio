@@ -1,3 +1,4 @@
+import { offerGraphExport } from './components/playfile/exportMenus';
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { lazyWithSuspense, preloadLazyComponents, type PropsOf } from './components/lazyWithSuspense';
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
@@ -24,12 +25,14 @@ import { usePlaySplit } from './components/play/playSplit';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './components/shell/rebuildAction';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
-import type { Page } from './components/page';
+import { NAVIGATE_EVENT, type Page } from './components/page';
+import { useLinkedPresentationWatcher } from './components/shell/linkedPresentationWatcher';
 import { can, openProSheet, requireFeature } from './lib/plan';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useShallow } from 'zustand/react/shallow';
 import { useNodeGraphStore, EXAMPLE_INDEX, EXAMPLE_FOLDERS, PLAY_SETUP_TOAST } from './store/useNodeGraphStore';
-import { useToastStore } from './components/ui/toastStore';
+import { toast, useToastStore } from './components/ui/toastStore';
+import { OPEN_WHATS_NEW, openWhatsNew, takeUpdateAnnouncement, useWhatsNewUnread } from './changelog/releaseNotes';
 import { audioEngine } from './lib/audioEngine';
 import { useBreakpoint, isMobile, isTablet, isDesktop } from './hooks/useBreakpoint';
 import { SplitHandle } from './components/shell/PhoneSplit';
@@ -428,6 +431,8 @@ function App() {
   const bp = useBreakpoint();
   const mobile = isMobile(bp);
   const tablet = isTablet(bp);
+  const breakpointRef = useRef(bp);
+  breakpointRef.current = bp;
   void isDesktop; // used implicitly via breakpoint branching
 
   const [showErrors, setShowErrors]     = useState(false);
@@ -461,12 +466,27 @@ function App() {
     return useToastStore.subscribe(clear);
   }, [page]);
 
+  // Opening a .playfile shows what came in on its page (src/playfile/app.ts).
+  useEffect(() => {
+    const go = (e: Event) => { const p = (e as CustomEvent<Page>).detail; if (p) setPage(p); };
+    window.addEventListener('playfile-open-page', go);
+    return () => window.removeEventListener('playfile-open-page', go);
+  }, [setPage]);
+
   // The Library's "Manage in Files" opens the Files page.
   useEffect(() => {
     const go = () => setPage('files');
     window.addEventListener('open-files-page', go);
     return () => window.removeEventListener('open-files-page', go);
   }, [setPage]);
+  // Anything else that needs a page shown (a linked presentation's "Open", say).
+  useEffect(() => {
+    const go = (e: Event) => { const p = (e as CustomEvent<Page>).detail; if (p) setPage(p); };
+    window.addEventListener(NAVIGATE_EVENT, go);
+    return () => window.removeEventListener(NAVIGATE_EVENT, go);
+  }, [setPage]);
+  // A graph with a linked presentation: offer it, open it too, or nothing (the setting in the Library).
+  useLinkedPresentationWatcher();
 
   // Navigate to Function Builder when an ExprBlock requests it
   useEffect(() => {
@@ -534,6 +554,42 @@ function App() {
   // NodeSearchPalette; that already exists, this is for browsing/reference.
   const [mobileExamplesTab, setMobileExamplesTab] = useState<'examples' | 'nodes' | 'history'>('examples');
   const unseenActivity = useUnseenActivity();
+  // Release notes this device hasn't seen: a dot on History (the Browse button on phones).
+  const unreadRelease = useWhatsNewUnread();
+  // Tablets have no History tab: "What's new" on the Updated notice opens History in a sheet.
+  const [showTabletHistory, setShowTabletHistory] = useState(false);
+  // A What's new link asks for a page (and, on a phone, the Browse sheet gets out of the way).
+  useEffect(() => {
+    const go = (e: Event) => {
+      const p = (e as CustomEvent<Page>).detail;
+      if (!p) return;
+      setShowMobileExamples(false);
+      setShowTabletHistory(false);
+      setPage(p);
+    };
+    window.addEventListener('open-page', go);
+    return () => window.removeEventListener('open-page', go);
+  }, [setPage]);
+  // "What's new" on the Updated notice: History's What's new view, wherever History lives.
+  useEffect(() => {
+    const open = () => {
+      const b = breakpointRef.current;
+      if (isMobile(b)) { setMobileExamplesTab('history'); setShowMobileExamples(true); return; }
+      if (isTablet(b)) { setShowTabletHistory(true); return; }
+      setPage('studio');
+      setPaletteCollapsed(false);
+    };
+    window.addEventListener(OPEN_WHATS_NEW, open);
+    return () => window.removeEventListener(OPEN_WHATS_NEW, open);
+  }, [setPage]);
+  // After an update: once, a small notice pointing at What's new.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const r = takeUpdateAnnouncement();
+      if (r) toast.info('Updated · What’s new', { message: r.title, action: { label: 'What’s new', onClick: openWhatsNew } });
+    }, 1500);
+    return () => window.clearTimeout(id);
+  }, []);
   // Reset's own confirm step, in-app rather than window.confirm() — a native
   // confirm dialog is unreliable (sometimes silently a no-op) inside a Tauri
   // webview, which would make Reset look broken with no error or feedback.
@@ -574,7 +630,7 @@ function App() {
 
   const shortcutHandlers = useMemo(() => ({
     undo:           unlessScratch(() => undo()),
-    export:         unlessScratch(() => exportGraph()),
+    export:         unlessScratch(() => offerGraphExport(null)),
     import:         unlessScratch(() => { void importAnyFile(setPage); }),
     fitView:        () => _fitViewCallback?.(),
     toggleCode:     () => setShowCode(v => !v),
@@ -905,9 +961,9 @@ function App() {
             }}
           >
             <Icon name="spark" size={15} />Browse
-            {unseenActivity.count > 0 && (
-              <span aria-label={`${unseenActivity.count} new ${unseenActivity.count === 1 ? 'notice' : 'notices'} in History`}
-                style={{ width: 8, height: 8, borderRadius: '50%', marginLeft: -2, background: unseenActivity.error ? tk.status.danger : tk.accent.base, boxShadow: `0 0 0 2px ${tk.ink.base}` }} />
+            {(unseenActivity.count > 0 || unreadRelease) && (
+              <span aria-label={unseenActivity.count > 0 ? `${unseenActivity.count} new ${unseenActivity.count === 1 ? 'notice' : 'notices'} in History` : 'New release notes in History'}
+                style={{ width: 8, height: 8, borderRadius: '50%', marginLeft: -2, background: unseenActivity.count > 0 && unseenActivity.error ? tk.status.danger : tk.accent.base, boxShadow: `0 0 0 2px ${tk.ink.base}` }} />
             )}
           </button>
         </div>
@@ -924,7 +980,7 @@ function App() {
                 options={[
                   { value: 'examples', label: 'Examples' },
                   { value: 'nodes', label: 'Nodes' },
-                  { value: 'history', label: unseenActivity.count > 0 ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>History<span style={{ width: 7, height: 7, borderRadius: '50%', background: unseenActivity.error ? tk.status.danger : tk.accent.base }} /></span> : 'History' },
+                  { value: 'history', label: unseenActivity.count > 0 || unreadRelease ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>History<span style={{ width: 7, height: 7, borderRadius: '50%', background: unseenActivity.count > 0 && unseenActivity.error ? tk.status.danger : tk.accent.base }} /></span> : 'History' },
                 ]}
               />
             </div>
@@ -1182,6 +1238,11 @@ function App() {
         {showExport && <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
         <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />
+        {showTabletHistory && (
+          <Sheet title="History" onClose={() => setShowTabletHistory(false)}>
+            <HistoryPanel compact onShowOnCanvas={() => setShowTabletHistory(false)} />
+          </Sheet>
+        )}
       </div>
   );
   }

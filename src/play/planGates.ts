@@ -4,7 +4,7 @@
  * Free: controls, and mappings whose source is the mouse, a key, audio (a live
  * band, an audio reader, an Audio Input node's band) or another control, plus
  * triggers fired by those. Pro: everything else (layers and their actions,
- * every other source, backgrounds, a MIDI file, takes).
+ * every other source, backgrounds, a MIDI file, takes, the Finish stack).
  *
  * A setup made on Pro opens on Free unchanged: the store keeps the whole
  * record, and `playableForPlan` is only the copy that plays, so nothing is
@@ -49,7 +49,7 @@ const cache = new WeakMap<PlayRecord, PlayRecord>();
  * mappings Free can run. The input is never changed.
  */
 export function playableForPlan(record: PlayRecord, plan: Plan | null): PlayRecord {
-  if (canOn(plan, 'play.layers') && canOn(plan, 'play.sources') && canOn(plan, 'play.backgrounds') && canOn(plan, 'play.midiFile')) return record;
+  if (canOn(plan, 'play.layers') && canOn(plan, 'play.sources') && canOn(plan, 'play.backgrounds') && canOn(plan, 'play.midiFile') && canOn(plan, 'play.finish')) return record;
   const hit = cache.get(record);
   if (hit) return hit;
   const out: PlayRecord = {
@@ -59,6 +59,7 @@ export function playableForPlan(record: PlayRecord, plan: Plan | null): PlayReco
     groups: undefined,
     actions: undefined,
     midiFile: undefined,
+    finish: canOn(plan, 'play.finish') ? record.finish : undefined,
     display: record.display ? { picture: true, backdrop: record.display.backdrop } : undefined,
   };
   cache.set(record, out);
@@ -74,5 +75,6 @@ export function proOnlyParts(record: PlayRecord, plan: Plan | null): string[] {
   if (locked) out.push(`${locked} mapping${locked === 1 ? '' : 's'}`);
   if (!canOn(plan, 'play.backgrounds') && record.display?.source && record.display.source !== 'shader') out.push('the background');
   if (!canOn(plan, 'play.midiFile') && record.midiFile) out.push('the MIDI file');
+  if (!canOn(plan, 'play.finish') && record.finish?.effects.some(e => e.enabled) && record.finish.on) out.push('the Finish stack');
   return out;
 }

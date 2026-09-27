@@ -13,6 +13,8 @@
  * Phones get one column: the steps as a strip of numbers, settings in a
  * sheet. Markdown and KaTeX load with this page, not with the app.
  */
+import { reportFileResult } from '../shell/reportFileResult';
+import { exportPresentationPlayfile } from '../../playfile/app';
 import { openBackgrounds, openCapture } from '../backgrounds/backgroundsUi';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { paperStyle } from './paper';
@@ -41,6 +43,7 @@ import { useSampleStills } from './useSampleStills';
 import { ExportDialog } from './ExportDialog';
 import { deleteWithUndo, exportPresentationFile, importPresentationFile, saveCopy } from './presentationFiles';
 import { PresentationsDialog } from './PresentationsDialog';
+import { announcePresentationOpened } from './linkActions';
 import { whenSaved } from '../../store/graphVersions';
 import type { BlockContext } from './Blocks';
 import { useCamera } from '../../present/runtimeHost';
@@ -132,7 +135,7 @@ function Header({ compact, list, onExport, onBrowse }: { compact: boolean; list:
   const others = list.filter(p => p.name !== name).slice(0, 5);
   const items: MenuItem[] = [
     ...(others.length ? [
-      ...others.map(p => ({ label: p.name, icon: 'slides' as const, hint: `${p.steps} step${p.steps === 1 ? '' : 's'}${p.updatedAt ? ` · ${whenSaved(p.updatedAt)}` : ''}`, onSelect: () => { usePresentation.getState().open(p.name); } })),
+      ...others.map(p => ({ label: p.name, icon: 'slides' as const, hint: `${p.steps} step${p.steps === 1 ? '' : 's'}${p.updatedAt ? ` · ${whenSaved(p.updatedAt)}` : ''}`, onSelect: () => { if (usePresentation.getState().open(p.name)) announcePresentationOpened(p.name); } })),
     ] : []),
     { label: list.length ? `All presentations (${list.length})…` : 'All presentations…', icon: 'folder', hint: 'Search, folders, download, delete', onSelect: onBrowse },
     'separator',
@@ -158,7 +161,8 @@ function Header({ compact, list, onExport, onBrowse }: { compact: boolean; list:
         const t = await askText('Save a copy', { label: 'Title of the copy', initial: `${name ?? doc.title} copy`, confirmLabel: 'Save the copy' });
         if (t) { const n = saveCopy(t); if (n) toast.success(`Saved a copy: “${n}”`, { message: 'The copy is open now.' }); }
       } },
-      { label: 'Download', icon: 'export' as const, hint: 'A .present.json file with every Play in it, to open in Playfield anywhere', onSelect: () => void exportPresentationFile() },
+      { label: 'Download as .playfile', icon: 'export' as const, hint: 'Every Play, picture and font in it, and the graphs it was made from: opens in Playfield anywhere', onSelect: () => { if (name) void exportPresentationPlayfile(name, doc).then(r => reportFileResult(r, { failTitle: 'Couldn’t download the presentation' })); } },
+      { label: 'Download as .present.json', icon: 'code' as const, hint: 'A readable presentation file with every Play in it', onSelect: () => void exportPresentationFile() },
       { label: 'Export as a web page…', icon: 'code' as const, hint: 'One HTML file, slides or one long page', onSelect: onExport },
       'separator' as const,
       { label: 'Delete', icon: 'trash' as const, danger: true, hint: 'You can undo it for a few seconds', onSelect: () => { if (name) deleteWithUndo(name); } },

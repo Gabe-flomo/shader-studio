@@ -1,6 +1,6 @@
 /**
- * engine.ts — keeps the local cache (localStorage + the background images in
- * IndexedDB) and the workspace folder the same.
+ * engine.ts — keeps the local cache (localStorage + the background images and
+ * the Video layers' videos in IndexedDB) and the workspace folder the same.
  *
  * The app always reads and writes the cache; this copies changes across.
  * For every file it remembers the content hash (and size and time) both sides
@@ -29,7 +29,7 @@
 import type { MutableKV } from '../files/mutate';
 import {
   applyMembership, AREAS, classify, decodeAreas, describePath, displayName, encodeTree, equivalent, LIST_DIRS, META_DIR, mergeLists, newMemo, retarget, TOMBSTONES_FILE, validate, WORKSPACE_FILE,
-  type Area, type EncodeMemo, type Encoded, type Entry, type ImageStore, type Tree,
+  type Area, type EncodeMemo, type Encoded, type Entry, type ImageStore, type MediaChanges, type Tree,
 } from './layout';
 import { hashBytes, hashString } from './hash';
 import { WorkspaceFsError, type FileStat, type WsFs } from './fs';
@@ -85,6 +85,8 @@ export interface SyncResult {
 export interface EngineDeps {
   kv: MutableKV;
   images: ImageStore | null;
+  /** The Video layers' videos; without it, the folder's videos are left alone. */
+  videos?: ImageStore | null;
   fs: WsFs;
   state: SyncState;
   saveState(s: SyncState): Promise<void>;
@@ -105,7 +107,7 @@ export class SyncEngine {
   get state(): SyncState { return this.d.state; }
   private now(): number { return this.d.now?.() ?? Date.now(); }
 
-  encode(): Promise<Encoded> { return encodeTree(this.d.kv, this.d.images, this.memo); }
+  encode(): Promise<Encoded> { return encodeTree(this.d.kv, this.d.images, this.memo, this.d.videos ?? null); }
 
   /** Local changes not in the folder yet (also notes when each was first seen). */
   async pending(enc?: Encoded): Promise<PendingChange[]> {
@@ -331,18 +333,21 @@ export class SyncEngine {
     }
     for (const k of ch.remove) { if (kv.get(k) != null) { kv.remove(k); keys.push(k); } }
     let imagesChanged = false;
-    if (images) {
-      for (const { meta, entry } of ch.images.put) {
+    const media = async (store: ImageStore | null | undefined, c: MediaChanges, what: string) => {
+      if (!store) return;
+      for (const { meta, entry } of c.put) {
         try {
           const data = entry.bytes ?? (entry.load ? await entry.load() : null);
           if (!data) continue;
-          await images.put({ ...meta, bytes: data.length }, data);
+          await store.put({ ...meta, bytes: data.length }, data);
           imagesChanged = true;
-        } catch (e) { problems.push(`Background image “${meta.name}”: ${e instanceof Error ? e.message : String(e)}`); }
+        } catch (e) { problems.push(`${what} “${meta.name}”: ${e instanceof Error ? e.message : String(e)}`); }
       }
-      for (const { id, name } of ch.images.rename) { try { await images.rename(id, name); imagesChanged = true; } catch { /* next pass */ } }
-      for (const id of ch.images.remove) { try { await images.remove(id); imagesChanged = true; } catch { /* next pass */ } }
-    }
+      for (const { id, name } of c.rename) { try { await store.rename(id, name); imagesChanged = true; } catch { /* next pass */ } }
+      for (const id of c.remove) { try { await store.remove(id); imagesChanged = true; } catch { /* next pass */ } }
+    };
+    await media(images, ch.images, 'Background image');
+    await media(this.d.videos, ch.videos, 'Video');
     const folders = applyMembership(kv, ch.membership, this.now());
     if (folders != null) { try { kv.set('assetbrowser_folders', folders); keys.push('assetbrowser_folders'); } catch { /* folders only */ } }
     return { keys, images: imagesChanged, problems, consumed: ch.consumed };

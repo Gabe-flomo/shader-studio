@@ -1,11 +1,14 @@
 /**
  * BackgroundsDialog — the library's backgrounds: Images (captured from a
- * graph, or imported) and Palettes (built in, and yours). Folders like the
+ * graph, or imported), Palettes (built in, and yours) and Videos (the Video
+ * layers' files: poster, size, which setups use them, delete with a warning
+ * when one does, and clean up the ones nothing uses). Folders like the
  * other kinds (the shared folder store), search, and per item rename, move to
  * a folder, download or copy, and delete with Undo. Capture from a graph and
  * Import an image sit at the top. Opened with `pick`, choosing an item
  * answers the caller instead (openBackgrounds in backgroundsUi.ts).
  */
+import { exportPlayfile } from '../../playfile/app';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -16,21 +19,24 @@ import { Menu, type MenuItem } from '../ui/Menu';
 import { Modal } from '../ui/Modal';
 import { Sheet } from '../ui/Sheet';
 import { Segmented } from '../ui/Choice';
-import { askText } from '../ui/dialogStore';
+import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import { FolderableList } from '../NodeGraph/FolderableList';
 import { createFolder, getFolderForItem, loadFolders } from '../../utils/assetFolders';
 import { saveBinaryFile } from '../../utils/fileIO';
 import { EXAMPLE_INDEX } from '../../store/exampleIndex';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { formatSize } from '../../utils/library';
+import { browserKV, describeVideoUses, videoUses, type VideoUse } from '../../lib/videoUsage';
 import {
-  IMAGE_FOLDER_SCOPE, PALETTE_FOLDER_SCOPE, freePaletteName, getImage, importImageFile, moveImage, movePalette, paletteCss, renameImage, renamePalette, savePalette,
-  type BackgroundImageMeta, type Palette,
+  IMAGE_FOLDER_SCOPE, PALETTE_FOLDER_SCOPE, freePaletteName, getImage, getVideo, importImageFile, moveImage, movePalette, paletteCss, renameImage, renamePalette, renameVideo, savePalette, videoExt,
+  type BackgroundImageMeta, type LibraryVideoMeta, type Palette,
 } from '../../lib/backgroundLibrary';
-import { deleteImageWithUndo, deletePaletteWithUndo, useBackgroundImages, usePalettes } from './useBackgrounds';
+import { deleteImageWithUndo, deletePaletteWithUndo, deleteVideosWithUndo, useBackgroundImages, useLibraryVideos, usePalettes } from './useBackgrounds';
 import { openCapture, type BackgroundPick } from './backgroundsUi';
 import { PaletteEditor } from './FillEditor';
 
-type Tab = 'images' | 'palettes';
+type Tab = 'images' | 'palettes' | 'videos';
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 640;
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -42,11 +48,20 @@ function imageDetail(m: BackgroundImageMeta): string {
   return `${size} · ${graph} at ${Number(m.source.time.toFixed(2))} s${m.source.mode === 'play' ? ', with layers' : ''}`;
 }
 
-function Thumb({ src, w = 72, h = 40 }: { src?: string; w?: number; h?: number }) {
+const clock = (s: number) => { const m = Math.floor(s / 60), r = Math.round(s - m * 60); return `${m}:${r < 10 ? '0' : ''}${r}`; };
+
+/** "12.4 MB · 1280 × 720 · 0:08 · used by 2 setups" */
+function videoDetail(v: LibraryVideoMeta, uses: readonly VideoUse[] | undefined): string {
+  const parts = [formatSize(v.bytes), v.width && v.height ? `${v.width} × ${v.height}` : '', v.duration ? clock(v.duration) : ''];
+  if (uses) parts.push(uses.length ? `used by ${uses.length === 1 ? (uses[0].kind === 'open' ? 'the open graph' : `“${uses[0].label}”`) : `${uses.length} setups`}` : 'not used');
+  return parts.filter(Boolean).join(' · ');
+}
+
+function Thumb({ src, w = 72, h = 40, icon = 'overlay' }: { src?: string; w?: number; h?: number; icon?: 'overlay' | 'play' }) {
   const tk = useTokens();
   return (
     <span style={{ width: w, height: h, flexShrink: 0, borderRadius: radius.sm, overflow: 'hidden', background: tk.bg.render, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.08)}` }}>
-      {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <Icon name="overlay" size={14} style={{ color: alpha('#ffffff', 0.4) }} />}
+      {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <Icon name={icon} size={14} style={{ color: alpha('#ffffff', 0.4) }} />}
     </span>
   );
 }
@@ -95,7 +110,14 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
     return () => window.removeEventListener('assetbrowser-folders-changed', on);
   }, []);
   const picking = !!pick;
-  const tabs = pick === 'image' ? ['images'] : pick === 'palette' ? ['palettes'] : ['images', 'palettes'];
+  const tabs = pick === 'image' ? ['images'] : pick === 'palette' ? ['palettes'] : pick ? ['images', 'palettes'] : ['images', 'palettes', 'videos'];
+  const { videos, error: videoError } = useLibraryVideos();
+  const vids = useMemo(() => videos ?? [], [videos]);
+  // Which setups use each video: saved graphs and presentations, and the open graph as it is now.
+  const openName = useNodeGraphStore(s => s.currentGraph?.name ?? null);
+  const openLayers = useNodeGraphStore(s => s.play.layers);
+  const uses = useMemo(() => (tab === 'videos' ? videoUses(vids.map(v => v.id), browserKV, { name: openName, layers: openLayers }) : null), [tab, vids, openName, openLayers]);
+  const unusedVideos = useMemo(() => (uses ? vids.filter(v => !uses.get(v.id)?.length) : []), [uses, vids]);
 
   const needle = q.trim().toLowerCase();
   const imgs = useMemo(() => images ?? [], [images]);
@@ -124,7 +146,8 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
     ...(picking && pick !== 'palette' ? [{ label: 'Use it', icon: 'check' as const, onSelect: () => onDone({ kind: 'image', image: m }) }, 'separator' as const] : []),
     { label: 'Rename…', icon: 'edit', onSelect: async () => { const t = (await askText('Rename background', { label: 'Name', initial: m.name, confirmLabel: 'Rename' }))?.trim(); if (t && t !== m.name) await renameImage(m.id, t); } },
     { label: getFolderForItem(IMAGE_FOLDER_SCOPE, m.id) ? 'Move to another folder…' : 'Move to a folder…', icon: 'folder', onSelect: later(() => openMenu(el, moveItems(IMAGE_FOLDER_SCOPE, m.id, moveImage))) },
-    { label: 'Download', icon: 'export', hint: `The picture file, ${m.width} × ${m.height}`, onSelect: async () => {
+    { label: 'Download as .playfile', icon: 'export', hint: 'Opens straight into someone’s backgrounds library', onSelect: () => { void exportPlayfile([`ext:backgrounds:${m.id}`], { fileName: m.name, dependencies: false, success: `Saved “${m.name}”` }).then(r => { if (!r.ok && !r.cancelled) toast.error('Couldn’t download it', { message: r.error }); }); } },
+    { label: 'Download the picture', icon: 'camera', hint: `The picture file, ${m.width} × ${m.height}`, onSelect: async () => {
       const img = await getImage(m.id);
       if (!img) return;
       const ext = img.type === 'image/jpeg' ? 'jpg' : img.type.split('/')[1]?.replace('svg+xml', 'svg') ?? 'png';
@@ -134,6 +157,36 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
     'separator',
     { label: 'Delete', icon: 'trash', danger: true, hint: 'You can undo it for a few seconds', onSelect: () => void deleteImageWithUndo(m) },
   ];
+  const deleteVideo = async (v: LibraryVideoMeta) => {
+    const u = uses?.get(v.id) ?? [];
+    if (u.length && !(await askConfirm(`Delete “${v.name}”?`, { message: `${describeVideoUses(u)} Without the file, ${u.reduce((n, x) => n + x.layers, 0) === 1 ? 'that layer asks' : 'those layers ask'} for it again (pick the file, or import a ZIP that has it). You can undo for a few seconds.`, confirmLabel: 'Delete', danger: true }))) return;
+    await deleteVideosWithUndo([v], u.length ? 'The layers that used it ask for it again.' : undefined);
+  };
+  const cleanUp = async () => {
+    const list = unusedVideos;
+    if (!list.length) return;
+    const bytes = list.reduce((n, v) => n + v.bytes, 0);
+    if (!(await askConfirm(`Delete ${plural(list.length, 'unused video')}?`, { message: `${list.map(v => `“${v.name}”`).slice(0, 6).join(', ')}${list.length > 6 ? ` and ${list.length - 6} more` : ''}: no saved Play setup, presentation or the open graph uses ${list.length === 1 ? 'it' : 'them'}. Frees ${formatSize(bytes)}.`, confirmLabel: 'Delete', danger: true }))) return;
+    await deleteVideosWithUndo(list);
+  };
+  const videoMenu = (v: LibraryVideoMeta): MenuItem[] => [
+    { label: 'Rename…', icon: 'edit', onSelect: async () => { const t = (await askText('Rename video', { label: 'Name', initial: v.name, confirmLabel: 'Rename' }))?.trim(); if (t && t !== v.name) await renameVideo(v.id, t); } },
+    { label: 'Download', icon: 'export', hint: `The video file, ${formatSize(v.bytes)}`, onSelect: async () => {
+      const got = await getVideo(v.id);
+      if (!got) return;
+      const ext = videoExt(got.type);
+      const base = v.name.replace(/[/\\:*?"<>|]/g, '-');
+      const res = await saveBinaryFile(new Uint8Array(await got.blob.arrayBuffer()), new RegExp(`\\.${ext}$`, 'i').test(base) ? base : `${base}.${ext}`, got.type);
+      if (!res.ok && !res.cancelled) toast.error('Couldn’t download it', { message: res.error });
+    } },
+    'separator',
+    { label: 'Delete', icon: 'trash', danger: true, hint: uses?.get(v.id)?.length ? 'Its Video layers ask for it again; you can undo' : 'You can undo it for a few seconds', onSelect: () => void deleteVideo(v) },
+  ];
+  const videoRow = (v: LibraryVideoMeta) => (
+    <Row key={v.id} compact={compact} picking={false} title={v.name} detail={videoDetail(v, uses?.get(v.id))}
+      lead={<Thumb src={v.thumb || undefined} icon="play" w={compact ? 64 : 80} h={compact ? 36 : 45} />}
+      onPick={() => {}} onMenu={el => openMenu(el, videoMenu(v))} />
+  );
   const paletteMenu = (p: Palette, el: HTMLElement): MenuItem[] => [
     ...(picking && pick !== 'image' ? [{ label: 'Use it', icon: 'check' as const, onSelect: () => onDone({ kind: 'palette', palette: p }) }, 'separator' as const] : []),
     ...(p.preset ? [] : [
@@ -178,6 +231,7 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
         <Segmented<Tab> fill ariaLabel="Kind of background" value={tab} onChange={setTab} options={[
           { value: 'images', label: `Images${images ? ` (${images.length})` : ''}` },
           { value: 'palettes', label: `Palettes (${palettes.length})` },
+          ...(tabs.includes('videos') ? [{ value: 'videos' as Tab, label: `Videos${videos ? ` (${videos.length})` : ''}` }] : []),
         ]} />
       )}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -186,12 +240,20 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
             <Button size="sm" variant="primary" icon="camera" onClick={() => void capture()} title="Render a saved graph or an example at a moment you choose, and keep it as a picture">Capture from a graph…</Button>
             <Button size="sm" icon="import" disabled={busy} onClick={() => fileInput.current?.click()} title="PNG, JPG, WebP, GIF or SVG, kept as it is">{busy ? 'Adding…' : 'Import an image…'}</Button>
           </>
+        ) : tab === 'videos' ? (
+          <>
+            <Button size="sm" icon="trash" disabled={!unusedVideos.length} onClick={() => void cleanUp()}
+              title="Delete the videos no saved Play setup, presentation or the open graph uses">
+              {unusedVideos.length ? `Clean up ${unusedVideos.length} unused (${formatSize(unusedVideos.reduce((n, v) => n + v.bytes, 0))})` : 'Nothing unused'}
+            </Button>
+            <span style={{ alignSelf: 'center', color: tk.text.faint, font: `500 11.5px ${fontFamily.ui}` }}>{formatSize(vids.reduce((n, v) => n + v.bytes, 0))} in all</span>
+          </>
         ) : (
           <Button size="sm" variant="primary" icon="plus" onClick={() => setEditing('new')}>New palette…</Button>
         )}
       </div>
-      {(tab === 'images' ? imgs.length : palettes.length) > 6 && (
-        <Field aria-label="Search backgrounds" placeholder={tab === 'images' ? 'Search image backgrounds' : 'Search palettes'} height={32} value={q} onChange={e => setQ(e.target.value)}
+      {(tab === 'images' ? imgs.length : tab === 'videos' ? vids.length : palettes.length) > 6 && (
+        <Field aria-label="Search backgrounds" placeholder={tab === 'images' ? 'Search image backgrounds' : tab === 'videos' ? 'Search videos' : 'Search palettes'} height={32} value={q} onChange={e => setQ(e.target.value)}
           leading={<Icon name="search" size={13} style={{ color: tk.text.faint }} />}
           onKeyDown={e => { if (e.key === 'Escape' && q) { e.stopPropagation(); setQ(''); } }} />
       )}
@@ -210,6 +272,12 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
       : <FolderableList scopeKey={IMAGE_FOLDER_SCOPE} color={tk.accent.base} items={imgs.map(m => ({ id: m.id, label: m.name }))}
           renderItem={item => { const m = byId.get(item.id); return m ? imageRow(m) : null; }}
           emptyHint={empty('No image backgrounds yet. Capture one from a graph (any moment, with or without its layers), or import a picture.')} />;
+  } else if (tab === 'videos') {
+    const list = needle ? vids.filter(v => v.name.toLowerCase().includes(needle)) : vids;
+    body = videos === null ? empty('Loading…')
+      : videoError ? empty(`Videos can’t be kept in this browser: ${videoError}`)
+      : list.length ? <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{list.map(videoRow)}</div>
+      : empty(needle ? `No video called anything like “${q.trim()}”.` : 'No videos yet. Add a Video layer on Play and pick a file, or drop a video on the picture.');
   } else {
     const found = needle ? palettes.filter(p => p.name.toLowerCase().includes(needle)) : null;
     body = found
@@ -228,7 +296,9 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
   const content = <div style={{ padding: compact ? '10px 0 4px' : '8px 14px 14px', minHeight: compact ? 180 : 300 }}>{body}</div>;
   const note = (
     <div style={{ color: tk.text.faint, font: `500 11.5px/1.5 ${fontFamily.ui}` }}>
-      {picking ? 'Choose one to use it. ' : ''}Kept in this browser; Export everything and the backup folder include them. A setup that uses one keeps its own copy, so it works when shared.
+      {picking ? 'Choose one to use it. ' : ''}{tab === 'videos'
+        ? 'Kept in this browser; Export everything, the workspace folder and the backup folder include them. A Video layer points at its file here, so a setup shared without it asks for the file.'
+        : 'Kept in this browser; Export everything and the backup folder include them. A setup that uses one keeps its own copy, so it works when shared.'}
     </div>
   );
   const popup = menu && <Menu x={menu.x} y={menu.y} minWidth={240} items={menu.items} onClose={() => setMenu(null)} />;
@@ -245,7 +315,7 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
     );
   }
   return (
-    <Modal title={heading} subtitle={images ? `${plural(images.length, 'image')} · ${plural(mine.length, 'palette')} of yours` : undefined} icon="overlay" onClose={() => onDone(null)} width={600} footer={note}>
+    <Modal title={heading} subtitle={images ? `${plural(images.length, 'image')} · ${plural(mine.length, 'palette')} of yours${vids.length && !picking ? ` · ${plural(vids.length, 'video')}` : ''}` : undefined} icon="overlay" onClose={() => onDone(null)} width={600} footer={note}>
       {toolbar}
       <div style={{ maxHeight: 'min(58vh, 540px)', overflowY: 'auto' }}>{content}</div>
       {popup}{editor}

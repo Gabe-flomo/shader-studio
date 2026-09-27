@@ -5,6 +5,7 @@
  * draw order, make a null for a property that follows one, and make a null
  * that drives a control.
  */
+import { FINISH_EFFECTS, finishParam, finishTarget } from '../../types/playFinish';
 import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type ShapeLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type TriggerSpec } from '../../types/play';
 import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
 import { resetKindLayer } from '../../play/layerKinds';
@@ -297,11 +298,21 @@ export function addLayerPropControl(p: PlayRecord, layerId: string, key: string)
   return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'float', label: `${l.label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
 }
 
+/** A Finish effect's number as a panel control (unchanged when it's already one). */
+export function addFinishPropControl(p: PlayRecord, effectId: string, key: string): PlayRecord {
+  const e = p.finish?.effects.find(x => x.id === effectId);
+  const d = e && finishParam(e.kind, key);
+  const target = finishTarget(effectId, key);
+  if (!e || !d || p.controls.some(c => c.target === target)) return p;
+  return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'float', label: `${FINISH_EFFECTS[e.kind].label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
+}
+
 /** Map `source` onto the control at `target` (made first if needed), across its whole range. Returns the record and the control. */
-export function mapSourceTo(p: PlayRecord, source: PlaySource, target: { control: string } | { candidate: PlayCandidate } | { layerId: string; key: string }, smoothMs = 60): { play: PlayRecord; control?: PlayControl } {
+export function mapSourceTo(p: PlayRecord, source: PlaySource, target: { control: string } | { candidate: PlayCandidate } | { layerId: string; key: string } | { effectId: string; key: string }, smoothMs = 60): { play: PlayRecord; control?: PlayControl } {
   let rec = p, targetKey: string;
   if ('control' in target) targetKey = p.controls.find(c => c.id === target.control)?.target ?? '';
   else if ('candidate' in target) { rec = addCandidateControl(rec, target.candidate); targetKey = target.candidate.target; }
+  else if ('effectId' in target) { rec = addFinishPropControl(rec, target.effectId, target.key); targetKey = finishTarget(target.effectId, target.key); }
   else { rec = addLayerPropControl(rec, target.layerId, target.key); targetKey = layerTarget(target.layerId, target.key); }
   const control = rec.controls.find(c => c.target === targetKey);
   if (!control) return { play: p };

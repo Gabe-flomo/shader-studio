@@ -13,6 +13,7 @@
  * plus the lists of any external stores (IndexedDB sources, see sources.ts).
  */
 import { isLibraryKey, PRESENTATION_FOLDER_SCOPE, PRESENTATION_KEY_PREFIX, type KV } from '../utils/library';
+import { GRAPH_LINK_FIELD, normalizeLinks, PRESENTATION_LINK_FIELD } from '../present/links';
 
 export type SectionId = 'graphs' | 'presentations' | 'glsl' | 'functions' | 'presets' | 'nodes' | 'scripts' | 'backgrounds' | 'settings';
 
@@ -89,6 +90,8 @@ export interface FileNode {
   private?: boolean;
   /** A small picture of it (an image background's thumbnail), as a data URL. */
   thumb?: string;
+  /** A graph's linked presentations, or a presentation's linked graphs, by name (present/links.ts). */
+  linked?: string[];
 }
 
 export interface Inventory {
@@ -114,6 +117,8 @@ export interface ExternalListing {
   folderScope?: string;
   /** The JSON field saved things point at its items with ("libraryId"), for Used by. */
   refField?: string;
+  /** Saved things point at its items (a Video layer's file) rather than keeping a copy: removing one breaks them. */
+  refIsLink?: boolean;
   items: Array<{ id: string; label: string; size: number; modified?: number; detail?: string; hash?: string; thumb?: string }>;
 }
 
@@ -466,6 +471,10 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
       }
     }
   }
+  // Links between graphs and presentations (present/links.ts), where the other side is still here.
+  const presNames = new Set(presentations.map(p => p.name));
+  for (const g of graphs) { const l = normalizeLinks(g.parsed[GRAPH_LINK_FIELD]).filter(n => presNames.has(n)); if (l.length) g.node.linked = l; }
+  for (const p of presentations) { const l = normalizeLinks(p.parsed[PRESENTATION_LINK_FIELD]).filter(n => graphByName.has(n)); if (l.length) p.node.linked = l; }
 
   // ── Sections ──
   const sectionNode = (id: SectionId, children: FileNode[]): FileNode => {
@@ -527,7 +536,16 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
         detail: it.detail, hash: it.hash, ref: { t: 'external', source: ext.source, id: it.id }, ...(it.thumb ? { thumb: it.thumb } : {}),
         ...(ext.folderScope ? { membership: { scope: ext.folderScope, id: it.id } } : {}),
       };
-      if (ext.refField) {
+      if (ext.refField && ext.refIsLink) {
+        // Setups whose layers point at it (a Video layer's file): without it, those layers ask for it again.
+        const needle = `"${ext.refField}":${JSON.stringify(it.id)}`;
+        const usedBy: UsedBy[] = [];
+        const layers = (c: number) => `${c === 1 ? 'A Video layer' : `${c} Video layers`}`;
+        for (const g of graphs) { const c = g.raw.split(needle).length - 1; if (c) usedBy.push({ id: g.id, label: g.name, where: `${layers(c)} in its Play setup`, breaks: true }); }
+        for (const p of presentations) { const c = p.raw.split(needle).length - 1; if (c) usedBy.push({ id: p.node.id, label: p.name, where: `${layers(c)} in a Play in it`, breaks: true }); }
+        n.usedBy = usedBy;
+        if (!usedBy.length) n.unused = 'No saved Play setup or presentation uses it';
+      } else if (ext.refField) {
         // What embedded a copy of it names it beside the copy.
         const needle = `"${ext.refField}":${JSON.stringify(it.id)}`;
         const usedBy: UsedBy[] = [];
@@ -771,7 +789,7 @@ function presentationNode(name: string, key: string, raw: string, p: Obj | undef
     id, section: 'presentations', kind: 'presentation', label: name,
     detail: [plural(steps.length, 'step'), plural(sources.length, 'Play')].join(' · '),
     size: key.length + raw.length, modified: num(p?.updatedAt), ref: { t: 'key', key }, membership: { scope: PRESENTATION_FOLDER_SCOPE, id: name },
-    hash: hashText(contentOf(p, ['title', 'updatedAt', 'createdAt', 'origin'])),
+    hash: hashText(contentOf(p, ['title', 'updatedAt', 'createdAt', 'origin', 'linkedGraphs'])),
     children: children.length ? children : undefined,
   };
 }

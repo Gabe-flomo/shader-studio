@@ -8,6 +8,7 @@
  * is the same store write a Studio slider makes, and a mapping is a per-frame
  * uniform write on the input bus (lib/playEngine.ts).
  */
+import { offerPlayExport } from '../playfile/exportMenus';
 import { can, openProSheet, requireFeature, useCan, usePlanName } from '../../lib/plan';
 import { sourceNeedsPro, sourceTypeNeedsPro, triggerNeedsPro, proOnlyParts } from '../../play/planGates';
 import { ProBadge, ProLock } from '../account/ProSheet';
@@ -42,6 +43,7 @@ import { HAND_POINT_SECTIONS, sourcePickerSections } from './sourcePickerSection
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
 import { LayersPanel } from './LayersPanel';
+import { FinishPanel } from './finish/FinishPanel';
 import { NotesCard } from './NotesCard';
 import { AspectPicker } from '../shell/PreviewChrome';
 import { NOTE_REF_TYPE, noteRef, type NoteRefKind } from './noteRefs';
@@ -49,6 +51,9 @@ import { LayerContextMenu } from './LayerContextMenu';
 import { driveWithNull, graphNullDrives, layerNullDrives, pairedKey, type NullDrive } from './layerOps';
 import { toast } from '../ui/toastStore';
 import { usePlayUi, type PanelSize } from './playUi';
+import { setLayerDropHandler } from '../../play/layerDrop';
+import { addDroppedLayers, dropLabel } from './dropLayers';
+import { appDropMakers } from './dropMakers';
 import { sidebarView, useBigTab, usePlaySplit } from './playSplit';
 import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
@@ -65,7 +70,8 @@ import { GuidesToggle } from './GuidesToggle';
 import { OpenPlayableButton } from './OpenPlayable';
 import { MidiFileCard } from './MidiFileCard';
 import { AnchorPicker, FirePicker, TriggerPicker, type TriggerLayerRef } from './TriggerPicker';
-import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, type ActionKind } from '../../types/play';
+import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, layerTarget, parseActionTarget, parseLayerTarget, parsePropTarget, type ActionKind } from '../../types/play';
+import { FINISH_EFFECTS, finishNumericProps, finishParam, finishTarget, parseFinishTarget, patchFinishEffect, readFinishValue } from '../../types/playFinish';
 import { playBackground } from '../../play/background';
 import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
@@ -124,7 +130,6 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const nodes = useNodeGraphStore(s => s.nodes);
   const paramBindings = useNodeGraphStore(s => s.paramBindings);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
-  const exportPlayFile = useNodeGraphStore(s => s.exportPlayFile);
   const [embedOpen, setEmbedOpen] = useState(false);
   const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
 
@@ -158,6 +163,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const candidates = useMemo(() => collectPlayCandidates(nodes, paramBindings), [nodes, paramBindings]);
 
   const writeControl = useCallback((control: PlayControl, value: number | number[]) => {
+    const ft = parseFinishTarget(control.target);
+    if (ft) {
+      if (typeof value === 'number') setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, ft.effectId, { [ft.key]: value }) }));
+      return;
+    }
     const lt = parseLayerTarget(control.target);
     if (lt) {
       if (typeof value === 'number') setPlay(p => ({ ...p, layers: p.layers.map(l => l.id === lt.layerId ? { ...l, [lt.key]: value } as typeof l : l) }));
@@ -168,8 +178,14 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   }, [updateNodeParams, setPlay]);
 
   const update = useCallback((fn: (p: PlayRecord) => PlayRecord) => setPlay(fn), [setPlay]);
+  // Images and videos dropped on the picture become layers where they land (play/layerDrop.ts).
+  useEffect(() => setLayerDropHandler({
+    label: n => dropLabel(n),
+    drop: (files, at) => { void addDroppedLayers(files, at, update, appDropMakers); },
+  }), [update]);
   // What this plan runs (play/planGates.ts). Locked parts stay visible, and nothing in the record is removed.
   const layersOk = useCan('play.layers');
+  const finishOk = useCan('play.finish');
   const backgroundsOk = useCan('play.backgrounds');
   const websiteOk = useCan('export.website');
   const takesOk = useCan('play.takes');
@@ -195,6 +211,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       const l = play.layers.find(x => x.id === at.layerId);
       return { kind: 'layer', title: l?.label ?? 'a deleted layer', param: actionLabel(at.do, l), missing: !l, go: () => { if (l) revealLayerFor(l.id); } };
     }
+    const ft = parseFinishTarget(c.target);
+    if (ft) {
+      const e = play.finish?.effects.find(x => x.id === ft.effectId);
+      return { kind: 'layer', title: e ? `Finish · ${FINISH_EFFECTS[e.kind].label}` : 'a removed Finish effect', param: (e && finishParam(e.kind, ft.key)?.label) ?? ft.key, missing: !e, go: () => { if (e) usePlayUi.getState().revealFinish(e.id); } };
+    }
     const lt = parseLayerTarget(c.target);
     if (lt) {
       const l = play.layers.find(x => x.id === lt.layerId);
@@ -219,6 +240,21 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     props: layerNumericProps(l).map(d => ({ key: d.key, label: d.label, hint: d.hint, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
     actions: actionsForLayer(l),
   })), [play.layers]);
+  // The Finish stack's numbers (types/playFinish.ts): targets `finish:<effect>::<key>`.
+  const finishCandidates = useMemo<LayerCandidates[]>(() => (play.finish?.effects ?? []).map(e => ({
+    id: e.id, label: `Finish · ${FINISH_EFFECTS[e.kind].label}`,
+    props: finishNumericProps(e).map(d => ({ key: d.key, label: d.label, hint: d.hint || undefined, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) })),
+    actions: [],
+  })), [play.finish]);
+  const addFinishControl = useCallback((effectId: string, key: string, withNull: boolean) => {
+    const e = play.finish?.effects.find(x => x.id === effectId);
+    const d = e && finishParam(e.kind, key);
+    if (!e || !d) return;
+    const target = finishTarget(effectId, key), label = `${FINISH_EFFECTS[e.kind].label} · ${d.label}`;
+    if (withNull) { addWithNull([{ target, label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), value: readFinishValue(play.finish, target) ?? d.value, axis: 'x' }], `${label} null`); return; }
+    update(p => (p.controls.some(c => c.target === target) ? p : { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'float', label, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [play.finish, update]);
   // A layer's actions (Drop again, Burst…) as buttons on the panel, which mappings can press.
   const addActionControl = useCallback((layerId: string, kind: ActionKind) => {
     update(p => {
@@ -342,12 +378,12 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       <>
         <OpenPlayableButton compact={compact} />
         <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
-        <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now" disabled={play.controls.length === 0} onClick={async () => { reportFileResult(await exportPlayFile(), { failTitle: 'Couldn’t export the play file', success: 'Play file exported' }); }} />
+        <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now (.playfile, or readable JSON)" disabled={play.controls.length === 0} onClick={e => offerPlayExport(e.currentTarget)} />
         {!play.notes && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows and how to play it (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
         <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
         <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
         <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
-        <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddAction={addActionControl} onAddNull={addWithNull} />
+        <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} finish={finishOk ? finishCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddFinish={addFinishControl} onAddAction={addActionControl} onAddNull={addWithNull} />
       </>
     )}
   />;
@@ -374,7 +410,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       {(() => {
         // Several controls whose nodes were grouped together: relink them in one go.
         const moved = play.controls.flatMap(c => {
-          if (controlExists(nodes, c, play) || parseLayerTarget(c.target) || parseActionTarget(c.target)) return [];
+          if (controlExists(nodes, c, play) || parsePropTarget(c.target) || parseActionTarget(c.target)) return [];
           const f = locateTarget(nodes, c.target);
           return f.status === 'moved' ? [{ id: c.id, target: f.target }] : [];
         });
@@ -401,14 +437,14 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           index={i}
           count={play.controls.length}
           exists={controlExists(nodes, c, play)}
-          fate={controlExists(nodes, c, play) ? undefined : parseLayerTarget(c.target) || parseActionTarget(c.target) ? { status: 'deleted' } : locateTarget(nodes, c.target)}
+          fate={controlExists(nodes, c, play) ? undefined : parsePropTarget(c.target) || parseActionTarget(c.target) ? { status: 'deleted' } : locateTarget(nodes, c.target)}
           onRelink={target => update(p => ({ ...p, controls: p.controls.map(x => (x.id === c.id ? { ...x, target } : x)) }))}
           help={controlHelp(nodes, c.target, play)}
           source={sourceOf(c)}
           onMap={() => addMapping(c.kind === 'action' ? { kind: 'mouse', axis: 'down' } : { kind: 'mouse', axis: 'x' }, c.id)}
           onNull={c.kind === 'float' ? () => {
             const v = readControlValue(nodes, c.target, play);
-            const key = parseLayerTarget(c.target)?.key ?? targetParts(c.target).paramKey;
+            const key = parsePropTarget(c.target)?.key ?? targetParts(c.target).paramKey;
             addWithNull([{ target: c.target, label: c.label, min: c.min, max: c.max, value: typeof v === 'number' ? v : c.min, axis: pairedKey(key)?.axis ?? 'x' }], `${c.label} null`);
           } : undefined}
           onAmount={amount => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, amount } : x) }))}
@@ -455,6 +491,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       {big === 'layers' && (layersOk
         ? <LayersPanel play={play} touch={false} split={splitWide} exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))} />
         : <LockedLayers play={play} />)}
+      {big === 'finish' && (finishOk ? <FinishPanel play={play} onChange={update} touch={false} wide={splitWide} /> : <LockedFinish play={play} />)}
       {big === 'mappings' && renderMappings(true)}
     </div>,
     splitHost,
@@ -485,6 +522,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           options={[
             ...(compact || sideView.tabs.includes('controls') ? [{ value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` }] : []),
             ...(compact || sideView.tabs.includes('layers') ? [{ value: 'layers' as const, label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}${layersOk ? '' : ' · Pro'}` }] : []),
+            ...(compact || sideView.tabs.includes('finish') ? [{ value: 'finish' as const, label: `Finish${play.finish?.effects.length ? ` · ${play.finish.effects.length}` : ''}${finishOk ? '' : ' · Pro'}`, title: 'Grade, lens, film and time effects over the whole picture' }] : []),
             ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length ? ` · ${play.mappings.length}` : ''}` }] : []),
           ]}
         />
@@ -503,6 +541,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))}
         />
       )}
+      {shown === 'finish' && (finishOk ? <FinishPanel play={play} onChange={update} touch={compact} /> : <LockedFinish play={play} />)}
       {shown === 'controls' && controlsHeader}
       {canvasRow && !compact && (
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel, overflowX: 'auto' }}>
@@ -572,7 +611,7 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 /** A layer's numbers, for the Add control menu. */
 interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number }>; actions: ActionKind[] }
 
-function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLayer, onAddAction, onAddNull, compact = false }: {
+function AddControlButton({ candidates, layers, finish, layerById, taken, onAdd, onAddLayer, onAddFinish, onAddAction, onAddNull, compact = false }: {
   /** Phones: the button is an icon, so the header's row of tools fits. */
   compact?: boolean;
   candidates: PlayCandidate[];
@@ -581,6 +620,9 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
   taken: Set<string>;
   onAdd: (c: PlayCandidate) => void;
   onAddLayer: (layerId: string, key: string) => void;
+  /** The Finish stack's effects and their numbers. */
+  finish: LayerCandidates[];
+  onAddFinish: (effectId: string, key: string, withNull: boolean) => void;
   onAddAction: (layerId: string, kind: ActionKind) => void;
   /** Add the slider (and its X/Y partner) with a Null layer that drives it. */
   onAddNull: (drives: NullDrive[], label: string) => void;
@@ -614,6 +656,8 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
     actions: withNull ? [] : l.actions.filter(a => !taken.has(actionTarget(l.id, a)) && (!q || `${l.label} ${actionLabel(a, layerById(l.id))}`.toLowerCase().includes(q))),
   })).filter(l => l.props.length + l.actions.length > 0);
   const layerCount = layerShown.reduce((n, l) => n + l.props.length + l.actions.length, 0);
+  const finishShown = finish.map(f => ({ ...f, props: f.props.filter(pr => (withNull || !taken.has(finishTarget(f.id, pr.key))) && (!q || `${f.label} ${pr.label}`.toLowerCase().includes(q))) })).filter(f => f.props.length > 0);
+  const finishCount = finishShown.reduce((n, f) => n + f.props.length, 0);
   // While searching every folder with a match is open.
   const isOpen = (k: string) => !!q || unfolded.has(k);
   const itemStyle: React.CSSProperties = {
@@ -632,7 +676,7 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
       <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.mono}` }}>{count}</span>
     </button>
   );
-  const nothing = candidates.length === 0 && layers.every(l => l.props.length + l.actions.length === 0);
+  const nothing = candidates.length === 0 && layers.every(l => l.props.length + l.actions.length === 0) && finish.every(f => f.props.length === 0);
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
       {compact
@@ -648,7 +692,7 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
             </Tooltip>
           </div>
           <div style={{ maxHeight: 400, overflowY: 'auto', marginTop: 6 }}>
-            {graphShown.length === 0 && layerCount === 0 && (
+            {graphShown.length === 0 && layerCount === 0 && finishCount === 0 && (
               <div style={{ padding: '10px 8px', color: tk.text.faint }}>{q ? 'No match.' : 'Everything is already on the panel.'}</div>
             )}
             {graphShown.length > 0 && folder('graph', 'From the graph', graphShown.length)}
@@ -677,6 +721,19 @@ function AddControlButton({ candidates, layers, layerById, taken, onAdd, onAddLa
                     <Icon name="curve" size={13} style={{ color: tk.text.faint }} />
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.label}</span>
                     {withNull && taken.has(layerTarget(l.id, pr.key)) && <span style={{ color: tk.text.faint, fontSize: 10.5 }}>on panel</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {finishCount > 0 && folder('finish', 'From the Finish stack', finishCount)}
+            {finishCount > 0 && isOpen('finish') && finishShown.map(f => (
+              <div key={f.id}>
+                {folder(`finish:${f.id}`, f.label, f.props.length, 14)}
+                {isOpen(`finish:${f.id}`) && f.props.map(pr => (
+                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { onAddFinish(f.id, pr.key, withNull); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
+                    <Icon name="curve" size={13} style={{ color: tk.text.faint }} />
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.label}</span>
+                    {withNull && taken.has(finishTarget(f.id, pr.key)) && <span style={{ color: tk.text.faint, fontSize: 10.5 }}>on panel</span>}
                   </button>
                 ))}
               </div>
@@ -1038,6 +1095,27 @@ function joinParts(parts: string[]): string {
 }
 
 /** Free's Layers tab: what layers do, the setup's own layers listed dimmed (kept, not run), and the way to Pro. */
+function LockedFinish({ play }: { play: PlayRecord }) {
+  const tk = useTokens();
+  const n = play.finish?.effects.length ?? 0;
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 12px' }}>
+      <div style={{ padding: '14px 14px 12px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Icon name="lock" size={15} style={{ color: tk.text.faint }} />
+          <b style={{ font: `650 13px ${fontFamily.ui}`, color: tk.text.primary }}>The Finish stack is part of Pro</b>
+          <ProBadge />
+        </div>
+        <span style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
+          Colour grading with curves and wheels, lens distortion, CRT, bloom, halation, film grain, camera shake and time displacement over the whole picture.
+          {n > 0 ? ` This setup’s ${n === 1 ? 'effect is' : `${n} effects are`} kept as they are, and play again with Pro.` : ''}
+        </span>
+        <div><Button size="sm" variant="primary" icon="spark" onClick={() => openProSheet('play.finish')}>See what Pro adds</Button></div>
+      </div>
+    </div>
+  );
+}
+
 function LockedLayers({ play }: { play: PlayRecord }) {
   const tk = useTokens();
   return (

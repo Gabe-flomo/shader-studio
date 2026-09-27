@@ -11,7 +11,7 @@
  *   shows it (the kit's overlay).
  */
 import type { PlayHtmlInput } from '../play/exportHtml';
-import { parseLayerTarget, type PlayControl } from '../types/play';
+import { parsePropTarget, type PlayControl } from '../types/play';
 
 export type CaptureMode = 'graph' | 'play';
 
@@ -25,13 +25,13 @@ export function hasPlayPicture(input: PlayHtmlInput): boolean {
 export function captureInput(input: PlayHtmlInput, mode: CaptureMode): PlayHtmlInput {
   if (mode === 'play') return input;
   const p = input.play;
-  const controls = p.controls.filter(c => !parseLayerTarget(c.target));
+  const controls = p.controls.filter(c => !parsePropTarget(c.target));
   const ids = new Set(controls.map(c => c.id));
   const { display: _d, ...rest } = p;
   void _d;
   return {
     ...input,
-    play: { ...rest, layers: [], groups: undefined, actions: [], takes: undefined, controls, mappings: p.mappings.filter(m => ids.has(m.controlId)) },
+    play: { ...rest, layers: [], groups: undefined, actions: [], takes: undefined, finish: undefined, controls, mappings: p.mappings.filter(m => ids.has(m.controlId)) },
     backgroundGraphs: undefined,
   };
 }

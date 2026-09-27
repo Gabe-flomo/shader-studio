@@ -12,6 +12,10 @@ export interface KitEnv {
   W: number; H: number; dpr: number;
   time: number; dt: number;
   value(layer: PlayLayer, key: string): number;
+  /** Null markers and the hands' skeleton go here instead (the Finish stack keeps them off the finished picture). */
+  guides?: CanvasRenderingContext2D | null;
+  /** Layers to also draw alone (even hidden), read back with layerCanvas(id). */
+  alphaLayers?: readonly string[] | null;
   pointer: KitPointer;
   markers: boolean;
   editing: boolean;
@@ -71,6 +75,8 @@ export interface LayerKit {
   act(a: { do: ActionKind; layerId: string; amount: number }): void;
   shapeAt(record: PlayRecord, x: number, y: number, aspect: number, value: (layer: PlayLayer, key: string) => number): string | null;
   isAnimated(record: PlayRecord): boolean;
+  /** A layer drawn alone on the last frame (listed in env.alphaLayers), or null. */
+  layerCanvas(id: string): HTMLCanvasElement | null;
   /**
    * The Background layer's plan for this frame (null without one): what the
    * host must render first (graphs) and keep playing (videos). Carries out

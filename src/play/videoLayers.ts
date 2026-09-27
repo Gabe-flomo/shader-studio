@@ -67,7 +67,7 @@ class PlayVideoLayers {
   private resumeArmed = false;
 
   constructor() {
-    videoSound.setHost({ analyser: id => this.analyser(id), state: id => this.soundState(id) });
+    videoSound.setHost({ analyser: id => this.analyser(id), state: id => this.soundState(id), file: id => this.file(id) });
   }
 
   /** Something the card shows changed (loaded, missing, playing). Returns an unsubscribe. */
@@ -163,6 +163,13 @@ class PlayVideoLayers {
     this.unplug(e);
     if (e.el) { e.el.pause(); e.el.removeAttribute('src'); e.el.load(); }
     forgetMedia(mediaKey(layerId));
+  }
+
+  /** The layer's opened file and its length (0 while unknown), or null while it has none (an offline render mixes its sound from it). */
+  file(layerId: string): { blob: Blob; duration: number } | null {
+    const e = this.entries.get(layerId);
+    const f = e && e.status === 'ready' ? files.get(e.videoId) : undefined;
+    return f ? { blob: f.blob, duration: this.duration(layerId) } : null;
   }
 
   /** The layer's element (for the kit to draw), or null while it has none. */

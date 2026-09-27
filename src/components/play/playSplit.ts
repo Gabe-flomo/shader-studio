@@ -1,7 +1,7 @@
 /**
  * playSplit.ts — the Play page's split view (desktop and tablet): the picture
  * shares the preview area with a big panel that shows one of the sidebar's
- * sections (Controls, Layers or Mappings) with room to breathe.
+ * sections (Controls, Layers, Finish or Mappings) with room to breathe.
  *
  * PlaySplitArea.tsx draws the divider and the panel's frame; PlayPage renders
  * the chosen section into the frame's body through a portal, so the section
@@ -39,7 +39,7 @@ export const MIN_PANEL_PX = 300;
 export const WIDE_PANEL_PX = 640;
 
 const SIDES: readonly SplitSide[] = ['left', 'right', 'top', 'bottom'];
-const TABS: readonly PlayTab[] = ['controls', 'layers', 'mappings'];
+const TABS: readonly PlayTab[] = ['controls', 'layers', 'finish', 'mappings'];
 
 /** Remembered prefs from storage text; anything missing or odd falls back to the default. */
 export function parseSplitPrefs(raw: string | null): SplitPrefs {
@@ -84,6 +84,10 @@ export function ratioAt(side: SplitSide, rect: { left: number; top: number; widt
   return clampRatio(r, total);
 }
 
+/** The sections the sidebar can show (Mappings is its drawer on desktop). */
+export type SideTab = 'controls' | 'layers' | 'finish';
+const SIDE_TABS: readonly SideTab[] = ['controls', 'layers', 'finish'];
+
 /**
  * What the sidebar shows beside a big panel on `big` (null: not split): the
  * section in view, the sections its switcher offers, and whether the Mappings
@@ -91,11 +95,10 @@ export function ratioAt(side: SplitSide, rect: { left: number; top: number; widt
  * tab the person picked (`tab`) is left as it was, so closing the split
  * brings it back.
  */
-export function sidebarView(tab: PlayTab, big: PlayTab | null): { tab: 'controls' | 'layers'; tabs: Array<'controls' | 'layers'>; drawer: boolean } {
-  const own: 'controls' | 'layers' = tab === 'layers' ? 'layers' : 'controls';
-  if (big === 'controls') return { tab: 'layers', tabs: ['layers'], drawer: true };
-  if (big === 'layers') return { tab: 'controls', tabs: ['controls'], drawer: true };
-  return { tab: own, tabs: ['controls', 'layers'], drawer: big !== 'mappings' };
+export function sidebarView(tab: PlayTab, big: PlayTab | null): { tab: SideTab; tabs: SideTab[]; drawer: boolean } {
+  const tabs = SIDE_TABS.filter(t => t !== big);
+  const own: SideTab = tab === 'layers' || tab === 'finish' ? tab : 'controls';
+  return { tab: tabs.includes(own) ? own : tabs[0], tabs, drawer: big !== 'mappings' };
 }
 
 function loadPrefs(): SplitPrefs {

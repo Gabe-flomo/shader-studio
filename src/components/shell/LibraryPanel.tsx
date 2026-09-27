@@ -5,6 +5,7 @@
  * folder that holds it all as files (workspace/workspace.ts), and where
  * recordings are saved (utils/recordingsFolder.ts).
  */
+import { offerSetExport } from '../playfile/exportMenus';
 import { ProBadgeFor } from '../account/ProSheet';
 import { requireFeature } from '../../lib/plan';
 import { useEffect, useRef, useState } from 'react';
@@ -12,15 +13,16 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
 import { Menu } from '../ui/Menu';
-import { exportEverything, exportSet, importEverything } from '../../utils/libraryActions';
+import { importEverything } from '../../utils/libraryActions';
 import { onWorkspaceStatus, useWorkspaceStatus } from '../../workspace/workspace';
 import { WorkspaceView } from '../workspace/WorkspacePanel';
 import { summary } from '../workspace/workspaceUi';
 import { countInSet, DOWNLOAD_SETS, formatSize, LIBRARY_REFRESH_EVENTS, libraryStats, STORAGE_LIMIT, takeSnapshot, type LibraryKind, type LibraryStats } from '../../utils/library';
 import { toast } from '../ui/toastStore';
 import { RecordingsSetting } from './RecordingsSetting';
+import { LinkedOpenSettingControl } from './GraphLinks';
 import { openBackgrounds, openCapture } from '../backgrounds/backgroundsUi';
-import { useBackgroundImages } from '../backgrounds/useBackgrounds';
+import { useBackgroundImages, useLibraryVideos } from '../backgrounds/useBackgrounds';
 
 const run = (fn: () => Promise<unknown>) => () => { fn().catch(e => toast.error('That didn’t work', { message: e instanceof Error ? e.message : String(e) })); };
 
@@ -51,6 +53,9 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
   const { images } = useBackgroundImages();
   const imageCount = images?.length ?? 0;
   const imageBytes = (images ?? []).reduce((n, m) => n + m.bytes, 0);
+  const { videos } = useLibraryVideos();
+  const videoCount = videos?.length ?? 0;
+  const videoBytes = (videos ?? []).reduce((n, m) => n + m.bytes, 0);
   const [showAll, setShowAll] = useState(false);
   const [, tick] = useState(0);
   useEffect(() => { const id = window.setInterval(() => tick(n => n + 1), 15000); return () => window.clearInterval(id); }, []);
@@ -65,7 +70,7 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
     ['Presentations', `${k.presentations.count}`, k.presentations.count ? `${formatSize(k.presentations.size)}, Plays included` : 'none yet'],
     ['Presets', `${presets}`, PRESET_KINDS.filter(x => k[x].count).map(x => `${k[x].count} ${KIND_LABELS[x].toLowerCase()}`).join(' · ') || 'none yet'],
     ['Published nodes', `${k['published nodes'].count}`, `${k.palettes.count} palette${k.palettes.count === 1 ? '' : 's'} · ${k['glsl shaders'].count} GLSL`],
-    ['Backgrounds', `${imageCount + k.backgrounds.count}`, imageCount + k.backgrounds.count ? `${imageCount} image${imageCount === 1 ? '' : 's'} (${formatSize(imageBytes)}) · ${k.backgrounds.count} palette${k.backgrounds.count === 1 ? '' : 's'}` : 'none yet'],
+    ['Backgrounds', `${imageCount + k.backgrounds.count + videoCount}`, imageCount + k.backgrounds.count + videoCount ? `${imageCount} image${imageCount === 1 ? '' : 's'} (${formatSize(imageBytes)}) · ${k.backgrounds.count} palette${k.backgrounds.count === 1 ? '' : 's'}${videoCount ? ` · ${videoCount} video${videoCount === 1 ? '' : 's'} (${formatSize(videoBytes)})` : ''}` : 'none yet'],
     ['Saved data', formatSize(stats.total), `${Math.round(used * 100)}% of the browser’s ~5 MB`],
   ];
   const kinds = (Object.keys(k) as LibraryKind[]).filter(x => k[x].size > 0).sort((a, b) => k[b].size - k[a].size);
@@ -109,21 +114,21 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
         </div>
       )}
       <div style={row}>
-        <Button size="sm" icon="export" onClick={run(exportEverything)} title="One ZIP: library.json (for importing) plus every graph, presentation and preset as files in folders">Export everything<ProBadgeFor feature="files.everything" /></Button>
+        <Button size="sm" icon="export" onClick={e => { if (requireFeature('files.everything')) offerSetExport(e.currentTarget, 'everything'); }} title="Everything in one .playfile, or one ZIP: library.json (for importing) plus every graph, presentation and preset as files in folders">Export everything<ProBadgeFor feature="files.everything" /></Button>
         <span ref={dlRef} style={{ display: 'inline-flex' }}>
           <Button size="sm" icon="export" title="One kind of thing as a ZIP of plain files: just the graphs, the presentations (.present.json), the GLSL shaders (.glsl), the functions, nodes or presets" onClick={() => { if (!requireFeature('files.everything')) return; const r = dlRef.current?.getBoundingClientRect(); setDlMenu(r ? { x: r.left, y: r.bottom + 4 } : null); }}>Download…<ProBadgeFor feature="files.everything" /></Button>
         </span>
         {dlMenu && (
           <Menu x={dlMenu.x} y={dlMenu.y} minWidth={280} onClose={() => setDlMenu(null)}
-            items={DOWNLOAD_SETS.map(d => { const n = d.id === 'everything' ? 0 : countInSet(takeSnapshot(), d.id) + (d.id === 'backgrounds' ? imageCount : 0); return { label: d.id === 'everything' ? d.label : `${d.label} (${n})`, hint: d.hint, icon: 'export' as const, disabled: d.id !== 'everything' && n === 0, onSelect: () => { void exportSet(d.id); } }; })} />
+            items={DOWNLOAD_SETS.map(d => { const n = d.id === 'everything' ? 0 : countInSet(takeSnapshot(), d.id) + (d.id === 'backgrounds' ? imageCount + videoCount : 0); return { label: d.id === 'everything' ? d.label : `${d.label} (${n})`, hint: d.hint, icon: 'export' as const, disabled: d.id !== 'everything' && n === 0, onSelect: () => { const at = dlMenu; setTimeout(() => offerSetExport(at, d.id), 0); } }; })} />
         )}
-        <Button size="sm" icon="import" onClick={run(importEverything)} title="A library ZIP or library.json (older Backup ZIPs work too). Adds to what you have; never overwrites.">Import a library…<ProBadgeFor feature="files.install" /></Button>
+        <Button size="sm" icon="import" onClick={run(importEverything)} title="A .playfile, a library ZIP or library.json (older Backup ZIPs work too). Adds to what you have; never overwrites.">Import a library…<ProBadgeFor feature="files.install" /></Button>
       </div>
 
       <span style={{ ...label, marginTop: 8 }}>Backgrounds</span>
-      <span style={note}>Pictures and palettes for Play’s Background and for presentations. Capture a still from any graph (at any moment, with or without its layers), or import a picture.</span>
+      <span style={note}>Pictures and palettes for Play’s Background and for presentations, and the Video layers’ videos. Capture a still from any graph (at any moment, with or without its layers), or import a picture.</span>
       <div style={row}>
-        <Button size="sm" icon="overlay" onClick={() => { void openBackgrounds(); }} title="Image backgrounds and palettes: folders, rename, download, delete">Backgrounds{imageCount + k.backgrounds.count ? ` (${imageCount + k.backgrounds.count})` : ''}…</Button>
+        <Button size="sm" icon="overlay" onClick={() => { void openBackgrounds(); }} title="Image backgrounds, palettes and videos: folders, rename, download, delete, clean up">Backgrounds{imageCount + k.backgrounds.count + videoCount ? ` (${imageCount + k.backgrounds.count + videoCount})` : ''}…</Button>
         <Button size="sm" icon="camera" onClick={() => { void openCapture(); }} title="Render a saved graph or an example at a moment you choose and keep it as an image background">Capture from a graph…</Button>
       </div>
 
@@ -132,6 +137,9 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
 
       <span style={{ ...label, marginTop: 8 }}>Save recordings to</span>
       <RecordingsSetting />
+
+      <span style={{ ...label, marginTop: 8 }}>Linked presentations</span>
+      <LinkedOpenSettingControl />
     </div>
   );
 }

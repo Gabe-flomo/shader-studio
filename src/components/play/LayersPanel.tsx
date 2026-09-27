@@ -59,6 +59,9 @@ import { DataLayerEditor } from './layers/DataLayerEditor';
 import { MatteMaskBar } from './layers/MatteMask';
 import { matteMaskSummary } from '../../play/mattes';
 import { matteUsers } from '../../types/playLayers';
+import { dragFileCount, dragHasFiles } from '../../play/layerDrop';
+import { addDroppedLayers, dropLabel } from './dropLayers';
+import { appDropMakers } from './dropMakers';
 
 const KIND = BUILTIN_LAYER;
 
@@ -106,6 +109,17 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   useEffect(() => playOverlay.onDrawing(d => setDrawing(d ? { ...d } : null)), []);
   // A layer clicked on the picture is selected here too.
   useEffect(() => playOverlay.onSelect(id => usePlayUi.getState().reveal(id)), []);
+
+  // Image and video files dragged over the list: a drop adds them as layers (into the group it shows).
+  const [fileDrag, setFileDrag] = useState<string | null>(null);
+  const fileDragOver = (e: React.DragEvent) => {
+    if (!dragHasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    const label = dropLabel(dragFileCount(e.dataTransfer), 'list');
+    if (label !== fileDrag) setFileDrag(label);
+  };
+  useEffect(() => { if (!fileDrag) return; const end = () => setFileDrag(null); window.addEventListener('dragend', end); window.addEventListener('drop', end); return () => { window.removeEventListener('dragend', end); window.removeEventListener('drop', end); }; }, [fileDrag]);
 
   // Groups: the rows the list shows (the whole list, or inside the group it has entered).
   const tree = useMemo(() => buildTree(play), [play]);
@@ -360,9 +374,23 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
           <Button size="sm" variant="ghost" onClick={clearPicks}>{selectMode ? 'Done' : 'Clear'}</Button>
         </div>
       )}
-      {wrapSplit(<div ref={listRef} style={split
-        ? { width: 'clamp(280px, 38%, 420px)', flexShrink: 0, overflowY: 'auto', padding: '6px 12px 12px 16px', borderRight: `1px solid ${tk.border.default}` }
-        : { flex: 1, minHeight: play.notes && !top ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }}>
+      {wrapSplit(<div ref={listRef} data-layer-list=""
+        onDragEnter={fileDragOver} onDragOver={fileDragOver}
+        onDragLeave={e => { if (fileDrag && !e.currentTarget.contains(e.relatedTarget as Node | null)) setFileDrag(null); }}
+        onDrop={e => {
+          if (!dragHasFiles(e.dataTransfer)) return;
+          e.preventDefault();
+          setFileDrag(null);
+          void addDroppedLayers(Array.from(e.dataTransfer.files), null, onChange, appDropMakers, entered);
+        }}
+        style={{ ...(split
+          ? { width: 'clamp(280px, 38%, 420px)', flexShrink: 0, overflowY: 'auto', padding: '6px 12px 12px 16px', borderRight: `1px solid ${tk.border.default}` }
+          : { flex: 1, minHeight: play.notes && !top ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }),
+        ...(fileDrag ? { boxShadow: `inset 0 0 0 2px ${tk.accent.base}`, background: alpha(tk.accent.base, 0.06) } : {}) }}>
+        {fileDrag && (
+          // Files dragged over the list: what a drop does.
+          <div data-layer-drop="" style={{ position: 'sticky', top: 0, zIndex: 3, margin: '4px 0 6px', padding: '8px 12px', borderRadius: radius.md, background: tk.accent.base, color: '#fff', font: `600 12.5px ${fontFamily.ui}`, textAlign: 'center', pointerEvents: 'none' }}>{fileDrag}</div>
+        )}
         {top && <div style={{ margin: '0 -12px' }}>{top}</div>}
         <SoloStrip kind="layer" total={play.layers.filter(l => l.kind !== 'null').length} />
         {inside && (

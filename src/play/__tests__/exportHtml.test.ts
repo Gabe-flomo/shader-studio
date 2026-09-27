@@ -23,7 +23,7 @@ describe('web page export', () => {
     expect(html).toContain('"fragmentShader":"precision highp float;');
     expect(html).toContain('"ratio":1.7777777777777777');
     expect(html).toContain('A <\\/script> B');
-    expect(html).toContain('ShaderStudioPlay = { version: 7, mount');
+    expect(html).toContain('ShaderStudioPlay = { version: 8, mount');
     expect(html).toContain('window.PLAY_OPTIONS = {"mode":"player"');
     expect(html.match(/<\/script>/g)?.length).toBe(2);
   });

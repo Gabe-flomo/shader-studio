@@ -9,6 +9,7 @@ import { cloneBlock, cloneStep, emptyPresentation, newStep, type Block, type Pre
 import { deletePresentation, freeName, loadPresentation, rememberLast, renamePresentation, savePresentation, type DeletedPresentation } from '../../present/storage';
 import { toast } from '../ui/toastStore';
 import { internPresentation } from '../../present/presentAssets';
+import { reconcilePresentation, registerOpenPresentation } from '../../present/links';
 
 export type PresentMode = 'edit' | 'slides' | 'scroll';
 
@@ -23,8 +24,12 @@ interface PresentationState {
   savedAt: number;
 
   open(name: string): boolean;
-  /** Save `doc` under a free name based on its title and open it. */
-  adopt(doc: Presentation): string;
+  /**
+   * Save `doc` under a free name based on its title and open it. Its links to
+   * graphs are dropped (a copy, an import or a sample starts unlinked) unless
+   * `keepLinks`.
+   */
+  adopt(doc: Presentation, opts?: { keepLinks?: boolean }): string;
   create(title: string): string;
   rename(to: string): boolean;
   /** Delete the open presentation; what was stored comes back for Undo. */
@@ -112,13 +117,15 @@ export const usePresentation = create<PresentationState>((set, get) => {
       void internOpen();
       return true;
     },
-    adopt(doc) {
+    adopt(doc, opts) {
       saveNow();
       const name = freeName(doc.title);
-      const p = { ...doc, title: name, updatedAt: Date.now() };
+      const { linkedGraphs, ...rest } = doc;
+      const p: Presentation = { ...rest, ...(opts?.keepLinks && linkedGraphs?.length ? { linkedGraphs } : {}), title: name, updatedAt: Date.now() };
       const r = savePresentation(name, p);
       if (!r.ok) toast.error('Couldn’t save the presentation', { message: r.error });
       set({ name, doc: p, step: 0, selected: null, status: r.ok ? 'saved' : 'failed', savedAt: r.ok ? Date.now() : 0, mode: 'edit' });
+      if (p.linkedGraphs) reconcilePresentation(name);
       void internOpen();
       return name;
     },
@@ -250,6 +257,17 @@ export const usePresentation = create<PresentationState>((set, get) => {
     removeSource(id) { get().update(p => ({ ...p, sources: p.sources.filter(s => s.id !== id) })); },
     setPoster(id, poster) { get().update(p => ({ ...p, sources: p.sources.map(s => (s.id === id ? { ...s, poster } : s)) })); },
   };
+});
+
+// Links to graphs (present/links.ts): changes to the open presentation's go through here, so the next save keeps them.
+registerOpenPresentation({
+  name: () => usePresentation.getState().name,
+  links: () => usePresentation.getState().doc?.linkedGraphs ?? [],
+  setLinks: links => usePresentation.getState().update(p => {
+    const { linkedGraphs: _old, ...rest } = p;
+    void _old;
+    return links.length ? { ...rest, linkedGraphs: links } : rest;
+  }),
 });
 
 // Leaving the page (or the app) saves what's pending.

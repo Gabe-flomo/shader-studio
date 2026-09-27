@@ -19,6 +19,7 @@ import { Button } from '../ui/Button';
 import { Field } from '../ui/Field';
 import { Popover } from '../ui/Popover';
 import { reportFileResult } from './reportFileResult';
+import { GraphPresentationLink } from './GraphLinks';
 
 export function SaveGraphForm({ onDone }: { onDone?: () => void }) {
   const tk = useTokens();
@@ -64,6 +65,7 @@ export function SaveGraphForm({ onDone }: { onDone?: () => void }) {
         <button type="button" onClick={() => setAsNew(true)} style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.accent.text, font: `500 12px ${fontFamily.ui}`, alignSelf: 'flex-start' }}>
           Save as a new graph instead…
         </button>
+        <GraphPresentationLink graph={current.name} onNavigated={onDone} />
       </div>
     );
   }

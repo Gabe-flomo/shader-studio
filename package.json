@@ -1,7 +1,7 @@
 {
   "name": "shader-studio",
   "private": true,
-  "version": "0.0.0",
+  "version": "2026.9.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,10 +13,14 @@
     "test": "vitest run",
     "osc-bridge": "node tools/osc-bridge.mjs",
     "gate:user": "node tools/gate-user.mjs add",
-    "gate:remove": "node tools/gate-user.mjs remove"
+    "gate:remove": "node tools/gate-user.mjs remove",
+    "release:sync": "node tools/release-version.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
+    "@noble/ciphers": "^2.4.0",
+    "@noble/ed25519": "^3.2.0",
+    "@noble/hashes": "^2.4.0",
     "@shaderfrog/glsl-parser": "^7.0.1",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-dialog": "^2.6.0",

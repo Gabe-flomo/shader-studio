@@ -1,5 +1,6 @@
+import { offerSetExport } from './playfile/exportMenus';
+import { redactSealedCode } from '../nodes/userNodes/userNodeRegistry';
 import { ProBadgeFor } from './account/ProSheet';
-import { exportSet } from '../utils/libraryActions';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { safeSetItem } from '../utils/fileIO';
@@ -380,8 +381,12 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           {onConvert && <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)} title="Open this shader on the Convert page and see the nodes it would become">Convert<ProBadgeFor feature="convert" /></Button>}
           <IconButton icon="copy" label="Copy the whole shader" size="sm" onClick={() => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); }} />
           <IconButton icon="search" label="Discover functions: extract from this file, or search the saved shaders" size="sm" onClick={() => setDiscoverOpen(true)} />
-          <IconButton icon="export" label="Download every saved shader as a .glsl file, in a ZIP (notes as a comment at the top): easy to share or to send for help" size="sm" onClick={() => { void exportSet('glsl'); }} />
-          <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => { setCode(nodeGraphShader || BOILERPLATE); setOpen(null); }} />
+          <IconButton icon="export" label="Download every saved shader: one .playfile, or .glsl files in a ZIP (notes as a comment at the top), easy to share or to send for help" size="sm" onClick={e => offerSetExport(e.currentTarget, 'glsl')} />
+          <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => {
+            // A graph built with a sealed node pack keeps that code hidden here too.
+            if (nodeGraphShader && redactSealedCode(nodeGraphShader) !== nodeGraphShader) { toast.info('This graph uses a sealed node pack', { message: 'Its code stays hidden, so the graph’s shader can’t be opened here.' }); return; }
+            setCode(nodeGraphShader || BOILERPLATE); setOpen(null);
+          }} />
           <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => { setCode(BOILERPLATE); setOpen(null); }} />
           <IconButton icon="trash" label="Clear the editor" size="sm" onClick={() => { setCode(''); setOpen(null); }} />
           {!sideOpen && <IconButton icon="popout" label="Show saved shaders and functions" size="sm" onClick={() => setShowPanel(true)} />}

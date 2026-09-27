@@ -1,7 +1,7 @@
 # Accounts, plans and file formats: a plan
 
-Plan, not built. Written 27 Sep 2026 from a voice note. Section 7 lists the
-decisions to settle before building.
+A plan, partly built (see the milestones in section 8). Written 27 Sep 2026
+from a voice note. Section 7 lists the decisions to settle before building.
 
 ## 1. The idea
 
@@ -81,14 +81,16 @@ layer greyed out with "needs Pro", and nothing is ever deleted.
 ## 5. One Playfield file format
 
 Today there are several: `.present.json`, play files, library ZIPs, graph JSON,
-`.glsl`. The plan is one container, **`.playfield`**:
+`.glsl`. The plan is one container, **`.playfile`** (built: its spec is
+[playfile-format.md](playfile-format.md); it was called `.playfield` here at
+first):
 
 - A ZIP with a `manifest.json`: kind (graph, play, presentation, node pack,
   GLSL, background, profile), format version, app version, author, and
   signatures. The typed payloads sit inside, and a single file can carry
   several kinds, such as a presentation bundled with its graphs, GLSL files
   and images.
-- The app opens any `.playfield` and says what's inside before importing, the
+- The app opens any `.playfile` and says what's inside before importing, the
   same way the Files page's Install works today.
 - **Node packs** (`kind: nodes`) can be **signed** by their author, so you know
   who made them, and optionally **sealed**:
@@ -105,12 +107,12 @@ Today there are several: `.present.json`, play files, library ZIPs, graph JSON,
 ## 6. Sharing and hosting
 
 - **No hosted links to Plays or files.** You share by sending the file (the
-  `.playfield` bundle). Nothing is stored on a server.
+  `.playfile` bundle). Nothing is stored on a server.
 - **The app moves off GitHub Pages** to its own domain. GitHub Pages can hold the
   landing page.
 - **Later: a community site** (separate from the app) hosting **presentations**
   as lessons. Each one can bundle downloadable files (graphs, GLSL,
-  `.playfield` packs) that open in Shader Studio. A marketplace for node packs
+  `.playfile` packs) that open in Shader Studio. A marketplace for node packs
   could follow. Both are out of scope for the first version.
 
 ## 7. Decisions (27 Sep 2026)
@@ -133,7 +135,7 @@ Today there are several: `.present.json`, play files, library ZIPs, graph JSON,
 5. **File formats:**
    - Graphs, groups, presentations, GLSL and the rest can still be exported as
      readable JSON, and anyone can share or sell those.
-   - **Nodes are only exported as `.playfield` node packs**: signed, and
+   - **Nodes are only exported as `.playfile` node packs**: signed, and
      optionally sealed. Importing packs works on Free.
 6. **Sealed packs:** signature plus encryption at rest, and a little beyond
    "good enough"; see section 9 for how far protection can go.
@@ -260,8 +262,18 @@ sign-in.
    Pro features move into their own lazily-loaded code chunks. The desktop
    build encrypts those chunks, and Rust decrypts them for a valid licence.
    The web app serves them only after sign-in.
-3. **The `.playfield` container:** manifest, open-anything, bundles, and
-   migration of the old formats (they still open).
-4. **Node packs:** export with signing and optional sealing; import on Free.
+3. **The `.playfile` container: done** ([playfile-format.md](playfile-format.md)).
+   The manifest, the one reader and writer with their checks, open anything
+   (Import, Install, drop on the window, the desktop file association), the
+   preview with keep both / replace, bundles that bring what a graph or
+   presentation uses, and `.playfile` offered at every download next to the
+   readable format. The old formats still open. Not yet: reading a file passed
+   on the command line on Windows and Linux.
+4. **Node packs: done** (same doc). Signed with a per-author Ed25519 key
+   (keychain on desktop, IndexedDB in a browser), trusted authors, optional
+   sealing (AES-256-GCM at rest, source hidden in the app); making packs is Pro,
+   importing them Free. The seal's key is derived inside the app, so it stops
+   casual copying only (section 9); moving that secret to the Rust side waits
+   for the encrypted Pro code of milestone 2.
 5. **Hosting:** own domain for the app, the landing page on GitHub Pages.
    (The community site comes later.)

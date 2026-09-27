@@ -26,7 +26,7 @@ import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, 
 import { geoAnchor } from '../play/kit/geometry.js';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
-import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parseLayerTarget } from '../types/play';
+import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parsePropTarget } from '../types/play';
 import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
 import { audioReaderBank } from './audioReaderBank';
@@ -826,9 +826,9 @@ class PlayEngine implements InputSource {
         driven.add(control.id);
         continue;
       }
-      const layerTarget = parseLayerTarget(control.target);
+      const layerTarget = parsePropTarget(control.target);
       if (layerTarget) {
-        // A layer property: not a uniform. The overlay reads it after this tick.
+        // A layer property or a Finish effect's number: not a uniform. The overlay reads it after this tick.
         const lk = `${layerTarget.layerId}::${layerTarget.key}`;
         if (this.layerLive.get(lk) !== v) { this.layerLive.set(lk, v); this.layerMoved = true; }
         this.live.set(control.id, v);
@@ -860,7 +860,7 @@ class PlayEngine implements InputSource {
       this.actionLevel.delete(id);
       const control = this.controls.get(id);
       const base = this.base.get(id);
-      const lt = control ? parseLayerTarget(control.target) : null;
+      const lt = control ? parsePropTarget(control.target) : null;
       if (lt) {
         this.layerLive.delete(`${lt.layerId}::${lt.key}`);
         this.layerMoved = true;
@@ -963,7 +963,7 @@ class PlayEngine implements InputSource {
 
   /** Actions, layer-property mappings and Learn run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.isLearning() || this.allTriggers().some(t => t.on === 'proximity') || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parseLayerTarget(c.target) !== null);
+    return !!this.record.actions?.length || this.isLearning() || this.allTriggers().some(t => t.on === 'proximity') || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */

@@ -9,7 +9,7 @@
  * way back: pause those mappings, or take the slider off the Play panel.
  */
 import type { PlayRecord } from '../types/play';
-import { parseActionTarget, parseLayerTarget } from '../types/play';
+import { parseActionTarget, parsePropTarget } from '../types/play';
 import { sourceLabel } from './playSources';
 
 export interface PlayDrive {
@@ -30,7 +30,7 @@ export function playDrivenMap(play: PlayRecord): Map<string, PlayDrive> {
   if (hit) return hit;
   const out = new Map<string, PlayDrive>();
   for (const c of play.controls) {
-    if (c.kind === 'action' || parseLayerTarget(c.target) || parseActionTarget(c.target)) continue;
+    if (c.kind === 'action' || parsePropTarget(c.target) || parseActionTarget(c.target)) continue;
     const sources = play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers));
     if (sources.length) out.set(driveKey(c.target), { controlId: c.id, controlLabel: c.label, sources });
   }

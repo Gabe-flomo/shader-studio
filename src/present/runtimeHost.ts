@@ -50,6 +50,8 @@ export interface PlayMount {
    * With `capture`, returns the picture with its layers as one canvas.
    */
   renderAt?(t: number, o?: { steps?: number[]; dt?: number; seed?: number; capture?: boolean }): HTMLCanvasElement | null;
+  /** Bring the video layers (and a video background) to their exact frames at `t` before a renderAt capture. */
+  seekVideos?(t: number): Promise<void>;
 }
 
 interface PlayRuntime {
@@ -68,7 +70,7 @@ declare global {
 
 /** The runtime, evaluated on first use. */
 export function playRuntime(): PlayRuntime {
-  if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 7) {
+  if (!window.ShaderStudioPlay || window.ShaderStudioPlay.version < 8) {
     // The same text the web export inlines: the kit first, then the player.
     new Function(`${kitScript()}\n${runtimeSource}`)();
   }

@@ -22,6 +22,7 @@ import { Sheet } from '../ui/Sheet';
 import { toast } from '../ui/toastStore';
 import { CreditTag } from '../ui/Credit';
 import { creditSentence, type SourceCredit } from '../../types/credit';
+import { GraphLinkBadge } from '../shell/GraphLinks';
 
 export interface PlayableRow { kind: 'saved' | 'example'; id: string; label: string; hint?: string; folder: string; source?: SourceCredit }
 type Row = PlayableRow;
@@ -184,6 +185,7 @@ export function PlayableList({ onDone, onPick, current: currentOverride, all = f
                       {r.hint && <span style={{ fontSize: 11, fontWeight: 400, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.hint}</span>}
                       {r.source && <CreditTag source={r.source} size={10.5} style={{ marginTop: 1 }} />}
                     </span>
+                    {r.kind === 'saved' ? <GraphLinkBadge graph={r.id} compact /> : !onPick && <GraphLinkBadge example={r.id} compact />}
                   </button>
                 );
               })}

@@ -20,6 +20,8 @@ export interface VideoSoundHost {
   /** The analyser its sound goes through, or null while its sound is off or it has no element. */
   analyser(layerId: string): AnalyserNode | null;
   state(layerId: string): VideoSoundState;
+  /** The layer's open file and its length in seconds (0 while unknown), for mixing its sound offline; null without one. */
+  file?(layerId: string): { blob: Blob; duration: number } | null;
 }
 
 let host: VideoSoundHost | null = null;
@@ -29,6 +31,7 @@ export const videoSound = {
   setHost(h: VideoSoundHost | null): void { host = h; },
   analyser: (layerId: string): AnalyserNode | null => host?.analyser(layerId) ?? null,
   state: (layerId: string): VideoSoundState => host?.state(layerId) ?? 'gone',
+  file: (layerId: string): { blob: Blob; duration: number } | null => host?.file?.(layerId) ?? null,
   /** Something the readers show changed (a state, a file). */
   changed(): void { for (const fn of listeners) fn(); },
   subscribe(fn: () => void): () => void { listeners.add(fn); return () => { listeners.delete(fn); }; },

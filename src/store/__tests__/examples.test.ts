@@ -6,6 +6,7 @@ import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../exampleIndex';
 import { PLAY_EXAMPLE_KEYS } from '../playExampleIndex';
 import type { GraphNode } from '../../types/nodeGraph';
 import { parseActionTarget, parseLayerTarget, parsePlayRecord } from '../../types/play';
+import { parseFinishTarget } from '../../types/playFinish';
 import { collectPlayCandidates } from '../../play/playControls';
 import { klSketchCompile, klSketchPress, klSketchStep } from '../../play/kit/layers.js';
 import { kdScriptView } from '../../play/kit/data.js';
@@ -71,7 +72,10 @@ describe('bundled examples', () => {
       const r = compileGraph({ nodes });
       const targets = new Set(collectPlayCandidates(nodes, r.paramBindings).map(c => c.target));
       const layerIds = new Set(play.layers.map(l => l.id));
+      const effectIds = new Set(play.finish?.effects.map(e => e.id) ?? []);
       for (const c of play.controls) {
+        const ft = parseFinishTarget(c.target);
+        if (ft) { if (!effectIds.has(ft.effectId)) problems.push(`${k}: control "${c.label}" targets a missing Finish effect ${ft.effectId}`); continue; }
         const lt = parseLayerTarget(c.target) ?? parseActionTarget(c.target);
         if (lt ? !layerIds.has(lt.layerId) : !targets.has(c.target)) problems.push(`${k}: control "${c.label}" targets ${c.target}, which is not a live param or layer`);
       }
@@ -137,7 +141,8 @@ describe('bundled examples', () => {
   });
 
   it('every Script layer compiles and draws frames without an error, pressing each of its buttons', () => {
-    const ctx = new Proxy({}, { get: (_t, k) => (k === 'canvas' ? {} : () => undefined), set: () => true }) as unknown as CanvasRenderingContext2D;
+    // Gradients and patterns come back as objects with addColorStop, as a real canvas's do.
+    const ctx = new Proxy({}, { get: (_t, k) => (k === 'canvas' ? {} : typeof k === 'string' && k.startsWith('create') ? () => ({ addColorStop: () => undefined }) : () => undefined), set: () => true }) as unknown as CanvasRenderingContext2D;
     let count = 0;
     for (const k of keys) {
       for (const l of EXAMPLE_GRAPHS[k].play?.layers ?? []) {

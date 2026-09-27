@@ -28,6 +28,7 @@ export async function renderStill(source: PresentSource, o: { w: number; h: numb
     // The player needs a frame or two to compile; try a few times.
     for (let i = 0; i < 12; i++) {
       await new Promise(r => setTimeout(r, i === 0 ? 120 : 200));
+      await m.seekVideos?.(o.time);
       const c = m.renderAt?.(o.time, { steps: plan.steps, dt: plan.dt, seed: 1, capture: true });
       if (!c || !c.width) continue;
       const out = document.createElement('canvas');

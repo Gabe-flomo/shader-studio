@@ -165,11 +165,13 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const play  = useNodeGraphStore(s => s.play);
   // Output (RGBA): the picture has its own alpha, so a transparent export keeps it.
   const ownAlpha = nodes.some(n => n.type === 'vec4Output');
-  const layersOn = !external && playOverlay.hasLayers();
+  // The Finish stack is drawn on a canvas of its own too: record that, not the bare picture.
+  const hasLayers = !external && playOverlay.hasLayers();
+  const layersOn = hasLayers || (!external && playOverlay.hasFinish());
   // What happens to the shader's picture: its own alpha, black turns clear, or left out for the layers alone.
   const [pictureChoice, setPicture] = useState<TransparentPicture | null>(null);
   const picture: TransparentPicture = pictureChoice === 'own' && !ownAlpha ? 'luma' : pictureChoice ?? (ownAlpha ? 'own' : 'luma');
-  const nothingShows = transparent && picture === 'drop' && !layersOn;
+  const nothingShows = transparent && picture === 'drop' && !hasLayers;
   // Sound: only songs already in Playfield, never the microphone.
   const tracks = external ? [] : recordingTracks(play, nodes);
   const [withAudio, setWithAudio] = useState(true);
@@ -879,7 +881,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
 
             {tracks.length > 0 && (
               <Section label="Sound">
-                <Toggle checked={withAudio} onChange={setWithAudio} label={`Include ${tracks.length === 1 ? `“${tracks[0].label}”` : `${tracks.length} songs: ${tracks.map(t => t.label).join(', ')}`}`} />
+                <Toggle checked={withAudio} onChange={setWithAudio} label={`Include ${tracks.length === 1 ? `“${tracks[0].label}”` : `${tracks.length} ${tracks.some(t => t.video) ? 'sounds' : 'songs'}: ${tracks.map(t => t.label).join(', ')}`}`} />
                 <Help>
                   {pngSequence
                     ? 'Added to the zip as a WAV, lined up with frame 1.'
