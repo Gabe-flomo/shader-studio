@@ -6,6 +6,7 @@
  * that drives a control.
  */
 import { finishHost, finishHostLabel, finishParamOf, finishTarget } from '../../types/playFinish';
+import { audioFxControlFor } from '../../types/playAudioFx';
 import { layerNumericProps, defaultLayer, layerTarget, type NullLayer, type ShapeLayer, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type TriggerSpec } from '../../types/play';
 import { candidateLabel, playId, targetParts, type PlayCandidate } from '../../play/playControls';
 import { resetKindLayer } from '../../play/layerKinds';
@@ -307,10 +308,18 @@ export function addFinishPropControl(p: PlayRecord, effectId: string, key: strin
   return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'float', label: `${finishHostLabel(e)} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
 }
 
+/** An audio effect's number (`audiofx:<chain>:<effect>::<key>`) as a panel control (unchanged when it's already one). */
+export function addAudioFxPropControl(p: PlayRecord, target: string): PlayRecord {
+  const c = audioFxControlFor(p.audioFx, p.layers, target);
+  if (!c || p.controls.some(x => x.target === target)) return p;
+  return { ...p, controls: [...p.controls, { id: playId('ctl'), ...c }] };
+}
+
 /** Map `source` onto the control at `target` (made first if needed), across its whole range. Returns the record and the control. */
-export function mapSourceTo(p: PlayRecord, source: PlaySource, target: { control: string } | { candidate: PlayCandidate } | { layerId: string; key: string } | { effectId: string; key: string }, smoothMs = 60): { play: PlayRecord; control?: PlayControl } {
+export function mapSourceTo(p: PlayRecord, source: PlaySource, target: { control: string } | { candidate: PlayCandidate } | { layerId: string; key: string } | { effectId: string; key: string } | { audioFx: string }, smoothMs = 60): { play: PlayRecord; control?: PlayControl } {
   let rec = p, targetKey: string;
   if ('control' in target) targetKey = p.controls.find(c => c.id === target.control)?.target ?? '';
+  else if ('audioFx' in target) { rec = addAudioFxPropControl(rec, target.audioFx); targetKey = target.audioFx; }
   else if ('candidate' in target) { rec = addCandidateControl(rec, target.candidate); targetKey = target.candidate.target; }
   else if ('effectId' in target) { rec = addFinishPropControl(rec, target.effectId, target.key); targetKey = finishTarget(target.effectId, target.key); }
   else { rec = addLayerPropControl(rec, target.layerId, target.key); targetKey = layerTarget(target.layerId, target.key); }

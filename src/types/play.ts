@@ -62,6 +62,8 @@ export const DEFAULT_FIRE: FireSpec = { mode: 'once', every: 3, unit: 'frames' }
  */
 export type AnchorRef = string;
 export const HAND_ANCHOR_PREFIX = 'hand:';
+/** The MIDI pad grid's last pad (play.padGrid): its column across and row up, 0..1, like the Pad grid X and Y sources. None before a pad is hit. */
+export const PAD_ANCHOR = 'pad:last';
 export function handAnchor(side: HandSide, point: number): AnchorRef { return `${HAND_ANCHOR_PREFIX}${side}:${point}`; }
 /** The hand and landmark of a `hand:<side>:<point>` anchor, or null for a layer anchor. */
 export function parseHandAnchor(ref: string): { side: HandSide; point: number } | null {

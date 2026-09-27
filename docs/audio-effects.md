@@ -45,6 +45,8 @@ Reverb size and decay build a new impulse response, crossfaded between two convo
 
 Each number is a control target: `audiofx:<chainId>:<effectId>::<key>` (for example `audiofx:layer:song:ec_1::feedback`). The + beside a number makes the control; `parsePropTarget` gives the mapping engine the prop id `audiofx:<chainId>:<effectId>`, so the value lives beside layer properties and Finish numbers (`playEngine.layerValue`), is recorded in takes, played back, and read by conditions. Removing an effect removes its controls and their mappings. Map a cutoff with an **Exp** curve for an even sweep.
 
+The numbers are offered wherever other targets are: a reading's **Map…** menu and **Add control** (folder **From the sound effects**, one sub-folder per effect, named "<sound> · <effect>", e.g. "Song · Echo"; Add control lists them on Pro), and the condition value picker (**Sound effects**; the path is the target itself, `audiofx:<chain>:<effect>::<key>`, which `sgParseValueRef` reads as the prop `audiofx:<chain>:<effect>`). The helpers are `audioFxHosts`, `audioFxChainLabel` and `audioFxControlFor` in `types/playAudioFx.ts`; a control made from any of them has the same label as the card's +.
+
 ## Readers: after or before
 
 **Readers hear** (`audioFx.analyse`, default after): the analyser each sound already had (the audio readers, audio layers, Audio Input uniforms) taps the chain's output, or with **Before** its input. The master chain has no analyser of its own, except on the test loop, which is a single sound.
@@ -66,4 +68,3 @@ Audio effects are **Pro** (`play.audioFx` in `lib/plan.ts`), like the picture's 
 ## Not yet
 
 - Plugin hosting (see `docs/backlog.md`). The drum pad sampler shipped with a chain of its own (`layer:<id>`, docs/drum-pads.md).
-- Audio effect numbers in the Map… menu and in condition value pickers (use the + on the card, then map the control).

@@ -1,8 +1,10 @@
 /**
  * BackgroundsDialog — the library's backgrounds: Images (captured from a
- * graph, or imported), Palettes (built in, and yours) and Videos (the Video
+ * graph, or imported), Palettes (built in, and yours), Videos (the Video
  * layers' files: poster, size, which setups use them, delete with a warning
- * when one does, and clean up the ones nothing uses). Folders like the
+ * when one does, and clean up the ones nothing uses) and Sounds (the drum
+ * pads' samples, kept in the same store: a waveform, size, length, used by,
+ * rename, download, delete and clean up). Folders like the
  * other kinds (the shared folder store), search, and per item rename, move to
  * a folder, download or copy, and delete with Undo. Capture from a graph and
  * Import an image sit at the top. Opened with `pick`, choosing an item
@@ -29,14 +31,14 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { formatSize } from '../../utils/library';
 import { browserKV, describeVideoUses, videoUses, type VideoUse } from '../../lib/videoUsage';
 import {
-  IMAGE_FOLDER_SCOPE, PALETTE_FOLDER_SCOPE, freePaletteName, getImage, getVideo, importImageFile, moveImage, movePalette, paletteCss, renameImage, renamePalette, renameVideo, savePalette, videoExt,
+  IMAGE_FOLDER_SCOPE, PALETTE_FOLDER_SCOPE, freePaletteName, ensureSoundWave, getImage, getVideo, isAudioType, importImageFile, moveImage, movePalette, paletteCss, renameImage, renamePalette, renameVideo, savePalette, videoExt,
   type BackgroundImageMeta, type LibraryVideoMeta, type Palette,
 } from '../../lib/backgroundLibrary';
 import { deleteImageWithUndo, deletePaletteWithUndo, deleteVideosWithUndo, useBackgroundImages, useLibraryVideos, usePalettes } from './useBackgrounds';
 import { openCapture, type BackgroundPick } from './backgroundsUi';
 import { PaletteEditor } from './FillEditor';
 
-type Tab = 'images' | 'palettes' | 'videos';
+type Tab = 'images' | 'palettes' | 'videos' | 'sounds';
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 640;
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -57,7 +59,7 @@ function videoDetail(v: LibraryVideoMeta, uses: readonly VideoUse[] | undefined)
   return parts.filter(Boolean).join(' · ');
 }
 
-function Thumb({ src, w = 72, h = 40, icon = 'overlay' }: { src?: string; w?: number; h?: number; icon?: 'overlay' | 'play' }) {
+function Thumb({ src, w = 72, h = 40, icon = 'overlay' }: { src?: string; w?: number; h?: number; icon?: 'overlay' | 'play' | 'wave' }) {
   const tk = useTokens();
   return (
     <span style={{ width: w, height: h, flexShrink: 0, borderRadius: radius.sm, overflow: 'hidden', background: tk.bg.render, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.08)}` }}>
@@ -110,14 +112,21 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
     return () => window.removeEventListener('assetbrowser-folders-changed', on);
   }, []);
   const picking = !!pick;
-  const tabs = pick === 'image' ? ['images'] : pick === 'palette' ? ['palettes'] : pick ? ['images', 'palettes'] : ['images', 'palettes', 'videos'];
+  const tabs = pick === 'image' ? ['images'] : pick === 'palette' ? ['palettes'] : pick ? ['images', 'palettes'] : ['images', 'palettes', 'videos', 'sounds'];
   const { videos, error: videoError } = useLibraryVideos();
-  const vids = useMemo(() => videos ?? [], [videos]);
+  // Drum pad samples are kept with the videos; each has its own tab.
+  const vids = useMemo(() => (videos ?? []).filter(v => !isAudioType(v.type)), [videos]);
+  const snds = useMemo(() => (videos ?? []).filter(v => isAudioType(v.type)), [videos]);
+  // A sound without a waveform yet gets one while the tab is open (tried once a session).
+  useEffect(() => { if (tab === 'sounds') for (const s of snds) if (!s.thumb) void ensureSoundWave(s.id).catch(() => {}); }, [tab, snds]);
+  const media = tab === 'sounds' ? snds : vids;
   // Which setups use each video: saved graphs and presentations, and the open graph as it is now.
   const openName = useNodeGraphStore(s => s.currentGraph?.name ?? null);
   const openLayers = useNodeGraphStore(s => s.play.layers);
-  const uses = useMemo(() => (tab === 'videos' ? videoUses(vids.map(v => v.id), browserKV, { name: openName, layers: openLayers }) : null), [tab, vids, openName, openLayers]);
-  const unusedVideos = useMemo(() => (uses ? vids.filter(v => !uses.get(v.id)?.length) : []), [uses, vids]);
+  const uses = useMemo(() => (tab === 'videos' || tab === 'sounds' ? videoUses(media.map(v => v.id), browserKV, { name: openName, layers: openLayers }) : null), [tab, media, openName, openLayers]);
+  const unusedVideos = useMemo(() => (uses ? media.filter(v => !uses.get(v.id)?.length) : []), [uses, media]);
+  const sound = tab === 'sounds';
+  const kindWord = sound ? 'sound' : 'video';
 
   const needle = q.trim().toLowerCase();
   const imgs = useMemo(() => images ?? [], [images]);
@@ -159,19 +168,23 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
   ];
   const deleteVideo = async (v: LibraryVideoMeta) => {
     const u = uses?.get(v.id) ?? [];
-    if (u.length && !(await askConfirm(`Delete “${v.name}”?`, { message: `${describeVideoUses(u)} Without the file, ${u.reduce((n, x) => n + x.layers, 0) === 1 ? 'that layer asks' : 'those layers ask'} for it again (pick the file, or import a ZIP that has it). You can undo for a few seconds.`, confirmLabel: 'Delete', danger: true }))) return;
-    await deleteVideosWithUndo([v], u.length ? 'The layers that used it ask for it again.' : undefined);
+    const one = u.reduce((n, x) => n + x.layers, 0) === 1;
+    const msg = isAudioType(v.type)
+      ? `${describeVideoUses(u, ['A drum pad', 'drum pads'])} Without the file, ${one ? 'that pad asks' : 'those pads ask'} for it again (pick the file, or import a ZIP that has it). You can undo for a few seconds.`
+      : `${describeVideoUses(u)} Without the file, ${one ? 'that layer asks' : 'those layers ask'} for it again (pick the file, or import a ZIP that has it). You can undo for a few seconds.`;
+    if (u.length && !(await askConfirm(`Delete “${v.name}”?`, { message: msg, confirmLabel: 'Delete', danger: true }))) return;
+    await deleteVideosWithUndo([v], u.length ? (isAudioType(v.type) ? 'The pads that used it ask for it again.' : 'The layers that used it ask for it again.') : undefined);
   };
   const cleanUp = async () => {
     const list = unusedVideos;
     if (!list.length) return;
     const bytes = list.reduce((n, v) => n + v.bytes, 0);
-    if (!(await askConfirm(`Delete ${plural(list.length, 'unused video')}?`, { message: `${list.map(v => `“${v.name}”`).slice(0, 6).join(', ')}${list.length > 6 ? ` and ${list.length - 6} more` : ''}: no saved Play setup, presentation or the open graph uses ${list.length === 1 ? 'it' : 'them'}. Frees ${formatSize(bytes)}.`, confirmLabel: 'Delete', danger: true }))) return;
+    if (!(await askConfirm(`Delete ${plural(list.length, `unused ${kindWord}`)}?`, { message: `${list.map(v => `“${v.name}”`).slice(0, 6).join(', ')}${list.length > 6 ? ` and ${list.length - 6} more` : ''}: no saved Play setup, presentation or the open graph uses ${list.length === 1 ? 'it' : 'them'}. Frees ${formatSize(bytes)}.`, confirmLabel: 'Delete', danger: true }))) return;
     await deleteVideosWithUndo(list);
   };
   const videoMenu = (v: LibraryVideoMeta): MenuItem[] => [
-    { label: 'Rename…', icon: 'edit', onSelect: async () => { const t = (await askText('Rename video', { label: 'Name', initial: v.name, confirmLabel: 'Rename' }))?.trim(); if (t && t !== v.name) await renameVideo(v.id, t); } },
-    { label: 'Download', icon: 'export', hint: `The video file, ${formatSize(v.bytes)}`, onSelect: async () => {
+    { label: 'Rename…', icon: 'edit', onSelect: async () => { const t = (await askText(isAudioType(v.type) ? 'Rename sound' : 'Rename video', { label: 'Name', initial: v.name, confirmLabel: 'Rename' }))?.trim(); if (t && t !== v.name) await renameVideo(v.id, t); } },
+    { label: 'Download', icon: 'export', hint: `The ${isAudioType(v.type) ? 'sound' : 'video'} file, ${formatSize(v.bytes)}`, onSelect: async () => {
       const got = await getVideo(v.id);
       if (!got) return;
       const ext = videoExt(got.type);
@@ -180,11 +193,11 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
       if (!res.ok && !res.cancelled) toast.error('Couldn’t download it', { message: res.error });
     } },
     'separator',
-    { label: 'Delete', icon: 'trash', danger: true, hint: uses?.get(v.id)?.length ? 'Its Video layers ask for it again; you can undo' : 'You can undo it for a few seconds', onSelect: () => void deleteVideo(v) },
+    { label: 'Delete', icon: 'trash', danger: true, hint: uses?.get(v.id)?.length ? (isAudioType(v.type) ? 'Its drum pads ask for it again; you can undo' : 'Its Video layers ask for it again; you can undo') : 'You can undo it for a few seconds', onSelect: () => void deleteVideo(v) },
   ];
   const videoRow = (v: LibraryVideoMeta) => (
     <Row key={v.id} compact={compact} picking={false} title={v.name} detail={videoDetail(v, uses?.get(v.id))}
-      lead={<Thumb src={v.thumb || undefined} icon="play" w={compact ? 64 : 80} h={compact ? 36 : 45} />}
+      lead={<Thumb src={v.thumb || undefined} icon={isAudioType(v.type) ? 'wave' : 'play'} w={compact ? 64 : 80} h={compact ? 36 : 45} />}
       onPick={() => {}} onMenu={el => openMenu(el, videoMenu(v))} />
   );
   const paletteMenu = (p: Palette, el: HTMLElement): MenuItem[] => [
@@ -231,7 +244,8 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
         <Segmented<Tab> fill ariaLabel="Kind of background" value={tab} onChange={setTab} options={[
           { value: 'images', label: `Images${images ? ` (${images.length})` : ''}` },
           { value: 'palettes', label: `Palettes (${palettes.length})` },
-          ...(tabs.includes('videos') ? [{ value: 'videos' as Tab, label: `Videos${videos ? ` (${videos.length})` : ''}` }] : []),
+          ...(tabs.includes('videos') ? [{ value: 'videos' as Tab, label: `Videos${videos ? ` (${vids.length})` : ''}` }] : []),
+          ...(tabs.includes('sounds') ? [{ value: 'sounds' as Tab, label: `Sounds${videos ? ` (${snds.length})` : ''}` }] : []),
         ]} />
       )}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -240,20 +254,20 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
             <Button size="sm" variant="primary" icon="camera" onClick={() => void capture()} title="Render a saved graph or an example at a moment you choose, and keep it as a picture">Capture from a graph…</Button>
             <Button size="sm" icon="import" disabled={busy} onClick={() => fileInput.current?.click()} title="PNG, JPG, WebP, GIF or SVG, kept as it is">{busy ? 'Adding…' : 'Import an image…'}</Button>
           </>
-        ) : tab === 'videos' ? (
+        ) : tab === 'videos' || tab === 'sounds' ? (
           <>
             <Button size="sm" icon="trash" disabled={!unusedVideos.length} onClick={() => void cleanUp()}
-              title="Delete the videos no saved Play setup, presentation or the open graph uses">
+              title={`Delete the ${kindWord}s no saved Play setup, presentation or the open graph uses`}>
               {unusedVideos.length ? `Clean up ${unusedVideos.length} unused (${formatSize(unusedVideos.reduce((n, v) => n + v.bytes, 0))})` : 'Nothing unused'}
             </Button>
-            <span style={{ alignSelf: 'center', color: tk.text.faint, font: `500 11.5px ${fontFamily.ui}` }}>{formatSize(vids.reduce((n, v) => n + v.bytes, 0))} in all</span>
+            <span style={{ alignSelf: 'center', color: tk.text.faint, font: `500 11.5px ${fontFamily.ui}` }}>{formatSize(media.reduce((n, v) => n + v.bytes, 0))} in all</span>
           </>
         ) : (
           <Button size="sm" variant="primary" icon="plus" onClick={() => setEditing('new')}>New palette…</Button>
         )}
       </div>
-      {(tab === 'images' ? imgs.length : tab === 'videos' ? vids.length : palettes.length) > 6 && (
-        <Field aria-label="Search backgrounds" placeholder={tab === 'images' ? 'Search image backgrounds' : tab === 'videos' ? 'Search videos' : 'Search palettes'} height={32} value={q} onChange={e => setQ(e.target.value)}
+      {(tab === 'images' ? imgs.length : tab === 'videos' || tab === 'sounds' ? media.length : palettes.length) > 6 && (
+        <Field aria-label="Search backgrounds" placeholder={tab === 'images' ? 'Search image backgrounds' : tab === 'videos' || tab === 'sounds' ? `Search ${kindWord}s` : 'Search palettes'} height={32} value={q} onChange={e => setQ(e.target.value)}
           leading={<Icon name="search" size={13} style={{ color: tk.text.faint }} />}
           onKeyDown={e => { if (e.key === 'Escape' && q) { e.stopPropagation(); setQ(''); } }} />
       )}
@@ -272,12 +286,14 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
       : <FolderableList scopeKey={IMAGE_FOLDER_SCOPE} color={tk.accent.base} items={imgs.map(m => ({ id: m.id, label: m.name }))}
           renderItem={item => { const m = byId.get(item.id); return m ? imageRow(m) : null; }}
           emptyHint={empty('No image backgrounds yet. Capture one from a graph (any moment, with or without its layers), or import a picture.')} />;
-  } else if (tab === 'videos') {
-    const list = needle ? vids.filter(v => v.name.toLowerCase().includes(needle)) : vids;
+  } else if (tab === 'videos' || tab === 'sounds') {
+    const list = needle ? media.filter(v => v.name.toLowerCase().includes(needle)) : media;
     body = videos === null ? empty('Loading…')
-      : videoError ? empty(`Videos can’t be kept in this browser: ${videoError}`)
+      : videoError ? empty(`${sound ? 'Sounds' : 'Videos'} can’t be kept in this browser: ${videoError}`)
       : list.length ? <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{list.map(videoRow)}</div>
-      : empty(needle ? `No video called anything like “${q.trim()}”.` : 'No videos yet. Add a Video layer on Play and pick a file, or drop a video on the picture.');
+      : empty(needle ? `No ${kindWord} called anything like “${q.trim()}”.` : sound
+        ? 'No sounds yet. Add a Drum pads layer on Play and drop a sample on a pad.'
+        : 'No videos yet. Add a Video layer on Play and pick a file, or drop a video on the picture.');
   } else {
     const found = needle ? palettes.filter(p => p.name.toLowerCase().includes(needle)) : null;
     body = found
@@ -296,7 +312,9 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
   const content = <div style={{ padding: compact ? '10px 0 4px' : '8px 14px 14px', minHeight: compact ? 180 : 300 }}>{body}</div>;
   const note = (
     <div style={{ color: tk.text.faint, font: `500 11.5px/1.5 ${fontFamily.ui}` }}>
-      {picking ? 'Choose one to use it. ' : ''}{tab === 'videos'
+      {picking ? 'Choose one to use it. ' : ''}{tab === 'sounds'
+        ? 'Kept in this browser with the videos; Export everything, the workspace folder and the backup folder include them. A drum pad points at its sample here, so a setup shared without it asks for the file.'
+        : tab === 'videos'
         ? 'Kept in this browser; Export everything, the workspace folder and the backup folder include them. A Video layer points at its file here, so a setup shared without it asks for the file.'
         : 'Kept in this browser; Export everything and the backup folder include them. A setup that uses one keeps its own copy, so it works when shared.'}
     </div>
@@ -315,7 +333,7 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
     );
   }
   return (
-    <Modal title={heading} subtitle={images ? `${plural(images.length, 'image')} · ${plural(mine.length, 'palette')} of yours${vids.length && !picking ? ` · ${plural(vids.length, 'video')}` : ''}` : undefined} icon="overlay" onClose={() => onDone(null)} width={600} footer={note}>
+    <Modal title={heading} subtitle={images ? `${plural(images.length, 'image')} · ${plural(mine.length, 'palette')} of yours${vids.length && !picking ? ` · ${plural(vids.length, 'video')}` : ''}${snds.length && !picking ? ` · ${plural(snds.length, 'sound')}` : ''}` : undefined} icon="overlay" onClose={() => onDone(null)} width={600} footer={note}>
       {toolbar}
       <div style={{ maxHeight: 'min(58vh, 540px)', overflowY: 'auto' }}>{content}</div>
       {popup}{editor}

@@ -28,7 +28,9 @@ import { playUses3D, useThreeSource } from '../../play/threeSource';
 import { parseLayerTarget, type PlayControl, type PlayRecord } from '../../types/play';
 import { parseFinishTarget, patchFinishEffect } from '../../types/playFinish';
 import { parseAudioFxTarget, patchAudioFxEffect } from '../../types/playAudioFx';
-import { playEngine } from '../../lib/playEngine';
+import { playEngine, pairDrives } from '../../lib/playEngine';
+import { pairOf } from '../../play/pairs';
+import { XYPad } from './PairControls';
 import { playBackground } from '../../play/background';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -188,6 +190,11 @@ function StageControls() {
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const live = useLiveValues(play);
   const driven = new Set(play.mappings.filter(m => m.enabled).map(m => m.controlId));
+  // A pair's mappings drive its A and/or B too.
+  for (const pm of play.pairMappings ?? []) {
+    const pr = pm.enabled ? play.pairs?.find(x => x.id === pm.pairId) : undefined;
+    if (pr) for (const id of [pr.a, pr.b]) if (pairDrives(pm, pr, id)) driven.add(id);
+  }
   const write = (c: PlayControl, value: number | number[]) => {
     const ft = parseFinishTarget(c.target);
     if (ft) { if (typeof value === 'number') setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, ft.effectId, { [ft.key]: value }) })); return; }
@@ -211,6 +218,23 @@ function StageControls() {
           const value = readControlValue(nodes, c.target, play);
           const lv = live.get(c.id);
           const isDriven = driven.has(c.id);
+          // A position pair is one XY pad, where its A is (as on the Play panel).
+          const pair = pairOf(play, c.id);
+          const cb = pair?.position ? shown.find(x => x.id === (c.id === pair.a ? pair.b : pair.a)) : undefined;
+          if (pair && cb) {
+            if (c.id !== pair.a) return null;
+            const num = (ctl: PlayControl) => { const l = live.get(ctl.id), v = readControlValue(nodes, ctl.target, play); return driven.has(ctl.id) && typeof l === 'number' ? l : typeof v === 'number' ? v : ctl.min; };
+            const dB = driven.has(cb.id);
+            return (
+              <div key={c.id} data-pair-id={pair.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, font: `600 12px ${fontFamily.ui}` }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pair.label}</span>
+                  {(isDriven || dB) && <span title="A mapping moves it" style={{ color: tk.accent.base, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em' }}>LIVE</span>}
+                </div>
+                <XYPad a={c} b={cb} x={num(c)} y={num(cb)} lockX={isDriven} lockY={dB} onChange={(x, y) => { if (!isDriven) write(c, x); if (!dB) write(cb, y); }} />
+              </div>
+            );
+          }
           return (
             <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, font: `600 12px ${fontFamily.ui}` }}>

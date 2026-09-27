@@ -25,6 +25,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { LIBRARY_FILE, LIBRARY_KIND, libraryZipName, mergeJson, PRESENTATION_FOLDER_SCOPE, PRESENTATION_KEY_PREFIX, readableFiles, readLibrary, type LibrarySnapshot } from '../utils/library';
 import { parsePresentation } from '../types/presentation';
+import { VIDEOS_MANIFEST, mergeVideosManifests } from '../lib/backgroundLibrary';
 import { fixImportedLinks } from '../present/links';
 import { APP_VERSION } from './appVersion';
 import {
@@ -521,7 +522,8 @@ export async function externalPart(refs: Array<{ source: string; id: string }> |
     const listed = await s.list();
     const want = ids ? listed.filter(i => ids.includes(i.id)) : listed;
     if (!want.length) continue;
-    Object.assign(out.files, await s.zipFiles(ids));
+    // Videos and sounds share one store and so one manifest: a second copy of it is merged, not overwritten.
+    for (const [path, data] of Object.entries(await s.zipFiles(ids))) out.files[path] = path === VIDEOS_MANIFEST && out.files[path] ? mergeVideosManifests(out.files[path], data) : data;
     for (const i of want) out.items.push({ source: s.id, section: s.section, id: i.id, name: i.label, size: i.size });
   }
   return out;

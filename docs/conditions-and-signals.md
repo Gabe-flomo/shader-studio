@@ -15,11 +15,12 @@ A trigger kind for actions and trigger mappings. It watches one value and fires 
 | `ctl:<control>` | A control on the panel, in its own units (what a mapping drives it to, else its slider) |
 | `layer:<layer>::<key>` | A layer's property, as a mapping or a following null has it now |
 | `finish:<effect>::<key>` | A Finish effect's number |
+| `audiofx:<chain>:<effect>::<key>` | An audio effect's number (docs/audio-effects.md) |
 | `map:<mapping>` | A mapping's source reading, 0 to 1 (a trigger mapping's envelope) |
 | `mouse:x`, `mouse:y` | The pointer, 0 to 1 (y up) |
 | `dist:<A>\|<B>` | How far apart two things are, in picture heights |
 
-A distance's ends (anchors) are a layer (its centre, as proximity measures it), a hand point (`hand:<side>:<point>`), the pointer (`mouse`) or a point on the picture (`pt:<x>,<y>`, 0 to 1, y up).
+A distance's ends (anchors) are a layer (its centre, as proximity measures it), a hand point (`hand:<side>:<point>`), the pointer (`mouse`), a point on the picture (`pt:<x>,<y>`, 0 to 1, y up), or the MIDI pad grid's last pad (`pad:last`: its column across and row up, 0 to 1, like the Pad grid X and Y sources; no position before a pad is hit). The pickers offer the last pad when the setup has a pad grid; it is most useful as a pair mapping's **Position** source.
 
 **The comparison:**
 
@@ -62,7 +63,7 @@ Two controls played as one. On the Controls tab, right-click a slider (long-pres
 
 A layer's property rows offer **Add as position with …** too.
 
-A pair shows as one card: a slider for each value, each disabled while a mapping drives it, and an **XY pad** for a position (drag the dot; an axis a mapping drives stays put). The pair's own mappings, rename and **Unpair** are on the card and its right-click menu. The two controls stay ordinary controls (`pairs` only groups them), so layers and graphs still see two plain values, and takes record two tracks.
+A pair shows as one card: a slider for each value, each disabled while a mapping drives it, and an **XY pad** for a position (drag the dot; an axis a mapping drives stays put). On the Stage and in the website player's panel a position pair is just the XY pad, under the pair's name (a pair of two values stays two sliders). The pair's own mappings, rename and **Unpair** are on the card and its right-click menu. The two controls stay ordinary controls (`pairs` only groups them), so layers and graphs still see two plain values, and takes record two tracks.
 
 ## Pair mappings
 
@@ -105,9 +106,8 @@ A pair needs two different float controls, each in one pair at most; a pair mapp
 
 ## Website exports
 
-The runtime runs conditions, signals, pair mappings and axis swaps through the inlined kit (`SSKit.signals`), frame for frame like the app (`src/play/__tests__/conditionsSignals.test.ts` checks one against the other). The exported player's panel shows a pair's two sliders; it has no XY pad yet.
+The runtime runs conditions, signals, pair mappings and axis swaps through the inlined kit (`SSKit.signals`), frame for frame like the app (`src/play/__tests__/conditionsSignals.test.ts` checks one against the other). The exported player's panel shows a position pair as an XY pad (`.ssp-xy`; an axis a mapping drives stays put) and any other pair as two sliders. The pad grid's last pad (`pad:last`) is read from the page's own pad grid.
 
 ## Not yet
 
-- A **grid pad** as a position source (MIDI grid controllers, see the backlog's MIDI section).
-- The XY pad in the website player's panel and on the Stage.
+- Nothing listed.

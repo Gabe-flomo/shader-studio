@@ -6,10 +6,11 @@
 import type { ActionKind, CondCmp, FireMode, FireSpec, HandGesture, HandRead, HandSide, LfoShape, LiveAudioBand, NoiseType, PlayCurve, PlaySignal, PlaySource, SensorRead, TriggerMode, TriggerSpec, ValueCondition } from '../types/play';
 import type { PlayFinish } from '../types/playFinish';
 import { finishTargetLabel } from '../types/playFinish';
+import { audioFxChainLabel, audioFxTargetLabel, parseAudioFxTarget, type PlayAudioFx } from '../types/playAudioFx';
 import { sgParseValueRef, sgScreenPoint } from './kit/signals.js';
 import { proximityCondition } from './triggers';
 import { signalNames } from './signalNames';
-import { ANCHOR_KINDS, DEFAULT_FIRE, handAnchor, parseHandAnchor } from '../types/play';
+import { ANCHOR_KINDS, DEFAULT_FIRE, PAD_ANCHOR, handAnchor, parseHandAnchor } from '../types/play';
 import { HD_POINT_NAMES } from './kit/hands.js';
 import { datasetStore } from '../data/datasetStore';
 import { DATA_ROW_COLUMN } from '../types/play';
@@ -299,6 +300,7 @@ export interface LabelContext {
   signals?: ReadonlyArray<PlaySignal>;
   mappings?: ReadonlyArray<{ id: string; source: PlaySource }>;
   finish?: PlayFinish;
+  audioFx?: PlayAudioFx;
 }
 
 /** A signal's name ("Missing signal" when it was deleted). */
@@ -335,7 +337,11 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
         const f = finishTargetLabel(ctx.finish, `finish:${r.layerId.slice(7)}::${r.key}`);
         return f ? `${f.effect} · ${f.param}` : `Finish · ${r.key}`;
       }
-      if (r.layerId.startsWith('audiofx:')) return `Sound · ${r.key}`;
+      if (r.layerId.startsWith('audiofx:')) {
+        const target = `${r.layerId}::${r.key}`;
+        const f = audioFxTargetLabel(ctx.audioFx, target), t = parseAudioFxTarget(target);
+        return f && t ? `${audioFxChainLabel(t.chainId, ctx.layers)} · ${f.effect} · ${f.param}` : `Sound · ${r.key}`;
+      }
       return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${r.key}`;
     }
   }
@@ -346,6 +352,7 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
 /** "Right · Index tip", "Mouse", "Point 0.5, 0.5", or the layer's name. */
 export function anchorLabel(ref: string, layers: ReadonlyArray<{ id: string; label: string }> = []): string {
   if (ref === 'mouse') return 'Mouse';
+  if (ref === PAD_ANCHOR) return 'Pad grid · last pad';
   const pt = sgScreenPoint(ref);
   if (pt) return `Point ${round(pt.x)}, ${round(pt.y)}`;
   const h = parseHandAnchor(ref);

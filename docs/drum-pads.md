@@ -9,6 +9,8 @@ Sixteen pads, drawn like the hardware: pads 1–4 along the bottom, 13–16 on t
 Each pad plays one of:
 
 - **A file of your own** (WAV, MP3, OGG, M4A, AIFF, FLAC). It goes into the media library in IndexedDB (the `videos` store of `shader-studio-backgrounds`, where Video layers' files live). The pad keeps only the file's library id, name and size (`sampleId`, `fileName`, `bytes`). So samples travel wherever videos do: library ZIPs (`backgrounds/videos.json` and `backgrounds/videos/`), the workspace and backup folders, profiles, and `.playfile`s (a pad's `sampleId` is collected like a Video layer's `videoId`, `playfile/bundle.ts videoIdsIn`). A sample this browser doesn't have is shown as **missing**, and the pad asks for it again.
+
+In the Library's **Backgrounds** window samples have a **Sounds** tab: each with a small waveform (drawn once, `ensureSoundWave` in `lib/backgroundLibrary.ts`, which also notes the length), size, length and which setups use it; rename, download, delete (a used one says which pads ask for it again; Undo puts it back) and **Clean up** for the unused. The Files page lists them under **Backgrounds → Sounds** (`soundsSource` in `files/videosSource.ts`, "used by" from pads' `sampleId`). Storage is unchanged: videos and sounds share the store and one ZIP manifest (`backgrounds/videos.json`), which the Files page's two sources merge when both write it, and each installs only its own kind.
 - **A generated drum**: kick, snare, closed hat, open hat, clap, tom, rim or cowbell (`dpSynthData` in the kit). They're made from a seed when the layer loads, so they need no file and sound the same everywhere, websites included.
 
 Per pad:
@@ -86,7 +88,6 @@ Drum pads are a layer, so they're Pro (`play.layers`). On Free the layer isn't i
 ## Not yet
 
 - Banks (A/B): 16 pads per layer. Add a second layer for more.
-- A library tab of its own for sounds: samples are listed with the videos (no poster).
 - Presentations' own copies of pad samples (a Play in a presentation plays generated drums, and its sample pads are silent on the page).
 - The pad grid on websites. Sample slicing, time-stretch, and filter or pitch envelopes per pad.
 - A MIDI file's notes play the pads live, but a render only hears hits recorded in a take.

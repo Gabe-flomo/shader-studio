@@ -533,7 +533,8 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
         // Setups whose layers point at it (a Video layer's file): without it, those layers ask for it again.
         const needle = `"${ext.refField}":${JSON.stringify(it.id)}`;
         const usedBy: UsedBy[] = [];
-        const layers = (c: number) => `${c === 1 ? 'A Video layer' : `${c} Video layers`}`;
+        const [one, many] = ext.refField === 'sampleId' ? ['A drum pad', 'drum pads'] : ['A Video layer', 'Video layers'];
+        const layers = (c: number) => `${c === 1 ? one : `${c} ${many}`}`;
         for (const g of graphs) { const c = g.raw.split(needle).length - 1; if (c) usedBy.push({ id: g.id, label: g.name, where: `${layers(c)} in its Play setup`, breaks: true }); }
         for (const p of presentations) { const c = p.raw.split(needle).length - 1; if (c) usedBy.push({ id: p.node.id, label: p.name, where: `${layers(c)} in a Play in it`, breaks: true }); }
         n.usedBy = usedBy;

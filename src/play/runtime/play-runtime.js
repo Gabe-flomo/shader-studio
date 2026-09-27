@@ -101,6 +101,8 @@
 .ssp-value{font-family:ui-monospace,Menlo,Consolas,monospace;color:#9a9da8;font-size:12px}
 .ssp-range{width:100%;accent-color:#4d7cff}
 .ssp-range:disabled{opacity:.7}
+.ssp-xy{position:relative;height:120px;border-radius:8px;background:#121318;cursor:crosshair;touch-action:none;overflow:hidden;background-image:linear-gradient(#ffffff0d 1px,transparent 1px),linear-gradient(90deg,#ffffff0d 1px,transparent 1px);background-size:25% 25%}
+.ssp-xy-dot{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:7px;background:#4d7cff;box-shadow:0 0 0 2px #1b1c23;pointer-events:none}
 .ssp-colour{width:100%;height:30px;border:0;padding:0;background:none;border-radius:6px;cursor:pointer}
 .ssp-empty{color:#9a9da8;margin-top:10px}
 .ssp-error{position:absolute;inset:auto 12px 12px 12px;padding:10px 12px;border-radius:8px;background:#3a1216;color:#ffb4b4;font-size:12px}
@@ -1263,6 +1265,12 @@ void main() {
     const reported = k => sensors.get(k);
     function anchorAt(ref) {
       if (ref === 'mouse') return { x: mouse.x, y: mouse.y };
+      // The pad grid's last pad (column across, row up, 0..1), like the Pad grid X and Y sources.
+      if (ref === 'pad:last') {
+        if (!padG) return null;
+        const x = KM.gridRead(padG, padCfg, 'x', 0, 0, time), y = KM.gridRead(padG, padCfg, 'y', 0, 0, time);
+        return x === null || y === null ? null : { x, y };
+      }
       const pt = SG ? SG.point(ref) : null;
       if (pt) return pt;
       const h = handAnchorOf(ref);
@@ -1726,12 +1734,46 @@ void main() {
         panel.append(row);
       }
       if (!play.controls.length) panel.append(el('div', 'ssp-empty', 'No controls in this play file.'));
+      // A position pair (both its controls numbers) is one XY pad, where its A is.
+      const xyPairOf = c => (play.pairs || []).find(p => p.position && (p.a === c.id || p.b === c.id) && controls.has(p.a) && controls.has(p.b) && controls.get(p.a).kind !== 'color' && controls.get(p.b).kind !== 'color' && !actTarget(controls.get(p.a).target) && !actTarget(controls.get(p.b).target));
       for (const c of play.controls) {
         const row = el('div', 'ssp-control');
         const top = el('div', 'ssp-row');
-        top.append(el('span', 'ssp-label', c.label));
+        const xyPair = xyPairOf(c);
+        if (xyPair && xyPair.a !== c.id) continue;
+        top.append(el('span', 'ssp-label', xyPair ? xyPair.label : c.label));
         const out = el('span', 'ssp-value', '');
         top.append(out);
+        if (xyPair) {
+          const cb = controls.get(xyPair.b);
+          const pad = el('div', 'ssp-xy'), dot = el('span', 'ssp-xy-dot');
+          pad.setAttribute('role', 'group'); pad.setAttribute('aria-label', c.label + ' and ' + cb.label);
+          pad.append(dot);
+          const u = (v, k) => (k.max > k.min ? Math.max(0, Math.min(1, (v - k.min) / (k.max - k.min))) : 0);
+          const now = k => { const v = live.has(k.id) ? live.get(k.id) : base.get(k.id); return typeof v === 'number' ? v : k.min; };
+          const place = () => {
+            const x = now(c), y = now(cb);
+            dot.style.left = u(x, c) * 100 + '%'; dot.style.top = (1 - u(y, cb)) * 100 + '%';
+            out.textContent = fmt(x, c.step) + ', ' + fmt(y, cb.step);
+          };
+          let dragging = false;
+          const at = e => {
+            const r = pad.getBoundingClientRect();
+            if (!r.width || !r.height) return;
+            const ux = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), uy = Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / r.height));
+            if (!live.has(c.id)) setFloat(c, c.min + (c.max - c.min) * ux);
+            if (!live.has(cb.id)) setFloat(cb, cb.min + (cb.max - cb.min) * uy);
+            place();
+          };
+          pad.onpointerdown = e => { dragging = true; try { pad.setPointerCapture(e.pointerId); } catch (_) { /* nothing to capture */ } at(e); };
+          pad.onpointermove = e => { if (dragging) at(e); };
+          pad.onpointerup = pad.onpointercancel = () => { dragging = false; };
+          row.append(top, pad);
+          place();
+          readouts.set(c.id, { out, input: pad, kind: 'xy', place, ids: [c.id, cb.id] });
+          panel.append(row);
+          continue;
+        }
         row.append(top);
         const at = actTarget(c.target);
         if (at) {
@@ -1767,6 +1809,7 @@ void main() {
       if (bg || now - lastPanel < 66) return;
       lastPanel = now;
       for (const [id, r] of readouts) {
+        if (r.kind === 'xy') { r.input.parentElement.classList.toggle('ssp-driven', r.ids.some(k => live.has(k))); r.place(); continue; }
         const v = live.get(id), driven = v !== undefined;
         r.input.parentElement.classList.toggle('ssp-driven', driven);
         // A driven colour stays editable: mappings scale it or set one channel, starting from what the picker says.

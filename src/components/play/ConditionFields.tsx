@@ -17,8 +17,9 @@ import { playEngine } from '../../lib/playEngine';
 import { sgParseValueRef, sgScreenPoint } from '../../play/kit/signals.js';
 import { COND_LABELS, anchorOptions, valueRefLabel, type LabelContext } from '../../play/playSources';
 import { addSignal, deleteSignal, renameSignal, signalUses } from '../../play/pairs';
-import { layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
+import { PAD_ANCHOR, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf } from '../../types/playFinish';
+import { audioFxControlFor, audioFxHosts } from '../../types/playAudioFx';
 import { GroupedPicker } from '../ui/GroupedPicker';
 import type { PickerSection } from '../ui/groupedPickerModel';
 import { sectionsFromOptions } from '../ui/groupedPickerModel';
@@ -44,6 +45,8 @@ export function valueSections(play: PlayRecord): PickerSection[] {
   if (layerItems.length) out.push({ heading: 'Layers', items: layerItems });
   const finishItems = finishHosts(play.finish).flatMap(e => finishNumericProps(e).map(d => ({ value: `finish:${e.id}::${d.key}`, label: `${finishHostLabel(e)} · ${d.label}`, icon: 'spark' as const, keywords: 'finish' })));
   if (finishItems.length) out.push({ heading: 'Finish', items: finishItems });
+  const soundItems = audioFxHosts(play.audioFx, play.layers).flatMap(h => h.params.map(d => ({ value: `${h.id}::${d.key}`, label: `${h.label} · ${d.label}`, icon: 'wave' as const, keywords: 'sound audio effect' })));
+  if (soundItems.length) out.push({ heading: 'Sound effects', items: soundItems });
   if (play.mappings.length) out.push({ heading: 'Mapping sources', items: play.mappings.map(m => ({ value: `map:${m.id}`, label: valueRefLabel(`map:${m.id}`, ctx), icon: 'bidir' as const, description: 'What it reads, 0 to 1' })) });
   out.push({ heading: 'Pointer & distance', items: [
     { value: 'mouse:x', label: 'Mouse X', icon: 'mouse', description: '0 to 1 across the picture' },
@@ -55,7 +58,7 @@ export function valueSections(play: PlayRecord): PickerSection[] {
 
 /** What labels need from the setup. */
 export function labelContext(play: PlayRecord): LabelContext {
-  return { layers: play.layers, controls: play.controls, signals: play.signals, mappings: play.mappings, finish: play.finish };
+  return { layers: play.layers, controls: play.controls, signals: play.signals, mappings: play.mappings, finish: play.finish, audioFx: play.audioFx };
 }
 
 /** A value's natural range, for the threshold ruler and the meter. */
@@ -67,6 +70,9 @@ export function valueRange(ref: string, play: PlayRecord): { min: number; max: n
       const e = finishHost(play.finish, r.layerId.slice(7));
       const d = e && finishParamOf(e, r.key);
       if (d && d.max > d.min) return { min: d.min, max: d.max, step: d.step ?? 0.01 };
+    } else if (r.layerId.startsWith('audiofx:')) {
+      const c = audioFxControlFor(play.audioFx, play.layers, `${r.layerId}::${r.key}`);
+      if (c && c.max > c.min) return { min: c.min, max: c.max, step: c.step ?? 0.01 };
     } else {
       const l = play.layers.find(x => x.id === r.layerId);
       const d = l && layerNumericProps(l).find(x => x.key === r.key);
@@ -97,11 +103,13 @@ function useConditionNow(c: ValueCondition, isOpen: () => boolean): { v: number 
 }
 
 /** A layer, a hand, the pointer or a point on the picture (x, y), for one end of a distance. */
-export function DistanceAnchorPicker({ value, layers, exclude, ariaLabel, onChange }: {
+export function DistanceAnchorPicker({ value, layers, exclude, ariaLabel, pads = false, onChange }: {
   value: string;
   layers: ReadonlyArray<{ id: string; label: string; kind: string }>;
   exclude?: string;
   ariaLabel: string;
+  /** Offer the MIDI pad grid's last pad (the setup has a pad grid). */
+  pads?: boolean;
   onChange: (ref: string) => void;
 }) {
   const tk = useTokens();
@@ -112,8 +120,11 @@ export function DistanceAnchorPicker({ value, layers, exclude, ariaLabel, onChan
       { value: 'mouse', label: 'Mouse', icon: 'mouse' as const, description: 'The pointer over the picture' },
       { value: 'pt', label: 'A point on the picture', icon: 'target' as const, description: 'X and Y, 0 to 1 (Y up)' },
     ] },
+    ...(pads || value === PAD_ANCHOR ? [{ heading: 'MIDI', items: [
+      { value: PAD_ANCHOR, label: 'Pad grid · last pad', icon: 'grid' as const, description: 'The last pad hit: its column across and row up, 0 to 1', keywords: 'midi launchpad pad' },
+    ] }] : []),
     ...sectionsFromOptions(anchorOptions(layers, exclude)),
-  ], [layers, exclude]);
+  ], [layers, exclude, pads, value]);
   const pick = pt ? 'pt' : hand ? `hand:${hand.side}` : value;
   const num = { width: 44, height: 24, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}`, textAlign: 'center' as const };
   return (
@@ -180,8 +191,8 @@ export function ConditionFields({ cond: c, isOpen, crossings = true, onChange }:
           }} />
       </div>
       {dist && <>
-        <div style={line}><span style={cap}>From</span><DistanceAnchorPicker value={dist.a} layers={layerRefs} exclude={dist.b} ariaLabel="Distance from" onChange={a => onChange({ ...c, value: `dist:${a}|${dist.b}` })} /></div>
-        <div style={line}><span style={cap}>To</span><DistanceAnchorPicker value={dist.b} layers={layerRefs} exclude={dist.a} ariaLabel="Distance to" onChange={b => onChange({ ...c, value: `dist:${dist.a}|${b}` })} /></div>
+        <div style={line}><span style={cap}>From</span><DistanceAnchorPicker value={dist.a} layers={layerRefs} exclude={dist.b} pads={!!play.padGrid} ariaLabel="Distance from" onChange={a => onChange({ ...c, value: `dist:${a}|${dist.b}` })} /></div>
+        <div style={line}><span style={cap}>To</span><DistanceAnchorPicker value={dist.b} layers={layerRefs} exclude={dist.a} pads={!!play.padGrid} ariaLabel="Distance to" onChange={b => onChange({ ...c, value: `dist:${dist.a}|${b}` })} /></div>
       </>}
       <div style={line}>
         <span style={cap}>When</span>

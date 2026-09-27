@@ -23,6 +23,7 @@ import { RecordingsSetting } from './RecordingsSetting';
 import { LinkedOpenSettingControl } from './GraphLinks';
 import { openBackgrounds, openCapture } from '../backgrounds/backgroundsUi';
 import { useBackgroundImages, useLibraryVideos } from '../backgrounds/useBackgrounds';
+import { isAudioType } from '../../lib/backgroundLibrary';
 
 const run = (fn: () => Promise<unknown>) => () => { fn().catch(e => toast.error('That didn’t work', { message: e instanceof Error ? e.message : String(e) })); };
 
@@ -56,6 +57,8 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
   const { videos } = useLibraryVideos();
   const videoCount = videos?.length ?? 0;
   const videoBytes = (videos ?? []).reduce((n, m) => n + m.bytes, 0);
+  const soundCount = (videos ?? []).filter(m => isAudioType(m.type)).length;
+  const clipCount = videoCount - soundCount;
   const [showAll, setShowAll] = useState(false);
   const [, tick] = useState(0);
   useEffect(() => { const id = window.setInterval(() => tick(n => n + 1), 15000); return () => window.clearInterval(id); }, []);
@@ -70,7 +73,7 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
     ['Presentations', `${k.presentations.count}`, k.presentations.count ? `${formatSize(k.presentations.size)}, Plays included` : 'none yet'],
     ['Presets', `${presets}`, PRESET_KINDS.filter(x => k[x].count).map(x => `${k[x].count} ${KIND_LABELS[x].toLowerCase()}`).join(' · ') || 'none yet'],
     ['Published nodes', `${k['published nodes'].count}`, `${k.palettes.count} palette${k.palettes.count === 1 ? '' : 's'} · ${k['glsl shaders'].count} GLSL`],
-    ['Backgrounds', `${imageCount + k.backgrounds.count + videoCount}`, imageCount + k.backgrounds.count + videoCount ? `${imageCount} image${imageCount === 1 ? '' : 's'} (${formatSize(imageBytes)}) · ${k.backgrounds.count} palette${k.backgrounds.count === 1 ? '' : 's'}${videoCount ? ` · ${videoCount} video${videoCount === 1 ? '' : 's'} (${formatSize(videoBytes)})` : ''}` : 'none yet'],
+    ['Backgrounds', `${imageCount + k.backgrounds.count + videoCount}`, imageCount + k.backgrounds.count + videoCount ? `${imageCount} image${imageCount === 1 ? '' : 's'} (${formatSize(imageBytes)}) · ${k.backgrounds.count} palette${k.backgrounds.count === 1 ? '' : 's'}${videoCount ? ` · ${clipCount} video${clipCount === 1 ? '' : 's'}${soundCount ? `, ${soundCount} sound${soundCount === 1 ? '' : 's'}` : ''} (${formatSize(videoBytes)})` : ''}` : 'none yet'],
     ['Saved data', formatSize(stats.total), `${Math.round(used * 100)}% of the browser’s ~5 MB`],
   ];
   const kinds = (Object.keys(k) as LibraryKind[]).filter(x => k[x].size > 0).sort((a, b) => k[b].size - k[a].size);

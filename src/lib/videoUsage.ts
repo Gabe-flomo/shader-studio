@@ -59,12 +59,12 @@ export function videoUses(ids: readonly string[], kv: ReadKV, open?: { name: str
 }
 
 /** "Used by “Sunset” and the open graph" … for a confirmation. */
-export function describeVideoUses(uses: readonly VideoUse[]): string {
+export function describeVideoUses(uses: readonly VideoUse[], noun: [string, string] = ['A Video layer', 'Video layers']): string {
   if (!uses.length) return 'Nothing uses it.';
   const names = uses.map(u => (u.kind === 'open' ? `the open graph${u.label && u.label !== 'The open graph' ? ` (“${u.label}”)` : ''}` : u.kind === 'presentation' ? `the presentation “${u.label}”` : `“${u.label}”`));
   const list = names.length <= 3 ? names.join(names.length === 2 ? ' and ' : ', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
   const layers = uses.reduce((n, u) => n + u.layers, 0);
-  return `${layers === 1 ? 'A Video layer' : `${layers} Video layers`} in ${list} ${layers === 1 ? 'uses' : 'use'} it.`;
+  return `${layers === 1 ? noun[0] : `${layers} ${noun[1]}`} in ${list} ${layers === 1 ? 'uses' : 'use'} it.`;
 }
 
 /** localStorage as a ReadKV (empty where there's none). */
