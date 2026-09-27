@@ -130,6 +130,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
             { label: `Convert GLSL to nodes${pro('convert')}`, icon: 'nodes', hint: 'Paste a shader, preview the nodes it becomes, make it real', onSelect: () => onPageChange('convert') },
             { label: 'Export this graph', icon: 'export', hint: 'A .playfile, or readable JSON', onSelect: () => offerGraphExport(null) },
+            { label: 'Builder: functions and node packs', icon: 'nodes', hint: 'Plot functions, make node packs (full screen)', onSelect: () => { void import('../nodePacks/builderWindow').then(m => m.popOutBuilder()); } },
             page === 'files'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Files', icon: 'folder', hint: 'Everything saved: sizes, clean up, download and install', onSelect: () => onPageChange('files') },

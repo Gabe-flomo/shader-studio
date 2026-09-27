@@ -42,10 +42,12 @@ interface Props {
   /** A group node on the canvas, a subgraph prepared from a whole graph, or GLSL code. */
   source: PublishSource;
   onClose: () => void;
-  /** Called with the definition id after a successful publish. */
+  /** Called with the node type's id after a successful publish (a new one's too). */
   onPublished?: (id: string) => void;
   /** Editing an existing node type (re-publish updates it in place). Group sources may also carry `params.__userNodeId`. */
   existingId?: string;
+  /** The group isn't on the canvas (it's from a saved graph or a preset): publish it as given. */
+  detached?: boolean;
 }
 
 interface PortRow {
@@ -103,7 +105,7 @@ export function PublishNodeModal(props: Props) {
   return allowed ? <PublishNodeModalInner {...props} /> : null;
 }
 
-function PublishNodeModalInner({ source: initialSource, onClose, onPublished, existingId }: Props) {
+function PublishNodeModalInner({ source: initialSource, onClose, onPublished, existingId, detached }: Props) {
   const tk = useTokens();
   // Phones: one column, preview under the fields, full-height dialog
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
@@ -315,11 +317,12 @@ function PublishNodeModalInner({ source: initialSource, onClose, onPublished, ex
     if (busy) return;
     setError(null);
     setBusy(true);
-    const result = await publishUserNode(groupNode ? groupNode.id : source, buildSpec(false));
+    // A group on the canvas is looked up by id (the store has the latest); one from a saved graph is passed as it is.
+    const result = await publishUserNode(groupNode && !detached ? groupNode.id : source, buildSpec(false));
     setBusy(false);
     if (!result.ok) { setError(result.error); return; }
     toast.success(replace && existing ? `Updated "${label.trim()}"` : `Published "${label.trim()}"`, { message: 'Find it under Nodes → ' + category + ', or search for it.' });
-    onPublished?.(existing && replace ? existing.id : '');
+    onPublished?.(result.id ?? (existing && replace ? existing.id : ''));
     onClose();
   };
 

@@ -922,7 +922,8 @@ interface NodeGraphState {
 
   // User-published node types (see nodes/userNodes)
   /** Flatten a group node (by id in the active scope) or a prepared subgraph into a GLSL function and register it as a node type. */
-  publishUserNode: (source: string | PublishSource, spec: PublishUserNodeSpec) => Promise<FileResult>;
+  /** Publish a node type; on success `id` is the node type's id (its registry key). */
+  publishUserNode: (source: string | PublishSource, spec: PublishUserNodeSpec) => Promise<FileResult & { id?: string }>;
   /** Parse a saved graph's nodes (migrated) without loading it into the editor. */
   readSavedGraphNodes: (name: string) => GraphNode[] | null;
   deleteUserNode: (id: string) => void;
@@ -2844,7 +2845,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (result.ok && sealedInside.length) toast.info('Published as a sealed node', { message: `It’s built from ${sealedInside.map(l => `“${l}”`).join(', ')}, from a sealed node pack, so its code stays hidden too.` });
     // Instances of a re-published node pick up the new function on the next compile.
     get().compile();
-    return result;
+    return result.ok ? { ...result, id: built.def.id } : result;
   },
 
   readSavedGraphNodes: (name) => {

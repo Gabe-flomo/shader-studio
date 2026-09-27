@@ -26,6 +26,8 @@ import { fromUtf8 } from './bytes';
 import { KIND_LAYOUT, type ItemKind } from './format';
 import type { PlayfileContents, ReadItem, SignatureStatus } from './reader';
 import { sealDefinition, storedForm, unsealDefinition } from './sealing';
+import { videoFilesFor } from './bundle';
+import { readPackInfo, type InstalledPack, type PackInfo } from '../nodePacks/types';
 
 export type RowStatus = 'new' | 'same' | 'conflict' | 'needs-pro' | 'unreadable';
 export type Choice = 'keep-both' | 'replace';
@@ -54,6 +56,8 @@ export interface ImportRow {
 export interface ImportPlan {
   rows: ImportRow[];
   contents: PlayfileContents;
+  /** Node packs made in the pack workspace: their name, version, notes and examples (by the `nodes` item's path). */
+  packs?: Array<{ path: string; info: PackInfo }>;
 }
 
 export interface ImportEnv {
@@ -74,6 +78,12 @@ export interface ImportEnv {
   installProfile?: (profile: Profile) => Promise<InstallSummary>;
   /** Stores for a profile's preview (backgrounds). */
   sources?: FilesSource[];
+  /** Is this video (by its id) in the videos library already? */
+  hasVideo?: (id: string) => Promise<boolean>;
+  /** Put videos into the library: the files `importVideoFiles` reads (lib/backgroundLibrary.ts). */
+  addVideos?: (files: Record<string, Uint8Array>) => Promise<{ added: number; same: number; skipped: number }>;
+  /** Remember a node pack that came in (its category, nodes and examples). */
+  recordPack?: (pack: InstalledPack) => void;
   now?: () => number;
 }
 
@@ -87,6 +97,8 @@ export interface ImportSummary {
   changedKeys: string[];
   /** What to open afterwards: the file's one graph or Play setup, or its one presentation. */
   open?: { kind: 'graph' | 'play' | 'presentation'; name: string };
+  /** Node packs that came in. */
+  packs?: InstalledPack[];
 }
 
 type Obj = Record<string, unknown>;
@@ -131,6 +143,7 @@ export async function planImport(contents: PlayfileContents, env: ImportEnv): Pr
   // Nodes from a file whose signature doesn't hold aren't ticked: someone changed it.
   const nodesOk = sig.state !== 'modified';
   const bgs = env.backgrounds ? await env.backgrounds().catch(() => []) : [];
+  const packs: Array<{ path: string; info: PackInfo }> = [];
   for (const it of contents.items) {
     const dependency = it.meta?.dependency === true;
     const base = { kind: it.kind, bytes: it.bytes, dependency, include: true, choice: 'keep-both' as Choice };
@@ -162,8 +175,11 @@ export async function planImport(contents: PlayfileContents, env: ImportEnv): Pr
       case 'nodes': {
         const raw = parseJson(fromUtf8(it.data));
         const list: unknown[] = Array.isArray(obj(raw)?.nodes) ? obj(raw)!.nodes as unknown[] : Array.isArray(raw) ? raw : [raw];
-        const defs = list.filter(isNodeDefinition);
+        const info = readPackInfo(raw);
+        // A pack's nodes are listed under the pack's name (docs/node-packs.md, "Namespacing").
+        const defs = list.filter(isNodeDefinition).map(d => (info ? { ...d, category: info.name } : d));
         if (!defs.length) { rows.push(bad('No node types in it')); break; }
+        if (info) packs.push({ path: it.path, info });
         for (const d of defs) {
           const mine = env.userNode(d.id);
           const status: RowStatus = !mine ? 'new' : nodeContent(mine) === nodeContent(d) ? 'same' : 'conflict';
@@ -199,6 +215,14 @@ export async function planImport(contents: PlayfileContents, env: ImportEnv): Pr
         rows.push({ ...base, id: it.path, name: it.name, status: fresh ? 'new' : 'same', detail: [plural(pv.rows.length, 'item'), pv.counts.rename ? `${pv.counts.rename} under a new name` : '', pv.counts.same ? `${pv.counts.same} already here` : ''].filter(Boolean).join(' · '), include: fresh > 0, value: snap });
         break;
       }
+      case 'video': {
+        const id = typeof it.meta?.id === 'string' ? it.meta.id : '';
+        const type = typeof it.meta?.type === 'string' && /^video\//.test(it.meta.type) ? it.meta.type : videoTypeFromPath(it.path);
+        if (!id || !type) { rows.push(bad('Not a video this version can keep')); break; }
+        const here = env.hasVideo ? await env.hasVideo(id).catch(() => false) : false;
+        rows.push({ ...base, id: it.path, name: it.name, status: here ? 'same' : 'new', detail: type.replace('video/', '').toUpperCase(), include: !here, value: { id, type } });
+        break;
+      }
       case 'profile': {
         let profile: Profile;
         try { profile = readProfile(it.data); } catch (e) { rows.push(bad(`Not a profile: ${e instanceof Error ? e.message : String(e)}`)); break; }
@@ -209,7 +233,12 @@ export async function planImport(contents: PlayfileContents, env: ImportEnv): Pr
       }
     }
   }
-  return { rows, contents };
+  return { rows, contents, ...(packs.length ? { packs } : {}) };
+}
+
+function videoTypeFromPath(p: string): string | null {
+  const e = /\.(mp4|m4v|webm|mov|ogv)$/i.exec(p)?.[1]?.toLowerCase();
+  return !e ? null : e === 'mov' ? 'video/quicktime' : e === 'm4v' ? 'video/x-m4v' : e === 'ogv' ? 'video/ogg' : `video/${e}`;
 }
 
 function typeFromPath(p: string): string | null {
@@ -229,6 +258,8 @@ export async function applyImport(plan: ImportPlan, picks: Record<string, Pick>,
   const pick = (r: ImportRow): Pick => picks[r.id] ?? { include: r.include, choice: r.choice };
   const graphsIn: Array<{ kind: 'graph' | 'play'; name: string }> = [];
   const presIn: string[] = [];
+  /** Node rows that came in, by row id → the id registered (a kept-both copy has a new one). */
+  const nodeIdsIn = new Map<string, string>();
 
   for (const r of plan.rows) {
     const p = pick(r);
@@ -268,6 +299,7 @@ export async function applyImport(plan: ImportPlan, picks: Record<string, Pick>,
           }
           const res = await env.registerNode(def);
           if (!res.ok) throw new Error(res.error ?? 'It couldn’t be saved');
+          nodeIdsIn.set(r.id, def.id);
           sum.changedKeys.push(`shader-studio:un:${def.id}`);
           record(sum, r, name, replace);
           break;
@@ -294,6 +326,14 @@ export async function applyImport(plan: ImportPlan, picks: Record<string, Pick>,
           record(sum, r, r.name, false);
           break;
         }
+        case 'video': {
+          if (!env.addVideos) throw new Error('Videos can’t be stored here');
+          const item = plan.contents.items.find(i => i.path === r.id) as ReadItem;
+          const res = await env.addVideos(videoFilesFor(item));
+          if (!res.added && !res.same) throw new Error('The video couldn’t be kept');
+          record(sum, r, r.name, false);
+          break;
+        }
         case 'library': {
           const res = installMerge({ snapshot: r.value as LibrarySnapshot, manifest: null, files: {} }, env.kv);
           sum.changedKeys.push(...res.changedKeys);
@@ -315,7 +355,30 @@ export async function applyImport(plan: ImportPlan, picks: Record<string, Pick>,
     }
   }
   remapLinks(env.kv, sum);
+  if (plan.packs?.length) {
+    sum.packs = [];
+    const renamed = (kind: 'graph' | 'presentation', name: string) => sum.renamed.find(x => (x.kind === kind || (kind === 'graph' && x.kind === 'play')) && x.from === name)?.to ?? name;
+    const graphNames = new Set(graphsIn.map(g => g.name));
+    const presNames = new Set(presIn);
+    for (const { path, info } of plan.packs) {
+      const nodeIds = plan.rows.filter(r => r.kind === 'nodes' && r.id.startsWith(`${path}#`))
+        .map(r => nodeIdsIn.get(r.id) ?? (r.status === 'same' ? (r.value as UserNodeDefinition).id : ''))
+        .filter(Boolean);
+      if (!nodeIds.length) continue;
+      const pack: InstalledPack = {
+        ...info,
+        examples: (info.examples ?? []).map(n => renamed('graph', graphNameFor(n))).filter(n => graphNames.has(n) || env.kv.get(GRAPH_PREFIX + n) != null),
+        presentations: (info.presentations ?? []).map(n => renamed('presentation', n)).filter(n => presNames.has(n) || env.kv.get(PRESENTATION_KEY_PREFIX + n) != null),
+        nodeIds, category: info.name, installedAt: now,
+        ...(signedBy ? { signedBy } : {}),
+      };
+      sum.packs.push(pack);
+      env.recordPack?.(pack);
+    }
+  }
   const chosenGraphs = graphsIn.filter(g => !plan.rows.find(r => r.name === g.name && r.dependency));
+  // A node pack's graphs are its examples: they're opened from the pack's entry in the node list, not straight away.
+  if (sum.packs?.length) return sum;
   if (chosenGraphs.length === 1 && !presIn.length) sum.open = { kind: chosenGraphs[0].kind, name: chosenGraphs[0].name };
   else if (presIn.length === 1) sum.open = { kind: 'presentation', name: presIn[0] };
   return sum;

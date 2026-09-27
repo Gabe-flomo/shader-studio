@@ -53,7 +53,9 @@ export async function writePlayfile(items: WriteItem[], opts: WriteOptions = {})
     const data = typeof it.data === 'string' ? strToU8(it.data) : it.data;
     const layout = KIND_LAYOUT[it.kind];
     const ext = layout.ext || (it.ext ?? '');
-    const base = `${layout.dir}/${fileSafeName(it.name)}`;
+    const named = `${layout.dir}/${fileSafeName(it.name)}`;
+    // A name that already ends in its extension ("Clip.webm") isn't given it twice.
+    const base = ext && named.toLowerCase().endsWith(ext.toLowerCase()) && named.length > layout.dir.length + 1 + ext.length ? named.slice(0, -ext.length) : named;
     let path = `${base}${ext}`;
     for (let n = 2; taken.has(path.toLowerCase()); n++) path = `${base} (${n})${ext}`;
     taken.add(path.toLowerCase());
@@ -74,9 +76,9 @@ export async function writePlayfile(items: WriteItem[], opts: WriteOptions = {})
   if (signer) manifest.signature = { alg: 'Ed25519', value: toBase64(await signer.sign(signedBytes(manifest))) };
   files[MANIFEST_PATH] = strToU8(JSON.stringify(manifest, null, 1));
   files['README.txt'] = strToU8(README);
-  // Images and ZIPs are already compressed.
+  // Images, videos and ZIPs are already compressed.
   const zipped: Record<string, Uint8Array | [Uint8Array, { level: 0 }]> = {};
-  for (const [p, b] of Object.entries(files)) zipped[p] = /\.(png|jpe?g|webp|gif|avif|zip|mp4|webm)$/i.test(p) ? [b, { level: 0 }] : b;
+  for (const [p, b] of Object.entries(files)) zipped[p] = /\.(png|jpe?g|webp|gif|avif|zip|mp4|m4v|webm|mov|ogv)$/i.test(p) ? [b, { level: 0 }] : b;
   return { bytes: zipSync(zipped, { level: 6 }), manifest };
 }
 
