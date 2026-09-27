@@ -1,3 +1,5 @@
+import { ProBadgeFor } from '../account/ProSheet';
+import { useCan } from '../../lib/plan';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SaveGraphForm, VersionsButton } from '../shell/GraphVersions';
 import { useNodeGraphStore, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
@@ -250,6 +252,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const deleteUserNode     = useNodeGraphStore(s => s.deleteUserNode);
   const openUserNodeSource = useNodeGraphStore(s => s.openUserNodeSource);
   const exportUserNodes    = useNodeGraphStore(s => s.exportUserNodes);
+  const canPack = useCan('nodes.pack');
   const readSavedGraphNodes = useNodeGraphStore(s => s.readSavedGraphNodes);
   const [publishSource, setPublishSource] = useState<PublishSource | null>(null);
   const [publishExisting, setPublishExisting] = useState<string | undefined>(undefined);
@@ -526,9 +529,9 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
             <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
               <Button size="sm" variant="primary" icon="spark"
                 disabled={graphNodes.length === 0}
-                onClick={() => openPublishFor(graphNodes, 'Current graph')}>Publish current graph…</Button>
+                onClick={() => openPublishFor(graphNodes, 'Current graph')}>Publish current graph…<ProBadgeFor feature="nodes.publish" /></Button>
               <Button size="sm" icon="code" title="Write a GLSL function and publish it as a node"
-                onClick={() => setPublishSource({ kind: 'code', code: '', label: 'My Node' })}>Write GLSL…</Button>
+                onClick={() => setPublishSource({ kind: 'code', code: '', label: 'My Node' })}>Write GLSL…<ProBadgeFor feature="nodes.publish" /></Button>
               <Button size="sm" icon="import" title="Open a fragment shader (Shadertoy or raw) and turn it into a node"
                 onClick={async () => {
                   let code: string | null;
@@ -541,12 +544,12 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                   const notes = [...tidy.notes, ...r.notes];
                   if (notes.length) toast.info('Check the converted code', { message: notes.join(' ') });
                   setPublishSource({ kind: 'code', code: r.code, entry: r.entry, label: 'Imported shader' });
-                }}>Import GLSL…</Button>
+                }}>Import GLSL…<ProBadgeFor feature="nodes.publish" /></Button>
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
               <span ref={savedPickRef} style={{ display: 'inline-flex' }}>
                 <Button size="sm" icon="graphs" title="Publish a saved graph as a node without opening it" disabled={savedNames.length === 0}
-                  onClick={() => { setSavedPickOpen(o => !o); setSavedPickQ(''); }}>Start from a saved graph…</Button>
+                  onClick={() => { setSavedPickOpen(o => !o); setSavedPickQ(''); }}>Start from a saved graph…<ProBadgeFor feature="nodes.publish" /></Button>
               </span>
               {savedPickOpen && (
                 <Popover anchorRef={savedPickRef} onClose={() => setSavedPickOpen(false)} align="start" width={300} padding={8}>
@@ -565,7 +568,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               <span style={{ display: 'flex', gap: 2 }}>
                 <IconButton icon="import" label="Import node types from a .json file" size="sm" onClick={importUserNodes} />
                 {userNodes.length > 0 && (
-                  <IconButton icon="export" label="Export all node types as one .json file" size="sm"
+                  <IconButton icon="export" label={canPack ? 'Export all node types as one .json file' : 'Export all node types as one .json file (Pro: making node packs)'} size="sm"
                     onClick={async () => reportFileResult(await exportUserNodes(), { failTitle: 'Couldn’t export node types' })} />
                 )}
               </span>

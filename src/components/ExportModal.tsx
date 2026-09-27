@@ -1,3 +1,4 @@
+import { can, openProSheet, requireFeature, useCan } from '../lib/plan';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CanvasRecorder } from '../utils/CanvasRecorder';
 import { codecExt, runFfmpegEncode, type FfmpegCodec } from '../utils/ffmpegRecorder';
@@ -73,6 +74,9 @@ const CODEC_DESCRIPTIONS: Record<FfmpegCodec, string> = {
 // Output sizes. "Preview" is the canvas as shown; the rest are standard
 // short sides (720p, 1080p, 1440p, 2160p) laid out in the preview's shape,
 // so a 16:9 preview gives 1920×1080 and a 9:16 preview 1080×1920.
+/** Free's export cap (docs/accounts-and-plans.md decision 3): 1080p on the short side. */
+const FREE_MAX_SHORT_SIDE = 1080;
+
 const RESOLUTIONS: ReadonlyArray<{ id: string; label: string; sub: string; shortSide: number | null }> = [
   { id: 'preview', label: 'Preview', sub: 'as shown', shortSide: null },
   { id: '720',     label: '720p',    sub: 'HD',       shortSide: 720 },
@@ -174,11 +178,15 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const takes = useNodeGraphStore(s => s.play.takes) ?? NO_TAKES;
   const [takeId, setTakeId] = useState<string | null>(() => { const p = useTakes.getState().pending; if (p) useTakes.getState().renderTake(null); return p; });
   // Video: record or render the picture. Performance: play live and keep it as a take.
-  const [tab, setTab] = useState<'video' | 'performance'>(() => {
+  // Plan gates (lib/plan.ts): takes are Pro, and Free exports up to 1080p.
+  const takesOk = useCan('play.takes');
+  const hiresOk = useCan('export.hires');
+  const [tab, setTabRaw] = useState<'video' | 'performance'>(() => {
     const perf = useTakes.getState().openOnPerformance;
     if (perf) useTakes.setState({ openOnPerformance: false });
-    return perf && !external ? 'performance' : 'video';
+    return perf && !external && can('play.takes') ? 'performance' : 'video';
   });
+  const setTab = (t: 'video' | 'performance') => { if (t === 'performance' && !requireFeature('play.takes')) return; setTabRaw(t); };
   // Render… on a take while this is open (the Performance tab's list): switch to rendering it.
   const pendingTake = useTakes(s => s.pending);
   useEffect(() => {
@@ -189,7 +197,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   }, [pendingTake]);
   const perf = useTakes(s => s.settings);
   const rolling = useTakes(s => s.rolling);
-  const take = external ? null : takes.find(t => t.id === takeId) ?? null;
+  const take = external || !takesOk ? null : takes.find(t => t.id === takeId) ?? null;
   // A take keeps no camera or video frames (too big): its render shows what they show while it renders.
   const liveFeeds = !!take && (nodes.some(n => n.type === 'videoInput') || play.layers.some(l => l.visible && (l.kind === 'camera' || (l as { readFrom?: string }).readFrom === 'camera')));
   const span = take ? { from: take.from, length: Math.max(1 / fps, take.length) } : { from: 0, length: duration };
@@ -268,12 +276,22 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     return () => { cancelled = true; };
   }, [canvas, offlineRender, needsOfflineHandle, sizeKey]);
 
-  // If the chosen scale turns out to be unsupported, fall back to the largest one that is.
+  /** Free exports up to 1080p (short side): 1440p, 2160p and a preview bigger than that are Pro. */
+  const overFreeCap = (id: string): boolean => {
+    const r = RESOLUTIONS.find(x => x.id === id);
+    if (r?.shortSide) return r.shortSide > FREE_MAX_SHORT_SIDE;
+    const sup = support?.[id];
+    return !!sup && Math.min(sup.width, sup.height) > FREE_MAX_SHORT_SIDE;
+  };
+
+  // If the chosen scale turns out to be unsupported (or not on this plan), fall back to the largest one that is.
   useEffect(() => {
-    if (!support || !support[resId]?.blocked) return;
-    const best = [...RESOLUTIONS].reverse().find(r => !support[r.id]?.blocked);
+    if (!support) return;
+    if (!support[resId]?.blocked && (hiresOk || !overFreeCap(resId))) return;
+    const best = [...RESOLUTIONS].reverse().find(r => !support[r.id]?.blocked && (hiresOk || !overFreeCap(r.id)));
     if (best) setResId(best.id);
-  }, [support, resId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [support, resId, hiresOk]);
 
   const current = support?.[resId] ?? null;
 
@@ -734,7 +752,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
             onChange={setTab}
             options={[
               { value: 'video', label: 'Video', sub: 'the picture, or a take' },
-              { value: 'performance', label: 'Performance', sub: 'play live, render later' },
+              { value: 'performance', label: takesOk ? 'Performance' : 'Performance · Pro', sub: 'play live, render later' },
             ]}
           />
         )}
@@ -838,8 +856,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                   ariaLabel="Take"
                   height={34}
                   value={takeId ?? ''}
-                  onChange={v => setTakeId(v || null)}
-                  options={[{ value: '', label: 'None: record live' }, ...takes.map((t: PlayTake) => ({ value: t.id, label: `${t.name} · ${formatDuration(t.length)}` }))]}
+                  onChange={v => { if (v && !requireFeature('play.takes')) return; setTakeId(v || null); }}
+                  options={[{ value: '', label: 'None: record live' }, ...takes.map((t: PlayTake) => ({ value: t.id, label: `${t.name} · ${formatDuration(t.length)}${takesOk ? '' : ' · Pro'}` }))]}
                 />
                 {take && (
                   <Help>
@@ -947,11 +965,12 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                 fill
                 ariaLabel="Resolution"
                 value={resId}
-                onChange={v => setResId(v)}
+                onChange={v => { if (!hiresOk && overFreeCap(v)) { openProSheet('export.hires'); return; } setResId(v); }}
                 options={RESOLUTIONS.map(r => {
                   const sup = support?.[r.id];
                   const blocked = sup?.blocked ?? null;
-                  return { value: r.id, label: r.label, sub: sup ? fmtPx(sup.width, sup.height) : r.sub, disabled: !!blocked, title: blocked ?? undefined };
+                  const pro = !hiresOk && overFreeCap(r.id);
+                  return { value: r.id, label: pro ? `${r.label} · Pro` : r.label, sub: sup ? fmtPx(sup.width, sup.height) : r.sub, disabled: !!blocked, title: blocked ?? (pro ? 'Part of Pro: Free exports up to 1080p' : undefined) };
                 })}
               />
               {resId !== 'preview' && <Help>Rendered at that exact size in the preview's shape. Higher resolutions need a higher bitrate to look clean.</Help>}

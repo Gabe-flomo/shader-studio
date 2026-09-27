@@ -16,6 +16,8 @@ import { exportEverything, importEverything } from '../../utils/libraryActions';
 import { Modal } from '../ui/Modal';
 import { LibraryPanel } from './LibraryPanel';
 import { HandsLive } from '../play/HandsChip';
+import { canOn, usePlan, type Feature } from '../../lib/plan';
+import { accountMenuItems } from '../account/accountMenu';
 
 /**
  * Phone top bar (Mobile board): the Studio | Play | Present switch (other pages: the logo, back
@@ -41,6 +43,10 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
   const moreRef = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [library, setLibrary] = useState(false);
+  const session = usePlan(s => s.session);
+  const account = accountMenuItems(session);
+  // Menu rows are plain text: locked ones say so in their label.
+  const pro = (f: Feature) => (canOn(session.status === 'signed-in' ? session.plan : null, f) ? '' : ' · Pro');
   const mainPage = page === 'studio' || page === 'play' || page === 'present';
 
   return (
@@ -122,20 +128,21 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
               : { label: 'Present', icon: 'slides', hint: 'Teach with your Plays: steps of text, pictures, sliders and code', onSelect: () => onPageChange('present') },
             { label: 'Import a file', icon: 'import', hint: 'A graph, or a .present.json (opens on Present)', onSelect: () => { void importAnyFile(onPageChange); } },
             { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
-            { label: 'Convert GLSL to nodes', icon: 'nodes', hint: 'Paste a shader, preview the nodes it becomes, make it real', onSelect: () => onPageChange('convert') },
+            { label: `Convert GLSL to nodes${pro('convert')}`, icon: 'nodes', hint: 'Paste a shader, preview the nodes it becomes, make it real', onSelect: () => onPageChange('convert') },
             { label: 'Export this graph', icon: 'export', onSelect: async () => { reportFileResult(await exportGraph(), { failTitle: 'Couldn’t export the graph', success: 'Graph exported' }); } },
             page === 'files'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Files', icon: 'folder', hint: 'Everything saved: sizes, clean up, download and install', onSelect: () => onPageChange('files') },
             { label: 'Library…', icon: 'folder', hint: 'Backup folder, export and import, recordings', onSelect: () => setLibrary(true) },
-            { label: 'Export everything', icon: 'export', hint: 'Every graph, presentation, preset and setting as one ZIP', onSelect: () => { void exportEverything(); } },
-            { label: 'Import a library', icon: 'import', hint: 'A library ZIP: adds to what you have', onSelect: () => { void importEverything(); } },
+            { label: `Export everything${pro('files.everything')}`, icon: 'export', hint: 'Every graph, presentation, preset and setting as one ZIP', onSelect: () => { void exportEverything(); } },
+            { label: `Import a library${pro('files.install')}`, icon: 'import', hint: 'A library ZIP: adds to what you have', onSelect: () => { void importEverything(); } },
             'separator',
             page === 'shortcuts'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Keyboard shortcuts', icon: 'hash', onSelect: () => onPageChange('shortcuts') },
             { label: mode === 'light' ? 'Dark theme' : 'Light theme', icon: mode === 'light' ? 'moon' : 'sun', onSelect: toggleTheme },
             ...(onClear ? ['separator' as const, { label: 'Clear the graph…', icon: 'trash' as const, danger: true, onSelect: onClear }] : []),
+            ...(account.length ? ['separator' as const, ...account] : []),
           ]}
         />
       )}

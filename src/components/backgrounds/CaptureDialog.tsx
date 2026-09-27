@@ -15,6 +15,7 @@
  * (captureSteps). While you drag, the warm-up is coarse; it settles exactly
  * a moment after you let go, and always before a capture.
  */
+import { openProSheet, requireFeature, useCan } from '../../lib/plan';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -68,6 +69,7 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
   const compact = narrow();
   const presSize = useMemo(() => (aspect ? sizeForAspect(aspect) : null), [aspect]);
   const [size, setSize] = useState(() => (askedSize ? clampCaptureSize(askedSize.w, askedSize.h) : presSize ?? { w: 1920, h: 1080 }));
+  const hiresOk = useCan('export.hires');
   const [custom, setCustom] = useState(false);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [loading, setLoading] = useState(false);
@@ -185,6 +187,8 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
 
   // ── Capture ───────────────────────────────────────────────────────────────
   const capture = async () => {
+    // Free captures up to 1080 on the short side; bigger is Pro (lib/plan.ts).
+    if (Math.min(size.w, size.h) > 1080 && !requireFeature('export.hires')) return;
     if (!loaded) return;
     setPlaying(false);
     setSaving(true);
@@ -300,7 +304,7 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
             <Select ariaLabel="Size" height={32} value={selectValue} style={{ width: '100%' }}
               options={[
                 ...(presSize ? [{ value: presId!, label: `The presentation’s shape (${presSize.w} × ${presSize.h})` }] : []),
-                ...SIZES.map(s => ({ value: s.id, label: s.label })),
+                ...SIZES.map(s => ({ value: s.id, label: !hiresOk && Math.min(s.w, s.h) > 1080 ? `${s.label} · Pro` : s.label })),
                 { value: 'custom', label: 'Another size…' },
               ]}
               onChange={v => {
@@ -308,6 +312,7 @@ export function CaptureDialog({ aspect, size: askedSize, from, onDone }: {
                 setCustom(false);
                 if (presSize && v === presId) { setSize(presSize); return; }
                 const s = SIZES.find(x => x.id === v);
+                if (s && !hiresOk && Math.min(s.w, s.h) > 1080) { openProSheet('export.hires'); return; }
                 if (s) setSize({ w: s.w, h: s.h });
               }} />
             {(custom || selectValue === 'custom') && (

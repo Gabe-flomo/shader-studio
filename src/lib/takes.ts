@@ -31,6 +31,7 @@
  * A performance runs up to a minute (TAKE_MAX_SECONDS). An opt-in rolling
  * buffer keeps the last minute of playing, to save as a take after the fact.
  */
+import { requireFeature } from './plan';
 import { create } from 'zustand';
 import { inputBus, paramChannelKey, type InputSource, type InputWriter } from './inputBus';
 import { audioEngine } from './audioEngine';
@@ -542,6 +543,7 @@ export const useTakes = create<TakeState>((set, get) => ({
   openOnPerformance: false,
   setSettings: s => set(st => ({ settings: { ...st.settings, ...s, seconds: Math.max(1, Math.min(TAKE_MAX_SECONDS, Math.round(s.seconds ?? st.settings.seconds))) } })),
   begin() {
+    if (!requireFeature('play.takes')) return;
     const st = get();
     if (st.phase === 'replay') st.endReplay();
     if (st.phase === 'recording' || st.phase === 'countdown') return;
@@ -633,20 +635,24 @@ export const useTakes = create<TakeState>((set, get) => ({
     useNodeGraphStore.getState().setPlay(p => ({ ...p, takes: (p.takes ?? []).map(t => (t.id === id ? { ...t, name: n } : t)) }));
   },
   renderTake(id) {
+    if (id && !requireFeature('play.takes')) return;
     if (id && get().phase === 'replay') get().endReplay();
     set({ pending: id });
     if (id && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('open-record'));
   },
   openPerformance() {
+    if (!requireFeature('play.takes')) return;
     set({ openOnPerformance: true });
     window.dispatchEvent(new CustomEvent('open-record'));
   },
   setRolling(on) {
+    if (on && !requireFeature('play.takes')) return;
     try { localStorage.setItem(ROLLING_KEY, on ? '1' : '0'); } catch { /* private window: on for this session only */ }
     if (on) startRolling(); else stopRolling();
     set({ rolling: on });
   },
   saveRolling() {
+    if (!requireFeature('play.takes')) return null;
     if (!rolling) return null;
     const take = rolling.toTake(nextName(useNodeGraphStore.getState().play.takes ?? []), TAKE_MAX_SECONDS);
     if (!take) { toast.info('Nothing to save yet', { message: 'The last minute is kept while the clock runs.' }); return null; }
