@@ -18,6 +18,7 @@ import { RulerSlider } from '../../ui/RulerSlider';
 import { Tooltip } from '../../ui/Tooltip';
 import { ContextMenuArea } from '../../ui/ContextMenuArea';
 import { pairedKey } from '../layerOps';
+import { MASK_DEFAULTS, maskKeyParts } from '../../../types/playLayers';
 
 type Tokens = ReturnType<typeof useTokens>;
 type RGB = [number, number, number];
@@ -29,7 +30,8 @@ export interface FieldKit {
   numStyle: React.CSSProperties;
   set: (patch: Partial<PlayLayer> | Record<string, unknown>) => void;
   get: <T = unknown>(key: string) => T;
-  prop: (key: string) => ReactNode;
+  /** A numeric property's ruler; `label` replaces its name (a mask's rows say "Feather", not "Mask 1 · Feather"). */
+  prop: (key: string, label?: string) => ReactNode;
   props: (...keys: string[]) => ReactNode;
   row: (label: string, children: ReactNode, hint?: string) => ReactNode;
   colour: (label: string, key: string, hint?: string) => ReactNode;
@@ -84,11 +86,12 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
       {children}
     </div>
   );
-  const prop = (key: string) => {
+  const prop = (key: string, shortLabel?: string) => {
     const def = layerNumericProps(l).find(d => d.key === key);
     if (!def) return null;
     const exposed = exposedTargets.has(layerTarget(l.id, key));
-    const fallback = typeof defaults[key] === 'number' ? defaults[key] as number : undefined;
+    const mk = maskKeyParts(key);
+    const fallback = typeof defaults[key] === 'number' ? defaults[key] as number : mk ? MASK_DEFAULTS[mk.prop] : undefined;
     // A slider a script declared may have no value yet (a file from before it was declared): show its low end rather than crash.
     const raw = get<number>(key);
     const value = typeof raw === 'number' && Number.isFinite(raw) ? raw : (fallback ?? def.min);
@@ -109,7 +112,7 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
       <ContextMenuArea key={`prop:${key}`} items={items} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
         {open => (
           <>
-            {label(def.label, def.hint)}
+            {label(shortLabel ?? def.label, def.hint)}
             <div style={{ flex: 1, minWidth: 0 }}>
               <RulerSlider value={value} min={def.min} max={def.max} step={def.step ?? 0.01} defaultValue={fallback} onChange={v => set({ [key]: v })} onType={v => set({ [key]: v })} ariaLabel={`${l.label} ${def.label}`} touch={touch} />
             </div>
@@ -158,7 +161,7 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
   const note = (text: ReactNode) => <div style={{ margin: '6px 0 0 68px', color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>{text}</div>;
   return {
     l, tk, numStyle, get, set: p => set(p as Record<string, unknown>),
-    prop, props: (...keys) => keys.map(prop), row, colour, seg, select, toggle, pick, palette, note,
+    prop, props: (...keys) => keys.map(k => prop(k)), row, colour, seg, select, toggle, pick, palette, note,
     exposedTargets, exposeControl: onExposeControl,
   };
 }

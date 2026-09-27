@@ -67,6 +67,8 @@ export const ICONS = {
   target: { sw: 1.4, body: "<circle cx='8' cy='8' r='4.5'/><circle cx='8' cy='8' r='1.1'/><path d='M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2'/>" },
   dice: { sw: 1.4, body: "<rect x='2.2' y='2.2' width='11.6' height='11.6' rx='2.6'/><circle cx='5.4' cy='5.4' r='1.05' fill='currentColor' stroke='none'/><circle cx='10.6' cy='5.4' r='1.05' fill='currentColor' stroke='none'/><circle cx='8' cy='8' r='1.05' fill='currentColor' stroke='none'/><circle cx='5.4' cy='10.6' r='1.05' fill='currentColor' stroke='none'/><circle cx='10.6' cy='10.6' r='1.05' fill='currentColor' stroke='none'/>" },
   grid: { sw: 1.4, body: "<rect x='2.2' y='2.2' width='11.6' height='11.6' rx='2'/><path d='M2.2 8h11.6M8 2.2v11.6'/>" },
+  link: { sw: 1.4, body: "<path d='M6.9 9.1a2.5 2.5 0 003.5 0l2.1-2.1a2.5 2.5 0 00-3.5-3.5l-.8.8'/><path d='M9.1 6.9a2.5 2.5 0 00-3.5 0L3.5 9a2.5 2.5 0 003.5 3.5l.8-.8'/>" },
+  mask: { sw: 1.4, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><ellipse cx='8' cy='8' rx='3.3' ry='2.8'/>" },
   unlink: { sw: 1.4, body: "<path d='M6.5 9.5l3-3'/><path d='M9 4.5l1-1a2.5 2.5 0 013.5 3.5l-1 1M7 11.5l-1 1a2.5 2.5 0 01-3.5-3.5l1-1'/>" },
   text: { sw: 1.5, body: "<path d='M3.5 4.5V3h9v1.5M8 3v10M6 13h4'/>" },
   slides: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='8.5' rx='1.5'/><path d='M8 11v2.5M5.5 13.5h5'/>" },

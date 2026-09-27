@@ -27,12 +27,50 @@ export type MatteMode =
 
 type RGB = [number, number, number];
 
+/**
+ * A track matte: another layer this one shows through (After Effects' track
+ * matte). The layer is drawn on its own, then multiplied by the matte's
+ * alpha or brightness. The matte layer still runs while it is hidden (its
+ * eye is the "Show matte" switch), and can have a matte of its own.
+ */
+export interface TrackMatte {
+  /** The matte layer's id. */
+  id: string;
+  /** Alpha: where the matte is solid. Luma: where it is bright. */
+  mode: 'alpha' | 'luma';
+  /** Show the layer where the matte is not. */
+  invert: boolean;
+}
+
+export type MaskShape = 'rect' | 'ellipse' | 'polygon';
+/** How a mask combines with the ones above it: Add joins, Subtract cuts out, Intersect keeps the overlap. */
+export type MaskOp = 'add' | 'subtract' | 'intersect';
+/**
+ * A mask a layer owns: it shows the layer inside and hides it outside. Its
+ * numbers (offset, size, turn, rounding, feather, expand, opacity) live on the
+ * layer as `mask_<id>_<prop>`, so controls, mappings and takes drive them;
+ * see MASK_PROPS. The offset hangs from the layer's centre and turns with it.
+ */
+export interface LayerMask {
+  /** `m1`, `m2`…: unique on its layer. */
+  id: string;
+  shape: MaskShape;
+  /** Polygon corners, flat [x0, y0, …] in the mask's own box (-0.5..0.5 each way, y up). */
+  points: number[];
+  op: MaskOp;
+  invert: boolean;
+}
+
 interface LayerBase {
   id: string;
   label: string;
   visible: boolean;
   /** Include this layer in what the graph's Layers node sees (its colour, alpha and distance). */
   toShader: boolean;
+  /** Absent: no matte. Not on nulls or the Background layer. */
+  trackMatte?: TrackMatte;
+  /** Absent or empty: no masks. Not on nulls or the Background layer. */
+  masks?: LayerMask[];
 }
 
 /** A draggable point. Its position is a source ("Null X" / "Null Y") and can be a control. */
@@ -951,7 +989,121 @@ export function parseLayer(raw: unknown): PlayLayer | null {
   if (kind === 'script') for (const [k, v] of Object.entries(l)) if (k.startsWith('p_') && typeof v === 'number' && Number.isFinite(v)) out[k] = v;
   // Made from a layer kind: the id (parsePlayRecord checks the file has it).
   if (kind === 'script' && typeof l.kindId === 'string' && /^[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]{1,80}$/.test(l.kindId)) out.kindId = l.kindId;
+  if (canHaveMatte(kind)) {
+    const t = parseTrackMatte(l.trackMatte, id);
+    if (t) out.trackMatte = t;
+    const masks = parseMasks(l.masks);
+    if (masks.length) {
+      out.masks = masks;
+      // Each mask's numbers, clamped, or its defaults.
+      for (const m of masks) for (const prop of MASK_PROP_KEYS) {
+        const v = l[maskKey(m.id, prop)], d = MASK_PROPS[prop];
+        out[maskKey(m.id, prop)] = typeof v === 'number' && Number.isFinite(v) ? Math.max(d.lo, Math.min(d.hi, v)) : MASK_DEFAULTS[prop];
+      }
+    }
+  }
   return out as unknown as PlayLayer;
+}
+
+// ── Track mattes and masks ───────────────────────────────────────────────────
+
+/** Nulls draw nothing and the Background layer is the picture: every other kind can be matted and masked. */
+export function canHaveMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'background'; }
+/** Anything that draws can be a matte, the Background layer (the picture) included. */
+export function canBeMatte(kind: PlayLayerKind): boolean { return kind !== 'null'; }
+
+function parseTrackMatte(v: unknown, selfId: string): TrackMatte | null {
+  if (!v || typeof v !== 'object') return null;
+  const t = v as Record<string, unknown>;
+  if (typeof t.id !== 'string' || !t.id || t.id === selfId) return null;
+  return { id: t.id, mode: t.mode === 'luma' ? 'luma' : 'alpha', invert: t.invert === true };
+}
+
+export const MASKS_MAX = 16;
+const MASK_SHAPES: readonly MaskShape[] = ['rect', 'ellipse', 'polygon'];
+const MASK_OPS: readonly MaskOp[] = ['add', 'subtract', 'intersect'];
+
+function parseMasks(v: unknown): LayerMask[] {
+  if (!Array.isArray(v)) return [];
+  const out: LayerMask[] = [], seen = new Set<string>();
+  for (const raw of v) {
+    if (!raw || typeof raw !== 'object' || out.length >= MASKS_MAX) continue;
+    const m = raw as Record<string, unknown>;
+    const id = typeof m.id === 'string' && /^m\d{1,4}$/.test(m.id) ? m.id : '';
+    if (!id || seen.has(id)) continue;
+    const shape = MASK_SHAPES.includes(m.shape as MaskShape) ? m.shape as MaskShape : 'rect';
+    const pts = Array.isArray(m.points) && m.points.length % 2 === 0 && m.points.length <= 2000 && m.points.every(n => typeof n === 'number' && Number.isFinite(n)) ? [...m.points as number[]] : [];
+    // A polygon needs three corners; without them it is a rectangle.
+    const poly = shape === 'polygon' && pts.length >= 6;
+    seen.add(id);
+    out.push({ id, shape: poly ? 'polygon' : shape === 'polygon' ? 'rect' : shape, points: poly ? pts : [], op: MASK_OPS.includes(m.op as MaskOp) ? m.op as MaskOp : 'add', invert: m.invert === true });
+  }
+  return out;
+}
+
+export type MaskProp = 'x' | 'y' | 'w' | 'h' | 'rotation' | 'round' | 'feather' | 'expand' | 'opacity';
+interface MaskPropDef { label: string; min: number; max: number; step?: number; lo: number; hi: number; hint: string }
+/** Same numbers as the kit's KM_MASK_DEFAULTS (play/kit/mattes.js; a test keeps them together). */
+export const MASK_DEFAULTS: Readonly<Record<MaskProp, number>> = { x: 0, y: 0, w: 0.5, h: 0.5, rotation: 0, round: 0, feather: 0, expand: 0, opacity: 1 };
+/** A mask's numbers: slider range (min, max), what a file may hold (lo, hi), and the tooltip. */
+export const MASK_PROPS: Readonly<Record<MaskProp, MaskPropDef>> = {
+  x: { label: 'X', min: -1.5, max: 1.5, lo: -4, hi: 4, hint: 'Across from the layer’s centre, in picture heights. The mask moves and turns with the layer.' },
+  y: { label: 'Y', min: -1, max: 1, lo: -4, hi: 4, hint: 'Up from the layer’s centre, in picture heights.' },
+  w: { label: 'Width', min: 0.01, max: 2, lo: 0.001, hi: 8, hint: 'Width in picture heights.' },
+  h: { label: 'Height', min: 0.01, max: 2, lo: 0.001, hi: 8, hint: 'Height in picture heights.' },
+  rotation: { label: 'Rotation', min: -180, max: 180, step: 1, lo: -3600, hi: 3600, hint: 'Degrees, clockwise, on top of the layer’s own turn.' },
+  round: { label: 'Rounding', min: 0, max: 0.5, lo: 0, hi: 0.5, hint: 'Rectangle corners: 0 is square, 0.5 fully round.' },
+  feather: { label: 'Feather', min: 0, max: 0.3, lo: 0, hi: 0.5, hint: 'How soft the edge is, in picture heights. 0 is a hard edge.' },
+  expand: { label: 'Expand', min: -0.2, max: 0.2, lo: -0.5, hi: 0.5, hint: 'Grow the mask outward (above 0) or shrink it inward (below 0), in picture heights, before the feather.' },
+  opacity: { label: 'Opacity', min: 0, max: 1, lo: 0, hi: 1, hint: 'How much the mask counts. At 0 it does nothing.' },
+};
+export const MASK_PROP_KEYS = Object.keys(MASK_PROPS) as MaskProp[];
+
+export const maskKey = (id: string, prop: MaskProp | string): string => `mask_${id}_${prop}`;
+/** A mask number's key split up, or null for any other key. */
+export function maskKeyParts(key: string): { id: string; prop: MaskProp } | null {
+  const m = /^mask_(m\d{1,4})_([a-z]+)$/.exec(key);
+  return m && m[2] in MASK_PROPS ? { id: m[1], prop: m[2] as MaskProp } : null;
+}
+/** What a mask shows as: "Mask 2". */
+export const maskLabel = (id: string): string => `Mask ${id.slice(1)}`;
+
+/** Would `consumerId` taking `matteId` as its matte make a loop? (Also true for itself.) The same walk as the kit's kmWouldCycle. */
+export function matteWouldCycle(layers: ReadonlyArray<Pick<PlayLayer, 'id' | 'trackMatte'>>, consumerId: string, matteId: string): boolean {
+  const byId = new Map(layers.map(l => [l.id, l]));
+  let id = matteId;
+  for (let guard = 0; id && guard <= layers.length; guard++) {
+    if (id === consumerId) return true;
+    id = byId.get(id)?.trackMatte?.id ?? '';
+  }
+  return false;
+}
+
+/** The layers `consumerId` may use as its matte: anything that draws, except itself and anything that would loop back to it. */
+export function matteCandidates(layers: readonly PlayLayer[], consumerId: string): PlayLayer[] {
+  return layers.filter(l => canBeMatte(l.kind) && !matteWouldCycle(layers, consumerId, l.id));
+}
+
+/** The layers that use `id` as their matte. */
+export function matteUsers(layers: readonly PlayLayer[], id: string): PlayLayer[] {
+  return layers.filter(l => l.trackMatte?.id === id);
+}
+
+/** Mattes that point at a missing layer or a null, or round in a loop, dropped (a file loads whatever it says). */
+export function repairMattes(layers: PlayLayer[]): PlayLayer[] {
+  const drop = (l: PlayLayer): PlayLayer => { const c = { ...l }; delete c.trackMatte; return c; };
+  // First the ones that point nowhere useful.
+  let out = layers.map(l => {
+    if (!l.trackMatte) return l;
+    const m = layers.find(x => x.id === l.trackMatte!.id);
+    return !m || !canBeMatte(m.kind) || !canHaveMatte(l.kind) ? drop(l) : l;
+  });
+  // Then loops: walking down each chain, the link that closes a loop goes.
+  for (const l of out) {
+    const t = out.find(x => x.id === l.id)?.trackMatte;
+    if (t && matteWouldCycle(out, l.id, t.id)) out = out.map(x => (x.id === l.id ? drop(x) : x));
+  }
+  return out.every((l, i) => l === layers[i]) ? layers : out;
 }
 
 export function isScriptParamDef(d: unknown): d is ScriptParamDef {
@@ -1152,6 +1304,16 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
  * at hand.
  */
 export function layerNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
+  const own = kindNumericProps(l);
+  if (!l.masks?.length) return own;
+  // A mask's numbers follow the layer's own: "Mask 1 · Feather".
+  return [...own, ...l.masks.flatMap(m => MASK_PROP_KEYS.map(p => {
+    const d = MASK_PROPS[p];
+    return { key: maskKey(m.id, p), label: `${maskLabel(m.id)} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}), hint: d.hint };
+  }))];
+}
+
+function kindNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
   const base = LAYER_NUMERIC_PROPS[l.kind];
   // Index and Offset run over the queue: a slider from the first source to the last.
   if (l.kind === 'background') { const last = Math.max(1, l.sources.length - 1); return base.map(d => d.key === 'index' || d.key === 'offset' ? { ...d, max: last } : d); }

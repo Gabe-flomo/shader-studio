@@ -7,7 +7,9 @@
  * in picture heights; rotation is degrees, clockwise on screen. Screen maths
  * is in CSS pixels with y down, where a positive angle also turns clockwise.
  */
-import type { PlayLayer } from '../types/play';
+import type { LayerMask, PlayLayer } from '../types/play';
+import { maskKey } from '../types/playLayers';
+import { kmMaskLocal, kmMaskPlacement } from './kit/mattes.js';
 
 export interface Bounds {
   /** Centre, 0..1, y up. */
@@ -151,4 +153,25 @@ export function patchFor(l: PlayLayer, start: Bounds, b: Bounds, v: Value): Reco
     case 'lens': out.radius = r4(v(l, 'radius') * kx); break;
   }
   return out;
+}
+
+// ── Masks ────────────────────────────────────────────────────────────────────
+
+type KmLayer = Parameters<typeof kmMaskPlacement>[0];
+
+/** A mask's box on the picture: its place hangs from the layer's, so it turns with the layer. */
+export function maskBounds(l: PlayLayer, m: LayerMask, v: Value, aspect: number): Bounds {
+  const p = kmMaskPlacement(l as unknown as KmLayer, m, k => v(l, k), aspect);
+  return { x: p.x, y: p.y, w: p.w, h: p.h, rot: p.rotation, uniform: false, turns: true };
+}
+
+/** The layer patch (the mask's numbers) that gives a mask bounds `b`. Polygon points stay in the mask's box, so they stretch with it. */
+export function maskPatchFor(l: PlayLayer, m: LayerMask, b: Bounds, v: Value, aspect: number): Record<string, number> {
+  const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
+  const at = kmMaskLocal(l as unknown as KmLayer, k => v(l, k), aspect, b.x, b.y, b.rot);
+  return {
+    [maskKey(m.id, 'x')]: r4(at.x), [maskKey(m.id, 'y')]: r4(at.y),
+    [maskKey(m.id, 'w')]: r4(b.w), [maskKey(m.id, 'h')]: r4(b.h),
+    [maskKey(m.id, 'rotation')]: Math.round(at.rotation * 10) / 10,
+  };
 }

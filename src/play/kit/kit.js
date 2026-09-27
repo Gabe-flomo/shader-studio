@@ -39,6 +39,7 @@ import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPr
 import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 import { hdDraw } from './hands.js';
+import { kmApplyMasks, kmApplyTrack, kmMatteSources, kmTrackOf } from './mattes.js';
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
@@ -243,6 +244,10 @@ export function createLayerKit() {
     const hiddenBySource = new Set(layers.filter(l => l.kind === 'cloner' && l.hideSource && l.sourceId && baseVisible(l)).map(l => l.sourceId));
     const isVisible = l => baseVisible(l) && !hiddenBySource.has(l.id);
     const vis = layers.filter(isVisible);
+    // Track mattes: a layer used as another's matte runs (and is drawn into a canvas of its own) even while it is hidden.
+    const byId = new Map(layers.map(l => [l.id, l]));
+    const matteSources = kmMatteSources(layers, isVisible);
+    const live = matteSources.size ? layers.filter(l => isVisible(l) || matteSources.has(l.id)) : vis;
 
     // 1. Nulls that follow something ride a spring; their position is reported back to the host.
     for (const l of layers) {
@@ -266,7 +271,7 @@ export function createLayerKit() {
 
     // 2. Read the picture (and the camera) at the resolutions anything needs.
     const needs = { coarse: false, fine: false, cam: false, camFine: false };
-    for (const l of vis) {
+    for (const l of live) {
       if (l.kind === 'particles') { if (l.readFrom === 'camera') { needs.cam = true; if (l.detail === 'fine') needs.camFine = true; } else if (l.detail === 'fine') needs.fine = true; else needs.coarse = true; if (l.colour === 'picture') needs.coarse = true; }
       else if (l.kind === 'bodies' && l.solidPicture) needs.coarse = true;
       else if (l.kind === 'shape' && l.shape === 'picture') needs.coarse = true;
@@ -520,7 +525,7 @@ export function createLayerKit() {
       for (const cp of copies) klDrawCopy(c, cp, sx, sy, W, H, scratch, box);
       c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
     }
-    const drawOne = (c, l) => {
+    const drawOne = (c, l, guides) => {
       const v = k => env.value(l, k);
       c.save();
       try {
@@ -547,7 +552,7 @@ export function createLayerKit() {
             break;
           }
           case 'shape':
-            klDrawShape(c, l, v, W, H, dpr, maskShows.get(l.id) || null, env.editing, env.selectedId === l.id);
+            klDrawShape(c, l, v, W, H, dpr, maskShows.get(l.id) || null, env.editing && guides, env.selectedId === l.id);
             break;
           case 'cloner': drawCloner(c, l, v); break;
           case 'script': drawScript(c, l, v); break;
@@ -573,7 +578,8 @@ export function createLayerKit() {
           case 'glyphs': {
             const cell = Math.max(3, v('cell') * dpr), cols = Math.max(1, Math.min(320, Math.ceil(W / cell))), rows = Math.max(1, Math.min(240, Math.ceil(H / cell)));
             const fromLayer = l.readFrom === 'layer';
-            const src = fromLayer ? pool['src:' + l.sourceId] || null : l.readFrom === 'camera' ? cam : gl;
+            const srcLayer = fromLayer && l.sourceId !== l.id ? byId.get(l.sourceId) : null;
+            const src = fromLayer ? (srcLayer ? renderLayer(srcLayer) : null) : l.readFrom === 'camera' ? cam : gl;
             if (!src) break;
             const grid = sampleInto('glyphGrid', src, cols, rows, l.readFrom === 'camera' && camMirror);
             if (grid) klDrawGlyphs(c, l, v, W, H, dpr, grid, cols, rows, pool, l.readFrom === 'camera' ? null : src, fromLayer);
@@ -617,18 +623,40 @@ export function createLayerKit() {
         }
       } finally { c.restore(); }
     };
-    // Layers a glyph layer reads are also drawn into a canvas of their own (even while hidden), for it to sample.
+    // A layer drawn on its own canvas first: one with a track matte or masks, one a glyph layer reads, or
+    // one that is a matte. It is drawn there once a frame (with its own blend, so particles still add up
+    // among themselves), cut by its matte and masks, then laid on the picture with its blend.
     const glyphSources = new Set();
     for (const l of layers) if (l.kind === 'glyphs' && l.readFrom === 'layer' && l.sourceId && l.sourceId !== l.id && isVisible(l)) glyphSources.add(l.sourceId);
-    const drawLayer = (c, l) => {
-      if (!glyphSources.has(l.id)) { drawOne(c, l); return; }
-      const off = klCanvas(pool, 'src:' + l.id, W, H), o = off.getContext('2d');
+    const ownCanvas = l => glyphSources.has(l.id) || matteSources.has(l.id) || !!kmTrackOf(l, byId) || !!(l.masks && l.masks.length);
+    const rendered = new Map();
+    function renderLayer(l) {
+      if (rendered.has(l.id)) return rendered.get(l.id);
+      rendered.set(l.id, null); // a loop (a matte of a matte of itself) finds nothing and draws unmatted
+      const off = klCanvas(pool, 'lay:' + l.id, W, H), o = off.getContext('2d');
       o.setTransform(1, 0, 0, 1, 0, 0); o.globalAlpha = 1; o.globalCompositeOperation = 'source-over';
       o.clearRect(0, 0, W, H);
-      drawOne(o, l);
-      if (isVisible(l)) c.drawImage(off, 0, 0);
+      // The Background layer as a matte: the picture it shows.
+      if (l.kind === 'background') o.drawImage(gl, 0, 0, W, H);
+      else drawOne(o, l, false);
+      o.setTransform(1, 0, 0, 1, 0, 0); o.globalAlpha = 1;
+      const m = kmTrackOf(l, byId);
+      if (m) { const mc = renderLayer(m); if (mc) kmApplyTrack(pool, o, mc, l.trackMatte, W, H); }
+      if (l.masks && l.masks.length && l.kind !== 'background') kmApplyMasks(pool, o, l, k => env.value(l, k), W, H);
+      rendered.set(l.id, off);
+      return off;
+    }
+    // Text, images and the camera with a Reveal or Luma picture matte already chose how they meet the picture.
+    const blendOf = l => ((l.kind === 'text' || l.kind === 'image' || l.kind === 'camera') && l.matte !== 'over') ? 'source-over' : KL_BLEND[l.blend] || 'source-over';
+    const drawLayer = (c, l) => {
+      if (!ownCanvas(l)) { drawOne(c, l, true); return; }
+      const off = renderLayer(l);
+      if (!off) return;
+      c.globalAlpha = 1; c.globalCompositeOperation = blendOf(l);
+      c.drawImage(off, 0, 0);
+      c.globalCompositeOperation = 'source-over';
     };
-    const drawn = l => isVisible(l) || glyphSources.has(l.id);
+    const drawn = l => isVisible(l);
     const tap = env.shaderTap;
     if (tap) {
       // The Layers node: draw what it sees into a buffer of its own, hand that over, then lay it on the overlay.
@@ -657,7 +685,7 @@ export function createLayerKit() {
       report(env, z.id + '::fill', fill);
       report(env, z.id + '::hover', pointer.over && z.dist(pointer.x, pointer.y) < 0 ? 1 : 0);
     }
-    for (const l of vis) {
+    for (const l of live) {
       if (l.kind === 'particles') {
         const p = parts.get(l.id);
         if (!p) continue;
@@ -683,6 +711,11 @@ export function createLayerKit() {
     // 7. Null markers on top of everything, and the tracked hands' skeleton (a setup aid) with them.
     if (env.markers && env.hands) hdDraw(ctx, env.hands.state, W, H, dpr, env.hands.colour);
     if (env.markers) for (const l of vis) if (l.kind === 'null') klDrawNull(ctx, l, env.value(l, 'x'), env.value(l, 'y'), env.value(l, 'size'), dpr, W, H, l.role && l.role !== 'none' ? env.value(l, 'radius') * H : 0);
+
+    // 8. Let go of the canvases of layers that no longer draw on their own or have masks.
+    for (const k in pool) {
+      if (k.startsWith('lay:') ? !rendered.get(k.slice(4)) : k.startsWith('mk:') ? !(rendered.get(k.slice(3)) && byId.get(k.slice(3)).masks) : false) { pool[k].width = pool[k].height = 0; delete pool[k]; }
+    }
   }
 
   /**
@@ -799,7 +832,8 @@ export function createLayerKit() {
     isAnimated(record) {
       // A crossfade under way, or a sketch showing in the background.
       if (bqLast && record.layers[0] && record.layers[0].id === bqLast.layerId && (bqLast.fading || bqLast.items.some(i => i.item.kind === 'script'))) return true;
-      return record.layers.some(l => (shown.has(l.id) ? shown.get(l.id) : l.visible) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && l.sequence) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera')));
+      const mattes = kmMatteSources(record.layers, l => (shown.has(l.id) ? shown.get(l.id) : l.visible));
+      return record.layers.some(l => ((shown.has(l.id) ? shown.get(l.id) : l.visible) || mattes.has(l.id)) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && l.sequence) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera')));
     },
     /**
      * Forget all state (a new recording starts from scratch). `seed` (a take's)
