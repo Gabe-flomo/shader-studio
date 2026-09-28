@@ -90,6 +90,8 @@ const LIST_KINDS: ListKind[] = [
   { kind: 'finishPreset', area: 'presets', key: 'shader-studio:finish-presets', root: 'presets/finish stacks', ext: '.finish.json', label: 'Finish stack preset' },
   { kind: 'finishEffect', area: 'presets', key: 'shader-studio:finish-effects', root: 'presets/finish effects', ext: '.effect.json', label: 'Finish effect' },
   { kind: 'drumKit', area: 'presets', key: 'shader-studio:drum-kits', root: 'presets/drum kits', ext: '.kit.json', label: 'Drum kit' },
+  { kind: 'layerSet', area: 'presets', key: 'shader-studio:layer-sets', root: 'presets/layer sets', ext: '.set.json', label: 'Layer set' },
+  { kind: 'rackPreset', area: 'presets', key: 'shader-studio:rack-presets', root: 'presets/racks', ext: '.rack.json', label: 'Rack preset' },
 ];
 
 /** How the two sides' changes to a file combine when both changed it. */

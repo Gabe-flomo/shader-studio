@@ -39,7 +39,7 @@ export const PROFILE_KIND = 'shader-studio-profile';
 export const MANIFEST_FILE = 'manifest.json';
 /** Kept on this machine when everything is replaced: where its backups go. */
 const DEVICE_KEYS = new Set(['shader-studio:settings:backupDir', 'shader-studio:settings:recordings']);
-const LIST_KEYS = new Set(['shader-studio:glsl-shaders', 'shader-studio:palette-presets', 'shader-studio:finish-presets', 'shader-studio:finish-effects', 'shader-studio:finish-looks', 'shader-studio-backgrounds:palettes', 'shader-studio:play:savedScripts', 'shader-studio:play:layerKinds', 'fn_builder_saved_fns_v1', 'fn_builder_groups_v1']);
+const LIST_KEYS = new Set(['shader-studio:glsl-shaders', 'shader-studio:palette-presets', 'shader-studio:finish-presets', 'shader-studio:finish-effects', 'shader-studio:finish-looks', 'shader-studio-backgrounds:palettes', 'shader-studio:play:savedScripts', 'shader-studio:play:layerKinds', 'fn_builder_saved_fns_v1', 'fn_builder_groups_v1', 'shader-studio:layer-sets', 'shader-studio:rack-presets']);
 /** Lists whose items sit in folders by id: a renamed copy keeps its folder. */
 const LIST_SCOPES: Record<string, string> = { 'shader-studio:play:layerKinds': 'layerKinds', 'shader-studio-backgrounds:palettes': 'backgrounds:palettes' };
 
