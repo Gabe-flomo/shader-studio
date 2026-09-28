@@ -217,6 +217,8 @@
   // or an audio effect's (audiofx:<chainId>:<effectId>::<key>, kept under 'audiofx:<chainId>:<effectId>').
   function layerTarget(t) {
     if (t.startsWith('audiofx:')) { const i = t.lastIndexOf('::'); return i > 8 ? { layerId: t.slice(0, i), key: t.slice(i + 2) } : null; }
+    // A Granulator rack's setting (au:<rackId>:inst::<address>, docs/granulator.md), kept under 'au:<rackId>:inst'.
+    if (t.startsWith('au:')) { const i = t.indexOf('::'); return i > 3 ? { layerId: t.slice(0, i), key: t.slice(i + 2) } : null; }
     const fin = t.startsWith('finish:');
     if (!fin && !t.startsWith('layer:')) return null;
     const r = t.slice(fin ? 7 : 6); const i = r.lastIndexOf('::');
@@ -226,6 +228,8 @@
   function actTarget(t) { if (!t.startsWith('act:')) return null; const r = t.slice(4); const i = r.lastIndexOf('::'); return i > 0 ? { layerId: r.slice(0, i), do: r.slice(i + 2) } : null; }
   // A reader's level control (`reader:<id>::level`, play/readerControls.ts): its mapping drives it; the value is kept as the control's live value only, for "Another control", conditions and pairs.
   function readerTarget(t) { return t.startsWith('reader:') && t.endsWith('::level') ? { readerId: t.slice(7, -7) } : null; }
+  // A Granulator's grain readout control (`grains:<rackId>::<read>`): driven by its sensor mapping, live value only, like a reader's.
+  function grainsTarget(t) { return t.startsWith('grains:') && t.indexOf('::') > 7; }
   function bindingKey(t) { return t.split('::').slice(-2).join('::'); }
   function isTyping(t) { return t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || (t && t.isContentEditable); }
 
@@ -353,7 +357,7 @@ void main() {
     const noteOn = type === 0x90 && data[2] > 0, noteOff = type === 0x80 || (type === 0x90 && data[2] === 0);
     const seq = ++shared.midiSeq, KM = typeof SSKit !== 'undefined' && SSKit.midi ? SSKit.midi : null;
     if (type === 0xb0 && KM) KM.lockRecord(shared.midiLocks, device || '', chn, data[1] & 127, data[2], seq);
-    if (type >= 0x80 && type <= 0xe0) for (const inst of shared.instances) { if (inst.pad) inst.pad(data[0], data[1] || 0, data[2] || 0, device || ''); if (inst.drum) inst.drum(data[0], data[1] || 0, data[2] || 0); }
+    if (type >= 0x80 && type <= 0xe0) for (const inst of shared.instances) { if (inst.pad) inst.pad(data[0], data[1] || 0, data[2] || 0, device || ''); if (inst.drum) inst.drum(data[0], data[1] || 0, data[2] || 0); if (inst.grain) inst.grain(data[0], data[1] || 0, data[2] || 0); }
     for (const ch of [shared.midi[0], shared.midi[chn]]) {
       if (noteOn) { ch.note = data[1]; ch.vel = data[2]; ch.held.add(data[1]); ch.seenNote = true; ch.noteSeq[data[1] & 127] = seq; ch.noteVel[data[1] & 127] = data[2]; }
       else if (noteOff) ch.held.delete(data[1]);
@@ -1289,7 +1293,7 @@ void main() {
     for (const c of play.controls) {
       const lt = layerTarget(c.target);
       if (lt) { const l = layersById.get(lt.layerId); if (l && typeof l[lt.key] === 'number') base.set(c.id, l[lt.key]); }
-      else if (readerTarget(c.target)) base.set(c.id, 0);
+      else if (readerTarget(c.target) || grainsTarget(c.target)) base.set(c.id, 0);
       else { const u = uniformFor(c); if (u && uniformValues[u] !== undefined) base.set(c.id, Array.isArray(uniformValues[u]) ? uniformValues[u].slice() : uniformValues[u]); }
     }
     // Layers talk back: sensors (zone fill, speed…) and where following nulls are. The layer kit (inlined ahead of this file) draws them.
@@ -1345,8 +1349,68 @@ void main() {
       k.sampler.hit(pad, Object.assign(DPK.numbers(key => value(k.l, DPK.key(pad, key))), { buffer: buf, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: vel }));
     }
     const drumHit = (pad, vel) => { for (const l of drumLayers) drumAct({ layerId: l.id, amount: pad + 1, vel }); };
+    // Granulator racks (the kit's granulator.js, docs/granulator.md): each one's grains in an AudioWorklet (else a
+    // ScriptProcessor) → its Sound chain (`rack:<id>`, analysed for the readers as `engine:<id>`) → its volume → the
+    // master chain. Heard once the visitor's first click or key lets sound start; notes from Web MIDI and `ae:<id>`
+    // pad actions; its settings driven like layer properties under 'au:<id>:inst'; its grains reported as sensors.
+    const GRK = typeof SSKit !== 'undefined' && SSKit.granulator ? SSKit.granulator : null;
+    const grainRacks = GRK && !follow && play.audioEngine ? (play.audioEngine.racks || []).filter(r => r.instrument && r.instrument.kind === 'granulator' && !r.source && !r.mute) : [];
+    const grains = { ctx: null, racks: new Map(), wired: false };
+    if (grainRacks.length) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        grains.ctx = new AC();
+        for (const r of grainRacks) {
+          const params = {};
+          for (const p of GRK.params) params[String(p.addr)] = r.instrument.params && typeof r.instrument.params[p.addr] === 'number' ? r.instrument.params[p.addr] : p.value;
+          layersById.set('au:' + r.id + ':inst', params);
+          const g = { r, params, live: null, an: null, freq: null, out: null, buffer: null, stats: null };
+          grains.racks.set(r.id, g);
+          const sm = r.instrument.sample || {};
+          if (sm.synth) g.buffer = GRK.synth(grains.ctx, sm.synth);
+          else if (sm.src) fetch(sm.src).then(x => x.arrayBuffer()).then(b => grains.ctx.decodeAudioData(b)).then(buf => { g.buffer = buf; if (g.live) g.live.setBuffer(buf); }, () => {});
+        }
+      }
+    }
+    function wireGrains() {
+      if (grains.wired || !grains.ctx) return;
+      grains.wired = true;
+      const bus = grains.ctx.createGain();
+      afxAttach(grains.ctx, 'master', bus, grains.ctx.destination, null);
+      for (const g of grains.racks.values()) {
+        g.live = GRK.create(grains.ctx, { seed: 1 });
+        g.an = grains.ctx.createAnalyser(); g.an.fftSize = 2048; g.an.smoothingTimeConstant = 0.8; g.freq = new Float32Array(g.an.frequencyBinCount);
+        g.out = grains.ctx.createGain(); g.out.gain.value = Math.max(0, g.r.volume == null ? 1 : g.r.volume);
+        afxAttach(grains.ctx, 'rack:' + g.r.id, g.live.output, g.out, null);
+        g.out.connect(g.an); g.out.connect(bus);
+        if (g.buffer) g.live.setBuffer(g.buffer);
+        tickGrains();
+      }
+    }
+    function startGrains() { if (!grains.ctx || !alive) return; wireGrains(); if (grains.ctx.state === 'suspended') grains.ctx.resume(); }
+    // Every frame: the settings as mappings drive them, and the grains out as sensors (`ae:<id>::grains`…).
+    function tickGrains() {
+      for (const g of grains.racks.values()) {
+        const id = 'au:' + g.r.id + ':inst';
+        if (g.live) g.live.set(GRK.settings(g.params, (a, b) => layerValue(id, a, b)));
+        const st = g.live ? g.live.stats() : null;
+        if (!st) continue;
+        const sum = GRK.summary(st), k = 'ae:' + g.r.id + '::';
+        sensors.set(k + 'grains', sum.grains); sensors.set(k + 'grainMean', sum.mean); sensors.set(k + 'grainSpread', sum.spread); sensors.set(k + 'grainLevel', sum.level); sensors.set(k + 'grainPitch', sum.pitch);
+        for (let i = 0; i < 16; i++) { sensors.set(k + 'grainPos' + (i + 1), i < st.count ? st.pos[i] : 0); sensors.set(k + 'grainAmp' + (i + 1), i < st.count ? Math.min(1, st.amp[i]) : 0); }
+      }
+    }
+    // A rack's note: `ae:<id>` pad actions carry note + 1 and the velocity (0 lets it go).
+    function grainNote(rackId, note, vel) {
+      const g = grains.racks.get(rackId);
+      if (!g) return;
+      startGrains();
+      if (!g.live) return;
+      if (vel > 0) g.live.noteOn(note, vel); else g.live.noteOff(note);
+    }
     // Play pad actions go to the drums; every other action to the layer kit.
     if (K && drumLayers.length) { const kitAct = K.act; K.act = a => (a.do === 'pad' ? drumAct(a) : kitAct(a)); }
+    if (K && grains.racks.size) { const kitAct = K.act; K.act = a => (a.do === 'pad' && typeof a.layerId === 'string' && a.layerId.indexOf('ae:') === 0 ? grainNote(a.layerId.slice(3), Math.round(a.amount) - 1, a.vel == null ? 1 : a.vel) : kitAct(a)); }
     const actions = (play.actions || []).filter(a => a.enabled);
     // Conditions, signals and axis swaps: the kit's signals.js, the same code the app runs.
     const SG = typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals : null;
@@ -1404,7 +1468,7 @@ void main() {
             const d = s.otherId ? anchorGap(s.layerId, s.otherId) : null;
             return d === null ? null : Math.min(1, d);
           }
-          const v = sensors.get(s.layerId + '::' + s.read);
+          const v = sensors.get(s.layerId + '::' + s.read + (s.read === 'grainPos' || s.read === 'grainAmp' ? (s.otherId || '1') : ''));
           return v === undefined ? null : v;
         }
         case 'control': { const c = controls.get(s.controlId); if (!c) return null; const v = live.has(c.id) ? live.get(c.id) : base.get(c.id); if (v === undefined) return null; if (Array.isArray(v)) return (v[0] + v[1] + v[2]) / 3; const span = c.max - c.min; return span > 0 ? Math.max(0, Math.min(1, (v - c.min) / span)) : 0; }
@@ -1478,7 +1542,10 @@ void main() {
       const vid = R.cfg.input && R.cfg.input.indexOf('video:') === 0 ? lVideos.get(R.cfg.input.slice(6)) : null;
       // A Drum pad layer's sound (`pads:<id>`), once the first click or key has let it start.
       const dk = R.cfg.input && R.cfg.input.indexOf('pads:') === 0 ? drums.kits.get(R.cfg.input.slice(5)) : null;
-      if (dk) { if (dk.an) { dk.an.getFloatFrequencyData(dk.freq); freq = dk.freq; sr = dk.an.context.sampleRate; } }
+      // A Granulator rack's sound (`engine:<id>`), once the first click or key has let it start.
+      const gk = R.cfg.input && R.cfg.input.indexOf('engine:') === 0 ? grains.racks.get(R.cfg.input.slice(7)) : null;
+      if (gk) { if (gk.an) { gk.an.getFloatFrequencyData(gk.freq); freq = gk.freq; sr = gk.an.context.sampleRate; } }
+      else if (dk) { if (dk.an) { dk.an.getFloatFrequencyData(dk.freq); freq = dk.freq; sr = dk.an.context.sampleRate; } }
       else if (vid) { if (vid.an) { vid.an.getFloatFrequencyData(vid.freq); freq = vid.freq; sr = vid.an.context.sampleRate; } }
       else if (a && a.an) { a.an.getFloatFrequencyData(a.freq); freq = a.freq; sr = a.an.context.sampleRate; }
       else if ((!R.cfg.input || !a) && shared.live.status === 'on') { updateLive(); freq = shared.live.freq; sr = shared.live.sr; }
@@ -1631,6 +1698,7 @@ void main() {
     }
     function tickMappings(dt) {
       tickPads();
+      if (grains.wired) tickGrains();
       tickHands();
       tickAudioTriggers();
       tickZoneTriggers();
@@ -1663,7 +1731,7 @@ void main() {
         }
         const lt = layerTarget(c.target);
         if (lt) { layerLive.set(lt.layerId + '::' + lt.key, v); live.set(c.id, v); driven.add(c.id); continue; }
-        if (readerTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }
+        if (readerTarget(c.target) || grainsTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }
         const un = uniformFor(c); if (!un) continue;
         if (c.kind === 'color') {
           const b = base.get(c.id) || [0, 0, 0];
@@ -1764,6 +1832,7 @@ void main() {
         on(window, 'keyup', e => { const pad = held.get(e.code); if (pad === undefined) return; held.delete(e.code); for (const l of drumLayers) if (l.keys && l.pads[pad] && l.pads[pad].mode === 'gate') drumAct({ layerId: l.id, amount: pad + 1, vel: 0 }); });
       } else on(window, 'keydown', startDrums, true);
     }
+    if (grains.ctx) { on(window, 'pointerdown', startGrains, true); on(window, 'keydown', startGrains, true); }
     if (!follow && queueLayer && (queueLayer.sources || []).some(s => s.kind === 'video' && s.muted === false)) { on(window, 'pointerdown', () => { qSound = true; }, true); on(window, 'keydown', () => { qSound = true; }, true); }
     if (pointerOn) {
       on(stage, 'pointermove', e => {
@@ -1796,7 +1865,7 @@ void main() {
 
     // Panel (player only)
     const readouts = new Map();
-    const usesMidi = !!play.padGrid || drumLayers.some(l => l.midi) || play.mappings.some(m => m.source.kind === 'midi' || m.source.kind === 'pad' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'));
+    const usesMidi = !!play.padGrid || drumLayers.some(l => l.midi) || grainRacks.some(r => r.midi !== 'off') || play.mappings.some(m => m.source.kind === 'midi' || m.source.kind === 'pad' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'));
     const usesOsc = play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc'));
     const usesTilt = play.mappings.some(m => m.source.kind === 'tilt');
     // Readers on the live input (or on a node whose song stayed out of the page, which listens to the input instead) need it too.
@@ -2043,6 +2112,15 @@ void main() {
         if (vel > 0 || (l.pads[pad] && l.pads[pad].mode === 'gate')) drumAct({ layerId: l.id, amount: pad + 1, vel });
       }
     };
+    // MIDI notes play the Granulator racks that listen (any input, or all devices here: a page can't tell them apart), by channel.
+    if (grains.racks.size) inst.grain = (st, d1, d2) => {
+      const type = st & 0xf0, ch = (st & 0x0f) + 1;
+      for (const g of grains.racks.values()) {
+        if (g.r.midi === 'off' || (g.r.channel && g.r.channel !== ch)) continue;
+        if (type === 0x90 || type === 0x80) grainNote(g.r.id, d1, type === 0x90 ? d2 / 127 : 0);
+        else if (type === 0xe0 && g.live) g.live.bend((((d2 << 7) | d1) - 8192) / 8192 * 2);
+      }
+    };
     shared.instances.add(inst);
 
     let raf = 0, alive = true;
@@ -2222,6 +2300,8 @@ void main() {
         for (const v of lVideos.values()) { v.el.pause(); v.el.removeAttribute('src'); v.el.load(); }
         if (vSound.ctx) vSound.ctx.close();
         if (drums.ctx) drums.ctx.close();
+        for (const g of grains.racks.values()) if (g.live) g.live.dispose();
+        if (grains.ctx) grains.ctx.close();
         for (const u of blobUrls) URL.revokeObjectURL(u);
         if (song.ctx) song.ctx.close();
         if (finishR) finishR.dispose();

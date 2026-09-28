@@ -41,6 +41,8 @@ import finishSource from './kit/finish.js?raw';
 import audioFxSource from './kit/audioFx.js?raw';
 import signalsSource from './kit/signals.js?raw';
 import drumPadsSource from './kit/drumPads.js?raw';
+import granulatorSource from './kit/granulator.js?raw';
+import type { AeGrainSample } from '../types/playAudioEngine';
 import { renderableFinish } from '../types/playFinish';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { BACKGROUND_VIDEO_KEEP, backgroundLayerOf, usesHands, type PlayRecord } from '../types/play';
@@ -112,6 +114,8 @@ export interface PlayMedia {
   layerVideos?: Record<string, PlayMediaFile>;
   /** Drum pad layers' samples, by layer id and pad index (the page puts each in its pad as `src`). */
   layerPads?: Record<string, Record<string, PlayMediaFile>>;
+  /** Granulator racks' Library samples, by rack id (the page puts each in the rack's sample as `src`). */
+  rackSamples?: Record<string, PlayMediaFile>;
 }
 
 export type EmbedMode = 'player' | 'background';
@@ -211,6 +215,15 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: 
       ? { what: `The video “${l.fileName}” (${sizeText(bytes)}) in ${l.label}`, why: `Videos over ${sizeText(VIDEO_LIMIT)} stay out of the page to keep it light, so that layer draws nothing there${readsVideo(play, l.id) ? ' and its audio readers hear nothing' : ''}. Trim or compress it under ${sizeText(VIDEO_LIMIT)} to bring it along.` }
       : { what: `The video “${l.fileName}” in ${l.label}`, why: 'Its file isn’t open in this session (it is still loading, or this browser’s library doesn’t have it), so that layer draws nothing on the page. Open the Play page until it shows, then export again.' });
   }
+  // Granulator racks: a Library sample over the limit, or not opened this session, stays out; that rack is silent on the page.
+  for (const r of play.audioEngine?.racks ?? []) {
+    const sm = r.instrument?.kind === 'granulator' ? r.instrument.sample : undefined;
+    if (!sm?.sampleId || media?.rackSamples?.[r.id]?.src) continue;
+    const bytes = media?.rackSamples?.[r.id]?.bytes ?? 0;
+    out.push(bytes > AUDIO_LIMIT
+      ? { what: `The sound “${sm.name}” (${sizeText(bytes)}) in ${r.name}’s Granulator`, why: `Sounds over ${sizeText(AUDIO_LIMIT)} stay out of the page, so that Granulator is silent there. Trim it, or pick a generated sample.` }
+      : { what: `The sound “${sm.name}” in ${r.name}’s Granulator`, why: 'Its file isn’t open in this session (still loading, or this browser’s library doesn’t have it), so that Granulator is silent on the page. Open the Play page until its waveform shows, then export again.' });
+  }
   // Drum pads: a sample over the limit, or not opened this session, stays out; that pad is silent on the page.
   for (const l of play.layers) {
     if (l.kind !== 'drumpad') continue;
@@ -261,6 +274,7 @@ export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', 
     if (f?.src) out.push({ what: `Video “${f.name}” in ${f.label}`, bytes: f.src.length });
     if (l.kind === 'drumpad') for (const s of Object.values(media?.layerPads?.[l.id] ?? {})) if (s.src) out.push({ what: `Sound “${s.name}” in ${s.label}`, bytes: s.src.length });
   }
+  for (const s of Object.values(media?.rackSamples ?? {})) if (s.src) out.push({ what: `Sound “${s.name}” in ${s.label}`, bytes: s.src.length });
   const queue = backgroundLayerOf(play);
   const d = queue ? undefined : play?.display;
   if (d?.source === 'image' && d.image) out.push({ what: `Background image “${d.image.name}”`, bytes: d.image.src.length });
@@ -329,6 +343,12 @@ export function playBundle(input: PlayHtmlInput) {
   if (play.layers.some(l => l.kind === 'drumpad')) {
     play.layers = play.layers.map(l => (l.kind === 'drumpad' ? { ...l, pads: l.pads.map((p, i) => ({ ...p, src: input.media?.layerPads?.[l.id]?.[i]?.src ?? '' })) } as typeof l : l));
   }
+  // Granulator racks carry a Library sample in their sample (a data URL, when it came along); generated ones need nothing.
+  if (play.audioEngine?.racks.some(r => r.instrument?.kind === 'granulator' && r.instrument.sample?.sampleId)) {
+    play.audioEngine = { racks: play.audioEngine.racks.map(r => (r.instrument?.kind === 'granulator' && r.instrument.sample?.sampleId
+      ? { ...r, instrument: { ...r.instrument!, sample: { ...r.instrument!.sample!, src: input.media?.rackSamples?.[r.id]?.src ?? '' } as AeGrainSample } }
+      : r)) };
+  }
   // A saved graph's nodes stay out: the page runs the graph compiled (backgroundGraphs).
   if (queue) play.layers = [{ ...queue, sources: queue.sources.map(s => { if (!s.nodes) return s; const c = { ...s }; delete c.nodes; return c; }) }, ...play.layers.slice(1)];
   const graphs = queue ? Object.fromEntries(Object.entries(input.backgroundGraphs ?? {}).filter(([id]) => queue.sources.some(s => s.id === id))) : {};
@@ -359,10 +379,10 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, relationshipSource, handsSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, audioFxSource, drumPadsSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, relationshipSource, handsSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, audioFxSource, drumPadsSource, granulatorSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH } };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell }, granulator: { create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH } };\n})();\n`;
 }
 
 /**
