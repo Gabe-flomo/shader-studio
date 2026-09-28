@@ -31,6 +31,9 @@ const CONNECTION_GATED = new Set([
   'neighborDist.dispScale',   // only in the hash-displacement path (cellID wired, displacement not)
   'glassScene.diffuseness',   // the node emits no code at all until its scene inputs are wired
   'printText.decimals',       // only formats the number printed when Value is wired
+  // GI Lit March Group: the PBR lighting block is only emitted once a scene is wired
+  'giLitMarchGroup.metallic', 'giLitMarchGroup.roughness', 'giLitMarchGroup.lightStrength',
+  'giLitMarchGroup.giStrength', 'giLitMarchGroup.specStrength',
 ]);
 
 function makeNode(id: string, type: string, def: NodeDefinition, x = 0): GraphNode {

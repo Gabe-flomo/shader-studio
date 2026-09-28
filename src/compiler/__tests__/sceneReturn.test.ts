@@ -71,7 +71,7 @@ describe('scene group return value', () => {
     const r = compileGraph({ nodes });
     expect(r.success, (r.errors ?? []).join('; ')).toBe(true);
     const fn = r.fragmentShader.match(/float mapScene_\w+\(vec3 p[^)]*\) \{([\s\S]*?)return (\w+);\s*\}/)!;
-    const sphereVar = fn[1].match(/float (\w+_dist) = sdf3d_sphere\(p, 0\.[0-9]+\);/)?.[1];
+    const sphereVar = fn[1].match(/float (\w+_dist) = sdf3d_sphere\(p, (?:0\.[0-9]+|u_p_\w+_radius)\);/)?.[1];
     expect(sphereVar).toBeTruthy();
     expect(fn[1]).toMatch(new RegExp(`float ${fn[2]} = ${sphereVar};`));
   });
