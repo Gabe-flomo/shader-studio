@@ -31,6 +31,7 @@ import type { IconName } from '../ui/iconPaths';
 import { Select } from '../ui/Select';
 import { usePlayUi } from './playUi';
 import { addTraceDrawer, normalise, setTraceSource, traceBuffer, type TraceSample } from './controlTrace';
+import { ControlLinkHint } from './ControlLink';
 import { boardGroupList, groupControls, type ControlOriginKind, type KindFilter, type MappedFilter } from './controlGroups';
 
 export type TraceKind = 'line' | 'level' | 'step' | 'colour' | 'xy';
@@ -170,6 +171,7 @@ export function ControlsBoard({ play, renderCard, drivenBy, flatView }: {
         {filtered && <Button size="sm" variant="ghost" onClick={() => { setQuery(''); setGroup('all'); setMapped('all'); setKind('all'); }}>Clear</Button>}
       </>}
       <span style={{ flex: 1 }} />
+      <ControlLinkHint play={play} />
       <IconButton icon="grid" size="sm" active={flat} label={flat ? 'Grouped, with live graphs' : 'Flat grid: every card in one grid, no groups or graphs'} onClick={() => setFlat(!flat)} />
     </div>
   );

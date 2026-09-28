@@ -56,6 +56,7 @@ import { LayerContextMenu } from './LayerContextMenu';
 import { driveWithNull, graphNullDrives, layerNullDrives, pairedKey, type NullDrive } from './layerOps';
 import { toast } from '../ui/toastStore';
 import { usePlayUi, type PanelSize, type PlayTab } from './playUi';
+import { applyControlLink, LinkableControl, useControlLinkEscape } from './ControlLink';
 import { setLayerDropHandler } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
@@ -221,6 +222,9 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   }, [updateNodeParams, setPlay]);
 
   const update = useCallback((fn: (p: PlayRecord) => PlayRecord) => setPlay(fn), [setPlay]);
+  // ⌘-click a control, then a second one, to quick-link them (ControlLink.tsx); Esc cancels.
+  useControlLinkEscape();
+  const linkControl = useCallback((sourceId: string, targetId: string) => applyControlLink(play, update, sourceId, targetId), [play, update]);
   // Images and videos dropped on the picture become layers where they land (play/layerDrop.ts).
   useEffect(() => setLayerDropHandler({
     label: n => dropLabel(n),
@@ -561,9 +565,9 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       );
     }
     return (
-    <ContextMenuArea key={c.id} items={() => controlMenu(c.id)}>
+    <LinkableControl key={c.id} id={c.id} play={play} onLink={linkControl}>
+    <ContextMenuArea items={() => controlMenu(c.id)}>
     <ControlRow
-      key={c.id}
       control={c}
       index={i}
       count={play.controls.length}
@@ -600,6 +604,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       isolated={board?.isolated}
     />
     </ContextMenuArea>
+    </LinkableControl>
     );
   };
   // What drives a trace on the Controls board (a control id, or `pair:<id>`), for its isolated strip.
