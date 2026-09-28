@@ -58,6 +58,16 @@ Sources: [Output: Granular synthesis 101](https://output.com/blog/granular-synth
 
 Portal's grain controls are Density (grain rate), Offset, Size, **Count** (how many grains may exist at once), Shape (the envelope: fully down keeps the transient, up adds fades on both sides) and Pitch, which can **lock to a scale**. Its strength is macros: a few big knobs, each driving many parameters with its own modulator. Ideas worth borrowing: **Count as a hard grain cap**, and **scale-locked grain pitch** (later).
 
+### Ableton Emit and Image-Line Harmor (for Emit and Spectral, 2026-09-28)
+
+Sources: [Sound On Sound: Granular synthesis in Ableton Live](https://www.soundonsound.com/techniques/granular-synthesis-ableton-live), [Ableton: new Max for Live devices](https://www.ableton.com/en/blog/sample-layering-granular-stereo-tools-and-more-new-max-live-devices-community/), [Harmor manual](https://www.image-line.com/fl-studio-learning/fl-studio-online-manual/html/plugins/Harmor.htm), [EDMProd on Harmor](https://www.edmprod.com/fl-studio-harmor/).
+
+- **Emit** (Max for Live) is a particle emitter drawn over a spectrogram: grain bursts shoot out and travel through the sample, and a draggable box sets the range and direction each grain may move in.
+- It runs two independent emitters of up to 16 grains each over one sample, so two streams can cross the same material.
+- Its playback is a phase vocoder, so particles travel at any speed without changing pitch; vertical movement on the display maps to filtering and panning.
+- **Harmor** turns a loaded sound into partials (sines) and resynthesises them, up to 516 per voice, so the spectrum can be edited directly.
+- Its **Prism** moves partials away from harmonic ratios (inharmonic, metallic) and **Blur** smears them in time or frequency. Our Shift (a hertz offset, not a ratio) is the cheap cousin of Prism; blur is left for later.
+
 ### Reaktor Grainstates
 
 Grainstates (a Reaktor factory ensemble) runs several granular players side by side over one buffer. Its grain particles move between the players as a network of states, so the texture wanders on its own. We did not borrow from it directly. The Play page's own mappings, LFOs and readers already give a similar "system that moves by itself" when they are pointed at the granulator's numbers.
@@ -84,11 +94,23 @@ It runs in **Web Audio** everywhere: in the browser, in the desktop app (WKWebVi
 
 We built:
 
-- **Sample**: any sound in the Library's Sounds (drum pad samples are Library sounds too), a **drum pad's sound** (a Library sample or a generated drum), a sound uploaded on the card, or a **generated tone** (a pad chord, a pluck, a voice-like vowel, noise; no file needed). The card shows the **waveform**, with every live grain drawn on it (where it reads, how loud) and the position/spray band. Click or drag on the waveform to set Position.
+- **Sample**: any sound in the Library's Sounds (drum pad samples are Library sounds too), a **drum pad's sound** (a Library sample or a generated drum), a sound uploaded on the card, or the one **generated tone**, the **pad chord** (no file needed). The other generated samples (pluck, vowel, bell, noise sweep, sine) were retired on 2026-09-28: a record or preset that names one plays the pad chord instead, and the Granulator example now uses the pad chord (its second rack, **Particle chimes**, plays it an octave up; the **Shine** reader listens at 880 Hz). Library sounds you uploaded are untouched. There were never sound files in the repo for them (they were made in code), so nothing left `public/`. The card shows the **waveform**, with every live grain drawn on it (where it reads, how loud) and the position/spray band. Click or drag on the waveform to set Position.
 - **Modes**:
   - **Classic** (Granulator III's Classic): synchronous. Two overlapping grains per voice, a new one every half grain size. Density is ignored.
   - **Flux** (Granulator III's Loop crossed with Granulator II's Fluxus): a regular stream at **Density** grains per second, independent of the grain size, so the grains leave gaps or pile up. Each grain's level flickers by **Level random** and it may reverse by **Reverse**. With Density × Size ≈ 1 it is a crossfading loop through the scanned position.
   - **Cloud** (Granulator III's Cloud and Clouds' random density): asynchronous. Onsets are random (Poisson) at Density per second, each grain gets a random pitch inside ±Spread and a random pan, and they keep coming up to the cap.
+  - **Emit** (after Ableton's Emit): each voice has **eight spawn points** that start around Position and **travel** through the sample; grains leave from them in turn, Density a second, and read from wherever their spawn point is now (plus Spray).
+    - **Direction**: Forward, Backward, Both · alternate (every other spawn point goes the other way) or Both · random (each picks, seeded).
+    - **Travel speed**: sample lengths a second (0 to 4; 0 keeps them still). A mapping target like every setting.
+    - **Emit spread**: how far apart the spawn points start (spaced evenly, a little seeded jitter). 0: every grain shoots from Position in one line; 1: spread over the whole sample.
+    - **At the end**: **Wrap** (on from the other end), **Bounce** (turns back), **Respawn** (jumps to a seeded random place).
+    - Position, Scan and the Scan LFO move the whole set; Freeze stops the travel. Grain size, Density, pitch, the randoms, the window and the envelope apply as in Flux.
+  - **Spectral** (after Harmor's resynthesis): grains play **frequency bands** of the sample instead of time slices.
+    - The sample is **analysed once** (an STFT: Hann window of 1024, 2048 or 4096 samples, **Analysis window**, hop a quarter of it; longer hops past 1024 frames) into each frame's strongest 48 peaks (fractional bins by parabolic interpolation, sine amplitudes). It is remembered per sample and window: on the main thread in the app and on exported pages (sent to the worklet, which never analyses on the audio thread), and made on first use in offline renders and tests.
+    - Each grain reads the frame at its time position (Position, Spray, Scan, LFO as usual), takes the **Partials** (1–16) strongest peaks inside its band and plays them as **sines** from a table, each at the phase of one steady oscillator of that frequency (so overlapping grains add up), through its window. No random numbers are drawn for phases, so the sequence never shifts. A bank of sines is cheap and deterministic in a worklet; an inverse FFT would need a whole frame per grain.
+    - **Band** (0–1 on a log axis from 20 Hz to half the sample's rate) and **Band width** (a share of that axis) pick the frequencies. **Band spread** spaces the grains' bands (eight spawn points on the frequency axis, as Emit's on the time axis), and **Band travel** / **Band direction** / **Band at the end** move them along it (Bounce by default).
+    - **Pitch** (and the note, bend, Spread, Pitch random, FM) multiplies the frequencies; **Shift** adds hertz (inharmonic, like a frequency shifter). A band with no peaks is silent.
+    - The card shows the **spectrogram** (time across, frequency up) with the band; drag on it to set Position (across) and Band (up and down).
 - **Position** (0–1 of the file) and **Spray** (random start offset, 0–2 s, as Granulator II's Spray and III's Variation).
 - **Grain size** 2 ms–2 s and **Size random**.
 - **Density** 1–200 grains per second (Flux, Cloud).
@@ -110,7 +132,12 @@ We built:
   - `grainPitch`: the mean pitch, 0.5 = unshifted, ±48 st at the ends
   - per grain, `grainPos` / `grainAmp` with the grain's number (1–16)
 
+  - Spectral: `grainBandMean` (the sounding grains' mean band centre, 0–1 on the Band axis), `grainEnergySum`, and per grain `grainBand` / `grainEnergy`, so visuals can follow spectral grains
+  - the card also draws Emit's and Spectral's **spawn points** (triangles on the top edge for places in the sample, on the left edge for bands); the worklet posts them with the grains
+
   **Readouts → controls** makes controls for count, mean and spread (a group "Grains · <rack>"). **Grains → nulls** makes a few null layers that ride grains 1–8 (x = position in the file, y = level), which particles, paths and the rest can follow.
+
+  **The nulls' folder.** Grains → nulls puts its nulls in a folder of their own at the top level of the layer list ("Grains · <rack>", "(2)" for a second batch). The folder is **sealed**: a layer added later never joins it, even while the list shows the folder (it lands in the nearest open group around it, or at the top level, and the list goes there). Only dropping a layer in puts one inside. Grains from a layer (nulls as the source) makes no layers, so it has no folder. `LayerGroup.sealed` (types/layerGroups.ts, `newLayerHome`), `placeNewLayer` (components/play/groupOps.ts).
 - **Output**: the granulator's sound goes through its own **Sound effect chain** (`rack:<id>`: Filter, Echo, Reverb, Distortion, Compressor, in Finish → Sound or on the card) to the page's master chain. The audio readers can listen to it (**Readers listen here** on the card). Audio Unit effects on a granulator rack are desktop-only and not wired to it (see Limits).
 - **Takes and renders**: notes and parameter moves are recorded as for any rack. A frame-by-frame render replays them into the pure engine, sample-exactly, with the same seed, so two renders of one take are identical to the bit.
 - **Exported web pages**: the runtime plays granulator racks (Drone, MIDI, mapped parameters, readers, readouts), carrying a Library sample in the page when it fits and making a generated tone when that is the sample.
@@ -152,7 +179,9 @@ Not built (yet):
 | Readouts → controls, Grains → nulls | `src/play/grainControls.ts` |
 | Exported pages | `src/play/runtime/play-runtime.js` (granulator racks), `src/play/exportHtml.ts` (the kit, carried samples) |
 | The example | `src/store/playExamples.ts` (`granulator`) |
-| Tests | `src/play/__tests__/granulator.test.ts` |
+| Emit's spawn points, Spectral's analysis and partials | `src/play/kit/granulator.js` (`headsStep`, `analyse`, `pickPartials` inside the engine; `grAnalyse`, `grBufferSpectrum`, `grSpectrumImage`, `grReadStats`) |
+| The grain nulls' sealed folder | `src/play/grainControls.ts`, `src/types/layerGroups.ts` (`sealed`, `newLayerHome`), `src/components/play/groupOps.ts` (`placeNewLayer`) |
+| Tests | `src/play/__tests__/granulator.test.ts`, `granulatorModes.test.ts` (Emit, Spectral), `grainGroups.test.ts` (the sealed folder) |
 
 ## Tests
 
@@ -170,3 +199,11 @@ Not built (yet):
 - the record: parsing, targets, readouts kept and dropped with the rack, Grains → nulls
 - the web export: the carried sample, and the page's kit
 - Grains from a layer: the links, closest first up to the cap, the cutoff mean, density following the count, births firing at once, a logged render replayed identically, and parsing
+- retired generated samples read as the pad chord; a drum pad's drum stays
+
+`src/play/__tests__/granulatorModes.test.ts`:
+
+- Emit: spawn points travel at Travel speed forward, backward and alternately; Wrap, Bounce and Respawn at the ends (Respawn the same for a seed); Spread 0 is one line, 1 is scattered; grains read at the spawn points; bit-exact renders per seed
+- Spectral: the analysis finds the right peaks with their amplitudes, the same every time; a low band plays the low tone and a high band the high one (zero crossings), Pitch multiplies and Shift adds hertz, an empty band is silent; band and energy readouts and the travelling bands; bit-exact renders per seed; the real AudioWorklet getting the analysis from the main thread; the worklet's packed readouts round-trip
+
+`src/play/__tests__/grainGroups.test.ts`: Grains → nulls makes a sealed top-level folder; a later layer stays outside it (even while the list shows it) or goes to the open group around it; a drop still puts one in; the seal survives a save.
