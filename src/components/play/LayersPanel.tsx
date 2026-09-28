@@ -15,10 +15,13 @@
  */
 import { VideoEditor } from './layers/VideoEditor';
 import { DrumPadEditor } from './layers/DrumPadEditor';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { accentColor } from '../../theme/categories';
 import type { LayerKindDef } from '../../types/layerKinds';
+import { GROUP_COLOURS } from '../../types/layerGroups';
+import { extraRelationshipsOf, relationshipNesting, RELATION_ROLE_LABEL } from '../../play/relationshipNesting';
+import type { RelationRole } from '../../types/playLayers';
 import { addKindLayer } from '../../play/layerKinds';
 import { AddLayerMenu } from './layers/AddLayerMenu';
 import { P5ImportDialog, type P5ImportResult } from './layers/P5Import';
@@ -137,6 +140,20 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const inside = path[path.length - 1];
   const hiddenAbove = path.some(g => g.hidden);
   const stripe = inside ? accentColor(inside.colour, mode) : undefined;
+
+  // Relationship layers' members, tucked under their row (relationshipNesting.ts): only among the
+  // layers this view shows, so a member nests only when its relationship is in the same list.
+  const nesting = useMemo(
+    () => relationshipNesting(rows.flatMap(n => (n.kind === 'layer' ? [n.layer] : []))),
+    [rows],
+  );
+  const relIds = useMemo(() => Array.from(nesting.byRelationship.keys()), [nesting]);
+  const relColour = (id: string) => accentColor(GROUP_COLOURS[Math.max(0, relIds.indexOf(id)) % GROUP_COLOURS.length], mode);
+  const relFolded = usePlayUi(s => s.folded);
+  const toggleRelFold = usePlayUi(s => s.toggleFold);
+  // Selecting a relationship highlights its members (faintly); selecting a member outlines the
+  // relationship row(s) it belongs to.
+  const selectedRelMemberships = selected ? nesting.byMember.get(selected) ?? [] : [];
 
   const addKind = (k: LayerKindDef) => {
     const id = playId('layer');
@@ -339,6 +356,27 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     };
   };
 
+  // A row's drag-to-reorder shell, for a layer at its own spot in the list or nested under its
+  // relationship (nesting is display-only: dragging it still reorders the real list).
+  const rowShellFor = (it: ItemRef, k: string, pickable: boolean, children: ReactNode) => (
+    <RowShell
+      key={k}
+      picked={isPicked(it)}
+      selectMode={selectMode}
+      pickable={pickable}
+      touch={touch}
+      drop={dropAt?.key === k ? dropAt.where : null}
+      onPick={how => pick(it, how)}
+      onLongPress={() => { anchor.current = it; setPicked(isPicked(it) ? picked : [...picked, it], true); }}
+      onDragStart={() => { draggingRow = it; }}
+      onDragOver={where => { if (!draggingRow || sameItem(draggingRow, it) || containerOf(play, draggingRow) !== containerOf(play, it)) return false; if (dropAt?.key !== k || dropAt.where !== where) setDropAt({ key: k, where }); return true; }}
+      onDragEnd={() => { draggingRow = null; setDropAt(null); }}
+      onDrop={where => { const from = draggingRow; draggingRow = null; setDropAt(null); if (from) onChange(p => moveItemTo(p, from, it, where)); }}
+    >
+      {children}
+    </RowShell>
+  );
+
   // Split: the list beside the selected layer's editor.
   const editing = split ? play.layers.find(l => l.id === selected) : undefined;
   const wrapSplit = (list: ReactNode) => !split ? list : (
@@ -431,36 +469,55 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
           const item = nodeItem(n);
           const k = `${item.kind}:${item.id}`;
           const prev = rows[i - 1];
-          return (
-            <RowShell
-              key={k}
-              picked={isPicked(item)}
-              selectMode={selectMode}
-              pickable={!(n.kind === 'layer' && n.layer.kind === 'background')}
-              touch={touch}
-              drop={dropAt?.key === k ? dropAt.where : null}
-              onPick={how => pick(item, how)}
-              onLongPress={() => { anchor.current = item; setPicked(isPicked(item) ? picked : [...picked, item], true); }}
-              onDragStart={() => { draggingRow = item; }}
-              onDragOver={where => { if (!draggingRow || sameItem(draggingRow, item) || containerOf(play, draggingRow) !== containerOf(play, item)) return false; if (dropAt?.key !== k || dropAt.where !== where) setDropAt({ key: k, where }); return true; }}
-              onDragEnd={() => { draggingRow = null; setDropAt(null); }}
-              onDrop={where => { const from = draggingRow; draggingRow = null; setDropAt(null); if (from) onChange(p => moveItemTo(p, from, item, where)); }}
-            >
-              {n.kind === 'group' ? (
-                <GroupCard
-                  group={n.group}
-                  play={play}
-                  touch={touch}
-                  hiddenAbove={hiddenAbove}
-                  onChange={onChange}
-                  onEnter={() => enter(n.group.id)}
-                  menuItems={groupMenu(n.group)}
+          // A relationship's members render nested under it (below), not at their own spot.
+          if (n.kind === 'layer' && nesting.byMember.has(n.layer.id)) return null;
+          const rowShell = rowShellFor(item, k, !(n.kind === 'layer' && n.layer.kind === 'background'), (
+            n.kind === 'group' ? (
+              <GroupCard
+                group={n.group}
+                play={play}
+                touch={touch}
+                hiddenAbove={hiddenAbove}
+                onChange={onChange}
+                onEnter={() => enter(n.group.id)}
+                menuItems={groupMenu(n.group)}
+              />
+            ) : (() => {
+              const l = n.layer;
+              const members = nesting.byRelationship.get(l.id);
+              return (
+                <LayerRow
+                  {...rowProps(l, prev?.kind === 'layer' && prev.layer.trackMatte?.id === l.id)}
+                  headerOnly={split}
+                  relOutline={selectedRelMemberships.includes(l.id) ? relColour(l.id) : undefined}
+                  relMembers={members?.length ? { count: members.length, colour: relColour(l.id), collapsed: !!relFolded[`rel:${l.id}`], onToggle: () => toggleRelFold(`rel:${l.id}`) } : undefined}
                 />
-              ) : (() => {
-                const l = n.layer;
-                return <LayerRow {...rowProps(l, prev?.kind === 'layer' && prev.layer.trackMatte?.id === l.id)} headerOnly={split} />;
-              })()}
-            </RowShell>
+              );
+            })()
+          ));
+          if (n.kind !== 'layer' || n.layer.kind !== 'relationship') return rowShell;
+          const members = nesting.byRelationship.get(n.layer.id) ?? [];
+          if (!members.length || relFolded[`rel:${n.layer.id}`]) return rowShell;
+          const colour = relColour(n.layer.id);
+          return (
+            <Fragment key={k}>
+              {rowShell}
+              {members.map(m => {
+                const ml = play.layers.find(x => x.id === m.id);
+                if (!ml) return null;
+                const mItem: ItemRef = { kind: 'layer', id: ml.id };
+                const mk = `layer:${ml.id}`;
+                const extra = extraRelationshipsOf(nesting, ml.id);
+                return rowShellFor(mItem, mk, ml.kind !== 'background', (
+                  <LayerRow
+                    {...rowProps(ml, false)}
+                    headerOnly={split}
+                    relNest={{ colour, role: m.role, extra: extra.length, relLabel: n.layer.label }}
+                    relHighlight={selected === n.layer.id}
+                  />
+                ));
+              })}
+            </Fragment>
           );
         })}
         {!entered && extras && <ActionsSection play={play} onChange={onChange} />}
@@ -572,7 +629,7 @@ function DuplicateGroupDialog({ group, play, onPick, onClose }: { group: LayerGr
   );
 }
 
-function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch, selected, stripe, dim, groupItems, pictureHidden, drawing, maskDrawing, matteOf, nested, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull, onPairXY, headerOnly = false, big = false }: {
+function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch, selected, stripe, dim, groupItems, pictureHidden, drawing, maskDrawing, matteOf, nested, exposedTargets, revealTick, onSelect, onPatch, onRemove, onRename, onDuplicate, onReset, onCreateNull, onMove, onExpose, onExposeControl, onDriveNull, onPairXY, headerOnly = false, big = false, relNest, relHighlight, relMembers, relOutline }: {
   layer: PlayLayer;
   layers: PlayLayer[];
   play: PlayRecord;
@@ -614,6 +671,14 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   headerOnly?: boolean;
   /** In the split view's big panel. */
   big?: boolean;
+  /** This row is a relationship's member, nested (display-only) under its row: the relationship's colour and label, this member's role, and how many other relationships it also belongs to. */
+  relNest?: { colour: string; role: RelationRole; extra: number; relLabel: string };
+  /** Its relationship (a `relNest` row's parent, or a relationship row itself when it is the one selected) is selected: highlight faintly. */
+  relHighlight?: boolean;
+  /** This is a relationship layer with members nested under it: how many, its colour, and the fold state. */
+  relMembers?: { count: number; colour: string; collapsed: boolean; onToggle: () => void };
+  /** A member of this relationship is selected: outline the row in the relationship's colour. */
+  relOutline?: string;
 }) {
   const tk = useTokens();
   const [editing, setEditing] = useState(false);
@@ -671,13 +736,19 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   const summary = !shows ? matteMaskSummary(play, l) : '';
   const reveal = usePlayUi(s => s.reveal);
 
+  // Relationship nesting: a member row indents under its relationship's row (12px on a phone, 18px
+  // otherwise — the same as a group's children), with a connector and a role chip.
+  const narrow = typeof window !== 'undefined' && window.innerWidth < 640;
+  const relIndent = narrow ? 12 : 18;
+
   return (
     <div
       data-layer-id={l.id}
       onPointerDownCapture={onSelect}
       style={{
-        position: 'relative', padding: '8px 10px 10px', marginTop: nested ? 4 : 6, marginLeft: nested ? 18 : 0, borderRadius: radius.card, background: tk.bg.panel,
-        boxShadow: `inset 0 0 0 ${selected ? 1.5 : 1}px ${selected ? tk.accent.base : tk.border.default}`,
+        position: 'relative', padding: '8px 10px 10px', marginTop: nested || relNest ? 4 : 6, marginLeft: relNest ? relIndent : nested ? 18 : 0, borderRadius: radius.card,
+        background: relHighlight && relNest ? alpha(relNest.colour, 0.1) : tk.bg.panel,
+        boxShadow: `inset 0 0 0 ${selected ? 1.5 : relOutline ? 1.5 : 1}px ${selected ? tk.accent.base : relOutline ?? tk.border.default}`,
         // A hidden matte is still at work: it isn't dimmed like a hidden layer.
         opacity: (l.visible || matteOf.length) && !dim ? 1 : 0.6,
       }}
@@ -685,6 +756,12 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
       {stripe && <span aria-hidden style={{ position: 'absolute', left: 3, top: 10, bottom: 10, width: 3, borderRadius: 2, background: stripe }} />}
       {/* Tucked under the layer it is the matte of, joined by an elbow (After Effects' track matte column). */}
       {nested && <span aria-hidden style={{ position: 'absolute', left: -12, top: -5, width: 11, height: 23, borderLeft: `1.5px solid ${tk.text.faint}`, borderBottom: `1.5px solid ${tk.text.faint}`, borderBottomLeftRadius: 7, opacity: 0.7 }} />}
+      {/* Tucked under its relationship's row: display-only — dragging it out doesn't remove it, only the editor does. */}
+      {relNest && (
+        <Tooltip label={`Drawn in its own place; grouped here because “${relNest.relLabel}” moves it`}>
+          <span aria-hidden style={{ position: 'absolute', left: -(relIndent - 6), top: -5, width: relIndent - 7, height: 23, borderLeft: `1.5px solid ${relNest.colour}`, borderBottom: `1.5px solid ${relNest.colour}`, borderBottomLeftRadius: 7, opacity: 0.8 }} />
+        </Tooltip>
+      )}
       <div
         draggable={!editing}
         onDragStart={e => { e.dataTransfer.setData(NOTE_REF_TYPE, noteRef('layer', l.id)); e.dataTransfer.setData('text/plain', noteRef('layer', l.id)); e.dataTransfer.effectAllowed = 'copyMove'; }}
@@ -698,6 +775,19 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
         ) : (
           <button type="button" title={headerOnly ? 'Edit' : 'Rename'} onClick={() => { if (headerOnly) return; setDraft(l.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: headerOnly ? 'pointer' : 'text', color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.label}</button>
         )}
+        {relNest && (
+          <>
+            <Tooltip label={`Grouped under “${relNest.relLabel}”`}>
+              <span aria-hidden style={{ width: 8, height: 8, borderRadius: 4, background: relNest.colour, flexShrink: 0 }} />
+            </Tooltip>
+            <span style={{ flexShrink: 0, padding: '2px 6px', borderRadius: 999, background: alpha(relNest.colour, 0.16), color: relNest.colour, font: `650 10px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>{RELATION_ROLE_LABEL[relNest.role]}</span>
+            {relNest.extra > 0 && (
+              <Tooltip label={`In ${relNest.extra} other relationship${relNest.extra === 1 ? '' : 's'} too`}>
+                <span style={{ flexShrink: 0, padding: '2px 5px', borderRadius: 999, background: tk.bg.field, color: tk.text.faint, font: `650 10px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>+{relNest.extra}</span>
+              </Tooltip>
+            )}
+          </>
+        )}
         {l.kind !== 'null' && !isBackground && <SoloButton kind="layer" id={l.id} />}
         <span title={matteOf.length ? (l.visible ? 'Showing on its own too. Off: only as the matte' : 'Hidden, working as the matte. On: show it on its own too') : l.visible ? 'Hide' : 'Show'} style={{ display: 'inline-flex' }}>
           <Toggle checked={l.visible} onChange={visible => set({ visible })} />
@@ -710,6 +800,18 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
         </span>
         {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={isBackground ? backgroundMenuItems({ onReset, onRemove }) : [...groupItems, 'separator', ...layerMenuItems({ onDuplicate, onReset, onRemove })]} />}
       </div>
+      {relMembers && (
+        <button
+          type="button"
+          onClick={relMembers.onToggle}
+          title={relMembers.collapsed ? 'Show its members' : 'Hide its members'}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '2px 0 0 20px', padding: '2px 0', border: 0, background: 'none', cursor: 'pointer', color: tk.text.faint, font: `11.5px ${fontFamily.ui}` }}
+        >
+          <Icon name={relMembers.collapsed ? 'chevR' : 'chevD'} size={12} />
+          <span aria-hidden style={{ width: 8, height: 8, borderRadius: 4, background: relMembers.colour, flexShrink: 0 }} />
+          <span>{relMembers.count} member{relMembers.count === 1 ? '' : 's'}</span>
+        </button>
+      )}
       {matteOf.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, margin: '2px 0 0 20px', color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, minWidth: 0 }}>
           <Icon name="link" size={13} style={{ color: tk.accent.base }} />
