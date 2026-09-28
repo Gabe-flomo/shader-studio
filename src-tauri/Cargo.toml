@@ -35,4 +35,10 @@ base64 = "0.22"
 notify = "8"
 # The Kaggle API key, in the system keychain.
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
+
+# MIDI: CoreMIDI directly on macOS (one client, one input port per source); midir elsewhere.
+[target.'cfg(target_os = "macos")'.dependencies]
+coremidi = "0.9"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
 midir = "0.11.0"

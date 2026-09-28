@@ -61,9 +61,9 @@ export interface AeRack {
   name: string;
   instrument: AeSlot | null;
   effects: AeSlot[];
-  /** The computer keyboard (and a MIDI file) plays it. */
+  /** The computer keyboard plays it, DAW-style (lib/rackKeyboard.ts): at most one rack at a time; off by default. */
   keyboard: boolean;
-  /** Which MIDI input plays it: '' any, 'off' none, else the device's name. */
+  /** Which MIDI input plays it: '' any (the MIDI file and the keyboard stand-in too), 'off' none, else the device's name. */
   midi: string;
   /** MIDI channel 1..16, or 0 for all. */
   channel: number;
@@ -173,7 +173,17 @@ export function newRack(id: string, existing: readonly AeRack[]): AeRack {
   let n = existing.length + 1;
   const names = new Set(existing.map(r => r.name));
   while (names.has(`Rack ${n}`)) n++;
-  return { id, name: `Rack ${n}`, instrument: null, effects: [], keyboard: true, midi: '', channel: 0, volume: 1, mute: false };
+  return { id, name: `Rack ${n}`, instrument: null, effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false };
+}
+
+/** Give the computer keyboard to one rack (and to no other), or take it away. */
+export function setRackKeyboard(ae: PlayAudioEngine | undefined, rackId: string, on: boolean): PlayAudioEngine {
+  return { racks: (ae?.racks ?? []).map(r => ({ ...r, keyboard: on && r.id === rackId })) };
+}
+
+/** The rack the computer keyboard plays, if any. */
+export function keyboardRack(ae: PlayAudioEngine | undefined): AeRack | undefined {
+  return ae?.racks.find(r => r.keyboard);
 }
 
 export function patchRack(ae: PlayAudioEngine | undefined, rackId: string, patch: Partial<AeRack> | ((r: AeRack) => AeRack)): PlayAudioEngine {
@@ -221,10 +231,15 @@ export function zonesFor(sounds: ReadonlyArray<{ id: string; name: string }>, mo
 
 // ── MIDI routing ────────────────────────────────────────────────────────────
 
-/** Does a message from `device` ('' = the keyboard stand-in or a MIDI file) on `channel` (1..16) play this rack? */
-export function rackHears(r: Pick<AeRack, 'keyboard' | 'midi' | 'channel'>, device: string, channel: number): boolean {
+/**
+ * Does a message from `device` on `channel` (1..16) play this rack? A rack on
+ * "any MIDI input" hears every device, the MIDI file and the keyboard stand-in
+ * (device ''); one limited to a device hears that device only. The rack's
+ * own computer keyboard doesn't come through here (lib/rackKeyboard.ts sends
+ * to the rack directly).
+ */
+export function rackHears(r: Pick<AeRack, 'midi' | 'channel'>, device: string, channel: number): boolean {
   if (r.channel && channel !== r.channel) return false;
-  if (!device) return r.keyboard;
   if (r.midi === 'off') return false;
   return r.midi === '' || r.midi === device;
 }
@@ -310,7 +325,7 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
       name: text(o.name, `Rack ${racks.length + 1}`, 60),
       instrument: parseSlot(o.instrument, AE_INST),
       effects,
-      keyboard: o.keyboard !== false,
+      keyboard: o.keyboard === true,
       midi: typeof o.midi === 'string' ? o.midi.slice(0, 120) : '',
       channel: Math.round(num(o.channel, 0, 0, 16)),
       volume: num(o.volume, 1, 0, 2),

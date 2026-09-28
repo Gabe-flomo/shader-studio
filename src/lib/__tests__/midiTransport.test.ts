@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const bridge = vi.hoisted(() => ({
   invoke: vi.fn(),
   handler: null as ((e: { payload: unknown }) => void) | null,
-  ports: { inputs: [] as Array<{ id: string; name: string }>, outputs: [] as Array<{ id: string; name: string }> },
+  ports: { inputs: [] as Array<{ id: string; name: string; manufacturer?: string; offline?: boolean }>, outputs: [] as Array<{ id: string; name: string; offline?: boolean }> },
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: bridge.invoke }));
@@ -123,5 +123,83 @@ describe('desktop MIDI bridge', () => {
     expect(await broken.connect()).toBe('denied');
     bridge.invoke.mockImplementation(async (cmd: string) => (cmd === 'midi_list' ? bridge.ports : undefined));
     expect(await broken.connect({ retry: true })).toBe('ready');
+  });
+});
+
+describe('desktop MIDI bridge: ports by id', () => {
+  it('opens two devices with one name separately, names a nameless port, and leaves offline ones closed but listed', async () => {
+    bridge.ports = {
+      inputs: [
+        { id: '101', name: 'MPK mini 3', manufacturer: 'Akai', offline: false },
+        { id: '102', name: 'MPK mini 3', manufacturer: 'Akai', offline: false },
+        { id: '103', name: '', manufacturer: '', offline: false },
+        { id: '104', name: 'Ableton Push 3', manufacturer: 'Ableton', offline: true },
+      ],
+      outputs: [{ id: '201', name: 'MPK mini 3', offline: false }, { id: '202', name: 'Ableton Push 3', offline: true }],
+    };
+    const devices = vi.fn();
+    const t = new TauriMidiTransport({ bytes() {}, devices });
+    await t.connect();
+    const opened = bridge.invoke.mock.calls.filter(c => c[0] === 'midi_open_input').map(c => (c[1] as { id: string }).id);
+    expect(opened).toEqual(['101', '102', '103']);
+    expect(t.inputs()).toEqual(['MPK mini 3', 'MPK mini 3', 'MIDI port 103']);
+    expect(t.sources()).toEqual([
+      { id: '101', name: 'MPK mini 3', manufacturer: 'Akai', offline: false, open: true, note: '' },
+      { id: '102', name: 'MPK mini 3', manufacturer: 'Akai', offline: false, open: true, note: '' },
+      { id: '103', name: 'MIDI port 103', manufacturer: '', offline: false, open: true, note: '' },
+      { id: '104', name: 'Ableton Push 3', manufacturer: 'Ableton', offline: true, open: false, note: '' },
+    ]);
+    // Pad lights for a name go to every connected output with it, never an offline one.
+    expect(t.outputsNamed('MPK mini 3')).toHaveLength(1);
+    expect(t.outputsNamed('Ableton Push 3')).toEqual([]);
+    // The Push comes online: it's opened on the next scan, and devices fires once for the change.
+    devices.mockClear();
+    bridge.ports = { ...bridge.ports, inputs: bridge.ports.inputs.map(p => (p.id === '104' ? { ...p, offline: false } : p)) };
+    await t.refresh();
+    expect(bridge.invoke).toHaveBeenCalledWith('midi_open_input', { id: '104' });
+    expect(devices).toHaveBeenCalledTimes(1);
+    expect(t.inputs()).toContain('Ableton Push 3');
+    // Switching a name off closes both ports with it and says so in the sources.
+    t.setDeviceEnabled('MPK mini 3', false);
+    await flush();
+    const closed = bridge.invoke.mock.calls.filter(c => c[0] === 'midi_close_input').map(c => (c[1] as { id: string }).id).sort();
+    expect(closed).toEqual(['101', '102']);
+    expect(t.sources().filter(s => s.name === 'MPK mini 3').map(s => s.note)).toEqual(['switched off here', 'switched off here']);
+  });
+
+  it('an input that fails to open says why in its source, and a nothing-there list is fine', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    bridge.ports = { inputs: [{ id: '1', name: 'Keys' }], outputs: [] };
+    bridge.invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'midi_open_input') throw 'Keys is offline (not plugged in)';
+      return cmd === 'midi_list' ? bridge.ports : undefined;
+    });
+    const t = new TauriMidiTransport({ bytes() {}, devices() {} });
+    await t.connect();
+    expect(t.sources()[0]).toMatchObject({ open: false, note: 'Keys is offline (not plugged in)' });
+    expect(t.busy()).toEqual(['Keys']);
+    bridge.ports = { inputs: [], outputs: [] };
+    bridge.invoke.mockImplementation(async (cmd: string) => (cmd === 'midi_list' ? bridge.ports : undefined));
+    await t.refresh();
+    expect(t.sources()).toEqual([]);
+    expect(t.inputs()).toEqual([]);
+  });
+
+  it('channel messages reach the engine; sysex, clock and program change reach the monitor only', async () => {
+    const { midiMonitor } = await import('../midiMonitor');
+    midiMonitor.clear();
+    bridge.ports = { inputs: [{ id: '101', name: 'MPK mini 3', manufacturer: 'Akai' }], outputs: [] };
+    const engine = new MidiEngine({ tauri: true });
+    await engine.connectWebMidi();
+    bridge.handler?.({ payload: { device: 'MPK mini 3', id: '101', bytes: [0xf0, 0x47, 0x7f, 0x49, 0xf7], len: 5, timestamp: 1 } });
+    bridge.handler?.({ payload: { device: 'MPK mini 3', id: '101', bytes: [0xf0, 0x47], len: 300, timestamp: 2 } });
+    bridge.handler?.({ payload: { device: 'MPK mini 3', id: '101', bytes: [0xf8], timestamp: 3 } });
+    bridge.handler?.({ payload: { device: 'MPK mini 3', id: '101', bytes: [0x99, 36, 100], timestamp: 4 } });
+    bridge.handler?.({ payload: { device: 'MPK mini 3', id: '101', bytes: [0xc0, 3], timestamp: 5 } });
+    expect(engine.lastActivity()?.text).toBe('C2 (note 36) · vel 100 · ch 10');
+    const log = midiMonitor.list('MPK mini 3');
+    expect(log.map(e => e.bytes)).toEqual([[0xf0, 0x47, 0x7f, 0x49, 0xf7], [0xf0, 0x47], [0xf8], [0x99, 36, 100], [0xc0, 3]]);
+    expect(log[1]).toMatchObject({ id: '101', len: 300 });
+    expect(engine.sources()).toEqual([{ id: '101', name: 'MPK mini 3', manufacturer: 'Akai', offline: false, open: true, note: '' }]);
   });
 });

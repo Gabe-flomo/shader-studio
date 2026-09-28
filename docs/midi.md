@@ -115,34 +115,114 @@ level by column and row.
   player). The page's pad grid has no on-screen pads and doesn't light the
   controller.
 
+## Monitor
+
+**Monitor** (the button on the MIDI status chip in Mappings, and the antenna
+button in the Engine tab's header) is for "is my controller getting through,
+and what exactly does it send?":
+
+- **Sources**: every input the system knows, connected or not: its name, its
+  maker, its id (CoreMIDI's unique id in the app, the browser's port id on the
+  web), and its state: **open** (we listen to it), **offline** (macOS
+  remembers the device but it isn't plugged in), **switched off here**, or why
+  it couldn't be opened. Behind that, how many messages it has sent.
+- **Messages**: a live log of the newest 200 raw messages, filtered to one
+  device or all: the time, the device, the bytes in hex and what they mean
+  ("Note on C2 (36) vel 90 · ch 10", "CC 1 Mod wheel = 64", "SysEx Akai (12
+  bytes)", "Clock", "Program 3"). Sysex and system messages show here even
+  though the engine ignores them; a long sysex shows its first 64 bytes and
+  its length. **Pause** freezes the log (the counts keep going), **Clear**
+  empties it, **Copy** puts the sources and the log on the clipboard as text,
+  ready for a bug report.
+- The keyboard stand-in, a MIDI file and `__shaderStudioDev.midiEngine.handleBytes(...)`
+  show as "(no device)". `__shaderStudioDev.midiMonitor.text()` is the same log
+  in the console.
+
+`src/lib/midiMonitor.ts` (the ring buffer and the decoding, `describeMidiBytes`),
+`src/components/play/MidiMonitor.tsx` (the view).
+
+### When a controller doesn't show, or shows and stays silent
+
+1. **Not in Sources at all**: macOS doesn't see it. Check Audio MIDI Setup →
+   MIDI Studio: a grey icon is offline. Try another cable or port (some
+   USB-C hubs drop MIDI class devices), and a controller with a mode switch
+   (an MPK mini's program or DAW mode) should be in its plain MIDI mode.
+2. **Listed as offline**: the system remembers it from before; plug it in
+   and it turns to open within two seconds (the app scans every 2 s while the
+   window is visible; **Connect** scans at once).
+3. **Listed but not open, with a reason**: read it. "Couldn't open" usually
+   means another app holds the port exclusively; quit that app or press
+   Connect. "Switched off here": click the device's name on the MIDI status
+   chip to listen again.
+4. **Open but no messages when you play**: the controller isn't sending on
+   its USB MIDI port (some send on a second port or over Bluetooth), or is
+   sending only sysex (its editor mode). Watch the log while pressing pads
+   and keys, turning knobs; if it stays empty, the device's own
+   configuration is the place to look.
+5. **Messages arrive but nothing plays**: check what the log says against the
+   rack or mapping. Pads on **channel 10** need the rack on **All channels**
+   (the default) or channel 10; a rack limited to one device must name this
+   one (two devices with the same name are still two ports, and both work). A
+   knob lock binds an exact device + channel + CC. A note range on a mapping
+   excludes notes outside it.
+6. **Copy** the Monitor and send it with a bug report: it names every source
+   with its id and state and lists what each one sent.
+
 ## Desktop app
 
 The macOS app runs in WKWebView, which has no Web MIDI, so it reads MIDI
-natively: `src-tauri/src/midi.rs` uses the `midir` crate (CoreMIDI), and
+natively: `src-tauri/src/midi.rs` talks to **CoreMIDI directly** (the
+`coremidi` crate; `midir` stands in on other platforms), and
 `src/lib/midiTauri.ts` is its web half. `src/lib/midiTransport.ts` picks Web
 MIDI in a browser and the bridge in the app (`__TAURI_INTERNALS__`), so the
 engine, knob locks, note ranges and pad grids work the same in both.
 
-- **Commands**: `midi_list` (inputs and outputs, `{ id, name }`),
-  `midi_open_input` / `midi_close_input`, `midi_open_output` /
-  `midi_close_output`, `midi_send` (one channel message; opens the output on
-  first use; sysex is refused).
-- **Messages** arrive as `midi://message` events `{ device, bytes, timestamp }`
-  from midir's callback thread, one per message (a CoreMIDI packet carrying
-  several, or running status, is split in Rust). Sysex, clock and active
-  sensing are ignored.
-- **Devices**: every input is opened when MIDI is first used (a MIDI node, or
-  a MIDI mapping on the Play page). The port list is read again every 2 s
-  while the window is visible, so plugging a controller in or out is picked
-  up on its own; Connect re-scans at once.
+- **One client** for the life of the app, **one input port per source** we
+  listen to, one output port for everything sent. A scan (`midi_list`) reads
+  the system's source list from that client; nothing is created or torn down
+  per scan, so scanning every 2 s costs nothing and never hits CoreMIDI's
+  client limits.
+- **Ports are known by id**, CoreMIDI's unique id, never by name: two
+  controllers with the same name are two ports and both are opened; a port
+  with an empty name is shown as "MIDI port <id>". The name is still what
+  knob locks, pad grids and racks match on.
+- **Offline** sources (`kMIDIPropertyOffline`: a device macOS remembers but
+  that isn't connected) are listed with `offline: true` so the Monitor can
+  show them, and are never opened; the moment one comes online the next scan
+  opens it. A device plugged in before launch is opened on the first scan.
+- **Commands**: `midi_list` (inputs and outputs, `{ id, name, manufacturer,
+  offline, open }`), `midi_open_input` / `midi_close_input`,
+  `midi_open_output` / `midi_close_output`, `midi_send` (one channel message;
+  sysex is refused).
+- **Messages** arrive as `midi://message` events `{ device, id, bytes, len,
+  timestamp }` from CoreMIDI's callback thread, one per message. A per-port
+  parser (`midi.rs Parser`, unit-tested) splits a packet carrying several
+  messages, keeps **running status** across packets, and treats **sysex**
+  carefully: a sysex comes out whole even when split over packets, a realtime
+  byte inside it comes out on its own, and a sysex that never gets its 0xF7
+  (or passes 4 KB) is dropped the moment another status byte arrives, so a
+  controller's sysex burst on connect (the MPK mini's, say) can never swallow
+  the notes that follow it. Sysex reaches the page trimmed to 64 bytes with
+  the real `len`, for the Monitor only; the engine ignores it. Clock and
+  active sensing are dropped in Rust.
+- **Devices**: every connected input is opened when MIDI is first used (a MIDI
+  node, a MIDI mapping, or a rack on the Play page). The port list is read
+  again every 2 s while the window is visible, so plugging a controller in or
+  out is picked up on its own; Connect re-scans at once.
 - **Per device**: with two or more inputs, the Play page's MIDI status lists
   them; click one to ignore it (and click again to listen). The desktop app
   closes an ignored port; a browser drops its messages. Remembered on this
   computer (`shader-studio:midi:off`), in both.
 - **Pad lights** go to the output with the same name as the grid's device.
-- **Names** are CoreMIDI's port names. They're usually what Chrome shows,
+- **Names** are CoreMIDI's display names. They're usually what Chrome shows,
   but a lock taken in the browser may name a device slightly differently;
   if a locked knob stops responding in the app, lock it again there.
+- **Tests**: `cargo test --lib midi` covers the parser (running status
+  across packets, sysex with messages after it, sysex split over packets,
+  unterminated and oversize sysex, realtime inside sysex, trimming) and the
+  event shape; `src/lib/__tests__/midiTransport.test.ts` covers the web half
+  (ports by id, duplicate and empty names, offline ports, hot-plug, sysex to
+  the Monitor).
 
 No capability entries are needed: the app's own commands aren't gated by the
 capability file (there is no app permission manifest), and events use

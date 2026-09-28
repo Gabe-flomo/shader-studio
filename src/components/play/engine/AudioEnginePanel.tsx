@@ -9,7 +9,7 @@
  * Audio Units too (`audio.plugins`); on Free the racks are kept, and listed
  * dimmed.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { fontFamily, radius } from '../../../theme/tokens';
 import { Button, IconButton } from '../../ui/Button';
@@ -24,6 +24,7 @@ import { AE_RACKS_MAX, newRack } from '../../../types/playAudioEngine';
 import type { PlayRecord } from '../../../types/play';
 import { RackCard } from './RackCard';
 import { engineId, withEngine } from './engineOps';
+import { MidiStatusChip } from '../chips';
 
 export function AudioEnginePanel({ play, onChange, touch, wide = false }: {
   play: PlayRecord;
@@ -85,6 +86,7 @@ function EngineHeader({ desktop, touch }: { desktop: boolean; touch: boolean }) 
   const status = useEngineUi(s => s.status);
   const outputs = useEngineUi(s => s.outputs);
   const prefs = useEnginePrefs();
+  const [midi, setMidi] = useState(false);
   useEffect(() => { if (desktop) void audioEngineHost.refreshOutputs(); }, [desktop, status.ready]);
   const line = !desktop
     ? 'In this browser: the sample player, through the page’s sound.'
@@ -95,8 +97,10 @@ function EngineHeader({ desktop, touch }: { desktop: boolean; touch: boolean }) 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Icon name="wave" size={14} style={{ color: tk.text.faint }} />
         <span style={{ flex: 1, minWidth: 0, color: status.error ? tk.status.danger : tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>{line}</span>
+        <IconButton icon="antenna" size="sm" active={midi} label={midi ? 'Hide MIDI devices and the monitor' : 'MIDI devices and the monitor: which controllers are seen, and what they send'} onClick={() => setMidi(m => !m)} />
         {desktop && <IconButton icon={prefs.mute ? 'eyeOff' : 'wave'} size="sm" active={prefs.mute} label={prefs.mute ? 'Unmute the engine' : 'Mute the engine'} onClick={() => prefs.set({ mute: !prefs.mute })} />}
       </div>
+      {midi && <div style={{ padding: '6px 0 2px' }}><MidiStatusChip monitor /></div>}
       {desktop && (
         <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr', alignItems: 'center', gap: 8 }}>
           <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Output</span>

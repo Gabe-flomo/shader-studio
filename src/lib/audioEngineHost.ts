@@ -26,7 +26,7 @@
  */
 import { create } from 'zustand';
 import {
-  AE_INST, AE_PAD_BASE_NOTE, aeRack, aeSlot, parseAuTarget, auPropId, rackHears, unitKey, zoneForNote,
+  AE_INST, AE_PAD_BASE_NOTE, aeRack, aeSlot, keyboardRack, parseAuTarget, auPropId, rackHears, unitKey, zoneForNote,
   type AeRack, type AeSlot, type AeZone, type PlayAudioEngine,
 } from '../types/playAudioEngine';
 import {
@@ -36,6 +36,7 @@ import {
 import { engineSound } from './engineSound';
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { isTauri } from './midiTransport';
+import { rackKeyboard } from './rackKeyboard';
 import { can } from './plan';
 
 type Invoke = <T>(cmd: string, args?: unknown, options?: { headers?: Record<string, string> }) => Promise<T>;
@@ -236,6 +237,8 @@ class AudioEngineHost {
 
   constructor() {
     engineSound.setHost({ spectrum: id => this.spectrum(id), has: id => this.has(id) });
+    // The rack holding the computer keyboard plays through the same door as MIDI (so takes record it).
+    rackKeyboard.configure({ send: (rackId, bytes) => this.input(rackId, bytes) });
   }
 
   /** For tests and the browser build: the Tauri bridge, the Web Audio context, the Library's sounds. */
@@ -329,6 +332,8 @@ class AudioEngineHost {
     if (on !== this.target) {
       this.target = on;
       this.syncMidi();
+      const kb = keyboardRack(on);
+      rackKeyboard.setTarget(kb?.id ?? '', kb?.name ?? '');
       this.kick();
     }
     this.controls = controls;
@@ -650,6 +655,7 @@ class AudioEngineHost {
     for (const w of this.web.values()) w.dispose();
     this.web.clear(); this.mirror.clear(); this.spectra.clear(); this.driven.clear(); this.held.clear();
     this.target = undefined; this.controls = []; this.running = null; this.again = false;
+    rackKeyboard.setTarget('');
     this.offMidi?.(); this.offMidi = null;
     this.unlisten?.(); this.unlisten = null;
     useEngineUi.setState({ status: { mode: 'off', ready: false, error: '', sampleRate: 48000 }, errors: {}, params: {}, loading: {}, outputs: [] });

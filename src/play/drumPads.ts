@@ -26,6 +26,7 @@ import { audioFxHost } from '../lib/audioFx';
 import { layerChainId } from '../types/playAudioFx';
 import { mediaSource, rememberMedia } from '../lib/mediaSources';
 import { isTypingTarget, playEngine } from '../lib/playEngine';
+import { keyboardClaimed } from '../lib/keyboardClaim';
 import { midiEngine } from '../lib/midiEngine';
 import { padGrid } from '../lib/padGrid';
 import { padSound, type PadSoundState } from '../lib/padSound';
@@ -281,7 +282,7 @@ class PlayDrumPads {
   private keysOn(): boolean { return playEngine.isPerforming() && !playEngine.isLearning(); }
 
   private onKeyDown = (e: KeyboardEvent): void => {
-    if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isTypingTarget(e.target) || !this.keysOn()) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isTypingTarget(e.target) || !this.keysOn() || keyboardClaimed(e)) return;
     const pad = dpPadOfKey(e.code);
     if (pad < 0) return;
     let hit = false;

@@ -13,12 +13,25 @@ Everything here is **Pro**: `audio.engine` (racks, the sample player, engine rea
 
 ## The rack card
 
-- **Played by**: any MIDI input, none, or one device by name; a channel or all. **Computer keyboard and MIDI file** lets the keyboard stand-in (A–K white keys, W E T Y U black, Z/X octave, C/V velocity; **Keys as a piano** turns it on) and the record's MIDI file play the rack. The strip of keys on the card plays with the mouse (higher on a key hits harder; Shift is full velocity).
+- **Played by**: any MIDI input (the default: a controller plugged in just plays, and so do the record's MIDI file and the MIDI node's keyboard stand-in), none, or one device by name; a channel or all (the default: an MPK mini's pads on channel 10 reach the rack along with its keys on channel 1). **Computer keyboard** gives the rack the computer keyboard (below). The strip of keys on the card plays with the mouse (higher on a key hits harder; Shift is full velocity) and lights the notes typed.
 - **Spectrum**: the rack's sound after its effects. **Readers listen here** points the setup's audio readers at it (`audioReaders.input = engine:<rackId>`), then clicking the spectrum places readers exactly as on the Audio readers panel; **Audio readers…** opens the panel listening to the rack. In the panel, **Listen to** lists **Audio engine · <rack>**.
 - **Instrument**: **Choose an instrument…** offers the **Sample player** and every enabled Audio Unit instrument (desktop). The sample player has **zones**: a Library sound on one key (drum-rack style from C2 = 36, the next free key each time) or across every key at its own pitch on C4. Each row sets the lowest key, the highest and the key where it plays unpitched. **Use the first 16 as a kit** fills C2… from the Library's sounds.
 - **Effects**: **Audio Unit effect…** appends one; each card has bypass, earlier/later, remove. The order is the chain's order.
 - On an Audio Unit card: the **window** button opens the plug-in's own view (AUv3 view controller, else the AUv2 Cocoa view, else Apple's generic view) in a native window; the **sliders** button lists its parameters. Every number, toggle and list is editable here, and the **+** makes it a Play control, target `au:<rackId>:<slotId>::<address>` (the instrument's slot id is `inst`). **Keep its settings** stores the unit's whole state (`fullState`, base64) in the setup, so a preset dialled in the plug-in's window comes back next time.
 - **Volume** and **mute** per rack; the engine's **Output** device, **Volume** and mute at the top of the tab (this device's settings, `shader-studio:audio:engine`).
+
+## Computer keyboard
+
+**Computer keyboard** on a rack card plays the rack from the keyboard the way a DAW's musical typing does. Off by default, so a plugged-in controller is what plays; on for one rack at a time (turning it on for another rack turns it off here). While it's on and the Play page shows:
+
+- **A W S E D F T G Y H U J K** are C, C#, D, D#, E, F, F#, G, G#, A, A#, B, C from the octave; **O L P ; '** carry on above. **Z / X** move the octave down and up, **C / V** the velocity by 16 (the card has the octave and a velocity slider too), **Shift** sustains: keys let go keep sounding until Shift goes up.
+- **The keyboard is the rack's**: every plain key is swallowed, so the app's shortcuts (F, A, U, T, the number filters…), the Play page's key mappings, drum pad keys, Space and the arrow keys don't fire. Combos with ⌘, ⌃ or ⌥ (Save, Undo, Rebuild…) still work, Tab still moves focus, and text fields still type normally.
+- **A pill in the top bar** says "Keyboard → <rack> · Esc" while a rack has it. **Esc**, or clicking the pill, gives the keyboard back; so does removing the rack or leaving the Play page. All of these write `keyboard: false` into the rack, so the card's toggle follows.
+- Notes go through the Play overlay like MIDI notes (`ae:<rackId>` pad actions), so a **take records them**.
+
+Stored per rack as `rack.keyboard` (`types/playAudioEngine.ts`: `setRackKeyboard`, `keyboardRack`). The runtime is `lib/rackKeyboard.ts` (the key handling, the `useRackKeyboard` store the card and pill read) and `lib/keyboardClaim.ts` (`keyboardClaimed(e)`, which every plain-key handler asks first). The host passes the record's keyboard rack to it in `frame()`; `audioEngineWire.ts` wires the record write-back.
+
+The MIDI node's own **keyboard stand-in** (Studio, `midiEngine.setKeyboardEnabled`) is separate: it plays MIDI nodes and mappings, and reaches a rack on "any MIDI input" like a MIDI file would. It stands aside while a rack has the keyboard.
 
 ## Mapping and takes
 
@@ -46,7 +59,9 @@ Every installed Audio Unit (instruments and effects, with maker, kind, version, 
 | Running it: reconciling the record into the native engine, the browser sample player, MIDI in, mapped parameters, spectra | `src/lib/audioEngineHost.ts` (+ `audioEngineWire.ts` joins it to the overlay, Web Audio and the Library) |
 | Frames, parameter lists, MIDI bytes (pure) | `src/lib/audioEngineProtocol.ts` |
 | Readers on a rack | `src/lib/engineSound.ts`, `audioReaderBank.ts`, `readersPanelUi.ts` |
-| UI | `src/components/play/engine/` (AudioEnginePanel, RackCard, UnitPicker, PluginsDialog, engineOps) |
+| UI | `src/components/play/engine/` (AudioEnginePanel, RackCard, UnitPicker, PluginsDialog, engineOps, KeyboardPill) |
+| Computer keyboard | `src/lib/rackKeyboard.ts`, `src/lib/keyboardClaim.ts` |
+| MIDI devices and the Monitor (the antenna button in the Engine header) | `src/components/play/MidiMonitor.tsx`, `src/lib/midiMonitor.ts`; docs/midi.md |
 | Plugins setting | `src/lib/pluginSettings.ts` |
 | Native engine (Objective-C, AVAudioEngine) | `src-tauri/native/audio_engine.m`, compiled by `build.rs` on macOS |
 | Rust: commands, worker thread (glide + frames), FFI, FFT and packing, parameter descriptions | `src-tauri/src/audio_engine/{mod,ffi,analysis,params}.rs` |
@@ -56,7 +71,8 @@ Commands: `ae_status`, `ae_units`, `ae_rack_create/remove/volume`, `ae_set_instr
 
 ## Tests
 
-- `src/play/__tests__/audioEngine.test.ts`: the record, targets, parsing, the protocol, the host against a fake bridge (build, reorder, bypass, failures and retry, sound caching, Pro gates, notes through takes, drum pad following, mapped parameters, reader spectra), the Plugins setting, Library usage, app settings.
+- `src/play/__tests__/audioEngine.test.ts`: the record, targets, parsing, the protocol, the host against a fake bridge (build, reorder, bypass, failures and retry, sound caching, Pro gates, notes through takes, drum pad following, mapped parameters, reader spectra), the Plugins setting, Library usage, app settings, MIDI routing by device and channel, the one-rack keyboard toggle.
+- `src/lib/__tests__/rackKeyboard.test.ts`: musical typing, the claim that makes shortcuts wait, Esc and leaving Play giving the keyboard back.
 - `cargo test --lib audio_engine`: FFT and packing, parameter descriptions and the smoother, id checks, MIDI splitting.
 - `cargo test --lib audio_engine::native -- --ignored --test-threads=1`: the real engine in **offline manual-rendering mode** (no device, nothing heard) with Apple's built-in units: DLSMusicDevice makes sound on a note and silence before it, the tap and FFT find A4, AUDelay / AULowpass / AUReverb2 load, a Hz parameter is set and read back, reorder, bypass, remove, preset round-trip, mute gives silence, a missing unit is an error, the sample player pitches a WAV up an octave.
 
@@ -64,6 +80,7 @@ Commands: `ae_status`, `ae_units`, `ae_rack_create/remove/volume`, `ae_set_instr
 
 1. Build the desktop app; on first launch open Library → Settings → **Plugins** and check the list has Apple's units (DLSMusicDevice, AUSampler, AUDelay, AUReverb2, AULowpass…) and your third-party ones. Hide one and check it leaves the pickers.
 2. Engine tab → Add a rack → Choose an instrument → **DLSMusicDevice**; play the card's keys and a MIDI keyboard: sound from the chosen output, the spectrum moving. Readers listen here → place a reader → map it to a control.
+   Then **Computer keyboard** on the card: the top bar shows "Keyboard → Rack 1 · Esc", A–K play, F no longer fits the view, ⌘Z still undoes; Esc gives it back and the toggle goes off.
 3. Add **AUDelay** and **AUReverb2**; open their windows, reorder, bypass. Move a parameter, make it a control, map an LFO to it: it should glide, not click.
 4. A third-party AUv2 (a signed build needs the entitlement; an ad-hoc dev build loads them anyway) and an AUv3 (it appears with "AUv3"; its own view should open in the window).
 5. Keep its settings → save the setup → reopen: the plug-in comes back as dialled.

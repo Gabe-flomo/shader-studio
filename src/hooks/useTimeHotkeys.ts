@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { keyboardClaimed } from '../lib/keyboardClaim';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 
 const STEP_SECONDS = 1;
@@ -47,7 +48,7 @@ export function useTimeHotkeys() {
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isTypingOrControlTarget(e.target)) return;
+      if (isTypingOrControlTarget(e.target) || keyboardClaimed(e)) return;
       if (e.code === 'Space') {
         // preventDefault also stops the browser's own "activate the
         // focused button" behavior for Space, so this can't double-fire
