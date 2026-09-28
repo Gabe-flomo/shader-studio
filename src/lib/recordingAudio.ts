@@ -41,7 +41,8 @@
 import { audioEngine, trackChainId } from './audioEngine';
 import type { PlayRecord } from '../types/play';
 import { layerChainId, MASTER_CHAIN, type PlayAudioFx } from '../types/playAudioFx';
-import { AE_INST, RACK_ACT_PREFIX, auPropId, isGranulatorRack, type AeRack, type AeSlot } from '../types/playAudioEngine';
+import { AE_INST, RACK_ACT_PREFIX, auPropId, isGranulatorRack, type AeRack, type AeSlot, type PlayAudioEngine, type RackMacro } from '../types/playAudioEngine';
+import { macroValueAt } from '../play/rackMacros';
 import { rackChainId } from '../types/playAudioFx';
 import { grRender, grSettings } from '../play/kit/granulator.js';
 import { grainBuffer } from './webGranulator';
@@ -72,7 +73,11 @@ export interface RecordingTrack {
   grain?: GrainTrack;
 }
 
-export interface GrainTrack { rackId: string; slot: AeSlot; buffer: AudioBuffer; volume: number }
+export interface GrainTrack {
+  rackId: string; slot: AeSlot; buffer: AudioBuffer; volume: number;
+  /** The rack's macros: a take's macro tracks turn the settings they target (docs/audio-engine.md, "Macros"). */
+  macros?: RackMacro[];
+}
 
 /** Granulator racks as tracks, when their sample is decoded here (a muted one is left out). */
 export function grainTracks(racks: readonly AeRack[] | undefined, bufferOf: (r: AeRack) => AudioBuffer | null = r => grainBuffer(r.instrument?.sample)): RecordingTrack[] {
@@ -80,7 +85,7 @@ export function grainTracks(racks: readonly AeRack[] | undefined, bufferOf: (r: 
   for (const r of racks ?? []) {
     if (!isGranulatorRack(r) || r.source || r.mute) continue;
     const buffer = bufferOf(r);
-    if (buffer) out.push({ key: `grain:${r.id}`, label: `Audio engine · ${r.name}`, clock: true, chain: rackChainId(r.id), grain: { rackId: r.id, slot: r.instrument!, buffer, volume: r.volume } });
+    if (buffer) out.push({ key: `grain:${r.id}`, label: `Audio engine · ${r.name}`, clock: true, chain: rackChainId(r.id), grain: { rackId: r.id, slot: r.instrument!, buffer, volume: r.volume, ...(r.macros ? { macros: r.macros } : {}) } });
   }
   return out;
 }
@@ -322,6 +327,8 @@ export function playPadHits(ctx: BaseAudioContext, input: AudioNode, volume: Gai
  */
 export function renderGrains(ctx: BaseAudioContext, g: GrainTrack, hits: readonly PadHit[], frames: number, valueAt?: ValueAt, from = 0): AudioBuffer {
   const layerId = `${RACK_ACT_PREFIX}${g.rackId}`, prop = auPropId(g.rackId, AE_INST);
+  // Macros turning its settings: their tracks read through each target's curve and range.
+  if (valueAt && g.macros?.some(m => m.targets.length)) valueAt = macroValueAt({ racks: [{ id: g.rackId, name: '', instrument: g.slot, effects: [], keyboard: false, midi: '', channel: 0, volume: g.volume, mute: false, macros: g.macros }] } as PlayAudioEngine, valueAt);
   const events = hits.filter(h => h.layerId === layerId).map(h => ({ t: h.t, note: h.pad, vel: h.vel }));
   const channels: Float32Array[] = [];
   for (let c = 0; c < Math.min(2, g.buffer.numberOfChannels); c++) channels.push(g.buffer.getChannelData(c));

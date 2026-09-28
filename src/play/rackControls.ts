@@ -10,7 +10,7 @@
  */
 import type { PlayControl, PlayRecord } from '../types/play';
 import { RACK_CONTROLS_MAX } from '../types/playArrangement';
-import { aeRack, aeSlot, aeSlotName, auTarget, patchSlot, type AeRack, type AeSlot } from '../types/playAudioEngine';
+import { RACK_MACROS, aeRack, aeSlot, aeSlotName, auTarget, macroTarget, patchSlot, rackMacros, type AeRack, type AeSlot } from '../types/playAudioEngine';
 import { withEngine } from '../components/play/engine/engineOps';
 import { playId } from './playControls';
 
@@ -31,10 +31,14 @@ export function rackControlsOf(p: Pick<PlayRecord, 'controls'>, rack: AeRack, sl
   return out;
 }
 
-/** Every rack control target on a rack (its instrument's and its effects'). */
+/** Every rack control target on a rack (its instrument's and its effects'), then its macros that have a Play control (the tape records both). */
 export function rackControlTargets(p: Pick<PlayRecord, 'controls'>, rack: AeRack): string[] {
   const out: string[] = [];
   for (const s of [rack.instrument, ...rack.effects]) if (s) for (const { control } of rackControlsOf(p, rack, s)) out.push(control.target);
+  for (let n = 1; n <= RACK_MACROS; n++) {
+    const t = macroTarget(rack.id, n);
+    if (p.controls.some(c => c.target === t)) out.push(t);
+  }
   return out;
 }
 
@@ -141,14 +145,17 @@ export function moveRackControl(p: PlayRecord, rackId: string, slotId: string, a
 export function regroupRackControls(p: PlayRecord): PlayRecord {
   let changed = false;
   const groups = new Map<string, string>();
+  const labels = new Map<string, string>();
   for (const r of p.audioEngine?.racks ?? []) {
     for (const s of [r.instrument, ...r.effects]) if (s) for (const a of s.controls ?? []) groups.set(auTarget(r.id, s.id, a), rackControlGroup(r, s));
+    // Macros: "Rack 1 · Macros", each "Rack 1 · Macro 3".
+    rackMacros(r).forEach((m, i) => { const t = macroTarget(r.id, i + 1); groups.set(t, `${r.name} · Macros`); labels.set(t, `${r.name} · ${m.name}`); });
   }
   const controls = p.controls.map(c => {
-    const g = groups.get(c.target);
-    if (!g || c.group === g) return c;
+    const g = groups.get(c.target), l = labels.get(c.target);
+    if (!g || (c.group === g && (!l || c.label === l))) return c;
     changed = true;
-    return { ...c, group: g };
+    return { ...c, group: g, ...(l ? { label: l } : {}) };
   });
   return changed ? { ...p, controls } : p;
 }

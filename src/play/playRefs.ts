@@ -33,7 +33,7 @@ import {
 import type { PlayLayer } from '../types/playLayers';
 import { parseAudioFxTarget, audioFxTarget, AUDIO_FX_TARGET_PREFIX } from '../types/playAudioFx';
 import { FINISH_TARGET_PREFIX } from '../types/playFinish';
-import { AU_TARGET_PREFIX, GRAINS_TARGET_PREFIX, RACK_ACT_PREFIX } from '../types/playAudioEngine';
+import { AU_TARGET_PREFIX, GRAINS_TARGET_PREFIX, MACRO_TARGET_PREFIX, RACK_ACT_PREFIX } from '../types/playAudioEngine';
 
 export type RefKind = 'layer' | 'control' | 'mapping' | 'reader' | 'signal' | 'pair' | 'graph' | 'foreign';
 /** `where`: inside a layer, the key the reference sits under (trackMatte, members, pointIds, followId…). */
@@ -62,7 +62,7 @@ export function mapTarget(target: string, f: RefFn): string {
     if (t && t.chainId.startsWith('layer:')) return audioFxTarget(`layer:${f('layer', t.chainId.slice(6))}`, t.effectId, t.key);
     return f('foreign', target);
   }
-  if (target.startsWith(FINISH_TARGET_PREFIX) || target.startsWith(AU_TARGET_PREFIX) || target.startsWith(GRAINS_TARGET_PREFIX)) return f('foreign', target);
+  if (target.startsWith(FINISH_TARGET_PREFIX) || target.startsWith(AU_TARGET_PREFIX) || target.startsWith(GRAINS_TARGET_PREFIX) || target.startsWith(MACRO_TARGET_PREFIX)) return f('foreign', target);
   return f('graph', target);
 }
 

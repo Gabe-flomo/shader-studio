@@ -477,7 +477,7 @@ export function audibleArrangement(arr: PlayArrangement): PlayArrangement {
 // ── Parsing ─────────────────────────────────────────────────────────────────
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
-const AU_TARGET = /^au:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}::\d{1,20}$/;
+const AU_TARGET = /^(au:[A-Za-z0-9_-]{1,64}:[A-Za-z0-9_-]{1,64}::\d{1,20}|macro:[A-Za-z0-9_-]{1,64}::[1-8])$/;
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 function round6(v: number): number { return Math.round(v * 1e6) / 1e6 + 0; }

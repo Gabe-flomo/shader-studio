@@ -571,7 +571,7 @@ import { parseProjection, type ProjectionRecord } from './projection';
 import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
 import { finishHosts, finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
 import { audioFxEffects, audioFxPropId, isAudioFxEmpty, parseAudioFx, parseAudioFxTarget, type PlayAudioFx } from './playAudioFx';
-import { aeRack, auPropId, auTargetExists, isAudioEngineEmpty, isGranulatorRack, parseAudioEngine, parseAuTarget, parseGrainsTarget, rackOfSensorLayer, type PlayAudioEngine } from './playAudioEngine';
+import { aeRack, auPropId, auTargetExists, isAudioEngineEmpty, isGranulatorRack, macroPropId, parseAudioEngine, parseAuTarget, parseGrainsTarget, parseMacroTarget, rackOfSensorLayer, type PlayAudioEngine } from './playAudioEngine';
 import { arrangementFor, isArrangementEmpty, parseArrangement, type PlayArrangement } from './playArrangement';
 import { sgParseValueRef } from '../play/kit/signals.js';
 import { PAD_GRID_MAX, PAD_GRID_READS, parseMidiLocks, parseNoteRange, parsePadGrid, type MidiLock, type PadGridRead, type PlayPadGrid } from './playMidi';
@@ -729,7 +729,10 @@ export function parsePropTarget(target: string): { layerId: string; key: string 
   const at = parseAudioFxTarget(target);
   if (at) return { layerId: audioFxPropId(at.chainId, at.effectId), key: at.key };
   const au = parseAuTarget(target);
-  return au ? { layerId: auPropId(au.rackId, au.slotId), key: au.address } : null;
+  if (au) return { layerId: auPropId(au.rackId, au.slotId), key: au.address };
+  // A rack's Macro Control (docs/audio-engine.md, "Macros"): the host fans its driven value out to its targets.
+  const mt = parseMacroTarget(target);
+  return mt ? { layerId: macroPropId(mt.rackId), key: String(mt.n) } : null;
 }
 
 /**
@@ -1556,6 +1559,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   const readerIds = new Set(audioReaders?.readers.map(x => x.id) ?? []);
   const keptControls = controls.filter(c => {
     if (parseAuTarget(c.target)) return auTargetExists(audioEngine, c.target);
+    const mt = parseMacroTarget(c.target);
+    if (mt) return !!aeRack(audioEngine, mt.rackId);
     const gt = parseGrainsTarget(c.target);
     if (gt) return isGranulatorRack(aeRack(audioEngine, gt.rackId));
     const rt = parseReaderTarget(c.target);

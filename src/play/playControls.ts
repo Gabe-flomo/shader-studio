@@ -16,7 +16,7 @@ import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
 import { layerNumericProps, parseActionTarget, parseLayerTarget, parseReaderTarget } from '../types/play';
 import { finishHost, finishParamOf, parseFinishTarget, patchFinishEffect, readFinishValue } from '../types/playFinish';
 import { audioFxEffect, audioFxParam, parseAudioFxTarget, patchAudioFxEffect, readAudioFxValue } from '../types/playAudioFx';
-import { aeRack, auTargetExists, isGranulatorRack, parseAuTarget, parseGrainsTarget, readAuValue } from '../types/playAudioEngine';
+import { aeRack, auTargetExists, isGranulatorRack, parseAuTarget, parseGrainsTarget, parseMacroTarget, readAuValue, readMacroValue } from '../types/playAudioEngine';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDrivers';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
@@ -231,6 +231,8 @@ export function readControlValue(nodes: GraphNode[], target: string, play?: Play
   if (parseAudioFxTarget(target)) return readAudioFxValue(play?.audioFx, target);
   // An Audio Unit's parameter: the value kept in the setup (0 until one is set; the + keeps the plug-in's).
   if (parseAuTarget(target)) return auTargetExists(play?.audioEngine, target) ? readAuValue(play?.audioEngine, target) ?? 0 : undefined;
+  // A rack's Macro Control: its value (0..1) while its rack exists.
+  if (parseMacroTarget(target)) return readMacroValue(play?.audioEngine, target);
   if (parseActionTarget(target)) return undefined;
   // A reader's level control: nothing of its own to read (its mapping drives it); 0 while its reader exists.
   const rt = parseReaderTarget(target);

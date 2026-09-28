@@ -14,7 +14,7 @@
 import type { PlayRecord, PlayTake, TakeEvent, TakeTrack } from '../types/play';
 import { TAKE_MAX_EVENTS } from '../types/play';
 import { audibleArrangement, audibleTracks, noteEvents, type PlayArrangement } from '../types/playArrangement';
-import { RACK_ACT_PREFIX, parseAuTarget } from '../types/playAudioEngine';
+import { RACK_ACT_PREFIX, rackTargetProp } from '../types/playAudioEngine';
 import { encodeKeys } from './takePlayback';
 
 /** The tape's notes, per event, as a take's pad events for `racks` (default: the audible ones), `loops` times round. */
@@ -41,7 +41,7 @@ export function tapeControlTracks(play: Pick<PlayRecord, 'controls'>, arr: PlayA
   for (const id of racks) {
     for (const [target, pts] of Object.entries(arr.tracks[id]?.auto ?? {})) {
       const c = play.controls.find(x => x.target === target);
-      if (!c || !parseAuTarget(target) || pts.length < 2) continue;
+      if (!c || !rackTargetProp(target) || pts.length < 2) continue;
       const times: number[] = [], values: number[] = [];
       for (let k = 0; k < Math.max(1, loops); k++) {
         for (let i = 0; i < pts.length; i += 2) {

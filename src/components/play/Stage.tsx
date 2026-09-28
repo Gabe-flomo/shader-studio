@@ -29,7 +29,8 @@ import { playUses3D, useThreeSource } from '../../play/threeSource';
 import { parseLayerTarget, type PlayControl, type PlayRecord } from '../../types/play';
 import { parseFinishTarget, patchFinishEffect } from '../../types/playFinish';
 import { parseAudioFxTarget, patchAudioFxEffect } from '../../types/playAudioFx';
-import { aeRack, aeSlot, parseAuTarget, patchSlot } from '../../types/playAudioEngine';
+import { aeRack, aeSlot, parseAuTarget, parseMacroTarget, patchSlot } from '../../types/playAudioEngine';
+import { setMacroValue } from '../../play/rackMacros';
 import { playEngine, pairDrives } from '../../lib/playEngine';
 import { pairOf } from '../../play/pairs';
 import { XYPad } from './PairControls';
@@ -228,6 +229,8 @@ function StageControls() {
     if (at) { if (typeof value === 'number') setPlay(p => ({ ...p, audioFx: patchAudioFxEffect(p.audioFx, at.chainId, at.effectId, { [at.key]: value }) })); return; }
     const au = parseAuTarget(c.target);
     if (au) { if (typeof value === 'number') setPlay(p => ({ ...p, audioEngine: patchSlot(p.audioEngine, au.rackId, au.slotId, { params: { ...aeSlot(aeRack(p.audioEngine, au.rackId), au.slotId)?.params, [au.address]: value } }) })); return; }
+    const mt = parseMacroTarget(c.target);
+    if (mt) { if (typeof value === 'number') setPlay(p => setMacroValue(p, mt.rackId, mt.n, value)); return; }
     const lt = parseLayerTarget(c.target);
     if (lt) {
       if (typeof value === 'number') setPlay(p => ({ ...p, layers: p.layers.map(l => (l.id === lt.layerId ? { ...l, [lt.key]: value } as typeof l : l)) }));
