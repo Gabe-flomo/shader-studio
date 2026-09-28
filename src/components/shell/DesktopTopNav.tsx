@@ -1,17 +1,18 @@
 import { offerGraphExport } from '../playfile/exportMenus';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { SAVED_GRAPHS_CHANGED, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getMembership, loadFolders, toggleFolderCollapsed } from '../../utils/assetFolders';
 
 /** The folder scope the sidebar's Saved Graphs list uses (FolderableList scopeKey) */
 const GRAPH_FOLDER_SCOPE = 'graphs';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
-import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { alpha, fontFamily, radius, type ThemeMode } from '../../theme/tokens';
 import { isPlayRecordEmpty } from '../../types/play';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
 import type { Page } from '../page';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
+import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
 import { Menu } from '../ui/Menu';
 import { ProBadgeFor } from '../account/ProSheet';
@@ -26,6 +27,30 @@ import { importAnyFile } from './importAnyFile';
 import { SaveGraphForm, VersionsButton } from './GraphVersions';
 import { GraphLinkBadge } from './GraphLinks';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
+import { getTopNavFold } from './topNavFold';
+
+/**
+ * Tracks an element's border-box width via ResizeObserver, so layout can respond to the bar's
+ * actual rendered space (a narrowed split view, a wide Hands pill) rather than a fixed breakpoint.
+ * Returns 0 until the first measurement lands.
+ */
+function useElementWidth<T extends HTMLElement>(): [RefObject<T | null>, number] {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setWidth(el.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width;
+      if (w != null) setWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, width];
+}
 
 const TABS: { page: Page; label: string }[] = [
   { page: 'studio', label: 'Studio' },
@@ -61,22 +86,38 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
   // The Play tab shows a dot while the graph carries controls or mappings.
   const hasPlay = useNodeGraphStore(s => !isPlayRecordEmpty(s.play));
 
+  // Responsive folding: measured off the bar itself, so a narrowed split view or a wide Hands
+  // pill fold things just as a narrow window would. See topNavFold.ts for the stages.
+  const [barRef, barWidth] = useElementWidth<HTMLDivElement>();
+  const fold = getTopNavFold(barWidth);
+  const iconOnly = compact || fold.iconOnly;
+  const foldAux = compact || fold.foldAux;
+  const hideWordmark = compact || fold.hideWordmark;
+  const showRecordLabel = !compact && fold.recordLabel;
+
   return (
     <div
+      ref={barRef}
       style={{
         height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px 0 18px',
         background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`, color: tk.text.primary,
-        font: `12.5px ${fontFamily.ui}`, userSelect: 'none',
+        font: `12.5px ${fontFamily.ui}`, userSelect: 'none', minWidth: 0,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: compact ? 'auto' : 250, flexShrink: compact ? 0 : 1, minWidth: compact ? undefined : 36, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: hideWordmark ? 'auto' : 250, flexShrink: hideWordmark ? 0 : 1, minWidth: hideWordmark ? undefined : 36, overflow: 'hidden' }}>
         <span style={{ width: 26, height: 26, flexShrink: 0, borderRadius: radius.md, background: tk.ink.base, color: tk.ink.text, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="presets" size={13} />
         </span>
-        {!compact && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Playfield</span>}
+        {!hideWordmark && <span style={{ fontWeight: 700, fontSize: 14.5, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Playfield</span>}
       </div>
 
-      <div role="tablist" style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover }}>
+      <div
+        role="tablist"
+        style={{
+          display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover, flexShrink: 1, minWidth: 0,
+          overflowX: fold.scrollTabs ? 'auto' : 'visible', scrollbarWidth: 'none',
+        }}
+      >
         {TABS.map(t => {
           const on = page === t.page;
           return (
@@ -99,24 +140,30 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         })}
       </div>
 
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-        <KeyboardPill compact={compact} />
-        <HandsLive compact={compact} />
-        <WorkspaceChip compact={compact} />
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, minWidth: 0, flexShrink: 0 }}>
+        {!foldAux && <KeyboardPill compact={compact} />}
+        {!foldAux && <HandsLive compact={compact} />}
+        {!foldAux && <WorkspaceChip compact={compact} />}
         <IconButton icon="undo" label="Undo" shortcut={shortcuts.undo} onClick={undo} />
         <IconButton icon="redo" label="Redo" onClick={redo} />
-        {!compact && <Divider />}
-        <SaveGraphButton compact={compact} />
+        {!iconOnly && <Divider />}
+        <SaveGraphButton compact={iconOnly} />
         <LoadGraphButton />
-        {!compact && <Divider />}
-        <IconButton icon="rebuild" label={REBUILD_TOOLTIP} shortcut={shortcuts.rebuild} onClick={() => { void rebuildWithToast(); }} />
-        <IconButton
-          icon={mode === 'light' ? 'moon' : 'sun'}
-          label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-          onClick={toggleTheme}
-        />
-        {!compact && <Divider />}
-        {compact ? (
+        {!iconOnly && <Divider />}
+        {foldAux ? (
+          <OverflowMenu mode={mode} toggleTheme={toggleTheme} rebuildShortcut={shortcuts.rebuild} />
+        ) : (
+          <>
+            <IconButton icon="rebuild" label={REBUILD_TOOLTIP} shortcut={shortcuts.rebuild} onClick={() => { void rebuildWithToast(); }} />
+            <IconButton
+              icon={mode === 'light' ? 'moon' : 'sun'}
+              label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+              onClick={toggleTheme}
+            />
+          </>
+        )}
+        {!iconOnly && <Divider />}
+        {iconOnly ? (
           <>
             <IconButton icon="import" label="Import a .playfile, graph or presentation file" shortcut={shortcuts.import}
               onClick={() => { void importAnyFile(onPageChange); }} />
@@ -143,18 +190,68 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
             type="button"
             onClick={onRecord}
             style={{
-              height: 32, marginLeft: 4, padding: compact ? '0 11px' : '0 13px 0 11px', border: 0, borderRadius: radius.control, cursor: 'pointer',
+              height: 32, marginLeft: 4, padding: showRecordLabel ? '0 13px 0 11px' : '0 11px', border: 0, borderRadius: radius.control, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 7, background: tk.ink.base, color: tk.ink.text,
               font: `600 12.5px ${fontFamily.ui}`,
             }}
           >
             <span style={{ width: 9, height: 9, borderRadius: '50%', background: tk.status.danger, boxShadow: `0 0 0 3px ${alpha(tk.status.danger, 0.25)}` }} />
-            {!compact && 'Record'}
+            {showRecordLabel && 'Record'}
           </button>
         </Tooltip>
         <AccountButton />
       </div>
     </div>
+  );
+}
+
+/**
+ * The bar's "···" overflow, holding the least-used items once the bar is too narrow for them
+ * inline: the Workspace/Keyboard/Hands chips (each already hides itself when it has nothing to
+ * show) and Rebuild + the theme toggle. Everything here stays reachable by keyboard through this
+ * one button rather than disappearing.
+ */
+function OverflowMenu({ mode, toggleTheme, rebuildShortcut }: { mode: ThemeMode; toggleTheme: () => void; rebuildShortcut?: string }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+  return (
+    <span ref={anchor} style={{ display: 'inline-flex' }}>
+      <IconButton icon="more" label="More tools" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
+      {open && (
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={230} padding={6}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <WorkspaceChip />
+            <KeyboardPill />
+            <HandsLive />
+            <OverflowRow icon="rebuild" label={`${REBUILD_TOOLTIP}${rebuildShortcut ? ` (${rebuildShortcut})` : ''}`}
+              onClick={() => { void rebuildWithToast(); setOpen(false); }} />
+            <OverflowRow icon={mode === 'light' ? 'moon' : 'sun'} label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+              onClick={() => { toggleTheme(); setOpen(false); }} />
+          </div>
+        </Popover>
+      )}
+    </span>
+  );
+}
+
+function OverflowRow({ icon, label, onClick }: { icon: IconName; label: string; onClick: () => void }) {
+  const tk = useTokens();
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, height: 32, padding: '0 8px', border: 0, borderRadius: radius.md,
+        background: hover ? tk.bg.hover : 'none', cursor: 'pointer', color: tk.text.secondary, font: `500 12.5px ${fontFamily.ui}`,
+        width: '100%', textAlign: 'left',
+      }}
+    >
+      <Icon name={icon} size={15} />
+      {label}
+    </button>
   );
 }
 
