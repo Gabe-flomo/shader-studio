@@ -39,8 +39,8 @@ const AG_PAIRS_ALL = 1200, AG_FAR_PAIRS = 0.4;
 /** Readings a layer reports (`<id>::<read>`), all 0..1. */
 export const AG_READS = ['alive', 'speed', 'spread', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4', 'catch', 'catches'];
 
-const P = (key, label, min, max, value, hint, step) => ({ key, label, min, max, value, hint, ...(step ? { step } : {}) });
-const W_HINT = 'How much this rule counts next to the others (their steering is added up, weighted).';
+const agParam = (key, label, min, max, value, hint, step) => ({ key, label, min, max, value, hint, ...(step ? { step } : {}) });
+const AG_W_HINT = 'How much this rule counts next to the others (their steering is added up, weighted).';
 
 /**
  * Every rule type: its label, a one-line hint, the numbers it has (each a
@@ -49,33 +49,33 @@ const W_HINT = 'How much this rule counts next to the others (their steering is 
  */
 export const AG_RULES = {
   seek: { label: 'Seek', hint: 'Steer toward a target: a point, the pointer, the nearest element of another layer, or the nearest agent of a group.', target: true,
-    params: [P('weight', 'Weight', 0, 5, 1, W_HINT), P('speed', 'Speed', 0, 2, 0.5, 'How fast it wants to go toward the target, picture heights per second.'), P('radius', 'Reach', 0, 2, 0, 'Only targets closer than this (picture heights). 0: any distance.')] },
+    params: [agParam('weight', 'Weight', 0, 5, 1, AG_W_HINT), agParam('speed', 'Speed', 0, 2, 0.5, 'How fast it wants to go toward the target, picture heights per second.'), agParam('radius', 'Reach', 0, 2, 0, 'Only targets closer than this (picture heights). 0: any distance.')] },
   flee: { label: 'Flee', hint: 'Steer away from a target within reach, harder the closer it is.', target: true,
-    params: [P('weight', 'Weight', 0, 5, 1.5, W_HINT), P('speed', 'Speed', 0, 2, 0.6, 'How fast it wants to run, picture heights per second.'), P('radius', 'Reach', 0, 2, 0.25, 'Runs from targets closer than this. 0: any distance.')] },
+    params: [agParam('weight', 'Weight', 0, 5, 1.5, AG_W_HINT), agParam('speed', 'Speed', 0, 2, 0.6, 'How fast it wants to run, picture heights per second.'), agParam('radius', 'Reach', 0, 2, 0.25, 'Runs from targets closer than this. 0: any distance.')] },
   align: { label: 'Align', hint: 'Match the heading and speed of neighbours within the radius (boids).', neighbours: true,
-    params: [P('weight', 'Weight', 0, 5, 1, W_HINT), P('radius', 'Radius', 0.005, 0.5, 0.08, 'Neighbours closer than this count.')] },
+    params: [agParam('weight', 'Weight', 0, 5, 1, AG_W_HINT), agParam('radius', 'Radius', 0.005, 0.5, 0.08, 'Neighbours closer than this count.')] },
   cohere: { label: 'Cohere', hint: 'Steer toward the centre of neighbours within the radius (boids).', neighbours: true,
-    params: [P('weight', 'Weight', 0, 5, 0.6, W_HINT), P('radius', 'Radius', 0.005, 0.5, 0.1, 'Neighbours closer than this count.')] },
+    params: [agParam('weight', 'Weight', 0, 5, 0.6, AG_W_HINT), agParam('radius', 'Radius', 0.005, 0.5, 0.1, 'Neighbours closer than this count.')] },
   separate: { label: 'Separate', hint: 'Push away from neighbours closer than the radius, harder the closer (boids).', neighbours: true,
-    params: [P('weight', 'Weight', 0, 5, 1.5, W_HINT), P('radius', 'Radius', 0.002, 0.3, 0.035, 'Neighbours closer than this push apart.')] },
+    params: [agParam('weight', 'Weight', 0, 5, 1.5, AG_W_HINT), agParam('radius', 'Radius', 0.002, 0.3, 0.035, 'Neighbours closer than this push apart.')] },
   wander: { label: 'Wander', hint: 'A slow random walk (seeded noise, the same every run).',
-    params: [P('weight', 'Weight', 0, 5, 0.6, W_HINT), P('rate', 'Rate', 0, 5, 1, 'How quickly the wandering direction changes.')] },
+    params: [agParam('weight', 'Weight', 0, 5, 0.6, AG_W_HINT), agParam('rate', 'Rate', 0, 5, 1, 'How quickly the wandering direction changes.')] },
   orbit: { label: 'Orbit', hint: 'Circle a target at a distance: a point, the pointer, another layer (its nearest element), or a group’s centre.', target: true, modes: ['ccw', 'cw'],
-    params: [P('weight', 'Weight', 0, 5, 1, W_HINT), P('radius', 'Distance', 0.01, 1, 0.25, 'The orbit’s radius, picture heights.'), P('speed', 'Speed', 0, 2, 0.4, 'Speed along the orbit, picture heights per second.')] },
+    params: [agParam('weight', 'Weight', 0, 5, 1, AG_W_HINT), agParam('radius', 'Distance', 0.01, 1, 0.25, 'The orbit’s radius, picture heights.'), agParam('speed', 'Speed', 0, 2, 0.4, 'Speed along the orbit, picture heights per second.')] },
   gravity: { label: 'Gravity', hint: 'Pairs: every agent pulls every other (n-body, softened). Point: everyone falls toward a target.', target: true, modes: ['pairs', 'point'],
-    params: [P('weight', 'Strength', 0, 5, 1, 'How hard the pull is.'), P('soft', 'Softening', 0.001, 0.3, 0.04, 'Keeps close passes from flinging agents off: the pull stops growing inside about this distance.'), P('radius', 'Reach', 0, 2, 0, 'Pairs: only agents closer than this pull (0: all of them; over 1200 agents, within 0.4).')] },
+    params: [agParam('weight', 'Strength', 0, 5, 1, 'How hard the pull is.'), agParam('soft', 'Softening', 0.001, 0.3, 0.04, 'Keeps close passes from flinging agents off: the pull stops growing inside about this distance.'), agParam('radius', 'Reach', 0, 2, 0, 'Pairs: only agents closer than this pull (0: all of them; over 1200 agents, within 0.4).')] },
   springs: { label: 'Springs', hint: 'Join agents with springs: each to its nearest few, in a ring, or in a grid (as they were placed). Rest length is the length they were built at.', modes: ['nearest', 'ring', 'grid'],
-    params: [P('weight', 'Stiffness', 0, 200, 30, 'How hard a stretched or squashed spring pulls back.'), P('damp', 'Damping', 0, 10, 1.5, 'How quickly a spring stops wobbling.'), P('rest', 'Rest', 0.1, 3, 1, 'Rest length as a multiple of the built length: under 1 pulls the net tight, over 1 puffs it out.'), P('radius', 'Link within', 0.005, 0.5, 0.1, 'Nearest: links only to agents closer than this when the net is built.'), P('anchor', 'Anchor', 0, 50, 0, 'A pull back to where each agent was when the net was built: 0 lets the net drift and fold; higher keeps its shape like a jelly.')] },
+    params: [agParam('weight', 'Stiffness', 0, 200, 30, 'How hard a stretched or squashed spring pulls back.'), agParam('damp', 'Damping', 0, 10, 1.5, 'How quickly a spring stops wobbling.'), agParam('rest', 'Rest', 0.1, 3, 1, 'Rest length as a multiple of the built length: under 1 pulls the net tight, over 1 puffs it out.'), agParam('radius', 'Link within', 0.005, 0.5, 0.1, 'Nearest: links only to agents closer than this when the net is built.'), agParam('anchor', 'Anchor', 0, 50, 0, 'A pull back to where each agent was when the net was built: 0 lets the net drift and fold; higher keeps its shape like a jelly.')] },
   field: { label: 'Field', hint: 'Follow a vector field: curl noise, a vortex round a target, a uniform wind, or the picture (climb toward bright, descend toward dark).', target: true, modes: ['curl', 'vortex', 'uniform', 'climb', 'descend'],
-    params: [P('weight', 'Weight', 0, 5, 1, W_HINT), P('speed', 'Speed', 0, 2, 0.3, 'How fast the field carries them, picture heights per second.'), P('scale', 'Swirl size', 0.2, 12, 3, 'Curl noise: how many swirls fit across the picture.'), P('evolve', 'Evolve', 0, 2, 0.15, 'Curl noise: how fast the field changes.'), P('angle', 'Direction', -180, 180, 0, 'Uniform: the wind’s direction, degrees (0 is right, 90 up).', 1), P('look', 'Looks', 0.01, 0.4, 0.05, 'Climb and descend: how far around it samples the picture.')] },
+    params: [agParam('weight', 'Weight', 0, 5, 1, AG_W_HINT), agParam('speed', 'Speed', 0, 2, 0.3, 'How fast the field carries them, picture heights per second.'), agParam('scale', 'Swirl size', 0.2, 12, 3, 'Curl noise: how many swirls fit across the picture.'), agParam('evolve', 'Evolve', 0, 2, 0.15, 'Curl noise: how fast the field changes.'), agParam('angle', 'Direction', -180, 180, 0, 'Uniform: the wind’s direction, degrees (0 is right, 90 up).', 1), agParam('look', 'Looks', 0.01, 0.4, 0.05, 'Climb and descend: how far around it samples the picture.')] },
   boundary: { label: 'Boundary', hint: 'What happens at the edge of the picture (or a shape): wrap round, bounce, die, or steer away before reaching it.', target: true, modes: ['wrap', 'bounce', 'kill', 'steer'],
-    params: [P('weight', 'Weight', 0, 10, 2, 'Steer: how hard it turns them back. Bounce: how much speed a bounce keeps (0..1).'), P('margin', 'Margin', 0, 0.4, 0.08, 'Steer: they start turning this far inside the edge.')] },
+    params: [agParam('weight', 'Weight', 0, 10, 2, 'Steer: how hard it turns them back. Bounce: how much speed a bounce keeps (0..1).'), agParam('margin', 'Margin', 0, 0.4, 0.08, 'Steer: they start turning this far inside the edge.')] },
   drag: { label: 'Drag', hint: 'Slow everything down, like moving through water.',
-    params: [P('weight', 'Drag', 0, 10, 0.5, 'How much speed is lost per second.')] },
+    params: [agParam('weight', 'Drag', 0, 10, 0.5, 'How much speed is lost per second.')] },
   maxSpeed: { label: 'Max speed', hint: 'Cap each agent’s speed (and, optionally, keep it above a minimum so a flock never stalls).',
-    params: [P('weight', 'Max', 0.01, 3, 0.45, 'Top speed, picture heights per second.'), P('min', 'Min', 0, 2, 0, 'Lowest speed: slower agents are nudged along their heading.')] },
+    params: [agParam('weight', 'Max', 0.01, 3, 0.45, 'Top speed, picture heights per second.'), agParam('min', 'Min', 0, 2, 0, 'Lowest speed: slower agents are nudged along their heading.')] },
   catch: { label: 'Catch', hint: 'Agents of this group catch agents of the target group within the radius: the caught die and the catcher gains energy.', neighbours: true,
-    params: [P('radius', 'Radius', 0.002, 0.3, 0.025, 'How close a catch is.'), P('gain', 'Energy gain', 0, 2, 0.5, 'Energy a catcher gains per catch (energy starts at 1).')] },
+    params: [agParam('radius', 'Radius', 0.002, 0.3, 0.025, 'How close a catch is.'), agParam('gain', 'Energy gain', 0, 2, 0.5, 'Energy a catcher gains per catch (energy starts at 1).')] },
 };
 export const AG_RULE_TYPES = Object.keys(AG_RULES);
 /** Where a rule aims. */
