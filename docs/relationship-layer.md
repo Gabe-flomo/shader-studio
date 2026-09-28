@@ -39,6 +39,19 @@ Units: positions are picture heights with X scaled by the aspect, so a
 distance of 0.5 is half the picture's height in any direction; speeds are
 picture heights per second.
 
+**In the Layers list**, a relationship's members show tucked under its row
+(indented, with a connector line, a colour dot and a role chip — Chaser,
+Prey or Member), so it is obvious which layers it drives without opening the
+editor. The row shows a member count and a fold arrow (collapse/expand,
+remembered per layer). A member in several relationships nests under the
+first one, by list order, and carries a small "+N" chip for the others.
+Selecting the relationship row highlights its members' rows faintly, and
+selecting a member outlines its relationship row. The nesting is
+display-only — it never changes the layers' actual order (their z-order, and
+what a drag reorders): a member dragged elsewhere in the list is still a
+member; only the editor's chips take it out of the relationship. See
+`src/play/relationshipNesting.ts` and `LayersPanel.tsx`.
+
 ## Kinds
 
 **Chase / Follow.** Each chaser looks for the closest prey within its
