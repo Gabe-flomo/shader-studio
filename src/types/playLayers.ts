@@ -86,8 +86,11 @@ export interface NullLayer extends LayerBase {
   size: number;
   color: string;
   /** Chase the mouse, another null or a point on a tracked hand on a spring instead of staying put. */
-  follow: 'none' | 'mouse' | 'null' | 'hand';
+  follow: 'none' | 'mouse' | 'null' | 'hand' | 'agent';
+  /** follow 'null': the null; follow 'agent': the Agents layer. */
   followId: string;
+  /** follow 'agent': which agent (0 is the first); while it is dead, the layer's centre. */
+  agentIndex: number;
   /** follow: 'hand': which hand (the performer's own; 'any' is the right one when it is in view) and which landmark (0 wrist … 8 index tip … 20 pinky tip). */
   handSide: 'left' | 'right' | 'any';
   handPoint: number;
@@ -1417,7 +1420,7 @@ function agentDefaults(): Defaults<AgentsLayer> {
 }
 
 const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind: K }>> } = {
-  null: { toShader: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7', follow: 'none', followId: '', handSide: 'right', handPoint: 8, spring: 0.5, wobble: 0.3, role: 'none', radius: 0.04, strength: 1, tilt: 0 },
+  null: { toShader: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7', follow: 'none', followId: '', agentIndex: 0, handSide: 'right', handPoint: 8, spring: 0.5, wobble: 0.3, role: 'none', radius: 0.04, strength: 1, tilt: 0 },
   text: {
     toShader: true, text: 'PLAY', x: 0.5, y: 0.5, size: 0.25, rotation: 0, opacity: 1, color: [1, 1, 1], font: 'sans', fontUrl: '', weight: 700, blend: 'normal', matte: 'over',
     sequence: false, interval: 0, transition: 'fade',
@@ -1522,7 +1525,7 @@ const unit = N(0, 1);
 
 const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
   null: {
-    toShader: B, x: N(), y: N(), size: N(0), color: { t: 'hex' }, follow: E('none', 'mouse', 'null', 'hand'), followId: S, handSide: E('right', 'left', 'any'), handPoint: N(0, 20, true), spring: unit, wobble: unit,
+    toShader: B, x: N(), y: N(), size: N(0), color: { t: 'hex' }, follow: E('none', 'mouse', 'null', 'hand', 'agent'), followId: S, agentIndex: N(0, AG_MAX - 1, true), handSide: E('right', 'left', 'any'), handPoint: N(0, 20, true), spring: unit, wobble: unit,
     role: E('none', 'emitter', 'absorber', 'attract', 'repel', 'vortex'), radius: N(0.001), strength: N(0), tilt: N(0, 85),
   },
   text: {

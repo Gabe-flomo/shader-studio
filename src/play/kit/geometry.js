@@ -210,7 +210,7 @@ export function geoFieldFromAlpha(data, gw, gh) {
  *   shape      box, circle and line: its position; a polygon: its bounds' centre after rotation; a path: its points' centre (reported);
  *              a layer's shape: that layer's anchor; the picture's bright parts: their centroid (reported)
  *   cloner     grid and ring: the centre; line: its middle; path and points: the copies' centroid (reported)
- *   particles, bodies, brush   the centroid of what is alive (reported), none until something is
+ *   particles, bodies, brush, agents   the centroid of what is alive (reported), none until something is
  *   script     where the sketch sets s.anchor (reported), else the picture's centre
  *   relationship   its members' centroid (reported), none until it has one
  * `value(key)` reads the layer's property now (a mapping may drive it),
@@ -244,7 +244,7 @@ export function geoAnchor(layer, value, aspect, reported, lookup, depth) {
       if (layer.arrange === 'path' || layer.arrange === 'points') return rep() || at();
       return at();
     // A Data layer: its current row where it is drawn (a path: its head).
-    case 'particles': case 'bodies': case 'brush': case 'data':
+    case 'particles': case 'bodies': case 'brush': case 'data': case 'agents':
       return rep();
     case 'script':
       return rep() || { x: 0.5, y: 0.5 };

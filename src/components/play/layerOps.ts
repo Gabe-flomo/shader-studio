@@ -21,7 +21,10 @@ export function removeLayer(p: PlayRecord, id: string): PlayRecord {
     // A layer that used it as its matte goes back to no matte; a path that used it as a corner loses that corner.
     layers: dropMatteRefs(p.layers.filter(l => l.id !== id), id).map(l => (l.kind === 'shape' && l.pointIds?.includes(id) ? { ...l, pointIds: l.pointIds.filter(x => x !== id) }
       // A relationship loses the member (and a member reading the layer's alpha reads brightness again).
-      : l.kind === 'relationship' && l.members.some(m => m.id === id || m.layerId === id) ? { ...l, members: l.members.filter(m => m.id !== id).map(m => (m.layerId === id ? { ...m, layerId: '', channel: m.channel === 'layer' ? 'brightness' : m.channel } : m)) } : l)),
+      : l.kind === 'relationship' && l.members.some(m => m.id === id || m.layerId === id) ? { ...l, members: l.members.filter(m => m.id !== id).map(m => (m.layerId === id ? { ...m, layerId: '', channel: m.channel === 'layer' ? 'brightness' : m.channel } : m)) }
+      // An Agents rule aimed at it has no target (the rule stays, idle); a null following its agents stops.
+      : l.kind === 'agents' && l.rules.some(r => r.targetId === id) ? { ...l, rules: l.rules.map(r => (r.targetId === id ? { ...r, targetId: '' } : r)) }
+      : l.kind === 'null' && l.follow === 'agent' && l.followId === id ? { ...l, follow: 'none' as const, followId: '' } : l)),
     controls,
     mappings: p.mappings.filter(m => ids.has(m.controlId)
       && !((m.source.kind === 'null' || m.source.kind === 'sensor') && m.source.layerId === id)

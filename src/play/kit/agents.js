@@ -620,8 +620,9 @@ function agRevive(st, l, i, aspect) {
 
 /**
  * One frame. `l` is the layer, `v(key)` a setting now (mappings may drive
- * it), `dt` the frame's step in seconds, `rand` the random source to build
- * with (the layer's own seed, or the kit's session source), and `info`:
+ * it), `dt` the frame's step in seconds, `makeRand()` a random source to
+ * build with (the layer's own seed afresh, or the kit's session source; it is
+ * called on every rebuild and used for respawns after), and `info`:
  *   pointer   { x, y, over } 0..1 with y up
  *   elements(layerId)  another layer's elements [{ x, y }] (0..1, y up), or null
  *   zone(layerId)      a shape's zone ({ dist(x, y) }, negative inside), or null
@@ -629,9 +630,9 @@ function agRevive(st, l, i, aspect) {
  * Takes as many fixed steps as the accumulated time allows (at most
  * AG_MAX_STEPS). Afterwards st.reads holds the readings.
  */
-export function agStep(st, l, v, dt, aspect, rand, info) {
+export function agStep(st, l, v, dt, aspect, makeRand, info) {
   const key = agKey(l);
-  if (st.key !== key) { st.key = key; st.buildId = (st.buildId || 0) + 1; agBuild(st, l, v, aspect, rand); }
+  if (st.key !== key) { st.key = key; st.buildId = (st.buildId || 0) + 1; agBuild(st, l, v, aspect, makeRand()); }
   // The picture changed shape: keep everyone where they were on it.
   if (Math.abs(st.aspect - aspect) > 1e-9) { const s = aspect / st.aspect; for (let i = 0; i < st.n; i++) { st.x[i] *= s; } st.aspect = aspect; }
   const inf = info || {};
