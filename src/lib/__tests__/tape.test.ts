@@ -287,3 +287,55 @@ describe('undo', () => {
     expect(commits).toHaveLength(2);
   });
 });
+
+describe('the Arrangement view’s transport: one Play/Pause, a separate Stop', () => {
+  beforeEach(() => {
+    play = { ...play, arrangement: { ...emptyArrangement(), length: 4, loop: false, tracks: { rk1: { notes: [{ t: 0.5, n: 60, v: 1, d: 0.25 }, { t: 2.5, n: 64, v: 1, d: 0.25 }], auto: {}, arm: true } } } };
+  });
+
+  it('Play/Pause pauses where the tape is and carries on from there', () => {
+    tape.togglePlay();
+    expect(useTape.getState().phase).toBe('playing');
+    runTo(1.5);
+    tape.togglePlay();
+    expect(useTape.getState()).toMatchObject({ phase: 'stopped', point: 1.5 });
+    sent = [];
+    tape.togglePlay();
+    runTo(3);
+    // From 1.5: the note at 0.5 isn't played again, the one at 2.5 is.
+    expect(sent.filter(s => s.bytes[0] === 0x90).map(s => s.bytes[1])).toEqual([64]);
+  });
+
+  it('Stop goes back to the start from any state', () => {
+    tape.togglePlay(); runTo(1.2);
+    tape.stopToStart();
+    expect(useTape.getState()).toMatchObject({ phase: 'stopped', point: 0 });
+    tape.setPoint(2); tape.stopToStart();
+    expect(useTape.getState().point).toBe(0);
+  });
+
+  it('Play/Pause while recording keeps the recording and pauses there', () => {
+    tape.setPoint(1); tape.record();
+    runTo(0.3); noteOn('rk2', 50); runTo(0.6); noteOff('rk2', 50); runTo(1);
+    tape.togglePlay();
+    expect(useTape.getState()).toMatchObject({ phase: 'stopped', point: 2 });
+    expect(commits).toEqual(['Recorded Rack 2 on the tape']);
+    expect(arr().tracks.rk2.clips).toEqual([{ t: 1, d: 1 }]);
+  });
+
+  it('Play/Pause during a count-in cancels it, nothing recorded, the point kept', () => {
+    play = { ...play, arrangement: { ...arr(), countIn: 1 } };
+    tape.setPoint(2); tape.record();
+    expect(useTape.getState().phase).toBe('counting');
+    runTo(0.5);
+    tape.togglePlay();
+    expect(useTape.getState()).toMatchObject({ phase: 'stopped', point: 2 });
+    expect(commits).toEqual([]);
+  });
+
+  it('a muted clip doesn’t play', () => {
+    play = { ...play, arrangement: { ...arr(), tracks: { rk1: { ...arr().tracks.rk1, clips: [{ t: 0, d: 1, mute: true }, { t: 2, d: 1 }] } } } };
+    tape.togglePlay(); runTo(3.5);
+    expect(sent.filter(s => s.bytes[0] === 0x90).map(s => s.bytes[1])).toEqual([64]);
+  });
+});

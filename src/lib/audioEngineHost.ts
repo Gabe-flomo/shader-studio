@@ -43,7 +43,7 @@ import {
   FRAME_EVENT, FRAME_STALE_MS, allNotesOff, decodeFrame, midiEventBytes, paramGlides, parseParamList, soundExt,
   type AuParam, type EngineSpectrum, type NativeFrame,
 } from './audioEngineProtocol';
-import { engineSound } from './engineSound';
+import { ENGINE_MASTER, engineSound } from './engineSound';
 import { TOUCH_EVENT, parseTouched, type TouchedParam } from './paramWatch';
 import { engineSend, SEND_CAPACITY } from './engineSend';
 import { decodeEngineRender, type EngineRender, type EngineRenderJob, type TapDone } from './engineRender';
@@ -107,7 +107,7 @@ function setLoading(key: string, on: boolean): void {
   });
 }
 
-// ── The selected rack card (session state: the lead unless one is locked) ──
+// ── The selected track (session state: the lead unless one is locked) ──
 
 export const useEngineSelection = create<{ selected: string; select: (rackId: string) => void }>(set => ({
   selected: '',
@@ -330,13 +330,46 @@ class AudioEngineHost {
 
   /** A rack's latest spectrum (null: silent for a while, or no such rack). */
   spectrum(rackId: string): EngineSpectrum | null {
+    if (rackId === ENGINE_MASTER) return this.masterSpectrum();
     const w = this.web.get(rackId);
     if (w) { const s = webSpectrum(w.analyser, rackId); return s.peak > 1e-6 ? s : null; }
     const s = this.spectra.get(rackId);
     return s && now() - s.at < FRAME_STALE_MS ? s : null;
   }
 
-  has(rackId: string): boolean { return this.mirror.has(rackId) || this.web.has(rackId); }
+  has(rackId: string): boolean {
+    if (rackId === ENGINE_MASTER) return this.mirror.size + this.web.size > 0;
+    return this.mirror.has(rackId) || this.web.has(rackId);
+  }
+
+  private master: EngineSpectrum | null = null;
+  /**
+   * Every sounding rack together (the master's Listener): the racks' spectra
+   * summed as power per bin, their levels as the root of summed squares. Racks
+   * at another sample rate or bin count than the first are left out.
+   */
+  private masterSpectrum(): EngineSpectrum | null {
+    const ids = [...new Set([...this.web.keys(), ...this.mirror.keys()])];
+    const parts = ids.map(id => this.spectrum(id)).filter((s): s is EngineSpectrum => !!s);
+    if (!parts.length) return null;
+    const first = parts[0];
+    const same = parts.filter(s => s.freq.length === first.freq.length && s.sampleRate === first.sampleRate);
+    if (same.length === 1) return first;
+    let m = this.master;
+    if (!m || m.freq.length !== first.freq.length) m = this.master = { freq: new Float32Array(first.freq.length), wave: new Float32Array(first.wave.length), sampleRate: first.sampleRate, rms: 0, peak: 0, at: 0 };
+    m.sampleRate = first.sampleRate;
+    m.at = Math.max(...same.map(s => s.at));
+    for (let i = 0; i < m.freq.length; i++) {
+      let p = 0;
+      for (const s of same) p += Math.pow(10, s.freq[i] / 10);
+      m.freq[i] = p > 0 ? 10 * Math.log10(p) : -200;
+    }
+    m.wave.fill(0);
+    for (const s of same) for (let i = 0; i < Math.min(m.wave.length, s.wave.length); i++) m.wave[i] += s.wave[i];
+    m.rms = Math.sqrt(same.reduce((a, s) => a + s.rms * s.rms, 0));
+    m.peak = Math.min(1, same.reduce((a, s) => a + s.peak, 0));
+    return m;
+  }
 
   applyPrefs(): void {
     const p = useEnginePrefs.getState();

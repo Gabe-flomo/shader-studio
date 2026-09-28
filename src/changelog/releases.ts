@@ -43,6 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-09-28',
     title: 'Signals from every particle, rail tabs, recovery',
     highlights: [
+      { area: 'Play', text: 'The Audio engine is one Arrangement view, laid out like Ableton: tracks with audio-style clips, a device chain per track, listeners as devices, one Play/Pause.', link: { kind: 'doc', path: 'docs/arrangement.md' } },
       { area: 'Play', text: 'Every particles layer and Agents can send a Born and a Died signal, and reads how many were born or died this step.', link: { kind: 'doc', path: 'docs/particles-multiply.md' } },
       { area: 'Play', text: 'Rail categories open straight to their pages, shown as tabs in the panel header; ⌘⇧M jumps to Mappings from anywhere.', link: { kind: 'doc', path: 'docs/split-view.md' } },
       { area: 'Files', text: 'Autosave: the open project is saved aside every 5 minutes (or every minute, or on every change) in Files → App settings.', link: { kind: 'doc', path: 'docs/crash-recovery.md' } },

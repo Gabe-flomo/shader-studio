@@ -48,7 +48,17 @@ export interface ArrTrack {
   solo?: boolean;
   /** Records when Record is pressed (default on). */
   arm: boolean;
+  /**
+   * The clips on the lane (docs/arrangement.md, "Clips"): the spans recordings
+   * covered, sorted, not overlapping. A muted clip's notes and moves don't
+   * play. Absent on a tape recorded before clips: they're worked out from the
+   * material (trackClips).
+   */
+  clips?: ArrClip[];
 }
+
+/** A clip on a lane: `t` seconds from the tape's start, `d` long; `mute` leaves it out of playback. */
+export interface ArrClip { t: number; d: number; mute?: boolean }
 
 export interface PlayArrangement {
   /** Seconds; 0 until the first recording. */
@@ -288,17 +298,23 @@ export function mergePass(track: ArrTrack | undefined, pass: ArrPass, fadeMs = 0
  */
 export function applyPasses(arr: PlayArrangement, passes: readonly ArrPass[], opts: { stoppedAt: number }): PlayArrangement {
   const tracks = { ...arr.tracks };
-  for (const p of passes) tracks[p.rack] = mergePass(tracks[p.rack], p, arr.fade);
+  for (const p of passes) {
+    const before = tracks[p.rack];
+    const merged = mergePass(before, p, arr.fade);
+    tracks[p.rack] = { ...merged, clips: clipsWithPass(before ? trackClips(before, TAPE_MAX_SECONDS) : [], p.from, Math.max(p.from, p.to)) };
+  }
   const reached = Math.min(TAPE_MAX_SECONDS, Math.max(0, opts.stoppedAt));
   const length = round3(Math.max(arr.length, reached));
   return { ...arr, tracks, length, loop: arr.length > 0 ? arr.loop : true };
 }
 
-/** A track cleared (its notes and automation; mute, solo and arm kept). */
+/** A track cleared (its notes, automation and clips; mute, solo and arm kept). */
 export function clearTrack(arr: PlayArrangement, rack: string): PlayArrangement {
   const t = arr.tracks[rack];
   if (!t) return arr;
-  return { ...arr, tracks: { ...arr.tracks, [rack]: { ...t, notes: [], auto: {} } } };
+  const out: ArrTrack = { ...t, notes: [], auto: {} };
+  delete out.clips;
+  return { ...arr, tracks: { ...arr.tracks, [rack]: out } };
 }
 
 export function patchTrack(arr: PlayArrangement, rack: string, over: Partial<ArrTrack>): PlayArrangement {
@@ -314,6 +330,148 @@ export function arrangementFor(arr: PlayArrangement | undefined, rackIds: readon
   const tracks = { ...arr.tracks };
   for (const id of gone) delete tracks[id];
   return { ...arr, tracks };
+}
+
+// ── Clips ───────────────────────────────────────────────────────────────────
+
+/** Material closer than this (s) is one clip when a tape's clips are worked out from its material. */
+export const CLIP_JOIN = 1;
+/** The shortest clip a trim leaves (s). */
+export const CLIP_MIN = 0.05;
+
+/** Where a track has notes or automation, as spans (a note from its start to its end; automation from its first point to its last). */
+function materialSpans(track: ArrTrack): Array<[number, number]> {
+  const spans: Array<[number, number]> = track.notes.map(n => [n.t, n.t + Math.max(NOTE_MIN, n.d)] as [number, number]);
+  for (const pts of Object.values(track.auto)) if (pts.length >= 2) spans.push([pts[0], Math.max(pts[0] + NOTE_MIN, pts[pts.length - 2])]);
+  return spans;
+}
+
+/**
+ * A lane's clips, sorted, within the tape's `length`: the track's own when it
+ * has them, else worked out from its material (runs of notes and moves closer
+ * than CLIP_JOIN are one clip), so an older tape shows clips too.
+ */
+export function trackClips(track: ArrTrack | undefined, length: number): ArrClip[] {
+  if (!track) return [];
+  const end = length > 0 ? length : TAPE_MAX_SECONDS;
+  if (track.clips) {
+    return track.clips
+      .map(c => ({ ...c, d: round6(Math.min(c.d, end - c.t)) }))
+      .filter(c => c.t < end && c.d > 1e-6)
+      .sort((a, b) => a.t - b.t);
+  }
+  return unionSpans(materialSpans(track), CLIP_JOIN)
+    .map(([a, b]) => ({ t: round6(Math.max(0, a)), d: round6(Math.min(end, b) - Math.max(0, a)) }))
+    .filter(c => c.d > 1e-6);
+}
+
+/** Clips after a recording over [from, to]: the pass's span joined with any clip it overlaps (a muted clip recorded over plays again). */
+export function clipsWithPass(clips: readonly ArrClip[], from: number, to: number): ArrClip[] {
+  const union = unionSpans([...clips.map(c => [c.t, c.t + c.d] as [number, number]), [from, to]]);
+  return union.map(([a, b]) => {
+    const same = clips.find(c => Math.abs(c.t - a) < 1e-6 && Math.abs(c.t + c.d - b) < 1e-6);
+    const clip: ArrClip = { t: round6(a), d: round6(b - a) };
+    if (same?.mute) clip.mute = true;
+    return clip;
+  }).filter(c => c.d > 1e-6);
+}
+
+const inClip = (t: number, c: ArrClip, closed = false) => t >= c.t - 1e-9 && (closed ? t <= c.t + c.d + 1e-9 : t < c.t + c.d - 1e-9);
+
+/** A track with its clips written down (so an edit to one clip doesn't change how the others are worked out). */
+function withClips(arr: PlayArrangement, rack: string): (ArrTrack & { clips: ArrClip[] }) | undefined {
+  const t = arr.tracks[rack];
+  return t ? { ...t, clips: trackClips(t, arr.length) } : undefined;
+}
+
+/** A clip deleted: the notes that start in it and the moves inside it come off the tape. */
+export function deleteClip(arr: PlayArrangement, rack: string, index: number): PlayArrangement {
+  const t = withClips(arr, rack);
+  const c = t?.clips[index];
+  if (!t || !c) return arr;
+  const auto: Record<string, number[]> = {};
+  for (const [k, pts] of Object.entries(t.auto)) {
+    const kept: number[] = [];
+    for (let i = 0; i < pts.length; i += 2) if (!inClip(pts[i], c, true)) kept.push(pts[i], pts[i + 1]);
+    if (kept.length) auto[k] = kept;
+  }
+  const notes = t.notes.filter(n => !inClip(n.t, c));
+  return { ...arr, tracks: { ...arr.tracks, [rack]: { ...t, notes, auto, clips: t.clips.filter((_, i) => i !== index) } } };
+}
+
+/** A clip muted (left out of playback, takes and renders) or back on. */
+export function setClipMute(arr: PlayArrangement, rack: string, index: number, mute: boolean): PlayArrangement {
+  const t = withClips(arr, rack);
+  if (!t || !t.clips[index]) return arr;
+  const clips = t.clips.map((x, i) => {
+    if (i !== index) return x;
+    const y: ArrClip = { t: x.t, d: x.d };
+    if (mute) y.mute = true;
+    return y;
+  });
+  return { ...arr, tracks: { ...arr.tracks, [rack]: { ...t, clips } } };
+}
+
+/** How far a clip's ends can go: from the clip before it (or 0) to the one after it (or the tape's end). */
+export function clipBounds(arr: PlayArrangement, rack: string, index: number): { min: number; max: number } | null {
+  const clips = trackClips(arr.tracks[rack], arr.length);
+  const c = clips[index];
+  if (!c) return null;
+  const prev = clips[index - 1], next = clips[index + 1];
+  return { min: prev ? prev.t + prev.d : 0, max: next ? next.t : Math.max(arr.length, c.t + c.d) };
+}
+
+/**
+ * A clip's ends moved to [from, to] (kept inside clipBounds, at least
+ * CLIP_MIN long). What the trim leaves outside goes: notes starting there,
+ * moves there; a note sounding past the new end is cut at it.
+ */
+export function trimClip(arr: PlayArrangement, rack: string, index: number, from: number, to: number): PlayArrangement {
+  const t = withClips(arr, rack);
+  const c = t?.clips[index];
+  const b = clipBounds(arr, rack, index);
+  if (!t || !c || !b) return arr;
+  const e = round6(Math.min(b.max, Math.max(to, Math.min(b.max, from + CLIP_MIN))));
+  const a = round6(Math.max(b.min, Math.min(from, e - CLIP_MIN)));
+  const next: ArrClip = { ...c, t: a, d: round6(e - a) };
+  const cut = (x: number, closed = false) => inClip(x, c, closed) && !inClip(x, next, closed);
+  const notes: ArrNote[] = [];
+  for (const n of t.notes) {
+    if (cut(n.t)) continue;
+    notes.push(inClip(n.t, next) && n.t + n.d > e ? { ...n, d: round6(Math.max(NOTE_MIN, e - n.t)) } : n);
+  }
+  const auto: Record<string, number[]> = {};
+  for (const [k, pts] of Object.entries(t.auto)) {
+    const kept: number[] = [];
+    for (let i = 0; i < pts.length; i += 2) if (!cut(pts[i], true)) kept.push(pts[i], pts[i + 1]);
+    if (kept.length) auto[k] = kept;
+  }
+  return { ...arr, tracks: { ...arr.tracks, [rack]: { ...t, notes, auto, clips: t.clips.map((x, i) => (i === index ? next : x)) } } };
+}
+
+const audibleCache = new WeakMap<PlayArrangement, PlayArrangement>();
+
+/** The tape as it plays: each track without what its muted clips hold (the same object when no clip is muted). */
+export function audibleArrangement(arr: PlayArrangement): PlayArrangement {
+  const hit = audibleCache.get(arr);
+  if (hit) return hit;
+  let tracks: Record<string, ArrTrack> | null = null;
+  for (const [id, t] of Object.entries(arr.tracks)) {
+    const muted = (t.clips ?? []).filter(c => c.mute);
+    if (!muted.length) continue;
+    const off = (x: number, closed = false) => muted.some(c => inClip(x, c, closed));
+    const auto: Record<string, number[]> = {};
+    for (const [k, pts] of Object.entries(t.auto)) {
+      const kept: number[] = [];
+      for (let i = 0; i < pts.length; i += 2) if (!off(pts[i], true)) kept.push(pts[i], pts[i + 1]);
+      if (kept.length) auto[k] = kept;
+    }
+    tracks ??= { ...arr.tracks };
+    tracks[id] = { ...t, notes: t.notes.filter(n => !off(n.t)), auto };
+  }
+  const out = tracks ? { ...arr, tracks } : arr;
+  audibleCache.set(arr, out);
+  return out;
 }
 
 // ── Parsing ─────────────────────────────────────────────────────────────────
@@ -356,6 +514,28 @@ function parseAuto(raw: unknown): Record<string, number[]> {
   return out;
 }
 
+function parseClips(raw: unknown): ArrClip[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const spans: ArrClip[] = [];
+  for (const x of raw) {
+    if (spans.length >= 256 || !x || typeof x !== 'object') continue;
+    const o = x as Record<string, unknown>;
+    if (!fin(o.t) || !fin(o.d) || o.t < 0 || o.d <= 0 || o.t > TAPE_MAX_SECONDS) continue;
+    const c: ArrClip = { t: o.t, d: Math.min(o.d, TAPE_MAX_SECONDS + 1 - o.t) };
+    if (o.mute === true) c.mute = true;
+    spans.push(c);
+  }
+  spans.sort((a, b) => a.t - b.t);
+  // Overlapping clips (a hand-edited file) are cut where the next one starts.
+  const out: ArrClip[] = [];
+  for (const c of spans) {
+    const last = out[out.length - 1];
+    if (last && last.t + last.d > c.t) { if (c.t - last.t < 1e-6) continue; last.d = c.t - last.t; }
+    out.push(c);
+  }
+  return out;
+}
+
 /** The tape from a file, or undefined when it has nothing (no length, no material). */
 export function parseArrangement(raw: unknown): PlayArrangement | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -369,6 +549,8 @@ export function parseArrangement(raw: unknown): PlayArrangement | undefined {
       const track: ArrTrack = { notes: parseNotes(x.notes), auto: parseAuto(x.auto), arm: x.arm !== false };
       if (x.mute === true) track.mute = true;
       if (x.solo === true) track.solo = true;
+      const clips = parseClips(x.clips);
+      if (clips) track.clips = clips;
       tracks[id] = track;
       n++;
     }

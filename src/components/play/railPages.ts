@@ -46,7 +46,7 @@ export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
   background: { id: 'background', category: 'layers', label: 'Background', description: 'What the picture is under the layers' },
   'finish-picture': { id: 'finish-picture', category: 'finish', label: 'Picture', description: 'Grade, lens, film and time effects over the whole picture' },
   'finish-sound': { id: 'finish-sound', category: 'finish', label: 'Sound', description: 'Reverb, echo, filter and more on each sound and the master' },
-  'engine-performance': { id: 'engine-performance', category: 'engine', label: 'Performance', description: 'Racks of synths and effects, played live' },
+  'engine-performance': { id: 'engine-performance', category: 'engine', label: 'Arrangement', description: 'Racks of synths and effects, played live' },
   mappings: { id: 'mappings', category: 'mappings', label: 'Mappings', description: 'Inputs onto controls: source, range, curve, smoothing' },
   'midi-file': { id: 'midi-file', category: 'mappings', label: 'MIDI file', description: 'A MIDI file played as if from a controller' },
   'pad-grid': { id: 'pad-grid', category: 'mappings', label: 'Pad grid', description: 'A grid of pads from a controller, read as sources' },

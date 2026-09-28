@@ -51,10 +51,10 @@ const info = (p: AuParam): RackParamInfo => ({ address: p.address, name: p.name,
 
 // ── The strip ────────────────────────────────────────────────────────────────
 
-/** Every rack control on the rack (the instrument's, then each effect's), as small faders. */
-export function RackControlsStrip({ rack, play, onChange, touch }: { rack: AeRack; play: PlayRecord; onChange: Change; touch: boolean }) {
+/** Every rack control on the rack (the instrument's, then each effect's), as small faders; `only`: one slot's (its device). */
+export function RackControlsStrip({ rack, play, onChange, touch, only }: { rack: AeRack; play: PlayRecord; onChange: Change; touch: boolean; only?: string }) {
   const tk = useTokens();
-  const slots = [rack.instrument, ...rack.effects].filter((s): s is AeSlot => !!s);
+  const slots = [rack.instrument, ...rack.effects].filter((s): s is AeSlot => !!s && (!only || s.id === only));
   const any = slots.some(s => rackControlsOf(play, rack, s).length);
   if (!any) return null;
   return (

@@ -1,7 +1,7 @@
 /**
  * rackControls.ts — a rack's controls (docs/arrangement.md, Configure): up
  * to RACK_CONTROLS_MAX parameters of an instrument or an effect picked to be
- * played on the rack card's strip. Each is an ordinary Play control on
+ * played on their device in the chain. Each is an ordinary Play control on
  * `au:<rack>:<slot>::<address>` (mappable to a MIDI knob, recorded by takes
  * and on the tape) in the group "<rack> · <slot name>"; the slot keeps their
  * addresses in the strip's order (`slot.controls`).

@@ -31,7 +31,7 @@ import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { LiveAudioChip } from './chips';
 import { SpectrumView } from './SpectrumView';
-import { engineRackOfInput } from '../../lib/engineSound';
+import { ENGINE_MASTER, engineRackOfInput } from '../../lib/engineSound';
 export { ReaderMeter } from './ReaderDots';
 import { useCan } from '../../lib/plan';
 import { EMPTY_READERS as EMPTY, readerInputOptions, usesReader, useReadersPanel } from './readersPanelUi';
@@ -145,9 +145,10 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
   const rackId = engineRackOfInput(cfg.input);
   const rack = rackId ? play.audioEngine?.racks.find(r => r.id === rackId) : undefined;
   const sourceNote = rackId
-    ? hint(!rack ? 'That Audio engine rack has been deleted. Pick another input.'
-      : !engineOk ? 'The Audio engine is part of Pro: its racks are kept, and play again with Pro.'
-        : `${rack.name}: the readers hear the rack after its effects. Play it (MIDI, the computer keyboard, the keys on its card) to see them move.`)
+    ? hint(!engineOk ? 'The Audio engine is part of Pro: its racks are kept, and play again with Pro.'
+      : rackId === ENGINE_MASTER ? 'The Audio engine’s master: the readers hear every rack together. Play one to see them move.'
+        : !rack ? 'That Audio engine rack has been deleted. Pick another input.'
+          : `${rack.name}: the readers hear the rack at its Listener in the device chain (after its effects unless it sits before them). Play it (MIDI, the computer keyboard, the keys on its track) to see them move.`)
     : padsId
     ? hint(!padsLayer ? 'That Drum pad layer has been deleted. Pick another input.' : `${padsLayer.label}: the readers hear its pads after its effects. Hit a pad (click, keys, MIDI) to see them move.`)
     : videoId

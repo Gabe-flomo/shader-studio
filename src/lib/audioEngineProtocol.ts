@@ -21,7 +21,7 @@ export interface NativeFrame {
   peak: number;
 }
 
-/** A frame as the readers and the rack card read it. */
+/** A frame as the readers and the Listener and the meters read it. */
 export interface EngineSpectrum {
   /** dB per bin (like AnalyserNode.getFloatFrequencyData). */
   freq: Float32Array;
