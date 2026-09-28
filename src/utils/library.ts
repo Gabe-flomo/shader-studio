@@ -66,11 +66,14 @@ const KINDS: Array<{ prefix: string; dir: string; scope?: string }> = [
 export const BACKGROUND_PALETTES_KEY = 'shader-studio-backgrounds:palettes';
 /** The Finish stack's lists (components/play/finish/finishLibrary.ts, savedLooks.ts): stack presets, custom effects, saved looks. */
 export const FINISH_LIST_KEYS = ['shader-studio:finish-presets', 'shader-studio:finish-effects', 'shader-studio:finish-looks'];
+/** Saved drum kits (play/drumKits.ts). */
+export const DRUM_KITS_KEY = 'shader-studio:drum-kits';
 const NAMED_FILES: Record<string, string> = {
   'shader-studio:palette-presets': 'palettes.json',
   'shader-studio:finish-presets': 'finish stack presets.json',
   'shader-studio:finish-effects': 'finish effects.json',
   'shader-studio:finish-looks': 'finish looks.json',
+  [DRUM_KITS_KEY]: 'drum kits.json',
   [BACKGROUND_PALETTES_KEY]: 'background palettes.json',
   'shader-studio:glsl-shaders': 'glsl shaders.json',
   // Your saved Present themes (present/userThemes.ts USER_THEMES_KEY).
@@ -428,7 +431,7 @@ export const LIBRARY_REFRESH_EVENTS = ['finish-library-changed', 'finish-looks-c
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
-export type LibraryKind = 'graphs' | 'versions' | 'group presets' | 'functions' | 'expressions' | 'transforms' | 'keyframe presets' | 'published nodes' | 'presentations' | 'palettes' | 'finish' | 'glsl shaders' | 'backgrounds' | 'settings';
+export type LibraryKind = 'graphs' | 'versions' | 'group presets' | 'functions' | 'expressions' | 'transforms' | 'keyframe presets' | 'published nodes' | 'presentations' | 'palettes' | 'finish' | 'drum kits' | 'glsl shaders' | 'backgrounds' | 'settings';
 
 export interface LibraryStats {
   /** Per kind: how many and how much space (characters, about bytes: saved work is mostly plain text). */
@@ -442,7 +445,7 @@ export interface LibraryStats {
 export const STORAGE_LIMIT = 5 * 1024 * 1024;
 
 export function libraryStats(s: LibrarySnapshot): LibraryStats {
-  const kinds = Object.fromEntries((['graphs', 'versions', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'presentations', 'palettes', 'finish', 'glsl shaders', 'backgrounds', 'settings'] as LibraryKind[]).map(k => [k, { count: 0, size: 0 }])) as LibraryStats['kinds'];
+  const kinds = Object.fromEntries((['graphs', 'versions', 'group presets', 'functions', 'expressions', 'transforms', 'keyframe presets', 'published nodes', 'presentations', 'palettes', 'finish', 'drum kits', 'glsl shaders', 'backgrounds', 'settings'] as LibraryKind[]).map(k => [k, { count: 0, size: 0 }])) as LibraryStats['kinds'];
   let playSetups = 0, total = 0;
   for (const [k, v] of Object.entries(s.items)) {
     const size = k.length + v.length;
@@ -460,8 +463,8 @@ export function libraryStats(s: LibrarySnapshot): LibraryStats {
       kind = 'backgrounds';
       const a = parse(v);
       count = Array.isArray(a) ? a.length : 0;
-    } else if (FINISH_LIST_KEYS.includes(k)) {
-      kind = 'finish';
+    } else if (FINISH_LIST_KEYS.includes(k) || k === DRUM_KITS_KEY) {
+      kind = k === DRUM_KITS_KEY ? 'drum kits' : 'finish';
       const a = parse(v);
       count = Array.isArray(a) ? a.length : 0;
     } else if (k === 'shader-studio:palette-presets' || k === 'shader-studio:glsl-shaders') {
@@ -495,6 +498,7 @@ export function kindOfKey(k: string, v: string): LibraryKind {
   if (found) return found.dir as LibraryKind;
   if (k === 'shader-studio:palette-presets') return 'palettes';
   if (FINISH_LIST_KEYS.includes(k)) return 'finish';
+  if (k === DRUM_KITS_KEY) return 'drum kits';
   if (k === 'shader-studio:glsl-shaders') return 'glsl shaders';
   if (k === BACKGROUND_PALETTES_KEY) return 'backgrounds';
   return 'settings';
@@ -510,7 +514,7 @@ export const DOWNLOAD_SETS: ReadonlyArray<{ id: DownloadSetId; label: string; hi
   { id: 'glsl', label: 'Only GLSL shaders', hint: 'Every saved shader as a plain .glsl file (notes as a comment at the top), in its folders', kinds: ['glsl shaders'] },
   { id: 'functions', label: 'Only custom functions', hint: 'The Functions library: each preset as a .json file', kinds: ['functions'] },
   { id: 'nodes', label: 'Only published nodes', hint: 'Node types you published from the Builder, as .json files', kinds: ['published nodes'] },
-  { id: 'presets', label: 'Only the other presets', hint: 'Group, expression, transform and keyframe presets, palettes, and the Finish stack’s presets, effects and looks', kinds: ['group presets', 'expressions', 'transforms', 'keyframe presets', 'palettes', 'finish'] },
+  { id: 'presets', label: 'Only the other presets', hint: 'Group, expression, transform and keyframe presets, palettes, and the Finish stack’s presets, effects and looks', kinds: ['group presets', 'expressions', 'transforms', 'keyframe presets', 'palettes', 'finish', 'drum kits'] },
 ];
 
 /** The part of a snapshot that is of these kinds (plus the folder store, so folders survive an import). */

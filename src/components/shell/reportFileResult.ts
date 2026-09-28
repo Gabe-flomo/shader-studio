@@ -10,7 +10,8 @@ export function reportFileResult(result: FileResult, messages: { failTitle: stri
     if (messages.success) toast.success(messages.success);
     return true;
   }
-  if (!result.cancelled) toast.error(messages.failTitle, { message: result.error });
+  // A storage-limit refusal already showed its own toast, with the way to Files → Clean up (files/storageLimit.ts).
+  if (!result.cancelled && !result.error.includes('Storage limit reached')) toast.error(messages.failTitle, { message: result.error });
   return false;
 }
 

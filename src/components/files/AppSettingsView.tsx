@@ -17,8 +17,12 @@ import { describeSetting, resetAllKeys } from '../../files/appSettings';
 import { resetSettings } from './filesActions';
 import { Size } from './fileUi';
 import { cardStyle } from './fileUiShared';
+import { StorageLimitControl } from './StorageLimitControl';
+import { useStorageLimit } from './useStorageLimit';
+import { DEFAULT_STORAGE_LIMIT, limitLabel } from '../../files/storageLimit';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const keyOf = (n: FileNode) => (n.ref?.t === 'key' ? n.ref.key : '');
 
 export function AppSettingsView({ inv, node, compact }: { inv: Inventory; node: FileNode; compact: boolean }) {
@@ -27,6 +31,7 @@ export function AppSettingsView({ inv, node, compact }: { inv: Inventory; node: 
   const items = cats.flatMap(c => c.children ?? []);
   const resettable = items.filter(n => resetAllKeys([keyOf(n)]).length);
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
+  const limit = useStorageLimit();
 
   const resetOne = async (n: FileNode) => {
     const info = describeSetting(keyOf(n));
@@ -56,6 +61,22 @@ export function AppSettingsView({ inv, node, compact }: { inv: Inventory; node: 
         </div>
         <Button size="sm" icon="reset" disabled={!resettable.length} onClick={() => { void resetAll(); }}>Reset all app settings…</Button>
       </div>
+
+      <section aria-label="Storage" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px', minHeight: 28 }}>
+          <span style={{ font: `650 13px ${fontFamily.ui}`, color: tk.text.primary }}>Storage</span>
+          <span style={{ fontSize: 12, color: tk.text.faint, flex: 1 }}>This device</span>
+        </div>
+        <div style={{ ...cardStyle(tk), overflow: 'hidden' }}>
+          <div data-setting="shader-studio:settings:storageLimit" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: compact ? '9px 6px 9px 12px' : '8px 10px 8px 14px' }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <span style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.primary }}>Storage limit</span>
+              <span style={{ fontSize: 11.5, color: tk.text.muted }}>Saving, uploads and imports that would take this device past {limitLabel(limit)} are refused; removing things never is. Saved work, images, videos, sounds{isTauri() ? ' and the workspace folder' : ''} count.{limit !== DEFAULT_STORAGE_LIMIT ? ` The default is ${limitLabel(DEFAULT_STORAGE_LIMIT)}.` : ''}</span>
+            </div>
+            <StorageLimitControl />
+          </div>
+        </div>
+      </section>
 
       {cats.map(c => {
         const open = !closed.has(c.id);

@@ -11,6 +11,7 @@ import { can, requireFeature, usePlan } from '../lib/plan';
 import { toast } from '../components/ui/toastStore';
 import { askText } from '../components/ui/dialogStore';
 import { errorMessage, saveBinaryFile, type FileResult } from '../utils/fileIO';
+import { ensureRoom } from '../files/storageLimit';
 import { buildInventory, GRAPH_PREFIX, type Inventory } from '../files/inventory';
 import { localMutableKV, type MutableKV } from '../files/mutate';
 import { listExternal, filesSources } from '../files/sources';
@@ -91,6 +92,8 @@ export { isPlayfile };
 /** Bring in the picked rows, remember the author if asked, refresh the app, and open what came in. */
 export async function runImport(plan: ImportPlan, picks: Record<string, Pick>, opts: { trust?: boolean } = {}): Promise<ImportSummary> {
   const sig = plan.contents.signature;
+  // The device's storage limit: what is ticked has to fit.
+  await ensureRoom(plan.rows.reduce((n, r) => n + ((picks[r.id]?.include ?? r.include) && r.status !== 'same' && r.status !== 'unreadable' && r.status !== 'needs-pro' ? r.bytes : 0), 0));
   if (opts.trust && sig.state === 'signed') trustAuthor(sig.name, sig.publicKey);
   const summary = await applyImport(plan, picks, appImportEnv());
   // Presentations that came in with their pictures and fonts embedded keep references to the library instead.

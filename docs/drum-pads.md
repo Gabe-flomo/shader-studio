@@ -92,8 +92,28 @@ Drum pads are a layer, so they're Pro (`play.layers`). On Free the layer isn't i
 
 `src/components/play/__tests__/drumPadSplit.test.tsx`: the sidebar renders the summary card (not the editor), the big panel the full editor, phones get Open full editor, `openLayerInSplit` turns the split on at Layers with the layer selected, and the effect-chain line.
 
+## Kits
+
+A **kit** is the whole layer as a preset (`src/play/drumKits.ts`): every pad (its sample or generated drum, name, mode, loop, reverse, choke), each pad's numbers (start, end, pitch, volume, pan, ADSR, velocity), Keys / MIDI (base note, channel) / Pad grid, Volume and the layer's effect chain. In the editor's **Kit** section (`layers/DrumKitRow.tsx`):
+
+- **Save kit…** names it and keeps it on this device. A kit with the same name is replaced (its id stays).
+- **Load kit…** opens a sheet: the **built-in** kits (**808-ish**, **Acoustic-ish** with a touch of reverb, **Percussion**; all generated drums, so they need no files and sound the same everywhere) and the **saved** ones, each with a line ("12 pads · 3 samples · Filter → Reverb"). **Replace pads** makes the layer the kit: pads, numbers, settings, Volume and effect chain (loaded effects get new ids, so they never collide with the layer's controls; a kit without a chain removes the layer's). **Merge into empty** puts the kit's sounds (with their numbers) on this layer's empty pads only and leaves everything else alone. A saved kit's **…** menu has **Rename…**, **Save as a .playfile…** and **Delete…**.
+
+Samples are referenced by their library id. A kit whose sample this device doesn't have says "N samples missing on this device" in the list; loaded, those pads show **missing** (the same status as any pad whose file is gone) and ask for the file again.
+
+Kits are stored as one list in localStorage (`shader-studio:drum-kits`) like the Finish stack's presets, so they:
+
+- show on the **Files page** under **Presets → Drum kits** (remove with Undo, download, **Save as a .playfile…**, which bundles the samples the kit uses as `video` items — the importer now takes sounds as well as videos);
+- travel in **library ZIPs** and profile ZIPs (`drum kits.json`, kind `drum kits`, part of the Presets set) and in `.playfile` **library items** (a kit's `sampleId`s are collected like a Video layer's `videoId`, so the samples come along);
+- sync into the **workspace folder** as `presets/drum kits/<Name>.kit.json`.
+
+Node packs don't carry kits yet (a kit travels on its own as a `.playfile`).
+
+`src/play/__tests__/drumKits.test.ts`: the save/load round trip, merge against replace, missing samples, the built-in kits, the Files page listing, bundling with samples, and the importer taking sounds.
+
 ## Not yet
 
+- Kits as node-pack extras.
 - Banks (A/B): 16 pads per layer. Add a second layer for more.
 - Presentations' own copies of pad samples (a Play in a presentation plays generated drums, and its sample pads are silent on the page).
 - The pad grid on websites. Sample slicing, time-stretch, and filter or pitch envelopes per pad.

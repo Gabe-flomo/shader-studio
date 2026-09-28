@@ -23,7 +23,7 @@ import { APP_VERSION } from '../files/appVersion';
 import { toast } from '../components/ui/toastStore';
 import { newState, SyncEngine, UNUSED, type ConflictRecord, type PendingChange, type SyncState } from './engine';
 import { handleFs, WorkspaceFsError, type DirHandleLike, type WsFs } from './fs';
-import { WORKSPACE_FILE, type ImageStore } from './layout';
+import { LIST_DIRS, WORKSPACE_FILE, type ImageStore } from './layout';
 import { loadConfig, loadSyncState, saveConfig, saveSyncState, type WorkspaceConfig } from './store';
 
 export type WorkspaceSupport = 'desktop' | 'browser' | 'none';
@@ -68,6 +68,16 @@ function set(patch: Partial<WorkspaceStatus>): void {
   for (const l of [...listeners]) { try { l(); } catch { /* a listener's problem */ } }
 }
 export function workspaceStatus(): WorkspaceStatus { return status; }
+
+/** Bytes of the workspace folder's files on disk (desktop only; 0 without a connected folder, and in a browser, whose folder holds the same files). */
+export async function workspaceFolderBytes(): Promise<number> {
+  if (!fs || support !== 'desktop' || status.state === 'off' || status.state === 'connecting') return 0;
+  try {
+    let n = 0;
+    for (const st of (await fs.list(LIST_DIRS, [WORKSPACE_FILE])).values()) n += st.size;
+    return n;
+  } catch { return 0; }
+}
 export function onWorkspaceStatus(cb: () => void): () => void { listeners.add(cb); return () => { listeners.delete(cb); }; }
 export function useWorkspaceStatus(): WorkspaceStatus { return useSyncExternalStore(onWorkspaceStatus, workspaceStatus, workspaceStatus); }
 

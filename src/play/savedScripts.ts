@@ -5,6 +5,7 @@
  * another script layer (whole, or just its functions).
  */
 import { useSyncExternalStore } from 'react';
+import { safeSetItem } from '../utils/fileIO';
 
 /**
  * A sketch you kept as a starter; `mode` is 3d for a 3D sketch (absent in ones saved before 3D: 2d).
@@ -28,7 +29,7 @@ function read(): SavedScript[] {
 }
 function write(next: SavedScript[]) {
   cache = next;
-  try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* storage full or blocked: the list still works for this session */ }
+  safeSetItem(KEY, JSON.stringify(next), 'saved sketches'); // full, blocked or over the storage limit: the list still works for this session
   for (const l of listeners) l();
 }
 

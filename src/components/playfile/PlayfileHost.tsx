@@ -24,6 +24,7 @@ import { reportFileResult } from '../shell/reportFileResult';
 import { Check } from '../files/fileUi';
 import { formatSize } from '../../utils/library';
 import { errorMessage } from '../../utils/fileIO';
+import { isStorageLimitError } from '../../files/storageLimit';
 import { useBreakpoint, isMobile } from '../../hooks/useBreakpoint';
 import { KIND_LAYOUT, PLAYFILE_EXT, type ItemKind } from '../../playfile/format';
 import type { Choice, ImportRow, ImportSummary, Pick } from '../../playfile/importer';
@@ -150,7 +151,7 @@ function ImportDialog({ open, onClose }: { open: OpenImport; onClose: () => void
       const r = await runImport(plan, picks, { trust });
       setDone(r);
       if (r.open && !r.failed.length) { onClose(); toast.success(`Imported ${plural(r.added.length + r.replaced.length + r.renamed.length, 'item')} from “${fileName}”`, { message: summaryLine(r) }); }
-    } catch (e) { toast.error('Couldn’t import that', { message: errorMessage(e) }); }
+    } catch (e) { if (!isStorageLimitError(e)) toast.error('Couldn’t import that', { message: errorMessage(e) }); }
     setBusy(false);
   };
 

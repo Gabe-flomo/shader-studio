@@ -17,6 +17,7 @@ import { nodePreviewRenderer } from './lib/nodePreviewRenderer'
 import { loadExampleGraphs } from './store/exampleIndex'
 import { installCameraKeeper } from './lib/cameraKeeper'
 import { installTouchGuards } from './lib/touchGuards'
+import { installStorageLimit } from './files/storageLimitApp'
 import { installViewportWatcher } from './lib/viewport'
 import { resolveNodeAliases } from './nodes/definitions/aliases'
 import { getNodeDefinition } from './nodes/definitions'
@@ -33,6 +34,7 @@ import { padGrid } from './lib/padGrid'
 installCameraKeeper()
 // Long presses on touch screens: no browser menu over the app's own.
 installTouchGuards()
+installStorageLimit()
 installViewportWatcher()
 
 const root = createRoot(document.getElementById('root')!)
