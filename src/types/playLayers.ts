@@ -16,6 +16,7 @@
 
 import { LINKED_PREFIX, LINKED_REF_MAX, isLinkedRef } from '../files/linkedRefs';
 import { DP_CHOKES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
+import { AG_GROUPS, AG_MAX, AG_RULES, AG_RULE_TYPES, AG_TARGETS, AG_CHANNELS, agPresetLayer } from '../play/kit/agents.js';
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken' | 'difference' | 'exclusion' | 'add';
 
@@ -578,6 +579,74 @@ export interface RelationshipLayer extends LayerBase {
   [pictureKey: `m${number}_picture`]: number;
 }
 
+export type AgentRuleType = 'seek' | 'flee' | 'align' | 'cohere' | 'separate' | 'wander' | 'orbit' | 'gravity' | 'springs' | 'field' | 'boundary' | 'drag' | 'maxSpeed' | 'catch';
+export type AgentTarget = 'point' | 'pointer' | 'layer' | 'group';
+/**
+ * One rule in an Agents layer's stack. Its numbers (weight, radius…) are
+ * layer properties `<id>_<key>` (mappable like any other); a target point is
+ * `<id>_x`, `<id>_y`. `group` is who it applies to (0: everyone, 1–4); for
+ * neighbour and group targets, `targetGroup` is who counts (0 any, -1 their
+ * own group, -2 other groups, 1–4).
+ */
+export interface AgentRule {
+  id: string;
+  type: AgentRuleType;
+  on: boolean;
+  group: number;
+  targetGroup: number;
+  /** The type's mode (orbit cw/ccw, gravity pairs/point, springs topology, field kind, boundary behaviour), or ''. */
+  mode: string;
+  target: AgentTarget;
+  /** target 'layer': the layer (its nearest element, or a shape as a boundary). */
+  targetId: string;
+  /** field climb/descend: which channel of the picture. */
+  channel: string;
+  /** springs nearest: links per agent. */
+  k: number;
+}
+export type AgentLook = 'dots' | 'sprites' | 'goo';
+export type AgentSpawn = 'random' | 'centre' | 'grid' | 'ring' | 'edges';
+export const AGENT_MAX_RULES = 24;
+
+/**
+ * Many agents (entities with a position, velocity, heading, age, energy and
+ * group) moved by an ordered stack of rules on a fixed-step, seeded stepper
+ * (docs/agents-layer.md). Up to four groups, each with its count, colour,
+ * size and energy.
+ */
+export interface AgentsLayer extends LayerBase {
+  kind: 'agents';
+  rules: AgentRule[];
+  /** The preset the rules came from ('' after hand edits or none). */
+  preset: string;
+  groups: number;
+  seed: number;
+  spawn: AgentSpawn;
+  spawnRadius: number;
+  startSpeed: number;
+  spin: number;
+  /** Simulated seconds per real second (the fixed step stays 1/60 s). */
+  speed: number;
+  substeps: number;
+  look: AgentLook;
+  colourBy: 'group' | 'speed' | 'age' | 'energy' | 'heading';
+  palette: number;
+  colourSpan: number;
+  trail: number;
+  links: 'off' | 'springs' | 'near';
+  linkRadius: number;
+  linkOpacity: number;
+  linkWidth: number;
+  linkColor: RGB;
+  gooBlend: number;
+  gooThreshold: number;
+  gooSoft: number;
+  opacity: number;
+  blend: BlendMode;
+  [groupKey: `g${number}_${string}`]: number | RGB;
+  [ruleKey: `r${number}_${string}`]: number;
+}
+
 /** The webcam, as a layer (like an image), a mask, or what particles, glyphs and contours read. Its motion is a sensor source. */
 export interface CameraLayer extends LayerBase {
   kind: 'camera';
@@ -761,6 +830,47 @@ export function parseRelationMembers(v: unknown): RelationMember[] {
 }
 /** A new member of a relationship: a plain member of mass 1 that ignores the picture. */
 export const newRelationMember = (id: string, role: RelationRole = 'member'): RelationMember => ({ id, role, mass: 1, picture: 'off', channel: 'brightness', layerId: '', radius: 0.06 });
+
+/** An Agents layer's rules from a file: known types, ids r1…, sane fields; anything else is dropped. */
+export function parseAgentRules(v: unknown): AgentRule[] {
+  if (!Array.isArray(v)) return [];
+  const out: AgentRule[] = [], seen = new Set<string>();
+  for (const raw of v) {
+    if (!raw || typeof raw !== 'object' || out.length >= AGENT_MAX_RULES) continue;
+    const r = raw as Record<string, unknown>;
+    if (typeof r.id !== 'string' || !/^r\d{1,4}$/.test(r.id) || seen.has(r.id) || !AG_RULE_TYPES.includes(r.type as string)) continue;
+    seen.add(r.id);
+    const def = AG_RULES[r.type as string];
+    const int = (x: unknown, lo: number, hi: number, d: number) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(lo, Math.min(hi, Math.round(x))) : d);
+    out.push({
+      id: r.id, type: r.type as AgentRuleType, on: r.on !== false,
+      group: int(r.group, 0, AG_GROUPS, 0), targetGroup: int(r.targetGroup, -2, AG_GROUPS, 0),
+      mode: def.modes ? (def.modes.includes(r.mode as string) ? r.mode as string : def.modes[0]) : '',
+      target: AG_TARGETS.includes(r.target as string) ? r.target as AgentTarget : 'point',
+      targetId: typeof r.targetId === 'string' ? r.targetId : '',
+      channel: AG_CHANNELS.includes(r.channel as string) ? r.channel as string : 'brightness',
+      k: int(r.k, 1, 8, 3),
+    });
+  }
+  return out;
+}
+/** A rule's numbers as layer keys with their defaults: its type's params, and a target point for types that aim. */
+export function agentRuleNumbers(r: Pick<AgentRule, 'id' | 'type'>): Array<[string, number]> {
+  const def = AG_RULES[r.type];
+  if (!def) return [];
+  const out: Array<[string, number]> = def.params.map(p => [`${r.id}_${p.key}`, p.value]);
+  if (def.target) out.push([`${r.id}_x`, 0.5], [`${r.id}_y`, 0.5]);
+  return out;
+}
+/** A new rule of a type with the lowest free id, and its numbers at their defaults (a patch for the layer). */
+export function newAgentRule(l: Pick<AgentsLayer, 'rules'>, type: AgentRuleType): { rule: AgentRule; numbers: Record<string, number> } {
+  const used = new Set(l.rules.map(r => r.id));
+  let n = 1;
+  while (used.has(`r${n}`)) n++;
+  const def = AG_RULES[type];
+  const rule: AgentRule = { id: `r${n}`, type, on: true, group: 0, targetGroup: 0, mode: def.modes ? def.modes[0] : '', target: type === 'boundary' ? 'point' : type === 'seek' || type === 'flee' ? 'pointer' : 'point', targetId: '', channel: 'brightness', k: 3 };
+  return { rule, numbers: Object.fromEntries(agentRuleNumbers(rule)) };
+}
 
 function parseDrumPads(v: unknown): DrumPad[] {
   const arr = Array.isArray(v) ? v : [];
@@ -1197,10 +1307,10 @@ export interface DataLayer extends LayerBase {
 let dataItemCount: (l: DataLayer) => number = () => 0;
 export function setDataItemCount(fn: (l: DataLayer) => number): void { dataItemCount = fn; }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer | RelationshipLayer;
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer | RelationshipLayer | AgentsLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad', 'relationship'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad', 'relationship', 'agents'];
 
 /** The starter sketch a new Script layer holds. */
 export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
@@ -1285,6 +1395,27 @@ export function script3dDefaults(): Pick<ScriptLayer, 'mode' | 'code' | 'paramDe
 
 type Defaults<T> = Omit<T, 'id' | 'label' | 'visible' | 'kind'>;
 
+const AGENT_GROUP_COLOURS: RGB[] = [[0.55, 0.85, 1], [1, 0.45, 0.35], [0.6, 1, 0.55], [1, 0.85, 0.4]];
+/** Every group's numbers and colour at their defaults (group 1 has 200 agents, the others 20 once switched on). */
+function agentGroupDefaults(): Record<string, number | RGB> {
+  const out: Record<string, number | RGB> = {};
+  for (let g = 1; g <= AG_GROUPS; g++) {
+    out[`g${g}_count`] = g === 1 ? 200 : 20; out[`g${g}_color`] = [...AGENT_GROUP_COLOURS[g - 1]] as RGB;
+    out[`g${g}_size`] = 3; out[`g${g}_drain`] = 0; out[`g${g}_respawn`] = 0;
+  }
+  return out;
+}
+/** A new Agents layer: the Boids preset with 200 agents in one group. */
+function agentDefaults(): Defaults<AgentsLayer> {
+  const base: Record<string, unknown> = {
+    toShader: true, rules: [], preset: '', groups: 1, seed: 1, spawn: 'random', spawnRadius: 0.3, startSpeed: 0.2, spin: 0, speed: 1, substeps: 1,
+    look: 'dots', colourBy: 'group', palette: 1, colourSpan: 0.6, trail: 0, links: 'off', linkRadius: 0.06, linkOpacity: 0.35, linkWidth: 1, linkColor: [1, 1, 1],
+    gooBlend: 2.5, gooThreshold: 0.5, gooSoft: 0.2, opacity: 1, blend: 'normal',
+    ...agentGroupDefaults(),
+  };
+  return { ...base, ...agPresetLayer('boids', null), g1_count: 200 } as unknown as Defaults<AgentsLayer>;
+}
+
 const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind: K }>> } = {
   null: { toShader: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7', follow: 'none', followId: '', handSide: 'right', handPoint: 8, spring: 0.5, wobble: 0.3, role: 'none', radius: 0.04, strength: 1, tilt: 0 },
   text: {
@@ -1323,6 +1454,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     respawnAt: 'random', respawnDelay: 1.5, catchRadius: 0.04, onCatch: 'respawn', catchSignal: '', debug: false,
     ...relationNumbers(),
   },
+  agents: agentDefaults(),
   bodies: { toShader: true, source: 'letters', text: 'PLAY', count: 24, size: 48, gravity: 1, angle: 0, bounce: 0.35, friction: 0.3, font: 'sans', fontUrl: '', colour: 'tint', color: [1, 1, 1], palette: 1, solidPicture: false, threshold: 0.6, scatter: 1, opacity: 1, blend: 'normal' },
   camera: { toShader: true, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], mirror: true, blend: 'normal', matte: 'over' },
   video: {
@@ -1375,7 +1507,9 @@ type Field =
   /** A Drum pad layer's pads. */
   | { t: 'drumpads' }
   /** A Relationship layer's members. */
-  | { t: 'members' };
+  | { t: 'members' }
+  /** An Agents layer's rule stack. */
+  | { t: 'agentRules' };
 
 const BLENDS = ['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken', 'difference', 'exclusion', 'add'] as const;
 const MATTES = ['over', 'reveal', 'luma'] as const;
@@ -1451,6 +1585,16 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     respawnAt: E('random', 'fixed', 'far'), respawnDelay: N(0, 60), catchRadius: N(0, 1), onCatch: E('none', 'respawn', 'swap'), catchSignal: S, debug: B,
     ...Object.fromEntries(Array.from({ length: RELATION_MAX_MEMBERS }, (_, i) => [relationPictureKey(i), N(0, 5)] as const)),
   },
+  agents: {
+    toShader: B, rules: { t: 'agentRules' }, preset: S, groups: N(1, AG_GROUPS, true), seed: N(0, 1e9, true), spawn: E('random', 'centre', 'grid', 'ring', 'edges'), spawnRadius: N(0, 0.5),
+    startSpeed: N(0, 5), spin: N(-10, 10), speed: N(0, 10), substeps: N(1, 4, true),
+    look: E('dots', 'sprites', 'goo'), colourBy: E('group', 'speed', 'age', 'energy', 'heading'), palette: N(0, 9, true), colourSpan: N(0.01, 10), trail: unit,
+    links: E('off', 'springs', 'near'), linkRadius: N(0.005, 0.5), linkOpacity: unit, linkWidth: N(0.25, 10), linkColor: C,
+    gooBlend: N(1, 8), gooThreshold: N(0.01, 0.99), gooSoft: unit, opacity: unit, blend: blendF,
+    ...Object.fromEntries(Array.from({ length: AG_GROUPS }, (_, i) => [
+      [`g${i + 1}_count`, N(0, AG_MAX, true)], [`g${i + 1}_color`, C], [`g${i + 1}_size`, N(0.2, 60)], [`g${i + 1}_drain`, N(0, 10)], [`g${i + 1}_respawn`, N(0, 500)],
+    ] as const).flat()),
+  },
   drumpad: {
     toShader: B, pads: { t: 'drumpads' }, volume: N(0, 1.5), keys: B, midi: B, channel: N(0, 16, true), baseNote: N(0, 112, true), grid: B,
     ...Object.fromEntries(Array.from({ length: DP_PADS }, (_, i) => DP_PARAMS.map(p => [dpKey(i, p.key), N(p.min, p.max)] as const)).flat()),
@@ -1506,6 +1650,7 @@ function coerce(v: unknown, f: Field, fallback: unknown): unknown {
     case 'queue': return parseBackgroundItems(v);
     case 'drumpads': return parseDrumPads(v);
     case 'members': return parseRelationMembers(v);
+    case 'agentRules': return parseAgentRules(v);
   }
 }
 
@@ -1523,6 +1668,8 @@ export function parseLayer(raw: unknown): PlayLayer | null {
   // A script's slider values are dynamic keys: keep every finite `p_<key>` number.
   if (kind === 'script') for (const [k, v] of Object.entries(l)) if (k.startsWith('p_') && typeof v === 'number' && Number.isFinite(v)) out[k] = v;
   if (kind === 'script') parseScriptExtras(l, out);
+  // An Agents layer's rule numbers are dynamic keys (`r3_weight`): each rule's, clamped to a sane range, else its default.
+  if (kind === 'agents') for (const r of out.rules as AgentRule[]) for (const [k, dv] of agentRuleNumbers(r)) { const x = l[k]; out[k] = typeof x === 'number' && Number.isFinite(x) ? Math.max(-1e4, Math.min(1e4, x)) : dv; }
   // Made from a layer kind: the id (parsePlayRecord checks the file has it).
   if (kind === 'script' && typeof l.kindId === 'string' && /^[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]{1,80}$/.test(l.kindId)) out.kindId = l.kindId;
   if (canHaveMatte(kind)) {
@@ -1545,6 +1692,7 @@ export function parseLayer(raw: unknown): PlayLayer | null {
 
 /** Nulls draw nothing and the Background layer is the picture: every other kind can be matted and masked. */
 export function canHaveMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'background' && kind !== 'drumpad' && kind !== 'relationship'; }
+
 /** Anything that draws can be a matte, the Background layer (the picture) included. */
 export function canBeMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'drumpad' && kind !== 'relationship'; }
 
@@ -1928,7 +2076,47 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'catchRadius', label: 'Catch radius', min: 0, max: 0.4, hint: 'Chase: a chaser this close to a prey catches it (plus their own small radius).' },
     { key: 'respawnDelay', label: 'Respawn after', min: 0, max: 10, step: 0.1, hint: 'Escape: how long an escaped member stays out of the picture before it respawns.' },
   ],
+  agents: [
+    { key: 'speed', label: 'Speed', min: 0, max: 3, hint: 'Simulated seconds per second: 2 runs twice as fast, 0 pauses. The step itself stays 1/60 s, so a take renders the same at any speed setting it was played with.' },
+    { key: 'spawnRadius', label: 'Spread', min: 0, max: 0.5, hint: 'Centre, ring and grid: how far out from the middle they start (picture heights). Changing it starts over.' },
+    { key: 'startSpeed', label: 'Start speed', min: 0, max: 2, hint: 'How fast they are moving when they start, in random directions. Changing it starts over.' },
+    { key: 'spin', label: 'Spin', min: -4, max: 4, hint: 'Start turning round the middle at this many radians per second (a disc for gravity to hold). Changing it starts over.' },
+    { key: 'colourSpan', label: 'Colour span', min: 0.05, max: 3, hint: 'Colour by speed: the speed at the palette’s end (picture heights per second); by age: a tenth of the age there (seconds).' },
+    { key: 'trail', label: 'Trail', min: 0, max: 1, hard: true, hint: 'How long a trail they leave. 0: none; near 1: long streaks.' },
+    { key: 'linkRadius', label: 'Link within', min: 0.005, max: 0.3, hint: 'Links between neighbours: agents closer than this are joined by a line that fades with distance.' },
+    { key: 'linkOpacity', label: 'Link opacity', min: 0, max: 1, hard: true, hint: 'How solid the links are.' },
+    { key: 'linkWidth', label: 'Link width', min: 0.25, max: 6, hint: 'Line width of the links, pixels.' },
+    { key: 'gooBlend', label: 'Goo blend', min: 1, max: 6, hint: 'How far each agent’s blob reaches, as a multiple of its size: higher merges from further apart.' },
+    { key: 'gooThreshold', label: 'Goo threshold', min: 0.05, max: 0.95, hard: true, hint: 'Lower: fatter blobs that merge sooner. Higher: thinner ones.' },
+    { key: 'gooSoft', label: 'Goo edge', min: 0, max: 1, hard: true, hint: '0: a hard edge; higher: a soft band round it.' },
+    OPACITY,
+  ],
 };
+
+/** An Agents layer's group numbers (for the groups it has) and its rules' numbers, as controls can drive them. */
+function agentNumericProps(l: AgentsLayer): LayerNumericProp[] {
+  const out: LayerNumericProp[] = [];
+  const groups = Math.max(1, Math.min(AG_GROUPS, Math.round(l.groups)));
+  for (let g = 1; g <= groups; g++) {
+    const name = groups > 1 ? `Group ${g} · ` : '';
+    out.push(
+      { key: `g${g}_size`, label: `${name}Size`, min: 0.5, max: 16, step: 0.1, hint: 'How big each agent is drawn, pixels (a sprite’s half width; a goo blob’s radius before Goo blend).' },
+      { key: `g${g}_drain`, label: `${name}Energy drain`, min: 0, max: 1, hint: 'Energy lost per second (energy starts at 1). At 0 an agent dies; a catch gives some back. 0: they never tire.' },
+      { key: `g${g}_respawn`, label: `${name}Respawn`, min: 0, max: 20, hint: 'Dead agents of this group come back at this many per second, where they spawn. 0: the dead stay dead.' },
+    );
+  }
+  l.rules.forEach((r, i) => {
+    const def = AG_RULES[r.type];
+    if (!def) return;
+    const name = `Rule ${i + 1} ${def.label}`;
+    for (const p of def.params) out.push({ key: `${r.id}_${p.key}`, label: `${name} · ${p.label}`, min: p.min, max: p.max, ...(p.step ? { step: p.step } : {}), hint: p.hint });
+    if (def.target && r.target === 'point') out.push(
+      { key: `${r.id}_x`, label: `${name} · X`, min: 0, max: 1, hint: 'The target point across the picture: 0 is the left edge, 1 the right.' },
+      { key: `${r.id}_y`, label: `${name} · Y`, min: 0, max: 1, hint: 'The target point up the picture: 0 is the bottom, 1 the top.' },
+    );
+  });
+  return out;
+}
 
 /**
  * The numeric properties a control can drive on this layer: the kind's
@@ -1960,6 +2148,7 @@ function kindNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
   // A pad's numbers are the sampler's physical ranges (a start past the sample's end, a pan past the speakers), so they're hard.
   if (l.kind === 'drumpad') return [...base, ...l.pads.flatMap((p, i) => (padHasSound(p) ? DP_PARAMS.map(d => ({ key: dpKey(i, d.key), label: `Pad ${i + 1} · ${d.label}`, min: d.min, max: d.max, step: d.step, hard: true, hint: d.hint })) : []))];
   // Each member that reacts to the picture: its strength, "Member 2 · Picture strength" (`m2_picture`).
+  if (l.kind === 'agents') return [...base, ...agentNumericProps(l)];
   if (l.kind === 'relationship') return [...base, ...l.members.flatMap((m, i) => (m.picture !== 'off' ? [{ key: relationPictureKey(i), label: `Member ${i + 1} · Picture strength`, min: 0, max: 3, hint: `How hard member ${i + 1} climbs or descends the picture's ${m.channel}.` }] : []))];
   if (l.kind !== 'script') return base;
   // Buttons are actions, not numbers; toggles are 0/1 numbers.
