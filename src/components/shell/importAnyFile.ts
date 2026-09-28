@@ -9,7 +9,7 @@
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { PRESENTATION_FILE_KIND } from '../../types/presentation';
 import { errorMessage, openBinaryFile } from '../../utils/fileIO';
-import { CONTAINER_ACCEPT } from '../../playfile/format';
+import { CONTAINER_ACCEPT, isContainerName } from '../../playfile/format';
 import { isPlayfile } from '../../playfile/reader';
 import { LIBRARY_KIND } from '../../utils/library';
 import { importLibraryBytes } from '../../utils/libraryActions';
@@ -46,12 +46,17 @@ export async function importText(text: string, navigate: (p: Page) => void, file
   return ok ? 'graph' : null;
 }
 
-/** Import a file's bytes: a .playfile opens its preview; a ZIP is a library or profile; anything else is read as text. */
+/**
+ * Import a file's bytes: a .playfile (v2 envelope or v1 ZIP) opens its preview;
+ * a file named .playfile that is neither is refused as not a Playfield file;
+ * a ZIP is a library or profile; anything else is read as text.
+ */
 export async function importBytes(name: string, bytes: Uint8Array, navigate: (p: Page) => void): Promise<ImportedAs> {
   if (isPlayfile(bytes)) {
     const { openPlayfileBytes } = await import('../../playfile/app');
     return (await openPlayfileBytes(name, bytes)) ? 'playfile' : null;
   }
+  if (isContainerName(name)) { toast.error(`Couldn’t open “${name}”`, { message: 'Not a Playfield file.' }); return null; }
   if (bytes.length > 3 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
     void importLibraryBytes(name, bytes);
     return 'library';

@@ -65,13 +65,30 @@ describe('top bar Import', () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('opens a .playfile’s preview (and still reads the old formats by their content)', async () => {
-    const { writePlayfile } = await import('../../../playfile/writer');
+  it('opens a .playfile’s preview, v2 envelope or v1 ZIP (and still reads the old formats by their content)', async () => {
+    const { writePlayfile, writePlayfileZip } = await import('../../../playfile/writer');
     h.file = (await writePlayfile([{ kind: 'graph', name: 'G', data: '{"nodes":[]}' }])).bytes;
+    expect(String.fromCharCode(...h.file.subarray(0, 4))).toBe('PLYF');
     expect(await importAnyFile(vi.fn())).toBe('playfile');
-    expect(h.openPlayfileBytes).toHaveBeenCalled();
+    expect(h.openPlayfileBytes).toHaveBeenCalledTimes(1);
+    h.file = (await writePlayfileZip([{ kind: 'graph', name: 'G', data: '{"nodes":[]}' }])).bytes;
+    expect(await importAnyFile(vi.fn())).toBe('playfile');
+    expect(h.openPlayfileBytes).toHaveBeenCalledTimes(2);
     expect(h.importGraph).not.toHaveBeenCalled();
     expect(h.importLibraryBytes).not.toHaveBeenCalled();
+  });
+
+  it('refuses a file named .playfile that is neither container, instead of trying it as a graph', async () => {
+    const { importBytes } = await import('../importAnyFile');
+    const { toast } = await import('../../ui/toastStore');
+    const junk = new Uint8Array([0x58, 0x4c, 0x59, 0x46, 2, 1, 0, 0, 9, 9, 9, 9]);
+    expect(await importBytes('Wrong.playfile', junk, vi.fn())).toBe(null);
+    expect(toast.error).toHaveBeenCalledWith('Couldn’t open “Wrong.playfile”', { message: 'Not a Playfield file.' });
+    expect(h.openPlayfileBytes).not.toHaveBeenCalled();
+    expect(h.importGraph).not.toHaveBeenCalled();
+    // The same bytes under another name still take the old text route (a graph JSON, say).
+    await importBytes('notes.json', junk, vi.fn());
+    expect(h.importGraph).toHaveBeenCalled();
   });
 
   it('reads the kind, not the name', () => {

@@ -23,6 +23,8 @@ export const CONTAINER_VERSION = 2;
 export const PLAYFILE_EXT = '.playfile';
 /** Every extension Import offers for the container. */
 export const CONTAINER_ACCEPT = '.playfile,.playfield,.play';
+/** Is this file name one of the container's extensions? (What it holds is told by its bytes: reader.ts isPlayfile.) */
+export const isContainerName = (name: string): boolean => /\.(playfile|playfield|play)$/i.test(name);
 /** Not `+zip` any more: a v2 file isn't one (v1 files were `application/x-playfile+zip`). */
 export const PLAYFILE_MIME = 'application/x-playfile';
 export const MANIFEST_PATH = 'manifest.json';

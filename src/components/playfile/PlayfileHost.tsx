@@ -26,7 +26,7 @@ import { formatSize } from '../../utils/library';
 import { errorMessage } from '../../utils/fileIO';
 import { isStorageLimitError } from '../../files/storageLimit';
 import { useBreakpoint, isMobile } from '../../hooks/useBreakpoint';
-import { KIND_LAYOUT, PLAYFILE_EXT, type ItemKind } from '../../playfile/format';
+import { isContainerName, KIND_LAYOUT, PLAYFILE_EXT, type ItemKind } from '../../playfile/format';
 import type { Choice, ImportRow, ImportSummary, Pick } from '../../playfile/importer';
 import { currentAuthorName, exportNodePack, openPlayfileBytes, runImport, usePlayfileUi, type OpenImport } from '../../playfile/app';
 import { existingAuthorKey, setAuthorName, trustedFor } from '../../playfile/signing';
@@ -36,7 +36,6 @@ import type { PackInfo } from '../../nodePacks/types';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-const isContainerName = (n: string) => /\.(playfile|playfield|play)$/i.test(n);
 
 const KIND_ICONS: Record<ItemKind, IconName> = {
   graph: 'graphs', play: 'play', presentation: 'slides', nodes: 'nodes', glsl: 'code', background: 'overlay', library: 'presets', profile: 'folder', video: 'camera',
