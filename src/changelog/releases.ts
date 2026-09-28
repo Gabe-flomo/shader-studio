@@ -43,6 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-09-28',
     title: 'Plug-ins that talk back, quick links, one Controls tab',
     highlights: [
+      { area: 'Files', text: 'Save a set of layers with their mappings, controls and actions, and racks as presets; both load back from Add layer, Add track or Files.', link: { kind: 'doc', path: 'docs/presets.md' } },
       { area: 'Play', text: 'Matte the picture with any layer (a shape, a path, a hand path), with Invert and a soft edge. Start over clears Play in one undoable step.' },
       { area: 'Play', text: 'Arrangement: Play/Pause runs the picture too, the timeline scrubs (|◀ ◀◀ ▶▶ ▶|, Home/End, editable bar.beat), and devices fold to a header.' },
       { area: 'Desktop', text: 'Move a rack control and the plug-in\'s own knob follows; A–K keep playing notes while the plug-in window is in front.', link: { kind: 'doc', path: 'docs/audio-engine.md' } },
