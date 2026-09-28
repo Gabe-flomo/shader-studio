@@ -110,11 +110,13 @@ export function clipWave(track: Pick<ArrTrack, 'notes'> | undefined, clip: ArrCl
   const dt = clip.d / peaks.length;
   if (preview && preview.length > 0 && preview.peaks.length) {
     const n = preview.peaks.length;
+    // A quiet track is drawn bigger (up to 4×, the loudest peak at 0.9), the same for all its clips.
+    const gain = displayGain(preview.peaks);
     for (let c = 0; c < peaks.length; c++) {
       const a = Math.floor(((clip.t + c * dt) / preview.length) * n), b = Math.max(a + 1, Math.floor(((clip.t + (c + 1) * dt) / preview.length) * n));
       let m = 0;
       for (let i = Math.max(0, a); i < Math.min(n, b); i++) m = Math.max(m, preview.peaks[i]);
-      peaks[c] = m;
+      peaks[c] = Math.min(1, m * gain);
     }
     return { kind: 'audio', peaks };
   }
@@ -131,6 +133,19 @@ export function clipWave(track: Pick<ArrTrack, 'notes'> | undefined, clip: ArrCl
   }
   if (max > 0) for (let c = 0; c < peaks.length; c++) peaks[c] = (peaks[c] / max) * 0.92;
   return { kind: 'envelope', peaks };
+}
+
+const gains = new WeakMap<Float32Array, number>();
+/** How much a track's waveform is scaled for drawing: its loudest peak to 0.9, at most 4×, never down. */
+export function displayGain(peaks: Float32Array): number {
+  let g = gains.get(peaks);
+  if (g === undefined) {
+    let m = 0;
+    for (const v of peaks) m = Math.max(m, v);
+    g = m > 0 ? Math.max(1, Math.min(4, 0.9 / m)) : 1;
+    gains.set(peaks, g);
+  }
+  return g;
 }
 
 const ATTACK = 0.006, DECAY = 0.25, SUSTAIN = 0.55, RELEASE = 0.18;

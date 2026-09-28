@@ -225,7 +225,7 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
         </span>
       </div>
       <div role="list" aria-label={`${rack.name}’s devices`}
-        style={{ flex: 1, minHeight: narrow ? undefined : 0, display: 'flex', alignItems: 'stretch', overflowX: 'auto', overflowY: 'hidden', padding: '0 12px 10px', maxHeight: narrow ? 460 : undefined, scrollSnapType: narrow ? 'x proximity' : undefined }}>
+        style={{ flex: 1, minHeight: narrow ? undefined : 0, display: 'flex', alignItems: narrow ? 'flex-start' : 'stretch', overflowX: 'auto', overflowY: 'hidden', padding: '0 12px 10px', height: narrow ? 460 : undefined, scrollSnapType: narrow ? 'x proximity' : undefined }}>
         {items}
         <button type="button" onClick={e => { const r = e.currentTarget.getBoundingClientRect(); addMenu(r.left, r.top); }} title="Add a device: an instrument, an Audio Unit effect or a Listener"
           style={{ flex: '0 0 56px', alignSelf: 'stretch', minHeight: 80, borderRadius: radius.md, border: `1.5px dashed ${tk.border.strong}`, background: 'transparent', color: tk.text.muted, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>

@@ -143,6 +143,7 @@ export class Tape {
 
   /** The tape's length as the ruler shows it: a recording running past the end stretches it. */
   shownLength(): number {
+    if (!this.deps) return 0; // not wired yet (a test mounting the view)
     const a = this.arr();
     return this.rec && this.running() ? Math.max(a.length, Math.min(TAPE_MAX_SECONDS, this.pos())) : a.length;
   }

@@ -336,7 +336,7 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
           options={COUNT_INS.map(n => ({ value: String(n), label: n ? `Count-in ${n} bar${n > 1 ? 's' : ''}` : 'No count-in' }))}
           onChange={v => setArr(a => ({ ...a, countIn: Number(v) as CountIn }))} />
         <BpmField key={arr.bpm} bpm={arr.bpm} height={b} />
-        <span title="Where the tape is: bar.beat.sixteenth, and time / the tape’s length" style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, padding: '0 8px', height: b, borderRadius: radius.sm, background: tk.bg.field, lineHeight: `${b}px`, minWidth: 0 }}>
+        <span title="Where the tape is: bar.beat.sixteenth, and time / the tape’s length" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', height: b, boxSizing: 'border-box', borderRadius: radius.sm, background: tk.bg.field, minWidth: 0 }}>
           <span ref={bbRef} aria-label="Position in bars and beats" style={{ font: `700 13px ${fontFamily.mono}`, color: recording ? tk.status.danger : tk.text.primary, fontVariantNumeric: 'tabular-nums', minWidth: 44 }} />
           {!narrow && <span ref={timeRef} style={{ font: `11px ${fontFamily.mono}`, color: tk.text.muted, fontVariantNumeric: 'tabular-nums' }} />}
           {narrow && <span ref={timeRef} style={{ display: 'none' }} />}
@@ -479,7 +479,7 @@ function Timeline({ play, arr, racks, rows, span, lanes, phase, narrow, touch, m
             onDrop={e => { e.preventDefault(); dropTrack(drag?.over ?? i); }}
             style={{ position: 'relative' }}>
             {drag && drag.over === i && <DropLine top />}
-            <Track play={play} arr={arr} rack={rack} row={row} index={i} count={rows.length} track={arr.tracks[row.id]} span={span} preview={lanes[row.id]}
+            <Track play={play} arr={arr} rack={rack} row={masterSelected && row.selected ? { ...row, selected: false } : row} index={i} count={rows.length} track={arr.tracks[row.id]} span={span} preview={lanes[row.id]}
               narrow={narrow} touch={touch} recording={recRacks.includes(row.id)} clipSel={clipSel?.rack === row.id ? clipSel.index : -1}
               onClipSel={index => onClipSel(index < 0 ? null : { rack: row.id, index })} onSeek={seek} onPick={() => onPickTrack(row.id)} onMenu={onMenu} onChange={onChange}
               registerHead={registerHead} registerRec={registerRec}
@@ -545,7 +545,7 @@ function VolumeBar({ value, onChange, label, touch }: { value: number; onChange:
         if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); onChange(Math.min(2, Math.round((value + 0.05) * 100) / 100)); }
         else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); onChange(Math.max(0, Math.round((value - 0.05) * 100) / 100)); }
       }}
-      style={{ position: 'relative', flex: 1, minWidth: 40, height: touch ? 22 : 14, borderRadius: 3, background: tk.bg.field, cursor: 'ew-resize', touchAction: 'none' }}>
+      style={{ position: 'relative', flex: 'none', width: '100%', minWidth: 40, height: touch ? 22 : 14, borderRadius: 3, background: tk.bg.field, cursor: 'ew-resize', touchAction: 'none' }}>
       <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${f * 100}%`, borderRadius: 3, background: alpha(tk.text.primary, 0.18) }} />
       <span style={{ position: 'absolute', left: '50%', top: 2, bottom: 2, width: 1, background: tk.border.strong }} />
       <span style={{ position: 'absolute', left: `${f * 100}%`, top: -1, bottom: -1, width: 3, marginLeft: -1.5, borderRadius: 1, background: tk.text.secondary }} />
