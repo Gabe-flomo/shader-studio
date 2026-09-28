@@ -31,6 +31,8 @@ interface Slot {
   chain: AfChain;
   /** Where the analyser was last wired (null: not yet). */
   pre: boolean | null;
+  /** Where the chain's output is connected now (the outlet, or a send). */
+  routed: AudioNode | null;
 }
 
 const plain: ValueOf = (_id, _key, base) => base;
@@ -47,15 +49,16 @@ class AudioFxHost {
    * it out again (inlet and analyser are left disconnected).
    */
   attach(ctx: BaseAudioContext, chainId: string, inlet: AudioNode, outlet: AudioNode | null, analyser: AnalyserNode | null = null): () => void {
-    const slot: Slot = { ctx, chainId, inlet, outlet, analyser, chain: afCreateChain(ctx), pre: null };
+    const slot: Slot = { ctx, chainId, inlet, outlet, analyser, chain: afCreateChain(ctx), pre: null, routed: null };
     inlet.connect(slot.chain.input);
-    if (outlet) slot.chain.output.connect(outlet);
+    this.route(slot);
     this.slots.add(slot);
     this.apply(slot);
     return () => {
       if (!this.slots.delete(slot)) return;
       try { inlet.disconnect(slot.chain.input); } catch { /* already */ }
       if (analyser) { try { inlet.disconnect(analyser); } catch { /* not there */ } }
+      if (slot.routed) { try { slot.chain.output.disconnect(slot.routed); } catch { /* already */ } }
       slot.chain.dispose();
     };
   }
@@ -69,6 +72,32 @@ class AudioFxHost {
 
   /** The chains a context has slots for right now (tests, the panel). */
   chainIds(): string[] { return [...new Set([...this.slots].map(s => s.chainId))]; }
+
+  /**
+   * Send a chain's sound elsewhere: every slot of `chainId` in `ctx` puts its
+   * chain's output into `to` instead of its outlet (the Audio engine's send:
+   * lib/engineSend.ts), or back into the outlet with null. The analyser keeps
+   * reading. Slots attached later while a send is on are diverted too.
+   */
+  divert(ctx: BaseAudioContext, chainId: string, to: AudioNode | null): void {
+    if (to) this.diverted.set(`${chainId}`, { ctx, to }); else this.diverted.delete(chainId);
+    for (const s of this.slots) if (s.ctx === ctx && s.chainId === chainId) this.route(s);
+  }
+
+  private diverted = new Map<string, { ctx: BaseAudioContext; to: AudioNode }>();
+
+  /** Where a slot's chain output goes now: its outlet, or the send it's diverted into. */
+  private route(s: Slot): void {
+    const d = this.diverted.get(s.chainId);
+    const want = d && d.ctx === s.ctx ? d.to : s.outlet;
+    if (s.routed === want) return;
+    if (s.routed) { try { s.chain.output.disconnect(s.routed); } catch { /* not there */ } }
+    if (want) s.chain.output.connect(want);
+    s.routed = want;
+  }
+
+  /** Is this chain diverted (sent to the Audio engine) right now? */
+  isDiverted(chainId: string): boolean { return this.diverted.has(chainId); }
 
   private apply(s: Slot): void {
     const fx = this.fx;

@@ -72,11 +72,24 @@ export interface AeRack {
   mute: boolean;
   /** Drum pad hits from this layer play the rack (pad N → note 36 + N), set by "Play these pads in the Audio engine". */
   pads?: string;
+  /**
+   * A web sound sent through the rack's effects instead of an instrument
+   * (desktop): 'master' (everything the page plays) or a chain id (a layer's
+   * song or video sound, an Audio Input node: types/playAudioFx.ts). The
+   * sound leaves the page's output and plays through the engine (docs/audio-engine.md).
+   */
+  source?: string;
 }
 
 export interface PlayAudioEngine {
   racks: AeRack[];
 }
+
+/** Where a note from a rack's input goes: `ae:<rackId>` pad actions (so a take records it). */
+export const RACK_ACT_PREFIX = 'ae:';
+
+/** A send's source: the master bus, or a chain id. */
+export const isSendSource = (s: string) => /^(master|layer:[A-Za-z0-9_-]{1,64}|node:[A-Za-z0-9_-]{1,64})$/.test(s);
 
 export const AE_RACKS_MAX = 16;
 export const AE_EFFECTS_MAX = 12;
@@ -332,6 +345,7 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
       mute: o.mute === true,
     };
     if (typeof o.pads === 'string' && ID.test(o.pads)) rack.pads = o.pads;
+    if (typeof o.source === 'string' && isSendSource(o.source)) rack.source = o.source;
     racks.push(rack);
   }
   return racks.length ? { racks } : undefined;

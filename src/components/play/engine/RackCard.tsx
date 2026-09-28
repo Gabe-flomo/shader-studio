@@ -6,6 +6,10 @@
  *
  * Each plug-in parameter can become a control (+), target
  * `au:<rack>:<slot>::<address>`; a value moved here is kept in the setup.
+ *
+ * Sound in (desktop): instead of an instrument, a rack can take a web sound
+ * (everything the page plays, or one layer's) through its effects
+ * (lib/engineSend.ts); the page stops playing that sound itself.
  */
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTokens } from '../../../theme/themeStore';
@@ -39,6 +43,7 @@ import { UnitPicker, type UnitChoice } from './UnitPicker';
 import { playId } from '../../../play/playControls';
 import { usePlayUi } from '../playUi';
 import { engineId, withEngine } from './engineOps';
+import { sendChoices, sendLabel } from '../../../lib/engineSend';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -101,7 +106,7 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
         <Icon name="piano" size={15} style={{ color: tk.text.faint }} />
         <button type="button" onClick={() => void rename()} title="Rename" style={{ border: 0, background: 'none', padding: 0, cursor: 'text', color: tk.text.primary, font: `650 13px ${fontFamily.ui}`, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rack.name}</button>
         <span style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-          {rack.instrument ? (rack.instrument.kind === 'sampler' ? 'Sample player' : rack.instrument.unit?.name) : 'No instrument'}{rack.effects.length ? ` · ${rack.effects.length} effect${rack.effects.length === 1 ? '' : 's'}` : ''}
+          {rack.source ? `Sends ${sendLabel(rack.source, play.layers)}` : rack.instrument ? (rack.instrument.kind === 'sampler' ? 'Sample player' : rack.instrument.unit?.name) : 'No instrument'}{rack.effects.length ? ` · ${rack.effects.length} effect${rack.effects.length === 1 ? '' : 's'}` : ''}
         </span>
         <span style={{ flex: 1 }} />
         <IconButton icon={rack.mute ? 'eyeOff' : 'wave'} size="sm" active={rack.mute} label={rack.mute ? 'Unmute' : 'Mute'} onClick={() => { if (!rack.mute) audioEngineHost.releaseHeld(rack.id); patch({ mute: !rack.mute }); }} />
@@ -112,15 +117,22 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
       {!folded && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px 12px' }}>
           {rackError && <Note tone="bad">{rackError}</Note>}
-          <InputRow rack={rack} onPatch={patch} onKeyboard={on => { audioEngineHost.releaseHeld(rack.id); edit(ae => setRackKeyboard(ae, rack.id, on)); }} touch={touch} />
+          {!rack.source && <InputRow rack={rack} onPatch={patch} onKeyboard={on => { audioEngineHost.releaseHeld(rack.id); edit(ae => setRackKeyboard(ae, rack.id, on)); }} touch={touch} />}
+          {desktop && <SourceRow rack={rack} play={play} onPatch={o => { audioEngineHost.releaseHeld(rack.id); edit(ae => patchRack(ae, rack.id, r => ({ ...r, ...o, ...(o.source ? { keyboard: false } : {}) }))); }} />}
           <RackSpectrum rack={rack} play={play} onChange={onChange} />
-          <Keys rackId={rack.id} touch={touch} />
-          <Caption>Instrument</Caption>
-          {rack.instrument ? (
-            <SlotView rack={rack} slot={rack.instrument} play={play} onChange={onChange} touch={touch} desktop={desktop} pluginsOk={pluginsOk}
-              onReplace={() => setPicking('instrument')} onRemove={() => removeSlot(AE_INST)} />
+          {!rack.source && <Keys rackId={rack.id} touch={touch} />}
+          {rack.source ? (
+            <SendView rack={rack} play={play} />
           ) : (
-            <div><Button size="sm" variant="primary" icon="plus" onClick={() => setPicking('instrument')}>Choose an instrument…</Button></div>
+            <>
+              <Caption>Instrument</Caption>
+              {rack.instrument ? (
+                <SlotView rack={rack} slot={rack.instrument} play={play} onChange={onChange} touch={touch} desktop={desktop} pluginsOk={pluginsOk}
+                  onReplace={() => setPicking('instrument')} onRemove={() => removeSlot(AE_INST)} />
+              ) : (
+                <div><Button size="sm" variant="primary" icon="plus" onClick={() => setPicking('instrument')}>Choose an instrument…</Button></div>
+              )}
+            </>
           )}
           <Caption>Effects{rack.effects.length ? ` · ${rack.effects.length}` : ''}</Caption>
           {rack.effects.map((e, i) => (
@@ -209,6 +221,65 @@ function InputRow({ rack, onPatch, onKeyboard, touch }: { rack: AeRack; onPatch:
           </span>
           <span />
           <Note>{RACK_KEYBOARD_HINT}</Note>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Sound in (desktop): the rack plays its instrument from MIDI, or takes a web
+ * sound through its effects (lib/engineSend.ts). The instrument slot is kept
+ * in the record while a send is on and comes back when it's turned off.
+ */
+function SourceRow({ rack, play, onPatch }: { rack: AeRack; play: PlayRecord; onPatch: (o: Partial<AeRack>) => void }) {
+  const tk = useTokens();
+  const choices = sendChoices(play.layers);
+  const options = [
+    { value: '', label: rack.instrument ? 'Its instrument, from MIDI' : 'An instrument, from MIDI' },
+    ...choices,
+    ...(rack.source && !choices.some(c => c.value === rack.source) ? [{ value: rack.source, label: sendLabel(rack.source, play.layers) }] : []),
+  ];
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <span style={{ ...labelStyle(tk), width: 64 }}>Sound in</span>
+      <Select ariaLabel="What the rack plays" value={rack.source ?? ''} options={options} height={28} style={{ flex: '1 1 200px', minWidth: 0 }}
+        onChange={v => onPatch(v ? { source: v } : { source: undefined })} />
+    </div>
+  );
+}
+
+/** A sending rack: what it takes, how the send is doing, and the way back. */
+function SendView({ rack, play }: { rack: AeRack; play: PlayRecord }) {
+  const tk = useTokens();
+  const key = `${rack.id}/${AE_INST}`;
+  const error = useEngineUi(s => s.errors[key]);
+  const loading = useEngineUi(s => !!s.loading[key]);
+  const rate = useEngineUi(s => s.status.sampleRate);
+  const [stats, setStats] = useState<{ queued: number; underruns: number } | null>(null);
+  useEffect(() => {
+    let on = true;
+    const tick = async () => { const st = await audioEngineHost.inputStats(rack.id); if (on) setStats(st); };
+    void tick();
+    const id = setInterval(() => void tick(), 1000);
+    return () => { on = false; clearInterval(id); };
+  }, [rack.id]);
+  return (
+    <div style={{ borderRadius: radius.md, background: tk.bg.field, padding: '8px 8px 8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <Icon name="import" size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <b style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sendLabel(rack.source ?? '', play.layers)}{loading ? ' · connecting…' : ''}</b>
+          <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}` }}>
+            Sent through the effects below and heard from the engine’s output; the page no longer plays it.
+            {stats && rate > 0 ? ` About ${Math.round(stats.queued / rate * 1000)} ms in the engine’s buffer${stats.underruns ? ` · ${stats.underruns} dropouts` : ''}.` : ''}
+          </span>
+        </span>
+      </div>
+      {error && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <Note tone="bad">{error}</Note>
+          <Button size="sm" variant="ghost" icon="rebuild" onClick={() => audioEngineHost.retry(rack.id, AE_INST)}>Try again</Button>
         </div>
       )}
     </div>
