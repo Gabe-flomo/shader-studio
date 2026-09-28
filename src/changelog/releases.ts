@@ -39,6 +39,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.12',
+    date: '2026-09-28',
+    title: 'A Files home, readers as controls, a private file format',
+    highlights: [
+      { area: 'Files', text: 'Files opens on a home: activity for the week with a calendar, a carousel of your recent work as pictures, and what you use most.', link: { kind: 'doc', path: 'docs/files-page.md' } },
+      { area: 'Files', text: 'Item and node pages: code folded small, a live preview with sliders, where it\'s used, and Insert into the graph.' },
+      { area: 'Play', text: 'Every audio reader is now a control in an "Audio readers" group, with live meters on the rack, video and drum pad cards, and names by band (Lows, High mids…).', link: { kind: 'doc', path: 'docs/audio-readers.md' } },
+      { area: 'Files', text: '.playfile is a Playfield-only file now: not a ZIP anyone can open; tampered files are refused; old files still open.', link: { kind: 'doc', path: 'docs/playfile-format.md' } },
+      { area: 'Studio', text: 'The Convert and GLSL pages show the full canvas with its toolbar, with a Source / Converted / Split wipe on Convert.' },
+      { area: 'Desktop', text: 'The projection editor\'s preview draws live, and corner handles stay reachable off the edge.' },
+    ],
+  },
+  {
     id: '2026.9.11',
     date: '2026-09-28',
     title: 'MIDI that just works, undo on Play, and sound in renders',
