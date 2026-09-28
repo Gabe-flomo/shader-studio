@@ -76,12 +76,22 @@ Clean up, and in downloads and installs.
 
 ## Placing and look
 
-Like an Image layer: X, Y, Scale, Rotation, Opacity, the Over / Reveal / Luma
-picture matte, blend modes, track mattes and masks, handles on the picture.
+Like an Image layer: X, Y, Scale, Rotation, Opacity, Mirror (under Look), the
+Over / Reveal / Luma picture matte, blend modes, track mattes and masks,
+handles on the picture.
 **Fit** sets the size at Scale 1: *Fit inside* (the whole frame inside the
 picture), *Fill* (covers it, cropped) or *Height* (as tall as the picture).
 The kit's `klVideoFit` works that height out, so the app, renders and web
 pages agree.
+
+## Tracking
+
+The card's **Tracking** section points the hand, face and pose trackers at
+this video instead of the camera (*Track this video*), and analyses it once
+(**Analyse video**) so they read exact, repeatable landmarks by the video's
+own time: in playback, scrubbing, takes, renders and on websites. The
+landmarks sit where the layer shows the video (position, Fit, Scale,
+rotation, Mirror). See docs/tracking.md.
 
 ## Playback
 
