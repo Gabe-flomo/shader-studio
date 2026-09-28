@@ -164,7 +164,7 @@ function ReaderFields({ trigger: t, readers, onChange }: {
       <div style={{ ...line, flexWrap: 'nowrap' }}>
         <span style={cap} title="Fires when the reader goes above this (0–1)">Fires at</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <RulerSlider ariaLabel="Threshold" value={t.threshold} min={0.01} max={0.99} step={0.01} defaultValue={0.6} onChange={threshold => onChange({ ...t, threshold, hysteresis: Math.min(t.hysteresis, threshold) })} />
+          <RulerSlider ariaLabel="Threshold" value={t.threshold} min={0.01} max={0.99} step={0.01} hard defaultValue={0.6} onChange={threshold => onChange({ ...t, threshold, hysteresis: Math.min(t.hysteresis, threshold) })} />
         </div>
       </div>
       <div style={{ ...line, flexWrap: 'nowrap' }}>
@@ -268,7 +268,7 @@ function ProximityFields({ trigger: t, layers, onChange }: {
       <div style={{ ...line, flexWrap: 'nowrap' }}>
         <span style={cap} title="In picture heights: 1 is the height of the picture">Distance</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <RulerSlider ariaLabel="Distance, in picture heights" value={t.distance} min={0} max={PROX_MAX} step={0.01} defaultValue={0.15} onChange={distance => onChange({ ...t, distance })} />
+          <RulerSlider ariaLabel="Distance, in picture heights" value={t.distance} min={0} max={PROX_MAX} step={0.01} hard defaultValue={0.15} onChange={distance => onChange({ ...t, distance })} />
         </div>
       </div>
       <div style={{ ...line, flexWrap: 'nowrap' }}>

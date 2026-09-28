@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasCustomRange, paramSliderRange, rangePatch, resetRangePatch } from '../sliderRange';
+import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } from '../sliderRange';
 import { collectParamCandidates } from '../userNodes/paramCandidates';
 import type { GraphNode } from '../../types/nodeGraph';
 
@@ -14,13 +14,20 @@ describe('paramSliderRange', () => {
     expect(paramSliderRange({ __scMax_b: 50 }, 'b', pd)).toEqual({ min: 0, max: 50 });
     expect(paramSliderRange({ __scMax_b: 50, __scBidir_b: true }, 'b', pd)).toEqual({ min: -50, max: 50 });
   });
-  it('a range edited on the slider keeps both ends', () => {
-    const params = { ...rangePatch('b', -2, 300) };
+  it('a range a typed value widened keeps both ends, and Reset puts the definition’s back', () => {
+    const params = { ...extendRangePatch('b', -2, 300) };
     expect(paramSliderRange(params, 'b', pd)).toEqual({ min: -2, max: 300 });
     expect(hasCustomRange(params, 'b')).toBe(true);
     const reset = { ...params, ...resetRangePatch('b') };
     expect(hasCustomRange(reset, 'b')).toBe(false);
     expect(paramSliderRange(reset, 'b', pd)).toEqual({ min: -10, max: 10 });
+  });
+  it('typing past a bidirectional range keeps it bidirectional (−N to N)', () => {
+    const params = { __scBidir_b: true, ...extendRangePatch('b', -50, 50) };
+    expect(paramSliderRange(params, 'b', pd)).toEqual({ min: -50, max: 50 });
+    expect(params.__scBidir_b).toBe(true);
+    // Turning bidirectional off drops the mirrored min: 0 to max, as typing past the range always gave.
+    expect(paramSliderRange({ ...params, __scBidir_b: false, __scMin_b: null }, 'b', pd)).toEqual({ min: 0, max: 50 });
   });
 });
 

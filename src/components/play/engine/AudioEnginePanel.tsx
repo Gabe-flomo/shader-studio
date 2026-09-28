@@ -107,7 +107,7 @@ function EngineHeader({ desktop, touch }: { desktop: boolean; touch: boolean }) 
           <Select ariaLabel="Output device" value={String(prefs.output)} height={28} onChange={v => prefs.set({ output: Number(v) })}
             options={[{ value: '0', label: 'System output' }, ...outputs.map(o => ({ value: String(o.id), label: `${o.name}${o.default ? ' (default)' : ''}` })), ...(prefs.output && !outputs.some(o => o.id === prefs.output) ? [{ value: String(prefs.output), label: 'A device not connected now' }] : [])]} />
           <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Volume</span>
-          <RulerSlider value={prefs.volume} min={0} max={2} step={0.01} defaultValue={1} onChange={v => prefs.set({ volume: v })} ariaLabel="Engine volume" touch={touch} />
+          <RulerSlider value={prefs.volume} min={0} max={2} step={0.01} defaultValue={1} hard onChange={v => prefs.set({ volume: v })} ariaLabel="Engine volume" touch={touch} />
         </div>
       )}
     </div>

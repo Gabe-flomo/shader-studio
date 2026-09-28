@@ -95,6 +95,11 @@ export interface ParamDef {
   min?: number;
   max?: number;
   step?: number;
+  /**
+   * min/max are a physical limit, not just the slider's range: a typed value is clamped. Without
+   * it, typing a number past the range widens the range to hold it (lib/rangeMath rangeAfterTyping).
+   */
+  hard?: boolean;
   hint?: string;
   // Options for 'select' type
   options?: { value: string; label: string }[];

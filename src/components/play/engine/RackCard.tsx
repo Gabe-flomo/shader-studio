@@ -136,7 +136,7 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr', alignItems: 'center', gap: 8 }}>
             <span style={labelStyle(tk)}>Volume</span>
-            <RulerSlider value={rack.volume} min={0} max={2} step={0.01} defaultValue={1} onChange={v => patch({ volume: v })} ariaLabel={`${rack.name} volume`} touch={touch} />
+            <RulerSlider value={rack.volume} min={0} max={2} step={0.01} defaultValue={1} hard onChange={v => patch({ volume: v })} ariaLabel={`${rack.name} volume`} touch={touch} />
           </div>
         </div>
       )}
@@ -205,7 +205,7 @@ function InputRow({ rack, onPatch, onKeyboard, touch }: { rack: AeRack; onPatch:
           <span />
           <span style={labelStyle(tk)}>Velocity</span>
           <span style={{ gridColumn: '2 / 4' }}>
-            <RulerSlider value={velocity} min={1} max={127} step={1} integer defaultValue={100} onChange={v => rackKeyboard.setVelocity(v)} ariaLabel="Keyboard velocity" touch={touch} />
+            <RulerSlider value={velocity} min={1} max={127} step={1} integer defaultValue={100} hard onChange={v => rackKeyboard.setVelocity(v)} ariaLabel="Keyboard velocity" touch={touch} />
           </span>
           <span />
           <Note>{RACK_KEYBOARD_HINT}</Note>
@@ -381,7 +381,7 @@ function Params({ rack, slot, play, onChange, touch, onKeep }: { rack: AeRack; s
               <Select ariaLabel={p.name} value={String(Math.round(v))} height={26} onChange={x => set(p, Number(x))}
                 options={p.values.map((label, i) => ({ value: String(Math.round(p.min) + i), label }))} />
             ) : (
-              <RulerSlider value={v} min={p.min} max={p.max} step={p.step || (p.max - p.min) / 1000} defaultValue={p.value} onChange={x => set(p, x)} ariaLabel={p.name} touch={touch} integer={p.step === 1} />
+              <RulerSlider value={v} min={p.min} max={p.max} step={p.step || (p.max - p.min) / 1000} defaultValue={p.value} hard onChange={x => set(p, x)} ariaLabel={p.name} touch={touch} integer={p.step === 1} />
             )}
             <IconButton icon={isExposed ? 'check' : 'plus'} size="sm" active={isExposed} disabled={isExposed} label={isExposed ? 'Already a control' : `Make ${p.name} a control, to map audio, MIDI or an LFO onto it`} onClick={() => expose(p)} />
           </div>

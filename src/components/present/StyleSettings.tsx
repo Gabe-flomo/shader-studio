@@ -100,7 +100,7 @@ function KindTiles({ kinds, value, onPick, preview }: { kinds: Kind[]; value: Ki
 function Amount({ label, value, onChange, hint, disabled, defaultValue, compact }: { label: string; value: number | undefined; onChange: (v: number) => void; hint?: string; disabled?: boolean; defaultValue: number; compact: boolean }) {
   return (
     <Row label={label} hint={hint}>
-      <RulerSlider ariaLabel={label} value={pct(value)} min={0} max={100} step={1} integer={false} defaultValue={Math.round(defaultValue * 100)} disabled={disabled} touch={compact} onChange={v => onChange(Math.max(0, Math.min(1, v / 100)))} />
+      <RulerSlider ariaLabel={label} value={pct(value)} min={0} max={100} step={1} integer={false} hard defaultValue={Math.round(defaultValue * 100)} disabled={disabled} touch={compact} onChange={v => onChange(Math.max(0, Math.min(1, v / 100)))} />
     </Row>
   );
 }

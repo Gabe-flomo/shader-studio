@@ -75,7 +75,7 @@ export function RandomizeMenu({ x, y, params, excluded, onChange, amount, onAmou
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 8px 8px' }}
         title="How far a randomize may move each slider: 100% picks anywhere in its range, 10% nudges it around its current value">
         <span style={{ width: 58, flexShrink: 0, color: tk.text.secondary }}>Strength</span>
-        <RulerSlider value={Math.round(amount * 100)} min={1} max={100} step={1} integer defaultValue={100}
+        <RulerSlider value={Math.round(amount * 100)} min={1} max={100} step={1} integer hard defaultValue={100}
           onChange={v => onAmountChange(Math.min(1, Math.max(0.01, v / 100)))} ariaLabel="Randomize strength (percent)" />
         <span style={{ flexShrink: 0, color: tk.text.muted }}>%</span>
       </div>
