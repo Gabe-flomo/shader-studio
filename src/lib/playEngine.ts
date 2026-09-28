@@ -26,6 +26,7 @@ import { kmNoteUnit } from '../play/kit/midi.js';
 import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
 import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
+import { incAdvance, incFold, incGlide, incGliding, incNew, incRange, incRepeat, incReset, incThreshold, type IncState } from '../play/kit/increment.js';
 import { sgCondNew, sgCondStep, sgParseValueRef, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
 import { readFinishValue } from '../types/playFinish';
 import { AUDIO_FX_TARGET_PREFIX, readAudioFxValue } from '../types/playAudioFx';
@@ -221,6 +222,11 @@ class PlayEngine implements InputSource {
   private actionListeners = new Set<(a: PlayAction) => void>();
   /** Action controls: the last mapped level, so a rise through 0.5 fires once. */
   private actionLevel = new Map<string, number>();
+  /** Increment mappings: each one's steps (play/kit/increment.js), its trigger's and its reset signal's firing state, and its repeat condition. */
+  private incStates = new Map<string, IncState>();
+  private incFire = new Map<string, FireSlot>();
+  private incCond = new Map<string, SgCondState>();
+  private incMoving = false;
 
   // ── Hands (hand tracking): landmarks from handFeed, read as sources, gestures and null targets ──
   private hands: HdState = hdCreate();
@@ -375,6 +381,12 @@ class PlayEngine implements InputSource {
     for (const id of [...this.triggerStates.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger') && !(record.pairMappings ?? []).some(m => m.id === id && m.source.kind === 'value' && m.source.source.kind === 'trigger')) this.triggerStates.delete(id);
     // Show the new state (a mapping added, removed or disabled) even while the clock is paused.
     inputBus.wake();
+    // Increments start over when they are switched off (or stop being increments); an explicit start moves with its field.
+    for (const [id, st] of [...this.incStates]) {
+      const m = record.mappings.find(x => x.id === id);
+      if (!m || !m.enabled || !m.increment) { this.incStates.delete(id); this.incCond.delete(id); this.incFire.delete(id); this.incFire.delete(`${id}:reset`); }
+      else if (m.increment.start === 'value') st.start = m.increment.startValue;
+    }
     // Drop state for mappings that are gone; keep the rest so a re-label doesn't jump.
     const ids = new Set(record.mappings.map(m => m.id));
     for (const id of [...this.state.keys()]) if (!ids.has(id)) this.state.delete(id);
@@ -544,6 +556,11 @@ class PlayEngine implements InputSource {
   private allTriggers(): TriggerSpec[] {
     const out: TriggerSpec[] = [];
     for (const m of this.record.mappings) if (m.enabled && m.source.kind === 'trigger') out.push(m.source.trigger);
+    for (const m of this.record.mappings) {
+      if (!m.enabled || !m.increment) continue;
+      if (m.increment.on === 'trigger') out.push(m.increment.trigger);
+      if (m.increment.resetOn) out.push({ on: 'signal', signal: m.increment.resetOn });
+    }
     for (const a of this.record.actions ?? []) if (a.enabled) out.push(a.trigger);
     for (const m of this.record.pairMappings ?? []) if (m.enabled && m.source.kind === 'value' && m.source.source.kind === 'trigger') out.push(m.source.source.trigger);
     return out;
@@ -879,6 +896,13 @@ class PlayEngine implements InputSource {
 
   /** A mapping's 0..1 reading this frame (a trigger's envelope, toggle, step or random value), for meters. */
   readMapping(m: PlayMapping): number | null {
+    if (m.increment) {
+      // An increment: where it is across its range, 0..1.
+      const st = this.incStates.get(m.id);
+      if (!st) return null;
+      const [lo, hi] = incRange(m.outMin, m.outMax);
+      return hi > lo ? clamp01((incFold(st.p, lo, hi, m.increment.limit) - lo) / (hi - lo)) : 0;
+    }
     if (m.source.kind === 'trigger') return this.triggerStates.get(m.id)?.value ?? 0;
     return this.readSource(m.source);
   }
@@ -968,7 +992,11 @@ class PlayEngine implements InputSource {
     this.tickAudioTriggers();
     this.tickZoneTriggers();
     // A clock sent back (rewind): axis swaps start on A again.
-    if (time < this.lastTime - 1e-6) for (const st of this.pairState.values()) st.swap = sgSwapNew();
+    if (time < this.lastTime - 1e-6) {
+      for (const st of this.pairState.values()) st.swap = sgSwapNew();
+      // Increments start over from their start, so the same timeline steps the same way again.
+      for (const [id, st] of this.incStates) { const m = this.record.mappings.find(x => x.id === id); incReset(st, m ? this.incStart(m) : st.start, true); }
+    }
     this.lastTime = time;
     this.tickConditionTriggers();
     this.tickRelationshipSignals();
@@ -978,26 +1006,30 @@ class PlayEngine implements InputSource {
     if (this.gamepadIsBound && this.performing) inputBus.wake();
     const driven = new Set<string>();
     this.layerMoved = false;
+    this.incMoving = false;
     // Colour controls start each frame from their base so an un-mapped channel keeps the slider's value.
     for (const m of this.record.mappings) {
       if (!m.enabled) continue;
       const control = this.controls.get(m.controlId);
       if (!control) continue;
-      const reading = m.source.kind === 'trigger' ? this.readTrigger(m, dt) : this.readSource(m.source);
-      if (reading === null) continue;
-      const target = mapValue(reading, m);
-      let st = this.state.get(m.id);
-      if (!st) { st = { value: undefined }; this.state.set(m.id, st); }
       let v: number;
-      if (m.smoothMs <= 0 || st.value === undefined) {
-        v = target;
-      } else {
-        const alpha = 1 - Math.exp(-(dt * 1000) / m.smoothMs);
-        v = st.value + (target - st.value) * alpha;
-        // Settle exactly so a held knob stops producing sub-epsilon churn.
-        if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target;
+      if (m.increment) v = this.tickIncrement(m, dt);
+      else {
+        const reading = m.source.kind === 'trigger' ? this.readTrigger(m, dt) : this.readSource(m.source);
+        if (reading === null) continue;
+        const target = mapValue(reading, m);
+        let st = this.state.get(m.id);
+        if (!st) { st = { value: undefined }; this.state.set(m.id, st); }
+        if (m.smoothMs <= 0 || st.value === undefined) {
+          v = target;
+        } else {
+          const alpha = 1 - Math.exp(-(dt * 1000) / m.smoothMs);
+          v = st.value + (target - st.value) * alpha;
+          // Settle exactly so a held knob stops producing sub-epsilon churn.
+          if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target;
+        }
+        st.value = v;
       }
-      st.value = v;
       if (control.kind === 'action') {
         // A button: fires once each time its mapping rises through the middle (a key down, a click, a beat).
         const was = this.actionLevel.get(control.id) ?? 0;
@@ -1043,6 +1075,73 @@ class PlayEngine implements InputSource {
     }
     this.restoreOnce.clear();
     this.drivenLastFrame = driven;
+  }
+
+  /** Where an increment starts: its explicit start, else the control's value now (a colour: its channel, or full brightness). */
+  private incStart(m: PlayMapping): number {
+    const inc = m.increment;
+    if (inc?.start === 'value') return inc.startValue;
+    const b = this.base.get(m.controlId);
+    if (Array.isArray(b)) return m.channel === undefined ? 1 : b[m.channel] ?? 0;
+    if (typeof b === 'number' && Number.isFinite(b)) return b;
+    return incRange(m.outMin, m.outMax)[0];
+  }
+
+  /** How many times a trigger fires this frame for an increment (its own firing-mode slot under `slotId`). */
+  private incFires(slotId: string, t: TriggerSpec, dt: number): number {
+    const { presses, gate } = this.triggerInput(t);
+    const { slot, fresh } = this.fireSlot(this.incFire, slotId, t, presses, gate);
+    return fresh ? 0 : stepFire(slot.st, t.fire, presses, gate, dt);
+  }
+
+  /**
+   * One frame of an Increment mapping (play/kit/increment.js): count what
+   * fired it (a trigger, a threshold, a repeat), take that many steps, send
+   * its step and wrap-back signals, and return the value to write.
+   */
+  private tickIncrement(m: PlayMapping, dt: number): number {
+    const inc = m.increment!;
+    const [lo, hi] = incRange(m.outMin, m.outMax);
+    let st = this.incStates.get(m.id);
+    if (!st) { st = incNew(this.incStart(m)); this.incStates.set(m.id, st); }
+    if (inc.resetOn && this.incFires(`${m.id}:reset`, { on: 'signal', signal: inc.resetOn }, dt) > 0) incReset(st, this.incStart(m), false);
+    let count = 0;
+    if (inc.on === 'trigger') count = this.incFires(m.id, inc.trigger, dt);
+    else if (inc.on === 'threshold') count = incThreshold(st, m.source.kind === 'trigger' ? this.readTrigger(m, dt) : this.readSource(m.source), inc);
+    else {
+      let open = true;
+      if (inc.when) {
+        let c = this.incCond.get(m.id);
+        if (!c) { c = sgCondNew(); this.incCond.set(m.id, c); }
+        sgCondStep(c, this.readValue(inc.when.value), inc.when);
+        open = c.open;
+      }
+      count = incRepeat(st, this.time, inc, open);
+    }
+    if (count > 0) {
+      for (const ev of incAdvance(st, inc, lo, hi, count)) {
+        const sig = ev === 'step' ? inc.stepSignal : inc.resetSignal;
+        if (sig) this.emitSignal(sig);
+      }
+    }
+    const v = incGlide(st, inc, lo, hi, dt);
+    if (incGliding(st)) this.incMoving = true;
+    return v;
+  }
+
+  /** For the editor: an increment's steps so far (since the last wrap-back, and in all). Null before it has run. */
+  incrementNow(mappingId: string): { n: number; count: number } | null {
+    const st = this.incStates.get(mappingId);
+    return st ? { n: st.n, count: st.count } : null;
+  }
+
+  /** The editor's Reset: back to the start (the control's value now, or the explicit start), growth and direction too. */
+  resetIncrement(mappingId: string): void {
+    const st = this.incStates.get(mappingId);
+    const m = this.record.mappings.find(x => x.id === mappingId);
+    if (st && m) incReset(st, this.incStart(m), false);
+    else this.incStates.delete(mappingId);
+    inputBus.wake();
   }
 
   /** Write a number to a float control: a layer property or Finish number (the overlay reads it), or a uniform. */
@@ -1223,6 +1322,7 @@ class PlayEngine implements InputSource {
       if (!m.enabled) continue;
       if (m.source.kind === 'key' && m.source.code === code) return true;
       if (m.source.kind === 'trigger' && m.source.trigger.on === 'key' && m.source.trigger.code === code) return true;
+      if (m.increment?.on === 'trigger' && m.increment.trigger.on === 'key' && m.increment.trigger.code === code) return true;
     }
     for (const a of this.record.actions ?? []) if (a.enabled && a.trigger.on === 'key' && a.trigger.code === code) return true;
     for (const m of this.record.pairMappings ?? []) {
@@ -1234,7 +1334,7 @@ class PlayEngine implements InputSource {
 
   /** Actions, layer-property mappings, reader controls and Learn run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.isLearning() || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
+    return !!this.record.actions?.length || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
@@ -1248,8 +1348,9 @@ class PlayEngine implements InputSource {
     if (this.allTriggers().some(t => firesWhileHeld(t.fire) && this.triggerInput(t).gate)) return true;
     // Tracking hands: landmarks arrive about 30 times a second, and smoothing and springs ease between them.
     if (handFeed.isOn() && !handFeed.isPaused()) return true;
-    // An axis mid-smoothing keeps drawing until it settles.
-    if (this.pairMoving) return true;
+    // An axis mid-smoothing keeps drawing until it settles; so does an increment mid-glide, and a repeating one.
+    if (this.pairMoving || this.incMoving) return true;
+    if (this.record.mappings.some(m => m.enabled && m.increment?.on === 'repeat')) return true;
     return this.record.mappings.some(m => m.enabled && sourceAnimates(m.source, (this.triggerStates.get(m.id)?.stage ?? 'idle') === 'idle'))
       || (this.record.pairMappings ?? []).some(m => m.enabled && m.source.kind === 'value' && sourceAnimates(m.source.source, (this.triggerStates.get(m.id)?.stage ?? 'idle') === 'idle'));
   }
