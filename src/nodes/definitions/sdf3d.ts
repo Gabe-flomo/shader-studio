@@ -1760,7 +1760,7 @@ export const Turbulence3DNode: NodeDefinition = {
   },
   defaultParams: { octaves: 8, strength: 0.3, frequency: 1.0, decay: 0.7, ax: 1.0, ay: 0.6, az: 0.6 },
   paramDefs: {
-    octaves:   { label: 'Octaves',   type: 'float', min: 1,   max: 12,   step: 1,    hint: 'Sine layers per sample. 8–10 for water; every octave runs on every march step.' },
+    octaves:   { label: 'Octaves',   type: 'float', min: 1,   max: 12,   step: 1, compileTime: true,    hint: 'Sine layers per sample. 8–10 for water; every octave runs on every march step. Recompiles when changed.' },
     strength:  { label: 'Strength',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Displacement per octave (divided by d).' },
     frequency: { label: 'Frequency', type: 'float', min: 0.1, max: 8.0,  step: 0.1,  hint: 'Wave frequency of the first octave.' },
     decay:     { label: 'Decay',     type: 'float', min: 0.3, max: 0.95, step: 0.01, hint: 'd /= decay each octave; smaller decay = frequencies climb faster.' },
@@ -1813,7 +1813,7 @@ export const DomainWarp3DNode: NodeDefinition = {
   paramDefs: {
     strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 2.0, step: 0.01 },
     scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1  },
-    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 6,   step: 1    },
+    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 6,   step: 1, compileTime: true, hint: 'Recompiles when changed.' },
     gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01 },
   },

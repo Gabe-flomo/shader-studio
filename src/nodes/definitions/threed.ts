@@ -252,7 +252,7 @@ export const RaymarchNode: NodeDefinition = {
     fog_color:      { label: 'Fog Color',     type: 'vec3',  min: 0,     max: 1,    step: 0.01   },
     palette_preset: { label: 'Object Palette',type: 'select', options: PALETTE_PRESET_OPTIONS },
     bg_preset:      { label: 'BG Palette',    type: 'select', options: PALETTE_PRESET_OPTIONS },
-    ao_steps:       { label: 'AO Steps',      type: 'float', min: 0,     max: 10,   step: 1      },
+    ao_steps:       { label: 'AO Steps',      type: 'float', min: 0,     max: 10,   step: 1, compileTime: true, hint: 'Recompiles when changed.' },
     noise_scale:    { label: 'Noise Scale',   type: 'float', min: 0.1,   max: 5,    step: 0.1, showWhen: { param: 'shape', value: 'noisy_sphere' }    },
     noise_strength: { label: 'Noise Warp',    type: 'float', min: 0,     max: 1,    step: 0.01, showWhen: { param: 'shape', value: 'noisy_sphere' }   },
     cone_angle:     { label: 'Cone Angle',    type: 'float', min: 0.05,  max: 1.2,  step: 0.01, showWhen: { param: 'shape', value: 'cone' }   },
@@ -839,7 +839,7 @@ export const ChromaticAberrationNode: NodeDefinition = {
       { value: '10', label: '10' },
       { value: '16', label: '16' },
     ]},
-    angle_deg:  { label: 'Angle (deg)', type: 'float', min: 0.0, max: 360.0, step: 1.0 },
+    angle_deg:  { label: 'Angle (deg)', type: 'float', min: 0.0, max: 360.0, step: 1.0, showWhen: { param: 'mode', value: 'linear' } },
     animate:    { label: 'Animate', type: 'select', options: [
       { value: 'false', label: 'Off' },
       { value: 'true',  label: 'On'  },

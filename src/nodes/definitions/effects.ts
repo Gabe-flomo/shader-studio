@@ -324,7 +324,7 @@ export const FractalLoopNode: NodeDefinition = {
     phase:     [0.0,  0.33, 0.67],
   },
   paramDefs: {
-    iterations:  { label: 'Iterations',   type: 'float', min: 1,     max: 8,    step: 1     },
+    iterations:  { label: 'Iterations',   type: 'float', min: 1,     max: 8,    step: 1, compileTime: true, hint: 'Recompiles when changed.' },
     fract_scale: { label: 'Tile Scale',   type: 'float', min: 0.01,  max: 10.0, step: 0.01  },
     scale_exp:   { label: 'Scale Growth', type: 'float', min: 0.0,   max: 2.0,  step: 0.01  },
     ring_freq:   { label: 'Ring Freq',    type: 'float', min: 1.0,   max: 20.0, step: 0.1   },
@@ -396,7 +396,7 @@ export const RotatingLinesLoopNode: NodeDefinition = {
     rot_offset_1: 33.0, rot_offset_2: 11.0,
   },
   paramDefs: {
-    iterations:   { label: 'Iterations',   type: 'float', min: 2,      max: 40,   step: 1     },
+    iterations:   { label: 'Iterations',   type: 'float', min: 2,      max: 40,   step: 1, compileTime: true, hint: 'Recompiles when changed.' },
     uv_scale:     { label: 'UV Scale',     type: 'float', min: 0.01,   max: 1.0,  step: 0.01  },
     scroll_y:     { label: 'Scroll Y',     type: 'float', min: 0.0,    max: 2.0,  step: 0.01  },
     box_half_y:   { label: 'Box Height',   type: 'float', min: 0.01,   max: 1.0,  step: 0.01  },
@@ -469,7 +469,7 @@ export const AccumulateLoopNode: NodeDefinition = {
     atten_mode: 'inverse', color_mode: 'cos_vec3', tonemap_mode: 'tanh_sq',
   },
   paramDefs: {
-    iterations:    { label: 'Iterations',   type: 'float',  min: 5,       max: 200,  step: 1      },
+    iterations:    { label: 'Iterations',   type: 'float',  min: 5,       max: 200,  step: 1, compileTime: true, hint: 'Recompiles when changed.' },
     time_scale:    { label: 'Speed',   type: 'float',  min: 0.0,     max: 2.0,  step: 0.01   },
     freq:          { label: 'UV Freq',      type: 'float',  min: 1.0,     max: 200,  step: 1.0    },
     glow:          { label: 'Glow',         type: 'float',  min: 0.00001, max: 0.01, step: 0.00001 },
@@ -589,7 +589,7 @@ export const ForLoopNode: NodeDefinition = {
   },
   defaultParams: { iterations: 4, body: DEFAULT_LOOP_BODY },
   paramDefs: {
-    iterations: { label: 'Iterations', type: 'float', min: 1, max: 16, step: 1 },
+    iterations: { label: 'Iterations', type: 'float', min: 1, max: 16, step: 1, compileTime: true, hint: 'Recompiles when changed.' },
     body:        { label: 'Body',       type: 'string' },
   },
   glslFunction: PALETTE_GLSL_FN,
@@ -1274,7 +1274,7 @@ export const ChromaticAberrationAutoNode: NodeDefinition = {
     ]},
     strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 0.2,  step: 0.001 },
     contrast:   { label: 'Contrast',   type: 'float', min: 0.0, max: 3.0,  step: 0.05  },
-    angle_deg:  { label: 'Angle (°)',  type: 'float', min: 0,   max: 360,  step: 1     },
+    angle_deg:  { label: 'Angle (°)',  type: 'float', min: 0,   max: 360,  step: 1, showWhen: { param: 'mode', value: 'linear' } },
     animate:    { label: 'Animate',    type: 'select', options: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'On' }] },
     anim_speed: { label: 'Speed', type: 'float', min: 0,   max: 3,    step: 0.01, showWhen: { param: 'animate', value: 'true' } },
   },
@@ -1988,7 +1988,7 @@ export const ChromaShiftNode: NodeDefinition = {
     ]},
     strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 2.0,  step: 0.01 },
     contrast:   { label: 'Contrast',   type: 'float', min: 0.0, max: 3.0,  step: 0.05 },
-    angle_deg:  { label: 'Angle (°)',  type: 'float', min: 0,   max: 360,  step: 1    },
+    angle_deg:  { label: 'Angle (°)',  type: 'float', min: 0,   max: 360,  step: 1, showWhen: { param: 'mode', value: 'linear' } },
     animate:    { label: 'Animate',    type: 'select', options: [{ value: 'false', label: 'Off' }, { value: 'true', label: 'On' }] },
     anim_speed: { label: 'Speed', type: 'float', min: 0,   max: 3,    step: 0.01, showWhen: { param: 'animate', value: 'true' } },
   },

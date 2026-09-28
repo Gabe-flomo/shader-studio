@@ -852,7 +852,7 @@ export const TurbulenceNode: NodeDefinition = {
   },
   defaultParams: { octaves: 6, strength: 0.3, frequency: 1.0, decay: 0.7, rotate: 1.0 },
   paramDefs: {
-    octaves:   { label: 'Octaves',   type: 'float', min: 1,   max: 12,   step: 1,    hint: 'How many sine layers. 6–10 looks like water; each one costs a sin().' },
+    octaves:   { label: 'Octaves',   type: 'float', min: 1,   max: 12,   step: 1, compileTime: true,    hint: 'How many sine layers. 6–10 looks like water; each one costs a sin(). Recompiles when changed.' },
     strength:  { label: 'Strength',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Displacement per octave (divided by d). 0.3 ripples, 0.8 melts.' },
     frequency: { label: 'Frequency', type: 'float', min: 0.1, max: 8.0,  step: 0.1,  hint: 'Wave frequency of the first octave. Higher = finer waves.' },
     decay:     { label: 'Decay',     type: 'float', min: 0.3, max: 0.95, step: 0.01, hint: 'd /= decay each octave: 0.7 doubles the frequency roughly every two octaves.' },
@@ -903,7 +903,7 @@ export const ChaosLayersNode: NodeDefinition = {
   },
   defaultParams: { layers: 5, scale: 0.1, brightness: 0.04, shift: 2.618, layerScale: 0.6, waves: 0.2, cutout: 0.0, parallaxX: 2.0, parallaxY: 1.0, size: 1.0 },
   paramDefs: {
-    layers:     { label: 'Layers',      type: 'float', min: 1,    max: 8,   step: 1,     hint: '3–5 hides the grid; 1–2 shows axis lines unless Waves is up.' },
+    layers:     { label: 'Layers',      type: 'float', min: 1,    max: 8,   step: 1, compileTime: true,     hint: '3–5 hides the grid; 1–2 shows axis lines unless Waves is up. Recompiles when changed.' },
     scale:      { label: 'Scale',       type: 'float', min: 0.02, max: 1.0, step: 0.005, hint: 'Cell size relative to the screen height. Smaller = denser, more points.' },
     brightness: { label: 'Brightness',  type: 'float', min: 0.0,  max: 0.5, step: 0.005, hint: 'Multiplies the summed glow.' },
     size:       { label: 'Point Size',  type: 'float', min: 0.1,  max: 1.0, step: 0.01,  hint: 'Radius of each point light inside its cell (1 = touches the cell edge).' },

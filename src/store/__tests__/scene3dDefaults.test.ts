@@ -138,8 +138,12 @@ describe('March Loop colours', () => {
 
     const legacy = compileGraph({ nodes: withLoopParams({ bgR: 0.1, bgG: 0.2, bgB: 0.3 }) });
     const colour = compileGraph({ nodes: withLoopParams({ bg: [0.1, 0.2, 0.3] }) });
-    expect(colour.fragmentShader).toMatch(/_bg\s+= vec3\(0\.1, 0\.2, 0\.3\);/);
-    expect(legacy.fragmentShader).toBe(colour.fragmentShader);
+    // The colour param is a live uniform (a picker drag doesn't recompile);
+    // legacy per-channel params bake the same value.
+    const bgUniform = colour.fragmentShader.match(/_bg\s+= (u_p_\w+_bg);/)?.[1];
+    expect(bgUniform).toBeTruthy();
+    expect(colour.paramUniforms[bgUniform!]).toEqual([0.1, 0.2, 0.3]);
+    expect(legacy.fragmentShader).toMatch(/_bg\s+= vec3\(0\.1, 0\.2, 0\.3\);/);
 
     const loopId = nodes.find(n => n.type === 'marchLoopGroup')!.id;
     const camId = nodes.find(n => n.type === 'marchCamera')!.id;

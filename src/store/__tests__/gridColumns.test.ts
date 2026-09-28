@@ -47,7 +47,8 @@ function compiledCell(nodes: GraphNode[], wiredValue?: number): number {
   const m = r.fragmentShader!.match(/(\w+)_cell = 2\.0 \* \1_asp \/ ([^;]+);/);
   expect(m, 'cell line').not.toBeNull();
   const cols = m![2].trim();
-  if (wiredValue === undefined) return 2 * ASPECT / Number(cols);
+  // An unwired Columns is a live uniform (a slider drag must not recompile).
+  if (wiredValue === undefined) return 2 * ASPECT / Number(r.paramUniforms[cols] ?? cols);
   // A wire into an old node is doubled: `(2.0 * <constant's output>)`.
   expect(cols).toMatch(/^\(2\.0 \* \w+_value\)$/);
   return 2 * ASPECT / (2 * wiredValue);

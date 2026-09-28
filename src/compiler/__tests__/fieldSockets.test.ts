@@ -172,7 +172,8 @@ describe('field sockets', () => {
     const [fn] = fieldFns(r.fragmentShader);
     const main = mainOf(r.fragmentShader);
     expect(main).toMatch(/for \(int arr_0_i = 0; arr_0_i < 64; arr_0_i\+\+\)/);
-    expect(main).toMatch(/float arr_0_n {4}= clamp\(floor\(12\.0 \+ 0\.5\), 1\.0, 64\.0\);/);
+    expect(main).toMatch(/float arr_0_n {4}= clamp\(floor\(u_p_arrx0_count \+ 0\.5\), 1\.0, 64\.0\);/);
+    expect(r.paramUniforms.u_p_arrx0_count).toBe(12);
     expect(main).toContain(`${fn.name}(arr_0_l, arr_0_cid, 0.0, arr_0_fi)`);
     expect(main).toContain('smin(arr_0_d, arr_0_dn');
   });

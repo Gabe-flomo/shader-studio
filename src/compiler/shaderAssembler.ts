@@ -156,6 +156,16 @@ function sceneOutputReturn(subgraph: SubgraphData, slugOf: (id: string) => strin
 }
 
 /** A scene function name, or '' when there is none (unwired, or an empty Scene Group's MISSING_SCENE). */
+/**
+ * The original (store) id of a node compiled inside a group-like body, given
+ * its slug. The store keys slider edits by that id (`innerNodeId::paramKey`),
+ * so the uniform binding must be too — not by the slug-prefixed id.
+ */
+function origIdBySlug(slugMap: Map<string, string>, slug: string): string {
+  for (const [orig, s] of slugMap) if (s === slug) return orig;
+  return slug;
+}
+
 function liveSceneFn(name: string | undefined): string {
   return name && name !== 'MISSING_SCENE' && name !== 'MISSING_SCENE_FN' ? name : '';
 }
@@ -1799,7 +1809,7 @@ export class ShaderAssembler {
                     } else if (inp.type === 'float' && (k === 'time' || k === 't')) gnInputVars[k] = 'u_time';
                   }
                 }
-                const gnResult = gDef.generateGLSL(gn, gnInputVars);
+                const gnResult = gDef.generateGLSL(this.patchBodyNode(gn, gDef, origIdBySlug(grpSlugMap, gnOrigId)), gnInputVars);
                 sceneFnLines.push(gnResult.code);
                 this.nodeOutputs.set(gn.id, gnResult.outputVars);
                 { const dv = sceneDistanceVar(gDef, gn, gnResult.outputVars); if (dv) sgLastFloatVar = dv; }
@@ -1850,7 +1860,7 @@ export class ShaderAssembler {
                 effectiveSn = { ...effectiveSn, params: { ...effectiveSn.params, [paramKey]: v } };
               }
             }
-            const snResult = snDef.generateGLSL(effectiveSn, snInputVars);
+            const snResult = snDef.generateGLSL(this.patchBodyNode(effectiveSn, snDef, origIdBySlug(sgSubSlugMap, origId)), snInputVars);
             sceneFnLines.push(snResult.code);
             this.nodeOutputs.set(sn.id, snResult.outputVars);
 
@@ -1885,7 +1895,10 @@ export class ShaderAssembler {
 
   }
 
-  private compileMarchLoopGroupNode(node: GraphNode, inputVars: Record<string, string>, nodeSlug: string): void {
+  private compileMarchLoopGroupNode(rawNode: GraphNode, inputVars: Record<string, string>, nodeSlug: string): void {
+          // The group's own sliders (Max Dist, Jitter, colours…) are live uniforms;
+          // step counts are compileTime and stay baked.
+          const node = this.patchGroupSelf(rawNode, nodeSlug);
           const subgraph = node.params.subgraph as SubgraphData | undefined;
 
           // Resolve external inputs
@@ -2263,7 +2276,7 @@ export class ShaderAssembler {
                             if (fb) gnInputVars2[k] = fb;
                           }
                         }
-                        const gnResult2 = gDef.generateGLSL(gn, gnInputVars2);
+                        const gnResult2 = gDef.generateGLSL(this.patchBodyNode(gn, gDef, origIdBySlug(igrpSlugMap, gnOrigId2)), gnInputVars2);
                         sceneFnLines.push(gnResult2.code); this.nodeOutputs.set(gn.id, gnResult2.outputVars);
                         { const dv = sceneDistanceVar(gDef, gn, gnResult2.outputVars); if (dv) sgLastFloatVar = dv; }
                       }
@@ -2298,7 +2311,7 @@ export class ShaderAssembler {
                       }
                     }
 
-                    const sgnResult = sgnDef.generateGLSL(sgn, sgnInputVars);
+                    const sgnResult = sgnDef.generateGLSL(this.patchBodyNode(sgn, sgnDef, origIdBySlug(sgInnerSlugMap, sgnOrigId)), sgnInputVars);
                     sceneFnLines.push(sgnResult.code);
                     this.nodeOutputs.set(sgn.id, sgnResult.outputVars);
 
@@ -2406,7 +2419,7 @@ export class ShaderAssembler {
                     }
                     continue;
                   }
-                  const gnResult = gDef.generateGLSL(gn, gnInputVars);
+                  const gnResult = gDef.generateGLSL(this.patchBodyNode(gn, gDef, origIdBySlug(mlGrpSlugMap, gnOrigId)), gnInputVars);
                   bodyLines.push(gnResult.code);
                   // Handle assignOp accumulators nested inside this inline group
                   const gnSlugKey = gn.id.slice(mlGrpPrefix.length);
@@ -2498,7 +2511,7 @@ export class ShaderAssembler {
                 continue;
               }
 
-              const snResult = snDef.generateGLSL(snEffective, snInputVars);
+              const snResult = snDef.generateGLSL(this.patchBodyNode(snEffective, snDef, origIdBySlug(mlSubSlugMap, origId)), snInputVars);
 
               // ── assignOp in body: route output through inout accumulator ──────────
               if (sn.assignOp && sn.assignOp !== '=') {
@@ -2674,7 +2687,10 @@ export class ShaderAssembler {
 
   }
 
-  private compileGiLitMarchGroupNode(node: GraphNode, inputVars: Record<string, string>, nodeSlug: string): void {
+  private compileGiLitMarchGroupNode(rawNode: GraphNode, inputVars: Record<string, string>, nodeSlug: string): void {
+          // The group's own sliders (Max Dist, Jitter, colours…) are live uniforms;
+          // step counts are compileTime and stay baked.
+          const node = this.patchGroupSelf(rawNode, nodeSlug);
           const subgraph = node.params.subgraph as SubgraphData | undefined;
 
           // Resolve external inputs
@@ -3019,7 +3035,7 @@ export class ShaderAssembler {
                             if (fb) gnInputVars2[k] = fb;
                           }
                         }
-                        const gnResult2 = gDef.generateGLSL(gn, gnInputVars2);
+                        const gnResult2 = gDef.generateGLSL(this.patchBodyNode(gn, gDef, origIdBySlug(igrpSlugMap, gnOrigId2)), gnInputVars2);
                         sceneFnLines.push(gnResult2.code); this.nodeOutputs.set(gn.id, gnResult2.outputVars);
                         { const dv = sceneDistanceVar(gDef, gn, gnResult2.outputVars); if (dv) sgLastFloatVar = dv; }
                       }
@@ -3054,7 +3070,7 @@ export class ShaderAssembler {
                       }
                     }
 
-                    const sgnResult = sgnDef.generateGLSL(sgn, sgnInputVars);
+                    const sgnResult = sgnDef.generateGLSL(this.patchBodyNode(sgn, sgnDef, origIdBySlug(sgInnerSlugMap, sgnOrigId)), sgnInputVars);
                     sceneFnLines.push(sgnResult.code);
                     this.nodeOutputs.set(sgn.id, sgnResult.outputVars);
 
@@ -3155,7 +3171,7 @@ export class ShaderAssembler {
                     }
                     continue;
                   }
-                  const gnResult = gDef.generateGLSL(gn, gnInputVars);
+                  const gnResult = gDef.generateGLSL(this.patchBodyNode(gn, gDef, origIdBySlug(mlGrpSlugMap, gnOrigId)), gnInputVars);
                   bodyLines.push(gnResult.code);
                   const gnSlugKey = gn.id.slice(mlGrpPrefix.length);
                   const origGnForAcc = mlGrpSlugToOrigNode.get(gnSlugKey);
@@ -3242,7 +3258,7 @@ export class ShaderAssembler {
                 continue;
               }
 
-              const snResult = snDef.generateGLSL(snEffective, snInputVars);
+              const snResult = snDef.generateGLSL(this.patchBodyNode(snEffective, snDef, origIdBySlug(mlSubSlugMap, origId)), snInputVars);
 
               if (sn.assignOp && sn.assignOp !== '=') {
                 bodyLines.push(snResult.code);
@@ -3618,7 +3634,7 @@ export class ShaderAssembler {
                 effectiveSn = { ...effectiveSn, params: { ...effectiveSn.params, [paramKey]: v } };
               }
             }
-            const snResult = snDef.generateGLSL(effectiveSn, snInputVars);
+            const snResult = snDef.generateGLSL(this.patchBodyNode(effectiveSn, snDef, origIdBySlug(swSubSlugMap, origId)), snInputVars);
             warpFnLines.push(snResult.code);
             this.nodeOutputs.set(sn.id, snResult.outputVars);
 
@@ -3681,6 +3697,26 @@ export class ShaderAssembler {
           this.nodeOutputs.set(node.id, bypassOutputVars);
           return;
 
+  }
+
+  /**
+   * Uniform-patch a node compiled inside a scene / march / warp body (whose
+   * GLSL lands in a helper function — uniforms are global, so that's fine) and
+   * record its uniforms and slider bindings. `bindingId` is the node's original
+   * store id so a slider drag finds its uniform instead of recompiling.
+   */
+  private patchBodyNode(node: GraphNode, def: NodeDefinition, bindingId: string): GraphNode {
+    const { patchedNode, uniforms, bindings } = patchNodeParamsForUniforms(node, def, fn => this.functions.add(fn), bindingId);
+    Object.assign(this.paramUniforms, uniforms);
+    Object.assign(this.paramBindings, bindings);
+    return patchedNode;
+  }
+
+  /** Uniform-patch a compiler-built group node's own params (named by its slug, bound by its id). */
+  private patchGroupSelf(node: GraphNode, nodeSlug: string): GraphNode {
+    const def = getNodeDefinitionFor(node);
+    if (!def) return node;
+    return { ...this.patchBodyNode({ ...node, id: nodeSlug }, def, node.id), id: node.id };
   }
 
   private compileStandardNode(node: GraphNode, inputVars: Record<string, string>, nodeSlug: string, def: NonNullable<ReturnType<typeof getNodeDefinition>>): void {
