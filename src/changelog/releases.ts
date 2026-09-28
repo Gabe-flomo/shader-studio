@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.17',
+    date: '2026-09-28',
+    title: 'Plug-ins that talk back, quick links, one Controls tab',
+    highlights: [
+      { area: 'Desktop', text: 'Move a rack control and the plug-in\'s own knob follows; A–K keep playing notes while the plug-in window is in front.', link: { kind: 'doc', path: 'docs/audio-engine.md' } },
+      { area: 'Play', text: 'Quick link: ⌘-click one control, then another, and pick the direction to map them — an audio reader onto a radius in two clicks.' },
+      { area: 'Play', text: 'Controls and Mappings share one rail category with tabs; ⌘1–4 jump to Controls, Layers, Finish and Engine.', link: { kind: 'doc', path: 'docs/split-view.md' } },
+      { area: 'Play', text: 'The script editor keeps the caret where you click after scrolling; the Keyboard and Hands pills no longer cover the top bar.' },
+    ],
+  },
+  {
     id: '2026.9.16',
     date: '2026-09-28',
     title: 'Signals from every particle, rail tabs, recovery',
