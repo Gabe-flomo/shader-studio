@@ -22,7 +22,7 @@ import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { usePlayUi, type PlayTab } from './playUi';
 import { clampRatio, ratioAt, setAreaMeasure, shownRatio, usePlaySplit, WIDE_PANEL_PX, type SidebarMode, type SplitSide } from './playSplit';
-import { PlayRail } from './PlayRail';
+import { PlayRail, RailPageTabs } from './PlayRail';
 import { categoryDef, categoryOf, RAIL_PAGES } from './railPages';
 
 /** How often the picture follows the divider while it's dragged, in ms. */
@@ -174,8 +174,10 @@ function SplitPanel() {
   const side = usePlaySplit(s => s.side), setSide = usePlaySplit(s => s.setSide);
   const sidebar = usePlaySplit(s => s.sidebar), setSidebar = usePlaySplit(s => s.setSidebar);
   const railPage = usePlaySplit(s => s.railPage);
+  const setRailPage = usePlaySplit(s => s.setRailPage);
   const rail = sidebar === 'rail';
   const setHost = usePlaySplit(s => s.setHost);
+  const play = useNodeGraphStore(s => s.play);
   const nControls = useNodeGraphStore(s => s.play.controls.length);
   const nLayers = useNodeGraphStore(s => s.play.layers.length);
   const nMappings = useNodeGraphStore(s => s.play.mappings.length);
@@ -207,13 +209,14 @@ function SplitPanel() {
     <div data-split-panel="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 12px', minHeight: 44, boxSizing: 'border-box', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`, flexWrap: 'wrap' }}>
         {rail ? (
-          // The rail picks the page; the bar says where you are.
-          <div data-rail-crumb="" style={{ flex: '1 1 240px', minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 10, overflow: 'hidden' }}>
-            <span style={{ flexShrink: 0, font: `650 13px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
-              {cat.label !== page.label && <><span style={{ color: tk.text.muted, fontWeight: 600 }}>{cat.label}</span><span style={{ color: tk.text.faint, margin: '0 6px' }}>›</span></>}
-              {page.label}
-            </span>
-            <span style={{ minWidth: 0, color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.description}</span>
+          // The category, and its pages as a tab strip when it has more than one.
+          <div data-rail-crumb="" style={{ flex: '1 1 240px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
+            <span style={{ flexShrink: 0, font: `650 13px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>{cat.label}</span>
+            {cat.pages.length > 1 ? (
+              <RailPageTabs def={cat} current={railPage} play={play} onPick={setRailPage} />
+            ) : (
+              <span style={{ minWidth: 0, color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.description}</span>
+            )}
           </div>
         ) : (
           <div style={{ flex: '1 1 240px', minWidth: 'min(100%, 380px)', maxWidth: 460 }}>

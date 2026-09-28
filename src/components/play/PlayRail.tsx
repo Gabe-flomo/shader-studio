@@ -1,13 +1,13 @@
 /**
  * PlayRail — the split view's sidebar folded into a rail of icons, one per
- * category (railPages.ts). Clicking an icon opens a small drawer beside the
- * rail with that category's pages (name, one line, count); picking one shows
- * it full width in the big panel. A category with a single page opens it
- * straight away. Clicking the open category's icon again closes its drawer;
- * Esc or a click elsewhere does too; arrows and Enter move and pick.
+ * category (railPages.ts). Clicking an icon opens that category straight
+ * away, on the page it was last on (else its first) — no drawer in between.
+ * A category with more than one page gets a tab strip in the panel's header
+ * (PlaySplitArea's `RailPageTabs`, exported below) so switching between them
+ * doesn't mean going back to the rail. ↑/↓ move between the rail's icons.
  *
- * Phones get the same categories as a bottom row (PlayRailBar) whose drawer
- * is a sheet.
+ * Phones get the same categories as a bottom row (PlayRailBar); a category
+ * with several pages opens a sheet of them (no room there for a tab strip).
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useTokens } from '../../theme/themeStore';
@@ -15,7 +15,6 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useCan } from '../../lib/plan';
 import { Icon } from '../ui/Icon';
-import { Popover } from '../ui/Popover';
 import { Sheet } from '../ui/Sheet';
 import { Tooltip } from '../ui/Tooltip';
 import { RAIL_PX, usePlaySplit } from './playSplit';
@@ -33,17 +32,12 @@ export function PlayRail() {
   const tk = useTokens();
   const play = useNodeGraphStore(s => s.play);
   const page = usePlaySplit(s => s.railPage);
-  const setPage = usePlaySplit(s => s.setRailPage);
+  const openCategory = usePlaySplit(s => s.openRailCategory);
   const locked = useLocked();
   const railRef = useRef<HTMLDivElement>(null);
   const buttons = useRef<Partial<Record<RailCategory, HTMLButtonElement | null>>>({});
-  const [open, setOpen] = useState<RailCategory | null>(null);
   const active = categoryOf(page);
 
-  const pressIcon = (c: RailCategoryDef) => {
-    if (c.pages.length === 1) { setPage(c.pages[0]); setOpen(null); return; }
-    setOpen(o => (o === c.id ? null : c.id));
-  };
   // Up and down move between the rail's icons.
   const onRailKey = (e: ReactKeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
@@ -52,9 +46,6 @@ export function PlayRail() {
     e.preventDefault();
     buttons.current[RAIL_CATEGORIES[stepIndex(i, e.key, RAIL_CATEGORIES.length)].id]?.focus();
   };
-  const openDef = open ? RAIL_CATEGORIES.find(c => c.id === open) : undefined;
-  const anchor = useRef<HTMLElement | null>(null);
-  anchor.current = open ? buttons.current[open] ?? null : null;
 
   return (
     <nav
@@ -73,17 +64,12 @@ export function PlayRail() {
           def={c}
           refFn={el => { buttons.current[c.id] = el; }}
           active={active === c.id}
-          open={open === c.id}
+          open={false}
           badge={categoryBadge(c.id, play)}
           locked={locked(c.id)}
-          onPress={() => pressIcon(c)}
+          onPress={() => openCategory(c.id)}
         />
       ))}
-      {openDef && (
-        <Popover anchorRef={anchor} clearRef={railRef} onClose={() => setOpen(null)} width={288} padding={6}>
-          <RailPageList def={openDef} current={page} play={play} autoFocus onPick={p => { setPage(p); setOpen(null); }} />
-        </Popover>
-      )}
     </nav>
   );
 }
@@ -109,8 +95,8 @@ function RailButton({ def, refFn, active, open, badge, locked, onPress, phone = 
       data-rail-category={def.id}
       aria-label={`${def.label}${locked ? ' (Pro)' : ''}`}
       aria-current={active ? 'page' : undefined}
-      aria-expanded={def.pages.length > 1 ? open : undefined}
-      aria-haspopup={def.pages.length > 1 ? 'menu' : undefined}
+      aria-expanded={phone && def.pages.length > 1 ? open : undefined}
+      aria-haspopup={phone && def.pages.length > 1 ? 'menu' : undefined}
       onClick={onPress}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -198,6 +184,61 @@ export function RailPageList({ def, current, play, onPick, autoFocus = false, to
             <span style={{ font: `600 ${touch ? 14 : 12.5}px ${fontFamily.ui}`, color: on ? tk.accent.text : tk.text.primary }}>{d.label}</span>
             <span style={{ font: `500 11px ${fontFamily.mono}`, color: tk.text.faint }}>{n ? n : ''}</span>
             <span style={{ gridColumn: '1 / -1', font: `${touch ? 12.5 : 11.5}px/1.4 ${fontFamily.ui}`, color: tk.text.muted }}>{d.description}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The panel header's tab strip for a category with more than one page
+ * (PlaySplitArea's `SplitPanel`): its pages by name (and count, where the
+ * old drawer showed one). ←/→ move and switch; Home/End jump to the ends.
+ */
+export function RailPageTabs({ def, current, play, onPick }: {
+  def: RailCategoryDef;
+  current: RailPage;
+  play: Parameters<typeof pageCount>[1];
+  onPick: (page: RailPage) => void;
+}) {
+  const tk = useTokens();
+  const items = useRef<Array<HTMLButtonElement | null>>([]);
+  const onKey = (e: ReactKeyboardEvent) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    const i = items.current.findIndex(el => el === document.activeElement);
+    const from = i < 0 ? def.pages.indexOf(current) : i;
+    const next = stepIndex(from, e.key, def.pages.length);
+    if (next === from) return;
+    e.preventDefault();
+    items.current[next]?.focus();
+    onPick(def.pages[next]);
+  };
+  return (
+    <div role="tablist" aria-label={`${def.label} pages`} onKeyDown={onKey} style={{ display: 'flex', gap: 2, minWidth: 0, overflowX: 'auto' }}>
+      {def.pages.map((p, i) => {
+        const d = RAIL_PAGES[p];
+        const n = pageCount(p, play);
+        const on = p === current;
+        return (
+          <button
+            key={p}
+            ref={el => { items.current[i] = el; }}
+            type="button"
+            role="tab"
+            data-rail-tab={p}
+            aria-selected={on}
+            tabIndex={on ? 0 : -1}
+            onClick={() => onPick(p)}
+            style={{
+              flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 5, border: 0, cursor: 'pointer', outline: 'none',
+              padding: '4px 9px', borderRadius: radius.md, whiteSpace: 'nowrap',
+              background: on ? tk.bg.selected : 'transparent', color: on ? tk.accent.text : tk.text.secondary,
+              font: `600 11.5px ${fontFamily.ui}`,
+            }}
+          >
+            {d.label}
+            {n ? <span style={{ font: `500 10px ${fontFamily.mono}`, color: on ? tk.accent.text : tk.text.faint }}>{n}</span> : null}
           </button>
         );
       })}
