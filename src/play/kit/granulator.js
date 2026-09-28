@@ -276,7 +276,7 @@ export function grMakeEngine() {
       emitDir: 0, emitSpeed: 0.2, emitSpread: 0.1, emitEdge: 0, band: 0.35, bandWidth: 0.12, bandSpread: 0.1, bandSpeed: 0, bandDir: 0, bandEdge: 1, shift: 0, partials: 8, fftSize: 1,
     };
     // Spectral: the analysis (made here when needed unless opts.autoSpectrum === false: the worklet gets it from the main thread).
-    var autoSpec = !(opts && opts.autoSpectrum === false), spec = null, bufRate = sr;
+    var autoSpec = !(opts && opts.autoSpectrum === false), spec = null, bufRate = sr, now = 0;
     var rnd = mulberry(seed || 1), seedNow = seed || 1;
     var bufL = null, bufR = null, bufLen = 0, ratio = 1, bufDur = 0;
     var frame = 0, events = [], held = {}, bend = 0, fmPhase = 0, lfoPhase = 0, seq = 0, maxCount = 0, voiceSeq = 0;
@@ -377,8 +377,9 @@ export function grMakeEngine() {
         if (!(hz > 0 && hz < sr * 0.49)) continue;
         var a = spec.amps[o + j];
         g.pinc[n] = hz / sr; g.pamp[n] = a;
-        // A fixed start phase from the peak's place: no random numbers, so the sequence never shifts.
-        var ph = (b * 0.6180339887 + fr * 0.1234567) % 1; g.pph[n] = ph < 0 ? ph + 1 : ph;
+        // The phase of one steady oscillator at this frequency (from the engine's clock), so overlapping
+        // grains of a partial add up instead of cancelling; no random numbers, so the sequence never shifts.
+        var ph = (hz / sr) * now; g.pph[n] = ph - Math.floor(ph);
         e2 += a * a; n++;
       }
       g.np = n; g.energy = Math.sqrt(e2);
@@ -481,6 +482,7 @@ export function grMakeEngine() {
       var scanInc = bufDur > 0 ? P.scan / bufDur / sr : 0;
       var mode = P.mode | 0, emitInc = P.emitSpeed / sr, bandInc = P.bandSpeed / sr, emitEdge = P.emitEdge | 0, emitDir = P.emitDir | 0, bandEdge = P.bandEdge | 0, bandDir = P.bandDir | 0;
       for (var n = from; n < to; n++) {
+        now = frame + n;
         gainS += (P.level - gainS) * smooth;
         cutS += ((ptCutoff === ptCutoff ? ptCutoff : P.cutoff) - cutS) * smooth;
         if (!freeze) lfoPhase = wrap(lfoPhase + lfoInc);
