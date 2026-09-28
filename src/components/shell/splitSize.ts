@@ -6,13 +6,16 @@
  *
  * Drag to any size between the page's min and max; let go near a snap point
  * and it settles there. Double-tap goes back to the page's default.
+ *
+ * Held sideways, the picture sits on the left and the size is its width in
+ * vw instead (the *_LANDSCAPE specs), remembered separately.
  */
 import { useCallback, useRef, useState } from 'react';
 
 export interface SplitSpec {
   /** Where the size is kept (localStorage). */
   key: string;
-  /** The picture's height, in vh. */
+  /** The picture's height in vh (portrait), or its width in vw (landscape). */
   initial: number;
   min: number;
   max: number;
@@ -24,6 +27,8 @@ export const SNAP_VH = 3;
 
 export const STUDIO_SPLIT: SplitSpec = { key: 'shader-studio:phoneSplit:studio', initial: 42, min: 15, max: 75, snaps: [30, 42, 60] };
 export const PLAY_SPLIT: SplitSpec = { key: 'shader-studio:phoneSplit:play', initial: 42, min: 20, max: 70, snaps: [30, 42, 56] };
+export const STUDIO_SPLIT_LANDSCAPE: SplitSpec = { key: 'shader-studio:phoneSplit:studio:landscape', initial: 45, min: 25, max: 70, snaps: [35, 45, 55] };
+export const PLAY_SPLIT_LANDSCAPE: SplitSpec = { key: 'shader-studio:phoneSplit:play:landscape', initial: 50, min: 30, max: 70, snaps: [40, 50, 60] };
 
 export const clampSplit = (spec: SplitSpec, vh: number): number => Math.max(spec.min, Math.min(spec.max, vh));
 

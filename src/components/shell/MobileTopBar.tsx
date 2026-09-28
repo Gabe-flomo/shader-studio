@@ -19,6 +19,7 @@ import { LibraryPanel } from './LibraryPanel';
 import { HandsLive } from '../play/HandsChip';
 import { canOn, usePlan, type Feature } from '../../lib/plan';
 import { accountMenuItems } from '../account/accountMenu';
+import { rotateFullscreenLabel, useRotateFullscreen } from '../../lib/rotateFullscreen';
 
 /**
  * Phone top bar (Mobile board): the Studio | Play | Present switch (other pages: the logo, back
@@ -44,6 +45,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [library, setLibrary] = useState(false);
   const session = usePlan(s => s.session);
+  const rotate = useRotateFullscreen();
   const account = accountMenuItems(session);
   // Menu rows are plain text: locked ones say so in their label.
   const pro = (f: Feature) => (canOn(session.status === 'signed-in' ? session.plan : null, f) ? '' : ' · Pro');
@@ -142,6 +144,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Keyboard shortcuts', icon: 'hash', onSelect: () => onPageChange('shortcuts') },
             { label: mode === 'light' ? 'Dark theme' : 'Light theme', icon: mode === 'light' ? 'moon' : 'sun', onSelect: toggleTheme },
+            { label: `Rotate to full screen · ${rotateFullscreenLabel(rotate.setting)}`, icon: 'phone', hint: 'Turned sideways, the picture alone fills the screen. Tap to change: Off, Play only, Always (Play and Studio)', onSelect: rotate.cycle },
             ...(onClear ? ['separator' as const, { label: 'Clear the graph…', icon: 'trash' as const, danger: true, onSelect: onClear }] : []),
             ...(account.length ? ['separator' as const, ...account] : []),
           ]}
