@@ -60,6 +60,8 @@ One component everywhere (`components/linked/LinkedBrowser.tsx`, opened by `open
 
 Previews are cached in IndexedDB (`shader-studio-linked`, store `thumbs`) keyed by folder, path, size and time, so a file is looked at once until it changes; none are made for files over 60 MB (images), 400 MB (videos), 120 MB (sounds).
 
+**Auditioning (filtered to sounds)**: the same Splice-style auditioning as the Sounds tab (docs/drum-pads.md) — a shared player (`lib/samplePreview.ts`) and hook (`components/audio/useSamplePreview.ts`) drive `SampleRow` here too. With **auto-preview** on (remembered), ↑/↓ move the highlight and play it at once, at a fixed preview volume, separate from the master chain; ← restarts, → skips 3 s, Space toggles, Enter picks, Esc stops and closes (the window's own Escape handling closes it; the preview stops when it unmounts). A click highlights and previews, a double-click picks; on a phone, a tap previews and a second tap (or the Pick button) picks. Only one sound previews at a time — arrowing past one cancels its load if it hasn't finished.
+
 ## Desktop security
 
 `src-tauri/src/linked.rs` has **no command that writes, renames or removes**. The page registers the folders the user linked (`lf_set_roots`); every other command refuses a root that isn't one of them, refuses paths with `..`, `.` or empty parts, and refuses anything that resolves (through a symlink) outside its root. Hidden files (`.DS_Store`, `._*`, dotfiles) are not listed. Rust tests cover the root check, the path check, symlinks out and listing.

@@ -23,6 +23,7 @@ import {
   defaultLayer, handAnchor, type ActionKind, type AudioReader, type PlayAudioReaders, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
   type CondCmp, type PairAxis, type PlayPair, type PlayPairMapping, type PlaySignal, type RelationMember, type RelationRole, type RelationshipLayer, newRelationMember,
+  defaultIncrement, type PlayIncrement,
 } from '../types/play';
 import { DEFAULT_PAD_GRID, type PlayPadGrid } from '../types/playMidi';
 import type { PlayAudioEngine } from '../types/playAudioEngine';
@@ -68,6 +69,8 @@ const colourCtl = (id: string, target: string, label: string): PlayControl => ({
 const map = (id: string, controlId: string, source: PlaySource, outMin: number, outMax: number, opts: Partial<PlayMapping> = {}): PlayMapping =>
   ({ id, controlId, source, outMin, outMax, curve: 'linear', smoothMs: 0, enabled: true, ...opts });
 
+/** An Increment (docs/increment-mapping.md): the defaults with these settings. */
+const inc = (o: Partial<PlayIncrement>): PlayIncrement => ({ ...defaultIncrement(), ...o });
 const S = {
   mouse: (axis: 'x' | 'y' | 'down'): PlaySource => ({ kind: 'mouse', axis }),
   key: (code: string): PlaySource => ({ kind: 'key', code }),
@@ -739,6 +742,31 @@ Signals pass along the chain in the same frame. Each signal fires at most once a
 • Drag the dot on the XY pad; the axis a mapping drives is locked while it drives it.
 • In Mappings → Pairs, change the walk's source to Mouse X, or its swap thresholds. Press **Start on A** to reset it (rewinding the clock does the same).
 • Change the walk to **Position** → Mouse: both axes follow the pointer at once.`,
+  })),
+  ex('playIncrement', glowGraph({ radius: 0.08, falloff: 10, tint: [0.55, 0.8, 1] }), play({
+    controls: [
+      ctl('radius', 'circ::radius', 'Radius (steps on the beat)', 0.04, 0.34),
+      ctl('posX', 'circ::posX', 'Circle · X (steps on each wrap)', -0.6, 0.6),
+      ctl('falloff', 'glow::brightness', 'Falloff (steps on mouse X)', 3, 24),
+    ],
+    signals: [{ id: 'grow', name: 'Radius.step' }, { id: 'again', name: 'Radius.reset' }],
+    mappings: [
+      map('beat', 'radius', S.mouse('x'), 0.04, 0.34, { increment: inc({ on: 'repeat', every: 1, unit: 'beats', bpm: 100, step: 0.02, growth: 'compound', factor: 1.5, glideMs: 180, glideCurve: 'out', wrapAfter: 5, wrapBack: 'glide', start: 'value', startValue: 0.05, stepSignal: 'grow', resetSignal: 'again' }) }),
+      map('walk', 'posX', S.mouse('x'), -0.5, 0.5, { increment: inc({ on: 'trigger', trigger: { on: 'signal', signal: 'again' }, step: 0.3, limit: 'bounce', glideMs: 500, glideCurve: 'smooth', start: 'value', startValue: 0 }) }),
+      map('edge', 'falloff', S.mouse('x'), 4, 22, { increment: inc({ on: 'threshold', threshold: 0.5, hysteresis: 0.1, falling: true, step: 2, growth: 'additive', factor: 1, limit: 'wrap', glideMs: 120, start: 'value', startValue: 8 }) }),
+    ],
+    notes: `**What it shows.** **Increment** mappings: instead of following its source, a control moves in **steps**, "boom, boom, boom", or with a glide, "smooth, smooth, smooth". A step can grow each time, stop, wrap or bounce at the ends of the range, go back to its start after a number of steps, and send a signal each time.
+
+**How it's built.**
+• **Radius** steps on every beat at 100 bpm (**Repeat**). The step **compounds**: 0.02, then × 1.5 each time. After 5 steps it **glides back** to 0.05 and starts growing again. Each step sends **Radius.step**, each wrap-back **Radius.reset**.
+• **Circle · X** steps 0.3 each time Radius.reset fires (**Trigger** on a signal), gliding, and **bounces** between −0.5 and 0.5: two increments chained into calculated motion.
+• **Falloff** steps when the mouse crosses the middle of the picture (**Threshold** on Mouse X, both ways). The step is **additive** (2, 3, 4…) and **wraps** round its range. The hysteresis stops a hovering mouse from stepping twice.
+
+**Try this.**
+• Open Mappings: each row sums itself up in a line, like "+0.02 ×1.5 on beat, wrap 5, glide 180 ms".
+• Set Radius's glide to 0: each step jumps instead of sliding.
+• Change Circle · X's wrap back to **Ping-pong** after 3 steps.
+• Rewind the clock: the steps start over, so a take renders the same every time.`,
   })),
   ex('playTextMattes', fbmGraph(), play({
     layers: [

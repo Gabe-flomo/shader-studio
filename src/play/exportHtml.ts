@@ -41,6 +41,7 @@ import finishGlslSource from './kit/finishGlsl.js?raw';
 import finishSource from './kit/finish.js?raw';
 import audioFxSource from './kit/audioFx.js?raw';
 import signalsSource from './kit/signals.js?raw';
+import incrementSource from './kit/increment.js?raw';
 import drumPadsSource from './kit/drumPads.js?raw';
 import granulatorSource from './kit/granulator.js?raw';
 import type { AeGrainSample } from '../types/playAudioEngine';
@@ -380,10 +381,10 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, relationshipSource, agentsSource, handsSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, audioFxSource, drumPadsSource, granulatorSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, relationshipSource, agentsSource, handsSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, incrementSource, audioFxSource, drumPadsSource, granulatorSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell }, granulator: { create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS, fromPoints: grFromPoints }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH } };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell }, granulator: { create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS, fromPoints: grFromPoints }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH }, increment: { create: incNew, range: incRange, fold: incFold, threshold: incThreshold, repeat: incRepeat, advance: incAdvance, reset: incReset, glide: incGlide } };\n})();\n`;
 }
 
 /**

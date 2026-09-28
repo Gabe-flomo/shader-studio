@@ -21,12 +21,15 @@ import { Segmented } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { toast } from '../ui/toastStore';
 import {
-  UNSUPPORTED_TEXT, checkLinkedFolder, linkFolder, linkedSupport, listLinked, loadLinkedFolders, onLinkedChange, reconnectLinkedFolder, relocateLinkedFolder, searchLinked, useLinkedFolders,
+  UNSUPPORTED_TEXT, checkLinkedFolder, linkFolder, linkedSupport, listLinked, loadLinkedFolders, onLinkedChange, reconnectLinkedFolder, relocateLinkedFolder, resolveLinked, searchLinked, useLinkedFolders,
   type LinkedEntry, type LinkedFolder, type LinkedStatus,
 } from '../../files/linkedFolders';
 import { firstFiles, hintFilter, linkedRef, mediaKindOf, pickerEntries, type LinkedFilter } from '../../files/linkedRefs';
 import { cachedPreview, linkedPreview, type LinkedPreview } from '../../files/linkedThumbs';
 import { FILTER_WORDS, lengthWords, sizeWords, type LinkedPick } from './linkedUi';
+import { AutoPreviewToggle, SampleRow } from '../audio/SampleRow';
+import { useSamplePreview } from '../audio/useSamplePreview';
+import { stopPreview } from '../../lib/samplePreview';
 
 const KIND_ICON: Record<string, IconName> = { image: 'overlay', video: 'play', audio: 'wave', font: 'text' };
 const FILTERS: { value: LinkedFilter; label: string }[] = [
@@ -129,6 +132,22 @@ function Row({ folderId, e, selected, onClick, onDouble, compact, showPath }: { 
   );
 }
 
+interface AuditionItem { id: string; entry: LinkedEntry }
+
+/** A sound row that plays through the shared preview player (Splice-style auditioning). */
+function AudioRow({ folderId, entry, highlighted, playing, loading, progress, compact, onClick, onDouble, onTap, onPick }: {
+  folderId: string; entry: LinkedEntry; highlighted: boolean; playing: boolean; loading: boolean; progress: number; compact: boolean;
+  onClick: () => void; onDouble: () => void; onTap: () => void; onPick: () => void;
+}) {
+  const [p, setP] = useState<LinkedPreview | null>(() => cachedPreview(folderId, entry));
+  useEffect(() => { let live = true; setP(cachedPreview(folderId, entry)); void linkedPreview(folderId, entry).then(x => { if (live) setP(x); }); return () => { live = false; }; }, [folderId, entry]);
+  return (
+    <SampleRow title={entry.name} detail={detailOf(entry, p)} thumb={p?.thumb} w={compact ? 56 : 64} h={compact ? 34 : 36}
+      highlighted={highlighted} playing={playing} loading={loading} progress={progress} touch={compact}
+      onClick={onClick} onDoubleClick={onDouble} onTap={onTap} onPick={onPick} />
+  );
+}
+
 export interface LinkedBrowserProps {
   filter: LinkedFilter;
   mode: 'file' | 'folder' | 'manage';
@@ -198,7 +217,7 @@ export function LinkedBrowser({ filter: pickerFilter, mode, onPick, compact = fa
     return () => { live = false; window.clearTimeout(t); };
   }, [folder, q, filter, dir, version]);
 
-  useEffect(() => { setSelected(null); }, [folderId, dir]);
+  useEffect(() => { setSelected(null); stopPreview(); }, [folderId, dir]);
 
   const shown = useMemo(() => (found ? found.files : entries ? pickerEntries(entries, filter) : []), [found, entries, filter]);
   const folderFiles = useMemo(() => (entries ? firstFiles(entries, filter, 1000) : []), [entries, filter]);
@@ -209,6 +228,16 @@ export function LinkedBrowser({ filter: pickerFilter, mode, onPick, compact = fa
     catch (e) { toast.error('Couldn’t link that folder', { message: e instanceof Error ? e.message : String(e) }); }
   };
   const pickFile = (e: LinkedEntry) => { if (mode === 'file' && folder && !e.dir) onPick?.({ kind: 'file', ref: linkedRef(folder.id, e.path), folderId: folder.id, entry: e }); };
+
+  // Splice-style auditioning: filtered to sounds, arrow through them and hear them as you go
+  // (docs/linked-folders.md). One player, shared with the Sounds tab and the drum pad picker.
+  const auditionOk = filter === 'audio' && !!folder;
+  const auditionItems = useMemo<AuditionItem[]>(() => (auditionOk ? shown.filter(e => !e.dir).map(e => ({ id: e.path, entry: e })) : []), [auditionOk, shown]);
+  const sp = useSamplePreview<AuditionItem>({
+    items: auditionItems,
+    getSource: async ({ entry }) => { if (!folder) return null; const r = await resolveLinked(linkedRef(folder.id, entry.path)); return r.ok ? r.blob : null; },
+    onPick: ({ entry }) => { setSelected(entry); pickFile(entry); },
+  });
 
   // ── Nothing to show yet ──
   if (support === 'none' && !folders.length) {
@@ -225,11 +254,21 @@ export function LinkedBrowser({ filter: pickerFilter, mode, onPick, compact = fa
   const preview = selected && folder ? <Preview folderId={folder.id} e={selected} compact={compact} mode={mode} onUse={() => pickFile(selected)} /> : null;
 
   const list = (
-    <div role="list" aria-label={`${folder?.name ?? 'Folder'} contents`} style={{ display: 'flex', flexDirection: 'column', gap: 1, minHeight: 0 }}>
+    <div role="list" aria-label={`${folder?.name ?? 'Folder'} contents`} tabIndex={auditionOk ? 0 : undefined}
+      onKeyDown={auditionOk ? sp.onKeyDown : undefined}
+      style={{ display: 'flex', flexDirection: 'column', gap: 1, minHeight: 0, outline: 'none' }}>
       {error ? <Note>{error}</Note>
         : !entries && !found ? <Note>{st === 'checking' || !st ? 'Opening…' : ' '}</Note>
         : !shown.length ? <Note>{found ? `No ${words.many} called anything like “${q.trim()}”${found.complete ? '' : ' (stopped after the first 400 folders)'}.` : `No ${words.many} here${dir ? '' : ' at the top'}.`}</Note>
-        : shown.map(e => (
+        : shown.map(e => auditionOk && !e.dir ? (
+          <AudioRow key={e.path} folderId={folder!.id} entry={e} compact={compact}
+            highlighted={sp.highlight === e.path} playing={sp.playingId === e.path && sp.playing} loading={sp.playingId === e.path && sp.loading}
+            progress={sp.playingId === e.path && sp.duration ? sp.position / sp.duration : 0}
+            onClick={() => { setSelected(e); sp.onRowClick({ id: e.path, entry: e }); }}
+            onDouble={() => sp.onRowDoubleClick({ id: e.path, entry: e })}
+            onTap={() => { setSelected(e); sp.onRowTap({ id: e.path, entry: e }); }}
+            onPick={() => sp.onRowDoubleClick({ id: e.path, entry: e })} />
+        ) : (
           <Row key={e.path} folderId={folder!.id} e={e} compact={compact} showPath={!!found} selected={selected?.path === e.path}
             onClick={() => { if (e.dir) { setDir(e.path); setQ(''); } else setSelected(e); }}
             onDouble={mode === 'file' && !e.dir ? () => pickFile(e) : undefined} />
@@ -268,9 +307,12 @@ export function LinkedBrowser({ filter: pickerFilter, mode, onPick, compact = fa
             leading={<Icon name="search" size={13} style={{ color: tk.text.faint }} />}
             onKeyDown={e => { if (e.key === 'Escape' && q) { e.stopPropagation(); setQ(''); } }} />
         </div>
-        {mode === 'manage'
-          ? <Segmented<LinkedFilter> size="sm" ariaLabel="Show" value={typeFilter} onChange={setTypeFilter} options={FILTERS} wrap />
-          : filter !== 'any' && <span style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}` }}>Showing {words.many} and folders.</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {mode === 'manage'
+            ? <Segmented<LinkedFilter> size="sm" ariaLabel="Show" value={typeFilter} onChange={setTypeFilter} options={FILTERS} wrap />
+            : filter !== 'any' && <span style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}` }}>Showing {words.many} and folders.</span>}
+          {auditionOk && <AutoPreviewToggle value={sp.autoPreview} onChange={sp.setAutoPreview} compact={compact} />}
+        </div>
         <div style={{ display: 'flex', gap: 12, minHeight: 0, flexDirection: compact ? 'column' : 'row' }}>
           <div style={{ flex: 1, minWidth: 0, maxHeight: listHeight, overflowY: 'auto', margin: '0 -4px', padding: '0 4px' }}>{list}</div>
           {!compact && mode !== 'folder' && (
