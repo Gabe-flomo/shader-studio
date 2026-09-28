@@ -63,6 +63,7 @@ import { OPEN_CLEANUP_VIEW } from '../../files/storageLimit';
 import { takeCleanupRequest } from '../../files/storageLimitApp';
 import { exportPlayfile } from '../../playfile/app';
 import { reportFileResult } from '../shell/reportFileResult';
+import { OPEN_APP_SETTINGS, takeAppSettingsRequest } from '../../files/recovery';
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 /** A saved drum kit (Presets → Drum kits): it can leave as a .playfile with its samples. */
@@ -121,6 +122,14 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     if (id && inv) setExpanded(s => { const n = new Set(s); for (const p of pathTo(inv, id).slice(0, -1)) n.add(p.id); return n; });
     scroller.current?.scrollTo({ top: 0 });
   }, [inv, compact]);
+  // The Recover dialog's "Show in Files" asks for App settings, where the autosaves are listed.
+  const [wantAppSettings, setWantAppSettings] = useState(() => takeAppSettingsRequest());
+  useEffect(() => {
+    const go = () => { takeAppSettingsRequest(); setWantAppSettings(true); };
+    window.addEventListener(OPEN_APP_SETTINGS, go);
+    return () => window.removeEventListener(OPEN_APP_SETTINGS, go);
+  }, []);
+  useEffect(() => { if (wantAppSettings && inv) { setWantAppSettings(false); open(APP_SETTINGS_ID); } }, [wantAppSettings, inv, open]);
   const openNodePage = useCallback((type: string) => { setSheetId(null); setNodeType(type); setView('nodes'); scroller.current?.scrollTo({ top: 0 }); }, []);
   const show = useCallback((v: View) => { setSheetId(null); setView(v); scroller.current?.scrollTo({ top: 0 }); }, []);
 

@@ -47,6 +47,11 @@ mod sys {
         pub fn ae_tap_read(out: *mut f32, max: c_int, from: *mut u64, written: *mut u64) -> c_int;
         pub fn ae_tap_info(rate: *mut f64, install_ns: *mut u64, first_ns: *mut u64) -> c_int;
         pub fn ae_tap_stop() -> c_int;
+        // Loading plug-ins safely (safety.rs).
+        pub fn ae_nan_flushes() -> u64;
+        pub fn ae_last_load_in_process() -> c_int;
+        pub fn ae_probe_prepare();
+        pub fn ae_pump_main(seconds: f64);
         // Plug-in windows' placement and memory (pure helpers; the tests below).
         #[allow(dead_code)]
         pub fn ae_win_place(want: *const f64, axes: c_int, limits: *const f64, saved: *const f64, screen: *const f64, out: *mut f64) -> c_int;
@@ -286,12 +291,26 @@ mod imp {
         (unsafe { sys::ae_tap_info(&mut rate, &mut a, &mut b) } == 0).then_some((rate, a, b))
     }
     pub fn tap_stop() { unsafe { sys::ae_tap_stop() }; }
+    /// Buffers a unit made that weren't finite (NaN, ±inf), flushed to silence, since launch.
+    pub fn nan_flushes() -> u64 { unsafe { sys::ae_nan_flushes() } }
+    /// Whether the last unit loaded ended up in the app's own process (None before any).
+    pub fn last_load_in_process() -> Option<bool> {
+        match unsafe { sys::ae_last_load_in_process() } { 0 => Some(false), 1 => Some(true), _ => None }
+    }
+    /// The trial-load process: an AppKit app that never shows in the Dock.
+    pub fn probe_prepare() { unsafe { sys::ae_probe_prepare() } }
+    /// Run the main thread's run loop for a while (a plug-in loading elsewhere may dispatch to it).
+    pub fn pump_main(seconds: f64) { unsafe { sys::ae_pump_main(seconds) } }
 }
 
 #[cfg(not(target_os = "macos"))]
 #[allow(dead_code)]
 mod imp {
     const NO: &str = "The Audio engine hosts Audio Units on macOS only";
+    pub fn nan_flushes() -> u64 { 0 }
+    pub fn last_load_in_process() -> Option<bool> { None }
+    pub fn probe_prepare() {}
+    pub fn pump_main(seconds: f64) { std::thread::sleep(std::time::Duration::from_secs_f64(seconds)) }
     pub fn configure_offline(_: f64) -> Result<(), String> { Err(NO.into()) }
     pub fn sample_rate() -> f64 { 48000.0 }
     pub fn list_units() -> String { "[]".into() }

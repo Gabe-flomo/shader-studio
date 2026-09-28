@@ -357,23 +357,93 @@ static void ae_close_windows_of(NSString *rid) {
   for (NSString *k in keys) if ([k hasPrefix:[rid stringByAppendingString:@"/"]]) ae_close_window(k);
 }
 
-/** Instantiate an Audio Unit (v2 in-process, v3 out-of-process), waiting up to 10 s. */
-static AVAudioUnit *ae_instantiate(OSType type, OSType sub, OSType manu, NSString **why) {
-  AudioComponentDescription d = { type, sub, manu, 0, 0 };
-  if (!AudioComponentFindNext(NULL, &d)) { if (why) *why = @"That Audio Unit isn't installed on this Mac"; return nil; }
+// ── Loading plug-ins safely (docs/audio-engine.md "When a plug-in crashes") ──
+
+/** Output samples a unit made that weren't finite (NaN or ±inf), flushed to silence. */
+static _Atomic uint64_t gNanFlushes = 0;
+
+/**
+ * After a unit renders: if anything it wrote isn't a finite number, the whole
+ * buffer becomes silence, so one misbehaving effect can't poison the rest of
+ * the rack (a NaN in a filter's state never recovers). Real-time safe: a scan
+ * and a memset, no locks, no allocation.
+ */
+static OSStatus ae_nan_guard(void *ref, AudioUnitRenderActionFlags *flags, const AudioTimeStamp *ts, UInt32 bus, UInt32 frames, AudioBufferList *io) {
+  (void)ref; (void)ts; (void)bus; (void)frames;
+  if (!flags || !(*flags & kAudioUnitRenderAction_PostRender) || !io) return noErr;
+  BOOL bad = NO;
+  for (UInt32 b = 0; b < io->mNumberBuffers && !bad; b++) {
+    const float *p = (const float *)io->mBuffers[b].mData;
+    if (!p) continue;
+    UInt32 n = io->mBuffers[b].mDataByteSize / sizeof(float);
+    for (UInt32 i = 0; i < n; i++) if (!isfinite(p[i])) { bad = YES; break; }
+  }
+  if (!bad) return noErr;
+  for (UInt32 b = 0; b < io->mNumberBuffers; b++) if (io->mBuffers[b].mData) memset(io->mBuffers[b].mData, 0, io->mBuffers[b].mDataByteSize);
+  atomic_fetch_add(&gNanFlushes, 1);
+  return noErr;
+}
+
+uint64_t ae_nan_flushes(void) { return atomic_load(&gNanFlushes); }
+
+/** `defaults write com.shaderstudio.app AudioUnitsInProcess -bool YES` (or PLAYFIELD_AU_IN_PROCESS=1): load every unit in-process, as before. */
+static BOOL ae_prefer_in_process(void) {
+  const char *env = getenv("PLAYFIELD_AU_IN_PROCESS");
+  if (env && env[0] == '1') return YES;
+  return [[NSUserDefaults standardUserDefaults] boolForKey:@"AudioUnitsInProcess"];
+}
+
+/** 1 when the last unit loaded ended up in the app's own process (AUv2 the system couldn't move out, or in-process by choice), 0 out of process. */
+static _Atomic int gLastInProcess = -1;
+int ae_last_load_in_process(void) { return atomic_load(&gLastInProcess); }
+
+static AVAudioUnit *ae_instantiate_with(AudioComponentDescription d, AudioComponentInstantiationOptions opts, NSString **why, BOOL *timedOut) {
   __block AVAudioUnit *out = nil;
   __block NSError *err = nil;
   dispatch_semaphore_t done = dispatch_semaphore_create(0);
-  [AVAudioUnit instantiateWithComponentDescription:d options:0 completionHandler:^(AVAudioUnit *u, NSError *e) {
-    out = u; err = e;
-    dispatch_semaphore_signal(done);
-  }];
+  @try {
+    [AVAudioUnit instantiateWithComponentDescription:d options:opts completionHandler:^(AVAudioUnit *u, NSError *e) {
+      out = u; err = e;
+      dispatch_semaphore_signal(done);
+    }];
+  } @catch (NSException *x) {
+    if (why) *why = [NSString stringWithFormat:@"The Audio Unit threw while loading (%@)", x.reason ?: x.name];
+    return nil;
+  }
   if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC)) != 0) {
+    // Given up on, not waited for: if it ever finishes, the unit is just released.
+    if (timedOut) *timedOut = YES;
     if (why) *why = @"The Audio Unit took too long to load";
     return nil;
   }
   if (!out && why) *why = err.localizedDescription ?: @"The Audio Unit couldn't be loaded";
   return out;
+}
+
+/**
+ * Instantiate an Audio Unit, waiting up to 10 s (a timeout is a failure, not a
+ * hang). Out of process where the system can: an AUv3 always; an AUv2 on
+ * macOS 11 and later through Apple's hosting service, so a crash takes down
+ * that service, not the app. When an out-of-process load fails outright, it's
+ * tried once in-process. Each unit's output is guarded against NaN/inf.
+ */
+static AVAudioUnit *ae_instantiate(OSType type, OSType sub, OSType manu, NSString **why) {
+  AudioComponentDescription d = { type, sub, manu, 0, 0 };
+  if (!AudioComponentFindNext(NULL, &d)) { if (why) *why = @"That Audio Unit isn't installed on this Mac"; return nil; }
+  BOOL timedOut = NO;
+  NSString *first = nil;
+  AVAudioUnit *u = nil;
+  if (!ae_prefer_in_process()) u = ae_instantiate_with(d, kAudioComponentInstantiation_LoadOutOfProcess, &first, &timedOut);
+  if (!u && !timedOut) u = ae_instantiate_with(d, 0, why, &timedOut);
+  else if (!u && why) *why = first;
+  if (!u) return nil;
+  @try {
+    BOOL inProc = YES;
+    if (@available(macOS 10.15, *)) inProc = u.AUAudioUnit.isLoadedInProcess;
+    atomic_store(&gLastInProcess, inProc ? 1 : 0);
+    if (u.audioUnit) AudioUnitAddRenderNotify(u.audioUnit, ae_nan_guard, NULL);
+  } @catch (NSException *x) { (void)x; }
+  return u;
 }
 
 static void ae_sampler_detach(AERack *r) {
@@ -550,6 +620,18 @@ double ae_sample_rate(void) {
   return sr;
 }
 
+/** Where a unit's bundle is (its .component, or the app its extension is in), for noticing it changed; nil when the system won't say. */
+static NSString *ae_component_path(AVAudioUnitComponent *c) {
+  @try {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    NSURL *u = c.componentURL;
+#pragma clang diagnostic pop
+    if (u.isFileURL) return u.path;
+  } @catch (NSException *x) { (void)x; }
+  return nil;
+}
+
 /** JSON: every installed instrument and effect Audio Unit. */
 char *ae_list_units(void) {
   @autoreleasepool {
@@ -571,6 +653,7 @@ char *ae_list_units(void) {
           @"version": c.versionString ?: @"",
           @"v3": @((d.componentFlags & kAudioComponentFlag_IsV3AudioUnit) != 0),
           @"customView": @(c.hasCustomView),
+          @"path": ae_component_path(c) ?: @"",
         }];
       }
     } @catch (NSException *x) { (void)x; }
@@ -1895,5 +1978,24 @@ int ae_open_ui(const char *rid, const char *sid, const char *title, char **err) 
       }];
     AE_GUARD_END(-1)
     return 0;
+  }
+}
+
+// ── The trial-load helper process (src/audio_engine/safety.rs) ──────────────
+
+/** In the `--au-probe` process: an AppKit application that never shows in the Dock, for plug-ins that expect one. */
+void ae_probe_prepare(void) {
+  @autoreleasepool {
+    @try {
+      [NSApplication sharedApplication];
+      [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
+    } @catch (NSException *x) { (void)x; }
+  }
+}
+
+/** Run the main thread's run loop (and so the main dispatch queue) for `seconds`: a plug-in loading on another thread may need it. */
+void ae_pump_main(double seconds) {
+  @autoreleasepool {
+    [[NSRunLoop mainRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:seconds]];
   }
 }

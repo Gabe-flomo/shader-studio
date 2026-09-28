@@ -92,6 +92,9 @@ function startApp() {
   // The workspace folder (desktop app; a picked folder in Chrome/Edge) starts once the app is up;
   // without one, the old backup folder keeps its copy.
   window.setTimeout(() => { void import('./workspace/workspace').then(m => m.startWorkspace()) }, 1500)
+  // Crash recovery (docs/crash-recovery.md): after the blank graph is up, offer to recover a crashed
+  // session's unsaved work, then autosave the open project on the setting's cadence.
+  window.setTimeout(() => { void import('./files/recovery').then(m => m.startRecovery()) }, 1000)
 }
 
 if (import.meta.env.DEV && location.hash === '#ui') {

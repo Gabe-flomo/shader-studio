@@ -18,6 +18,7 @@ import { resetSettings } from './filesActions';
 import { Size } from './fileUi';
 import { cardStyle } from './fileUiShared';
 import { StorageLimitControl } from './StorageLimitControl';
+import { AutosaveSettings } from './AutosaveSettings';
 import { useStorageLimit } from './useStorageLimit';
 import { DEFAULT_STORAGE_LIMIT, limitLabel } from '../../files/storageLimit';
 
@@ -77,6 +78,8 @@ export function AppSettingsView({ inv, node, compact }: { inv: Inventory; node: 
           </div>
         </div>
       </section>
+
+      <AutosaveSettings />
 
       {cats.map(c => {
         const open = !closed.has(c.id);
