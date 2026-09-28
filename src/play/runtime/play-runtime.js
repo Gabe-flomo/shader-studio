@@ -2315,7 +2315,9 @@ void main() {
         if (!qPlan.direct) captureQueue(item.id);
       }
       const layered = !!(play.layers.length || hidden || usesLayersNode || bgOnly);
-      if (layered) drawLayers(dt);
+      // Paused (or reduced-motion/off-screen) ⇒ dt 0 for the layer kit: simulated layers (particles,
+      // agents, bodies…) hold still while the picture still draws. `time` is already frozen the same way.
+      if (layered) drawLayers(running ? dt : 0);
       if (finishR) {
         const ok = finishR.draw({
           finish, value: (e, k) => layerValue('finish:' + e.id, k, e[k]), picture: glCanvas, layers: layered ? ovCanvas : null,
