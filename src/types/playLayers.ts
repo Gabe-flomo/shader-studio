@@ -473,6 +473,77 @@ export interface BodiesLayer extends LayerBase {
   blend: BlendMode;
 }
 
+export type RelationKind = 'chase' | 'repel' | 'attract';
+export type RelationRole = 'chaser' | 'prey' | 'member';
+/** What a member does at the picture's edge. */
+export type RelationWall = 'bounce' | 'repel' | 'wrap' | 'respawn' | 'escape';
+export type PictureChannel = 'brightness' | 'red' | 'green' | 'blue' | 'hue' | 'saturation' | 'layer';
+/** A layer in a relationship, and how it reacts to the picture under it. */
+export interface RelationMember {
+  id: string;
+  /** Chase: who hunts and who runs. Repel and attract: everyone is a member. */
+  role: RelationRole;
+  /** Heavier moves less under the same force. */
+  mass: number;
+  /** Move toward higher values of the channel (climb) or away from them (descend), on top of the relationship's forces. */
+  picture: 'off' | 'climb' | 'descend';
+  channel: PictureChannel;
+  /** channel 'layer': whose alpha it reads. */
+  layerId: string;
+  /** How far around it looks, in picture heights: the gradient over that ring is what it climbs. */
+  radius: number;
+}
+export const RELATION_MAX_MEMBERS = 24;
+/** The mappable strength of member i's (0-based) reaction to the picture: `m1_picture` … */
+export const relationPictureKey = (i: number): `m${number}_picture` => `m${i + 1}_picture`;
+
+/**
+ * Members (layers with a position) moved every frame by a force between them: a chase (chasers hunt the
+ * closest prey in sight, prey flees, a catch fires a signal), everyone pushing apart, or everyone pulling
+ * together (kept apart at a boundary, or gravity-like and orbiting). It draws nothing but a debug overlay.
+ */
+export interface RelationshipLayer extends LayerBase {
+  kind: 'relationship';
+  members: RelationMember[];
+  relation: RelationKind;
+  /** Chase: how fast they run (picture heights per second), how hard they accelerate, how sharply they turn (0..1). */
+  speed: number;
+  accel: number;
+  turn: number;
+  /** Chase: a chaser sees prey this close; prey runs from a chaser this close; how much they roam without one. */
+  sight: number;
+  flee: number;
+  wander: number;
+  /** Repel and attract: how hard. */
+  strength: number;
+  repelDistance: number;
+  repelCurve: 'linear' | 'inverse';
+  /** Attract: keep a minimum distance (a soft boundary), or overshoot (gravity-like, they pass through and orbit). */
+  attractMode: 'keep' | 'overshoot';
+  minDistance: number;
+  /** Overshoot: 0 pulls evenly at any distance, 1 falls off as the inverse square. */
+  falloff: number;
+  /** How stiff the soft contacts are, how much of a bounce is kept, how quickly motion dies out. */
+  springiness: number;
+  bounciness: number;
+  damping: number;
+  maxSpeed: number;
+  wallChaser: RelationWall;
+  wallPrey: RelationWall;
+  wallMember: RelationWall;
+  /** Where a respawn goes, and how long an escaped member stays away. */
+  respawnAt: 'random' | 'fixed' | 'far';
+  respawnDelay: number;
+  /** A chaser this close to a prey catches it. */
+  catchRadius: number;
+  onCatch: 'none' | 'respawn' | 'swap';
+  /** A signal sent on every catch, or ''. */
+  catchSignal: string;
+  /** Draw the forces while the guides show: sight and flee radii, chaser → target lines, velocity and picture arrows. */
+  debug: boolean;
+  [pictureKey: `m${number}_picture`]: number;
+}
+
 /** The webcam, as a layer (like an image), a mask, or what particles, glyphs and contours read. Its motion is a sensor source. */
 export interface CameraLayer extends LayerBase {
   kind: 'camera';
@@ -620,6 +691,42 @@ function drumPadNumbers(): Record<string, number> {
   for (let i = 0; i < DP_PADS; i++) for (const p of DP_PARAMS) out[dpKey(i, p.key)] = p.value;
   return out;
 }
+
+/** Every member's picture strength at its default (1), for a new Relationship layer. */
+function relationNumbers(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (let i = 0; i < RELATION_MAX_MEMBERS; i++) out[relationPictureKey(i)] = 1;
+  return out;
+}
+
+const RELATION_ROLES = ['chaser', 'prey', 'member'] as const;
+const PICTURE_CHANNELS = ['brightness', 'red', 'green', 'blue', 'hue', 'saturation', 'layer'] as const;
+/** A relationship's members from a file: each a layer id with its role, mass and picture reaction; anything else is dropped. */
+export function parseRelationMembers(v: unknown): RelationMember[] {
+  if (!Array.isArray(v)) return [];
+  const out: RelationMember[] = [], seen = new Set<string>();
+  for (const raw of v) {
+    if (!raw || typeof raw !== 'object') continue;
+    const m = raw as Record<string, unknown>;
+    if (typeof m.id !== 'string' || !m.id || seen.has(m.id)) continue;
+    seen.add(m.id);
+    const mass = typeof m.mass === 'number' && Number.isFinite(m.mass) ? Math.max(0.1, Math.min(10, m.mass)) : 1;
+    const radius = typeof m.radius === 'number' && Number.isFinite(m.radius) ? Math.max(0.01, Math.min(0.5, m.radius)) : 0.06;
+    out.push({
+      id: m.id,
+      role: (RELATION_ROLES as readonly string[]).includes(m.role as string) ? (m.role as RelationRole) : 'member',
+      mass,
+      picture: m.picture === 'climb' || m.picture === 'descend' ? m.picture : 'off',
+      channel: (PICTURE_CHANNELS as readonly string[]).includes(m.channel as string) ? (m.channel as PictureChannel) : 'brightness',
+      layerId: typeof m.layerId === 'string' ? m.layerId : '',
+      radius,
+    });
+    if (out.length >= RELATION_MAX_MEMBERS) break;
+  }
+  return out;
+}
+/** A new member of a relationship: a plain member of mass 1 that ignores the picture. */
+export const newRelationMember = (id: string, role: RelationRole = 'member'): RelationMember => ({ id, role, mass: 1, picture: 'off', channel: 'brightness', layerId: '', radius: 0.06 });
 
 function parseDrumPads(v: unknown): DrumPad[] {
   const arr = Array.isArray(v) ? v : [];
@@ -1054,10 +1161,10 @@ export interface DataLayer extends LayerBase {
 let dataItemCount: (l: DataLayer) => number = () => 0;
 export function setDataItemCount(fn: (l: DataLayer) => number): void { dataItemCount = fn; }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer;
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer | RelationshipLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad', 'relationship'];
 
 /** The starter sketch a new Script layer holds. */
 export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
@@ -1171,6 +1278,13 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
   contours: { toShader: true, levels: 10, width: 1.2, flow: 0.2, detail: 'fine', colour: 'palette', color: [1, 1, 1], palette: 1, readFrom: 'picture', opacity: 0.9, blend: 'screen' },
   lens: { toShader: true, x: 0.5, y: 0.5, radius: 0.18, effect: 'magnify', amount: 2, follow: 'mouse', nullId: '', ring: 1.5, ringColor: [1, 1, 1], opacity: 1 },
   brush: { toShader: true, paint: 'drag', nullId: '', size: 14, colour: 'palette', color: [1, 1, 1], palette: 1, fade: 4, walls: false, opacity: 0.9, blend: 'screen' },
+  relationship: {
+    toShader: false, members: [], relation: 'chase', speed: 0.5, accel: 2, turn: 0.6, sight: 0.6, flee: 0.35, wander: 0.5,
+    strength: 0.6, repelDistance: 0.3, repelCurve: 'linear', attractMode: 'overshoot', minDistance: 0.2, falloff: 0.5,
+    springiness: 0.5, bounciness: 0.3, damping: 0.3, maxSpeed: 1, wallChaser: 'bounce', wallPrey: 'bounce', wallMember: 'bounce',
+    respawnAt: 'random', respawnDelay: 1.5, catchRadius: 0.04, onCatch: 'respawn', catchSignal: '', debug: false,
+    ...relationNumbers(),
+  },
   bodies: { toShader: true, source: 'letters', text: 'PLAY', count: 24, size: 48, gravity: 1, angle: 0, bounce: 0.35, friction: 0.3, font: 'sans', fontUrl: '', colour: 'tint', color: [1, 1, 1], palette: 1, solidPicture: false, threshold: 0.6, scatter: 1, opacity: 1, blend: 'normal' },
   camera: { toShader: true, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], mirror: true, blend: 'normal', matte: 'over' },
   video: {
@@ -1221,7 +1335,9 @@ type Field =
   /** A Background layer's queue. */
   | { t: 'queue' }
   /** A Drum pad layer's pads. */
-  | { t: 'drumpads' };
+  | { t: 'drumpads' }
+  /** A Relationship layer's members. */
+  | { t: 'members' };
 
 const BLENDS = ['normal', 'multiply', 'screen', 'overlay', 'lighten', 'darken', 'difference', 'exclusion', 'add'] as const;
 const MATTES = ['over', 'reveal', 'luma'] as const;
@@ -1287,6 +1403,13 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     font: E('sans', 'serif', 'mono'), fontUrl: S, colour: E('tint', 'palette'), color: C, palette: N(0, 9, true), solidPicture: B, threshold: unit, scatter: N(0, 10), opacity: unit, blend: blendF,
   },
   camera: { toShader: B, x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, mirror: B, blend: blendF, matte: matteF },
+  relationship: {
+    toShader: B, members: { t: 'members' }, relation: E('chase', 'repel', 'attract'), speed: N(0, 5), accel: N(0, 20), turn: unit, sight: N(0, 3), flee: N(0, 3), wander: N(0, 2),
+    strength: N(0, 5), repelDistance: N(0.001, 3), repelCurve: E('linear', 'inverse'), attractMode: E('keep', 'overshoot'), minDistance: N(0, 3), falloff: unit,
+    springiness: unit, bounciness: unit, damping: unit, maxSpeed: N(0.01, 10), wallChaser: E('bounce', 'repel', 'wrap', 'respawn', 'escape'), wallPrey: E('bounce', 'repel', 'wrap', 'respawn', 'escape'), wallMember: E('bounce', 'repel', 'wrap', 'respawn', 'escape'),
+    respawnAt: E('random', 'fixed', 'far'), respawnDelay: N(0, 60), catchRadius: N(0, 1), onCatch: E('none', 'respawn', 'swap'), catchSignal: S, debug: B,
+    ...Object.fromEntries(Array.from({ length: RELATION_MAX_MEMBERS }, (_, i) => [relationPictureKey(i), N(0, 5)] as const)),
+  },
   drumpad: {
     toShader: B, pads: { t: 'drumpads' }, volume: N(0, 1.5), keys: B, midi: B, channel: N(0, 16, true), baseNote: N(0, 112, true), grid: B,
     ...Object.fromEntries(Array.from({ length: DP_PADS }, (_, i) => DP_PARAMS.map(p => [dpKey(i, p.key), N(p.min, p.max)] as const)).flat()),
@@ -1341,6 +1464,7 @@ function coerce(v: unknown, f: Field, fallback: unknown): unknown {
       return Array.isArray(v) ? v.filter(isScriptParamDef).slice(0, 32).map(d => ({ ...d })) : fallback;
     case 'queue': return parseBackgroundItems(v);
     case 'drumpads': return parseDrumPads(v);
+    case 'members': return parseRelationMembers(v);
   }
 }
 
@@ -1379,9 +1503,9 @@ export function parseLayer(raw: unknown): PlayLayer | null {
 // ── Track mattes and masks ───────────────────────────────────────────────────
 
 /** Nulls draw nothing and the Background layer is the picture: every other kind can be matted and masked. */
-export function canHaveMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'background' && kind !== 'drumpad'; }
+export function canHaveMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'background' && kind !== 'drumpad' && kind !== 'relationship'; }
 /** Anything that draws can be a matte, the Background layer (the picture) included. */
-export function canBeMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'drumpad'; }
+export function canBeMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'drumpad' && kind !== 'relationship'; }
 
 function parseTrackMatte(v: unknown, selfId: string): TrackMatte | null {
   if (!v || typeof v !== 'object') return null;
@@ -1733,6 +1857,24 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'labelSize', label: 'Labels', min: 6, max: 32, step: 0.5, hint: 'Axis numbers and labels, in pixels.' },
     OPACITY,
   ],
+  relationship: [
+    { key: 'speed', label: 'Speed', min: 0, max: 2, hint: 'Chase: how fast chasers and prey run, in picture heights per second.' },
+    { key: 'accel', label: 'Acceleration', min: 0, max: 8, hint: 'Chase: how quickly they get up to speed or change it.' },
+    { key: 'turn', label: 'Turn rate', min: 0, max: 1, hint: 'Chase: how sharply they can turn. Low is a wide arc, 1 turns on the spot.' },
+    { key: 'sight', label: 'Sight', min: 0, max: 2, hint: 'Chase: a chaser sees prey this close (picture heights) and runs at the closest; beyond it, it wanders.' },
+    { key: 'flee', label: 'Flee distance', min: 0, max: 2, hint: 'Chase: prey runs from a chaser this close.' },
+    { key: 'wander', label: 'Wander', min: 0, max: 2, hint: 'Chase: how much a chaser roams without prey in sight (and prey without a chaser near).' },
+    { key: 'strength', label: 'Strength', min: 0, max: 3, hint: 'Repel and attract: how hard they push apart or pull together.' },
+    { key: 'repelDistance', label: 'Repel within', min: 0.02, max: 1.5, hint: 'Repel: members closer than this push apart.' },
+    { key: 'minDistance', label: 'Keep apart', min: 0, max: 1.5, hint: 'Attract, keep: the distance they can\'t cross. A soft spring at the boundary keeps them bouncy, not stuck.' },
+    { key: 'falloff', label: 'Falloff', min: 0, max: 1, hint: 'Attract, overshoot: 0 pulls as hard from far as from near; 1 falls off as the inverse square, like gravity.' },
+    { key: 'springiness', label: 'Springiness', min: 0, max: 1, hint: 'How stiff the soft contacts are: the keep-apart boundary and a Repel wall.' },
+    { key: 'bounciness', label: 'Bounciness', min: 0, max: 1, hint: 'How much of a bounce is kept at a wall or the keep-apart boundary. 0 barely rebounds.' },
+    { key: 'damping', label: 'Damping', min: 0, max: 1, hint: 'How quickly motion dies out. 0 keeps every push; 1 settles fast.' },
+    { key: 'maxSpeed', label: 'Max speed', min: 0.05, max: 4, hint: 'A cap on any member\'s speed, in picture heights per second.' },
+    { key: 'catchRadius', label: 'Catch radius', min: 0, max: 0.4, hint: 'Chase: a chaser this close to a prey catches it (plus their own small radius).' },
+    { key: 'respawnDelay', label: 'Respawn after', min: 0, max: 10, step: 0.1, hint: 'Escape: how long an escaped member stays out of the picture before it respawns.' },
+  ],
 };
 
 /**
@@ -1764,6 +1906,8 @@ function kindNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
   // Each pad that plays something: its numbers, "Pad 3 · Pitch" (`pad3_pitch`).
   // A pad's numbers are the sampler's physical ranges (a start past the sample's end, a pan past the speakers), so they're hard.
   if (l.kind === 'drumpad') return [...base, ...l.pads.flatMap((p, i) => (padHasSound(p) ? DP_PARAMS.map(d => ({ key: dpKey(i, d.key), label: `Pad ${i + 1} · ${d.label}`, min: d.min, max: d.max, step: d.step, hard: true, hint: d.hint })) : []))];
+  // Each member that reacts to the picture: its strength, "Member 2 · Picture strength" (`m2_picture`).
+  if (l.kind === 'relationship') return [...base, ...l.members.flatMap((m, i) => (m.picture !== 'off' ? [{ key: relationPictureKey(i), label: `Member ${i + 1} · Picture strength`, min: 0, max: 3, hint: `How hard member ${i + 1} climbs or descends the picture's ${m.channel}.` }] : []))];
   if (l.kind !== 'script') return base;
   // Buttons are actions, not numbers; toggles are 0/1 numbers.
   // A colour is a packed RGB, not a number to slide; a choice slides from option to option.

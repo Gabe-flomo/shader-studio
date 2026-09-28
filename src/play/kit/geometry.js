@@ -212,6 +212,7 @@ export function geoFieldFromAlpha(data, gw, gh) {
  *   cloner     grid and ring: the centre; line: its middle; path and points: the copies' centroid (reported)
  *   particles, bodies, brush   the centroid of what is alive (reported), none until something is
  *   script     where the sketch sets s.anchor (reported), else the picture's centre
+ *   relationship   its members' centroid (reported), none until it has one
  * `value(key)` reads the layer's property now (a mapping may drive it),
  * `reported(key)` a number the kit reported (`<id>::ax`, `<id>::ay`), and
  * `lookup(id)` another layer. Null when the layer has no anchor yet.
@@ -247,6 +248,9 @@ export function geoAnchor(layer, value, aspect, reported, lookup, depth) {
       return rep();
     case 'script':
       return rep() || { x: 0.5, y: 0.5 };
+    // A relationship stands at its members' centroid (reported); none until it has members.
+    case 'relationship':
+      return rep();
     default:
       return null;
   }

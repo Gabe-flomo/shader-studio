@@ -1532,6 +1532,16 @@ void main() {
     }
     // A signal: its "When signal fires" triggers see a press and its release at once.
     function emitSignal(id) { const k = 'sig:' + id; press(k); release(k); }
+    // Relationship layers: each catch the kit counted (`<id>::caught`) sends the layer's catch signal.
+    const caughtSeen = new Map();
+    function tickRelationshipSignals() {
+      for (const l of play.layers) {
+        if (l.kind !== 'relationship') continue;
+        const n = sensors.get(l.id + '::caught') || 0, last = caughtSeen.get(l.id);
+        caughtSeen.set(l.id, n);
+        if (last !== undefined && n > last && l.catchSignal) emitSignal(l.catchSignal);
+      }
+    }
     function tickZoneTriggers() {
       for (const t of allTriggers) {
         if (t.on !== 'zone' || t.event === 'click') continue;
@@ -1628,6 +1638,7 @@ void main() {
       if (time < lastTime - 1e-6) for (const st of pairState.values()) st.swap = SG.swapNew();
       lastTime = time;
       tickConditionTriggers();
+      tickRelationshipSignals();
       tickActions(dt);
       const driven = new Set();
       let moved = false;

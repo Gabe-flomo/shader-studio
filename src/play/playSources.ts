@@ -458,7 +458,10 @@ export function repeatHint(what: ActionKind | `mode:${TriggerMode}`, fire: FireS
   return REPEAT_HINTS[what] ?? null;
 }
 
-export const SENSOR_LABELS: Record<SensorRead, string> = { fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance', level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble', area: 'Area', perimeter: 'Perimeter' };
+export const SENSOR_LABELS: Record<SensorRead, string> = {
+  fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance', level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble', area: 'Area', perimeter: 'Perimeter',
+  gap: 'Gap', closing: 'Closing', chaseSpeed: 'Chase speed', sight: 'In sight', catch: 'Catch', sinceCatch: 'Since catch', catches: 'Catches', picture: 'Picture',
+};
 export const SENSOR_HINTS: Record<SensorRead, string> = {
   fill: 'How full of particles the shape is: 0.5 is as dense as average, 1 is twice that or more.',
   hover: '1 while the pointer is over the shape, else 0.',
@@ -473,6 +476,14 @@ export const SENSOR_HINTS: Record<SensorRead, string> = {
   lowmid: 'Low-mids, 150–600 Hz: body, warmth, most voices.',
   highmid: 'High-mids, 600 Hz–3 kHz: snares, leads, presence.',
   treble: 'Treble, 3–12 kHz: hi-hats, cymbals, air.',
+  gap: 'Relationship: how far apart its closest pair is (a chase: the closest chaser and prey), 0 touching, 1 a picture height or more.',
+  closing: 'Relationship: how fast the closest pair is closing in. 0.5 is neither; 1 is closing at full speed, 0 parting at full speed.',
+  chaseSpeed: 'Relationship: how fast the chasers move (repel and attract: everyone), against the Max speed.',
+  sight: 'Relationship: 1 while a chaser has prey in sight, else 0.',
+  catch: 'Relationship: 1 on the frame a chaser catches its prey, fading out over a quarter of a second.',
+  sinceCatch: 'Relationship: how long since the last catch, 1 at ten seconds or more (and before the first).',
+  catches: 'Relationship: how many catches so far, 1 at twenty or more.',
+  picture: 'The picture under this layer, in its Picture channel (brightness unless its relationship says otherwise). Reads while the layer is a member of a Relationship; on the relationship itself, the mean under its members.',
 };
 
 export const LIVE_BAND_LABELS: Record<LiveAudioBand, string> = { level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble' };

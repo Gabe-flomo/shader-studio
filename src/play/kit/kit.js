@@ -25,7 +25,9 @@
  *   layerVideo(layer)  a Video layer's <video> (following the clock, the host's job), or null (optional)
  *   image(src) a loaded <img> for a data URL, or null while loading
  *   sensor(key, value)     report a sensor reading (`layerId::read`)
- *   override(layerId, key, value|null)  where a following null is now
+ *   override(layerId, key, value|null)  where a following null (or a relationship's member) is now
+ *   placed(layerId, key)   a recorded place for a driven layer (a take playing back or rendering), or
+ *              undefined: it wins over the relationship simulation's own (optional)
  *   hand(side, point)      a tracked hand's landmark on the picture ({ x, y }) or null (optional)
  *   handsLive  hand tracking is running (it has seen a camera frame): a hand null whose hand is
  *              out of view is then "lost" (a path shape's Hand lost) even before it first saw it;
@@ -51,18 +53,23 @@ import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCove
 import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klSketchStale, klPaintBackground, klSketchDispose } from './layers.js';
 import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
+import { rlCreate, rlStep, rlPlace, rlShift, rlDraw, rlPictureOf, RL_MAX_MEMBERS, RL_READS } from './relationship.js';
 import { hdDraw } from './hands.js';
 import { kmApplyMasks, kmApplyTrack, kmMatteSources, kmTrackOf } from './mattes.js';
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 import { kdState, kdAct, kdPlan, kdTextItems, kdFrame, kdDrawTable, kdColumn, kdText, kdChunkText, kdWrapText, kdScriptView } from './data.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
-const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1 };
+const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1 };
 
 export function createLayerKit() {
   const pool = {};
   const parts = new Map(), bodies = new Map(), brushes = new Map(), springs = new Map(), texts = new Map(), audios = new Map(), masks = new Map(), scripts = new Map();
   const scriptPresses = new Map(); // layer id → { key: amount }: script buttons pressed since the layer's last frame
+  // Relationship layers: each one's simulation, the members driven last frame (to let go of), and the coarse
+  // alpha grids of layers their members read as a picture channel (as drawn last frame).
+  const rels = new Map(), relGrids = new Map();
+  let relDriven = new Set();
   // Path shapes: each one's geometry last frame (for picking on the picture) and its fade (On lost: Fade).
   const paths = new Map(), pathFades = new Map();
   // Layers drawn alone this frame for the host (env.alphaLayers), by id.
@@ -241,7 +248,9 @@ export function createLayerKit() {
   }
 
   let frameNo = 0;
-  function frame(ctx, record, env) {
+  function frame(ctx, record, env0) {
+    // `env` is swapped for a copy whose value() sees the relationships' driven positions once they have run.
+    let env = env0;
     frameNo++;
     const W = env.W, H = env.H, dpr = env.dpr || 1, time = env.time, dt = Math.min(0.1, Math.max(0, env.dt));
     const aspect = W / H, pointer = env.pointer || { x: 0.5, y: 0.5, over: false, down: false };
@@ -268,7 +277,7 @@ export function createLayerKit() {
       try { ctx.drawImage(env.gl, 0, 0, W, H); } catch (err) { /* no picture to copy yet */ }
     }
     const ids = new Set(layers.map(l => l.id));
-    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates, paths, pathFades]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
+    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates, paths, pathFades, rels, relGrids]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
     // Sketch sources that left the queue (or whose layer did) stop keeping state.
     if (bqSketches.size) { const inQueue = new Set(bq ? record.layers[0].sources.map(s => s.id) : []); for (const id of [...bqSketches.keys()]) if (!inQueue.has(id)) { klSketchDispose(bqSketches.get(id)); bqSketches.delete(id); } }
     // A visibility change in the panel wins over an earlier show/hide action.
@@ -315,6 +324,81 @@ export function createLayerKit() {
       env.override(l.id, 'x', s.x); env.override(l.id, 'y', s.y);
     }
 
+    // 1b. Relationships: a force simulation between member layers. From here on a member's x and y are the
+    // simulation's (env.value sees them at once; the host is told through override, and a recorded place wins).
+    // The picture they react to is last frame's coarse grid (step 2) and, for a layer channel, that layer as
+    // it was drawn last frame (relGrids).
+    const relLayers = layers.filter(l => l.kind === 'relationship');
+    const driven = new Map(), drivenNow = new Set(), relPicSources = new Set();
+    if (relLayers.length || relDriven.size) {
+      const relById = new Map(relLayers.map(l => [l.id, l]));
+      const lastCoarse = coarse ? { s: coarse, w: KIT_COARSE_W, h: KIT_COARSE_H } : null;
+      const stepped = new Set();
+      const place = (id, p) => { if (!p) return; driven.set(id, p); drivenNow.add(id); env0.override(id, 'x', p.x); env0.override(id, 'y', p.y); };
+      // A parent moved a nested relationship as one body: its members (and theirs) move by the same amount.
+      const shiftGroup = (gst, dx, dy, depth) => {
+        if (depth > 4 || (!dx && !dy)) return;
+        rlShift(gst, dx, dy, aspect);
+        for (const id of gst.m.keys()) { const L = byId.get(id); if (L && L.kind === 'relationship' && rels.has(id)) shiftGroup(rels.get(id), dx, dy, depth + 1); else place(id, rlPlace(gst, id, aspect)); }
+      };
+      const stepRelationship = l => {
+        let st = rels.get(l.id);
+        if (!st) { st = rlCreate(); rels.set(l.id, st); }
+        const v = k => env0.value(l, k);
+        const members = [];
+        l.members.slice(0, RL_MAX_MEMBERS).forEach((m, i) => {
+          const L = byId.get(m.id);
+          if (!L || L.id === l.id) return;
+          const isRel = L.kind === 'relationship';
+          // A nested relationship counts once it has run this frame (a cycle leaves one out); anything else needs an x and a y.
+          if (isRel ? !stepped.has(L.id) || !rels.has(L.id) : typeof L.x !== 'number' || typeof L.y !== 'number') return;
+          let pic = null;
+          if (m.channel === 'layer') { if (m.layerId && m.layerId !== l.id) relPicSources.add(m.layerId); }
+          const grid = m.channel === 'layer' ? relGrids.get(m.layerId) || null : lastCoarse;
+          if (grid) { const s = v('m' + (i + 1) + '_picture'); pic = { grid: grid.s, gw: grid.w, gh: grid.h, channel: m.channel, mode: m.picture, strength: typeof s === 'number' && isFinite(s) ? s : 1, radius: m.radius }; }
+          const role = l.relation === 'chase' ? (m.role === 'chaser' ? 'chaser' : 'prey') : 'member';
+          members.push({ id: m.id, role, mass: m.mass, base: isRel ? { x: 0.5, y: 0.5 } : { x: L.x, y: L.y }, group: isRel ? rels.get(L.id) : null, pic });
+        });
+        rlStep(st, l, v, dt, time, aspect, members, rngFor(l.id, 'relationship'));
+        for (const m of members) {
+          if (m.group) { const p = rlPlace(st, m.id, aspect); if (p) shiftGroup(m.group, p.x - m.group.cx, p.y - m.group.cy, 0); }
+          else place(m.id, rlPlace(st, m.id, aspect));
+        }
+        // Its readings, its anchor (the centroid), and the picture under each member.
+        report(env0, l.id + '::ax', members.length ? st.cx : NaN); report(env0, l.id + '::ay', members.length ? st.cy : NaN);
+        for (const r of RL_READS) report(env0, l.id + '::' + r, st.reads[r] || 0);
+        report(env0, l.id + '::caught', st.catches);
+        let pv = 0, pn = 0;
+        for (const m of members) { const val = rlPictureOf(st, m.id); if (val !== null) { report(env0, m.id + '::picture', val); pv += val; pn++; } }
+        report(env0, l.id + '::picture', pn ? pv / pn : 0);
+      };
+      // Children before parents: a relationship that holds another waits for it (a cycle stops waiting after a few rounds).
+      const todo = relLayers.filter(l => isVisible(l));
+      for (let round = 0; round < 4 && todo.length; round++) {
+        for (const l of [...todo]) {
+          const waits = round < 3 && l.members.some(m => m.id !== l.id && relById.has(m.id) && todo.includes(relById.get(m.id)));
+          if (waits) continue;
+          stepRelationship(l); stepped.add(l.id); todo.splice(todo.indexOf(l), 1);
+        }
+      }
+      // A relationship hidden or removed forgets its run (it starts from its members' own places again), and
+      // a member let go (removed, or its relationship hidden) is its own layer again.
+      for (const id of [...rels.keys()]) if (!stepped.has(id)) rels.delete(id);
+      for (const id of relDriven) if (!drivenNow.has(id)) { env0.override(id, 'x', null); env0.override(id, 'y', null); }
+      relDriven = drivenNow;
+      if (driven.size) {
+        const placed = env0.placed;
+        env = Object.assign({}, env0, {
+          value: (l, k) => {
+            const d = k === 'x' || k === 'y' ? driven.get(l.id) : undefined;
+            if (d === undefined) return env0.value(l, k);
+            const p = placed ? placed(l.id, k) : undefined;
+            return typeof p === 'number' ? p : d[k];
+          },
+        });
+      }
+    }
+
     // Path shapes: their corners are nulls, where they are now (after the springs above). Their
     // readings (area, perimeter, spread) fade with them; their centre is their anchor.
     const pathGeos = new Map();
@@ -340,6 +424,7 @@ export function createLayerKit() {
     for (const l of live) {
       if (l.kind === 'particles') { if (l.readFrom === 'camera') { needs.cam = true; if (l.detail === 'fine') needs.camFine = true; } else if (l.detail === 'fine') needs.fine = true; else needs.coarse = true; if (l.colour === 'picture') needs.coarse = true; }
       else if (l.kind === 'bodies' && l.solidPicture) needs.coarse = true;
+      else if (l.kind === 'relationship') needs.coarse = true;
       else if (l.kind === 'shape' && l.shape === 'picture') needs.coarse = true;
       else if (l.kind === 'brush' && l.colour === 'picture') needs.coarse = true;
       else if (l.kind === 'script' && l.readPicture) needs.coarse = true;
@@ -795,7 +880,7 @@ export function createLayerKit() {
     // among themselves), cut by its matte and masks, then laid on the picture with its blend.
     const glyphSources = new Set();
     for (const l of layers) if (l.kind === 'glyphs' && l.readFrom === 'layer' && l.sourceId && l.sourceId !== l.id && isVisible(l)) glyphSources.add(l.sourceId);
-    const ownCanvas = l => glyphSources.has(l.id) || matteSources.has(l.id) || !!kmTrackOf(l, byId) || !!(l.masks && l.masks.length);
+    const ownCanvas = l => glyphSources.has(l.id) || matteSources.has(l.id) || relPicSources.has(l.id) || !!kmTrackOf(l, byId) || !!(l.masks && l.masks.length);
     const rendered = new Map();
     function renderLayer(l) {
       if (rendered.has(l.id)) return rendered.get(l.id);
@@ -845,6 +930,16 @@ export function createLayerKit() {
       klDrawFieldPreview(ctx, particleFieldGrid(s.p, s.penv, cols, rows, s.sim.seed), cols, rows, W, H, dpr, s.penv.attractorPoint, s.penv.zones);
     }
 
+    // Layers a relationship's members read as a picture channel: their alpha on a coarse grid, for next frame.
+    for (const id of [...relGrids.keys()]) if (!relPicSources.has(id)) relGrids.delete(id);
+    for (const id of relPicSources) {
+      const src = byId.get(id);
+      if (!src || src.kind === 'relationship') { relGrids.delete(id); continue; }
+      const c = renderLayer(src);
+      const s = c ? sampleInto('rlpic:' + id, c, KIT_COARSE_W, KIT_COARSE_H, false) : null;
+      if (s) relGrids.set(id, { s, w: KIT_COARSE_W, h: KIT_COARSE_H }); else relGrids.delete(id);
+    }
+
     // 6. Sensors.
     for (const z of zones) {
       if (!zoneById.has(z.id)) continue;
@@ -884,6 +979,8 @@ export function createLayerKit() {
     const gx = env.guides || ctx;
     if (env.hands) hdDraw(gx, env.hands.state, W, H, dpr, env.hands.colour);
     if (env.markers) for (const l of vis) if (l.kind === 'null') klDrawNull(gx, l, env.value(l, 'x'), env.value(l, 'y'), env.value(l, 'size'), dpr, W, H, l.role && l.role !== 'none' ? env.value(l, 'radius') * H : 0);
+    // A relationship's forces (its Show forces switch): with the guides, never in the finished picture.
+    if (env.markers) for (const l of vis) if (l.kind === 'relationship' && l.debug && rels.has(l.id)) rlDraw(gx, rels.get(l.id), l, k => env.value(l, k), W, H, dpr, aspect);
 
     // 8. Let go of the canvases of layers that no longer draw on their own or have masks.
     for (const k in pool) {
@@ -1017,6 +1114,6 @@ export function createLayerKit() {
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
     background,
-    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
+    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); relDriven = new Set(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
   };
 }

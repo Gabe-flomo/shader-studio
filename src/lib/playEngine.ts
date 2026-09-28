@@ -428,6 +428,22 @@ class PlayEngine implements InputSource {
     if (value === null) this.overrides.delete(k); else this.overrides.set(k, value);
   }
 
+  /** An override as set (a take's recorded place for a driven layer), or undefined. */
+  overrideOf(layerId: string, key: string): number | undefined {
+    return this.overrides.get(`${layerId}::${key}`);
+  }
+
+  /** Relationship layers: each catch the kit counted (`<id>::caught`) sends the layer's catch signal. */
+  private caughtSeen = new Map<string, number>();
+  private tickRelationshipSignals(): void {
+    for (const l of this.record.layers) {
+      if (l.kind !== 'relationship') continue;
+      const n = this.sensors.get(`${l.id}::caught`) ?? 0, last = this.caughtSeen.get(l.id);
+      this.caughtSeen.set(l.id, n);
+      if (last !== undefined && n > last && l.catchSignal) this.emitSignal(l.catchSignal);
+    }
+  }
+
   /** The picture's width / height, for distances between nulls. */
   setAspect(aspect: number): void {
     if (aspect > 0 && Number.isFinite(aspect)) this.aspect = aspect;
@@ -948,6 +964,7 @@ class PlayEngine implements InputSource {
     if (time < this.lastTime - 1e-6) for (const st of this.pairState.values()) st.swap = sgSwapNew();
     this.lastTime = time;
     this.tickConditionTriggers();
+    this.tickRelationshipSignals();
     this.tickActions(dt);
     if (this.learnCb && this.performing) this.pollGamepadLearn();
     // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.

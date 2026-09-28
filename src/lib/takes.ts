@@ -147,11 +147,15 @@ export class TakeCapture {
       this.push('control', c.id, c.label, time, Array.isArray(v) ? [...v] : v, { target: c.target });
     }
     // Nulls too: one following the pointer on a spring moves by itself, so its place is part of the performance.
+    // And a relationship's members: the simulation moves them, so where they were is recorded the same way.
+    const members = new Set<string>();
+    for (const l of this.play.layers) if (l.kind === 'relationship' && l.visible) for (const m of l.members) members.add(m.id);
     for (const l of this.play.layers) {
-      if (l.kind !== 'null') continue;
+      if (l.kind !== 'null' && !members.has(l.id)) continue;
       const layer = (play.layers.find(x => x.id === l.id) ?? l) as unknown as Record<string, number>;
+      if (l.kind !== 'null' && (typeof layer.x !== 'number' || typeof layer.y !== 'number')) continue;
       for (const k of ['x', 'y'] as const) {
-        this.push('control', `null:${l.id}:${k}`, `${l.label} ${k}`, time, playEngine.layerValue(l.id, k, layer[k] ?? 0.5), { target: layerTarget(l.id, k) });
+        this.push('control', `${l.kind === 'null' ? 'null' : 'member'}:${l.id}:${k}`, `${l.label} ${k}`, time, playEngine.layerValue(l.id, k, layer[k] ?? 0.5), { target: layerTarget(l.id, k) });
       }
     }
     for (const [key, v] of busNow) this.push('bus', key, key.split('::').pop() ?? key, time, v);

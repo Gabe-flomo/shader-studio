@@ -664,6 +664,8 @@ class PlayOverlay {
       image: src => this.image(src),
       sensor: forExport ? () => {} : (k, v) => playEngine.setSensor(k, v),
       override: forExport || this.replaying ? () => {} : (id, k, v) => playEngine.setOverride(id, k, v),
+      // A take's recorded places for a relationship's members win over the simulation while it plays back or renders.
+      placed: forExport || this.replaying ? (id, k) => playEngine.overrideOf(id, k) : undefined,
       // Hands: live only. A take playing back or rendering puts following nulls where it recorded them.
       hand: forExport || this.replaying ? undefined : (side, point) => playEngine.handPoint(side as 'left' | 'right' | 'any', point),
       handsLive: !forExport && !this.replaying && playEngine.handState().live,
