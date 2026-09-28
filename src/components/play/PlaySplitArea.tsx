@@ -6,7 +6,9 @@
  *
  * The panel's frame is drawn here (its section switcher, where it sits, the
  * sidebar and close buttons); its body is a portal target that PlayPage fills
- * with the chosen section. The divider drags (the picture resizes a few times
+ * with the chosen section. With the sidebar folded into the rail
+ * (PlayRail.tsx), the rail sits on the panel's left edge and the bar names
+ * the page instead of offering sections. The divider drags (the picture resizes a few times
  * a second while dragging, not every pointer move) and double-clicks back to
  * half and half.
  */
@@ -18,18 +20,22 @@ import { useCan } from '../../lib/plan';
 import { IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
-import type { PlayTab } from './playUi';
-import { clampRatio, ratioAt, usePlaySplit, WIDE_PANEL_PX, type SplitSide } from './playSplit';
+import { usePlayUi, type PlayTab } from './playUi';
+import { clampRatio, ratioAt, setAreaMeasure, shownRatio, usePlaySplit, WIDE_PANEL_PX, type SidebarMode, type SplitSide } from './playSplit';
+import { PlayRail } from './PlayRail';
+import { categoryDef, categoryOf, RAIL_PAGES } from './railPages';
 
 /** How often the picture follows the divider while it's dragged, in ms. */
 const DRAG_APPLY_MS = 60;
 
 export const SPLIT_SHORTCUT = 'cmd+shift+l';
+export const RAIL_SHORTCUT = 'cmd+shift+b';
 
 export function PlaySplitArea({ active, children }: { active: boolean; children: ReactNode }) {
   const splitOn = usePlaySplit(s => s.on);
   const side = usePlaySplit(s => s.side);
-  const stored = usePlaySplit(s => s.ratio);
+  const stored = usePlaySplit(shownRatio);
+  const rail = usePlaySplit(s => s.sidebar === 'rail');
   const on = active && splitOn;
   const areaRef = useRef<HTMLDivElement>(null);
   const [total, setTotal] = useState(0);
@@ -44,6 +50,17 @@ export function PlaySplitArea({ active, children }: { active: boolean; children:
   }, [active]);
 
   const horizontal = side === 'left' || side === 'right';
+  // Opening the rail measures the area and the sidebar beside it, so the picture keeps its size.
+  useEffect(() => {
+    if (!on) return;
+    setAreaMeasure(() => {
+      const el = areaRef.current;
+      if (!el) return null;
+      const bar = document.querySelector<HTMLElement>('[data-play-sidebar]');
+      return { total: horizontal ? el.clientWidth : el.clientHeight, sidebarPx: bar?.offsetWidth ?? 0 };
+    });
+    return () => setAreaMeasure(null);
+  }, [on, horizontal]);
   useEffect(() => {
     const el = areaRef.current;
     if (!on || !el) return;
@@ -81,7 +98,8 @@ export function PlaySplitArea({ active, children }: { active: boolean; children:
       handle.removeEventListener('pointercancel', onUp);
       setDragging(false);
       setDragRatio(null);
-      usePlaySplit.getState().setRatio(latest);
+      const st = usePlaySplit.getState();
+      if (st.sidebar === 'rail') st.setRailRatio(latest); else st.setRatio(latest);
     };
     handle.addEventListener('pointermove', onMove);
     handle.addEventListener('pointerup', onUp);
@@ -96,7 +114,7 @@ export function PlaySplitArea({ active, children }: { active: boolean; children:
       </div>
       {on && (
         <ThemeOverrideContext.Provider value={null}>
-          <SplitDivider horizontal={horizontal} dragging={dragging} onPointerDown={startDrag} onReset={() => usePlaySplit.getState().setRatio(0.5)} />
+          <SplitDivider horizontal={horizontal} dragging={dragging} onPointerDown={startDrag} onReset={() => { const st = usePlaySplit.getState(); if (rail) st.setRailRatio(0.5); else st.setRatio(0.5); }} />
           <div style={{ flex: `0 0 ${(ratio * 100).toFixed(2)}%`, order: panelFirst ? 0 : 2, minWidth: 0, minHeight: 0, display: 'flex' }}>
             <SplitPanel />
           </div>
@@ -143,12 +161,20 @@ const SIDE_OPTIONS: Array<{ value: SplitSide; icon: 'panelLeft' | 'panelRight' |
   { value: 'bottom', icon: 'panelBottom', title: 'Panel below the picture' },
 ];
 
-/** The big panel: its header (section, side, sidebar, close) and the body PlayPage fills. */
+const SIDEBAR_OPTIONS: Array<{ value: SidebarMode; icon: 'sidebar' | 'rail' | 'sidebarOff'; title: string }> = [
+  { value: 'full', icon: 'sidebar', title: 'Sidebar beside the panel' },
+  { value: 'rail', icon: 'rail', title: 'Fold the sidebar into icons: this panel takes its width, one page at a time (⌘⇧B)' },
+  { value: 'hidden', icon: 'sidebarOff', title: 'No sidebar: just the picture and this panel' },
+];
+
+/** The big panel: its header (section or page, side, sidebar, close), the rail, and the body PlayPage fills. */
 function SplitPanel() {
   const tk = useTokens();
   const tab = usePlaySplit(s => s.tab), setTab = usePlaySplit(s => s.setTab);
   const side = usePlaySplit(s => s.side), setSide = usePlaySplit(s => s.setSide);
-  const sidebarHidden = usePlaySplit(s => s.sidebarHidden), setSidebarHidden = usePlaySplit(s => s.setSidebarHidden);
+  const sidebar = usePlaySplit(s => s.sidebar), setSidebar = usePlaySplit(s => s.setSidebar);
+  const railPage = usePlaySplit(s => s.railPage);
+  const rail = sidebar === 'rail';
   const setHost = usePlaySplit(s => s.setHost);
   const nControls = useNodeGraphStore(s => s.play.controls.length);
   const nLayers = useNodeGraphStore(s => s.play.layers.length);
@@ -172,25 +198,40 @@ function SplitPanel() {
     setHost(bodyRef.current);
     return () => setHost(null);
   }, [setHost]);
+  // Something asked for a place the rail's panel isn't showing (a layer clicked on the picture, "Go to effect"…): go there.
+  useEffect(() => (rail ? followReveals() : undefined), [rail]);
 
+  const page = RAIL_PAGES[railPage];
+  const cat = categoryDef(categoryOf(railPage));
   return (
-    <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 12px', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`, flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 240px', minWidth: 0, maxWidth: 460 }}>
-          <Segmented<PlayTab>
-            fill
-            ariaLabel="Panel section"
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: 'controls', label: `Controls${nControls ? ` · ${nControls}` : ''}` },
-              { value: 'layers', label: `Layers${nLayers ? ` · ${nLayers}` : ''}${layersOk ? '' : ' · Pro'}` },
-              { value: 'finish', label: `Finish${nFinish ? ` · ${nFinish}` : ''}${finishOk ? '' : ' · Pro'}` },
-              { value: 'engine', label: `Engine${nRacks ? ` · ${nRacks}` : ''}${engineOk ? '' : ' · Pro'}` },
-              { value: 'mappings', label: `Mappings${nMappings ? ` · ${nMappings}` : ''}` },
-            ]}
-          />
-        </div>
+    <div data-split-panel="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 12px', minHeight: 44, boxSizing: 'border-box', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`, flexWrap: 'wrap' }}>
+        {rail ? (
+          // The rail picks the page; the bar says where you are.
+          <div data-rail-crumb="" style={{ flex: '1 1 240px', minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 10, overflow: 'hidden' }}>
+            <span style={{ flexShrink: 0, font: `650 13px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
+              {cat.label !== page.label && <><span style={{ color: tk.text.muted, fontWeight: 600 }}>{cat.label}</span><span style={{ color: tk.text.faint, margin: '0 6px' }}>›</span></>}
+              {page.label}
+            </span>
+            <span style={{ minWidth: 0, color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.description}</span>
+          </div>
+        ) : (
+          <div style={{ flex: '1 1 240px', minWidth: 'min(100%, 380px)', maxWidth: 460 }}>
+            <Segmented<PlayTab>
+              fill
+              ariaLabel="Panel section"
+              value={tab}
+              onChange={setTab}
+              options={[
+                { value: 'controls', label: `Controls${nControls ? ` · ${nControls}` : ''}` },
+                { value: 'layers', label: `Layers${nLayers ? ` · ${nLayers}` : ''}${layersOk ? '' : ' · Pro'}` },
+                { value: 'finish', label: `Finish${nFinish ? ` · ${nFinish}` : ''}${finishOk ? '' : ' · Pro'}` },
+                { value: 'engine', label: `Engine${nRacks ? ` · ${nRacks}` : ''}${engineOk ? '' : ' · Pro'}` },
+                { value: 'mappings', label: `Mappings${nMappings ? ` · ${nMappings}` : ''}` },
+              ]}
+            />
+          </div>
+        )}
         <span style={{ flex: 1 }} />
         <Segmented<SplitSide>
           size="sm"
@@ -200,18 +241,38 @@ function SplitPanel() {
           options={SIDE_OPTIONS.map(o => ({ value: o.value, title: o.title, label: <Icon name={o.icon} size={14} /> }))}
         />
         <span aria-hidden style={{ width: 1, height: 18, background: tk.border.default, margin: '0 2px' }} />
-        <IconButton
-          icon="sidebar"
+        <Segmented<SidebarMode>
           size="sm"
-          active={!sidebarHidden}
-          label={sidebarHidden ? 'Show the sidebar' : 'Hide the sidebar: more room for the picture and this panel'}
-          onClick={() => setSidebarHidden(!sidebarHidden)}
+          ariaLabel="The sidebar"
+          value={sidebar}
+          onChange={setSidebar}
+          options={SIDEBAR_OPTIONS.map(o => ({ value: o.value, title: o.title, label: <Icon name={o.icon} size={14} /> }))}
         />
         <IconButton icon="close" size="sm" label="Close the panel: back to the full picture" shortcut={SPLIT_SHORTCUT} onClick={() => usePlaySplit.getState().setOn(false)} />
       </div>
-      <div ref={bodyRef} style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }} />
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex' }}>
+        {rail && <PlayRail />}
+        <div ref={bodyRef} style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }} />
+      </div>
     </div>
   );
+}
+
+/**
+ * While the rail is out, follow what asks for a place: a layer revealed (clicked
+ * on the picture, a note's link), a Finish or sound effect revealed, a control
+ * group revealed. The panel moves to that page; returns the unsubscribe.
+ */
+export function followReveals(): () => void {
+  let prev = usePlayUi.getState();
+  return usePlayUi.subscribe(ui => {
+    const was = prev;
+    prev = ui;
+    const split = usePlaySplit.getState();
+    if (ui.revealTick !== was.revealTick) split.setRailPage('layers');
+    else if (ui.finishTick !== was.finishTick) split.setRailPage(ui.finishView === 'sound' ? 'finish-sound' : 'finish-picture');
+    else if (ui.controlGroupTick !== was.controlGroupTick) split.setRailPage('controls');
+  });
 }
 
 /** The preview toolbar's button that opens and closes the split. */
