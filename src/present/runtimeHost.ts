@@ -50,8 +50,17 @@ export interface PlayMount {
    * With `capture`, returns the picture with its layers as one canvas.
    */
   renderAt?(t: number, o?: { steps?: number[]; dt?: number; seed?: number; capture?: boolean }): HTMLCanvasElement | null;
+  /**
+   * renderAt in chunks: the same steps in the same order, yielding to the
+   * page every `budgetMs` (12) of work with `onProgress(done, total)` between
+   * chunks. Resolves null when superseded (a newer renderAt, play(), an
+   * aborted `signal`, or destroy()).
+   */
+  renderAtAsync?(t: number, o?: { steps?: number[]; dt?: number; seed?: number; capture?: boolean; budgetMs?: number; signal?: AbortSignal; onProgress?: (done: number, total: number) => void }): Promise<HTMLCanvasElement | null>;
   /** Bring the video layers (and a video background) to their exact frames at `t` before a renderAt capture. */
   seekVideos?(t: number): Promise<void>;
+  /** Draw this many pixels from now on (a preview at its shown size; the capture at its full size). */
+  setPixelSize?(s: { w: number; h: number }): void;
 }
 
 interface PlayRuntime {
