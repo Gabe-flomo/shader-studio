@@ -61,7 +61,7 @@ export function rangeEdges(value: number, min: number, max: number, unit: number
   return { lo: lo > -reach ? lo : null, hi: hi < reach ? hi : null };
 }
 
-export { niceCeil, rangeIncluding } from '../../lib/rangeMath';
+export { niceCeil, rangeAfterTyping, rangeIncluding } from '../../lib/rangeMath';
 
 export function clampToStep(n: number, min: number, max: number, step: number): number {
   const clamped = Math.min(max, Math.max(min, n));

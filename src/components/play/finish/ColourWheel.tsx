@@ -79,7 +79,7 @@ export function ColourWheel({ title, hint, x, y, level, onMove, onLevel, touch, 
         }} />
       </div>
       <div style={{ width: '100%' }}>
-        <RulerSlider value={level} min={-1} max={1} step={0.01} defaultValue={0} onChange={onLevel} ariaLabel={`${title} level`} touch={touch} />
+        <RulerSlider value={level} min={-1} max={1} step={0.01} defaultValue={0} hard onChange={onLevel} ariaLabel={`${title} level`} touch={touch} />
       </div>
     </div>
   );

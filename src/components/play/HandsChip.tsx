@@ -158,7 +158,7 @@ function HandsSettings() {
       </div>
       <div>
         {head('Strictness')}
-        <RulerSlider ariaLabel="Hand tracking strictness" value={strictness} min={0} max={1} step={0.05} defaultValue={DEFAULT_HAND_STRICTNESS} disabled={!!hands.confidence}
+        <RulerSlider ariaLabel="Hand tracking strictness" value={strictness} min={0} max={1} step={0.05} hard defaultValue={DEFAULT_HAND_STRICTNESS} disabled={!!hands.confidence}
           onChange={v => set({ strictness: v, confidence: undefined })} />
         <p style={hint}>{hands.confidence ? 'Set by hand below.' : 'Higher ignores faint or doubtful hands (fewer phantom hands); too high can lose your hand in dim light.'}</p>
         <button type="button" onClick={() => setAdvanced(a => !a)} aria-expanded={advanced}
@@ -170,7 +170,7 @@ function HandsSettings() {
             {([['detection', 'Finding a hand', 'How sure the model must be to find a new hand.'], ['presence', 'Keeping a hand', 'How sure it must be that a found hand is still there.'], ['tracking', 'Following a hand', 'Below this it looks for the hand afresh instead of following it.']] as const).map(([k, name, what]) => (
               <div key={k} title={what}>
                 <div style={{ ...small, marginBottom: 3 }}>{name}</div>
-                <RulerSlider ariaLabel={name} value={conf[k]} min={0.1} max={0.95} step={0.05} onChange={v => setConf(k, v)} />
+                <RulerSlider ariaLabel={name} value={conf[k]} min={0.1} max={0.95} step={0.05} hard onChange={v => setConf(k, v)} />
               </div>
             ))}
             <p style={{ ...hint, margin: 0 }}>
@@ -183,12 +183,12 @@ function HandsSettings() {
       </div>
       <div>
         {head('Smoothing')}
-        <RulerSlider ariaLabel="Hand smoothing" value={hands.smoothing} min={0} max={1} step={0.05} defaultValue={DEFAULT_HANDS.smoothing} onChange={v => set({ smoothing: v })} />
+        <RulerSlider ariaLabel="Hand smoothing" value={hands.smoothing} min={0} max={1} step={0.05} hard defaultValue={DEFAULT_HANDS.smoothing} onChange={v => set({ smoothing: v })} />
         <p style={hint}>How calm a still hand is. 0 follows every twitch.</p>
       </div>
       <div>
         {head('Responsiveness')}
-        <RulerSlider ariaLabel="Hand responsiveness" value={hands.responsiveness ?? DEFAULT_HAND_RESPONSIVENESS} min={0} max={1} step={0.05} defaultValue={DEFAULT_HAND_RESPONSIVENESS} onChange={v => set({ responsiveness: v })} />
+        <RulerSlider ariaLabel="Hand responsiveness" value={hands.responsiveness ?? DEFAULT_HAND_RESPONSIVENESS} min={0} max={1} step={0.05} hard defaultValue={DEFAULT_HAND_RESPONSIVENESS} onChange={v => set({ responsiveness: v })} />
         <p style={hint}>How quickly a fast move is followed. Low lags behind quick moves; high lets a little jitter through while moving.</p>
       </div>
       <div>

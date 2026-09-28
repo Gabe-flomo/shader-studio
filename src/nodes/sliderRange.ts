@@ -24,9 +24,13 @@ export function hasCustomRange(params: Record<string, unknown>, key: string): bo
   return typeof params[`__scMax_${key}`] === 'number' || typeof params[`__scMin_${key}`] === 'number';
 }
 
-/** The params patch for a range typed on the slider: both ends, and not bidirectional any more. */
-export function rangePatch(key: string, min: number, max: number): Record<string, unknown> {
-  return { [`__scMin_${key}`]: min, [`__scMax_${key}`]: max, [`__scBidir_${key}`]: false };
+/**
+ * The params patch for a range a typed value widened (rangeAfterTyping): both ends. Bidirectional
+ * stays as it is: the widened range of a bidirectional slider is symmetric, so `__scMin_` agrees
+ * with −max, and turning bidirectional off clears `__scMin_` anyway.
+ */
+export function extendRangePatch(key: string, min: number, max: number): Record<string, unknown> {
+  return { [`__scMin_${key}`]: min, [`__scMax_${key}`]: max };
 }
 
 /** The params patch that puts the definition's range back. */

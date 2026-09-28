@@ -3,7 +3,7 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import {
-  COUNT_MAX_MARKS, TICK_HEIGHT, TICK_WIDTH, clampToStep, countAfterDrag, dragStep, formatValue, rangeEdges, rangeIncluding, rulerTicks, rulerUnit,
+  COUNT_MAX_MARKS, TICK_HEIGHT, TICK_WIDTH, clampToStep, countAfterDrag, dragStep, formatValue, rangeAfterTyping, rangeEdges, rangeIncluding, rulerTicks, rulerUnit,
   valueAfterDrag,
 } from './rulerMath';
 import { Tooltip } from './Tooltip';
@@ -13,6 +13,13 @@ import { Tooltip } from './Tooltip';
  * fixed centre needle. Drag to change (⇧ for ×0.1), double-click to reset, ← / → to step
  * (⇧ ×10), horizontal trackpad scroll to nudge. Vertical scroll is left alone so the canvas
  * and panels keep scrolling.
+ *
+ * Typing sets the range: a number typed into the chip past the max becomes the new max (0 → N;
+ * −N → N when the range is symmetric about zero), one below the min of a one-way slider the new
+ * min. A number inside the range is just the value, so the range never shrinks on its own. The
+ * slider keeps the wider range itself; `onRange` lets the owner store it. `hard` limits (opacity,
+ * an audio unit's range) clamp instead. The slider itself has no min/max fields and no
+ * right-click of its own: a right-click reaches whatever menu the row around it has.
  *
  * `integer` params are counts, so they get a different track: one mark per item, spread evenly and
  * squeezing together as the count grows. Dragging right adds items.
@@ -50,7 +57,7 @@ function installWheelGestures(): void {
 
 export function RulerSlider({
   value, min, max, step = 0.01, defaultValue, onChange, integer = false, keyframed, disabled = false,
-  ariaLabel, touch = false, onType, onRange,
+  ariaLabel, touch = false, onType, onRange, hard = false,
 }: {
   value: number;
   min: number;
@@ -66,15 +73,19 @@ export function RulerSlider({
   /** Mobile: taller track. */
   touch?: boolean;
   /**
-   * Takes over a typed value instead of clamping it into range — node params use this to let
-   * a typed value past the range widen it.
+   * Takes a typed value instead of `onChange`: the value is already past the step clamp, and
+   * the range has already been widened to hold it (see `onRange`), so this is for owners that
+   * store typed values differently from dragged ones (immediately, say).
    */
   onType?: (value: number) => void;
   /**
-   * Makes the range editable right on the slider: the min and max show faintly at the track's
-   * ends; double-click one (long-press on a phone, or right-click the track) to type a new one.
+   * A typed value went past the range and widened it: store the new range (a node's
+   * `__scMin_/__scMax_`, a Play control's min/max). Without it the slider still widens, but
+   * only for as long as it's mounted.
    */
   onRange?: (min: number, max: number) => void;
+  /** A physical limit (0–1 opacity, an audio unit's range): a typed value is clamped, never widens the range. */
+  hard?: boolean;
 }) {
   const tk = useTokens();
   const locked = disabled || !!keyframed;
@@ -82,11 +93,20 @@ export function RulerSlider({
   // widens the range around it rather than being clamped back on the first touch. While a drag
   // is on, the range it started with holds, so the ruler's scale doesn't change under the pointer.
   const [held, setHeld] = useState<{ min: number; max: number } | null>(null);
-  const [rangeEdit, setRangeEdit] = useState<'min' | 'max' | null>(null);
-  // The ends shown at the track's ends (and edited there) are this range too, so they never
-  // contradict the value; editing one end keeps the other as shown.
-  const range = held ?? rangeIncluding(value, min, max);
+  // A range a typed value widened, kept here until the owner's range (min/max) changes: that's
+  // the owner storing it, or resetting it, and either way theirs is right again.
+  const [typed, setTyped] = useState<{ min: number; max: number; base: string } | null>(null);
+  const base = `${min}:${max}`;
+  if (typed && typed.base !== base) setTyped(null);
+  const grown = typed && typed.base === base ? { min: Math.min(min, typed.min), max: Math.max(max, typed.max) } : { min, max };
+  const range = held ?? rangeIncluding(value, grown.min, grown.max);
   ({ min, max } = range);
+  // Typing sets the range (rangeAfterTyping); the typed number itself is kept as typed.
+  const commitTyped = (n: number) => {
+    const r = rangeAfterTyping(n, min, max, hard);
+    if (r.extended) { setTyped({ min: r.min, max: r.max, base }); onRange?.(r.min, r.max); }
+    (onType ?? onChange)(r.value);
+  };
   const unit = rulerUnit(min, max, integer);
   const effectiveStep = integer ? 1 : step;
   const h = touch ? 36 : 28;
@@ -203,7 +223,6 @@ export function RulerSlider({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       onDoubleClick={() => { if (!locked && defaultValue !== undefined) onChange(defaultValue); }}
-      onContextMenu={onRange && !locked ? e => { e.preventDefault(); e.stopPropagation(); setRangeEdit('min'); } : undefined}
       onKeyDown={onKeyDown}
       style={{
         position: 'relative', flex: 1, minWidth: 0, height: h, borderRadius: h / 2, overflow: 'hidden', outline: 'none',
@@ -230,20 +249,6 @@ export function RulerSlider({
       ))}
       <span style={{ position: 'absolute', left: '50%', top: 3, bottom: 3, width: 2, marginLeft: -1, borderRadius: 1, background: needle }} />
       </>}
-      {onRange && (['min', 'max'] as const).map(end => (
-        <RangeEnd
-          key={end}
-          end={end}
-          value={range[end]}
-          other={range[end === 'min' ? 'max' : 'min']}
-          editing={rangeEdit !== null}
-          focus={rangeEdit === end}
-          locked={locked}
-          onOpen={() => setRangeEdit(end)}
-          onDone={() => setRangeEdit(null)}
-          onCommit={v => { if (end === 'min') onRange(v, range.max); else onRange(range.min, v); }}
-        />
-      ))}
     </div>
   );
 
@@ -270,9 +275,9 @@ export function RulerSlider({
         <NumberInput
           value={value}
           format={fmt}
-          onCommit={n => (onType ? onType(n) : onChange(clampToStep(n, min, max, effectiveStep)))}
+          onCommit={commitTyped}
           disabled={disabled}
-          title={`${ariaLabel} (${min} – ${max})`}
+          title={hard ? `${ariaLabel} (${min} – ${max})` : `${ariaLabel} (${min} – ${max}): type a number past the end to widen the range`}
           style={chipStyle}
         />
       )}
@@ -280,90 +285,5 @@ export function RulerSlider({
         ? <Tooltip grow label="Keyframes attached" description={keyframed.summary ?? 'Edit them from the ◆ socket.'}>{track}</Tooltip>
         : track}
     </div>
-  );
-}
-
-/** Long-press on a touch screen stands in for the double-click. */
-const LONG_PRESS_MS = 500;
-
-/**
- * One end of an editable range: the number, faint, at the track's edge. Double-click it (or
- * long-press on a phone) to turn both ends into fields: Enter or clicking away commits, Esc
- * cancels, Tab goes to the other end. A min at or above the max (or the reverse) is refused.
- * Pressing on the number doesn't drag the slider, so a double-click there is the number's.
- */
-function RangeEnd({ end, value, other, editing, focus, locked, onOpen, onDone, onCommit }: {
-  end: 'min' | 'max'; value: number; other: number; editing: boolean; focus: boolean; locked: boolean;
-  onOpen: () => void; onDone: () => void; onCommit: (v: number) => void;
-}) {
-  const tk = useTokens();
-  const shown = +value.toPrecision(4);
-  const press = useRef<number | null>(null);
-  useEffect(() => () => { if (press.current !== null) window.clearTimeout(press.current); }, []);
-  const side: CSSProperties = end === 'min' ? { left: 5 } : { right: 5 };
-  if (editing) return <RangeField end={end} value={value} other={other} focus={focus} side={side} onDone={onDone} onCommit={onCommit} />;
-  const clear = () => { if (press.current !== null) { window.clearTimeout(press.current); press.current = null; } };
-  return (
-    <span
-      data-range-label={end}
-      title={locked ? undefined : `${end === 'min' ? 'Minimum' : 'Maximum'}: double-click to change the range`}
-      onPointerDown={e => {
-        if (locked) return;
-        e.stopPropagation();
-        if (e.pointerType !== 'mouse') { clear(); press.current = window.setTimeout(() => { press.current = null; onOpen(); }, LONG_PRESS_MS); }
-      }}
-      onPointerUp={clear}
-      onPointerCancel={clear}
-      onPointerLeave={clear}
-      onDoubleClick={e => { e.stopPropagation(); if (!locked) onOpen(); }}
-      onContextMenu={e => { if (e.nativeEvent instanceof PointerEvent && e.nativeEvent.pointerType !== 'mouse') e.preventDefault(); }}
-      style={{
-        position: 'absolute', top: '50%', ...side, transform: 'translateY(-50%)', padding: '2px 3px', cursor: locked ? 'inherit' : 'text',
-        color: tk.text.faint, font: `500 9.5px ${fontFamily.mono}`, fontVariantNumeric: 'tabular-nums', userSelect: 'none', WebkitUserSelect: 'none',
-        pointerEvents: locked ? 'none' : 'auto',
-      }}
-    >{shown}</span>
-  );
-}
-
-/** The field one end turns into while the range is being edited (mounted fresh each time, so it starts from the current value). */
-function RangeField({ end, value, other, focus, side, onDone, onCommit }: {
-  end: 'min' | 'max'; value: number; other: number; focus: boolean; side: CSSProperties; onDone: () => void; onCommit: (v: number) => void;
-}) {
-  const tk = useTokens();
-  const [text, setText] = useState(() => String(+value.toPrecision(4)));
-  const cancelled = useRef(false);
-  const commit = () => {
-    if (cancelled.current) return;
-    const n = parseFloat(text);
-    if (Number.isFinite(n) && n !== value && (end === 'min' ? n < other : n > other)) onCommit(n);
-  };
-  return (
-    <input
-      autoFocus={focus}
-      aria-label={end === 'min' ? 'Slider minimum' : 'Slider maximum'}
-      inputMode="decimal"
-      data-range-end={end}
-      value={text}
-      onChange={e => setText(e.target.value)}
-      onFocus={e => e.currentTarget.select()}
-      onPointerDown={e => e.stopPropagation()}
-      onDoubleClick={e => e.stopPropagation()}
-      onKeyDown={e => {
-        e.stopPropagation();
-        if (e.key === 'Enter') { commit(); cancelled.current = true; onDone(); }
-        else if (e.key === 'Escape') { cancelled.current = true; onDone(); }
-      }}
-      onBlur={e => {
-        commit();
-        // Tabbing to the other end keeps the editor open.
-        if (!(e.relatedTarget as HTMLElement | null)?.dataset?.rangeEnd) onDone();
-      }}
-      style={{
-        position: 'absolute', top: '50%', ...side, width: 46, height: 20, marginTop: -10, zIndex: 1, boxSizing: 'border-box',
-        padding: '0 4px', border: 0, borderRadius: 5, outline: `1.5px solid ${tk.accent.base}`, textAlign: 'center',
-        background: tk.bg.panel, color: tk.text.primary, font: `500 10.5px ${fontFamily.mono}`,
-      }}
-    />
   );
 }

@@ -188,7 +188,7 @@ export function InputExprPopover({ node, inputKey, anchorRef, onClose, sheet = f
                 <span style={{ minWidth: 26, maxWidth: 64, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', font: `600 ${touch ? 13 : 11.5}px ${fontFamily.mono}`, color: tk.kind.expr }}>{k.name}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <RulerSlider value={values[k.name] ?? 0} min={k.min} max={k.max} step={Math.min(0.01, (k.max - k.min) / 200)}
-                    onChange={v => setValue(k.name, v)} ariaLabel={`Knob ${k.name}`} touch={touch} />
+                    onChange={v => setValue(k.name, v)} onRange={(min, max) => setKnob(k.name, { min, max })} ariaLabel={`Knob ${k.name}`} touch={touch} />
                 </div>
                 <RangeField value={k.min} touch={touch} ariaLabel={`${k.name} minimum`} onCommit={n => { if (n < k.max) setKnob(k.name, { min: n }); }} />
                 <RangeField value={k.max} touch={touch} ariaLabel={`${k.name} maximum`} onCommit={n => { if (n > k.min) setKnob(k.name, { max: n }); }} />

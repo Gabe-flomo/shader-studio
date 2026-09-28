@@ -360,7 +360,8 @@ function NumRow({ p, value, label, touch, exposed, onSet, onExpose }: { p: AfPar
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
       <Label text={p.unit ? `${p.label} ${p.unit}` : p.label} hint={p.hint || undefined} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <RulerSlider value={value} min={p.min} max={p.max} step={p.step} defaultValue={p.value} onChange={onSet} ariaLabel={`${label} ${p.label}`} touch={touch} integer={p.step === 1} />
+        {/* An effect's ranges are the DSP's (a filter's Hz, a 0–1 mix) and the kit clamps stored values into them, so they're hard. */}
+        <RulerSlider value={value} min={p.min} max={p.max} step={p.step} defaultValue={p.value} hard onChange={onSet} ariaLabel={`${label} ${p.label}`} touch={touch} integer={p.step === 1} />
       </div>
       <IconButton icon={exposed ? 'check' : 'plus'} size="sm" active={exposed} disabled={exposed} label={exposed ? 'Already a control' : `Make ${p.label} a control, to map the mouse, audio or an LFO onto it`} onClick={onExpose} />
     </div>

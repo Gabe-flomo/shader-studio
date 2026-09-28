@@ -1007,7 +1007,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
               disabled={!exists || driven}
               onChange={onChange}
               onType={onChange}
-              // The range's ends show at the track's ends: double-click one (long-press on a phone) to change it.
+              // Typing a value past the range widens it: the control keeps the new range.
               onRange={onRange}
               ariaLabel={control.label}
               touch={touch}

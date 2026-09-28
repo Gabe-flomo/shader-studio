@@ -280,6 +280,8 @@ function StageControls() {
                   defaultValue={typeof value === 'number' ? value : (c.min + c.max) / 2}
                   disabled={isDriven}
                   onChange={v => write(c, v)}
+                  // Typing a value past the range widens it: the control keeps the new range, as on the panel.
+                  onRange={(min, max) => setPlay(p => ({ ...p, controls: p.controls.map(x => (x.id === c.id ? { ...x, min, max } : x)) }))}
                   ariaLabel={c.label}
                 />
               )}

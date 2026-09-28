@@ -1533,12 +1533,16 @@ function migrateParticles(l: Record<string, unknown>): void {
 
 // ── Numeric properties a control can drive ──────────────────────────────────
 
-export interface LayerNumericProp { key: string; label: string; min: number; max: number; step?: number; hint: string }
+export interface LayerNumericProp {
+  key: string; label: string; min: number; max: number; step?: number; hint: string;
+  /** min/max are a physical limit (0–1 opacity, a pad's start in its sample): a typed value is clamped rather than widening the slider's range. */
+  hard?: boolean;
+}
 
 const X = (what: string): LayerNumericProp => ({ key: 'x', label: 'X', min: 0, max: 1, hint: `${what} across the picture: 0 is the left edge, 1 the right.` });
 const Y = (what: string): LayerNumericProp => ({ key: 'y', label: 'Y', min: 0, max: 1, hint: `${what} up the picture: 0 is the bottom, 1 the top.` });
 const ROT: LayerNumericProp = { key: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1, hint: 'Degrees, clockwise.' };
-const OPACITY: LayerNumericProp = { key: 'opacity', label: 'Opacity', min: 0, max: 1, hint: 'How solid the layer is. 0 is invisible.' };
+const OPACITY: LayerNumericProp = { key: 'opacity', label: 'Opacity', min: 0, max: 1, hard: true, hint: 'How solid the layer is. 0 is invisible.' };
 
 /** Numeric layer properties a control can drive, per kind. The control's target is `layer:<layerId>::<key>`. */
 export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumericProp>> = {
@@ -1758,7 +1762,8 @@ function kindNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
     return base.map(d => d.key === 'offset' ? { ...d, max: Math.max(1, n - 1) } : d.key === 'from' || d.key === 'to' || d.key === 'count' ? { ...d, max: Math.max(2, n) } : d);
   }
   // Each pad that plays something: its numbers, "Pad 3 · Pitch" (`pad3_pitch`).
-  if (l.kind === 'drumpad') return [...base, ...l.pads.flatMap((p, i) => (padHasSound(p) ? DP_PARAMS.map(d => ({ key: dpKey(i, d.key), label: `Pad ${i + 1} · ${d.label}`, min: d.min, max: d.max, step: d.step, hint: d.hint })) : []))];
+  // A pad's numbers are the sampler's physical ranges (a start past the sample's end, a pan past the speakers), so they're hard.
+  if (l.kind === 'drumpad') return [...base, ...l.pads.flatMap((p, i) => (padHasSound(p) ? DP_PARAMS.map(d => ({ key: dpKey(i, d.key), label: `Pad ${i + 1} · ${d.label}`, min: d.min, max: d.max, step: d.step, hard: true, hint: d.hint })) : []))];
   if (l.kind !== 'script') return base;
   // Buttons are actions, not numbers; toggles are 0/1 numbers.
   // A colour is a packed RGB, not a number to slide; a choice slides from option to option.

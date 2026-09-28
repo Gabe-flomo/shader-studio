@@ -25,6 +25,27 @@ export function rangeIncluding(value: number, min: number, max: number): { min: 
 }
 
 /**
+ * What typing a number into a slider's value chip does to its range. A number past the max
+ * becomes the max and the range runs 0 → N (a min above zero, like a radius's 0.01, drops to
+ * 0; a negative min stays); on a bidirectional slider (one whose range is symmetric about
+ * zero) it runs −N → N. A number below the min of a one-way slider becomes the min likewise
+ * (N → 0, or N → the old max when that's above zero). A number inside the range is just the
+ * value: typing a smaller number never shrinks the range on its own (only a "Reset range"
+ * does). A `hard` limit (opacity, an audio unit's range) clamps the number instead.
+ */
+export function rangeAfterTyping(typed: number, min: number, max: number, hard = false): { value: number; min: number; max: number; extended: boolean } {
+  const lo = Math.min(min, max), hi = Math.max(min, max);
+  if (!Number.isFinite(typed)) return { value: lo, min: lo, max: hi, extended: false };
+  if (hard) return { value: Math.min(hi, Math.max(lo, typed)), min: lo, max: hi, extended: false };
+  if (typed >= lo && typed <= hi) return { value: typed, min: lo, max: hi, extended: false };
+  const bidir = lo === -hi && hi > 0;
+  if (bidir) { const a = Math.abs(typed); return { value: typed, min: -a, max: a, extended: true }; }
+  return typed > hi
+    ? { value: typed, min: Math.min(lo, 0), max: typed, extended: true }
+    : { value: typed, min: typed, max: Math.max(hi, 0), extended: true };
+}
+
+/**
  * A range for a value that came without one (a number in pasted code, a constant freed into a
  * slider): 0–1 (or −1–1) for small values, else 0 to about twice the value, on a round number
  * (107 → 0–500, −3 → −10–10); negative values get a range symmetric around zero. The step
