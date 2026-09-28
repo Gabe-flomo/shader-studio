@@ -8,6 +8,7 @@ mod data_fetch;
 mod midi;
 mod playfile;
 mod workspace;
+mod linked;
 mod osc_listener;
 mod output_window;
 
@@ -318,6 +319,7 @@ pub fn run() {
         .manage(midi::MidiState::default())
         .manage(audio_engine::EngineState::default())
         .manage(workspace::WatchState(Mutex::new(None)))
+        .manage(linked::LinkedState::default())
         .manage(playfile::OpenedFiles(Mutex::new(Vec::new())))
         .manage(output_window::OutputState::default())
         .invoke_handler(tauri::generate_handler![
@@ -378,6 +380,13 @@ pub fn run() {
             workspace::ws_watch,
             workspace::ws_unwatch,
             workspace::ws_reveal,
+            linked::lf_set_roots,
+            linked::lf_probe,
+            linked::lf_list,
+            linked::lf_stat,
+            linked::lf_read,
+            linked::lf_watch,
+            linked::lf_unwatch,
             playfile::opened_files_take,
             playfile::open_file_read,
             playfile::signing_key_get,
