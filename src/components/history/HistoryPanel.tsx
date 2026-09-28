@@ -10,8 +10,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { useNodeGraphStore, undoManager } from '../../store/useNodeGraphStore';
-import { buildTimeline, diffGraphs, type StepDiff, type TimelineStep } from '../../store/historyLabels';
-import type { GraphNode } from '../../types/nodeGraph';
+import { buildTimeline, diffGraphs, type StepDiff, type TimelineState, type TimelineStep } from '../../store/historyLabels';
+import { describePlayChange, type PlayChange } from '../../store/playHistory';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius, type Tokens } from '../../theme/tokens';
 import { Segmented } from '../ui/Choice';
@@ -46,21 +46,42 @@ function useClock(ms = 30_000): number {
   return now;
 }
 
-/** The graph, but at most every 300 ms: a slider drag doesn't re-describe the history every frame. */
-function useThrottledNodes(): GraphNode[] {
-  const [nodes, setNodes] = useState(() => useNodeGraphStore.getState().nodes);
+/** The graph and the Play setup, but at most every 300 ms: a slider drag doesn't re-describe the history every frame. */
+function useThrottledState(): TimelineState {
+  const read = (): TimelineState => { const s = useNodeGraphStore.getState(); return { nodes: s.nodes, play: s.play }; };
+  const [state, setState] = useState(read);
   useEffect(() => {
     let timer: number | null = null;
-    let last = useNodeGraphStore.getState().nodes;
-    const flush = () => { timer = null; setNodes(useNodeGraphStore.getState().nodes); };
+    let last = read();
+    const flush = () => { timer = null; setState(read()); };
     const unsub = useNodeGraphStore.subscribe(s => {
-      if (s.nodes === last) return;
-      last = s.nodes;
+      if (s.nodes === last.nodes && s.play === last.play) return;
+      last = { nodes: s.nodes, play: s.play };
       if (timer === null) timer = window.setTimeout(flush, 300);
     });
     return () => { unsub(); if (timer !== null) window.clearTimeout(timer); };
   }, []);
-  return nodes;
+  return state;
+}
+
+/** A Play-only step: nothing in the graph to show or diff. */
+const playOnly = (s: TimelineStep) => !!s.play && s.before === s.after;
+
+/** What a Play step changed (memoised on the records themselves, as the cards render often and the steps are rebuilt each time). */
+function usePlayChange(s: TimelineStep): PlayChange | null {
+  const before = s.play?.before, after = s.play?.after;
+  return useMemo(() => (before && after ? describePlayChange(before, after) : null), [before, after]);
+}
+
+/** The chip for a Play step: what kind of change it was. */
+function playChipKind(c: PlayChange | null): ChipKind {
+  switch (c?.kind) {
+    case 'added': return 'added';
+    case 'removed': return 'removed';
+    case 'moved': return 'moved';
+    case 'comment': return 'comment';
+    default: return 'play';
+  }
 }
 
 export function HistoryPanel({ compact = false, mode: modeProp, onShowOnCanvas }: {
@@ -363,15 +384,15 @@ function ChangesView({ mode, split, rootRef, onShowOnCanvas }: { mode: HistoryMo
   const tk = useTokens();
   const compact = mode === 'compact';
   const version = useSyncExternalStore(undoManager.subscribe, undoManager.getVersion);
-  const nodes = useThrottledNodes();
+  const state = useThrottledState();
   const scratch = useNodeGraphStore(s => !!s.scratch);
   const now = useClock();
   const [openId, setOpenId] = useState<number | null>(null);
 
   const steps = useMemo(() => {
     void version; // the stacks are mutable: the version says when they changed
-    return buildTimeline(undoManager.done(), undoManager.undone(), nodes);
-  }, [version, nodes]);
+    return buildTimeline(undoManager.done(), undoManager.undone(), state);
+  }, [version, state]);
   const origin = undoManager.getOrigin();
   const trimmed = undoManager.isTrimmed();
   const doneCount = steps.filter(s => s.status !== 'undone').length;
@@ -433,7 +454,7 @@ function ChangesView({ mode, split, rootRef, onShowOnCanvas }: { mode: HistoryMo
         </span>
       </div>
       {steps.length === 0 && (
-        <Note>Nothing to undo yet. Each change you make to the graph shows up here, newest first, and you can step back to any of them.</Note>
+        <Note>Nothing to undo yet. Each change you make to the graph or the Play setup shows up here, newest first, and you can step back to any of them.</Note>
       )}
       <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {groups.map((g, gi) => (
@@ -450,7 +471,7 @@ function ChangesView({ mode, split, rootRef, onShowOnCanvas }: { mode: HistoryMo
                 onToggle={() => {
                   const opening = openId !== s.id;
                   setOpenId(opening ? s.id : null);
-                  if (opening && !compact) showOnCanvas(touched(s));
+                  if (opening && !compact && !playOnly(s)) showOnCanvas(touched(s));
                 }}
                 onRestore={() => restore(s)}
                 detail={detailFor(s)}
@@ -500,9 +521,10 @@ function StepCard({ step, now, mode, split, rootRef, open, onToggle, onRestore, 
   const compact = mode === 'compact';
   const ref = useRef<HTMLDivElement>(null);
   const d = diffGraphs(step.before, step.after);
-  const kind = stepKind(d);
+  const pc = usePlayChange(step);
+  const kind = playOnly(step) ? playChipKind(pc) : stepKind(d);
   const undone = step.status === 'undone', current = step.status === 'current';
-  const summary = changeSummary(d);
+  const summary = playOnly(step) ? playSummary(pc) : changeSummary(d);
   return (
     <li style={{ listStyle: 'none' }}>
       <EntryCard
@@ -536,6 +558,12 @@ function StepCard({ step, now, mode, split, rootRef, open, onToggle, onRestore, 
       )}
     </li>
   );
+}
+
+/** "Play · 3 changes" — a Play step, counted. */
+function playSummary(c: PlayChange | null): string {
+  if (!c) return 'Play';
+  return c.lines.length > 1 ? `Play · ${c.lines.length} changes` : 'Play';
 }
 
 /** "2 params · 1 wire" — what a step touched, counted. */
@@ -583,18 +611,20 @@ function StepDetail({ step, now, compact, onClose, onRestore, onShow }: {
 }) {
   const tk = useTokens();
   const d = useMemo(() => diffGraphs(step.before, step.after), [step.before, step.after]);
-  const lines = detailLines(d, tk);
+  const pc = usePlayChange(step);
+  const isPlay = playOnly(step);
+  const lines = isPlay ? playLines(pc, tk) : detailLines(d, tk);
   const shown = lines.slice(0, MAX_LINES);
   const liveIds = useNodeGraphStore(s => s.nodes.map(n => n.id).join('\n'));
   const live = useMemo(() => new Set(liveIds.split('\n')), [liveIds]);
-  const canShow = [...step.nodeIds, ...d.touchedTopIds].some(id => live.has(id));
-  const affected = affectedNodes(d);
+  const canShow = !isPlay && [...step.nodeIds, ...d.touchedTopIds].some(id => live.has(id));
+  const affected = isPlay ? [] : affectedNodes(d);
   const undone = step.status === 'undone', current = step.status === 'current';
   const btn = compact ? { height: 38 } : undefined;
   return (
     <div>
       <DetailHeader
-        kind={stepKind(d)}
+        kind={isPlay ? playChipKind(pc) : stepKind(d)}
         title={step.label}
         onClose={onClose}
         sub={(
@@ -616,7 +646,7 @@ function StepDetail({ step, now, compact, onClose, onRestore, onShow }: {
       </div>
       <SectionLabel>What changed</SectionLabel>
       {shown.length === 0
-        ? <span style={{ fontSize: 12, color: tk.text.faint }}>Nothing the graph shows changed (a view or layout detail).</span>
+        ? <span style={{ fontSize: 12, color: tk.text.faint }}>{isPlay ? 'The Play setup changed.' : 'Nothing the graph shows changed (a view or layout detail).'}</span>
         : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
             {shown.map((l, i) => <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, font: `12.5px/1.45 ${fontFamily.ui}`, color: tk.text.secondary, minWidth: 0 }}>{l}</li>)}
@@ -687,6 +717,19 @@ function detailLines(d: StepDiff, tk: Tokens): ReactNode[] {
   for (const o of d.other) out.push(<><Sign c={tk.status.warning}>•</Sign>{text(<>{muted(`${o.name} · `)}{o.what}</>)}</>);
   if (d.moved.length) out.push(<><Sign c={tk.text.faint}>↔</Sign>{text(muted(d.moved.length === 1 ? `Moved ${d.moved[0].name}` : `Moved ${d.moved.length} nodes`))}</>);
   return out;
+}
+
+/** A Play step's lines, each signed by what it did. */
+function playLines(c: PlayChange | null, tk: Tokens): ReactNode[] {
+  if (!c) return [];
+  const text = (t: ReactNode) => <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{t}</span>;
+  return c.lines.map(l => {
+    const sign = /^Added /.test(l) ? <Sign c={tk.status.success}>+</Sign>
+      : /^Removed /.test(l) ? <Sign c={tk.status.danger}>−</Sign>
+        : /^Reordered /.test(l) ? <Sign c={tk.text.faint}>↔</Sign>
+          : <Sign c={tk.accent.base}>~</Sign>;
+    return <>{sign}{text(l)}</>;
+  });
 }
 
 function Note({ children }: { children: ReactNode }) {

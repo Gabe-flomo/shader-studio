@@ -112,6 +112,7 @@ import { videoEngine } from '../lib/videoEngine';
 import { IdGenerator } from './managers/IdGenerator';
 import { UndoManager } from './managers/UndoManager';
 import { nodeName, nodesPhrase } from './historyLabels';
+import { describePlayChange } from './playHistory';
 import { PresetManager } from './managers/PresetManager';
 import { CompilationService } from './managers/CompilationService';
 import { GRAPH_LINK_FIELD, graphDeleted, linkedPresentationsOf } from '../present/links';
@@ -410,6 +411,35 @@ let _historyParamPending = false;
 // Stored outside Zustand state so pushing snapshots never triggers a re-render.
 export const undoManager = new UndoManager();
 
+/** How a setPlay call joins the history: not at all, or as a step with this label. */
+export type PlayHistoryOption = false | { label?: string };
+
+// A Play value still changing (a slider drag, typing in the notes): the step made by its first
+// change is kept and renamed as the value moves, until a second of quiet or a different edit.
+let _playBurst: { key: string; entryId: number; timer: ReturnType<typeof setTimeout> } | null = null;
+const PLAY_BURST_MS = 1000;
+function endPlayBurst(): void {
+  if (_playBurst) clearTimeout(_playBurst.timer);
+  _playBurst = null;
+}
+/** One undo step for a Play edit, named from the difference (or `label`); the same value moving again joins the step. */
+function recordPlayStep(prev: PlayRecord, next: PlayRecord, history: PlayHistoryOption | undefined): void {
+  const change = describePlayChange(prev, next);
+  const label = (history && history.label) || change?.label;
+  if (!label) { endPlayBurst(); return; }  // nothing worth a step (a rack taking the keyboard)
+  const key = history && history.label ? null : change?.key ?? null;
+  const top = undoManager.top();
+  if (key && _playBurst && _playBurst.key === key && top && top.id === _playBurst.entryId && top.play) {
+    // The label reads from the step's own "before", so a drag says where it started: "Radius 0.2 → 0.5".
+    undoManager.labelTop({ label: describePlayChange(top.play, next)?.label ?? label });
+  } else {
+    undoManager.pushPlay(prev, { label });
+  }
+  endPlayBurst();
+  const entry = undoManager.top();
+  if (key && entry) _playBurst = { key, entryId: entry.id, timer: setTimeout(() => { _playBurst = null; }, PLAY_BURST_MS) };
+}
+
 /** Shallow-deep equality for probe readouts: same output keys, same numbers. */
 function probeValuesEqual(a: Record<string, number[]>, b: Record<string, number[]>): boolean {
   const ak = Object.keys(a);
@@ -479,11 +509,15 @@ interface NodeGraphState {
 
   /**
    * The graph's Play setup: exposed controls and input mappings (see
-   * types/play.ts). Saved with the graph under `play`. Not part of undo — Play
-   * never edits the graph, and its edits are cheap to redo by hand.
+   * types/play.ts). Saved with the graph under `play`. Every edit through
+   * setPlay is an undo step in the same history as the graph's, named from
+   * what changed (store/playHistory.ts); a value that keeps changing (a slider
+   * drag) is one step. Pass `history: false` for a write that isn't an edit
+   * (the output window's projection, which keeps its own history), or a
+   * `label` to name the step yourself.
    */
   play: PlayRecord;
-  setPlay: (next: PlayRecord | ((play: PlayRecord) => PlayRecord)) => void;
+  setPlay: (next: PlayRecord | ((play: PlayRecord) => PlayRecord), history?: PlayHistoryOption) => void;
   /**
    * The graph's datasets (src/data/): imported files, their notebooks and
    * frozen results, read by Data nodes (and later the Data layer). Saved with
@@ -3033,32 +3067,38 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   undoSteps: (count) => {
     if (get().scratch) return 0;
-    let nodes = get().nodes, n = 0;
+    let { nodes, play } = get();
+    let n = 0, graph = false, playChanged = false;
     for (; n < count; n++) {
-      const prev = undoManager.undo(nodes);
+      const prev = undoManager.undo({ nodes, play });
       if (!prev) break;
-      nodes = prev;
+      if (prev.nodes) { nodes = prev.nodes; graph = true; }
+      if (prev.play) { play = prev.play; playChanged = true; }
     }
     if (!n) return 0;
+    endPlayBurst();
     // Restore counter so new nodes after undo don't collide
-    idGenerator.syncFromGraph(nodes);
-    set({ nodes, nodeProbeValues: null });
-    get().compile();
+    if (graph) idGenerator.syncFromGraph(nodes);
+    set({ ...(graph ? { nodes, nodeProbeValues: null } : {}), ...(playChanged ? { play } : {}) });
+    if (graph) get().compile();
     return n;
   },
 
   redoSteps: (count) => {
     if (get().scratch) return 0;
-    let nodes = get().nodes, n = 0;
+    let { nodes, play } = get();
+    let n = 0, graph = false, playChanged = false;
     for (; n < count; n++) {
-      const next = undoManager.redo(nodes);
+      const next = undoManager.redo({ nodes, play });
       if (!next) break;
-      nodes = next;
+      if (next.nodes) { nodes = next.nodes; graph = true; }
+      if (next.play) { play = next.play; playChanged = true; }
     }
     if (!n) return 0;
-    idGenerator.syncFromGraph(nodes);
-    set({ nodes, nodeProbeValues: null });
-    get().compile();
+    endPlayBurst();
+    if (graph) idGenerator.syncFromGraph(nodes);
+    set({ ...(graph ? { nodes, nodeProbeValues: null } : {}), ...(playChanged ? { play } : {}) });
+    if (graph) get().compile();
     return n;
   },
 
@@ -4605,11 +4645,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set(state => ({ paramUniforms: { ...state.paramUniforms, ...updates } }));
   },
 
-  setPlay: (next) => set(state => {
+  setPlay: (next, history) => {
+    const prev = get().play;
     // Layer groups stay whole: a member removed, moved or duplicated elsewhere never splits one.
-    const play = tidyGroups(typeof next === 'function' ? next(state.play) : next);
-    return play === state.play ? state : { play };
-  }),
+    const play = tidyGroups(typeof next === 'function' ? next(prev) : next);
+    if (play === prev) return;
+    if (history !== false && !get().scratch) recordPlayStep(prev, play, history);
+    set({ play });
+  },
 
   setDataset: (dataset) => set(state => ({ datasets: { ...state.datasets, [dataset.id]: dataset } })),
   updateDataset: (id, patch) => set(state => {
@@ -4789,7 +4832,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   replaceGraph: (rawNodes) => {
-    undoManager.push(get().nodes, { label: 'Replaced the graph' });
+    undoManager.push(get().nodes, { label: 'Replaced the graph' }, get().play);
     const nodes = rawNodes.map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
     idGenerator.syncFromGraph(nodes);
     set(st => ({ nodes, looseGroups: [], play: emptyPlayRecord(), datasets: {}, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
