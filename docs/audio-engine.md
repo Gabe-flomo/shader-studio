@@ -12,6 +12,18 @@ In the **desktop app on a Mac** the racks run in a native engine (AVAudioEngine)
 
 Everything here is **Pro**: `audio.engine` (racks, the sample player, engine readers) and `audio.plugins` (Audio Units, on racks and behind "+ Audio Unit effect"). On Free the record keeps its racks (nothing is dropped), the Engine tab shows the Pro card, and `playableForPlan` gives the engine no racks. **Upload sounds** in the Library stays Free: the sounds are drum pad samples too, which are Pro-layer features already, but keeping uploads open costs nothing and the Sounds tab was Free before.
 
+The tab has two views: **Performance** (the racks, below) and **Arrangement** (the tape: a lane per rack recording the notes played and the rack controls' moves, looped, overdubbed, punched in; docs/arrangement.md). A setup makes up to **8 racks**, each **1 instrument + up to 8 effects** (a file made before these limits keeps what it has).
+
+## The lead rack
+
+With several racks and several MIDI inputs, not every rack plays at once. One rack **leads**: it takes the MIDI notes, the computer keyboard (the Computer keyboard toggle follows the lead) and pad hits (a pad controller's notes).
+
+- **Select a card** (click anywhere on it; it's outlined) to make its rack the lead. Selecting a lane on the tape does the same.
+- **Lock as lead** (the lock on a card) keeps that rack the lead while you select other cards to edit them. The card shows **Lead** (and **Locked**); the header says "Playing: Rack 2 · locked".
+- Nothing selected: the **first rack** leads.
+- A rack with **its own routing** (a MIDI device, or a channel, under Played by) plays what that sends, lead or not, as before. "No MIDI" plays nothing. A lead with its own routing plays only what that sends.
+- The lock is kept in the record (`audioEngine.lock`); the selection is this session's (`useEngineSelection`). The rule is `rackPlays(rack, lead, device, channel)` and `leadRackId(ae, selected)` in `types/playAudioEngine.ts`; the host asks it for every MIDI note. The tape records what each rack receives, so the lead's track records and routed racks record theirs.
+
 ## The rack card
 
 - **Played by**: any MIDI input (the default: a controller plugged in just plays, and so do the record's MIDI file and the MIDI node's keyboard stand-in), none, or one device by name; a channel or all (the default: an MPK mini's pads on channel 10 reach the rack along with its keys on channel 1). **Computer keyboard** gives the rack the computer keyboard (below). The strip of keys on the card plays with the mouse (higher on a key hits harder; Shift is full velocity) and lights the notes typed.
@@ -19,6 +31,7 @@ Everything here is **Pro**: `audio.engine` (racks, the sample player, engine rea
 - **Instrument**: **Choose an instrument…** offers the **Sample player**, the **Granulator** (up to 64 grains from a sample, in Web Audio everywhere, desktop too; its own Sound effect chain, grain readouts as sensors, grains from a layer's particles: docs/granulator.md) and every enabled Audio Unit instrument (desktop). The sample player has **zones**: a Library sound on one key (drum-rack style from C2 = 36, the next free key each time) or across every key at its own pitch on C4. Each row sets the lowest key, the highest and the key where it plays unpitched. **Use the first 16 as a kit** fills C2… from the Library's sounds.
 - **Effects**: **Audio Unit effect…** appends one; each card has bypass, earlier/later, remove. The order is the chain's order.
 - On an Audio Unit card: the **window** button opens the plug-in's own view (AUv3 view controller, else the AUv2 Cocoa view, else Apple's generic view) in a native window (see Plug-in windows below); the **sliders** button lists its parameters. Every number, toggle and list is editable here, and the **+** makes it a Play control, target `au:<rackId>:<slotId>::<address>` (the instrument's slot id is `inst`). **Keep its settings** stores the unit's whole state (`fullState`, base64) in the setup, so a preset dialled in the plug-in's window comes back next time.
+- **Configure** (the target icon) on the instrument or an effect picks up to 8 of its parameters as **rack controls**: a strip of faders on the card, Play controls in "<rack> · <slot>", mappable to MIDI knobs and recorded on the tape (docs/arrangement.md). On the desktop, moving a knob in the plug-in's window offers it.
 - **Volume** and **mute** per rack; the engine's **Output** device, **Volume** and mute at the top of the tab (this device's settings, `shader-studio:audio:engine`).
 
 ## Computer keyboard
@@ -96,6 +109,7 @@ Every installed Audio Unit (instruments and effects, with maker, kind, version, 
 | Computer keyboard | `src/lib/rackKeyboard.ts`, `src/lib/keyboardClaim.ts` |
 | MIDI devices and the Monitor (the antenna button in the Engine header) | `src/components/play/MidiMonitor.tsx`, `src/lib/midiMonitor.ts`; docs/midi.md |
 | Plugins setting | `src/lib/pluginSettings.ts` |
+| The tape (Arrangement), rack controls, the lead rack | docs/arrangement.md; `src/types/playArrangement.ts`, `src/lib/tape.ts`, `src/play/rackControls.ts`, `src/components/play/engine/{ArrangementPanel,RackControls,selectRack}` |
 | Renders and recordings: the job, the reply, alignment | `src/lib/engineRender.ts` (pure), `engineExport.ts` (the export's part), `recordingAudio.ts` (engine tracks, sends' tracks) |
 | Sends | `src/lib/engineSend.ts`, `audioFx.ts` (`divert`) |
 | Native engine (Objective-C, AVAudioEngine): the live and render contexts, the input source, the recording tap | `src-tauri/native/audio_engine.m`, compiled by `build.rs` on macOS |
@@ -106,7 +120,8 @@ Commands: `ae_status`, `ae_units`, `ae_rack_create/remove/volume`, `ae_set_instr
 
 ## Tests
 
-- `src/play/__tests__/audioEngine.test.ts`: the record, targets, parsing, the protocol, the host against a fake bridge (build, reorder, bypass, failures and retry, sound caching, Pro gates, notes through takes, drum pad following, mapped parameters, reader spectra), the Plugins setting, Library usage, app settings, MIDI routing by device and channel, the one-rack keyboard toggle.
+- `src/play/__tests__/arrangement.test.ts`, `src/lib/__tests__/tape.test.ts`: the tape (docs/arrangement.md).
+- `src/play/__tests__/audioEngine.test.ts`: the lead rack (lock, selection, the first by default; own device or channel still routes), the record, targets, parsing, the protocol, the host against a fake bridge (build, reorder, bypass, failures and retry, sound caching, Pro gates, notes through takes, drum pad following, mapped parameters, reader spectra), the Plugins setting, Library usage, app settings, MIDI routing by device and channel, the one-rack keyboard toggle.
 - `src/lib/__tests__/rackKeyboard.test.ts`: musical typing, the claim that makes shortcuts wait, Esc and leaving Play giving the keyboard back.
 - `src/play/__tests__/engineRender.test.ts`: the render job (racks, notes at their seconds inside the span, followed pads, parameter steps only where a value changed), the reply decoded, the render lined up in a real offline mix (a click lands where it was rendered, slid earlier by a reported latency), engine tracks and what a send takes out of the mix, the send choices, the tap's offset, and the host uploading a send's sound, rendering, tapping, muxing, and turning a rack into an input.
 - `cargo test --lib audio_engine`: plug-in window placement (the plug-in's size centred, never bigger than the screen nor off it, a fixed plug-in keeps its size but its remembered place, a resizable one its remembered size within its limits, one axis only, nonsense frames ignored), plug-in keys, frames remembered and forgotten per plug-in (a throwaway defaults suite); FFT and packing, parameter descriptions and the smoother, id checks, MIDI splitting, the replay schedule (render up to each event, group events at one sample, chunking, events at 0 first, late ones dropped), the job's shape and the reply's packing, the tap collector (a valid WAV, silence where frames were lost, an overlap kept once, the start offset); `cargo test --lib mux_tests`: FFmpeg's mux arguments.

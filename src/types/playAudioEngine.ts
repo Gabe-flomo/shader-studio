@@ -15,6 +15,7 @@
  *
  * Pure: types, parsing, targets and record edits. lib/audioEngineHost.ts runs it.
  */
+import { RACK_CONTROLS_MAX } from './playArrangement';
 import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
 
 
@@ -74,6 +75,13 @@ export interface AeSlot {
   sample?: AeGrainSample;
   /** kind 'granulator': "Grains from" a layer: each thing inside the boundary plays grains (docs/granulator.md). */
   from?: AeGrainFrom;
+  /**
+   * Rack controls (docs/arrangement.md, Configure): up to RACK_CONTROLS_MAX
+   * parameter addresses, in the strip's order. Each is a Play control on
+   * `au:<rack>:<slot>::<address>` in the group "<rack> · <slot name>"
+   * (play/rackControls.ts); the tape records their automation.
+   */
+  controls?: string[];
 }
 
 /** One link: a thing's prop (GR_FROM_PROPS) sets a grain setting (GR_FROM_TARGETS) between min (at 0) and max (at 1). */
@@ -112,6 +120,13 @@ export interface AeRack {
 
 export interface PlayAudioEngine {
   racks: AeRack[];
+  /**
+   * The rack locked as the lead (docs/audio-engine.md, "The lead rack"): it
+   * takes the MIDI notes, the computer keyboard and pad hits that no rack's
+   * own routing claims, whichever card is selected. Absent: the selected
+   * card's rack leads (session state), else the first rack.
+   */
+  lock?: string;
 }
 
 /** Where a note from a rack's input goes: `ae:<rackId>` pad actions (so a take records it). */
@@ -120,8 +135,12 @@ export const RACK_ACT_PREFIX = 'ae:';
 /** A send's source: the master bus, or a chain id. */
 export const isSendSource = (s: string) => /^(master|layer:[A-Za-z0-9_-]{1,64}|node:[A-Za-z0-9_-]{1,64})$/.test(s);
 
-export const AE_RACKS_MAX = 16;
-export const AE_EFFECTS_MAX = 12;
+/** Racks a setup makes (docs/arrangement.md: up to 8 racks, each an instrument and up to 8 effects). */
+export const AE_RACKS_MAX = 8;
+export const AE_EFFECTS_MAX = 8;
+/** A file made before those limits keeps up to this many (nothing it has is dropped on opening). */
+const AE_RACKS_KEEP = 16;
+const AE_EFFECTS_KEEP = 12;
 export const AE_ZONES_MAX = 64;
 /** Pad N of a following drum pad layer plays this note + N. */
 export const AE_PAD_BASE_NOTE = 36;
@@ -260,7 +279,7 @@ export function newRack(id: string, existing: readonly AeRack[]): AeRack {
 
 /** Give the computer keyboard to one rack (and to no other), or take it away. */
 export function setRackKeyboard(ae: PlayAudioEngine | undefined, rackId: string, on: boolean): PlayAudioEngine {
-  return { racks: (ae?.racks ?? []).map(r => ({ ...r, keyboard: on && r.id === rackId })) };
+  return { ...ae, racks: (ae?.racks ?? []).map(r => ({ ...r, keyboard: on && r.id === rackId })) };
 }
 
 /** The rack the computer keyboard plays, if any. */
@@ -270,7 +289,7 @@ export function keyboardRack(ae: PlayAudioEngine | undefined): AeRack | undefine
 
 export function patchRack(ae: PlayAudioEngine | undefined, rackId: string, patch: Partial<AeRack> | ((r: AeRack) => AeRack)): PlayAudioEngine {
   const racks = (ae?.racks ?? []).map(r => (r.id === rackId ? (typeof patch === 'function' ? patch(r) : { ...r, ...patch }) : r));
-  return { racks };
+  return { ...ae, racks };
 }
 
 export function patchSlot(ae: PlayAudioEngine | undefined, rackId: string, slotId: string, patch: Partial<AeSlot>): PlayAudioEngine {
@@ -316,6 +335,39 @@ export function zonesFor(sounds: ReadonlyArray<{ id: string; name: string }>, mo
 }
 
 // ── MIDI routing ────────────────────────────────────────────────────────────
+
+/** Does the rack name its own MIDI input (a device, or a channel)? Then it plays what that sends, lead or not. */
+export const hasOwnRouting = (r: Pick<AeRack, 'midi' | 'channel'>) => (r.midi !== '' && r.midi !== 'off') || r.channel !== 0;
+
+/**
+ * The lead rack (docs/audio-engine.md, "The lead rack"): the one locked as
+ * lead, else the selected card's (`selected`, session state), else the first.
+ * '' when there are no racks.
+ */
+export function leadRackId(ae: PlayAudioEngine | undefined, selected = ''): string {
+  const racks = ae?.racks ?? [];
+  if (ae?.lock && racks.some(r => r.id === ae.lock)) return ae.lock;
+  if (selected && racks.some(r => r.id === selected)) return selected;
+  return racks[0]?.id ?? '';
+}
+
+/**
+ * Does a note from `device` on `channel` play this rack? A rack with its own
+ * routing (a device or a channel) plays what that sends, as rackHears says;
+ * one on "any MIDI input" plays only while it's the lead. 'No MIDI' never.
+ */
+export function rackPlays(r: Pick<AeRack, 'id' | 'midi' | 'channel'>, lead: string, device: string, channel: number): boolean {
+  if (r.midi === 'off') return false;
+  if (hasOwnRouting(r)) return rackHears(r, device, channel);
+  return r.id === lead;
+}
+
+/** Lock a rack as the lead (or unlock: ''). */
+export function setLeadLock(ae: PlayAudioEngine | undefined, rackId: string): PlayAudioEngine {
+  const out: PlayAudioEngine = { ...ae, racks: ae?.racks ?? [] };
+  if (rackId && out.racks.some(r => r.id === rackId)) out.lock = rackId; else delete out.lock;
+  return out;
+}
 
 /**
  * Does a message from `device` on `channel` (1..16) play this rack? A rack on
@@ -388,6 +440,8 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
     }
     const from = parseGrainFrom(o.from);
     if (from) slot.from = from;
+    const rc = parseRackControls(o.controls, a => !!grParam(a));
+    if (rc) slot.controls = rc;
     const sm = o.sample && typeof o.sample === 'object' ? o.sample as Record<string, unknown> : null;
     if (sm) {
       if (typeof sm.sampleId === 'string' && ID.test(sm.sampleId)) slot.sample = { sampleId: sm.sampleId, name: text(sm.name, 'Sound', 120) };
@@ -402,7 +456,19 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
   const params = parseParams(o.params);
   if (params) slot.params = params;
   if (typeof o.state === 'string' && o.state.length <= 2_000_000 && /^[A-Za-z0-9+/=]+$/.test(o.state)) slot.state = o.state;
+  const rc = parseRackControls(o.controls, () => true);
+  if (rc) slot.controls = rc;
   return slot;
+}
+
+/** A slot's rack controls: distinct parameter addresses, at most RACK_CONTROLS_MAX. */
+function parseRackControls(raw: unknown, ok: (address: string) => boolean): string[] | undefined {
+  const out: string[] = [];
+  for (const a of Array.isArray(raw) ? raw : []) {
+    if (out.length >= RACK_CONTROLS_MAX) break;
+    if (typeof a === 'string' && /^\d{1,20}$/.test(a) && !out.includes(a) && ok(a)) out.push(a);
+  }
+  return out.length ? out : undefined;
 }
 
 /** A granulator's "Grains from", or undefined when it names no source. */
@@ -429,7 +495,7 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
   const racks: AeRack[] = [];
   const seen = new Set<string>();
   for (const x of Array.isArray(a.racks) ? a.racks : []) {
-    if (racks.length >= AE_RACKS_MAX) break;
+    if (racks.length >= AE_RACKS_KEEP) break;
     if (!x || typeof x !== 'object') continue;
     const o = x as Record<string, unknown>;
     if (typeof o.id !== 'string' || !ID.test(o.id) || seen.has(o.id)) continue;
@@ -437,7 +503,7 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
     const effects: AeSlot[] = [];
     const fxIds = new Set<string>();
     for (const e of Array.isArray(o.effects) ? o.effects : []) {
-      if (effects.length >= AE_EFFECTS_MAX) break;
+      if (effects.length >= AE_EFFECTS_KEEP) break;
       const s = parseSlot(e);
       if (s && !fxIds.has(s.id)) { fxIds.add(s.id); effects.push(s); }
     }
@@ -456,12 +522,15 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
     if (typeof o.source === 'string' && isSendSource(o.source)) rack.source = o.source;
     racks.push(rack);
   }
-  return racks.length ? { racks } : undefined;
+  if (!racks.length) return undefined;
+  const lock = typeof a.lock === 'string' && racks.some(r => r.id === a.lock) ? a.lock : undefined;
+  return lock ? { racks, lock } : { racks };
 }
 
 /** The record's engine with only what `plugins` allows: without Audio Units, AU slots are left out (the sample player stays). */
 export function engineWithoutPlugins(ae: PlayAudioEngine): PlayAudioEngine {
   return {
+    ...ae,
     racks: ae.racks.map(r => ({ ...r, instrument: r.instrument?.kind === 'au' ? null : r.instrument, effects: [] })),
   };
 }

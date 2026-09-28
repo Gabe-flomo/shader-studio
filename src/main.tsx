@@ -31,6 +31,8 @@ import { playEngine } from './lib/playEngine'
 import { midiEngine } from './lib/midiEngine'
 import { midiMonitor } from './lib/midiMonitor'
 import { rackKeyboard } from './lib/rackKeyboard'
+import { tape, useTape } from './lib/tape'
+import { audioEngine } from './lib/audioEngine'
 import { padGrid } from './lib/padGrid'
 
 // The webcam turns off as soon as no layer or hand tracking uses it.
@@ -56,6 +58,8 @@ if (import.meta.env.DEV) {
     midiMonitor, rackKeyboard,
     /** Linked folders without a folder picker: `(await linked()).devLinkOpfs('Samples', { 'kick.wav': blob })` links a folder in the browser's private file system. */
     linked: () => import('./files/linkedFolders'),
+    /** The Audio engine's tape (docs/arrangement.md): `tape.record()`, `tape.play()`, `useTape.getState()`; `audioEngine.setMasterVolume(0)` for silent checks. */
+    tape, useTape, audioEngine,
     /**
      * Hand tracking without a camera (the preview browser has none): feed the real tracker a video,
      * an image or a canvas instead, then start it. A URL ending in an image type is loaded as an image.

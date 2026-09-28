@@ -36,7 +36,7 @@
  */
 import { create } from 'zustand';
 import {
-  AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, aeRack, aeSlot, isGranulatorRack, keyboardRack, parseAuTarget, auPropId, rackHears, unitKey, zoneForNote,
+  AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, aeRack, aeSlot, isGranulatorRack, keyboardRack, leadRackId, parseAuTarget, auPropId, rackPlays, unitKey, zoneForNote,
   type AeRack, type AeSlot, type AeZone, type PlayAudioEngine,
 } from '../types/playAudioEngine';
 import {
@@ -105,6 +105,13 @@ function setLoading(key: string, on: boolean): void {
     return { loading };
   });
 }
+
+// ── The selected rack card (session state: the lead unless one is locked) ──
+
+export const useEngineSelection = create<{ selected: string; select: (rackId: string) => void }>(set => ({
+  selected: '',
+  select: rackId => set({ selected: rackId }),
+}));
 
 // ── Device settings (this device: output, master volume) ────────────────────
 
@@ -192,6 +199,12 @@ class WebRack {
     }
   }
   missing(): string[] { return this.zones.filter(z => this.buffers.get(z.sampleId) === 'error').map(z => z.sampleId); }
+  /** The zones and their decoded sounds (the tape's lane previews render with them). */
+  loaded(): { zones: AeZone[]; buffers: Map<string, AudioBuffer> } {
+    const buffers = new Map<string, AudioBuffer>();
+    for (const [id, b] of this.buffers) if (b instanceof AudioBuffer) buffers.set(id, b);
+    return { zones: this.zones, buffers };
+  }
   setVolume(v: number, mute: boolean): void { this.out.gain.setTargetAtTime(mute ? 0 : v, this.ctx.currentTime, 0.015); }
   midi(status: number, d1: number, d2: number): void {
     const kind = status & 0xf0;
@@ -368,6 +381,12 @@ class AudioEngineHost {
   granulatorPoints(rackId: string, pts: GrPoints, inside: number): void {
     const w = this.web.get(rackId);
     if (w && w.kind === 'granulator') w.points(pts, inside);
+  }
+
+  /** A browser sample player rack's zones and decoded sounds, or null (not running here). */
+  webSampler(rackId: string): { zones: AeZone[]; buffers: Map<string, AudioBuffer> } | null {
+    const w = this.web.get(rackId);
+    return w && w.kind === 'sampler' ? w.loaded() : null;
   }
 
   /** A granulator rack running here (the card draws its grains), or null. */
@@ -646,6 +665,12 @@ class AudioEngineHost {
     } catch { return []; }
   }
 
+  /** A slot's parameters as they are now, without touching the card's list (Configure watches the plug-in's window with it). */
+  async readParams(rack: string, slot: string): Promise<AuParam[] | null> {
+    if (!this.invoke) return null;
+    try { return parseParamList(await this.invoke<unknown>('ae_params', { rack, slot })); } catch { return null; }
+  }
+
   /** A slot's whole state, to keep in the record. */
   async slotState(rack: string, slot: string): Promise<string | null> {
     if (!this.invoke) return null;
@@ -717,11 +742,25 @@ class AudioEngineHost {
     if (e.kind === 'devices' || !this.target) return;
     const bytes = midiEventBytes(e);
     if (!bytes) return;
-    for (const r of this.target.racks) if (rackHears(r, e.device ?? '', e.channel)) this.input(r.id, bytes);
+    // Racks with their own routing play what it sends; the rest only while they lead (docs/audio-engine.md, "The lead rack").
+    const lead = leadRackId(this.target, useEngineSelection.getState().selected);
+    for (const r of this.target.racks) if (rackPlays(r, lead, e.device ?? '', e.channel)) this.input(r.id, bytes);
   }
 
-  /** A message for a rack from its input (MIDI, the keyboard, the card's keys). Notes go through a take. */
-  input(rackId: string, bytes: number[]): void {
+  /** Listeners for what's played live into racks (the tape records from here; lib/tape.ts). */
+  private inputTaps = new Set<(rackId: string, bytes: number[]) => void>();
+  onInput(fn: (rackId: string, bytes: number[]) => void): () => void {
+    this.inputTaps.add(fn);
+    return () => { this.inputTaps.delete(fn); };
+  }
+
+  /**
+   * A message for a rack from its input (MIDI, the keyboard, the card's keys),
+   * or from the tape playing (`fromTape`: not heard by the input taps, so the
+   * tape doesn't record itself). Notes go through a take.
+   */
+  input(rackId: string, bytes: number[], fromTape = false): void {
+    if (!fromTape) for (const fn of this.inputTaps) fn(rackId, bytes);
     const kind = bytes[0] & 0xf0;
     if ((kind === 0x90 || kind === 0x80) && this.act) {
       const on = kind === 0x90 && bytes[2] > 0;

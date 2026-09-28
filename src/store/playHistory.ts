@@ -61,6 +61,7 @@ const SECTIONS: Record<string, { name: string; noun?: string; kind?: PlayChangeK
   finish: { name: 'Finish' },
   audioFx: { name: 'Audio effects' },
   audioEngine: { name: 'Audio engine' },
+  arrangement: { name: 'Tape' },
   projection: { name: 'Projection' },
 };
 

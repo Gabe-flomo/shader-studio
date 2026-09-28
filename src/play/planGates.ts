@@ -71,6 +71,7 @@ export function playableForPlan(record: PlayRecord, plan: Plan | null): PlayReco
     finish: canOn(plan, 'play.finish') ? record.finish : undefined,
     audioFx: canOn(plan, 'play.audioFx') ? record.audioFx : undefined,
     audioEngine: !record.audioEngine || !canOn(plan, 'audio.engine') ? undefined : canOn(plan, 'audio.plugins') ? record.audioEngine : engineWithoutPlugins(record.audioEngine),
+    arrangement: !record.arrangement || !canOn(plan, 'audio.engine') ? undefined : record.arrangement,
     display: record.display ? { picture: true, backdrop: record.display.backdrop } : undefined,
   };
   cache.set(record, out);
