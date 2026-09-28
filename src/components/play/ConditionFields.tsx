@@ -268,20 +268,25 @@ export function SignalPicker({ value, onChange, none, ariaLabel = 'Signal' }: { 
 const NO_SIGNALS: NonNullable<PlayRecord['signals']> = [];
 
 /** A setup's signals: add, rename, fire by hand (to try what listens), delete. Each flashes as it fires. */
-export function SignalsList({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: PlayRecord) => PlayRecord) => void }) {
+export function SignalsList({ play, onChange, bare = false }: {
+  play: PlayRecord;
+  onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
+  /** No heading or explainer: the full-width Signals page has its own. */
+  bare?: boolean;
+}) {
   const tk = useTokens();
   const signals = play.signals ?? NO_SIGNALS;
   const [lit, setLit] = useState<Record<string, number>>({});
   useEffect(() => playEngine.onSignal(id => setLit(l => ({ ...l, [id]: (l[id] ?? 0) + 1 }))), []);
   return (
-    <div style={{ marginTop: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 4px' }}>
+    <div style={{ marginTop: bare ? 0 : 14 }}>
+      {!bare && <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 4px' }}>
         <span style={{ font: `650 12.5px ${fontFamily.ui}` }}>Signals</span>
         {signals.length > 0 && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}` }}>{signals.length}</span>}
         <span style={{ flex: 1 }} />
         <Button size="sm" icon="plus" onClick={() => onChange(p => addSignal(p).play)}>Add signal</Button>
-      </div>
-      {signals.length === 0 && (
+      </div>}
+      {signals.length === 0 && !bare && (
         <div style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}`, padding: '2px 2px 6px' }}>
           A signal is a named event: an action sends it (Do: Send a signal), and other actions and mappings fire on it (When: a signal fires). Chain them: the dot reaches the box, that sends Hit, Hit bursts the sparks and steps the text.
         </div>

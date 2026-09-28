@@ -75,7 +75,7 @@ let draggingRow: ItemRef | null = null;
 const sameItem = (a: ItemRef, b: ItemRef) => a.kind === b.kind && a.id === b.id;
 const nodeItem = (n: TreeNode): ItemRef => (n.kind === 'layer' ? { kind: 'layer', id: n.layer.id } : { kind: 'group', id: n.group.id });
 
-export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, top, split = false, big = false }: {
+export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, top, split = false, big = false, extras = true }: {
   play: PlayRecord;
   touch: boolean;
   /** Targets that already have a control (their + is shown pressed). */
@@ -89,6 +89,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   split?: boolean;
   /** In the split view's big panel (wide or not): big editors (the drum pads') show in full. */
   big?: boolean;
+  /** Actions and Signals under the list (the rail's full-width pages give them pages of their own). */
+  extras?: boolean;
 }) {
   const tk = useTokens();
   const mode = useThemeMode();
@@ -461,8 +463,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             </RowShell>
           );
         })}
-        {!entered && <ActionsSection play={play} onChange={onChange} />}
-        {!entered && <SignalsList play={play} onChange={onChange} />}
+        {!entered && extras && <ActionsSection play={play} onChange={onChange} />}
+        {!entered && extras && <SignalsList play={play} onChange={onChange} />}
       </div>)}
       {duplicating && <DuplicateGroupDialog group={duplicating} play={play} onPick={w => duplicateGroupAs(duplicating, w)} onClose={() => setDuplicating(null)} />}
     </>

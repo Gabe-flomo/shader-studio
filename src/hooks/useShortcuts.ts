@@ -40,6 +40,7 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'fullscreen',        label: 'Full screen',           group: 'View',       defaultCombo: 'cmd+shift+f', description: 'The picture on its own (Studio and Play preview), or the presentation (Present). F alone does it too on Play and in Present’s Slides and Scroll. Esc leaves', inEditors: true },
   // Play
   { id: 'playSplit',         label: 'Split the Play view',   group: 'View',       defaultCombo: 'cmd+shift+l', description: 'On the Play page: the picture beside a big Controls, Layers or Mappings panel, or back to the full picture' },
+  { id: 'playRail',          label: 'Fold the Play sidebar', group: 'View',       defaultCombo: 'cmd+shift+b', description: 'On the Play page, split: fold the sidebar into a rail of icons so the panel takes its width, one page at a time; again to bring it back' },
   // Node graph — add nodes
   { id: 'addNode',           label: 'Open node palette',     group: 'Add Nodes',  defaultCombo: 'a',           description: 'Open the add-node palette' },
   { id: 'addUV',             label: 'Add UV node',           group: 'Add Nodes',  defaultCombo: 'u',           description: 'Instantly add a UV node' },

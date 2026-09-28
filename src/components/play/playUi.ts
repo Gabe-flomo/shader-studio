@@ -11,6 +11,7 @@
  */
 import { create } from 'zustand';
 import type { PlayRecord } from '../../types/play';
+import type { RailPage } from './railPages';
 
 export type PlayTab = 'controls' | 'layers' | 'finish' | 'engine' | 'mappings';
 
@@ -37,6 +38,10 @@ function loadFolded(): Record<string, true> {
 interface PlayUi {
   tab: PlayTab;
   setTab: (tab: PlayTab) => void;
+  /** Phones: the page picked from the bottom row's sheet ('' = the tab's own; railPages.phonePageShown). */
+  phonePage: RailPage | '';
+  /** Phones: show a page (its tab, and the page within it). */
+  showPage: (page: RailPage) => void;
   /** The selected layer's id ('' = none). */
   selected: string;
   /** Bumped when something asks for the selected layer to be shown: the list opens it and scrolls to it. */
@@ -88,6 +93,13 @@ interface PlayUi {
 
 const NONE: ReadonlySet<string> = new Set();
 
+/** Each page's tab (kept here as well as in railPages.ts, so this module needs nothing from it at run time). */
+const PAGE_TABS: Record<RailPage, PlayTab> = {
+  controls: 'controls', layers: 'layers', actions: 'layers', signals: 'layers', background: 'layers',
+  'finish-picture': 'finish', 'finish-sound': 'finish', 'engine-performance': 'engine',
+  mappings: 'mappings', 'midi-file': 'mappings', 'pad-grid': 'mappings',
+};
+
 /** The record as it plays with solo applied (the same object when nothing is soloed). */
 export function applySolo(p: PlayRecord, layers: ReadonlySet<string>, mappings: ReadonlySet<string>): PlayRecord {
   if (!layers.size && !mappings.size) return p;
@@ -100,20 +112,25 @@ export function applySolo(p: PlayRecord, layers: ReadonlySet<string>, mappings: 
 
 export const usePlayUi = create<PlayUi>((set, get) => ({
   tab: 'controls',
-  setTab: tab => set({ tab }),
+  setTab: tab => set({ tab, phonePage: '' }),
+  phonePage: '',
+  showPage: page => set({
+    tab: PAGE_TABS[page], phonePage: page,
+    ...(page === 'finish-picture' ? { finishView: 'picture' as const } : page === 'finish-sound' ? { finishView: 'sound' as const } : {}),
+  }),
   selected: '',
   revealTick: 0,
   select: id => set(get().selected === id ? { selected: id } : { selected: id, mask: '' }),
-  reveal: id => set({ tab: 'layers', selected: id, revealTick: get().revealTick + 1, ...(get().selected === id ? {} : { mask: '' }) }),
+  reveal: id => set({ tab: 'layers', phonePage: '', selected: id, revealTick: get().revealTick + 1, ...(get().selected === id ? {} : { mask: '' }) }),
   finishFocus: '',
   finishTick: 0,
-  revealFinish: id => set({ tab: 'finish', finishView: 'picture', finishFocus: id, finishTick: get().finishTick + 1 }),
+  revealFinish: id => set({ tab: 'finish', phonePage: '', finishView: 'picture', finishFocus: id, finishTick: get().finishTick + 1 }),
   finishView: 'picture',
   setFinishView: finishView => set({ finishView }),
-  revealAudioFx: id => set({ tab: 'finish', finishView: 'sound', finishFocus: id, finishTick: get().finishTick + 1 }),
+  revealAudioFx: id => set({ tab: 'finish', phonePage: '', finishView: 'sound', finishFocus: id, finishTick: get().finishTick + 1 }),
   controlGroupFocus: '',
   controlGroupTick: 0,
-  revealControlGroup: group => set({ tab: 'controls', controlGroupFocus: group, controlGroupTick: get().controlGroupTick + 1 }),
+  revealControlGroup: group => set({ tab: 'controls', phonePage: '', controlGroupFocus: group, controlGroupTick: get().controlGroupTick + 1 }),
   mask: '',
   setMask: mask => set({ mask }),
   panel: loadPanel(),

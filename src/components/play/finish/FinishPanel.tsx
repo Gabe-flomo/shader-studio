@@ -72,10 +72,15 @@ export function FinishPanel(props: {
   touch: boolean;
   /** The split view's wide panel: cards in columns. */
   wide?: boolean;
+  /** Just this view, with no Picture/Sound switch (the rail's full-width pages are one each). */
+  only?: 'picture' | 'sound';
 }) {
+  const { only, ...rest } = props;
   const tk = useTokens();
-  const view = usePlayUi(s => s.finishView), setView = usePlayUi(s => s.setFinishView);
+  const chosen = usePlayUi(s => s.finishView), setView = usePlayUi(s => s.setFinishView);
+  const view = only ?? chosen;
   const nSound = Object.values(props.play.audioFx?.chains ?? {}).reduce((n, c) => n + c.effects.length, 0);
+  if (only) return <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{view === 'sound' ? <AudioFxPanel {...rest} /> : <PictureFinish {...rest} />}</div>;
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div style={{ flexShrink: 0, padding: '8px 12px 0', borderBottom: `1px solid ${tk.border.subtle}` }}>
@@ -86,7 +91,7 @@ export function FinishPanel(props: {
           ]} />
         <div style={{ height: 8 }} />
       </div>
-      {view === 'sound' ? <AudioFxPanel {...props} /> : <PictureFinish {...props} />}
+      {view === 'sound' ? <AudioFxPanel {...rest} /> : <PictureFinish {...rest} />}
     </div>
   );
 }
