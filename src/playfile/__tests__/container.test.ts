@@ -1,13 +1,15 @@
 /**
- * The .playfile container: writing and reading every kind, manifest
- * validation (paths, sizes, hashes, versions, unknown kinds), signing and
- * tamper detection with both Ed25519 backends, and sealing.
+ * The .playfile container: writing and reading every kind, the v2 envelope
+ * (opaque to archive tools, tamper-proof, v1 still read), manifest validation
+ * (paths, sizes, hashes, versions, unknown kinds), signing and tamper
+ * detection with both Ed25519 backends, and sealing.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { readPlayfile, isPlayfile } from '../reader';
-import { writePlayfile, playfileName } from '../writer';
-import { DEFAULT_LIMITS, isSafePath, ITEM_KINDS, PlayfileError, type PlayfileLimits } from '../format';
+import { writePlayfile, writePlayfileZip, playfileName } from '../writer';
+import { forceContainerBackend, HEADER_BYTES, isContainer, unwrapContainer, wrapContainer } from '../container';
+import { CONTAINER_VERSION, DEFAULT_LIMITS, isSafePath, ITEM_KINDS, type PlayfileLimits } from '../format';
 import { canonicalJson, sha256Hex } from '../bytes';
 import { fingerprint, forceEd25519Backend, newSeed, publicKeyOf, signerFromSeed, trustAuthor, trustedFor, type SmallKV } from '../signing';
 import { minifyGlsl, sealDefinition, unsealDefinition, storedForm } from '../sealing';
@@ -20,11 +22,13 @@ async function signer() {
   return signerFromSeed(seed, await publicKeyOf(seed));
 }
 
-/** Rewrite one file inside a ZIP. */
-function patchZip(bytes: Uint8Array, path: string, f: (b: Uint8Array) => Uint8Array): Uint8Array {
-  const files: Record<string, Uint8Array> = unzipSync(bytes);
+/** Rewrite one file inside the ZIP a .playfile holds (v2 is unwrapped and wrapped again; a v1 ZIP stays one). */
+async function patchZip(bytes: Uint8Array, path: string, f: (b: Uint8Array) => Uint8Array): Promise<Uint8Array> {
+  const v2 = isContainer(bytes);
+  const files: Record<string, Uint8Array> = unzipSync(v2 ? await unwrapContainer(bytes) : bytes);
   files[path] = f(files[path]);
-  return zipSync(files);
+  const zip = zipSync(files);
+  return v2 ? wrapContainer(zip) : zip;
 }
 const editManifest = (bytes: Uint8Array, f: (m: Record<string, unknown>) => void) => patchZip(bytes, 'manifest.json', b => { const m = JSON.parse(strFromU8(b)); f(m); return strToU8(JSON.stringify(m)); });
 
@@ -63,36 +67,158 @@ describe('writing and reading', () => {
 
   it('refuses an empty file list, non-ZIPs and ZIPs without a manifest', async () => {
     await expect(writePlayfile([])).rejects.toThrow();
-    await expect(readPlayfile(strToU8('{"nodes":[]}'))).rejects.toThrow(PlayfileError);
+    await expect(readPlayfile(strToU8('{"nodes":[]}'))).rejects.toThrow(/Not a Playfield file/);
     await expect(readPlayfile(zipSync({ 'a.json': strToU8('{}') }))).rejects.toThrow(/no manifest/);
+    await expect(readPlayfile(await wrapContainer(zipSync({ 'a.json': strToU8('{}') })))).rejects.toThrow(/no manifest/);
     expect(isPlayfile(zipSync({ 'library.json': strToU8('{}') }))).toBe(false);
   });
 
   it('still reads the names the format had while it was built', async () => {
     const { bytes } = await writePlayfile([{ kind: 'glsl', name: 'x', data: 'void main(){}' }]);
     for (const f of ['playfield', 'play']) {
-      const old = editManifest(bytes, m => { m.format = f; });
+      const old = await editManifest(bytes, m => { m.format = f; });
       expect(isPlayfile(old)).toBe(true);
       expect((await readPlayfile(old)).items).toHaveLength(1);
     }
   });
 });
 
+describe('the v2 envelope', () => {
+  const magic = (b: Uint8Array) => String.fromCharCode(...b.subarray(0, 4));
+  const flip = (b: Uint8Array, at: number) => { const c = b.slice(); c[at] ^= 1; return c; };
+
+  it('round-trips every kind through the envelope, and the bytes start with PLYF', async () => {
+    const items = ITEM_KINDS.map((kind, i) => ({ kind, name: `Item ${i}`, data: `{"kind":"${kind}","n":${i}}`, ...(kind === 'background' ? { ext: '.png' } : {}) }));
+    const { bytes, manifest } = await writePlayfile(items, { author: 'Ada' });
+    expect(magic(bytes)).toBe('PLYF');
+    expect(bytes[4]).toBe(CONTAINER_VERSION);
+    expect(isContainer(bytes)).toBe(true);
+    expect(isPlayfile(bytes)).toBe(true);
+    // The manifest inside is still layout version 1: the envelope changed, not the ZIP.
+    expect(manifest.version).toBe(1);
+    const r = await readPlayfile(bytes);
+    expect(r.manifest.version).toBe(1);
+    expect(r.items.map(i => [i.kind, i.name, strFromU8(i.data)])).toEqual(items.map(i => [i.kind, i.name, i.data]));
+    expect(r.skipped).toEqual([]);
+    expect(r.signature).toEqual({ state: 'unsigned', name: 'Ada' });
+  });
+
+  it('is not a ZIP: an archive tool can’t list or extract it, and nothing inside is text', async () => {
+    const { bytes } = await writePlayfile([{ kind: 'graph', name: 'Rings', data: '{"nodes":[{"type":"secretNodeType"}]}' }, { kind: 'glsl', name: 'Shader', data: 'float secretFn() { return 1.0; }' }]);
+    expect(bytes[0] === 0x50 && bytes[1] === 0x4b).toBe(false);
+    expect(() => unzipSync(bytes)).toThrow();
+    const text = String.fromCharCode(...bytes);
+    for (const s of ['manifest.json', 'graphs/', 'Rings', 'secretNodeType', 'secretFn', 'README', 'playfile']) expect(text).not.toContain(s);
+    // Two writes of the same content don't look alike (a salt and a nonce per file).
+    const { bytes: again } = await writePlayfile([{ kind: 'graph', name: 'Rings', data: '{"nodes":[{"type":"secretNodeType"}]}' }, { kind: 'glsl', name: 'Shader', data: 'float secretFn() { return 1.0; }' }]);
+    expect(toHexStr(bytes.subarray(16, 44))).not.toBe(toHexStr(again.subarray(16, 44)));
+    expect(toHexStr(bytes.subarray(HEADER_BYTES, HEADER_BYTES + 32))).not.toBe(toHexStr(again.subarray(HEADER_BYTES, HEADER_BYTES + 32)));
+  });
+
+  it('refuses a file whose bytes were changed anywhere, as modified or damaged', async () => {
+    const { bytes } = await writePlayfile([{ kind: 'graph', name: 'g', data: '{"a":1}' }]);
+    // Ciphertext, tag, salt, nonce, flags and the length fields are all covered.
+    for (const at of [HEADER_BYTES, HEADER_BYTES + 5, bytes.length - 1, 16, 32, 5, 8, 12]) {
+      await expect(readPlayfile(flip(bytes, at)), `byte ${at}`).rejects.toThrow(/modified or damaged/);
+    }
+    await expect(readPlayfile(bytes.subarray(0, bytes.length - 3))).rejects.toThrow(/modified or damaged/);
+    await expect(readPlayfile(bytes.subarray(0, 20))).rejects.toThrow(/modified or damaged/);
+    const longer = new Uint8Array(bytes.length + 4); longer.set(bytes);
+    await expect(readPlayfile(longer)).rejects.toThrow(/modified or damaged/);
+    // Untouched, it still opens (the copies above didn't change the original).
+    expect((await readPlayfile(bytes)).items).toHaveLength(1);
+  });
+
+  it('still opens a v1 file (a plain ZIP) and always will', async () => {
+    const { bytes } = await writePlayfileZip([{ kind: 'graph', name: 'Old', data: '{"nodes":[]}' }, { kind: 'glsl', name: 's', data: 'void main(){}' }], { author: 'Ada' });
+    expect(bytes[0] === 0x50 && bytes[1] === 0x4b).toBe(true);
+    expect(Object.keys(unzipSync(bytes))).toContain('manifest.json');
+    expect(isPlayfile(bytes)).toBe(true);
+    expect(isContainer(bytes)).toBe(false);
+    const r = await readPlayfile(bytes);
+    expect(r.items.map(i => i.name)).toEqual(['Old', 's']);
+    // A v1 signed file too.
+    const s = await signer();
+    const signed = await writePlayfileZip([{ kind: 'nodes', name: 'P', data: '{"version":1,"nodes":[]}' }], { author: 'Ada', signer: s });
+    expect((await readPlayfile(signed.bytes)).signature.state).toBe('signed');
+    // And the same items wrapped read the same.
+    expect((await readPlayfile(await wrapContainer(signed.bytes))).signature).toEqual((await readPlayfile(signed.bytes)).signature);
+  });
+
+  it('refuses the wrong magic, garbage and a newer container, each with its sentence', async () => {
+    const { bytes } = await writePlayfile([{ kind: 'graph', name: 'g', data: '{}' }]);
+    const wrong = bytes.slice(); wrong.set(strToU8('PLYX'), 0);
+    await expect(readPlayfile(wrong)).rejects.toThrow(/Not a Playfield file/);
+    expect(isPlayfile(wrong)).toBe(false);
+    await expect(readPlayfile(strToU8('hello there'))).rejects.toThrow(/Not a Playfield file/);
+    await expect(readPlayfile(new Uint8Array(0))).rejects.toThrow(/Not a Playfield file/);
+    await expect(readPlayfile(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0]))).rejects.toThrow(/Not a Playfield file/);
+    const newer = bytes.slice(); newer[4] = CONTAINER_VERSION + 1;
+    await expect(readPlayfile(newer)).rejects.toThrow(/newer Playfield/);
+    expect(isPlayfile(newer)).toBe(true);
+    const zero = bytes.slice(); zero[4] = 0;
+    await expect(readPlayfile(zero)).rejects.toThrow(/modified or damaged/);
+  });
+
+  it('checks the header’s lengths against the limits before decrypting anything', async () => {
+    const { bytes } = await writePlayfile([{ kind: 'glsl', name: 's', data: 'x'.repeat(1000) }]);
+    // The header claims a ZIP bigger than the limit: refused as too big, not tried (a tampered tag would say "modified").
+    const claims = bytes.slice();
+    new DataView(claims.buffer).setUint32(12, small.fileBytes + 1, true);
+    await expect(readPlayfile(claims, small)).rejects.toThrow(/too big/);
+    await expect(readPlayfile(claims, small)).rejects.not.toThrow(/modified/);
+    // The file itself past the limit: refused before the header is even looked at.
+    const huge = new Uint8Array(small.fileBytes + 1); huge.set(strToU8('PLYF'), 0); huge[4] = CONTAINER_VERSION;
+    await expect(readPlayfile(huge, small)).rejects.toThrow(/too big/);
+    // A ciphertext length that doesn't match the file: refused before decrypting.
+    const short = bytes.slice();
+    new DataView(short.buffer).setUint32(8, 10, true);
+    await expect(readPlayfile(short)).rejects.toThrow(/modified or damaged/);
+    // Limits still apply to what's inside, exactly as for a v1 file.
+    const big = await writePlayfile([{ kind: 'glsl', name: 'big', data: 'x'.repeat(60_000) }]);
+    await expect(readPlayfile(big.bytes, small)).rejects.toThrow(/too big/);
+    const many = await writePlayfile(Array.from({ length: 25 }, (_, i) => ({ kind: 'glsl' as const, name: `s${i}`, data: 'x' })));
+    await expect(readPlayfile(many.bytes, small)).rejects.toThrow(/too many/);
+  });
+
+  it('gives the same result on both AES backends, and each opens the other’s files', async () => {
+    const zip = (await writePlayfileZip([{ kind: 'graph', name: 'g', data: '{"x":1}' }])).bytes;
+    try {
+      forceContainerBackend('webcrypto');
+      const a = await wrapContainer(zip);
+      forceContainerBackend('noble');
+      const b = await wrapContainer(zip);
+      expect([...await unwrapContainer(a)]).toEqual([...zip]);
+      forceContainerBackend('webcrypto');
+      expect([...await unwrapContainer(b)]).toEqual([...zip]);
+      await expect(unwrapContainer(flip(a, HEADER_BYTES))).rejects.toThrow(/modified or damaged/);
+      forceContainerBackend('noble');
+      await expect(unwrapContainer(flip(b, HEADER_BYTES))).rejects.toThrow(/modified or damaged/);
+    } finally { forceContainerBackend(null); }
+    // Uncompressed payloads open too (the flag says which).
+    const plain = await wrapContainer(zip, { compress: false });
+    expect(plain[5]).toBe(0);
+    expect([...await unwrapContainer(plain)]).toEqual([...zip]);
+  });
+});
+
+const toHexStr = (b: Uint8Array) => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+
 describe('manifest validation', () => {
   it('rejects paths that point outside the file', async () => {
     const { bytes } = await writePlayfile([{ kind: 'graph', name: 'g', data: '{}' }]);
     for (const p of ['../evil.json', '/abs.json', 'a/../../b', 'C:/x', 'a\\b', 'a//b', './a']) {
-      await expect(readPlayfile(editManifest(bytes, m => { (m.items as Array<{ path: string }>)[0].path = p; }))).rejects.toThrow(/outside the file/);
+      await expect(readPlayfile(await editManifest(bytes, m => { (m.items as Array<{ path: string }>)[0].path = p; }))).rejects.toThrow(/outside the file/);
     }
     expect(isSafePath('graphs/ok.json')).toBe(true);
   });
 
   it('ignores ZIP entries with unsafe names, and files the manifest doesn’t list', async () => {
     const { bytes } = await writePlayfile([{ kind: 'graph', name: 'g', data: '{}' }]);
-    const files = unzipSync(bytes);
+    const files = unzipSync(await unwrapContainer(bytes));
     files['../../escape.txt'] = strToU8('x');
     files['extra.bin'] = strToU8('y');
-    const r = await readPlayfile(zipSync(files));
+    const r = await readPlayfile(await wrapContainer(zipSync(files)));
     expect(r.items).toHaveLength(1);
     expect(r.notes.join(' ')).toMatch(/unsafe path/);
     expect(r.notes.join(' ')).toMatch(/not listed/);
@@ -111,10 +237,10 @@ describe('manifest validation', () => {
 
   it('refuses a newer format version and says so; reads unknown kinds as notes', async () => {
     const { bytes } = await writePlayfile([{ kind: 'graph', name: 'g', data: '{}' }]);
-    await expect(readPlayfile(editManifest(bytes, m => { m.version = 2; }))).rejects.toThrow(/newer Playfield/);
-    await expect(readPlayfile(editManifest(bytes, m => { m.version = 'x'; }))).rejects.toThrow(/version/);
-    await expect(readPlayfile(editManifest(bytes, m => { m.format = 'zip'; }))).rejects.toThrow(/manifest/);
-    const withHologram = editManifest(bytes, m => { (m.items as Array<{ kind: string }>)[0].kind = 'hologram'; });
+    await expect(readPlayfile(await editManifest(bytes, m => { m.version = 2; }))).rejects.toThrow(/newer Playfield/);
+    await expect(readPlayfile(await editManifest(bytes, m => { m.version = 'x'; }))).rejects.toThrow(/version/);
+    await expect(readPlayfile(await editManifest(bytes, m => { m.format = 'zip'; }))).rejects.toThrow(/manifest/);
+    const withHologram = await editManifest(bytes, m => { (m.items as Array<{ kind: string }>)[0].kind = 'hologram'; });
     const r = await readPlayfile(withHologram);
     expect(r.items).toEqual([]);
     expect(r.skipped[0].reason).toMatch(/hologram/);
@@ -123,15 +249,15 @@ describe('manifest validation', () => {
 
   it('leaves out items whose bytes don’t match their size or hash', async () => {
     const { bytes, manifest } = await writePlayfile([{ kind: 'graph', name: 'a', data: '{"a":1}' }, { kind: 'graph', name: 'b', data: '{"b":2}' }]);
-    const changed = patchZip(bytes, manifest.items[0].path, () => strToU8('{"a":9}'));
+    const changed = await patchZip(bytes, manifest.items[0].path, () => strToU8('{"a":9}'));
     const r = await readPlayfile(changed);
     expect(r.items.map(i => i.name)).toEqual(['b']);
     expect(r.skipped[0].reason).toMatch(/hash/);
-    const shorter = patchZip(bytes, manifest.items[1].path, () => strToU8('{}'));
+    const shorter = await patchZip(bytes, manifest.items[1].path, () => strToU8('{}'));
     expect((await readPlayfile(shorter)).skipped[0].reason).toMatch(/size/);
-    const bad = editManifest(bytes, m => { (m.items as Array<{ sha256: string }>)[0].sha256 = 'nothex'; });
+    const bad = await editManifest(bytes, m => { (m.items as Array<{ sha256: string }>)[0].sha256 = 'nothex'; });
     await expect(readPlayfile(bad)).rejects.toThrow(/SHA-256/);
-    const dup = editManifest(bytes, m => { const its = m.items as Array<{ path: string }>; its[1].path = its[0].path; });
+    const dup = await editManifest(bytes, m => { const its = m.items as Array<{ path: string }>; its[1].path = its[0].path; });
     await expect(readPlayfile(dup)).rejects.toThrow(/twice/);
   });
 });
@@ -149,23 +275,23 @@ describe('signing', () => {
 
         // An item changed, with its hash updated in the manifest: the signature no longer matches.
         const newData = strToU8('void main(){ gl_FragColor = vec4(1.0); }');
-        let t = patchZip(bytes, manifest.items[1].path, () => newData);
-        t = editManifest(t, m => { const it = (m.items as Array<{ sha256: string; bytes: number }>)[1]; it.sha256 = sha256Hex(newData); it.bytes = newData.length; });
+        let t = await patchZip(bytes, manifest.items[1].path, () => newData);
+        t = await editManifest(t, m => { const it = (m.items as Array<{ sha256: string; bytes: number }>)[1]; it.sha256 = sha256Hex(newData); it.bytes = newData.length; });
         expect((await readPlayfile(t)).signature.state).toBe('modified');
         // An item changed, manifest untouched: that item is refused and the file reads as modified.
-        const t2 = patchZip(bytes, manifest.items[0].path, () => strToU8('{"version":1,"nodes":[1]}'));
+        const t2 = await patchZip(bytes, manifest.items[0].path, () => strToU8('{"version":1,"nodes":[1]}'));
         const r2 = await readPlayfile(t2);
         expect(r2.signature.state).toBe('modified');
         expect(r2.items.map(i => i.kind)).toEqual(['glsl']);
         // The author's name swapped.
-        expect((await readPlayfile(editManifest(bytes, m => { (m.author as { name: string }).name = 'Mallory'; }))).signature.state).toBe('modified');
+        expect((await readPlayfile(await editManifest(bytes, m => { (m.author as { name: string }).name = 'Mallory'; }))).signature.state).toBe('modified');
         // Someone else's key put in.
         const other = await signer();
-        expect((await readPlayfile(editManifest(bytes, m => { (m.author as { publicKey: string }).publicKey = btoa(String.fromCharCode(...other.publicKey)); }))).signature.state).toBe('modified');
+        expect((await readPlayfile(await editManifest(bytes, m => { (m.author as { publicKey: string }).publicKey = btoa(String.fromCharCode(...other.publicKey)); }))).signature.state).toBe('modified');
         // The signature removed: just unsigned.
-        expect((await readPlayfile(editManifest(bytes, m => { delete m.signature; }))).signature.state).toBe('unsigned');
+        expect((await readPlayfile(await editManifest(bytes, m => { delete m.signature; }))).signature.state).toBe('unsigned');
         // A garbage signature.
-        expect((await readPlayfile(editManifest(bytes, m => { (m.signature as { value: string }).value = 'AAAA'; }))).signature.state).toBe('modified');
+        expect((await readPlayfile(await editManifest(bytes, m => { (m.signature as { value: string }).value = 'AAAA'; }))).signature.state).toBe('modified');
       });
     });
   }

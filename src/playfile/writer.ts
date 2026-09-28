@@ -1,10 +1,14 @@
 /**
- * Writing a .playfile: items in, a ZIP with a manifest out, signed when
- * a signer is given. The one place a .playfile is made (reader.ts reads it).
+ * Writing a .playfile: items in, a ZIP with a manifest (signed when a signer
+ * is given) wrapped in the v2 envelope (container.ts) out. The one place a
+ * .playfile is made (reader.ts reads it). `writePlayfileZip` is the bare v1
+ * ZIP: what goes inside the envelope, and what tests and the docs' "an old
+ * file still opens" check use.
  */
 import { strToU8, zipSync } from 'fflate';
 import { APP_VERSION } from '../files/appVersion';
 import { canonicalJson, sha256Hex, toBase64, utf8 } from './bytes';
+import { wrapContainer } from './container';
 import { fileSafeName, KIND_LAYOUT, PLAYFILE_EXT, MANIFEST_PATH, PLAYFILE_FORMAT, PLAYFILE_VERSION, type ItemKind, type ManifestItem, type PlayfileManifest } from './format';
 import type { Signer } from './signing';
 
@@ -31,10 +35,10 @@ Open it in Playfield (Shader Studio): Import, or drop it on the window. The app
 shows what is inside, who signed it, and what clashes with what you have,
 before anything is added.
 
-It is a ZIP: manifest.json lists every item with its kind, size and SHA-256,
-and the items sit in folders by kind (graphs/, presentations/, nodes/…). The
-graphs, presentations and shaders are readable files. A sealed node pack keeps
-its code encrypted.
+Inside, manifest.json lists every item with its kind, size and SHA-256, and
+the items sit in folders by kind (graphs/, presentations/, nodes/…). A sealed
+node pack keeps its code encrypted. To get a graph or presentation as a
+readable file, use the app's "Export as readable JSON".
 `;
 
 /** The bytes a signature covers: the manifest without its signature, as canonical JSON. */
@@ -44,7 +48,14 @@ export function signedBytes(manifest: PlayfileManifest): Uint8Array {
   return utf8(canonicalJson(rest));
 }
 
+/** A .playfile as the app writes it: the v2 envelope around the ZIP. */
 export async function writePlayfile(items: WriteItem[], opts: WriteOptions = {}): Promise<{ bytes: Uint8Array; manifest: PlayfileManifest }> {
+  const { bytes, manifest } = await writePlayfileZip(items, opts);
+  return { bytes: await wrapContainer(bytes), manifest };
+}
+
+/** The v1 container: the plain ZIP with its manifest. What writePlayfile wraps; on its own, what older apps wrote. */
+export async function writePlayfileZip(items: WriteItem[], opts: WriteOptions = {}): Promise<{ bytes: Uint8Array; manifest: PlayfileManifest }> {
   if (!items.length) throw new Error('Nothing to put in the file.');
   const files: Record<string, Uint8Array> = {};
   const entries: ManifestItem[] = [];

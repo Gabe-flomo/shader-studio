@@ -6,11 +6,16 @@
  * format and version, each item's size and SHA-256, and the signature.
  * Unknown kinds are left out with a note; a newer container is refused with
  * a sentence saying so.
+ *
+ * Both containers open: v2 (the encrypted envelope, container.ts, told by its
+ * magic) is unwrapped first, and its tag refuses a changed file; v1 (a plain
+ * ZIP) is read as it always was. Anything else is "Not a Playfield file".
  */
 import { strFromU8, unzipSync } from 'fflate';
 import { fromBase64, sha256Hex } from './bytes';
+import { isContainer, unwrapContainer } from './container';
 import {
-  DEFAULT_LIMITS, isItemKind, isSafePath, LEGACY_FORMATS, MANIFEST_PATH, PLAYFILE_FORMAT, PLAYFILE_VERSION, PlayfileError,
+  DEFAULT_LIMITS, formatBytes as mb, isItemKind, isSafePath, LEGACY_FORMATS, MANIFEST_PATH, PLAYFILE_FORMAT, PLAYFILE_VERSION, PlayfileError,
   type ItemKind, type ManifestItem, type PlayfileLimits, type PlayfileManifest,
 } from './format';
 import { fingerprint, verifyBytes } from './signing';
@@ -42,8 +47,13 @@ export interface PlayfileContents {
 
 const isZip = (b: Uint8Array) => b.length > 3 && b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04;
 
-/** A quick look: is this a .playfile (a ZIP with a Playfield manifest)? Reads only the manifest. */
+/**
+ * A quick look: is this a .playfile? A v2 container by its magic (what's inside
+ * is checked when it's opened); a v1 ZIP by its manifest, which is all this
+ * reads.
+ */
 export function isPlayfile(bytes: Uint8Array): boolean {
+  if (isContainer(bytes)) return true;
   if (!isZip(bytes)) return false;
   try {
     const m = unzipSync(bytes, { filter: f => f.name === MANIFEST_PATH && f.originalSize <= DEFAULT_LIMITS.manifestBytes })[MANIFEST_PATH];
@@ -57,7 +67,15 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 export async function readPlayfile(bytes: Uint8Array, limits: PlayfileLimits = DEFAULT_LIMITS): Promise<PlayfileContents> {
   if (bytes.length > limits.fileBytes) throw new PlayfileError(`It’s too big to open (${mb(bytes.length)}; the limit is ${mb(limits.fileBytes)}).`);
-  if (!isZip(bytes)) throw new PlayfileError('It isn’t a .playfile (not a ZIP).');
+  if (isContainer(bytes)) bytes = await unwrapContainer(bytes, limits);
+  else if (!isZip(bytes)) throw new PlayfileError('Not a Playfield file.');
+  return readPlayfileZip(bytes, limits);
+}
+
+/** The v1 container (a plain ZIP with a manifest), which is also what a v2 envelope holds. */
+async function readPlayfileZip(bytes: Uint8Array, limits: PlayfileLimits): Promise<PlayfileContents> {
+  if (bytes.length > limits.fileBytes) throw new PlayfileError(`It’s too big to open (${mb(bytes.length)}; the limit is ${mb(limits.fileBytes)}).`);
+  if (!isZip(bytes)) throw new PlayfileError('Not a Playfield file.');
 
   // Look at every entry before inflating anything: count, declared sizes, paths.
   let entries = 0, declared = 0;
@@ -172,8 +190,4 @@ async function checkSignature(manifest: PlayfileManifest, raw: PlayfileManifest,
   } catch { ok = false; }
   if (!ok || damaged) return { state: 'modified', name: name || 'Someone', publicKey: pk, ...(fp ? { fingerprint: fp } : {}) };
   return { state: 'signed', name: name || 'Someone', publicKey: pk, fingerprint: fp! };
-}
-
-function mb(n: number): string {
-  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(n >= 10 * 1024 * 1024 ? 0 : 1)} MB` : `${Math.ceil(n / 1024)} KB`;
 }

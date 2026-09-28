@@ -9,6 +9,7 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { strFromU8, unzipSync } from 'fflate';
+import { unwrapContainer } from '../../playfile/container';
 
 const store = new Map<string, string>();
 vi.hoisted(() => {
@@ -334,7 +335,7 @@ describe('assembling and exporting a pack', () => {
     const a = await assemblePack(p, w.env);
     expect(a.sealed).toBe(true);
     const { bytes } = await writePlayfile(a.items, { author: 'Ada', signer: await signer() });
-    for (const [path, b] of Object.entries(unzipSync(bytes))) {
+    for (const [path, b] of Object.entries(unzipSync(await unwrapContainer(bytes)))) {
       if (!path.startsWith('nodes/')) continue;
       const text = strFromU8(b);
       expect(text).not.toContain('sin(uv.x * freq)');
@@ -405,7 +406,7 @@ describe('assembling and exporting a pack', () => {
     const a = await assemblePack(p, w.env);
     expect(a.info.finishEffects).toEqual(['Posterize']);
     const { bytes } = await writePlayfile(a.items, { author: 'Ada', signer: await signer() });
-    for (const [path, b] of Object.entries(unzipSync(bytes))) if (path.startsWith('nodes/')) expect(strFromU8(b)).not.toContain('floor(color');
+    for (const [path, b] of Object.entries(unzipSync(await unwrapContainer(bytes)))) if (path.startsWith('nodes/')) expect(strFromU8(b)).not.toContain('floor(color');
     const m = importEnv();
     const plan = await planImport(await readPlayfile(bytes), m);
     const row = plan.rows.find(r => r.id.includes('#fx:'))!;
@@ -448,7 +449,7 @@ describe('Video layers’ files travel in .playfile exports', () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ kind: 'video', name: 'Clip.webm', ext: '.webm', meta: { id: meta.id, type: 'video/webm', width: 64, duration: 2 } });
     const { bytes } = await writePlayfile([{ kind: 'graph', name: 'V', data: graph }, ...items], {});
-    expect(Object.keys(unzipSync(bytes))).toContain('videos/Clip.webm');
+    expect(Object.keys(unzipSync(await unwrapContainer(bytes)))).toContain('videos/Clip.webm');
     const env: ImportEnv = { ...importEnv(), hasVideo, addVideos: importVideoFiles };
 
     const here = await planImport(await readPlayfile(bytes), env);

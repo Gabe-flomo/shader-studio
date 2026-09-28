@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { strFromU8, unzipSync } from 'fflate';
+import { unwrapContainer, wrapContainer } from '../container';
 import type { UserNodeDefinition } from '../../types/userNode';
 import type { GraphNode } from '../../types/nodeGraph';
 import { buildInventory } from '../../files/inventory';
@@ -123,7 +124,8 @@ describe('graph export bundles what it uses', () => {
   it('a sealed node a graph uses goes in sealed, never unsealed', async () => {
     const init = { ...fixture(), 'shader-studio:un:un_wobble_abc': JSON.stringify(sealDefinition(NODE)) };
     const { bytes } = await exportFrom(init, ['graph:Sunset']);
-    for (const [, b] of Object.entries(unzipSync(bytes))) expect(strFromU8(b)).not.toContain(SECRET);
+    // The v2 envelope hides everything; the ZIP inside is what an older reader (or someone with the key) sees.
+    for (const [, b] of Object.entries(unzipSync(await unwrapContainer(bytes)))) expect(strFromU8(b)).not.toContain(SECRET);
   });
 });
 
@@ -246,7 +248,7 @@ describe('node packs', () => {
   it('sealed: no code in the file as text, imported sealed, opens for the compiler', async () => {
     const { bytes, bundle } = await exportFrom(fixture(), ['node:un_wobble_abc'], { canPack: true, seal: true }, true);
     expect(bundle.sealed).toBe(true);
-    const files = unzipSync(bytes);
+    const files = unzipSync(await unwrapContainer(bytes));
     for (const [p, b] of Object.entries(files)) {
       const t = strFromU8(b);
       expect(t, p).not.toContain(SECRET);
@@ -275,13 +277,13 @@ describe('node packs', () => {
 
   it('a pack whose signature doesn’t hold imports nothing unless ticked', async () => {
     const { bytes } = await exportFrom(fixture(), ['node:un_wobble_abc'], { canPack: true }, true);
-    const files: Record<string, Uint8Array> = unzipSync(bytes);
+    const files: Record<string, Uint8Array> = unzipSync(await unwrapContainer(bytes));
     const man = JSON.parse(strFromU8(files['manifest.json']));
     man.author.name = 'Mallory';
     files['manifest.json'] = new TextEncoder().encode(JSON.stringify(man));
     const { zipSync } = await import('fflate');
     const m = machine();
-    const { plan } = await importInto(m, zipSync(files));
+    const { plan } = await importInto(m, await wrapContainer(zipSync(files)));
     expect(plan.contents.signature.state).toBe('modified');
     expect(plan.rows[0].include).toBe(false);
     expect(m.nodes.size).toBe(0);

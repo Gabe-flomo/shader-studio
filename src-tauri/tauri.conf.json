@@ -47,14 +47,13 @@
         "description": "Playfield file",
         "role": "Editor",
         "rank": "Owner",
-        "mimeType": "application/x-playfile+zip",
+        "mimeType": "application/x-playfile",
         "contentTypes": [
           "com.shaderstudio.playfile"
         ],
         "exportedType": {
           "identifier": "com.shaderstudio.playfile",
           "conformsTo": [
-            "public.zip-archive",
             "public.data"
           ]
         }
