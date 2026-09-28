@@ -388,8 +388,8 @@ describe('a web page carries and reads a baked track', () => {
     const win: Record<string, unknown> = { devicePixelRatio: 1, addEventListener() {}, removeEventListener() {}, matchMedia: () => ({ matches: false }) };
     const doc = { head: new El('head'), hidden: false, getElementById: () => null, createElement: (tag: string) => new El(tag), addEventListener() {}, removeEventListener() {} };
     const noop = class { observe() {} disconnect() {} };
-    const fn = new Function('window', 'document', 'navigator', 'requestAnimationFrame', 'cancelAnimationFrame', 'ResizeObserver', 'IntersectionObserver', 'Image', 'URL', 'atob', `${kitScript()}\n${runtimeSource}`);
-    fn(win, doc, {}, (cb: (t: number) => void) => { rafs.push(cb); return rafs.length; }, () => {}, noop, noop, El.bind(null, 'img'), { createObjectURL: () => 'blob:x', revokeObjectURL() {} }, (s: string) => Buffer.from(s, 'base64').toString('binary'));
+    const fn = new Function('window', 'document', 'navigator', 'requestAnimationFrame', 'cancelAnimationFrame', 'ResizeObserver', 'IntersectionObserver', 'Image', 'URL', `${kitScript()}\n${runtimeSource}`);
+    fn(win, doc, {}, (cb: (t: number) => void) => { rafs.push(cb); return rafs.length; }, () => {}, noop, noop, El.bind(null, 'img'), { createObjectURL: () => 'blob:x', revokeObjectURL() {} });
     const api = win.ShaderStudioPlay as { mount: (el: unknown, b: unknown, o?: unknown) => { get(id: string): { value: number; driven: boolean } | null } };
     const h = api.mount(new El('div'), { ...bundle, uniforms: { u_hx: { type: 'float', value: 0 } } }, { mode: 'player', panel: false });
     let now = 1000;
