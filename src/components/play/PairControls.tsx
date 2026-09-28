@@ -30,7 +30,7 @@ import { ConditionFields, DistanceAnchorPicker, SignalPicker, labelContext } fro
 
 // ── On the panel ─────────────────────────────────────────────────────────────
 
-export function PairCard({ pair, a, b, values, live, drivenA, drivenB, drivenBy, touch, onChange, onRename, onUnpair, onMap, onPosition }: {
+export function PairCard({ pair, a, b, values, live, drivenA, drivenB, drivenBy, touch, onChange, onRename, onUnpair, onMap, onPosition, trace, onName, isolated = false }: {
   pair: PlayPair;
   a: PlayControl;
   b: PlayControl;
@@ -45,6 +45,11 @@ export function PairCard({ pair, a, b, values, live, drivenA, drivenB, drivenBy,
   onUnpair: () => void;
   onMap: () => void;
   onPosition: (position: boolean) => void;
+  /** The Controls board's live graph (a trail of the pair's path), under the sliders. */
+  trace?: ReactNode;
+  /** The board: clicking the name isolates the graph (a double-click renames). */
+  onName?: () => void;
+  isolated?: boolean;
 }) {
   const tk = useTokens();
   const [editing, setEditing] = useState(false);
@@ -67,7 +72,7 @@ export function PairCard({ pair, a, b, values, live, drivenA, drivenB, drivenBy,
         <span title={pair.position ? 'A position: A is X, B is Y' : 'Two values played together'} style={{ display: 'inline-flex', color: tk.accent.text }}><svgIcon.Pair /></span>
         {editing
           ? <Field autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(pair.label); setEditing(false); } }} height={26} style={{ flex: 1 }} />
-          : <button type="button" title="Rename" onClick={() => { setDraft(pair.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'text', color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pair.label}</button>}
+          : <button type="button" title={onName ? 'Isolate its graph at the top (double-click to rename)' : 'Rename'} aria-pressed={onName ? isolated : undefined} onClick={() => { if (onName) { onName(); return; } setDraft(pair.label); setEditing(true); }} onDoubleClick={onName ? () => { setDraft(pair.label); setEditing(true); } : undefined} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: onName ? 'pointer' : 'text', color: isolated ? tk.accent.text : tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pair.label}</button>}
         {driven && <span title={drivenBy.join(', ')} style={{ height: 20, padding: '0 7px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>{drivenBy[0] ?? 'Mapped'}{drivenBy.length > 1 ? ` +${drivenBy.length - 1}` : ''}</span>}
         <IconButton icon="plus" label="Map something onto the pair" size="sm" onClick={onMap} />
         <IconButton icon="close" label="Unpair: two separate sliders again (its pair mappings go)" size="sm" onClick={onUnpair} />
@@ -75,6 +80,7 @@ export function PairCard({ pair, a, b, values, live, drivenA, drivenB, drivenBy,
       {pair.position && <XYPad a={a} b={b} x={shownA} y={shownB} lockX={drivenA} lockY={drivenB} onChange={(x, y) => { if (!drivenA) onChange(a, x); if (!drivenB) onChange(b, y); }} />}
       {row(a, shownA, drivenA, pair.position ? 'X' : 'A')}
       {row(b, shownB, drivenB, pair.position ? 'Y' : 'B')}
+      {trace}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>
         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label} · {b.label}</span>
         <Toggle checked={pair.position} onChange={onPosition} label="XY pad" />

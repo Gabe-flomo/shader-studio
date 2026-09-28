@@ -62,6 +62,7 @@ import { PlayRailBar } from './PlayRail';
 import { phonePageShown, type RailPage } from './railPages';
 import { ActionsPage, BackgroundPage, CardPage, SignalsPage } from './FullPages';
 import { groupCounts, groupMappings, type MappingGroupId } from './mappingGroups';
+import { ControlsBoard, type BoardSlot } from './ControlsBoard';
 import { AudioEnginePanel } from './engine/AudioEnginePanel';
 import { aeRack, aeSlot, aeSlotLabel, parseAuTarget, patchSlot } from '../../types/playAudioEngine';
 import { SplitButton } from './PlaySplitArea';
@@ -522,6 +523,88 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     { label: 'Map onto the pair', icon: 'plus', onSelect: () => addPairMapping(pairId) },
     { label: 'Unpair', icon: 'close', hint: 'Two separate sliders again; its pair mappings go', onSelect: () => update(p => unpair(p, pairId)) },
   ];
+  // A control's card (a pair's shows once, where its A is). `board`: the Controls board's trace slot and isolate.
+  const renderOne = (c: PlayControl, i: number, board?: BoardSlot): ReactNode => {
+    const pair = pairOf(play, c.id);
+    if (pair) {
+      // A pair shows once, where its A is; B's own row is inside it.
+      if (c.id !== pair.a) return null;
+      const cb = play.controls.find(x => x.id === pair.b);
+      if (!cb) return null;
+      const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
+      const pms = (play.pairMappings ?? []).filter(m => m.enabled && m.pairId === pair.id);
+      return (
+        <ContextMenuArea key={c.id} items={() => pairMenu(pair.id)}>
+          <PairCard
+            pair={pair} a={c} b={cb} touch={compact}
+            values={[num(readControlValue(nodes, c.target, play)), num(readControlValue(nodes, cb.target, play))]}
+            live={[liveValues.get(c.id), liveValues.get(cb.id)]}
+            drivenA={pms.some(m => pairDrives(m, pair, c.id)) || play.mappings.some(m => m.enabled && m.controlId === c.id)}
+            drivenB={pms.some(m => pairDrives(m, pair, cb.id)) || play.mappings.some(m => m.enabled && m.controlId === cb.id)}
+            drivenBy={[...pms.map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === c.id || m.controlId === cb.id)).map(m => sourceLabel(m.source, play.controls, play.layers))]}
+            onChange={(ctl, v) => writeControl(ctl, v)}
+            onRename={label => update(p => ({ ...p, pairs: (p.pairs ?? []).map(x => (x.id === pair.id ? { ...x, label } : x)) }))}
+            onPosition={position => update(p => ({ ...p, pairs: (p.pairs ?? []).map(x => (x.id === pair.id ? { ...x, position } : x)) }))}
+            onUnpair={() => update(p => unpair(p, pair.id))}
+            onMap={() => addPairMapping(pair.id)}
+            trace={board?.trace}
+            onName={board?.onIsolate}
+            isolated={board?.isolated}
+          />
+        </ContextMenuArea>
+      );
+    }
+    return (
+    <ContextMenuArea key={c.id} items={() => controlMenu(c.id)}>
+    <ControlRow
+      key={c.id}
+      control={c}
+      index={i}
+      count={play.controls.length}
+      exists={controlExists(nodes, c, play)}
+      fate={controlExists(nodes, c, play) ? undefined : parsePropTarget(c.target) || parseActionTarget(c.target) ? { status: 'deleted' } : locateTarget(nodes, c.target)}
+      onRelink={target => update(p => ({ ...p, controls: p.controls.map(x => (x.id === c.id ? { ...x, target } : x)) }))}
+      help={controlHelp(nodes, c.target, play)}
+      source={sourceOf(c)}
+      onMap={() => addMapping(c.kind === 'action' ? { kind: 'mouse', axis: 'down' } : { kind: 'mouse', axis: 'x' }, c.id)}
+      onNull={c.kind === 'float' ? () => {
+        const v = readControlValue(nodes, c.target, play);
+        const key = parsePropTarget(c.target)?.key ?? targetParts(c.target).paramKey;
+        addWithNull([{ target: c.target, label: c.label, min: c.min, max: c.max, value: typeof v === 'number' ? v : c.min, axis: pairedKey(key)?.axis ?? 'x' }], `${c.label} null`);
+      } : undefined}
+      onAmount={amount => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, amount } : x) }))}
+      value={readControlValue(nodes, c.target, play)}
+      live={liveValues.get(c.id)}
+      drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers))}
+      touch={compact}
+      onChange={v => writeControl(c, v)}
+      onRename={label => update(p => { const rt = parseReaderTarget(c.target); return rt ? renameReader(p, rt.readerId, label) : { ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }; })}
+      onRange={(min, max) => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, min, max } : x) }))}
+      onMove={dir => update(p => {
+        const j = i + dir;
+        if (j < 0 || j >= p.controls.length) return p;
+        const controls = [...p.controls];
+        [controls[i], controls[j]] = [controls[j], controls[i]];
+        return { ...p, controls };
+      })}
+      removeLabel={parseReaderTarget(c.target) ? 'Delete the reader (and this control)' : undefined}
+      onRemove={() => update(p => { const rt = parseReaderTarget(c.target); return rt ? removeReader(p, rt.readerId) : { ...p, controls: p.controls.filter(x => x.id !== c.id), mappings: p.mappings.filter(m => m.controlId !== c.id) }; })}
+      trace={board?.trace}
+      onName={board?.onIsolate}
+      isolated={board?.isolated}
+    />
+    </ContextMenuArea>
+    );
+  };
+  // What drives a trace on the Controls board (a control id, or `pair:<id>`), for its isolated strip.
+  const traceDrivenBy = (key: string): string[] => {
+    if (key.startsWith('pair:')) {
+      const pair = play.pairs?.find(p => `pair:${p.id}` === key);
+      if (!pair) return [];
+      return [...(play.pairMappings ?? []).filter(m => m.enabled && m.pairId === pair.id).map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === pair.a || m.controlId === pair.b)).map(m => sourceLabel(m.source, play.controls, play.layers))];
+    }
+    return play.mappings.filter(m => m.enabled && m.controlId === key).map(m => sourceLabel(m.source, play.controls, play.layers));
+  };
   const renderControls = (inPanel: boolean) => (
     <div style={{ flex: 1, minHeight: play.notes && !compact && !inPanel ? 110 : 0, overflowY: 'auto', padding: inPanel ? '8px 16px 16px' : '6px 12px 12px' }}>
       {compact && (
@@ -573,73 +656,14 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             ? 'Add a node with a slider or a colour in the Studio first. Any live slider can be a control.'
             : 'Pick sliders and colours from the graph to build your panel. Then map MIDI, the mouse or keys onto them below.'}
         />
-      ) : <div style={inPanel ? PANEL_GRID : undefined}>{(() => {
-      const renderOne = (c: PlayControl, i: number): ReactNode => {
-        const pair = pairOf(play, c.id);
-        if (pair) {
-          // A pair shows once, where its A is; B's own row is inside it.
-          if (c.id !== pair.a) return null;
-          const cb = play.controls.find(x => x.id === pair.b);
-          if (!cb) return null;
-          const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
-          const pms = (play.pairMappings ?? []).filter(m => m.enabled && m.pairId === pair.id);
-          return (
-            <ContextMenuArea key={c.id} items={() => pairMenu(pair.id)}>
-              <PairCard
-                pair={pair} a={c} b={cb} touch={compact}
-                values={[num(readControlValue(nodes, c.target, play)), num(readControlValue(nodes, cb.target, play))]}
-                live={[liveValues.get(c.id), liveValues.get(cb.id)]}
-                drivenA={pms.some(m => pairDrives(m, pair, c.id)) || play.mappings.some(m => m.enabled && m.controlId === c.id)}
-                drivenB={pms.some(m => pairDrives(m, pair, cb.id)) || play.mappings.some(m => m.enabled && m.controlId === cb.id)}
-                drivenBy={[...pms.map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === c.id || m.controlId === cb.id)).map(m => sourceLabel(m.source, play.controls, play.layers))]}
-                onChange={(ctl, v) => writeControl(ctl, v)}
-                onRename={label => update(p => ({ ...p, pairs: (p.pairs ?? []).map(x => (x.id === pair.id ? { ...x, label } : x)) }))}
-                onPosition={position => update(p => ({ ...p, pairs: (p.pairs ?? []).map(x => (x.id === pair.id ? { ...x, position } : x)) }))}
-                onUnpair={() => update(p => unpair(p, pair.id))}
-                onMap={() => addPairMapping(pair.id)}
-              />
-            </ContextMenuArea>
-          );
-        }
-        return (
-        <ContextMenuArea key={c.id} items={() => controlMenu(c.id)}>
-        <ControlRow
-          key={c.id}
-          control={c}
-          index={i}
-          count={play.controls.length}
-          exists={controlExists(nodes, c, play)}
-          fate={controlExists(nodes, c, play) ? undefined : parsePropTarget(c.target) || parseActionTarget(c.target) ? { status: 'deleted' } : locateTarget(nodes, c.target)}
-          onRelink={target => update(p => ({ ...p, controls: p.controls.map(x => (x.id === c.id ? { ...x, target } : x)) }))}
-          help={controlHelp(nodes, c.target, play)}
-          source={sourceOf(c)}
-          onMap={() => addMapping(c.kind === 'action' ? { kind: 'mouse', axis: 'down' } : { kind: 'mouse', axis: 'x' }, c.id)}
-          onNull={c.kind === 'float' ? () => {
-            const v = readControlValue(nodes, c.target, play);
-            const key = parsePropTarget(c.target)?.key ?? targetParts(c.target).paramKey;
-            addWithNull([{ target: c.target, label: c.label, min: c.min, max: c.max, value: typeof v === 'number' ? v : c.min, axis: pairedKey(key)?.axis ?? 'x' }], `${c.label} null`);
-          } : undefined}
-          onAmount={amount => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, amount } : x) }))}
-          value={readControlValue(nodes, c.target, play)}
-          live={liveValues.get(c.id)}
-          drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers))}
-          touch={compact}
-          onChange={v => writeControl(c, v)}
-          onRename={label => update(p => { const rt = parseReaderTarget(c.target); return rt ? renameReader(p, rt.readerId, label) : { ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }; })}
-          onRange={(min, max) => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, min, max } : x) }))}
-          onMove={dir => update(p => {
-            const j = i + dir;
-            if (j < 0 || j >= p.controls.length) return p;
-            const controls = [...p.controls];
-            [controls[i], controls[j]] = [controls[j], controls[i]];
-            return { ...p, controls };
-          })}
-          removeLabel={parseReaderTarget(c.target) ? 'Delete the reader (and this control)' : undefined}
-          onRemove={() => update(p => { const rt = parseReaderTarget(c.target); return rt ? removeReader(p, rt.readerId) : { ...p, controls: p.controls.filter(x => x.id !== c.id), mappings: p.mappings.filter(m => m.controlId !== c.id) }; })}
-        />
-        </ContextMenuArea>
-        );
-      };
+      ) : inPanel ? (
+        <ControlsBoard play={play} renderCard={renderOne} drivenBy={traceDrivenBy} flatView={renderFlatControls(true)} />
+      ) : renderFlatControls(false)}
+    </div>
+  );
+  // Every card in one grid (the sidebar; the board's Flat grid), with the author's groups under their headings.
+  const renderFlatControls = (inPanel: boolean) => (
+    <div style={inPanel ? PANEL_GRID : undefined}>{(() => {
       // Controls with a group sit together under its heading, where the first of them is.
       const items: ReactNode[] = [];
       const shownGroups = new Set<string>();
@@ -655,8 +679,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         );
       });
       return items;
-      })()}</div>}
-    </div>
+      })()}</div>
   );
   // `pages`: the MIDI file and the pad grid have pages of their own (the rail's, the phone's row); `workspace`: the full-width table.
   const renderMappings = (inPanel: boolean, pages = false, workspace = false) => (
@@ -1029,7 +1052,7 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
 /** Where a control's value lives: a layer's property or a node's param. */
 interface ControlSource { kind: 'layer' | 'node' | 'reader'; title: string; param: string; within?: string; missing: boolean; go: () => void }
 
-function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount }: {
+function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount, trace, onName, isolated = false }: {
   control: PlayControl;
   index: number;
   count: number;
@@ -1058,6 +1081,11 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
   onNull?: () => void;
   /** Action controls: how much (particles for a burst, strength for a scatter). */
   onAmount: (amount: number) => void;
+  /** The Controls board's live graph, under the slider. */
+  trace?: ReactNode;
+  /** The board: clicking the name isolates the graph (a double-click renames). */
+  onName?: () => void;
+  isolated?: boolean;
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
@@ -1093,9 +1121,11 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
         ) : (
           <button
             type="button"
-            title="Rename"
-            onClick={() => { setDraft(control.label); setEditing(true); }}
-            style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'text', color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            title={onName ? (isolated ? 'Isolated at the top: click to unpin (double-click to rename)' : 'Isolate its graph at the top (double-click to rename)') : 'Rename'}
+            aria-pressed={onName ? isolated : undefined}
+            onClick={() => { if (onName) { onName(); return; } setDraft(control.label); setEditing(true); }}
+            onDoubleClick={onName ? () => { setDraft(control.label); setEditing(true); } : undefined}
+            style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: onName ? 'pointer' : 'text', color: isolated ? tk.accent.text : tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
           >{control.label}</button>
         )}
         {(help.hint || help.comment) && (
@@ -1152,6 +1182,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           </div>
         </div>
       )}
+      {trace}
       {!exists && fate && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 6px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
           <span style={{ flex: 1, minWidth: 0 }}>

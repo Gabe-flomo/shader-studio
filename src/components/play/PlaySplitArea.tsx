@@ -210,7 +210,7 @@ function SplitPanel() {
           // The rail picks the page; the bar says where you are.
           <div data-rail-crumb="" style={{ flex: '1 1 240px', minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 10, overflow: 'hidden' }}>
             <span style={{ flexShrink: 0, font: `650 13px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
-              {cat.pages.length > 1 && <><span style={{ color: tk.text.muted, fontWeight: 600 }}>{cat.label}</span><span style={{ color: tk.text.faint, margin: '0 6px' }}>›</span></>}
+              {cat.label !== page.label && <><span style={{ color: tk.text.muted, fontWeight: 600 }}>{cat.label}</span><span style={{ color: tk.text.faint, margin: '0 6px' }}>›</span></>}
               {page.label}
             </span>
             <span style={{ minWidth: 0, color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.description}</span>
