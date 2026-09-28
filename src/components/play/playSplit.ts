@@ -20,7 +20,7 @@
  */
 import { create } from 'zustand';
 import { usePlayUi, type PlayTab } from './playUi';
-import { categoryOf, isRailPage, pageForTab, type RailPage } from './railPages';
+import { categoryOf, firstPageOf, isRailPage, pageForTab, type RailCategory, type RailPage } from './railPages';
 
 export type SplitSide = 'left' | 'right' | 'top' | 'bottom';
 /** The sidebar beside the big panel: all of it, a rail of icons, or nothing. */
@@ -41,11 +41,13 @@ export interface SplitPrefs {
   railPage: RailPage;
   /** The panel's share in rail mode (null: worked out when the rail opens, so the picture keeps its size). */
   railRatio: number | null;
+  /** The page last shown for each category, so opening a category from the rail goes back to it (railPage stays the single source of truth for what's shown). */
+  railPageMemory: Partial<Record<RailCategory, RailPage>>;
 }
 
 export const SPLIT_KEY = 'shader-studio:play:split';
 /** The Play page opens split, with the sidebar folded into the icon rail (the owner's preferred view). */
-export const DEFAULT_SPLIT: SplitPrefs = { on: true, side: 'right', ratio: 0.5, tab: 'controls', sidebar: 'rail', sidebarBefore: 'full', railPage: 'controls', railRatio: null };
+export const DEFAULT_SPLIT: SplitPrefs = { on: true, side: 'right', ratio: 0.5, tab: 'controls', sidebar: 'rail', sidebarBefore: 'full', railPage: 'controls', railRatio: null, railPageMemory: {} };
 /** Bumped when the default view changes; older saves take the new default for `on` and `sidebar` once. */
 export const SPLIT_PREFS_VERSION = 2;
 /** The rail's width, in px. */
@@ -82,7 +84,18 @@ export function parseSplitPrefs(raw: string | null): SplitPrefs {
     sidebarBefore: o.sidebarBefore === 'hidden' ? 'hidden' : 'full',
     railPage: isRailPage(o.railPage) ? o.railPage : DEFAULT_SPLIT.railPage,
     railRatio: typeof o.railRatio === 'number' && Number.isFinite(o.railRatio) ? clampRatio(o.railRatio) : null,
+    railPageMemory: parseRailPageMemory(o.railPageMemory),
   };
+}
+
+/** Only keep entries that name a real page under the category they claim. */
+function parseRailPageMemory(v: unknown): Partial<Record<RailCategory, RailPage>> {
+  if (!v || typeof v !== 'object') return {};
+  const out: Partial<Record<RailCategory, RailPage>> = {};
+  for (const [cat, page] of Object.entries(v as Record<string, unknown>)) {
+    if (isRailPage(page) && categoryOf(page) === cat) out[cat as RailCategory] = page;
+  }
+  return out;
 }
 
 /**
@@ -153,6 +166,7 @@ function savePrefs(p: SplitPrefs): void {
     localStorage.setItem(SPLIT_KEY, JSON.stringify({
       v: SPLIT_PREFS_VERSION, on: p.on, side: p.side, ratio: round3(p.ratio), tab: p.tab,
       sidebar: p.sidebar, sidebarBefore: p.sidebarBefore, railPage: p.railPage, railRatio: p.railRatio === null ? null : round3(p.railRatio),
+      railPageMemory: p.railPageMemory,
     }));
   } catch { /* preference only */ }
 }
@@ -181,8 +195,10 @@ interface PlaySplit extends SplitPrefs {
   setSidebar: (mode: SidebarMode) => void;
   /** ⌘⇧B: into the rail, or back to what the sidebar was (turning the split on if it's off). */
   toggleRail: () => void;
-  /** Show a page in the panel (rail mode). */
+  /** Show a page in the panel (rail mode). Remembers it as that page's category's last page. */
   setRailPage: (page: RailPage) => void;
+  /** A rail category was clicked: its remembered page, else its first. */
+  openRailCategory: (cat: RailCategory) => void;
   setRailRatio: (ratio: number) => void;
 }
 
@@ -219,7 +235,8 @@ export const usePlaySplit = create<PlaySplit>((set, get) => {
       if (!s.on) { save({ on: true }); if (s.sidebar === 'rail') return; }
       get().setSidebar(s.sidebar === 'rail' ? s.sidebarBefore : 'rail');
     },
-    setRailPage: railPage => save({ railPage }),
+    setRailPage: railPage => save({ railPage, railPageMemory: { ...get().railPageMemory, [categoryOf(railPage)]: railPage } }),
+    openRailCategory: cat => get().setRailPage(get().railPageMemory[cat] ?? firstPageOf(cat)),
     setRailRatio: ratio => save({ railRatio: clampRatio(ratio) }),
   };
 });
@@ -245,6 +262,22 @@ export function showPageInSplit(page: RailPage): void {
   if (split.sidebar === 'rail') { split.setRailPage(page); return; }
   if (page === 'finish-picture' || page === 'finish-sound') usePlayUi.getState().setFinishView(page === 'finish-sound' ? 'sound' : 'picture');
   split.setTab(categoryOf(page));
+}
+
+/**
+ * Mappings, wherever the split shows pages: opens the split if it's closed,
+ * then its Mappings page (the rail's own, or the tab-strip's). ⌘⇧M and the
+ * rail's own Mappings icon are both always there, so this is never the only
+ * way in — it's for reaching it from anywhere else on the Play page. False
+ * when there's no split view on screen (phones; the bottom row's Mappings
+ * icon covers it there).
+ */
+export function goToMappings(): boolean {
+  const split = usePlaySplit.getState();
+  if (!split.available) return false;
+  if (!split.on) split.setOn(true);
+  showPageInSplit('mappings');
+  return true;
 }
 
 /**

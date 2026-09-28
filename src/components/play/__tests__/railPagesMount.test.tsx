@@ -23,9 +23,10 @@ vi.hoisted(() => {
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { PlayPage } from '../PlayPage';
+import { PlayRail, RailPageTabs } from '../PlayRail';
 import { DEFAULT_SPLIT, usePlaySplit } from '../playSplit';
 import { usePlayUi } from '../playUi';
-import { RAIL_PAGE_IDS, type RailPage } from '../railPages';
+import { RAIL_PAGE_IDS, categoryDef, type RailPage } from '../railPages';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { emptyPlayRecord, type PlayRecord } from '../../../types/play';
 import { defaultLayer } from '../../../types/playLayers';
@@ -112,6 +113,43 @@ describe('the rail’s full-width pages', () => {
     mountPage('layers', true);
     // PlayPage renders only the portal (and what floats): no tab strip of its own.
     expect(document.querySelector('[aria-label="Play section"]')).toBeNull();
+  });
+
+  it('the rail is always there, Mappings included, and a click goes straight to a page — no drawer', () => {
+    usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'controls' });
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const root = createRoot(el);
+    roots.push({ root, el });
+    act(() => root.render(<PlayRail />));
+    const cats = el.querySelectorAll('[data-rail-category]');
+    expect(Array.from(cats).map(c => c.getAttribute('data-rail-category'))).toEqual(['controls', 'layers', 'finish', 'engine', 'mappings']);
+    act(() => (el.querySelector('[data-rail-category="layers"]') as HTMLButtonElement).click());
+    expect(usePlaySplit.getState().railPage).toBe('layers');
+    expect(el.querySelector('[data-popover]')).toBeNull();
+    expect(document.querySelector('[data-popover]')).toBeNull();
+  });
+
+  it('the panel header’s tab strip lists a category’s pages, switches on click, and the page is remembered per category', () => {
+    usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'layers' });
+    const layers = categoryDef('layers');
+    expect(layers.pages.length).toBeGreaterThan(1);
+    expect(categoryDef('controls').pages.length).toBe(1); // Controls stays a plain page, not a strip.
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const root = createRoot(el);
+    roots.push({ root, el });
+    const render = () => root.render(<RailPageTabs def={layers} current={usePlaySplit.getState().railPage} play={setup()} onPick={p => usePlaySplit.getState().setRailPage(p)} />);
+    act(render);
+    const tabs = el.querySelectorAll('[data-rail-tab]');
+    expect(Array.from(tabs).map(t => t.getAttribute('data-rail-tab'))).toEqual(['layers', 'actions', 'signals', 'background']);
+    act(() => { (el.querySelector('[data-rail-tab="signals"]') as HTMLButtonElement).click(); render(); });
+    expect(usePlaySplit.getState().railPage).toBe('signals');
+    expect(el.querySelector('[data-rail-tab="signals"]')?.getAttribute('aria-selected')).toBe('true');
+    // Leaving Layers and coming back returns to Signals, not the category's first page.
+    usePlaySplit.getState().openRailCategory('controls');
+    usePlaySplit.getState().openRailCategory('layers');
+    expect(usePlaySplit.getState().railPage).toBe('signals');
   });
 });
 
