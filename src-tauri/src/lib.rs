@@ -311,6 +311,12 @@ fn open_url(url: String) -> Result<(), String> {
     cmd.arg(&url).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// `main`: started as a plug-in trial process (`--au-probe`, audio_engine/safety.rs)? Run it and return its exit code.
+pub fn probe_from_args() -> Option<i32> {
+    let args: Vec<String> = std::env::args().collect();
+    audio_engine::safety::probe_from_args(&args)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -319,6 +325,7 @@ pub fn run() {
         .manage(OscState(Mutex::new(None)))
         .manage(midi::MidiState::default())
         .manage(audio_engine::EngineState::default())
+        .manage(audio_engine::safety::SafetyState::default())
         .manage(workspace::WatchState(Mutex::new(None)))
         .manage(linked::LinkedState::default())
         .manage(playfile::OpenedFiles(Mutex::new(Vec::new())))
@@ -369,6 +376,9 @@ pub fn run() {
             audio_engine::ae_tap_start,
             audio_engine::ae_tap_stop,
             audio_engine::ae_tap_discard,
+            audio_engine::safety::ae_crash_take,
+            audio_engine::safety::ae_plugin_retry,
+            audio_engine::safety::ae_plugin_safety,
             mux_recording_audio,
             open_url,
             data_fetch::fetch_url,
@@ -412,6 +422,8 @@ pub fn run() {
         .setup(|app| {
             // Crash recovery (docs/crash-recovery.md): the previous launch's marker is kept for the page, this one's written.
             recovery::start(app.handle());
+            // Plug-ins: the trial results, and the marker a crash while loading one left (audio_engine/safety.rs).
+            audio_engine::safety::start(app.handle());
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
