@@ -16,7 +16,7 @@ const store = vi.hoisted(() => {
 import {
   RAIL_CATEGORIES, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryOf, firstPageOf, isRailPage, pageCount, pageForTab, phonePageShown, stepIndex,
 } from '../railPages';
-import { DEFAULT_SPLIT, SPLIT_KEY, openLayerInSplit, parseSplitPrefs, railRatioFor, setAreaMeasure, showPageInSplit, shownRatio, usePlaySplit } from '../playSplit';
+import { DEFAULT_SPLIT, SPLIT_KEY, goToMappings, openLayerInSplit, parseSplitPrefs, railRatioFor, setAreaMeasure, showPageInSplit, shownRatio, usePlaySplit } from '../playSplit';
 import { followReveals } from '../PlaySplitArea';
 import { usePlayUi } from '../playUi';
 import { DEFAULT_ACTIONS, findShortcut, normaliseCombo, type ShortcutMap } from '../../../hooks/useShortcuts';
@@ -151,15 +151,44 @@ describe('the rail’s state', () => {
     expect(usePlaySplit.getState().sidebar).toBe('hidden');
   });
 
+  it('opening a category from the rail goes straight to its remembered page, else its first', () => {
+    const st = usePlaySplit.getState();
+    st.setSidebar('rail');
+    st.openRailCategory('layers');
+    expect(usePlaySplit.getState().railPage).toBe('layers');
+    st.setRailPage('signals');
+    st.openRailCategory('controls');
+    expect(usePlaySplit.getState().railPage).toBe('controls');
+    // Coming back to Layers: the page it was left on, not its first.
+    st.openRailCategory('layers');
+    expect(usePlaySplit.getState().railPage).toBe('signals');
+    // Remembered across a reload.
+    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null).railPageMemory).toMatchObject({ layers: 'signals', controls: 'controls' });
+  });
+
+  it('Mappings is always reachable: ⌘⇧M opens the split (if closed) and shows it', () => {
+    usePlaySplit.setState({ on: false, sidebar: 'rail', railPage: 'layers' });
+    expect(goToMappings()).toBe(true);
+    expect(usePlaySplit.getState()).toMatchObject({ on: true, railPage: 'mappings' });
+    // From the tab-strip panel too.
+    usePlaySplit.setState({ on: true, sidebar: 'full', tab: 'controls' });
+    expect(goToMappings()).toBe(true);
+    expect(usePlaySplit.getState().tab).toBe('mappings');
+    // Unavailable (no split area on screen, e.g. a phone): nothing to do.
+    usePlaySplit.setState({ available: false });
+    expect(goToMappings()).toBe(false);
+  });
+
   it('⌘⇧B with the split closed opens it with the rail out', () => {
     usePlaySplit.setState({ on: false, sidebar: 'full' });
     usePlaySplit.getState().toggleRail();
     expect(usePlaySplit.getState()).toMatchObject({ on: true, sidebar: 'rail' });
   });
 
-  it('is ⌘⇧B, clashing with no other default', () => {
+  it('is ⌘⇧B, clashing with no other default; Mappings is ⌘⇧M', () => {
     const map: ShortcutMap = Object.fromEntries(DEFAULT_ACTIONS.map(a => [a.id, a.defaultCombo]));
     expect(findShortcut(map, 'shift+cmd+b')).toBe('playRail');
+    expect(findShortcut(map, 'shift+cmd+m')).toBe('gotoMappings');
     const combos = DEFAULT_ACTIONS.map(a => normaliseCombo(a.defaultCombo));
     expect(new Set(combos).size).toBe(combos.length);
   });

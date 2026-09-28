@@ -22,7 +22,7 @@ import { canvasFrameRef as canvasFrame, exitFullscreen, isFullscreenKey, isTypin
 import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
 import { PlaySplitArea, SplitButton } from './components/play/PlaySplitArea';
-import { usePlaySplit } from './components/play/playSplit';
+import { goToMappings, usePlaySplit } from './components/play/playSplit';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './components/shell/rebuildAction';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
@@ -724,6 +724,7 @@ function App() {
     shortcuts:      () => setPage(p => p === 'shortcuts' ? 'studio' : 'shortcuts'),
     playSplit:      () => { const sp = usePlaySplit.getState(); if (sp.available) sp.toggle(); },
     playRail:       () => { const sp = usePlaySplit.getState(); if (sp.available) sp.toggleRail(); },
+    gotoMappings:   () => goToMappings(),
   }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll, setPage, page, hosted]);
 
   const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);

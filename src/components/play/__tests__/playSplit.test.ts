@@ -22,7 +22,9 @@ describe('split prefs', () => {
 
   it('keep what was saved, with the ratio in range', () => {
     expect(parseSplitPrefs(JSON.stringify({ v: 2, on: true, side: 'bottom', ratio: 0.35, tab: 'layers', sidebar: 'rail', sidebarBefore: 'hidden', railPage: 'finish-sound', railRatio: 0.6 })))
-      .toEqual({ on: true, side: 'bottom', ratio: 0.35, tab: 'layers', sidebar: 'rail', sidebarBefore: 'hidden', railPage: 'finish-sound', railRatio: 0.6 });
+      .toEqual({ on: true, side: 'bottom', ratio: 0.35, tab: 'layers', sidebar: 'rail', sidebarBefore: 'hidden', railPage: 'finish-sound', railRatio: 0.6, railPageMemory: {} });
+    // Only entries naming a real page under the category they claim survive.
+    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPageMemory: { layers: 'signals', finish: 'layers', mappings: 'nope' } })).railPageMemory).toEqual({ layers: 'signals' });
     // A current save keeps a hidden sidebar (and the pre-rail `sidebarHidden` spelling).
     expect(parseSplitPrefs(JSON.stringify({ v: 2, on: true, sidebarHidden: true })).sidebar).toBe('hidden');
     expect(parseSplitPrefs(JSON.stringify({ v: 2, on: false, sidebar: 'full' })).on).toBe(false);

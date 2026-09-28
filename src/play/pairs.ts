@@ -153,11 +153,53 @@ export function deleteSignal(play: PlayRecord, id: string): PlayRecord {
   return out;
 }
 
-/** How many actions, mappings and swaps send or listen for a signal. */
+/**
+ * Signal fields a layer or an increment sends on its own, outside of a "Send
+ * a signal" action: a Multiply layer's split/full/annihilate/cleared, a
+ * Relationship layer's catch, an Increment mapping's step and wrap-back.
+ */
+export function layerSignalSenders(play: PlayRecord): Array<{ id: string; label: string }> {
+  const out: Array<{ id: string; label: string }> = [];
+  for (const l of play.layers) {
+    if (l.kind === 'particles' && l.emit === 'multiply') {
+      if (l.splitSignal) out.push({ id: l.splitSignal, label: `${l.label}: Split` });
+      if (l.fullSignal) out.push({ id: l.fullSignal, label: `${l.label}: Full` });
+      if (l.annihilateSignal) out.push({ id: l.annihilateSignal, label: `${l.label}: Annihilate` });
+      if (l.clearedSignal) out.push({ id: l.clearedSignal, label: `${l.label}: Cleared` });
+    } else if (l.kind === 'relationship' && l.catchSignal) {
+      out.push({ id: l.catchSignal, label: `${l.label}: Catch` });
+    }
+  }
+  for (const m of play.mappings) {
+    const inc = m.increment;
+    if (!inc) continue;
+    const control = play.controls.find(c => c.id === m.controlId)?.label ?? m.controlId;
+    if (inc.stepSignal) out.push({ id: inc.stepSignal, label: `${control} increment: Step` });
+    if (inc.resetSignal) out.push({ id: inc.resetSignal, label: `${control} increment: Wrap back` });
+  }
+  return out;
+}
+
+/** Signal fields that listen for a signal outside of an action or a mapping source: an Increment's Reset on. */
+export function layerSignalListeners(play: PlayRecord): Array<{ id: string; label: string }> {
+  const out: Array<{ id: string; label: string }> = [];
+  for (const m of play.mappings) {
+    const inc = m.increment;
+    if (inc?.resetOn) {
+      const control = play.controls.find(c => c.id === m.controlId)?.label ?? m.controlId;
+      out.push({ id: inc.resetOn, label: `${control} increment: Reset` });
+    }
+  }
+  return out;
+}
+
+/** How many actions, mappings, swaps, layers and increments send or listen for a signal. */
 export function signalUses(play: PlayRecord, id: string): number {
   let n = 0;
   for (const a of play.actions ?? []) { if (a.signal === id) n++; if (a.trigger.on === 'signal' && a.trigger.signal === id) n++; }
   for (const m of play.mappings) if (m.source.kind === 'trigger' && m.source.trigger.on === 'signal' && m.source.trigger.signal === id) n++;
   for (const m of play.pairMappings ?? []) { if (m.swap?.signal === id) n++; if (m.swap?.backSignal === id) n++; }
+  n += layerSignalSenders(play).filter(s => s.id === id).length;
+  n += layerSignalListeners(play).filter(s => s.id === id).length;
   return n;
 }
