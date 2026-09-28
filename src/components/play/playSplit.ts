@@ -44,7 +44,10 @@ export interface SplitPrefs {
 }
 
 export const SPLIT_KEY = 'shader-studio:play:split';
-export const DEFAULT_SPLIT: SplitPrefs = { on: false, side: 'right', ratio: 0.5, tab: 'controls', sidebar: 'full', sidebarBefore: 'full', railPage: 'controls', railRatio: null };
+/** The Play page opens split, with the sidebar folded into the icon rail (the owner's preferred view). */
+export const DEFAULT_SPLIT: SplitPrefs = { on: true, side: 'right', ratio: 0.5, tab: 'controls', sidebar: 'rail', sidebarBefore: 'full', railPage: 'controls', railRatio: null };
+/** Bumped when the default view changes; older saves take the new default for `on` and `sidebar` once. */
+export const SPLIT_PREFS_VERSION = 2;
 /** The rail's width, in px. */
 export const RAIL_PX = 60;
 /** The ratio is kept within these, whatever the pixels say. */
@@ -67,13 +70,15 @@ export function parseSplitPrefs(raw: string | null): SplitPrefs {
   try { v = JSON.parse(raw); } catch { return { ...DEFAULT_SPLIT }; }
   if (!v || typeof v !== 'object') return { ...DEFAULT_SPLIT };
   const o = v as Record<string, unknown>;
+  // A save from before the rail became the default keeps its side, ratio and page but opens the new way.
+  const current = o.v === SPLIT_PREFS_VERSION;
   return {
-    on: typeof o.on === 'boolean' ? o.on : DEFAULT_SPLIT.on,
+    on: current && typeof o.on === 'boolean' ? o.on : DEFAULT_SPLIT.on,
     side: SIDES.includes(o.side as SplitSide) ? o.side as SplitSide : DEFAULT_SPLIT.side,
     ratio: typeof o.ratio === 'number' && Number.isFinite(o.ratio) ? clampRatio(o.ratio) : DEFAULT_SPLIT.ratio,
     tab: TABS.includes(o.tab as PlayTab) ? o.tab as PlayTab : DEFAULT_SPLIT.tab,
     // `sidebarHidden` is how the hidden sidebar was saved before the rail.
-    sidebar: SIDEBARS.includes(o.sidebar as SidebarMode) ? o.sidebar as SidebarMode : o.sidebarHidden === true ? 'hidden' : DEFAULT_SPLIT.sidebar,
+    sidebar: !current ? DEFAULT_SPLIT.sidebar : SIDEBARS.includes(o.sidebar as SidebarMode) ? o.sidebar as SidebarMode : o.sidebarHidden === true ? 'hidden' : DEFAULT_SPLIT.sidebar,
     sidebarBefore: o.sidebarBefore === 'hidden' ? 'hidden' : 'full',
     railPage: isRailPage(o.railPage) ? o.railPage : DEFAULT_SPLIT.railPage,
     railRatio: typeof o.railRatio === 'number' && Number.isFinite(o.railRatio) ? clampRatio(o.railRatio) : null,
@@ -146,7 +151,7 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 function savePrefs(p: SplitPrefs): void {
   try {
     localStorage.setItem(SPLIT_KEY, JSON.stringify({
-      on: p.on, side: p.side, ratio: round3(p.ratio), tab: p.tab,
+      v: SPLIT_PREFS_VERSION, on: p.on, side: p.side, ratio: round3(p.ratio), tab: p.tab,
       sidebar: p.sidebar, sidebarBefore: p.sidebarBefore, railPage: p.railPage, railRatio: p.railRatio === null ? null : round3(p.railRatio),
     }));
   } catch { /* preference only */ }

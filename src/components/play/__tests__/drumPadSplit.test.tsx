@@ -60,9 +60,10 @@ describe('drum pads card', () => {
   });
 
   it('opening in split turns the split on, on Layers, with the layer selected', () => {
+    usePlaySplit.setState({ on: false });
     expect(openLayerInSplit('dp1')).toBe(false);
     expect(usePlaySplit.getState().on).toBe(false);
-    usePlaySplit.setState({ available: true, tab: 'finish' });
+    usePlaySplit.setState({ available: true, tab: 'finish', sidebar: 'full' });
     expect(openLayerInSplit('dp1')).toBe(true);
     const s = usePlaySplit.getState();
     expect(s.on).toBe(true);
