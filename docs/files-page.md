@@ -13,7 +13,8 @@ Code: `src/components/files/*` (the views) over `src/files/*` (the models, pure 
 - **Calendar**: the month, a dot on each day with activity (up to three for busier days); earlier months with the arrows; click a day for that day's events, newest first. Days before counting started are greyed.
 - **Recent**: a sideways carousel of poster cards for the newest graphs, Plays (graphs with a Play setup), presentations and GLSL shaders. Clicking one opens it where it belongs: a graph in the Studio, a Play on the Play page, a presentation on Present, a shader on the GLSL page.
 - **Most used**: chips with counts for node types (into groups), custom functions by name, layer kinds and the sources Play mappings read, counted across every saved graph plus the open graph when it isn't a saved one as it is. A node chip opens its node page.
-- **Sections**: tiles for Browse, Nodes, Notes, Clean up, Workspace folder and App settings; then the **Space** meter.
+- **Sections**: tiles for Browse, Nodes, Notes, Clean up, Workspace folder, Linked folders and App settings; then the **Space** meter.
+- **Linked folders** (`components/linked/LinkedFoldersView.tsx`, model `files/linkedFolders.ts`; see `docs/linked-folders.md`): folders on disk (samples, images, videos, fonts) every asset picker can browse, used in place. A sidebar entry (with a warning when one needs attention), a group of the folders under the tree, and a view with each folder's state, Link a folder…, rename, what it's for, Allow again / Check again / Find it…, Unlink (with Undo) and the shared browser.
 
 ### The activity log
 

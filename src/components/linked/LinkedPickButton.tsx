@@ -8,7 +8,6 @@
  *   linkedMissingText(ref, name)         what to say about a missing linked file
  *   <LinkedRelinkButton ref onRelinked /> "Relink…" for the missing states
  */
-import { useSyncExternalStore } from 'react';
 import { Button } from '../ui/Button';
 import { toast } from '../ui/toastStore';
 import { getLinkedFolder, linkedProblem, linkedSupport, reconnectLinkedFolder, useLinkedFolders, type LinkedEntry } from '../../files/linkedFolders';
@@ -17,7 +16,7 @@ import { FILTER_WORDS, openLinkedPicker } from './linkedUi';
 
 /** Are linked folders worth offering here (supported, or some are linked)? */
 export function useLinkedAvailable(): boolean {
-  const n = useSyncExternalStore(useLinkedFolders.subscribe, () => useLinkedFolders.getState().folders.length);
+  const n = useLinkedFolders(s => s.folders.length);
   return n > 0 || linkedSupport() !== 'none';
 }
 

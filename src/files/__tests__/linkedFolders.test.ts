@@ -204,3 +204,32 @@ describe('the library reads linked ids without copying them', () => {
     expect(Object.keys(files)).toEqual([]);
   });
 });
+
+describe('setups keep linked references', () => {
+  it('a Background video and image keep their linked ref; exports find the video', async () => {
+    const { parseBackgroundItems } = await import('../../types/playLayers');
+    const { parseDisplay } = await import('../../types/play');
+    const video = linkedRef('lf_a1', 'Clips/A long folder name/clip one.mp4');
+    const items = parseBackgroundItems([
+      { id: 's1', kind: 'video', name: 'clip one.mp4', src: '', bytes: 99, libraryId: video },
+      { id: 's2', kind: 'image', name: 'Sunset', src: 'data:image/png;base64,AAAA', libraryId: linkedRef('lf_a1', 'Pictures/Sunset.png') },
+      { id: 's3', kind: 'video', name: 'x.mp4', src: '', bytes: 1, libraryId: 'vid_123' },
+    ]);
+    expect(items[0].libraryId).toBe(video);
+    expect(items[1].libraryId).toBe('linked:lf_a1/Pictures/Sunset.png');
+    expect(items[2].libraryId).toBeUndefined(); // only linked videos name a file this way
+    const d = parseDisplay({ source: 'video', video: { name: 'clip one.mp4', src: '', bytes: 99, loop: true, muted: true, rate: 1, libraryId: video } });
+    expect(d?.video?.libraryId).toBe(video);
+
+    const setup = JSON.stringify({ display: d, layers: [{ kind: 'background', sources: items }] });
+    // Inside a library snapshot the JSON is escaped once more: found there too; the image (embedded) is not.
+    expect(videoIdsIn([{ kind: 'play', name: 'A', data: setup }])).toEqual([video]);
+    expect(videoIdsIn([{ kind: 'library', name: 'L', data: JSON.stringify({ x: setup }) }])).toEqual([video]);
+  });
+
+  it('a Text layer font can be a linked file (the kit reads it through the app)', async () => {
+    const { klParseFontUrl } = await import('../../play/kit/fonts.js');
+    expect(klParseFontUrl('linked:lf_a1/Fonts/Space Grotesk.woff2')).toEqual({ family: 'SS Space Grotesk', file: 'linked:lf_a1/Fonts/Space Grotesk.woff2' });
+    expect(klParseFontUrl('linked:lf_a1/readme.txt')).toBeNull();
+  });
+});
