@@ -21,9 +21,8 @@
  *                    settings, and the grains' readouts (count, positions,
  *                    levels, pitches) posted back ~60 times a second
  *   grRender(o)      render notes offline with the pure engine (takes, tests)
- *   grSynthData      generated samples (a pad chord, a pluck, a vowel, a bell,
- *                    noise, a sine, and the drum pads' drums), so an example
- *                    needs no audio file
+ *   grSynthData      generated samples (the pad chord, and the drum pads'
+ *                    drums), so an example needs no audio file
  */
 import { dpSynthData, DP_SYNTHS } from './drumPads.js';
 
@@ -1011,69 +1010,26 @@ export function grCreate(ctx, opts) {
 
 // ── Generated samples ───────────────────────────────────────────────────────
 
-/** Samples the granulator can make without a file (the drum pads' drums too). */
-export const GR_SYNTHS = ['pad', 'pluck', 'vowel', 'bell', 'noise', 'sine'].concat(DP_SYNTHS);
-export const GR_SYNTH_NAMES = { pad: 'Pad chord', pluck: 'Pluck', vowel: 'Vowel', bell: 'Bell', noise: 'Noise sweep', sine: 'Sine (220 Hz)', kick: 'Kick', snare: 'Snare', hat: 'Hat', openhat: 'Open hat', clap: 'Clap', tom: 'Tom', rim: 'Rim', cowbell: 'Cowbell' };
+/**
+ * The generated sample the granulator offers: the pad chord (the others were
+ * retired 2026-09-28; records naming one play the pad chord instead).
+ */
+export const GR_SYNTHS = ['pad'];
+/** Generated samples a granulator's record may name: the pad chord, and a drum pad's generated drum (picked as that pad's sound). */
+export const GR_SAMPLE_SYNTHS = GR_SYNTHS.concat(DP_SYNTHS);
+/** Generated samples no longer made: a record naming one gets the pad chord. */
+export const GR_RETIRED_SYNTHS = ['pluck', 'vowel', 'bell', 'noise', 'sine'];
+export const GR_SYNTH_NAMES = { pad: 'Pad chord', kick: 'Kick', snare: 'Snare', hat: 'Hat', openhat: 'Open hat', clap: 'Clap', tom: 'Tom', rim: 'Rim', cowbell: 'Cowbell' };
 
-function grNoise(seed) {
-  let a = seed >>> 0 || 1;
-  return () => { a ^= a << 13; a ^= a >>> 17; a ^= a << 5; return ((a >>> 0) / 4294967296) * 2 - 1; };
-}
-
-/** A generated sample, mono, at `rate`. */
+/** A generated sample, mono, at `rate`: a drum pad's drum, else the pad chord (also for a retired kind). */
 export function grSynthData(kind, rate) {
   if (DP_SYNTHS.indexOf(kind) >= 0) return dpSynthData(kind, rate);
   const sr = rate || 44100;
-  const secs = kind === 'pluck' ? 2 : kind === 'sine' ? 2 : 3;
+  const secs = 3;
   const n = Math.max(1, Math.round(secs * sr));
   const out = new Float32Array(n);
-  const rnd = grNoise(GR_SYNTHS.indexOf(kind) * 104729 + 7);
   const TAU = 2 * Math.PI;
-  if (kind === 'pluck') {
-    // Karplus–Strong at G3.
-    const period = Math.round(sr / 196), line = new Float32Array(period);
-    for (let i = 0; i < period; i++) line[i] = rnd();
-    let idx = 0;
-    for (let i = 0; i < n; i++) {
-      const a = line[idx], b = line[(idx + 1) % period];
-      out[i] = a;
-      line[idx] = 0.498 * (a + b);
-      idx = (idx + 1) % period;
-    }
-  } else if (kind === 'vowel') {
-    // A saw at A2 through three formants moving from "ah" to "oo".
-    let ph = 0;
-    const bands = [0, 1, 2].map(() => ({ s1: 0, s2: 0 }));
-    for (let i = 0; i < n; i++) {
-      const t = i / sr, k = t / secs;
-      ph = (ph + 110 * (1 + 0.004 * Math.sin(TAU * 5 * t)) / sr) % 1;
-      const saw = 2 * ph - 1;
-      const f = [730 + (300 - 730) * k, 1090 + (870 - 1090) * k, 2440 + (2240 - 2440) * k];
-      let v = 0;
-      for (let b = 0; b < 3; b++) {
-        const g = Math.tan(Math.PI * f[b] / sr), q = 8, a1 = 1 / (1 + g * (g + 1 / q)), st = bands[b];
-        const v3 = saw - st.s2, v1 = a1 * st.s1 + g * a1 * v3, v2 = st.s2 + g * a1 * st.s1 + g * g * a1 * v3;
-        st.s1 = 2 * v1 - st.s1; st.s2 = 2 * v2 - st.s2;
-        v += v1 * (b === 0 ? 1 : b === 1 ? 0.6 : 0.3);
-      }
-      out[i] = v;
-    }
-  } else if (kind === 'bell') {
-    for (let i = 0; i < n; i++) {
-      const t = i / sr, env = Math.exp(-t / 0.9);
-      out[i] = env * Math.sin(TAU * 440 * t + 3 * env * Math.sin(TAU * 440 * 1.4 * t)) + 0.4 * Math.exp(-t / 0.4) * Math.sin(TAU * 440 * 2.76 * t);
-    }
-  } else if (kind === 'noise') {
-    let s1 = 0, s2 = 0;
-    for (let i = 0; i < n; i++) {
-      const t = i / sr, f = 200 * Math.pow(40, t / secs), g = Math.tan(Math.PI * Math.min(f, sr * 0.45) / sr), a1 = 1 / (1 + g * (g + 0.2));
-      const x = rnd(), v3 = x - s2, v1 = a1 * s1 + g * a1 * v3, v2 = s2 + g * a1 * s1 + g * g * a1 * v3;
-      s1 = 2 * v1 - s1; s2 = 2 * v2 - s2;
-      out[i] = v1;
-    }
-  } else if (kind === 'sine') {
-    for (let i = 0; i < n; i++) out[i] = Math.sin(TAU * 220 * i / sr);
-  } else {
+  {
     // pad: A minor-ish chord (A3 C4 E4 A4), slightly detuned, a slow swell.
     const fs = [220, 261.63, 329.63, 440];
     for (let i = 0; i < n; i++) {

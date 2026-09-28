@@ -68,6 +68,8 @@ export const GR_WINDOWS: readonly string[];
 export const GR_PARAMS: readonly GrParam[];
 export const GR_KEYS: readonly string[];
 export const GR_SYNTHS: readonly string[];
+export const GR_SAMPLE_SYNTHS: readonly string[];
+export const GR_RETIRED_SYNTHS: readonly string[];
 export const GR_SYNTH_NAMES: Record<string, string>;
 export function grParam(k: string | number): GrParam | null;
 export function grDefaults(): GrSettings;

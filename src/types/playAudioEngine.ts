@@ -16,7 +16,7 @@
  * Pure: types, parsing, targets and record edits. lib/audioEngineHost.ts runs it.
  */
 import { RACK_CONTROLS_MAX } from './playArrangement';
-import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
+import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_RETIRED_SYNTHS, GR_SAMPLE_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
 
 
 /** An Audio Unit, by its component description (four-char codes as numbers), with its names for showing. */
@@ -49,7 +49,8 @@ export const AE_INST = 'inst';
 /**
  * A granulator's sample (docs/granulator.md): a kept sound from the Library
  * (`sampleId`, named like a zone's so the Library's "used by", clean-up and
- * bundling find it), or a generated one (`synth`: play/kit/granulator.js GR_SYNTHS).
+ * bundling find it), or a generated one (`synth`: play/kit/granulator.js GR_SAMPLE_SYNTHS:
+ * the pad chord, or a drum pad's generated drum; a retired one reads as the pad chord).
  */
 export interface AeGrainSample {
   sampleId?: string;
@@ -453,7 +454,9 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
     const sm = o.sample && typeof o.sample === 'object' ? o.sample as Record<string, unknown> : null;
     if (sm) {
       if (typeof sm.sampleId === 'string' && ID.test(sm.sampleId)) slot.sample = { sampleId: sm.sampleId, name: text(sm.name, 'Sound', 120) };
-      else if (typeof sm.synth === 'string' && GR_SYNTHS.includes(sm.synth)) slot.sample = { synth: sm.synth, name: text(sm.name, GR_SYNTH_NAMES[sm.synth] ?? sm.synth, 120) };
+      else if (typeof sm.synth === 'string' && GR_SAMPLE_SYNTHS.includes(sm.synth)) slot.sample = { synth: sm.synth, name: text(sm.name, GR_SYNTH_NAMES[sm.synth] ?? sm.synth, 120) };
+      // A generated sample that was retired (pluck, vowel, bell, noise sweep, sine): the pad chord plays instead.
+      else if (typeof sm.synth === 'string' && GR_RETIRED_SYNTHS.includes(sm.synth)) slot.sample = { synth: 'pad', name: GR_SYNTH_NAMES.pad };
     }
     return slot;
   }
