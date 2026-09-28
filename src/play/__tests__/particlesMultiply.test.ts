@@ -5,7 +5,7 @@
  * the goo (metaball) field's threshold maths.
  */
 import { describe, it, expect } from 'vitest';
-import { createParticles, gooAlpha, gooField, gooKernel, seededRandom, stepParticles, type ParticleEnv, type ParticleParams, type ParticleState } from '../particle-sim.js';
+import { createParticles, cullParticles, gooAlpha, gooField, gooKernel, multiplyParticles, seededRandom, stepParticles, type ParticleEnv, type ParticleParams, type ParticleState } from '../particle-sim.js';
 import { defaultLayer, emptyPlayRecord, type ParticlesLayer } from '../../types/play';
 import { PLAY_EXAMPLE_GRAPHS } from '../../store/playExamples';
 import { buildPlayHtml, DEFAULT_EMBED } from '../exportHtml';
@@ -186,6 +186,126 @@ describe('multiply: after the count is reached', () => {
     });
     expect(drops).toBeGreaterThan(0);
     expect(moved).toBeGreaterThan(0); // the noise field at speed 3 (0.54 heights/s) takes over from the gentle bud push
+  });
+});
+
+describe('multiply: fullness', () => {
+  it('raising Fullness buds toward the target; lowering it culls the youngest first', () => {
+    const rand = seededRandom(6), st = createParticles(100, rand, true);
+    const p = params({ grow: 'fullness', fullness: 100, multLife: 'stay', multAfter: 'hold' });
+    const e = env();
+    run(st, p, e, 6, rand);
+    expect(aliveCount(st)).toBe(100);
+    expect(st.mx?.reached).toBe(true);
+    // Lower it: the excess is culled, youngest first (the most recently budded).
+    const ages = () => { const a: number[] = []; for (let i = 0; i < st.count; i++) if (st.alive[i]) a.push(st.age[i]); return a; };
+    const before = ages().sort((a, b) => a - b);
+    const p2 = { ...p, fullness: 40 };
+    stepParticles(st, p2, e, rand);
+    expect(aliveCount(st)).toBe(40);
+    // What's left is the oldest 40 (the youngest 60 of the previous generation went first).
+    const oldestKept = Math.min(...ages());
+    expect(oldestKept).toBeGreaterThanOrEqual(before[60] - 1e-6);
+  });
+
+  it('raising it a lot buds a few at a time rather than all at once (a sweep looks like growth, not a pop)', () => {
+    const rand = seededRandom(2), st = createParticles(200, rand, true);
+    const p = params({ grow: 'fullness', fullness: 0, multLife: 'stay', multAfter: 'hold' });
+    const e = env();
+    run(st, p, e, 1, rand); // settle at empty (well, one particle: Fullness 0 still keeps the seed dying off)
+    const p2 = { ...p, fullness: 100 };
+    stepParticles(st, p2, e, rand);
+    // Not everyone appears in the first frame.
+    expect(aliveCount(st)).toBeGreaterThan(0);
+    expect(aliveCount(st)).toBeLessThan(200);
+  });
+
+  it('with no living parent, a bud starts where the layer is Born', () => {
+    const rand = seededRandom(9), st = createParticles(20, rand, true);
+    const p = params({ grow: 'fullness', fullness: 0, spawn: 'center', spawnRadius: 0 });
+    const e = env();
+    stepParticles(st, p, e, rand); // phase 'start': seeds one at Born
+    for (let i = 0; i < st.count; i++) st.alive[i] = 0; // wipe it out
+    const p2 = { ...p, fullness: 10 };
+    stepParticles(st, p2, e, rand);
+    let bornAtCentre = false;
+    for (let i = 0; i < st.count; i++) if (st.alive[i]) { expect(st.x[i]).toBeCloseTo(0.5, 3); expect(st.y[i]).toBeCloseTo(0.5, 3); bornAtCentre = true; }
+    expect(bornAtCentre).toBe(true);
+  });
+
+  it('is deterministic: the same seed replays exactly', () => {
+    const run1 = (seed: number) => {
+      const rand = seededRandom(seed), st = createParticles(80, rand, true);
+      const p = params({ grow: 'fullness', fullness: 60, multLife: 'annihilate', pairRadius: 0.4 }), e = env();
+      run(st, p, e, 5, rand);
+      return { x: Array.from(st.x), alive: Array.from(st.alive), mx: { ...st.mx } };
+    };
+    expect(run1(77)).toEqual(run1(77));
+  });
+});
+
+describe('multiply: actions', () => {
+  it('Multiply buds `amount` now, from a random living parent', () => {
+    const rand = seededRandom(3), st = createParticles(50, rand, true);
+    const p = params({ multLife: 'stay', multAfter: 'hold' }), e = env();
+    // Seed one living particle by hand (no need to grow the whole colony).
+    st.alive[0] = 1; st.x[0] = 0.5; st.y[0] = 0.5; st.age[0] = 1;
+    multiplyParticles(st, p, e, 5, rand);
+    expect(aliveCount(st)).toBe(6);
+    expect(st.mx?.splits).toBe(5);
+  });
+
+  it('Multiply with nobody alive buds from Born', () => {
+    const rand = seededRandom(3), st = createParticles(50, rand, true);
+    const p = params({ spawn: 'center', spawnRadius: 0 }), e = env();
+    // The first one (nobody alive yet) starts exactly at Born; later ones in the same call bud off it.
+    multiplyParticles(st, p, e, 1, rand);
+    expect(aliveCount(st)).toBe(1);
+    expect(st.x[0]).toBeCloseTo(0.5, 5);
+    expect(st.y[0]).toBeCloseTo(0.5, 5);
+    multiplyParticles(st, p, e, 2, rand);
+    expect(aliveCount(st)).toBe(3);
+  });
+
+  it('Cull removes `amount`, youngest first', () => {
+    const rand = seededRandom(3), st = createParticles(10, rand, true);
+    const p = params(), e = env();
+    for (let i = 0; i < 10; i++) { st.alive[i] = 1; st.age[i] = i; } // 0 is youngest, 9 the oldest
+    cullParticles(st, p, e, 4, rand);
+    expect(aliveCount(st)).toBe(6);
+    for (let i = 0; i < 4; i++) expect(st.alive[i]).toBe(0);
+    for (let i = 4; i < 10; i++) expect(st.alive[i]).toBe(1);
+  });
+});
+
+describe('multiply: signals', () => {
+  it('counts a split for every bud, by itself or by Fullness', () => {
+    const rand = seededRandom(14), st = createParticles(60, rand, true);
+    const p = params({ splitRate: 2, multLife: 'stay', multAfter: 'hold' }), e = env();
+    run(st, p, e, 6, rand);
+    expect(st.mx?.splits).toBeGreaterThan(0);
+    expect(st.mx?.splits).toBeGreaterThanOrEqual(aliveCount(st) - 1); // one seed, the rest budded
+  });
+
+  it('counts full once the colony first reaches its target, and again each loop', () => {
+    const rand = seededRandom(8), st = createParticles(24, rand, true);
+    const p = params({ splitRate: 2, multLife: 'annihilate', multAfter: 'loop', pairRadius: 0.3, seekSpeed: 0.3 }), e = env();
+    run(st, p, e, 40, rand);
+    expect((st.mx?.fulls ?? 0)).toBeGreaterThanOrEqual(2); // loops (and so re-fills) at least twice in 40 s
+  });
+
+  it('counts an annihilation for every pair that dies', () => {
+    const rand = seededRandom(21), st = createParticles(30, rand, true);
+    const p = params({ splitRate: 2, multLife: 'annihilate', multAfter: 'hold', pairRadius: 0.5, seekSpeed: 0.2 }), e = env();
+    run(st, p, e, 20, rand);
+    expect((st.mx?.annihilations ?? 0)).toBeGreaterThan(0);
+  });
+
+  it('counts cleared when the colony empties out', () => {
+    const rand = seededRandom(8), st = createParticles(16, rand, true);
+    const p = params({ splitRate: 2, multLife: 'annihilate', multAfter: 'loop', pairRadius: 0.5, seekSpeed: 0.4, loopHold: 0 }), e = env();
+    run(st, p, e, 20, rand);
+    expect((st.mx?.cleareds ?? 0)).toBeGreaterThan(0);
   });
 });
 

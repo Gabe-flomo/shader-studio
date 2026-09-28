@@ -120,8 +120,10 @@ export function ActionsSection({ play, onChange, only, bare = false }: {
               {a.do === SIGNAL_ACTION
                 ? <SignalPicker value={a.signal ?? ''} onChange={signal => update(a.id, { signal })} />
                 : <Select ariaLabel="Layer" value={a.layerId} options={play.layers.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const l = play.layers.find(x => x.id === v); update(a.id, { layerId: v, do: l && actionsFor(l).includes(a.do) ? a.do : l ? defaultAction(l) : a.do }); }} height={26} />}
-              {(a.do === 'burst' || a.do === 'scatter') && (
-                <NumberInput value={a.amount} min={0} max={a.do === 'burst' ? 5000 : 10} step={a.do === 'burst' ? 10 : 0.5} title={a.do === 'burst' ? 'How many particles' : 'How hard'} onCommit={n => update(a.id, { amount: Math.max(0, n) })} style={numStyle} />
+              {(a.do === 'burst' || a.do === 'scatter' || a.do === 'multiply' || a.do === 'cull') && (
+                <NumberInput value={a.amount} min={0} max={a.do === 'burst' || a.do === 'multiply' || a.do === 'cull' ? 5000 : 10} step={a.do === 'scatter' ? 0.5 : 10}
+                  title={a.do === 'burst' ? 'How many particles' : a.do === 'scatter' ? 'How hard' : a.do === 'multiply' ? 'How many to bud now' : 'How many to remove, youngest first'}
+                  onCommit={n => update(a.id, { amount: Math.max(0, n) })} style={numStyle} />
               )}
               {a.do === 'pad' && layer?.kind === 'drumpad' && (
                 // Play pad N, counting from 1.
