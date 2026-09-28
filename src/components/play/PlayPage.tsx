@@ -26,7 +26,9 @@ import { PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '../../types/pl
 import { GRAIN_EACH, grainSensorLayer, isGranulatorRack, parseGrainsTarget } from '../../types/playAudioEngine';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
-import { applyCurve, playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
+import { applyCurve, FN_BEAT_HZ, playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
+import { fnEval } from '../../play/kit/fn.js';
+import { subscribeTimeTick } from '../../lib/timeTick';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
 import { ASSIGN_FLASH_MS, claimMidiListen, isUnassignedCc, startMidiAutoLearn } from '../../lib/midiAutoLearn';
 import { MidiWaitChip } from './MidiSourceOptions';
@@ -1980,6 +1982,26 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
         <Select ariaLabel="Clock shape" value={source.shape} options={LFO_SHAPES} onChange={v => onChange({ ...source, shape: v as LfoShape })} height={26} />
       </>);
     }
+    case 'fn': {
+      const { error } = fnEval(source.expr, { t: 0, b: 0 });
+      return (
+        <>
+          {row(<>
+            <Field value={source.expr} onChange={e => onChange({ ...source, expr: e.target.value })} height={26} mono style={{ flex: 1, minWidth: 140 }} placeholder="sin(t * 2) * 0.5 + 0.5" />
+            <FnPreview expr={source.expr} />
+          </>)}
+          <div style={{ margin: '-2px 0 6px 60px', color: error ? tk.status.danger : tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>
+            {error || 't = seconds, b = beats · sin cos tan abs floor ceil round fract sqrt pow exp log sign min max mix clamp step smoothstep mod noise rand'}
+          </div>
+          {row(<>
+            <NumberInput value={source.min} title="Raw value that reads as 0" onCommit={n => onChange({ ...source, min: n })} style={{ ...numStyle, width: 48 }} />
+            {hint('→')}
+            <NumberInput value={source.max} title="Raw value that reads as 1" onCommit={n => onChange({ ...source, max: n === source.min ? n + 1 : n })} style={{ ...numStyle, width: 48 }} />
+            {hint('range: normalises the formula into 0–1')}
+          </>)}
+        </>
+      );
+    }
     case 'audio': {
       if (audioNodes.length === 0) return row(hint('Add an Audio Input node in the Studio and load a file or the mic.'));
       const node = audioNodes.find(n => n.id === source.nodeId) ?? audioNodes[0];
@@ -2179,6 +2201,24 @@ function EnvelopeGlyph({ a, d, s, r }: { a: number; d: number; s: number; r: num
  * tick is the source's raw reading. With a straight curve they sit together;
  * a drawn or Exp/Log curve pulls them apart, so its effect is visible.
  */
+/**
+ * A Function source's live raw value, next to its expression field. Follows
+ * the preview clock directly (lib/timeTick, the same one ShaderCanvas emits
+ * every frame) and writes the span's text on each tick instead of setting
+ * React state, so typing a formula never fights a per-frame re-render.
+ */
+function FnPreview({ expr }: { expr: string }) {
+  const tk = useTokens();
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => subscribeTimeTick(t => {
+    const el = ref.current;
+    if (!el) return;
+    const { value, error } = fnEval(expr, { t, b: t * FN_BEAT_HZ });
+    el.textContent = error ? '—' : value.toFixed(3);
+  }), [expr]);
+  return <span ref={ref} style={{ minWidth: 52, textAlign: 'right', flexShrink: 0, font: `11px ${fontFamily.mono}`, color: tk.text.faint }}>0.000</span>;
+}
+
 function MappingMeter({ input, output, on, margin }: { input: number; output: number; on: boolean; margin: string }) {
   const tk = useTokens();
   const i = Math.max(0, Math.min(1, input)), o = Math.max(0, Math.min(1, output));

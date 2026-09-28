@@ -33,6 +33,7 @@ import { AUDIO_FX_TARGET_PREFIX, readAudioFxValue } from '../types/playAudioFx';
 import { signalNames } from '../play/signalNames';
 import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../types/play';
 import { geoAnchor } from '../play/kit/geometry.js';
+import { fnEval } from '../play/kit/fn.js';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
 import { sensorKey } from '../types/play';
@@ -116,6 +117,9 @@ export function lfoValue(shape: LfoShape, t: number): number {
 export function clockRate(bpm: number, beats: number): number {
   return bpm / 60 / Math.max(0.0625, beats);
 }
+
+/** A Function source's `b`: quarter notes per second at a fixed 120 BPM (docs/play-v1-plan.md, "Sources"). */
+export const FN_BEAT_HZ = 120 / 60;
 
 interface PadSnapshot { axes: number[]; buttons: number[] }
 
@@ -854,6 +858,10 @@ class PlayEngine implements InputSource {
         return lfoValue(source.shape, this.time * source.rate + source.phase);
       case 'clock':
         return lfoValue(source.shape, this.time * clockRate(source.bpm, source.beats));
+      case 'fn': {
+        const { value } = fnEval(source.expr, { t: this.time, b: this.time * FN_BEAT_HZ });
+        return Math.max(0, Math.min(1, (value - source.min) / (source.max - source.min)));
+      }
       case 'audio':
         return audioEngine.bandLevel(source.nodeId, source.band);
       case 'tilt': {

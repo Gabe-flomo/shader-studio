@@ -33,6 +33,7 @@ A mapping is `source → range → curve → smoothing → control`. Every sourc
 | Another control | that control across its range | cross-modulation; chains work, a loop lags a frame |
 | LFO | sine, triangle, saw, square, random-step at a rate in Hz, with a phase offset | runs on the graph clock, so pausing pauses it and offline export is deterministic |
 | Clock (BPM) | the same shapes locked to a tempo, one cycle per N beats | tap tempo on the row |
+| Function | a one-line formula over `t` (seconds) and `b` (beats at 120 BPM), normalised into 0..1 by its own min..max | its own tiny parser, compiled to a closure — no `eval`; a bad line shows the error under the field and reads as 0; docs/input-expressions.md is the same idea for a node's float inputs |
 | Audio band | one band of an Audio Input node | the node needs a file or the mic playing |
 | Phone tilt | left/right, front/back, compass | iOS asks once; the row shows Enable |
 | Gamepad | a stick axis or a button | polled; Learn takes the first stick moved or button pressed |
