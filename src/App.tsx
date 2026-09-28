@@ -1411,10 +1411,11 @@ function App() {
 
         {/* Right: Shader Preview — hidden when floated or when the page hosts the canvas itself. A render surface, so it's dark in both themes. */}
         {!previewFloated && !hosted && (
-          <ThemeOverrideContext.Provider value="dark">
-            <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
+          <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
+            {/* Chrome around the picture follows the app's real theme; the picture itself stays dark (below). */}
+            <ThemeOverrideContext.Provider value={null}>
               <PreviewHeader>
-                <AspectPicker />
+                <AspectPicker onPanel />
                 <CanvasFullscreenButton plainF={page === 'play'} />
                 {page === 'play' && <GuidesToggle />}
                 {page === 'play' && <SplitButton />}
@@ -1423,31 +1424,35 @@ function App() {
                 <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
                 <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
               </PreviewHeader>
+            </ThemeOverrideContext.Provider>
+            <ThemeOverrideContext.Provider value="dark">
               <PlaySplitArea active={page === 'play'}>
                 <div ref={canvasFrame} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                   <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
                   {showHistogram && histData && <HistogramOverlay data={histData} />}
                 </div>
               </PlaySplitArea>
+            </ThemeOverrideContext.Provider>
+            <ThemeOverrideContext.Provider value={null}>
               <PreviewFooter idleHint="Hover for colour · select a node to probe" />
-            </div>
-          </ThemeOverrideContext.Provider>
+            </ThemeOverrideContext.Provider>
+          </div>
         )}
       </div>
 
       {/* Floating preview window */}
       {previewFloated && (
-        <ThemeOverrideContext.Provider value="dark">
-          <div
-            ref={floatContainerRef}
-            style={{
-              position: 'fixed', left: floatPos.x, top: floatPos.y, width: floatSize.w, height: floatSize.h, zIndex: 500,
-              display: 'flex', flexDirection: 'column', background: '#0d0d12', borderRadius: 12, overflow: 'hidden',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08)',
-              resize: 'both', minWidth: 240, minHeight: 180,
-            }}
-          >
-            {/* Drag handle / title bar */}
+        <div
+          ref={floatContainerRef}
+          style={{
+            position: 'fixed', left: floatPos.x, top: floatPos.y, width: floatSize.w, height: floatSize.h, zIndex: 500,
+            display: 'flex', flexDirection: 'column', background: '#0d0d12', borderRadius: 12, overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08)',
+            resize: 'both', minWidth: 240, minHeight: 180,
+          }}
+        >
+          {/* Drag handle / title bar — follows the app's real theme; the picture below stays dark. */}
+          <ThemeOverrideContext.Provider value={null}>
             <div onMouseDown={handleFloatHeaderMouseDown} style={{ cursor: 'grab', userSelect: 'none' }}>
               <PreviewHeader>
                 <span onMouseDown={e => e.stopPropagation()} style={{ display: 'flex', gap: 2 }}>
@@ -1456,13 +1461,17 @@ function App() {
                 </span>
               </PreviewHeader>
             </div>
+          </ThemeOverrideContext.Provider>
+          <ThemeOverrideContext.Provider value="dark">
             <div ref={canvasFrame} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
               <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
               {showHistogram && histData && <HistogramOverlay data={histData} />}
             </div>
+          </ThemeOverrideContext.Provider>
+          <ThemeOverrideContext.Provider value={null}>
             <PreviewFooter idleHint="Hover to probe" />
-          </div>
-        </ThemeOverrideContext.Provider>
+          </ThemeOverrideContext.Provider>
+        </div>
       )}
 
       {showExport && (
