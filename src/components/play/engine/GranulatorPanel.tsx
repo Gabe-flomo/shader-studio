@@ -74,7 +74,7 @@ export function GranulatorPanel({ rack, slot, play, onChange, touch }: { rack: A
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ ...labelStyle(tk), width: 44 }}>Mode</span>
         <Segmented size="sm" ariaLabel="Grain mode" value={String(mode)} onChange={v => set('mode', Number(v))}
-          options={['Classic', 'Flux', 'Cloud'].map((m, i) => ({ value: String(i), label: m, title: grParam('mode')!.hint }))} />
+          options={['Classic', 'Flux', 'Cloud'].map((m, i) => ({ value: String(i), label: m, title: MODE_NOTES[i] }))} />
         <IconButton icon={exposed.has(auTarget(rack.id, AE_INST, '0')) ? 'check' : 'plus'} size="sm" disabled={exposed.has(auTarget(rack.id, AE_INST, '0'))} label="Make Mode a control" onClick={() => expose(grParam('mode')!)} />
       </div>
       <span style={{ color: tk.text.muted, font: `11px/1.45 ${fontFamily.ui}` }}>{MODE_NOTES[mode] ?? ''}</span>
@@ -277,7 +277,7 @@ function Readouts({ rack, onChange }: { rack: AeRack; onChange: Change }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 2 }}>
       <span style={labelStyle(tk)}>Grains for the picture</span>
       <span style={{ color: tk.text.muted, font: `11px/1.45 ${fontFamily.ui}` }}>
-        The grains read as sensors on this rack (a mapping’s Layer sensor → {rack.name} · Granulator): count, mean position, spread, level, pitch, and each grain’s place and level.
+        The grains read as sensors on this rack (a mapping’s Layer sensor → {rack.name} · grains): count, mean position, spread, level, pitch, and each grain’s place and level.
       </span>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <Button size="sm" icon="sliders" onClick={() => { onChange(p => addGrainReadouts(p, rack.id)); toast.success('Grain count, position and spread are controls', { message: `In “Grains · ${rack.name}”.`, action: { label: 'Show', onClick: show } }); }}>Readouts → controls</Button>

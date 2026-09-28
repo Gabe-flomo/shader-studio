@@ -416,7 +416,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // Granulator racks read like layers in the sensor pickers (their grains: docs/granulator.md), as `ae:<rackId>`.
   const layerRefs = useMemo(() => [
     ...play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind, ...(l.kind === 'shape' ? { shape: l.shape } : {}) })),
-    ...(play.audioEngine?.racks ?? []).filter(isGranulatorRack).map(r => ({ id: grainSensorLayer(r.id), label: `${r.name} · Granulator`, kind: 'granulator' })),
+    ...(play.audioEngine?.racks ?? []).filter(isGranulatorRack).map(r => ({ id: grainSensorLayer(r.id), label: `${r.name} · grains`, kind: 'granulator' })),
   ], [play.layers, play.audioEngine]);
   // Desktop: the drawer's height, dragged from its top edge and remembered.
   const rootRef = useRef<HTMLDivElement>(null);
