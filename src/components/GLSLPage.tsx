@@ -22,6 +22,9 @@ import { Icon } from './ui/Icon';
 import { Menu } from './ui/Menu';
 import { shaderFacts, type ShaderFacts } from '../glsl/shaderFacts';
 import { DiscoverFunctionsModal } from './code/DiscoverFunctionsModal';
+import { PageCanvas } from './shell/PageCanvas';
+import { usePageCanvas } from './shell/pageCanvasStore';
+import { usePhoneLayout } from '../hooks/useBreakpoint';
 
 // ── Boilerplate ───────────────────────────────────────────────────────────────
 
@@ -155,6 +158,12 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
   const setRawGlslShader = useNodeGraphStore(s => s.setRawGlslShader);
   const nodeGraphShader  = useNodeGraphStore(s => s.fragmentShader);
   const glslErrors       = useNodeGraphStore(s => s.glslErrors);
+  // Full canvas: the main preview hosted on this page, wide, with its toolbar (shell/PageCanvas.tsx); the
+  // app's preview column steps aside. On a phone (which has no preview column) it sits over the editor.
+  const layout = usePageCanvas(s => s.layout.glsl);
+  const toggleLayout = usePageCanvas(s => s.toggleLayout);
+  const full = layout === 'full';
+  const { phone } = usePhoneLayout();
 
   const [code, setCode]         = useState<string>(() => localStorage.getItem(EDITOR_KEY) ?? BOILERPLATE);
   const [shaders, setShaders]   = useState<SavedShader[]>(loadShaders);
@@ -326,9 +335,14 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
     </div>
   );
 
+  // The way back from Full canvas sits on the canvas itself (the editor's toolbar has no room for it there).
+  const smallButton = <IconButton icon="layoutCanvas" label={phone ? 'Small: hide the preview' : 'Small preview: back to the app’s preview column'} size="sm" active onClick={() => toggleLayout('glsl')} />;
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', height: '100%', flex: 1, minWidth: 0, minHeight: 0, background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
+    {phone && full && <div style={{ height: '42vh', flexShrink: 0, position: 'relative' }}><PageCanvas page="glsl" phone resizable={false} tools={smallButton} /></div>}
+    <div style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0, background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden' }}>
 
       {/* ── Node palette sidebar ──────────────────────────────────────── */}
       {paletteCollapsed ? (
@@ -391,6 +405,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           }} />
           <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => { setCode(BOILERPLATE); setOpen(null); }} />
           <IconButton icon="trash" label="Clear the editor" size="sm" onClick={() => { setCode(''); setOpen(null); }} />
+          {!full && <IconButton icon="layoutCanvas" label="Full canvas: the preview here, wide, with its toolbar (shape, full screen, Record, time)" size="sm" onClick={() => toggleLayout('glsl')} />}
           {!sideOpen && <IconButton icon="popout" label="Show saved shaders and functions" size="sm" onClick={() => setShowPanel(true)} />}
         </div>
 
@@ -528,6 +543,8 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
           )}
         </div>
       )}
+      {full && !phone && <PageCanvas page="glsl" defaultShare={0.42} tools={smallButton} />}
+    </div>
     </div>
   );
 }
