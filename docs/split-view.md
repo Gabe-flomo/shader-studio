@@ -28,11 +28,21 @@ The panel's bar has three buttons for the sidebar (`SplitPrefs.sidebar`):
 
 The rail (`PlayRail.tsx`) has an icon per category, with a tooltip, the open
 category highlighted (and a bar on the rail's edge), and a count on Layers and
-Mappings. Clicking an icon opens a small drawer beside the rail listing the
-category's pages (name, one line, count); clicking one shows it in the panel.
-A category with only one page opens it straight away. Clicking the open
-category's icon again closes the drawer; Esc and a click elsewhere do too;
-↑/↓ move through the rail's icons and the drawer's pages, Enter picks.
+Mappings. Clicking an icon opens that category straight away, on the page it
+was last on (else its first) — no drawer in between (`railPageMemory`,
+`openRailCategory` in `playSplit.ts`). A category with more than one page also
+gets a tab strip in the panel's header, right beside its name (`RailPageTabs`
+in `PlayRail.tsx`), so switching pages doesn't mean going back to the rail;
+clicking a tab switches, ←/→ move through the strip when it's focused
+(wrapping; Home/End jump to the ends). A category with only one page (Controls,
+Engine) shows no strip, just its description. ↑/↓ move through the rail's own
+icons.
+
+**Mappings is always reachable**: it's a rail category like the others, so its
+icon (with its count badge) is always on the rail, whatever page or category
+is open; ⌘⇧M jumps straight to it, opening the split first if it's closed
+(`goToMappings` in `playSplit.ts`). Phones get the same: Mappings is always
+one of the bottom row's icons.
 
 The categories and pages are data (`railPages.ts`):
 
@@ -121,7 +131,8 @@ usable inline; the graph is added under them.
 ## Tests
 
 `src/components/play/__tests__/rail.test.ts` (the page model, the rail's state
-and restore, routing pages into the panel, ⌘⇧B), `controlBoard.test.ts` (the
-trace buffer, the sampler loop, the board's and the workspace's groups) and
-`railPagesMount.test.tsx` (every page mounted in jsdom, wide and narrow, and
-the phone's pages, without a console error).
+and restore, opening a category straight to its remembered page, ⌘⇧B and ⌘⇧M),
+`controlBoard.test.ts` (the trace buffer, the sampler loop, the board's and the
+workspace's groups) and `railPagesMount.test.tsx` (every page mounted in
+jsdom, wide and narrow, the phone's pages, the rail's click-through and the
+panel header's tab strip, all without a console error).
