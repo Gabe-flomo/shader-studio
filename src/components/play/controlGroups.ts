@@ -4,7 +4,7 @@
  * audio readers' too) wins; otherwise a rack's parameters sit under their
  * rack, a layer's numbers and buttons under their layer, the Finish stack's
  * and the sound effects' under theirs, and the graph's sliders under
- * "Controls". Groups keep the panel's order (first control first); the
+ * "From the graph". Groups keep the panel's order (first control first); the
  * second of a pair shows inside the first's card, so it isn't listed apart.
  */
 import { parseActionTarget, parseLayerTarget, parseReaderTarget, type PlayControl, type PlayRecord } from '../../types/play';
@@ -36,7 +36,7 @@ export function controlOrigin(c: PlayControl, play: PlayRecord): ControlOrigin {
   }
   if (parseFinishTarget(c.target)) return { id: 'finish', label: 'Finish', kind: 'finish' };
   if (parseAudioFxTarget(c.target)) return { id: 'sound', label: 'Sound effects', kind: 'sound' };
-  return { id: 'graph', label: 'Controls', kind: 'graph' };
+  return { id: 'graph', label: 'From the graph', kind: 'graph' };
 }
 
 export type MappedFilter = 'all' | 'mapped' | 'unmapped';

@@ -216,7 +216,7 @@ function SplitPanel() {
             <span style={{ minWidth: 0, color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.description}</span>
           </div>
         ) : (
-          <div style={{ flex: '1 1 240px', minWidth: 0, maxWidth: 460 }}>
+          <div style={{ flex: '1 1 240px', minWidth: 'min(100%, 380px)', maxWidth: 460 }}>
             <Segmented<PlayTab>
               fill
               ariaLabel="Panel section"

@@ -130,7 +130,7 @@ describe('the board’s groups', () => {
   it('puts each control under where it comes from', () => {
     const play = boardPlay();
     const origin = (id: string) => controlOrigin(play.controls.find(c => c.id === id)!, play);
-    expect(origin('speed')).toEqual({ id: 'graph', label: 'Controls', kind: 'graph' });
+    expect(origin('speed')).toEqual({ id: 'graph', label: 'From the graph', kind: 'graph' });
     expect(origin('boxX')).toEqual({ id: 'layer:l1', label: 'Box', kind: 'layer' });
     expect(origin('boxBurst').id).toBe('layer:l1');
     expect(origin('cutoff')).toEqual({ id: 'rack:rk1', label: 'Rack 1 · Sample player', kind: 'rack' });

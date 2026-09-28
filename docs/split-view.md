@@ -96,7 +96,7 @@ the controls are a board (`ControlsBoard.tsx`) instead of one grid:
 - **Groups** by where each control comes from (`controlGroups.ts`): a group
   the author named (audio readers' groups too), else its rack ("Rack 1 ·
   Sample player"), its layer, the Finish stack, the sound effects, or the
-  graph ("Controls"). Groups keep the panel's order and fold (remembered).
+  graph ("From the graph"). Groups keep the panel's order and fold (remembered).
   A pair shows once, as its card.
 - **Live graphs:** each card has a small trace of its value over the last six
   seconds under its slider: a line for sliders, a filled level for audio
