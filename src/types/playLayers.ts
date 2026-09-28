@@ -14,6 +14,7 @@
  * their proportions on any canvas shape.
  */
 
+import { LINKED_PREFIX, LINKED_REF_MAX, isLinkedRef } from '../files/linkedRefs';
 import { DP_CHOKES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken' | 'difference' | 'exclusion' | 'add';
@@ -1051,13 +1052,15 @@ function parseBackgroundItem(raw: unknown): BackgroundItem | null {
     case 'image':
       if (typeof r.src !== 'string' || r.src.length > BACKGROUND_IMAGE_MAX || !DATA_IMAGE.test(r.src)) return null;
       out.src = r.src;
-      if (typeof r.libraryId === 'string' && r.libraryId) out.libraryId = r.libraryId.slice(0, 80);
+      if (typeof r.libraryId === 'string' && r.libraryId) out.libraryId = keepLibraryId(r.libraryId);
       break;
     case 'video': {
       out.src = typeof r.src === 'string' && r.src.length <= BACKGROUND_VIDEO_MAX && DATA_VIDEO.test(r.src) ? r.src : '';
       out.bytes = typeof r.bytes === 'number' && Number.isFinite(r.bytes) && r.bytes > 0 ? Math.round(r.bytes) : 0;
       out.loop = r.loop !== false; out.muted = r.muted !== false;
       out.rate = typeof r.rate === 'number' && Number.isFinite(r.rate) ? Math.max(0.1, Math.min(4, r.rate)) : 1;
+      // A video from a linked folder (docs/linked-folders.md): played from disk, named by its reference.
+      if (isLinkedRef(r.libraryId) && r.libraryId.length <= LINKED_REF_MAX) out.libraryId = r.libraryId;
       break;
     }
     case 'colour': {
@@ -1971,4 +1974,9 @@ function kindNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
 /** The buttons a script declares (a function in params, or `{ kind: 'button' }`): each is an action on the layer. */
 export function scriptButtons(l: PlayLayer): ScriptParamDef[] {
   return l.kind === 'script' ? l.paramDefs.filter(d => d.kind === 'button') : [];
+}
+
+/** A library id kept in a setup: a library record's (short), or a linked folder's file reference (longer). */
+export function keepLibraryId(id: string): string {
+  return id.startsWith(LINKED_PREFIX) ? (id.length <= LINKED_REF_MAX ? id : '') : id.slice(0, 80);
 }

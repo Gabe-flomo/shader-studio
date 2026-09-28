@@ -30,6 +30,9 @@
 import { activeFill, backgroundLayerOf, backgroundSource, pictureHidden, replacesShader, videoTimeAt, type BackgroundItem, type BackgroundLayer, type PlayDisplay, type PlayRecord } from '../types/play';
 import type { KitBackground } from './kit/layers.js';
 import type { BqPlan } from './kit/queue.js';
+import { isLinkedRef } from '../files/linkedRefs';
+import { onLinkedChange } from '../files/linkedFolders';
+import { getVideo } from '../lib/backgroundLibrary';
 
 /**
  * One frame of the ShaderCanvas loop, decided:
@@ -69,6 +72,10 @@ class PlayBackground {
   private videoSrc = '';
   /** Videos over the keep limit, for this session: object URLs by file name and size. */
   private sessions = new Map<string, string>();
+  /** Videos from linked folders (docs/linked-folders.md): object URLs by reference, read from disk when first shown. */
+  private linked = new Map<string, string>();
+  private linkedTried = new Set<string>();
+  private linkedWired = false;
   private listeners = new Set<Listener>();
   /** The browser refused to play a video with its sound (no click yet): it plays muted until the next gesture. */
   private soundBlocked = false;
@@ -291,13 +298,37 @@ class PlayBackground {
     const v = this.display?.video;
     if (!v) return '';
     if (v.src) return v.src;
-    return this.sessions.get(sessionKey(v.name, v.bytes)) ?? '';
+    return this.sessions.get(sessionKey(v.name, v.bytes)) ?? (isLinkedRef(v.libraryId) ? this.linkedUrl(v.libraryId) : '');
   }
 
   private queueVideoUrl(item: BackgroundItem): string {
     if (item.kind !== 'video') return '';
     if (item.src) return item.src;
-    return this.sessions.get(sessionKey(item.name, item.bytes ?? 0)) ?? '';
+    return this.sessions.get(sessionKey(item.name, item.bytes ?? 0)) ?? (isLinkedRef(item.libraryId) ? this.linkedUrl(item.libraryId) : '');
+  }
+
+  /** A linked video's URL: '' while it's being read (the picture updates when it's in) or when it can't be. */
+  private linkedUrl(ref: string): string {
+    const had = this.linked.get(ref);
+    if (had) return had;
+    if (!this.linkedWired) {
+      this.linkedWired = true;
+      // Changed on disk: read again. A folder that came back: try the ones that failed.
+      onLinkedChange(refs => {
+        for (const [r, u] of [...this.linked]) if (!refs || refs.includes(r)) { if (refs) { URL.revokeObjectURL(u); this.linked.delete(r); } }
+        for (const r of [...this.linkedTried]) if (!refs || refs.includes(r)) this.linkedTried.delete(r);
+        this.sync(); this.syncQueue(); this.emit();
+      });
+    }
+    if (this.linkedTried.has(ref) || typeof URL === 'undefined') return '';
+    this.linkedTried.add(ref);
+    // getVideo: the linked file, or the library's copy when a .playfile import brought it (the folder isn't on this computer).
+    void getVideo(ref).then(got => {
+      if (!got) { this.emit(); return; }
+      this.linked.set(ref, URL.createObjectURL(got.blob));
+      this.sync(); this.syncQueue(); this.emit();
+    });
+    return '';
   }
 
   private makeVideo(url: string): HTMLVideoElement {

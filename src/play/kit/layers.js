@@ -25,6 +25,9 @@ export const KL_FONTS = { sans: 'Inter, system-ui, -apple-system, "Segoe UI", He
 
 const klFontSeen = new Map();
 let klFontGen = 0;
+/** The app's reader for fonts in linked folders (`linked:` refs): ref → the file's bytes, or null. */
+let klLinkedFontReader = null;
+export function klSetLinkedFontReader(fn) { klLinkedFontReader = fn; }
 
 /** Bumped whenever a web font finishes loading, so cached text redraws in it. */
 export function klFontGeneration() { return klFontGen; }
@@ -37,7 +40,15 @@ export function klFontFor(l) {
   if (!klFontSeen.has(f.family) && typeof document !== 'undefined') {
     klFontSeen.set(f.family, true);
     const done = () => { klFontGen++; };
-    if (f.file && typeof FontFace !== 'undefined') {
+    if (f.file && f.file.indexOf('linked:') === 0) {
+      // A font in a linked folder: its bytes from disk. Not there yet (folder not connected): try again in a while.
+      const retry = () => { setTimeout(() => { klFontSeen.delete(f.family); klFontGen++; }, 15000); };
+      if (!klLinkedFontReader || typeof FontFace === 'undefined') retry();
+      else Promise.resolve(klLinkedFontReader(f.file)).then(buf => {
+        if (!buf) { retry(); return; }
+        return new FontFace(f.family, buf).load().then(face => { document.fonts.add(face); done(); });
+      }).catch(retry);
+    } else if (f.file && typeof FontFace !== 'undefined') {
       new FontFace(f.family, 'url(' + JSON.stringify(f.file) + ')').load().then(face => { document.fonts.add(face); done(); }).catch(() => {});
     } else if (f.css) {
       const link = document.createElement('link');

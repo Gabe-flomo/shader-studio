@@ -477,7 +477,8 @@ export type {
 } from './playLayers';
 export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot, videoLayerTimeAt, videoReaderInput, videoLayerOfInput, RELATION_MAX_MEMBERS, relationPictureKey, newRelationMember } from './playLayers';
 import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataTypes';
-import { parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
+import { keepLibraryId, parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
+import { isLinkedRef, LINKED_REF_MAX } from '../files/linkedRefs';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 import { parseSourceCredit, type SourceCredit } from './credit';
 import { parseProjection, type ProjectionRecord } from './projection';
@@ -698,6 +699,8 @@ export interface BackgroundVideo {
   muted: boolean;
   /** Playback rate: 1 = as recorded. */
   rate: number;
+  /** A video from a linked folder (docs/linked-folders.md): `linked:<folder>/<path>`, played from disk. */
+  libraryId?: string;
 }
 
 /**
@@ -975,7 +978,7 @@ export function parseDisplay(raw: unknown): PlayDisplay | undefined {
   const im = d.image as Record<string, unknown> | undefined;
   if (im && typeof im === 'object' && typeof im.src === 'string' && im.src.length <= BACKGROUND_IMAGE_MAX && DATA_IMAGE.test(im.src)) {
     out.image = { name: typeof im.name === 'string' && im.name.trim() ? im.name.slice(0, 120) : 'Image', src: im.src };
-    if (typeof im.libraryId === 'string' && im.libraryId) out.image.libraryId = im.libraryId.slice(0, 80);
+    if (typeof im.libraryId === 'string' && im.libraryId) { const id = keepLibraryId(im.libraryId); if (id) out.image.libraryId = id; }
   }
   const fill = parseFill(d.fill);
   if (fill) out.fill = fill;
@@ -986,6 +989,7 @@ export function parseDisplay(raw: unknown): PlayDisplay | undefined {
     const bytes = typeof vi.bytes === 'number' && Number.isFinite(vi.bytes) && vi.bytes > 0 ? Math.round(vi.bytes) : 0;
     const rate = typeof vi.rate === 'number' && Number.isFinite(vi.rate) ? Math.max(0.1, Math.min(4, vi.rate)) : 1;
     out.video = { name: vi.name.slice(0, 120), src, bytes, loop: vi.loop !== false, muted: vi.muted !== false, rate };
+    if (isLinkedRef(vi.libraryId) && vi.libraryId.length <= LINKED_REF_MAX) out.video.libraryId = vi.libraryId;
   }
   if (d.fit === 'contain' || d.fit === 'stretch') out.fit = d.fit;
   if (d.source === 'image' || d.source === 'video' || d.source === 'colour') out.source = d.source;

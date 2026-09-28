@@ -28,6 +28,8 @@ import { readerVideoNote, useVideoSoundState } from '../videoSoundUi';
 import { VIDEO_ACCEPT, sizeText } from '../backgroundFiles';
 import { Section } from './Section';
 import { BigEditorScaffold } from './BigEditorScaffold';
+import { LinkedPickButton, LinkedRelinkButton, linkedMissingText } from '../../linked/LinkedPickButton';
+import { isLinkedRef } from '../../../files/linkedRefs';
 import { matteRows, type EditorContext } from './editors';
 import type { Choice, FieldKit } from './fields';
 
@@ -72,8 +74,12 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
     } finally { setBusy(false); }
   };
 
+  // A video used from a linked folder where it is (docs/linked-folders.md): the layer names it by its reference.
+  const takeLinked = (ref: string, name: string, bytes: number) => f.set({ videoId: ref, fileName: name.slice(0, 120), bytes });
+
   const hint = (text: string) => <div style={{ margin: '6px 0 0 68px', color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>{text}</div>;
   const fileNote = status === 'loading' ? 'Opening the video…'
+    : status === 'missing' && isLinkedRef(l.videoId) ? linkedMissingText(l.videoId, l.fileName)
     : status === 'missing' ? `“${l.fileName}”${l.bytes ? ` (${sizeText(l.bytes)})` : ''} isn’t in this browser’s library (another browser, or a cleared library). Pick it again.`
       : status === 'error' ? (playVideoLayers.errorText(l.id) || 'This browser couldn’t open that video.')
         : '';
@@ -92,11 +98,15 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
           <div style={{ marginTop: 6, padding: '12px 12px', borderRadius: radius.md, background: tk.bg.field, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
             <span style={{ color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}` }}>Pick a video</span>
             <span style={{ color: tk.text.muted, font: `11.5px/1.45 ${fontFamily.ui}` }}>An MP4, WebM or MOV of your own. It stays in this browser’s library, not in the setup. With Sound on, its sound can drive controls through audio readers.</span>
-            <Button size="sm" variant="primary" icon="import" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Opening…' : 'Pick a video…'}</Button>
+            <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <Button size="sm" variant="primary" icon="import" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Opening…' : 'Pick a video…'}</Button>
+              <LinkedPickButton filter="video" disabled={busy} onPick={(ref, e) => takeLinked(ref, e.name, e.size)} />
+            </span>
           </div>
         ) : f.row('File', (
           <>
             <Button size="sm" icon="import" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Opening…' : status === 'missing' ? 'Pick it again' : 'Replace'}</Button>
+            {status === 'missing' ? <LinkedRelinkButton id={l.videoId} filter="video" onRelinked={ref => takeLinked(ref, ref.split('/').pop() ?? l.fileName, l.bytes)} /> : <LinkedPickButton filter="video" label="Linked…" disabled={busy} onPick={(ref, e) => takeLinked(ref, e.name, e.size)} />}
             <span title={l.fileName} style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
               {l.fileName}{l.bytes ? ` · ${sizeText(l.bytes)}` : ''}{duration ? ` · ${clock(duration)}` : ''}
             </span>

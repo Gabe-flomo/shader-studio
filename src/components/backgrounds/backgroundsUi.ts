@@ -20,7 +20,9 @@
 import { create } from 'zustand';
 import type { BackgroundImageMeta, CaptureSource, Palette } from '../../lib/backgroundLibrary';
 
-export type BackgroundPick = { kind: 'image'; image: BackgroundImageMeta } | { kind: 'palette'; palette: Palette };
+export type BackgroundPick = { kind: 'image'; image: BackgroundImageMeta } | { kind: 'palette'; palette: Palette }
+  /** A picture from a linked folder (only when asked with `linked`): its `linked:` reference. */
+  | { kind: 'linked'; ref: string; name: string };
 
 export interface CaptureRequest {
   kind: 'capture';
@@ -37,6 +39,8 @@ export interface LibraryRequest {
   /** Pick an image, a palette, or either; absent: just manage them. */
   pick?: 'image' | 'palette' | 'any';
   title?: string;
+  /** Offer pictures from linked folders too (the caller handles a `linked` pick). */
+  linked?: boolean;
   resolve: (p: BackgroundPick | null) => void;
 }
 type Request = CaptureRequest | LibraryRequest;
@@ -54,6 +58,6 @@ export function openCapture(o: { aspect?: number; size?: { w: number; h: number 
   return new Promise(resolve => push({ kind: 'capture', key: ++seq, ...o, resolve }));
 }
 
-export function openBackgrounds(o: { pick?: LibraryRequest['pick']; title?: string } = {}): Promise<BackgroundPick | null> {
+export function openBackgrounds(o: { pick?: LibraryRequest['pick']; title?: string; linked?: boolean } = {}): Promise<BackgroundPick | null> {
   return new Promise(resolve => push({ kind: 'library', key: ++seq, ...o, resolve }));
 }

@@ -38,8 +38,10 @@ import { deleteImageWithUndo, deletePaletteWithUndo, deleteVideosWithUndo, useBa
 import { openCapture, type BackgroundPick } from './backgroundsUi';
 import { audioAccept, isAudioFile, notAudioMessage } from '../../lib/audioAccept';
 import { PaletteEditor } from './FillEditor';
+import { LinkedBrowser } from '../linked/LinkedBrowser';
+import { useLinkedAvailable } from '../linked/LinkedPickButton';
 
-type Tab = 'images' | 'palettes' | 'videos' | 'sounds';
+type Tab = 'images' | 'palettes' | 'videos' | 'sounds' | 'linked';
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 640;
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -95,7 +97,7 @@ function Row({ lead, title, detail, picking, onPick, onMenu, compact }: { lead: 
   );
 }
 
-export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'palette' | 'any'; title?: string; onDone: (p: BackgroundPick | null) => void }) {
+export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pick?: 'image' | 'palette' | 'any'; title?: string; linked?: boolean; onDone: (p: BackgroundPick | null) => void }) {
   const tk = useTokens();
   const compact = narrow();
   const { images, error } = useBackgroundImages();
@@ -114,7 +116,10 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
     return () => window.removeEventListener('assetbrowser-folders-changed', on);
   }, []);
   const picking = !!pick;
-  const tabs = pick === 'image' ? ['images'] : pick === 'palette' ? ['palettes'] : pick ? ['images', 'palettes'] : ['images', 'palettes', 'videos', 'sounds'];
+  // Linked folders (docs/linked-folders.md): pictures from disk when the caller takes them; browsing when just managing.
+  const linkedOk = useLinkedAvailable();
+  const withLinked = linkedOk && (linked || !pick);
+  const tabs = [...(pick === 'image' ? ['images'] : pick === 'palette' ? ['palettes'] : pick ? ['images', 'palettes'] : ['images', 'palettes', 'videos', 'sounds']), ...(withLinked ? ['linked'] : [])];
   const { videos, error: videoError } = useLibraryVideos();
   // Drum pad samples are kept with the videos; each has its own tab.
   const vids = useMemo(() => (videos ?? []).filter(v => !isAudioType(v.type)), [videos]);
@@ -267,9 +272,10 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
           { value: 'palettes', label: `Palettes (${palettes.length})` },
           ...(tabs.includes('videos') ? [{ value: 'videos' as Tab, label: `Videos${videos ? ` (${vids.length})` : ''}` }] : []),
           ...(tabs.includes('sounds') ? [{ value: 'sounds' as Tab, label: `Sounds${videos ? ` (${snds.length})` : ''}` }] : []),
+          ...(tabs.includes('linked') ? [{ value: 'linked' as Tab, label: pick ? 'Linked folder' : 'Linked' }] : []),
         ]} />
       )}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {tab !== 'linked' && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {tab === 'images' ? (
           <>
             <Button size="sm" variant="primary" icon="camera" onClick={() => void capture()} title="Render a saved graph or an example at a moment you choose, and keep it as a picture">Capture from a graph…</Button>
@@ -287,8 +293,8 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
         ) : (
           <Button size="sm" variant="primary" icon="plus" onClick={() => setEditing('new')}>New palette…</Button>
         )}
-      </div>
-      {(tab === 'images' ? imgs.length : tab === 'videos' || tab === 'sounds' ? media.length : palettes.length) > 6 && (
+      </div>}
+      {tab !== 'linked' && (tab === 'images' ? imgs.length : tab === 'videos' || tab === 'sounds' ? media.length : palettes.length) > 6 && (
         <Field aria-label="Search backgrounds" placeholder={tab === 'images' ? 'Search image backgrounds' : tab === 'videos' || tab === 'sounds' ? `Search ${kindWord}s` : 'Search palettes'} height={32} value={q} onChange={e => setQ(e.target.value)}
           leading={<Icon name="search" size={13} style={{ color: tk.text.faint }} />}
           onKeyDown={e => { if (e.key === 'Escape' && q) { e.stopPropagation(); setQ(''); } }} />
@@ -300,7 +306,10 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
   const caps: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint, padding: '10px 6px 4px' };
 
   let body: React.ReactNode;
-  if (tab === 'images') {
+  if (tab === 'linked') {
+    body = <LinkedBrowser filter={pick ? 'image' : 'any'} mode={pick ? 'file' : 'manage'} compact={compact} listHeight={compact ? '44dvh' : 360}
+      onPick={p => { if (p.kind === 'file') onDone({ kind: 'linked', ref: p.ref, name: p.entry.name }); }} />;
+  } else if (tab === 'images') {
     const found = needle ? imgs.filter(m => `${m.name} ${imageDetail(m)}`.toLowerCase().includes(needle)) : null;
     body = images === null ? empty('Loading…')
       : error ? empty(`Image backgrounds can’t be kept in this browser: ${error}`)
@@ -334,7 +343,9 @@ export function BackgroundsDialog({ pick, title, onDone }: { pick?: 'image' | 'p
   const content = <div style={{ padding: compact ? '10px 0 4px' : '8px 14px 14px', minHeight: compact ? 180 : 300 }}>{body}</div>;
   const note = (
     <div style={{ color: tk.text.faint, font: `500 11.5px/1.5 ${fontFamily.ui}` }}>
-      {picking ? 'Choose one to use it. ' : ''}{tab === 'sounds'
+      {picking ? 'Choose one to use it. ' : ''}{tab === 'linked'
+        ? 'Files in folders you linked (Files → Linked folders), used from where they are: not copied into the library, and not counted toward the storage limit.'
+        : tab === 'sounds'
         ? 'Kept in this browser with the videos; Export everything, the workspace folder and the backup folder include them. Drum pads and the Audio engine’s sample player point at their sounds here, so a setup shared without them asks for the files.'
         : tab === 'videos'
         ? 'Kept in this browser; Export everything, the workspace folder and the backup folder include them. A Video layer points at its file here, so a setup shared without it asks for the file.'

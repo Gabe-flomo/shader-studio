@@ -9,6 +9,8 @@
  */
 import { unzipSync } from 'fflate';
 import { importVideoFiles, listVideos, videoZipFiles } from '../lib/backgroundLibrary';
+import { isLinkedRef } from '../files/linkedRefs';
+import { statLinked } from '../files/linkedFolders';
 import { askChoice } from '../components/ui/dialogStore';
 import { toast } from '../components/ui/toastStore';
 import { formatSize } from './library';
@@ -28,9 +30,16 @@ export async function askVideosInZip(ask: typeof askChoice = askChoice, limit = 
   try { list = await listVideos(); } catch { return 'all'; }
   // Only these (the ones a .playfile's Video layers use).
   if (ids) { const want = new Set(ids); list = list.filter(v => want.has(v.id)); }
-  const bytes = list.reduce((n, v) => n + v.bytes, 0);
+  let bytes = list.reduce((n, v) => n + v.bytes, 0);
+  // Files from linked folders go in too (their bytes are read from disk): count them.
+  let linked = 0;
+  for (const id of ids ?? []) {
+    if (!isLinkedRef(id) || list.some(v => v.id === id)) continue;
+    const st = await statLinked(id);
+    if (st) { bytes += st.size; linked++; }
+  }
   if (bytes <= limit) return 'all';
-  const id = await ask(`Include ${plural(list.length, 'video')} (${formatSize(bytes)})?`, [
+  const id = await ask(`Include ${plural(list.length + linked, 'video')} (${formatSize(bytes)})?`, [
     { id: 'none', label: 'Leave them out', variant: 'ghost' },
     { id: 'all', label: 'Include them', variant: 'primary' },
   ], { message: `The Video layers’ files make the ${ids ? 'file' : 'ZIP'} big. Left out, those layers ask for their files after an import elsewhere.` });

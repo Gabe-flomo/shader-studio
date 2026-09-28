@@ -17,6 +17,8 @@ import { toast } from '../../ui/toastStore';
 import { LiveAudioChip } from '../chips';
 import type { FieldKit } from './fields';
 import { audioAccept, isAudioFile, notAudioMessage } from '../../../lib/audioAccept';
+import { LinkedPickButton } from '../../linked/LinkedPickButton';
+import { linkedFile } from '../../linked/linkedSources';
 
 const FONTS = [{ value: 'sans', label: 'Sans' }, { value: 'serif', label: 'Serif' }, { value: 'mono', label: 'Mono' }];
 
@@ -45,7 +47,8 @@ export function FontRow({ f, weight = true }: { f: FieldKit; weight?: boolean })
           style={{ flex: 1, minWidth: 0 }}
         />
       ), 'Paste a link from Google Fonts (the css2 link, the <link> tag, or the font\'s page), type a family name like "Bebas Neue", or give a .woff2 / .ttf file URL. Websites you export load it too. Clear it to go back to the preset.')}
-      {draft.trim() && f.note(parsed ? <>Using <b>{parsed.family}</b>{parsed.file ? ' from the file' : ' from Google Fonts'}. Weights the font doesn't have are faked by the browser.</> : 'Not a Google Fonts link, family name or font file URL (https, .woff2 / .woff / .ttf / .otf).')}
+      {f.row('', <LinkedPickButton filter="font" label="Font from a linked folder…" variant="ghost" onPick={ref => { setDraft(ref); f.set({ fontUrl: ref }); }} />)}
+      {draft.trim() && f.note(parsed ? <>Using <b>{parsed.family}</b>{parsed.file?.startsWith('linked:') ? ' from a linked folder (read from disk here; a website you export shows the preset instead)' : parsed.file ? ' from the file' : ' from Google Fonts'}. Weights the font doesn't have are faked by the browser.</> : 'Not a Google Fonts link, family name or font file URL (https, .woff2 / .woff / .ttf / .otf).')}
     </>
   );
 }
@@ -80,6 +83,7 @@ export function AudioSourceRows({ f }: { f: FieldKit }) {
         <>
           <input ref={fileRef} type="file" accept={audioAccept()} style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void pick(file); }} />
           <Button size="sm" icon="import" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Loading…' : loaded ? 'Change song' : fileName ? 'Load it again' : 'Load a song'}</Button>
+          <LinkedPickButton filter="audio" label="Linked…" variant="ghost" disabled={busy} onPick={ref => { void linkedFile(ref).then(pick, e => toast.error('Couldn’t load that song', { message: e instanceof Error ? e.message : String(e) })); }} />
           {loaded && <ClockButton />}
           {fileName && <span style={{ color: f.tk.text.faint, font: '11px Inter, system-ui, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }} title={fileName}>{fileName}</span>}
         </>
