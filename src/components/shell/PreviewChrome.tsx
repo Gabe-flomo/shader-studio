@@ -11,15 +11,15 @@ import { timeReadoutRef } from '../../lib/timeTick';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
 
-// Header and footer bars for the shader preview. The preview is a render surface, so callers
-// render these under ThemeOverrideContext 'dark' — they look the same in both app themes.
-
-const RULE = alpha('#ffffff', 0.06);
+// Header and footer bars for the shader preview. The picture itself is a render surface and
+// stays dark in both themes (callers wrap it in ThemeOverrideContext 'dark'), but these bars
+// are ordinary chrome: callers wrap them back in ThemeOverrideContext value={null} so they
+// follow the app's real theme like any other panel header.
 
 export function PreviewHeader({ children }: { children?: ReactNode }) {
   const tk = useTokens();
   return (
-    <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: '0 8px 0 18px', background: tk.bg.render, borderBottom: `1px solid ${RULE}` }}>
+    <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: '0 8px 0 18px', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}` }}>
       <span style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>PREVIEW</span>
       {children}
     </div>
@@ -109,7 +109,7 @@ export function PreviewFooter({ idleHint }: { idleHint: string }) {
   const num = { color: tk.text.primary, fontVariantNumeric: 'tabular-nums' as const };
 
   return (
-    <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: '0 10px 0 8px', background: tk.bg.render, borderTop: `1px solid ${RULE}`, font: mono, color: tk.text.faint }}>
+    <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: '0 10px 0 8px', background: tk.bg.panel, borderTop: `1px solid ${tk.border.default}`, font: mono, color: tk.text.faint }}>
       <IconButton icon={timePlaying ? 'pause' : 'play'} label={timePlaying ? 'Pause' : 'Play'} shortcut="space" size="sm" onClick={() => setTimePlaying(!timePlaying)} />
       <IconButton icon="reset" label="Reset time to 0" size="sm" onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))} />
       <IconButton icon="rebuild" label={REBUILD_TOOLTIP} shortcut={rebuildShortcut} size="sm" onClick={() => { void rebuildWithToast(); }} />

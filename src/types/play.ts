@@ -361,6 +361,13 @@ export type PlaySource =
   | { kind: 'lfo'; shape: LfoShape; rate: number; phase: number }
   /** An oscillator locked to a tempo: one cycle every `beats` beats at `bpm`. */
   | { kind: 'clock'; shape: LfoShape; bpm: number; beats: number }
+  /**
+   * A one-line formula (`sin(t * 2) * 0.5 + 0.5`) over time, compiled to a
+   * closure with no `eval` (src/play/kit/fn.js). `expr` sees `t` (seconds),
+   * `b` (beats at 120 BPM), `pi`, `tau` and a small function set. Its raw
+   * output is normalised into 0..1 by `min`..`max`, like an OSC source's.
+   */
+  | { kind: 'fn'; expr: string; min: number; max: number }
   /** One band of an Audio Input node in the graph (amplitude 0..1). */
   | { kind: 'audio'; nodeId: string; band: number }
   /** Phone orientation: `beta` front/back, `gamma` left/right, `alpha` compass. Active on the Play page. */
@@ -1314,6 +1321,11 @@ function parseSource(raw: unknown): PlaySource | null {
       return { kind: 'lfo', shape: shape(s.shape), rate: Math.max(0.001, num(s.rate, 0.5)), phase: num(s.phase, 0) };
     case 'clock':
       return { kind: 'clock', shape: shape(s.shape), bpm: Math.max(1, num(s.bpm, 120)), beats: Math.max(0.0625, num(s.beats, 4)) };
+    case 'fn': {
+      const expr = (str(s.expr) ?? '').slice(0, 500);
+      const min = num(s.min, -1), max = num(s.max, 1);
+      return { kind: 'fn', expr, min, max: max === min ? min + 1 : max };
+    }
     case 'audio': {
       const nodeId = str(s.nodeId);
       return nodeId ? { kind: 'audio', nodeId, band: Math.max(0, Math.round(num(s.band, 0))) } : null;

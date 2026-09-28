@@ -22,7 +22,7 @@ import { kmNoteName } from './kit/midi.js';
 export type HandSourceType = `hand:${HandRead}`;
 /** `reader:<id>`: one audio reader. */
 export type ReaderSourceType = `reader:${string}`;
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | HandSourceType | ReaderSourceType;
+export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | HandSourceType | ReaderSourceType;
 /** Not a source: the picker's entry that opens the Audio readers panel. */
 export const OPEN_READERS = 'readers:open';
 
@@ -57,6 +57,7 @@ export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[
   { value: 'lfo', label: 'LFO' },
   { value: 'noise', label: 'Noise' },
   { value: 'clock', label: 'Clock (BPM)' },
+  { value: 'fn', label: 'Function' },
   { value: 'live', label: 'Band (bass, treble…)', group: 'Live audio' },
   { value: 'audio', label: 'Audio Input node band' },
   { value: 'tilt', label: 'Phone tilt' },
@@ -198,6 +199,7 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
     case 'osc': return { kind: 'osc', address: prev.kind === 'osc' ? prev.address : '/1/fader1', arg: 0, min: 0, max: 1 };
     case 'trigger': return { kind: 'trigger', trigger: prev.kind === 'key' ? { on: 'key', code: prev.code } : { on: 'key', code: 'Space' }, mode: 'envelope', attack: 10, decay: 200, sustain: 0.5, release: 400, steps: 4, velocity: false };
     case 'clock': return { kind: 'clock', shape: 'saw', bpm: 120, beats: 4 };
+    case 'fn': return prev.kind === 'fn' ? prev : { kind: 'fn', expr: '', min: -1, max: 1 };
     case 'audio': return { kind: 'audio', nodeId: prev.kind === 'audio' ? prev.nodeId : '', band: 0 };
     case 'tilt': return { kind: 'tilt', axis: 'gamma' };
     case 'gamepad': return { kind: 'gamepad', pad: 0, control: 'axis', index: 0 };
@@ -221,6 +223,7 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'reader') return readerLabel(audioReaderBank.name(s.readerId));
   if (s.kind === 'trigger') return `${s.mode === 'envelope' ? 'Env' : s.mode === 'toggle' ? 'Toggle' : s.mode === 'step' ? 'Step' : 'Random'} · ${triggerLabel(s.trigger, layers)}`;
   if (s.kind === 'clock') return `${s.bpm} bpm · ${s.beats} beat${s.beats === 1 ? '' : 's'}`;
+  if (s.kind === 'fn') return s.expr ? `ƒ ${s.expr}` : 'Function';
   if (s.kind === 'audio') return `Audio band ${s.band + 1}`;
   if (s.kind === 'tilt') return `Tilt ${s.axis === 'beta' ? 'front/back' : s.axis === 'gamma' ? 'left/right' : 'compass'}`;
   if (s.kind === 'gamepad') return `Pad ${s.pad + 1} ${s.control} ${s.index}`;

@@ -1446,6 +1446,7 @@ void main() {
         case 'lfo': return lfo(s.shape, time * s.rate + s.phase);
         case 'noise': return noiseAt(s.type, time, s.rate, s.seed, s.steps, frame);
         case 'clock': return lfo(s.shape, time * (s.bpm / 60 / Math.max(0.0625, s.beats)));
+        case 'fn': { const FNK = typeof SSKit !== 'undefined' && SSKit.fn ? SSKit.fn : null; const v = FNK ? FNK.eval(s.expr, { t: time, b: time * 2 }).value : 0; return Math.max(0, Math.min(1, (v - s.min) / (s.max - s.min))); }
         case 'tilt': { const t = shared.tilt; if (!t.got) return null; if (s.axis === 'alpha') return ((t.alpha % 360) + 360) % 360 / 360; const v = Math.max(-90, Math.min(90, s.axis === 'beta' ? t.beta : t.gamma)); return (v + 90) / 180; }
         case 'gamepad': { const p = gamepad(s.pad); if (!p) return null; if (s.control === 'axis') { const a = p.axes[s.index]; return a === undefined ? null : Math.max(0, Math.min(1, (a + 1) / 2)); } const b = p.buttons[s.index]; return b ? b.value : null; }
         case 'pad': return padG ? KM.gridRead(padG, padCfg, s.read, s.col, s.row, time) : null;

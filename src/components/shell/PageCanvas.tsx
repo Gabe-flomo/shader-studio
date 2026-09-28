@@ -95,24 +95,29 @@ export function PageCanvas({ page, tools, overlay, idleHint = 'Hover for colour'
   }
 
   return (
-    <ThemeOverrideContext.Provider value="dark">
-      <div ref={ref} data-page-canvas={page} style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: '#0d0d12', font: `12.5px ${fontFamily.ui}`, ...(resizable ? { width: clampCanvasWidth(width, room, defaultShare), flexShrink: 0, borderLeft: `1px solid ${tk.border.default}` } : { flex: 1, minWidth: 0 }) }}>
-        {resizable && (
-          <div onPointerDown={startResize} title="Drag to resize the canvas" style={{ position: 'absolute', top: 0, bottom: 0, left: -4, width: 8, cursor: 'col-resize', zIndex: 30 }} />
-        )}
+    <div ref={ref} data-page-canvas={page} style={{ position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: '#0d0d12', font: `12.5px ${fontFamily.ui}`, ...(resizable ? { width: clampCanvasWidth(width, room, defaultShare), flexShrink: 0, borderLeft: `1px solid ${tk.border.default}` } : { flex: 1, minWidth: 0 }) }}>
+      {resizable && (
+        <div onPointerDown={startResize} title="Drag to resize the canvas" style={{ position: 'absolute', top: 0, bottom: 0, left: -4, width: 8, cursor: 'col-resize', zIndex: 30 }} />
+      )}
+      {/* Chrome around the picture follows the app's real theme; the picture itself stays dark (below). */}
+      <ThemeOverrideContext.Provider value={null}>
         <PreviewHeader>
           {tools}
           {tools && <span style={{ width: 8, flexShrink: 0 }} />}
-          <AspectPicker />
+          <AspectPicker onPanel />
           <CanvasFullscreenButton />
           <IconButton icon="record" label="Record a video or take a Snapshot PNG of the picture" size="sm" onClick={openRecord} />
         </PreviewHeader>
+      </ThemeOverrideContext.Provider>
+      <ThemeOverrideContext.Provider value="dark">
         <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
           <ShaderCanvas onCanvasReady={onCanvasReady} onRegisterOfflineRender={onOffline} />
           {overlay}
         </div>
+      </ThemeOverrideContext.Provider>
+      <ThemeOverrideContext.Provider value={null}>
         <PreviewFooter idleHint={idleHint} />
-      </div>
-    </ThemeOverrideContext.Provider>
+      </ThemeOverrideContext.Provider>
+    </div>
   );
 }
