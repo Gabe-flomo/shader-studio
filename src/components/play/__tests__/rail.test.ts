@@ -14,11 +14,11 @@ const store = vi.hoisted(() => {
   return m;
 });
 import {
-  RAIL_CATEGORIES, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryOf, firstPageOf, isRailPage, pageCount, pageForTab, phonePageShown, stepIndex,
+  RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryOf, firstPageOf, isRailPage, mappingsCountOf, pageCount, pageForTab, phonePageShown, stepIndex,
 } from '../railPages';
-import { DEFAULT_SPLIT, SPLIT_KEY, goToMappings, openLayerInSplit, parseSplitPrefs, railRatioFor, setAreaMeasure, showPageInSplit, shownRatio, usePlaySplit } from '../playSplit';
+import { DEFAULT_SPLIT, SPLIT_KEY, goToMappings, goToRailCategory, openLayerInSplit, parseSplitPrefs, railRatioFor, setAreaMeasure, showPageInSplit, shownRatio, usePlaySplit } from '../playSplit';
 import { followReveals } from '../PlaySplitArea';
-import { usePlayUi } from '../playUi';
+import { tabForPage, usePlayUi } from '../playUi';
 import { DEFAULT_ACTIONS, findShortcut, normaliseCombo, type ShortcutMap } from '../../../hooks/useShortcuts';
 import { emptyPlayRecord, type PlayRecord } from '../../../types/play';
 
@@ -27,42 +27,68 @@ describe('categories and pages', () => {
     const listed = RAIL_CATEGORIES.flatMap(c => c.pages.map(p => [c.id, p] as const));
     expect(listed.map(([, p]) => p).sort()).toEqual([...RAIL_PAGE_IDS].sort());
     for (const [cat, page] of listed) expect(categoryOf(page)).toBe(cat);
-    expect(RAIL_CATEGORIES.map(c => c.id)).toEqual(['controls', 'layers', 'finish', 'engine', 'mappings']);
+    // Controls and Mappings are one rail category (the owner's call, 2026-09-28): they're so closely related.
+    expect(RAIL_CATEGORIES.map(c => c.id)).toEqual(['controls', 'layers', 'finish', 'engine']);
   });
 
   it('gives each category the pages the owner listed', () => {
     const pages = Object.fromEntries(RAIL_CATEGORIES.map(c => [c.id, c.pages.map(p => RAIL_PAGES[p].label)]));
     expect(pages).toEqual({
-      controls: ['Controls'],
+      controls: ['Controls', 'Mappings', 'MIDI file', 'Pad grid'],
       layers: ['Layers', 'Actions', 'Signals', 'Background'],
       finish: ['Picture', 'Sound'],
       engine: ['Arrangement'],
-      mappings: ['Mappings', 'MIDI file', 'Pad grid'],
     });
     for (const p of RAIL_PAGE_IDS) expect(RAIL_PAGES[p].description.length).toBeGreaterThan(10);
   });
 
-  it('starts the rail where the tab-strip panel was', () => {
+  it('starts the rail where the tab-strip panel was (Mappings keeps its own tab, even though it shares the Controls rail icon)', () => {
     expect(pageForTab('controls')).toBe('controls');
     expect(pageForTab('layers')).toBe('layers');
     expect(pageForTab('finish', 'sound')).toBe('finish-sound');
     expect(pageForTab('finish')).toBe('finish-picture');
     expect(pageForTab('engine')).toBe('engine-performance');
     expect(pageForTab('mappings')).toBe('mappings');
-    expect(firstPageOf('mappings')).toBe('mappings');
+    expect(firstPageOf('controls')).toBe('controls');
+    expect(categoryOf('mappings')).toBe('controls');
     expect(isRailPage('pad-grid')).toBe(true);
     expect(isRailPage('notes')).toBe(false);
     expect(isRailPage('toString')).toBe(false);
   });
 
-  it('counts what a page holds, and badges only layers and mappings', () => {
+  it('counts what a page holds, and badges only layers and controls (the controls count, not mappings’)', () => {
     const play: PlayRecord = { ...emptyPlayRecord(), actions: [{ id: 'a', trigger: { on: 'key', code: 'Space' }, do: 'show', layerId: 'l', amount: 1, enabled: true }], signals: [{ id: 's', name: 'Hit' }, { id: 't', name: 'Go' }] };
     expect(pageCount('actions', play)).toBe(1);
     expect(pageCount('signals', play)).toBe(2);
     expect(pageCount('midi-file', play)).toBeUndefined();
     expect(categoryBadge('layers', play)).toBeUndefined();
-    expect(categoryBadge('mappings', { ...play, mappings: [{ id: 'm', controlId: 'c', source: { kind: 'key', code: 'KeyA' }, outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0, enabled: true }] })).toBe(1);
-    expect(categoryBadge('controls', { ...play, controls: [{ id: 'c', target: 'n::k', kind: 'float', label: 'K', min: 0, max: 1 }] })).toBeUndefined();
+    const withMappingsOnly: PlayRecord = { ...play, mappings: [{ id: 'm', controlId: 'c', source: { kind: 'key', code: 'KeyA' }, outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0, enabled: true }] };
+    expect(categoryBadge('controls', withMappingsOnly)).toBeUndefined(); // No controls yet, so no badge — even with a mapping.
+    expect(mappingsCountOf(withMappingsOnly)).toBe(1);
+    expect(categoryBadge('controls', { ...play, controls: [{ id: 'c', target: 'n::k', kind: 'float', label: 'K', min: 0, max: 1 }] })).toBe(1);
+  });
+
+  it('⌘1–4 open the rail categories, matching useShortcuts.ts', () => {
+    expect(RAIL_CATEGORY_SHORTCUT).toEqual({ controls: 'cmd+1', layers: 'cmd+2', finish: 'cmd+3', engine: 'cmd+4' });
+    const map: ShortcutMap = Object.fromEntries(DEFAULT_ACTIONS.map(a => [a.id, a.defaultCombo]));
+    expect(findShortcut(map, 'cmd+1')).toBe('railControls');
+    expect(findShortcut(map, 'cmd+2')).toBe('railLayers');
+    expect(findShortcut(map, 'cmd+3')).toBe('railFinish');
+    expect(findShortcut(map, 'cmd+4')).toBe('railEngine');
+    for (const cat of RAIL_CATEGORIES.map(c => c.id)) {
+      expect(map[`rail${cat[0].toUpperCase()}${cat.slice(1)}`]).toBe(RAIL_CATEGORY_SHORTCUT[cat]);
+    }
+  });
+
+  it('goToRailCategory opens the split (if closed) on the category’s remembered page, else its first', () => {
+    usePlaySplit.setState({ ...DEFAULT_SPLIT, on: false, available: true, sidebar: 'rail', railPageMemory: {} });
+    expect(goToRailCategory('layers')).toBe(true);
+    expect(usePlaySplit.getState()).toMatchObject({ on: true, railPage: 'layers' });
+    usePlaySplit.getState().setRailPage('signals');
+    expect(goToRailCategory('layers')).toBe(true);
+    expect(usePlaySplit.getState().railPage).toBe('signals');
+    usePlaySplit.setState({ available: false });
+    expect(goToRailCategory('engine')).toBe(false);
   });
 
   it('moves through a list with the arrows, wrapping', () => {
@@ -94,7 +120,7 @@ describe('categories and pages', () => {
     ui.showPage('background');
     ui.setTab('layers');
     expect(usePlayUi.getState().phonePage).toBe('');
-    for (const p of RAIL_PAGE_IDS) { ui.showPage(p); expect(usePlayUi.getState().tab).toBe(categoryOf(p)); }
+    for (const p of RAIL_PAGE_IDS) { ui.showPage(p); expect(usePlayUi.getState().tab).toBe(tabForPage(p)); }
   });
 });
 
