@@ -48,8 +48,9 @@ export const RELEASES: Release[] = [
       { area: 'Desktop', text: 'MIDI controllers work in the desktop app through a native bridge; knob lock, note ranges and pad grids come along.', link: { kind: 'doc', path: 'docs/midi.md' } },
       { area: 'Phone', text: 'Turning the phone sideways keeps the phone layout, with a full-screen picture on Play; turning back restores it inside the safe area.' },
       { area: 'Phone', text: 'Audio pickers open Files (not the video picker), the drum pads open in the split view or a sheet, and the Record dialog fits the screen.' },
-      { area: 'Play', text: 'Drum pads: Stop shows only while a sound plays, and tapping an empty pad adds a sound.', link: { kind: 'example', key: 'drumPads', page: 'play' } },
+      { area: 'Play', text: 'Drum pads: save and load kits, Stop only while a sound plays, tap an empty pad to add a sound; a storage limit with a meter on Files.', link: { kind: 'example', key: 'drumPads', page: 'play' } },
       { area: 'Present', text: 'Capture a background: the time slider responds at once and settles when you let go.' },
+      { area: 'Studio', text: 'The Palette node edits its stops on a gradient bar, like the Present picker, so the card stays one bar tall.' },
     ],
   },
   {
