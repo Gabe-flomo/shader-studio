@@ -177,7 +177,7 @@ function Tag({ children, colour, bg, title }: { children: ReactNode; colour: str
 }
 
 /** Stored where, used by what, using what. */
-function Relations({ inv, node, onOpen, compact }: { inv: Inventory; node: FileNode; onOpen: (id: string) => void; compact: boolean }) {
+export function Relations({ inv, node, onOpen, compact }: { inv: Inventory; node: FileNode; onOpen: (id: string) => void; compact: boolean }) {
   const tk = useTokens();
   const where = node.ref?.t === 'key' ? node.ref.key : node.ref?.t === 'part' ? `inside ${node.ref.key}` : node.ref?.t === 'external' ? `${node.ref.source} (IndexedDB)` : null;
   const folder = node.membership ? inv.byId.get(inv.parentOf.get(node.id) ?? '') : undefined;
@@ -216,7 +216,7 @@ function Relations({ inv, node, onOpen, compact }: { inv: Inventory; node: FileN
   );
 }
 
-function LinkRow({ label, sub, tone, onClick }: { label: string; sub?: string; tone: 'needs' | 'copy'; onClick?: () => void }) {
+export function LinkRow({ label, sub, tone, onClick }: { label: string; sub?: string; tone: 'needs' | 'copy'; onClick?: () => void }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   const body = (

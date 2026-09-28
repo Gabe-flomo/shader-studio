@@ -1,4 +1,5 @@
 import { isPlayfile } from '../playfile/reader';
+import { recordActivity } from '../files/activity';
 import { CONTAINER_ACCEPT } from '../playfile/format';
 import { requireFeature } from '../lib/plan';
 import { create } from 'zustand';
@@ -278,7 +279,7 @@ export function saveCustomFnPreset(
     comment: data.comment?.trim() || undefined,
     savedAt: Date.now(),
   };
-  return customFnPresetManager.save(preset);
+  return customFnPresetManager.save(preset).then(r => { if (r.ok) recordActivity('save', preset.label); return r; });
 }
 
 /** Read all saved custom-fn presets from localStorage. */
@@ -4963,6 +4964,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const stored = safeSetItem(`shader-studio:${name}`, payload, `graph "${name}"`);
     if (!stored.ok) return stored;
     set({ currentGraph: { name, version, latest: true }, graphDirty: false });
+    recordActivity('save', name);
     window.dispatchEvent(new Event(SAVED_GRAPHS_CHANGED));
     const dir = getGraphDir();
     if (dir) {
@@ -5098,6 +5100,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set({ currentGraph: null, graphDirty: false });
     // A play file already opens on Play; a plain graph that happens to carry a setup just says so.
     if (!isPlayFile) announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
+    recordActivity('import', 'Graph file');
     return { ok: true };
   },
 
@@ -5135,6 +5138,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     out.inputs.color = { ...out.inputs.color, connection: { nodeId: shader.id, outputKey: 'color' } };
     set(st => ({ nodes: [uv, shader, out], activeGroupPath: [], activeGroupId: null, selectedNodeId: shader.id, selectedNodeIds: [shader.id], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
+    recordActivity('import', fileName);
     return { ok: true, notes: converted.notes, label: fileName };
   },
 
@@ -5178,7 +5182,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       savedAt: Date.now(),
     };
     // Always save to localStorage (belt-and-suspenders), and to disk if configured
-    return customFnPresetManager.save(preset);
+    return customFnPresetManager.save(preset).then(r => { if (r.ok) recordActivity('save', preset.label); return r; });
   },
 
   deleteCustomFn: (id) => {

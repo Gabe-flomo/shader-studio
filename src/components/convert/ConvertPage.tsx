@@ -57,6 +57,10 @@ import { DiscoverResults } from '../code/DiscoverResults';
 import { saveLabel, useDiscoverPicks } from '../code/useDiscoverPicks';
 import { loadCustomFns } from '../../store/useNodeGraphStore';
 import { P5Convert } from './P5Convert';
+import { PageCanvas } from '../shell/PageCanvas';
+import { usePageCanvas } from '../shell/pageCanvasStore';
+import { SplitOverlay } from './SplitOverlay';
+import { VIEW_OPTIONS, effectiveView, rawShaderFor, withUniformConsts } from './convertView';
 
 const PublishNodeModal = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('../NodeGraph/PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
 
@@ -168,6 +172,23 @@ function GlslConvert({ onMaterialized, compact = false }: { onMaterialized: () =
   const originalUniforms = useMemo(() => Object.fromEntries((raw.report.uniforms ?? []).map(u => [u.name, u.value])), [raw]);
   const graphFrag = compiled?.success ? compiled.fragmentShader : null;
   const onDiff = useCallback((d: PairDiff | null) => setDiff(d), []);
+
+  // The page canvas (shell/pageCanvas.ts): the main preview hosted here, full size, showing the source, the
+  // converted graph or both under a wipe. The main canvas renders the scratch graph; Source (and the wipe's
+  // source side) is the paste with its own uniforms pinned to their starting values, as the check draws it.
+  const layout = usePageCanvas(s => s.layout.convert);
+  const toggleLayout = usePageCanvas(s => s.toggleLayout);
+  const storedView = usePageCanvas(s => s.view);
+  const setView = usePageCanvas(s => s.setView);
+  const full = layout === 'full';
+  const canvasSource = useMemo(() => withUniformConsts(original, raw.report.uniforms), [original, raw]);
+  const view = effectiveView(storedView, !!graphFrag);
+  const setRawGlslShader = useNodeGraphStore(s => s.setRawGlslShader);
+  useEffect(() => {
+    if (!full || empty) { setRawGlslShader(null); return; }
+    setRawGlslShader(rawShaderFor(storedView, canvasSource, !!graphFrag));
+    return () => setRawGlslShader(null);
+  }, [full, empty, storedView, canvasSource, graphFrag, setRawGlslShader]);
 
   // The converted graph goes on the real canvas (scratch mode); the user's graph comes back on leave.
   const canvasWrap = useRef<HTMLDivElement>(null);
@@ -305,6 +326,15 @@ function GlslConvert({ onMaterialized, compact = false }: { onMaterialized: () =
   ].filter(Boolean).join(' · ');
 
   const formSwitch = <Segmented size="sm" ariaLabel="Graph form" value={optimised ? 'opt' : 'raw'} onChange={v => setOptimised(v === 'opt')} options={[{ value: 'raw', label: 'As written' }, { value: 'opt', label: 'Optimised' }]} />;
+  const layoutSwitch = <Segmented size="sm" ariaLabel="Preview size" value={layout} onChange={v => { if (v !== layout) toggleLayout('convert'); }} options={[{ value: 'small', label: 'Small previews' }, { value: 'full', label: 'Full canvas' }]} />;
+  const viewSwitch = <Segmented size="sm" ariaLabel="Canvas shows" value={view} onChange={setView} options={VIEW_OPTIONS.map(o => ({ value: o.value, label: o.label }))} />;
+  const pageCanvas = full && (
+    <PageCanvas
+      page="convert" phone={compact} tools={graphFrag ? viewSwitch : undefined}
+      idleHint={view === 'split' ? 'Hover for colour (the converted side) · drag the divider' : view === 'source' ? 'Hover for colour · the source shader' : 'Hover for colour · the converted graph'}
+      overlay={view === 'split' && graphFrag ? <SplitOverlay source={canvasSource} uniforms={originalUniforms} /> : null}
+    />
+  );
   const convertButton = (
     <Button size="sm" variant={stale ? 'primary' : 'secondary'} icon="spark" onClick={run} disabled={!stale && (empty || !code.trim())} title={stale ? 'Convert the shader as it is now (⌘↵ / Ctrl+Enter)' : 'Converted. Edit the shader and press again to run it'}>Convert</Button>
   );
@@ -312,7 +342,9 @@ function GlslConvert({ onMaterialized, compact = false }: { onMaterialized: () =
     <div style={compact
       ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle }
       : { background: tk.bg.subtle, flexShrink: 0, maxHeight: '46%', display: 'flex', flexDirection: 'column' }}>
-      {compact && <div style={{ padding: '10px 14px 0', display: 'flex', gap: 8, alignItems: 'center' }}>{formSwitch}</div>}
+      {compact && <div style={{ padding: '10px 14px 0', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{formSwitch}<span style={{ flex: 1 }} />{layoutSwitch}</div>}
+      {/* On a phone the page canvas sits here, over the check; on desktop it has the room beside the graph. */}
+      {compact && full && !empty && <div style={{ height: '44vh', flexShrink: 0, position: 'relative', marginTop: 10 }}>{pageCanvas}</div>}
       {empty ? (
         <div style={{ padding: '14px', color: tk.text.faint, lineHeight: 1.5 }}>Paste a fragment shader, or pick an example, and press Convert. The check compares the original with the graph here.</div>
       ) : (
@@ -528,13 +560,18 @@ function GlslConvert({ onMaterialized, compact = false }: { onMaterialized: () =
         {editor}
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px 0', borderTop: `1px solid ${tk.border.subtle}`, background: lower === 'check' ? tk.bg.subtle : tk.bg.panel }}>
           <Segmented size="sm" ariaLabel="Under the editor" value={lower} onChange={setLower} options={[{ value: 'check', label: blocked && !empty ? 'Check !' : 'Check' }, { value: 'fns', label: fnsLabel }]} />
+          <span style={{ flex: 1 }} />
+          {layoutSwitch}
         </div>
         {lower === 'check' ? check : <div style={{ height: '58%', flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>{functions}</div>}
         <div onMouseDown={startPaneResize} title="Drag to resize" style={{ position: 'absolute', top: 0, bottom: 0, right: -3, width: 6, cursor: 'col-resize', zIndex: 5 }} />
       </div>
 
-      {/* Centre: the Studio canvas, read-only */}
-      {canvas}
+      {/* Centre: the Studio canvas, read-only; right, with Full canvas on, the main preview hosted here (drag its left edge) */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', position: 'relative' }}>
+        {canvas}
+        {pageCanvas}
+      </div>
 
       {oneNode && <PublishNodeModal source={{ kind: 'code', code: oneNode.code, entry: oneNode.entry, label: oneNode.label }} onClose={() => setOneNode(null)} />}
     </div>

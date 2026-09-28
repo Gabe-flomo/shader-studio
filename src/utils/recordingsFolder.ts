@@ -12,6 +12,7 @@
  * replacing the older recording.
  */
 import { idb, type DirHandle, type PickerWindow } from './backupFolder';
+import { recordActivity } from '../files/activity';
 
 export type RecordingsMode = 'folder' | 'ask' | 'downloads';
 export interface RecordingsSettings { mode: RecordingsMode; /** Desktop: the folder's path (unset = the default). */ dir?: string }
@@ -131,6 +132,12 @@ export async function recordingPath(file: string): Promise<string | null> {
  * went (a path or a folder/file name), or null when the save was cancelled.
  */
 export async function saveRecording(blob: Blob, file: string): Promise<string | null> {
+  const where = await saveRecordingFile(blob, file);
+  if (where) recordActivity('render', file);
+  return where;
+}
+
+async function saveRecordingFile(blob: Blob, file: string): Promise<string | null> {
   if (isTauri()) {
     const path = await recordingPath(file);
     if (!path) return null;

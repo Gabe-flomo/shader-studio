@@ -32,6 +32,7 @@
  * buffer keeps the last minute of playing, to save as a take after the fact.
  */
 import { requireFeature } from './plan';
+import { recordActivity } from '../files/activity';
 import { create } from 'zustand';
 import { inputBus, paramChannelKey, type InputSource, type InputWriter } from './inputBus';
 import { audioEngine } from './audioEngine';
@@ -569,6 +570,7 @@ function keepTake(take: PlayTake): void {
   if (!room.ok) { toast.error('The take wasn’t kept', { message: room.error }); return; }
   if (had.length >= TAKES_MAX) toast.info(`${had[0].name} was removed`, { message: `A setup keeps its last ${TAKES_MAX} takes.` });
   store.setPlay(p => ({ ...p, takes: [...(p.takes ?? []), take].slice(-TAKES_MAX) }));
+  recordActivity('take', take.name);
 }
 
 function startRolling(): void {
