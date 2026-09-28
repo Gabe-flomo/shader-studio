@@ -13,6 +13,10 @@
  *   Z / X   octave down / up      C / V   velocity down / up     Shift   sustain
  *   Esc     gives the keyboard back
  *
+ * On the desktop the same keys also come from a focused plug-in window (the
+ * keys its view doesn't use, lib/pluginWindowKeys.ts) through handleKeyDown /
+ * handleKeyUp, so they play exactly as they do in the app's window.
+ *
  * Notes go through the host's `input` (so a take records them). It lets go
  * of the keyboard when the rack is removed, the page leaves Play, Esc is
  * pressed or the top bar's pill is clicked: those write `keyboard: false`
@@ -65,6 +69,8 @@ export interface KeyLike {
 export class RackKeyboard {
   private send: (rackId: string, bytes: number[]) => void = () => {};
   private release: (rackId: string) => void = () => {};
+  /** Told when listening starts and stops (the desktop app forwards plug-in windows' keys only while it listens). */
+  private forward: (on: boolean) => void = () => {};
   private onPage = false;
   private listening = false;
   private target = { id: '', name: '' };
@@ -77,11 +83,19 @@ export class RackKeyboard {
   private octave = 4;
   private velocity = 100;
 
-  /** The host wires `send` (notes to a rack); the app wires `release` (writes keyboard: false into the record). */
-  configure(o: { send?: (rackId: string, bytes: number[]) => void; release?: (rackId: string) => void }): void {
+  /**
+   * The host wires `send` (notes to a rack); the app wires `release` (writes
+   * keyboard: false into the record) and, on the desktop, `forward` (plug-in
+   * windows pass their keys on while a rack listens: lib/pluginWindowKeys.ts).
+   */
+  configure(o: { send?: (rackId: string, bytes: number[]) => void; release?: (rackId: string) => void; forward?: (on: boolean) => void }): void {
     if (o.send) this.send = o.send;
     if (o.release) this.release = o.release;
+    if (o.forward) { this.forward = o.forward; if (this.listening) o.forward(true); }
   }
+
+  /** The window the keys came from lost focus (the app's, or a plug-in window): let go of the notes, keep the keyboard. */
+  blur(): void { this.silence(); }
 
   /** The rack the record gives the keyboard to ('' for none), from the host whenever the record changes. */
   setTarget(rackId: string, rackName = ''): void {
@@ -125,6 +139,7 @@ export class RackKeyboard {
         window.addEventListener('keyup', this.onKeyUp, true);
         window.addEventListener('blur', this.onBlur);
       }
+      this.forward(true);
     } else if (!want && this.listening) {
       this.listening = false;
       this.silence();
@@ -133,6 +148,7 @@ export class RackKeyboard {
         window.removeEventListener('keyup', this.onKeyUp, true);
         window.removeEventListener('blur', this.onBlur);
       }
+      this.forward(false);
     }
     // The claim follows the rack that listens (and goes when none does).
     const claim = this.listening ? this.target.id : '';
@@ -227,7 +243,7 @@ export class RackKeyboard {
     this.target = { id: '', name: '' };
     this.sync();
     this.octave = 4; this.velocity = 100;
-    this.send = () => {}; this.release = () => {};
+    this.send = () => {}; this.release = () => {}; this.forward = () => {};
     this.publish();
   }
 }

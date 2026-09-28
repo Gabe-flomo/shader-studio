@@ -21,6 +21,7 @@
 
 pub mod analysis;
 pub mod ffi;
+pub mod keys;
 pub mod params;
 pub mod render;
 pub mod safety;
@@ -748,7 +749,7 @@ mod native {
     #[test]
     #[ignore]
     fn renders_apple_units_offline() {
-        ffi::configure_offline(48000.0).expect("offline");
+        let _ = ffi::configure_offline(48000.0); // another test may have configured it
         // The unit list has Apple's built-ins.
         let units: serde_json::Value = serde_json::from_str(&ffi::list_units()).unwrap();
         let names: Vec<String> = units.as_array().unwrap().iter().map(|u| u["name"].as_str().unwrap_or("").to_string()).collect();
@@ -845,6 +846,37 @@ mod native {
         ffi::rack_remove("rk_s").unwrap();
         ffi::rack_remove("rk_test").unwrap();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A rack control moving a parameter reaches the plug-in's own window: AUDelay (an AUv2) hears it
+    /// through AUEventListener (its Cocoa view's path) and the parameter tree's observers (an AUv3 view's).
+    /// (A listener hears the v2 bridge's own notification too; that AUDelay's and Serum 2's views only
+    /// *move* with ae_param_set's extra AUEventListenerNotify was checked on their real views, which need
+    /// the main thread: see docs/audio-engine.md, Plug-in windows.)
+    #[test]
+    #[ignore]
+    fn host_parameter_sets_reach_the_plugin_s_view() {
+        let _ = ffi::configure_offline(48000.0);
+        ffi::rack_create("rk_view").unwrap();
+        ffi::set_instrument("rk_view", Some(DLS)).unwrap();
+        ffi::effect_insert("rk_view", "fx_d", -1, DELAY).unwrap();
+        let ps = params::parse_params(&ffi::params("rk_view", "fx_d").unwrap());
+        let p = ps.iter().find(|p| p.max > p.min).expect("a parameter");
+        let addr: u64 = p.address.parse().unwrap();
+        let mid = (p.min + p.max) / 2.0;
+        let (v2, tree) = ffi::test_param_heard("rk_view", "fx_d", addr, mid, 0.3).unwrap();
+        println!("AUDelay {}: v2 listener heard {v2}, tree observers {tree}", p.name);
+        assert!(v2 >= 1, "an AUv2 view's listener hears the host's set");
+        assert!(tree >= 1, "the tree's observers hear it");
+        // Configure's watch still doesn't count it as a touch.
+        ffi::watch_start("rk_view", "fx_d").unwrap();
+        let (v2w, treew) = ffi::test_param_heard("rk_view", "fx_d", addr, p.min, 0.3).unwrap();
+        println!("while watched: v2 listener heard {v2w}, tree observers {treew}");
+        assert!(v2w >= 1 && treew >= 1, "the window follows while Configure watches too");
+        let drained: Vec<touch::Batch> = serde_json::from_str(&ffi::watch_drain()).unwrap();
+        assert!(drained[0].changes.is_empty(), "{:?}", drained[0].changes);
+        ffi::watch_stop("rk_view", "fx_d");
+        ffi::rack_remove("rk_view").unwrap();
     }
 
     /// A take with two notes, rendered in the render context (DLSMusicDevice + AUDelay): energy lands at the notes' samples and not before.

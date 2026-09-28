@@ -15,6 +15,8 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { playEngine } from './playEngine';
 import { makeGrainTap } from './grainFrom';
 import { wireTape } from './tapeWire';
+import { isTauri } from './midiTransport';
+import { wirePluginWindowKeys } from './pluginWindowKeys';
 
 let wired = false;
 
@@ -27,6 +29,12 @@ export function wireAudioEngine(): void {
   rackKeyboard.configure({
     release: rackId => useNodeGraphStore.getState().setPlay(p => (p.audioEngine?.racks.some(r => r.id === rackId && r.keyboard) ? { ...p, audioEngine: setRackKeyboard(p.audioEngine, rackId, false) } : p), false),
   });
+  // Desktop: keys a focused plug-in window doesn't use play the rack too (lib/pluginWindowKeys.ts).
+  if (isTauri()) {
+    void Promise.all([import('@tauri-apps/api/core'), import('@tauri-apps/api/event')])
+      .then(([{ invoke }, { listen }]) => wirePluginWindowKeys(rackKeyboard, { invoke, listen }))
+      .catch(() => {});
+  }
   playOverlay.onPad(a => audioEngineHost.onPad(a));
   // Granulators whose grains come from a layer: its things after every frame (lib/grainFrom.ts).
   playOverlay.setGrainTap(makeGrainTap((rackId, pts, inside) => audioEngineHost.granulatorPoints(rackId, pts, inside)));

@@ -1182,6 +1182,35 @@ char *ae_params(const char *rid, const char *sid, char **err) {
   }
 }
 
+/** An AUv2 unit (not a v3 one bridged to the v2 API): its Cocoa view listens through AUEventListener. */
+static BOOL ae_is_v2(AudioUnit au) {
+  if (!au) return NO;
+  AudioComponent c = AudioComponentInstanceGetComponent(au);
+  AudioComponentDescription d = {0};
+  if (!c || AudioComponentGetDescription(c, &d) != noErr) return NO;
+  return !(d.componentFlags & kAudioComponentFlag_IsV3AudioUnit);
+}
+
+/**
+ * The host set a parameter: tell the plug-in's own window. Setting through the
+ * AUParameterTree already reaches an AUv3 view's observers (and any other
+ * observer; a watch's own token is the originator, so Configure doesn't count
+ * it as a touch). An AUv2 unit's Cocoa or Carbon-era view listens through
+ * AUEventListener instead, which a raw set never tells: post the change there.
+ * The v2 bridge's parameter addresses in the global scope are the parameter ids.
+ */
+static void ae_notify_v2_listeners(AVAudioUnit *u, AUParameterAddress address) {
+  AudioUnit au = u.audioUnit;
+  if (address > UINT32_MAX || !ae_is_v2(au)) return;
+  AudioUnitEvent ev = {0};
+  ev.mEventType = kAudioUnitEvent_ParameterValueChange;
+  ev.mArgument.mParameter.mAudioUnit = au;
+  ev.mArgument.mParameter.mParameterID = (AudioUnitParameterID)address;
+  ev.mArgument.mParameter.mScope = kAudioUnitScope_Global;
+  ev.mArgument.mParameter.mElement = 0;
+  AUEventListenerNotify(NULL, NULL, &ev);
+}
+
 int ae_param_set(const char *rid, const char *sid, uint64_t address, float value, char **err) {
   AE_GUARD_BEGIN
     AERack *r = ae_rack(rid);
@@ -1191,9 +1220,53 @@ int ae_param_set(const char *rid, const char *sid, uint64_t address, float value
     float v = value < p.minValue ? p.minValue : value > p.maxValue ? p.maxValue : value;
     NSString *slot = [NSString stringWithUTF8String:sid];
     [p setValue:v originator:ae_watch_host_set(rid, slot, p)]; // a watch's own observer isn't told
+    ae_notify_v2_listeners(u, address); // the plug-in's AUv2 view follows (after the host-set mark, so a watch ignores it)
     ae_watch_after_set(rid, slot, p);
   AE_GUARD_END(-1)
   return 0;
+}
+
+/**
+ * Tests: set a parameter through ae_param_set and count what a plug-in window
+ * would hear within `wait` seconds: AUEventListener value changes (an AUv2
+ * view) and AUParameterTree observer calls (an AUv3 view). 0 when it ran.
+ */
+int ae_test_param_heard(const char *rid, const char *sid, uint64_t address, float value, double wait, int *v2_heard, int *tree_heard) {
+  @autoreleasepool {
+    __block _Atomic int v2 = 0, tree = 0;
+    AVAudioUnit *u = nil;
+    ae_init_globals();
+    [gLock lock];
+    AERack *r = ae_rack(rid);
+    u = r ? ae_slot_unit(r, [NSString stringWithUTF8String:sid]) : nil;
+    [gLock unlock];
+    if (!u) return -3;
+    dispatch_queue_t q = dispatch_queue_create("ae.test.listen", DISPATCH_QUEUE_SERIAL);
+    AUEventListenerRef listener = NULL;
+    AUEventListenerCreateWithDispatchQueue(&listener, 0, 0, q, ^(void *obj, const AudioUnitEvent *ev, UInt64 t, AudioUnitParameterValue val) {
+      (void)obj; (void)t; (void)val;
+      if (ev->mEventType == kAudioUnitEvent_ParameterValueChange && ev->mArgument.mParameter.mParameterID == (AudioUnitParameterID)address) atomic_fetch_add(&v2, 1);
+    });
+    if (listener && u.audioUnit) {
+      AudioUnitEvent ev = {0};
+      ev.mEventType = kAudioUnitEvent_ParameterValueChange;
+      ev.mArgument.mParameter = (AudioUnitParameter){ u.audioUnit, (AudioUnitParameterID)address, kAudioUnitScope_Global, 0 };
+      AUEventListenerAddEventType(listener, NULL, &ev);
+    }
+    AUParameterTree *pt = u.AUAudioUnit.parameterTree;
+    AUParameterObserverToken tok = [pt tokenByAddingParameterObserver:^(AUParameterAddress a, AUValue v) { (void)v; if (a == address) atomic_fetch_add(&tree, 1); }];
+    char *err = NULL;
+    int rc = ae_param_set(rid, sid, address, value, &err);
+    if (err) free(err);
+    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:wait]];
+    [NSThread sleepForTimeInterval:wait];
+    dispatch_sync(q, ^{});
+    [pt removeParameterObserver:tok];
+    if (listener) AUListenerDispose(listener);
+    if (v2_heard) *v2_heard = atomic_load(&v2);
+    if (tree_heard) *tree_heard = atomic_load(&tree);
+    return rc;
+  }
 }
 
 /** The slot's whole state (a preset), as a property list in base64; NULL when it has none. */
@@ -1734,6 +1807,143 @@ static NSScreen *ae_screen_for(const double *saved) {
 static void ae_rect_out(NSRect r, double *o) { o[0] = r.origin.x; o[1] = r.origin.y; o[2] = r.size.width; o[3] = r.size.height; }
 static NSRect ae_rect_in(const double *o) { return NSMakeRect(o[0], o[1], o[2], o[3]); }
 
+// ── Computer-keyboard notes from a plug-in window ───────────────────────────
+//
+// While a rack plays from the computer keyboard (src/lib/rackKeyboard.ts) the
+// page turns forwarding on (`ae_keys_forward`). A key the plug-in's view
+// doesn't use travels up the responder chain to its window: AEPlugWindow's
+// keyDown: sends it to the page (`plugin-window:key`, the same code/key/
+// modifiers/repeat a DOM KeyboardEvent has) and swallows it. So typing into a
+// plug-in's text field (the field takes the key) stays the plug-in's, and so
+// do keys a plug-in handles itself. ⌘/⌃/⌥ combos and Tab are never forwarded.
+// A local monitor sends the key-up of every key forwarded down (whoever takes
+// the up) and Shift (sustain); the window losing key focus sends "blur", which
+// lets go of held notes, as the app's own window losing focus does.
+
+typedef void (*AEKeyCallback)(const char *json);
+static AEKeyCallback gKeyCallback = NULL; // main thread
+static BOOL gKeyForward = NO;             // main thread
+static id gKeyMonitor = nil;              // main thread
+static NSMutableSet<NSNumber *> *gKeysDown = nil; // key codes forwarded down; main thread
+static BOOL gShiftL = NO, gShiftR = NO;
+
+/** A macOS virtual key code → the DOM `KeyboardEvent.code` (positional, like the page's mapping); nil for keys never forwarded. */
+static NSString *ae_dom_code(unsigned short k) {
+  static NSDictionary<NSNumber *, NSString *> *m = nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    m = @{
+      @0: @"KeyA", @1: @"KeyS", @2: @"KeyD", @3: @"KeyF", @4: @"KeyH", @5: @"KeyG", @6: @"KeyZ", @7: @"KeyX",
+      @8: @"KeyC", @9: @"KeyV", @11: @"KeyB", @12: @"KeyQ", @13: @"KeyW", @14: @"KeyE", @15: @"KeyR",
+      @16: @"KeyY", @17: @"KeyT", @18: @"Digit1", @19: @"Digit2", @20: @"Digit3", @21: @"Digit4", @22: @"Digit6",
+      @23: @"Digit5", @24: @"Equal", @25: @"Digit9", @26: @"Digit7", @27: @"Minus", @28: @"Digit8", @29: @"Digit0",
+      @30: @"BracketRight", @31: @"KeyO", @32: @"KeyU", @33: @"BracketLeft", @34: @"KeyI", @35: @"KeyP",
+      @37: @"KeyL", @38: @"KeyJ", @39: @"Quote", @40: @"KeyK", @41: @"Semicolon", @42: @"Backslash",
+      @43: @"Comma", @44: @"Slash", @45: @"KeyN", @46: @"KeyM", @47: @"Period", @49: @"Space", @50: @"Backquote",
+      @53: @"Escape", @123: @"ArrowLeft", @124: @"ArrowRight", @125: @"ArrowDown", @126: @"ArrowUp",
+    };
+  });
+  return m[@(k)];
+}
+
+static void ae_key_send(NSString *type, NSString *code, NSEvent *e, BOOL repeat) {
+  if (!gKeyCallback) return;
+  NSEventModifierFlags f = e ? e.modifierFlags : 0;
+  NSString *key = @"";
+  if (e && (e.type == NSEventTypeKeyDown || e.type == NSEventTypeKeyUp)) key = e.charactersIgnoringModifiers ?: @"";
+  NSDictionary *d = @{
+    @"type": type, @"code": code ?: @"", @"key": key, @"repeat": @(repeat),
+    @"shift": @((f & NSEventModifierFlagShift) != 0), @"meta": @((f & NSEventModifierFlagCommand) != 0),
+    @"ctrl": @((f & NSEventModifierFlagControl) != 0), @"alt": @((f & NSEventModifierFlagOption) != 0),
+    @"window": ae_window_key(e.window) ?: @"",
+  };
+  NSData *json = [NSJSONSerialization dataWithJSONObject:d options:0 error:nil];
+  if (!json) return;
+  NSString *s = [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
+  gKeyCallback(s.UTF8String);
+}
+
+/** A key the plug-in's view didn't take reached its window: the page's, when a rack has the keyboard. YES when forwarded (and so swallowed). */
+static BOOL ae_key_down_unhandled(NSEvent *e) {
+  if (!gKeyForward || !gKeyCallback || !ae_window_key(e.window)) return NO;
+  NSEventModifierFlags f = e.modifierFlags;
+  if (f & (NSEventModifierFlagCommand | NSEventModifierFlagControl | NSEventModifierFlagOption)) return NO;
+  // A Cocoa text field or view editing (only reaches here if it passed the key on).
+  if ([e.window.firstResponder isKindOfClass:NSText.class]) return NO;
+  NSString *code = ae_dom_code(e.keyCode);
+  if (!code) return NO;
+  if (!gKeysDown) gKeysDown = [NSMutableSet new];
+  [gKeysDown addObject:@(e.keyCode)];
+  ae_key_send(@"down", code, e, e.isARepeat);
+  return YES;
+}
+
+/** Let go of everything forwarded (the window lost key focus, forwarding stopped). */
+static void ae_keys_blur(void) {
+  BOOL any = gKeysDown.count || gShiftL || gShiftR;
+  [gKeysDown removeAllObjects];
+  gShiftL = gShiftR = NO;
+  if (any) ae_key_send(@"blur", @"", nil, NO);
+}
+
+/** The key-up of a key forwarded down, and Shift, in a plug-in window. Main thread. */
+static NSEvent *ae_key_monitor(NSEvent *e) {
+  if (!gKeyForward || !ae_window_key(e.window)) return e;
+  if (e.type == NSEventTypeKeyUp) {
+    if (![gKeysDown containsObject:@(e.keyCode)]) return e;
+    [gKeysDown removeObject:@(e.keyCode)];
+    ae_key_send(@"up", ae_dom_code(e.keyCode), e, NO);
+    return nil; // ours: its down was
+  }
+  if (e.type == NSEventTypeFlagsChanged && (e.keyCode == 56 || e.keyCode == 60)) {
+    // Which Shift from the device bits (NX_DEVICELSHIFTKEYMASK 0x2, NX_DEVICERSHIFTKEYMASK 0x4).
+    BOOL left = e.keyCode == 56;
+    BOOL down = (e.modifierFlags & (left ? 0x2 : 0x4)) != 0;
+    BOOL *was = left ? &gShiftL : &gShiftR;
+    if (down != *was) {
+      *was = down;
+      // A Cocoa text field keeps Shift for capitals; sustain is only for playing.
+      if (!down || ![e.window.firstResponder isKindOfClass:NSText.class]) ae_key_send(down ? @"down" : @"up", left ? @"ShiftLeft" : @"ShiftRight", e, NO);
+    }
+  }
+  return e;
+}
+
+/** The page's rack keyboard is on (1) or off (0); `cb` gets each forwarded key as JSON (on the main thread). */
+void ae_keys_forward(int on, AEKeyCallback cb) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (cb) gKeyCallback = cb;
+    gKeyForward = on != 0;
+    if (gKeyForward && !gKeyMonitor) {
+      gKeyMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyUp | NSEventMaskFlagsChanged handler:^NSEvent *(NSEvent *e) {
+        @try { return ae_key_monitor(e); } @catch (NSException *x) { (void)x; return e; }
+      }];
+    } else if (!gKeyForward && gKeyMonitor) {
+      [NSEvent removeMonitor:gKeyMonitor];
+      gKeyMonitor = nil;
+      [gKeysDown removeAllObjects];
+      gShiftL = gShiftR = NO;
+    }
+  });
+}
+
+/** Tests: the DOM code for a macOS key code ("" for none; static, don't free). */
+const char *ae_key_code_name(unsigned short k) {
+  NSString *c = ae_dom_code(k);
+  return c ? c.UTF8String : "";
+}
+
+/** A plug-in window: keys its view passes on come to the page while a rack has the keyboard. */
+@interface AEPlugWindow : NSWindow
+@end
+@implementation AEPlugWindow
+- (void)keyDown:(NSEvent *)e {
+  BOOL sent = NO;
+  @try { sent = ae_key_down_unhandled(e); } @catch (NSException *x) { (void)x; }
+  if (!sent) [super keyDown:e];
+}
+@end
+
 static char kAEPlugWin;
 static char kAEPrefSize;
 
@@ -1825,10 +2035,12 @@ static char kAEPrefSize;
 }
 
 - (void)windowDidMove:(NSNotification *)n { (void)n; [self remember]; }
+- (void)windowDidResignKey:(NSNotification *)n { (void)n; ae_keys_blur(); } // held notes let go, as the app's window losing focus does
 - (void)windowDidEndLiveResize:(NSNotification *)n { (void)n; [self remember]; }
 
 - (void)windowWillClose:(NSNotification *)n {
   (void)n;
+  ae_keys_blur();
   [self remember];
   [self stop];
   NSWindow *w = self.window;
@@ -1896,7 +2108,7 @@ static void ae_show_window(NSString *key, NSString *unitKey, NSString *title, NS
   ae_win_place(wantF, c.axes, limits, hasSaved ? saved : NULL, scr, out);
   NSRect frame = ae_rect_in(out);
 
-  NSWindow *w = [[NSWindow alloc] initWithContentRect:[NSWindow contentRectForFrameRect:frame styleMask:style] styleMask:style backing:NSBackingStoreBuffered defer:NO];
+  NSWindow *w = [[AEPlugWindow alloc] initWithContentRect:[NSWindow contentRectForFrameRect:frame styleMask:style] styleMask:style backing:NSBackingStoreBuffered defer:NO];
   w.releasedWhenClosed = NO;
   w.title = title;
   [w setFrame:frame display:NO];
