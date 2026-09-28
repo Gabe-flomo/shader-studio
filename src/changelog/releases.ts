@@ -46,6 +46,7 @@ export const RELEASES: Release[] = [
       { area: 'Play', text: 'A Granulator instrument in the Audio engine, modelled on Granulator III: Classic, Flux and Cloud modes, up to 64 grains, playable from MIDI or the keyboard.', link: { kind: 'example', key: 'granulator', page: 'play' } },
       { area: 'Play', text: 'Grains drive visuals (count, position, spread as sources; grains onto nulls), and a layer can drive grains: particles inside a boundary shape become grains.' },
       { area: 'Play', text: 'Big layer editors in the split view share one layout: a section strip to jump around, tidier rows, and labels that wrap instead of overflowing.' },
+      { area: 'Desktop', text: 'Plug-in windows open at the plug-in\'s own size, resize only where the plug-in allows, and remember where you left them.' },
     ],
   },
   {
