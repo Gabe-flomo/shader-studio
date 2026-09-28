@@ -125,7 +125,7 @@ export function applyRackPresetToPlay(preset: RackPreset, replace?: string): voi
   useEngineSelection.getState().select(r.rackId);
   const title = replace ? `“${preset.name}” is on the track` : `Added “${preset.name}”`;
   if (r.missing.length) toast.error(title, { message: r.notes.join('. ') + '.' });
-  else toast.success(title, { message: r.notes.length ? `Not added: ${r.notes.join('; ')}.` : 'Its controls are on the Controls tab.' });
+  else toast.success(title, { message: r.notes.length ? `Not added: ${r.notes.join('; ')}.` : preset.controls.length ? 'Its rack controls are on the Controls tab.' : 'Play it from MIDI or the computer keyboard.' });
 }
 
 /** A preset's Sound effects on Finish → Sound's master chain. */

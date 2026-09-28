@@ -57,6 +57,8 @@ Posters are drawn one at a time, only while the tab is visible, and an all-black
 - **notes and credits**: a Play's notes and source credit, a function's comment, a shader's note, how many node comments are inside;
 - what's **inside** (a graph's earlier versions and Play setup), as rows that open.
 
+Layer sets and rack presets (Presets → Layer sets / Racks, docs/presets.md) open as item pages too: **Add to Play** / **Add as a track** is their Open, a set shows the poster it was saved with, the files its layers use (linked-folder ones as links) and what was left out when it was saved, and **Export as .playfile** takes a set's videos and sounds along.
+
 ## Node pages
 
 `NodePage.tsx`, reached from a Most-used chip or the **Nodes** list (`NodesListView.tsx`: every node type with code of its own, by category, with a search). It shows:
