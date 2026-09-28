@@ -1,4 +1,5 @@
 import { can, openProSheet, requireFeature, useCan } from '../lib/plan';
+import { recordActivity } from '../files/activity';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CanvasRecorder } from '../utils/CanvasRecorder';
 import { codecExt, runFfmpegEncode, type FfmpegCodec } from '../utils/ffmpegRecorder';
@@ -549,6 +550,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       applier?.release();
       restoreScale();
       setOutputPath(path);
+      recordActivity('render', path.split(/[\\/]/).pop());
       setState('done');
     } catch (err) {
       applier?.release();

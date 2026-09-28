@@ -1,4 +1,5 @@
 import { offerSetExport } from './playfile/exportMenus';
+import { recordActivity } from '../files/activity';
 import { redactSealedCode } from '../nodes/userNodes/userNodeRegistry';
 import { ProBadgeFor } from './account/ProSheet';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -234,6 +235,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string) => void }) 
       : [...shaders, { id, name, code }];
     // Only reflect the save in the list once it's actually in storage.
     if (!persistShaders(next).ok) return;
+    recordActivity('save', name);
     setShaders(next);
     setOpen(id);
     setShowSaveInput(false);

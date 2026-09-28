@@ -5,6 +5,7 @@
  * and installing a profile.
  */
 import { internStoredPresentations } from '../../present/presentAssets';
+import { recordActivity } from '../../files/activity';
 import { savePresentation } from '../../present/storage';
 import { toast } from '../ui/toastStore';
 import { LIBRARY_REFRESH_EVENTS, formatSize, libraryZipName } from '../../utils/library';
@@ -204,6 +205,7 @@ export async function runInstall(profile: Profile, mode: 'merge' | 'replace'): P
     // Presentations that came in with their pictures and fonts embedded keep references to the library instead.
     await internStoredPresentations(savePresentation).catch(() => []);
     syncApp(summary.changedKeys);
+    recordActivity('import', mode === 'replace' ? 'Replaced everything' : 'Installed a profile');
     return summary;
   } catch (e) {
     if (!isStorageLimitError(e)) toast.error(mode === 'replace' ? 'Nothing was replaced' : 'Couldn’t install that', { message: errorMessage(e) });

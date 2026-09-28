@@ -46,6 +46,15 @@ import { DownloadDialog, InstallDialog, RemoveDialog } from './FilesDialogs';
 import { deleteFolderKeepItems, deleteNoteWithUndo, downloadEverything, removeWithUndo, syncApp, type RemoveConfirm, type SaveTarget } from './filesActions';
 import { Check, IconTile } from './fileUi';
 import { capsLabel } from './fileUiShared';
+import { HomeView, type HomeEntry } from './HomeView';
+import { ItemPage } from './ItemPage';
+import { isPlayGraph, ITEM_KINDS, itemCode, itemRecord } from '../../files/itemCode';
+import { NodePage } from './NodePage';
+import { NodesListView } from './NodesListView';
+import { Sheet } from '../ui/Sheet';
+import { duplicateNode } from '../../files/duplicate';
+import { graphFileText } from '../../playfile/bundle';
+import { saveTextFile } from '../../utils/fileIO';
 import { WorkspaceBanner, WorkspaceEntry, WorkspaceView } from '../workspace/WorkspacePanel';
 import { OPEN_WORKSPACE_VIEW, takeWorkspaceViewRequest } from '../workspace/workspaceUi';
 import { OPEN_CLEANUP_VIEW } from '../../files/storageLimit';
@@ -59,12 +68,19 @@ const isDrumKit = (n: FileNode) => n.kind === 'preset' && n.id.startsWith('dkit:
 const exportKit = async (n: FileNode) => reportFileResult(await exportPlayfile([n.id], { fileName: n.label, dependencies: false, success: `Exported the kit “${n.label}”` }), { failTitle: 'Couldn’t export the kit' });
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-type View = 'browse' | 'cleanup' | 'workspace' | 'notes';
+type View = 'home' | 'browse' | 'cleanup' | 'workspace' | 'notes' | 'nodes';
+/** The GLSL page reads these when it mounts: the editor's text and which saved shader it is. */
+const GLSL_EDITOR_KEY = 'shader-studio:glsl-editor';
+const GLSL_OPEN_KEY = 'glsl-editor:open-shader';
 
 export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: (p: Page) => void }) {
   const tk = useTokens();
   const { inv, building, estimate, usage } = useFilesInventory();
-  const [view, setView] = useState<View>(() => (takeWorkspaceViewRequest() ? 'workspace' : takeCleanupRequest() ? 'cleanup' : 'browse'));
+  const [view, setView] = useState<View>(() => (takeWorkspaceViewRequest() ? 'workspace' : takeCleanupRequest() ? 'cleanup' : 'home'));
+  /** The node type whose page is shown (the Nodes view). */
+  const [nodeType, setNodeType] = useState<string | null>(null);
+  /** On a phone, an item's page opens in a sheet over where you are. */
+  const [sheetId, setSheetId] = useState<string | null>(null);
   // A storage-limit refusal's "Open Files → Clean up" asks for the Clean up view.
   useEffect(() => {
     const go = () => { takeCleanupRequest(); setView('cleanup'); };
@@ -78,7 +94,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     return () => window.removeEventListener(OPEN_WORKSPACE_VIEW, go);
   }, []);
   // Where you are, as the path down to it: when the thing itself goes (removed, renamed), you land on its nearest surviving parent.
-  const [trail, setTrail] = useState<string[]>(compact ? [] : ['section:graphs']);
+  const [trail, setTrail] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['section:graphs']));
   const [menu, setMenu] = useState<{ node: FileNode | null; x: number; y: number } | null>(null);
   const [confirm, setConfirm] = useState<{ c: RemoveConfirm; resolve: (ok: boolean) => void } | null>(null);
@@ -86,18 +102,23 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   const [install, setInstall] = useState<{ name: string; profile: Profile; preview: InstallPreview } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
-  const current = inv ? [...trail].reverse().find(id => inv.byId.has(id)) ?? (compact ? null : 'section:graphs') : null;
+  const current = inv ? [...trail].reverse().find(id => inv.byId.has(id)) ?? null : null;
   const node = inv && current ? inv.byId.get(current) ?? null : null;
   const [rawChecked, setChecked] = useState<Set<string>>(() => new Set());
   // Ticks on things that are gone don't count.
   const checked = useMemo(() => (inv ? new Set([...rawChecked].filter(id => inv.byId.has(id))) : rawChecked), [inv, rawChecked]);
 
   const open = useCallback((id: string | null) => {
-    setView('browse');
+    const n = id && inv ? inv.byId.get(id) : null;
+    if (compact && n && ITEM_KINDS.has(n.kind)) { setSheetId(id); return; }
+    setSheetId(null);
+    setView(id ? 'browse' : 'home');
     setTrail(id && inv ? pathTo(inv, id).map(n => n.id) : []);
     if (id && inv) setExpanded(s => { const n = new Set(s); for (const p of pathTo(inv, id).slice(0, -1)) n.add(p.id); return n; });
     scroller.current?.scrollTo({ top: 0 });
-  }, [inv]);
+  }, [inv, compact]);
+  const openNodePage = useCallback((type: string) => { setSheetId(null); setNodeType(type); setView('nodes'); scroller.current?.scrollTo({ top: 0 }); }, []);
+  const show = useCallback((v: View) => { setSheetId(null); setView(v); scroller.current?.scrollTo({ top: 0 }); }, []);
 
   // ── Ticks ──
   const ancestorsOfChecked = useMemo(() => {
@@ -194,6 +215,42 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     else s2.revealNode(path, target);
     onNavigate?.('studio');
   };
+  /** A saved GLSL shader on the GLSL page: the page reads the editor's text and the open shader's id when it mounts. */
+  const openShader = (n: FileNode) => {
+    const rec = itemRecord(n);
+    const code = itemCode(n, rec)?.text;
+    const id = n.ref?.t === 'part' && n.ref.match?.field === 'id' ? String(n.ref.match.value) : null;
+    if (code == null) { toast.error('Couldn’t open that shader'); return; }
+    try { localStorage.setItem(GLSL_EDITOR_KEY, code); if (id) localStorage.setItem(GLSL_OPEN_KEY, id); } catch { /* the page falls back to its own text */ }
+    onNavigate?.('glsl');
+  };
+  /** Open a thing where it lives: a graph in the Studio (or Play when it has a setup), a presentation on Present, a shader on the GLSL page. */
+  const openWhereItBelongs = (n: FileNode) => {
+    if (n.kind === 'graph') void openGraph(n.label, isPlayGraph(n) ? 'play' : 'studio');
+    else if (n.kind === 'presentation') { rememberLast(n.label); onNavigate?.('present'); }
+    else if (n.kind === 'shader') openShader(n);
+    else if (n.kind === 'function' || n.kind === 'builderFn') onNavigate?.('fn');
+    else open(n.id);
+  };
+  const exportItemPlayfile = async (n: FileNode) => reportFileResult(await exportPlayfile([n.id], { fileName: n.label, success: `Exported “${n.label}”` }), { failTitle: 'Couldn’t export it' });
+  const exportReadable = async (n: FileNode) => {
+    const rec = itemRecord(n);
+    const text = n.kind === 'graph' && rec.raw ? graphFileText(rec.raw, isPlayGraph(n)) : itemCode(n, rec)?.text ?? rec.raw;
+    if (text == null) { toast.error('Nothing to export'); return; }
+    const ext = n.kind === 'shader' || n.kind === 'function' || n.kind === 'builderFn' ? 'glsl' : n.kind === 'script' ? 'js' : 'json';
+    const safe = n.label.replace(/[/\\:*?"<>|]/g, '-').slice(0, 60) || 'item';
+    reportFileResult(await saveTextFile(text, `${safe}.${ext}`, ext === 'json' ? 'application/json' : 'text/plain'), { failTitle: 'Couldn’t export it', success: `Exported “${n.label}”` });
+  };
+  const duplicate = (n: FileNode) => {
+    let r: ReturnType<typeof duplicateNode>;
+    try { r = duplicateNode(localMutableKV, n); } catch (e) { toast.error('Couldn’t duplicate it', { message: errorMessage(e) }); return; }
+    if (!r) { toast.warning('That can’t be duplicated here'); return; }
+    const key = n.ref?.t === 'key' || n.ref?.t === 'part' ? n.ref.key : '';
+    syncApp([key]);
+    let undone = false;
+    const made = r;
+    toast.success(`Made “${made.label}”`, { action: { label: 'Undo', stillValid: () => !undone, onClick: () => { if (undone) return; undone = true; made.undo(); syncApp([key]); } } });
+  };
   const notesCount = useMemo(() => {
     if (!inv) return 0;
     try { return collectNotes(localMutableKV, { labelOf: t => getNodeDefinition(t)?.label }).notes.length; } catch { return 0; }
@@ -258,7 +315,20 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   }
 
   const path = node ? pathTo(inv, node.id) : [];
-  const nodeView = node?.id === APP_SETTINGS_ID ? <AppSettingsView inv={inv} node={node} compact={compact} /> : node ? (
+  const itemPage = (n: FileNode) => (
+    <ItemPage inv={inv} node={n} compact={compact} onOpen={open} onMenu={(x, at) => setMenu({ node: x, ...at })}
+      primary={n.kind === 'graph' ? { label: isPlayGraph(n) ? 'Open in Play' : 'Open in the Studio', icon: isPlayGraph(n) ? 'play' : 'nodes', onClick: () => { void openGraph(n.label, isPlayGraph(n) ? 'play' : 'studio'); } }
+        : n.kind === 'presentation' ? { label: 'Open on Present', icon: 'slides', onClick: () => { rememberLast(n.label); onNavigate?.('present'); } }
+        : n.kind === 'shader' ? { label: 'Open on the GLSL page', icon: 'code', onClick: () => openShader(n) }
+        : n.kind === 'builderFn' ? { label: 'Open the Function Builder', icon: 'fn', onClick: () => onNavigate?.('fn') }
+        : null}
+      onExportPlayfile={!n.private && n.kind !== 'palette' ? () => { void exportItemPlayfile(n); } : undefined}
+      onExportReadable={() => { void exportReadable(n); }}
+      onDuplicate={n.ref ? () => duplicate(n) : undefined}
+      onRemove={n.ref ? () => { void remove([n.id], n.size > 40_000); } : undefined} />
+  );
+  const sheetNode = sheetId ? inv.byId.get(sheetId) ?? null : null;
+  const nodeView = node?.id === APP_SETTINGS_ID ? <AppSettingsView inv={inv} node={node} compact={compact} /> : node && ITEM_KINDS.has(node.kind) ? itemPage(node) : node ? (
     <NodeView inv={inv} node={node} compact={compact} checkState={checkState} onCheck={onCheck} onOpen={open} onMenu={(n, at) => setMenu({ node: n, ...at })}
       actions={<>
         {node.kind === 'graph' && <Button size="sm" icon="nodes" onClick={() => { void openGraph(node.label); }}>Open in the Studio</Button>}
@@ -271,8 +341,21 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   const cleanup = <CleanUpView inv={inv} compact={compact} onShow={open} onRemove={remove} />;
   const workspace = <WorkspaceView compact={compact} />;
   const notes = <NotesView inv={inv} compact={compact} onGoTo={n => { void goToNote(n); }} onDelete={n => { deleteNoteWithUndo(n); }} />;
-  const special = (v: View) => (v === 'cleanup' ? cleanup : v === 'workspace' ? workspace : v === 'notes' ? notes : null);
-  const specialCrumb = (v: View) => crumb(v === 'cleanup' ? 'Clean up' : v === 'workspace' ? 'Workspace folder' : 'Notes');
+  const entries: HomeEntry[] = [
+    { id: 'browse', icon: 'folder', label: 'Browse', sub: 'Everything saved, as a tree', tint: tk.accent.base, onClick: () => open('section:graphs') },
+    { id: 'nodes', icon: 'nodes', label: 'Nodes', sub: 'Every node type: sockets, a live picture, its GLSL', tint: tk.accent.base, onClick: () => { setNodeType(null); show('nodes'); } },
+    { id: 'notes', icon: 'comment', label: 'Notes', sub: notesCount ? `${plural(notesCount, 'note')}: Play notes and node comments` : 'No notes yet', count: notesCount, tint: tk.accent.base, onClick: () => show('notes') },
+    { id: 'cleanup', icon: 'spark', label: 'Clean up', sub: cleanupCount ? `${plural(cleanupCount, 'suggestion')}: old versions, unused files, duplicates` : 'Nothing to clean up', count: cleanupCount, tint: tk.status.success, onClick: () => show('cleanup') },
+    { id: 'workspace', icon: 'folder', label: 'Workspace folder', sub: 'A folder on this computer that mirrors what’s saved', tint: tk.status.warning, onClick: () => show('workspace') },
+    { id: 'settings', icon: 'sliders', label: 'App settings', sub: 'Theme, shortcuts, panel sizes: reset to default here', tint: tk.text.muted, onClick: () => open(APP_SETTINGS_ID) },
+  ];
+  const home = <HomeView inv={inv} compact={compact} estimate={estimate} usage={usage} entries={entries} onOpen={open} onOpenNode={openNodePage} onOpenWhereItBelongs={openWhereItBelongs}
+    browse={compact ? <div style={{ borderRadius: radius.lg, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden' }}>
+      {inv.sections.map((s, i) => <SectionRow key={s.id} node={s} first={i === 0} state={checkState(s.id)} onCheck={on => onCheck(s.id, on)} onOpen={() => open(s.id)} />)}
+    </div> : undefined} />;
+  const nodesView = nodeType ? <NodePage type={nodeType} compact={compact} inv={inv} onOpen={open} onNavigate={onNavigate} /> : <NodesListView compact={compact} onOpenNode={openNodePage} />;
+  const special = (v: View) => (v === 'home' ? home : v === 'nodes' ? nodesView : v === 'cleanup' ? cleanup : v === 'workspace' ? workspace : v === 'notes' ? notes : null);
+  const specialCrumb = (v: View) => (v === 'nodes' && nodeType ? [{ id: 'nodes', label: 'Nodes', kind: 'section' as const, section: 'nodes' as const, size: 0 }, { id: `nodetype:${nodeType}`, label: getNodeDefinition(nodeType)?.label ?? nodeType, kind: 'node' as const, section: 'nodes' as const, size: 0 }] : crumb(v === 'cleanup' ? 'Clean up' : v === 'workspace' ? 'Workspace folder' : v === 'notes' ? 'Notes' : v === 'nodes' ? 'Nodes' : 'Home'));
   const banner = view !== 'workspace' && <WorkspaceBanner compact={compact} onOpen={() => setView('workspace')} />;
   const crumb = (label: string) => [{ id: view, label, kind: 'section' as const, section: 'graphs' as const, size: 0 }];
 
@@ -294,6 +377,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   );
 
   const dialogs = <>
+    {compact && sheetNode && <Sheet title={sheetNode.label} onClose={() => setSheetId(null)} maxHeight="88dvh">{itemPage(sheetNode)}</Sheet>}
     {menu && <Menu x={menu.x} y={menu.y} minWidth={240} onClose={() => setMenu(null)} items={menuItems(menu.node)} />}
     {confirm && <RemoveDialog c={confirm.c} onDone={ok => { confirm.resolve(ok); setConfirm(null); }} />}
     {download && <DownloadDialog inv={inv} ids={download} onClose={() => setDownload(null)} />}
@@ -302,38 +386,27 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
 
   // ── Phone: pages you drill into ──
   if (compact) {
-    const atRoot = view === 'browse' && !node;
+    const atRoot = view === 'home';
     return (
       <div {...drop} style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', background: tk.bg.app, position: 'relative' }}>
         {/* The top bar already says Files: this bar appears once you're inside something, or have ticked something. */}
         {(!atRoot || selection) && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, height: 44, padding: '0 6px 0 4px', background: selection ? tk.bg.selected : tk.bg.panel, borderBottom: `1px solid ${tk.border.default}` }}>
           {selectionBar ?? <>
-          <IconButton icon="chevL" label="Back" tooltip={false} onClick={() => { if (view !== 'browse') setView('browse'); else open(path.length > 1 ? path[path.length - 2].id : null); }} />
+          <IconButton icon="chevL" label="Back" tooltip={false} onClick={() => { if (view === 'nodes' && nodeType) setNodeType(null); else if (view !== 'browse') show('home'); else open(path.length > 1 ? path[path.length - 2].id : null); }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Breadcrumbs path={view !== 'browse' ? specialCrumb(view) : path} onOpen={open} compact />
+            <Breadcrumbs path={view !== 'browse' ? specialCrumb(view) : path} onOpen={id => { if (id === 'nodes') setNodeType(null); else open(id); }} compact />
           </div>
           </>}
         </div>}
         {banner}
         <div ref={scroller} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          {view !== 'browse' ? special(view) : node ? nodeView : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 12px 40px' }}>
-              <div style={{ padding: '14px 14px 12px', borderRadius: radius.lg, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
-                <SpaceMeter inv={inv} estimate={estimate} usage={usage} compact onCleanUp={() => setView('cleanup')} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <Button icon="import" onClick={() => { void startInstall(); }}>Install…<ProBadgeFor feature="files.install" /></Button>
-                <Button variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.left, r.bottom + 4); }}>Download all<ProBadgeFor feature="files.everything" /></Button>
-              </div>
-              <CleanUpEntry count={cleanupCount} onClick={() => setView('cleanup')} />
-              <NotesEntry count={notesCount} onClick={() => setView('notes')} />
-              <WorkspaceEntry active={false} dense={false} onClick={() => setView('workspace')} />
-              <span style={{ ...capsLabel(tk), padding: '4px 4px 0' }}>Everything saved</span>
-              <div style={{ borderRadius: radius.lg, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden' }}>
-                {inv.sections.map((s, i) => <SectionRow key={s.id} node={s} first={i === 0} state={checkState(s.id)} onCheck={on => onCheck(s.id, on)} onOpen={() => open(s.id)} />)}
-              </div>
+          {view === 'home' ? <>
+            {home}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '0 16px 40px', marginTop: -24 }}>
+              <Button icon="import" onClick={() => { void startInstall(); }}>Install…<ProBadgeFor feature="files.install" /></Button>
+              <Button variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.left, r.bottom + 4); }}>Download all<ProBadgeFor feature="files.everything" /></Button>
             </div>
-          )}
+          </> : view !== 'browse' ? special(view) : node ? nodeView : home}
         </div>
         {dialogs}
       </div>
@@ -348,9 +421,11 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
           <SpaceMeter inv={inv} estimate={estimate} usage={usage} onCleanUp={() => setView('cleanup')} />
         </div>
         <div style={{ padding: '10px 10px 4px' }}>
-          <CleanUpEntry count={cleanupCount} active={view === 'cleanup'} onClick={() => setView('cleanup')} dense />
-          <NotesEntry count={notesCount} active={view === 'notes'} onClick={() => setView('notes')} dense />
-          <WorkspaceEntry active={view === 'workspace'} onClick={() => setView('workspace')} />
+          <SideEntry icon="grid" tint={tk.accent.base} label="Home" sub="" count={0} active={view === 'home'} dense onClick={() => show('home')} />
+          <SideEntry icon="nodes" tint={tk.accent.base} label="Nodes" sub="" count={0} active={view === 'nodes'} dense onClick={() => { setNodeType(null); show('nodes'); }} />
+          <CleanUpEntry count={cleanupCount} active={view === 'cleanup'} onClick={() => show('cleanup')} dense />
+          <NotesEntry count={notesCount} active={view === 'notes'} onClick={() => show('notes')} dense />
+          <WorkspaceEntry active={view === 'workspace'} onClick={() => show('workspace')} />
         </div>
         <div style={{ ...capsLabel(tk), padding: '12px 18px 6px' }}>Everything saved</div>
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 10px 16px' }}>
@@ -362,7 +437,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         <div style={{ height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: selection ? '0 16px 0 10px' : '0 16px 0 20px', borderBottom: `1px solid ${tk.border.default}`, background: selection ? tk.bg.selected : tk.bg.panel }}>
           {selectionBar ?? <>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Breadcrumbs path={view !== 'browse' ? specialCrumb(view) : path} onOpen={open} />
+            <Breadcrumbs path={view !== 'browse' ? specialCrumb(view) : path} onOpen={id => { if (id === 'nodes') setNodeType(null); else open(id); }} />
           </div>
           <Button size="sm" icon="import" onClick={() => { void startInstall(); }} title="Open a .playfile, a profile or a partial ZIP: see what’s inside, then bring it in">Install…<ProBadgeFor feature="files.install" /></Button>
           <Button size="sm" variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.right - 260, r.bottom + 4); }} title="Everything saved here: one .playfile, or one ZIP with a manifest">Download everything<ProBadgeFor feature="files.everything" /></Button>
@@ -370,7 +445,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         </div>
         {banner}
         <div ref={scroller} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          {view !== 'browse' ? special(view) : nodeView}
+          {view !== 'browse' ? special(view) : node ? nodeView : home}
         </div>
       </main>
       {dialogs}

@@ -7,6 +7,7 @@
  * components/playfile/.
  */
 import { create } from 'zustand';
+import { recordActivity } from '../files/activity';
 import { can, requireFeature, usePlan } from '../lib/plan';
 import { toast } from '../components/ui/toastStore';
 import { askText } from '../components/ui/dialogStore';
@@ -96,6 +97,7 @@ export async function runImport(plan: ImportPlan, picks: Record<string, Pick>, o
   await ensureRoom(plan.rows.reduce((n, r) => n + ((picks[r.id]?.include ?? r.include) && r.status !== 'same' && r.status !== 'unreadable' && r.status !== 'needs-pro' ? r.bytes : 0), 0));
   if (opts.trust && sig.state === 'signed') trustAuthor(sig.name, sig.publicKey);
   const summary = await applyImport(plan, picks, appImportEnv());
+  recordActivity('import', `${plan.rows.length} from a .playfile`);
   // Presentations that came in with their pictures and fonts embedded keep references to the library instead.
   try {
     const [{ internStoredPresentations }, { savePresentation }] = await Promise.all([import('../present/presentAssets'), import('../present/storage')]);

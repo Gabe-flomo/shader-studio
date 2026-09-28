@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { recordActivity } from '../../files/activity';
 
 export interface FnDef {
   id: string;
@@ -281,6 +282,7 @@ export const useFunctionBuilder = create<FunctionBuilderState>((set) => ({
     // Replace if same name exists, otherwise prepend
     const updated = [def, ...s.savedFunctionDefs.filter(f => f.name !== fn.name)];
     persistSavedFns(updated);
+    recordActivity('save', fn.name);
     return { savedFunctionDefs: updated };
   }),
 

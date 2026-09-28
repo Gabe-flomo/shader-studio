@@ -5,6 +5,7 @@
  * stored under its name, so there's no Save button to forget.
  */
 import { create } from 'zustand';
+import { recordActivity } from '../../files/activity';
 import { cloneBlock, cloneStep, emptyPresentation, newStep, type Block, type Presentation, type PresentSource, type Step } from '../../types/presentation';
 import { deletePresentation, freeName, loadPresentation, rememberLast, renamePresentation, savePresentation, type DeletedPresentation } from '../../present/storage';
 import { toast } from '../ui/toastStore';
@@ -69,12 +70,23 @@ export function stepOfBlock(p: Presentation, id: string): number {
   return p.steps.findIndex(s => s.blocks.some(b => b.id === id));
 }
 
+/** The Files home counts presentation saves: the autosave that runs while you type counts once per presentation every few minutes. */
+const lastNoted = new Map<string, number>();
+const NOTE_EVERY_MS = 5 * 60_000;
+function noteSaved(name: string): void {
+  const now = Date.now();
+  if (now - (lastNoted.get(name) ?? 0) < NOTE_EVERY_MS) return;
+  lastNoted.set(name, now);
+  recordActivity('presentation', name);
+}
+
 export const usePresentation = create<PresentationState>((set, get) => {
   const flush = () => {
     timer = null;
     const { name, doc } = get();
     if (!name || !doc) return;
     const r = savePresentation(name, doc);
+    if (r.ok) noteSaved(name);
     set(r.ok ? { status: 'saved', savedAt: Date.now() } : { status: 'failed' });
     if (!r.ok) toast.error('Couldn’t save the presentation', { message: r.error });
   };
@@ -124,6 +136,7 @@ export const usePresentation = create<PresentationState>((set, get) => {
       const p: Presentation = { ...rest, ...(opts?.keepLinks && linkedGraphs?.length ? { linkedGraphs } : {}), title: name, updatedAt: Date.now() };
       const r = savePresentation(name, p);
       if (!r.ok) toast.error('Couldn’t save the presentation', { message: r.error });
+      else recordActivity('presentation', name);
       set({ name, doc: p, step: 0, selected: null, status: r.ok ? 'saved' : 'failed', savedAt: r.ok ? Date.now() : 0, mode: 'edit' });
       if (p.linkedGraphs) reconcilePresentation(name);
       void internOpen();
