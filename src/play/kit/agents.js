@@ -128,11 +128,15 @@ export function agHashBuild(hs, xs, ys, alive, n, cell, w, h) {
   return hs;
 }
 
+function agClampCell(v, hi) { return v < 0 ? 0 : v > hi ? hi : v; }
+
 /** The agents within `r` of (x, y) into `out` (an Int32Array), and how many (at most out.length). The point itself counts if it is one. */
 export function agHashQuery(hs, x, y, r, out) {
   const size = hs.size, cols = hs.cols, rows = hs.rows, xs = hs.xs, ys = hs.ys, start = hs.start, items = hs.items;
-  const x0 = Math.max(0, Math.floor((x - r) / size)), x1 = Math.min(cols - 1, Math.floor((x + r) / size));
-  const y0 = Math.max(0, Math.floor((y - r) / size)), y1 = Math.min(rows - 1, Math.floor((y + r) / size));
+  // Clamped both ways: a query past the edge still reaches the edge cells, where outside points were put.
+  const cl = agClampCell;
+  const x0 = cl(Math.floor((x - r) / size), cols - 1), x1 = cl(Math.floor((x + r) / size), cols - 1);
+  const y0 = cl(Math.floor((y - r) / size), rows - 1), y1 = cl(Math.floor((y + r) / size), rows - 1);
   const r2 = r * r, cap = out.length;
   let k = 0;
   // Points outside the area sit in the edge cells: a query reaching past the edge still looks there.
