@@ -20,6 +20,8 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { kitScript } from '../exportHtml';
 import runtimeSource from '../runtime/play-runtime.js?raw';
 import { playableForPlan } from '../planGates';
+import { signalUses } from '../pairs';
+import { signalLinks } from '../../components/play/FullPages';
 import {
   defaultLayer, emptyPlayRecord, parsePlayRecord, usesHands,
   type CondCmp, type PlayAction, type PlayControl, type PlayLayer, type PlayPairMapping, type PlayRecord, type TriggerSpec, type ValueCondition,
@@ -223,6 +225,65 @@ describe('condition triggers and signals in the engine', () => {
     expect(playEngine.readValue('dist:mouse|pt:0.5,0.5')).toBeCloseTo(0);
     expect(playEngine.readValue('layer:n::x')).toBeCloseTo(0.2);
     expect(playEngine.readValue('ctl:gone')).toBeNull();
+  });
+});
+
+// ── Layer-emitted signals (Multiply) ────────────────────────────────────────
+
+/** Tick the engine once per sensor value for `key`, driving the layer kit's report() the way particle-sim would. */
+function driveSensor<T>(key: string, values: number[], read: () => T, from = 1): T[] {
+  let t = from;
+  return values.map(v => {
+    playEngine.setSensor(key, v);
+    inputBus.tick(1 / 60, (t += 1 / 60));
+    return read();
+  });
+}
+
+describe('a Multiply layer\'s signals drive actions through the trigger path', () => {
+  it('Split fires a burst on another layer through "when a signal fires"', () => {
+    const multiply = { ...defaultLayer('particles', 'm', 'Multiply'), emit: 'multiply', splitSignal: 's1' } as PlayLayer;
+    const target = { ...defaultLayer('particles', 'p2', 'Sparks'), emit: 'burst' } as PlayLayer;
+    const rec: PlayRecord = {
+      ...emptyPlayRecord(),
+      layers: [multiply, target],
+      signals: [{ id: 's1', name: 'Split' }],
+      actions: [act('burst-on-split', { on: 'signal', signal: 's1' }, { layerId: 'p2', amount: 30 })],
+    };
+    playEngine.setRecord(rec);
+    const fired: string[] = [];
+    const off = playEngine.onAction(a => fired.push(a.id));
+    // particle-sim's kit reports `m::split` each frame as a running count of buds; the engine watches it rise.
+    const perFrame = driveSensor('m::split', [0, 0, 1, 1, 3], () => fired.length);
+    off();
+    expect(perFrame).toEqual([0, 0, 1, 1, 2]);
+    expect(fired).toEqual(['burst-on-split', 'burst-on-split']);
+  });
+
+  it('renaming the layer keeps the signal working (it is kept by signal id, not layer name)', () => {
+    const multiply = { ...defaultLayer('particles', 'm', 'Multiply'), emit: 'multiply', splitSignal: 's1' } as PlayLayer;
+    const target = { ...defaultLayer('particles', 'p2', 'Sparks'), emit: 'burst' } as PlayLayer;
+    const rec: PlayRecord = {
+      ...emptyPlayRecord(),
+      layers: [{ ...multiply, label: 'Colony' }, target],
+      signals: [{ id: 's1', name: 'Split' }],
+      actions: [act('burst-on-split', { on: 'signal', signal: 's1' }, { layerId: 'p2', amount: 30 })],
+    };
+    playEngine.setRecord(rec);
+    const fired: string[] = [];
+    const off = playEngine.onAction(a => fired.push(a.id));
+    const perFrame = driveSensor('m::split', [0, 0, 1], () => fired.length);
+    off();
+    expect(perFrame).toEqual([0, 0, 1]);
+  });
+
+  it('a Multiply layer\'s signals show up as senders on the Signals page (sent by, used count), even with no "Send a signal" action', () => {
+    const multiply = { ...defaultLayer('particles', 'm', 'Colony'), emit: 'multiply', splitSignal: 's1', fullSignal: 's2' } as PlayLayer;
+    const rec: PlayRecord = { ...emptyPlayRecord(), layers: [multiply], signals: [{ id: 's1', name: 'Split' }, { id: 's2', name: 'Full' }] };
+    expect(signalUses(rec, 's1')).toBe(1);
+    expect(signalUses(rec, 's2')).toBe(1);
+    expect(signalLinks(rec, 's1').sentBy).toEqual(['Colony: Split']);
+    expect(signalLinks(rec, 's2').sentBy).toEqual(['Colony: Full']);
   });
 });
 
