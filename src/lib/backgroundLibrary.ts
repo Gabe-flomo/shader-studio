@@ -68,6 +68,8 @@ import { createFolder, getMembership, loadFolders, moveItemsToFolder, removeItem
 import { BACKGROUND_IMAGE_MAX, BACKGROUND_IMAGE_SIDE, PLAY_FILL_STOPS_MAX, fitStops, type BackgroundFill, type ColourStop } from '../types/play';
 import { klFillAt } from '../play/kit/layers.js';
 import { ensureRoom } from '../files/storageLimit';
+import { isLinkedRef, mimeOf } from '../files/linkedRefs';
+import { onLinkedChange, resolveLinked, statLinked } from '../files/linkedFolders';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -213,12 +215,17 @@ export async function listImages(): Promise<BackgroundImageMeta[]> {
 export function imageCountCached(): number { return cache?.length ?? 0; }
 
 export async function getImage(id: string): Promise<BackgroundImage | null> {
+  if (isLinkedRef(id)) {
+    const got = await resolveLinked(id);
+    if (got.ok) return { id, name: got.name.replace(/\.[a-z0-9]{2,5}$/i, ''), width: 0, height: 0, type: got.type || 'image/png', bytes: got.size, createdAt: got.mtime, thumb: '', blob: got.blob };
+  }
   const r = await tx<StoredImage | undefined>('readonly', s => s.get(id));
   if (!r) return null;
   return { ...metaOf(r, membershipOf(IMAGE_FOLDER_SCOPE)), blob: new Blob([r.data], { type: r.type }) };
 }
 
 export async function hasImage(id: string): Promise<boolean> {
+  if (isLinkedRef(id) && await statLinked(id)) return true;
   const n = await tx<number>('readonly', s => s.count(id));
   return n > 0;
 }
@@ -238,6 +245,11 @@ function dropUrl(id: string): void {
   const u = urls.get(id);
   if (u) { urls.delete(id); try { URL.revokeObjectURL(u); } catch { /* gone */ } }
 }
+// A linked file that changed on disk (or went) is read again next time.
+onLinkedChange(refs => {
+  for (const id of [...urls.keys()]) if (isLinkedRef(id) && (!refs || refs.includes(id))) dropUrl(id);
+  if (refs?.length) emit();
+});
 
 // ── Pixels (browser only; tests pass sizes and thumbnails in) ──────────────
 
@@ -661,6 +673,12 @@ export function resetBackgroundCache(): void { cache = null; dbPromise = null; }
 //   videoZipFiles(ids?, { naming? }) → `backgrounds/videos.json` and each file under
 //     `backgrounds/videos/`, for library ZIPs, profiles and the backup folder
 //   importVideoFiles(files) → { added, same, skipped } (ids kept; one already here is left)
+//
+// Linked files (docs/linked-folders.md): an id `linked:<folderId>/<path>` is a
+// file in a linked folder, read from disk in place (files/linkedFolders.ts),
+// never copied here. getVideo/hasVideo/getImage/hasImage/imageUrl read it from
+// the folder; when the folder isn't here they fall back to a library record with
+// that same id (a .playfile carried the file, and the import kept it).
 
 export interface LibraryVideoMeta {
   id: string;
@@ -746,11 +764,22 @@ export async function listVideos(): Promise<LibraryVideoMeta[]> {
 /** A kept video's file, or null when this browser doesn't have it. */
 export async function getVideo(id: string): Promise<(LibraryVideoMeta & { blob: Blob }) | null> {
   if (!id) return null;
+  if (isLinkedRef(id)) {
+    const got = await resolveLinked(id);
+    if (got.ok) return { id, name: got.name, type: got.type || videoMimeOf(got.name) || 'video/mp4', bytes: got.size, createdAt: got.mtime, blob: got.blob };
+  }
   const r = await tx<StoredVideo | undefined>('readonly', s => s.get(id), VIDEO_STORE);
   return r ? { ...videoMeta(r), blob: new Blob([r.data], { type: r.type }) } : null;
 }
 
 export async function hasVideo(id: string): Promise<boolean> {
+  if (!id) return false;
+  if (isLinkedRef(id) && await statLinked(id)) return true;
+  return hasLibraryVideo(id);
+}
+
+/** Is there a record with this id in the library itself (not a linked file)? */
+export async function hasLibraryVideo(id: string): Promise<boolean> {
   if (!id) return false;
   return (await tx<number>('readonly', s => s.count(id), VIDEO_STORE)) > 0;
 }
@@ -906,10 +935,27 @@ export async function videoZipFiles(ids: readonly string[] | null = null, o: { n
   let metas: LibraryVideoMeta[];
   try { metas = await listVideos(); } catch { return {}; }
   if (ids) { const want = new Set(ids); metas = metas.filter(m => want.has(m.id)); }
+  // Linked files the ids name (read from their folders; one this device can't reach stays out, or its imported copy goes).
+  const linked: Array<{ id: string; name: string; type: string; data: Uint8Array; createdAt: number }> = [];
+  for (const id of ids ?? []) {
+    if (!isLinkedRef(id)) continue;
+    const got = await resolveLinked(id);
+    if (got.ok) linked.push({ id, name: got.name, type: got.type || videoMimeOf(got.name) || mimeOf(got.name), data: new Uint8Array(await got.blob.arrayBuffer()), createdAt: got.mtime });
+  }
+  metas = metas.filter(m => !linked.some(l => l.id === m.id));
   if (o.only) metas = metas.filter(m => isAudioType(m.type) === (o.only === 'audio'));
-  if (!metas.length) return {};
+  const linkedWanted = o.only ? linked.filter(l => isAudioType(l.type) === (o.only === 'audio')) : linked;
+  if (!metas.length && !linkedWanted.length) return {};
   const out: Record<string, Uint8Array> = {};
   const manifest: VideosManifest = { kind: VIDEOS_MANIFEST_KIND, version: 1, videos: [] };
+  for (const l of linkedWanted) {
+    const ext = videoExt(l.type);
+    const base = `backgrounds/videos/${o.naming === 'id' ? safeFile(l.id) : safeFile(l.name.replace(/\.[a-z0-9]{2,4}$/i, ''))}`;
+    let path = `${base}.${ext}`, n = 2;
+    while (path in out) path = `${base} (${n++}).${ext}`;
+    out[path] = l.data;
+    manifest.videos.push({ id: l.id, name: l.name, file: path.slice('backgrounds/'.length), type: l.type, bytes: l.data.length, createdAt: l.createdAt });
+  }
   for (const m of [...metas].reverse()) {
     const r = await tx<StoredVideo | undefined>('readonly', s => s.get(m.id), VIDEO_STORE);
     if (!r) continue;
@@ -962,7 +1008,8 @@ export async function importVideoFiles(files: Record<string, Uint8Array>, o: { o
     if (o.only && manifestEntryIsAudio(e) !== (o.only === 'audio')) continue;
     const data = files[found.root + e.file];
     if (!data) { r.skipped++; continue; }
-    if (await hasVideo(e.id)) { r.same++; continue; }
+    // A linked file comes in as library media under the same id (the setups that name it find it): only the library is asked.
+    if (await hasLibraryVideo(e.id)) { r.same++; continue; }
     const copy = new Uint8Array(data.byteLength); copy.set(data);
     await addVideoFile(new Blob([copy.buffer], { type: e.type || videoMimeOf(e.file) || 'video/mp4' }), {
       id: e.id, name: typeof e.name === 'string' ? e.name : 'Video', createdAt: typeof e.createdAt === 'number' ? e.createdAt : undefined, poster: e,
