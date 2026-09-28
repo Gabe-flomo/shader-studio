@@ -4,7 +4,7 @@
  * drawn outlines all go through these, so a matte never loops and a removed
  * mask takes its controls with it.
  */
-import { defaultLayer, layerTarget, type LayerMask, type MaskOp, type MaskShape, type PlayLayer, type PlayRecord, type ShapeLayer, type TrackMatte } from '../types/play';
+import { defaultLayer, layerTarget, type BackgroundMatte, type LayerMask, type MaskOp, type MaskShape, type PlayLayer, type PlayRecord, type ShapeLayer, type TrackMatte } from '../types/play';
 import { canBeMatte, canHaveMatte, MASK_DEFAULTS, MASK_PROP_KEYS, MASKS_MAX, maskKey, matteUsers, matteWouldCycle, type MaskProp } from '../types/playLayers';
 import { playId } from './playControls';
 
@@ -55,6 +55,52 @@ export function addMatteShape(p: PlayRecord, layerId: string, aspect = 16 / 9): 
   const layers = [...p.layers];
   layers.splice(i + 1, 0, shape);
   return { play: setTrackMatte({ ...p, layers }, layerId, id, { mode: 'alpha', invert: false }), id };
+}
+
+// ── The Background's matte ──────────────────────────────────────────────────
+
+/** Layers the Background can be matted by: not nulls, not the Background layer itself. */
+export function backgroundMatteCandidates(layers: readonly PlayLayer[]): PlayLayer[] {
+  return layers.filter(l => l.kind !== 'background' && canBeMatte(l.kind));
+}
+
+/**
+ * Use `matteId` as the Background's matte ('' takes it off). As with a layer
+ * matte, the layer becomes hidden the first time it is used, so it works as
+ * the matte and not on its own too.
+ */
+export function setBackgroundMatte(p: PlayRecord, matteId: string): PlayRecord {
+  if (!matteId) { if (!p.backgroundMatte) return p; const c = { ...p }; delete c.backgroundMatte; return c; }
+  const m = p.layers.find(x => x.id === matteId);
+  if (!m || m.kind === 'background' || !canBeMatte(m.kind)) return p;
+  const firstUse = m.visible !== false && p.backgroundMatte?.id !== matteId;
+  const backgroundMatte: BackgroundMatte = { id: matteId, mode: p.backgroundMatte?.mode ?? 'alpha', ...(p.backgroundMatte?.invert ? { invert: true } : {}) };
+  return { ...p, backgroundMatte, layers: firstUse ? p.layers.map(x => (x.id === matteId ? { ...x, visible: false } : x)) : p.layers };
+}
+
+/** Change how the Background uses its matte (mode, invert, feather, opacity outside, show the layer). */
+export function patchBackgroundMatte(p: PlayRecord, patch: Partial<Omit<BackgroundMatte, 'id'>>): PlayRecord {
+  if (!p.backgroundMatte) return p;
+  const next: BackgroundMatte = { ...p.backgroundMatte, ...patch };
+  // Drop falsy optional fields so a plain matte stays small in the file.
+  if (!next.invert) delete next.invert;
+  if (!next.feather) delete next.feather;
+  if (!next.opacityOutside) delete next.opacityOutside;
+  if (!next.showLayer) delete next.showLayer;
+  return { ...p, backgroundMatte: next };
+}
+
+/** "Matted by Hand path 1 · inverted · 12 px", for the Background page. */
+export function backgroundMatteSummary(p: PlayRecord): string {
+  const t = p.backgroundMatte;
+  const m = t && p.layers.find(x => x.id === t.id);
+  if (!t || !m) return '';
+  const parts = [`Matted by ${m.label}`];
+  if (t.mode === 'luma') parts.push('luma');
+  if (t.invert) parts.push('inverted');
+  if (t.feather) parts.push(`${Math.round(t.feather)} px`);
+  if (t.opacityOutside) parts.push(`${Math.round(t.opacityOutside * 100)}% outside`);
+  return parts.join(' · ');
 }
 
 // ── Masks ────────────────────────────────────────────────────────────────────

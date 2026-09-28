@@ -561,7 +561,7 @@ export type {
 } from './playLayers';
 export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot, videoLayerTimeAt, videoReaderInput, videoLayerOfInput, RELATION_MAX_MEMBERS, relationPictureKey, newRelationMember } from './playLayers';
 import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataTypes';
-import { keepLibraryId, parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
+import { canBeMatte, keepLibraryId, parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
 import { isLinkedRef, LINKED_REF_MAX } from '../files/linkedRefs';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 import { parseSourceCredit, type SourceCredit } from './credit';
@@ -811,6 +811,26 @@ export interface PlayDisplay {
   fill?: BackgroundFill;
 }
 
+/**
+ * The Background (the shader picture, a Background layer's queue, or the
+ * colour/gradient) matted by another layer: its alpha or its brightness
+ * (luma), optionally inverted, with a soft edge and an opacity for what sits
+ * outside the matte (0 hides it, up to 1 only dims). The matte layer itself
+ * stays hidden unless `showLayer`. See docs/mattes-and-masks.md.
+ */
+export interface BackgroundMatte {
+  /** The layer id used as the matte. */
+  id: string;
+  mode: 'alpha' | 'luma';
+  invert?: boolean;
+  /** Soft edge, in device pixels at the overlay's own resolution. Absent/0 = hard edge. */
+  feather?: number;
+  /** Opacity of the background outside the matte, 0..1. Absent/0 = fully hidden outside. */
+  opacityOutside?: number;
+  /** Keep the matte layer visible on the picture too (else hidden, working as the matte only). */
+  showLayer?: boolean;
+}
+
 export interface PlayRecord {
   version: 1;
   controls: PlayControl[];
@@ -887,6 +907,8 @@ export interface PlayRecord {
    * Absent = none (the output shows the picture as it is).
    */
   projection?: ProjectionRecord;
+  /** The Background matted by a layer (docs/mattes-and-masks.md). Absent = no matte. */
+  backgroundMatte?: BackgroundMatte;
 }
 
 // ── Takes: a performance recorded as keyframes ──────────────────────────────
@@ -1609,6 +1631,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   if (arrangement && !isArrangementEmpty(arrangement)) out.arrangement = arrangement;
   const projection = parseProjection(r.projection);
   if (projection) out.projection = projection;
+  const backgroundMatte = parseBackgroundMatte(r.backgroundMatte, layers);
+  if (backgroundMatte) out.backgroundMatte = backgroundMatte;
   if (Array.isArray(r.takes)) {
     const seenT = new Set<string>();
     const takes: PlayTake[] = [];
@@ -1618,6 +1642,22 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     }
     if (takes.length) out.takes = takes;
   }
+  return out;
+}
+
+/** The Background's matte from a file: a usable layer (not a Background layer, not a null), clamped numbers. */
+function parseBackgroundMatte(raw: unknown, layers: readonly PlayLayer[]): BackgroundMatte | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const id = str(o.id);
+  if (!id) return undefined;
+  const layer = layers.find(x => x.id === id);
+  if (!layer || layer.kind === 'background' || !canBeMatte(layer.kind)) return undefined;
+  const out: BackgroundMatte = { id, mode: o.mode === 'luma' ? 'luma' : 'alpha' };
+  if (o.invert === true) out.invert = true;
+  if (typeof o.feather === 'number' && Number.isFinite(o.feather) && o.feather > 0) out.feather = Math.max(0, Math.min(200, o.feather));
+  if (typeof o.opacityOutside === 'number' && Number.isFinite(o.opacityOutside) && o.opacityOutside > 0) out.opacityOutside = Math.max(0, Math.min(1, o.opacityOutside));
+  if (o.showLayer === true) out.showLayer = true;
   return out;
 }
 
@@ -1765,5 +1805,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx) && isAudioEngineEmpty(play.audioEngine) && isArrangementEmpty(play.arrangement) && !play.projection);
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx) && isAudioEngineEmpty(play.audioEngine) && isArrangementEmpty(play.arrangement) && !play.projection && !play.backgroundMatte);
 }

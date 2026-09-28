@@ -34,6 +34,8 @@ export function removeLayer(p: PlayRecord, id: string): PlayRecord {
   };
   const actions = (p.actions ?? []).filter(a => a.layerId !== id && !triggerReads(a.trigger, id));
   if (actions.length) out.actions = actions; else delete out.actions;
+  // The Background's matte goes back to none when its layer is removed.
+  if (out.backgroundMatte?.id === id) delete out.backgroundMatte;
   return out;
 }
 

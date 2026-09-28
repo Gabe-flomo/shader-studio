@@ -48,6 +48,7 @@ export function wireTape(): void {
     override: (id, key, v) => playEngine.setOverride(id, key, v),
     driven: (id, key) => playEngine.drivenValue(id, key),
     click: metronomeClick,
+    setTimePlaying: playing => useNodeGraphStore.getState().setTimePlaying(playing),
     notice: (title, message) => toast.info(title, message ? { message } : undefined),
     every: fn => { const id = setInterval(fn, 8); return () => clearInterval(id); },
     onInput: fn => audioEngineHost.onInput(fn),

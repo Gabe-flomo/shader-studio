@@ -22,3 +22,5 @@ type Matted = { id: string; kind: string; trackMatte?: { id: string } };
 export function kmTrackOf<L extends Matted>(l: L, byId: Map<string, L>): L | null;
 export function kmWouldCycle(layers: ReadonlyArray<{ id: string; trackMatte?: { id: string } }>, consumerId: string, matteId: string): boolean;
 export function kmMatteSources<L extends Matted>(layers: readonly L[], drawn: (l: L) => boolean): Set<string>;
+export function kmBackgroundMatteValue(m: number, invert: boolean | undefined, opacityOutside: number | undefined): number;
+export function kmApplyBackgroundMatte(pool: Record<string, unknown>, o: CanvasRenderingContext2D, matte: unknown, t: { mode: string; invert?: boolean; feather?: number; opacityOutside?: number }, W: number, H: number): void;

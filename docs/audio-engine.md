@@ -111,6 +111,10 @@ How a touch is detected (`native/audio_engine.m` "Touch to configure", `touch.rs
 
 If nothing arrives for 20 s, Configure says the plug-in may not report its window's moves and points to the list.
 
+## Rack presets
+
+A track's ⋯ menu → **Save as preset…** keeps the rack as a reusable piece: the instrument (an Audio Unit with its whole state, asked of the engine at that moment like **Keep its settings**; the sample player's zones; the Granulator's sample and settings), the effects in order with their state and on/off, the rack controls picked with Configure and their values, a Granulator's Sound effects, the Listener's place, MIDI input and channel, volume and colour. **No wiring**: no mappings onto its controls, no tape, no Grains from, no sends. **Add track → From a preset…** adds a rack from one; ⋯ → **Replace with preset…** puts one's devices on an existing track (its clips stay). An Audio Unit this Mac doesn't have is left out and named; the rest loads. A preset's Sound effects can also go on Finish → Sound's master chain. Saved under Files → Presets → Racks. See [presets.md](presets.md).
+
 ## Limits
 
 - A plug-in that macOS can only load in the app's own process (an AUv2 its hosting service can't take, or with `AudioUnitsInProcess` on) can still take the app down when it crashes; see When a plug-in crashes below for what limits the damage.

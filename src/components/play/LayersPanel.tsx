@@ -24,6 +24,8 @@ import { extraRelationshipsOf, relationshipNesting, RELATION_ROLE_LABEL } from '
 import type { RelationRole } from '../../types/playLayers';
 import { addKindLayer } from '../../play/layerKinds';
 import { AddLayerMenu } from './layers/AddLayerMenu';
+import { SaveSetDialog } from './layers/SaveSetDialog';
+import { addLayerSetToPlay } from './presetsUi';
 import { P5ImportDialog, type P5ImportResult } from './layers/P5Import';
 import { p5LayerRecord } from './layers/p5Layer';
 import { BUILTIN_LAYER, type BuiltinVariant } from './layers/addLayerCatalog';
@@ -69,6 +71,7 @@ import { matteUsers } from '../../types/playLayers';
 import { dragFileCount, dragHasFiles } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
+import { startOverMenuItem } from '../../play/startOver';
 
 const KIND = BUILTIN_LAYER;
 
@@ -105,6 +108,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const mode = useThemeMode();
   const addRef = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState(false);
+  const pageMoreRef = useRef<HTMLSpanElement>(null);
+  const [pageMore, setPageMore] = useState<{ x: number; y: number } | null>(null);
   const [importingP5, setImportingP5] = useState(false);
   const addP5 = (r: P5ImportResult) => {
     setImportingP5(false);
@@ -302,6 +307,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     const item: ItemRef = { kind: 'group', id: g.id };
     return [
       { label: 'Duplicate…', hint: 'Its layers alone, or with their controls and mappings', onSelect: () => setDuplicating(g) },
+      { label: 'Save as a set…', icon: 'layers', hint: 'Its layers with their controls, mappings and actions, to add anywhere', onSelect: () => setSavingSet(groupLayerIds(play, g.id)) },
       { label: 'Ungroup', hint: `${MOD}⇧G · the layers stay where they are`, onSelect: () => onChange(p => ungroup(p, g.id)) },
       'separator',
       { label: 'Move up', hint: 'Drawn earlier', disabled: !canMove(play, item, -1), onSelect: () => onChange(p => moveItem(p, item, -1)) },
@@ -311,6 +317,14 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     ];
   };
   const [duplicating, setDuplicating] = useState<LayerGroup | null>(null);
+  // "Save as a set…": the layers picked (a picked group brings every layer inside it), or the selected one.
+  const [savingSet, setSavingSet] = useState<string[] | null>(null);
+  const pickedLayerIds = (): string[] => {
+    const items = picked.length ? picked : selectedInView && backgroundLayerOf(play)?.id !== selected ? [selectedInView] : [];
+    const ids = new Set(items.flatMap(i => (i.kind === 'group' ? groupLayerIds(play, i.id) : [i.id])));
+    return play.layers.filter(l => ids.has(l.id) && l.kind !== 'background').map(l => l.id);
+  };
+  const saveSet = () => { const ids = pickedLayerIds(); if (ids.length) setSavingSet(ids); };
   const duplicateGroupAs = (g: LayerGroup, withControls: boolean) => {
     let made = '';
     onChange(p => { const r = duplicateGroup(p, g.id, withControls); made = r.id; return r.play; });
@@ -482,8 +496,17 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         <span ref={addRef} style={{ display: 'inline-flex' }}>
           <Button size="sm" icon="plus" aria-expanded={menu} onClick={() => setMenu(m => !m)}>Add layer</Button>
         </span>
-        {menu && <AddLayerMenu play={play} touch={touch} anchorRef={addRef} onAdd={add} onAddKind={addKind} onChange={onChange} onClose={() => setMenu(false)} />}
+        {menu && <AddLayerMenu play={play} touch={touch} anchorRef={addRef} onAdd={add} onAddKind={addKind} onAddSet={set => addLayerSetToPlay(set)} onChange={onChange} onClose={() => setMenu(false)} />}
         {importingP5 && <P5ImportDialog onCreate={addP5} onClose={() => setImportingP5(false)} />}
+        <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
+          <IconButton icon="more" label="More" size="sm" tooltip={false} onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 200, y: r.bottom + 4 } : null); }} />
+        </span>
+        {pageMore && <Menu x={pageMore.x} y={pageMore.y} minWidth={200} onClose={() => setPageMore(null)} items={[
+          { label: 'Save as a set…', icon: 'layers', disabled: !pickedLayerIds().length, hint: picked.length ? `The ${picked.length} picked, with their controls and mappings` : 'The selected layer (⇧/⌘-click to pick more)', onSelect: () => { setPageMore(null); saveSet(); } },
+          'separator',
+          startOverMenuItem(() => setPageMore(null)),
+        ]} />}
+        {savingSet && <SaveSetDialog play={play} layerIds={savingSet} onClose={saved => { setSavingSet(null); if (saved) clearPicks(); }} />}
       </div>
       {(picked.length > 0 || selectMode) && (
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 14px', borderBottom: `1px solid ${tk.border.default}`, background: alpha(tk.accent.base, 0.08) }}>
@@ -491,6 +514,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             {picked.length ? `${picked.length} selected` : touch ? 'Tap layers to select' : 'Click layers to select'}
           </span>
           {picked.some(i => i.kind === 'group') && <Button size="sm" variant="ghost" onClick={ungroupPicked} title={`Ungroup (${MOD}⇧G)`}>Ungroup</Button>}
+          <Button size="sm" variant="ghost" icon="layers" disabled={!picked.length} onClick={saveSet} title="The picked layers with their controls, mappings and actions, to add in any setup">Save as a set…</Button>
           <Button size="sm" variant="primary" icon="folder" disabled={!picked.length} onClick={groupPicked} title={`Group (${MOD}G)`}>Group</Button>
           <Button size="sm" variant="ghost" onClick={clearPicks}>{selectMode ? 'Done' : 'Clear'}</Button>
         </div>
