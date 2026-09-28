@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  CLIP_COLUMNS, LISTENER, TRACK_COLORS, applyChainOrder, barsBeats, chainOrder, clipWave, deviceChain, engineTracks, listenerExact, moveTrack, parseBarsBeats, reorderChain, rulerTicks, snapPoint, tapeStep, transportPlan, type Device,
+  CLIP_COLUMNS, LISTENER, TRACK_COLORS, applyChainOrder, barsBeats, chainOrder, clipWave, deviceChain, deviceControlSummary, engineTracks, listenerExact, moveTrack, parseBarsBeats, reorderChain, rulerTicks, snapPoint, tapeStep, transportPlan, type Device,
 } from '../engineView';
 import {
   applyPasses, audibleArrangement, clipBounds, clipsWithPass, deleteClip, emptyArrangement, parseArrangement, setClipMute, trackClips, trimClip, type ArrTrack, type PlayArrangement,
@@ -231,6 +231,12 @@ describe('the device chain', () => {
     expect(readerGroupName(p)).toBe('Audio readers · Master');
     expect(readerInputOptions('', [], [], [{ id: 'rk1', name: 'Rack 1' }]).map(o => o.value)).toContain('engine:master');
     expect(readerInputOptions('', [], [], []).map(o => o.value)).not.toContain('engine:master');
+  });
+
+  it('a folded device’s one-line summary of its rack controls', () => {
+    expect(deviceControlSummary([{ label: 'A WT Pos', value: 0.678 }, { label: 'Cutoff', value: 0.4 }])).toBe('A WT Pos 0.68 · Cutoff 0.4');
+    expect(deviceControlSummary([])).toBe('');
+    expect(deviceControlSummary([{ label: 'Gain', value: 1 }])).toBe('Gain 1');
   });
 });
 

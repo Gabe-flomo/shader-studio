@@ -326,12 +326,21 @@ export function RackSpectrum({ id, name, play, onChange }: { id: string; name: s
  * dragging does the same), replace, remove; under it `children` (the slot's
  * rack controls) and what the slot has to set (zones, the Granulator, the
  * parameter list). `grip`: drawn first in the title row (the drag handle).
+ *
+ * `folded`/`onToggleFold` (Task: collapsible devices in a rack): folds it to
+ * the header row alone — its name, bypass and `summary`, a one-line readout
+ * of its rack controls — dropping the rest (params, Configure's panel, the
+ * Granulator/sampler settings). Still folds while `configuring`: touching a
+ * parameter in the plug-in's own window (docs/arrangement.md, "touch to
+ * configure") keeps working, since that only needs Configure's own watch,
+ * not this panel drawn open.
  */
-export function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk, first, last, onMove, onBypass, onRemove, onReplace, grip, children }: {
+export function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk, first, last, onMove, onBypass, onRemove, onReplace, grip, children, folded, onToggleFold, summary }: {
   rack: AeRack; slot: AeSlot; play: PlayRecord; onChange: Change; touch: boolean; desktop: boolean; pluginsOk: boolean;
   first?: boolean; last?: boolean;
   onMove?: (by: -1 | 1) => void; onBypass?: () => void; onRemove: () => void; onReplace?: () => void;
   grip?: React.ReactNode; children?: React.ReactNode;
+  folded?: boolean; onToggleFold?: () => void; summary?: string;
 }) {
   const tk = useTokens();
   const key = `${rack.id}/${slot.id}`;
@@ -353,38 +362,44 @@ export function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk
     toast.success('Its settings are kept with the setup', { message: 'Save the setup to keep them for next time.' });
   };
   const offline = isAu && (!desktop || !pluginsOk);
+  // Still shown open while configuring, even folded: the touch-to-configure watch lives in ConfigurePanel.
+  const collapsed = !!folded && !configuring;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, opacity: slot.bypass || offline ? 0.7 : 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexWrap: 'wrap' }}>
+        {onToggleFold && <IconButton icon={collapsed ? 'chevR' : 'chevD'} size="sm" label={collapsed ? 'Expand' : 'Collapse to its name, on/off and a summary'} onClick={onToggleFold} />}
         {grip}
         {onBypass && <IconButton icon="bypass" size="sm" active={!slot.bypass} label={slot.bypass ? 'Off (bypassed): turn it on' : 'On: bypass it'} onClick={onBypass} />}
         <Icon name={slot.id === AE_INST ? (isAu ? 'piano' : slot.kind === 'granulator' ? 'wave' : 'import') : 'wave'} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
-        <span style={{ flex: '1 1 90px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <span onDoubleClick={onToggleFold} style={{ flex: '1 1 90px', minWidth: 0, display: 'flex', flexDirection: 'column', cursor: onToggleFold ? 'pointer' : undefined }}>
           <b style={{ font: `650 12px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={name}>{name}{loading ? ' · loading…' : ''}</b>
-          {isAu && <span style={{ color: tk.text.muted, font: `10.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.unit?.vendor}{slot.state ? ' · settings kept' : ''}</span>}
+          {isAu && !collapsed && <span style={{ color: tk.text.muted, font: `10.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.unit?.vendor}{slot.state ? ' · settings kept' : ''}</span>}
+          {collapsed && summary && <span title={summary} style={{ color: tk.text.faint, font: `10.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>}
         </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 0, flexShrink: 0 }}>
-          {isAu && desktop && pluginsOk && <IconButton icon="popout" size="sm" label="Open window: the plug-in’s own view" onClick={() => void openWindow()} />}
-          {isAu && desktop && pluginsOk && <IconButton icon="sliders" size="sm" active={open} label={open ? 'Hide parameters' : 'Parameters'} onClick={() => setOpen(o => !o)} />}
-          {canConfigure && <IconButton icon="target" size="sm" active={configuring} label={configuring ? 'Done configuring' : `Configure: pick up to ${RACK_CONTROLS_MAX} rack controls${isAu ? ' (touch them in its window, or pick from the list)' : ''}`} onClick={() => setConfiguring(c => !c)} />}
-          {onMove && <IconButton icon="chevL" size="sm" label="Earlier in the chain" disabled={first} onClick={() => onMove(-1)} />}
-          {onMove && <IconButton icon="chevR" size="sm" label="Later in the chain" disabled={last} onClick={() => onMove(1)} />}
-          {onReplace && <IconButton icon="reset" size="sm" label="Choose another instrument" onClick={onReplace} />}
-          <IconButton icon="trash" size="sm" tone="danger" label="Remove" onClick={onRemove} />
-        </span>
+        {!collapsed && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 0, flexShrink: 0 }}>
+            {isAu && desktop && pluginsOk && <IconButton icon="popout" size="sm" label="Open window: the plug-in’s own view" onClick={() => void openWindow()} />}
+            {isAu && desktop && pluginsOk && <IconButton icon="sliders" size="sm" active={open} label={open ? 'Hide parameters' : 'Parameters'} onClick={() => setOpen(o => !o)} />}
+            {canConfigure && <IconButton icon="target" size="sm" active={configuring} label={configuring ? 'Done configuring' : `Configure: pick up to ${RACK_CONTROLS_MAX} rack controls${isAu ? ' (touch them in its window, or pick from the list)' : ''}`} onClick={() => setConfiguring(c => !c)} />}
+            {onMove && <IconButton icon="chevL" size="sm" label="Earlier in the chain" disabled={first} onClick={() => onMove(-1)} />}
+            {onMove && <IconButton icon="chevR" size="sm" label="Later in the chain" disabled={last} onClick={() => onMove(1)} />}
+            {onReplace && <IconButton icon="reset" size="sm" label="Choose another instrument" onClick={onReplace} />}
+            <IconButton icon="trash" size="sm" tone="danger" label="Remove" onClick={onRemove} />
+          </span>
+        )}
       </div>
-      {children}
-      {offline && <Note>{!desktop ? 'Plays in the desktop app on a Mac; kept here as it is.' : 'Audio Unit plug-ins are part of Pro: kept as it is, silent until then.'}</Note>}
-      {error && (
+      {!collapsed && children}
+      {!collapsed && offline && <Note>{!desktop ? 'Plays in the desktop app on a Mac; kept here as it is.' : 'Audio Unit plug-ins are part of Pro: kept as it is, silent until then.'}</Note>}
+      {!collapsed && error && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <Note tone="bad">{error}</Note>
           <Button size="sm" variant="ghost" icon="rebuild" onClick={() => audioEngineHost.retry(rack.id, slot.id)}>Try again</Button>
         </div>
       )}
       {configuring && <ConfigurePanel rack={rack} slot={slot} play={play} onChange={onChange} desktop={desktop} onClose={() => setConfiguring(false)} />}
-      {slot.kind === 'sampler' && <SamplerZones rack={rack} slot={slot} onChange={onChange} />}
-      {slot.kind === 'granulator' && <GranulatorPanel rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} />}
-      {isAu && open && desktop && pluginsOk && <Params rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} onKeep={() => void keepState()} />}
+      {!collapsed && slot.kind === 'sampler' && <SamplerZones rack={rack} slot={slot} onChange={onChange} />}
+      {!collapsed && slot.kind === 'granulator' && <GranulatorPanel rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} />}
+      {!collapsed && isAu && open && desktop && pluginsOk && <Params rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} onKeep={() => void keepState()} />}
     </div>
   );
 }

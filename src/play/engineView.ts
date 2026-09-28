@@ -178,6 +178,15 @@ export type Device =
 /** The key the Listener has among the movable devices. */
 export const LISTENER = 'listener';
 
+/**
+ * A folded device's one-line summary of its rack controls ("A WT Pos 0.68 ·
+ * Cutoff 0.4"): each control's label and live value, trimmed to 2 decimals
+ * with trailing zeros dropped, joined by " · ".
+ */
+export function deviceControlSummary(controls: ReadonlyArray<{ label: string; value: number }>): string {
+  return controls.map(c => `${c.label} ${Math.round(c.value * 100) / 100}`).join(' · ');
+}
+
 /** Does this effect shape the sound where the engine runs? */
 export function effectHeard(rack: Pick<AeRack, 'instrument' | 'source'>, slot: AeSlot, native: boolean): boolean {
   if (slot.bypass || slot.kind !== 'au' || !native) return false;
