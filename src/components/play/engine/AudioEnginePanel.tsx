@@ -36,7 +36,8 @@ import { Segmented } from '../../ui/Choice';
 import { usePlayUi } from '../playUi';
 import { ArrangementPanel, TapeTransport } from './ArrangementPanel';
 import { useEngineSelection } from '../../../lib/audioEngineHost';
-import { keyboardRack, leadRackId, setLeadLock, setRackKeyboard } from '../../../types/playAudioEngine';
+import { leadRackId } from '../../../types/playAudioEngine';
+import { lockLead, selectRack } from './selectRack';
 
 export function AudioEnginePanel({ play, onChange, touch, wide = false }: {
   play: PlayRecord;
@@ -107,19 +108,6 @@ function EngineBody({ play, onChange, touch, wide, desktop, add }: {
   const lock = play.audioEngine?.lock ?? '';
   const lead = leadRackId(play.audioEngine, selected);
   // Selecting a card hands it the lead (unless one is locked); the computer keyboard, if a rack has it, follows the lead.
-  const select = (id: string) => {
-    if (useEngineSelection.getState().selected === id) return;
-    useEngineSelection.getState().select(id);
-    if (!lock) followLead(id);
-  };
-  const followLead = (id: string) => onChange(p => {
-    const kb = keyboardRack(p.audioEngine);
-    return kb && kb.id !== id ? { ...p, audioEngine: setRackKeyboard(p.audioEngine, id, true) } : p;
-  });
-  const setLock = (id: string, on: boolean) => {
-    onChange(p => ({ ...p, audioEngine: setLeadLock(p.audioEngine, on ? id : '') }));
-    followLead(on ? id : leadRackId({ racks }, useEngineSelection.getState().selected));
-  };
   const leadRack = racks.find(r => r.id === lead);
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -139,7 +127,7 @@ function EngineBody({ play, onChange, touch, wide, desktop, add }: {
         {racks.map((r, i) => (
           <RackCard key={r.id} rack={r} play={play} onChange={onChange} touch={touch} index={i} count={racks.length}
             selected={r.id === (selected || lead)} lead={r.id === lead} locked={r.id === lock}
-            onSelect={() => select(r.id)} onLock={on => setLock(r.id, on)} />
+            onSelect={() => selectRack(r.id)} onLock={on => lockLead(r.id, on)} />
         ))}
       </div>
       <div><Button size="sm" variant={racks.length ? 'secondary' : 'primary'} icon="plus" disabled={racks.length >= AE_RACKS_MAX} onClick={add}>Add a rack</Button></div>

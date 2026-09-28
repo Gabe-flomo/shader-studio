@@ -30,6 +30,7 @@ import {
 } from '../types/playArrangement';
 import { aeRack, auPropId, parseAuTarget, readAuValue } from '../types/playAudioEngine';
 import { rackControlTargets } from '../play/rackControls';
+import { keepIndices } from './takePlayback';
 
 export type TapePhase = 'stopped' | 'playing' | 'counting' | 'recording';
 export type RecordMode = 'overdub' | 'replace';
@@ -88,6 +89,16 @@ interface Capture {
 }
 
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6 + 0;
+
+/** A control's samples with only the points its shape needs (within 0.2% of its range), as takes keep theirs. */
+function thin(flat: number[]): number[] {
+  const times: number[] = [], values: number[] = [];
+  for (let i = 0; i < flat.length; i += 2) { times.push(flat[i]); values.push(flat[i + 1]); }
+  let lo = Infinity, hi = -Infinity;
+  for (const v of values) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  const keep = keepIndices(times, values, 1, Math.max(1e-6, (hi - lo) * 0.002));
+  return keep.flatMap(i => [times[i], values[i]]);
+}
 
 export class Tape {
   private deps: TapeDeps | null = null;
@@ -282,6 +293,9 @@ export class Tape {
         c.until = now + TOUCH_HOLD;
       }
       c.prev = v;
+      // Kept at up to 60 a second (a move's first sample always), thinned again on stop.
+      const n = c.pts.length;
+      if (n >= 2 && now - c.pts[n - 2] < 1 / 60 && c.until < now) continue;
       c.pts.push(round6(now), v);
     }
     rec.lastSample = now;
@@ -298,7 +312,7 @@ export class Tape {
       const auto: Record<string, number[]> = {}, touched: Record<string, Array<[number, number]>> = {};
       for (const [target, c] of rec.auto) {
         if (c.rack !== rack || !c.pts.length) continue;
-        auto[target] = c.pts;
+        auto[target] = thin(c.pts);
         if (c.touched.length) touched[target] = c.touched.map(([a, b]) => [a, Math.min(b, to)] as [number, number]);
       }
       if (rec.mode === 'overdub' && !notes.length && !Object.keys(touched).length) continue;

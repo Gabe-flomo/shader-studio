@@ -30,6 +30,7 @@ import { arrangementTake } from '../../../lib/tapeTake';
 import { addTake, useTakes } from '../../../lib/takes';
 import { usePlayUi } from '../playUi';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { selectRack } from './selectRack';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -297,7 +298,12 @@ function Lane({ play, rack, track, length, span, preview, selected, narrow, touc
     useNodeGraphStore.getState().setPlay(p => ({ ...p, arrangement: clearTrack(p.arrangement ?? emptyArrangement(), rack.id) }), { label: `Cleared ${rack.name}’s track` });
   };
   const patch = (over: Partial<ArrTrack>) => setArr(a => patchTrack(a, rack.id, over));
-  const select = () => useTape.setState(s => ({ selected: s.selected === rack.id ? '' : rack.id }));
+  // Selecting a lane also selects its rack: unless one is locked as the lead, what you play goes to it.
+  const select = () => {
+    const on = useTape.getState().selected !== rack.id;
+    useTape.setState({ selected: on ? rack.id : '' });
+    if (on) selectRack(rack.id);
+  };
   const nNotes = track?.notes.length ?? 0, nAuto = Object.keys(track?.auto ?? {}).length;
   const head = (
     <div style={{ width: narrow ? '100%' : HEAD_W, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
