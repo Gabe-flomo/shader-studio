@@ -83,6 +83,8 @@ function startApp() {
   root.render(<><App /><Toaster /><BackgroundsHost /><LinkedPickerHost /><DialogHost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><PerformanceBar /></>)
   // Songs stop when the graph that owns them is closed or they're deleted.
   void import('./lib/audioSync').then(m => m.startAudioSync())
+  // Text layers' fonts from linked folders (docs/linked-folders.md) are read from disk.
+  void Promise.all([import('./play/kit/layers.js'), import('./files/linkedFolders')]).then(([k, l]) => k.klSetLinkedFontReader(async ref => { const r = await l.resolveLinked(ref); return r.ok ? r.blob.arrayBuffer() : null }))
   // The workspace folder (desktop app; a picked folder in Chrome/Edge) starts once the app is up;
   // without one, the old backup folder keeps its copy.
   window.setTimeout(() => { void import('./workspace/workspace').then(m => m.startWorkspace()) }, 1500)

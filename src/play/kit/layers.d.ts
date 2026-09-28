@@ -1,6 +1,8 @@
 /** The parts of layers.js the app reads directly (the rest is used by kit.js). */
 export function klGlyphList(chars: string): string[];
 export function klFontFor(l: { font?: string; fontUrl?: string; weight?: number }): string;
+/** Fonts in linked folders (`linked:` refs): the app gives the kit a reader for their bytes. */
+export function klSetLinkedFontReader(fn: ((ref: string) => Promise<ArrayBuffer | null>) | null): void;
 
 export function klSeeded(seed: number, i: number, salt: number): number;
 export interface ClonerPlacement { i: number; t: number; x: number; y: number; angle?: number }
