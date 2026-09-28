@@ -101,6 +101,7 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:settings:exprDir': S('Expression export folder', 'saving'),
   'shader-studio:settings:customFnDir': S('Custom function export folder', 'saving'),
   'shader-studio:settings:filesKeepVersions': S('Clean up: versions to keep', 'saving'),
+  'shader-studio:settings:storageLimit': S('Storage limit', 'saving', { hint: 'Back to 10 GB' }),
   // Windows
   'playfield:builderWindow': S('Builder window', 'windows'),
   'playfield:history-window': S('History window', 'windows'),

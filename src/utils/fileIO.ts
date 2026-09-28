@@ -28,6 +28,8 @@ export function errorMessage(e: unknown): string {
   try { return JSON.stringify(e); } catch { return String(e); }
 }
 
+import { roomNow } from '../files/storageLimit';
+
 /**
  * Is this a localStorage quota error? Browsers disagree on the name/code, so
  * check all the common spellings.
@@ -47,6 +49,11 @@ export function isQuotaError(e: unknown): boolean {
  */
 export function safeSetItem(key: string, value: string, what = 'data'): FileResult {
   try {
+    // The device's storage limit (files/storageLimit.ts): growth past it is refused; shrinking never is.
+    let had = -key.length;
+    try { const v = localStorage.getItem(key); if (v != null) had = v.length; } catch { /* read failed: treat as new */ }
+    const room = roomNow(value.length - had);
+    if (!room.ok) return { ok: false, error: `Could not save ${what}. ${room.error}` };
     localStorage.setItem(key, value);
     return { ok: true };
   } catch (e) {

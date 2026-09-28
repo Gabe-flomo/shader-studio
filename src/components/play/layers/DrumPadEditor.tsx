@@ -29,6 +29,7 @@ import { openLayerInSplit, usePlaySplit } from '../playSplit';
 import { AUDIO_FX_EFFECTS, layerChainId, type PlayAudioFx } from '../../../types/playAudioFx';
 import type { EditorContext } from './editors';
 import type { FieldKit } from './fields';
+import { DrumKitRow } from './DrumKitRow';
 
 const keyName = (code: string) => code.replace(/^Key|^Digit/, '');
 /** Rows top to bottom: pads 13–16 on top, 1–4 at the bottom, like the hardware. */
@@ -239,6 +240,7 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
       </Section>
 
       <Section kind="drumpad" title="Kit">
+        <DrumKitRow f={f} ctx={ctx} />
         {f.prop('volume')}
         {f.toggle('Keys', 'keys', 'Z X C V · A S D F · Q W E R · 1 2 3 4', 'On the Play page, these keys play pads 1–16 (the bottom row is 1–4, like the pads above).')}
         {f.toggle('MIDI', 'midi', 'Notes play the pads', 'MIDI notes from the base note up play pads 1–16 (36–51, a drum rack’s, by default). Velocity sets how hard.')}

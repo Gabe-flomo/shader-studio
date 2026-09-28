@@ -15,6 +15,7 @@
  * panel, tests and a future SDK share one implementation.
  */
 import { useSyncExternalStore } from 'react';
+import { safeSetItem } from '../utils/fileIO';
 import { defaultLayer, type PlayLayer, type ScriptLayer } from '../types/playLayers';
 import type { PlayRecord } from '../types/play';
 import { newLayerKindId, parseLayerKinds, withKindParams, type LayerKindColour, type LayerKindDef, type LayerKindIcon } from '../types/layerKinds';
@@ -65,7 +66,7 @@ function loadSaved(): RegisteredKind[] {
 
 /** The kinds installed on this machine (the ones you saved). */
 export const layerKindRegistry = createLayerKindRegistry(loadSaved(), all => {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(all.filter(k => k.source === 'saved').map(k => k.def))); } catch { /* storage full or blocked: the list still works for this session */ }
+  safeSetItem(STORAGE_KEY, JSON.stringify(all.filter(k => k.source === 'saved').map(k => k.def)), 'layer kinds'); // full, blocked or over the storage limit: the list still works for this session
 });
 
 /** Match the registry to storage again (after the Files page changed the saved kinds). */

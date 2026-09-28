@@ -227,10 +227,11 @@ export async function planImport(contents: PlayfileContents, env: ImportEnv): Pr
       }
       case 'video': {
         const id = typeof it.meta?.id === 'string' ? it.meta.id : '';
-        const type = typeof it.meta?.type === 'string' && /^video\//.test(it.meta.type) ? it.meta.type : videoTypeFromPath(it.path);
-        if (!id || !type) { rows.push(bad('Not a video this version can keep')); break; }
+        // Video layers' files and drum pads' samples (audio) share the store.
+        const type = typeof it.meta?.type === 'string' && /^(video|audio)\//.test(it.meta.type) ? it.meta.type : videoTypeFromPath(it.path);
+        if (!id || !type) { rows.push(bad('Not a video or sound this version can keep')); break; }
         const here = env.hasVideo ? await env.hasVideo(id).catch(() => false) : false;
-        rows.push({ ...base, id: it.path, name: it.name, status: here ? 'same' : 'new', detail: type.replace('video/', '').toUpperCase(), include: !here, value: { id, type } });
+        rows.push({ ...base, id: it.path, name: it.name, status: here ? 'same' : 'new', detail: `${type.startsWith('audio/') ? 'Sound · ' : ''}${type.replace(/^(video|audio)\//, '').replace(/^x-/, '').toUpperCase()}`, include: !here, value: { id, type } });
         break;
       }
       case 'profile': {
@@ -246,9 +247,12 @@ export async function planImport(contents: PlayfileContents, env: ImportEnv): Pr
   return { rows, contents, ...(packs.length ? { packs } : {}) };
 }
 
+const AUDIO_TYPES: Record<string, string> = { wav: 'audio/wav', mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', weba: 'audio/webm', aif: 'audio/aiff', aiff: 'audio/aiff' };
 function videoTypeFromPath(p: string): string | null {
-  const e = /\.(mp4|m4v|webm|mov|ogv)$/i.exec(p)?.[1]?.toLowerCase();
-  return !e ? null : e === 'mov' ? 'video/quicktime' : e === 'm4v' ? 'video/x-m4v' : e === 'ogv' ? 'video/ogg' : `video/${e}`;
+  const e = /\.(mp4|m4v|webm|mov|ogv|wav|mp3|ogg|oga|m4a|aac|flac|weba|aiff?)$/i.exec(p)?.[1]?.toLowerCase();
+  if (!e) return null;
+  if (AUDIO_TYPES[e]) return AUDIO_TYPES[e];
+  return e === 'mov' ? 'video/quicktime' : e === 'm4v' ? 'video/x-m4v' : e === 'ogv' ? 'video/ogg' : `video/${e}`;
 }
 
 function typeFromPath(p: string): string | null {

@@ -49,6 +49,7 @@ import { audioReaderBank } from './audioReaderBank';
 import { padGrid } from './padGrid';
 import { layerAudio } from './layerAudio';
 import { toast } from '../components/ui/toastStore';
+import { roomNow } from '../files/storageLimit';
 import { streamHub } from '../data/streams/streamHub';
 import { DataFeedCapture, DataFeedPlayer } from '../data/streams/takeData';
 
@@ -558,6 +559,9 @@ function nextName(takes: PlayTake[]): string {
 function keepTake(take: PlayTake): void {
   const store = useNodeGraphStore.getState();
   const had = store.play.takes ?? [];
+  // The device's storage limit: a take (its audio frames included) that wouldn't fit once the graph is saved isn't kept.
+  const room = roomNow(JSON.stringify(take).length);
+  if (!room.ok) { toast.error('The take wasn’t kept', { message: room.error }); return; }
   if (had.length >= TAKES_MAX) toast.info(`${had[0].name} was removed`, { message: `A setup keeps its last ${TAKES_MAX} takes.` });
   store.setPlay(p => ({ ...p, takes: [...(p.takes ?? []), take].slice(-TAKES_MAX) }));
 }

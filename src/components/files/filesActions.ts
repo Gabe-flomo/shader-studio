@@ -9,6 +9,7 @@ import { savePresentation } from '../../present/storage';
 import { toast } from '../ui/toastStore';
 import { LIBRARY_REFRESH_EVENTS, formatSize, libraryZipName } from '../../utils/library';
 import { errorMessage, saveBinaryFile } from '../../utils/fileIO';
+import { ensureRoom, isStorageLimitError, usageNow } from '../../files/storageLimit';
 import { expandRemoval, localMutableKV, removalWarnings, removeFolderKeepItems, removeNodes } from '../../files/mutate';
 import { buildProfileZip, everythingSnapshot, externalPart, installMerge, installReplace, installSources, selectionSnapshot, type InstallSummary, type Profile } from '../../files/profileZip';
 import { removeExternal } from '../../files/sources';
@@ -193,6 +194,9 @@ export function selectionSummary(inv: Inventory, ids: string[], opts: { versions
 
 export async function runInstall(profile: Profile, mode: 'merge' | 'replace'): Promise<InstallSummary | null> {
   try {
+    // The device's storage limit: the profile has to fit (a replace frees what is here first, so it is not counted then).
+    const bytes = Object.entries(profile.snapshot.items).reduce((n, [k, v]) => n + k.length + v.length, 0) + Object.values(profile.files).reduce((n, f) => n + f.length, 0);
+    if (mode === 'merge') await ensureRoom(bytes); else await ensureRoom(Math.max(0, bytes - (usageNow()?.total ?? 0)));
     let summary: InstallSummary;
     // Images and other IndexedDB stores' files go through their store.
     if (mode === 'merge') summary = await installSources(profile, 'merge', installMerge(profile, localMutableKV));
@@ -202,7 +206,7 @@ export async function runInstall(profile: Profile, mode: 'merge' | 'replace'): P
     syncApp(summary.changedKeys);
     return summary;
   } catch (e) {
-    toast.error(mode === 'replace' ? 'Nothing was replaced' : 'Couldn’t install that', { message: errorMessage(e) });
+    if (!isStorageLimitError(e)) toast.error(mode === 'replace' ? 'Nothing was replaced' : 'Couldn’t install that', { message: errorMessage(e) });
     return null;
   }
 }
