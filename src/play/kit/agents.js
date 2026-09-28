@@ -166,7 +166,12 @@ export function agCounts(l) {
 
 /** A fresh, empty state; agStep fills it on its first frame. */
 export function agCreate() {
-  return { key: '', n: 0, acc: 0, simTime: 0, steps: 0, aspect: 1, rand: null, links: new Map(), hs: {}, buf: new Int32Array(256), reads: {}, catches: 0, catchPulse: 0, respawn: [0, 0, 0, 0], counts: [0, 0, 0, 0], frozen: false };
+  return {
+    key: '', n: 0, acc: 0, simTime: 0, steps: 0, aspect: 1, rand: null, links: new Map(), hs: {}, buf: new Int32Array(256), reads: {},
+    catches: 0, catchPulse: 0, respawn: [0, 0, 0, 0], counts: [0, 0, 0, 0], frozen: false,
+    // Signals: how many agents have died / been revived so far (catches, energy drain, a kill boundary; prey respawn).
+    evBorn: 0, evDied: 0,
+  };
 }
 
 /** Where a new agent goes (spawn mode), in body units. `k` of `n` places a grid or a ring in order. */
@@ -198,7 +203,7 @@ function agBuild(st, l, v, aspect, rand) {
   st.age = new Float64Array(n); st.energy = new Float64Array(n); st.heading = new Float64Array(n); st.seed = new Float64Array(n);
   st.group = new Uint8Array(n); st.alive = new Uint8Array(n);
   st.rand = rand; st.acc = 0; st.simTime = 0; st.steps = 0; st.aspect = aspect;
-  st.links = new Map(); st.catches = 0; st.catchPulse = 0; st.respawn = [0, 0, 0, 0];
+  st.links = new Map(); st.catches = 0; st.catchPulse = 0; st.respawn = [0, 0, 0, 0]; st.evBorn = 0; st.evDied = 0;
   const v0 = Math.max(0, v('startSpeed')), spin = v('spin') || 0;
   let i = 0;
   for (let g = 0; g < AG_GROUPS; g++) for (let c = 0; c < counts[g]; c++, i++) {
@@ -616,11 +621,12 @@ function agNormal(z, x, y, aspect) {
   return [gx / m, gy / m];
 }
 
-function agKill(st, i) { st.alive[i] = 0; st.vx[i] = 0; st.vy[i] = 0; }
+function agKill(st, i) { st.alive[i] = 0; st.vx[i] = 0; st.vy[i] = 0; st.evDied++; }
 function agRevive(st, l, i, aspect) {
   const p = agSpawnAt(st, l, i, st.n, aspect, st.rand, true), a = st.rand() * Math.PI * 2, s = 0.1 * st.rand();
   st.x[i] = p[0]; st.y[i] = p[1]; st.vx[i] = Math.cos(a) * s; st.vy[i] = Math.sin(a) * s; st.heading[i] = a;
   st.alive[i] = 1; st.age[i] = 0; st.energy[i] = 1;
+  st.evBorn++;
 }
 
 /**

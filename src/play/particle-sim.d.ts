@@ -11,6 +11,8 @@ export interface ParticleState {
   /** Multiply's colony state (null until the first step). splits/fulls/annihilations/cleareds are event counters (each bumped once per bud, target reached, pair death and clear-out) that the layer's signals watch. */
   mx: { phase: 'start' | 'grow' | 'full'; full: number; idle: number; respawn: number; cycles: number; reached: boolean; splits: number; fulls: number; annihilations: number; cleareds: number; wasEmpty: boolean } | null;
   /** Annihilation bursts still showing: where, how old (s), and the sparks' angle. */
+  /** How many particles have been born / have died so far, cumulative, every Emit mode. The kit diffs these between frames into the Born/Died signals and the born/died-this-step readings. */
+  evBorn: number; evDied: number;
 }
 /** A particles layer's settings with numbers already driven (the id, label and kind are not read). */
 export type ParticleParams = Omit<ParticlesLayer, 'id' | 'label' | 'kind' | 'visible' | 'toShader'> & Partial<Pick<ParticlesLayer, 'id' | 'label' | 'kind' | 'visible' | 'toShader'>>;

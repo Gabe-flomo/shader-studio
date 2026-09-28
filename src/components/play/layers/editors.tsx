@@ -262,7 +262,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
   const flock = g<number>('flock');
   const nullPick = (why: string) => f.pick('Null', 'nullId', nulls(ctx), 'Add a Null layer first', why, () => ctx.createNull('nullId'));
   const signals = ctx.play.signals ?? [];
-  const signalRow = (label: string, key: 'splitSignal' | 'fullSignal' | 'annihilateSignal' | 'clearedSignal', hint: string) => f.row(label, (
+  const signalRow = (label: string, key: 'splitSignal' | 'fullSignal' | 'annihilateSignal' | 'clearedSignal' | 'bornSignal' | 'diedSignal', hint: string) => f.row(label, (
     <>
       <Select ariaLabel={`Signal on ${label.toLowerCase()}`} value={g<string>(key)} options={[{ value: '', label: 'None' }, ...signals.map(s => ({ value: s.id, label: s.name }))]} onChange={v => f.set({ [key]: v })} height={26} style={{ flex: 1, minWidth: 0 }} />
       <Button size="sm" variant="ghost" onClick={() => ctx.changePlay(p => { const r = addSignal(p); return { ...r.play, layers: r.play.layers.map(x => (x.id === f.l.id ? { ...x, [key]: r.id } : x)) }; })}>New signal</Button>
@@ -351,6 +351,10 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
           <Button size="sm" variant="ghost" onClick={() => ctx.act('reset')}>Respawn all</Button>
           <Button size="sm" variant="ghost" onClick={() => ctx.act('freeze')}>Freeze / unfreeze</Button>
         </Buttons>
+        <Section id="particles-birth-signals" kind="particles" title="Signals out" hint="Named events other actions and mappings can react to. Pick a signal (or make one) for any you want to use; leave the rest as None.">
+          {signalRow('Born', 'bornSignal', 'Sent whenever one or more particles are born this step — a Burst action, a stream respawn, or a Multiply bud.')}
+          {signalRow('Died', 'diedSignal', 'Sent whenever one or more particles die this step — age, a kill boundary, an annihilation, or a Cull action.')}
+        </Section>
       </Section>
 
       <Section

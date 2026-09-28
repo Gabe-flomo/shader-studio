@@ -153,10 +153,29 @@ describe('rules', () => {
     expect(st.reads.group1).toBeGreaterThan(0.5); // prey respawn
   });
 
-  it('energy drain starves a group; respawn brings it back', () => {
+  it('born/died signals: a catch counts a death, a prey respawn counts a birth', () => {
+    const st = run(layerOf('predatorPrey', { seed: 4 }), 600, 1 / 60, 4);
+    // Predator–prey catches and respawns prey the whole run: both counters move, and every catch
+    // (each kills the caught prey once) is at most matched by a later revive, never the reverse this early.
+    expect(st.evDied).toBeGreaterThan(0);
+    expect(st.evDied).toBeGreaterThanOrEqual(st.catches);
+    expect(st.evBorn).toBeGreaterThan(0);
+  });
+
+  it('energy drain starves a group (each a death); respawn brings it back (each a birth)', () => {
     const l = layerOf('boids', { g1_count: 20, g1_drain: 2 });
-    expect(run(l, 40).reads.alive).toBe(0);
-    expect(run({ ...l, g1_respawn: 50 } as AgentsLayer, 40).reads.alive).toBeGreaterThan(0);
+    const starved = run(l, 40);
+    expect(starved.reads.alive).toBe(0);
+    expect(starved.evDied).toBe(20);
+    expect(starved.evBorn).toBe(0);
+    const revived = run({ ...l, g1_respawn: 50 } as AgentsLayer, 40);
+    expect(revived.reads.alive).toBeGreaterThan(0);
+    expect(revived.evBorn).toBeGreaterThan(0);
+  });
+
+  it('two runs with the same seed give the same born/died counts (determinism)', () => {
+    const once = () => { const st = run(layerOf('predatorPrey', { seed: 6 }), 400, 1 / 60, 6); return { born: st.evBorn, died: st.evDied }; };
+    expect(once()).toEqual(once());
   });
 
   it('every rule type runs without NaN', () => {
@@ -213,6 +232,13 @@ describe('the agents layer in the kit', () => {
     for (const r of sensorReadsFor({ kind: 'agents' })) if (r !== 'distance') expect(one.sensors.has(`a::${r}`), r).toBe(true);
     expect(one.sensors.get('a::alive')).toBeGreaterThan(0.5);
     expect(one.sensors.get('a::ax')).toBeGreaterThan(0);
+  });
+
+  it('reports its cumulative born/died counts (for the play engine’s born/died signals)', () => {
+    const layers = () => [layerOf('predatorPrey', { seed: 3 }) as unknown as PlayLayer];
+    const { sensors } = kitRun(createLayerKit, layers(), 400);
+    expect(sensors.get('a::bornCount')).toBeGreaterThan(0);
+    expect(sensors.get('a::diedCount')).toBeGreaterThan(0);
   });
 
   it('an unseeded layer follows a take’s session seed', () => {
