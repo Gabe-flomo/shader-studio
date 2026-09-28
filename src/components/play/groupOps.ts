@@ -10,7 +10,7 @@
  */
 import { layerNumericProps, layerTarget, parseActionTarget, parseLayerTarget, actionTarget, type PlayAction, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type TriggerSpec } from '../../types/play';
 import {
-  buildTree, childrenOf, containerOf, groupLayerIds, groupOfLayer, groupPath, subgroupIds, tidyGroups, flattenTree,
+  buildTree, childrenOf, containerOf, groupLayerIds, groupOfLayer, groupPath, newLayerHome, subgroupIds, tidyGroups, flattenTree,
   type GroupColour, type ItemRef, type LayerGroup, type TreeNode,
 } from '../../types/layerGroups';
 import { playId } from '../../play/playControls';
@@ -390,6 +390,16 @@ export function orderedItems(rows: readonly TreeNode[]): ItemRef[] {
 }
 
 export { key as itemKey };
+
+/**
+ * A new layer placed while the list shows `entered`: in that group, at its
+ * end, unless it is sealed (a grains group): then in the nearest open group
+ * around it, or left at the top level.
+ */
+export function placeNewLayer(p: PlayRecord, layerId: string, entered: string): PlayRecord {
+  const home = entered ? newLayerHome(p.groups, entered) : '';
+  return home ? addToGroup(p, layerId, home) : p;
+}
 
 /** A new layer put in a group (the one the list is showing), at its end. */
 export function addToGroup(p: PlayRecord, layerId: string, id: string): PlayRecord {

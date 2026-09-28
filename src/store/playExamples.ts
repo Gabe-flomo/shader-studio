@@ -1924,18 +1924,18 @@ Distance reads only while both hands are in view, so the rings hold their size w
       racks: [{
         id: 'gran', name: 'Granulator', effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false,
         instrument: {
-          id: 'inst', kind: 'granulator', sample: { synth: 'vowel', name: 'Vowel' },
+          id: 'inst', kind: 'granulator', sample: { synth: 'pad', name: 'Pad chord' },
           // By GR_PARAMS address: Cloud, position, spray, size, density, spread, pitch random, pan random,
           // filter + cutoff, attack, release, scan LFO rate + depth, drone, level.
           params: { 0: 2, 1: 0.35, 2: 0.12, 3: 140, 5: 28, 7: 7, 8: 0.15, 9: 0.7, 14: 1, 15: 7000, 17: 0.6, 20: 1.5, 24: 0.07, 25: 0.12, 28: 1, 33: 0.9 },
         },
       }, {
-        // Part two: the particles inside the ring play a bell, each at its own place and pitch.
-        id: 'ring', name: 'Particle bells', effects: [], keyboard: false, midi: 'off', channel: 0, volume: 1, mute: false,
+        // Part two: the particles inside the ring play the pad chord an octave up, each at its own place and pitch.
+        id: 'ring', name: 'Particle chimes', effects: [], keyboard: false, midi: 'off', channel: 0, volume: 1, mute: false,
         instrument: {
-          id: 'inst', kind: 'granulator', sample: { synth: 'bell', name: 'Bell' },
-          // Cloud, grain size, pan random, cap, level, grains per thing.
-          params: { 0: 2, 3: 120, 9: 0.2, 29: 48, 33: 0.6, 35: 3 },
+          id: 'inst', kind: 'granulator', sample: { synth: 'pad', name: 'Pad chord' },
+          // Cloud, grain size, pitch +12, pan random, cap, level, grains per thing.
+          params: { 0: 2, 3: 120, 6: 12, 9: 0.2, 29: 48, 33: 0.6, 35: 3 },
           from: {
             source: 'flow', boundary: 'hoop', births: true,
             links: [
@@ -1953,7 +1953,7 @@ Distance reads only while both hands are in view, so the rings hold their size w
       input: 'engine:gran',
       readers: [
         reader('body', 'Body', 320, 1.2, 25, 3, 160, [1, 0.55, 0.35]),
-        reader('air', 'Air', 2600, 1.2, 35, 2, 120, [0.4, 0.8, 1]),
+        reader('air', 'Shine', 880, 1.2, 35, 2, 120, [0.4, 0.8, 1]),
       ],
     },
     layers: [
@@ -1987,16 +1987,16 @@ Distance reads only while both hands are in view, so the rings hold their size w
     ],
     notes: `**What it shows.** A **Granulator**: an Audio engine rack whose instrument plays a sample as a cloud of short grains, up to 64 at once. Its sound feeds audio readers that swell the glow, and its grains ride three nulls across the picture. Move the mouse to play it: X scans through the sample, Y sets the grain size.
 
-**How it's built.** The rack **Granulator** (Engine tab) holds a Granulator in **Cloud** mode, with **Drone** on so it sounds without a key. Its sample is a generated **vowel** (a voice sliding from "ah" to "oo"), made when the example opens, so no audio file comes with it. Mouse X drives **Position** (\`au:gran:inst::1\`, a control like any Audio Unit parameter) and mouse Y the **Grain size** through an Exp curve. The sound goes through the rack's own Sound chain (Finish → Sound → Granulator: a hall reverb). The readers listen to the rack (**Listen to: Audio engine · Granulator**): **Body** at 320 Hz drives the glow, and **Air** at 2.6 kHz is strongest at the bright "ah" end (the left). The grains are sensors on the rack: **Grain count**, and grains 1–3's place in the sample (x) and level (y) drive the three nulls.
+**How it's built.** The rack **Granulator** (Engine tab) holds a Granulator in **Cloud** mode, with **Drone** on so it sounds without a key. Its sample is the generated **pad chord** (A minor, slowly swelling), made when the example opens, so no audio file comes with it. Mouse X drives **Position** (\`au:gran:inst::1\`, a control like any Audio Unit parameter) and mouse Y the **Grain size** through an Exp curve. The sound goes through the rack's own Sound chain (Finish → Sound → Granulator: a hall reverb). The readers listen to the rack (**Listen to: Audio engine · Granulator**): **Body** at 320 Hz drives the glow, and **Shine** at 880 Hz follows the chord's top octave. The grains are sensors on the rack: **Grain count**, and grains 1–3's place in the sample (x) and level (y) drive the three nulls.
 
 **Try this.**
 • Click the picture first: the browser starts sound on a click. Mute the master if you only want to watch.
-• Engine tab → Granulator: switch **Classic**, **Flux** and **Cloud**, try **Freeze**, turn **Scan** to 1 for a time-stretch, or change the **Sample** to a pad chord or a drum.
+• Engine tab → Granulator: switch **Classic**, **Flux**, **Cloud**, **Emit** (grains from spawn points that travel through the sample) and **Spectral** (grains that play frequency bands), try **Freeze**, turn **Scan** to 1 for a time-stretch, or change the **Sample** to a Library sound or a drum pad's.
 • Turn **Drone** off and play it from the card's keys, the computer keyboard (**Computer keyboard** on the card) or a MIDI keyboard: C4 plays the sample at its own pitch.
 • **Readouts → controls** and **Grains → nulls** on the card make more of these.
 • Record a take and render it: the grains come out the same every time (seeded).
 
-**Part two: grains from the particles.** A second rack, **Particle bells**, plays a generated bell from the **Flow** particles: under **Grains from a layer**, its Source is Flow and its boundary is the **Ring** circle (an LFO drifts it across). Each particle inside plays 3 grains a second: its X sets where in the bell it reads, Y its pitch (±12 semitones), its speed the grain size, and its age the level, so a particle fades out of the sound as it fades out of sight. More particles in the ring make more grains, and a particle born inside plays at once. Move the Ring, point the boundary at a drawn path, or change the links.`,
+**Part two: grains from the particles.** A second rack, **Particle chimes**, plays the pad chord an octave up from the **Flow** particles: under **Grains from a layer**, its Source is Flow and its boundary is the **Ring** circle (an LFO drifts it across). Each particle inside plays 3 grains a second: its X sets where in the chord it reads, Y its pitch (±12 semitones), its speed the grain size, and its age the level, so a particle fades out of the sound as it fades out of sight. More particles in the ring make more grains, and a particle born inside plays at once. Move the Ring, point the boundary at a drawn path, or change the links.`,
   })),
   ex('audioEffects', glowGraph({ radius: 0.12, falloff: 12, tint: [1, 0.6, 0.3] }), play({
     audioFx: {

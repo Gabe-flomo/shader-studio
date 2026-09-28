@@ -13,7 +13,7 @@
  *              `ae:<rackId>`, for mappings (grainSensors)
  */
 import { create } from 'zustand';
-import { grCreate, grPeaks, grSettings, grSummary, grSynthBuffer, GR_SYNTH_NAMES, type GrLive, type GrPoints, type GrStats } from '../play/kit/granulator.js';
+import { grCreate, grPeaks, grSettings, grSummary, grSynthBuffer, GR_SYNTH_NAMES, type GrLive, type GrPoints, type GrSpectrum, type GrStats } from '../play/kit/granulator.js';
 import { AE_INST, GRAIN_EACH, auPropId, grainSensorLayer, type AeGrainSample, type AeSlot } from '../types/playAudioEngine';
 import { rackChainId } from '../types/playAudioFx';
 import { audioFxHost } from './audioFx';
@@ -132,6 +132,8 @@ export class WebGranulatorRack {
 
   /** The latest readouts (for drawing the grains on the waveform). */
   stats(): GrStats { return this.live.stats(); }
+  /** Spectral's analysis of the sample (made once, remembered), for the card's spectrogram; null without a sample. */
+  spectrum(): GrSpectrum | null { return this.live.spectrum(); }
   /** 'worklet', 'script', or '' while it starts. */
   engineKind(): string { return this.live.kind; }
 
@@ -143,9 +145,13 @@ export class WebGranulatorRack {
     set(`${id}::grainSpread`, sum.spread);
     set(`${id}::grainLevel`, sum.level);
     set(`${id}::grainPitch`, sum.pitch);
+    set(`${id}::grainBandMean`, sum.band);
+    set(`${id}::grainEnergySum`, sum.energy);
     for (let i = 0; i < GRAIN_EACH; i++) {
       set(`${id}::grainPos${i + 1}`, i < st.count ? st.pos[i] : 0);
       set(`${id}::grainAmp${i + 1}`, i < st.count ? Math.min(1, st.amp[i]) : 0);
+      set(`${id}::grainBand${i + 1}`, i < st.count ? st.band[i] : 0);
+      set(`${id}::grainEnergy${i + 1}`, i < st.count ? Math.min(1, st.energy[i] * 4) : 0);
     }
   }
 

@@ -40,7 +40,7 @@ function setup(): PlayRecord {
   };
   const grains: AeRack = {
     id: 'rk2', name: 'Grains', keyboard: false, midi: '', channel: 0, volume: 1, mute: false,
-    instrument: { id: AE_INST, kind: 'granulator', sample: { synth: 'sine', name: 'Sine' }, params: { 3: 80, 1: 0.6 }, controls: ['3'], from: { source: 'parts', boundary: '', births: true, links: [] } },
+    instrument: { id: AE_INST, kind: 'granulator', sample: { synth: 'pad', name: 'Pad chord' }, params: { 3: 80, 1: 0.6 }, controls: ['3'], from: { source: 'parts', boundary: '', births: true, links: [] } },
     effects: [],
   };
   return {
@@ -78,7 +78,7 @@ describe('rack presets: capture', () => {
 
   it('a Granulator keeps its sample, settings and Sound effects, not its Grains from', () => {
     const { preset, left } = rackPresetFrom(setup(), 'rk2', 'Clouds');
-    expect(preset!.rack.instrument).toMatchObject({ kind: 'granulator', sample: { synth: 'sine' }, params: { 3: 80, 1: 0.6 } });
+    expect(preset!.rack.instrument).toMatchObject({ kind: 'granulator', sample: { synth: 'pad' }, params: { 3: 80, 1: 0.6 } });
     expect(preset!.rack.instrument?.from).toBeUndefined();
     expect(preset!.soundFx?.effects.map(e => e.kind)).toEqual(['reverb']);
     expect(left).toContain('Grains from a layer (it names the setup’s layers)');

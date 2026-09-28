@@ -16,7 +16,7 @@
  * Pure: types, parsing, targets and record edits. lib/audioEngineHost.ts runs it.
  */
 import { RACK_CONTROLS_MAX } from './playArrangement';
-import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
+import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_RETIRED_SYNTHS, GR_SAMPLE_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
 
 
 /** An Audio Unit, by its component description (four-char codes as numbers), with its names for showing. */
@@ -49,7 +49,8 @@ export const AE_INST = 'inst';
 /**
  * A granulator's sample (docs/granulator.md): a kept sound from the Library
  * (`sampleId`, named like a zone's so the Library's "used by", clean-up and
- * bundling find it), or a generated one (`synth`: play/kit/granulator.js GR_SYNTHS).
+ * bundling find it), or a generated one (`synth`: play/kit/granulator.js GR_SAMPLE_SYNTHS:
+ * the pad chord, or a drum pad's generated drum; a retired one reads as the pad chord).
  */
 export interface AeGrainSample {
   sampleId?: string;
@@ -247,15 +248,15 @@ export const isGranulatorRack = (r: AeRack | undefined): boolean => r?.instrumen
 /**
  * A granulator rack reports its grains as sensors on `ae:<rackId>` (so a
  * mapping's Sensor source reads them): GRAIN_READS, and per grain
- * `grainPos<N>` / `grainAmp<N>` (N 1..GRAIN_EACH).
+ * `grainPos<N>` / `grainAmp<N>` / `grainBand<N>` / `grainEnergy<N>` (N 1..GRAIN_EACH).
  */
-export const GRAIN_READS = ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch'] as const;
+export const GRAIN_READS = ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainBandMean', 'grainEnergySum'] as const;
 export type GrainRead = (typeof GRAIN_READS)[number];
 export const GRAIN_EACH = 16;
 export const grainSensorLayer = (rackId: string) => `${RACK_ACT_PREFIX}${rackId}`;
 /** The rack a sensor's layer id names (`ae:<rackId>`), or ''. */
 export const rackOfSensorLayer = (layerId: string) => (layerId.startsWith(RACK_ACT_PREFIX) ? layerId.slice(RACK_ACT_PREFIX.length) : '');
-export const GRAIN_READ_LABELS: Record<GrainRead, string> = { grains: 'Grain count', grainMean: 'Grain position (mean)', grainSpread: 'Grain spread', grainLevel: 'Grain level', grainPitch: 'Grain pitch' };
+export const GRAIN_READ_LABELS: Record<GrainRead, string> = { grains: 'Grain count', grainMean: 'Grain position (mean)', grainSpread: 'Grain spread', grainLevel: 'Grain level', grainPitch: 'Grain pitch', grainBandMean: 'Grain band (mean)', grainEnergySum: 'Grain energy' };
 
 /**
  * Control target of a grain readout's control (`grains:<rackId>::<read>`).
@@ -453,7 +454,9 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
     const sm = o.sample && typeof o.sample === 'object' ? o.sample as Record<string, unknown> : null;
     if (sm) {
       if (typeof sm.sampleId === 'string' && ID.test(sm.sampleId)) slot.sample = { sampleId: sm.sampleId, name: text(sm.name, 'Sound', 120) };
-      else if (typeof sm.synth === 'string' && GR_SYNTHS.includes(sm.synth)) slot.sample = { synth: sm.synth, name: text(sm.name, GR_SYNTH_NAMES[sm.synth] ?? sm.synth, 120) };
+      else if (typeof sm.synth === 'string' && GR_SAMPLE_SYNTHS.includes(sm.synth)) slot.sample = { synth: sm.synth, name: text(sm.name, GR_SYNTH_NAMES[sm.synth] ?? sm.synth, 120) };
+      // A generated sample that was retired (pluck, vowel, bell, noise sweep, sine): the pad chord plays instead.
+      else if (typeof sm.synth === 'string' && GR_RETIRED_SYNTHS.includes(sm.synth)) slot.sample = { synth: 'pad', name: GR_SYNTH_NAMES.pad };
     }
     return slot;
   }
