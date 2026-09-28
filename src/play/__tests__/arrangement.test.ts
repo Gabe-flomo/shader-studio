@@ -16,7 +16,7 @@ import { withEngine } from '../../components/play/engine/engineOps';
 import { playableForPlan } from '../planGates';
 import { arrangementTake } from '../../lib/tapeTake';
 import { trackAt } from '../../lib/takePlayback';
-import { ParamWatch, movedParams } from '../../lib/paramWatch';
+import { parseTouched } from '../../lib/paramWatch';
 
 const T = 'au:rk1:inst::3';
 const note = (t: number, n: number, d = 0.2, v = 0.8): ArrNote => ({ t, n, v, d });
@@ -239,18 +239,12 @@ describe('in the Play record', () => {
   });
 });
 
-describe('watching a plug-in’s window (Configure)', () => {
-  it('offers what moved, most recent first, live within half a second', () => {
-    expect(movedParams(null, new Map([['1', 0]]))).toEqual([]);
-    expect(movedParams(new Map([['1', 0], ['2', 5]]), new Map([['1', 0.5], ['2', 5], ['3', 1]]))).toEqual(['1']);
-    const w = new ParamWatch();
-    w.push(new Map([['1', 0], ['2', 0]]), 0);
-    expect(w.heard()).toBe(false);
-    w.push(new Map([['1', 0.2], ['2', 0]]), 150);
-    w.push(new Map([['1', 0.2], ['2', 0.4]]), 300);
-    expect(w.offers(400)).toEqual([{ address: '2', live: true }, { address: '1', live: true }]);
-    expect(w.offers(800)).toEqual([{ address: '2', live: true }, { address: '1', live: false }]);
-    expect(w.offers(5000)).toEqual([]);
-    expect(w.heard()).toBe(true);
+describe('touch to configure (Configure)', () => {
+  it('reads the engine’s touched-parameter event', () => {
+    const t = parseTouched({ rack: 'rk_1', slot: 'fx_2', first: true, param: { address: '12', identifier: 'cutoff', name: 'Cutoff', min: 10, max: 20000, value: 440, unit: 'Hz', kind: 'number', step: 0, log: true } });
+    expect(t).toMatchObject({ rack: 'rk_1', slot: 'fx_2', first: true, param: { address: '12', name: 'Cutoff', value: 440, log: true } });
+    expect(parseTouched({ rack: 'rk_1', slot: 'fx_2', param: { address: 'x', min: 0, max: 1, value: 0 } })).toBeNull();
+    expect(parseTouched({ slot: 'fx_2', param: {} })).toBeNull();
+    expect(parseTouched(null)).toBeNull();
   });
 });

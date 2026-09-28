@@ -1,59 +1,26 @@
 /**
- * paramWatch.ts — Configure's "click a control in the plug-in's window"
- * (docs/arrangement.md): while Configure is open on an Audio Unit, its
- * parameter list is read a few times a second and compared; a parameter
- * whose value moved in the last WATCH_RECENT_MS is offered as "Add <name>".
- * (A plug-in that doesn't report its window's moves to the host shows
- * nothing here; the parameter list is always there to pick from.)
+ * paramWatch.ts — Configure's "touch to configure" (docs/arrangement.md):
+ * while Configure is on for an Audio Unit, the desktop engine watches its
+ * parameters (src-tauri/src/audio_engine/touch.rs) and sends each one the
+ * person moves in the plug-in's own window as `audio-engine:param-touched`.
+ * Configure adds it as a rack control (rackControls.ts, `touchRackControl`).
  *
- * Pure: snapshots in, moved addresses out.
+ * Pure: the event's payload in, a checked touch out.
  */
+import { parseParamList, type AuParam } from './audioEngineProtocol';
 
-/** How often Configure reads the parameters (ms). */
-export const WATCH_EVERY_MS = 150;
-/** A parameter moved this recently is the one being touched (ms). */
-export const WATCH_RECENT_MS = 500;
-/** An offer stays up this long after the move, so there's time to click it (ms). */
-export const WATCH_OFFER_MS = 4000;
+export const TOUCH_EVENT = 'audio-engine:param-touched';
 
-export type ParamSnapshot = ReadonlyMap<string, number>;
+/** With nothing touched this long (ms) after Configure opened, it says the plug-in may not report its window's moves. */
+export const WATCH_QUIET_MS = 20000;
 
-/** Addresses whose value changed between two snapshots (new ones don't count: they weren't moved). */
-export function movedParams(prev: ParamSnapshot | null, next: ParamSnapshot, eps = 1e-6): string[] {
-  if (!prev) return [];
-  const out: string[] = [];
-  for (const [a, v] of next) {
-    const was = prev.get(a);
-    if (was !== undefined && Math.abs(v - was) > eps * Math.max(1, Math.abs(was))) out.push(a);
-  }
-  return out;
-}
+/** A parameter the person touched in a slot's window: its description, `value` the newest. */
+export interface TouchedParam { rack: string; slot: string; param: AuParam; first: boolean }
 
-/**
- * Keeps when each parameter last moved and says which to offer: the ones
- * moved within WATCH_OFFER_MS, most recent first (at most `max`), marking
- * the ones moving right now (within WATCH_RECENT_MS).
- */
-export class ParamWatch {
-  private last: ParamSnapshot | null = null;
-  private moved = new Map<string, number>();
-
-  /** A new reading at `now` (ms). */
-  push(snapshot: ParamSnapshot, now: number): void {
-    for (const a of movedParams(this.last, snapshot)) this.moved.set(a, now);
-    this.last = snapshot;
-  }
-
-  offers(now: number, max = 3): Array<{ address: string; live: boolean }> {
-    return [...this.moved.entries()]
-      .filter(([, at]) => now - at <= WATCH_OFFER_MS)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, max)
-      .map(([address, at]) => ({ address, live: now - at <= WATCH_RECENT_MS }));
-  }
-
-  /** Did anything move since watching began? */
-  heard(): boolean { return this.moved.size > 0; }
-
-  forget(address: string): void { this.moved.delete(address); }
+export function parseTouched(raw: unknown): TouchedParam | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.rack !== 'string' || typeof o.slot !== 'string') return null;
+  const [param] = parseParamList([o.param]);
+  return param ? { rack: o.rack, slot: o.slot, param, first: o.first === true } : null;
 }

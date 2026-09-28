@@ -33,6 +33,9 @@ mod sys {
         #[allow(dead_code)] // tests
         pub fn ae_render_offline(out: *mut f32, frames: c_int, err: *mut *mut c_char) -> c_int;
         pub fn ae_open_ui(rack: *const c_char, slot: *const c_char, title: *const c_char, err: *mut *mut c_char) -> c_int;
+        pub fn ae_watch_start(rack: *const c_char, slot: *const c_char, err: *mut *mut c_char) -> c_int;
+        pub fn ae_watch_stop(rack: *const c_char, slot: *const c_char) -> c_int;
+        pub fn ae_watch_drain() -> *mut c_char;
         pub fn ae_rack_set_input(rack: *const c_char, capacity: u32, err: *mut *mut c_char) -> c_int;
         pub fn ae_rack_feed(rack: *const c_char, pcm: *const f32, frames: u32, err: *mut *mut c_char) -> i64;
         pub fn ae_rack_input_stats(rack: *const c_char, queued: *mut u64, underruns: *mut u64) -> c_int;
@@ -203,6 +206,20 @@ mod imp {
         let (r, s, t) = (cstr(rack), cstr(slot), cstr(title));
         check(unsafe { sys::ae_open_ui(r.as_ptr(), s.as_ptr(), t.as_ptr(), &mut e) }, e, "Opening the plug-in window")
     }
+    /// Watch a slot's parameters for touches (Configure; touch.rs).
+    pub fn watch_start(rack: &str, slot: &str) -> Result<(), String> {
+        let mut e = ptr::null_mut();
+        let (r, s) = (cstr(rack), cstr(slot));
+        check(unsafe { sys::ae_watch_start(r.as_ptr(), s.as_ptr(), &mut e) }, e, "Watching the plug-in")
+    }
+    pub fn watch_stop(rack: &str, slot: &str) {
+        let (r, s) = (cstr(rack), cstr(slot));
+        unsafe { sys::ae_watch_stop(r.as_ptr(), s.as_ptr()) };
+    }
+    /// JSON: every watched slot's changes and window activity since the last drain.
+    pub fn watch_drain() -> String {
+        unsafe { take(sys::ae_watch_drain()) }.unwrap_or_else(|| "[]".into())
+    }
 
     // ── Inputs fed from the page ────────────────────────────────────────────
     /// The rack's source becomes an input the page feeds, with `capacity` frames of buffer.
@@ -299,6 +316,9 @@ mod imp {
     pub fn set_output(_: u32) -> Result<(), String> { Err(NO.into()) }
     pub fn render_offline(_: &mut [f32]) -> Result<usize, String> { Err(NO.into()) }
     pub fn open_ui(_: &str, _: &str, _: &str) -> Result<(), String> { Err(NO.into()) }
+    pub fn watch_start(_: &str, _: &str) -> Result<(), String> { Err(NO.into()) }
+    pub fn watch_stop(_: &str, _: &str) {}
+    pub fn watch_drain() -> String { "[]".into() }
     pub fn set_input(_: &str, _: u32) -> Result<(), String> { Err(NO.into()) }
     pub fn feed(_: &str, _: &[f32]) -> Result<u64, String> { Err(NO.into()) }
     pub fn input_stats(_: &str) -> Option<(u64, u64)> { None }

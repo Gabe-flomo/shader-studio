@@ -23,7 +23,7 @@ import { arrangementTake, tapeEvents } from '../tapeTake';
 import { jobNotes } from '../engineRender';
 import { newRack, auTarget, auPropId, type AeRack } from '../../types/playAudioEngine';
 import { emptyArrangement, type PlayArrangement } from '../../types/playArrangement';
-import { addRackControl, moveRackControl, rackControlsOf, regroupRackControls, removeRackControl, renameRackControl } from '../../play/rackControls';
+import { addRackControl, moveRackControl, rackControlsOf, regroupRackControls, removeRackControl, renameRackControl, touchRackControl } from '../../play/rackControls';
 import type { PlayRecord } from '../../types/play';
 
 const rack = (id: string, name: string): AeRack => ({ ...newRack(id, []), name, instrument: { id: 'inst', kind: 'granulator', sample: { synth: 'pad', name: 'Pad' } } });
@@ -248,6 +248,35 @@ describe('rack controls', () => {
     p = removeRackControl(p, 'rk1', 'inst', '0');
     expect(p.controls).toHaveLength(7);
     expect(p.audioEngine!.racks[0].instrument!.controls).not.toContain('0');
+  });
+
+  it('touching a parameter in the plug-in window adds it; when full the first on the strip makes room', () => {
+    const param = (i: number) => ({ address: String(i), name: `P${i}`, min: 0, max: 1, value: i / 10 });
+    let p = play;
+    let r = touchRackControl(p, 'rk1', 'inst', param(0));
+    expect(r.added).toBe(true);
+    expect(r.replaced).toBeUndefined();
+    p = r.record;
+    // Touching it again changes nothing.
+    r = touchRackControl(p, 'rk1', 'inst', param(0));
+    expect(r.added).toBe(false);
+    expect(r.record).toBe(p);
+    for (let i = 1; i < 8; i++) p = touchRackControl(p, 'rk1', 'inst', param(i)).record;
+    const addrs = () => rackControlsOf(p, p.audioEngine!.racks[0], p.audioEngine!.racks[0].instrument!).map(x => x.address);
+    expect(addrs()).toEqual(['0', '1', '2', '3', '4', '5', '6', '7']);
+    // A mapping on the one that goes, goes with it.
+    const first = p.controls.find(c => c.target === auTarget('rk1', 'inst', '0'))!;
+    p = { ...p, mappings: [...p.mappings, { id: 'm1', controlId: first.id } as unknown as PlayRecord['mappings'][number]] };
+    r = touchRackControl(p, 'rk1', 'inst', param(8));
+    expect(r.added).toBe(true);
+    expect(r.replaced).toEqual({ address: '0', label: 'P0' });
+    p = r.record;
+    expect(addrs()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
+    expect(p.controls.some(c => c.target === auTarget('rk1', 'inst', '0'))).toBe(false);
+    expect(p.mappings.some(m => m.controlId === first.id)).toBe(false);
+    // Its value is where it was touched; an unknown slot changes nothing.
+    expect(p.audioEngine!.racks[0].instrument!.params?.['8']).toBeCloseTo(0.8);
+    expect(touchRackControl(p, 'rk1', 'nope', param(9)).record).toBe(p);
   });
 });
 

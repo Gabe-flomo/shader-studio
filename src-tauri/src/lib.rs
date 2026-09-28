@@ -357,6 +357,8 @@ pub fn run() {
             audio_engine::ae_set_output,
             audio_engine::ae_master,
             audio_engine::ae_open_ui,
+            audio_engine::ae_watch_start,
+            audio_engine::ae_watch_stop,
             audio_engine::ae_rack_input,
             audio_engine::ae_rack_feed,
             audio_engine::ae_rack_input_stats,

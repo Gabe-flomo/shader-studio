@@ -442,7 +442,7 @@ function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk, first
         </span>
         {isAu && desktop && pluginsOk && <IconButton icon="popout" size="sm" label="Open the plug-in’s window" onClick={() => void openWindow()} />}
         {isAu && desktop && pluginsOk && <IconButton icon="sliders" size="sm" active={open} label={open ? 'Hide parameters' : 'Parameters'} onClick={() => setOpen(o => !o)} />}
-        {canConfigure && <IconButton icon="target" size="sm" active={configuring} label={configuring ? 'Done configuring' : `Configure: pick up to ${RACK_CONTROLS_MAX} rack controls${isAu ? ' (move them in its window, or pick from the list)' : ''}`} onClick={() => setConfiguring(c => !c)} />}
+        {canConfigure && <IconButton icon="target" size="sm" active={configuring} label={configuring ? 'Done configuring' : `Configure: pick up to ${RACK_CONTROLS_MAX} rack controls${isAu ? ' (touch them in its window, or pick from the list)' : ''}`} onClick={() => setConfiguring(c => !c)} />}
         {onBypass && <IconButton icon="bypass" size="sm" active={!!slot.bypass} label={slot.bypass ? 'Turn back on' : 'Bypass'} onClick={onBypass} />}
         {onMove && <IconButton icon="chevU" size="sm" label="Earlier" disabled={first} onClick={() => onMove(-1)} />}
         {onMove && <IconButton icon="chevD" size="sm" label="Later" disabled={last} onClick={() => onMove(1)} />}
