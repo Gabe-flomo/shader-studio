@@ -98,6 +98,27 @@ export function ItemPage({ inv, node, compact, onOpen, onMenu, primary, onExport
           </div>
         </div>
       )}
+      {/* A layer set's poster: the picture when it was saved. */}
+      {posterFor.length === 0 && node.kind === 'preset' && node.thumb && (
+        <div style={{ ...cardStyle(tk), padding: 6, display: 'flex', justifyContent: 'center', background: tk.bg.render }}>
+          <img src={node.thumb} alt={`The picture when “${node.label}” was saved`} style={{ width: '100%', maxWidth: 560, aspectRatio: '16 / 9', objectFit: 'contain', display: 'block', borderRadius: radius.md }} />
+        </div>
+      )}
+      {/* A layer set's media and what was left out (docs/presets.md). */}
+      {Array.isArray(v?.excluded) && Array.isArray(v?.media) && ((v.media as unknown[]).length > 0 || (v.excluded as unknown[]).length > 0) && (
+        <div style={{ ...cardStyle(tk), padding: cardPad, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {(v.media as Array<{ id?: unknown; name?: unknown; kind?: unknown; linked?: unknown }>).length > 0 && <>
+            <span style={capsLabel(tk)}>Files its layers use</span>
+            {(v.media as Array<{ id?: unknown; name?: unknown; kind?: unknown; linked?: unknown }>).map(m => (
+              <span key={String(m.id)} style={{ fontSize: 12, color: tk.text.secondary }}>{String(m.kind) === 'video' ? 'Video' : String(m.kind) === 'font' ? 'Font' : 'Sound'} “{String(m.name || m.id)}”{m.linked ? ' · a linked-folder file (kept as a link)' : ' · from the library (a .playfile export takes it along)'}</span>
+            ))}
+          </>}
+          {(v.excluded as unknown[]).length > 0 && <>
+            <span style={capsLabel(tk)}>Left out when it was saved</span>
+            {(v.excluded as unknown[]).map(x => <span key={String(x)} style={{ fontSize: 12, color: tk.text.muted }}>{String(x)}</span>)}
+          </>}
+        </div>
+      )}
       {snippet && preview && (
         <div style={{ ...cardStyle(tk), padding: cardPad, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={capsLabel(tk)}>Live preview · its numbers are the sliders</span>
