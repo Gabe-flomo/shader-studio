@@ -5,7 +5,7 @@
  * control, drive it with a null or reset it), a colour, a segmented choice, a select, a
  * toggle, a layer picker and a note. Every label carries a tooltip.
  */
-import type { ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { layerNumericProps, defaultLayer, layerTarget, type PlayControl, type PlayLayer } from '../../../types/play';
@@ -18,6 +18,7 @@ import { RulerSlider } from '../../ui/RulerSlider';
 import { Tooltip } from '../../ui/Tooltip';
 import { ContextMenuArea } from '../../ui/ContextMenuArea';
 import { pairedKey } from '../layerOps';
+import { MiniMapper } from '../MiniMapper';
 import { MASK_DEFAULTS, maskKeyParts } from '../../../types/playLayers';
 
 type Tokens = ReturnType<typeof useTokens>;
@@ -59,6 +60,21 @@ const COARSE = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer:
 
 const toHex = (v: RGB) => `#${v.map(c => Math.round(Math.max(0, Math.min(1, c)) * 255).toString(16).padStart(2, '0')).join('')}`;
 const fromHex = (h: string): RGB => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+
+/** A property's +: opens the mini mapper (picking "Control only" adds it outright, as the + used to do alone). */
+function MiniMapperAddButton({ exposed, label, layerLabel, layerId, propKey }: { exposed: boolean; label: string; layerLabel: string; layerId: string; propKey: string }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+  // Once wired, `exposed` flips true while the popover may still be open showing its done state
+  // (the mapping's summary, Open in Mappings) — only the closed face swaps to the plain check.
+  if (exposed && !open) return <IconButton icon="check" label="Already a control (right-click for more)" size="sm" active disabled />;
+  return (
+    <span ref={anchor} style={{ display: 'inline-flex' }}>
+      <IconButton icon={exposed ? 'check' : 'plus'} active={exposed} label={`Map ${label} onto a source, or add it as a control (right-click for more)`} size="sm" onClick={() => setOpen(o => !o)} />
+      {open && <MiniMapper anchorRef={anchor} target={{ layerId, key: propKey }} label={`${layerLabel} · ${label}`} onClose={() => setOpen(false)} />}
+    </span>
+  );
+}
 
 export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onExposeControl, onDriveNull, onPairXY }: {
   l: PlayLayer;
@@ -127,7 +143,8 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
             {touch || COARSE
               // No right-click on a phone or tablet: the + opens the same menu.
               ? <IconButton icon={exposed ? 'check' : 'plus'} label={`${def.label}: add to controls, or drive with a null`} size="sm" active={exposed} onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); open(r.left, r.bottom + 4); }} />
-              : <IconButton icon={exposed ? 'check' : 'plus'} label={exposed ? 'Already a control (right-click for more)' : `Make ${def.label} a control (right-click to drive it with a null)`} size="sm" active={exposed} disabled={exposed} onClick={() => onExpose(key)} />}
+              // Desktop: the + opens the mini mapper (picking "Control only" does what it used to do outright); right-click still reaches the null/pair/reset menu above.
+              : <MiniMapperAddButton exposed={exposed} label={def.label} layerLabel={l.label} layerId={l.id} propKey={key} />}
           </>
         )}
       </ContextMenuArea>

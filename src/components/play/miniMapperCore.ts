@@ -1,0 +1,132 @@
+/**
+ * miniMapper.ts — the "+"'s mini mapper: picking a source wires it onto a
+ * target at once (the target's control made first if it isn't on the panel
+ * yet), the same "Control only" / MapToMenu / Add control paths already
+ * offer (layerOps.ts's resolveTargetControl and mapSourceTo), just grouped
+ * the way the owner asked for: Control only, MIDI, Mouse & keys, Hands,
+ * Audio, Layers, Generators, Controls, Increment. Pure: no React, unit-
+ * tested directly. MiniMapper.tsx renders the sections this builds and
+ * calls `wireMiniMapperPick` with the row's value; "Learn" (MIDI or any
+ * input) is the one case a component drives itself, through
+ * lib/playEngine.ts's startLearn, since it waits for the next input.
+ */
+import type { IconName } from '../ui/iconPaths';
+import type { PickerItem, PickerSection } from '../ui/groupedPickerModel';
+import { SENSOR_LABELS, sourceFromType, type SourceType } from '../../play/playSources';
+import { defaultIncrement, sensorReadsFor, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type SensorRead } from '../../types/play';
+import { mapSourceTo, resolveTargetControl, type MapTarget } from './layerOps';
+
+export type MiniMapperTarget = MapTarget;
+
+/** The picker's value for "no source": the control alone, mappable later. */
+export const CONTROL_ONLY = 'controlOnly';
+/** The picker's value for Increment: wires a placeholder source with defaults to tune in Mappings. */
+export const INCREMENT = 'increment';
+/** The picker's value for Learn: MiniMapper.tsx drives this one itself (it waits for an input). */
+export const MIDI_LEARN = 'midi:learn';
+
+const HAND_ENTRIES: { value: SourceType; label: string; icon: IconName; description: string }[] = [
+  { value: 'hand:point', label: 'Fingertip or joint', icon: 'hand', description: 'X, Y or Z of one point on the hand' },
+  { value: 'hand:pinch', label: 'Pinch', icon: 'hand', description: 'Thumb to a fingertip' },
+  { value: 'hand:open', label: 'Openness', icon: 'hand', description: 'Fist to open hand' },
+  { value: 'hand:palm', label: 'Palm centre', icon: 'hand', description: 'Where the palm is, X or Y' },
+  { value: 'hand:roll', label: 'Roll', icon: 'hand', description: 'The turn of the hand' },
+  { value: 'hand:size', label: 'Nearness', icon: 'hand', description: 'How big the hand looks' },
+  { value: 'hand:present', label: 'Hand in view', icon: 'hand', description: 'On while the hand is seen' },
+  { value: 'hand:gesture', label: 'Gesture held', icon: 'hand', description: 'Fist, pinch, point…' },
+  { value: 'hand:spread', label: 'Distance between the hands', icon: 'hand', description: 'Palm to palm' },
+];
+
+/** What the sections need to know about the setup: MIDI devices seen, and a Camera layer (hands need one). */
+export interface MiniMapperContext {
+  play: PlayRecord;
+  midiDevices: readonly string[];
+  hasCamera: boolean;
+  /** Audio readers already made for this setup, for the Audio section (audioReaderBank.list()). */
+  readers?: ReadonlyArray<{ id: string; name: string }>;
+}
+
+const sensorItem = (l: PlayLayer, read: SensorRead): PickerItem => ({ value: `sensor:${l.id}:${read}`, label: `${l.label} · ${SENSOR_LABELS[read]}`, icon: 'eye' });
+
+/** The mini mapper's categories, in the owner's order, gated on what the setup has. */
+export function miniMapperSections(ctx: MiniMapperContext): PickerSection[] {
+  const { play, midiDevices, hasCamera, readers = [] } = ctx;
+  const sections: PickerSection[] = [];
+  sections.push({ heading: 'Control only', items: [
+    { value: CONTROL_ONLY, label: 'Add as a control', icon: 'plus', description: 'No source — map anything onto it from Mappings later' },
+  ] });
+  if (midiDevices.length) {
+    sections.push({ heading: 'MIDI', items: [
+      { value: MIDI_LEARN, label: 'Learn…', icon: 'piano', description: `Move a control on ${midiDevices.join(', ')}` },
+      { value: 'midi:note', label: 'MIDI note', icon: 'piano', description: 'The note number, 0–1' },
+      { value: 'midi:velocity', label: 'MIDI velocity', icon: 'piano', description: 'How hard the last note was hit' },
+      { value: 'midi:gate', label: 'MIDI gate', icon: 'piano', description: 'On while a note is held' },
+      { value: 'midi:bend', label: 'Pitch bend', icon: 'piano', description: 'The bend wheel' },
+    ] });
+  }
+  sections.push({ heading: 'Mouse & keys', items: [
+    { value: 'mouse:x', label: 'Mouse X', icon: 'mouse', description: 'Across the picture' },
+    { value: 'mouse:y', label: 'Mouse Y', icon: 'mouse', description: 'Up and down the picture' },
+    { value: 'mouse:down', label: 'Mouse button', icon: 'mouse', description: 'Pressed or not' },
+    { value: 'key', label: 'Keyboard key', icon: 'keyboard', description: 'Held or not' },
+  ] });
+  if (hasCamera) sections.push({ heading: 'Hands', items: HAND_ENTRIES });
+  const audioItems: PickerItem[] = [{ value: 'live', label: 'Band (bass, treble…)', icon: 'live', description: 'A band of the live input' }];
+  for (const r of readers) audioItems.push({ value: `reader:${r.id}`, label: `Reader · ${r.name}`, icon: 'curve' });
+  audioItems.push({ value: 'audio', label: 'Audio Input node band', icon: 'nodes', description: 'A band of an Audio Input node in the graph' });
+  sections.push({ heading: 'Audio', items: audioItems });
+  const layerItems: PickerItem[] = [];
+  for (const l of play.layers) {
+    const reads = sensorReadsFor(l as { kind: string; shape?: string }).filter(r => r !== 'distance') as SensorRead[];
+    for (const r of reads) layerItems.push(sensorItem(l, r));
+  }
+  if (layerItems.length) sections.push({ heading: 'Layers', items: layerItems });
+  sections.push({ heading: 'Generators', items: [
+    { value: 'lfo', label: 'LFO', icon: 'wave', description: 'Sine, triangle, saw or square' },
+    { value: 'noise', label: 'Noise', icon: 'dice', description: 'Smooth, drifting, random or stepped' },
+    { value: 'clock', label: 'Clock', icon: 'clock', description: 'A shape in time with a BPM' },
+    { value: 'fn', label: 'Function', icon: 'fn', description: 'A formula over time' },
+  ] });
+  if (play.controls.length) sections.push({ heading: 'Controls', items: play.controls.map(c => ({ value: `control:${c.id}`, label: c.label, icon: 'sliders' as const })) });
+  sections.push({ heading: 'Increment', items: [
+    { value: INCREMENT, label: 'Step on a beat, a signal…', icon: 'bolt', description: 'Moves in steps instead of following; tune it in Mappings' },
+  ] });
+  return sections;
+}
+
+export interface WireResult { play: PlayRecord; control?: PlayControl; mapping?: PlayMapping }
+
+/** "Control only": the control alone, no mapping. */
+export function wireControlOnly(p: PlayRecord, target: MiniMapperTarget): WireResult {
+  return resolveTargetControl(p, target);
+}
+
+/** A source picked (or Learned): the control (made first if needed) and a mapping across its whole range. */
+export function wireSource(p: PlayRecord, source: PlaySource, target: MiniMapperTarget, smoothMs = 60): WireResult {
+  const { play, control } = mapSourceTo(p, source, target, smoothMs);
+  const mapping = control && play.mappings.length > p.mappings.length ? play.mappings[play.mappings.length - 1] : undefined;
+  return { play, control, mapping };
+}
+
+/** Increment: the control, and a mapping with a harmless placeholder source (unused except by a threshold) and Increment's defaults, ready to tune in Mappings. */
+export function wireIncrement(p: PlayRecord, target: MiniMapperTarget): WireResult {
+  const r = wireSource(p, { kind: 'clock', shape: 'saw', bpm: 120, beats: 4 }, target, 0);
+  if (!r.mapping) return r;
+  const span = Math.abs(r.mapping.outMax - r.mapping.outMin);
+  const step = span > 0 ? Math.round((span / 8) * 1000) / 1000 : 0.1;
+  const mappings = r.play.mappings.map(m => (m.id === r.mapping!.id ? { ...m, increment: defaultIncrement(step, 120) } : m));
+  return { play: { ...r.play, mappings }, control: r.control, mapping: mappings.find(m => m.id === r.mapping!.id) };
+}
+
+/** Every row's value except Learn (MiniMapper.tsx drives that one, since it waits for an input) wires here. */
+export function wireMiniMapperPick(p: PlayRecord, value: string, target: MiniMapperTarget): WireResult {
+  if (value === CONTROL_ONLY) return wireControlOnly(p, target);
+  if (value === INCREMENT) return wireIncrement(p, target);
+  if (value.startsWith('sensor:')) {
+    const [, layerId, read] = value.split(':');
+    return wireSource(p, { kind: 'sensor', layerId, read: read as SensorRead, otherId: '' }, target);
+  }
+  if (value.startsWith('control:')) return wireSource(p, { kind: 'control', controlId: value.slice('control:'.length) }, target);
+  if (value.startsWith('reader:')) return wireSource(p, { kind: 'reader', readerId: value.slice('reader:'.length) }, target);
+  return wireSource(p, sourceFromType(value as SourceType, { kind: 'mouse', axis: 'x' }), target);
+}
