@@ -91,7 +91,7 @@ export type TriggerOn =
    * `fill` particles filling it past `threshold` (0..1, see the sensor source).
    */
   | { on: 'zone'; layerId: string; event: 'click' | 'enter' | 'fill'; threshold: number }
-  /** A hand gesture seen by hand tracking (docs/hand-tracking.md): fires when it starts, held while it lasts. */
+  /** A hand gesture seen by hand tracking (docs/tracking.md): fires when it starts, held while it lasts. */
   | { on: 'hand'; side: HandSide; gesture: HandGesture }
   /** A face gesture (docs/tracking.md): the mouth opening, a smile, a blink, brows up, a face coming or going. */
   | { on: 'face'; gesture: FaceGesture }
@@ -226,7 +226,7 @@ export interface PlayAudioReaders {
   readers: AudioReader[];
 }
 
-// ── Hands (hand tracking, docs/hand-tracking.md) ────────────────────────────
+// ── Hands (hand tracking, docs/tracking.md) ────────────────────────────
 
 /** The performer's own hand. `any`: the right hand when it is in view, else the left (for gestures: either). */
 export type HandSide = 'left' | 'right' | 'any';

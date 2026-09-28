@@ -2624,7 +2624,7 @@ void main() {
     };
   }
 
-  // The worker that runs the Hand Landmarker (mirrors src/lib/handWorker.ts): MediaPipe's ES module and
+  // The worker that runs the Hand Landmarker (mirrors src/lib/trackerWorker.ts): MediaPipe's ES module and
   // its WebAssembly come in as blob URLs, the model as bytes. MediaPipe's "Right" is the performer's right hand (unmirrored frames).
   const HAND_WORKER = [
     'let lm = null, lastT = 0;',

@@ -1,5 +1,5 @@
 /**
- * HandsChip.tsx — hand tracking's status and settings (docs/hand-tracking.md).
+ * HandsChip.tsx — hand tracking's status and settings (docs/tracking.md).
  *
  *   HandsChip   "Hands: tracking 2 hands", an eye to show or hide the hand
  *               on the picture, Enable / Stop and the settings (hands to

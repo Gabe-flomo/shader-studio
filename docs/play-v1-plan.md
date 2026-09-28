@@ -15,7 +15,7 @@
 - **Step 4, triggers and envelopes: done** (`src/play/triggers.ts`). A Trigger source fires on a key, a click, a beat, a MIDI note, an OSC message or an audio hit and plays an envelope (ADSR, velocity), a toggle, a step or a random value. Noise sources (smooth, drift, random, stepped) sit beside the LFO.
 - **OSC and live audio: done.** `npm run osc-bridge` (tools/osc-bridge.mjs) brings OSC from Ableton or TouchOSC in; a Live audio source listens to a mic or a virtual cable carrying Ableton's sound. First-time setup: docs/connecting-ableton.md (also in the app, Mappings → ⓘ).
 - **Proximity and firing modes: done** (see *Proximity and firing modes* below). **On: Proximity** fires when two things on the picture come closer (or go farther) than a distance, and every trigger can fire once, continuously, every N frames or seconds, or on release.
-- **Hand tracking: done** (docs/hand-tracking.md). MediaPipe's Hand Landmarker in a worker, fed by the shared webcam, loaded only when hands are first enabled and bundled with the app (offline). Landmarks, pinch, openness, palm, roll, nearness and the two hands' distance are sources; pinches, fist, open palm, point and a hand coming or going are gesture triggers; nulls can follow any landmark.
+- **Hand tracking: done** (docs/tracking.md). MediaPipe's Hand Landmarker in a worker, fed by the shared webcam, loaded only when hands are first enabled and bundled with the app (offline). Landmarks, pinch, openness, palm, roll, nearness and the two hands' distance are sources; pinches, fist, open palm, point and a hand coming or going are gesture triggers; nulls can follow any landmark.
 - **Step 5, MIDI files and offline export: not started.** Quantise-to-scale and latch processors, MIDI clock and Ableton Link are next after it.
 
 ---
@@ -120,7 +120,7 @@ A burst every 3 frames is a trail of sparks; a toggle every frame strobes, so th
 
 ## Hands
 
-Hand tracking (docs/hand-tracking.md) adds a **Hands** group to the source list, **On: Hand gesture** to triggers (pinch with each finger, fist, open palm, point, comes into view, leaves view, each with hysteresis so it fires once), and **Follows → A hand** to nulls, so particle roles, sensors, Script layers' `s.null()` and Cloner effectors can follow a fingertip. The model runs locally in a worker at about 30 frames a second, on the camera a Camera layer uses (which can stay hidden). Takes record what hands drove, and rest the tracker while they play back. The **Hands** folder in Examples has four setups: fingertips moving particles, pinch / point / fist, two hands at once, and a fingertip touching a shape (proximity). Web exports carry it only when asked (**Include hand tracking**, about 12.2 MB).
+Hand tracking (docs/tracking.md) adds a **Hands** group to the source list, **On: Hand gesture** to triggers (pinch with each finger, fist, open palm, point, comes into view, leaves view, each with hysteresis so it fires once), and **Follows → A hand** to nulls, so particle roles, sensors, Script layers' `s.null()` and Cloner effectors can follow a fingertip. The model runs locally in a worker at about 30 frames a second, on the camera a Camera layer uses (which can stay hidden). Takes record what hands drove, and rest the tracker while they play back. The **Hands** folder in Examples has four setups: fingertips moving particles, pinch / point / fist, two hands at once, and a fingertip touching a shape (proximity). Web exports carry it only when asked (**Include hand tracking**, about 12.2 MB).
 
 ## Controls
 

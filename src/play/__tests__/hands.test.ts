@@ -3,7 +3,7 @@
  * same path the tracker's do (handFeed → Play engine → hands.js), so sources,
  * gestures, smoothing, following nulls, takes and the file format are all
  * checked here. The tracker itself (MediaPipe in a worker) is checked in the
- * browser (docs/hand-tracking.md).
+ * browser (docs/tracking.md).
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 

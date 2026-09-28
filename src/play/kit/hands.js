@@ -4,7 +4,7 @@
  * exports (inlined with the rest of the kit, so its top-level names stay
  * distinct: everything here starts with hd / HD_).
  *
- * A tracker (MediaPipe's Hand Landmarker, lib/handTracker.ts in the app)
+ * A tracker (MediaPipe's Hand Landmarker, lib/trackerPump.ts in the app)
  * hands in raw frames:
  *
  *   { t, w, h, hands: [{ side: 'left' | 'right', score, lm: [x, y, z] × 21 }] }
