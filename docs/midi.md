@@ -8,7 +8,39 @@ controller (Push, Launchpad) as the cells of a grid shader.
 The reading itself is in `src/play/kit/midi.js`, part of the layer kit, so the
 app and exported web pages do the same thing.
 
+## A new knob mapping
+
+A **MIDI CC** row added with **Add** (or switched to MIDI CC in the picker)
+starts **unassigned**: it has no CC number yet and shows a pulsing "Turn a
+knob…". The first CC that moves on any enabled device becomes its CC and
+channel, the row flashes, and the **Knob** row reads "CC 70 · ch 1 · MPK
+mini 3". Until then the row reads nothing and leaves its control alone.
+
+Nothing is assigned while another row is listening on its own (Learn, Change…,
+Set range, the pad grid's Learn) or while an Audio engine rack has the
+computer keyboard. With several unassigned rows, each knob fills one row: the
+knob still turning doesn't take the next row too.
+
+The controls on a CC row:
+
+- the **CC number** field and the **channel** select in the source row (type a
+  CC if you know it; the field appears once the row has one);
+- **Knob**: what the row follows. **Change…** waits for the next knob you turn
+  and takes its CC (and channel) instead; Esc keeps the current one;
+- **Learn** (✦) on the row replaces the whole source with the next input of
+  any kind (a key, a note, the mouse);
+- **Lock to this knob** (below): a lock on top of the CC.
+
+Stored as `cc` on the source; a source without `cc` is unassigned. Older
+records keep whatever CC they have (the old default was 1, and a row typed to
+CC 1 on purpose can't be told from one that was never touched, so both stay).
+`src/lib/midiAutoLearn.ts` does the assigning; `src/lib/__tests__/midiAutoLearn.test.ts`
+covers it.
+
 ## Knob lock
+
+**Learn** and **Change…** pick the CC. **Lock** goes further: it ties the row
+to a device as well, so the same CC from another controller is ignored.
 
 A **MIDI CC** mapping shows an **Active** readout: the control touched last,
 with its CC number, channel and device ("CC 21 = 64 · ch 2 · Launch Control
@@ -19,9 +51,10 @@ XL").
   channel or another device is ignored.
 - Lock several controls on one mapping: whichever of them moved last drives it.
   Each lock is a chip with its own × to unlock it.
-- **Learn & lock** waits for the next knob you turn and locks it.
-- After **Learn** (✦) on a row, the knob you turned is the active input, so
-  **Lock to this knob** is one click away.
+- Unlocking removes only the device binding: the row keeps the lock's CC and
+  follows it from any device again (the chip's tooltip says so).
+- After **Learn** (✦) or **Change…** on a row, the knob you turned is the
+  active input, so **Lock to this knob** is one click away.
 
 The Studio's **MIDI Input** node has the same **Active** row and a **Lock**
 button: it locks a CC output (adding it if needed) to the knob touched last.
@@ -37,6 +70,9 @@ name, so a lock taken from them matches any device.
 
 - **Set range**: press the lowest key, then the highest (the prompts say which
   is next; Esc cancels). The order doesn't matter.
+- **Learn a note** (velocity and gate): press one key or pad, and only that
+  note drives the row (a range of one; **Change note…** picks another, **Any
+  note** drops it). A pad as a gate, in one press.
 - The range shows as note names (C2–G3) and each end can be typed as a name
   (C2, F#3, Db4) or a number (36).
 - Only notes inside the range count. A **note** source then reads 0 at the low

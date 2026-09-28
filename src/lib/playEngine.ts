@@ -764,7 +764,8 @@ class PlayEngine implements InputSource {
           case 'velocity': return ch.seenNote ? ch.lastVelocity / 127 : null;
           case 'gate': return ch.seenNote ? (ch.heldCount > 0 ? 1 : 0) : null;
           case 'bend': return ch.seenBend ? (ch.bend + 1) / 2 : null;
-          case 'cc': { const n = (source.cc ?? 1) & 127; return ch.seenCc[n] ? ch.cc[n] / 127 : null; }
+          // No `cc` yet: the row is waiting for its knob (lib/midiAutoLearn.ts) and leaves the control alone.
+          case 'cc': { if (source.cc === undefined) return null; const n = source.cc & 127; return ch.seenCc[n] ? ch.cc[n] / 127 : null; }
         }
         return null;
       }

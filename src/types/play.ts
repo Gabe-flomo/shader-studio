@@ -1141,7 +1141,8 @@ function parseSource(raw: unknown): PlaySource | null {
       if (!signal || !MIDI_SIGNALS.has(signal)) return null;
       const channel = Math.max(0, Math.min(16, Math.round(num(s.channel, 0))));
       const out: PlaySource = { kind: 'midi', signal: signal as MidiSignal, channel };
-      if (signal === 'cc') out.cc = Math.max(0, Math.min(127, Math.round(num(s.cc, 1))));
+      // No `cc`: the row hasn't been given its knob yet (lib/midiAutoLearn.ts assigns the first one that moves).
+      if (signal === 'cc' && typeof s.cc === 'number' && Number.isFinite(s.cc)) out.cc = Math.max(0, Math.min(127, Math.round(s.cc)));
       const locks = signal === 'cc' ? parseMidiLocks(s.locks) : undefined;
       if (locks) out.locks = locks;
       const range = signal === 'note' || signal === 'velocity' || signal === 'gate' ? parseNoteRange(s.range) : undefined;
