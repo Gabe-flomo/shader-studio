@@ -104,6 +104,7 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:settings:customFnDir': S('Custom function export folder', 'saving'),
   'shader-studio:settings:filesKeepVersions': S('Clean up: versions to keep', 'saving'),
   'shader-studio:settings:storageLimit': S('Storage limit', 'saving', { hint: 'Back to 10 GB' }),
+  'shader-studio:settings:autosave': S('Autosave', 'saving', { hint: 'Back to every 5 minutes' }),
   // Windows
   'playfield:builderWindow': S('Builder window', 'windows'),
   'playfield:history-window': S('History window', 'windows'),
@@ -116,6 +117,7 @@ const KNOWN: Record<string, SettingInfo> = {
   'playfield:activity-log': S('Activity log', 'app', { data: true }),
   'playfield:whats-new-seen': S('What’s new: last seen', 'app'),
   'playfield:whats-new-toasted': S('What’s new: last shown', 'app'),
+  'shader-studio:session': S('Crash recovery: this session', 'app', { hint: 'The next launch won’t offer to recover this session' }),
   // Not app settings (they stay in the Settings section), named for installs and downloads.
   'shader-studio:kaggle': S('Kaggle sign-in', 'sharing', { data: true }),
   'shader-studio:discover:learned-roles': S('Learned parameter roles', 'other', { data: true }),

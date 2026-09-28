@@ -23,9 +23,23 @@ export interface AuUnitInfo {
   customView: boolean;
 }
 
+export interface PluginCrashNote {
+  /** "Crashed Playfield while loading", "Crashed when it was tried out", "Didn't finish loading in 45 s". */
+  why: string;
+  at: number;
+  /** Its name, for when the list hasn't been scanned. */
+  name?: string;
+}
+
+export interface PluginUnitPref { on: boolean; new?: boolean; crashed?: PluginCrashNote }
+
 export interface PluginPrefs {
-  /** Per unit key: shown or hidden, and whether a rescan found it and it hasn't been looked at. */
-  units: Record<string, { on: boolean; new?: boolean }>;
+  /**
+   * Per unit key: shown or hidden, whether a rescan found it and it hasn't been looked at, and
+   * `crashed` when it crashed the app or its trial load (docs/audio-engine.md "When a plug-in crashes"):
+   * switched off, with why and when, until Try again.
+   */
+  units: Record<string, PluginUnitPref>;
   /** Units a rescan finds start hidden. */
   newOff: boolean;
   /** When the list was last scanned (ms), 0 never: the first scan tags nothing New. */
@@ -46,7 +60,9 @@ export function parsePluginPrefs(raw: string | null): PluginPrefs {
     for (const [k, x] of Object.entries(o.units as Record<string, unknown>)) {
       if (!x || typeof x !== 'object' || k.length > 40) continue;
       const u = x as Record<string, unknown>;
-      units[k] = { on: u.on !== false, ...(u.new === true ? { new: true } : {}) };
+      const c = u.crashed && typeof u.crashed === 'object' ? u.crashed as Record<string, unknown> : null;
+      const crashed = c && typeof c.why === 'string' ? { why: c.why.slice(0, 200), at: typeof c.at === 'number' && Number.isFinite(c.at) ? c.at : 0, ...(typeof c.name === 'string' && c.name ? { name: c.name.slice(0, 120) } : {}) } : null;
+      units[k] = { on: u.on !== false, ...(u.new === true ? { new: true } : {}), ...(crashed ? { crashed } : {}) };
     }
   }
   return { units, newOff: o.newOff === true, scanned: typeof o.scanned === 'number' && Number.isFinite(o.scanned) ? o.scanned : 0 };
@@ -75,11 +91,26 @@ export function setPluginsEnabled(prefs: PluginPrefs, keys: readonly string[], o
   return { ...prefs, units };
 }
 
-/** Looked at: nothing is New any more. */
+/** Looked at: nothing is New any more (crash notes stay). */
 export function clearNewTags(prefs: PluginPrefs): PluginPrefs {
   const units: PluginPrefs['units'] = {};
-  for (const [k, v] of Object.entries(prefs.units)) units[k] = { on: v.on };
+  for (const [k, v] of Object.entries(prefs.units)) units[k] = { on: v.on, ...(v.crashed ? { crashed: v.crashed } : {}) };
   return { ...prefs, units };
+}
+
+/** A unit crashed (the app, or its trial load): switched off, with the note. */
+export function markPluginCrashed(prefs: PluginPrefs, key: string, why: string, at: number, name?: string): PluginPrefs {
+  return { ...prefs, units: { ...prefs.units, [key]: { on: false, crashed: { why, at, ...(name ? { name } : {}) } } } };
+}
+
+/** Try again worked: the note goes and the unit is on again. */
+export function clearPluginCrash(prefs: PluginPrefs, key: string): PluginPrefs {
+  return { ...prefs, units: { ...prefs.units, [key]: { on: true } } };
+}
+
+/** The units switched off for crashing, newest first. */
+export function crashedPlugins(prefs: PluginPrefs): Array<{ code: string } & PluginCrashNote> {
+  return Object.entries(prefs.units).filter(([, v]) => v.crashed).map(([code, v]) => ({ code, ...v.crashed! })).sort((a, b) => b.at - a.at);
 }
 
 /** The units the pickers offer. */
@@ -145,6 +176,8 @@ interface PluginStore {
   setEnabled: (keys: readonly string[], on: boolean) => void;
   setNewOff: (on: boolean) => void;
   clearNew: () => void;
+  markCrashed: (key: string, why: string, at?: number, name?: string) => void;
+  clearCrash: (key: string) => void;
 }
 
 export const usePluginSettings = create<PluginStore>((set, get) => {
@@ -171,5 +204,7 @@ export const usePluginSettings = create<PluginStore>((set, get) => {
     setEnabled: (keys, on) => put(setPluginsEnabled(get().prefs, keys, on)),
     setNewOff: on => put({ ...get().prefs, newOff: on }),
     clearNew: () => put(clearNewTags(get().prefs)),
+    markCrashed: (key, why, at = Date.now(), name) => put(markPluginCrashed(load(), key, why, at, name)),
+    clearCrash: key => put(clearPluginCrash(load(), key)),
   };
 });

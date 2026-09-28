@@ -38,6 +38,7 @@ import { rollingSeconds, takeApplier, useTakes } from '../lib/takes';
 import { TakesList } from './play/TakesList';
 import { TAKE_MAX_SECONDS, type PlayTake } from '../types/play';
 import { Select } from './ui/Select';
+import { holdAutosave } from '../files/recovery';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
@@ -376,6 +377,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     recorderRef.current?.capture();
     rafRef.current = requestAnimationFrame(captureLoop);
   }, []);
+
+  // Autosave waits while a recording or render runs (docs/crash-recovery.md).
+  useEffect(() => (state === 'recording' || state === 'encoding' ? holdAutosave() : undefined), [state]);
 
   // A lost WebGL context mid-export (typically GPU memory exhaustion at
   // 2×/4× on mobile) otherwise just freezes the video on the last frame.

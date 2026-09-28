@@ -933,7 +933,8 @@ interface NodeGraphState {
   loadSavedGraph: (name: string) => FileResult;
   deleteSavedGraph: (name: string) => void;
   exportGraph: () => Promise<FileResult>;
-  importGraph: (json: string) => FileResult;
+  /** `recovered`: an autosave put back after a crash (files/recovery.ts): its own undo label, no import in the activity log. */
+  importGraph: (json: string, opts?: { recovered?: boolean }) => FileResult;
   importGraphFromFile: () => Promise<FileResult>;
   /** Pick a .glsl/.frag file, wrap it as a code-backed node type and build UV → node → Output. */
   importGlslFromFile: () => Promise<FileResult & { notes?: string[]; label?: string }>;
@@ -5074,7 +5075,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return saveTextFile(json, name.endsWith('.json') ? name : `${name}.json`);
   },
 
-  importGraph: (json: string) => {
+  importGraph: (json: string, opts) => {
     // Parse and migrate before touching any state: a malformed file must
     // leave the current graph and its undo history exactly as they were.
     let nodes: GraphNode[];
@@ -5097,7 +5098,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       console.error('[importGraph] invalid graph file', e);
       return { ok: false, error: `Could not import graph: ${errorMessage(e)}` };
     }
-    undoManager.clear(isPlayFile ? 'Imported a Play file' : 'Imported a graph file');
+    undoManager.clear(opts?.recovered ? 'Recovered after a crash' : isPlayFile ? 'Imported a Play file' : 'Imported a graph file');
     idGenerator.syncFromGraph(nodes);
     set(state => ({
       nodes, looseGroups: Array.isArray(looseGroups) ? looseGroups as import('../types/nodeGraph').LooseGroup[] : [], play, datasets,
@@ -5108,7 +5109,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     set({ currentGraph: null, graphDirty: false });
     // A play file already opens on Play; a plain graph that happens to carry a setup just says so.
     if (!isPlayFile) announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
-    recordActivity('import', 'Graph file');
+    if (!opts?.recovered) recordActivity('import', 'Graph file');
     return { ok: true };
   },
 

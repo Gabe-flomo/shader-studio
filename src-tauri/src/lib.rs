@@ -11,6 +11,7 @@ mod workspace;
 mod linked;
 mod osc_listener;
 mod output_window;
+mod recovery;
 
 // ── FFmpeg session state ──────────────────────────────────────────────────────
 
@@ -310,6 +311,12 @@ fn open_url(url: String) -> Result<(), String> {
     cmd.arg(&url).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// `main`: started as a plug-in trial process (`--au-probe`, audio_engine/safety.rs)? Run it and return its exit code.
+pub fn probe_from_args() -> Option<i32> {
+    let args: Vec<String> = std::env::args().collect();
+    audio_engine::safety::probe_from_args(&args)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -318,10 +325,12 @@ pub fn run() {
         .manage(OscState(Mutex::new(None)))
         .manage(midi::MidiState::default())
         .manage(audio_engine::EngineState::default())
+        .manage(audio_engine::safety::SafetyState::default())
         .manage(workspace::WatchState(Mutex::new(None)))
         .manage(linked::LinkedState::default())
         .manage(playfile::OpenedFiles(Mutex::new(Vec::new())))
         .manage(output_window::OutputState::default())
+        .manage(recovery::SessionState::default())
         .invoke_handler(tauri::generate_handler![
             start_ffmpeg_encode,
             send_frame_rgba,
@@ -367,6 +376,9 @@ pub fn run() {
             audio_engine::ae_tap_start,
             audio_engine::ae_tap_stop,
             audio_engine::ae_tap_discard,
+            audio_engine::safety::ae_crash_take,
+            audio_engine::safety::ae_plugin_retry,
+            audio_engine::safety::ae_plugin_safety,
             mux_recording_audio,
             open_url,
             data_fetch::fetch_url,
@@ -399,8 +411,19 @@ pub fn run() {
             output_window::output_fullscreen,
             output_window::output_record_put,
             output_window::output_record_get,
+            recovery::session_start,
+            recovery::session_note,
+            recovery::autosave_write,
+            recovery::autosave_list,
+            recovery::autosave_read,
+            recovery::autosave_remove,
+            recovery::autosave_reveal,
         ])
         .setup(|app| {
+            // Crash recovery (docs/crash-recovery.md): the previous launch's marker is kept for the page, this one's written.
+            recovery::start(app.handle());
+            // Plug-ins: the trial results, and the marker a crash while loading one left (audio_engine/safety.rs).
+            audio_engine::safety::start(app.handle());
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -413,6 +436,10 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app, _event| {
+            // A clean quit: the next launch doesn't offer to recover.
+            if let tauri::RunEvent::Exit = &_event {
+                recovery::clean_exit(_app);
+            }
             // A .playfile opened with the app (Finder, the Dock): kept for the web side to take
             // at launch, and announced for when it's already running (src/playfile.rs).
             #[cfg(any(target_os = "macos", target_os = "ios"))]

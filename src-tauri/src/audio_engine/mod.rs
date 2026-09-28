@@ -9,6 +9,7 @@
 //!   render.rs    a take's racks rendered offline (sample-exact replay) for a video's sound
 //!   tap.rs       the live engine's sound drained into a WAV for a real-time recording
 //!   touch.rs     Configure's "touch to configure": which parameter changes are the person's
+//!   safety.rs    plug-ins that crash: trial loads in a throwaway process, the loading marker
 //!
 //! Every command is async so it runs off the main thread: loading an AUv3
 //! calls back on other threads, and plug-in windows are made on the main one.
@@ -22,6 +23,7 @@ pub mod analysis;
 pub mod ffi;
 pub mod params;
 pub mod render;
+pub mod safety;
 pub mod tap;
 pub mod touch;
 
@@ -258,16 +260,28 @@ pub struct Status {
     available: bool,
     #[serde(rename = "sampleRate")]
     sample_rate: f64,
+    /// Buffers a unit made that weren't finite (NaN, ±inf), flushed to silence since launch.
+    #[serde(rename = "nanFlushes")]
+    nan_flushes: u64,
+    /// Whether the last unit loaded runs in the app's own process (null before any).
+    #[serde(rename = "lastInProcess")]
+    last_in_process: Option<bool>,
 }
 
 #[tauri::command]
 pub async fn ae_status() -> Result<Status, String> {
-    Ok(Status { available: ffi::AVAILABLE, sample_rate: if ffi::AVAILABLE { ffi::sample_rate() } else { 48000.0 } })
+    Ok(Status {
+        available: ffi::AVAILABLE,
+        sample_rate: if ffi::AVAILABLE { ffi::sample_rate() } else { 48000.0 },
+        nan_flushes: ffi::nan_flushes(),
+        last_in_process: ffi::last_load_in_process(),
+    })
 }
 
 /// Every installed instrument and effect (read fresh each time, so it doubles as a rescan).
 #[tauri::command]
-pub async fn ae_units() -> Result<serde_json::Value, String> {
+pub async fn ae_units(safety: State<'_, safety::SafetyState>) -> Result<serde_json::Value, String> {
+    safety.forget_units();
     serde_json::from_str(&ffi::list_units()).map_err(|e| e.to_string())
 }
 
@@ -280,8 +294,9 @@ pub async fn ae_rack_create(app: AppHandle, state: State<'_, EngineState>, rack:
 }
 
 #[tauri::command]
-pub async fn ae_rack_remove(state: State<'_, EngineState>, rack: String) -> Result<(), String> {
+pub async fn ae_rack_remove(state: State<'_, EngineState>, safety: State<'_, safety::SafetyState>, rack: String) -> Result<(), String> {
     let rack = valid_id(&rack)?;
+    safety.forget_rack(rack);
     {
         let mut g = state.inner.lock().map_err(lock_err)?;
         g.racks.remove(rack);
@@ -297,15 +312,24 @@ pub async fn ae_rack_volume(rack: String, volume: f32, mute: bool) -> Result<(),
 
 /// The rack's instrument: an Audio Unit, or none.
 #[tauri::command]
-pub async fn ae_set_instrument(state: State<'_, EngineState>, rack: String, unit: Option<UnitRef>) -> Result<(), String> {
+pub async fn ae_set_instrument(app: AppHandle, state: State<'_, EngineState>, safety: State<'_, safety::SafetyState>, rack: String, unit: Option<UnitRef>) -> Result<(), String> {
     let rack = valid_id(&rack)?;
     state.inner.lock().map_err(lock_err)?.smoother.forget(rack, Some("inst"));
-    ffi::set_instrument(rack, unit.map(UnitRef::triple))
+    // A plug-in that crashed (here or when it was tried out) is refused; a new one is tried out first (safety.rs).
+    let loading = match unit {
+        Some(u) => Some(safety::before_load(&app, &safety, u)?),
+        None => None,
+    };
+    let r = ffi::set_instrument(rack, unit.map(UnitRef::triple));
+    drop(loading);
+    safety.note_slot(rack, "inst", if r.is_ok() { unit.map(UnitRef::triple) } else { None });
+    r
 }
 
 #[tauri::command]
-pub async fn ae_set_sampler(state: State<'_, EngineState>, rack: String) -> Result<(), String> {
+pub async fn ae_set_sampler(state: State<'_, EngineState>, safety: State<'_, safety::SafetyState>, rack: String) -> Result<(), String> {
     let rack = valid_id(&rack)?;
+    safety.note_slot(rack, "inst", None);
     state.inner.lock().map_err(lock_err)?.smoother.forget(rack, Some("inst"));
     ffi::set_sampler(rack)
 }
@@ -358,13 +382,21 @@ pub async fn ae_sampler_zone(app: AppHandle, rack: String, index: i32, sound: Op
 }
 
 #[tauri::command]
-pub async fn ae_effect_insert(rack: String, slot: String, index: i32, unit: UnitRef) -> Result<(), String> {
-    ffi::effect_insert(valid_id(&rack)?, valid_id(&slot)?, index, unit.triple())
+pub async fn ae_effect_insert(app: AppHandle, safety: State<'_, safety::SafetyState>, rack: String, slot: String, index: i32, unit: UnitRef) -> Result<(), String> {
+    let (rack, slot) = (valid_id(&rack)?, valid_id(&slot)?);
+    let loading = safety::before_load(&app, &safety, unit)?;
+    let r = ffi::effect_insert(rack, slot, index, unit.triple());
+    drop(loading);
+    if r.is_ok() {
+        safety.note_slot(rack, slot, Some(unit.triple()));
+    }
+    r
 }
 
 #[tauri::command]
-pub async fn ae_effect_remove(state: State<'_, EngineState>, rack: String, slot: String) -> Result<(), String> {
+pub async fn ae_effect_remove(state: State<'_, EngineState>, safety: State<'_, safety::SafetyState>, rack: String, slot: String) -> Result<(), String> {
     let (rack, slot) = (valid_id(&rack)?, valid_id(&slot)?);
+    safety.note_slot(rack, slot, None);
     state.inner.lock().map_err(lock_err)?.smoother.forget(rack, Some(slot));
     ffi::effect_remove(rack, slot)
 }
@@ -403,8 +435,10 @@ pub async fn ae_state_get(rack: String, slot: String) -> Result<Option<String>, 
 }
 
 #[tauri::command]
-pub async fn ae_state_set(rack: String, slot: String, state: String) -> Result<(), String> {
-    ffi::state_set(valid_id(&rack)?, valid_id(&slot)?, &state)
+pub async fn ae_state_set(safety: State<'_, safety::SafetyState>, rack: String, slot: String, state: String) -> Result<(), String> {
+    let (rack, slot) = (valid_id(&rack)?, valid_id(&slot)?);
+    let _loading = safety::around_slot(&safety, rack, slot, "preset");
+    ffi::state_set(rack, slot, &state)
 }
 
 /// MIDI channel messages for the rack's instrument: `bytes` is one or more 1–3 byte messages back to back.
@@ -457,8 +491,13 @@ pub async fn ae_master(volume: f32, mute: bool) -> Result<(), String> {
 
 /// The slot's own plug-in window (its view, else a generic one).
 #[tauri::command]
-pub async fn ae_open_ui(rack: String, slot: String, title: String) -> Result<(), String> {
-    ffi::open_ui(valid_id(&rack)?, valid_id(&slot)?, &title)
+pub async fn ae_open_ui(safety: State<'_, safety::SafetyState>, rack: String, slot: String, title: String) -> Result<(), String> {
+    let (rack, slot) = (valid_id(&rack)?, valid_id(&slot)?);
+    let loading = safety::around_slot(&safety, rack, slot, "window");
+    let r = ffi::open_ui(rack, slot, &title);
+    // The view loads on the main thread after this returns: the marker stays a few seconds.
+    loading.linger(safety::WINDOW_MARKER);
+    r
 }
 
 /// Configure is on for a slot: watch its parameters, and send the ones the person touches (touch.rs).
@@ -484,8 +523,9 @@ pub async fn ae_watch_stop(state: State<'_, EngineState>, rack: String, slot: St
 
 /// The rack's source becomes an input the page feeds with `ae_rack_feed`; `capacity` frames of buffer.
 #[tauri::command]
-pub async fn ae_rack_input(state: State<'_, EngineState>, rack: String, capacity: u32) -> Result<(), String> {
+pub async fn ae_rack_input(state: State<'_, EngineState>, safety: State<'_, safety::SafetyState>, rack: String, capacity: u32) -> Result<(), String> {
     let rack = valid_id(&rack)?;
+    safety.note_slot(rack, "inst", None);
     state.inner.lock().map_err(lock_err)?.smoother.forget(rack, Some("inst"));
     ffi::set_input(rack, capacity.clamp(1024, 1 << 22))
 }
@@ -553,7 +593,7 @@ impl Drop for RenderBusy {
 
 /// Render the job's racks offline (render.rs); the reply is bytes: u32 LE JSON length, the JSON (`RenderInfo`), left f32 LE, right f32 LE.
 #[tauri::command]
-pub async fn ae_render_take(app: AppHandle, state: State<'_, EngineState>, job: render::RenderJob) -> Result<tauri::ipc::Response, String> {
+pub async fn ae_render_take(app: AppHandle, state: State<'_, EngineState>, safety: State<'_, safety::SafetyState>, mut job: render::RenderJob) -> Result<tauri::ipc::Response, String> {
     let _one = state.rendering.lock().map_err(lock_err)?;
     let _busy = RenderBusy::new(&state.inner);
     for r in &job.racks {
@@ -562,10 +602,23 @@ pub async fn ae_render_take(app: AppHandle, state: State<'_, EngineState>, job: 
             valid_id(&s.id)?;
         }
     }
+    // A plug-in known to crash is left out of the render (noted), as one that won't load offline is.
+    let mut refused = vec![];
+    for r in job.racks.iter_mut() {
+        for s in r.instrument.iter_mut().chain(r.effects.iter_mut()) {
+            if let Some(u) = s.unit {
+                if let Err(e) = safety::allowed_for_render(&app, &safety, u) {
+                    refused.push(format!("{}: {e}", r.name));
+                    s.unit = None;
+                }
+            }
+        }
+    }
     let inputs = std::mem::take(&mut *state.render_inputs.lock().map_err(lock_err)?);
     let dir = sounds_dir(&app)?;
     let sound_path = |id: &str| valid_id(id).ok().and_then(|id| cached_sound(&dir, id)).map(|p| p.to_string_lossy().into_owned());
-    let (info, left, right) = render::run(&job, &sound_path, inputs)?;
+    let (mut info, left, right) = render::run(&job, &sound_path, inputs)?;
+    info.notes.extend(refused);
     Ok(tauri::ipc::Response::new(render::pack_reply(&info, &left, &right)))
 }
 
