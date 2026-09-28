@@ -43,6 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-09-28',
     title: 'Plug-ins that talk back, quick links, one Controls tab',
     highlights: [
+      { area: 'Play', text: 'The + beside any slider opens a mini mapper: pick MIDI, hands, audio, a layer, a generator or another control, and it is wired on the spot.' },
       { area: 'Files', text: 'Save a set of layers with their mappings, controls and actions, and racks as presets; both load back from Add layer, Add track or Files.', link: { kind: 'doc', path: 'docs/presets.md' } },
       { area: 'Play', text: 'Matte the picture with any layer (a shape, a path, a hand path), with Invert and a soft edge. Start over clears Play in one undoable step.' },
       { area: 'Play', text: 'Arrangement: Play/Pause runs the picture too, the timeline scrubs (|◀ ◀◀ ▶▶ ▶|, Home/End, editable bar.beat), and devices fold to a header.' },
