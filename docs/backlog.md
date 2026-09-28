@@ -60,3 +60,13 @@ Built: effect chains (filter, echo, reverb, distortion, compressor) on each soun
 Skipped for now by the owner (27 September 2026). The write-up stays for when it comes back.
 
 - **Custom effects from a graph.** A **Picture** source node (the finished frame) wired through any nodes, then **Publish as Finish effect**: the compiled graph becomes an ordinary custom effect (its exposed sliders its settings). The conversion is written up in `finish-stack.md`, "From a graph (next step)".
+
+## Playfield as a DAW plugin (later)
+
+Asked 28 September 2026. A lighter Playfield packaged as an Audio Unit, VST3 and CLAP instrument/effect for Ableton and other DAWs.
+
+- **What the DAW sends in directly:** the track's audio (for the readers), MIDI notes and CCs, tempo and transport (the picture's clock follows the song, including scrubbing and loops), and automation lanes for any control. No virtual cables or OSC.
+- **What it drops:** the app's own audio effects and Audio engine (the DAW has those), Convert, the Files page. It keeps Play, layers, mappings and the Finish stack, and opens `.playfile` Plays as presets.
+- **Where the picture goes:** the plugin window, an output window on a second display or projector, and Syphon (Mac) or NDI so Resolume, OBS or a video track can take the feed.
+- **How:** a native plugin shell (JUCE, or Rust `nih-plug`) embedding a web view that runs the existing website runtime (`play-runtime.js`), so there is one codebase. Costs: a second product to sign and ship, DAW quirks, a web view inside a plugin window on each platform, and its own licence check.
+- **When:** after the Audio engine settles and the licence work is done.
