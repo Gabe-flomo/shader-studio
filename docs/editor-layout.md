@@ -16,6 +16,20 @@ wraps a full editor's `Section` cards. It is layout only — it does not
 change how a `Section` folds or stores its state (`Section.tsx` /
 `playUi.ts` still own that), it just gives the panel:
 
+- **Collapsed by default.** Every `Section` folds on mount except the one
+  marked `primary` (Relationship's Members, Particles' Birth and death,
+  Video's Video, Finish → Grade's Basic…) — pick the section you almost
+  always open first. A folded `Section` can take a `summary` (a one-line
+  glance at what's set: `"Walls: bounce · wrap"`), so folding doesn't hide
+  that anything is there. Fold state is remembered per `<kind>:<title>`
+  (`playUi.ts`'s `folded`), same as before.
+- **Expand all / Collapse all.** Pass `kind` to `BigEditorScaffold` (the
+  same string every one of its `Section`s uses) and its strip (or, with
+  fewer than 4 sections, a small row above the content) gets the two
+  buttons, driven by `playUi.ts`'s `expandAllSections` / `collapseAllSections`.
+  A `Section` registers itself under its `kind` on mount so these know
+  every title to flip, without either file importing the other.
+
 - A **jump strip**, sticky under the panel's header, once the editor has
   **4 or more sections**. Below that a strip is just more chrome above two
   or three cards, so it doesn't render — `sections.length >= 4` is the
@@ -90,9 +104,21 @@ in any new one:
 1. Build it with `Section` and `FieldKit` like the others — don't fork
    either.
 2. Once it has 4+ sections, wrap it in `BigEditorScaffold` and give each
-   `Section` a matching `id`.
+   `Section` a matching `id`; pass `kind` too, so Expand all / Collapse all
+   reaches every section. Mark exactly one `Section` `primary`.
 3. Keep a short summary card for the sidebar; only mount the full editor
    when `ctx.big` (or on the phone sheet).
 4. If a section has a live meter or visual (a spectrum, a waveform), give
    it a fixed height so the rows around it don't jostle as the reading
    changes.
+
+## The sidebar list, with more than a few layers
+
+Past ~4 layers, `LayersPanel.tsx`'s `LayerRow` shows an unselected card as
+just its header (name, kind, visibility) and opens it on selection, so the
+list doesn't turn into a wall of every card's settings stacked at once. A
+manual fold (the row's own chevron) sticks until that layer's selected
+state changes again. "Always expand cards", in the Layers tab's header,
+turns this off for people who want every card open all the time. This
+only applies to the plain sidebar list — the split view's list is always
+header-only, with the full editor beside it.
