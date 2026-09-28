@@ -10,18 +10,24 @@
  * layers it sees is each layer's "Seen by the Layers node" switch.
  *
  * The uniforms are shared by every Layers node; the app (play/overlay.ts →
- * ShaderCanvas) and the web runtime bind them.
+ * play/layersTexture.ts → ShaderCanvas) and the web runtime bind them. The
+ * distance comes from a GPU jump flood (play/kit/jfa.js), or a coarser CPU
+ * field where WebGL2 can't run it; docs/layers-node.md.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 
 export const LAYERS_GLSL = `uniform sampler2D u_layers;
 uniform sampler2D u_layersField;
 uniform vec2 u_layersFieldSize;
+uniform float u_layersFieldLinear;
 vec2 ssl_screen(vec2 uv) { return vec2(uv.x * u_resolution.y / u_resolution.x, uv.y) * 0.5 + 0.5; }
 float ssl_decode(vec4 c) { return ((c.r * 255.0 * 256.0 + c.g * 255.0) / 65535.0 - 0.5) * 4.0; }
 float ssl_distance(vec2 uv) {
   if (u_layersFieldSize.x < 1.0) return 4.0;
   vec2 s = ssl_screen(uv);
+  // The GPU field (play/kit/jfa.js): float distances, row 0 at the bottom, filtered by the hardware.
+  if (u_layersFieldLinear > 0.5) return texture2D(u_layersField, clamp(s, 0.0, 1.0)).r;
+  // The CPU fallback: 16-bit packed, row 0 at the top, interpolated after unpacking.
   vec2 p = vec2(s.x, 1.0 - s.y) * u_layersFieldSize - 0.5;
   vec2 i0 = clamp(floor(p), vec2(0.0), u_layersFieldSize - 1.0);
   vec2 i1 = min(i0 + 1.0, u_layersFieldSize - 1.0);

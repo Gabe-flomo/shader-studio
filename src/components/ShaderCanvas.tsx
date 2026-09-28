@@ -25,7 +25,7 @@ import type { BackgroundItem } from '../types/play';
 import { HandsPill } from './play/HandsChip';
 import { applySolo, usePlayUi } from './play/playUi';
 import { applyGroupVisibility } from '../types/layerGroups';
-import { layersUniforms, setLayersTap } from '../play/layersTexture';
+import { layersUniforms, setLayersTap, setLayersRenderer, releaseLayersRenderer } from '../play/layersTexture';
 import { padGridUniforms } from '../lib/padGrid';
 import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
@@ -472,6 +472,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     let cssH = 1;
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+    // The Layers node's distance field is built on this renderer's GPU (play/kit/jfa.js).
+    setLayersRenderer(renderer);
     onCanvasReady?.(renderer.domElement);
 
     // ── Frame scheduling ─────────────────────────────────────────────────────
@@ -2093,6 +2095,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       particleSceneRef.current = null;
       perspCameraRef.current   = null;
       sceneRef.current = null;
+      releaseLayersRenderer(renderer);
       const loseCtx = renderer.getContext().getExtension('WEBGL_lose_context');
       loseCtx?.loseContext();
       gpuTimer.dispose();

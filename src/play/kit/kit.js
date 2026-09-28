@@ -992,15 +992,36 @@ export function createLayerKit() {
   }
 
   /**
-   * What the Layers node reads: the layers at half resolution (colour), and
-   * a signed distance to them (graph UV units, a picture height = 2) packed
-   * 16-bit into red and green of an RGBA grid, row 0 at the top.
+   * What the Layers node reads: the layers at full (`layers`) and half
+   * (`color`) resolution, a cheap signature of them (`sig`, it changes when
+   * they do) and, only when read, the CPU fallback's signed distance (graph
+   * UV units, a picture height = 2) packed 16-bit into red and green of an
+   * RGBA grid, row 0 at the top. The app builds the field on the GPU from
+   * `layers` (jfa.js) and reads `field` only where that can't run.
    */
   function shaderTapOf(buf, W, H, aspect) {
     const cw = Math.max(1, Math.round(W / 2)), ch = Math.max(1, Math.round(H / 2));
     const color = klCanvas(pool, 'shaderColor', cw, ch), cx = color.getContext('2d');
     cx.clearRect(0, 0, cw, ch); cx.drawImage(buf, 0, 0, cw, ch);
+    // The signature: a tiny copy of the layers, hashed.
+    const sgh = 36, sgw = Math.max(4, Math.round(sgh * aspect));
+    const tiny = klCanvas(pool, 'shaderSig', sgw, sgh), tx = tiny.getContext('2d', { willReadFrequently: true });
+    klDownscale(pool, 'shaderSigHalf', color, cw, ch, tx, sgw, sgh);
+    let sig = 0;
+    try {
+      const px = tx.getImageData(0, 0, sgw, sgh).data;
+      for (let i = 0; i < px.length; i++) sig = (Math.imul(sig, 31) + px[i]) | 0;
+    } catch (e) { sig = 0; }
     const gh = 180, gw = Math.max(8, Math.round(gh * aspect));
+    let field = null;
+    return {
+      color, layers: buf, sig, gw, gh,
+      get field() { if (!field) field = cpuShaderField(buf, W, H, gw, gh); return field; },
+    };
+  }
+
+  /** The CPU fallback's field: a coverage grid (180 rows), chamfer distances, packed 16-bit. */
+  function cpuShaderField(buf, W, H, gw, gh) {
     const small = klCanvas(pool, 'shaderMask', gw, gh), sx = small.getContext('2d', { willReadFrequently: true });
     klDownscale(pool, 'shaderHalf', buf, W, H, sx, gw, gh);
     let data;
@@ -1015,7 +1036,7 @@ export function createLayerKit() {
       const u = Math.max(0, Math.min(1, f.d[i] * 2 * 0.25 + 0.5)), q = Math.round(u * 65535);
       field[i * 4] = q >> 8; field[i * 4 + 1] = q & 255; field[i * 4 + 3] = 255;
     }
-    return { color, field, gw, gh };
+    return field;
   }
 
   function report(env, key, v) {

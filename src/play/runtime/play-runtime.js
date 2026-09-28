@@ -1216,6 +1216,10 @@ void main() {
     // The graph's Layers node: the layers' colour and distance field, uploaded after each frame's layers are drawn.
     const usesLayersNode = !bgOnly && /\bu_layers(Field)?\b/.test(B.fragmentShader);
     let layersTap = null, layersColourTex = null, layersFieldTex = null, layersFieldSize = [0, 0];
+    // The distance field on the GPU (kit/jfa.js, a jump flood over the colour's alpha) on WebGL2;
+    // the kit's CPU field (16-bit packed, u_layersFieldLinear 0) where that can't run.
+    const layersJfa = usesLayersNode && gl2 && typeof SSKit !== 'undefined' && SSKit.jfa ? SSKit.jfa.create(gl) : null;
+    let layersGpuField = null;
     if (usesLayersNode) {
       const mk = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 0])); return t; };
       gl.activeTexture(gl.TEXTURE1);
@@ -1230,11 +1234,18 @@ void main() {
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
         try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tap.color); } catch (e) { /* tainted */ }
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-        gl.activeTexture(gl.TEXTURE2);
-        gl.bindTexture(gl.TEXTURE_2D, layersFieldTex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tap.gw, tap.gh, 0, gl.RGBA, gl.UNSIGNED_BYTE, tap.field);
+        const out = layersJfa ? layersJfa.run({ texture: layersColourTex, width: tap.color.width, height: tap.color.height }) : null;
+        if (out) {
+          layersGpuField = out.texture;
+          layersFieldSize = [out.width, out.height];
+        } else {
+          layersGpuField = null;
+          gl.activeTexture(gl.TEXTURE2);
+          gl.bindTexture(gl.TEXTURE_2D, layersFieldTex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tap.gw, tap.gh, 0, gl.RGBA, gl.UNSIGNED_BYTE, tap.field);
+          layersFieldSize = [tap.gw, tap.gh];
+        }
         gl.activeTexture(gl.TEXTURE0);
-        layersFieldSize = [tap.gw, tap.gh];
       };
     }
 
@@ -2169,8 +2180,9 @@ void main() {
       }
       bindSampler('u_fontTexture', fontTex);
       if (usesLayersNode) {
-        bindSampler('u_layers', layersColourTex); bindSampler('u_layersField', layersFieldTex);
+        bindSampler('u_layers', layersColourTex); bindSampler('u_layersField', layersGpuField || layersFieldTex);
         const ls = loc('u_layersFieldSize'); if (ls) gl.uniform2fv(ls, layersFieldSize);
+        const ll = loc('u_layersFieldLinear'); if (ll) gl.uniform1f(ll, layersGpuField ? 1 : 0);
       }
       if (stateful) bindSampler('u_prevFrame', pingPong[pingIdx].tex);
       if (echoCfg) for (let i = 0; i < 6; i++) bindSampler('u_echo' + i, echoRing[i] ? echoRing[i].tex : blank);
