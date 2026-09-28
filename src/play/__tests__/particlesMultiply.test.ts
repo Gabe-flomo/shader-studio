@@ -112,19 +112,19 @@ describe('multiply: annihilate', () => {
       expect(m).not.toBe(i);
     }
     expect(paired).toBeGreaterThan(0);
-    // Deaths come in twos, each pair with a burst (Loop, so no splits refill the colony here).
+    // Deaths come in twos, and nothing is left behind (Loop, so no splits refill the colony here).
     const loop = { ...p, multAfter: 'loop' as const };
-    let deaths = 0, bursts = 0;
+    let deaths = 0;
     for (let f = 0; f < 120; f++) {
       const a0 = aliveCount(st);
       stepParticles(st, loop, e, rand);
       if (st.mx?.phase !== 'full') break; // cleared, and the loop started over
-      const died = a0 - aliveCount(st), fresh = st.fx.filter(b => b.t === 0).length; // this step's bursts (older ones have aged)
+      const died = a0 - aliveCount(st);
       expect(died % 2).toBe(0);
-      if (died > 0) { deaths += died; bursts += fresh; expect(fresh).toBe(died / 2); }
+      deaths += died;
     }
     expect(deaths).toBeGreaterThan(0);
-    expect(bursts).toBe(deaths / 2);
+    expect((st as unknown as Record<string, unknown>).fx).toBeUndefined();
   });
 
   it('no pairing while the colony is still growing', () => {

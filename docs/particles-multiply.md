@@ -21,7 +21,7 @@ Birth and death → **Emit: Multiply**. The layer starts with one particle where
 - **Stay**: drift apart gently (bud push + Spread) and stop.
 - **Flow**: the layer's field, attractor and zones move them like normal particles. Ones that leave the picture (Edges: Respawn) or reach the end of their Life die, and their slots are free for new buds.
 - **Return**: a spring (**Return spring**) pulls each particle back to where it was born.
-- **Annihilate**: once the colony first fills, each grown-up particle (older than one split interval) pairs with a random unpaired one within **Pair radius**. The two close in at **Seek speed** and, when they touch, both die with a small burst (a ring and six sparks). Paired particles don't split.
+- **Annihilate**: once the colony first fills, each grown-up particle (older than one split interval) pairs with a random unpaired one within **Pair radius**. The two close in at **Seek speed** and, when they touch, both die on the spot — no burst. Paired particles don't split.
 
 ### When full
 
@@ -33,7 +33,7 @@ If every particle dies under Hold or Respawn, a new colony starts from one. **St
 
 ### Determinism
 
-Every random choice (split times, bud directions, partners, burst angles) draws on the layer's random source in a fixed order. With **Seed** set, or inside a take (which seeds unseeded layers from the session), two runs at the same frame rate give the same result, so offline renders match what was played.
+Every random choice (split times, bud directions, partners) draws on the layer's random source in a fixed order. With **Seed** set, or inside a take (which seeds unseeded layers from the session), two runs at the same frame rate give the same result, so offline renders match what was played.
 
 ## Goo (metaballs)
 
