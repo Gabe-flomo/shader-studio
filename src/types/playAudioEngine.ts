@@ -116,10 +116,18 @@ export interface AeRack {
    * sound leaves the page's output and plays through the engine (docs/audio-engine.md).
    */
   source?: string;
+  /** The track's colour in the Arrangement (`#rrggbb`); absent: the palette's, by position (engineView.ts trackColor). */
+  color?: string;
 }
 
 export interface PlayAudioEngine {
   racks: AeRack[];
+  /**
+   * Where the Listener device sits in the chain of the rack the audio readers
+   * listen to (docs/audio-engine.md, "Listeners"): after this many of its
+   * effects (0: straight after the instrument). Absent: after the whole chain.
+   */
+  listenAt?: number;
   /**
    * The rack locked as the lead (docs/audio-engine.md, "The lead rack"): it
    * takes the MIDI notes, the computer keyboard and pad hits that no rack's
@@ -520,11 +528,14 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
     };
     if (typeof o.pads === 'string' && ID.test(o.pads)) rack.pads = o.pads;
     if (typeof o.source === 'string' && isSendSource(o.source)) rack.source = o.source;
+    if (typeof o.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.color)) rack.color = o.color;
     racks.push(rack);
   }
   if (!racks.length) return undefined;
   const lock = typeof a.lock === 'string' && racks.some(r => r.id === a.lock) ? a.lock : undefined;
-  return lock ? { racks, lock } : { racks };
+  const out: PlayAudioEngine = lock ? { racks, lock } : { racks };
+  if (typeof a.listenAt === 'number' && Number.isInteger(a.listenAt) && a.listenAt >= 0 && a.listenAt <= AE_EFFECTS_KEEP) out.listenAt = a.listenAt;
+  return out;
 }
 
 /** The record's engine with only what `plugins` allows: without Audio Units, AU slots are left out (the sample player stays). */

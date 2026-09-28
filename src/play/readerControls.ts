@@ -20,7 +20,7 @@
 import type { AudioReader, PlayAudioReaders, PlayControl, PlayMapping, PlayRecord, TriggerSpec } from '../types/play';
 import { parseReaderTarget, readerControlTarget } from '../types/play';
 import { padsLayerOfInput, videoLayerOfInput } from '../types/playLayers';
-import { engineRackOfInput } from '../lib/engineSound';
+import { ENGINE_MASTER, engineRackOfInput } from '../lib/engineSound';
 import { formatHz, newReader as newReaderAt } from './audioReaders';
 import { playId } from './playControls';
 
@@ -74,7 +74,7 @@ export function readerSourceName(p: PlayRecord, songLabel?: (nodeId: string) => 
   const input = p.audioReaders?.input ?? '';
   if (!input) return 'Live';
   const rack = engineRackOfInput(input);
-  if (rack) return p.audioEngine?.racks.find(r => r.id === rack)?.name ?? 'Rack';
+  if (rack) return rack === ENGINE_MASTER ? 'Master' : p.audioEngine?.racks.find(r => r.id === rack)?.name ?? 'Rack';
   const video = videoLayerOfInput(input);
   if (video) return p.layers.find(l => l.id === video)?.label ?? 'Video';
   const pads = padsLayerOfInput(input);

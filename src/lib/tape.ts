@@ -25,12 +25,13 @@
 import { create } from 'zustand';
 import type { PlayRecord } from '../types/play';
 import {
-  TAPE_MAX_SECONDS, TOUCH_HOLD, NOTE_MIN, applyPasses, audibleTracks, autoAt, beatsIn, emptyArrangement, noteEvents, punchIn, recordBpm, tapePosition, tapeSpans,
+  TAPE_MAX_SECONDS, TOUCH_HOLD, NOTE_MIN, applyPasses, audibleArrangement, audibleTracks, autoAt, beatsIn, emptyArrangement, noteEvents, punchIn, recordBpm, tapePosition, tapeSpans,
   type ArrNote, type ArrPass, type PlayArrangement,
 } from '../types/playArrangement';
 import { aeRack, auPropId, parseAuTarget, readAuValue } from '../types/playAudioEngine';
 import { rackControlTargets } from '../play/rackControls';
 import { keepIndices } from './takePlayback';
+import { transportPlan, type TransportCommand } from '../play/engineView';
 
 export type TapePhase = 'stopped' | 'playing' | 'counting' | 'recording';
 export type RecordMode = 'overdub' | 'replace';
@@ -165,6 +166,20 @@ export class Tape {
     if (!(a.length > 0)) { this.d.notice('Nothing on the tape yet', 'Press Record and play a rack: the first recording sets the tape’s length.'); return; }
     this.start(st.point >= a.length - 0.01 ? 0 : Math.max(0, st.point));
     useTape.setState({ phase: 'playing' });
+  }
+
+  /** The one Play/Pause button (and Space): from any state (play/engineView.ts transportPlan). */
+  togglePlay(): void { this.run('toggle'); }
+
+  /** Stop, back to the start (a recording in progress is kept). */
+  stopToStart(): void { this.run('stop'); }
+
+  private run(cmd: TransportCommand): void {
+    const plan = transportPlan(cmd, { phase: useTape.getState().phase, position: this.position() });
+    if (plan.stop) this.stop();
+    if (plan.point !== null) useTape.setState({ point: Math.max(0, Math.min(this.arr().length || 0, plan.point)) });
+    if (plan.play) this.play();
+    if (plan.record) this.record();
   }
 
   /** Play from `at` (a take recording along with the tape). */
@@ -336,7 +351,8 @@ export class Tape {
   tick(): void {
     if (!this.running()) return;
     const p = this.d.play();
-    const a = this.arr(p);
+    // Muted clips don't play.
+    const a = audibleArrangement(this.arr(p));
     const now = this.pos();
     const rec = this.rec;
     if (rec && now >= TAPE_MAX_SECONDS) {
