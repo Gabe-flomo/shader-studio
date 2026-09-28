@@ -13,7 +13,7 @@
  */
 import type { PlayRecord, PlayTake, TakeEvent, TakeTrack } from '../types/play';
 import { TAKE_MAX_EVENTS } from '../types/play';
-import { audibleTracks, noteEvents, type PlayArrangement } from '../types/playArrangement';
+import { audibleArrangement, audibleTracks, noteEvents, type PlayArrangement } from '../types/playArrangement';
 import { RACK_ACT_PREFIX, parseAuTarget } from '../types/playAudioEngine';
 import { encodeKeys } from './takePlayback';
 
@@ -62,7 +62,8 @@ export function tapeControlTracks(play: Pick<PlayRecord, 'controls'>, arr: PlayA
  * starting at graph-clock time `from`. Null when the tape has nothing.
  */
 export function arrangementTake(play: Pick<PlayRecord, 'controls' | 'arrangement'>, name: string, opts: { from?: number; loops?: number; id?: string } = {}): PlayTake | null {
-  const arr = play.arrangement;
+  // Muted clips are left out, as on playback.
+  const arr = play.arrangement && audibleArrangement(play.arrangement);
   if (!arr || !(arr.length > 0)) return null;
   const loops = Math.max(1, Math.min(Math.floor(60 / arr.length) || 1, Math.round(opts.loops ?? 1)));
   const length = Math.min(60, arr.length * loops);

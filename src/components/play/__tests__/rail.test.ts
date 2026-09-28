@@ -36,7 +36,7 @@ describe('categories and pages', () => {
       controls: ['Controls'],
       layers: ['Layers', 'Actions', 'Signals', 'Background'],
       finish: ['Picture', 'Sound'],
-      engine: ['Performance'],
+      engine: ['Arrangement'],
       mappings: ['Mappings', 'MIDI file', 'Pad grid'],
     });
     for (const p of RAIL_PAGE_IDS) expect(RAIL_PAGES[p].description.length).toBeGreaterThan(10);

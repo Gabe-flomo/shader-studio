@@ -14,7 +14,13 @@ export interface EngineSoundHost {
 
 let host: EngineSoundHost | null = null;
 
-/** The audio readers' input for an engine rack. */
+/**
+ * The engine's master (every rack together, docs/audio-engine.md "Listeners"):
+ * a reader input `engine:master`. Rack ids start with `rk`, so it can't clash.
+ */
+export const ENGINE_MASTER = 'master';
+
+/** The audio readers' input for an engine rack (or ENGINE_MASTER). */
 export const engineReaderInput = (rackId: string) => `engine:${rackId}`;
 export function engineRackOfInput(input: string): string | null {
   return input.startsWith('engine:') && input.length > 7 ? input.slice(7) : null;

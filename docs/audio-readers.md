@@ -4,7 +4,7 @@ An **audio reader** is a dot on the spectrum that reads one frequency band as 0�
 
 ## Every reader is a control
 
-A reader is made from the Audio readers panel, a rack card's mini spectrum, the Video card or the Drum pads card, and wherever it is made it comes with (`src/play/readerControls.ts`, `addReader`):
+A reader is made from the Audio readers panel, a track's Listener device (Audio engine), the Video card or the Drum pads card, and wherever it is made it comes with (`src/play/readerControls.ts`, `addReader`):
 
 - a **float control**, 0–1, target `reader:<readerId>::level`, labelled with the reader's name, in a **control group** named after what the readers listen to: **Audio readers · Live**, **Audio readers · Rack 1**, **Audio readers · Video 1**, **Audio readers · Kit**, **Audio readers · <song>**;
 - a **mapping** reader → control (0–1, linear, no smoothing), an ordinary mapping, so the control shows the reader's live level and a website carries it like any other.
@@ -20,7 +20,7 @@ Controls with a `group` (`PlayControl.group`) sit together under a folding headi
 
 ## On the source card
 
-Under a rack card's spectrum, the Video card's and the Drum pads card's, and behind **N readers** on the Live audio chip, the readers listening there are listed with their colour, name and a live meter (`src/components/play/ReaderDots.tsx`). Clicking a name opens the panel on that reader; **Controls →** opens the Controls section and highlights the group (`usePlayUi.revealControlGroup`). The Audio readers panel keeps the editing (frequency, width, gain, attack, release, colour, order), with its own **Controls →** per reader.
+Under a Listener's spectrum, the Video card's and the Drum pads card's, and behind **N readers** on the Live audio chip, the readers listening there are listed with their colour, name and a live meter (`src/components/play/ReaderDots.tsx`). Clicking a name opens the panel on that reader; **Controls →** opens the Controls section and highlights the group (`usePlayUi.revealControlGroup`). The Audio readers panel keeps the editing (frequency, width, gain, attack, release, colour, order), with its own **Controls →** per reader.
 
 ## Names
 
@@ -45,7 +45,7 @@ A new reader is named by the band its centre sits in, numbered when the band alr
 | Bands, names, the control and its mapping, the record edits | `src/play/readerControls.ts` |
 | The `reader:` target | `src/types/play.ts` (`readerControlTarget`, `parseReaderTarget`), `src/play/playControls.ts` (reads 0), `src/lib/playEngine.ts` (no uniform) |
 | The panel | `src/components/play/AudioReadersPanel.tsx`, `readersPanelUi.ts` |
-| Dots with meters on the cards | `src/components/play/ReaderDots.tsx`; rack `engine/RackCard.tsx`, video `layers/VideoEditor.tsx`, pads `layers/DrumPadEditor.tsx`, the chip `chips.tsx` |
+| Dots with meters on the cards | `src/components/play/ReaderDots.tsx`; the Listener device `engine/DeviceChain.tsx` (`RackSpectrum` in `engine/RackParts.tsx`), video `layers/VideoEditor.tsx`, pads `layers/DrumPadEditor.tsx`, the chip `chips.tsx` |
 | Control groups and the chip | `src/components/play/PlayPage.tsx` (`ControlGroup`), `playUi.ts` |
 | The website | `src/play/runtime/play-runtime.js` (`readerTarget`) |
 | Tests | `src/play/__tests__/readerControls.test.ts`, `audioReaders.test.ts` |
