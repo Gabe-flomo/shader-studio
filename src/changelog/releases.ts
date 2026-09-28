@@ -39,6 +39,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.11',
+    date: '2026-09-28',
+    title: 'MIDI that just works, undo on Play, and sound in renders',
+    highlights: [
+      { area: 'Play', text: 'A new knob mapping learns the first knob you turn; Lock ties it to one device. Velocity and gate rows can learn a note.', link: { kind: 'doc', path: 'docs/midi.md' } },
+      { area: 'Desktop', text: 'Controllers like the Akai MPK mini now work: a rewritten MIDI bridge, plus a Monitor that shows every device and what it sends.' },
+      { area: 'Desktop', text: 'Audio engine racks can take the computer keyboard (a toggle on the rack, Esc gives it back).', link: { kind: 'doc', path: 'docs/audio-engine.md' } },
+      { area: 'Desktop', text: 'The Audio engine\'s sound is in recordings and rendered takes, and a web sound can be sent through Audio Unit effects.' },
+      { area: 'Play', text: 'Undo and redo on the Play page (⌘Z, ⌘⇧Z), with every edit in History → Changes.' },
+      { area: 'Present', text: 'Present, Stage and exported websites recover when the browser drops the graphics context.' },
+      { area: 'Studio', text: 'Sliders: type a number past the end and the range grows to it; right-click is back to the Play and knob menu.' },
+    ],
+  },
+  {
     id: '2026.9.10',
     date: '2026-09-28',
     title: 'Projectors, Audio Units, and a better phone',
