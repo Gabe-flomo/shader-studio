@@ -22,7 +22,7 @@ import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 import {
   defaultLayer, handAnchor, type ActionKind, type AudioReader, type PlayAudioReaders, type FireSpec, type HandGesture, type HandRead, type HandSide, type LfoShape, type LiveAudioBand, type NoiseType, type PlayAction, type PlayControl, type PlayDisplay,
   type PlayLayer, type PlayLayerKind, type PlayMapping, type PlayRecord, type PlaySource, type PlayTake, type TakeTrack, type SensorRead, type TriggerMode, type TriggerSpec,
-  type CondCmp, type PairAxis, type PlayPair, type PlayPairMapping, type PlaySignal,
+  type CondCmp, type PairAxis, type PlayPair, type PlayPairMapping, type PlaySignal, type RelationMember, type RelationRole, type RelationshipLayer, newRelationMember,
 } from '../types/play';
 import { DEFAULT_PAD_GRID, type PlayPadGrid } from '../types/playMidi';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
@@ -116,6 +116,12 @@ function drumKit(id: string, label: string, pads: Array<[DpSynth, { name?: strin
   });
   return l;
 }
+/** A Relationship layer with `members` and its settings on top of the defaults. */
+function relationship(id: string, label: string, members: RelationMember[], over: Partial<RelationshipLayer> & Record<string, unknown>): PlayLayer {
+  return { ...defaultLayer('relationship', id, label), members, ...over } as PlayLayer;
+}
+/** A member of a relationship at its defaults. */
+const rm = (id: string, role: RelationRole = 'member'): RelationMember => newRelationMember(id, role);
 /** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
 const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
@@ -1018,6 +1024,29 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
 • Turn Layers only off (under Background).
 • Change the particles' field.`,
   })),
+  ex('playMultiply', layersGlowGraph({ falloff: 45, tint: [0.3, 0.7, 1] }), play({
+    layers: [layer('particles', 'cells', 'Cells', {
+      count: 200, emit: 'multiply', spawn: 'center', spawnRadius: 0, field: 'none', edges: 'bounce', seed: 7,
+      splitRate: 1.2, splitJitter: 0.35, splitChildren: 1, splitPush: 0.06, multSpread: 0.028, multLife: 'annihilate', multAfter: 'loop',
+      pairRadius: 0.25, seekSpeed: 0.12, loopHold: 0,
+      goo: true, gooBlend: 2.4, gooThreshold: 0.45, gooSoft: 0.15, size: 9, sizeJitter: 0.3,
+      colour: 'tint', color: [0.75, 1, 0.95], opacity: 1, trail: 0, blend: 'normal',
+    })],
+    controls: [
+      ctl('rate', 'layer:cells::splitRate', 'Cells · Split rate', 0.2, 4),
+      ctl('blend', 'layer:cells::gooBlend', 'Cells · Goo blend', 1, 5),
+      ctl('thresh', 'layer:cells::gooThreshold', 'Cells · Goo threshold', 0.1, 0.9),
+    ],
+    notes: `**What it shows.** With **Emit: Multiply** a particles layer starts as one particle. Each one buds after about 1 ÷ **Split rate** seconds (with a little **Split jitter**, so it isn't clockwork) until the **Count** is reached: here one cell becomes two hundred in about seven seconds.
+
+**How it's built.** **Goo** draws the particles as metaballs: every particle adds a soft bump to one field, and the field is cut at **Goo threshold**. Touching cells merge into one blob and part with a stretching neck. **Once born: Annihilate** pairs each cell with a random neighbour once the colony is full; the two close in and vanish in a small burst. **When full: Loop** stops the splitting, and when the colony has cleared it grows again from one. The glow is the Layers node: SDF Glow around whatever the layers draw.
+
+**Try this.**
+• Once born: **Stay**, and When full: **Hold**, for a colony that just grows.
+• Raise Goo blend: cells merge from further apart, with longer necks.
+• Buds 3: each split adds three cells, so it fills much faster.
+• Turn Goo off to see the particles themselves.`,
+  })),
 
   // ─ Shapes and zones ─
   ex('playWalls', quietGraph(), play({
@@ -1100,6 +1129,56 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
 • Hold the mouse button inside the box to pull the swarm in and watch the glow grow.
 • Map the box's Hover onto something.
 • Particle speed and spread are sensors too (on the particles layer).`,
+  })),
+  ex('playChase', glowGraph({ radius: 0.09, falloff: 10, tint: [0.4, 0.7, 1] }), play({
+    layers: [
+      layer('shape', 'prey', 'Prey', { shape: 'circle', x: 0.7, y: 0.55, w: 0.07, h: 0.07, action: 'none', fill: [0.5, 0.9, 1], fillOpacity: 0.9, strokeWidth: 0 }),
+      layer('null', 'hunter', 'Hunter', { x: 0.2, y: 0.4, size: 12, color: '#ff7a50' }),
+      layer('particles', 'pop', 'Pop', { count: 600, emit: 'burst', spawn: 'null', nullId: 'hunter', spawnRadius: 0.02, field: 'none', speed: 1.2, life: 0.9, fade: 0.6, size: 2, colour: 'palette', palette: 3, paletteBy: 'age', trail: 0.3, blend: 'screen' }),
+      relationship('chase', 'Chase', [rm('hunter', 'chaser'), rm('prey', 'prey')], { relation: 'chase', speed: 0.55, accel: 2.5, turn: 0.5, sight: 0.55, flee: 0.3, wander: 0.6, wallChaser: 'bounce', wallPrey: 'bounce', respawnAt: 'far', respawnDelay: 1.2, catchRadius: 0.03, onCatch: 'respawn', catchSignal: 'caught', debug: true }),
+    ],
+    controls: [colourCtl('tint', 'glow::tint', 'Tint (flashes on a catch)'), ctl('radius', 'circ::radius', 'Radius (closing speed)', 0.04, 0.3)],
+    signals: [{ id: 'caught', name: 'Caught' }],
+    mappings: [
+      map('flash', 'tint', S.trig({ on: 'signal', signal: 'caught' }, 'envelope', { attack: 10, decay: 400, sustain: 0.3, release: 600 }), 0.4, 1.8),
+      map('closing', 'radius', S.sensor('chase', 'closing'), 0.04, 0.3, { smoothMs: 120 }),
+    ],
+    actions: [act('burst', { on: 'signal', signal: 'caught' }, 'burst', 'pop', 200)],
+    notes: `**What it shows.** A **Relationship** layer moves other layers with a force between them. Here it's a **chase**: Hunter (a null) runs at Prey (a circle) whenever Prey is within its sight, and wanders when it isn't; Prey flees when Hunter comes close. A **catch** (Hunter within the catch radius) sends the **Caught** signal, which flashes the glow and bursts particles; Prey respawns on the far side.
+
+**How it's built.** Layers → Relationship → members: Hunter as the chaser, Prey as the prey. Prey runs a little slower than Hunter, so it gets cornered and caught; it respawns at the far side. The relationship's **Closing** reading (how fast the closest pair is closing in) drives the glow's radius. **Show forces** is on: the dashed rings are the sight and flee distances, the orange line runs from the chaser to its target, white arrows are velocities.
+
+**Try this.**
+• Drag Prey somewhere: the chase starts again from there.
+• Turn Sight down until Hunter can't see Prey: it wanders until Prey strays close.
+• Set Prey's wall to **Escape**: it may run off the picture (out of sight, so Hunter wanders) and comes back after the delay on the far side.
+• Set Then to **Swap roles**: the caught becomes the catcher.
+• Map Gap, Chase speed or In sight (in the Readings section) onto anything.`,
+  })),
+  ex('playOrbit', glowGraph({ radius: 0.16, posX: 0.35, posY: 0.2, falloff: 8, tint: [1, 0.7, 0.4] }), play({
+    layers: [
+      layer('shape', 'sun', 'Sun', { shape: 'circle', x: 0.5, y: 0.5, w: 0.1, h: 0.1, action: 'none', fill: [1, 0.85, 0.5], fillOpacity: 0.95, strokeWidth: 0 }),
+      layer('shape', 'p1', 'Rock', { shape: 'circle', x: 0.25, y: 0.5, w: 0.05, h: 0.05, action: 'none', fill: [0.6, 0.85, 1], fillOpacity: 0.9, strokeWidth: 0 }),
+      layer('shape', 'p2', 'Ice', { shape: 'circle', x: 0.75, y: 0.5, w: 0.04, h: 0.04, action: 'none', fill: [0.8, 0.7, 1], fillOpacity: 0.9, strokeWidth: 0 }),
+      layer('shape', 'p3', 'Dust', { shape: 'box', x: 0.5, y: 0.82, w: 0.035, h: 0.035, round: 0.3, action: 'none', fill: [0.7, 1, 0.8], fillOpacity: 0.9, strokeWidth: 0 }),
+      relationship('orbit', 'Orbit', [
+        { ...rm('sun'), mass: 6 },
+        { ...rm('p1'), picture: 'climb', channel: 'brightness', radius: 0.08 },
+        { ...rm('p2'), picture: 'climb', channel: 'brightness', radius: 0.08 },
+        { ...rm('p3'), mass: 0.5, picture: 'climb', channel: 'brightness', radius: 0.08 },
+      ], { relation: 'attract', attractMode: 'overshoot', strength: 1.2, falloff: 0.7, damping: 0.02, bounciness: 0.6, maxSpeed: 1.2, wallMember: 'bounce', debug: false, m2_picture: 0.4, m3_picture: 0.4, m4_picture: 0.8 }),
+    ],
+    controls: [ctl('bright', 'glow::brightness', 'Glow (closing speed)', 3, 16), ctl('strength', 'layer:orbit::strength', 'Pull', 0, 3), ctl('climb', 'layer:orbit::m4_picture', 'Dust climbs the glow', 0, 3)],
+    mappings: [map('closing', 'bright', S.sensor('orbit', 'closing'), 16, 4, { smoothMs: 100 })],
+    notes: `**What it shows.** **Attract** with **overshoot**: a gravity-like pull that members can fall through, so they orbit instead of sticking. Sun is heavy (mass 6) and barely moves; the three small members swing round it. The relationship's **Closing** reading (how fast the closest pair is closing in) drives the glow's brightness.
+
+**Picture forces.** Each member can also react to the **picture** under it, on top of the relationship: Rock, Ice and Dust **climb** brightness, so they drift toward the glow at the upper left (a shader is a landscape to them). **Looks** is how far around them they sample; the gradient over that ring is the direction they take. The strength is a mapping target per member (Dust's is on the panel).
+
+**Try this.**
+• Turn **Pull** down to 0: only the glow pulls them now. Turn it up: tight fast orbits.
+• Move the glow (its Center in the graph) and watch them follow.
+• Switch Mode to **Keep a distance**: they can't cross the boundary and bounce at it instead.
+• Turn on Show forces: the green arrows are the picture's pull, the white ones velocities.`,
   })),
   ex('playShapeTriggers', quietGraph(), play({
     layers: [

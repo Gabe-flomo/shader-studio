@@ -403,16 +403,28 @@ export type PlaySource =
 export const DATA_ROW_COLUMN = '#row';
 
 /** Layer kinds with a centre on the picture: what proximity triggers and distance sensors can measure from. */
-export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data', 'video'];
+export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data', 'video', 'relationship'];
 
-export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble' | 'area' | 'perimeter';
+/** Layer kinds a Relationship layer can move: they have an x and a y of their own (a relationship stands at its centroid). */
+export const RELATION_MEMBER_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'cloner', 'data', 'video', 'relationship'];
+
+/**
+ * Readings. Most are a layer's own; a Relationship layer adds: gap (its closest pair's distance), closing (how
+ * fast that pair closes: 0.5 still, 1 closing at full speed, 0 parting), chaseSpeed, sight (a chaser sees prey),
+ * catch (1 on a catch, fading), sinceCatch, catches (20 = 1). picture is the picture's channel under a layer
+ * that is a member of a relationship (`<memberId>::picture`), and the mean under the relationship's members.
+ */
+export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble' | 'area' | 'perimeter'
+  | 'gap' | 'closing' | 'chaseSpeed' | 'sight' | 'catch' | 'sinceCatch' | 'catches' | 'picture';
+export const RELATION_READS: readonly SensorRead[] = ['gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'distance'];
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
-  shape: ['fill', 'hover', 'distance'],
+  shape: ['fill', 'hover', 'picture', 'distance'],
   particles: ['speed', 'spread', 'distance'],
-  camera: ['motion', 'distance'],
-  null: ['distance'],
-  audio: ['level', 'bass', 'lowmid', 'highmid', 'treble', 'distance'],
-  text: ['distance'], image: ['distance'], lens: ['distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['distance'], data: ['distance'],
+  camera: ['motion', 'picture', 'distance'],
+  null: ['picture', 'distance'],
+  audio: ['level', 'bass', 'lowmid', 'highmid', 'treble', 'picture', 'distance'],
+  text: ['picture', 'distance'], image: ['picture', 'distance'], lens: ['picture', 'distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['picture', 'distance'], data: ['picture', 'distance'], video: ['picture', 'distance'],
+  relationship: RELATION_READS,
 };
 /** A path shape (corners that are nulls) also reads its area, perimeter and spread. */
 const PATH_READS: readonly SensorRead[] = ['area', 'perimeter', 'spread', 'fill', 'hover', 'distance'];
@@ -450,8 +462,9 @@ export type {
   BlendMode, MatteMode, NullLayer, TextLayer, ImageLayer, ParticlesLayer, ParticleField, ParticleShape, ParticleModulator,
   ShapeLayer, ZoneAction, AudioLayer, GlyphsLayer, ContoursLayer, LensLayer, BrushLayer, BodiesLayer, CameraLayer, VideoLayer, VideoFit, VideoSound,
   PlayLayer, PlayLayerKind, LayerNumericProp, BackgroundLayer, BackgroundItem, BackgroundItemKind, DataLayer, DataView, DataSplit, TrackMatte, LayerMask, MaskShape, MaskOp, MaskProp,
+  RelationshipLayer, RelationMember, RelationKind, RelationRole, RelationWall, PictureChannel,
 } from './playLayers';
-export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot, videoLayerTimeAt, videoReaderInput, videoLayerOfInput } from './playLayers';
+export { LAYER_KINDS, LAYER_NUMERIC_PROPS, layerNumericProps, defaultLayer, parseLayer, queueSlot, videoLayerTimeAt, videoReaderInput, videoLayerOfInput, RELATION_MAX_MEMBERS, relationPictureKey, newRelationMember } from './playLayers';
 import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataTypes';
 import { parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
@@ -1139,7 +1152,7 @@ function parseHands(v: unknown): PlayHands | null {
   return out;
 }
 
-const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter']);
+const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture']);
 
 function parseAction(raw: unknown): PlayAction | null {
   if (!raw || typeof raw !== 'object') return null;

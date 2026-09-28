@@ -5,7 +5,8 @@
  * actions a trigger would fire (burst, drop, next line, clear).
  */
 import { useState, type ReactNode } from 'react';
-import type { ActionKind, NullLayer, ParticleField, PlayLayer, PlayRecord, ZoneAction } from '../../../types/play';
+import { RELATION_MAX_MEMBERS, RELATION_MEMBER_KINDS, newRelationMember, relationPictureKey, type ActionKind, type NullLayer, type ParticleField, type PlayLayer, type PlayRecord, type RelationMember, type RelationshipLayer, type ZoneAction } from '../../../types/play';
+import { addSignal } from '../../../play/pairs';
 import { Button, IconButton } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { Menu } from '../../ui/Menu';
@@ -279,8 +280,28 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
       <Section kind="particles" title="Birth and death">
         {f.seg('Emit', 'emit', [
           { value: 'stream', label: 'Stream', title: 'Always alive, reborn when they leave' }, { value: 'burst', label: 'Bursts', title: 'Born only by a Burst action' },
-        ], 'Stream keeps every particle alive. Bursts starts empty: a Burst action (a key, a kick drum…) throws out a handful, which live for their Life and then vanish.')}
+          { value: 'multiply', label: 'Multiply', title: 'One particle is born and keeps splitting until there are Count of them' },
+        ], 'Stream keeps every particle alive. Bursts starts empty: a Burst action (a key, a kick drum…) throws out a handful, which live for their Life and then vanish. Multiply starts with one particle that buds and splits until the Count is reached.')}
         {g('emit') === 'burst' && <Buttons><Button size="sm" icon="spark" onClick={() => ctx.act('burst', 80)}>Burst 80 now</Button></Buttons>}
+        {g('emit') === 'multiply' && (
+          <>
+            {f.props('splitRate', 'splitJitter', 'splitChildren', 'splitPush')}
+            {f.seg('Once born', 'multLife', [
+              { value: 'stay', label: 'Stay', title: 'Drift apart gently and stop' }, { value: 'flow', label: 'Flow', title: 'Follow the field and forces like other particles' },
+              { value: 'return', label: 'Return', title: 'Spring back to where they were born' }, { value: 'annihilate', label: 'Annihilate', title: 'Pair up, seek each other and vanish in a burst' },
+            ], 'What a particle does after it buds. Annihilate starts once the colony first fills: each pairs with a random neighbour within Pair radius, they close in and both vanish in a small burst.')}
+            {g('multLife') !== 'flow' && f.prop('multSpread')}
+            {g('multLife') === 'return' && f.prop('returnSpring')}
+            {g('multLife') === 'annihilate' && f.props('pairRadius', 'seekSpeed')}
+            {f.seg('When full', 'multAfter', [
+              { value: 'loop', label: 'Loop', title: 'Stop splitting; start over from one when they are gone' }, { value: 'respawn', label: 'Respawn', title: 'The dead come back at the spawn point and multiply again' },
+              { value: 'hold', label: 'Hold', title: 'Keep splitting to stay at the full count' },
+            ], 'After the Count is reached. Loop stops splitting and starts again from one particle when they are gone (or after Loop hold). Respawn brings the dead back where the colony began. Hold keeps the survivors splitting to stay full.')}
+            {g('multAfter') === 'loop' && f.prop('loopHold')}
+            {f.note('The first particle is born where Born says; with Seed set, every run grows the same way.')}
+            <Buttons><Button size="sm" variant="ghost" onClick={() => ctx.act('reset')}>Start over from one</Button></Buttons>
+          </>
+        )}
         {f.seg('Born', 'spawn', [
           { value: 'anywhere', label: 'Anywhere' }, { value: 'edges', label: 'Edges' }, { value: 'center', label: 'Centre' }, { value: 'null', label: 'At a null' },
         ], 'Where new and respawned particles appear. Emitter shapes and emitter nulls take over when there are any.')}
@@ -354,7 +375,9 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
             {f.seg('Pick by', 'paletteBy', [{ value: 'heading', label: 'Heading' }, { value: 'speed', label: 'Speed' }, { value: 'age', label: 'Age' }, { value: 'brightness', label: 'Brightness' }], 'What chooses each particle\'s place on the gradient.')}
           </>
         )}
-        {f.props('links', 'opacity', 'trail')}
+        {f.toggle('Goo', 'goo', 'Metaballs: touching particles merge into blobs', 'Draws the particles as one smooth field: particles that touch merge into an organic blob and part with a stretching neck. Colour still comes from Tint, Picture or Palette.')}
+        {g<boolean>('goo') && f.props('gooBlend', 'gooThreshold', 'gooSoft')}
+        {f.props(...(g('goo') ? [] : ['links']), 'opacity', 'trail')}
         {f.select('Blend', 'blend', BLENDS, BLEND_HINT)}
         {f.toggle('Mask', 'reveal', 'Picture through particles', 'The particles become a mask: each one shows the picture under it instead of a colour. Hide the picture (Background → Layers only) to see the shader only where particles are.')}
       </Section>
@@ -939,4 +962,126 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 function extractCount(files: readonly ScriptFile[], fallback: number): number {
   const r = extractScriptParams(files[0]?.code ?? '', files.slice(1));
   return r.ok ? r.defs.length : fallback;
+}
+
+// ── Relationship ─────────────────────────────────────────────────────────────
+
+const RELATION_WALLS: Choice[] = [
+  { value: 'bounce', label: 'Bounce', title: 'Rebounds off the edge (Bounciness says how much)' },
+  { value: 'repel', label: 'Repel', title: 'A soft boundary a little inside the edge pushes it back' },
+  { value: 'wrap', label: 'Wrap', title: 'Leaves one side and comes in from the other' },
+  { value: 'respawn', label: 'Respawn', title: 'Leaving the picture puts it somewhere new at once' },
+  { value: 'escape', label: 'Escape', title: 'May leave the picture; comes back after the delay. Escaped prey is out of sight' },
+];
+const PICTURE_MODES: Choice[] = [{ value: 'off', label: 'Off' }, { value: 'climb', label: 'Climb', title: 'Moves toward higher values' }, { value: 'descend', label: 'Descend', title: 'Moves away from higher values' }];
+const PICTURE_CHANNELS: Choice[] = [
+  { value: 'brightness', label: 'Brightness' }, { value: 'red', label: 'Red' }, { value: 'green', label: 'Green' }, { value: 'blue', label: 'Blue' },
+  { value: 'hue', label: 'Hue' }, { value: 'saturation', label: 'Saturation' }, { value: 'layer', label: 'A layer’s alpha' },
+];
+
+/** Relationship: members (layers with a position) moved by a force between them, and by the picture under them. */
+export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
+  const l = f.l as RelationshipLayer;
+  const relation = l.relation;
+  const chase = relation === 'chase';
+  // Anything with a place of its own; another relationship counts (its centroid), unless it holds this one.
+  const holdsMe = (x: PlayLayer) => x.kind === 'relationship' && x.members.some(m => m.id === l.id);
+  const candidates = ctx.layers.filter(x => x.id !== l.id && RELATION_MEMBER_KINDS.includes(x.kind) && !(x.kind === 'shape' && (x.shape === 'path' || x.shape === 'picture' || x.shape === 'layer')) && !holdsMe(x));
+  const members = l.members;
+  const full = members.length >= RELATION_MAX_MEMBERS;
+  const setMembers = (next: RelationMember[]) => f.set({ members: next });
+  const toggle = (id: string) => {
+    if (members.some(m => m.id === id)) setMembers(members.filter(m => m.id !== id));
+    else if (!full) setMembers([...members, newRelationMember(id, chase ? (members.some(m => m.role === 'chaser') ? 'prey' : 'chaser') : 'member')]);
+  };
+  const change = (id: string, patch: Partial<RelationMember>) => setMembers(members.map(m => (m.id === id ? { ...m, ...patch } : m)));
+  const chip = (x: PlayLayer) => {
+    const on = members.some(m => m.id === x.id);
+    return (
+      <button key={x.id} type="button" onClick={() => toggle(x.id)} disabled={!on && full} title={on ? `${x.label} is a member. Click to take it out.` : full ? `A relationship holds ${RELATION_MAX_MEMBERS} members at most.` : `Make ${x.label} a member.`}
+        style={{ height: 24, padding: '0 9px', borderRadius: 7, border: 0, cursor: !on && full ? 'default' : 'pointer', opacity: !on && full ? 0.5 : 1, background: on ? f.tk.bg.selected : f.tk.bg.field, color: on ? f.tk.accent.text : f.tk.text.secondary, boxShadow: `inset 0 0 0 1px ${on ? f.tk.accent.base : f.tk.border.default}`, font: `500 11.5px Inter, system-ui, sans-serif` }}>
+        {x.kind === 'null' ? '◦ ' : x.kind === 'relationship' ? '⋈ ' : '▢ '}{x.label}
+      </button>
+    );
+  };
+  const signals = ctx.play.signals ?? [];
+  const alphaLayers = ctx.layers.filter(x => x.id !== l.id && x.kind !== 'relationship' && x.kind !== 'null' && x.kind !== 'drumpad');
+  const small: React.CSSProperties = { ...f.numStyle, width: 50 };
+  const faint: React.CSSProperties = { color: f.tk.text.faint, font: '11px Inter, system-ui, sans-serif' };
+  return (
+    <>
+      <Section kind="relationship" title="Members" hint={`Layers with a position: nulls, shapes, text, images, video, the camera… and other relationships (each stands at its members’ centre and moves as a group). Up to ${RELATION_MAX_MEMBERS}; every pair costs a little, so keep it to what you need. A member’s X and Y are driven from here (drag it on the picture to put it back where you want).`}>
+        {candidates.length
+          ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '2px 0 6px 68px' }}>{candidates.map(chip)}</div>
+          : f.note('Add a Null, Shape, Text or Image layer to make it a member.')}
+        {members.map((m, i) => {
+          const x = ctx.layers.find(y => y.id === m.id);
+          const name = x?.label ?? 'Missing layer';
+          return (
+            <div key={m.id} style={{ margin: '6px 0 2px 0', padding: '6px 8px', borderRadius: 8, background: f.tk.bg.field }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ color: f.tk.text.primary, font: `600 11.5px Inter, system-ui, sans-serif`, minWidth: 62 }}>{name}</span>
+                {chase && <Segmented ariaLabel={`${name} role`} value={m.role === 'chaser' ? 'chaser' : 'prey'} options={[{ value: 'chaser', label: 'Chaser' }, { value: 'prey', label: 'Prey' }]} onChange={v => change(m.id, { role: v as RelationMember['role'] })} size="sm" />}
+                <span style={faint}>Mass</span>
+                <NumberInput value={m.mass} min={0.1} max={10} step={0.1} title="Heavier moves less under the same force" onCommit={n => change(m.id, { mass: Math.max(0.1, Math.min(10, n)) })} style={small} />
+                <span style={faint}>Picture</span>
+                <Segmented ariaLabel={`${name} picture`} value={m.picture} options={PICTURE_MODES} onChange={v => change(m.id, { picture: v as RelationMember['picture'] })} size="sm" />
+              </div>
+              {m.picture !== 'off' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                  <Select ariaLabel={`${name} picture channel`} value={m.channel} options={PICTURE_CHANNELS} onChange={v => change(m.id, { channel: v as RelationMember['channel'] })} height={24} />
+                  {m.channel === 'layer' && <Select ariaLabel={`${name} reads layer`} value={m.layerId} options={[{ value: '', label: 'Pick a layer' }, ...alphaLayers.map(y => ({ value: y.id, label: y.label }))]} onChange={v => change(m.id, { layerId: v })} height={24} />}
+                  <span style={faint}>Looks</span>
+                  <NumberInput value={m.radius} min={0.01} max={0.5} step={0.01} title="How far around it looks (picture heights): the gradient over that ring is what it climbs" onCommit={n => change(m.id, { radius: Math.max(0.01, Math.min(0.5, n)) })} style={small} />
+                </div>
+              )}
+              {m.picture !== 'off' && f.prop(relationPictureKey(i), 'Strength')}
+            </div>
+          );
+        })}
+        {members.length === 1 && f.note('One member has nothing to relate to: add another.')}
+      </Section>
+      <Section kind="relationship" title="Relationship">
+        {f.seg('Kind', 'relation', [
+          { value: 'chase', label: 'Chase', title: 'Chasers hunt the closest prey in sight; prey flees. A catch sends a signal.' },
+          { value: 'repel', label: 'Repel', title: 'Everyone pushes apart when closer than a distance' },
+          { value: 'attract', label: 'Attract', title: 'Everyone pulls together: kept apart at a boundary, or gravity-like and orbiting' },
+        ], 'Chase: a chaser runs at the closest prey within its sight and wanders when none is; prey runs from a chaser within its flee distance. Repel: members push apart within a distance. Attract: members pull together, either kept a minimum distance apart (a soft boundary) or free to pass through and orbit.')}
+        {chase && f.props('speed', 'accel', 'turn', 'sight', 'flee', 'wander')}
+        {relation === 'repel' && <>
+          {f.props('strength', 'repelDistance')}
+          {f.seg('Curve', 'repelCurve', [{ value: 'linear', label: 'Linear', title: 'Fades evenly to nothing at the distance' }, { value: 'inverse', label: 'Inverse square', title: 'Gentle far away, hard when they nearly touch' }])}
+        </>}
+        {relation === 'attract' && <>
+          {f.seg('Mode', 'attractMode', [{ value: 'keep', label: 'Keep a distance', title: 'They can’t cross a boundary: a soft spring there' }, { value: 'overshoot', label: 'Overshoot', title: 'Gravity-like: they pass through each other and orbit' }])}
+          {f.props('strength', l.attractMode === 'keep' ? 'minDistance' : 'falloff')}
+        </>}
+      </Section>
+      <Section kind="relationship" title="Motion" hint="What keeps the motion looking natural rather than stuck: how stiff the soft contacts are, how much of a bounce is kept, how quickly things slow down, and a speed cap.">
+        {f.props('springiness', 'bounciness', 'damping', 'maxSpeed')}
+      </Section>
+      <Section kind="relationship" title="Walls" hint="What a member does at the picture’s edge, by role. Escape lets it leave: prey out of the picture is out of sight (the chaser wanders) and comes back after the delay, at the far side if Respawn at says so.">
+        {chase
+          ? <>{f.select('Chasers', 'wallChaser', RELATION_WALLS)}{f.select('Prey', 'wallPrey', RELATION_WALLS)}</>
+          : f.select('Members', 'wallMember', RELATION_WALLS)}
+        {f.seg('Respawn at', 'respawnAt', [{ value: 'random', label: 'Random' }, { value: 'fixed', label: 'Its own place', title: 'The layer’s own X and Y' }, { value: 'far', label: 'Far side', title: 'The edge farthest from the chasers' }], 'Where a member goes when it respawns: after a catch, at a Respawn wall, or coming back from an escape.')}
+        {f.prop('respawnDelay')}
+      </Section>
+      {chase && (
+        <Section kind="relationship" title="Catch" hint="A chaser within the catch radius of a prey catches it: the Catch reading pulses, Catches counts up, and the signal (if any) fires. One catch per approach.">
+          {f.prop('catchRadius')}
+          {f.seg('Then', 'onCatch', [{ value: 'none', label: 'Nothing' }, { value: 'respawn', label: 'Respawn prey' }, { value: 'swap', label: 'Swap roles', title: 'The prey becomes the chaser and the chaser the prey (until the layer runs again)' }])}
+          {f.row('Signal', (
+            <>
+              <Select ariaLabel="Signal on catch" value={l.catchSignal} options={[{ value: '', label: 'None' }, ...signals.map(s => ({ value: s.id, label: s.name }))]} onChange={v => f.set({ catchSignal: v })} height={26} style={{ flex: 1, minWidth: 0 }} />
+              <Button size="sm" variant="ghost" onClick={() => ctx.changePlay(p => { const r = addSignal(p); return { ...r.play, layers: r.play.layers.map(x => (x.id === l.id ? { ...x, catchSignal: r.id } : x)) }; })}>New signal</Button>
+            </>
+          ), 'Sent on every catch. Actions and trigger mappings fire on it: flash the background, burst particles, step the text.')}
+        </Section>
+      )}
+      <Section kind="relationship" title="Debug">
+        {f.toggle('Overlay', 'debug', 'Show forces', 'With the guides on: sight and flee radii, a line from each chaser to its target, velocity arrows (white) and the picture’s pull (green). Never in renders or the finished picture.')}
+      </Section>
+    </>
+  );
 }

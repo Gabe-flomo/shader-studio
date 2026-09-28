@@ -35,6 +35,8 @@ export interface KitEnv {
   image(src: string): HTMLImageElement | null;
   sensor(key: string, value: number): void;
   override(layerId: string, key: string, value: number | null): void;
+  /** A recorded place for a driven layer (a take playing back or rendering): it wins over a relationship's own. */
+  placed?: (layerId: string, key: string) => number | undefined;
   /** Set when the shader has a Layers node: gets the layers' colour and distance field each frame. */
   shaderTap?: (tap: ShaderTap) => void;
   /** A Script layer compiled or ran: null clears its error, a string is the message shown under its code. */

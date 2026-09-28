@@ -54,7 +54,7 @@ import { Tooltip } from '../ui/Tooltip';
 import { makeFieldKit } from './layers/fields';
 import {
   AudioEditor, BodiesEditor, BrushEditor, CameraEditor, ContoursEditor, GlyphsEditor, ImageEditor, LensEditor, NullEditor, ParticlesEditor, ShapeEditor, TextEditor,
-  type EditorContext, ClonerEditor, ScriptEditor } from './layers/editors';
+  type EditorContext, ClonerEditor, RelationshipEditor, ScriptEditor } from './layers/editors';
 import { ActionsSection } from './layers/ActionsSection';
 import { SignalsList } from './ConditionFields';
 import { layerPositionPair } from '../../play/pairs';
@@ -656,6 +656,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
     case 'lens': body = <LensEditor f={f} ctx={ctx} />; break;
     case 'brush': body = <BrushEditor f={f} ctx={ctx} />; break;
     case 'bodies': body = <BodiesEditor f={f} ctx={ctx} />; break;
+    case 'relationship': body = <RelationshipEditor f={f} ctx={ctx} />; break;
     case 'cloner': body = <ClonerEditor f={f} ctx={ctx} />; break;
     case 'script': body = <ScriptEditor f={f} ctx={ctx} />; break;
     case 'background': body = <BackgroundEditor f={f} ctx={ctx} />; break;
