@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.15',
+    date: '2026-09-28',
+    title: 'Agents',
+    highlights: [
+      { area: 'Play', text: 'An Agents layer: a crowd of entities steered by a stack of rules (seek, flee, flock, orbit, gravity, springs, fields), with Boids and Predator-prey presets.', link: { kind: 'example', key: 'playBoids', page: 'play' } },
+    ],
+  },
+  {
     id: '2026.9.14',
     date: '2026-09-28',
     title: 'Less on screen at once',
@@ -49,6 +57,8 @@ export const RELEASES: Release[] = [
       { area: 'Studio', text: 'The top bar fits narrower windows: labels drop first, rarely used buttons fold into a ··· menu, and nothing runs off the edge.' },
       { area: 'Play', text: 'Increment mappings: move a control in steps on a beat, a signal or a threshold; steps can compound, glide, wrap back, and each step sends a signal.', link: { kind: 'example', key: 'playIncrement', page: 'play' } },
       { area: 'Play', text: 'The Play page opens in the split view with the icon rail.' },
+      { area: 'Studio', text: 'Sliders no longer recompile the shader: whole-number sliders and sliders inside scene groups and march loops update live.' },
+      { area: 'Play', text: 'Multiply particles: a Fullness control sets how much of the colony is alive; Multiply and Cull actions; split, full, annihilate and cleared signals.' },
     ],
   },
   {
