@@ -44,7 +44,7 @@ glsl/<Name>.glsl                   a GLSL shader, plain text
 backgrounds/<Name>.<png|jpg|…>     a background image, as the picture file
 library/<Name>.library.json        a Library snapshot: presets, functions, scripts, palettes…
 profile/<Name>.zip                 a whole profile ZIP (Files → Download everything)
-videos/<Name>.<mp4|webm|mov…>      a Video layer's file (meta: its library id and type)
+videos/<Name>.<mp4|webm|wav…>      a Video layer's file or a drum pad's sample (meta: its library id and type)
 ```
 
 Paths are unique inside the file (a clash gets ` (2)`); a name is made safe
@@ -92,7 +92,7 @@ for a path, but the item's real name is the manifest's `name`.
 | `background` | added to the backgrounds library | — (same name and size is "already here") |
 | `library` | merged like Install's Merge: nothing of yours is overwritten, clashing presets come in as `Name (2)` | automatic |
 | `profile` | Install's Merge (needs Pro: `files.install`) | automatic |
-| `video` | added to the videos library under its id, so the Video layers that name it find it | — (the same id is "already here") |
+| `video` | added to the videos library under its id, so the Video layers (or drum pads: sounds are `video` items too) that name it find it | — (the same id is "already here") |
 
 "Already here" (identical content) rows are shown but not ticked. Nothing in a
 file runs on import: graphs and presentations are data, and node types are GLSL

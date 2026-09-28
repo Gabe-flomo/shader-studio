@@ -10,6 +10,7 @@ import { localMutableKV } from '../../files/mutate';
 import { listExternal } from '../../files/sources';
 import { LIBRARY_REFRESH_EVENTS } from '../../utils/library';
 import { FILES_CHANGED } from './filesActions';
+import { storageUsage, warnIfNear, type StorageUsage } from '../../files/storageLimit';
 
 export interface StorageEstimate { usage: number; quota: number }
 
@@ -22,10 +23,11 @@ function slicer(): () => Promise<void> | void {
   };
 }
 
-export function useFilesInventory(): { inv: Inventory | null; building: boolean; estimate: StorageEstimate | null; refresh: () => void } {
+export function useFilesInventory(): { inv: Inventory | null; building: boolean; estimate: StorageEstimate | null; usage: StorageUsage | null; refresh: () => void } {
   const [inv, setInv] = useState<Inventory | null>(null);
   const [building, setBuilding] = useState(true);
   const [estimate, setEstimate] = useState<StorageEstimate | null>(null);
+  const [usage, setUsage] = useState<StorageUsage | null>(null);
   const gen = useRef(0);
   const timer = useRef<number | undefined>(undefined);
   const [nonce, setNonce] = useState(0);
@@ -41,6 +43,11 @@ export function useFilesInventory(): { inv: Inventory | null; building: boolean;
         const e = await navigator.storage?.estimate?.();
         if (!cancelled && e) setEstimate({ usage: e.usage ?? 0, quota: e.quota ?? 0 });
       } catch { /* not offered */ }
+      // Usage against the device's storage limit (the media library and the workspace folder included), measured afresh.
+      try {
+        const u = await storageUsage(true);
+        if (!cancelled) { setUsage(u); warnIfNear(u.total); }
+      } catch { /* a store couldn't be read */ }
     })().catch(e => { console.error('[files] building the inventory', e); if (!cancelled) setBuilding(false); });
     return () => { cancelled = true; };
   }, [nonce]);
@@ -52,5 +59,5 @@ export function useFilesInventory(): { inv: Inventory | null; building: boolean;
     return () => { for (const ev of events) window.removeEventListener(ev, soon); window.clearTimeout(timer.current); };
   }, []);
 
-  return { inv, building, estimate, refresh: () => { setBuilding(true); setNonce(n => n + 1); } };
+  return { inv, building, estimate, usage, refresh: () => { setBuilding(true); setNonce(n => n + 1); } };
 }

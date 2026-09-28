@@ -67,6 +67,7 @@ import { strFromU8, strToU8 } from 'fflate';
 import { createFolder, getMembership, loadFolders, moveItemsToFolder, removeItemsFromFolders } from '../utils/assetFolders';
 import { BACKGROUND_IMAGE_MAX, BACKGROUND_IMAGE_SIDE, PLAY_FILL_STOPS_MAX, fitStops, type BackgroundFill, type ColourStop } from '../types/play';
 import { klFillAt } from '../play/kit/layers.js';
+import { ensureRoom } from '../files/storageLimit';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -295,6 +296,7 @@ export interface AddImageOptions {
 
 /** Keep a picture as an image background. Its size and thumbnail are worked out when not given. */
 export async function addImage(blob: Blob, o: AddImageOptions): Promise<BackgroundImageMeta> {
+  await ensureRoom(blob.size);
   let { width = 0, height = 0, thumb = '' } = o;
   if (!width || !height || !thumb) {
     const d = await decode(blob);
@@ -708,6 +710,7 @@ export async function addVideoFile(file: Blob & { name?: string }, o: { name?: s
     const same = (all ?? []).find(v => v.name === name && v.bytes === file.size);
     if (same) return videoMeta(same);
   }
+  await ensureRoom(file.size);
   const type = file.type || videoMimeOf(file.name ?? name) || 'video/mp4';
   const rec: StoredVideo = { id: o.id || newBackgroundId(isAudioType(type) ? 'snd' : 'vid'), name, type, bytes: file.size, createdAt: o.createdAt ?? Date.now(), ...cleanPoster(o.poster), data: await file.arrayBuffer() };
   // A sound has no frame to show.

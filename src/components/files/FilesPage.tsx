@@ -48,16 +48,29 @@ import { Check, IconTile } from './fileUi';
 import { capsLabel } from './fileUiShared';
 import { WorkspaceBanner, WorkspaceEntry, WorkspaceView } from '../workspace/WorkspacePanel';
 import { OPEN_WORKSPACE_VIEW, takeWorkspaceViewRequest } from '../workspace/workspaceUi';
+import { OPEN_CLEANUP_VIEW } from '../../files/storageLimit';
+import { takeCleanupRequest } from '../../files/storageLimitApp';
+import { exportPlayfile } from '../../playfile/app';
+import { reportFileResult } from '../shell/reportFileResult';
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+/** A saved drum kit (Presets → Drum kits): it can leave as a .playfile with its samples. */
+const isDrumKit = (n: FileNode) => n.kind === 'preset' && n.id.startsWith('dkit:');
+const exportKit = async (n: FileNode) => reportFileResult(await exportPlayfile([n.id], { fileName: n.label, dependencies: false, success: `Exported the kit “${n.label}”` }), { failTitle: 'Couldn’t export the kit' });
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 type View = 'browse' | 'cleanup' | 'workspace' | 'notes';
 
 export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: (p: Page) => void }) {
   const tk = useTokens();
-  const { inv, building, estimate } = useFilesInventory();
-  const [view, setView] = useState<View>(() => (takeWorkspaceViewRequest() ? 'workspace' : 'browse'));
+  const { inv, building, estimate, usage } = useFilesInventory();
+  const [view, setView] = useState<View>(() => (takeWorkspaceViewRequest() ? 'workspace' : takeCleanupRequest() ? 'cleanup' : 'browse'));
+  // A storage-limit refusal's "Open Files → Clean up" asks for the Clean up view.
+  useEffect(() => {
+    const go = () => { takeCleanupRequest(); setView('cleanup'); };
+    window.addEventListener(OPEN_CLEANUP_VIEW, go);
+    return () => window.removeEventListener(OPEN_CLEANUP_VIEW, go);
+  }, []);
   // The top bar's workspace indicator asks for the Workspace view.
   useEffect(() => {
     const go = () => { takeWorkspaceViewRequest(); setView('workspace'); };
@@ -203,6 +216,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     const scopeOf = n.membership?.scope;
     if (n.kind === 'graph') items.push({ label: 'Open in the Studio', icon: 'nodes', onSelect: () => { void openGraph(n.label); } });
     if (n.kind === 'presentation') items.push({ label: 'Open on Present', icon: 'slides', onSelect: () => { rememberLast(n.label); onNavigate?.('present'); } });
+    if (isDrumKit(n)) items.push({ label: 'Save as a .playfile…', icon: 'export', hint: 'The kit with the samples it uses, in one file that opens anywhere', onSelect: () => { void exportKit(n); } });
     if (n.scope && n.kind !== 'folder') items.push({ label: 'New folder…', icon: 'folder', onSelect: async () => { const l = await askText('New folder', { label: 'Name', confirmLabel: 'Create' }); if (l?.trim()) { createFolder(n.scope!, l.trim()); syncApp(['assetbrowser_folders']); } } });
     if (n.kind === 'folder' && n.ref?.t === 'folder') {
       const { scope, folderId } = n.ref;
@@ -249,6 +263,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
       actions={<>
         {node.kind === 'graph' && <Button size="sm" icon="nodes" onClick={() => { void openGraph(node.label); }}>Open in the Studio</Button>}
         {node.kind === 'presentation' && <Button size="sm" icon="slides" onClick={() => { rememberLast(node.label); onNavigate?.('present'); }}>Open on Present</Button>}
+        {isDrumKit(node) && <Button size="sm" icon="export" onClick={() => { void exportKit(node); }} title="The kit with the samples it uses, in one file that opens anywhere">Save as a .playfile…</Button>}
         {!node.private && !node.part && <Button size="sm" icon="export" onClick={() => openDownload([node.id])}>Download…</Button>}
         {node.ref && <Button size="sm" variant="ghost" icon="trash" onClick={() => { void remove([node.id], node.size > 40_000); }}>Remove…</Button>}
       </>} />
@@ -304,7 +319,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
           {view !== 'browse' ? special(view) : node ? nodeView : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 12px 40px' }}>
               <div style={{ padding: '14px 14px 12px', borderRadius: radius.lg, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
-                <SpaceMeter inv={inv} estimate={estimate} compact onCleanUp={() => setView('cleanup')} />
+                <SpaceMeter inv={inv} estimate={estimate} usage={usage} compact onCleanUp={() => setView('cleanup')} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <Button icon="import" onClick={() => { void startInstall(); }}>Install…<ProBadgeFor feature="files.install" /></Button>
@@ -330,7 +345,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     <div {...drop} style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', background: tk.bg.app, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
       <aside aria-label="Files" style={{ width: 288, flexShrink: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}`, minHeight: 0 }}>
         <div style={{ padding: '16px 16px 14px', borderBottom: `1px solid ${tk.border.subtle}` }}>
-          <SpaceMeter inv={inv} estimate={estimate} onCleanUp={() => setView('cleanup')} />
+          <SpaceMeter inv={inv} estimate={estimate} usage={usage} onCleanUp={() => setView('cleanup')} />
         </div>
         <div style={{ padding: '10px 10px 4px' }}>
           <CleanUpEntry count={cleanupCount} active={view === 'cleanup'} onClick={() => setView('cleanup')} dense />
