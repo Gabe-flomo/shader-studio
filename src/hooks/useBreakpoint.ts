@@ -1,24 +1,21 @@
-import { useState, useEffect } from 'react';
+/**
+ * useBreakpoint — the layout's size class. `mobile` means a phone (a touch
+ * device whose shorter side is small, either way up: see lib/viewport.ts),
+ * never just a narrow window; the rest go by width.
+ */
+import { useViewport, getBreakpoint, type Breakpoint } from '../lib/viewport';
 
-export type Breakpoint = 'mobile' | 'tablet' | 'desktop-sm' | 'desktop-lg';
-
-export function getBreakpoint(width: number): Breakpoint {
-  if (width < 768)  return 'mobile';
-  if (width < 1024) return 'tablet';
-  if (width < 1280) return 'desktop-sm';
-  return 'desktop-lg';
-}
+export { getBreakpoint, type Breakpoint };
 
 export function useBreakpoint(): Breakpoint {
-  const [bp, setBp] = useState<Breakpoint>(() => getBreakpoint(window.innerWidth));
+  return useViewport(s => s.breakpoint);
+}
 
-  useEffect(() => {
-    const handler = () => setBp(getBreakpoint(window.innerWidth));
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
-
-  return bp;
+/** Phones: whether it's one, and which way it's held. */
+export function usePhoneLayout(): { phone: boolean; landscape: boolean } {
+  const phone = useViewport(s => s.phone);
+  const landscape = useViewport(s => s.landscape);
+  return { phone, landscape };
 }
 
 export const isMobile    = (bp: Breakpoint) => bp === 'mobile';

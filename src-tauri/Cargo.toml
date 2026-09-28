@@ -16,6 +16,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.5.4", features = [] }
+# Compiles the Audio engine's Objective-C half (native/audio_engine.m) on macOS.
+cc = "1.2"
 
 [dependencies]
 serde_json = "1.0"

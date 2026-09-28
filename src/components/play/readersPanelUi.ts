@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import type { PlayAudioReaders, PlayLayer, PlayRecord, TriggerSpec } from '../../types/play';
 import { padsLayerOfInput, padsReaderInput, videoLayerOfInput, videoReaderInput } from '../../types/playLayers';
+import { engineRackOfInput, engineReaderInput } from '../../lib/engineSound';
 
 interface ReadersPanelUi {
   open: boolean;
@@ -58,16 +59,18 @@ export function removeReader(p: PlayRecord, id: string): PlayRecord {
  * that is gone (a deleted node or layer) stays listed, saying so, so the
  * picker still shows what is chosen.
  */
-export function readerInputOptions(input: string, songs: ReadonlyArray<{ id: string; label: string; file: string | null }>, layers: readonly PlayLayer[]): { value: string; label: string }[] {
+export function readerInputOptions(input: string, songs: ReadonlyArray<{ id: string; label: string; file: string | null }>, layers: readonly PlayLayer[], racks: ReadonlyArray<{ id: string; name: string }> = []): { value: string; label: string }[] {
   const out = [
     { value: '', label: 'Live input (mic, interface, cable)' },
     ...songs.map(s => ({ value: s.id, label: `Song · ${s.label}${s.file !== null ? ` · ${s.file}` : ' (no song loaded)'}` })),
   ];
   for (const l of layers) if (l.kind === 'video') out.push({ value: videoReaderInput(l.id), label: `Video · ${l.label}${l.sound === 'off' ? ' (sound off)' : ''}` });
   for (const l of layers) if (l.kind === 'drumpad') out.push({ value: padsReaderInput(l.id), label: `Drum pads · ${l.label}` });
-  const video = videoLayerOfInput(input), pads = padsLayerOfInput(input);
-  if (video && !layers.some(l => l.id === video && l.kind === 'video')) out.push({ value: input, label: 'Video · a layer no longer in the setup' });
+  for (const r of racks) out.push({ value: engineReaderInput(r.id), label: `Audio engine · ${r.name}` });
+  const video = videoLayerOfInput(input), pads = padsLayerOfInput(input), rack = engineRackOfInput(input);
+  if (rack) { if (!racks.some(r => r.id === rack)) out.push({ value: input, label: 'Audio engine · a rack no longer in the setup' }); }
+  else if (video && !layers.some(l => l.id === video && l.kind === 'video')) out.push({ value: input, label: 'Video · a layer no longer in the setup' });
   else if (pads && !layers.some(l => l.id === pads && l.kind === 'drumpad')) out.push({ value: input, label: 'Drum pads · a layer no longer in the setup' });
-  else if (input && !video && !pads && !songs.some(s => s.id === input)) out.push({ value: input, label: 'Song · a node no longer in the graph' });
+  else if (input && !video && !pads && !rack && !songs.some(s => s.id === input)) out.push({ value: input, label: 'Song · a node no longer in the graph' });
   return out;
 }

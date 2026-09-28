@@ -156,6 +156,8 @@ function SplitPanel() {
   const layersOk = useCan('play.layers');
   const nFinish = useNodeGraphStore(s => s.play.finish?.effects.length ?? 0);
   const finishOk = useCan('play.finish');
+  const nRacks = useNodeGraphStore(s => s.play.audioEngine?.racks.length ?? 0);
+  const engineOk = useCan('audio.engine');
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // The body's width decides whether the section lays out wide.
@@ -184,6 +186,7 @@ function SplitPanel() {
               { value: 'controls', label: `Controls${nControls ? ` · ${nControls}` : ''}` },
               { value: 'layers', label: `Layers${nLayers ? ` · ${nLayers}` : ''}${layersOk ? '' : ' · Pro'}` },
               { value: 'finish', label: `Finish${nFinish ? ` · ${nFinish}` : ''}${finishOk ? '' : ' · Pro'}` },
+              { value: 'engine', label: `Engine${nRacks ? ` · ${nRacks}` : ''}${engineOk ? '' : ' · Pro'}` },
               { value: 'mappings', label: `Mappings${nMappings ? ` · ${nMappings}` : ''}` },
             ]}
           />

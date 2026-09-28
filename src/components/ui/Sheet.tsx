@@ -21,22 +21,8 @@ export function Sheet({ title, onClose, children, maxHeight = '80dvh', headerExt
   const tk = useTokens();
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; });
-  // One close per gesture: on iOS a tap can arrive as pointerup and click, and a
-  // swipe ends where a click would start.
-  const closing = useRef(false);
-  const close = () => { if (closing.current) return; closing.current = true; onCloseRef.current(); window.setTimeout(() => { closing.current = false; }, 400); };
-  // Swipe down on the handle or the title row closes the sheet (phones).
-  const panel = useRef<HTMLDivElement>(null);
-  const dragY = useRef<number | null>(null);
-  const swipe = {
-    onPointerDown: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') return; dragY.current = e.clientY; },
-    onPointerMove: (e: React.PointerEvent) => { if (dragY.current == null || !panel.current) return; const dy = Math.max(0, e.clientY - dragY.current); panel.current.style.transform = dy ? `translateY(${dy}px)` : ''; },
-    onPointerUp: (e: React.PointerEvent) => { if (dragY.current == null) return; const dy = e.clientY - dragY.current; dragY.current = null; if (panel.current) panel.current.style.transform = ''; if (dy > 70) close(); },
-    onPointerCancel: () => { dragY.current = null; if (panel.current) panel.current.style.transform = ''; },
-    style: { touchAction: 'none' as const },
-  };
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -44,11 +30,10 @@ export function Sheet({ title, onClose, children, maxHeight = '80dvh', headerExt
   return createPortal(
     <div
       {...portalGuard}
-      onClick={e => { if (e.target === e.currentTarget) close(); }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex, background: tk.bg.scrim, display: 'flex', alignItems: 'flex-end' }}
     >
       <div
-        ref={panel}
         role="dialog"
         aria-modal="true"
         style={{
@@ -57,14 +42,14 @@ export function Sheet({ title, onClose, children, maxHeight = '80dvh', headerExt
           paddingBottom: 'env(safe-area-inset-bottom, 0px)', font: `13px ${fontFamily.ui}`,
         }}
       >
-        <div {...swipe} style={{ ...swipe.style, height: 22, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ height: 22, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ width: 40, height: 4, borderRadius: 2, background: tk.border.strong }} />
         </div>
         {title !== undefined && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 10px 10px 18px', flexShrink: 0 }}>
-            <span {...swipe} style={{ ...swipe.style, flex: 1, fontSize: 17, fontWeight: 650 }}>{title}</span>
+            <span style={{ flex: 1, fontSize: 17, fontWeight: 650 }}>{title}</span>
             {headerExtra}
-            <IconButton icon="close" label="Close" tooltip={false} onClick={close} onPointerUp={e => { if (e.pointerType !== 'mouse') close(); }} style={{ width: 40, height: 40 }} />
+            <IconButton icon="close" label="Close" tooltip={false} onClick={onClose} style={{ width: 40, height: 40 }} />
           </div>
         )}
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 16px 20px' }}>{children}</div>

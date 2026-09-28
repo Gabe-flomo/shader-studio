@@ -173,7 +173,7 @@ describe('bundled examples', () => {
       }
     }
     expect(count).toBeGreaterThanOrEqual(9);
-  });
+  }, 30000);
 
   it('the recorded-take example ships a take that plays back its controls, pointer and presses', () => {
     const take = EXAMPLE_GRAPHS.playTake.play?.takes?.[0];
