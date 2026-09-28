@@ -119,7 +119,7 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
       if (!existing) {
         onChange(p => {
           const racks = p.audioEngine?.racks ?? [];
-          const next = withEngine(p, { racks: [...racks, rackFromPads(engineId('rk'), pads, racks)] });
+          const next = withEngine(p, { ...p.audioEngine, racks: [...racks, rackFromPads(engineId('rk'), pads, racks)] });
           return { ...next, layers: next.layers.map(l => (l.id === pads.id ? { ...l, volume: 0 } as typeof l : l)) };
         });
       }

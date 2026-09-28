@@ -54,6 +54,7 @@ import { toast } from '../components/ui/toastStore';
 import { roomNow } from '../files/storageLimit';
 import { streamHub } from '../data/streams/streamHub';
 import { DataFeedCapture, DataFeedPlayer } from '../data/streams/takeData';
+import { tape } from './tape';
 
 export { takeEventsBetween, takeMouseAt, takePointerAt, takeValuesAt, type Take } from './takePlayback';
 
@@ -478,6 +479,12 @@ export interface PerformanceSettings {
   manual: boolean;
   /** Count 3, 2, 1 before recording. */
   countIn: boolean;
+  /**
+   * The Audio engine's tape plays along from its top while the take records
+   * (docs/arrangement.md): its notes and automation land in the take like
+   * anything played live, so the take renders them. Only when the setup has a tape.
+   */
+  withTape: boolean;
 }
 
 interface TakeState {
@@ -522,6 +529,8 @@ let rolling: TakeCapture | null = null;
 let replay: Replay | null = null;
 let countTimer: ReturnType<typeof setInterval> | undefined;
 let stopping = false;
+/** The take recording now has the tape playing along. */
+let tapeAlong = false;
 
 const ROLLING_KEY = 'shader-studio:performance-rolling';
 function readRolling(): boolean {
@@ -562,6 +571,9 @@ function nextName(takes: PlayTake[]): string {
   return `Take ${Math.max(n, takes.length) + 1}`;
 }
 
+/** Keep a take made elsewhere (the tape made into a take, docs/arrangement.md), as a recording is kept. */
+export function addTake(take: PlayTake): void { keepTake(take); }
+
 function keepTake(take: PlayTake): void {
   const store = useNodeGraphStore.getState();
   const had = store.play.takes ?? [];
@@ -587,7 +599,7 @@ function stopRolling(): void {
 export const useTakes = create<TakeState>((set, get) => ({
   phase: 'idle',
   countdown: 0,
-  settings: { seconds: 15, manual: false, countIn: true },
+  settings: { seconds: 15, manual: false, countIn: true, withTape: true },
   replayId: null,
   replayPlaying: false,
   rolling: false,
@@ -609,6 +621,9 @@ export const useTakes = create<TakeState>((set, get) => ({
       stopping = false;
       syncRecorder();
       useNodeGraphStore.getState().setTimePlaying(true);
+      // The tape plays along from its top (a performance over the tape).
+      tapeAlong = !!(get().settings.withTape && (useNodeGraphStore.getState().play.arrangement?.length ?? 0) > 0);
+      if (tapeAlong) { tape.playFrom(0); tape.forTake = true; }
       set({ phase: 'recording', countdown: 0 });
     };
     if (!st.settings.countIn) { go(); return; }
@@ -628,7 +643,10 @@ export const useTakes = create<TakeState>((set, get) => ({
     stopping = false;
     syncRecorder();
     const limit = st.settings.manual ? TAKE_MAX_SECONDS : Math.min(TAKE_MAX_SECONDS, st.settings.seconds);
-    const take = c.toTake(nextName(useNodeGraphStore.getState().play.takes ?? []), Infinity, limit);
+    const made = c.toTake(nextName(useNodeGraphStore.getState().play.takes ?? []), Infinity, limit);
+    const take = made && tapeAlong ? { ...made, tape: { at: 0 } } : made;
+    if (tapeAlong && tape.forTake) tape.stop();
+    tapeAlong = false;
     c.dispose();
     set({ phase: 'idle' });
     if (!take) { toast.info('Nothing was recorded', { message: 'The clock has to run while you play. Press Play on the clock and try again.' }); return; }
@@ -637,6 +655,8 @@ export const useTakes = create<TakeState>((set, get) => ({
   },
   cancel() {
     clearInterval(countTimer);
+    if (tapeAlong && tape.forTake) tape.stop();
+    tapeAlong = false;
     capture?.dispose();
     capture = null;
     stopping = false;

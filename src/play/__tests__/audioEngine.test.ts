@@ -27,6 +27,7 @@ const store = vi.hoisted(() => {
 import {
   AE_INST, AE_PAD_BASE_NOTE, auPropId, auTarget, auTargetExists, controlsKeptFor, engineWithoutPlugins, fourCC, fourCCText, keyboardRack, moveEffect, newRack,
   parseAudioEngine, parseAuTarget, patchSlot, rackHears, readAuValue, setRackKeyboard, unitKey, zoneForNote, zonesFor, type AeRack, type PlayAudioEngine,
+  hasOwnRouting, leadRackId, patchRack, rackPlays, setLeadLock,
 } from '../../types/playAudioEngine';
 import { emptyPlayRecord, parsePlayRecord, parsePropTarget, type PlayRecord } from '../../types/play';
 import { allNotesOff, decodeFrame, formatParam, midiEventBytes, parseParamList, soundExt, FRAME_DB_FLOOR } from '../../lib/audioEngineProtocol';
@@ -183,6 +184,40 @@ describe('record edits', () => {
     expect(rackHears({ ...r, midi: 'Push' }, 'Push', 1)).toBe(true);
     expect(rackHears({ ...r, channel: 2 }, 'Push', 1)).toBe(false);
     expect(rackHears({ ...r, channel: 10 }, 'MPK mini 3', 10)).toBe(true);
+  });
+
+  it('the lead rack: the lock, else the selected card, else the first', () => {
+    const ae: PlayAudioEngine = { racks: [newRack('rk_a', []), newRack('rk_b', []), newRack('rk_c', [])] };
+    expect(leadRackId(ae)).toBe('rk_a');
+    expect(leadRackId(ae, 'rk_b')).toBe('rk_b');
+    expect(leadRackId(ae, 'gone')).toBe('rk_a');
+    const locked = setLeadLock(ae, 'rk_c');
+    expect(locked.lock).toBe('rk_c');
+    // Selecting another card to edit it doesn't steal the lead from a lock.
+    expect(leadRackId(locked, 'rk_b')).toBe('rk_c');
+    expect(leadRackId(setLeadLock(locked, ''), 'rk_b')).toBe('rk_b');
+    expect(leadRackId(undefined)).toBe('');
+    // The lock is kept in the record; a lock on a rack the file lacks is dropped.
+    expect(parseAudioEngine(JSON.parse(JSON.stringify(locked)))!.lock).toBe('rk_c');
+    expect(parseAudioEngine({ racks: [{ id: 'rk_a' }], lock: 'rk_z' })!.lock).toBeUndefined();
+    // Record edits keep it.
+    expect(setRackKeyboard(locked, 'rk_a', true).lock).toBe('rk_c');
+    expect(patchRack(locked, 'rk_a', { volume: 0.5 }).lock).toBe('rk_c');
+  });
+
+  it('notes go to the lead; racks with their own device or channel play what it sends', () => {
+    const any = newRack('rk_a', []), other = newRack('rk_b', []);
+    const push = { ...newRack('rk_c', []), midi: 'Push' }, ch10 = { ...newRack('rk_d', []), channel: 10 };
+    const who = (lead: string, device: string, channel: number) => [any, other, push, ch10, { ...newRack('rk_e', []), midi: 'off' }].filter(r => rackPlays(r, lead, device, channel)).map(r => r.id);
+    expect(who('rk_a', 'Launchkey', 1)).toEqual(['rk_a']);
+    expect(who('rk_b', 'Launchkey', 1)).toEqual(['rk_b']);
+    expect(who('rk_a', 'Push', 1)).toEqual(['rk_a', 'rk_c']);
+    expect(who('rk_a', 'MPK mini 3', 10)).toEqual(['rk_a', 'rk_d']);
+    // A lead with its own routing still only plays what that sends; 'No MIDI' never plays.
+    expect(who('rk_c', 'Launchkey', 1)).toEqual([]);
+    expect(who('rk_e', 'Launchkey', 1)).toEqual([]);
+    expect(hasOwnRouting(any)).toBe(false);
+    expect(hasOwnRouting(push) && hasOwnRouting(ch10)).toBe(true);
   });
 
   it('gives the computer keyboard to one rack at a time, off unless the record says so', () => {

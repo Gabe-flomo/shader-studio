@@ -843,6 +843,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
               )}
               <Toggle tall={phone} checked={perf.manual} onChange={v => useTakes.getState().setSettings({ manual: v })} label="Stop by hand instead (up to 1 minute)" />
               <Toggle tall={phone} checked={perf.countIn} onChange={v => useTakes.getState().setSettings({ countIn: v })} label="Count 3, 2, 1 first" />
+              {(useNodeGraphStore.getState().play.arrangement?.length ?? 0) > 0 && (
+                <Toggle tall={phone} checked={perf.withTape} onChange={v => useTakes.getState().setSettings({ withTape: v })} label="Play the Audio engine’s tape along, from its top" />
+              )}
               <Help>
                 Start closes this and runs the clock. A small bar at the bottom shows the time and Stop (<Kbd combo="cmd+." />),
                 and everything else keeps working while you play. When it stops, the take plays back.

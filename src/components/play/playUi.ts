@@ -84,6 +84,9 @@ interface PlayUi {
   setFinishView: (v: 'picture' | 'sound') => void;
   /** Open the Finish tab's Sound view at this audio effect. */
   revealAudioFx: (effectId: string) => void;
+  /** The Engine tab's view: the racks as they play, or the tape (docs/arrangement.md). */
+  engineView: 'performance' | 'arrangement';
+  setEngineView: (v: 'performance' | 'arrangement') => void;
   /** The control group to scroll to and flash on the Controls section (bumped with controlGroupTick). */
   controlGroupFocus: string;
   controlGroupTick: number;
@@ -127,6 +130,8 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   revealFinish: id => set({ tab: 'finish', phonePage: '', finishView: 'picture', finishFocus: id, finishTick: get().finishTick + 1 }),
   finishView: 'picture',
   setFinishView: finishView => set({ finishView }),
+  engineView: 'performance',
+  setEngineView: engineView => set({ engineView }),
   revealAudioFx: id => set({ tab: 'finish', phonePage: '', finishView: 'sound', finishFocus: id, finishTick: get().finishTick + 1 }),
   controlGroupFocus: '',
   controlGroupTick: 0,
