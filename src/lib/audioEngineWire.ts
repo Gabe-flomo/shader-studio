@@ -14,6 +14,7 @@ import { setRackKeyboard } from '../types/playAudioEngine';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { playEngine } from './playEngine';
 import { makeGrainTap } from './grainFrom';
+import { wireTape } from './tapeWire';
 
 let wired = false;
 
@@ -29,6 +30,8 @@ export function wireAudioEngine(): void {
   playOverlay.onPad(a => audioEngineHost.onPad(a));
   // Granulators whose grains come from a layer: its things after every frame (lib/grainFrom.ts).
   playOverlay.setGrainTap(makeGrainTap((rackId, pts, inside) => audioEngineHost.granulatorPoints(rackId, pts, inside)));
+  // The tape (docs/arrangement.md): records and replays what's played into the racks.
+  wireTape();
   setEngineWebAudio({ ctx: () => audioEngine.context(), connect: n => audioEngine.connectOutside(n) });
   setEngineSounds(async id => {
     const v = await getVideo(id);

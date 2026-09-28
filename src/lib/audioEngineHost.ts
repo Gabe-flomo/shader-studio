@@ -199,6 +199,12 @@ class WebRack {
     }
   }
   missing(): string[] { return this.zones.filter(z => this.buffers.get(z.sampleId) === 'error').map(z => z.sampleId); }
+  /** The zones and their decoded sounds (the tape's lane previews render with them). */
+  loaded(): { zones: AeZone[]; buffers: Map<string, AudioBuffer> } {
+    const buffers = new Map<string, AudioBuffer>();
+    for (const [id, b] of this.buffers) if (b instanceof AudioBuffer) buffers.set(id, b);
+    return { zones: this.zones, buffers };
+  }
   setVolume(v: number, mute: boolean): void { this.out.gain.setTargetAtTime(mute ? 0 : v, this.ctx.currentTime, 0.015); }
   midi(status: number, d1: number, d2: number): void {
     const kind = status & 0xf0;
@@ -375,6 +381,12 @@ class AudioEngineHost {
   granulatorPoints(rackId: string, pts: GrPoints, inside: number): void {
     const w = this.web.get(rackId);
     if (w && w.kind === 'granulator') w.points(pts, inside);
+  }
+
+  /** A browser sample player rack's zones and decoded sounds, or null (not running here). */
+  webSampler(rackId: string): { zones: AeZone[]; buffers: Map<string, AudioBuffer> } | null {
+    const w = this.web.get(rackId);
+    return w && w.kind === 'sampler' ? w.loaded() : null;
   }
 
   /** A granulator rack running here (the card draws its grains), or null. */
