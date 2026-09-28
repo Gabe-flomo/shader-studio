@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.13',
+    date: '2026-09-28',
+    title: 'The Granulator',
+    highlights: [
+      { area: 'Play', text: 'A Granulator instrument in the Audio engine, modelled on Granulator III: Classic, Flux and Cloud modes, up to 64 grains, playable from MIDI or the keyboard.', link: { kind: 'example', key: 'granulator', page: 'play' } },
+      { area: 'Play', text: 'Grains drive visuals (count, position, spread as sources; grains onto nulls), and a layer can drive grains: particles inside a boundary shape become grains.' },
+    ],
+  },
+  {
     id: '2026.9.12',
     date: '2026-09-28',
     title: 'A Files home, readers as controls, a private file format',
