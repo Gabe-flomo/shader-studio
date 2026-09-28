@@ -48,7 +48,7 @@
  * sequences) between frames, keyed by layer id. Actions (burst, next line…)
  * are queued with kit.act() and applied on the next frame.
  */
-import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, seededRandom, stringSeed, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
+import { createParticles, resizeParticles, stepParticles, drawParticles, burstParticles, scatterParticles, resetParticles, multiplyParticles, cullParticles, seededRandom, stringSeed, paletteCssAt, particleFieldGrid } from '../particle-sim.js';
 import { geoCompile, geoFieldFromBrightness, geoFieldFromAlpha, geoFieldFromCoverage, sdfSegments, geoPathNodes, geoPathFade, geoPathBuild, geoPathReadings } from './geometry.js';
 import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPreview, klDrawNull, klPaintShape, klMatte, klBuildLuma, klDrawShape, klDrawAudio, klDrawGlyphs, klDrawContours, klDrawLens, klDrawBrush, klClonerLayout, klClonerCopies, klDrawCopy, klFontFor, klSketchCompile, klSketchStep, klSketchPress, klSketchStale, klPaintBackground, klSketchDispose } from './layers.js';
 import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
@@ -541,7 +541,7 @@ export function createLayerKit() {
           if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) bdScatter(b.st, (a.amount || 1) * env.value(l, 'scatter'), rngFor(l.id, 'bodies')); }
           else if (l.kind === 'particles') { if (!pending.has(l.id)) pending.set(l.id, []); pending.get(l.id).push(a); }
           break;
-        case 'burst':
+        case 'burst': case 'multiply': case 'cull':
           if (l.kind === 'particles') { if (!pending.has(l.id)) pending.set(l.id, []); pending.get(l.id).push(a); }
           break;
         default:
@@ -963,6 +963,12 @@ export function createLayerKit() {
           report(env, l.id + '::speed', Math.min(1, sp / n / maxV));
           report(env, l.id + '::spread', Math.min(1, Math.sqrt(Math.max(0, mxx / n - mx * mx + myy / n - my * my)) / (0.29 * Math.hypot(aspect, 1))));
         } else { report(env, l.id + '::speed', 0); report(env, l.id + '::spread', 0); }
+        if (l.emit === 'multiply' && sim.mx) {
+          report(env, l.id + '::split', sim.mx.splits);
+          report(env, l.id + '::full', sim.mx.fulls);
+          report(env, l.id + '::annihilate', sim.mx.annihilations);
+          report(env, l.id + '::cleared', sim.mx.cleareds);
+        }
       } else if (l.kind === 'camera') report(env, l.id + '::motion', cam ? motion : 0);
       else if (l.kind === 'bodies' || l.kind === 'brush') {
         // Anchors: the centroid of the bodies, or of the strokes on the picture.
@@ -1051,6 +1057,8 @@ export function createLayerKit() {
       if (a.do === 'burst') burstParticles(sim, p, penv, a.amount || 60, s.rand);
       else if (a.do === 'scatter') scatterParticles(sim, p, (a.amount || 1) * (p.scatter ?? 1), s.rand);
       else if (a.do === 'reset') resetParticles(sim, p, penv, s.rand);
+      else if (a.do === 'multiply') multiplyParticles(sim, p, penv, a.amount || 20, s.rand);
+      else if (a.do === 'cull') cullParticles(sim, p, penv, a.amount || 20, s.rand);
     }
     if (!frozen.has(l.id)) stepParticles(sim, p, penv, s.rand);
     const opacity = p.opacity, trail = p.trail;

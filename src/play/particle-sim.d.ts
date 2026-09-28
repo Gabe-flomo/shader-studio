@@ -8,8 +8,8 @@ export interface ParticleState {
   /** Multiply: seconds to the next split, the partner an annihilating particle seeks (-1 = none), where it was born. */
   split: Float32Array; mate: Int32Array; bx: Float32Array; by: Float32Array;
   seed: number;
-  /** Multiply's colony state (null until the first step). */
-  mx: { phase: 'start' | 'grow' | 'full'; full: number; idle: number; respawn: number; cycles: number; reached: boolean } | null;
+  /** Multiply's colony state (null until the first step). splits/fulls/annihilations/cleareds are event counters (each bumped once per bud, target reached, pair death and clear-out) that the layer's signals watch. */
+  mx: { phase: 'start' | 'grow' | 'full'; full: number; idle: number; respawn: number; cycles: number; reached: boolean; splits: number; fulls: number; annihilations: number; cleareds: number; wasEmpty: boolean } | null;
   /** Annihilation bursts still showing: where, how old (s), and the sparks' angle. */
 }
 /** A particles layer's settings with numbers already driven (the id, label and kind are not read). */
@@ -43,6 +43,8 @@ export function stepParticles(st: ParticleState, p: ParticleParams, env: Particl
 export function burstParticles(st: ParticleState, p: ParticleParams, env: ParticleEnv, amount: number, rand?: () => number): void;
 export function scatterParticles(st: ParticleState, p: ParticleParams, strength: number, rand?: () => number): void;
 export function resetParticles(st: ParticleState, p: ParticleParams, env: ParticleEnv, rand?: () => number): void;
+export function multiplyParticles(st: ParticleState, p: ParticleParams, env: ParticleEnv, amount: number, rand?: () => number): void;
+export function cullParticles(st: ParticleState, p: ParticleParams, env: ParticleEnv, amount: number, rand?: () => number): void;
 export function modulator(by: ParticleParams['sizeBy'], st: ParticleState, i: number, p: ParticleParams, env: ParticleEnv): number;
 export interface FieldSample { x: number; y: number; fx: number; fy: number; settle: boolean; ax: number; ay: number }
 export function particleFieldGrid(p: ParticleParams, env: ParticleEnv, cols: number, rows: number, seed?: number): FieldSample[];

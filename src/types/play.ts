@@ -508,7 +508,7 @@ export type { LayerGroup } from './layerGroups';
  *   next / prev / shuffle / goto   data: another row or chunk (a whole window when it steps by windows; goto: the `amount`th row)
  *   pad      drum pads: play pad number `amount` (1 = the first; docs/drum-pads.md)
  */
-export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto' | 'pad';
+export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto' | 'pad' | 'multiply' | 'cull';
 /** A built-in action, or a button a Script layer declares (`script:<key>`). */
 export type ActionKind = BuiltinActionKind | 'signal' | `script:${string}`;
 /** The action that sends a signal (its `signal`) instead of doing something to a layer. */
@@ -532,11 +532,11 @@ export interface PlayAction {
   signal?: string;
 }
 
-export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear', 'goto', 'pad'];
+export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear', 'goto', 'pad', 'multiply', 'cull'];
 
 /** Which actions make sense for which layer kinds. */
 export const ACTIONS_FOR: Record<string, readonly BuiltinActionKind[]> = {
-  particles: ['burst', 'scatter', 'reset', 'freeze', 'toggle', 'show', 'hide'],
+  particles: ['burst', 'scatter', 'multiply', 'cull', 'reset', 'freeze', 'toggle', 'show', 'hide'],
   bodies: ['drop', 'scatter', 'reset', 'freeze', 'toggle', 'show', 'hide'],
   text: ['next', 'prev', 'shuffle', 'reset', 'toggle', 'show', 'hide'],
   brush: ['clear', 'toggle', 'show', 'hide'],
@@ -590,8 +590,8 @@ export function parseActionTarget(target: string): { layerId: string; do: Action
   return { layerId: rest.slice(0, i), do: kind as ActionKind };
 }
 
-/** A new action's default amount: Burst throws a handful, everything else is 1 (Go to: the first source). */
-export const defaultActionAmount = (kind: ActionKind) => (kind === 'burst' ? 60 : 1);
+/** A new action's default amount: Burst throws a handful, Multiply and Cull a smaller one, everything else is 1 (Go to: the first source). */
+export const defaultActionAmount = (kind: ActionKind) => (kind === 'burst' ? 60 : kind === 'multiply' || kind === 'cull' ? 20 : 1);
 
 export const READER_TARGET_PREFIX = 'reader:';
 

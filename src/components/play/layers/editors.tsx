@@ -256,6 +256,13 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
   const shape = g<string>('shape'), colour = g<string>('colour');
   const flock = g<number>('flock');
   const nullPick = (why: string) => f.pick('Null', 'nullId', nulls(ctx), 'Add a Null layer first', why, () => ctx.createNull('nullId'));
+  const signals = ctx.play.signals ?? [];
+  const signalRow = (label: string, key: 'splitSignal' | 'fullSignal' | 'annihilateSignal' | 'clearedSignal', hint: string) => f.row(label, (
+    <>
+      <Select ariaLabel={`Signal on ${label.toLowerCase()}`} value={g<string>(key)} options={[{ value: '', label: 'None' }, ...signals.map(s => ({ value: s.id, label: s.name }))]} onChange={v => f.set({ [key]: v })} height={26} style={{ flex: 1, minWidth: 0 }} />
+      <Button size="sm" variant="ghost" onClick={() => ctx.changePlay(p => { const r = addSignal(p); return { ...r.play, layers: r.play.layers.map(x => (x.id === f.l.id ? { ...x, [key]: r.id } : x)) }; })}>New signal</Button>
+    </>
+  ), hint);
   return (
     <BigEditorScaffold kind="particles" sections={[
       { id: 'particles-motion', label: 'Motion' },
@@ -292,7 +299,12 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         {g('emit') === 'burst' && <Buttons><Button size="sm" icon="spark" onClick={() => ctx.act('burst', 80)}>Burst 80 now</Button></Buttons>}
         {g('emit') === 'multiply' && (
           <>
-            {f.props('splitRate', 'splitJitter', 'splitChildren', 'splitPush')}
+            {f.seg('Grow', 'grow', [
+              { value: 'itself', label: 'By itself', title: 'Split timers grow the colony' }, { value: 'fullness', label: 'By Fullness', title: 'The population follows the Fullness slider' },
+            ], 'By itself: each particle splits on its own clock (Split rate). By Fullness: the population chases the Fullness slider directly — raising it buds new particles from random living parents (a few a frame, so it looks like growth, not a pop); lowering it removes the youngest first. Split timers are off.')}
+            {g('grow') === 'fullness'
+              ? f.prop('fullness')
+              : f.props('splitRate', 'splitJitter', 'splitChildren', 'splitPush')}
             {f.seg('Once born', 'multLife', [
               { value: 'stay', label: 'Stay', title: 'Drift apart gently and stop' }, { value: 'flow', label: 'Flow', title: 'Follow the field and forces like other particles' },
               { value: 'return', label: 'Return', title: 'Spring back to where they were born' }, { value: 'annihilate', label: 'Annihilate', title: 'Pair up, seek each other and vanish in a burst' },
@@ -300,13 +312,21 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
             {g('multLife') !== 'flow' && f.prop('multSpread')}
             {g('multLife') === 'return' && f.prop('returnSpring')}
             {g('multLife') === 'annihilate' && f.props('pairRadius', 'seekSpeed')}
-            {f.seg('When full', 'multAfter', [
-              { value: 'loop', label: 'Loop', title: 'Stop splitting; start over from one when they are gone' }, { value: 'respawn', label: 'Respawn', title: 'The dead come back at the spawn point and multiply again' },
-              { value: 'hold', label: 'Hold', title: 'Keep splitting to stay at the full count' },
-            ], 'After the Count is reached. Loop stops splitting and starts again from one particle when they are gone (or after Loop hold). Respawn brings the dead back where the colony began. Hold keeps the survivors splitting to stay full.')}
-            {g('multAfter') === 'loop' && f.prop('loopHold')}
+            {g('grow') === 'itself' && <>
+              {f.seg('When full', 'multAfter', [
+                { value: 'loop', label: 'Loop', title: 'Stop splitting; start over from one when they are gone' }, { value: 'respawn', label: 'Respawn', title: 'The dead come back at the spawn point and multiply again' },
+                { value: 'hold', label: 'Hold', title: 'Keep splitting to stay at the full count' },
+              ], 'After the Count is reached. Loop stops splitting and starts again from one particle when they are gone (or after Loop hold). Respawn brings the dead back where the colony began. Hold keeps the survivors splitting to stay full.')}
+              {g('multAfter') === 'loop' && f.prop('loopHold')}
+            </>}
             {f.note('The first particle is born where Born says; with Seed set, every run grows the same way.')}
             <Buttons><Button size="sm" variant="ghost" onClick={() => ctx.act('reset')}>Start over from one</Button></Buttons>
+            <Section id="particles-multiply-signals" kind="particles" title="Signals out" hint="Named events other actions and mappings can react to. Pick a signal (or make one) for any you want to use; leave the rest as None.">
+              {signalRow('Split', 'splitSignal', 'Sent whenever a particle buds — by itself, by Fullness or the Multiply action.')}
+              {signalRow('Full', 'fullSignal', 'Sent whenever the colony reaches its target.')}
+              {g('multLife') === 'annihilate' && signalRow('Annihilate', 'annihilateSignal', 'Sent whenever a pair dies.')}
+              {signalRow('Cleared', 'clearedSignal', 'Sent whenever the colony empties out (or a Loop restarts).')}
+            </Section>
           </>
         )}
         {f.seg('Born', 'spawn', [

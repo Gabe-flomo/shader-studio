@@ -217,6 +217,10 @@ export interface ParticlesLayer extends LayerBase {
   multLife: 'stay' | 'flow' | 'return' | 'annihilate';
   /** Multiply, once the count is reached: start over from one when they're gone · the dead come back at the origin · stay full. */
   multAfter: 'loop' | 'respawn' | 'hold';
+  /** Multiply: split timers grow the colony (by itself), or the population chases Fullness directly. */
+  grow: 'itself' | 'fullness';
+  /** Multiply · Grow: by Fullness, 0..100%: how much of Count should be alive. Mappable/animatable. */
+  fullness: number;
   /** Multiply · return: spring strength back to the birth point. */
   returnSpring: number;
   /** Multiply · annihilate: how far a particle looks for a partner (picture heights). */
@@ -225,6 +229,14 @@ export interface ParticlesLayer extends LayerBase {
   seekSpeed: number;
   /** Multiply · loop: seconds at the full count before starting over (0 = only when they're gone). */
   loopHold: number;
+  /** Multiply: a signal id sent whenever a particle buds (by itself, by Fullness or the Multiply action). '' = none. */
+  splitSignal: string;
+  /** Multiply: a signal id sent whenever the colony reaches its target. '' = none. */
+  fullSignal: string;
+  /** Multiply · annihilate: a signal id sent whenever a pair dies. '' = none. */
+  annihilateSignal: string;
+  /** Multiply: a signal id sent whenever the colony empties out (or a Loop restarts). '' = none. */
+  clearedSignal: string;
   spawn: 'anywhere' | 'edges' | 'center' | 'null';
   spawnRadius: number;
   /** Leaving the picture: come in the other side, bounce, be reborn (spawn setting), or reappear anywhere at random. */
@@ -1298,8 +1310,8 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     flock: 0, flockRadius: 0.06, flockAlign: 1, flockCohere: 0.6, flockSeparate: 1.2, flockSpace: 0.4, scatter: 1, showField: false,
     attractor: 'none', force: 'gravitate', strength: 1, catchRadius: 0.02,
     emit: 'stream', spawn: 'anywhere', spawnRadius: 0.2, edges: 'wrap', life: 0, fade: 0, seed: 0, nullId: '',
-    splitRate: 1, splitJitter: 0.3, splitChildren: 1, splitPush: 0.08, multSpread: 0.035, multLife: 'stay', multAfter: 'hold',
-    returnSpring: 1, pairRadius: 0.3, seekSpeed: 0.15, loopHold: 6,
+    splitRate: 1, splitJitter: 0.3, splitChildren: 1, splitPush: 0.08, multSpread: 0.035, multLife: 'stay', multAfter: 'hold', grow: 'itself', fullness: 100,
+    returnSpring: 1, pairRadius: 0.3, seekSpeed: 0.15, loopHold: 6, splitSignal: '', fullSignal: '', annihilateSignal: '', clearedSignal: '',
     shape: 'dot', rotate: 'heading', sprite: '', crop: false, tintSprite: false, size: 2, sizeJitter: 0.3, opacity: 0.8,
     colour: 'tint', color: [1, 1, 1], palette: 1, paletteBy: 'heading',
     sizeBy: 'none', sizeAmount: 1, opacityBy: 'none', opacityAmount: 0.5, falloff: 0.3, links: 0,
@@ -1408,7 +1420,9 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     paletteBy: E('heading', 'speed', 'age', 'brightness'), sizeBy: { t: 'enum', values: MODS }, sizeAmount: N(), opacityBy: { t: 'enum', values: MODS }, opacityAmount: N(),
     falloff: N(0.01), links: N(0, 0.5), reveal: B, trail: unit, blend: blendF,
     splitRate: N(0.01, 20), splitJitter: unit, splitChildren: N(1, 4, true), splitPush: N(0, 2), multSpread: N(0, 0.5),
-    multLife: E('stay', 'flow', 'return', 'annihilate'), multAfter: E('loop', 'respawn', 'hold'), returnSpring: N(0, 10), pairRadius: N(0.02, 2), seekSpeed: N(0.005, 2), loopHold: N(0, 120),
+    multLife: E('stay', 'flow', 'return', 'annihilate'), multAfter: E('loop', 'respawn', 'hold'), grow: E('itself', 'fullness'), fullness: N(0, 100),
+    returnSpring: N(0, 10), pairRadius: N(0.02, 2), seekSpeed: N(0.005, 2), loopHold: N(0, 120),
+    splitSignal: S, fullSignal: S, annihilateSignal: S, clearedSignal: S,
     goo: B, gooBlend: N(1, 8), gooThreshold: N(0.01, 0.99), gooSoft: unit,
   },
   shape: {
@@ -1758,6 +1772,7 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'pairRadius', label: 'Pair radius', min: 0.02, max: 1, hint: 'Multiply · Annihilate: how far a particle looks for a partner (fraction of picture height).' },
     { key: 'seekSpeed', label: 'Seek speed', min: 0.01, max: 1, hint: 'Multiply · Annihilate: how fast partners close in on each other (fraction of picture height per second).' },
     { key: 'loopHold', label: 'Loop hold (s)', min: 0, max: 30, hint: 'Multiply · Loop: seconds at the full count before starting over from one particle. 0 = only when they are all gone.' },
+    { key: 'fullness', label: 'Fullness', min: 0, max: 100, hard: true, hint: 'Multiply · Grow: by Fullness: how much of Count should be alive, as a percentage. Raising it buds new particles from random living parents; lowering it removes the youngest first.' },
     { key: 'life', label: 'Life (s)', min: 0, max: 20, hint: 'Seconds before a particle respawns (each lives 60–140% of this). 0 = they live forever and only respawn at edges or when caught.' },
     { key: 'fade', label: 'Fade', min: 0, max: 1, hint: 'Fade in when born and out before dying, as a fraction of the life. With no life set, particles only fade in.' },
     { key: 'size', label: 'Size', min: 0.5, max: 40, step: 0.5, hint: 'Particle radius in pixels.' },
