@@ -28,6 +28,8 @@ import { Segmented } from '../../ui/Choice';
 import { Icon } from '../../ui/Icon';
 import type { IconName } from '../../ui/iconPaths';
 import { Menu, type MenuItem } from '../../ui/Menu';
+import { loadRackPresets, rackPresetSummary } from '../../../play/rackPresets';
+import { applyRackPresetToPlay, presetSoundToMaster, saveRackAsPreset } from '../presetsUi';
 import { toast } from '../../ui/toastStore';
 import { askConfirm } from '../../ui/dialogStore';
 import type { PlayRecord } from '../../../types/play';
@@ -555,11 +557,29 @@ function Timeline({ play, arr, racks, rows, span, lanes, phase, narrow, touch, m
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0' }}>
         <Button size="sm" variant={rows.length ? 'secondary' : 'primary'} icon="plus" disabled={rows.length >= AE_RACKS_MAX} onClick={onAddTrack}
           title={rows.length >= AE_RACKS_MAX ? `Up to ${AE_RACKS_MAX} tracks` : 'A new track: an instrument and its effects'}>Add track</Button>
+        <Button size="sm" variant="ghost" icon="presets" disabled={rows.length >= AE_RACKS_MAX}
+          onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); onMenu({ x: r.left, y: r.bottom + 4, title: 'Add a track from a preset', items: fromPresetItems() }); }}
+          title="A track from a saved rack: its instrument, effects and controls">From a preset…</Button>
         <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Drag a track’s header to reorder · Space plays and pauses</span>
       </div>
       {rows.length > 0 && <MasterRow narrow={narrow} touch={touch} selected={masterSelected} onPick={onPickMaster} span={span} registerHead={registerHead} />}
     </div>
   );
+}
+
+/** A menu of the saved rack presets, each doing `pick`. */
+function presetItems(pick: (p: ReturnType<typeof loadRackPresets>[number]) => void): MenuItem[] {
+  const list = loadRackPresets().sort((a, b) => a.name.localeCompare(b.name));
+  if (!list.length) return [{ label: 'No rack presets yet', disabled: true, hint: 'A track’s ⋯ menu → Save as preset…', onSelect: () => {} }];
+  return list.map(p => ({ label: p.name, icon: 'presets' as IconName, hint: rackPresetSummary(p), onSelect: () => pick(p) }));
+}
+
+/** Add track → From a preset…: a new track from each, and the ones with Sound effects as a Finish → Sound chain. */
+function fromPresetItems(): MenuItem[] {
+  const items = presetItems(p => applyRackPresetToPlay(p));
+  const withSound = loadRackPresets().filter(p => p.soundFx?.effects.length);
+  if (!withSound.length) return items;
+  return [...items, 'separator', { heading: 'Only its Sound effects, on Finish → Sound' }, ...withSound.map(p => ({ label: p.name, icon: 'sliders' as IconName, hint: p.soundFx!.effects.map(e => e.kind).join(' → '), onSelect: () => presetSoundToMaster(p) }))];
 }
 
 function DropLine({ top = false }: { top?: boolean }) {
@@ -632,6 +652,8 @@ function Track({ play, arr, rack, row, index, count, track, span, preview, narro
     x, y, title: rack.name,
     items: [
       { label: 'Rename…', icon: 'edit', onSelect: () => void edits.rename() },
+      { label: 'Save as preset…', icon: 'save', hint: 'Its instrument, effects and rack controls (no mappings, no tape)', onSelect: () => void saveRackAsPreset(rack.id) },
+      { label: 'Replace with preset…', icon: 'presets', hint: 'Its devices and controls from a saved rack; its clips stay', onSelect: () => setTimeout(() => onMenu({ x, y, title: `Replace ${rack.name}’s devices`, items: presetItems(p => applyRackPresetToPlay(p, rack.id)) }), 0) },
       { heading: 'Colour' },
       ...TRACK_COLORS.map((c, k) => ({ label: `Colour ${k + 1}${c === row.color ? ' ✓' : ''}`, icon: 'star' as IconName, iconColor: c, onSelect: () => recolor(c) })),
       'separator',

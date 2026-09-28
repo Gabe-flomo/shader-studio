@@ -29,6 +29,8 @@ import { Sheet } from '../../ui/Sheet';
 import { portalGuard } from '../../ui/portalGuard';
 import { KindDialog } from './KindDialog';
 import { addKindToList, applyKindLook, removeKindFromFile, removeKindFromList } from './kindActions';
+import { useLayerSets } from '../presetsUi';
+import { setSummary, type LayerSet } from '../../../play/layerSets';
 import { builtinGroups, builtinKey, LAYER_KIND_FOLDER_SCOPE, type BuiltinVariant, loadClosed, saveClosed, yourLayers, type KindEntry } from './addLayerCatalog';
 
 const WIDTH = 340;
@@ -53,13 +55,15 @@ function useFolders() {
 /** assetFolders writes to localStorage and can throw when it is blocked. */
 const safely = (fn: () => void) => { try { fn(); } catch { /* storage blocked */ } };
 
-export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onChange, onClose }: {
+export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onAddSet, onChange, onClose }: {
   play: PlayRecord;
   /** Phone layout: a bottom sheet with bigger rows. */
   touch: boolean;
   anchorRef: RefObject<HTMLElement | null>;
   onAdd: (kind: PlayLayerKind, variant?: BuiltinVariant) => void;
   onAddKind: (def: LayerKindDef) => void;
+  /** Add a saved layer set (docs/presets.md). */
+  onAddSet?: (set: LayerSet) => void;
   onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
   onClose: () => void;
 }) {
@@ -88,6 +92,14 @@ export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onChang
   const builtinTotal = builtins.reduce((n, g) => n + (searching ? g.items.length : g.total), 0);
   const yoursCount = searching ? yours.loose.length + yours.folders.reduce((n, g) => n + g.items.length, 0) : kinds.length;
 
+  // Layer sets: groups of layers saved with their controls, mappings and actions.
+  const allSets = useLayerSets();
+  const sets = useMemo(() => {
+    const t = query.trim().toLowerCase();
+    return (onAddSet ? allSets : []).filter(x => !t || x.name.toLowerCase().includes(t) || (x.note ?? '').toLowerCase().includes(t)).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allSets, query, onAddSet]);
+  const setRow = (x: LayerSet): Row => ({ key: `set:${x.id}`, label: x.name, hint: [setSummary(x.play), x.note?.split('\n')[0]].filter(Boolean).join(' · '), icon: 'layers', onAdd: () => onAddSet?.(x) });
+
   const isOpen = (key: string) => searching || !closed[key];
   const folderOpen = (f: FolderEntry) => searching || !f.collapsed;
   const toggle = (key: string) => setClosed(c => { const next = { ...c, [key]: !c[key] }; if (!next[key]) delete next[key]; saveClosed(next); return next; });
@@ -104,6 +116,7 @@ export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onChang
     for (const g of yours.folders) if (g.folder && folderOpen(g.folder)) for (const e of g.items) visible.push(kindRow(e));
     for (const e of yours.loose) visible.push(kindRow(e));
   }
+  if (onAddSet && isOpen('section:sets')) for (const x of sets) visible.push(setRow(x));
   const activeRow = visible.find(r => r.key === active) ?? null;
   const pick = (r: Row) => { r.onAdd(); onClose(); };
 
@@ -323,7 +336,18 @@ export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onChang
             )}
           </div>
         )}
-        {searching && visible.length === 0 && builtins.length === 0 && yoursCount === 0 && (
+        {onAddSet && (!searching || sets.length > 0) && (
+          <div>
+            {sectionHead('section:sets', 'Layer sets', sets.length)}
+            {isOpen('section:sets') && (
+              <>
+                {sets.map(x => row(setRow(x), 12))}
+                {!searching && sets.length === 0 && empty(<>Layers saved with their controls, mappings and actions. Pick layers (⇧/⌘-click), then <b>Save as a set…</b></>)}
+              </>
+            )}
+          </div>
+        )}
+        {searching && visible.length === 0 && builtins.length === 0 && yoursCount === 0 && sets.length === 0 && (
           <div style={{ padding: '18px 12px', textAlign: 'center', color: tk.text.muted, font: `12.5px ${fontFamily.ui}` }}>No layer matches “{query.trim()}”.</div>
         )}
       </div>
