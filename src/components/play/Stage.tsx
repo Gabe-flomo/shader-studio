@@ -18,6 +18,7 @@
  * edits) in Exact, and says so; Full isn't offered, since the app's picture
  * is the open graph, not the snapshot.
  */
+import { APP_HEIGHT } from '../../lib/viewport';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { controlExists, readControlValue, targetParts } from '../../play/playControls';
@@ -45,6 +46,7 @@ import { useLiveValues } from './useLiveValues';
 import { PHONE_SIZE, useStage, type StageMode, type StageSnapshot } from './stageStore';
 import { useTakes } from '../../lib/takes';
 import { TakesList } from './TakesList';
+import { showSnapshot, useOutput } from '../../output/outputHost';
 
 export function Stage({ canvas, onRecord }: {
   /** The app's live picture (Full). */
@@ -99,7 +101,7 @@ export function Stage({ canvas, onRecord }: {
 
   const bar = { height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderBottom: `1px solid ${alpha('#ffffff', 0.08)}`, background: '#101016', color: '#e8e8ef' } as const;
   return (
-    <div ref={rootRef} style={{ width: '100vw', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#07070b', color: '#e8e8ef', font: `12.5px ${fontFamily.ui}` }}>
+    <div ref={rootRef} style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', background: '#07070b', color: '#e8e8ef', font: `12.5px ${fontFamily.ui}` }}>
       <div style={bar}>
         <IconButton icon="close" label="Leave the Stage (Esc)" onClick={exit} />
         <b style={{ fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: narrow ? 120 : 220, minWidth: 0 }}>{graphName}</b>
@@ -124,6 +126,7 @@ export function Stage({ canvas, onRecord }: {
         {mode === 'exact' && !snap && <IconButton icon="reset" label="Rebuild the page with your latest changes" onClick={() => setBuild(b => b + 1)} />}
         <IconButton icon="layoutSplit" label={panel ? 'Hide the side panel' : 'Show the side panel'} active={panel} onClick={togglePanel} />
         {!narrow && <IconButton icon="fit" label={fullscreen ? 'Leave fullscreen' : 'Fullscreen'} active={fullscreen} onClick={toggleFullscreen} />}
+        <StageOutput snap={snap} frame={() => frameRef.current} />
         <Button size="sm" variant="primary" icon="record" onClick={record} disabled={!!snap?.sandboxed}
           title={snap?.sandboxed ? 'Its Script layers are someone else’s code, so it runs sealed off from Playfield, where Record can’t reach its picture' : undefined}
           style={{ background: tk.status.danger }}>{narrow ? null : 'Record'}</Button>
@@ -159,6 +162,28 @@ export function Stage({ canvas, onRecord }: {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * The output window from the Stage (docs/projection.md): it always follows
+ * the app's picture; a Present canvas can go to it instead, so the projector
+ * shows the canvas while this screen keeps its controls.
+ */
+function StageOutput({ snap, frame }: { snap: StageSnapshot | null; frame: () => HTMLIFrameElement | null }) {
+  const open = useOutput(s => s.open);
+  const source = useOutput(s => s.source);
+  // Leaving the Stage (or another canvas) gives the output back to the app's picture.
+  useEffect(() => () => { void showSnapshot(null); }, [snap]);
+  if (!open) return null;
+  if (!snap) return <span title="The output window shows this picture too" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px', borderRadius: 12, background: alpha('#ffffff', 0.1), color: alpha('#ffffff', 0.8), font: `600 11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}><Icon name="grid" size={12} />On the output</span>;
+  const on = source === 'snapshot';
+  return (
+    <Button size="sm" variant={on ? 'primary' : 'secondary'} icon="grid" disabled={!snap.input || snap.sandboxed}
+      title={snap.sandboxed ? 'Its Script layers are someone else’s code, so it runs sealed off, where the output can’t follow it' : on ? 'The output shows this canvas: click to show the Play again' : 'Show this canvas on the output window, following this page'}
+      onClick={() => { void showSnapshot(on || !snap.input ? null : { input: snap.input, frame, sandboxed: snap.sandboxed }); }}>
+      {on ? 'On the output' : 'Show on output'}
+    </Button>
   );
 }
 

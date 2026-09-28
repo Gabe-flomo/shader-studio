@@ -758,6 +758,9 @@ class PlayOverlay {
     return this.composite;
   }
 
+  /** The WebGL canvas the last frame was drawn on (the Mapping editor's preview snapshots it). */
+  pictureCanvas(): HTMLCanvasElement | null { return this.lastGl; }
+
   /** Picture + layers as they are now, for a screenshot. */
   snapshot(gl: HTMLCanvasElement): HTMLCanvasElement {
     const c = document.createElement('canvas');

@@ -35,7 +35,14 @@
  *   pauseOffscreen: boolean,         player: stop drawing while off-screen (a background always does)
  *   pixelSize: { w, h },             draw exactly this many pixels, however big the box is on screen
  *                                    (the capture window: 1920 × 1080 shown scaled down)
+ *   follow: boolean,                 another window drives it (the app's output window, docs/projection.md):
+ *                                    feed(f) gives the clock, pointer, uniforms, layer numbers and actions,
+ *                                    step(now) draws a frame; no mapping engine, inputs or sound of its own
  * }
+ *
+ * Also on the handle: canvases() (the shader's, the layers', the Finish stack's canvas and
+ * layer(id) drawn alone after showAlone(ids)), and feedOut() (what a follower needs, from
+ * this mount). A full-page export's mount is window.__sspMount.
  *
  * The control API (for a host drawing its own panel): get(id) → { value, driven }
  * (the value a mapping gives it while one drives it), set(id, value) as if its
@@ -456,6 +463,11 @@ void main() {
     const showPanel = !bg && opts.panel !== false;
     const pointerOn = !bg && opts.pointer !== false;
     const pauseOffscreen = bg || !!opts.pauseOffscreen;
+    // Follow: another window (the app's output window) drives this mount. Its clock, the pointer, the
+    // uniforms, the layers' numbers and the actions come through feed(); its own mapping engine, inputs
+    // and sound stay off, and the host draws each frame with step() instead of an animation frame.
+    const follow = !!opts.follow;
+    const fed = { t: 0, playing: true, pointer: null, uniforms: null, layers: null, actions: [], alpha: [] };
     // The layers are this mount's own copies: dragging a null or replacing a script never reaches the bundle.
     const play0 = B.play || { controls: [], mappings: [], layers: [] };
     const play = Object.assign({}, play0, { layers: (play0.layers || []).map(l => Object.assign({}, l)) });
@@ -1151,7 +1163,7 @@ void main() {
     const DPK = typeof SSKit !== 'undefined' && SSKit.drumPads ? SSKit.drumPads : null;
     const drumLayers = DPK ? play.layers.filter(l => l.kind === 'drumpad' && l.visible) : [];
     const drums = { ctx: null, kits: new Map(), wired: false };
-    if (drumLayers.length) {
+    if (drumLayers.length && !follow) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (AC) {
         drums.ctx = new AC();
@@ -1584,8 +1596,8 @@ void main() {
     const clampedMouse = (cx, cy) => { const u = toUnit(cx, cy); mouse.x = Math.max(0, Math.min(1, u.x)); mouse.y = Math.max(0, Math.min(1, u.y)); mouse.over = u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1; return u; };
     const listeners = [];
     const on = (target, type, fn, o) => { target.addEventListener(type, fn, o); listeners.push(() => target.removeEventListener(type, fn, o)); };
-    if (bgVideo && !bgMuted) on(window, 'pointerdown', () => { bgVideo.muted = false; }, true);
-    if (soundVideos.length) { on(window, 'pointerdown', startVideoSound, true); on(window, 'keydown', startVideoSound, true); }
+    if (bgVideo && !bgMuted && !follow) on(window, 'pointerdown', () => { bgVideo.muted = false; }, true);
+    if (soundVideos.length && !follow) { on(window, 'pointerdown', startVideoSound, true); on(window, 'keydown', startVideoSound, true); }
     if (drums.ctx) {
       on(window, 'pointerdown', startDrums, true);
       // Z X C V / A S D F / Q W E R / 1 2 3 4 play pads 1–16 (a player only: a background never takes keys).
@@ -1601,7 +1613,7 @@ void main() {
         on(window, 'keyup', e => { const pad = held.get(e.code); if (pad === undefined) return; held.delete(e.code); for (const l of drumLayers) if (l.keys && l.pads[pad] && l.pads[pad].mode === 'gate') drumAct({ layerId: l.id, amount: pad + 1, vel: 0 }); });
       } else on(window, 'keydown', startDrums, true);
     }
-    if (queueLayer && (queueLayer.sources || []).some(s => s.kind === 'video' && s.muted === false)) { on(window, 'pointerdown', () => { qSound = true; }, true); on(window, 'keydown', () => { qSound = true; }, true); }
+    if (!follow && queueLayer && (queueLayer.sources || []).some(s => s.kind === 'video' && s.muted === false)) { on(window, 'pointerdown', () => { qSound = true; }, true); on(window, 'keydown', () => { qSound = true; }, true); }
     if (pointerOn) {
       on(stage, 'pointermove', e => {
         const u = clampedMouse(e.clientX, e.clientY);
@@ -1839,7 +1851,7 @@ void main() {
         guides = guideCanvas.getContext('2d'); guides.clearRect(0, 0, W, H);
       }
       K.frame(octx, play, {
-        gl: glCanvas, W, H, dpr, time, dt, value, pointer, markers, editing: false, hidden, guides, alphaLayers: finishMap(),
+        gl: glCanvas, W, H, dpr, time, dt, value, pointer, markers, editing: false, hidden, guides, alphaLayers: alphaList(),
         backdrop: play.display ? play.display.backdrop : [0, 0, 0],
         background,
         graphFrame: item => qFrames.get(item.id) || null,
@@ -1938,22 +1950,24 @@ void main() {
     let held = false;
     function tick(now) {
       if (!alive) return;
-      raf = requestAnimationFrame(tick);
+      if (!follow) raf = requestAnimationFrame(tick);
       const dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
       lastNow = now;
       if (held) return;
-      const running = playing && !reduced && !document.hidden && !(pauseOffscreen && !onScreen);
+      const running = (follow ? fed.playing : playing) && !reduced && !document.hidden && !(pauseOffscreen && !onScreen);
       runVideos(running);
       followBackground(running);
       followLayerVideos(running);
       if ((pauseOffscreen && !onScreen) || document.hidden) return;
       if (reduced && !needsDraw && frame > 0) return;
-      if (playing && !reduced) time += dt;
+      if (follow) time = fed.t;
+      else if (playing && !reduced) time += dt;
       frame++;
       shared.live.clock++;
       if (bg && followPage) clampedMouse(shared.pageX, shared.pageY);
-      tickAudioNodes();
-      const moved = tickMappings(dt);
+      let moved;
+      if (follow) moved = applyFeed();
+      else { tickAudioNodes(); moved = tickMappings(dt); }
       for (const sl of afxSlots) afxUpdate(sl);
       // Feedback and echo change with every frame drawn, so while paused they draw only when something changes (as in the app).
       if (!playing && (stateful || echoCfg) && !needsDraw && !moved && frame > 1) { refreshPanel(now); return; }
@@ -1996,12 +2010,26 @@ void main() {
     }
     // The layer the time map reads (Time displacement's Layer map), drawn alone by the kit.
     let finishDrew = false;
+    // The layers the Finish stack reads alone, and (follow) the ones the host shows alone.
+    function alphaList() {
+      const f = finishMap();
+      if (!fed.alpha.length) return f;
+      return f ? f.concat(fed.alpha) : fed.alpha;
+    }
+    // Follow: what the host fed in, as if this mount's own engine had worked it out.
+    function applyFeed() {
+      if (fed.pointer) { mouse.x = fed.pointer[0]; mouse.y = fed.pointer[1]; mouse.down = fed.pointer[2] ? 1 : 0; mouse.over = !!fed.pointer[3]; }
+      if (fed.uniforms) for (const k in fed.uniforms) { const v = fed.uniforms[k]; uniformValues[k] = Array.isArray(v) ? v.slice() : v; }
+      if (fed.layers) for (const k in fed.layers) layerLive.set(k, fed.layers[k]);
+      for (const a of fed.actions.splice(0)) if (K && a.do !== 'pad') K.act(a);
+      return true;
+    }
     function finishMap() {
       if (!finishR) return null;
       const t = finish.effects.find(e => e.kind === 'time' && e.enabled);
       return t && t.map === 'layer' && t.layerId ? [t.layerId] : null;
     }
-    raf = requestAnimationFrame(tick);
+    if (!follow) raf = requestAnimationFrame(tick);
     // The picture and its layers with both canvases, as one 2D canvas (read in the same task as the draw).
     const composite = () => {
       const out = document.createElement('canvas');
@@ -2037,6 +2065,37 @@ void main() {
         root.classList.remove('ssp', 'ssp-bg', 'ssp-bare');
       },
       pause() { setPlaying(false); },
+      /**
+       * Follow mode: what the driving window says now. { t, playing, pointer: [x, y, down, over],
+       * uniforms: { name: value }, layers: { '<layerId>::<key>': value }, actions: [{ do, layerId, amount }] };
+       * any part may be left out. Applied on the next step().
+       */
+      feed(f) {
+        if (!f) return;
+        if (typeof f.t === 'number') fed.t = f.t;
+        if (typeof f.playing === 'boolean') fed.playing = f.playing;
+        if (f.pointer) fed.pointer = f.pointer;
+        if (f.uniforms) fed.uniforms = f.uniforms;
+        if (f.layers) fed.layers = f.layers;
+        if (f.actions && f.actions.length) fed.actions.push(...f.actions);
+        needsDraw = true;
+      },
+      /** Follow mode: draw one frame now (the host's animation frame). */
+      step(now) { tick(typeof now === 'number' ? now : performance.now()); },
+      /** Follow mode: these layers are drawn alone as well, for layer(id). */
+      showAlone(ids) { fed.alpha = Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : []; },
+      /** The canvases the picture is made of: the shader's, the layers', the Finish stack's (null unless it drew), and one layer drawn alone. */
+      canvases() {
+        return { picture: glCanvas, layers: ovCanvas, finished: finishR && finishDrew ? fnCanvas : null, layer: id => (K ? K.layerCanvas(id) : null) };
+      },
+      /** What another window needs to follow this mount: the clock, the pointer, the uniforms and every layer number. */
+      feedOut() {
+        const layers = {};
+        for (const [id, l] of layersById) for (const k in l) { const v = l[k]; if (typeof v === 'number') layers[id + '::' + k] = layerValue(id, k, v); }
+        const uniforms = {};
+        for (const k in uniformValues) { const v = uniformValues[k]; if (typeof v === 'number') uniforms[k] = v; else if (Array.isArray(v)) uniforms[k] = v.slice(); }
+        return { t: time, playing, pointer: [mouse.x, mouse.y, mouse.down ? 1 : 0, mouse.over ? 1 : 0], uniforms, layers };
+      },
       play() { held = false; setPlaying(true); },
       /**
        * Draw the frame at `t` seconds, the same every time: the clock stops and
@@ -2245,6 +2304,8 @@ void main() {
     const host = o.host === true && window.parent !== window;
     if (host) o.onScript = (layerId, error) => window.parent.postMessage({ ssp: 'scriptStatus', layerId, error }, '*');
     const m = mount(document.getElementById('play'), window.PLAY_BUNDLE, o);
+    // The page's mount, for a same-origin host (the app's Stage sends it on to the output window).
+    window.__sspMount = m;
     if (host) {
       window.addEventListener('message', e => {
         const d = e.data;

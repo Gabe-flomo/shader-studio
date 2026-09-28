@@ -3,14 +3,15 @@ import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { displayCombo } from '../../hooks/useShortcuts';
 
-/** On/off switch. Replaces checkboxes everywhere. */
+/** On/off switch. Replaces checkboxes everywhere. `tall` gives it a 40px tap target (phones). */
 export function Toggle({
-  checked, onChange, label, disabled = false,
+  checked, onChange, label, disabled = false, tall = false,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: ReactNode;
   disabled?: boolean;
+  tall?: boolean;
 }) {
   const tk = useTokens();
   const dark = useThemeMode() === 'dark';
@@ -26,7 +27,8 @@ export function Toggle({
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 7, border: 0, background: 'none', padding: 0,
         font: `12px ${fontFamily.ui}`, color: tk.text.secondary, cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap',
+        opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap', textAlign: 'left', maxWidth: '100%',
+        minHeight: tall ? 40 : undefined,
       }}
     >
       <span
@@ -43,7 +45,8 @@ export function Toggle({
           }}
         />
       </span>
-      {label}
+      {/* A long label (a song's name) breaks onto a second line instead of running off a phone. */}
+      {label !== undefined && <span style={{ whiteSpace: 'normal', minWidth: 0 }}>{label}</span>}
     </button>
   );
 }
@@ -63,10 +66,11 @@ export interface SegmentOption<T extends string> {
 /**
  * 2–5 mutually exclusive options. `fill` stretches the segments across the container; `sm` is
  * the compact form for card headers; `wrap` lets a long row of options break onto a second line
- * when its container is narrow (a phone) instead of pushing past it.
+ * when its container is narrow (a phone) instead of pushing past it; `tall` makes each segment
+ * at least 40px high, a finger-sized tap target.
  */
 export function Segmented<T extends string>({
-  options, value, onChange, fill = false, size = 'md', ariaLabel, wrap = false,
+  options, value, onChange, fill = false, size = 'md', ariaLabel, wrap = false, tall = false,
 }: {
   options: readonly SegmentOption<T>[];
   value: T;
@@ -75,6 +79,7 @@ export function Segmented<T extends string>({
   size?: 'sm' | 'md';
   ariaLabel?: string;
   wrap?: boolean;
+  tall?: boolean;
 }) {
   const sm = size === 'sm';
   const tk = useTokens();
@@ -101,7 +106,7 @@ export function Segmented<T extends string>({
               background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
               color: on ? tk.text.primary : tk.text.muted, font: `${on ? 600 : 500} ${sm ? 11.5 : 12}px ${fontFamily.ui}`,
               display: 'inline-flex', flexDirection: o.sub ? 'column' : 'row', alignItems: 'center', justifyContent: 'center', gap: o.sub ? 1 : 4,
-              whiteSpace: 'nowrap',
+              whiteSpace: 'nowrap', minHeight: tall ? 40 : undefined,
             }}
           >
             <span>{o.label}</span>

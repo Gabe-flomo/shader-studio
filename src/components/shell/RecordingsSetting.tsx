@@ -14,7 +14,8 @@ import {
   recordingsSettings, resetRecordings, setRecordingsMode, type RecordingsMode,
 } from '../../utils/recordingsFolder';
 
-export function RecordingsSetting() {
+/** `tall`: finger-sized rows (the Record dialog on a phone). */
+export function RecordingsSetting({ tall = false }: { tall?: boolean } = {}) {
   const tk = useTokens();
   const can = recordingsCan();
   const [mode, setMode] = useState(() => recordingsSettings().mode);
@@ -30,15 +31,16 @@ export function RecordingsSetting() {
     { value: 'downloads', label: 'Downloads', title: 'The browser’s usual download' },
   ];
   const pickFolder = () => { chooseRecordingsFolder().catch(fail); };
+  const btn = tall ? { height: 40 } : undefined;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <Segmented fill size="sm" ariaLabel="Save recordings" value={mode} options={options}
+      <Segmented fill size="sm" tall={tall} ariaLabel="Save recordings" value={mode} options={options}
         onChange={v => { if (v === 'folder' && label === 'No folder picked') pickFolder(); else setRecordingsMode(v as RecordingsMode); }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <span title={label} style={{ flex: 1, minWidth: 0, color: tk.text.muted, font: `11.5px ${fontFamily.mono}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-        {mode === 'folder' && needs && <Button size="sm" variant="primary" onClick={() => { allowRecordingsFolder().then(ok => { if (ok) setNeeds(false); }).catch(fail); }}>Allow again</Button>}
-        {mode === 'folder' && <Button size="sm" variant="ghost" icon="folder" onClick={pickFolder}>Choose…</Button>}
-        <Button size="sm" variant="ghost" icon="reset" title="Back to the default: Videos/Shader Studio in the desktop app, Downloads in a browser" onClick={() => { resetRecordings().catch(fail); }}>Default</Button>
+        {mode === 'folder' && needs && <Button size="sm" variant="primary" style={btn} onClick={() => { allowRecordingsFolder().then(ok => { if (ok) setNeeds(false); }).catch(fail); }}>Allow again</Button>}
+        {mode === 'folder' && <Button size="sm" variant="ghost" icon="folder" style={btn} onClick={pickFolder}>Choose…</Button>}
+        <Button size="sm" variant="ghost" icon="reset" style={btn} title="Back to the default: Videos/Shader Studio in the desktop app, Downloads in a browser" onClick={() => { resetRecordings().catch(fail); }}>Default</Button>
       </div>
       {!can.folder && !can.ask && <span style={{ color: tk.text.faint, fontSize: 11 }}>This browser saves to Downloads only; Chrome, Edge or the desktop app can use a folder.</span>}
     </div>

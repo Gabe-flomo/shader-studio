@@ -450,6 +450,7 @@ import { parseTakeDataFeeds, type TakeDataFeed } from '../data/streams/takeDataT
 import { parseLayer, repairMattes, BACKGROUND_IMAGE_MAX, BACKGROUND_VIDEO_MAX, DATA_IMAGE, DATA_VIDEO, type BackgroundLayer, type PlayLayer } from './playLayers';
 import { parseLayerKinds, syncLayerKinds, type LayerKindDef } from './layerKinds';
 import { parseSourceCredit, type SourceCredit } from './credit';
+import { parseProjection, type ProjectionRecord } from './projection';
 import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
 import { finishHosts, finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
 import { audioFxEffects, audioFxPropId, isAudioFxEmpty, parseAudioFx, parseAudioFxTarget, type PlayAudioFx } from './playAudioFx';
@@ -735,6 +736,12 @@ export interface PlayRecord {
   pairs?: PlayPair[];
   /** Mappings onto pairs (both axes at once, A or B, with axis swap). Absent = none. */
   pairMappings?: PlayPairMapping[];
+  /**
+   * Projection mapping for the output window (types/projection.ts,
+   * docs/projection.md): surfaces, corner pins, meshes, masks, edge blends.
+   * Absent = none (the output shows the picture as it is).
+   */
+  projection?: ProjectionRecord;
 }
 
 // ── Takes: a performance recorded as keyframes ──────────────────────────────
@@ -1395,6 +1402,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   if (finish) out.finish = finish;
   if (audioFx) out.audioFx = audioFx;
   if (audioEngine) out.audioEngine = audioEngine;
+  const projection = parseProjection(r.projection);
+  if (projection) out.projection = projection;
   if (Array.isArray(r.takes)) {
     const seenT = new Set<string>();
     const takes: PlayTake[] = [];
@@ -1549,5 +1558,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx) && isAudioEngineEmpty(play.audioEngine));
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx) && isAudioEngineEmpty(play.audioEngine) && !play.projection);
 }

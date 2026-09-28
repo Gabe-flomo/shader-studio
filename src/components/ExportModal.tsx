@@ -13,6 +13,8 @@ import { Field } from './ui/Field';
 import { Icon } from './ui/Icon';
 import { Kbd } from './ui/Kbd';
 import { Modal } from './ui/Modal';
+import { usePhoneDialog } from './ui/phoneDialog';
+import { choiceRowWraps, defaultResolutionId, previewTiny } from '../utils/recordDialog';
 import { RulerSlider } from './ui/RulerSlider';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
@@ -154,7 +156,10 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const midiLength = midiFile && midiInfo && 'duration' in midiInfo ? Math.ceil(midiInfo.duration + Math.max(0, midiFile.offset) + 0.5) : 0;
   const [fromTop, setFromTop] = useState(true);
   const [bitrate, setBitrate]       = useState(50); // Mbps
-  const [resId, setResId]           = useState('preview');
+  // A phone's preview panel is tiny (~160×280): open on 720p there (utils/recordDialog.ts).
+  const [resId, setResId]           = useState<string>(() => canvas ? defaultResolutionId(canvas.width, canvas.height) : 'preview');
+  // Full-screen dialog with stacked footer and finger-sized rows below 480px (ui/phoneDialog.ts).
+  const phone = usePhoneDialog();
   const previewAspect    = useNodeGraphStore(s => s.previewAspect);
   const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const [codec, setCodec]           = useState<FfmpegCodec>('h264');
@@ -704,34 +709,42 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const ext = pngSequence ? 'zip' : mode === 'ffmpeg' ? codecExt(transparent ? 'prores4444' : codec) : (current?.format?.ext ?? preferred?.ext ?? 'webm');
   const resetToIdle = () => { setState('idle'); setCaptureProgress(0); setElapsed(0); setFrameCount(0); setErrorMsg(''); setOutputPath(''); };
 
-  const footer = state === 'idle' && tab === 'performance' ? (
-    <>
-      <span style={{ flex: 1 }} />
-      <Button variant="ghost" onClick={onClose}>Cancel</Button>
-      <Button variant="primary" onClick={() => { useTakes.getState().begin(); onClose(); }} title="This closes, and a small bar shows the time and Stop">
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start performance
-      </Button>
-    </>
-  ) : state === 'idle' ? (
-    <>
-      <Button icon="camera" disabled={!canvas || nothingShows} onClick={handleScreenshot} title={transparent ? 'A PNG of this moment with its transparency' : undefined}>Snapshot PNG</Button>
-      <span style={{ flex: 1 }} />
-      <Button variant="ghost" onClick={onClose}>Cancel</Button>
-      <Button variant="primary" disabled={!canStart} onClick={handleStart}>
-        {mode === 'ffmpeg' ? 'Encode' : pngSequence ? 'Render PNGs' : <><span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start recording</>}
-      </Button>
-    </>
-  ) : isBusy ? (
-    <>
-      <span style={{ flex: 1 }} />
-      <Button variant="danger" onClick={handleStop}>{isEncoding ? 'Cancel encode' : 'Stop recording'}</Button>
-    </>
+  // The footer's buttons. On a phone the primary one spans a row of its own and the others
+  // share the row above it, each at least 40px high; on desktop they sit on one line, the
+  // first on the left and the rest beside the primary on the right.
+  const tall = phone ? { height: 40 } : undefined;
+  const wide = phone ? { ...tall, flex: 1 } : undefined;
+  const footerRows = (primary: React.ReactNode, left: React.ReactNode, right: React.ReactNode) => phone ? (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+      {(left || right) && <div style={{ display: 'flex', gap: 8 }}>{left}{right}</div>}
+      {primary}
+    </div>
   ) : (
     <>
-      <Button onClick={resetToIdle}>Record again</Button>
+      {left}
       <span style={{ flex: 1 }} />
-      <Button variant="primary" onClick={onClose}>Close</Button>
+      {right}
+      {primary}
     </>
+  );
+  const cancelBtn = <Button variant="ghost" onClick={onClose} style={wide}>Cancel</Button>;
+  const footer = state === 'idle' && tab === 'performance' ? footerRows(
+    <Button variant="primary" onClick={() => { useTakes.getState().begin(); onClose(); }} title="This closes, and a small bar shows the time and Stop" style={tall}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start performance
+    </Button>,
+    null, cancelBtn,
+  ) : state === 'idle' ? footerRows(
+    <Button variant="primary" disabled={!canStart} onClick={handleStart} style={tall}>
+      {mode === 'ffmpeg' ? 'Encode' : pngSequence ? 'Render PNGs' : <><span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start recording</>}
+    </Button>,
+    <Button icon="camera" disabled={!canvas || nothingShows} onClick={handleScreenshot} title={transparent ? 'A PNG of this moment with its transparency' : undefined} style={wide}>Snapshot PNG</Button>,
+    cancelBtn,
+  ) : isBusy ? footerRows(
+    <Button variant="danger" onClick={handleStop} style={tall}>{isEncoding ? 'Cancel encode' : 'Stop recording'}</Button>,
+    null, null,
+  ) : footerRows(
+    <Button variant="primary" onClick={onClose} style={tall}>Close</Button>,
+    <Button onClick={resetToIdle} style={wide}>Record again</Button>, null,
   );
 
   const stats = (
@@ -753,11 +766,12 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       onClose={() => { if (!isBusy) onClose(); }}
       footer={footer}
     >
-      <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ padding: phone ? '16px 16px 24px' : '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
         {!external && state === 'idle' && (
           <Segmented
             fill
+            tall={phone}
             ariaLabel="What to record"
             value={tab}
             onChange={setTab}
@@ -777,11 +791,11 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
             <Section label="Length" meta={perf.manual ? 'up to 1 minute' : `${perf.seconds} s`}>
               {!perf.manual && (
                 <div style={{ display: 'flex' }}>
-                  <RulerSlider value={perf.seconds} min={1} max={TAKE_MAX_SECONDS} step={1} integer defaultValue={15} onChange={v => useTakes.getState().setSettings({ seconds: v })} ariaLabel="Length in seconds" />
+                  <RulerSlider value={perf.seconds} min={1} max={TAKE_MAX_SECONDS} step={1} integer defaultValue={15} onChange={v => useTakes.getState().setSettings({ seconds: v })} ariaLabel="Length in seconds" touch={phone} />
                 </div>
               )}
-              <Toggle checked={perf.manual} onChange={v => useTakes.getState().setSettings({ manual: v })} label="Stop by hand instead (up to 1 minute)" />
-              <Toggle checked={perf.countIn} onChange={v => useTakes.getState().setSettings({ countIn: v })} label="Count 3, 2, 1 first" />
+              <Toggle tall={phone} checked={perf.manual} onChange={v => useTakes.getState().setSettings({ manual: v })} label="Stop by hand instead (up to 1 minute)" />
+              <Toggle tall={phone} checked={perf.countIn} onChange={v => useTakes.getState().setSettings({ countIn: v })} label="Count 3, 2, 1 first" />
               <Help>
                 Start closes this and runs the clock. A small bar at the bottom shows the time and Stop (<Kbd combo="cmd+." />),
                 and everything else keeps working while you play. When it stops, the take plays back.
@@ -791,7 +805,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
               <TakesList empty="None yet. Takes are saved with the graph and in play files." />
             </Section>
             <Section label="Keep the last minute">
-              <Toggle checked={rolling} onChange={v => useTakes.getState().setRolling(v)} label="Always keep the last minute of playing" />
+              <Toggle tall={phone} checked={rolling} onChange={v => useTakes.getState().setRolling(v)} label="Always keep the last minute of playing" />
               <Help>
                 Off unless you turn it on. While the clock runs, the last minute of playing is kept in memory (well under a
                 megabyte), so a good moment can be saved after it happened. Remembered on this device.
@@ -812,6 +826,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
           <Section label="Mode">
             <Segmented
               fill
+              tall={phone}
               ariaLabel="Export mode"
               value={mode}
               onChange={setMode}
@@ -828,11 +843,13 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
           <>
             {external && <Help>Recording the website player as it runs, in real time.</Help>}
             {!external && <Section label="Background">
-              <Toggle checked={transparent} onChange={setTransparent} label="Transparent, to lay over other footage" />
+              <Toggle tall={phone} checked={transparent} onChange={setTransparent} label="Transparent, to lay over other footage" />
               {transparent && (
                 <Segmented
                   fill
                   size="sm"
+                  tall={phone}
+                  wrap={choiceRowWraps(ownAlpha ? 3 : 2, phone)}
                   ariaLabel="The picture"
                   value={picture}
                   onChange={setPicture}
@@ -886,7 +903,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
 
             {tracks.length > 0 && (
               <Section label="Sound">
-                <Toggle checked={withAudio} onChange={setWithAudio} label={`Include ${tracks.length === 1 ? `“${tracks[0].label}”` : `${tracks.length} ${tracks.some(t => t.video) ? 'sounds' : 'songs'}: ${tracks.map(t => t.label).join(', ')}`}`} />
+                <Toggle tall={phone} checked={withAudio} onChange={setWithAudio} label={`Include ${tracks.length === 1 ? `“${tracks[0].label}”` : `${tracks.length} ${tracks.some(t => t.video) ? 'sounds' : 'songs'}: ${tracks.map(t => t.label).join(', ')}`}`} />
                 <Help>
                   {pngSequence
                     ? 'Added to the zip as a WAV, lined up with frame 1.'
@@ -934,6 +951,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
             <Section label="Frame rate">
               <Segmented
                 fill
+                tall={phone}
                 ariaLabel="Frame rate"
                 value={String(fps)}
                 onChange={v => setFps(Number(v))}
@@ -945,7 +963,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
               {take && <Help>The take’s length: {formatDuration(take.length)}.</Help>}
               {!take && (!manualStop || offline) && (
                 <div style={{ display: 'flex' }}>
-                  <RulerSlider value={duration} min={1} max={Math.max(60, midiLength, duration)} step={1} defaultValue={5} onChange={setDuration} ariaLabel="Duration in seconds" />
+                  <RulerSlider value={duration} min={1} max={Math.max(60, midiLength, duration)} step={1} defaultValue={5} onChange={setDuration} ariaLabel="Duration in seconds" touch={phone} />
                 </div>
               )}
               {midiLength > 0 && (
@@ -953,16 +971,18 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                   <Button size="sm" icon="wave" variant={duration === midiLength && !manualStop ? 'primary' : 'secondary'} onClick={() => { setDuration(midiLength); setManualStop(false); }}>
                     Whole MIDI file ({formatDuration(midiLength)})
                   </Button>
-                  {!offline && <Toggle checked={fromTop} onChange={setFromTop} label="Start the clock and the file from 0" />}
+                  {!offline && <Toggle tall={phone} checked={fromTop} onChange={setFromTop} label="Start the clock and the file from 0" />}
                 </div>
               )}
-              {!midiLength && clockSongs && sound && !offline && <Toggle checked={fromTop} onChange={setFromTop} label="Start the clock and the song from 0" />}
-              {!offline && <Toggle checked={manualStop} onChange={setManualStop} label="Stop manually instead" />}
+              {!midiLength && clockSongs && sound && !offline && <Toggle tall={phone} checked={fromTop} onChange={setFromTop} label="Start the clock and the song from 0" />}
+              {!offline && <Toggle tall={phone} checked={manualStop} onChange={setManualStop} label="Stop manually instead" />}
             </Section>
 
             <Section label="Shape" meta={PREVIEW_ASPECTS.find(a => a.id === previewAspect)?.hint}>
               <Segmented
                 fill
+                tall={phone}
+                wrap={choiceRowWraps(PREVIEW_ASPECTS.length, phone)}
                 ariaLabel="Aspect ratio"
                 value={previewAspect}
                 onChange={v => setPreviewAspect(v as typeof previewAspect)}
@@ -974,6 +994,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
             <Section label="Resolution" meta={canvas && current ? `${displayW} × ${displayH} px` : undefined}>
               <Segmented
                 fill
+                tall={phone}
+                wrap={choiceRowWraps(RESOLUTIONS.length, phone)}
                 ariaLabel="Resolution"
                 value={resId}
                 onChange={v => { if (!hiresOk && overFreeCap(v)) { openProSheet('export.hires'); return; } setResId(v); }}
@@ -981,7 +1003,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                   const sup = support?.[r.id];
                   const blocked = sup?.blocked ?? null;
                   const pro = !hiresOk && overFreeCap(r.id);
-                  return { value: r.id, label: pro ? `${r.label} · Pro` : r.label, sub: sup ? fmtPx(sup.width, sup.height) : r.sub, disabled: !!blocked, title: blocked ?? (pro ? 'Part of Pro: Free exports up to 1080p' : undefined) };
+                  // The preview as shown on a phone is ~160×280: say so under it.
+                  const tiny = r.id === 'preview' && !!sup && previewTiny(sup.width, sup.height);
+                  return { value: r.id, label: pro ? `${r.label} · Pro` : r.label, sub: tiny ? 'tiny on this screen' : sup ? fmtPx(sup.width, sup.height) : r.sub, disabled: !!blocked, title: blocked ?? (pro ? 'Part of Pro: Free exports up to 1080p' : tiny ? `${fmtPx(sup!.width, sup!.height)}: the preview panel's size on this screen` : undefined) };
                 })}
               />
               {resId !== 'preview' && <Help>Rendered at that exact size in the preview's shape. Higher resolutions need a higher bitrate to look clean.</Help>}
@@ -999,6 +1023,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
               <Section label="Bitrate">
                 <Segmented
                   fill
+                  tall={phone}
                   ariaLabel="Bitrate"
                   value={String(bitrate)}
                   onChange={v => setBitrate(Number(v))}
@@ -1013,7 +1038,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
             </Section>
 
             <Section label="Save to">
-              <RecordingsSetting />
+              <RecordingsSetting tall={phone} />
             </Section>
           </>
         )}

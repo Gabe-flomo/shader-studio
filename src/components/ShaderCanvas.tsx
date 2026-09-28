@@ -31,11 +31,12 @@ import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick } from '../lib/timeTick';
+import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
 import { seededRandom, stringSeed } from '../play/particle-sim.js';
 import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
-import { getBreakpoint, isMobile } from '../hooks/useBreakpoint';
+import { viewportSnapshot } from '../lib/viewport';
 import { onRebuild } from '../lib/rebuild';
 import { buildPreviewUniforms } from './previewUniforms';
 import { DataTextureBinder } from '../data/dataTextures';
@@ -459,7 +460,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Phones keep 'low-power' for battery.
     const renderer = new THREE.WebGLRenderer({
       antialias: false,
-      powerPreference: isMobile(getBreakpoint(window.innerWidth)) ? 'low-power' : 'high-performance',
+      powerPreference: viewportSnapshot().breakpoint === 'mobile' ? 'low-power' : 'high-performance',
     });
     renderer.setSize(1, 1);
     // Drawing buffer = CSS size × renderScale. Normally 1; raised only while
@@ -1291,6 +1292,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       }
       // A knob turned while the clock is paused still has to show; so does a layer a mapping moved.
       if (inputBus.changed() || playEngine.layerChanged()) needsRender = true;
+      // The output window (a projector) follows this frame: clock, uniforms, layer numbers (src/output/outputHost.ts).
+      if (outputTap.frame) outputTap.frame(elapsed, timePlayingRef.current, material.uniforms, renderer.domElement);
       // Draw live spectrum into any open AudioInputModal canvases
       for (const audioId of audioIdsRef.current) {
         if (!audioSpectrumRegistry.has(audioId)) continue;

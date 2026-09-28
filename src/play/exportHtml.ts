@@ -303,6 +303,8 @@ export function playBundle(input: PlayHtmlInput) {
   delete play.source;
   // Takes are for rendering in the app; the page never plays them back.
   delete play.takes;
+  // Projection mapping is for the app's output window (docs/projection.md); a page never warps itself.
+  delete play.projection;
   // Custom Finish effects from a sealed pack go in as code: the page compiles them (a shader reaches the GPU as text anyway).
   if (play.finish) {
     const fin = renderableFinish(play.finish)!;
@@ -368,7 +370,7 @@ export function kitScript(): string {
  * Without the three.js script loaded (loadThreeSource) a 3D layer draws
  * nothing in the page and says why.
  */
-function runtimeScript(play: PlayRecord): string {
+export function runtimeScript(play: PlayRecord): string {
   const three = playUses3D(play) ? threeSource() ?? '' : '';
   return (three + (three ? '\n' : '') + kitScript() + runtimeSource).replace(/<\/script/gi, '<\\/script');
 }

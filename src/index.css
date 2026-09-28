@@ -47,6 +47,8 @@ body {
      the browser's own UI. Fallback line above keeps older browsers (no
      dvh support) on 100vh. */
   height: 100dvh;
+  /* The measured layout viewport (lib/viewport.ts): iOS can leave dvh stale after a rotation. */
+  height: var(--app-vh, 100dvh);
 }
 
 /* Touch screens: a long press on the canvas, a picture, a card or a button shouldn't start
