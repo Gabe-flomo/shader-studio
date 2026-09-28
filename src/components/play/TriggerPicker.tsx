@@ -33,6 +33,9 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { LiveAudioChip, OscStatusChip } from './chips';
 import { HandsChip } from './HandsChip';
+import { TrackerChip } from './TrackingChips';
+import { FACE_GESTURE_OPTIONS, POSE_GESTURE_OPTIONS } from '../../play/trackSources';
+import type { FaceGesture, PoseGesture } from '../../types/playTracking';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { audioReaderBank } from '../../lib/audioReaderBank';
 import { useReadersPanel } from './readersPanelUi';
@@ -102,6 +105,14 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
         <Select ariaLabel="Gesture" value={t.gesture} options={HAND_GESTURE_OPTIONS} onChange={v => onChange({ ...t, gesture: v as HandGesture })} height={26} />
         {hint('or Learn and make it')}
         <HandsChip settings={false} />
+      </>}
+      {t.on === 'face' && <>
+        <Select ariaLabel="Face gesture" value={t.gesture} options={FACE_GESTURE_OPTIONS} onChange={v => onChange({ ...t, gesture: v as FaceGesture })} height={26} />
+        <TrackerChip kind="face" settings={false} />
+      </>}
+      {t.on === 'pose' && <>
+        <Select ariaLabel="Pose gesture" value={t.gesture} options={POSE_GESTURE_OPTIONS} onChange={v => onChange({ ...t, gesture: v as PoseGesture })} height={26} />
+        <TrackerChip kind="pose" settings={false} />
       </>}
       {t.on === 'proximity' && <ProximityFields trigger={t} layers={layers} onChange={onChange} />}
       {t.on === 'reader' && <ReaderFields trigger={t} readers={readers} onChange={onChange} />}

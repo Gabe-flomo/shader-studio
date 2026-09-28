@@ -26,6 +26,7 @@ import { Popover } from '../ui/Popover';
 import { RulerSlider } from '../ui/RulerSlider';
 import { usePlayUi } from './playUi';
 import { CameraChip } from './chips';
+import { TrackSource, TrackerChip, trackerText, useFromVideo, useTrackerStatus } from './TrackingChips';
 
 /** Inside another site's frame the camera is refused without asking (see chips.tsx). */
 const EMBEDDED = typeof window !== 'undefined' && window.self !== window.top;
@@ -65,6 +66,7 @@ export function HandsChip({ settings = true }: { settings?: boolean }) {
   const tk = useTokens();
   const { status, count, paused } = useHands();
   const [hands, set] = useHandSettings();
+  const from = useFromVideo('hands');
   const [open, setOpen] = useState(false);
   const gear = useRef<HTMLSpanElement>(null);
   // The tooltip's frame rate and timings, refreshed while tracking.
@@ -74,13 +76,13 @@ export function HandsChip({ settings = true }: { settings?: boolean }) {
     const id = window.setInterval(() => setTick(t => t + 1), 1000);
     return () => window.clearInterval(id);
   }, [status]);
-  const colour = status === 'on' ? (paused ? tk.text.disabled : count > 0 ? tk.status.success : tk.status.warning) : status === 'starting' ? tk.status.warning : status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.disabled;
+  const colour = from.baked ? (count > 0 ? tk.status.success : tk.status.warning) : status === 'on' ? (paused ? tk.text.disabled : count > 0 ? tk.status.success : tk.status.warning) : status === 'starting' ? tk.status.warning : status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.disabled;
   const s = handFeed.stats;
   const title = status === 'on' ? `${s.fps} frames a second · the model takes ${s.inferMs} ms (${s.delegate || '…'}) · ${s.latencyMs} ms camera to landmarks` : handFeed.getMessage() || undefined;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-      <span title={title} style={{ color: status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.muted, font: `11px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>{handsText(status, count, paused)}</span>
+      <span title={title} style={{ color: status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.muted, font: `11px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{from.layer ? trackerText('hands', status, count, paused, from) : handsText(status, count, paused)}</span>
       {status !== 'unsupported' && (
         <IconButton
           icon={hands.overlay ? 'eye' : 'eyeOff'} size="sm" active={hands.overlay}
@@ -88,10 +90,10 @@ export function HandsChip({ settings = true }: { settings?: boolean }) {
           onClick={() => set({ overlay: !hands.overlay })}
         />
       )}
-      {(status === 'off' || status === 'blocked' || status === 'error') && (
+      {!from.baked && (status === 'off' || status === 'blocked' || status === 'error') && (
         <Button size="sm" icon="hand" onClick={() => void handFeed.start()}>{status === 'off' ? 'Enable' : 'Try again'}</Button>
       )}
-      {status === 'on' && <Button size="sm" variant="ghost" onClick={() => handFeed.stop()}>Stop</Button>}
+      {!from.baked && status === 'on' && <Button size="sm" variant="ghost" onClick={() => handFeed.stop()}>Stop</Button>}
       {settings && (
         <span ref={gear} style={{ display: 'inline-flex' }}>
           <IconButton icon="sliders" label="Hand tracking settings" size="sm" active={open} onClick={() => setOpen(o => !o)} />
@@ -128,6 +130,7 @@ function HandsSettings() {
   const camera = useNodeGraphStore(s => s.play.layers.find(l => l.kind === 'camera'));
   const onlySide = useNodeGraphStore(s => oneHandUsed(s.play));
   const [advanced, setAdvanced] = useState(!!hands.confidence);
+  const video = useNodeGraphStore(s => { const l = hands.source ? s.play.layers.find(x => x.id === hands.source) : undefined; return l && l.kind === 'video' ? l : null; });
   const label = { color: tk.text.primary, font: `600 12px ${fontFamily.ui}` };
   const hint = { color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}`, margin: '3px 0 0' };
   const head = (text: string, right?: ReactNode) => (
@@ -142,6 +145,7 @@ function HandsSettings() {
   const small = { color: tk.text.muted, font: `11px ${fontFamily.ui}` };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 12, maxHeight: 'min(620px, calc(100vh - 80px))', overflowY: 'auto', boxSizing: 'border-box' }}>
+      <TrackSource kind="hands" />
       <div>
         <ShowHandToggle />
         <p style={hint}>Just the drawing: tracking keeps going while it’s hidden. The eye beside the status does the same. H hides the other guides, not the hand.</p>
@@ -192,8 +196,8 @@ function HandsSettings() {
         <p style={hint}>How quickly a fast move is followed. Low lags behind quick moves; high lets a little jitter through while moving.</p>
       </div>
       <div>
-        <Toggle checked={camera?.kind === 'camera' ? camera.mirror : hands.mirror} disabled={!!camera} onChange={mirror => set({ mirror })} label="Mirror, like a selfie" />
-        <p style={hint}>{camera ? 'The Camera layer’s own Mirror decides this: hands line up with the camera image it shows.' : 'Your right hand moves right on the picture.'}</p>
+        <Toggle checked={video ? !!video.mirror : camera?.kind === 'camera' ? camera.mirror : hands.mirror} disabled={!!camera || !!video} onChange={mirror => set({ mirror })} label="Mirror, like a selfie" />
+        <p style={hint}>{video ? 'Tracking a video: that layer’s own Mirror decides, so the hands line up with the video it shows.' : camera ? 'The Camera layer’s own Mirror decides this: hands line up with the camera image it shows.' : 'Your right hand moves right on the picture.'}</p>
       </div>
       <div>
         <Toggle checked={!!hands.swap} onChange={swap => set({ swap: swap || undefined })} label="Swap left and right" />
@@ -285,6 +289,8 @@ export function HandsButton() {
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={320} padding={0}>
           <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <HandsChip />
+            <TrackerChip kind="face" />
+            <TrackerChip kind="pose" />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Camera</span>
               <CameraChip />
@@ -292,7 +298,7 @@ export function HandsButton() {
             <div style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
               {on
                 ? <>Now press <b>Learn</b> and move a finger or pinch, or pick a source from the <b>Hands</b> group in a mapping. Triggers can fire <b>On: Hand gesture</b>, and a Null can follow a hand point.</>
-                : <>Turn it on to use your hands as a controller: every finger point, pinches and gestures become sources. It runs on this computer; nothing is uploaded.</>}
+                : <>Turn it on to use your hands as a controller: every finger point, pinches and gestures become sources. Face and Pose do the same for your face and body. Each can track a Video layer instead of the camera (in its settings). It runs on this computer; nothing is uploaded.</>}
             </div>
           </div>
         </Popover>
@@ -308,9 +314,32 @@ export function HandsButton() {
  */
 export function HandsLive({ compact = false }: { compact?: boolean }) {
   const tk = useTokens();
-  const { status, count, paused } = useHands();
+  const hs = useHands();
+  const fs = useTrackerStatus('face'), ps = useTrackerStatus('pose');
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLSpanElement>(null);
+  const live = (x: { status: HandStatus }) => x.status === 'on' || x.status === 'starting';
+  if (!live(hs) && (live(fs) || live(ps))) {
+    // Only the face or the body: the same light, for them.
+    const s = live(fs) ? fs : ps, kind = live(fs) ? 'face' as const : 'pose' as const;
+    const colour = s.status === 'starting' ? tk.status.warning : s.count > 0 ? tk.status.success : tk.text.muted;
+    return (
+      <span ref={anchor} style={{ display: 'inline-flex' }}>
+        <button type="button" onClick={() => setOpen(o => !o)} title={`${trackerText(kind, s.status, s.count, s.paused)}. Click to stop or change settings.`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: compact ? '0 8px' : '0 10px 0 8px', border: 0, borderRadius: 999, cursor: 'pointer', background: open ? tk.bg.selected : alpha(colour, 0.12), color: tk.text.secondary, font: `600 11.5px ${fontFamily.ui}` }}>
+          <span aria-hidden style={{ width: 7, height: 7, borderRadius: '50%', background: colour }} />
+          <Icon name={kind === 'face' ? 'face' : 'body'} size={13} />
+          {!compact && <span>{kind === 'face' ? 'Face' : 'Pose'}</span>}
+        </button>
+        {open && (
+          <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={320} padding={0}>
+            <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}><TrackerChip kind="face" /><TrackerChip kind="pose" /></div>
+          </Popover>
+        )}
+      </span>
+    );
+  }
+  const { status, count, paused } = hs;
   if (status !== 'on' && status !== 'starting') return null;
   const colour = status === 'starting' ? tk.status.warning : count > 0 ? tk.status.success : tk.text.muted;
   return (
@@ -329,7 +358,7 @@ export function HandsLive({ compact = false }: { compact?: boolean }) {
       </button>
       {open && (
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={320} padding={0}>
-          <div style={{ padding: '10px 12px 12px' }}><HandsChip /></div>
+          <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}><HandsChip />{live(fs) && <TrackerChip kind="face" />}{live(ps) && <TrackerChip kind="pose" />}</div>
         </Popover>
       )}
     </span>

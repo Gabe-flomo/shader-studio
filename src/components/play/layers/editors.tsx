@@ -21,6 +21,7 @@ import { Field } from '../../ui/Field';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { CameraChip } from '../chips';
 import { HandsChip, ShowHandToggle } from '../HandsChip';
+import { TrackPointPicker, TrackerChip } from '../TrackingChips';
 import { Select } from '../../ui/Select';
 import { HAND_POINT_OPTIONS, HAND_SIDES } from '../../../play/playSources';
 import { BLENDS, BLEND_HINT, type Choice, type FieldKit } from './fields';
@@ -119,6 +120,8 @@ export function NullEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           { value: 'none', label: 'Nothing' }, { value: 'mouse', label: 'Mouse', title: 'Chases the pointer while it is over the picture' }, { value: 'null', label: 'A null', title: 'Chases another null' },
           { value: 'hand', label: 'A hand', title: 'Chases a fingertip or joint of a tracked hand (hand tracking, with the camera)' },
           { value: 'agent', label: 'An agent', title: 'Chases one agent of an Agents layer' },
+          { value: 'face', label: 'A face', title: 'Chases a point on a tracked face (face tracking)' },
+          { value: 'pose', label: 'A body', title: 'Chases a point on a tracked body: a wrist, an elbow, a knee (pose tracking)' },
         ], 'A following null chases its target on a spring: it lags, overshoots and settles. Its X and Y (and anything mapped from them) move with that motion. Nulls can follow nulls that follow nulls, for chains.')}
         {l.follow === 'null' && f.pick('Target', 'followId', nulls(ctx, l.id), 'Add a second null', 'The null this one chases.', () => ctx.createNull('followId'))}
         {l.follow === 'agent' && <>
@@ -129,6 +132,10 @@ export function NullEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           {f.seg('Hand', 'handSide', HAND_SIDES, 'Your own right or left hand. Either follows your right hand while it is in view, else your left.')}
           {f.row('Point', <Select ariaLabel="Point on the hand" value={String(l.handPoint)} options={HAND_POINT_OPTIONS} onChange={v => f.set({ handPoint: parseInt(v, 10) || 0 })} height={26} style={{ flex: 1, minWidth: 0 }} />, 'The fingertip or joint it chases. When the hand leaves the picture it waits where it was.')}
           {f.row('Tracking', <HandsChip />)}
+        </>}
+        {(l.follow === 'face' || l.follow === 'pose') && <>
+          {f.row('Point', <TrackPointPicker kind={l.follow} value={l.trackPoint ?? (l.follow === 'face' ? 1 : 0)} onChange={trackPoint => f.set({ trackPoint })} />, l.follow === 'face' ? 'The point on the face it chases (the nose tip, an iris, a mouth corner…). When the face leaves the picture it waits where it was.' : 'The point on the body it chases. When the body leaves the picture it waits where it was.')}
+          {f.row('Tracking', <TrackerChip kind={l.follow} />)}
         </>}
         {l.follow !== 'none' && f.props('spring', 'wobble')}
       </Section>
