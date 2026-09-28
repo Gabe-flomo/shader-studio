@@ -1293,7 +1293,8 @@ void main() {
     for (const c of play.controls) {
       const lt = layerTarget(c.target);
       if (lt) { const l = layersById.get(lt.layerId); if (l && typeof l[lt.key] === 'number') base.set(c.id, l[lt.key]); }
-      else if (readerTarget(c.target) || grainsTarget(c.target)) base.set(c.id, 0);
+      else if (readerTarget(c.target)) base.set(c.id, 0);
+      else if (grainsTarget(c.target)) base.set(c.id, 0);
       else { const u = uniformFor(c); if (u && uniformValues[u] !== undefined) base.set(c.id, Array.isArray(uniformValues[u]) ? uniformValues[u].slice() : uniformValues[u]); }
     }
     // Layers talk back: sensors (zone fill, speed…) and where following nulls are. The layer kit (inlined ahead of this file) draws them.
@@ -1731,7 +1732,8 @@ void main() {
         }
         const lt = layerTarget(c.target);
         if (lt) { layerLive.set(lt.layerId + '::' + lt.key, v); live.set(c.id, v); driven.add(c.id); continue; }
-        if (readerTarget(c.target) || grainsTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }
+        if (readerTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }
+        if (grainsTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }
         const un = uniformFor(c); if (!un) continue;
         if (c.kind === 'color') {
           const b = base.get(c.id) || [0, 0, 0];
