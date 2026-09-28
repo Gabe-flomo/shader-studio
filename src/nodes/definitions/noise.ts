@@ -36,7 +36,7 @@ export const FBMNode: NodeDefinition = {
   glslFunction: FBM_GLSL,
   defaultParams: { octaves: 4, lacunarity: 2.0, gain: 0.5, scale: 1.0, time_scale: 0.0 },
   paramDefs: {
-    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 8,   step: 1, hint: 'Layers of detail. 1 is smooth blobs, 6+ adds fine grain; each costs GPU time.' },
+    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 8,   step: 1, compileTime: true, hint: 'Layers of detail. 1 is smooth blobs, 6+ adds fine grain; each costs GPU time. Recompiles when changed.' },
     lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01, hint: 'Frequency jump between layers. 2 is standard; higher = finer detail sooner.' },
     gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'How much each finer layer contributes. 0.5 is natural; higher = rougher.' },
     scale:      { label: 'Frequency',      type: 'float', min: 0.1, max: 10.0,step: 0.1, hint: 'Bigger means smaller, busier features.'  },
@@ -169,7 +169,7 @@ export const DomainWarpNode: NodeDefinition = {
   paramDefs: {
     strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 3.0, step: 0.01, hint: 'How far the noise pushes UV. 0.5 is marbled, 2+ is soup.' },
     scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1, hint: 'Frequency of the warp noise. Higher = smaller swirls.' },
-    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 4,   step: 1, hint: 'Noise layers in the warp. More = more detailed distortion.' },
+    octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 4,   step: 1, compileTime: true, hint: 'Noise layers in the warp. More = more detailed distortion. Recompiles when changed.' },
     lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01, hint: 'Frequency jump between layers. 2 is standard.' },
     gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Contribution of each finer layer. 0.5 is natural.' },
     time_scale: { label: 'Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01, hint: 'How fast the warp drifts. Needs Time wired.' },
@@ -281,8 +281,8 @@ export const FlowFieldNode: NodeDefinition = {
     palette_d: [0.0, 0.33, 0.67],
   },
   paramDefs: {
-    curves:        { label: 'Curves',        type: 'float',  min: 4,    max: 150,  step: 1, hint: 'Number of curves marched. More = denser strokes, more GPU cost.' },
-    steps:         { label: 'Steps/Curve',   type: 'float',  min: 2,    max: 64,   step: 1, hint: 'Segments per curve. More = longer, smoother strokes.' },
+    curves:        { label: 'Curves',        type: 'float',  min: 4,    max: 150,  step: 1, compileTime: true, hint: 'Number of curves marched. More = denser strokes, more GPU cost. Recompiles when changed.' },
+    steps:         { label: 'Steps/Curve',   type: 'float',  min: 2,    max: 64,   step: 1, compileTime: true, hint: 'Segments per curve. More = longer, smoother strokes. Recompiles when changed.' },
     step_size:     { label: 'Step Size',     type: 'float',  min: 0.002,max: 0.15, step: 0.002, hint: 'Length of each segment. Larger = longer, coarser strokes.' },
     noise_scale:   { label: 'Noise Scale',   type: 'float',  min: 0.1,  max: 8.0,  step: 0.05, hint: 'Frequency of the angle field. Higher = tighter, curlier paths.' },
     speed:         { label: 'Speed',    type: 'float',  min: 0.0,  max: 1.0,  step: 0.005, hint: 'How fast the field evolves. Needs Time wired.' },
@@ -296,7 +296,7 @@ export const FlowFieldNode: NodeDefinition = {
         { value: 'quantized', label: 'Quantized (rocky)' },
       ],
     },
-    quant_steps:   { label: 'Quant Steps',   type: 'float',  min: 2,    max: 32,   step: 1, hint: 'Number of allowed angles in Quantized mode. 4 is boxy, 8 is octagonal.' },
+    quant_steps:   { label: 'Quant Steps',   type: 'float',  min: 2,    max: 32,   step: 1, compileTime: true, hint: 'Number of allowed angles in Quantized mode. 4 is boxy, 8 is octagonal. Recompiles when changed.' },
     palette_offset:{ label: 'Color Phase',   type: 'float',  min: 0.0,  max: 6.28, step: 0.01, hint: 'Rotates the palette phase, in radians.' },
     palette_a:     { label: 'Palette A',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01, hint: 'Palette base color (cosine palette a).' },
     palette_b:     { label: 'Palette B',     type: 'vec3',   min: 0.0,  max: 1.0,  step: 0.01, hint: 'Palette amplitude per channel (cosine palette b).' },
@@ -422,7 +422,7 @@ export const CirclePackNode: NodeDefinition = {
     palette_d: [0.0, 0.33, 0.67],
   },
   paramDefs: {
-    circles:       { label: 'Circles',       type: 'float',  min: 4,    max: 200,  step: 1, hint: 'Number of circles attempted. More = denser packing, more GPU cost.' },
+    circles:       { label: 'Circles',       type: 'float',  min: 4,    max: 200,  step: 1, compileTime: true, hint: 'Number of circles attempted. More = denser packing, more GPU cost. Recompiles when changed.' },
     min_radius:    { label: 'Min Radius',    type: 'float',  min: 0.005,max: 0.3,  step: 0.005, hint: 'Smallest circle allowed.' },
     max_radius:    { label: 'Max Radius',    type: 'float',  min: 0.01, max: 0.5,  step: 0.005, hint: 'Largest circle allowed.' },
     padding:       { label: 'Padding',       type: 'float',  min: 0.0,  max: 0.1,  step: 0.002, hint: 'Gap kept between neighboring circles.' },

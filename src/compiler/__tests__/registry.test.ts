@@ -30,6 +30,7 @@ const SKIP = new Set(['output', 'vec4Output']);
 const CONNECTION_GATED = new Set([
   'neighborDist.dispScale',   // only in the hash-displacement path (cellID wired, displacement not)
   'glassScene.diffuseness',   // the node emits no code at all until its scene inputs are wired
+  'printText.decimals',       // only formats the number printed when Value is wired
 ]);
 
 function makeNode(id: string, type: string, def: NodeDefinition, x = 0): GraphNode {
