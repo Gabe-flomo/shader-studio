@@ -501,7 +501,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
                   {...rowProps(l, prev?.kind === 'layer' && prev.layer.trackMatte?.id === l.id)}
                   headerOnly={split}
                   relOutline={selectedRelMemberships.includes(l.id) ? relColour(l.id) : undefined}
-                  relMembers={members?.length ? { count: members.length, colour: relColour(l.id), collapsed: !!relFolded[`rel:${l.id}`], onToggle: () => toggleRelFold(`rel:${l.id}`) } : undefined}
+                  relMembers={members?.length ? { count: members.length, colour: relColour(l.id), collapsed: !!relFolded[`rel:${l.id}`], onToggle: () => toggleRelFold(`rel:${l.id}`, !relFolded[`rel:${l.id}`]) } : undefined}
                 />
               );
             })()

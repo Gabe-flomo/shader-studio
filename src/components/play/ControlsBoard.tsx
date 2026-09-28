@@ -228,7 +228,7 @@ function BoardGroupView({ id, label, icon, count, children }: { id: string; labe
   const toggleFold = usePlayUi(s => s.toggleFold);
   return (
     <section data-board-group={id} style={{ marginTop: 6 }}>
-      <button type="button" onClick={() => toggleFold(key)} aria-expanded={!folded}
+      <button type="button" onClick={() => toggleFold(key, !folded)} aria-expanded={!folded}
         style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', border: 0, background: 'none', padding: '6px 2px 2px', cursor: 'pointer', color: tk.text.secondary, font: `600 11.5px ${fontFamily.ui}`, textAlign: 'left' }}>
         <Icon name={folded ? 'chevR' : 'chevD'} size={12} style={{ color: tk.text.faint }} />
         <Icon name={icon} size={13} style={{ color: tk.text.faint }} />
