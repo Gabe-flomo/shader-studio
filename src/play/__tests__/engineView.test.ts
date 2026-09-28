@@ -16,6 +16,9 @@ import {
 } from '../../types/playArrangement';
 import { newRack, parseAudioEngine, type AeRack, type AeSlot, type PlayAudioEngine } from '../../types/playAudioEngine';
 import { arrangementTake } from '../../lib/tapeTake';
+import { readerGroupName } from '../readerControls';
+import { readerInputOptions } from '../../components/play/readersPanelUi';
+import type { PlayRecord } from '../../types/play';
 
 const au = (id: string, bypass = false): AeSlot => ({ id, kind: 'au', unit: { type: 1635083896, subtype: 1, manufacturer: 1, name: `FX ${id}`, vendor: 'Apple' }, ...(bypass ? { bypass } : {}) });
 const synth: AeSlot = { id: 'inst', kind: 'au', unit: { type: 1635085685, subtype: 2, manufacturer: 1, name: 'DLSMusicDevice', vendor: 'Apple' } };
@@ -221,6 +224,13 @@ describe('the device chain', () => {
     // Without the Listener in the order, its place isn't touched.
     expect(applyChainOrder({ ...ae, listenAt: 1 }, 'rk1', ['fxB', 'fxA', 'fxC']).listenAt).toBe(1);
     expect(reorderChain(order, 'nope', 0)).toEqual(order);
+  });
+
+  it('a Listener on the master: its readers are grouped as the Master’s, and the panel offers it', () => {
+    const p = { version: 1, controls: [], mappings: [], layers: [], audioEngine: { racks: [rack('rk1')] }, audioReaders: { input: 'engine:master', readers: [] } } as unknown as PlayRecord;
+    expect(readerGroupName(p)).toBe('Audio readers · Master');
+    expect(readerInputOptions('', [], [], [{ id: 'rk1', name: 'Rack 1' }]).map(o => o.value)).toContain('engine:master');
+    expect(readerInputOptions('', [], [], []).map(o => o.value)).not.toContain('engine:master');
   });
 });
 

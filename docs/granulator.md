@@ -148,7 +148,7 @@ Not built (yet):
 | Live in Web Audio: the rack, its Sound chain `rack:<id>`, readouts as sensors | `src/lib/webGranulator.ts`, `src/lib/audioEngineHost.ts` |
 | Grains from a layer: the overlay's tap, the render log | `src/lib/grainFrom.ts`, `src/play/overlay.ts` (`setGrainTap`), `src/play/kit/kit.js` (`grainThings`) |
 | Renders (a take's notes and settings, sample-exact) | `src/lib/recordingAudio.ts` (`grainTracks`, `renderGrains`) |
-| The card | `src/components/play/engine/GranulatorPanel.tsx` (in `RackCard.tsx`) |
+| The card | `src/components/play/engine/GranulatorPanel.tsx` (the instrument device in `DeviceChain.tsx`) |
 | Readouts → controls, Grains → nulls | `src/play/grainControls.ts` |
 | Exported pages | `src/play/runtime/play-runtime.js` (granulator racks), `src/play/exportHtml.ts` (the kit, carried samples) |
 | The example | `src/store/playExamples.ts` (`granulator`) |

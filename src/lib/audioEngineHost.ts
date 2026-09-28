@@ -107,7 +107,7 @@ function setLoading(key: string, on: boolean): void {
   });
 }
 
-// ── The selected rack card (session state: the lead unless one is locked) ──
+// ── The selected track (session state: the lead unless one is locked) ──
 
 export const useEngineSelection = create<{ selected: string; select: (rackId: string) => void }>(set => ({
   selected: '',

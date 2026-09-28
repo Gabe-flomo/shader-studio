@@ -1,5 +1,5 @@
 /**
- * ReaderDots — the readers on a source card (a rack card, the Video card, the
+ * ReaderDots — the readers on a source card (a Listener device, the Video card, the
  * Live audio chip): each dot's colour, name and live level, with a link to
  * the control group they show on (Controls → opens the Controls section and
  * highlights the group). Editing stays on the Audio readers panel.
