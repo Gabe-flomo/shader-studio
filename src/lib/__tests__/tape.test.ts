@@ -7,8 +7,18 @@
  * controls; and the live replay sends the same notes at the same seconds as
  * the take made from the tape (which is what an offline render plays).
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.hoisted(() => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  g.window = globalThis;
+  g.dispatchEvent = () => true;
+  const store = new Map<string, string>();
+  g.localStorage = { get length() { return store.size; }, key: (i: number) => [...store.keys()][i] ?? null, getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v); }, removeItem: (k: string) => { store.delete(k); }, clear: () => store.clear() };
+});
+
 import { tape, useTape, type TapeDeps } from '../tape';
+import { padHitsOf } from '../recordingAudio';
 import { arrangementTake, tapeEvents } from '../tapeTake';
 import { jobNotes } from '../engineRender';
 import { newRack, auTarget, auPropId, type AeRack } from '../../types/playAudioEngine';
@@ -137,6 +147,14 @@ describe('playback', () => {
     expect(live.filter(n => n.t < 2)).toEqual(rendered);
     expect(live[live.length - 1]).toEqual({ t: 2, bytes: [0x80, 64, 0] });
     expect(tapeEvents(arr())).toHaveLength(4);
+  });
+
+  it('a browser instrument (the Granulator) renders the same notes offline as it hears live', () => {
+    tape.play(); runTo(2);
+    const liveOns = sent.filter(s => s.bytes[0] === 0x90).map(s => [Math.round(s.at * 100) / 100, s.bytes[1], Math.round(s.bytes[2])]);
+    // recordingAudio.renderGrains plays a take's `ae:<rack>` pad hits (pad = note, at their exact seconds).
+    const hits = padHitsOf(arrangementTake(play, 'Tape')!, 0, 2).filter(h => h.layerId === 'ae:rk1' && h.vel > 0);
+    expect(hits.map(h => [Math.round(h.t * 100) / 100, h.pad, Math.round(h.vel * 127)])).toEqual(liveOns);
   });
 });
 
