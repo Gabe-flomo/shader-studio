@@ -364,8 +364,8 @@ export function createLayerKit() {
           if (m.group) { const p = rlPlace(st, m.id, aspect); if (p) shiftGroup(m.group, p.x - m.group.cx, p.y - m.group.cy, 0); }
           else place(m.id, rlPlace(st, m.id, aspect));
         }
-        // Its readings, its anchor (the centroid), and the picture under each member.
-        report(env0, l.id + '::ax', members.length ? st.cx : NaN); report(env0, l.id + '::ay', members.length ? st.cy : NaN);
+        // Its readings and the picture under each member (its anchor once every parent has moved it, below).
+        st.hasMembers = members.length > 0;
         for (const r of RL_READS) report(env0, l.id + '::' + r, st.reads[r] || 0);
         report(env0, l.id + '::caught', st.catches);
         let pv = 0, pn = 0;
@@ -381,6 +381,7 @@ export function createLayerKit() {
           stepRelationship(l); stepped.add(l.id); todo.splice(todo.indexOf(l), 1);
         }
       }
+      for (const id of stepped) { const st = rels.get(id); report(env0, id + '::ax', st.hasMembers ? st.cx : NaN); report(env0, id + '::ay', st.hasMembers ? st.cy : NaN); }
       // A relationship hidden or removed forgets its run (it starts from its members' own places again), and
       // a member let go (removed, or its relationship hidden) is its own layer again.
       for (const id of [...rels.keys()]) if (!stepped.has(id)) rels.delete(id);

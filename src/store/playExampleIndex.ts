@@ -55,6 +55,8 @@ const ROWS: Array<[string, string, string]> = [
   ['playForces', 'Wind, vortex and drag', 'Zones that push, swirl and slow particles.'],
   ['playTintZones', 'Tint and resize zones', 'Particles change colour and size while inside a shape.'],
   ['playSensors', 'Sensors: how full is the box', 'A shape measures how crowded it is, and that drives the shader.'],
+  ['playChase', 'Relationship: a chase', 'A null hunts a circle that flees; out of sight it wanders. A catch flashes the glow and bursts particles.'],
+  ['playOrbit', 'Relationship: orbits and the picture', 'Three shapes orbit a heavy sun (attract with overshoot) and drift toward the bright glow; closing speed drives the brightness.'],
   ['playShapeTriggers', 'Shape triggers', 'Click a shape, move onto it, or fill it with particles to fire actions.'],
   ['playDrawnShapes', 'Drawn shapes and trim', 'Outlines you draw, drawn on over time with Trim.'],
   ['playPictureShape', 'The picture as a shape', 'The bright parts of the shader become solid.'],
