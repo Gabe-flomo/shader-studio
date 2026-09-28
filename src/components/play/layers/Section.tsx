@@ -12,13 +12,15 @@ import { usePlayUi } from '../playUi';
  * carries a switch, and the settings only show while it is on (Flocking,
  * Sequence…).
  */
-export function Section({ kind, title, hint, on, onToggle, children }: {
+export function Section({ kind, title, hint, on, onToggle, id, children }: {
   /** The layer kind, so folding "Look" folds it on every particles layer. */
   kind: string;
   title: string;
   hint?: string;
   on?: boolean;
   onToggle?: (on: boolean) => void;
+  /** An anchor id (a BigEditorScaffold's jump strip scrolls to it). */
+  id?: string;
   children?: ReactNode;
 }) {
   const tk = useTokens();
@@ -29,7 +31,7 @@ export function Section({ kind, title, hint, on, onToggle, children }: {
   const showBody = !folded && (!switched || on);
   const heading = <span style={{ color: tk.text.secondary, font: `650 11px ${fontFamily.ui}` }}>{title}</span>;
   return (
-    <div>
+    <div id={id} style={id ? { scrollMarginTop: 44 } : undefined}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '12px 0 2px', minHeight: 22 }}>
         <button
           type="button"
