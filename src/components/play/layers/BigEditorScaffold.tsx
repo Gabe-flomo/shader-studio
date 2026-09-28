@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { fontFamily } from '../../../theme/tokens';
+import { usePlayUi } from '../playUi';
 
 export interface BigEditorSection {
   /** Matches the `id` given to the Section it jumps to. */
@@ -23,11 +24,23 @@ export interface BigEditorSection {
 /** From this width, two short numeric rows sit side by side instead of stacking. */
 export const TWO_COL_PX = 360;
 
-export function BigEditorScaffold({ sections, children }: { sections: BigEditorSection[]; children: ReactNode }) {
+type Tokens = ReturnType<typeof useTokens>;
+const FOLD_ALL_BTN = (tk: Tokens): React.CSSProperties => ({
+  border: 0, background: 'none', padding: '4px 6px', cursor: 'pointer', color: tk.text.faint, font: `600 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap',
+});
+
+export function BigEditorScaffold({ sections, kind, children }: {
+  sections: BigEditorSection[];
+  /** The Section cards' `kind`: lets the strip's Expand all / Collapse all reach every one of them. */
+  kind?: string;
+  children: ReactNode;
+}) {
   const tk = useTokens();
   const showStrip = sections.length >= 4;
   const [active, setActive] = useState(sections[0]?.id ?? '');
   const rootRef = useRef<HTMLDivElement>(null);
+  const expandAll = usePlayUi(s => s.expandAllSections);
+  const collapseAll = usePlayUi(s => s.collapseAllSections);
 
   // Highlight whichever section is nearest the top of the scroll area, so the strip tracks scrolling too.
   useEffect(() => {
@@ -57,6 +70,13 @@ export function BigEditorScaffold({ sections, children }: { sections: BigEditorS
     setActive(id);
   };
 
+  const foldAll = kind && (
+    <>
+      <button type="button" onClick={() => expandAll(kind)} style={FOLD_ALL_BTN(tk)}>Expand all</button>
+      <button type="button" onClick={() => collapseAll(kind)} style={FOLD_ALL_BTN(tk)}>Collapse all</button>
+    </>
+  );
+
   return (
     <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {showStrip && (
@@ -64,7 +84,7 @@ export function BigEditorScaffold({ sections, children }: { sections: BigEditorS
           role="tablist"
           aria-label="Jump to section"
           style={{
-            position: 'sticky', top: 0, zIndex: 2, display: 'flex', gap: 4, flexWrap: 'wrap',
+            position: 'sticky', top: 0, zIndex: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap',
             padding: '2px 0 8px', marginBottom: 4, background: tk.bg.subtle, borderBottom: `1px solid ${tk.border.default}`,
           }}
         >
@@ -87,7 +107,12 @@ export function BigEditorScaffold({ sections, children }: { sections: BigEditorS
               </button>
             );
           })}
+          <span style={{ flex: 1 }} />
+          {foldAll}
         </div>
+      )}
+      {!showStrip && kind && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, padding: '2px 0 4px' }}>{foldAll}</div>
       )}
       {children}
     </div>

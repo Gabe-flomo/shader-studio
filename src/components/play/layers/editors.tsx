@@ -103,7 +103,7 @@ export function NullEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const hex = l.color;
   return (
     <>
-      <Section kind="null" title="Point">
+      <Section kind="null" title="Point" primary summary={`${f.get<number>('x').toFixed(2)}, ${f.get<number>('y').toFixed(2)}`}>
         {f.props('x', 'y', 'size')}
         {f.row('Marker', (
           <>
@@ -149,7 +149,7 @@ export function TextEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Editor
   const text = f.get<string>('text');
   return (
     <>
-      <Section kind="text" title="Text">
+      <Section kind="text" title="Text" primary summary={text ? (text.length > 40 ? `${text.slice(0, 40)}…` : text) : 'Empty'}>
         {f.row('Text', seq
           ? <textarea value={text} onChange={e => f.set({ text: e.target.value })} rows={Math.min(6, text.split('\n').length + 1)} placeholder="One line per step" style={{ flex: 1, minWidth: 0, resize: 'vertical', borderRadius: 8, border: 0, padding: '6px 8px', background: f.tk.bg.field, color: f.tk.text.primary, font: '12.5px Inter, system-ui, sans-serif' }} />
           : <Field value={text} onChange={e => f.set({ text: e.target.value })} height={26} style={{ flex: 1, minWidth: 0 }} placeholder="Type something" />)}
@@ -184,7 +184,7 @@ export function TextEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Editor
 export function ImageEditor({ f, pictureHidden }: { f: FieldKit; pictureHidden: boolean }) {
   return (
     <>
-      <Section kind="image" title="Image">
+      <Section kind="image" title="Image" primary summary={f.get<string>('src') ? 'Picture set' : 'No picture yet'}>
         {f.row('Image', <ImagePicker src={f.get<string>('src')} onPick={src => f.set({ src })} />)}
       </Section>
       <Section kind="image" title="Position">
@@ -226,7 +226,7 @@ function CameraHands() {
 export function CameraEditor({ f, pictureHidden }: { f: FieldKit; pictureHidden: boolean }) {
   return (
     <>
-      <Section kind="camera" title="Camera">
+      <Section kind="camera" title="Camera" primary>
         {f.row('Camera', <CameraChip />, 'The webcam. Browsers ask the first time. Its motion is a sensor source, and particles, glyphs and contours can read it instead of the shader.')}
         {f.toggle('Mirror', 'mirror', 'Flip left to right (like a mirror)')}
       </Section>
@@ -257,7 +257,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
   const flock = g<number>('flock');
   const nullPick = (why: string) => f.pick('Null', 'nullId', nulls(ctx), 'Add a Null layer first', why, () => ctx.createNull('nullId'));
   return (
-    <BigEditorScaffold sections={[
+    <BigEditorScaffold kind="particles" sections={[
       { id: 'particles-motion', label: 'Motion' },
       { id: 'particles-birth', label: 'Birth and death' },
       { id: 'particles-flocking', label: 'Flocking' },
@@ -267,7 +267,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
       {f.row('Count', <NumberInput value={g<number>('count')} min={1} max={5000} step={50} title="How many particles (up to 5000)" onCommit={n => f.set({ count: Math.max(1, Math.min(5000, Math.round(n))) })} style={f.numStyle} />, 'How many particles. Changing it keeps the ones already moving.')}
       {f.toggle('Show field', 'showField', 'Draw the field and forces while editing', 'Arrows show where the field points; the attractor, nulls with a role and force zones show their pull. Only while the Layers tab is open, never in recordings or on websites.')}
 
-      <Section id="particles-motion" kind="particles" title="Motion">
+      <Section id="particles-motion" kind="particles" title="Motion" summary={`${FIELD_HELP[field].label} · speed ${g<number>('speed').toFixed(2)}`}>
         {f.seg('Field', 'field', (Object.keys(FIELD_HELP) as ParticleField[]).map(k => ({ value: k, label: FIELD_HELP[k].label, title: FIELD_HELP[k].title })),
           'Where each particle wants to go. Flow, Climb and Descend read the picture; Noise is its own drifting field; None leaves it to the forces.')}
         {f.note(<><b style={{ color: f.tk.text.secondary }}>{help.title}.</b> {help.body}</>)}
@@ -284,7 +284,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         {f.prop('collide')}
       </Section>
 
-      <Section id="particles-birth" kind="particles" title="Birth and death">
+      <Section id="particles-birth" kind="particles" title="Birth and death" primary summary={`${g('emit')} · born ${g('spawn')}`}>
         {f.seg('Emit', 'emit', [
           { value: 'stream', label: 'Stream', title: 'Always alive, reborn when they leave' }, { value: 'burst', label: 'Bursts', title: 'Born only by a Burst action' },
           { value: 'multiply', label: 'Multiply', title: 'One particle is born and keeps splitting until there are Count of them' },
@@ -333,6 +333,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         kind="particles"
         title="Flocking"
         hint="Boids: each particle also steers by the neighbours it can see. It still follows the field, the mouse and the zones."
+        summary={flock > 0 ? `On · ${flock.toFixed(2)}` : 'Off'}
         on={flock > 0}
         onToggle={on => {
           if (on) f.set({ flock: lastFlock.get(f.l.id) || 0.6 });
@@ -343,7 +344,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         {f.note('Flock is how much the flock wins over the field. Sight is how far each one sees; inside its Personal space, neighbours are pushed away. The Play example “Flocking” has good starting points.')}
       </Section>
 
-      <Section id="particles-attractor" kind="particles" title="Attractor">
+      <Section id="particles-attractor" kind="particles" title="Attractor" summary={g('attractor') === 'none' ? 'Nothing' : `${g('attractor')} · ${g('force')}`}>
         {f.seg('Pulled by', 'attractor', [
           { value: 'none', label: 'Nothing' }, { value: 'mouse', label: 'Mouse', title: 'The pointer while it is over the picture' },
           { value: 'press', label: 'Press', title: 'The pointer, only while a button is held' }, { value: 'null', label: 'Null', title: 'A null layer' },
@@ -359,7 +360,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         )}
       </Section>
 
-      <Section id="particles-look" kind="particles" title="Look">
+      <Section id="particles-look" kind="particles" title="Look" summary={`${shape} · ${colour}`}>
         {f.select('Shape', 'shape', [
           { value: 'dot', label: 'Dot' }, { value: 'square', label: 'Square' }, { value: 'triangle', label: 'Triangle' }, { value: 'streak', label: 'Streak' },
           { value: 'ring', label: 'Ring' }, { value: 'star', label: 'Star' }, { value: 'image', label: 'Image / SVG' },
@@ -405,7 +406,7 @@ export function ShapeEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const outlined = geometric || shape === 'path';
   return (
     <>
-      <Section kind="shape" title="Shape">
+      <Section kind="shape" title="Shape" primary summary={shape}>
         {f.seg('Shape', 'shape', [
           { value: 'box', label: 'Box' }, { value: 'circle', label: 'Circle' }, { value: 'line', label: 'Line' }, { value: 'polygon', label: 'Drawn' },
           { value: 'path', label: 'Path', title: 'Corners that are nulls: it moves as they do (put them on your fingertips)' },
@@ -541,7 +542,7 @@ export function AudioEditor({ f }: { f: FieldKit }) {
   const style = f.get<string>('style');
   return (
     <>
-      <Section kind="audio" title="Sound">
+      <Section kind="audio" title="Sound" primary>
         <AudioSourceRows f={f} />
         {f.seg('Style', 'style', [
           { value: 'wave', label: 'Wave', title: 'The waveform' }, { value: 'bars', label: 'Bars', title: 'A spectrum, low to high' },
@@ -574,7 +575,7 @@ export function GlyphsEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const sources = ctx.layers.filter(x => x.id !== f.l.id && x.kind !== 'null' && x.kind !== 'glyphs');
   return (
     <>
-      <Section kind="glyphs" title="Grid">
+      <Section kind="glyphs" title="Grid" primary summary={style}>
         {f.seg('Style', 'style', [
           { value: 'ascii', label: 'ASCII' }, { value: 'dots', label: 'Dots', title: 'Halftone' }, { value: 'squares', label: 'Squares' },
           { value: 'lines', label: 'Lines', title: 'Angle by brightness' }, { value: 'cross', label: 'Cross' },
@@ -604,7 +605,7 @@ export function GlyphsEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 export function ContoursEditor({ f }: { f: FieldKit }) {
   return (
     <>
-      <Section kind="contours" title="Lines">
+      <Section kind="contours" title="Lines" primary>
         {f.props('levels', 'width', 'flow')}
         {f.seg('Detail', 'detail', [{ value: 'coarse', label: 'Coarse' }, { value: 'fine', label: 'Fine' }], 'Fine traces smaller shapes; coarse gives smoother, simpler lines.')}
         {f.seg('Reads', 'readFrom', READ_FROM)}
@@ -622,7 +623,7 @@ export function ContoursEditor({ f }: { f: FieldKit }) {
 export function LensEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   return (
     <>
-      <Section kind="lens" title="Lens">
+      <Section kind="lens" title="Lens" primary summary={f.get<string>('effect')}>
         {f.select('Effect', 'effect', [
           { value: 'magnify', label: 'Magnify' }, { value: 'pixelate', label: 'Pixelate' }, { value: 'blur', label: 'Blur' },
           { value: 'invert', label: 'Invert' }, { value: 'mono', label: 'Black and white' }, { value: 'mirror', label: 'Mirror' },
@@ -646,7 +647,7 @@ export function LensEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 export function BrushEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   return (
     <>
-      <Section kind="brush" title="Brush">
+      <Section kind="brush" title="Brush" primary summary={f.get<string>('paint')}>
         {f.seg('Paint', 'paint', [
           { value: 'drag', label: 'Drag', title: 'Paint while a button is held' }, { value: 'hover', label: 'Hover', title: 'Paint wherever the pointer goes' },
           { value: 'null', label: 'A null', title: 'The null draws as it moves (map an LFO onto it)' }, { value: 'off', label: 'Off' },
@@ -671,7 +672,7 @@ export function BodiesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const source = f.get<string>('source');
   return (
     <>
-      <Section kind="bodies" title="Bodies">
+      <Section kind="bodies" title="Bodies" primary summary={source}>
         {f.seg('Bodies', 'source', [{ value: 'letters', label: 'Letters' }, { value: 'circles', label: 'Circles' }, { value: 'boxes', label: 'Boxes' }], 'Letters drops one body per letter of the text; circles and boxes drop Count of them.')}
         {source === 'letters'
           ? f.row('Text', <Field value={f.get<string>('text')} onChange={e => f.set({ text: e.target.value })} height={26} style={{ flex: 1, minWidth: 0 }} />)
@@ -721,7 +722,7 @@ export function ClonerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   };
   return (
     <>
-      <Section kind="cloner" title="Source">
+      <Section kind="cloner" title="Source" primary>
         {f.pick('Copies of', 'sourceId', sources, 'Add a Shape, Text, Image, Null or Script layer first', 'The layer that is copied. It keeps its own settings; the copies take its look and add their own place, size, turn and fade. A Script layer (or a kind you saved) is copied whole, centred on the middle of the picture.')}
         {f.toggle('Original', 'hideSource', 'Hide the original, draw the copies only')}
       </Section>
@@ -906,7 +907,7 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   if (kind) {
     return (
       <>
-        <Section kind="script" title="Kind" hint="This layer is made from a sketch saved as a layer kind. Its controls are its properties; the code belongs to the kind.">
+        <Section kind="script" title="Kind" primary hint="This layer is made from a sketch saved as a layer kind. Its controls are its properties; the code belongs to the kind.">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 6px 8px 10px', borderRadius: radius.md, background: f.tk.bg.field, marginTop: 4 }}>
             <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(kindColour, 0.14), color: kindColour }}>
               <Icon name={kind.icon} size={16} />
@@ -944,7 +945,7 @@ export function ScriptEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 
   return (
     <>
-      <Section kind="script" title="Code" hint={sketchMode === '3d' ? 'A 3D sketch: setup(s) runs once, draw(s) every frame, drawing with WebGL over the picture. The Sketch editor has the code, its files, the console, the reference and patterns.' : 'A sketch: setup(s) runs once, draw(s) every frame, on a canvas over the picture. p5.js sketches run too. The Sketch editor has the code, its files, the console, the reference and patterns.'}>
+      <Section kind="script" title="Code" primary hint={sketchMode === '3d' ? 'A 3D sketch: setup(s) runs once, draw(s) every frame, drawing with WebGL over the picture. The Sketch editor has the code, its files, the console, the reference and patterns.' : 'A sketch: setup(s) runs once, draw(s) every frame, on a canvas over the picture. p5.js sketches run too. The Sketch editor has the code, its files, the console, the reference and patterns.'}>
         <DrawGlimpse files={files} onOpen={() => setBig(true)} error={!!error} />
         <FileChips files={files} />
         <ScriptStatusLine layerId={l.id} error={error} running={dirty ? 'Edited in the Sketch editor: Apply there to run it.' : `Running${l.p5 ? ' (p5.js)' : ''} · ${defs.length} control${defs.length === 1 ? '' : 's'}`} />
@@ -1025,8 +1026,8 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
     { id: 'rel-debug', label: 'Debug' },
   ];
   return (
-    <BigEditorScaffold sections={sections}>
-      <Section id="rel-members" kind="relationship" title="Members" hint={`Layers with a position: nulls, shapes, text, images, video, the camera… and other relationships (each stands at its members’ centre and moves as a group). Up to ${RELATION_MAX_MEMBERS}; every pair costs a little, so keep it to what you need. A member’s X and Y are driven from here (drag it on the picture to put it back where you want).`}>
+    <BigEditorScaffold kind="relationship" sections={sections}>
+      <Section id="rel-members" kind="relationship" title="Members" primary summary={members.length ? `${members.length} member${members.length === 1 ? '' : 's'}` : 'None yet'} hint={`Layers with a position: nulls, shapes, text, images, video, the camera… and other relationships (each stands at its members’ centre and moves as a group). Up to ${RELATION_MAX_MEMBERS}; every pair costs a little, so keep it to what you need. A member’s X and Y are driven from here (drag it on the picture to put it back where you want).`}>
         {candidates.length
           ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '2px 0 6px 68px' }}>{candidates.map(chip)}</div>
           : f.note('Add a Null, Shape, Text or Image layer to make it a member.')}
@@ -1057,7 +1058,7 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
         })}
         {members.length === 1 && f.note('One member has nothing to relate to: add another.')}
       </Section>
-      <Section id="rel-relationship" kind="relationship" title="Relationship">
+      <Section id="rel-relationship" kind="relationship" title="Relationship" summary={relation}>
         {f.seg('Kind', 'relation', [
           { value: 'chase', label: 'Chase', title: 'Chasers hunt the closest prey in sight; prey flees. A catch sends a signal.' },
           { value: 'repel', label: 'Repel', title: 'Everyone pushes apart when closer than a distance' },
@@ -1073,10 +1074,10 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
           {f.props('strength', l.attractMode === 'keep' ? 'minDistance' : 'falloff')}
         </>}
       </Section>
-      <Section id="rel-motion" kind="relationship" title="Motion" hint="What keeps the motion looking natural rather than stuck: how stiff the soft contacts are, how much of a bounce is kept, how quickly things slow down, and a speed cap.">
+      <Section id="rel-motion" kind="relationship" title="Motion" summary={`spring ${l.springiness.toFixed(2)} · damp ${l.damping.toFixed(2)}`} hint="What keeps the motion looking natural rather than stuck: how stiff the soft contacts are, how much of a bounce is kept, how quickly things slow down, and a speed cap.">
         {f.props('springiness', 'bounciness', 'damping', 'maxSpeed')}
       </Section>
-      <Section id="rel-walls" kind="relationship" title="Walls" hint="What a member does at the picture’s edge, by role. Escape lets it leave: prey out of the picture is out of sight (the chaser wanders) and comes back after the delay, at the far side if Respawn at says so.">
+      <Section id="rel-walls" kind="relationship" title="Walls" summary={chase ? `Chasers ${l.wallChaser} · Prey ${l.wallPrey}` : `Members ${l.wallMember}`} hint="What a member does at the picture’s edge, by role. Escape lets it leave: prey out of the picture is out of sight (the chaser wanders) and comes back after the delay, at the far side if Respawn at says so.">
         {chase
           ? <>{f.select('Chasers', 'wallChaser', RELATION_WALLS)}{f.select('Prey', 'wallPrey', RELATION_WALLS)}</>
           : f.select('Members', 'wallMember', RELATION_WALLS)}
@@ -1084,7 +1085,7 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
         {f.prop('respawnDelay')}
       </Section>
       {chase && (
-        <Section id="rel-catch" kind="relationship" title="Catch" hint="A chaser within the catch radius of a prey catches it: the Catch reading pulses, Catches counts up, and the signal (if any) fires. One catch per approach.">
+        <Section id="rel-catch" kind="relationship" title="Catch" summary={`radius ${l.catchRadius.toFixed(2)} · ${l.onCatch}`} hint="A chaser within the catch radius of a prey catches it: the Catch reading pulses, Catches counts up, and the signal (if any) fires. One catch per approach.">
           {f.prop('catchRadius')}
           {f.seg('Then', 'onCatch', [{ value: 'none', label: 'Nothing' }, { value: 'respawn', label: 'Respawn prey' }, { value: 'swap', label: 'Swap roles', title: 'The prey becomes the chaser and the chaser the prey (until the layer runs again)' }])}
           {f.row('Signal', (
@@ -1095,7 +1096,7 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
           ), 'Sent on every catch. Actions and trigger mappings fire on it: flash the background, burst particles, step the text.')}
         </Section>
       )}
-      <Section id="rel-debug" kind="relationship" title="Debug">
+      <Section id="rel-debug" kind="relationship" title="Debug" summary={l.debug ? 'Overlay on' : 'Off'}>
         {f.toggle('Overlay', 'debug', 'Show forces', 'With the guides on: sight and flee radii, a line from each chaser to its target, velocity arrows (white) and the picture’s pull (green). Never in renders or the finished picture.')}
       </Section>
     </BigEditorScaffold>

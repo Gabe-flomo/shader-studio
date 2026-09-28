@@ -303,14 +303,16 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
   const title = finishHostLabel(e);
   const icon: IconName = custom ? 'code' : FINISH_EFFECTS[e.kind as FinishKind].icon as IconName;
   const foldKey = `finish:${e.id}`;
-  const folded = usePlayUi(s => !!s.folded[foldKey]);
+  // Folded by default (the stack can get long): an explicit choice sticks, remembered per effect id.
+  const foldStored = usePlayUi(s => s.folded[foldKey]);
+  const folded = foldStored ?? true;
   const toggleFold = usePlayUi(s => s.toggleFold);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   // Opened from a control's "go to" or just added: unfold and scroll to it.
   useEffect(() => {
     if (!focused || !el) return;
-    if (usePlayUi.getState().folded[foldKey]) toggleFold(foldKey);
+    if (usePlayUi.getState().folded[foldKey] ?? true) toggleFold(foldKey, false);
     el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusTick, focused, el]);
@@ -342,14 +344,19 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
       >
         {!touch && <Icon name="grip" size={12} style={{ color: tk.text.disabled, flexShrink: 0 }} />}
         <Icon name={icon} size={14} style={{ color: e.enabled ? tk.accent.base : tk.text.faint, flexShrink: 0 }} />
-        <button type="button" onClick={() => toggleFold(foldKey)} aria-expanded={!folded} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `650 12.5px ${fontFamily.ui}`, textAlign: 'left' }}>
+        <button type="button" onClick={() => toggleFold(foldKey, !folded)} aria-expanded={!folded} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `650 12.5px ${fontFamily.ui}`, textAlign: 'left' }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
           {e.kind === 'grade' && e.look && <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lookName(e.look)}</span>}
         </button>
         <Toggle checked={e.enabled} onChange={enabled => onPatch({ enabled })} />
-        <IconButton icon={folded ? 'chevR' : 'chevD'} size="sm" label={folded ? 'Show settings' : 'Fold'} onClick={() => toggleFold(foldKey)} />
+        <IconButton icon={folded ? 'chevR' : 'chevD'} size="sm" label={folded ? 'Show settings' : 'Fold'} onClick={() => toggleFold(foldKey, !folded)} />
         <IconButton icon="more" size="sm" label="Move, reset or remove" onClick={ev => { const r = (ev.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ x: r.right - 190, y: r.bottom + 4 }); }} />
       </div>
+      {folded && (
+        <div style={{ padding: '0 10px 8px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {effectSummary(e)}
+        </div>
+      )}
       {!folded && (
         <div style={{ padding: '0 10px 10px', opacity: e.enabled ? 1 : 0.55 }}>
           {editorFor(e, k, touch, layers, onPatch, onReplace)}
@@ -452,6 +459,26 @@ function lookName(id: string): string {
   return GRADE_LOOKS.find(l => l.id === id)?.name ?? loadSavedLooks().find(l => l.id === id)?.name ?? '';
 }
 
+/** A folded effect card's one line: the settings that stray from default, e.g. "exposure +0.5, contrast 1.2". */
+function fmtNum(v: number): string { return Number.isInteger(v) ? String(v) : v.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''); }
+
+function effectSummary(e: FinishEffect): string {
+  if (e.kind === 'custom') return e.sealed ? `Sealed${e.name ? ` · ${e.name}` : ''}` : e.name || 'Your effect code';
+  if (e.kind === 'grade') {
+    const parts: string[] = [];
+    if (e.look) parts.push(lookName(e.look) || 'Custom');
+    for (const [key, label] of [['exposure', 'exposure'], ['contrast', 'contrast']] as const) {
+      const v = num(e, key);
+      const def = finishParamOf(e, key)?.value ?? 0;
+      if (Math.abs(v - def) > 1e-3) parts.push(`${label} ${v > 0 && key === 'exposure' ? '+' : ''}${fmtNum(v)}`);
+    }
+    return parts.length ? parts.join(', ') : 'Neutral';
+  }
+  const changed = finishParamsOf(e).filter(p => !p.hidden).filter(p => Math.abs(num(e, p.key) - p.value) > 1e-3);
+  const shown = (changed.length ? changed : finishParamsOf(e).filter(p => !p.hidden)).slice(0, 3);
+  return shown.length ? shown.map(p => `${p.label.toLowerCase()} ${fmtNum(num(e, p.key))}`).join(' · ') : 'Default settings';
+}
+
 function GradeEditor({ e, k, touch, onPatch, onReplace }: { e: FinishEffect; k: RowKit; touch: boolean; onPatch: (c: Partial<FinishEffect>) => void; onReplace: (e: FinishEffect) => void }) {
   const [saved, setSaved] = useState<SavedLook[]>(() => loadSavedLooks());
   useEffect(() => {
@@ -491,7 +518,7 @@ function GradeEditor({ e, k, touch, onPatch, onReplace }: { e: FinishEffect; k: 
     </div>
   );
   return (
-    <BigEditorScaffold sections={[
+    <BigEditorScaffold kind="finish-grade" sections={[
       { id: 'grade-basic', label: 'Basic' },
       { id: 'grade-curves', label: 'Curves' },
       { id: 'grade-wheels', label: 'Colour wheels' },
@@ -507,7 +534,7 @@ function GradeEditor({ e, k, touch, onPatch, onReplace }: { e: FinishEffect; k: 
         <IconButton icon="save" size="sm" label="Save this grade as a look" onClick={() => { void save(); }} />
         {savedCurrent && <IconButton icon="trash" size="sm" tone="danger" label={`Delete the saved look “${savedCurrent.name}”`} onClick={() => { void remove(); }} />}
       </div>
-      <Section id="grade-basic" kind="finish-grade" title="Basic" hint="Light and white balance, like Lightroom’s Basic panel.">
+      <Section id="grade-basic" kind="finish-grade" title="Basic" primary summary={effectSummary(e)} hint="Light and white balance, like Lightroom’s Basic panel.">
         {k.nums('exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks')}
         <div style={{ height: 4 }} />
         <div style={{ position: 'relative' }}>
