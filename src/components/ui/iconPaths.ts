@@ -55,6 +55,7 @@ export const ICONS = {
   camera: { sw: 1.4, body: "<rect x='2' y='4.5' width='12' height='9' rx='2'/><circle cx='8' cy='9' r='2.3'/><path d='M5.5 4.5l1-2h3l1 2'/>" },
   grip: { sw: 2.2, body: "<path d='M6 4.5h.01M10 4.5h.01M6 8h.01M10 8h.01M6 11.5h.01M10 11.5h.01'/>" },
   alert: { sw: 1.4, body: "<circle cx='8' cy='8' r='6'/><path d='M8 4.8v3.6'/><circle cx='8' cy='11' r='0.4' fill='currentColor'/>" },
+  swarm: { sw: 1.4, body: "<path d='M2.2 5.6l3.6-2 .2 4.1zM8.6 3.4l4.6.4-2.6 3.8zM6 10.2l4.4 1.5-3.4 2.9z'/>" },
   spark: { sw: 1.4, body: "<path d='M8 1.5l1.6 4.9 4.9 1.6-4.9 1.6L8 14.5l-1.6-4.9L1.5 8l4.9-1.6z'/>" },
   layoutCanvas: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><rect x='4.5' y='5' width='7' height='6' rx='1' fill='currentColor' stroke='none'/>" },
   layoutSplit: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><path d='M2 8h12'/>" },

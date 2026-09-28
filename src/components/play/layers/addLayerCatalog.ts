@@ -46,6 +46,7 @@ export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
   { kind: 'particles', group: 'particles', label: 'Particles', hint: 'Flow along the picture, flock, swarm nulls and shapes, burst on the beat.', icon: 'spark' },
   { kind: 'bodies', group: 'particles', label: 'Bodies', hint: 'Letters, circles or boxes that fall, bounce and pile up.', icon: 'dice' },
   { kind: 'relationship', group: 'particles', label: 'Relationship', hint: 'Forces between layers: a null chases a shape that flees (a catch sends a signal), members push apart, or pull together and orbit. Members can also climb the picture\'s bright parts. Its gap, closing speed and catches are sources.', icon: 'target' },
+  { kind: 'agents', group: 'particles', label: 'Agents', hint: 'Many agents moved by a stack of rules: flocks (boids), n-body gravity, spring nets, predators and prey, flow fields. Rules seek, flee, align, orbit, catch… Seeded, so takes and websites run the same.', icon: 'swarm' },
   { kind: 'glyphs', group: 'effects', label: 'Glyphs', hint: 'The picture as ASCII, halftone dots, squares or lines.', icon: 'hash' },
   { kind: 'contours', group: 'effects', label: 'Contours', hint: 'Topographic lines through the picture\'s brightness.', icon: 'loop' },
   { kind: 'lens', group: 'effects', label: 'Lens', hint: 'A circle that magnifies, pixelates, blurs or inverts what is under it.', icon: 'search' },

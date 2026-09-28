@@ -54,13 +54,14 @@ import { KL_BLEND, klCss, klCanvas, klDownscale, klFontGeneration, klDrawFieldPr
 import { k3Renderer, k3Render, k3PictureTexture } from './sketch3d.js';
 import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 import { rlCreate, rlStep, rlPlace, rlShift, rlDraw, rlPictureOf, RL_MAX_MEMBERS, RL_READS } from './relationship.js';
+import { agCreate, agStep, agDraw, agReset, agScatter, agElements, agElement, AG_READS } from './agents.js';
 import { hdDraw } from './hands.js';
 import { kmApplyMasks, kmApplyTrack, kmMatteSources, kmTrackOf } from './mattes.js';
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 import { kdState, kdAct, kdPlan, kdTextItems, kdFrame, kdDrawTable, kdColumn, kdText, kdChunkText, kdWrapText, kdScriptView } from './data.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
-const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1 };
+const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1, agents: 1 };
 
 export function createLayerKit() {
   const pool = {};
@@ -70,6 +71,8 @@ export function createLayerKit() {
   // alpha grids of layers their members read as a picture channel (as drawn last frame).
   const rels = new Map(), relGrids = new Map();
   let relDriven = new Set();
+  // Agents layers: each one's simulation (agents.js).
+  const ags = new Map();
   // Path shapes: each one's geometry last frame (for picking on the picture) and its fade (On lost: Fade).
   const paths = new Map(), pathFades = new Map();
   // Layers drawn alone this frame for the host (env.alphaLayers), by id.
@@ -207,6 +210,12 @@ export function createLayerKit() {
     return n && n.kind === 'null' ? { x: env.value(n, 'x'), y: env.value(n, 'y') } : null;
   }
 
+  /** An Agents layer's centre (its live agents' centroid) as last stepped, or null. */
+  function agentCentre(id) {
+    const g = ags.get(id), r = g && g.reads;
+    return r && r.count ? { x: r.centroidX, y: r.centroidY } : null;
+  }
+
   /** A Video layer's frame now: its element once it has a picture, else null. */
   function videoOf(env, l) {
     const v = env.layerVideo ? env.layerVideo(l) : null;
@@ -277,7 +286,7 @@ export function createLayerKit() {
       try { ctx.drawImage(env.gl, 0, 0, W, H); } catch (err) { /* no picture to copy yet */ }
     }
     const ids = new Set(layers.map(l => l.id));
-    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates, paths, pathFades, rels, relGrids]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
+    for (const m of [parts, bodies, brushes, springs, texts, audios, masks, shown, lastVisible, scripts, bqStates, dStates, paths, pathFades, rels, relGrids, ags]) for (const id of [...m.keys()]) if (!ids.has(id)) { if (m === scripts) klSketchDispose(m.get(id)); m.delete(id); }
     // Sketch sources that left the queue (or whose layer did) stop keeping state.
     if (bqSketches.size) { const inQueue = new Set(bq ? record.layers[0].sources.map(s => s.id) : []); for (const id of [...bqSketches.keys()]) if (!inQueue.has(id)) { klSketchDispose(bqSketches.get(id)); bqSketches.delete(id); } }
     // A visibility change in the panel wins over an earlier show/hide action.
@@ -307,6 +316,8 @@ export function createLayerKit() {
       if (!s) { s = { x: l.x, y: l.y, vx: 0, vy: 0 }; springs.set(l.id, s); }
       let target = l.follow === 'mouse' ? (pointer.over ? pointer : null)
         : l.follow === 'hand' ? (env.hand ? env.hand(l.handSide, l.handPoint) : null)
+        // An agent of an Agents layer (as it was last frame): its number, or the layer's centre while that one is dead.
+        : l.follow === 'agent' ? (ags.has(l.followId) ? agElement(ags.get(l.followId), Math.round(l.agentIndex || 0)) || agentCentre(l.followId) : null)
         : nullPos(record, { value: (n, k) => (springs.has(n.id) && n.id !== l.id ? springs.get(n.id)[k] : env.value(n, k)) }, l.followId);
       if (l.follow === 'hand') {
         if (target) s.seen = true;
@@ -428,6 +439,7 @@ export function createLayerKit() {
       if (l.kind === 'particles') { if (l.readFrom === 'camera') { needs.cam = true; if (l.detail === 'fine') needs.camFine = true; } else if (l.detail === 'fine') needs.fine = true; else needs.coarse = true; if (l.colour === 'picture') needs.coarse = true; }
       else if (l.kind === 'bodies' && l.solidPicture) needs.coarse = true;
       else if (l.kind === 'relationship') needs.coarse = true;
+      else if (l.kind === 'agents' && (l.rules || []).some(r => r.on !== false && r.type === 'field' && (r.mode === 'climb' || r.mode === 'descend'))) needs.coarse = true;
       else if (l.kind === 'shape' && l.shape === 'picture') needs.coarse = true;
       else if (l.kind === 'brush' && l.colour === 'picture') needs.coarse = true;
       else if (l.kind === 'script' && l.readPicture) needs.coarse = true;
@@ -523,7 +535,7 @@ export function createLayerKit() {
         case 'toggle': shown.set(l.id, !isVisible(l)); break;
         case 'show': shown.set(l.id, true); break;
         case 'hide': shown.set(l.id, false); break;
-        case 'freeze': if (frozen.has(l.id)) frozen.delete(l.id); else frozen.add(l.id); { const b = bodies.get(l.id); if (b) b.st.frozen = frozen.has(l.id); } break;
+        case 'freeze': if (frozen.has(l.id)) frozen.delete(l.id); else frozen.add(l.id); { const b = bodies.get(l.id); if (b) b.st.frozen = frozen.has(l.id); } { const g = ags.get(l.id); if (g) g.frozen = frozen.has(l.id); } break;
         case 'next': case 'prev': case 'shuffle': case 'goto':
           if (l.kind === 'text' && a.do !== 'goto') stepText(l, a.do, time);
           else if (l.kind === 'data') kdAct(dataState(l), l, env.value(l, 'offset'), env.value(l, 'count'), dataOf(l).n, a, rngFor(l.id, 'data'));
@@ -536,9 +548,11 @@ export function createLayerKit() {
           else if (l.kind === 'brush') brushState(l.id).pts = [];
           else if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) bdDrop(b.st, l, aspect, (env.value(l, 'size') * dpr) / H, rngFor(l.id, 'bodies')); }
           else if (l.kind === 'particles') { if (!pending.has(l.id)) pending.set(l.id, []); pending.get(l.id).push(a); }
+          else if (l.kind === 'agents') { const g = ags.get(l.id); if (g) agReset(g); }
           break;
         case 'scatter':
           if (l.kind === 'bodies') { const b = bodies.get(l.id); if (b) bdScatter(b.st, (a.amount || 1) * env.value(l, 'scatter'), rngFor(l.id, 'bodies')); }
+          else if (l.kind === 'agents') { const g = ags.get(l.id); if (g) agScatter(g, 0.5 * (a.amount || 1)); }
           else if (l.kind === 'particles') { if (!pending.has(l.id)) pending.set(l.id, []); pending.get(l.id).push(a); }
           break;
         case 'burst': case 'multiply': case 'cull':
@@ -720,6 +734,7 @@ export function createLayerKit() {
       else if (l.arrange === 'points') {
         const s = parts.get(l.pathId);
         if (s && s.sim) { points = []; const sim = s.sim; for (let i = 0; i < sim.count && points.length < 400; i++) if (sim.alive[i]) points.push({ x: sim.x[i], y: sim.y[i] }); }
+        else if (ags.has(l.pathId)) points = agElements(ags.get(l.pathId), aspect).slice(0, 400).map(e => ({ x: e.x, y: e.y }));
       }
       const layout = klClonerLayout(l, v, aspect, path, points);
       if (l.arrange === 'path' || l.arrange === 'points') {
@@ -779,6 +794,44 @@ export function createLayerKit() {
       for (const cp of copies) klDrawCopy(c, cp, sx, sy, W, H, scratch, box);
       c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
     }
+    /**
+     * Another layer's elements as an Agents rule's target, 0..1 with y up: a particles layer's live
+     * particles, a bodies layer's bodies, another Agents layer's agents, a relationship's members, or
+     * anything with an x and a y as one point. Once per frame per layer.
+     */
+    const elemCache = new Map();
+    function elementsOf(id) {
+      if (!id) return null;
+      if (elemCache.has(id)) return elemCache.get(id);
+      const L = byId.get(id);
+      let out = null;
+      if (L) {
+        if (L.kind === 'particles') { const s = parts.get(id), sim = s && s.sim; if (sim) { out = []; for (let i = 0; i < sim.count && out.length < 2000; i++) if (sim.alive[i]) out.push({ x: sim.x[i], y: sim.y[i] }); } }
+        else if (L.kind === 'bodies') { const b = bodies.get(id); if (b) out = b.st.bodies.map(o => ({ x: o.x / aspect, y: o.y })); }
+        else if (L.kind === 'agents') { const g = ags.get(id); if (g) out = agElements(g, aspect); }
+        else if (L.kind === 'relationship') { out = []; for (const m of L.members || []) { const M = byId.get(m.id); if (M && typeof M.x === 'number') out.push({ x: env.value(M, 'x'), y: env.value(M, 'y') }); } }
+        else if (typeof L.x === 'number' && typeof L.y === 'number') out = [{ x: env.value(L, 'x'), y: env.value(L, 'y') }];
+      }
+      elemCache.set(id, out);
+      return out;
+    }
+    /** An Agents layer: step its rules (fixed steps, seeded), report its readings, draw it. */
+    function drawAgentsLayer(c, l, v) {
+      let st = ags.get(l.id);
+      if (!st) { st = agCreate(); ags.set(l.id, st); }
+      st.frozen = frozen.has(l.id);
+      // Its own seed wins (a fresh source on every rebuild); unseeded, it follows the session's (a take) or Math.random.
+      agStep(st, l, v, dt, aspect, () => (l.seed ? seededRandom(l.seed) : rngFor(l.id, 'agents')), {
+        pointer, elements: elementsOf,
+        zone: id => zoneById.get(id) || null,
+        picture: coarse ? { s: coarse, w: KIT_COARSE_W, h: KIT_COARSE_H } : null,
+      });
+      const r = st.reads;
+      for (const k of AG_READS) report(env, l.id + '::' + k, k === 'centroidX' || k === 'centroidY' ? (isFinite(r[k]) ? r[k] : 0.5) : r[k] || 0);
+      report(env, l.id + '::ax', r.count ? r.centroidX : NaN); report(env, l.id + '::ay', r.count ? r.centroidY : NaN);
+      elemCache.delete(l.id);
+      agDraw(c, st, l, v, W, H, dpr, aspect, KL_BLEND[l.blend] || 'source-over');
+    }
     const drawOne = (c, l, guides) => {
       const v = k => env.value(l, k);
       c.save();
@@ -811,6 +864,7 @@ export function createLayerKit() {
           case 'cloner': drawCloner(c, l, v); break;
           case 'script': drawScript(c, l, v); break;
           case 'data': drawData(c, l, v); break;
+          case 'agents': drawAgentsLayer(c, l, v); break;
           case 'particles': drawParticleLayer(c, l, v, env, record, zones, zoneById, pictureFor(l.readFrom, l.detail), pending.get(l.id), W, H, dpr, aspect, time, dt, pointer, gl); break;
           case 'bodies': {
             const sizeH = (v('size') * dpr) / H;
@@ -1141,6 +1195,10 @@ export function createLayerKit() {
       } else if (src && src.kind === 'bodies') {
         const b = bodies.get(src.id);
         if (b) b.st.bodies.forEach((o, i) => push(i, o.x / aspect, o.y, o.vx / aspect, o.vy, 0.5, Math.min(1, o.r * 8), false));
+      } else if (src && src.kind === 'agents') {
+        // An Agents layer's live agents: age over ten seconds, size by energy (1 at full).
+        const g = ags.get(src.id);
+        if (g) for (const e of agElements(g, aspect)) push(e.i, e.x, e.y, e.vx, e.vy, Math.min(1, e.age / 10), Math.min(1, e.energy / 2), e.age < 0.05);
       } else if (src && src.kind === 'null') {
         push(0, value(src, 'x'), value(src, 'y'), 0, 0, 0.5, 0.5, false);
       } else if (src && src.kind === 'relationship') {
@@ -1181,6 +1239,6 @@ export function createLayerKit() {
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
     background,
-    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); relDriven = new Set(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
+    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); ags.clear(); relDriven = new Set(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
   };
 }
