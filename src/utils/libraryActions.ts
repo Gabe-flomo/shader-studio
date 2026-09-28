@@ -3,6 +3,7 @@
  * ZIP, import one back, and say what happened.
  */
 import { internStoredPresentations } from '../present/presentAssets';
+import { recordActivity } from '../files/activity';
 import { savePresentation } from '../present/storage';
 import { toast } from '../components/ui/toastStore';
 import { buildLibraryZip, buildSetZip, countInSet, describeSnapshot, DOWNLOAD_SETS, importLibrary, LIBRARY_REFRESH_EVENTS, libraryZipName, readLibrary, takeSnapshot, type DownloadSetId } from './library';
@@ -83,6 +84,7 @@ export async function importLibraryBytes(fileName: string, bytes: Uint8Array): P
     const vid = await importVideosFrom(picked.bytes);
     // Presentations that came in with their pictures and fonts embedded keep references to the library instead.
     await internStoredPresentations(savePresentation).catch(() => []);
+    recordActivity('import', fileName);
     for (const ev of LIBRARY_REFRESH_EVENTS) window.dispatchEvent(new Event(ev));
     const parts = [
       r.added ? `${r.added} added` : '',
