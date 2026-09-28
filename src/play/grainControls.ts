@@ -9,11 +9,15 @@
  *                      each driven by a sensor mapping, in "Grains · <rack>"
  *   addGrainNulls      null layers that ride grains 1..n: x is where the grain
  *                      reads in the sample, y its level (sensor mappings on
- *                      the nulls' x and y), for particles, paths and the rest
+ *                      the nulls' x and y), for particles, paths and the rest.
+ *                      They sit in their own sealed folder at the top level
+ *                      ("Grains · <rack>"): layers added later never join it
+ *                      (types/layerGroups.ts newLayerHome), only a drop does
  *
  * Pure: record in, record out.
  */
-import { defaultLayer, layerTarget, type PlayControl, type PlayMapping, type PlayRecord, type SensorRead } from '../types/play';
+import { defaultLayer, layerTarget, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type SensorRead } from '../types/play';
+import { tidyGroups, type LayerGroup } from '../types/layerGroups';
 import { GRAIN_EACH, GRAIN_READ_LABELS, aeRack, grainSensorLayer, grainsTarget, type GrainRead } from '../types/playAudioEngine';
 import { playId } from './playControls';
 
@@ -44,21 +48,33 @@ export function addGrainReadouts(p: PlayRecord, rackId: string): PlayRecord {
   return { ...p, controls: [...p.controls, ...controls], mappings: [...p.mappings, ...mappings] };
 }
 
-/** `n` null layers riding grains 1..n (x: the grain's place in the sample, y: its level), with their mappings. */
+/** A group name no group has yet: `base`, `base (2)`… */
+function freeGroupName(groups: readonly LayerGroup[] | undefined, base: string): string {
+  const taken = new Set((groups ?? []).map(g => g.label));
+  if (!taken.has(base)) return base;
+  for (let i = 2; ; i++) if (!taken.has(`${base} (${i})`)) return `${base} (${i})`;
+}
+
+/**
+ * `n` null layers riding grains 1..n (x: the grain's place in the sample, y: its level), with their
+ * mappings, in a sealed folder of their own at the top level (new layers don't join it).
+ */
 export function addGrainNulls(p: PlayRecord, rackId: string, n = 8): PlayRecord {
   const rack = aeRack(p.audioEngine, rackId);
   if (!rack) return p;
   const count = Math.max(1, Math.min(GRAIN_EACH, Math.round(n)));
-  const layers = [...p.layers], controls: PlayControl[] = [], mappings: PlayMapping[] = [];
+  const layers = [...p.layers], controls: PlayControl[] = [], mappings: PlayMapping[] = [], made: string[] = [];
   const src = grainSensorLayer(rackId);
   for (let i = 1; i <= count; i++) {
     const id = playId('layer');
-    const l = { ...defaultLayer('null', id, `${rack.name} · grain ${i}`), x: 0.5, y: 0.2, size: 8 } as typeof layers[number];
+    const l = { ...defaultLayer('null', id, `${rack.name} · grain ${i}`), x: 0.5, y: 0.2, size: 8 } as PlayLayer;
     layers.push(l);
+    made.push(id);
     const cx: PlayControl = { id: playId('ctl'), target: layerTarget(id, 'x'), kind: 'float', label: `Grain ${i} · x`, min: 0, max: 1, group: `${GRAIN_GROUP_PREFIX}${rack.name} · nulls` };
     const cy: PlayControl = { id: playId('ctl'), target: layerTarget(id, 'y'), kind: 'float', label: `Grain ${i} · y`, min: 0, max: 1, group: `${GRAIN_GROUP_PREFIX}${rack.name} · nulls` };
     controls.push(cx, cy);
     mappings.push(mapping(cx.id, src, 'grainPos', 0.05, 0.95, String(i)), mapping(cy.id, src, 'grainAmp', 0.15, 0.85, String(i), 30));
   }
-  return { ...p, layers, controls: [...p.controls, ...controls], mappings: [...p.mappings, ...mappings] };
+  const group: LayerGroup = { id: playId('layer').replace(/^layer_/, 'grp_'), label: freeGroupName(p.groups, `${GRAIN_GROUP_PREFIX}${rack.name}`), colour: 'teal', layers: made, sealed: true };
+  return tidyGroups({ ...p, layers, groups: [...(p.groups ?? []), group], controls: [...p.controls, ...controls], mappings: [...p.mappings, ...mappings] });
 }

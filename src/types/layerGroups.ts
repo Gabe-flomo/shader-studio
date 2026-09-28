@@ -9,6 +9,11 @@
  * in. Where it shows in the list is where its members are: they are kept
  * next to each other (tidyGroups), at the place of the first of them. A group
  * with no layers left in it goes away. The Background layer is never in one.
+ *
+ * A **sealed** group (the nulls a Granulator's grains make, docs/granulator.md)
+ * takes no new layers: a layer added while the list shows it lands in the
+ * nearest group around it that isn't sealed, or at the top level
+ * (newLayerHome). Only dropping a layer in puts one inside.
  */
 import type { PlayLayer } from './playLayers';
 import { LAYER_KIND_COLOURS, type LayerKindColour } from './layerKinds';
@@ -27,6 +32,8 @@ export interface LayerGroup {
   parent?: string;
   /** Every layer inside is hidden. Absent: shown. */
   hidden?: true;
+  /** New layers never join it (they go to the top level, or the nearest open group around it); only a drop puts one inside. */
+  sealed?: true;
 }
 
 /** The part of a Play record groups work on. */
@@ -58,6 +65,7 @@ export function parseLayerGroups(raw: unknown, layers: readonly PlayLayer[]): La
     };
     if (typeof r.parent === 'string' && r.parent) group.parent = r.parent;
     if (r.hidden === true) group.hidden = true;
+    if (r.sealed === true) group.sealed = true;
     out.push(group);
   }
   return pruneGroups(out, layers);
@@ -108,6 +116,23 @@ export function pruneGroups(groups: readonly LayerGroup[], layers: readonly Play
 
 function byIdOf(groups: readonly LayerGroup[], id: string): LayerGroup | undefined { return groups.find(g => g.id === id); }
 function withParent(g: LayerGroup, parent: string | undefined): LayerGroup { const c = { ...g }; if (parent) c.parent = parent; else delete c.parent; return c; }
+
+/**
+ * Where a layer added while the list shows `entered` goes: that group, or
+ * when it is sealed the nearest group around it that isn't, or '' (the top
+ * level).
+ */
+export function newLayerHome(groups: readonly LayerGroup[] | undefined, entered: string): string {
+  const seen = new Set<string>();
+  for (let id = entered; id && !seen.has(id);) {
+    seen.add(id);
+    const g = groups?.find(x => x.id === id);
+    if (!g) return '';
+    if (!g.sealed) return g.id;
+    id = g.parent ?? '';
+  }
+  return '';
+}
 
 /** The group each grouped layer sits directly in. */
 export function groupOfLayer(groups: readonly LayerGroup[] | undefined): Map<string, string> {
