@@ -1320,6 +1320,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // it (u_time, particles, audio, video, feedback, scopes, the eye preview),
       // or a recording holds a lease. Otherwise draw only when asked to.
       const playing = timePlayingRef.current;
+      // Paused ⇒ the layer kit's per-frame step sees dt 0: particles, agents, springs and every other
+      // simulated layer hold still (the picture still draws, so edits stay visible), and resuming
+      // continues from where it stopped. Takes and offline renders drive their own time (stepLayers)
+      // and never go through this draw() call, so they're unaffected.
+      const layerDt = playing ? dt : 0;
       const videoActive = videoIdsRef.current.some(id => videoEngine.isPlaying(id));
       const shaderMoving = playing && (
         usesTimeRef.current || hasTimeNodeRef.current || gpuParticlesRef.current.size > 0 ||
@@ -1360,7 +1365,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         idleFrames = 0;
         frameCount++;
         drawQueueGraphs();
-        playOverlay.draw(renderer.domElement, elapsed, dt);
+        playOverlay.draw(renderer.domElement, elapsed, layerDt);
       } else if (plan.shader) {
         needsRender = false;
         idleFrames = 0;
@@ -1413,7 +1418,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         }
 
         // ── Play layers: drawn over the picture while it is still in the drawing buffer ──
-        playOverlay.draw(renderer.domElement, elapsed, dt);
+        playOverlay.draw(renderer.domElement, elapsed, layerDt);
 
         // Check for GLSL errors after first few renders
         const newErrors = flushGlErrors();
