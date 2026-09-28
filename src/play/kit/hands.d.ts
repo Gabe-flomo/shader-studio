@@ -57,7 +57,7 @@ export function hdEuroStep(f: { x: number; dx: number; t: number }, v: number, t
 export function hdEuroParams(smoothing: number, responsiveness?: number): { minCutoff: number; beta: number };
 export function hdTrackerOptions(hands: { maxHands?: number; strictness?: number; confidence?: { detection: number; presence: number; tracking: number } } | null | undefined): HdTrackerOptions;
 export function hdTracks(st: HdState): { raw: number; rejected: number; tracks: { id: number; side: 'left' | 'right'; said: 'left' | 'right'; score: number; shown: boolean; held: boolean }[] };
-export function hdPlacement(record: { layers: PlayLayer[] } | null, value: ((l: PlayLayer, k: string) => number) | null, camAspect: number, picAspect: number, mirror: boolean): HdPlace;
+export function hdPlacement(record: { layers: PlayLayer[] } | null, value: ((l: PlayLayer, k: string) => number) | null, camAspect: number, picAspect: number, mirror: boolean, sourceId?: string): HdPlace;
 export function hdToPicture(u: number, v: number, place: HdPlace, camAspect: number, picAspect: number): [number, number];
 export function hdUpdate(st: HdState, frame: HdFrame, o: HdUpdateOptions): void;
 export function hdAge(st: HdState, now: number): void;

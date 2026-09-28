@@ -18,11 +18,13 @@ import { audioReaderBank } from '../lib/audioReaderBank';
 import { readerLabel } from './audioReaders';
 import type { PadGridRead } from '../types/playMidi';
 import { kmNoteName } from './kit/midi.js';
+import { FACE_GESTURE_LABELS, POSE_GESTURE_LABELS, TRACK_SOURCE_TYPES, trackAnchorLabel, trackSource, trackSourceLabel, type FaceSourceType, type PoseSourceType } from './trackSources';
+import { parseTrackAnchor } from '../types/playTracking';
 
 export type HandSourceType = `hand:${HandRead}`;
 /** `reader:<id>`: one audio reader. */
 export type ReaderSourceType = `reader:${string}`;
-export type SourceType = 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | HandSourceType | ReaderSourceType;
+export type SourceType = FaceSourceType | PoseSourceType | 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | HandSourceType | ReaderSourceType;
 /** Not a source: the picker's entry that opens the Audio readers panel. */
 export const OPEN_READERS = 'readers:open';
 
@@ -78,6 +80,7 @@ export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[
   { value: 'hand:present', label: 'Hand in view', group: 'Hands' },
   { value: 'hand:gesture', label: 'Gesture held (fist, pinch…)', group: 'Hands' },
   { value: 'hand:spread', label: 'Distance between the hands', group: 'Hands' },
+  ...TRACK_SOURCE_TYPES,
 ];
 
 // ── Hands ────────────────────────────────────────────────────────────────────
@@ -167,6 +170,8 @@ export function sourceType(s: PlaySource): SourceType {
   if (s.kind === 'midi') return `midi:${s.signal}` as SourceType;
   if (s.kind === 'mouse') return `mouse:${s.axis}` as SourceType;
   if (s.kind === 'hand') return `hand:${s.read}`;
+  if (s.kind === 'face') return `face:${s.read}`;
+  if (s.kind === 'pose') return `pose:${s.read}`;
   if (s.kind === 'reader') return `reader:${s.readerId}`;
   return s.kind;
 }
@@ -174,6 +179,8 @@ export function sourceType(s: PlaySource): SourceType {
 /** `otherControlId` is the first control a new control source may point at (not the mapping's own target); `nullId` the first null layer; `sensor` the first layer that measures something. */
 export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId = '', nullId = '', sensor: { layerId: string; read: SensorRead } | null = null, dataset = ''): PlaySource {
   if (t.startsWith('hand:')) return handSource(t.slice(5) as HandRead, prev);
+  if (t.startsWith('face:')) return trackSource('face', t.slice(5), prev);
+  if (t.startsWith('pose:')) return trackSource('pose', t.slice(5), prev);
   if (t.startsWith('reader:')) return { kind: 'reader', readerId: t.slice(7) };
   const channel = prev.kind === 'midi' ? prev.channel : 0;
   // A note range carries over between note, velocity and gate; locks stay with a CC.
@@ -228,6 +235,7 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'tilt') return `Tilt ${s.axis === 'beta' ? 'front/back' : s.axis === 'gamma' ? 'left/right' : 'compass'}`;
   if (s.kind === 'gamepad') return `Pad ${s.pad + 1} ${s.control} ${s.index}`;
   if (s.kind === 'hand') return handSourceLabel(s);
+  if (s.kind === 'face' || s.kind === 'pose') return trackSourceLabel(s);
   if (s.kind === 'pad') return padSourceLabel(s);
   const ch = s.channel === 0 ? '' : ` · ch. ${s.channel}`;
   const range = s.range ? ` ${kmNoteName(s.range[0])}–${kmNoteName(s.range[1])}` : '';
@@ -288,6 +296,8 @@ export function triggerLabel(t: TriggerSpec, layers: ReadonlyArray<{ id: string;
     case 'audio': return `${LIVE_BAND_LABELS[t.band]} hit`;
     case 'zone': return t.event === 'click' ? 'Click on shape' : t.event === 'enter' ? 'Pointer enters shape' : `Shape fills to ${Math.round(t.threshold * 100)}%`;
     case 'hand': return `${SIDE_NAMES[t.side]} · ${HAND_GESTURE_LABELS[t.gesture]}`;
+    case 'face': return `Face · ${FACE_GESTURE_LABELS[t.gesture]}`;
+    case 'pose': return `Pose · ${POSE_GESTURE_LABELS[t.gesture]}`;
     case 'proximity': return `${anchorLabel(t.a, layers)} ${t.when === 'closer' ? 'near' : 'away from'} ${anchorLabel(t.b, layers)}`;
     case 'reader': return `${audioReaderBank.name(t.readerId) ?? 'Reader'} crosses ${Math.round(t.threshold * 100)}%`;
     case 'value': return conditionLabel(t, { layers, ...ctx });
@@ -361,6 +371,8 @@ export function anchorLabel(ref: string, layers: ReadonlyArray<{ id: string; lab
   if (pt) return `Point ${round(pt.x)}, ${round(pt.y)}`;
   const h = parseHandAnchor(ref);
   if (h) return `${SIDE_NAMES[h.side]} · ${HD_POINT_NAMES[h.point] ?? 'Point'}`;
+  const tr = parseTrackAnchor(ref);
+  if (tr) return trackAnchorLabel(tr.kind, tr.point);
   return layers.find(l => l.id === ref)?.label ?? (ref ? 'Missing layer' : 'Pick one');
 }
 
@@ -397,7 +409,7 @@ export function anchorChoice(pick: string, prev: string): string {
 
 /** "On release" for a key, "On exit" for things that come and go (a shape, proximity, a hand). */
 export function releaseLabel(t: TriggerSpec): string {
-  return t.on === 'value' ? 'When it stops' : t.on === 'proximity' || t.on === 'zone' || (t.on === 'hand' && (t.gesture === 'appear' || t.gesture === 'leave')) ? 'On exit' : 'On release';
+  return t.on === 'value' ? 'When it stops' : t.on === 'proximity' || t.on === 'zone' || ((t.on === 'hand' || t.on === 'face' || t.on === 'pose') && (t.gesture === 'appear' || t.gesture === 'leave')) ? 'On exit' : 'On release';
 }
 
 export function fireModes(t: TriggerSpec): { value: FireMode; label: string; title: string }[] {
@@ -523,6 +535,8 @@ export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
   { value: 'osc', label: 'OSC message' },
   { value: 'zone', label: 'Shape (click, enter, fill)' },
   { value: 'hand', label: 'Hand gesture (pinch, fist…)' },
+  { value: 'face', label: 'Face gesture (mouth open, blink…)' },
+  { value: 'pose', label: 'Pose gesture (hands up, arms out…)' },
   { value: 'proximity', label: 'Proximity (two things close)' },
   { value: 'value', label: 'When a value… (below, above, crosses)' },
   { value: 'signal', label: 'When a signal fires' },
@@ -548,6 +562,8 @@ function triggerOnFromKind(on: TriggerSpec['on'], prev: TriggerSpec, layers: Rea
     case 'audio': return { on: 'audio', band: prev.on === 'audio' ? prev.band : 'bass', threshold: prev.on === 'audio' ? prev.threshold : 0.6 };
     case 'zone': return { on: 'zone', layerId: prev.on === 'zone' ? prev.layerId : shapeId, event: prev.on === 'zone' ? prev.event : 'click', threshold: prev.on === 'zone' ? prev.threshold : 0.5 };
     case 'hand': return { on: 'hand', side: prev.on === 'hand' ? prev.side : 'right', gesture: prev.on === 'hand' ? prev.gesture : 'pinch' };
+    case 'face': return { on: 'face', gesture: prev.on === 'face' ? prev.gesture : 'mouthOpen' };
+    case 'pose': return { on: 'pose', gesture: prev.on === 'pose' ? prev.gesture : 'handsUp' };
     case 'reader': return prev.on === 'reader' ? prev : { on: 'reader', readerId, threshold: prev.on === 'audio' ? prev.threshold : 0.6, hysteresis: 0.1 };
     case 'proximity': {
       if (prev.on === 'proximity') return prev;

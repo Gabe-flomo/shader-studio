@@ -32,6 +32,9 @@ import bodiesSource from './kit/bodies.js?raw';
 import relationshipSource from './kit/relationship.js?raw';
 import agentsSource from './kit/agents.js?raw';
 import handsSource from './kit/hands.js?raw';
+import tracksSource from './kit/tracks.js?raw';
+import faceSource from './kit/face.js?raw';
+import poseSource from './kit/pose.js?raw';
 import queueSource from './kit/queue.js?raw';
 import mattesSource from './kit/mattes.js?raw';
 import dataSource from './kit/data.js?raw';
@@ -49,6 +52,7 @@ import type { AeGrainSample } from '../types/playAudioEngine';
 import { renderableFinish } from '../types/playFinish';
 import { applyGroupVisibility } from '../types/layerGroups';
 import { BACKGROUND_VIDEO_KEEP, backgroundLayerOf, usesHands, type PlayRecord } from '../types/play';
+import { TRACKER_NAMES, usesFace, usesPose, type TrackerKind } from '../types/playTracking';
 import type { HandAssets } from './handExport';
 import { PREVIEW_ASPECTS, type PreviewAspect } from '../utils/graphImportPlan';
 import { playUses3D, threeSource } from './threeSource';
@@ -119,6 +123,12 @@ export interface PlayMedia {
   layerPads?: Record<string, Record<string, PlayMediaFile>>;
   /** Granulator racks' Library samples, by rack id (the page puts each in the rack's sample as `src`). */
   rackSamples?: Record<string, PlayMediaFile>;
+  /**
+   * Baked tracks (docs/tracking.md), per tracker that follows a Video layer:
+   * the layer, and the stored frames as base64 in `src` (null when they aren't
+   * loaded here, or are over TRACK_LIMIT).
+   */
+  tracks?: Partial<Record<TrackerKind, PlayMediaFile & { layerId: string }>>;
 }
 
 export type EmbedMode = 'player' | 'background';
@@ -201,7 +211,20 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: 
     if (s.kind === 'video' && !s.src) out.push({ what: `The background video “${s.name}”${s.bytes ? ` (${sizeText(s.bytes)})` : ''}`, why: `Videos over ${sizeText(BACKGROUND_VIDEO_KEEP)} play in the app for the session only, so the page shows the Background layer’s colour while it would show. Trim or compress it under ${sizeText(BACKGROUND_VIDEO_KEEP)} to bring it along.` });
     if (s.kind === 'graph' && s.graph !== 'this' && opts.graphs && !opts.graphs[s.id]) out.push({ what: `The background graph “${s.name}”`, why: 'It couldn’t be compiled for the page (an example still loading, or a graph with an error), so the page shows the Background layer’s colour while it would show. Open the page again in a moment, or check the graph.' });
   }
-  if (usesHands(play) && !opts.hands) out.push({ what: 'Hand tracking', why: `It needs MediaPipe and its hand model (about ${sizeText(HAND_BYTES)}), which stay out of the page unless you tick Include hand tracking. Without them, hand mappings, gestures and nulls that follow a hand stay at rest.` });
+  // Trackers on a Video layer: the page reads their analysis (baked track) by the video's time, never a model.
+  for (const kind of trackersUsed(play)) {
+    const s = kind === 'hands' ? play.hands : play[kind];
+    if (!s?.source) {
+      if (kind !== 'hands') out.push({ what: `${TRACKER_NAMES[kind]} tracking from the camera`, why: `Pages don’t carry the ${kind === 'face' ? 'face' : 'body'} model yet, so ${kind === 'face' ? 'face' : 'pose'} mappings, gestures and nulls stay at rest there. Track an analysed Video layer instead to bring it along.` });
+      continue;
+    }
+    const t = media?.tracks?.[kind], layer = play.layers.find(l => l.id === s.source);
+    if (t?.src) continue;
+    out.push(t && t.bytes > TRACK_LIMIT
+      ? { what: `${TRACKER_NAMES[kind]} tracking of “${layer?.label ?? 'a video'}” (${sizeText(t.bytes)})`, why: `Analyses over ${sizeText(TRACK_LIMIT)} stay out of the page. Analyse at a lower frame rate (15 or 10 fps), or trim the video.` }
+      : { what: `${TRACKER_NAMES[kind]} tracking of “${layer?.label ?? 'a video'}”`, why: 'The page reads a video’s analysis, never a model: this one isn’t analysed (or the analysis isn’t loaded in this browser), so what it drives stays at rest there. Press Analyse video in the tracker’s settings, then export again.' });
+  }
+  if (usesHands(play) && !play.hands?.source && !opts.hands) out.push({ what: 'Hand tracking', why: `It needs MediaPipe and its hand model (about ${sizeText(HAND_BYTES)}), which stay out of the page unless you tick Include hand tracking. Without them, hand mappings, gestures and nulls that follow a hand stay at rest.` });
   for (const v of Object.values(media?.videos ?? {})) {
     if (!v.src && v.bytes > 0) out.push({ what: `The video “${v.name}” (${sizeText(v.bytes)}) in ${v.label}`, why: `Videos over ${sizeText(VIDEO_LIMIT)} stay out of the page to keep it light, so that input shows black there. Trim or compress it under ${sizeText(VIDEO_LIMIT)} to bring it along.` });
   }
@@ -253,6 +276,25 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: 
   return out;
 }
 
+/** The biggest analysis (baked track, as base64) a page carries. */
+export const TRACK_LIMIT = 16 * 1024 * 1024;
+
+/** The trackers a setup reads. */
+export function trackersUsed(play: PlayRecord): TrackerKind[] {
+  return ([['hands', usesHands(play)], ['face', usesFace(play)], ['pose', usesPose(play)]] as const).filter(([, on]) => on).map(([k]) => k);
+}
+
+/** The analyses the page carries: per tracker on a Video layer, its layer and base64 frames. */
+function bundleTracks(input: PlayHtmlInput): Partial<Record<TrackerKind, { layerId: string; data: string }>> | null {
+  const out: Partial<Record<TrackerKind, { layerId: string; data: string }>> = {};
+  for (const kind of trackersUsed(input.play)) {
+    const s = kind === 'hands' ? input.play.hands : input.play[kind];
+    const t = input.media?.tracks?.[kind];
+    if (s?.source && t?.src && t.layerId === s.source && t.src.length <= TRACK_LIMIT) out[kind] = { layerId: t.layerId, data: t.src };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 /** What hand tracking adds to a page (play/handExport.ts: MediaPipe and the model, gzipped, then base64), measured. */
 export const HAND_BYTES = 12.2 * 1024 * 1024;
 
@@ -269,6 +311,7 @@ function readsVideo(play: PlayRecord, layerId: string): boolean {
 export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', play?: PlayRecord, datasets?: WebDatasets): { what: string; bytes: number }[] {
   const out: { what: string; bytes: number }[] = [...datasetsCarried(datasets)];
   if (hands) out.push({ what: 'Hand tracking (MediaPipe and its hand model)', bytes: hands === 'pending' ? HAND_BYTES : hands.bundle.length + hands.loader.length + hands.wasm.length + hands.model.length });
+  if (play) for (const kind of trackersUsed(play)) { const t = media?.tracks?.[kind]; if (t?.src) out.push({ what: `${TRACKER_NAMES[kind]} tracking of ${t.label} (analysed)`, bytes: t.src.length }); }
   for (const t of Object.values(media?.textures ?? {})) if (t.src) out.push({ what: `Image in ${t.label}${t.scaledTo ? ` (scaled to ${t.scaledTo} px)` : ''}`, bytes: t.src.length });
   for (const v of Object.values(media?.videos ?? {})) if (v.src) out.push({ what: `Video “${v.name}” in ${v.label}`, bytes: v.src.length });
   for (const a of media?.audio ?? []) if (a.src) out.push({ what: `Song “${a.name}” in ${a.label}`, bytes: a.src.length });
@@ -364,7 +407,8 @@ export function playBundle(input: PlayHtmlInput) {
     aspect: aspect ? { id: aspect.id, ratio: aspect.ratio } : { id: 'free', ratio: null },
     ...(input.passes && (input.passes.stateful || input.passes.echo || input.passes.particles.length) ? { passes: input.passes } : {}),
     ...(input.media ? { media: runtimeMedia(input.media) } : {}),
-    ...(input.handAssets && usesHands(input.play) ? { hands: input.handAssets } : {}),
+    ...(input.handAssets && usesHands(input.play) && !input.play.hands?.source ? { hands: input.handAssets } : {}),
+    ...(bundleTracks(input) ? { tracks: bundleTracks(input) } : {}),
     ...(Object.keys(graphs).length ? { backgroundGraphs: graphs } : {}),
     ...(input.datasets && Object.keys(input.datasets).length ? { datasets: input.datasets } : {}),
     generatedBy: 'Playfield',
@@ -382,10 +426,10 @@ function runtimeOptions(o: EmbedOptions) {
  * createLayerKit. The kit's files keep their top-level names distinct so
  * they can share this scope.
  */
-export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, relationshipSource, agentsSource, handsSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, incrementSource, audioFxSource, drumPadsSource, granulatorSource, fnSource];
+export const KIT_SOURCES = [particleSource, geometrySource, sketch3dSource, p5Source, fontsSource, layersSource, mattesSource, bodiesSource, relationshipSource, agentsSource, handsSource, tracksSource, faceSource, poseSource, queueSource, dataSource, midiSource, kitSource, finishGlslSource, finishSource, signalsSource, incrementSource, audioFxSource, drumPadsSource, granulatorSource, fnSource];
 export function kitScript(): string {
   const body = KIT_SOURCES.map(src => src.replace(/^import .*$/gm, '').replace(/^export /gm, '')).join('\n');
-  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell }, granulator: { create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS, fromPoints: grFromPoints }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH }, increment: { create: incNew, range: incRange, fold: incFold, threshold: incThreshold, repeat: incRepeat, advance: incAdvance, reset: incReset, glide: incGlide }, fn: { eval: fnEval } };\n})();\n`;
+  return `var SSKit = (function () {\n${body}\nreturn { createLayerKit: createLayerKit, anchor: geoAnchor, hands: { create: hdCreate, update: hdUpdate, age: hdAge, read: hdRead, gate: hdGate, point: hdPoint, placement: hdPlacement, options: hdTrackerOptions }, tracks: { decode: tkDecode, fromBase64: tkFromBase64, driver: tkDriver, drive: tkDrive, handsFrame: tkHandsFrame, videoTime: tkVideoTime, subjectAge: tkSubjectAge }, face: { create: fcCreate, update: fcUpdate, read: fcRead, gate: fcGate, point: fcPoint }, pose: { create: psCreate, update: psUpdate, read: psRead, gate: psGate, point: psPoint }, data: { unit: kdUnit, column: kdColumn }, midi: { lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }, finish: { create: fnCreate, active: fnActive }, audioFx: { chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }, drumPads: { sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell }, granulator: { create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS, fromPoints: grFromPoints }, signals: { gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH }, increment: { create: incNew, range: incRange, fold: incFold, threshold: incThreshold, repeat: incRepeat, advance: incAdvance, reset: incReset, glide: incGlide }, fn: { eval: fnEval } };\n})();\n`;
 }
 
 /**

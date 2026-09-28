@@ -32,6 +32,16 @@ import { LinkedPickButton, LinkedRelinkButton, linkedMissingText } from '../../l
 import { isLinkedRef } from '../../../files/linkedRefs';
 import { matteRows, type EditorContext } from './editors';
 import type { Choice, FieldKit } from './fields';
+import { VideoTracking } from '../TrackingChips';
+import { TRACKER_NAMES } from '../../../types/playTracking';
+import { trackerSettingsOf } from '../trackBakeJobs';
+import type { PlayRecord } from '../../../types/play';
+
+/** "Hands, Face" when those track this layer; "Off" when none does. */
+function trackingSummary(play: PlayRecord, layerId: string): string {
+  const on = (['hands', 'face', 'pose'] as const).filter(k => trackerSettingsOf(play, k).source === layerId).map(k => TRACKER_NAMES[k]);
+  return on.length ? on.join(', ') : 'Off';
+}
 
 const FITS: Choice[] = [
   { value: 'contain', label: 'Fit inside', title: 'The whole frame inside the picture (Scale 1)' },
@@ -91,6 +101,7 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
       { id: 'video-sound', label: 'Sound' },
       { id: 'video-position', label: 'Position' },
       { id: 'video-look', label: 'Look' },
+      { id: 'video-tracking', label: 'Tracking' },
     ]}>
       <Section id="video-file" kind="video" title="Video" primary summary={l.videoId ? `${l.fileName}${l.bytes ? ` · ${sizeText(l.bytes)}` : ''}` : 'No video yet'}>
         <input ref={fileRef} type="file" accept={VIDEO_ACCEPT} style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void pick(file); }} />
@@ -134,7 +145,11 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
       </Section>
       <Section id="video-look" kind="video" title="Look" summary={`opacity ${l.opacity.toFixed(2)} · ${l.matte}`}>
         {f.prop('opacity')}
+        {f.toggle('Mirror', 'mirror', 'Flip left to right', 'Shows the video mirrored. Hands, a face or a body tracked in it are mirrored with it (left and right still mean the person’s own).')}
         {matteRows(f, pictureHidden)}
+      </Section>
+      <Section id="video-tracking" kind="video" title="Tracking" summary={trackingSummary(ctx.play, l.id)}>
+        <VideoTracking layer={l} />
       </Section>
     </BigEditorScaffold>
   );

@@ -84,6 +84,8 @@ export const ICONS = {
   scroll: { sw: 1.5, body: "<rect x='3' y='1.8' width='10' height='12.4' rx='1.5'/><path d='M5.5 5h5M5.5 8h5M5.5 11h3'/>" },
   book: { sw: 1.4, body: "<path d='M8 4.3C6.6 3.2 4.6 2.8 2 2.9v9.5c2.6-.1 4.6.3 6 1.4 1.4-1.1 3.4-1.5 6-1.4V2.9c-2.6-.1-4.6.3-6 1.4z'/><path d='M8 4.3v9.5'/>" },
   hand: { sw: 1.4, body: "<path d='M5.2 8.6V3.9a1 1 0 0 1 2 0v3.5M7.2 7.2V2.8a1 1 0 0 1 2 0v4.4M9.2 7.2V3.6a1 1 0 0 1 2 0v4M11.2 7.8V5.4a1 1 0 0 1 2 0v4.2c0 2.6-2 4.8-4.6 4.8-1.6 0-2.8-.7-3.7-2L3 10a1 1 0 0 1 1.5-1.3l.7.8'/>" },
+  face: { sw: 1.4, body: "<circle cx='8' cy='8' r='6'/><circle cx='5.9' cy='6.6' r='0.55' fill='currentColor'/><circle cx='10.1' cy='6.6' r='0.55' fill='currentColor'/><path d='M5.6 10c.6.8 1.4 1.2 2.4 1.2s1.8-.4 2.4-1.2'/>" },
+  body: { sw: 1.4, body: "<circle cx='8' cy='2.9' r='1.4'/><path d='M3.2 6.2L8 5.6l4.8.6M8 5.6v4.2M8 9.8l-2.4 4.4M8 9.8l2.4 4.4'/>" },
   sliders: { sw: 1.5, body: "<path d='M2.5 4.5h11M2.5 11.5h11'/><circle cx='6' cy='4.5' r='1.6' fill='currentColor'/><circle cx='10.5' cy='11.5' r='1.6' fill='currentColor'/>" },
   cube: { sw: 1.4, body: "<path d='M8 1.8l5.4 3.1v6.2L8 14.2l-5.4-3.1V4.9z'/><path d='M2.6 4.9L8 8l5.4-3.1M8 8v6.2'/>" },
   table: { sw: 1.4, body: "<rect x='2.2' y='2.6' width='11.6' height='10.8' rx='1.8'/><path d='M2.2 6.2h11.6M2.2 9.8h11.6M6.4 6.2v7.2'/>" },

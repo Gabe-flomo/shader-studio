@@ -4,7 +4,7 @@
  * exports (inlined with the rest of the kit, so its top-level names stay
  * distinct: everything here starts with hd / HD_).
  *
- * A tracker (MediaPipe's Hand Landmarker, lib/handTracker.ts in the app)
+ * A tracker (MediaPipe's Hand Landmarker, lib/trackerPump.ts in the app)
  * hands in raw frames:
  *
  *   { t, w, h, hands: [{ side: 'left' | 'right', score, lm: [x, y, z] × 21 }] }
@@ -143,11 +143,26 @@ export function hdTrackerOptions(hands) {
  * fraction of the picture's, rotation (degrees, clockwise) and mirroring.
  * A Camera layer (the first one) places it where it shows it; with none it
  * covers the picture, so a hand can reach every edge.
+ *
+ * Tracking a Video layer instead (`sourceId`, docs/tracking.md), the frames
+ * are that video's: they sit where the layer shows it (its position, Fit and
+ * Scale, rotation and Mirror).
  */
-export function hdPlacement(record, value, camAspect, picAspect, mirror) {
+export function hdPlacement(record, value, camAspect, picAspect, mirror, sourceId) {
+  if (sourceId) {
+    const vl = record && record.layers ? record.layers.find(l => l.id === sourceId && l.kind === 'video') : null;
+    if (vl) return { cx: value(vl, 'x'), cy: value(vl, 'y'), h: value(vl, 'scale') * hdVideoFit(vl.fit, camAspect, picAspect), rot: value(vl, 'rotation'), mirror: !!vl.mirror };
+  }
   const cam = record && record.layers ? record.layers.find(l => l.kind === 'camera') : null;
   if (cam) return { cx: value(cam, 'x'), cy: value(cam, 'y'), h: value(cam, 'scale'), rot: value(cam, 'rotation'), mirror: !!cam.mirror };
   return { cx: 0.5, cy: 0.5, h: camAspect > 0 && picAspect > 0 ? Math.max(1, picAspect / camAspect) : 1, rot: 0, mirror: mirror !== false };
+}
+
+/** A Video layer's height before its Scale (the same as layers.js klVideoFit, kept here so this file stands alone). */
+function hdVideoFit(fit, va, pa) {
+  if (fit !== 'contain' && fit !== 'cover') return 1;
+  if (!(va > 0) || !(pa > 0)) return 1;
+  return fit === 'contain' ? Math.min(1, pa / va) : Math.max(1, pa / va);
 }
 
 /** A camera-image point (0..1, y down) on the picture: [x, y] with y up. */

@@ -327,6 +327,17 @@ function parseMedia(v: unknown): PlayMedia | undefined {
     out.layerVideos = {};
     for (const [k, x] of Object.entries(v.layerVideos)) { const f = parseFile(x, 'video'); if (f) out.layerVideos[k.slice(0, 100)] = f; }
   }
+  // Baked tracks (docs/tracking.md): base64 frames per tracker, with the Video layer they belong to.
+  if (isObj(v.tracks)) {
+    const tracks: NonNullable<PlayMedia['tracks']> = {};
+    for (const kind of ['hands', 'face', 'pose'] as const) {
+      const x = v.tracks[kind];
+      if (!isObj(x) || typeof x.layerId !== 'string') continue;
+      const src = typeof x.src === 'string' && /^[A-Za-z0-9+/=]+$/.test(x.src) ? x.src : null;
+      tracks[kind] = { layerId: x.layerId.slice(0, 64), label: str(x.label, 200) ?? '', name: str(x.name, 200) ?? '', src, bytes: Math.max(0, num(x.bytes) ?? 0) };
+    }
+    if (Object.keys(tracks).length) out.tracks = tracks;
+  }
   return out;
 }
 

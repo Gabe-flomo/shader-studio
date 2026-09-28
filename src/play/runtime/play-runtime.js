@@ -158,7 +158,7 @@
     return x;
   }
   function triggerKey(t) {
-    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; case 'value': return 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance; case 'signal': return 'sig:' + t.signal; }
+    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'face': return 'face:' + t.gesture; case 'pose': return 'pose:' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; case 'value': return 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance; case 'signal': return 'sig:' + t.signal; }
     return '';
   }
   // Firing modes (once, held, every N frames or seconds, on release): how many times a trigger fires this frame.
@@ -1462,6 +1462,7 @@ void main() {
         case 'osc': { const a = shared.osc.get(s.address); if (!a) return null; const raw = a[s.arg]; const v = typeof raw === 'number' ? raw : typeof raw === 'boolean' ? (raw ? 1 : 0) : null; return v === null ? null : Math.max(0, Math.min(1, (v - s.min) / (s.max - s.min))); }
         case 'null': { const l = layersById.get(s.layerId); if (!l) return null; return Math.max(0, Math.min(1, layerValue(l.id, s.axis, l[s.axis]))); }
         case 'hand': return handSt ? HK.read(handSt, s.side, s.read, s.point, s.axis, s.gesture) : null;
+        case 'face': case 'pose': { const sj = subjects[s.kind]; return sj ? sj.K.read(sj.st, s.read, s.point, s.axis, s.gesture) : null; }
         case 'data': {
           // A dataset's current row (a Data layer's, or the first one showing it): the column there, 0..1 over its min..max.
           const r = dsResult(s.dataset);
@@ -1500,6 +1501,8 @@ void main() {
       if (pt) return pt;
       const h = handAnchorOf(ref);
       if (h) return handSt && usesHands ? HK.point(handSt, h.side, h.point) : null;
+      const tm = /^(face|pose):(\d{1,3})$/.exec(ref);
+      if (tm) { const sj = subjects[tm[1]]; return sj ? sj.K.point(sj.st, +tm[2]) : null; }
       const l = layersById.get(ref);
       return l && typeof SSKit !== 'undefined' && SSKit.anchor ? SSKit.anchor(l, k => value(l, k), glCanvas.width / Math.max(1, glCanvas.height), reported, anchorLookup) : null;
     }
@@ -1660,7 +1663,7 @@ void main() {
     }
     // Hands: this mount's view of the page's tracker (placed where its Camera layer shows the camera), and gesture triggers.
     const HK = typeof SSKit !== 'undefined' && SSKit.hands ? SSKit.hands : null;
-    const handSt = HK ? HK.create() : null;
+    let handSt = HK ? HK.create() : null;
     const handSettings = Object.assign({ smoothing: 0.5, overlay: true, colour: [0.35, 1, 0.75], mirror: true }, play.hands || {});
     // A condition on a distance to or from a hand point reads hands too.
     const condHands = c => { if (!c || typeof c.value !== 'string' || c.value.indexOf('dist:') !== 0) return false; const i = c.value.indexOf('|'); return i > 0 && (!!handAnchorOf(c.value.slice(5, i)) || !!handAnchorOf(c.value.slice(i + 1))); };
@@ -1668,21 +1671,76 @@ void main() {
     const usesHands = play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && trigHands(m.source.trigger)) || (!!m.increment && ((m.increment.on === 'trigger' && trigHands(m.increment.trigger)) || (m.increment.on === 'repeat' && condHands(m.increment.when)))) || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!handAnchorOf(m.source.otherId || '')))
       || actions.some(a => trigHands(a.trigger)) || play.layers.some(l => l.kind === 'null' && l.follow === 'hand')
       || pairMappings.some(m => (m.source.kind === 'position' ? !!handAnchorOf(m.source.anchor) : m.source.source.kind === 'hand' || (m.source.source.kind === 'trigger' && trigHands(m.source.source.trigger))) || condHands(m.a.when) || condHands(m.b.when));
-    if (usesHands && B.hands) { shared.hands.assets = B.hands; if (!shared.hands.options) shared.hands.options = HK.options(play.hands); }
+    // Baked tracks (docs/tracking.md): a Video layer the app analysed rides in the bundle (B.tracks, per tracker:
+    // { layerId, data }), and a tracker on it reads the stored frames at the video's own time (the kit's tracks.js).
+    // A tracker on a video that wasn't analysed stays at rest here (the page never runs a model on a video).
+    const TK = typeof SSKit !== 'undefined' && SSKit.tracks ? SSKit.tracks : null;
+    function bakedOf(kind) {
+      const b = B.tracks && B.tracks[kind], settings = kind === 'hands' ? play.hands : play[kind];
+      if (!TK || !b || !settings || settings.source !== b.layerId) return null;
+      const l = layersById.get(b.layerId);
+      if (!l || l.kind !== 'video') return null;
+      if (b.track === undefined) { try { b.track = TK.decode(TK.fromBase64(b.data)); } catch (e) { b.track = null; } }
+      return b.track && b.track.kind === kind ? { track: b.track, layer: l, drv: TK.driver() } : null;
+    }
+    const vtOf = bk => { const v = lVideos.get(bk.layer.id); return TK.videoTime(bk.layer, time, bk.track.duration, bk.layer.follow === false && v ? v.el.currentTime : null); };
+    const handBaked = usesHands ? bakedOf('hands') : null;
+    // Tracking a video with no analysis: nothing to read on the page, and no camera either.
+    const handsFromCamera = !handSettings.source;
+    if (usesHands && B.hands && handsFromCamera) { shared.hands.assets = B.hands; if (!shared.hands.options) shared.hands.options = HK.options(play.hands); }
     const handGates = new Set();
     let handSeq = -1;
     function tickHands() {
       if (!handSt || !usesHands) return;
       const H = shared.hands;
-      if (H.frame && H.seq !== handSeq) {
+      if (handBaked) {
+        const vt = vtOf(handBaked), picAspect = glCanvas.width / Math.max(1, glCanvas.height);
+        TK.drive(handBaked.drv, handBaked.track, vt, () => { handSt = HK.create(); }, f => {
+          const fr = TK.handsFrame(f), camAspect = fr.w / Math.max(1, fr.h);
+          HK.update(handSt, fr, { picAspect, place: HK.placement(play, value, camAspect, picAspect, handSettings.mirror, handSettings.source), smoothing: handSettings.smoothing, responsiveness: handSettings.responsiveness, maxHands: handSettings.maxHands, swap: handSettings.swap });
+        });
+        HK.age(handSt, vt * 1000);
+      } else if (handsFromCamera && H.frame && H.seq !== handSeq) {
         handSeq = H.seq;
         const picAspect = glCanvas.width / Math.max(1, glCanvas.height), camAspect = H.frame.w / Math.max(1, H.frame.h);
         HK.update(handSt, H.frame, { picAspect, place: HK.placement(play, value, camAspect, picAspect, handSettings.mirror), smoothing: handSettings.smoothing, responsiveness: handSettings.responsiveness, maxHands: handSettings.maxHands, swap: handSettings.swap });
       }
-      HK.age(handSt, performance.now());
+      if (!handBaked) HK.age(handSt, performance.now());
       for (const t of allTriggers) {
         if (t.on !== 'hand') continue;
         const k = triggerKey(t), on = HK.gate(handSt, t.side, t.gesture), open = handGates.has(k);
+        if (on && !open) { handGates.add(k); press(k); }
+        else if (!on && open) { handGates.delete(k); release(k); }
+      }
+    }
+    // Faces and bodies: from a baked track only (the page carries no face or pose model).
+    const trackAnchorOf = (ref, k) => typeof ref === 'string' && ref.indexOf(k + ':') === 0 && /^(face|pose):\d{1,3}$/.test(ref);
+    const condTrack = (c, k) => { if (!c || typeof c.value !== 'string' || c.value.indexOf('dist:') !== 0) return false; const i = c.value.indexOf('|'); return i > 0 && (trackAnchorOf(c.value.slice(5, i), k) || trackAnchorOf(c.value.slice(i + 1), k)); };
+    const trigTrack = (t, k) => t.on === k || (t.on === 'proximity' && (trackAnchorOf(t.a, k) || trackAnchorOf(t.b, k))) || (t.on === 'value' && condTrack(t, k));
+    const srcTrack = (s, k) => s.kind === k || (s.kind === 'trigger' && trigTrack(s.trigger, k)) || (s.kind === 'sensor' && s.read === 'distance' && trackAnchorOf(s.otherId, k));
+    const usesTrack = k => play.mappings.some(m => srcTrack(m.source, k) || (!!m.increment && ((m.increment.on === 'trigger' && trigTrack(m.increment.trigger, k)) || (m.increment.on === 'repeat' && condTrack(m.increment.when, k)))))
+      || actions.some(a => trigTrack(a.trigger, k)) || play.layers.some(l => l.kind === 'null' && l.follow === k)
+      || pairMappings.some(m => (m.source.kind === 'position' ? trackAnchorOf(m.source.anchor, k) : srcTrack(m.source.source, k)) || condTrack(m.a.when, k) || condTrack(m.b.when, k));
+    const subjects = {};
+    for (const k of ['face', 'pose']) {
+      const SK = typeof SSKit !== 'undefined' ? SSKit[k] : null;
+      if (!SK || !HK || !usesTrack(k)) continue;
+      const bk = bakedOf(k);
+      if (!bk) continue;
+      subjects[k] = { K: SK, st: SK.create(), bk, settings: Object.assign({ smoothing: 0.5, overlay: true, colour: k === 'face' ? [1, 0.75, 0.35] : [0.45, 0.7, 1], mirror: true }, play[k] || {}) };
+    }
+    function tickSubjects() {
+      for (const k in subjects) {
+        const s = subjects[k], vt = vtOf(s.bk), picAspect = glCanvas.width / Math.max(1, glCanvas.height);
+        TK.drive(s.bk.drv, s.bk.track, vt, () => { s.st = s.K.create(); }, f => {
+          const camAspect = f.w / Math.max(1, f.h);
+          s.K.update(s.st, f, { picAspect, place: HK.placement(play, value, camAspect, picAspect, s.settings.mirror, s.settings.source), smoothing: s.settings.smoothing, responsiveness: s.settings.responsiveness });
+        });
+        TK.subjectAge(s.st, vt * 1000);
+      }
+      for (const t of allTriggers) {
+        if (t.on !== 'face' && t.on !== 'pose') continue;
+        const s = subjects[t.on], k = triggerKey(t), on = !!s && s.K.gate(s.st, t.gesture), open = handGates.has(k);
         if (on && !open) { handGates.add(k); press(k); }
         else if (!on && open) { handGates.delete(k); release(k); }
       }
@@ -1771,6 +1829,7 @@ void main() {
       tickPads();
       if (grains.wired) tickGrains();
       tickHands();
+      tickSubjects();
       tickAudioTriggers();
       tickZoneTriggers();
       // A clock sent back: axis swaps start on A again.
@@ -2015,7 +2074,7 @@ void main() {
         }, () => { b.textContent = 'Camera blocked'; });
         tools.append(b);
       }
-      if (usesHands && B.hands) {
+      if (usesHands && B.hands && handsFromCamera) {
         const b = el('button', 'ssp-btn', 'Enable hands');
         b.title = 'Follows your hands with the camera. Everything runs on this device; nothing is uploaded.';
         const show = s => { b.textContent = s === 'on' ? 'Hands on' : s === 'starting' ? 'Starting…' : s === 'blocked' ? 'Camera blocked' : s === 'unsupported' ? 'No hand tracking here' : s === 'error' ? 'Hands didn’t start' : 'Enable hands'; b.disabled = s === 'on' || s === 'starting' || s === 'unsupported'; };
@@ -2165,6 +2224,9 @@ void main() {
         handsLive: !!(handSt && usesHands && handSt.live),
         // The skeleton is a setup aid: a page shows it only with its markers on.
         hands: handSt && usesHands && markers && handSettings.overlay && handSt.live ? { state: handSt, colour: handSettings.colour } : null,
+        track: (k, p) => (subjects[k] ? subjects[k].K.point(subjects[k].st, p) : null),
+        trackLive: k => !!(subjects[k] && subjects[k].st.live),
+        tracks: markers ? Object.keys(subjects).filter(k => subjects[k].settings.overlay && subjects[k].st.live).map(k => ({ kind: k, state: subjects[k].st, colour: subjects[k].settings.colour })) : null,
         // three.js for 3D Script layers: the page carries it (SSThree) only when it has one.
         three: typeof SSThree !== 'undefined' ? SSThree : (window.SSThree || null),
         scriptStatus: (id, err) => { const e = err || null; if (scriptErrors.get(id) === e) return; scriptErrors.set(id, e); if (onScript) { try { onScript(id, e); } catch (x) { /* the host's problem */ } } },
@@ -2562,7 +2624,7 @@ void main() {
     };
   }
 
-  // The worker that runs the Hand Landmarker (mirrors src/lib/handWorker.ts): MediaPipe's ES module and
+  // The worker that runs the Hand Landmarker (mirrors src/lib/trackerWorker.ts): MediaPipe's ES module and
   // its WebAssembly come in as blob URLs, the model as bytes. MediaPipe's "Right" is the performer's right hand (unmirrored frames).
   const HAND_WORKER = [
     'let lm = null, lastT = 0;',

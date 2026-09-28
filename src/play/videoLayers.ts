@@ -72,6 +72,8 @@ class PlayVideoLayers {
 
   constructor() {
     videoSound.setHost({ analyser: id => this.analyser(id), state: id => this.soundState(id), file: id => this.file(id) });
+    // Trackers on a Video layer read its element (a free-running video's time, live tracking before a bake).
+    playEngine.setVideoHost({ element: id => this.element(id) });
     // A video from a linked folder (docs/linked-folders.md) that changed on disk opens again; one that came back loads.
     onLinkedChange(refs => {
       let changed = false;

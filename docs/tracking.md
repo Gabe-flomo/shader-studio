@@ -1,6 +1,18 @@
-# Hand tracking
+# Tracking: hands, face and body
 
-*Play can follow your hands with the camera: fingertips move nulls, a pinch turns a knob, a fist fires a burst. Everything runs on your computer.*
+*Play can follow your hands, your face and your body, with the camera or in a video: fingertips move nulls, a pinch turns a knob, a fist fires a burst, an open mouth fires a trigger, raised hands start a drop. Everything runs on your computer.*
+
+Three trackers, each MediaPipe's own landmarker, each with its own status, settings and group in the source list:
+
+| Tracker | Model | Finds | Sources group |
+|---|---|---|---|
+| **Hands** | Hand Landmarker (`hand_landmarker.task`, float16, 7.8 MB) | up to two hands, 21 points each | Hands |
+| **Face** | Face Landmarker (`face_landmarker.task`, float16, 3.8 MB) | one face: 478 points, 52 blendshapes, the head's angles | Face |
+| **Pose** | Pose Landmarker lite (`pose_landmarker_lite.task`, float16, 5.8 MB) | one body: 33 points, each with how visible it is | Pose |
+
+Each model loads only when its tracker is first enabled (or a video is analysed with it). The three share the one camera stream. Hands are described first and in the most detail; face and pose work the same way unless their sections say otherwise.
+
+Each tracker can **track the camera or a Video layer** (its settings' **Track**): see *Tracking a video* below.
 
 ---
 
@@ -108,15 +120,97 @@ On the path's card:
 
 **Where it lives**: the geometry is in the kit (`play/kit/geometry.js`: `geoPathBuild`, `geoHull`, `geoCatmullRom`, `geoPathNodes`, `geoPathFade`, `geoPathReadings`), built each frame in `kit.js` after the nulls' springs (so it works the same in exported websites), drawn by `klDrawShape` in `layers.js`. Saved on the Shape: `shape: 'path'`, `pointIds`, `pathStyle`, `hull`, `webReach`, `circleMode`, `onLost`; files from before have the defaults.
 
+## Face tracking
+
+**Face** in the Tracking button (Mappings header) or on any face source, trigger or null: status (*Face: tracking*, *none in view*, *camera blocked*…), the eye to show or hide it on the picture, Enable / Stop and the settings (Track, Show face on picture and its colour, Strictness, Smoothing, Responsiveness, Mirror). One face at a time (MediaPipe's `numFaces` 1); a new face counts after 2 frames and one that drops out is held 250 ms, like a hand.
+
+### Sources (the Face group)
+
+| Source | Reads |
+|---|---|
+| Face point (X, Y, Z) | Any of the 478 points: the named ones in the list (nose tip, between the eyes, forehead, chin, lips, mouth corners, irises, eye corners, eyelids, brows, cheek edges), or any other by number (MediaPipe's face mesh). Z is 0.5 level with the face and rises toward the camera (measured against the face's width). |
+| Mouth open | MediaPipe's `jawOpen`: 0 closed, 1 wide open. |
+| Smile | Both mouth corners up (`mouthSmileLeft` and `Right`, averaged). |
+| Brows up / Brows down | `browInnerUp`; `browDownLeft` and `Right` averaged (a frown). |
+| Blink left / Blink right | `eyeBlinkLeft`, `eyeBlinkRight`: 1 shut. The sides are as MediaPipe names them. |
+| Jaw sideways | `jawLeft` − `jawRight`: 0.5 centred. |
+| Head turn, nod, tilt | Yaw, pitch and roll from MediaPipe's facial transformation matrix: 0.5 facing the camera, 0 and 1 at ±90°. Mirrored, turn and tilt go the way they look on the picture. |
+| Any blendshape | One of the 52, by name. |
+| Face nearness | How big the face looks: 0 far, 1 close. |
+| Face in view, Face gesture held | 1 while a face is seen; 1 while a gesture is held. |
+
+### Gestures (On: Face gesture)
+
+| Gesture | Starts / ends |
+|---|---|
+| Mouth opens | `jawOpen` past 0.35 / below 0.2 |
+| Smile | the smile past 0.5 / below 0.3 |
+| Blink (both eyes) | both eyes' blink past 0.55 / below 0.35 |
+| Wink left, Wink right | one eye's blink past 0.55 / below 0.35 |
+| Brows up | `browInnerUp` past 0.5 / below 0.3 |
+| Comes into view, Leaves view | as for hands |
+
+## Pose (body) tracking
+
+**Pose**: the same chip and settings as Face. One body at a time (`numPoses` 1). Left and right are the performer's own (MediaPipe's `left_wrist` is the person's left wrist; frames reach it unmirrored).
+
+### Sources (the Pose group)
+
+| Source | Reads |
+|---|---|
+| Body point (X, Y, Z) | Any of the 33 points: nose, eyes, ears, mouth, shoulders, elbows, wrists, hands (pinky, index, thumb), hips, knees, ankles, heels, feet. Z is 0.5 level with the hips (measured against the shoulders). |
+| Point visible | How sure the model is that a point is in view (a hand behind the back reads low). |
+| Shoulder lean | The shoulders' tilt: 0.5 level, more with the right-hand shoulder on the picture lower. |
+| Wrists apart | Wrist to wrist, 1 = a picture width. |
+| Body nearness | Shoulder width: 0 far, 1 close. |
+| Body in view, Pose gesture held | As for faces. |
+
+### Gestures (On: Pose gesture)
+
+| Gesture | Is |
+|---|---|
+| Both hands up | Both wrists above the nose (a quarter of a shoulder width above to start, back at the nose to stop). |
+| Left hand up, Right hand up | That wrist above the nose. |
+| Arms out | Both wrists well out past their shoulders, near shoulder height. |
+| Comes into view, Leaves view | As for hands. |
+
+A pose gesture needs the points it looks at to be visible (0.5 or surer), so an arm out of the picture never fires one.
+
+### Nulls, anchors and the picture
+
+A null's **Follows** can be **A face** or **A body**: pick the point (face: the named ones or any by number; body: any of the 33). It chases it on its spring like a hand null, rests where it was placed until the tracker has seen something, and waits where it was when the face or body leaves. Proximity and distance conditions can measure from a face or body point through such a null (or directly from a `face:<n>` / `pose:<n>` anchor in a file). **Show on picture** draws the face (its outline, eyes, brows, lips and irises) or the body (its skeleton, faint where a point isn't visible) in its own colour, with its own switch, like the hand.
+
+Learn listens to hands only for now.
+
+## Tracking a video
+
+Every tracker's settings have **Track: Camera / Video · <layer>** (the Video layer card's **Tracking** section does the same from the other side: *Track this video* per tracker). Tracking a video, frames come from that layer's video, respecting its own Start at, Speed and Loop, and the landmarks are placed where the layer shows the video on the picture: its position, Fit and Scale, rotation, and its **Mirror** (a Video layer now has one, under Look). Everything downstream is unchanged: sources, gestures, nulls, proximity, Learn and `hdUpdate`'s steadying (so labels don't flip in a video either).
+
+### Analyse video (baked tracks)
+
+A video repeats, so tracking it once is enough. **Analyse video** (with 30, 15 or 10 frames a second) runs the tracker over the whole clip: the video is seeked to each step and the frame handed to the model, in a worker, with a progress bar and **Cancel**. The result is a **baked track**: per frame, each hand's 21 points with its side and score (or the face's 478 points, head angles and blendshapes, or the body's 33 points and visibility), quantised to 16 bits over ±4 (a step of 0.00012, a tenth of a pixel in a 480 px frame) with a table of frame times (`play/kit/tracks.js`, format in its header). Sizes at 30 fps: hands about 0.5 KB a second (both hand slots), a body 0.25 KB, a face 3 KB.
+
+Playback, scrubbing, takes, offline renders and website exports then read the baked track by the **video's own time** (its clock time through Start at, Speed and Loop; a free-running video's element time), interpolating between frames, matching hands between frames by where their wrist is. There's no model at run time and the result is the same every time. After a jump (a seek, a loop, scrubbing back) the tracker's state starts afresh and replays the 0.6 s before the new time at the analysis rate, so where it lands depends on the time only, not on how it got there (`tkDrive`). Holding and smoothing run on video time too.
+
+- **Where it's kept**: the frames in the browser's own track store (IndexedDB `shader-studio-tracks`, one record per analysis); the setup keeps a note of each (`bakes` in the tracker's settings: the layer, the video file it was made from, the settings, frames, rate, size). Where IndexedDB refuses, the analysis lasts for the session.
+- **Stale**: a different file in the layer never reads an old analysis. Changed tracker settings (Strictness, hands to track) are noted: *The settings changed since: analyse again to use them*; the old analysis is still read until then. A browser that doesn't have the analysis (another browser, a file from someone else) says so and tracks the video live.
+- **Live, before analysing**: a tracker on a video that hasn't been analysed tracks it live as it plays, like the camera (no camera needed), with the hint to analyse for exact results. Once analysed, the live tracker stops.
+- **Longest**: 10 minutes of video are analysed.
+
+### On a website
+
+A page carries each tracker's analysis as base64 (listed with its size under what the page carries; left out past 16 MB with a note to analyse at a lower rate or trim the clip), and the page's runtime reads it with the kit's own code. It needs no MediaPipe and no Include hand tracking for a video's hands. A tracker on a video that wasn't analysed stays at rest on the page (listed under what it leaves behind). Face and pose from the **camera** aren't in pages yet: listed as left behind.
+
 ## Recording
 
 Takes record hands like everything else: controls driven by hand sources and gesture envelopes are control tracks, following nulls are null tracks, and actions a gesture fired are events. Playing a take back rests the tracker (the take has every value, and a hand waved meanwhile changes nothing); rendering a take frame by frame reproduces it exactly. The skeleton overlay is a live guide and isn't part of a rendered take.
 
 ## How it works
 
-- **Model**: MediaPipe's Hand Landmarker (`@mediapipe/tasks-vision`, the float16 `hand_landmarker.task`, 7.8 MB, from Google's MediaPipe model storage), up to two hands of 21 landmarks each.
-- **Files**: the model is in `public/mediapipe/`; MediaPipe's WebAssembly is served from the npm package at `<base>mediapipe/wasm/` (`vite.config.ts` serves it in dev and copies it into a build). The app never fetches anything from the internet for hand tracking.
-- **Loading**: nothing loads until hands are first enabled. `lib/handFeed.ts` (status, the newest frame) is tiny and in the main bundle; it imports `lib/handTracker.ts` on demand, which starts `lib/handWorker.ts` in a module worker holding MediaPipe.
+- **Models**: MediaPipe's Hand, Face and Pose Landmarkers (`@mediapipe/tasks-vision`; the float16 `hand_landmarker.task` 7.8 MB, `face_landmarker.task` 3.8 MB and `pose_landmarker_lite.task` 5.8 MB, from Google's MediaPipe model storage).
+- **Files**: the models are in `public/mediapipe/`; MediaPipe's WebAssembly is served from the npm package at `<base>mediapipe/wasm/` (`vite.config.ts` serves it in dev and copies it into a build). The app never fetches anything from the internet for tracking.
+- **Loading**: nothing loads until a tracker is first enabled. `lib/handFeed.ts` (a `TrackerFeed` per tracker: status, the newest frame, the camera or a Video layer as the source) is tiny and in the main bundle; it imports `lib/trackerPump.ts` on demand, which starts `lib/trackerWorker.ts` in a module worker holding MediaPipe with that tracker's model. An analysis (`lib/trackBakes.ts analyseVideo`) starts a worker of its own.
+- **Face and pose**: `play/kit/face.js` and `play/kit/pose.js` (readings, gestures, drawing) on a shared one-subject tracker in `play/kit/tracks.js` (placement, one-euro smoothing, appear and hold), which also holds the baked-track codec and `tkDrive`. Types and file reading: `types/playTracking.ts`; the UI: `components/play/TrackingChips.tsx` and `trackBakeJobs.ts`.
 - **Frames**: about 30 a second, never more than one in flight, the camera frame scaled to 480 px wide as an ImageBitmap and handed to the worker. The model runs there, GPU first (WebGL2 on an OffscreenCanvas), falling back to the CPU. The render loop never waits on it.
 - **Meaning**: `play/kit/hands.js` turns landmarks into hands on the picture (plausibility, tracks and steady sides, placement, mirroring, one-euro smoothing, the hold), readings and gestures. The same file runs in web exports, with the setup's settings (the page's tracker takes Hands to track and the thresholds when it starts).
 - **Settings reach the model live**: the engine hands `hdTrackerOptions(settings)` to `handFeed.configure`, which passes a change to the running worker (`HandLandmarker.setOptions`).

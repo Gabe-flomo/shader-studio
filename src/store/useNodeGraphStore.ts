@@ -23,7 +23,9 @@ import { migratePlayRecord } from './migratePlay';
 import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
 import { bakeControlValues, bakeLayerValues } from '../play/playControls';
-import { buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia, type PlayMediaFile } from '../play/exportHtml';
+import { TRACK_LIMIT, buildPlayHtml, type EmbedOptions, type PlayHtmlInput, type PlayMedia, type PlayMediaFile } from '../play/exportHtml';
+import { bakeFor } from '../types/playTracking';
+import { bakeBase64 } from '../lib/trackBakes';
 import { loadThreeSource, playUses3D } from '../play/threeSource';
 import { webInputFrom } from '../play/webInput';
 import { queueGraphsForWeb } from '../play/queueGraphs';
@@ -1569,7 +1571,19 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
     const m = mediaSource(`dsample:${sm.sampleId}`);
     rackSamples[r.id] = { label: `${r.name} · Granulator`, name: sm.name || m?.name || '', src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : 0) };
   }
-  return { textures, videos, audio, ...(Object.keys(layerVideos).length ? { layerVideos } : {}), ...(Object.keys(layerPads).length ? { layerPads } : {}), ...(Object.keys(rackSamples).length ? { rackSamples } : {}) };
+  // Trackers on a Video layer: their analysis (lib/trackBakes.ts), when it is loaded here and small enough.
+  const tracks: NonNullable<PlayMedia['tracks']> = {};
+  for (const kind of ['hands', 'face', 'pose'] as const) {
+    const s = kind === 'hands' ? st.play.hands : st.play[kind];
+    const layer = s?.source ? st.play.layers.find(l => l.id === s.source) : undefined;
+    if (!s || !layer || layer.kind !== 'video' || !layer.videoId) continue;
+    const b = bakeFor(s.bakes, layer.id, layer.videoId, '');
+    if (!b) continue;
+    const size = Math.ceil(b.bake.bytes / 3) * 4;
+    const data = size <= TRACK_LIMIT ? bakeBase64(b.bake.key) : null;
+    tracks[kind] = { layerId: layer.id, label: `“${layer.label}”`, name: layer.fileName, src: data, bytes: data?.length ?? size };
+  }
+  return { textures, videos, audio, ...(Object.keys(layerVideos).length ? { layerVideos } : {}), ...(Object.keys(layerPads).length ? { layerPads } : {}), ...(Object.keys(rackSamples).length ? { rackSamples } : {}), ...(Object.keys(tracks).length ? { tracks } : {}) };
 }
 
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
