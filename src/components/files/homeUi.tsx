@@ -22,10 +22,10 @@ export function Sparkline({ values, width = 96, height = 28, colour }: { values:
   const area = `${line} L${pts[pts.length - 1][0].toFixed(1)} ${height} L${pts[0][0].toFixed(1)} ${height} Z`;
   const last = pts[pts.length - 1];
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true" style={{ display: 'block', width: '100%', height, overflow: 'visible' }}>
       <path d={area} fill={alpha(colour, 0.12)} />
-      <path d={line} fill="none" stroke={colour} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={last[0]} cy={last[1]} r={3} fill={colour} />
+      <path d={line} fill="none" stroke={colour} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <circle cx={last[0]} cy={last[1]} r={3} fill={colour} vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
@@ -44,7 +44,7 @@ export function StatTile({ icon, label, count, perDay, days, compact }: { icon: 
       <span style={{ font: `650 ${compact ? 22 : 26}px ${fontFamily.ui}`, letterSpacing: '-0.02em', color: tk.text.primary, lineHeight: 1.1 }}>{count}</span>
       <div style={{ position: 'relative', marginTop: 2 }}
         onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); setHover(Math.max(0, Math.min(days - 1, Math.round(((e.clientX - r.left) / r.width) * (days - 1))))); }}>
-        <Sparkline values={perDay} width={compact ? 120 : 140} height={26} colour={count ? tk.accent.base : tk.text.disabled} />
+        <Sparkline values={perDay} width={140} height={26} colour={count ? tk.accent.base : tk.text.disabled} />
         {hover != null && (
           <span role="tooltip" style={{ position: 'absolute', left: 0, bottom: '100%', marginBottom: 4, padding: '3px 7px', borderRadius: radius.sm, background: tk.tooltip.bg, color: tk.tooltip.text, font: `11px ${fontFamily.ui}`, whiteSpace: 'nowrap', pointerEvents: 'none' }}>
             {dayLabel(hover)}: {perDay[hover]}
