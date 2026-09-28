@@ -440,15 +440,16 @@ function agSubstep(st, rules, h, aspect, info) {
             if (!alive[i] || !agApplies(q, group[i])) continue;
             const c = agTargetOf(st, q, i, near);
             if (!c) continue;
-            const dx = c[0] - x[i], dy = c[1] - y[i], d2 = dx * dx + dy * dy, d = Math.sqrt(d2) || 1e-6, g = w * 0.05 / (d2 + s2);
+            const dx = c[0] - x[i], dy = c[1] - y[i], d2 = dx * dx + dy * dy, d = Math.sqrt(d2) || 1e-6, g = w * 0.005 / (d2 + s2);
             ax[i] += (dx / d) * g; ay[i] += (dy / d) * g;
           }
           break;
         }
-        // Pairs: G scaled by the count so the pull doesn't grow with it.
+        // Pairs: G scaled by the count so the pull doesn't grow with it. (Weight 1 is a
+        // gentle pull; the owner found the old scale chaotic past 0.1.)
         let live = 0;
         for (let i = 0; i < n; i++) if (alive[i]) live++;
-        const G = (w * 0.25) / Math.max(1, live), far = q.radius > 0 ? q.radius : n > AG_PAIRS_ALL ? AG_FAR_PAIRS : 0;
+        const G = (w * 0.025) / Math.max(1, live), far = q.radius > 0 ? q.radius : n > AG_PAIRS_ALL ? AG_FAR_PAIRS : 0;
         for (let i = 0; i < n; i++) {
           if (!alive[i] || !agApplies(q, group[i])) continue;
           const gi = group[i];
