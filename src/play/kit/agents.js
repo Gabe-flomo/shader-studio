@@ -832,7 +832,7 @@ function agGoo(c, st, l, v, W, H, dpr, cols, size, px, py) {
   const blend = Math.max(1, v('gooBlend')), t = v('gooThreshold'), soft = v('gooSoft');
   let reach = 1;
   for (let g = 1; g <= AG_GROUPS; g++) if (st.counts[g - 1]) reach = Math.max(reach, size(g) * blend);
-  const cell = gooCell(W, H, reach);
+  const cell = gooCell(W, H, reach, st.n);
   const gw = Math.max(1, Math.ceil(W / cell)), gh = Math.max(1, Math.ceil(H / cell));
   const vv = new Float32Array(gw * gh), rgb = new Float32Array(gw * gh * 3);
   for (let i = 0; i < st.n; i++) {

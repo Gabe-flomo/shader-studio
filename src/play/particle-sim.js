@@ -1013,14 +1013,15 @@ export function gooSplat(v, rgb, gw, gh, cell, px, py, R, w, c) {
 }
 
 /** Cell size for the goo grid (px): at most ~160k cells, and never coarser than a quarter of a blob's reach unless the grid would pass ~400k cells. */
-export function gooCell(W, H, reach) {
-  const budget = Math.sqrt((W * H) / 160000), floor = Math.sqrt((W * H) / 400000);
+export function gooCell(W, H, reach, count = Infinity) {
+  // Up to ~160k cells; a small crowd (a few hundred) can afford the fine grid of ~400k.
+  const budget = Math.sqrt((W * H) / (count <= 600 ? 400000 : 160000)), floor = Math.sqrt((W * H) / 400000);
   return Math.max(1, floor, Math.min(budget, reach / 4));
 }
 
 function drawGoo(ctx, st, p, env) {
   const W = env.W, H = env.H, alpha = env.alpha == null ? 1 : env.alpha;
-  const cell = gooCell(W, H, Math.max(1, p.size * (env.dpr || 1) * Math.max(1, p.gooBlend ?? 2.5)));
+  const cell = gooCell(W, H, Math.max(1, p.size * (env.dpr || 1) * Math.max(1, p.gooBlend ?? 2.5)), st.alive ? st.alive.reduce((n, a) => n + (a ? 1 : 0), 0) : Infinity);
   const gw = Math.max(1, Math.ceil(W / cell)), gh = Math.max(1, Math.ceil(H / cell));
   const { v, rgb } = gooField(st, p, env, gw, gh, cell);
   gooBlit(ctx, st, v, rgb, gw, gh, cell, p.gooThreshold ?? 0.5, p.gooSoft ?? 0.2, alpha);
@@ -1037,11 +1038,27 @@ export function gooBlit(ctx, holder, v, rgb, gw, gh, cell, t, soft, alpha) {
     st.gooImg = st.goo.getContext('2d').createImageData(gw, gh);
   }
   const img = st.gooImg, d = img.data;
+  // The edge is always smoothed over about one cell: where the Goo edge setting
+  // is narrower than the field's change across a cell, the cut follows the
+  // local slope instead of stepping cell by cell (a hard edge stays crisp,
+  // not blocky).
+  const tt = Math.min(0.99, Math.max(0.01, t)), ss = Math.min(1, Math.max(0, soft));
+  const window = (tt + (1 - tt) * ss) - tt * (1 - ss);
   for (let k = 0, n = gw * gh; k < n; k++) {
     const f = v[k], o = k * 4;
-    const a = f > 0 ? gooAlpha(f, t, soft) : 0;
+    let a = 0;
+    if (f > 0 || ss < 1) {
+      const x = k % gw, y = (k - x) / gw;
+      const gx = (x + 1 < gw ? v[k + 1] : f) - (x > 0 ? v[k - 1] : f);
+      const gy = (y + 1 < gh ? v[k + gw] : f) - (y > 0 ? v[k - gw] : f);
+      const slope = Math.hypot(gx, gy) * 0.5;
+      if (slope > window) {
+        const u = Math.min(1, Math.max(0, (f - tt) / slope + 0.5));
+        a = u * u * (3 - 2 * u);
+      } else if (f > 0) a = gooAlpha(f, tt, ss);
+    }
     if (a <= 0) { d[o + 3] = 0; continue; }
-    const inv = 255 / f;
+    const inv = 255 / Math.max(f, 1e-6);
     d[o] = rgb[k * 3] * inv; d[o + 1] = rgb[k * 3 + 1] * inv; d[o + 2] = rgb[k * 3 + 2] * inv; d[o + 3] = a * 255;
   }
   st.goo.getContext('2d').putImageData(img, 0, 0);
