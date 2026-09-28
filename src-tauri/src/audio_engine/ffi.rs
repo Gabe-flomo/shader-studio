@@ -44,6 +44,15 @@ mod sys {
         pub fn ae_tap_read(out: *mut f32, max: c_int, from: *mut u64, written: *mut u64) -> c_int;
         pub fn ae_tap_info(rate: *mut f64, install_ns: *mut u64, first_ns: *mut u64) -> c_int;
         pub fn ae_tap_stop() -> c_int;
+        // Plug-in windows' placement and memory (pure helpers; the tests below).
+        #[allow(dead_code)]
+        pub fn ae_win_place(want: *const f64, axes: c_int, limits: *const f64, saved: *const f64, screen: *const f64, out: *mut f64) -> c_int;
+        #[allow(dead_code)]
+        pub fn ae_win_key(t: u32, s: u32, m: u32) -> *mut c_char;
+        #[allow(dead_code)]
+        pub fn ae_win_store(suite: *const c_char, key: *const c_char, rect: *const f64) -> c_int;
+        #[allow(dead_code)]
+        pub fn ae_win_recall(suite: *const c_char, key: *const c_char, out: *mut f64) -> c_int;
     }
 }
 
@@ -304,3 +313,119 @@ mod imp {
 }
 
 pub use imp::*;
+
+/// Plug-in windows: where one goes (sized to the plug-in, clamped to the screen, a
+/// remembered frame restored) and the per-plug-in memory, in a throwaway defaults suite.
+#[cfg(all(test, target_os = "macos"))]
+mod window_tests {
+    use super::sys;
+    use std::ffi::{CStr, CString};
+    use std::ptr;
+
+    const SCREEN: [f64; 4] = [0.0, 25.0, 1440.0, 875.0]; // a visible frame below the menu bar
+
+    fn place(want: [f64; 2], axes: i32, limits: Option<[f64; 4]>, saved: Option<[f64; 4]>) -> ([f64; 4], i32) {
+        let mut out = [0.0; 4];
+        let l = limits.as_ref().map_or(ptr::null(), |l| l.as_ptr());
+        let s = saved.as_ref().map_or(ptr::null(), |s| s.as_ptr());
+        let used = unsafe { sys::ae_win_place(want.as_ptr(), axes, l, s, SCREEN.as_ptr(), out.as_mut_ptr()) };
+        (out, used)
+    }
+
+    #[test]
+    fn a_new_window_is_the_plugin_s_size_centred() {
+        let (r, used) = place([600.0, 428.0], 0, None, None);
+        assert_eq!(used, 0);
+        assert_eq!(r, [420.0, 249.0, 600.0, 428.0]);
+    }
+
+    #[test]
+    fn a_window_is_never_bigger_than_the_screen_nor_off_it() {
+        let (r, _) = place([3000.0, 2000.0], 0, None, None);
+        assert_eq!(r, SCREEN);
+        // A saved frame off the right and bottom edges comes back on screen.
+        let (r, used) = place([400.0, 300.0], 0, None, Some([1300.0, -200.0, 400.0, 300.0]));
+        assert_eq!(used, 1);
+        assert_eq!(r, [1040.0, 25.0, 400.0, 300.0]);
+    }
+
+    #[test]
+    fn a_fixed_plugin_keeps_its_size_but_its_remembered_place() {
+        let (r, used) = place([400.0, 300.0], 0, None, Some([100.0, 200.0, 900.0, 700.0]));
+        assert_eq!(used, 1);
+        // The saved top-left (y + h = 900) is kept; the size is the plug-in's.
+        assert_eq!(r, [100.0, 600.0, 400.0, 300.0]);
+    }
+
+    #[test]
+    fn a_resizable_plugin_gets_its_remembered_size_within_its_limits() {
+        let (r, _) = place([400.0, 300.0], 3, Some([200.0, 150.0, 0.0, 0.0]), Some([100.0, 200.0, 900.0, 700.0]));
+        assert_eq!(r, [100.0, 200.0, 900.0, 700.0]);
+        // Under its minimum: the minimum; over a maximum: the maximum.
+        let (r, _) = place([400.0, 300.0], 3, Some([200.0, 150.0, 0.0, 0.0]), Some([100.0, 200.0, 50.0, 40.0]));
+        assert_eq!((r[2], r[3]), (200.0, 150.0));
+        let (r, _) = place([400.0, 300.0], 3, Some([200.0, 150.0, 640.0, 480.0]), Some([100.0, 200.0, 900.0, 700.0]));
+        assert_eq!((r[2], r[3]), (640.0, 480.0));
+        // No saved frame: the plug-in's size.
+        let (r, used) = place([400.0, 300.0], 3, Some([200.0, 150.0, 0.0, 0.0]), None);
+        assert_eq!((used, r[2], r[3]), (0, 400.0, 300.0));
+    }
+
+    #[test]
+    fn a_plugin_that_stretches_one_way_keeps_its_size_the_other() {
+        // Width only (1): the saved width, the plug-in's height (top-left kept).
+        let (r, _) = place([400.0, 300.0], 1, Some([200.0, 150.0, 0.0, 0.0]), Some([100.0, 200.0, 900.0, 700.0]));
+        assert_eq!(r, [100.0, 600.0, 900.0, 300.0]);
+        // Height only (2).
+        let (r, _) = place([400.0, 300.0], 2, Some([200.0, 150.0, 0.0, 0.0]), Some([100.0, 200.0, 900.0, 700.0]));
+        assert_eq!(r, [100.0, 200.0, 400.0, 700.0]);
+    }
+
+    #[test]
+    fn a_nonsense_saved_frame_is_ignored() {
+        let (r, used) = place([400.0, 300.0], 3, None, Some([f64::NAN, 0.0, 400.0, 300.0]));
+        assert_eq!(used, 0);
+        assert_eq!(r, [520.0, 313.0, 400.0, 300.0]);
+        let (_, used) = place([400.0, 300.0], 3, None, Some([10.0, 10.0, 0.0, 300.0]));
+        assert_eq!(used, 0);
+    }
+
+    fn key(t: &[u8; 4], s: &[u8; 4], m: &[u8; 4]) -> String {
+        let cc = |b: &[u8; 4]| u32::from_be_bytes(*b);
+        unsafe {
+            let p = sys::ae_win_key(cc(t), cc(s), cc(m));
+            let k = CStr::from_ptr(p).to_string_lossy().into_owned();
+            sys::ae_free(p);
+            k
+        }
+    }
+
+    #[test]
+    fn plugins_are_keyed_by_component_description() {
+        assert_eq!(key(b"aufx", b"dely", b"appl"), "aufx/dely/appl");
+        assert_eq!(key(b"aumu", b"dls ", b"appl"), "aumu/dls /appl");
+        assert_eq!(key(b"aufx", &[0, 1, 2, 3], b"appl"), "aufx/00010203/appl");
+    }
+
+    #[test]
+    fn frames_are_remembered_per_plugin_and_forgotten() {
+        let suite = CString::new(format!("com.playfield.tests.plugin-windows.{}", std::process::id())).unwrap();
+        let a = CString::new("aufx/dely/appl").unwrap();
+        let b = CString::new("aufx/rvb2/appl").unwrap();
+        let mut out = [0.0; 4];
+        unsafe {
+            assert_eq!(sys::ae_win_recall(suite.as_ptr(), a.as_ptr(), out.as_mut_ptr()), 0);
+            let fa = [10.0, 20.0, 640.0, 480.0];
+            let fb = [300.0, 400.0, 500.0, 350.0];
+            assert_eq!(sys::ae_win_store(suite.as_ptr(), a.as_ptr(), fa.as_ptr()), 0);
+            assert_eq!(sys::ae_win_store(suite.as_ptr(), b.as_ptr(), fb.as_ptr()), 0);
+            assert_eq!(sys::ae_win_recall(suite.as_ptr(), a.as_ptr(), out.as_mut_ptr()), 1);
+            assert_eq!(out, fa);
+            assert_eq!(sys::ae_win_recall(suite.as_ptr(), b.as_ptr(), out.as_mut_ptr()), 1);
+            assert_eq!(out, fb);
+            assert_eq!(sys::ae_win_store(suite.as_ptr(), a.as_ptr(), ptr::null()), 0);
+            assert_eq!(sys::ae_win_recall(suite.as_ptr(), a.as_ptr(), out.as_mut_ptr()), 0);
+            assert_eq!(sys::ae_win_store(suite.as_ptr(), b.as_ptr(), ptr::null()), 0);
+        }
+    }
+}

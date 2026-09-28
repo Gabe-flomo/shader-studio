@@ -34,6 +34,7 @@
 #import <AudioUnit/AUCocoaUIView.h>
 #import <AppKit/AppKit.h>
 #import <os/lock.h>
+#import <objc/runtime.h>
 #import <mach/mach_time.h>
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -1191,6 +1192,120 @@ int ae_tap_stop(void) {
 }
 
 // ── Plug-in windows ──────────────────────────────────────────────────────────
+//
+// A plug-in's window opens at the plug-in's own size (ae_plugin_size: an AUv3's
+// preferredContentSize, else the loaded view's own size). It can be resized only along
+// the axes the plug-in's view and its contents stretch (ae_view_axes); then the view is
+// pinned to the window and its own minimum (auto layout's fitting size) is honoured, and
+// an axis that doesn't stretch stays at the plug-in's size. With neither, the window is
+// fixed (no Resizable in its style), except that a view bigger than the
+// screen goes in a scroll view the window can grow up to the view's full size. When the
+// plug-in changes its own size (preferredContentSize, or an AUv2 view's frame) the window
+// follows, keeping its top-left corner. The last frame per plug-in (keyed by its
+// component description) is kept in the user defaults and restored on reopen: the
+// position always, the size only when the plug-in resizes; always clamped to a screen.
+
+#define AE_WIN_DEFAULTS @"PlugInWindowFrames"
+
+static BOOL ae_size_ok(NSSize s) {
+  return isfinite(s.width) && isfinite(s.height) && s.width >= 16 && s.height >= 16 && s.width < 20000 && s.height < 20000;
+}
+
+/**
+ * Where a plug-in window goes (pure; AppKit frame coordinates, origin bottom-left).
+ *   want:   w, h — the frame size the plug-in asks for.
+ *   axes:   the axes the window resizes along (1 width, 2 height): on those a saved
+ *           size replaces `want`, then `limits` apply.
+ *   limits: minW, minH, maxW, maxH (a max ≤ 0 is unbounded), or NULL.
+ *   saved:  x, y, w, h of the last frame, or NULL.
+ *   screen: x, y, w, h of the screen's visible frame.
+ *   out:    x, y, w, h (whole points).
+ * With no saved frame the window is centred on the screen; with one it keeps the saved
+ * top-left corner. Either way it's no bigger than the screen and wholly on it.
+ * Returns 1 when the saved frame was used, 0 when not, -1 on bad arguments.
+ */
+int ae_win_place(const double *want, int axes, const double *limits, const double *saved, const double *screen, double *out) {
+  if (!want || !screen || !out) return -1;
+  double w = want[0], h = want[1];
+  int used = saved && isfinite(saved[0]) && isfinite(saved[1]) && saved[2] > 0 && saved[3] > 0;
+  if (used && (axes & 1)) w = saved[2];
+  if (used && (axes & 2)) h = saved[3];
+  if ((axes & 1) && limits) {
+    if (limits[2] > 0) w = fmin(w, limits[2]);
+    w = fmax(w, limits[0]);
+  }
+  if ((axes & 2) && limits) {
+    if (limits[3] > 0) h = fmin(h, limits[3]);
+    h = fmax(h, limits[1]);
+  }
+  double sx = screen[0], sy = screen[1], sw = screen[2], sh = screen[3];
+  w = round(fmax(1, fmin(w, sw)));
+  h = round(fmax(1, fmin(h, sh)));
+  double x, y;
+  if (used) { x = saved[0]; y = saved[1] + saved[3] - h; }
+  else { x = sx + (sw - w) / 2; y = sy + (sh - h) / 2; }
+  x = fmin(fmax(x, sx), sx + sw - w);
+  y = fmin(fmax(y, sy), sy + sh - h);
+  out[0] = round(x); out[1] = round(y); out[2] = w; out[3] = h;
+  return used;
+}
+
+static NSString *ae_win_code(OSType t) {
+  char c[5] = { (char)((t >> 24) & 0xff), (char)((t >> 16) & 0xff), (char)((t >> 8) & 0xff), (char)(t & 0xff), 0 };
+  for (int i = 0; i < 4; i++) if (c[i] < 0x20 || c[i] > 0x7e) return [NSString stringWithFormat:@"%08x", (unsigned)t];
+  return [NSString stringWithUTF8String:c];
+}
+
+/** A plug-in's key for its remembered window: "type/subtype/manufacturer" as four-char codes. */
+static NSString *ae_unit_key(OSType t, OSType s, OSType m) {
+  return [NSString stringWithFormat:@"%@/%@/%@", ae_win_code(t), ae_win_code(s), ae_win_code(m)];
+}
+
+char *ae_win_key(uint32_t t, uint32_t s, uint32_t m) {
+  @autoreleasepool { return ae_strdup(ae_unit_key(t, s, m)); }
+}
+
+static NSUserDefaults *ae_win_defaults(const char *suite) {
+  return suite && *suite ? [[NSUserDefaults alloc] initWithSuiteName:[NSString stringWithUTF8String:suite]] : NSUserDefaults.standardUserDefaults;
+}
+
+static BOOL ae_win_recall_in(NSUserDefaults *d, NSString *key, double *out) {
+  NSDictionary *all = [d dictionaryForKey:AE_WIN_DEFAULTS];
+  NSArray *a = [all[key] isKindOfClass:NSArray.class] ? all[key] : nil;
+  if (a.count != 4) return NO;
+  for (int i = 0; i < 4; i++) {
+    if (![a[i] isKindOfClass:NSNumber.class]) return NO;
+    out[i] = [a[i] doubleValue];
+    if (!isfinite(out[i])) return NO;
+  }
+  return out[2] > 0 && out[3] > 0;
+}
+
+static void ae_win_store_in(NSUserDefaults *d, NSString *key, const double *r) {
+  NSMutableDictionary *all = [[d dictionaryForKey:AE_WIN_DEFAULTS] mutableCopy] ?: [NSMutableDictionary new];
+  if (r) all[key] = @[@(r[0]), @(r[1]), @(r[2]), @(r[3])];
+  else [all removeObjectForKey:key];
+  [d setObject:all forKey:AE_WIN_DEFAULTS];
+}
+
+/** Remember (rect x,y,w,h) or forget (rect NULL) a plug-in's window frame; suite NULL = the app's defaults. */
+int ae_win_store(const char *suite, const char *key, const double *rect) {
+  @autoreleasepool {
+    if (!key) return -1;
+    @try { ae_win_store_in(ae_win_defaults(suite), [NSString stringWithUTF8String:key], rect); }
+    @catch (NSException *x) { (void)x; return -1; }
+    return 0;
+  }
+}
+
+/** The remembered frame of a plug-in's window: 1 and out = x,y,w,h, or 0 when there's none. */
+int ae_win_recall(const char *suite, const char *key, double *out) {
+  @autoreleasepool {
+    if (!key || !out) return -1;
+    @try { return ae_win_recall_in(ae_win_defaults(suite), [NSString stringWithUTF8String:key], out) ? 1 : 0; }
+    @catch (NSException *x) { (void)x; return -1; }
+  }
+}
 
 static NSView *ae_cocoa_view(AudioUnit au) {
   UInt32 size = 0;
@@ -1213,32 +1328,293 @@ static NSView *ae_cocoa_view(AudioUnit au) {
   return view;
 }
 
-static void ae_show_window(NSString *key, NSString *title, NSView *view, NSViewController *vc) {
+/**
+ * The content size a plug-in's view asks for (points): an AUv3's preferredContentSize;
+ * else, for a view laid out by constraints, its fitting size; else its frame (an AUv2
+ * Cocoa view's or the generic view's own size — their fitting size is only a minimum,
+ * e.g. AUDelay's 40×129 for a 484×255 view); else its intrinsic size.
+ */
+static NSSize ae_plugin_size(NSViewController *vc, NSView *view) {
+  if (vc && ae_size_ok(vc.preferredContentSize)) return vc.preferredContentSize;
+  if (!view) return NSMakeSize(480, 320);
+  if (!view.translatesAutoresizingMaskIntoConstraints && ae_size_ok(view.fittingSize)) return view.fittingSize;
+  if (ae_size_ok(view.frame.size)) return view.frame.size;
+  NSSize i = view.intrinsicContentSize;
+  if (ae_size_ok(i)) return i;
+  if (ae_size_ok(view.fittingSize)) return view.fittingSize;
+  return NSMakeSize(480, 320);
+}
+
+/**
+ * The axes a plug-in's view can be resized along (1 width, 2 height): those it stretches
+ * along (its autoresizing mask) where what's in it stretches too — tried by growing the
+ * view by 120×90, laying it out, and seeing which way any subview grew by at least a
+ * quarter of that (then put back) — or, with nothing in it, where it draws itself.
+ * Apple's AUDelay and AUGraphicEQ stretch both ways (auto layout); the generic view and
+ * DLSMusicDevice's only in width (more height would be empty space); AUNBandEQ not at
+ * all. Called before the view is in a window.
+ */
+static int ae_view_axes(NSView *v) {
+  NSAutoresizingMaskOptions m = v.autoresizingMask;
+  int root = ((m & NSViewWidthSizable) ? 1 : 0) | ((m & NSViewHeightSizable) ? 2 : 0);
+  NSArray<NSView *> *subs = v.subviews;
+  if (!root || !subs.count) return root;
+  NSMutableArray<NSValue *> *before = [NSMutableArray arrayWithCapacity:subs.count];
+  for (NSView *s in subs) [before addObject:[NSValue valueWithSize:s.frame.size]];
+  NSSize s0 = v.frame.size;
+  int grew = 0;
+  @try {
+    [v setFrameSize:NSMakeSize(s0.width + 120, s0.height + 90)];
+    [v layoutSubtreeIfNeeded];
+    for (NSUInteger i = 0; i < subs.count; i++) {
+      NSSize a = before[i].sizeValue, b = subs[i].frame.size;
+      if (b.width >= a.width + 30) grew |= 1; // a quarter of the growth: not a control settling by a point or two
+      if (b.height >= a.height + 22) grew |= 2;
+    }
+  } @catch (NSException *x) { (void)x; }
+  [v setFrameSize:s0];
+  [v layoutSubtreeIfNeeded];
+  return root & grew;
+}
+
+/**
+ * Whether an AUv3 would take a view half as big again as `size`, asked through its view
+ * configurations (a plug-in that knows its editor is a fixed size, e.g. JUCE's, answers
+ * only for its own size). YES when it says so or doesn't say (Apple's default answer is
+ * every configuration; then the view's own stretching decides).
+ */
+static BOOL ae_au_takes_bigger_view(AUAudioUnit *auu, NSSize size) {
+  @try {
+    NSArray<AUAudioUnitViewConfiguration *> *cfgs = @[
+      [[AUAudioUnitViewConfiguration alloc] initWithWidth:size.width height:size.height hostHasController:NO],
+      [[AUAudioUnitViewConfiguration alloc] initWithWidth:round(size.width * 1.5) height:round(size.height * 1.5) hostHasController:NO],
+    ];
+    NSIndexSet *ok = [auu supportedViewConfigurations:cfgs];
+    return !ok.count || [ok containsIndex:1];
+  } @catch (NSException *x) { (void)x; return YES; }
+}
+
+/** The screen a saved frame is on, else the app's main window's, else the main screen. */
+static NSScreen *ae_screen_for(const double *saved) {
+  if (saved) {
+    NSPoint c = NSMakePoint(saved[0] + saved[2] / 2, saved[1] + saved[3] / 2);
+    for (NSScreen *s in NSScreen.screens) if (NSPointInRect(c, s.frame)) return s;
+  }
+  NSWindow *mw = NSApp.mainWindow ?: NSApp.keyWindow;
+  return mw.screen ?: NSScreen.mainScreen ?: NSScreen.screens.firstObject;
+}
+
+static void ae_rect_out(NSRect r, double *o) { o[0] = r.origin.x; o[1] = r.origin.y; o[2] = r.size.width; o[3] = r.size.height; }
+static NSRect ae_rect_in(const double *o) { return NSMakeRect(o[0], o[1], o[2], o[3]); }
+
+static char kAEPlugWin;
+static char kAEPrefSize;
+
+/** One open plug-in window: follows the plug-in's size, remembers its frame, cleans up on close. */
+@interface AEPlugWin : NSObject <NSWindowDelegate>
+@property (nonatomic, weak) NSWindow *window;
+@property (nonatomic, strong) NSViewController *vc;
+@property (nonatomic, strong) NSView *view;
+@property (nonatomic, strong) NSScrollView *scroll;
+@property (nonatomic, copy) NSString *key;
+@property (nonatomic, copy) NSString *unitKey;
+@property (nonatomic) int axes; // the axes the window resizes along (1 width, 2 height)
+@property (nonatomic) BOOL observing, fitting;
+@end
+
+@implementation AEPlugWin
+
+- (void)start {
+  self.observing = YES;
+  if (self.vc) [self.vc addObserver:self forKeyPath:@"preferredContentSize" options:0 context:&kAEPrefSize];
+  else {
+    self.view.postsFrameChangedNotifications = YES;
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(viewFrameChanged:) name:NSViewFrameDidChangeNotification object:self.view];
+  }
+}
+
+- (void)stop {
+  if (!self.observing) return;
+  self.observing = NO;
+  if (self.vc) { @try { [self.vc removeObserver:self forKeyPath:@"preferredContentSize" context:&kAEPrefSize]; } @catch (NSException *x) { (void)x; } }
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)observeValueForKeyPath:(NSString *)path ofObject:(id)obj change:(NSDictionary *)change context:(void *)ctx {
+  if (ctx != &kAEPrefSize) { [super observeValueForKeyPath:path ofObject:obj change:change context:ctx]; return; }
+  __weak AEPlugWin *weak = self;
+  dispatch_async(dispatch_get_main_queue(), ^{ [weak fit]; });
+}
+
+- (void)viewFrameChanged:(NSNotification *)n {
+  (void)n;
+  if (self.fitting || !self.window) return;
+  if (self.scroll || !NSEqualSizes(self.view.frame.size, self.window.contentView.bounds.size)) [self fit];
+}
+
+/** The plug-in changed its size: the window follows (top-left kept, on screen). */
+- (void)fit {
+  NSWindow *w = self.window;
+  if (!w || self.fitting) return;
+  NSSize s = self.vc ? self.vc.preferredContentSize : self.view.frame.size;
+  if (!ae_size_ok(s)) return;
+  self.fitting = YES;
+  @try {
+    NSScreen *screen = w.screen ?: ae_screen_for(NULL);
+    NSRect vis = screen ? screen.visibleFrame : w.frame;
+    if (self.scroll) {
+      // Scrolling: the document takes the new size; the window may not outgrow it.
+      [self.view setFrameSize:s];
+      w.contentMaxSize = s;
+      NSSize cur = w.contentView.bounds.size;
+      s = NSMakeSize(MIN(cur.width, s.width), MIN(cur.height, s.height));
+    }
+    NSRect cr = [w contentRectForFrameRect:w.frame];
+    if (!NSEqualSizes(cr.size, s)) {
+      NSRect nf = [w frameRectForContentRect:NSMakeRect(cr.origin.x, NSMaxY(cr) - s.height, s.width, s.height)];
+      double want[2] = { nf.size.width, nf.size.height }, saved[4], scr[4], out[4];
+      ae_rect_out(nf, saved);
+      ae_rect_out(vis, scr);
+      ae_win_place(want, 3, NULL, saved, scr, out);
+      // An axis the user can't resize along stays at the plug-in's (new) size.
+      NSSize c = [w contentRectForFrameRect:ae_rect_in(out)].size, mn = w.contentMinSize, mx = w.contentMaxSize;
+      if (!(self.axes & 1)) { mn.width = c.width; mx.width = c.width; }
+      if (!(self.axes & 2)) { mn.height = c.height; mx.height = c.height; }
+      w.contentMinSize = mn;
+      w.contentMaxSize = mx;
+      [w setFrame:ae_rect_in(out) display:YES];
+    }
+    if (!self.scroll) self.view.frame = w.contentView.bounds;
+  } @catch (NSException *x) { NSLog(@"[audio engine] plug-in window resize failed: %@", x.reason); }
+  self.fitting = NO;
+}
+
+- (void)remember {
+  NSWindow *w = self.window;
+  if (!w || !self.unitKey) return;
+  double r[4];
+  ae_rect_out(w.frame, r);
+  ae_win_store_in(NSUserDefaults.standardUserDefaults, self.unitKey, r);
+}
+
+- (void)windowDidMove:(NSNotification *)n { (void)n; [self remember]; }
+- (void)windowDidEndLiveResize:(NSNotification *)n { (void)n; [self remember]; }
+
+- (void)windowWillClose:(NSNotification *)n {
+  (void)n;
+  [self remember];
+  [self stop];
+  NSWindow *w = self.window;
+  w.delegate = nil;
+  [gWinLock lock];
+  if (w && gWindows[self.key] == w) [gWindows removeObjectForKey:self.key];
+  [gWinLock unlock];
+}
+
+- (void)dealloc { [self stop]; }
+
+@end
+
+/** Show a slot's plug-in window, or bring its open one to the front. Main thread. */
+static void ae_show_window(NSString *key, NSString *unitKey, NSString *title, NSView *view, NSViewController *vc, AUAudioUnit *auu) {
   [gWinLock lock];
   NSWindow *old = gWindows[key];
   [gWinLock unlock];
-  if (old) { [old makeKeyAndOrderFront:nil]; return; }
-  NSSize size = vc ? vc.preferredContentSize : view.frame.size;
-  if (size.width < 200 || size.height < 100) size = NSMakeSize(MAX(size.width, 480), MAX(size.height, 320));
-  NSWindow *w = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, size.width, size.height)
-                                            styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable
-                                              backing:NSBackingStoreBuffered defer:NO];
+  if (old) {
+    if (old.miniaturized) [old deminiaturize:nil];
+    [old makeKeyAndOrderFront:nil];
+    return;
+  }
+  NSView *pv = vc ? vc.view : view; // loads an AUv3's view
+  if (!pv) return;
+  AEPlugWin *c = [AEPlugWin new];
+  c.key = key;
+  c.unitKey = unitKey;
+  c.vc = vc;
+  c.view = pv;
+  NSSize want = ae_plugin_size(vc, pv);
+  want = NSMakeSize(ceil(want.width), ceil(want.height)); // whole points: crisp at any backing scale
+  c.axes = ae_view_axes(pv);
+  if (c.axes && vc && auu && !ae_au_takes_bigger_view(auu, want)) c.axes = 0;
+
+  double saved[4];
+  BOOL hasSaved = unitKey && ae_win_recall_in(NSUserDefaults.standardUserDefaults, unitKey, saved);
+  NSScreen *screen = ae_screen_for(hasSaved ? saved : NULL);
+  NSRect vis = screen ? screen.visibleFrame : NSMakeRect(0, 0, 1440, 900);
+
+  NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable;
+  NSRect fr = [NSWindow frameRectForContentRect:NSMakeRect(0, 0, want.width, want.height) styleMask:style];
+  NSSize chrome = NSMakeSize(fr.size.width - want.width, fr.size.height - want.height);
+  NSSize minS = NSMakeSize(160, 100), maxS = NSZeroSize;
+  BOOL scroll = !c.axes && (fr.size.width > vis.size.width || fr.size.height > vis.size.height);
+  if (scroll) {
+    // Bigger than the screen: scroll, and let the window grow up to the whole view.
+    c.axes = 3;
+    minS = NSMakeSize(MIN(want.width, 240), MIN(want.height, 160));
+    maxS = want;
+  } else if (c.axes) {
+    NSSize f = pv.fittingSize; // a minimum only when constraints lay it out
+    if (!pv.translatesAutoresizingMaskIntoConstraints && ae_size_ok(f)) minS = f;
+    minS = NSMakeSize(MIN(minS.width, want.width), MIN(minS.height, want.height));
+  }
+  // An axis the window doesn't resize along is held at the plug-in's size.
+  if (!(c.axes & 1)) { minS.width = want.width; maxS.width = want.width; }
+  if (!(c.axes & 2)) { minS.height = want.height; maxS.height = want.height; }
+  if (c.axes) style |= NSWindowStyleMaskResizable;
+
+  double wantF[2] = { fr.size.width, fr.size.height };
+  double limits[4] = { minS.width + chrome.width, minS.height + chrome.height, maxS.width > 0 ? maxS.width + chrome.width : 0, maxS.height > 0 ? maxS.height + chrome.height : 0 };
+  double scr[4], out[4];
+  ae_rect_out(vis, scr);
+  ae_win_place(wantF, c.axes, limits, hasSaved ? saved : NULL, scr, out);
+  NSRect frame = ae_rect_in(out);
+
+  NSWindow *w = [[NSWindow alloc] initWithContentRect:[NSWindow contentRectForFrameRect:frame styleMask:style] styleMask:style backing:NSBackingStoreBuffered defer:NO];
   w.releasedWhenClosed = NO;
   w.title = title;
-  if (vc) w.contentViewController = vc; else w.contentView = view;
-  [w setContentSize:size];
-  [w center];
+  [w setFrame:frame display:NO];
+  NSSize cs = [w contentRectForFrameRect:frame].size;
+  NSRect bounds = NSMakeRect(0, 0, cs.width, cs.height);
+  NSView *container = [[NSView alloc] initWithFrame:bounds];
+  container.autoresizesSubviews = YES;
+  if (scroll) {
+    NSScrollView *sv = [[NSScrollView alloc] initWithFrame:bounds];
+    sv.hasVerticalScroller = YES;
+    sv.hasHorizontalScroller = YES;
+    sv.autohidesScrollers = YES;
+    sv.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    pv.frame = NSMakeRect(0, 0, want.width, want.height);
+    sv.documentView = pv;
+    [container addSubview:sv];
+    c.scroll = sv;
+    [pv scrollPoint:NSMakePoint(0, pv.isFlipped ? 0 : NSMaxY(pv.bounds))]; // the top first
+  } else {
+    // Pinned to the window: it's exactly the content area.
+    pv.frame = bounds;
+    if (c.axes) pv.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [container addSubview:pv];
+    if (!pv.translatesAutoresizingMaskIntoConstraints) {
+      [NSLayoutConstraint activateConstraints:@[
+        [pv.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [pv.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [pv.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [pv.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
+      ]];
+    }
+  }
+  w.contentView = container;
+  // Limits in content points; a fixed axis is the window's own (maybe screen-clamped) size.
+  w.contentMinSize = NSMakeSize((c.axes & 1) ? MIN(minS.width, cs.width) : cs.width, (c.axes & 2) ? MIN(minS.height, cs.height) : cs.height);
+  w.contentMaxSize = NSMakeSize((c.axes & 1) ? (maxS.width > 0 ? maxS.width : CGFLOAT_MAX) : cs.width,
+                                (c.axes & 2) ? (maxS.height > 0 ? maxS.height : CGFLOAT_MAX) : cs.height);
+  c.window = w;
+  objc_setAssociatedObject(w, &kAEPlugWin, c, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  w.delegate = c;
+  [c start];
   [w makeKeyAndOrderFront:nil];
   [gWinLock lock];
   gWindows[key] = w;
   [gWinLock unlock];
-  __block id token = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowWillCloseNotification object:w queue:nil usingBlock:^(NSNotification *n) {
-    (void)n;
-    [gWinLock lock];
-    if (gWindows[key] == w) [gWindows removeObjectForKey:key];
-    [gWinLock unlock];
-    [[NSNotificationCenter defaultCenter] removeObserver:token];
-  }];
 }
 
 /** Open the slot's own window: the plug-in's view, its Cocoa view (AUv2), else a generic one. */
@@ -1253,12 +1629,14 @@ int ae_open_ui(const char *rid, const char *sid, const char *title, char **err) 
       NSString *key = [NSString stringWithFormat:@"%@/%@", r.rid, slot];
       NSString *name = [NSString stringWithUTF8String:title ?: ""];
       if (!name.length) name = u.name ?: @"Audio Unit";
+      AudioComponentDescription d = u.audioComponentDescription;
+      NSString *unitKey = ae_unit_key(d.componentType, d.componentSubType, d.componentManufacturer);
       AUAudioUnit *auu = u.AUAudioUnit;
       AudioUnit au = u.audioUnit;
       [auu requestViewControllerWithCompletionHandler:^(AUViewControllerBase *vc) {
         dispatch_async(dispatch_get_main_queue(), ^{
           @try {
-            if (vc) ae_show_window(key, name, nil, vc);
+            if (vc) ae_show_window(key, unitKey, name, nil, vc, auu);
             else {
               NSView *v = au ? ae_cocoa_view(au) : nil;
               if (!v && au) {
@@ -1266,7 +1644,7 @@ int ae_open_ui(const char *rid, const char *sid, const char *title, char **err) 
                 g.showsExpertParameters = YES;
                 v = g;
               }
-              if (v) ae_show_window(key, name, v, nil);
+              if (v) ae_show_window(key, unitKey, name, v, nil, nil);
             }
           } @catch (NSException *x) { NSLog(@"[audio engine] plug-in window failed: %@", x.reason); }
         });
