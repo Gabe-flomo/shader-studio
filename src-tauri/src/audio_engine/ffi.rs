@@ -52,6 +52,10 @@ mod sys {
         pub fn ae_last_load_in_process() -> c_int;
         pub fn ae_probe_prepare();
         pub fn ae_pump_main(seconds: f64);
+        /// Tests: what a plug-in window would hear of a host parameter set (AUEventListener, tree observers).
+        #[allow(dead_code)]
+        #[allow(dead_code)]
+        pub fn ae_test_param_heard(rack: *const c_char, slot: *const c_char, address: u64, value: f32, wait: f64, v2: *mut c_int, tree: *mut c_int) -> c_int;
         // Plug-in windows' placement and memory (pure helpers; the tests below).
         #[allow(dead_code)]
         pub fn ae_win_place(want: *const f64, axes: c_int, limits: *const f64, saved: *const f64, screen: *const f64, out: *mut f64) -> c_int;
@@ -301,6 +305,14 @@ mod imp {
     pub fn probe_prepare() { unsafe { sys::ae_probe_prepare() } }
     /// Run the main thread's run loop for a while (a plug-in loading elsewhere may dispatch to it).
     pub fn pump_main(seconds: f64) { unsafe { sys::ae_pump_main(seconds) } }
+    /// Tests: set a parameter as the host does and count (AUv2 view listener calls, tree observer calls) within `wait` s.
+    #[allow(dead_code)]
+    pub fn test_param_heard(rack: &str, slot: &str, address: u64, value: f32, wait: f64) -> Result<(i32, i32), String> {
+        let (r, s) = (cstr(rack), cstr(slot));
+        let (mut v2, mut tree) = (0 as c_int, 0 as c_int);
+        let rc = unsafe { sys::ae_test_param_heard(r.as_ptr(), s.as_ptr(), address, value, wait, &mut v2, &mut tree) };
+        if rc == 0 { Ok((v2, tree)) } else { Err(format!("ae_test_param_heard: {rc}")) }
+    }
 }
 
 #[cfg(not(target_os = "macos"))]

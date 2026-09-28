@@ -1182,6 +1182,35 @@ char *ae_params(const char *rid, const char *sid, char **err) {
   }
 }
 
+/** An AUv2 unit (not a v3 one bridged to the v2 API): its Cocoa view listens through AUEventListener. */
+static BOOL ae_is_v2(AudioUnit au) {
+  if (!au) return NO;
+  AudioComponent c = AudioComponentInstanceGetComponent(au);
+  AudioComponentDescription d = {0};
+  if (!c || AudioComponentGetDescription(c, &d) != noErr) return NO;
+  return !(d.componentFlags & kAudioComponentFlag_IsV3AudioUnit);
+}
+
+/**
+ * The host set a parameter: tell the plug-in's own window. Setting through the
+ * AUParameterTree already reaches an AUv3 view's observers (and any other
+ * observer; a watch's own token is the originator, so Configure doesn't count
+ * it as a touch). An AUv2 unit's Cocoa or Carbon-era view listens through
+ * AUEventListener instead, which a raw set never tells: post the change there.
+ * The v2 bridge's parameter addresses in the global scope are the parameter ids.
+ */
+static void ae_notify_v2_listeners(AVAudioUnit *u, AUParameterAddress address) {
+  AudioUnit au = u.audioUnit;
+  if (address > UINT32_MAX || !ae_is_v2(au)) return;
+  AudioUnitEvent ev = {0};
+  ev.mEventType = kAudioUnitEvent_ParameterValueChange;
+  ev.mArgument.mParameter.mAudioUnit = au;
+  ev.mArgument.mParameter.mParameterID = (AudioUnitParameterID)address;
+  ev.mArgument.mParameter.mScope = kAudioUnitScope_Global;
+  ev.mArgument.mParameter.mElement = 0;
+  AUEventListenerNotify(NULL, NULL, &ev);
+}
+
 int ae_param_set(const char *rid, const char *sid, uint64_t address, float value, char **err) {
   AE_GUARD_BEGIN
     AERack *r = ae_rack(rid);
@@ -1191,9 +1220,53 @@ int ae_param_set(const char *rid, const char *sid, uint64_t address, float value
     float v = value < p.minValue ? p.minValue : value > p.maxValue ? p.maxValue : value;
     NSString *slot = [NSString stringWithUTF8String:sid];
     [p setValue:v originator:ae_watch_host_set(rid, slot, p)]; // a watch's own observer isn't told
+    ae_notify_v2_listeners(u, address); // the plug-in's AUv2 view follows (after the host-set mark, so a watch ignores it)
     ae_watch_after_set(rid, slot, p);
   AE_GUARD_END(-1)
   return 0;
+}
+
+/**
+ * Tests: set a parameter through ae_param_set and count what a plug-in window
+ * would hear within `wait` seconds: AUEventListener value changes (an AUv2
+ * view) and AUParameterTree observer calls (an AUv3 view). 0 when it ran.
+ */
+int ae_test_param_heard(const char *rid, const char *sid, uint64_t address, float value, double wait, int *v2_heard, int *tree_heard) {
+  @autoreleasepool {
+    __block _Atomic int v2 = 0, tree = 0;
+    AVAudioUnit *u = nil;
+    ae_init_globals();
+    [gLock lock];
+    AERack *r = ae_rack(rid);
+    u = r ? ae_slot_unit(r, [NSString stringWithUTF8String:sid]) : nil;
+    [gLock unlock];
+    if (!u) return -3;
+    dispatch_queue_t q = dispatch_queue_create("ae.test.listen", DISPATCH_QUEUE_SERIAL);
+    AUEventListenerRef listener = NULL;
+    AUEventListenerCreateWithDispatchQueue(&listener, 0, 0, q, ^(void *obj, const AudioUnitEvent *ev, UInt64 t, AudioUnitParameterValue val) {
+      (void)obj; (void)t; (void)val;
+      if (ev->mEventType == kAudioUnitEvent_ParameterValueChange && ev->mArgument.mParameter.mParameterID == (AudioUnitParameterID)address) atomic_fetch_add(&v2, 1);
+    });
+    if (listener && u.audioUnit) {
+      AudioUnitEvent ev = {0};
+      ev.mEventType = kAudioUnitEvent_ParameterValueChange;
+      ev.mArgument.mParameter = (AudioUnitParameter){ u.audioUnit, (AudioUnitParameterID)address, kAudioUnitScope_Global, 0 };
+      AUEventListenerAddEventType(listener, NULL, &ev);
+    }
+    AUParameterTree *pt = u.AUAudioUnit.parameterTree;
+    AUParameterObserverToken tok = [pt tokenByAddingParameterObserver:^(AUParameterAddress a, AUValue v) { (void)v; if (a == address) atomic_fetch_add(&tree, 1); }];
+    char *err = NULL;
+    int rc = ae_param_set(rid, sid, address, value, &err);
+    if (err) free(err);
+    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:wait]];
+    [NSThread sleepForTimeInterval:wait];
+    dispatch_sync(q, ^{});
+    [pt removeParameterObserver:tok];
+    if (listener) AUListenerDispose(listener);
+    if (v2_heard) *v2_heard = atomic_load(&v2);
+    if (tree_heard) *tree_heard = atomic_load(&tree);
+    return rc;
+  }
 }
 
 /** The slot's whole state (a preset), as a property list in base64; NULL when it has none. */
