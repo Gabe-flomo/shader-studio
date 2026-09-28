@@ -23,7 +23,7 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
 import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import { PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '../../types/play';
-import { GRAIN_EACH, grainSensorLayer, isGranulatorRack } from '../../types/playAudioEngine';
+import { GRAIN_EACH, grainSensorLayer, isGranulatorRack, parseGrainsTarget } from '../../types/playAudioEngine';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
 import { applyCurve, playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
@@ -184,7 +184,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
 
   const writeControl = useCallback((control: PlayControl, value: number | number[]) => {
     // A reader's level control: its reader drives it; there is nothing to set by hand.
-    if (parseReaderTarget(control.target)) return;
+    if (parseReaderTarget(control.target) || parseGrainsTarget(control.target)) return;
     const ft = parseFinishTarget(control.target);
     if (ft) {
       if (typeof value === 'number') setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, ft.effectId, { [ft.key]: value }) }));

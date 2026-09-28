@@ -16,7 +16,7 @@ import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
 import { layerNumericProps, parseActionTarget, parseLayerTarget, parseReaderTarget } from '../types/play';
 import { finishHost, finishParamOf, parseFinishTarget, patchFinishEffect, readFinishValue } from '../types/playFinish';
 import { audioFxEffect, audioFxParam, parseAudioFxTarget, patchAudioFxEffect, readAudioFxValue } from '../types/playAudioFx';
-import { auTargetExists, parseAuTarget, readAuValue } from '../types/playAudioEngine';
+import { aeRack, auTargetExists, isGranulatorRack, parseAuTarget, parseGrainsTarget, readAuValue } from '../types/playAudioEngine';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDrivers';
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
@@ -235,6 +235,9 @@ export function readControlValue(nodes: GraphNode[], target: string, play?: Play
   // A reader's level control: nothing of its own to read (its mapping drives it); 0 while its reader exists.
   const rt = parseReaderTarget(target);
   if (rt) return play?.audioReaders?.readers.some(r => r.id === rt.readerId) ? 0 : undefined;
+  // A granulator's grain readout (docs/granulator.md): driven by its sensor mapping; 0 while its rack is a granulator.
+  const gt = parseGrainsTarget(target);
+  if (gt) return isGranulatorRack(aeRack(play?.audioEngine, gt.rackId)) ? 0 : undefined;
   // "group::…::node::param": an outer group's override of the rest of the path wins (that's what its
   // card's slider sets), then the next group's, then the node's own value.
   const parts = target.split('::');
