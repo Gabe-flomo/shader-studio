@@ -13,7 +13,7 @@
 
 import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
-import { layerNumericProps, parseActionTarget, parseLayerTarget } from '../types/play';
+import { layerNumericProps, parseActionTarget, parseLayerTarget, parseReaderTarget } from '../types/play';
 import { finishHost, finishParamOf, parseFinishTarget, patchFinishEffect, readFinishValue } from '../types/playFinish';
 import { audioFxEffect, audioFxParam, parseAudioFxTarget, patchAudioFxEffect, readAudioFxValue } from '../types/playAudioFx';
 import { auTargetExists, parseAuTarget, readAuValue } from '../types/playAudioEngine';
@@ -232,6 +232,9 @@ export function readControlValue(nodes: GraphNode[], target: string, play?: Play
   // An Audio Unit's parameter: the value kept in the setup (0 until one is set; the + keeps the plug-in's).
   if (parseAuTarget(target)) return auTargetExists(play?.audioEngine, target) ? readAuValue(play?.audioEngine, target) ?? 0 : undefined;
   if (parseActionTarget(target)) return undefined;
+  // A reader's level control: nothing of its own to read (its mapping drives it); 0 while its reader exists.
+  const rt = parseReaderTarget(target);
+  if (rt) return play?.audioReaders?.readers.some(r => r.id === rt.readerId) ? 0 : undefined;
   // "group::…::node::param": an outer group's override of the rest of the path wins (that's what its
   // card's slider sets), then the next group's, then the node's own value.
   const parts = target.split('::');
@@ -292,7 +295,7 @@ export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: 
   let out = nodes;
   for (const c of play.controls) {
     const v = values.get(c.id);
-    if (v === undefined || parseLayerTarget(c.target) || parseActionTarget(c.target) || parseFinishTarget(c.target) || parseAudioFxTarget(c.target)) continue;
+    if (v === undefined || parseLayerTarget(c.target) || parseActionTarget(c.target) || parseFinishTarget(c.target) || parseAudioFxTarget(c.target) || parseReaderTarget(c.target)) continue;
     const value = Array.isArray(v) ? [v[0], v[1], v[2]] : v;
     const parts = c.target.split('::');
     const key = parts[parts.length - 1];
@@ -327,7 +330,7 @@ export type TargetFate =
  * control can be pointed at the new path (group::…::node::param).
  */
 export function locateTarget(nodes: GraphNode[], target: string): TargetFate {
-  if (parseLayerTarget(target) || parseActionTarget(target) || parseFinishTarget(target) || parseAudioFxTarget(target)) return { status: 'ok' };
+  if (parseLayerTarget(target) || parseActionTarget(target) || parseFinishTarget(target) || parseAudioFxTarget(target) || parseReaderTarget(target)) return { status: 'ok' };
   if (readControlValue(nodes, target) !== undefined) return { status: 'ok' };
   const parts = target.split('::');
   const nodeId = parts[parts.length - 2], key = parts[parts.length - 1];

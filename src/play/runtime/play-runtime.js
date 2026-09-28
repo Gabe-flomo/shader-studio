@@ -224,6 +224,8 @@
   }
   // An action control (a button): `act:<layerId>::<action>`.
   function actTarget(t) { if (!t.startsWith('act:')) return null; const r = t.slice(4); const i = r.lastIndexOf('::'); return i > 0 ? { layerId: r.slice(0, i), do: r.slice(i + 2) } : null; }
+  // A reader's level control (`reader:<id>::level`, play/readerControls.ts): its mapping drives it; the value is kept as the control's live value only, for "Another control", conditions and pairs.
+  function readerTarget(t) { return t.startsWith('reader:') && t.endsWith('::level') ? { readerId: t.slice(7, -7) } : null; }
   function bindingKey(t) { return t.split('::').slice(-2).join('::'); }
   function isTyping(t) { return t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || (t && t.isContentEditable); }
 
@@ -1287,6 +1289,7 @@ void main() {
     for (const c of play.controls) {
       const lt = layerTarget(c.target);
       if (lt) { const l = layersById.get(lt.layerId); if (l && typeof l[lt.key] === 'number') base.set(c.id, l[lt.key]); }
+      else if (readerTarget(c.target)) base.set(c.id, 0);
       else { const u = uniformFor(c); if (u && uniformValues[u] !== undefined) base.set(c.id, Array.isArray(uniformValues[u]) ? uniformValues[u].slice() : uniformValues[u]); }
     }
     // Layers talk back: sensors (zone fill, speed…) and where following nulls are. The layer kit (inlined ahead of this file) draws them.
@@ -1649,6 +1652,7 @@ void main() {
         }
         const lt = layerTarget(c.target);
         if (lt) { layerLive.set(lt.layerId + '::' + lt.key, v); live.set(c.id, v); driven.add(c.id); continue; }
+        if (readerTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }
         const un = uniformFor(c); if (!un) continue;
         if (c.kind === 'color') {
           const b = base.get(c.id) || [0, 0, 0];
@@ -2473,7 +2477,7 @@ void main() {
     shared.camera = null; shared.cameraStream = null;
   }
   // internals: the pure GPU and audio helpers, for tests.
-  window.ShaderStudioPlay = { version: 8, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex, readerBandDb, readerRead, readerSmooth, readerGate, triggerKey } };
+  window.ShaderStudioPlay = { version: 8, mount, enableMidi, listen: startLive, enableCamera, stopCamera, enableHands, internals: { toGlsl, particleGeometry, perspective, bandAmplitude, particleVertex, readerBandDb, readerRead, readerSmooth, readerGate, readerTarget, triggerKey } };
 
   // A full-page export: mount on #play with the page's options (URL params can override).
   if (window.PLAY_BUNDLE && document.getElementById('play')) {

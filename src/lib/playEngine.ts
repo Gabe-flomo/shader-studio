@@ -34,7 +34,7 @@ import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../typ
 import { geoAnchor } from '../play/kit/geometry.js';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
-import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parsePropTarget } from '../types/play';
+import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parsePropTarget, parseReaderTarget } from '../types/play';
 import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
 import { audioReaderBank } from './audioReaderBank';
@@ -1012,7 +1012,7 @@ class PlayEngine implements InputSource {
       if (lt) {
         this.layerLive.delete(`${lt.layerId}::${lt.key}`);
         this.layerMoved = true;
-      } else if (control && base !== undefined) {
+      } else if (control && base !== undefined && !parseReaderTarget(control.target)) {
         write(paramChannelKey(bindingKeyOf(control.target)), Array.isArray(base) ? [...base] : base);
       }
       this.live.delete(id);
@@ -1028,7 +1028,8 @@ class PlayEngine implements InputSource {
       // A layer property or a Finish effect's number: not a uniform. The overlay reads it after this tick.
       const lk = `${layerTarget.layerId}::${layerTarget.key}`;
       if (this.layerLive.get(lk) !== v) { this.layerLive.set(lk, v); this.layerMoved = true; }
-    } else {
+    } else if (!parseReaderTarget(control.target)) {
+      // A reader's level control has no uniform: the value is kept as the control's live value only.
       write(paramChannelKey(bindingKeyOf(control.target)), v);
     }
     this.live.set(control.id, v);
@@ -1207,9 +1208,9 @@ class PlayEngine implements InputSource {
     return false;
   }
 
-  /** Actions, layer-property mappings and Learn run whatever the shader binds. */
+  /** Actions, layer-property mappings, reader controls and Learn run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.isLearning() || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null);
+    return !!this.record.actions?.length || this.isLearning() || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
