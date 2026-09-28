@@ -485,6 +485,7 @@ import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
 import { finishHosts, finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
 import { audioFxEffects, audioFxPropId, isAudioFxEmpty, parseAudioFx, parseAudioFxTarget, type PlayAudioFx } from './playAudioFx';
 import { aeRack, auPropId, auTargetExists, isAudioEngineEmpty, isGranulatorRack, parseAudioEngine, parseAuTarget, parseGrainsTarget, rackOfSensorLayer, type PlayAudioEngine } from './playAudioEngine';
+import { arrangementFor, isArrangementEmpty, parseArrangement, type PlayArrangement } from './playArrangement';
 import { sgParseValueRef } from '../play/kit/signals.js';
 import { PAD_GRID_MAX, PAD_GRID_READS, parseMidiLocks, parseNoteRange, parsePadGrid, type MidiLock, type PadGridRead, type PlayPadGrid } from './playMidi';
 export type { MidiLock, PadGridRead, PlayPadGrid } from './playMidi';
@@ -779,6 +780,12 @@ export interface PlayRecord {
    * Unit effects, played from MIDI and the keyboard. Absent = none.
    */
   audioEngine?: PlayAudioEngine;
+  /**
+   * The Audio engine's tape (types/playArrangement.ts, docs/arrangement.md):
+   * per rack, the notes played and the rack controls' automation, looped
+   * and overdubbed. Absent = none.
+   */
+  arrangement?: PlayArrangement;
   /** Named signals that actions send and triggers listen for. Absent = none. */
   signals?: PlaySignal[];
   /** Pair controls: two controls played as one (two sliders, an XY pad). Absent = none. */
@@ -870,6 +877,12 @@ export interface PlayTake {
   audioFrames?: TakeAudioTrack[];
   /** Live datasets' rows as they came (absent: no stream was connected). Replay feeds these instead of the stream. */
   dataFeeds?: TakeDataFeed[];
+  /**
+   * The Audio engine's tape played along from `at` seconds (docs/arrangement.md):
+   * its notes and automation are in the take's events and tracks like
+   * anything played live. `made`: the take was made from the tape itself.
+   */
+  tape?: { at: number; made?: boolean };
 }
 
 /** A performance runs up to a minute. */
@@ -1459,6 +1472,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   if (finish) out.finish = finish;
   if (audioFx) out.audioFx = audioFx;
   if (audioEngine) out.audioEngine = audioEngine;
+  const arrangement = arrangementFor(parseArrangement(r.arrangement), audioEngine?.racks.map(x => x.id) ?? []);
+  if (arrangement && !isArrangementEmpty(arrangement)) out.arrangement = arrangement;
   const projection = parseProjection(r.projection);
   if (projection) out.projection = projection;
   if (Array.isArray(r.takes)) {
@@ -1603,6 +1618,8 @@ export function parseTake(raw: unknown): PlayTake | null {
     ...(num(t.seed) !== null && (t.seed as number) > 0 ? { seed: Math.round(t.seed as number) } : {}),
     ...(audioFrames.length ? { audioFrames } : {}),
     ...(dataFeeds.length ? { dataFeeds } : {}),
+    ...(t.tape && typeof t.tape === 'object' && num((t.tape as Record<string, unknown>).at) !== null
+      ? { tape: { at: Math.max(0, Math.min(TAKE_MAX_SECONDS, (t.tape as { at: number }).at)), ...((t.tape as Record<string, unknown>).made === true ? { made: true } : {}) } } : {}),
   };
 }
 
@@ -1615,5 +1632,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx) && isAudioEngineEmpty(play.audioEngine) && !play.projection);
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx) && isAudioEngineEmpty(play.audioEngine) && isArrangementEmpty(play.arrangement) && !play.projection);
 }

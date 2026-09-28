@@ -414,6 +414,11 @@ class PlayEngine implements InputSource {
     return this.overrides.get(k) ?? this.layerLive.get(k) ?? base;
   }
 
+  /** What a mapping drives a layer property to right now, without overrides (undefined: not driven). The tape's touch detection reads it. */
+  drivenValue(layerId: string, key: string): number | undefined {
+    return this.layerLive.get(`${layerId}::${key}`);
+  }
+
   /** A layer measured something (fill, hover, speed, spread, motion). */
   setSensor(key: string, value: number): void {
     this.sensors.set(key, value);

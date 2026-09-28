@@ -5,6 +5,7 @@
  * and a rack made from a Drum pad layer's pads.
  */
 import type { PlayRecord } from '../../../types/play';
+import { arrangementFor, isArrangementEmpty } from '../../../types/playArrangement';
 import type { DrumPadLayer } from '../../../types/playLayers';
 import { AE_INST, AE_PAD_BASE_NOTE, controlsKeptFor, newRack, type AeRack, type AeZone, type PlayAudioEngine } from '../../../types/playAudioEngine';
 
@@ -19,6 +20,9 @@ export function engineId(prefix: 'rk' | 'fx'): string {
 export function withEngine(p: PlayRecord, ae: PlayAudioEngine): PlayRecord {
   const out: PlayRecord = { ...p };
   if (ae.racks.length) out.audioEngine = ae; else delete out.audioEngine;
+  // A removed rack's track on the tape goes with it.
+  const arr = arrangementFor(p.arrangement, ae.racks.map(r => r.id));
+  if (arr !== p.arrangement) { if (arr && !isArrangementEmpty(arr)) out.arrangement = arr; else delete out.arrangement; }
   const kept = controlsKeptFor(p.controls, out.audioEngine);
   if (kept.length !== p.controls.length) {
     const ids = new Set(kept.map(c => c.id));

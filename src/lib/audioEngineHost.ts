@@ -720,8 +720,20 @@ class AudioEngineHost {
     for (const r of this.target.racks) if (rackHears(r, e.device ?? '', e.channel)) this.input(r.id, bytes);
   }
 
-  /** A message for a rack from its input (MIDI, the keyboard, the card's keys). Notes go through a take. */
-  input(rackId: string, bytes: number[]): void {
+  /** Listeners for what's played live into racks (the tape records from here; lib/tape.ts). */
+  private inputTaps = new Set<(rackId: string, bytes: number[]) => void>();
+  onInput(fn: (rackId: string, bytes: number[]) => void): () => void {
+    this.inputTaps.add(fn);
+    return () => { this.inputTaps.delete(fn); };
+  }
+
+  /**
+   * A message for a rack from its input (MIDI, the keyboard, the card's keys),
+   * or from the tape playing (`fromTape`: not heard by the input taps, so the
+   * tape doesn't record itself). Notes go through a take.
+   */
+  input(rackId: string, bytes: number[], fromTape = false): void {
+    if (!fromTape) for (const fn of this.inputTaps) fn(rackId, bytes);
     const kind = bytes[0] & 0xf0;
     if ((kind === 0x90 || kind === 0x80) && this.act) {
       const on = kind === 0x90 && bytes[2] > 0;

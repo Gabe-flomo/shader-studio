@@ -15,6 +15,7 @@
  *
  * Pure: types, parsing, targets and record edits. lib/audioEngineHost.ts runs it.
  */
+import { RACK_CONTROLS_MAX } from './playArrangement';
 import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
 
 
@@ -74,6 +75,13 @@ export interface AeSlot {
   sample?: AeGrainSample;
   /** kind 'granulator': "Grains from" a layer: each thing inside the boundary plays grains (docs/granulator.md). */
   from?: AeGrainFrom;
+  /**
+   * Rack controls (docs/arrangement.md, Configure): up to RACK_CONTROLS_MAX
+   * parameter addresses, in the strip's order. Each is a Play control on
+   * `au:<rack>:<slot>::<address>` in the group "<rack> · <slot name>"
+   * (play/rackControls.ts); the tape records their automation.
+   */
+  controls?: string[];
 }
 
 /** One link: a thing's prop (GR_FROM_PROPS) sets a grain setting (GR_FROM_TARGETS) between min (at 0) and max (at 1). */
@@ -120,8 +128,12 @@ export const RACK_ACT_PREFIX = 'ae:';
 /** A send's source: the master bus, or a chain id. */
 export const isSendSource = (s: string) => /^(master|layer:[A-Za-z0-9_-]{1,64}|node:[A-Za-z0-9_-]{1,64})$/.test(s);
 
-export const AE_RACKS_MAX = 16;
-export const AE_EFFECTS_MAX = 12;
+/** Racks a setup makes (docs/arrangement.md: up to 8 racks, each an instrument and up to 8 effects). */
+export const AE_RACKS_MAX = 8;
+export const AE_EFFECTS_MAX = 8;
+/** A file made before those limits keeps up to this many (nothing it has is dropped on opening). */
+const AE_RACKS_KEEP = 16;
+const AE_EFFECTS_KEEP = 12;
 export const AE_ZONES_MAX = 64;
 /** Pad N of a following drum pad layer plays this note + N. */
 export const AE_PAD_BASE_NOTE = 36;
@@ -388,6 +400,8 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
     }
     const from = parseGrainFrom(o.from);
     if (from) slot.from = from;
+    const rc = parseRackControls(o.controls, a => !!grParam(a));
+    if (rc) slot.controls = rc;
     const sm = o.sample && typeof o.sample === 'object' ? o.sample as Record<string, unknown> : null;
     if (sm) {
       if (typeof sm.sampleId === 'string' && ID.test(sm.sampleId)) slot.sample = { sampleId: sm.sampleId, name: text(sm.name, 'Sound', 120) };
@@ -402,7 +416,19 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
   const params = parseParams(o.params);
   if (params) slot.params = params;
   if (typeof o.state === 'string' && o.state.length <= 2_000_000 && /^[A-Za-z0-9+/=]+$/.test(o.state)) slot.state = o.state;
+  const rc = parseRackControls(o.controls, () => true);
+  if (rc) slot.controls = rc;
   return slot;
+}
+
+/** A slot's rack controls: distinct parameter addresses, at most RACK_CONTROLS_MAX. */
+function parseRackControls(raw: unknown, ok: (address: string) => boolean): string[] | undefined {
+  const out: string[] = [];
+  for (const a of Array.isArray(raw) ? raw : []) {
+    if (out.length >= RACK_CONTROLS_MAX) break;
+    if (typeof a === 'string' && /^\d{1,20}$/.test(a) && !out.includes(a) && ok(a)) out.push(a);
+  }
+  return out.length ? out : undefined;
 }
 
 /** A granulator's "Grains from", or undefined when it names no source. */
@@ -429,7 +455,7 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
   const racks: AeRack[] = [];
   const seen = new Set<string>();
   for (const x of Array.isArray(a.racks) ? a.racks : []) {
-    if (racks.length >= AE_RACKS_MAX) break;
+    if (racks.length >= AE_RACKS_KEEP) break;
     if (!x || typeof x !== 'object') continue;
     const o = x as Record<string, unknown>;
     if (typeof o.id !== 'string' || !ID.test(o.id) || seen.has(o.id)) continue;
@@ -437,7 +463,7 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
     const effects: AeSlot[] = [];
     const fxIds = new Set<string>();
     for (const e of Array.isArray(o.effects) ? o.effects : []) {
-      if (effects.length >= AE_EFFECTS_MAX) break;
+      if (effects.length >= AE_EFFECTS_KEEP) break;
       const s = parseSlot(e);
       if (s && !fxIds.has(s.id)) { fxIds.add(s.id); effects.push(s); }
     }
