@@ -118,8 +118,13 @@ export function NullEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         {f.seg('Follows', 'follow', [
           { value: 'none', label: 'Nothing' }, { value: 'mouse', label: 'Mouse', title: 'Chases the pointer while it is over the picture' }, { value: 'null', label: 'A null', title: 'Chases another null' },
           { value: 'hand', label: 'A hand', title: 'Chases a fingertip or joint of a tracked hand (hand tracking, with the camera)' },
+          { value: 'agent', label: 'An agent', title: 'Chases one agent of an Agents layer' },
         ], 'A following null chases its target on a spring: it lags, overshoots and settles. Its X and Y (and anything mapped from them) move with that motion. Nulls can follow nulls that follow nulls, for chains.')}
         {l.follow === 'null' && f.pick('Target', 'followId', nulls(ctx, l.id), 'Add a second null', 'The null this one chases.', () => ctx.createNull('followId'))}
+        {l.follow === 'agent' && <>
+          {f.pick('Agents', 'followId', ctx.layers.filter(x => x.kind === 'agents'), 'Add an Agents layer first', 'The Agents layer whose agent this null chases.')}
+          {f.row('Agent', <NumberInput value={l.agentIndex} min={0} max={4999} step={1} title="Which agent (0 is the first). While it is dead, the layer’s centre." onCommit={n => f.set({ agentIndex: Math.max(0, Math.min(4999, Math.round(n))) })} style={f.numStyle} />, 'Which agent it follows, by number (0 is the first; groups are numbered in order). While that agent is dead the null heads for the live agents’ centre.')}
+        </>}
         {l.follow === 'hand' && <>
           {f.seg('Hand', 'handSide', HAND_SIDES, 'Your own right or left hand. Either follows your right hand while it is in view, else your left.')}
           {f.row('Point', <Select ariaLabel="Point on the hand" value={String(l.handPoint)} options={HAND_POINT_OPTIONS} onChange={v => f.set({ handPoint: parseInt(v, 10) || 0 })} height={26} style={{ flex: 1, minWidth: 0 }} />, 'The fingertip or joint it chases. When the hand leaves the picture it waits where it was.')}
@@ -458,6 +463,7 @@ function nullFollows(n: NullLayer, layers: PlayLayer[]): string {
   if (n.follow === 'hand') return `${n.handSide === 'any' ? 'Either hand' : n.handSide === 'right' ? 'Right hand' : 'Left hand'} · ${HD_POINT_NAMES[n.handPoint] ?? `point ${n.handPoint}`}`;
   if (n.follow === 'mouse') return 'Follows the mouse';
   if (n.follow === 'null') return `Follows ${layers.find(x => x.id === n.followId)?.label ?? 'a null'}`;
+  if (n.follow === 'agent') return `Follows agent ${n.agentIndex} of ${layers.find(x => x.id === n.followId)?.label ?? 'an Agents layer'}`;
   return 'Stays where you drag it';
 }
 
@@ -707,7 +713,7 @@ export function ClonerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const arrange = g<string>('arrange');
   const sources = ctx.layers.filter(x => x.id !== f.l.id && (x.kind === 'shape' || x.kind === 'text' || x.kind === 'image' || x.kind === 'camera' || x.kind === 'video' || x.kind === 'null' || x.kind === 'script'));
   const brushes = ctx.layers.filter(x => x.kind === 'brush');
-  const particles = ctx.layers.filter(x => x.kind === 'particles');
+  const particles = ctx.layers.filter(x => x.kind === 'particles' || x.kind === 'agents');
   const effectorLayers = ctx.layers.filter(x => x.id !== f.l.id && (x.kind === 'null' || x.kind === 'shape'));
   const chosen = g<string[]>('effectors') ?? [];
   const toggleEffector = (id: string) => f.set({ effectors: chosen.includes(id) ? chosen.filter(x => x !== id) : [...chosen, id] });
@@ -729,8 +735,8 @@ export function ClonerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
       <Section kind="cloner" title="Arrangement">
         {f.seg('Arrange', 'arrange', [
           { value: 'grid', label: 'Grid' }, { value: 'ring', label: 'Ring' }, { value: 'line', label: 'Line' },
-          { value: 'path', label: 'Path', title: 'Along a Brush layer\'s stroke' }, { value: 'points', label: 'Points', title: 'One copy per particle of a Particles layer' },
-        ], 'Grid: columns and rows around the centre. Ring: around a circle, or an arc. Line: from the start to the end. Path: along a brush stroke. Points: on a particles layer\'s particles.')}
+          { value: 'path', label: 'Path', title: 'Along a Brush layer\'s stroke' }, { value: 'points', label: 'Points', title: 'One copy per particle of a Particles layer (or agent of an Agents layer)' },
+        ], 'Grid: columns and rows around the centre. Ring: around a circle, or an arc. Line: from the start to the end. Path: along a brush stroke. Points: on a particles layer\'s particles or an Agents layer\'s agents.')}
         {arrange === 'grid' && f.props('cols', 'rows', 'x', 'y', 'spacingX', 'spacingY')}
         {arrange === 'ring' && <>{f.props('count', 'x', 'y', 'radius', 'startAngle', 'sweep')}{f.toggle('Face', 'face', 'Turn each copy to face along the ring')}</>}
         {arrange === 'line' && f.props('count', 'x', 'y', 'x2', 'y2')}

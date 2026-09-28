@@ -100,7 +100,7 @@ export function GranulatorPanel({ rack, slot, play, onChange, touch }: { rack: A
 
 // ── Grains from a layer ──────────────────────────────────────────────────────
 
-const FROM_KINDS: Record<string, string> = { particles: 'particles', bodies: 'bodies', null: 'a null', relationship: 'members' };
+const FROM_KINDS: Record<string, string> = { particles: 'particles', bodies: 'bodies', agents: 'agents', null: 'a null', relationship: 'members' };
 
 /**
  * "Grains from": a layer's things (particles, bodies, a null, a Relationship's members) play
@@ -134,7 +134,7 @@ function GrainsFrom({ rack, slot, play, onChange, touch, exposed, rate, onRate, 
         <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr', alignItems: 'center', gap: 6 }}>
           <span style={labelStyle(tk)}>Source</span>
           <Select ariaLabel="The layer whose things play grains" value={cur.source} height={28} onChange={v => patch({ source: v })}
-            options={[{ value: '', label: sources.length ? 'None' : 'No particles, bodies, nulls or relationships yet' }, ...sources.map(l => ({ value: l.id, label: `${l.label} · ${FROM_KINDS[l.kind]}` }))]} />
+            options={[{ value: '', label: sources.length ? 'None' : 'No particles, bodies, agents, nulls or relationships yet' }, ...sources.map(l => ({ value: l.id, label: `${l.label} · ${FROM_KINDS[l.kind]}` }))]} />
           <span style={labelStyle(tk)}>Inside</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <Select ariaLabel="The boundary: only things inside it play" value={cur.boundary} height={28} style={{ flex: 1, minWidth: 0 }} onChange={v => patch({ boundary: v })}
