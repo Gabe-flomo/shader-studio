@@ -34,7 +34,7 @@ import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import type { PlayControl, PlayRecord } from '../../../types/play';
 import {
   AUDIO_FX_EFFECTS, AUDIO_FX_KINDS, AUDIO_FX_PRESETS_CHANGED, MASTER_CHAIN, SYNTH_CHAIN, audioFxTarget, deleteAudioFxPreset, emptyAudioFx, emptyChain,
-  layerChainId, loadAudioFxPresets, newAudioFxEffect, nodeChainId, patchChain, presetEffects, saveAudioFxPreset, tidyAudioFx,
+  layerChainId, loadAudioFxPresets, newAudioFxEffect, nodeChainId, patchChain, rackChainId, presetEffects, saveAudioFxPreset, tidyAudioFx,
   type AudioFxChain, type AudioFxEffect, type AudioFxKind, type PlayAudioFx,
 } from '../../../types/playAudioFx';
 import { AF_SYNC, afShownParams, type AfParam } from '../../../play/kit/audioFx.js';
@@ -77,9 +77,10 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
       if (l.kind === 'drumpad') out.push({ id: layerChainId(l.id), label: l.label, icon: 'grid', note: 'This Drum pad layer’s pads, all through one chain (before its volume).' });
     }
     for (const n of nodes) if (n.type === 'audioInput') out.push({ id: nodeChainId(n.id), label: `Audio Input · ${n.id}`, icon: 'wave', note: 'This Audio Input node’s song.' });
+    for (const r of play.audioEngine?.racks ?? []) if (r.instrument?.kind === 'granulator' && !r.source) out.push({ id: rackChainId(r.id), label: `${r.name} · Granulator`, icon: 'piano', note: 'This Audio engine rack’s Granulator (before the rack’s volume).' });
     for (const id of Object.keys(fx.chains)) if (!out.some(s => s.id === id)) out.push({ id, label: `${id} (not here)`, icon: 'warning', note: 'Its sound isn’t in this setup any more: remove the chain, or bring the sound back.' });
     return out;
-  }, [play.layers, nodes, fx.chains]);
+  }, [play.layers, play.audioEngine, nodes, fx.chains]);
 
   const setFx = (fn: (f: PlayAudioFx) => PlayAudioFx) => onChange(p => {
     const next = tidyAudioFx(fn(p.audioFx ?? emptyAudioFx()));
