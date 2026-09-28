@@ -12,13 +12,15 @@ import { playOverlay } from '../play/overlay';
 import { rackKeyboard } from './rackKeyboard';
 import { setRackKeyboard } from '../types/playAudioEngine';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { playEngine } from './playEngine';
 
 let wired = false;
 
 export function wireAudioEngine(): void {
   if (wired) return;
   wired = true;
-  audioEngineHost.configure({ act: a => playOverlay.act(a) });
+  // Granulator racks report their grains as sensors (`ae:<rackId>::grains`…) for mappings.
+  audioEngineHost.configure({ act: a => playOverlay.act(a), sensor: (k, v) => playEngine.setSensor(k, v) });
   // Esc, the top bar's pill, leaving Play or removing the rack: the record's toggle follows.
   rackKeyboard.configure({
     release: rackId => useNodeGraphStore.getState().setPlay(p => (p.audioEngine?.racks.some(r => r.id === rackId && r.keyboard) ? { ...p, audioEngine: setRackKeyboard(p.audioEngine, rackId, false) } : p), false),

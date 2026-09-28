@@ -14,6 +14,11 @@
  * (through the app's audio engine, so it's in recordings and the master
  * chain); Audio Unit slots stay silent (desktop only).
  *
+ * Granulator racks (docs/granulator.md, lib/webGranulator.ts) play in Web
+ * Audio everywhere, the desktop app too: through their own Sound chain
+ * (`rack:<id>`), their settings driven by mappings each frame, their grains
+ * reported as sensors on `ae:<rackId>`.
+ *
  * MIDI: the MIDI engine's messages (hardware, the keyboard stand-in, a MIDI
  * file) go to every rack that hears them (rackHears). Notes pass through the
  * Play overlay as `pad` actions on `ae:<rackId>` so a take records them and
@@ -31,7 +36,7 @@
  */
 import { create } from 'zustand';
 import {
-  AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, aeRack, aeSlot, keyboardRack, parseAuTarget, auPropId, rackHears, unitKey, zoneForNote,
+  AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, aeRack, aeSlot, isGranulatorRack, keyboardRack, parseAuTarget, auPropId, rackHears, unitKey, zoneForNote,
   type AeRack, type AeSlot, type AeZone, type PlayAudioEngine,
 } from '../types/playAudioEngine';
 import {
@@ -45,6 +50,7 @@ import { midiEngine, type MidiEvent } from './midiEngine';
 import { isTauri } from './midiTransport';
 import { rackKeyboard } from './rackKeyboard';
 import { can } from './plan';
+import { WebGranulatorRack } from './webGranulator';
 
 type Invoke = <T>(cmd: string, args?: unknown, options?: { headers?: Record<string, string> }) => Promise<T>;
 type Listen = <T>(event: string, cb: (e: { payload: T }) => void) => Promise<() => void>;
@@ -155,6 +161,7 @@ type SoundLoader = (id: string) => Promise<{ blob: Blob; type: string; name: str
 
 /** A sample player rack in Web Audio: zones' buffers, voices through a gain, an analyser. */
 class WebRack {
+  readonly kind = 'sampler' as const;
   private ctx: AudioContext;
   private out: GainNode;
   readonly analyser: AnalyserNode;
@@ -231,7 +238,8 @@ class AudioEngineHost {
   private running: Promise<void> | null = null;
   private again = false;
   private spectra = new Map<string, EngineSpectrum>();
-  private web = new Map<string, WebRack>();
+  private web = new Map<string, WebRack | WebGranulatorRack>();
+  private sensor: ((key: string, value: number) => void) | null = null;
   private webCtx: { ctx: () => AudioContext; connect: (n: AudioNode) => () => void } | null = null;
   private soundLoader: SoundLoader | null = null;
   /** au target → the value last sent from a mapping (so a changed one is sent once). */
@@ -250,7 +258,8 @@ class AudioEngineHost {
   }
 
   /** For tests and the browser build: the Tauri bridge, the Web Audio context, the Library's sounds. */
-  configure(o: { invoke?: Invoke | null; listen?: Listen | null; webAudio?: AudioEngineHost['webCtx']; sounds?: SoundLoader; act?: Act | null }): void {
+  configure(o: { invoke?: Invoke | null; listen?: Listen | null; webAudio?: AudioEngineHost['webCtx']; sounds?: SoundLoader; act?: Act | null; sensor?: ((key: string, value: number) => void) | null }): void {
+    if (o.sensor !== undefined) this.sensor = o.sensor;
     if (o.invoke !== undefined) this.invoke = o.invoke;
     if (o.listen !== undefined) this.listen = o.listen;
     if (o.webAudio !== undefined) this.webCtx = o.webAudio;
@@ -346,6 +355,18 @@ class AudioEngineHost {
     }
     this.controls = controls;
     if (valueOf) this.drive(valueOf);
+    // Granulators: settings with their mappings, and the grains out as sensors.
+    for (const w of this.web.values()) {
+      if (w.kind !== 'granulator') continue;
+      w.update(valueOf);
+      if (this.sensor) w.report(this.sensor);
+    }
+  }
+
+  /** A granulator rack running here (the card draws its grains), or null. */
+  granulator(rackId: string): WebGranulatorRack | null {
+    const w = this.web.get(rackId);
+    return w && w.kind === 'granulator' ? w : null;
   }
 
   /** Mapped parameters: send what changed. */
@@ -409,10 +430,13 @@ class AudioEngineHost {
   }
 
   private async reconcile(ae: PlayAudioEngine | undefined): Promise<void> {
-    const racks = ae?.racks ?? [];
+    // Granulators run in Web Audio everywhere; the rest natively where the engine is.
+    const all = ae?.racks ?? [];
+    const racks = all.filter(r => !isGranulatorRack(r) || !!r.source);
+    const grains = all.filter(r => isGranulatorRack(r) && !r.source);
     const wantNative = racks.length > 0 && (await this.startNative());
-    if (!wantNative && racks.length && !this.native()) { this.reconcileWeb(racks); return; }
-    this.reconcileWeb([]);
+    if (!wantNative && racks.length && !this.native()) { this.reconcileWeb([...racks, ...grains]); return; }
+    this.reconcileWeb(grains);
     const inv = this.invoke;
     if (!inv) return;
     for (const id of [...this.mirror.keys()]) {
@@ -583,16 +607,21 @@ class AudioEngineHost {
   }
 
   private reconcileWeb(racks: readonly AeRack[]): void {
-    const want = racks.filter(r => r.instrument?.kind === 'sampler');
-    for (const [id, w] of this.web) if (!want.some(r => r.id === id)) { w.dispose(); this.web.delete(id); }
+    const want = racks.filter(r => !r.source && (r.instrument?.kind === 'sampler' || r.instrument?.kind === 'granulator'));
+    for (const [id, w] of this.web) if (!want.some(r => r.id === id && r.instrument?.kind === w.kind)) { this.releaseHeld(id); w.dispose(); this.web.delete(id); }
     if (!want.length) return;
     const wa = this.webCtx ?? defaultWebAudio();
     if (!wa) return;
-    useEngineUi.setState(s => (s.status.mode === 'web' ? s : { status: { ...s.status, mode: 'web' } }));
+    if (!this.mirror.size) useEngineUi.setState(s => (s.status.mode === 'web' ? s : { status: { ...s.status, mode: 'web' } }));
     for (const r of want) {
       let w = this.web.get(r.id);
-      if (!w) { w = new WebRack(wa.ctx(), wa.connect); this.web.set(r.id, w); }
-      w.setZones(r.instrument?.zones ?? [], this.soundLoader ?? defaultSounds);
+      if (r.instrument!.kind === 'granulator') {
+        if (!w) { w = new WebGranulatorRack(wa.ctx(), wa.connect, r.id); this.web.set(r.id, w); }
+        (w as WebGranulatorRack).setSlot(r.instrument!, this.soundLoader ?? defaultSounds);
+      } else {
+        if (!w) { w = new WebRack(wa.ctx(), wa.connect); this.web.set(r.id, w); }
+        (w as WebRack).setZones(r.instrument?.zones ?? [], this.soundLoader ?? defaultSounds);
+      }
       w.setVolume(r.volume, r.mute);
     }
   }

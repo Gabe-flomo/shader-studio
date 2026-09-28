@@ -31,11 +31,20 @@
  * real-time recording gets them from the engine's tap, muxed in afterwards
  * (ExportModal). A rack fed by a web sound (a send) takes that sound out of
  * the mix (`sentTracks`): it's heard through the rack instead.
+ *
+ * Granulator racks (docs/granulator.md) run in Web Audio, so real time
+ * records them off the record bus, and a frame-by-frame render replays the
+ * take's notes and mapped settings into the kit's pure grain engine
+ * (grRender: seeded, every note on its exact sample), through the rack's
+ * Sound chain (`rack:<id>`), its volume and the master chain (`grainTracks`).
  */
 import { audioEngine, trackChainId } from './audioEngine';
 import type { PlayRecord } from '../types/play';
 import { layerChainId, MASTER_CHAIN, type PlayAudioFx } from '../types/playAudioFx';
-import type { AeRack } from '../types/playAudioEngine';
+import { AE_INST, RACK_ACT_PREFIX, auPropId, isGranulatorRack, type AeRack, type AeSlot } from '../types/playAudioEngine';
+import { rackChainId } from '../types/playAudioFx';
+import { grRender, grSettings } from '../play/kit/granulator.js';
+import { grainBuffer } from './webGranulator';
 import { placeEngineRender, type EngineRender } from './engineRender';
 import { offlineFx, type ValueAt } from './audioFxOffline';
 import type { GraphNode } from '../types/nodeGraph';
@@ -58,12 +67,28 @@ export interface RecordingTrack {
   pads?: PadTrack;
   /** An Audio engine rack (desktop): rendered natively, or tapped in real time; never mixed here itself. */
   engine?: { rackId: string; source?: string };
+  /** A Granulator rack: its settings when the export starts and its decoded sample (it sounds from a take's notes, or its Drone). */
+  grain?: GrainTrack;
+}
+
+export interface GrainTrack { rackId: string; slot: AeSlot; buffer: AudioBuffer; volume: number }
+
+/** Granulator racks as tracks, when their sample is decoded here (a muted one is left out). */
+export function grainTracks(racks: readonly AeRack[] | undefined, bufferOf: (r: AeRack) => AudioBuffer | null = r => grainBuffer(r.instrument?.sample)): RecordingTrack[] {
+  const out: RecordingTrack[] = [];
+  for (const r of racks ?? []) {
+    if (!isGranulatorRack(r) || r.source || r.mute) continue;
+    const buffer = bufferOf(r);
+    if (buffer) out.push({ key: `grain:${r.id}`, label: `Audio engine · ${r.name}`, clock: true, chain: rackChainId(r.id), grain: { rackId: r.id, slot: r.instrument!, buffer, volume: r.volume } });
+  }
+  return out;
 }
 
 /** The Audio engine's racks as tracks: each with an instrument or a send (`native`: the desktop engine runs). */
 export function engineTracks(racks: readonly AeRack[] | undefined, native: boolean): RecordingTrack[] {
   if (!native) return [];
-  return (racks ?? []).filter(r => r.instrument || r.source).map(r => ({
+  // Granulators are mixed on the web side (grainTracks), never rendered natively.
+  return (racks ?? []).filter(r => r.source || (r.instrument && !isGranulatorRack(r))).map(r => ({
     key: `engine:${r.id}`, label: `Audio engine · ${r.name}`, clock: true, engine: { rackId: r.id, ...(r.source ? { source: r.source } : {}) },
   }));
 }
@@ -212,7 +237,7 @@ export function recordingTracks(play: PlayRecord, nodes: readonly GraphNode[]): 
  */
 export async function mixdown(tracks: readonly RecordingTrack[], duration: number, from = 0, sampleRate = 48000, fx?: MixFx): Promise<AudioBuffer | null> {
   const songs = tracks.filter(t => !t.video && !t.pads && !t.engine).map(t => ({ t, b: audioEngine.buffer(t.key) })).filter((x): x is { t: RecordingTrack; b: AudioBuffer } => !!x.b);
-  return mixBuffers(tracks.filter(t => t.video || t.pads), songs, duration, from, sampleRate, fx);
+  return mixBuffers(tracks.filter(t => t.video || t.pads || t.grain), songs, duration, from, sampleRate, fx);
 }
 
 /** mixdown with the songs' buffers in hand (tests give a generated tone); `tracks` are the Video layers' sounds and the Drum pad layers. */
@@ -225,8 +250,9 @@ export async function mixBuffers(tracks: readonly RecordingTrack[], buffers: Rea
     if (b && plan) videos.push({ b, plan, chain: t.chain });
   }
   const pads = tracks.filter(t => t.pads && duration > 0);
+  const grains = tracks.filter(t => t.grain && duration > 0);
   const engine = fx?.engine && fx.engine.frames > 0 ? fx.engine : null;
-  if ((!buffers.length && !videos.length && !pads.length && !engine) || duration <= 0) return null;
+  if ((!buffers.length && !videos.length && !pads.length && !grains.length && !engine) || duration <= 0) return null;
   const ctx = new OfflineAudioContext(2, Math.max(1, Math.ceil(duration * sampleRate)), sampleRate);
   const chains = await offlineFx(ctx, fx?.fx, duration, fx?.valueAt);
   // The Audio engine's racks: rendered already, past the page's chains (as live: the engine has its own output).
@@ -244,6 +270,14 @@ export async function mixBuffers(tracks: readonly RecordingTrack[], buffers: Rea
     if (plan.stopAt !== null) src.stop(plan.stopAt);
   }
   for (const t of pads) { const vol = ctx.createGain(); playPadHits(ctx, chains.input(t.chain ?? 'master', vol), vol, t.pads!, fx?.padHits ?? [], fx?.valueAt); }
+  for (const t of grains) {
+    const vol = ctx.createGain();
+    vol.gain.value = t.grain!.volume;
+    const src = ctx.createBufferSource();
+    src.buffer = renderGrains(ctx, t.grain!, fx?.padHits ?? [], ctx.length, fx?.valueAt);
+    src.connect(chains.input(t.chain ?? 'master', vol));
+    src.start(0);
+  }
   for (const { t, b } of buffers) {
     const src = ctx.createBufferSource();
     src.buffer = b;
@@ -277,6 +311,28 @@ export function playPadHits(ctx: BaseAudioContext, input: AudioNode, volume: Gai
     if (!buffer) continue;
     sampler.hit(h.pad, { ...dpHitNumbers(key => num(dpKey(h.pad, key), h.t)), buffer, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: h.vel }, h.t);
   }
+}
+
+/**
+ * A Granulator rack's sound for an offline mix: the take's notes for it
+ * (`ae:<rack>` pad hits: note + 1 as the pad, velocity) at their exact
+ * samples, its settings where the take had them every 128 frames, through the
+ * kit's pure engine (the same grains as live, seeded, so two renders match).
+ */
+export function renderGrains(ctx: BaseAudioContext, g: GrainTrack, hits: readonly PadHit[], frames: number, valueAt?: ValueAt): AudioBuffer {
+  const layerId = `${RACK_ACT_PREFIX}${g.rackId}`, prop = auPropId(g.rackId, AE_INST);
+  const events = hits.filter(h => h.layerId === layerId).map(h => ({ t: h.t, note: h.pad, vel: h.vel }));
+  const channels: Float32Array[] = [];
+  for (let c = 0; c < Math.min(2, g.buffer.numberOfChannels); c++) channels.push(g.buffer.getChannelData(c));
+  const out = grRender({
+    channels, bufferRate: g.buffer.sampleRate, sampleRate: ctx.sampleRate, frames, events,
+    settings: grSettings(g.slot.params), step: 256,
+    settingsAt: valueAt ? t => grSettings(g.slot.params, (a, base) => valueAt(prop, a, base, t)) : undefined,
+  });
+  const b = ctx.createBuffer(2, Math.max(1, frames), ctx.sampleRate);
+  b.getChannelData(0).set(out.left);
+  b.getChannelData(1).set(out.right);
+  return b;
 }
 
 /** 16-bit PCM WAV bytes of an AudioBuffer (stereo stays stereo; more channels are cut to two). */
