@@ -9,7 +9,7 @@ import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
  * Floating pill at the bottom of the phone preview: play/pause, reset, the time, and the
  * read-only node-graph overlay toggle. It sits on the render, so it's dark in both themes.
  */
-export function MobilePreviewPill({ overlayOpen, onToggleOverlay }: { overlayOpen: boolean; onToggleOverlay: () => void }) {
+export function MobilePreviewPill({ overlayOpen = false, onToggleOverlay }: { overlayOpen?: boolean; /** Absent (a page canvas): no overlay toggle. */ onToggleOverlay?: () => void }) {
   const timePlaying = useNodeGraphStore(s => s.timePlaying);
   const setTimePlaying = useNodeGraphStore(s => s.setTimePlaying);
 
@@ -39,7 +39,7 @@ export function MobilePreviewPill({ overlayOpen, onToggleOverlay }: { overlayOpe
       {btn('reset', 'Reset time to 0', () => window.dispatchEvent(new CustomEvent('reset-time')))}
       {btn('rebuild', REBUILD_TOOLTIP, () => { void rebuildWithToast(); })}
       <span style={{ font: `12px ${fontFamily.mono}`, color: '#e8e9ef', padding: '0 8px', fontVariantNumeric: 'tabular-nums' }} ref={timeReadoutRef}>0.00s</span>
-      {btn('overlay', overlayOpen ? 'Hide the node graph overlay' : 'Show the node graph over the preview', onToggleOverlay, overlayOpen)}
+      {onToggleOverlay && btn('overlay', overlayOpen ? 'Hide the node graph overlay' : 'Show the node graph over the preview', onToggleOverlay, overlayOpen)}
     </div>
   );
 }
