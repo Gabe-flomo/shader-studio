@@ -17,7 +17,7 @@ export function BackgroundsHost() {
     <>
       {stack.map(r => r.kind === 'capture'
         ? <CaptureDialog key={r.key} aspect={r.aspect} size={r.size} from={r.from} onDone={id => { closeBackgroundsWindow(r.key); r.resolve(id); }} />
-        : <BackgroundsDialog key={r.key} pick={r.pick} title={r.title} onDone={p => { closeBackgroundsWindow(r.key); r.resolve(p); }} />)}
+        : <BackgroundsDialog key={r.key} pick={r.pick} title={r.title} linked={r.linked} onDone={p => { closeBackgroundsWindow(r.key); r.resolve(p); }} />)}
     </>
   );
 }

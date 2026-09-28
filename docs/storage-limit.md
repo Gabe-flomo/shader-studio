@@ -12,6 +12,8 @@ The meter adds up everything the Files page knows about (`files/storageLimit.ts`
 | Images, Videos, Sounds | the media library in IndexedDB (`lib/backgroundLibrary.ts`) | each file's `bytes` |
 | Workspace folder | desktop app only: the connected folder's files on disk (`workspace/workspace.ts` `workspaceFolderBytes`) | `ws_list` sizes |
 
+**Linked folders** (`docs/linked-folders.md`) never count: their files are read from disk where they are and aren't stored by the app (only small thumbnails are cached). The Linked folders view and pickers say so.
+
 In a browser the workspace folder holds the same files the app already counts, so it is not added again. `navigator.storage.estimate()` is shown beside the meter as a cross-check ("Browser's estimate: 1.2 GB of 120 GB"); it is never what the limit is judged against, because it counts caches and other things the app does not manage.
 
 The media and folder parts are measured at most every few seconds and again after anything changes (`backgrounds-changed`, the library refresh events, `files-changed`); saved work is read live because it is cheap.

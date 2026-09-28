@@ -33,6 +33,8 @@ import { padSound, type PadSoundState } from '../lib/padSound';
 import { can } from '../lib/plan';
 import { kmLayoutOf, kmPadOf } from './kit/midi.js';
 import { audioAccept } from '../lib/audioAccept';
+import { isLinkedRef } from '../files/linkedRefs';
+import { onLinkedChange } from '../files/linkedFolders';
 import {
   DP_PADS, dpCreateSampler, dpHitNumbers, dpKey, dpPadOfCell, dpPadOfKey, dpPadOfNote, dpPeaks, dpSynthBuffer, type DpSampler,
 } from './kit/drumPads.js';
@@ -68,6 +70,14 @@ class PlayDrumPads {
 
   constructor() {
     padSound.setHost({ analyser: id => this.analyser(id), state: id => this.soundState(id), buffer: p => this.buffer(p) });
+    // A sample from a linked folder that changed on disk plays the new one; one that came back (folder plugged in, allowed again) loads.
+    onLinkedChange(refs => {
+      for (const [key, s] of [...this.samples]) {
+        if (!isLinkedRef(key) || (refs ? !refs.includes(key) : s.status === 'ready' || s.status === 'loading')) continue;
+        this.samples.delete(key);
+        void this.load(key, { ...emptyPad(), sampleId: key });
+      }
+    });
     if (typeof window === 'undefined') return;
     window.addEventListener('keydown', this.onKeyDown, true);
     window.addEventListener('keyup', this.onKeyUp, true);
@@ -158,6 +168,19 @@ class PlayDrumPads {
     const s = this.samples.get(sampleId);
     if (s?.status !== 'ready') throw new Error(s?.error || 'Couldn’t open that sound.');
     return { sampleId, fileName, bytes: file.size, kept };
+  }
+
+  /**
+   * Use a file from a linked folder (docs/linked-folders.md): nothing is copied
+   * into the library, the pad names it by its `linked:` reference. Rejects when
+   * it can't be read or decoded.
+   */
+  async useLinked(ref: string, fileName: string, bytes: number): Promise<{ sampleId: string; fileName: string; bytes: number }> {
+    this.samples.delete(ref);
+    await this.load(ref, { ...emptyPad(), sampleId: ref, fileName });
+    const s = this.samples.get(ref);
+    if (s?.status !== 'ready') throw new Error(s?.error || (s?.status === 'missing' ? 'That file couldn’t be read from its folder.' : 'Couldn’t open that sound.'));
+    return { sampleId: ref, fileName: fileName.slice(0, 120), bytes };
   }
 
   status(p: DrumPad | undefined): PadStatus { const k = sampleKey(p); return k ? this.samples.get(k)?.status ?? 'loading' : 'empty'; }

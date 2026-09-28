@@ -33,6 +33,9 @@ import { AUDIO_FX_EFFECTS, layerChainId, type PlayAudioFx } from '../../../types
 import type { EditorContext } from './editors';
 import type { FieldKit } from './fields';
 import { DrumKitRow } from './DrumKitRow';
+import { LinkedPickButton, LinkedRelinkButton, linkedMissingText, useLinkedAvailable } from '../../linked/LinkedPickButton';
+import { openLinkedPicker } from '../../linked/linkedUi';
+import { isLinkedRef, linkedRef } from '../../../files/linkedRefs';
 
 const keyName = (code: string) => code.replace(/^Key|^Digit/, '');
 /** Rows top to bottom: pads 13–16 on top, 1–4 at the bottom, like the hardware. */
@@ -141,6 +144,24 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
     } finally { setBusy(-1); }
   };
 
+  // Linked folders (docs/linked-folders.md): a sample used from disk where it is, not copied into the library.
+  const takeLinked = async (i: number, ref: string, name: string, bytes: number) => {
+    setBusy(i);
+    try { const got = await playDrumPads.useLinked(ref, name, bytes); setPad(i, { ...got, synth: '', name: '' }); setSel(i); }
+    catch (e) { toast.error('Couldn’t open that sound', { message: e instanceof Error ? e.message : String(e) }); }
+    finally { setBusy(-1); }
+  };
+  const linkedOk = useLinkedAvailable();
+  const loadFolder = async () => {
+    const p = await openLinkedPicker({ filter: 'audio', mode: 'folder', title: 'Load a folder onto the pads' });
+    if (p?.kind !== 'folder') return;
+    const files = p.files.slice(0, DP_PADS);
+    const got = await Promise.all(files.map(e => playDrumPads.useLinked(linkedRef(p.folderId, e.path), e.name, e.size).catch(() => null)));
+    f.set({ pads: l.pads.map((pad, i) => { const g = got[i]; return g ? { ...pad, ...g, synth: '', name: '' } : pad; }) });
+    const ok = got.filter(Boolean).length, bad = files.length - ok;
+    toast.success(`Loaded ${ok} sound${ok === 1 ? '' : 's'} onto pads 1–${files.length}`, { message: `${bad ? `${bad} couldn’t be decoded and were left as they were. ` : ''}${p.files.length > DP_PADS ? `The folder has ${p.files.length}: the first ${DP_PADS} alphabetically went on. ` : ''}Played from the folder, not copied into the library.` });
+  };
+
   const down = (i: number, e: ReactPointerEvent<HTMLButtonElement>) => {
     setSel(i);
     if (!padHasSound(l.pads[i])) return;
@@ -209,6 +230,7 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         {note('Click a pad to play it (higher is harder) and edit it below. Drop sound files on pads to load them.')}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
           <Button size="sm" icon="pause" onClick={() => playDrumPads.stopAll(l.id)} title="Stop everything sounding">Stop</Button>
+          {linkedOk && <Button size="sm" icon="link" onClick={() => void loadFolder()} title="Fill the pads from a linked folder’s sounds, alphabetically (pad 1 first), played from the folder">Load a folder onto pads…</Button>}
           {!mine && <Button size="sm" icon="wave" onClick={listenHere} title="Point the setup’s audio readers at these pads">Readers listen here</Button>}
           <Button size="sm" variant={mine ? 'primary' : 'ghost'} icon="wave" onClick={openReaders} title="The spectrum and readers, listening to these pads">Audio readers…</Button>
         </div>
@@ -219,13 +241,15 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         {f.row('Sound', (
           <>
             <Button size="sm" icon="import" disabled={busy === sel} onClick={() => fileRef.current?.click()}>{status === 'missing' ? 'Pick it again' : pad.sampleId ? 'Replace…' : 'Choose file…'}</Button>
+            <LinkedPickButton filter="audio" label="Linked folder…" disabled={busy === sel} onPick={(ref, e) => void takeLinked(sel, ref, e.name, e.size)} />
+            {status === 'missing' && <LinkedRelinkButton id={pad.sampleId} filter="audio" onRelinked={ref => void takeLinked(sel, ref, ref.split('/').pop() ?? pad.fileName, pad.bytes)} />}
             <Select ariaLabel="Generated drum" value={pad.sampleId ? '' : pad.synth} height={26}
               options={[{ value: '', label: pad.sampleId ? 'File' : 'Generated…' }, ...DP_SYNTHS.map(s => ({ value: s, label: DRUM_SYNTH_LABELS[s] }))]}
               onChange={v => { if (v) setPad(sel, { synth: v as DrumPad['synth'], sampleId: '', fileName: '', bytes: 0, name: '' }); }} />
             {padHasSound(pad) && <Button size="sm" variant="ghost" icon="trash" onClick={() => setPad(sel, emptyDrumPad())} title="Empty this pad">Clear</Button>}
           </>
         ), 'A sound file of your own (kept in this browser’s library, not in the setup) or a generated drum.')}
-        {pad.sampleId && note(`${pad.fileName}${pad.bytes ? ` · ${sizeText(pad.bytes)}` : ''}${status === 'missing' ? ' isn’t in this browser’s library (another browser, or a cleared library). Pick it again.' : status === 'error' ? ` · ${playDrumPads.errorText(pad)}` : ''}`)}
+        {pad.sampleId && note(`${pad.fileName}${pad.bytes ? ` · ${sizeText(pad.bytes)}` : ''}${status === 'missing' ? (isLinkedRef(pad.sampleId) ? ` · ${linkedMissingText(pad.sampleId, pad.fileName)}` : ' isn’t in this browser’s library (another browser, or a cleared library). Pick it again.') : status === 'error' ? ` · ${playDrumPads.errorText(pad)}` : ''}`)}
         {padHasSound(pad) && (
           <>
             <Waveform f={f} layer={l} pad={sel} />

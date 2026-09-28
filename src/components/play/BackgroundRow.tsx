@@ -28,6 +28,11 @@ import { Sheet } from '../ui/Sheet';
 import { FillEditor, type EditableFill } from '../backgrounds/FillEditor';
 import { openBackgrounds } from '../backgrounds/backgroundsUi';
 import { imageMenuItems, pickLibraryImage } from '../backgrounds/libraryImage';
+import { openLinkedPicker } from '../linked/linkedUi';
+import { LinkedRelinkButton, linkedMissingText, useLinkedAvailable } from '../linked/LinkedPickButton';
+import { linkedBackgroundImage, linkedBackgroundVideo, linkedImageSource, linkedVideoSource } from '../linked/linkedSources';
+import { isLinkedRef } from '../../files/linkedRefs';
+import { linkedProblem } from '../../files/linkedFolders';
 import { usePalettes } from '../backgrounds/useBackgrounds';
 import { freePaletteName, getPalette, paletteCss, paletteFill, savePalette, PALETTE_PRESETS } from '../../lib/backgroundLibrary';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -130,14 +135,40 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
     if (v === 'graph') { setPicking(true); return; }
     // A picture this setup already kept moves into the layer; otherwise pick a file.
     if (v === 'image' && d.image) { startLayer({ id: newSourceId(), kind: 'image', name: baseName(d.image.name), src: d.image.src }); return; }
-    if (v === 'video' && d.video && (d.video.src || playBackground.hasSessionVideo(d.video.name, d.video.bytes))) {
+    if (v === 'video' && d.video && (d.video.src || playBackground.hasSessionVideo(d.video.name, d.video.bytes) || isLinkedRef(d.video.libraryId))) {
       const vd = d.video;
-      startLayer({ id: newSourceId(), kind: 'video', name: vd.name, src: vd.src, bytes: vd.bytes, loop: vd.loop, muted: vd.muted, rate: vd.rate });
+      startLayer({ id: newSourceId(), kind: 'video', name: vd.name, src: vd.src, bytes: vd.bytes, loop: vd.loop, muted: vd.muted, rate: vd.rate, ...(vd.libraryId ? { libraryId: vd.libraryId } : {}) });
       return;
     }
     legacyPick.current = false;
     if (v === 'image') { askImage(false); return; }
-    videoInput.current?.click();
+    askVideo(false);
+  };
+
+  // Linked folders (docs/linked-folders.md): a picture embedded like a picked file, a video played from disk.
+  const linkedOk = useLinkedAvailable();
+  const [videoMenu, setVideoMenu] = useState<{ x: number; y: number; legacy: boolean } | null>(null);
+  /** Video…: a file, or (with linked folders) a menu. */
+  const askVideo = (legacy: boolean) => {
+    if (!linkedOk) { legacyPick.current = legacy; videoInput.current?.click(); return; }
+    const r = segRef.current?.getBoundingClientRect();
+    setVideoMenu({ x: r ? r.left : 16, y: r ? r.bottom + 4 : 80, legacy });
+  };
+  const fromLinked = async (kind: 'image' | 'video', legacy: boolean, ref?: string) => {
+    let use = ref, bytes = d.video?.bytes ?? 0;
+    if (!use) {
+      const p = await openLinkedPicker({ filter: kind });
+      if (p?.kind !== 'file') return;
+      use = p.ref; bytes = p.entry.size;
+    }
+    setBusy(true);
+    try {
+      if (kind === 'image') {
+        if (legacy) setDisplay({ source: 'image', image: await linkedBackgroundImage(use) }); else startLayer(await linkedImageSource(use));
+      } else if (legacy) setDisplay({ source: 'video', video: linkedBackgroundVideo(use, bytes, d.video) });
+      else startLayer(linkedVideoSource(use, bytes));
+    } catch (e) { toast.error(`Couldn’t use that ${kind}`, { message: e instanceof Error ? e.message : String(e) }); }
+    finally { setBusy(false); }
   };
 
   /** Image…: a menu, library or file. */
@@ -208,7 +239,7 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
   };
   const replaceLegacy = (kind: 'image' | 'video') => {
     if (kind === 'image') { askImage(true); return; }
-    legacyPick.current = true; videoInput.current?.click();
+    askVideo(true);
   };
 
   const label = (text: string) => <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{text}</span>;
@@ -260,7 +291,8 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
   // ── This setting decides ──────────────────────────────────────────────────
   const video = d.video;
   const vEl = source === 'video' ? playBackground.videoElement() : null;
-  const videoMissing = source === 'video' && !!video && !video.src && !playBackground.hasSessionVideo(video.name, video.bytes);
+  const videoLinked = !!video && isLinkedRef(video.libraryId);
+  const videoMissing = source === 'video' && !!video && !video.src && !playBackground.hasSessionVideo(video.name, video.bytes) && (!videoLinked || !!linkedProblem(video.libraryId!));
   const videoError = !!vEl?.error;
   const showToggle = source !== 'colour';
   const layersOnly = !d.picture && source !== 'colour';
@@ -362,8 +394,10 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
         </div>
       )}
 
-      {source === 'video' && video && !video.src && !videoMissing && note(`Over ${sizeText(BACKGROUND_VIDEO_KEEP)}, so it plays until you reload: saves, play files and web pages leave it out. Trim or compress it to keep it.`, 'warning')}
-      {videoMissing && note(`“${video!.name}” (${sizeText(video!.bytes)}) was too big to save. Load it again to use it.`, 'warning')}
+      {source === 'video' && videoLinked && !videoMissing && note('Plays from its linked folder, read-only: not copied into the setup or the library.')}
+      {source === 'video' && video && !video.src && !videoMissing && !videoLinked && note(`Over ${sizeText(BACKGROUND_VIDEO_KEEP)}, so it plays until you reload: saves, play files and web pages leave it out. Trim or compress it to keep it.`, 'warning')}
+      {videoMissing && !videoLinked && note(`“${video!.name}” (${sizeText(video!.bytes)}) was too big to save. Load it again to use it.`, 'warning')}
+      {videoMissing && videoLinked && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{note(linkedMissingText(video!.libraryId!, video!.name), 'warning')}<LinkedRelinkButton id={video!.libraryId!} filter="video" onRelinked={ref => void fromLinked('video', true, ref)} /></div>}
       {videoError && note('This browser can’t play that video. Try an MP4 (H.264) or a WebM.', 'warning')}
       {source !== 'shader' && note(<>The graph is paused on Play: only the {source === 'colour' ? 'colour' : source} and the layers are drawn. The Studio still runs the graph.{hasLayersNode ? ' Its Layers node gets nothing from here while the graph is paused.' : ''}</>)}
       {imageMenu && (
@@ -371,7 +405,14 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
           items={imageMenuItems(
             () => { const legacy = imageMenu.legacy; setImageMenu(null); void imageFromLibrary(legacy); },
             () => { legacyPick.current = imageMenu.legacy; setImageMenu(null); imageInput.current?.click(); },
+            linkedOk ? () => { const legacy = imageMenu.legacy; setImageMenu(null); void fromLinked('image', legacy); } : undefined,
           )} />
+      )}
+      {videoMenu && (
+        <Menu x={videoMenu.x} y={videoMenu.y} minWidth={240} onClose={() => setVideoMenu(null)} items={[
+          { label: 'Upload a file…', icon: 'import', hint: 'MP4, WebM or MOV', onSelect: () => { legacyPick.current = videoMenu.legacy; setVideoMenu(null); videoInput.current?.click(); } },
+          { label: 'From a linked folder…', icon: 'link', hint: 'Plays from disk where it is: not copied', onSelect: () => { const legacy = videoMenu.legacy; setVideoMenu(null); void fromLinked('video', legacy); } },
+        ]} />
       )}
       {picking && <GraphSourcePicker anchorRef={segRef} title="Show a graph" onClose={() => setPicking(false)} onPick={item => startLayer(item)} />}
     </div>
