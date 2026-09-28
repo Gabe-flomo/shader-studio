@@ -644,10 +644,88 @@ function seedOne(st, i, p, env, rand) {
 /** Particle radius in picture heights (for contact and budding distances). */
 const radiusH = (p, env) => Math.max(0.002, ((p.size || 2) * (env.dpr || 1)) / Math.max(1, env.H || 720));
 
-/** The colony's state: phase start → grow → full, the time spent full, and the respawn clock. */
+/**
+ * The colony's state: phase start → grow → full, the time spent full, the
+ * respawn clock, and counters for the layer's signals (each bumped once per
+ * event: a bud, reaching the target, a pair dying, the colony clearing out).
+ */
 function multState(st) {
-  if (!st.mx) st.mx = { phase: 'start', full: 0, idle: 0, respawn: 0, cycles: 0, reached: false };
+  if (!st.mx) st.mx = { phase: 'start', full: 0, idle: 0, respawn: 0, cycles: 0, reached: false, splits: 0, fulls: 0, annihilations: 0, cleareds: 0, wasEmpty: false };
   return st.mx;
+}
+
+/**
+ * Bud `amount` new particles into free slots from random living parents (the
+ * bud lands on its parent and is pushed apart, like a split); with nobody
+ * alive, they start where the layer is Born instead. Used by Grow: by
+ * Fullness and by the Multiply action. Counts each as `mx.splits`.
+ */
+function budFromParents(st, p, env, rand, amount, mx) {
+  const n = st.count, aspect = env.aspect || 1;
+  const gap = radiusH(p, env) * 0.3, push = Math.max(0, p.splitPush ?? 0.08);
+  let free = 0;
+  for (let k = 0; k < amount; k++) {
+    while (free < n && st.alive[free]) free++;
+    if (free >= n) break;
+    let alive = 0;
+    for (let i = 0; i < n; i++) if (st.alive[i]) alive++;
+    let parent = -1;
+    if (alive > 0) {
+      const pick = Math.floor(rand() * alive);
+      let seen = 0;
+      for (let i = 0; i < n; i++) if (st.alive[i]) { if (seen === pick) { parent = i; break; } seen++; }
+    }
+    if (parent >= 0) {
+      const a = rand() * TAU, cx = Math.cos(a), cy = Math.sin(a);
+      birth(st, free, st.x[parent] + (cx * gap) / aspect, st.y[parent] + cy * gap, st.vx[parent] + cx * push, st.vy[parent] + cy * push, p, rand);
+    } else {
+      seedOne(st, free, p, env, rand);
+    }
+    mx.splits++;
+    free++;
+  }
+}
+
+/** Remove `count` particles, the youngest first (freeing a paired mate too). Used by Grow: by Fullness and the Cull action. */
+function cullYoungest(st, count) {
+  const n = st.count;
+  for (let c = 0; c < count; c++) {
+    let youngest = -1, age = Infinity;
+    for (let i = 0; i < n; i++) if (st.alive[i] && st.age[i] < age) { age = st.age[i]; youngest = i; }
+    if (youngest < 0) break;
+    const m = st.mate[youngest];
+    if (m >= 0) st.mate[m] = -1;
+    st.mate[youngest] = -1;
+    st.alive[youngest] = 0;
+  }
+}
+
+/**
+ * Grow: by Fullness. No split clocks: the population chases
+ * round(Fullness × Count) directly, budding from random living parents a few
+ * at a time (so raising the slider looks like growth, not a pop) and culling
+ * the youngest first when it's lowered. Annihilate still pairs up whoever is
+ * alive; `full` is reached when alive ≥ the target.
+ */
+function multiplyByFullness(st, p, env, rand, dt, mx) {
+  const n = st.count, mode = p.multLife || 'stay';
+  let alive = 0;
+  for (let i = 0; i < n; i++) alive += st.alive[i];
+  if (alive === 0) { if (!mx.wasEmpty) { mx.cleareds++; mx.wasEmpty = true; } } else mx.wasEmpty = false;
+  const target = Math.max(0, Math.min(n, Math.round(((p.fullness ?? 100) / 100) * n)));
+  const wasReached = mx.reached;
+  mx.reached = target > 0 && alive >= target;
+  if (mx.reached && !wasReached) mx.fulls++;
+  if (alive < target) {
+    const need = target - alive;
+    const amount = Math.max(1, Math.min(need, Math.ceil(need * Math.min(1, dt * 6))));
+    budFromParents(st, p, env, rand, amount, mx);
+  } else if (alive > target) {
+    cullYoungest(st, alive - target);
+  }
+  if (mode === 'annihilate' && alive > 1) {
+    pairUp(st, p, env, rand, false, 1 - Math.exp(-dt * Math.max(0.01, p.splitRate ?? 1) * 0.25));
+  }
 }
 
 /** Births, deaths, pairing and restarts, before anything moves. */
@@ -659,9 +737,10 @@ function multiplyLife(st, p, env, rand, dt) {
     mx.phase = 'grow'; mx.full = 0; mx.idle = 0; mx.respawn = 0; mx.reached = false;
     return;
   }
+  if (p.grow === 'fullness') { multiplyByFullness(st, p, env, rand, dt, mx); return; }
   let alive = 0;
   for (let i = 0; i < n; i++) alive += st.alive[i];
-  if (mx.phase === 'grow' && alive >= n) { mx.phase = 'full'; mx.full = 0; mx.reached = true; }
+  if (mx.phase === 'grow' && alive >= n) { mx.phase = 'full'; mx.full = 0; mx.reached = true; mx.fulls++; }
   if (mx.phase === 'full') mx.full += dt;
   // Loop: once full, no more splitting; start over when they're gone (or after Loop hold).
   if (after === 'loop' && mx.phase === 'full') {
@@ -669,12 +748,13 @@ function multiplyLife(st, p, env, rand, dt) {
     if (alive < 2 || hold) {
       mx.idle += dt;
       // A short pause on an empty picture (or straight away when the hold runs out).
-      if (hold || mx.idle > 0.6) { mx.phase = 'start'; mx.cycles++; multiplyLife(st, p, env, rand, dt); }
+      if (hold || mx.idle > 0.6) { mx.phase = 'start'; mx.cycles++; mx.cleareds++; multiplyLife(st, p, env, rand, dt); }
       return;
     }
     mx.idle = 0;
   } else if (alive === 0) {
     // Hold and respawn: all gone, so begin again from one.
+    mx.cleareds++;
     seedOne(st, 0, p, env, rand);
     mx.phase = 'grow';
     return;
@@ -706,6 +786,7 @@ function multiplyLife(st, p, env, rand, dt) {
         if (free >= n) break;
         const a = a0 + (k * TAU) / kids, cx = Math.cos(a), cy = Math.sin(a);
         birth(st, free, st.x[i] + (cx * gap) / aspect, st.y[i] + cy * gap, st.vx[i] + cx * push, st.vy[i] + cy * push, p, rand);
+        mx.splits++;
         // Budding: one bud pushes its parent back the other way.
         if (kids === 1) { st.vx[i] -= cx * push; st.vy[i] -= cy * push; }
         alive++;
@@ -718,6 +799,17 @@ function multiplyLife(st, p, env, rand, dt) {
     const clearing = after === 'loop' && mx.phase === 'full';
     pairUp(st, p, env, rand, clearing, clearing ? 1 : 1 - Math.exp(-dt * Math.max(0.01, p.splitRate ?? 1) * 0.25));
   }
+}
+
+/** Action: bud `amount` particles now from random living parents (or Born, if nobody is alive). */
+export function multiplyParticles(st, p, env, amount, rand = Math.random) {
+  const mx = multState(st);
+  budFromParents(st, p, env, rand, Math.max(0, Math.round(amount)), mx);
+}
+
+/** Action: remove `amount` particles, youngest first. */
+export function cullParticles(st, p, env, amount, rand = Math.random) {
+  cullYoungest(st, Math.max(0, Math.round(amount)));
 }
 
 /**
@@ -780,6 +872,7 @@ function multiplyMove(st, p, env, rand, dt) {
       if (d < contact) {
         // Touch: both simply go. (No burst: the owner wants them to combine and vanish.)
         st.alive[i] = 0; st.alive[m] = 0; st.mate[i] = -1; st.mate[m] = -1;
+        if (st.mx) st.mx.annihilations++;
         continue;
       }
       vx += ((dx / d) * seek - vx) * seekK; vy += ((dy / d) * seek - vy) * seekK;

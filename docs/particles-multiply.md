@@ -35,6 +35,43 @@ If every particle dies under Hold or Respawn, a new colony starts from one. **St
 
 Every random choice (split times, bud directions, partners) draws on the layer's random source in a fixed order. With **Seed** set, or inside a take (which seeds unseeded layers from the session), two runs at the same frame rate give the same result, so offline renders match what was played.
 
+## Fullness
+
+**Grow** chooses how the colony gets to **Count**:
+
+| Setting | What it does |
+|---|---|
+| **By itself** | Today's behaviour: split timers grow the colony (Split rate, Split jitter, Buds, Bud push; **When full** applies). |
+| **By Fullness** | The population follows **Fullness** (0–100%, default 100) directly. Split timers are off, and **When full** doesn't apply. |
+
+Raising Fullness buds new particles from random living parents — the same bud placement as a split — a few a frame, so a sweep of the slider looks like growth, not a pop. Lowering it removes the youngest first. **Full** is reached when the number alive is at least `round(Fullness × Count)`. Annihilate and the other life modes still apply to whoever is alive; a Fullness sweep with Annihilate on keeps pairing up survivors as it goes.
+
+Fullness is a normal control: map an LFO, a knob, an audio band or the Increment mapping onto it, from the panel, a take or a website. It is deterministic in takes and in website exports, the same as everything else in Multiply.
+
+## Actions
+
+Two actions join Burst and Reset on a Multiply particles layer, in the Actions list (a key, a beat, a MIDI note, a signal…):
+
+| Action | What it does |
+|---|---|
+| **Multiply** | Buds `amount` particles now, from random living parents (or from Born, if nobody is alive yet). |
+| **Cull** | Removes `amount` particles, youngest first. |
+
+Both work regardless of **Grow**: they bud or cull immediately, on top of whatever Grow and the life modes are doing that frame.
+
+## Signals
+
+A Multiply layer can send a named signal (pick one, or make a new one, under **Signals out**) whenever:
+
+| Signal | Fires when |
+|---|---|
+| **Split** | A particle buds — by itself, by Fullness, or the Multiply action. |
+| **Full** | The colony reaches its target (Count, or Fullness × Count). |
+| **Annihilate** | A pair dies (Annihilate mode only). |
+| **Cleared** | The colony empties out, or a Loop restarts. |
+
+Other actions and mappings react to these the same way they react to any signal: "When: a signal fires" on a trigger, or a Send a signal action chained onto it.
+
 ## Goo (metaballs)
 
 Look → **Goo**. Each particle adds a smooth bump `k(d) = (1 − d²/R²)²` to one field, with `R` = its size × **Goo blend**. Where the sum passes **Goo threshold** is goo. Particles close enough that their bumps add past the threshold between them merge into one blob; as they part, a neck stretches and snaps. A lone particle's blob has radius `R·√(1 − √threshold)`.

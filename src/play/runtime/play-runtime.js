@@ -1618,6 +1618,22 @@ void main() {
         if (last !== undefined && n > last && l.catchSignal) emitSignal(l.catchSignal);
       }
     }
+    // Multiply layers: each split, full, annihilate and cleared the kit counted sends the layer's matching signal.
+    const multiplySeen = new Map();
+    function tickMultiplySignals() {
+      for (const l of play.layers) {
+        if (l.kind !== 'particles' || l.emit !== 'multiply') continue;
+        const split = sensors.get(l.id + '::split') || 0, full = sensors.get(l.id + '::full') || 0;
+        const annihilate = sensors.get(l.id + '::annihilate') || 0, cleared = sensors.get(l.id + '::cleared') || 0;
+        const last = multiplySeen.get(l.id);
+        multiplySeen.set(l.id, { split, full, annihilate, cleared });
+        if (!last) continue;
+        if (split > last.split && l.splitSignal) emitSignal(l.splitSignal);
+        if (full > last.full && l.fullSignal) emitSignal(l.fullSignal);
+        if (annihilate > last.annihilate && l.annihilateSignal) emitSignal(l.annihilateSignal);
+        if (cleared > last.cleared && l.clearedSignal) emitSignal(l.clearedSignal);
+      }
+    }
     function tickZoneTriggers() {
       for (const t of allTriggers) {
         if (t.on !== 'zone' || t.event === 'click') continue;
@@ -1750,6 +1766,7 @@ void main() {
       lastTime = time;
       tickConditionTriggers();
       tickRelationshipSignals();
+      tickMultiplySignals();
       tickActions(dt);
       const driven = new Set();
       let moved = false;

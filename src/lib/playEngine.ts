@@ -463,6 +463,23 @@ class PlayEngine implements InputSource {
     }
   }
 
+  /** Multiply layers: each split, full, annihilate and cleared the kit counted sends the layer's matching signal. */
+  private multiplySeen = new Map<string, { split: number; full: number; annihilate: number; cleared: number }>();
+  private tickMultiplySignals(): void {
+    for (const l of this.record.layers) {
+      if (l.kind !== 'particles' || l.emit !== 'multiply') continue;
+      const split = this.sensors.get(`${l.id}::split`) ?? 0, full = this.sensors.get(`${l.id}::full`) ?? 0;
+      const annihilate = this.sensors.get(`${l.id}::annihilate`) ?? 0, cleared = this.sensors.get(`${l.id}::cleared`) ?? 0;
+      const last = this.multiplySeen.get(l.id);
+      this.multiplySeen.set(l.id, { split, full, annihilate, cleared });
+      if (!last) continue;
+      if (split > last.split && l.splitSignal) this.emitSignal(l.splitSignal);
+      if (full > last.full && l.fullSignal) this.emitSignal(l.fullSignal);
+      if (annihilate > last.annihilate && l.annihilateSignal) this.emitSignal(l.annihilateSignal);
+      if (cleared > last.cleared && l.clearedSignal) this.emitSignal(l.clearedSignal);
+    }
+  }
+
   /** The picture's width / height, for distances between nulls. */
   setAspect(aspect: number): void {
     if (aspect > 0 && Number.isFinite(aspect)) this.aspect = aspect;
@@ -1000,6 +1017,7 @@ class PlayEngine implements InputSource {
     this.lastTime = time;
     this.tickConditionTriggers();
     this.tickRelationshipSignals();
+    this.tickMultiplySignals();
     this.tickActions(dt);
     if (this.learnCb && this.performing) this.pollGamepadLearn();
     // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.
