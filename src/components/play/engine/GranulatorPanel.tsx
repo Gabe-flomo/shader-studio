@@ -15,8 +15,8 @@ import { Segmented, Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { RulerSlider } from '../../ui/RulerSlider';
 import { toast } from '../../ui/toastStore';
-import { GR_SYNTHS, GR_SYNTH_NAMES, grParam, grSummary, type GrParam } from '../../../play/kit/granulator.js';
-import { AE_INST, aeRack, aeSlot, auPropId, auTarget, patchSlot, type AeGrainSample, type AeRack, type AeSlot } from '../../../types/playAudioEngine';
+import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_PROP_NAMES, GR_FROM_TARGETS, GR_SYNTHS, GR_SYNTH_NAMES, grFromDefaults, grParam, grSummary, type GrParam } from '../../../play/kit/granulator.js';
+import { AE_INST, aeRack, aeSlot, auPropId, auTarget, patchSlot, type AeGrainFrom, type AeGrainLink, type AeGrainSample, type AeRack, type AeSlot } from '../../../types/playAudioEngine';
 import type { PlayRecord } from '../../../types/play';
 import type { DrumPadLayer } from '../../../types/playLayers';
 import { formatParam } from '../../../lib/audioEngineProtocol';
@@ -91,7 +91,82 @@ export function GranulatorPanel({ rack, slot, play, onChange, touch }: { rack: A
           })}
         </div>
       ))}
+      <GrainsFrom rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} exposed={exposed.has(auTarget(rack.id, AE_INST, String(grParam('fromRate')!.addr)))}
+        rate={valueOf('fromRate')} onRate={v => set('fromRate', v)} onExposeRate={() => expose(grParam('fromRate')!)} />
       <Readouts rack={rack} onChange={onChange} />
+    </div>
+  );
+}
+
+// ── Grains from a layer ──────────────────────────────────────────────────────
+
+const FROM_KINDS: Record<string, string> = { particles: 'particles', bodies: 'bodies', null: 'a null', relationship: 'members' };
+
+/**
+ * "Grains from": a layer's things (particles, bodies, a null, a Relationship's members) play
+ * grains while they're inside a boundary shape, each thing's numbers setting its grains' through
+ * a few links (lib/grainFrom.ts). Folded until used.
+ */
+function GrainsFrom({ rack, slot, play, onChange, touch, exposed, rate, onRate, onExposeRate }: {
+  rack: AeRack; slot: AeSlot; play: PlayRecord; onChange: Change; touch: boolean; exposed: boolean; rate: number; onRate: (v: number) => void; onExposeRate: () => void;
+}) {
+  const tk = useTokens();
+  const from = slot.from;
+  const [open, setOpen] = useState(!!from);
+  const inside = useGrainUi(s => s.inside[rack.id]);
+  const setFrom = (f: AeGrainFrom | undefined) => onChange(p => withEngine(p, patchSlot(p.audioEngine, rack.id, AE_INST, { from: f })));
+  const sources = play.layers.filter(l => FROM_KINDS[l.kind]);
+  const shapes = play.layers.filter(l => l.kind === 'shape');
+  const src = from ? play.layers.find(l => l.id === from.source) : undefined;
+  const cur = from ?? { ...grFromDefaults(), source: '' };
+  const patch = (o: Partial<AeGrainFrom>) => { const next = { ...cur, ...o }; setFrom(next.source ? next : undefined); };
+  const patchLink = (i: number, o: Partial<AeGrainLink>) => patch({ links: cur.links.map((l, j) => (j === i ? { ...l, ...o } : l)) });
+  const num = (v: number) => (Math.abs(v) >= 100 ? String(Math.round(v)) : String(Math.round(v * 100) / 100));
+  const cell: CSSProperties = { height: 24, minWidth: 0, padding: '0 4px', borderRadius: radius.sm, border: `1px solid ${tk.border.default}`, background: tk.bg.panel, color: tk.text.primary, font: `11.5px ${fontFamily.mono}` };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        style={{ ...labelStyle(tk), border: 0, background: 'none', padding: '2px 0', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ display: 'inline-block', width: 10 }}>{open ? '▾' : '▸'}</span>Grains from a layer{from ? ` · ${src?.label ?? 'gone'}` : ''}
+      </button>
+      {open && (<>
+        <span style={{ color: tk.text.muted, font: `11px/1.45 ${fontFamily.ui}` }}>Each thing inside the boundary plays grains while it stays there, its own numbers setting its grains.</span>
+        <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr', alignItems: 'center', gap: 6 }}>
+          <span style={labelStyle(tk)}>Source</span>
+          <Select ariaLabel="The layer whose things play grains" value={cur.source} height={28} onChange={v => patch({ source: v })}
+            options={[{ value: '', label: sources.length ? 'None' : 'No particles, bodies, nulls or relationships yet' }, ...sources.map(l => ({ value: l.id, label: `${l.label} · ${FROM_KINDS[l.kind]}` }))]} />
+          <span style={labelStyle(tk)}>Inside</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <Select ariaLabel="The boundary: only things inside it play" value={cur.boundary} height={28} style={{ flex: 1, minWidth: 0 }} onChange={v => patch({ boundary: v })}
+              options={[{ value: '', label: 'The whole picture' }, ...shapes.map(l => ({ value: l.id, label: l.label }))]} />
+            {from && <span title="Things inside the boundary now" style={{ color: tk.text.secondary, font: `600 11px ${fontFamily.mono}`, whiteSpace: 'nowrap' }}>{inside ?? 0} in</span>}
+          </div>
+        </div>
+        {from && (<>
+          <ParamRow p={grParam('fromRate')!} value={rate} touch={touch} exposed={exposed} onSet={onRate} onExpose={onExposeRate} />
+          {src?.kind === 'particles' && <Toggle checked={cur.births} onChange={on => patch({ births: on })} label="A particle just born plays a grain at once (a burst is a burst of grains)" />}
+          <div role="table" aria-label="Links: a thing’s number sets a grain setting" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {cur.links.map((l, i) => (
+              <div role="row" key={i} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) minmax(0, 1fr) 46px 46px 22px', alignItems: 'center', gap: 4, opacity: l.on ? 1 : 0.55 }}>
+                <input type="checkbox" checked={l.on} aria-label="Link on" onChange={e => patchLink(i, { on: e.target.checked })} style={{ accentColor: tk.accent.base }} />
+                <select aria-label="Its number" value={l.prop} onChange={e => patchLink(i, { prop: e.target.value })} style={cell}>
+                  {GR_FROM_PROPS.map(k => <option key={k} value={k}>{GR_FROM_PROP_NAMES[k]}</option>)}
+                </select>
+                <select aria-label="Sets" value={l.target} onChange={e => { const t = GR_FROM_TARGETS[e.target.value]; patchLink(i, { target: e.target.value, min: t.min, max: t.max }); }} style={cell}>
+                  {Object.entries(GR_FROM_TARGETS).map(([k, t]) => <option key={k} value={k}>→ {t.name}</option>)}
+                </select>
+                <input aria-label="At 0" title={`At 0 (${GR_FROM_TARGETS[l.target]?.unit || 'value'})`} defaultValue={num(l.min)} key={`a${i}${l.target}${l.min}`} onBlur={e => { const v = Number(e.target.value); if (Number.isFinite(v)) patchLink(i, { min: v }); }} style={cell} />
+                <input aria-label="At 1" title={`At 1 (${GR_FROM_TARGETS[l.target]?.unit || 'value'})`} defaultValue={num(l.max)} key={`b${i}${l.target}${l.max}`} onBlur={e => { const v = Number(e.target.value); if (Number.isFinite(v)) patchLink(i, { max: v }); }} style={cell} />
+                <IconButton icon="close" size="sm" label="Remove this link" onClick={() => patch({ links: cur.links.filter((_, j) => j !== i) })} />
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <Button size="sm" variant="ghost" icon="plus" disabled={cur.links.length >= GR_FROM_LINKS_MAX} onClick={() => patch({ links: [...cur.links, { prop: 'bright', target: 'cutoff', on: true, min: GR_FROM_TARGETS.cutoff.min, max: GR_FROM_TARGETS.cutoff.max }] })}>Link</Button>
+              <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Each: a number of the thing (0 to 1) → a grain setting, from the first value to the second.</span>
+            </div>
+          </div>
+        </>)}
+      </>)}
     </div>
   );
 }

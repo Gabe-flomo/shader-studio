@@ -422,6 +422,8 @@ export function createLayerKit() {
 
     // 2. Read the picture (and the camera) at the resolutions anything needs.
     const needs = { coarse: false, fine: false, cam: false, camFine: false };
+    // A Granulator reading the picture under its things (grainThings' bright) asks for the coarse grid.
+    if (env.needCoarse) needs.coarse = true;
     for (const l of live) {
       if (l.kind === 'particles') { if (l.readFrom === 'camera') { needs.cam = true; if (l.detail === 'fine') needs.camFine = true; } else if (l.detail === 'fine') needs.fine = true; else needs.coarse = true; if (l.colour === 'picture') needs.coarse = true; }
       else if (l.kind === 'bodies' && l.solidPicture) needs.coarse = true;
@@ -1103,6 +1105,62 @@ export function createLayerKit() {
     },
     /** A layer drawn alone on the last frame (it was in env.alphaLayers), or null. */
     layerCanvas(id) { return alphaCanvases.get(id) || null; },
+    /**
+     * The things a Granulator's "Grains from" reads (docs/granulator.md), as the last frame left
+     * them: a particles layer's live particles, a bodies layer's bodies, a null, or a Relationship
+     * layer's members, each { id, x, y (0..1, y up), vx, vy (a second), age (0..1 of its life), size
+     * (0..1), bright (the picture under it, 0..1), born (it was born this frame) }. With `boundaryId`
+     * (a shape layer, a drawn path too) only the ones inside it; `cx`, `cy` are the boundary's centre
+     * (the picture's without one). `value(layer, key)` reads a layer's numbers as the frame did.
+     */
+    grainThings(record, sourceId, boundaryId, value, aspect) {
+      const out = [];
+      const src = record.layers.find(l => l.id === sourceId);
+      const bright = (x, y) => {
+        if (!coarse) return 0.5;
+        const px = Math.max(0, Math.min(KIT_COARSE_W - 1, Math.floor(x * KIT_COARSE_W))), py = Math.max(0, Math.min(KIT_COARSE_H - 1, Math.floor((1 - y) * KIT_COARSE_H)));
+        const i = (py * KIT_COARSE_W + px) * 4;
+        return (coarse[i] * 0.299 + coarse[i + 1] * 0.587 + coarse[i + 2] * 0.114) / 255;
+      };
+      const push = (id, x, y, vx, vy, age, size, born) => out.push({ id, x, y, vx, vy, age, size, bright: bright(x, y), born: !!born });
+      if (src && src.kind === 'particles') {
+        const st = parts.get(src.id), sim = st && st.sim, life = st && st.p ? st.p.life : 0;
+        if (sim) for (let i = 0; i < sim.count; i++) {
+          if (!sim.alive[i]) continue;
+          const L = life > 0 ? life * sim.life[i] : 0;
+          push(i, sim.x[i], sim.y[i], sim.vx[i], sim.vy[i], L ? Math.min(1, sim.age[i] / L) : 0.5, sim.r[i], sim.age[i] < 0.05);
+        }
+      } else if (src && src.kind === 'bodies') {
+        const b = bodies.get(src.id);
+        if (b) b.st.bodies.forEach((o, i) => push(i, o.x / aspect, o.y, o.vx / aspect, o.vy, 0.5, Math.min(1, o.r * 8), false));
+      } else if (src && src.kind === 'null') {
+        push(0, value(src, 'x'), value(src, 'y'), 0, 0, 0.5, 0.5, false);
+      } else if (src && src.kind === 'relationship') {
+        (src.members || []).forEach((m, i) => {
+          const L = record.layers.find(l => l.id === m.id);
+          if (L && typeof L.x === 'number') push(i, value(L, 'x'), value(L, 'y'), 0, 0, 0.5, 0.5, false);
+        });
+      }
+      let cx = 0.5, cy = 0.5;
+      const bl = boundaryId ? record.layers.find(l => l.id === boundaryId && l.kind === 'shape') : null;
+      if (bl) {
+        const v = k => value(bl, k);
+        let z = null;
+        if (bl.shape === 'path') {
+          const g = paths.get(bl.id);
+          if (g && g.pts.length) { cx = g.cx; cy = g.cy; z = geoCompile({ id: bl.id, shape: 'path', pathGeo: g, invert: bl.invert, x: 0, y: 0, w: 1, h: 1 }, aspect); }
+        } else if (bl.shape === 'layer') {
+          const m = masks.get(bl.id);
+          if (m) z = geoCompile({ id: bl.id, shape: 'field', field: m.field, invert: bl.invert, x: 0, y: 0, w: 1, h: 1 }, aspect);
+        } else if (bl.shape !== 'picture') {
+          cx = v('x'); cy = v('y');
+          z = geoCompile({ id: bl.id, shape: bl.shape, x: v('x'), y: v('y'), w: v('w'), h: v('h'), rotation: v('rotation'), round: v('round'), points: bl.points, invert: bl.invert }, aspect);
+        }
+        const inside = z ? out.filter(t => z.dist(t.x, t.y) < 0) : [];
+        return { things: inside, cx, cy, all: out.length };
+      }
+      return { things: out, cx, cy, all: out.length };
+    },
     /** Does anything need a new frame every tick (particles, bodies, a following null…)? */
     isAnimated(record) {
       // A crossfade under way, or a sketch showing in the background.

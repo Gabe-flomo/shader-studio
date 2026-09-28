@@ -45,6 +45,7 @@ import { AE_INST, RACK_ACT_PREFIX, auPropId, isGranulatorRack, type AeRack, type
 import { rackChainId } from '../types/playAudioFx';
 import { grRender, grSettings } from '../play/kit/granulator.js';
 import { grainBuffer } from './webGranulator';
+import { grainLog } from './grainFrom';
 import { placeEngineRender, type EngineRender } from './engineRender';
 import { offlineFx, type ValueAt } from './audioFxOffline';
 import type { GraphNode } from '../types/nodeGraph';
@@ -274,7 +275,7 @@ export async function mixBuffers(tracks: readonly RecordingTrack[], buffers: Rea
     const vol = ctx.createGain();
     vol.gain.value = t.grain!.volume;
     const src = ctx.createBufferSource();
-    src.buffer = renderGrains(ctx, t.grain!, fx?.padHits ?? [], ctx.length, fx?.valueAt);
+    src.buffer = renderGrains(ctx, t.grain!, fx?.padHits ?? [], ctx.length, fx?.valueAt, from);
     src.connect(chains.input(t.chain ?? 'master', vol));
     src.start(0);
   }
@@ -319,7 +320,7 @@ export function playPadHits(ctx: BaseAudioContext, input: AudioNode, volume: Gai
  * samples, its settings where the take had them every 128 frames, through the
  * kit's pure engine (the same grains as live, seeded, so two renders match).
  */
-export function renderGrains(ctx: BaseAudioContext, g: GrainTrack, hits: readonly PadHit[], frames: number, valueAt?: ValueAt): AudioBuffer {
+export function renderGrains(ctx: BaseAudioContext, g: GrainTrack, hits: readonly PadHit[], frames: number, valueAt?: ValueAt, from = 0): AudioBuffer {
   const layerId = `${RACK_ACT_PREFIX}${g.rackId}`, prop = auPropId(g.rackId, AE_INST);
   const events = hits.filter(h => h.layerId === layerId).map(h => ({ t: h.t, note: h.pad, vel: h.vel }));
   const channels: Float32Array[] = [];
@@ -328,6 +329,8 @@ export function renderGrains(ctx: BaseAudioContext, g: GrainTrack, hits: readonl
     channels, bufferRate: g.buffer.sampleRate, sampleRate: ctx.sampleRate, frames, events,
     settings: grSettings(g.slot.params), step: 256,
     settingsAt: valueAt ? t => grSettings(g.slot.params, (a, base) => valueAt(prop, a, base, t)) : undefined,
+    // "Grains from" a layer: the things as this render's frames left them (lib/grainFrom.ts), `from` seconds on.
+    pointsAt: g.slot.from?.source && grainLog.has(g.rackId) ? t => grainLog.at(g.rackId, t + from) : undefined,
   });
   const b = ctx.createBuffer(2, Math.max(1, frames), ctx.sampleRate);
   b.getChannelData(0).set(out.left);

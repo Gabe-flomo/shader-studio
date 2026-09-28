@@ -1357,6 +1357,7 @@ void main() {
     const GRK = typeof SSKit !== 'undefined' && SSKit.granulator ? SSKit.granulator : null;
     const grainRacks = GRK && !follow && play.audioEngine ? (play.audioEngine.racks || []).filter(r => r.instrument && r.instrument.kind === 'granulator' && !r.source && !r.mute) : [];
     const grains = { ctx: null, racks: new Map(), wired: false };
+    const grainsBright = grainRacks.some(r => r.instrument.from && (r.instrument.from.links || []).some(l => l.on !== false && l.prop === 'bright'));
     if (grainRacks.length) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (AC) {
@@ -2092,7 +2093,15 @@ void main() {
         override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },
         shaderTap: layersTap || undefined,
         data: dsEntry,
+        needCoarse: grainsBright,
       });
+      // "Grains from" a layer: each Granulator with a source takes the things inside its boundary, this frame.
+      for (const g of grains.racks.values()) {
+        const fr = g.r.instrument.from;
+        if (!fr || !fr.source || !g.live) continue;
+        const got = K.grainThings(play, fr.source, fr.boundary || '', value, W / Math.max(1, H));
+        g.live.points(GRK.fromPoints(got.things, got.cx, got.cy, fr, GRK.settings(g.params, (a, b) => layerValue('au:' + g.r.id + ':inst', a, b))));
+      }
     }
 
     // Visibility: a background pauses off-screen and in hidden tabs; reduced motion gets a still frame.

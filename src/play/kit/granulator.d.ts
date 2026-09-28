@@ -18,6 +18,7 @@ export interface GrEngine {
   stats(o: GrStats): GrStats;
   voicesOn(): number;
   reset(seed?: number): void;
+  points(data: Float32Array, n: number, cutoff?: number): void;
 }
 export interface GrLive {
   output: GainNode;
@@ -28,6 +29,7 @@ export interface GrLive {
   noteOff(note: number, when?: number): void;
   allOff(when?: number): void;
   bend(semis: number, when?: number): void;
+  points(p: GrPoints | null): void;
   stats(): GrStats;
   dispose(): void;
 }
@@ -41,6 +43,7 @@ export interface GrRenderInput {
   settingsAt?: (t: number) => Partial<GrSettings>;
   seed?: number;
   step?: number;
+  pointsAt?: (t: number) => GrPoints | null;
 }
 
 export const GR_MAX_GRAINS: number;
@@ -65,3 +68,15 @@ export function grCreate(ctx: BaseAudioContext, opts?: { seed?: number; worklet?
 export function grSynthData(kind: string, rate: number): Float32Array;
 export function grSynthBuffer(ctx: BaseAudioContext, kind: string): AudioBuffer;
 export function grPeaks(data: Float32Array, n: number): Float32Array;
+
+export interface GrPoints { data: Float32Array; n: number; cutoff: number }
+export interface GrFromLink { prop: string; target: string; on: boolean; min: number; max: number }
+export interface GrFrom { source: string; boundary: string; births: boolean; links: GrFromLink[] }
+export interface GrThing { id: number; x: number; y: number; vx: number; vy: number; age: number; size: number; bright: number; born: boolean }
+export const GR_FROM_PROPS: readonly string[];
+export const GR_FROM_PROP_NAMES: Record<string, string>;
+export const GR_FROM_TARGETS: Record<string, { name: string; min: number; max: number; unit: string }>;
+export const GR_FROM_LINKS_MAX: number;
+export function grFromDefaults(): GrFrom;
+export function grThingProps(t: GrThing, cx: number, cy: number): Record<string, number>;
+export function grFromPoints(things: readonly GrThing[], cx: number, cy: number, cfg: Pick<GrFrom, 'links' | 'births'>, settings: GrSettings): GrPoints;

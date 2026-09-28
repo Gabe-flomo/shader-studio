@@ -77,6 +77,7 @@ export const GR_PARAMS = [
   GR_P(32, 'velocity', 'Velocity', 0, 1, 1, '', { step: 0.01, hint: 'How much a note’s velocity sets its level: 0 plays every note the same.' }),
   GR_P(33, 'level', 'Level', 0, 2, 0.8, '', { step: 0.01, hint: 'The granulator’s output level.' }),
   GR_P(34, 'seed', 'Seed', 0, 9999, 1, '', { step: 1, hint: 'The random numbers’ seed: the same seed and notes make the same grains.' }),
+  GR_P(35, 'fromRate', 'Grains per thing', 0.1, 60, 6, '/s', { step: 0.1, log: true, hint: 'Grains from a layer: each thing inside makes this many grains a second while it stays, so more things make more grains.' }),
 ];
 export const GR_KEYS = GR_PARAMS.map(p => p.key);
 
@@ -147,7 +148,7 @@ export function grMakeEngine() {
     var P = {
       mode: 0, position: 0.3, spray: 0.05, size: 120, sizeRand: 0, density: 20, pitch: 0, spread: 0, pitchRand: 0, panRand: 0.3, levelRand: 0, reverse: 0,
       fmRate: 0, fmAmount: 0, filter: 0, cutoff: 6000, resonance: 0.71, attack: 0.02, decay: 0.3, sustain: 0.8, release: 0.8, window: 0, skew: 0.5,
-      scan: 0, lfoRate: 0, lfoDepth: 0.2, freeze: 0, hold: 0, drone: 0, cap: 64, voices: 8, root: 60, velocity: 1, level: 0.8, seed: 1,
+      scan: 0, lfoRate: 0, lfoDepth: 0.2, freeze: 0, hold: 0, drone: 0, cap: 64, voices: 8, root: 60, velocity: 1, level: 0.8, seed: 1, fromRate: 6,
     };
     var rnd = mulberry(seed || 1), seedNow = seed || 1;
     var bufL = null, bufR = null, bufLen = 0, ratio = 1, bufDur = 0;
@@ -155,6 +156,9 @@ export function grMakeEngine() {
     var gainS = P.level, cutS = P.cutoff, fc = { g: 0, k: 0, a1: 0, a2: 0, a3: 0 }, ic1L = 0, ic2L = 0, ic1R = 0, ic2R = 0, coefAt = -1;
     var voices = [];
     for (var vi = 0; vi < MAXV; vi++) voices.push({ on: false, note: 60, vel: 1, stage: 0, level: 0, rate: 0, relRate: 0, scan: 0, wait: 0, alt: false, drone: false, latched: false, keyUp: false, order: 0 });
+    // The things a layer drives grains from (points()): their grains hang on this voice, always at full level.
+    voices.push({ on: false, note: 60, vel: 1, stage: 2, level: 1, rate: 0, relRate: 0, scan: 0, wait: 0, alt: false, drone: false, latched: false, keyUp: false, order: 0 });
+    var pts = [], ptCutoff = NaN;
     var grains = [];
     for (var gi = 0; gi < MAXG; gi++) grains.push({ on: false, v: 0, pos: 0, rate: 1, len: 1, age: 0, amp: 0, gl: 0, gr: 0, semis: 0 });
     var live = 0;
@@ -268,6 +272,32 @@ export function grMakeEngine() {
       live++;
       if (live > maxCount) maxCount = live;
     }
+    // A grain for one thing: its place, pitch, size, level, pan and spray instead of the voice's.
+    function spawnPoint(pt) {
+      var cap = Math.max(1, Math.min(MAXG, Math.round(P.cap)));
+      var mode = P.mode | 0, rate0 = Math.max(0.01, P.fromRate);
+      pt.wait = mode === 2 ? Math.max(1, -Math.log(1 - rnd() * 0.999999) * sr / rate0) : Math.max(1, sr / rate0);
+      var rSpray = rnd(), rSize = rnd(), rPitch = rnd(), rSpread = rnd(), rPan = rnd(), rLevel = rnd(), rRev = rnd();
+      if (!bufLen || live >= cap) return;
+      var slot = -1;
+      for (var i = 0; i < MAXG; i++) if (!grains[i].on) { slot = i; break; }
+      if (slot < 0) return;
+      var len = Math.max(2, Math.round(Math.max(2, pt.size) * 0.001 * sr * (1 + P.sizeRand * (rSize * 2 - 1))));
+      var start = wrap(pt.pos) * bufLen + (rSpray * 2 - 1) * pt.spray * (bufLen / Math.max(1e-9, bufDur));
+      var spreadSemis = mode === 2 ? (rSpread * 2 - 1) * P.spread / 2 : 0;
+      var semis = P.pitch + pt.pitch + bend + spreadSemis + (rPitch * 2 - 1) * P.pitchRand;
+      var rate = Math.pow(2, semis / 12) * ratio;
+      var pan = pt.pan + (rPan * 2 - 1) * P.panRand;
+      if (pan < -1) pan = -1; else if (pan > 1) pan = 1;
+      var overlap = Math.max(1, rate0 * pts.length * len / sr);
+      var g = grains[slot];
+      g.on = true; g.v = MAXV; g.len = len; g.age = 0; g.semis = semis;
+      g.amp = Math.max(0, pt.amp) * (1 - P.levelRand * rLevel) / Math.sqrt(overlap);
+      if (rRev < P.reverse) { g.rate = -rate; g.pos = start + len * rate; } else { g.rate = rate; g.pos = start; }
+      g.gl = Math.cos((pan + 1) * Math.PI / 4); g.gr = Math.sin((pan + 1) * Math.PI / 4);
+      live++;
+      if (live > maxCount) maxCount = live;
+    }
     function coefs() {
       var c = cutS < 20 ? 20 : cutS > sr * 0.45 ? sr * 0.45 : cutS;
       fc.g = Math.tan(Math.PI * c / sr); fc.k = 1 / Math.max(0.1, P.resonance);
@@ -286,7 +316,7 @@ export function grMakeEngine() {
       var scanInc = bufDur > 0 ? P.scan / bufDur / sr : 0;
       for (var n = from; n < to; n++) {
         gainS += (P.level - gainS) * smooth;
-        cutS += (P.cutoff - cutS) * smooth;
+        cutS += ((ptCutoff === ptCutoff ? ptCutoff : P.cutoff) - cutS) * smooth;
         if (!freeze) lfoPhase = wrap(lfoPhase + lfoInc);
         var fm = 1;
         if (fmDepth > 0 && fmInc > 0) { fmPhase = wrap(fmPhase + fmInc); fm = Math.pow(2, fmDepth * Math.sin(2 * Math.PI * fmPhase)); }
@@ -304,6 +334,7 @@ export function grMakeEngine() {
           v.wait -= 1;
           if (v.wait <= 0 && v.stage !== 3) spawn(vi, v);
         }
+        for (var pi = 0; pi < pts.length; pi++) { var pt = pts[pi]; pt.wait -= 1; if (pt.wait <= 0) spawnPoint(pt); }
         var l = 0, r = 0;
         if (live > 0) {
           for (var gi = 0; gi < MAXG; gi++) {
@@ -348,6 +379,26 @@ export function grMakeEngine() {
       allOff: function (at) { push({ t: 3, frame: at === undefined ? frame : at }); },
       bend: function (semis, at) { push({ t: 4, value: semis, frame: at === undefined ? frame : at }); },
       sync: function (f) { frame = f; },
+      /**
+       * The things a layer drives grains from, now: `data` packs 8 numbers each (id, file position
+       * 0..1, pitch in semitones, grain size in ms, amplitude, pan -1..1, spray in seconds, born 0/1),
+       * `n` of them; `cutoff` overrides the filter's (NaN: not). A new thing's first grain comes at
+       * once when it was just born (so a burst of things is a burst of grains), else somewhere in
+       * its first interval; things that left stop. Each makes Grains per thing a second.
+       */
+      points: function (data, n, cutoff) {
+        var next = [], had = {};
+        for (var i = 0; i < pts.length; i++) had[pts[i].id] = pts[i];
+        var rate0 = Math.max(0.01, P.fromRate);
+        for (var j = 0; j < n; j++) {
+          var o = j * 8, id = data[o], pt = had[id];
+          if (!pt) { pt = { id: id, wait: data[o + 7] > 0 ? 0 : 1 + Math.floor(rnd() * sr / rate0) }; }
+          pt.pos = data[o + 1]; pt.pitch = data[o + 2]; pt.size = data[o + 3]; pt.amp = data[o + 4]; pt.pan = data[o + 5]; pt.spray = data[o + 6];
+          next.push(pt);
+        }
+        pts = next;
+        ptCutoff = typeof cutoff === 'number' ? cutoff : NaN;
+      },
       frame: function () { return frame; },
       process: function (L, R, n) {
         var at = 0;
@@ -377,7 +428,7 @@ export function grMakeEngine() {
       reset: function (s) {
         for (var i = 0; i < MAXG; i++) grains[i].on = false;
         for (var j = 0; j < MAXV; j++) voices[j].on = false;
-        live = 0; events = []; held = {}; bend = 0; fmPhase = 0; lfoPhase = 0; maxCount = 0; frame = 0; ic1L = ic2L = ic1R = ic2R = 0;
+        live = 0; events = []; held = {}; bend = 0; pts = []; ptCutoff = NaN; fmPhase = 0; lfoPhase = 0; maxCount = 0; frame = 0; ic1L = ic2L = ic1R = ic2R = 0;
         gainS = P.level; cutS = P.cutoff;
         seedNow = s !== undefined ? s : Math.round(P.seed); rnd = mulberry(seedNow);
         droneCheck();
@@ -415,6 +466,73 @@ export function grSummary(st) {
   };
 }
 
+// ── Grains from a layer ─────────────────────────────────────────────────────
+
+/** What a thing (a particle, a body, a null, a member) offers, each 0..1. */
+export const GR_FROM_PROPS = ['x', 'y', 'speed', 'heading', 'age', 'size', 'bright', 'dist'];
+export const GR_FROM_PROP_NAMES = { x: 'X', y: 'Y', speed: 'Speed', heading: 'Heading', age: 'Age', size: 'Size', bright: 'Brightness under it', dist: 'Distance to the centre' };
+/** What a thing's number can set on its grains, with the range a link starts from. */
+export const GR_FROM_TARGETS = {
+  position: { name: 'File position', min: 0, max: 1, unit: '' },
+  pitch: { name: 'Pitch', min: -12, max: 12, unit: 'st' },
+  size: { name: 'Grain size', min: 40, max: 300, unit: 'ms' },
+  amp: { name: 'Amplitude', min: 0, max: 1, unit: '' },
+  pan: { name: 'Pan', min: -1, max: 1, unit: '' },
+  cutoff: { name: 'Filter cutoff', min: 400, max: 12000, unit: 'Hz' },
+  spray: { name: 'Spray', min: 0, max: 0.5, unit: 's' },
+};
+export const GR_FROM_LINKS_MAX = 6;
+
+/** A new "Grains from": no source yet, and the four links it starts with. */
+export function grFromDefaults() {
+  return {
+    source: '', boundary: '', births: true,
+    links: [
+      { prop: 'x', target: 'position', on: true, min: 0, max: 1 },
+      { prop: 'y', target: 'pitch', on: true, min: -12, max: 12 },
+      { prop: 'speed', target: 'size', on: true, min: 40, max: 300 },
+      { prop: 'age', target: 'amp', on: true, min: 1, max: 0 },
+    ],
+  };
+}
+
+/** A thing's props, 0..1, from what grainThings reports (`cx`, `cy`: the boundary's centre). */
+export function grThingProps(t, cx, cy) {
+  const TAU = Math.PI * 2;
+  return {
+    x: t.x, y: t.y,
+    speed: Math.min(1, Math.hypot(t.vx, t.vy) / 0.5),
+    heading: ((Math.atan2(t.vy, t.vx) / TAU) % 1 + 1) % 1,
+    age: t.age, size: t.size, bright: t.bright,
+    dist: Math.min(1, Math.hypot(t.x - cx, t.y - cy) / 0.5),
+  };
+}
+
+/**
+ * The things inside, as the engine's points(): at most the Grain cap (64 at
+ * most) of them, the closest to the boundary's centre first. Each link sets
+ * one grain setting from one prop (min at 0, max at 1); a setting no link
+ * sets keeps the granulator's own (Position, Pitch 0, Grain size, full level,
+ * the centre, Spray). Cutoff is one filter for all: the mean of the things'.
+ */
+export function grFromPoints(things, cx, cy, cfg, settings) {
+  const cap = Math.max(1, Math.min(GR_MAX_GRAINS, Math.round(settings.cap || GR_MAX_GRAINS)));
+  const list = things.slice().sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy) || a.id - b.id).slice(0, cap);
+  const links = (cfg.links || []).filter(l => l.on && GR_FROM_TARGETS[l.target] && GR_FROM_PROPS.indexOf(l.prop) >= 0).slice(0, GR_FROM_LINKS_MAX);
+  const data = new Float32Array(list.length * 8);
+  let cut = 0, cutN = 0;
+  list.forEach((t, i) => {
+    const pr = grThingProps(t, cx, cy);
+    const g = { position: settings.position, pitch: 0, size: settings.size, amp: 1, pan: 0, spray: settings.spray, cutoff: NaN };
+    for (const l of links) g[l.target] = l.min + (l.max - l.min) * Math.max(0, Math.min(1, pr[l.prop]));
+    if (g.cutoff === g.cutoff) { cut += g.cutoff; cutN++; }
+    const o = i * 8;
+    data[o] = t.id; data[o + 1] = g.position; data[o + 2] = g.pitch; data[o + 3] = Math.max(2, g.size); data[o + 4] = Math.max(0, g.amp);
+    data[o + 5] = Math.max(-1, Math.min(1, g.pan)); data[o + 6] = Math.max(0, g.spray); data[o + 7] = cfg.births !== false && t.born ? 1 : 0;
+  });
+  return { data, n: list.length, cutoff: cutN ? cut / cutN : NaN };
+}
+
 // ── Offline ─────────────────────────────────────────────────────────────────
 
 /**
@@ -438,6 +556,7 @@ export function grRender(o) {
   for (let at = 0; at < frames; at += step) {
     const n = Math.min(step, frames - at);
     if (o.settingsAt) e.set(o.settingsAt(at / sr));
+    if (o.pointsAt) { const pt = o.pointsAt(at / sr); if (pt) e.points(pt.data, pt.n, pt.cutoff); }
     e.process(left.subarray(at, at + n), right.subarray(at, at + n), n);
   }
   return { left: left, right: right, maxCount: e.stats(grNewStats()).maxCount };
@@ -466,6 +585,7 @@ class PfGranulator extends AudioWorkletProcessor {
     else if (d.t === 'off') e.noteOff(d.note, f(d.at));
     else if (d.t === 'all') e.allOff(f(d.at));
     else if (d.t === 'bend') e.bend(d.value, f(d.at));
+    else if (d.t === 'pts') e.points(d.data, d.n, d.cutoff);
     else if (d.t === 'stop') this.alive = false;
   }
   process(inputs, outputs) {
@@ -537,6 +657,7 @@ export function grCreate(ctx, opts) {
     else if (d.t === 'off') eng.noteOff(d.note, frameOf(d.at));
     else if (d.t === 'all') eng.allOff(frameOf(d.at));
     else if (d.t === 'bend') eng.bend(d.value, frameOf(d.at));
+    else if (d.t === 'pts') eng.points(d.data, d.n, d.cutoff);
   }
   function useScript() {
     if (dead || kind) return;
@@ -596,6 +717,8 @@ export function grCreate(ctx, opts) {
     noteOff(note, when) { send({ t: 'off', note: note, at: when }); },
     allOff(when) { send({ t: 'all', at: when }); },
     bend(semis, when) { send({ t: 'bend', value: semis, at: when }); },
+    /** The things a layer drives grains from (grFromPoints), this frame. */
+    points(p) { if (p) send({ t: 'pts', data: p.data, n: p.n, cutoff: p.cutoff }); },
     stats() { return st; },
     dispose() {
       if (dead) return;

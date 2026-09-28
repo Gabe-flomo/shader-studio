@@ -15,7 +15,7 @@
  *
  * Pure: types, parsing, targets and record edits. lib/audioEngineHost.ts runs it.
  */
-import { GR_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
+import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
 
 
 /** An Audio Unit, by its component description (four-char codes as numbers), with its names for showing. */
@@ -72,7 +72,18 @@ export interface AeSlot {
   zones?: AeZone[];
   /** kind 'granulator': its sample (its settings are `params`, by GR_PARAMS address). */
   sample?: AeGrainSample;
+  /** kind 'granulator': "Grains from" a layer: each thing inside the boundary plays grains (docs/granulator.md). */
+  from?: AeGrainFrom;
 }
+
+/** One link: a thing's prop (GR_FROM_PROPS) sets a grain setting (GR_FROM_TARGETS) between min (at 0) and max (at 1). */
+export interface AeGrainLink { prop: string; target: string; on: boolean; min: number; max: number }
+/**
+ * A layer drives the grains: `source` a particles, bodies, null or
+ * Relationship layer; `boundary` a shape layer (only things inside it play;
+ * '' is the whole picture); `births` a thing just born plays a grain at once.
+ */
+export interface AeGrainFrom { source: string; boundary: string; births: boolean; links: AeGrainLink[] }
 
 export interface AeRack {
   id: string;
@@ -375,6 +386,8 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
       for (const [a, v] of Object.entries(params)) { const p = grParam(a); if (p) kept[a] = Math.max(p.min, Math.min(p.max, v)); }
       if (Object.keys(kept).length) slot.params = kept;
     }
+    const from = parseGrainFrom(o.from);
+    if (from) slot.from = from;
     const sm = o.sample && typeof o.sample === 'object' ? o.sample as Record<string, unknown> : null;
     if (sm) {
       if (typeof sm.sampleId === 'string' && ID.test(sm.sampleId)) slot.sample = { sampleId: sm.sampleId, name: text(sm.name, 'Sound', 120) };
@@ -390,6 +403,23 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
   if (params) slot.params = params;
   if (typeof o.state === 'string' && o.state.length <= 2_000_000 && /^[A-Za-z0-9+/=]+$/.test(o.state)) slot.state = o.state;
   return slot;
+}
+
+/** A granulator's "Grains from", or undefined when it names no source. */
+export function parseGrainFrom(raw: unknown): AeGrainFrom | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.source !== 'string' || !ID.test(o.source)) return undefined;
+  const links: AeGrainLink[] = [];
+  for (const x of Array.isArray(o.links) ? o.links : []) {
+    if (links.length >= GR_FROM_LINKS_MAX || !x || typeof x !== 'object') continue;
+    const l = x as Record<string, unknown>;
+    const t = typeof l.target === 'string' ? GR_FROM_TARGETS[l.target] : undefined;
+    if (!t || typeof l.prop !== 'string' || !GR_FROM_PROPS.includes(l.prop)) continue;
+    const lo = Math.min(t.min, -48, 0), hi = Math.max(t.max, 20000);
+    links.push({ prop: l.prop, target: l.target as string, on: l.on !== false, min: num(l.min, t.min, lo, hi), max: num(l.max, t.max, lo, hi) });
+  }
+  return { source: o.source, boundary: typeof o.boundary === 'string' && ID.test(o.boundary) ? o.boundary : '', births: o.births !== false, links };
 }
 
 /** The engine from a file, or undefined when it has no racks. */

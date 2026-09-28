@@ -58,6 +58,14 @@ const MASK_COLOUR = '#f5c542';
 
 type MaskDrag = { id: string; maskId: string; handle: Handle | null; start: Bounds; layer: PlayLayer; grab: { x: number; y: number } };
 
+/** What the overlay hands a Granulator's "Grains from" after each frame. */
+export type GrainTap = (kit: LayerKit, record: PlayRecord, aspect: number, time: number, offline: boolean) => void;
+
+/** Does any Granulator read the picture under its things (a Brightness link)? */
+function grainsReadPicture(r: PlayRecord): boolean {
+  return !!r.audioEngine?.racks.some(k => k.instrument?.kind === 'granulator' && k.instrument.from?.links.some(l => l.on && l.prop === 'bright'));
+}
+
 class PlayOverlay {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
@@ -268,6 +276,13 @@ class PlayOverlay {
     return this.exportKit.background(this.record, { time, value: this.value, allowDirect: false });
   }
   private exportPrepared = false;
+
+  /**
+   * After every frame the layers step (live, and each offline frame of a render): a Granulator
+   * reading a layer's things takes them here (lib/grainFrom.ts). `offline` for a render's frames.
+   */
+  private grainTap: GrainTap | null = null;
+  setGrainTap(fn: GrainTap | null): void { this.grainTap = fn; }
 
   /** Fire an action now (the panel's Burst / Drop / Next / Clear buttons). */
   act(a: KitAction): void { this.fire(a); }
@@ -639,6 +654,7 @@ class PlayOverlay {
     const needsAudio = this.record.layers.some(l => l.kind === 'audio' && l.visible);
     return {
       gl, W, H, dpr, time, dt,
+      needCoarse: grainsReadPicture(this.record),
       value: (l, k) => playEngine.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]),
       pointer: this.replayPointer ?? this.pointer,
       markers: !forExport && this.guides,
@@ -717,6 +733,7 @@ class PlayOverlay {
     if (gx) env.guides = gx;
     env.alphaLayers = this.alphaLayers();
     this.kit.frame(ctx, this.record, env);
+    this.grainTap?.(this.kit, this.record, this.aspect, time, false);
     const top = gx ?? ctx;
     if (this.drawing) this.drawOutline(top, W, H, dpr);
     else if (this.editing && this.guides && this.selectedId) this.drawHandles(top, W, H, dpr);
@@ -891,6 +908,7 @@ class PlayOverlay {
     // A Background layer is the picture: with a transparent export it stays in unless the picture is dropped.
     if (queue && opts.transparent && !dropPicture) env.transparent = false;
     kit.frame(ox, this.record, env);
+    this.grainTap?.(kit, this.record, width / height, time, true);
     if (dropPicture) { rgba.set(ox.getImageData(0, 0, width, height).data); return; }
     // Keyed after the layers have read the picture (their mattes and colours see it as it is).
     if (luma) { lumaKey(rgba); img.data.set(rgba); px.putImageData(img, 0, 0); }

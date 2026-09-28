@@ -51,6 +51,7 @@ import { isTauri } from './midiTransport';
 import { rackKeyboard } from './rackKeyboard';
 import { can } from './plan';
 import { WebGranulatorRack } from './webGranulator';
+import type { GrPoints } from '../play/kit/granulator.js';
 
 type Invoke = <T>(cmd: string, args?: unknown, options?: { headers?: Record<string, string> }) => Promise<T>;
 type Listen = <T>(event: string, cb: (e: { payload: T }) => void) => Promise<() => void>;
@@ -361,6 +362,12 @@ class AudioEngineHost {
       w.update(valueOf);
       if (this.sensor) w.report(this.sensor);
     }
+  }
+
+  /** "Grains from" a layer: this frame's points for a granulator rack (lib/grainFrom.ts), and how many things are inside. */
+  granulatorPoints(rackId: string, pts: GrPoints, inside: number): void {
+    const w = this.web.get(rackId);
+    if (w && w.kind === 'granulator') w.points(pts, inside);
   }
 
   /** A granulator rack running here (the card draws its grains), or null. */

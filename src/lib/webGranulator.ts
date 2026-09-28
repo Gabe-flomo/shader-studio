@@ -13,7 +13,7 @@
  *              `ae:<rackId>`, for mappings (grainSensors)
  */
 import { create } from 'zustand';
-import { grCreate, grPeaks, grSettings, grSummary, grSynthBuffer, GR_SYNTH_NAMES, type GrLive, type GrStats } from '../play/kit/granulator.js';
+import { grCreate, grPeaks, grSettings, grSummary, grSynthBuffer, GR_SYNTH_NAMES, type GrLive, type GrPoints, type GrStats } from '../play/kit/granulator.js';
 import { AE_INST, GRAIN_EACH, auPropId, grainSensorLayer, type AeGrainSample, type AeSlot } from '../types/playAudioEngine';
 import { rackChainId } from '../types/playAudioFx';
 import { audioFxHost } from './audioFx';
@@ -30,7 +30,8 @@ export interface GrainSampleUi {
   peaks: Float32Array | null;
   duration: number;
 }
-export const useGrainUi = create<{ samples: Record<string, GrainSampleUi> }>(() => ({ samples: {} }));
+/** `inside`: how many things of a "Grains from" layer are inside its boundary now, by rack. */
+export const useGrainUi = create<{ samples: Record<string, GrainSampleUi>; inside: Record<string, number> }>(() => ({ samples: {}, inside: {} }));
 
 /** A sample's cache key: `synth:<kind>` or the Library id. */
 export const grainSampleKey = (s: AeGrainSample | undefined) => (s?.synth ? `synth:${s.synth}` : s?.sampleId ?? '');
@@ -53,6 +54,7 @@ export class WebGranulatorRack {
   private sampleKey = '';
   private rackId: string;
   private params: Record<string, number> | undefined;
+  private fromOn = false;
 
   constructor(ctx: AudioContext, connect: (n: AudioNode) => () => void, rackId: string) {
     this.ctx = ctx;
@@ -69,6 +71,9 @@ export class WebGranulatorRack {
   /** The slot as the record has it now: its sample (loaded when it changed) and its settings. */
   setSlot(slot: AeSlot, load: SoundLoader | null): void {
     this.params = slot.params;
+    // No source any more: the things' grains stop.
+    if (!slot.from?.source && this.fromOn) { this.live.points({ data: new Float32Array(0), n: 0, cutoff: NaN }); useGrainUi.setState(st => { const inside = { ...st.inside }; delete inside[this.rackId]; return { inside }; }); }
+    this.fromOn = !!slot.from?.source;
     const key = grainSampleKey(slot.sample);
     if (key !== this.sampleKey) {
       this.sampleKey = key;
@@ -117,6 +122,12 @@ export class WebGranulatorRack {
     else if (kind === 0x80 || kind === 0x90) this.live.noteOff(d1);
     else if (kind === 0xb0 && (d1 === 120 || d1 === 123)) this.live.allOff();
     else if (kind === 0xe0) this.live.bend((((d2 << 7) | d1) - 8192) / 8192 * 2);
+  }
+
+  /** "Grains from" a layer: this frame's things as grain points; the count inside shows on the card. */
+  points(pts: GrPoints, inside: number): void {
+    this.live.points(pts);
+    if (useGrainUi.getState().inside[this.rackId] !== inside) useGrainUi.setState(st => ({ inside: { ...st.inside, [this.rackId]: inside } }));
   }
 
   /** The latest readouts (for drawing the grains on the waveform). */
