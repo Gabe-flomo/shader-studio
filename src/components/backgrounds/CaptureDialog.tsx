@@ -62,7 +62,7 @@ const fmtTime = (t: number) => (t < 100 ? t.toFixed(2) : t.toFixed(1));
 /** Steps of full warm-up at most for a capture (60 a second): beyond it the step grows. Never changes: the same time gives the same picture. */
 const FULL_STEPS = 1800;
 /** The preview's settle: fewer steps on a phone, where each costs more. */
-const PREVIEW_STEPS = TOUCH ? 600 : FULL_STEPS;
+const PREVIEW_STEPS = TOUCH ? 360 : FULL_STEPS;
 /** While dragging: a quick, coarse warm-up. */
 const DRAG_STEPS = TOUCH ? 30 : 120;
 /** A settle running longer than this shows how far it is. */
