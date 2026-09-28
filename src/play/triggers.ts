@@ -54,6 +54,8 @@ export function triggerKey(t: TriggerSpec): string {
     case 'audio': return `audio:${t.band}:${t.threshold}`;
     case 'zone': return t.event === 'fill' ? `zone:${t.layerId}:fill:${t.threshold}` : `zone:${t.layerId}:${t.event}`;
     case 'hand': return `hand:${t.side}:${t.gesture}`;
+    case 'face': return `face:${t.gesture}`;
+    case 'pose': return `pose:${t.gesture}`;
     case 'proximity': return `prox:${t.a}:${t.b}:${t.when}:${t.distance}:${t.margin}`;
     case 'reader': return `reader:${t.readerId}:${t.threshold}:${t.hysteresis}`;
     case 'value': return sgValueKey(t);
