@@ -19,6 +19,8 @@ export function engineId(prefix: 'rk' | 'fx'): string {
 /** The record with this engine: controls on removed slots, and their mappings, go too. */
 export function withEngine(p: PlayRecord, ae: PlayAudioEngine): PlayRecord {
   const out: PlayRecord = { ...p };
+  // A lock on a rack that's gone goes with it.
+  if (ae.lock && !ae.racks.some(r => r.id === ae.lock)) { ae = { ...ae }; delete ae.lock; }
   if (ae.racks.length) out.audioEngine = ae; else delete out.audioEngine;
   // A removed rack's track on the tape goes with it.
   const arr = arrangementFor(p.arrangement, ae.racks.map(r => r.id));

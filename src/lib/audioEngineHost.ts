@@ -36,7 +36,7 @@
  */
 import { create } from 'zustand';
 import {
-  AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, aeRack, aeSlot, isGranulatorRack, keyboardRack, parseAuTarget, auPropId, rackHears, unitKey, zoneForNote,
+  AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, aeRack, aeSlot, isGranulatorRack, keyboardRack, leadRackId, parseAuTarget, auPropId, rackPlays, unitKey, zoneForNote,
   type AeRack, type AeSlot, type AeZone, type PlayAudioEngine,
 } from '../types/playAudioEngine';
 import {
@@ -105,6 +105,13 @@ function setLoading(key: string, on: boolean): void {
     return { loading };
   });
 }
+
+// ── The selected rack card (session state: the lead unless one is locked) ──
+
+export const useEngineSelection = create<{ selected: string; select: (rackId: string) => void }>(set => ({
+  selected: '',
+  select: rackId => set({ selected: rackId }),
+}));
 
 // ── Device settings (this device: output, master volume) ────────────────────
 
@@ -717,7 +724,9 @@ class AudioEngineHost {
     if (e.kind === 'devices' || !this.target) return;
     const bytes = midiEventBytes(e);
     if (!bytes) return;
-    for (const r of this.target.racks) if (rackHears(r, e.device ?? '', e.channel)) this.input(r.id, bytes);
+    // Racks with their own routing play what it sends; the rest only while they lead (docs/audio-engine.md, "The lead rack").
+    const lead = leadRackId(this.target, useEngineSelection.getState().selected);
+    for (const r of this.target.racks) if (rackPlays(r, lead, e.device ?? '', e.channel)) this.input(r.id, bytes);
   }
 
   /** Listeners for what's played live into racks (the tape records from here; lib/tape.ts). */

@@ -39,7 +39,7 @@ export function AudioEnginePanel({ play, onChange, touch, wide = false }: {
   const add = () => onChange(p => {
     const list = p.audioEngine?.racks ?? [];
     if (list.length >= AE_RACKS_MAX) return p;
-    return withEngine(p, { racks: [...list, newRack(engineId('rk'), list)] });
+    return withEngine(p, { ...p.audioEngine, racks: [...list, newRack(engineId('rk'), list)] });
   });
 
   if (!ok) {

@@ -120,6 +120,13 @@ export interface AeRack {
 
 export interface PlayAudioEngine {
   racks: AeRack[];
+  /**
+   * The rack locked as the lead (docs/audio-engine.md, "The lead rack"): it
+   * takes the MIDI notes, the computer keyboard and pad hits that no rack's
+   * own routing claims, whichever card is selected. Absent: the selected
+   * card's rack leads (session state), else the first rack.
+   */
+  lock?: string;
 }
 
 /** Where a note from a rack's input goes: `ae:<rackId>` pad actions (so a take records it). */
@@ -272,7 +279,7 @@ export function newRack(id: string, existing: readonly AeRack[]): AeRack {
 
 /** Give the computer keyboard to one rack (and to no other), or take it away. */
 export function setRackKeyboard(ae: PlayAudioEngine | undefined, rackId: string, on: boolean): PlayAudioEngine {
-  return { racks: (ae?.racks ?? []).map(r => ({ ...r, keyboard: on && r.id === rackId })) };
+  return { ...ae, racks: (ae?.racks ?? []).map(r => ({ ...r, keyboard: on && r.id === rackId })) };
 }
 
 /** The rack the computer keyboard plays, if any. */
@@ -282,7 +289,7 @@ export function keyboardRack(ae: PlayAudioEngine | undefined): AeRack | undefine
 
 export function patchRack(ae: PlayAudioEngine | undefined, rackId: string, patch: Partial<AeRack> | ((r: AeRack) => AeRack)): PlayAudioEngine {
   const racks = (ae?.racks ?? []).map(r => (r.id === rackId ? (typeof patch === 'function' ? patch(r) : { ...r, ...patch }) : r));
-  return { racks };
+  return { ...ae, racks };
 }
 
 export function patchSlot(ae: PlayAudioEngine | undefined, rackId: string, slotId: string, patch: Partial<AeSlot>): PlayAudioEngine {
@@ -328,6 +335,39 @@ export function zonesFor(sounds: ReadonlyArray<{ id: string; name: string }>, mo
 }
 
 // ── MIDI routing ────────────────────────────────────────────────────────────
+
+/** Does the rack name its own MIDI input (a device, or a channel)? Then it plays what that sends, lead or not. */
+export const hasOwnRouting = (r: Pick<AeRack, 'midi' | 'channel'>) => (r.midi !== '' && r.midi !== 'off') || r.channel !== 0;
+
+/**
+ * The lead rack (docs/audio-engine.md, "The lead rack"): the one locked as
+ * lead, else the selected card's (`selected`, session state), else the first.
+ * '' when there are no racks.
+ */
+export function leadRackId(ae: PlayAudioEngine | undefined, selected = ''): string {
+  const racks = ae?.racks ?? [];
+  if (ae?.lock && racks.some(r => r.id === ae.lock)) return ae.lock;
+  if (selected && racks.some(r => r.id === selected)) return selected;
+  return racks[0]?.id ?? '';
+}
+
+/**
+ * Does a note from `device` on `channel` play this rack? A rack with its own
+ * routing (a device or a channel) plays what that sends, as rackHears says;
+ * one on "any MIDI input" plays only while it's the lead. 'No MIDI' never.
+ */
+export function rackPlays(r: Pick<AeRack, 'id' | 'midi' | 'channel'>, lead: string, device: string, channel: number): boolean {
+  if (r.midi === 'off') return false;
+  if (hasOwnRouting(r)) return rackHears(r, device, channel);
+  return r.id === lead;
+}
+
+/** Lock a rack as the lead (or unlock: ''). */
+export function setLeadLock(ae: PlayAudioEngine | undefined, rackId: string): PlayAudioEngine {
+  const out: PlayAudioEngine = { ...ae, racks: ae?.racks ?? [] };
+  if (rackId && out.racks.some(r => r.id === rackId)) out.lock = rackId; else delete out.lock;
+  return out;
+}
 
 /**
  * Does a message from `device` on `channel` (1..16) play this rack? A rack on
@@ -482,12 +522,15 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
     if (typeof o.source === 'string' && isSendSource(o.source)) rack.source = o.source;
     racks.push(rack);
   }
-  return racks.length ? { racks } : undefined;
+  if (!racks.length) return undefined;
+  const lock = typeof a.lock === 'string' && racks.some(r => r.id === a.lock) ? a.lock : undefined;
+  return lock ? { racks, lock } : { racks };
 }
 
 /** The record's engine with only what `plugins` allows: without Audio Units, AU slots are left out (the sample player stays). */
 export function engineWithoutPlugins(ae: PlayAudioEngine): PlayAudioEngine {
   return {
+    ...ae,
     racks: ae.racks.map(r => ({ ...r, instrument: r.instrument?.kind === 'au' ? null : r.instrument, effects: [] })),
   };
 }

@@ -345,7 +345,7 @@ export function playBundle(input: PlayHtmlInput) {
   }
   // Granulator racks carry a Library sample in their sample (a data URL, when it came along); generated ones need nothing.
   if (play.audioEngine?.racks.some(r => r.instrument?.kind === 'granulator' && r.instrument.sample?.sampleId)) {
-    play.audioEngine = { racks: play.audioEngine.racks.map(r => (r.instrument?.kind === 'granulator' && r.instrument.sample?.sampleId
+    play.audioEngine = { ...play.audioEngine, racks: play.audioEngine.racks.map(r => (r.instrument?.kind === 'granulator' && r.instrument.sample?.sampleId
       ? { ...r, instrument: { ...r.instrument!, sample: { ...r.instrument!.sample!, src: input.media?.rackSamples?.[r.id]?.src ?? '' } as AeGrainSample } }
       : r)) };
   }

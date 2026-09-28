@@ -92,7 +92,7 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
       if (!ok) return;
     }
     audioEngineHost.releaseHeld(rack.id);
-    edit(ae => ({ racks: (ae?.racks ?? []).filter(r => r.id !== rack.id) }));
+    edit(ae => ({ ...ae, racks: (ae?.racks ?? []).filter(r => r.id !== rack.id) }));
   };
   const rename = async () => {
     const name = await askText('Rename rack', { initial: rack.name, confirmLabel: 'Rename' });
@@ -102,9 +102,9 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
   const move = (by: -1 | 1) => edit(ae => {
     const racks = [...(ae?.racks ?? [])];
     const i = racks.findIndex(r => r.id === rack.id), j = i + by;
-    if (i < 0 || j < 0 || j >= racks.length) return { racks };
+    if (i < 0 || j < 0 || j >= racks.length) return { ...ae, racks };
     [racks[i], racks[j]] = [racks[j], racks[i]];
-    return { racks };
+    return { ...ae, racks };
   });
 
   return (
