@@ -21,8 +21,11 @@ describe('split prefs', () => {
   });
 
   it('keep what was saved, with the ratio in range', () => {
-    expect(parseSplitPrefs(JSON.stringify({ on: true, side: 'bottom', ratio: 0.35, tab: 'layers', sidebarHidden: true })))
-      .toEqual({ on: true, side: 'bottom', ratio: 0.35, tab: 'layers', sidebarHidden: true });
+    expect(parseSplitPrefs(JSON.stringify({ on: true, side: 'bottom', ratio: 0.35, tab: 'layers', sidebar: 'rail', sidebarBefore: 'hidden', railPage: 'finish-sound', railRatio: 0.6 })))
+      .toEqual({ on: true, side: 'bottom', ratio: 0.35, tab: 'layers', sidebar: 'rail', sidebarBefore: 'hidden', railPage: 'finish-sound', railRatio: 0.6 });
+    // Saved before the rail: a hidden sidebar stays hidden.
+    expect(parseSplitPrefs(JSON.stringify({ on: true, sidebarHidden: true })).sidebar).toBe('hidden');
+    expect(parseSplitPrefs(JSON.stringify({ sidebar: 'drawer', railPage: 'nope', railRatio: 'x' }))).toMatchObject({ sidebar: 'full', railPage: 'controls', railRatio: null });
     expect(parseSplitPrefs(JSON.stringify({ ratio: 0.99 })).ratio).toBe(RATIO_MAX);
     expect(parseSplitPrefs(JSON.stringify({ ratio: -3 })).ratio).toBe(RATIO_MIN);
   });
@@ -80,8 +83,8 @@ describe('split store', () => {
 
   it('remembers on, side, ratio, tab and the hidden sidebar', () => {
     const s = usePlaySplit.getState();
-    s.setOn(true); s.setSide('left'); s.setRatio(0.3333); s.setTab('mappings'); s.setSidebarHidden(true);
-    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null)).toEqual({ on: true, side: 'left', ratio: 0.333, tab: 'mappings', sidebarHidden: true });
+    s.setOn(true); s.setSide('left'); s.setRatio(0.3333); s.setTab('mappings'); s.setSidebar('hidden');
+    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null)).toMatchObject({ on: true, side: 'left', ratio: 0.333, tab: 'mappings', sidebar: 'hidden' });
     s.toggle();
     expect(usePlaySplit.getState().on).toBe(false);
     expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null).on).toBe(false);

@@ -469,8 +469,8 @@ function App() {
     if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 4000 }); else window.setTimeout(run, 2000);
   }, []);
   const playWidth = PANEL_WIDTHS[usePlayUi(s => s.panel)];
-  // Play's split view can hide the sidebar (the panel column), leaving the picture and the big panel.
-  const playSidebarHidden = usePlaySplit(s => s.on && s.available && s.sidebarHidden);
+  // Play's split view can fold the sidebar (the panel column) into the panel's rail or hide it, leaving the picture and the big panel.
+  const playSidebarHidden = usePlaySplit(s => s.on && s.available && s.sidebar !== 'full');
   // "This graph has a Play setup · Open Play" means nothing while Play is already open.
   useEffect(() => {
     if (page !== 'play') return;
@@ -723,6 +723,7 @@ function App() {
     filterUVOutputs:() => setNodeHighlightFilter('uv-out'),
     shortcuts:      () => setPage(p => p === 'shortcuts' ? 'studio' : 'shortcuts'),
     playSplit:      () => { const sp = usePlaySplit.getState(); if (sp.available) sp.toggle(); },
+    playRail:       () => { const sp = usePlaySplit.getState(); if (sp.available) sp.toggleRail(); },
   }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll, setPage, page, hosted]);
 
   const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);
@@ -1266,7 +1267,7 @@ function App() {
 
           {/* Play: the control panel takes the graph's place, the picture gets the rest */}
           {page === 'play' && (
-            <div style={playSidebarHidden ? { width: 0, flexShrink: 0, position: 'relative', overflow: 'hidden' } : { width: `min(${playWidth}px, 50vw)`, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }}>
+            <div data-play-sidebar="" style={playSidebarHidden ? { width: 0, flexShrink: 0, position: 'relative', overflow: 'hidden' } : { width: `min(${playWidth}px, 50vw)`, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }}>
               <PlayPage canvasRow />
             </div>
           )}
@@ -1372,7 +1373,7 @@ function App() {
         )}
 
         {/* Center content. On Play the panel is a fixed column and the picture takes the rest. */}
-        <div style={page === 'play'
+        <div data-play-sidebar={page === 'play' ? '' : undefined} style={page === 'play'
           ? (playSidebarHidden ? { width: 0, flexShrink: 0, position: 'relative', overflow: 'hidden' } : { width: playWidth, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` })
           : { flex: 1, position: 'relative', minWidth: 0 }}>
           {page === 'play' && <PlayPage />}

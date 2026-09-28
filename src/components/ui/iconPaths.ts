@@ -95,6 +95,9 @@ export const ICONS = {
   antenna: { sw: 1.4, body: "<circle cx='8' cy='6.6' r='1.3'/><path d='M8 7.9v6.3M5.3 3.9a3.8 3.8 0 000 5.4M10.7 3.9a3.8 3.8 0 010 5.4M3.2 1.9a6.7 6.7 0 000 9.4M12.8 1.9a6.7 6.7 0 010 9.4'/>" },
   gamepad: { sw: 1.4, body: "<path d='M4.6 4.4h6.8a3.2 3.2 0 013.1 2.5l.7 3.3a1.9 1.9 0 01-3.3 1.6L10.6 10H5.4l-1.3 1.8A1.9 1.9 0 01.8 10.2l.7-3.3a3.2 3.2 0 013.1-2.5z'/><path d='M5 6.4v2.2M3.9 7.5h2.2'/><circle cx='10.9' cy='6.9' r='.5' fill='currentColor' stroke='none'/><circle cx='12' cy='8.1' r='.5' fill='currentColor' stroke='none'/>" },
   phone: { sw: 1.4, body: "<rect x='4.2' y='1.6' width='7.6' height='12.8' rx='1.8'/><path d='M7.2 12.2h1.6'/>" },
+  layers: { sw: 1.4, body: "<path d='M8 2.2l5.8 3L8 8.2 2.2 5.2z'/><path d='M2.2 8.1L8 11.1l5.8-3'/><path d='M2.2 10.9L8 13.9l5.8-3'/>" },
+  rail: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><path d='M5.2 2.5v11'/><circle cx='3.6' cy='5.4' r='.7' fill='currentColor' stroke='none'/><circle cx='3.6' cy='8' r='.7' fill='currentColor' stroke='none'/><circle cx='3.6' cy='10.6' r='.7' fill='currentColor' stroke='none'/>" },
+  sidebarOff: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><path d='M4.5 5.5l7 5' opacity='.7'/>" },
 } satisfies Record<string, IconDef>;
 
 export type IconName = keyof typeof ICONS;

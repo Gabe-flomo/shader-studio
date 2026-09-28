@@ -53,11 +53,15 @@ import { NOTE_REF_TYPE, noteRef, type NoteRefKind } from './noteRefs';
 import { LayerContextMenu } from './LayerContextMenu';
 import { driveWithNull, graphNullDrives, layerNullDrives, pairedKey, type NullDrive } from './layerOps';
 import { toast } from '../ui/toastStore';
-import { usePlayUi, type PanelSize } from './playUi';
+import { usePlayUi, type PanelSize, type PlayTab } from './playUi';
 import { setLayerDropHandler } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
-import { sidebarView, useBigTab, usePlaySplit } from './playSplit';
+import { sidebarView, useBigPage, useBigTab, usePlaySplit } from './playSplit';
+import { PlayRailBar } from './PlayRail';
+import { phonePageShown, type RailPage } from './railPages';
+import { ActionsPage, BackgroundPage, CardPage, SignalsPage } from './FullPages';
+import { groupCounts, groupMappings, type MappingGroupId } from './mappingGroups';
 import { AudioEnginePanel } from './engine/AudioEnginePanel';
 import { aeRack, aeSlot, aeSlotLabel, parseAuTarget, patchSlot } from '../../types/playAudioEngine';
 import { SplitButton } from './PlaySplitArea';
@@ -367,11 +371,19 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // Split view (playSplit.ts): a big panel beside the picture shows one section, which the sidebar then leaves out.
   const bigTab = useBigTab();
   const big = compact ? null : bigTab;
+  // The sidebar folded into the rail: the panel shows one page full width (railPages.ts).
+  const railPage = useBigPage();
+  const bigPage = compact ? null : railPage;
   const splitHost = usePlaySplit(s => s.host);
   const splitWide = usePlaySplit(s => s.wide);
-  const sidebarGone = usePlaySplit(s => s.sidebarHidden) && big !== null;
+  const sidebarGone = usePlaySplit(s => s.sidebar !== 'full') && big !== null;
+  // Phones: the page picked from the bottom row (a Layers or Mappings page of its own, or the tab's).
+  const phonePicked = usePlayUi(s => s.phonePage), finishView = usePlayUi(s => s.finishView);
+  const phonePage: RailPage | null = compact ? phonePageShown(tab, finishView, phonePicked) : null;
   const sideView = sidebarView(tab, big);
-  const shown = compact ? tab : sideView.tab;
+  // A phone page that isn't a whole section (Actions, Signals, Background, MIDI file, Pad grid) shows on its own.
+  const phoneOwn = !!phonePage && OWN_PAGES.has(phonePage);
+  const shown: PlayTab | null = compact ? (phoneOwn ? null : tab) : sideView.tab;
   const nullLayers = useMemo(() => play.layers.filter(l => l.kind === 'null').map(l => ({ id: l.id, label: l.label })), [play.layers]);
   const [notesEditing, setNotesEditing] = useState(false);
   // Links in the notes: what they can point at, and going there.
@@ -646,11 +658,13 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       })()}</div>}
     </div>
   );
-  const renderMappings = (inPanel: boolean) => (
+  // `pages`: the MIDI file and the pad grid have pages of their own (the rail's, the phone's row); `workspace`: the full-width table.
+  const renderMappings = (inPanel: boolean, pages = false, workspace = false) => (
     <MappingsDrawer
       play={play}
-      mode={compact || inPanel ? 'tab' : 'drawer'}
+      mode={workspace && splitWide ? 'workspace' : compact || inPanel ? 'tab' : 'drawer'}
       grid={inPanel}
+      pages={pages}
       height={drawerH}
       onResizeStart={startDrawerResize}
       open={compact || inPanel || drawerOpen}
@@ -666,9 +680,40 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       layerRefs={layerRefs}
     />
   );
+  const exposeControl = (control: PlayControl) => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }));
+  /**
+   * One of the rail's pages (railPages.ts), full width in the big panel, or a
+   * page of its own on a phone (`touch`). `wide`: room for two columns.
+   */
+  const renderPage = (page: RailPage, wide: boolean, touch: boolean): ReactNode => {
+    switch (page) {
+      case 'controls': return <>{controlsHeader}{notesCard}{renderControls(true)}</>;
+      case 'layers': return layersOk
+        ? <LayersPanel play={play} touch={touch} split={wide} big extras={false} exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={exposeControl} />
+        : <LockedLayers play={play} />;
+      case 'actions': return layersOk ? <ActionsPage play={play} onChange={update} wide={wide} /> : <LockedLayers play={play} />;
+      case 'signals': return <SignalsPage play={play} onChange={update} wide={wide} />;
+      case 'background': return <BackgroundPage play={play} onChange={update} locked={!backgroundsOk} />;
+      case 'finish-picture':
+      case 'finish-sound': return finishOk ? <FinishPanel play={play} onChange={update} touch={touch} wide={wide} only={page === 'finish-sound' ? 'sound' : 'picture'} /> : <LockedFinish play={play} />;
+      case 'engine-performance': return <AudioEnginePanel play={play} onChange={update} touch={touch} wide={wide} />;
+      case 'mappings': return renderMappings(true, true, true);
+      case 'midi-file': return (
+        <CardPage title="MIDI file" intro="A MIDI file plays into the setup as if from a controller: its notes and CCs drive mappings, triggers and racks, in time with the picture.">
+          <MidiFileSlot />
+        </CardPage>
+      );
+      case 'pad-grid': return (
+        <CardPage title="Pad grid" intro="A grid of pads from a controller (a Launchpad, an MPC), read as sources: each pad’s press, pressure or toggle can drive a control.">
+          <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><PadGridCard /></ProLock>
+        </CardPage>
+      );
+    }
+  };
   // The big panel's section, rendered into the split view's panel (PlaySplitArea.tsx).
   const bigPanel = big && splitHost ? createPortal(
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+    <div data-big-page={bigPage ?? undefined} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {bigPage ? renderPage(bigPage, splitWide, false) : <>
       {big === 'controls' && <>{controlsHeader}{renderControls(true)}</>}
       {big === 'layers' && (layersOk
         ? <LayersPanel play={play} touch={false} split={splitWide} big exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))} />
@@ -676,6 +721,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       {big === 'finish' && (finishOk ? <FinishPanel play={play} onChange={update} touch={false} wide={splitWide} /> : <LockedFinish play={play} />)}
       {big === 'engine' && <AudioEnginePanel play={play} onChange={update} touch={false} wide={splitWide} />}
       {big === 'mappings' && renderMappings(true)}
+      </>}
     </div>,
     splitHost,
   ) : null;
@@ -694,13 +740,13 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
 
   return (
     <div ref={rootRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
-      {/* Sections. Desktop keeps Mappings as a drawer underneath; phones make it a third tab. */}
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 2px', background: tk.bg.panel }}>
+      {/* Sections. Desktop keeps Mappings as a drawer underneath; phones pick sections from the row along the bottom (PlayRailBar). */}
+      {!compact && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 2px', background: tk.bg.panel }}>
         <div style={{ flex: 1, minWidth: 0 }}>
         <Segmented
           fill
           ariaLabel="Play section"
-          value={shown}
+          value={sideView.tab}
           onChange={setTab}
           options={[
             ...(compact || sideView.tabs.includes('controls') ? [{ value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` }] : []),
@@ -711,8 +757,10 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           ]}
         />
         </div>
-        {!compact && <Segmented size="sm" ariaLabel="Panel width" value={panel} onChange={v => setPanel(v as PanelSize)} options={[{ value: 's', label: 'S', title: 'Narrow panel' }, { value: 'm', label: 'M', title: 'Medium panel' }, { value: 'l', label: 'L', title: 'Wide panel' }]} />}
-      </div>
+        <Segmented size="sm" ariaLabel="Panel width" value={panel} onChange={v => setPanel(v as PanelSize)} options={[{ value: 's', label: 'S', title: 'Narrow panel' }, { value: 'm', label: 'M', title: 'Medium panel' }, { value: 'l', label: 'L', title: 'Wide panel' }]} />
+      </div>}
+      {/* Phones: a page of its own, picked from the bottom row's sheet. */}
+      {phoneOwn && <div data-phone-page={phonePage} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{renderPage(phonePage!, false, true)}</div>}
       {!compact && notesCard}
       {shown === 'layers' && !layersOk && <LockedLayers play={play} />}
       {shown === 'layers' && layersOk && (
@@ -720,6 +768,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           top={compact ? notesCard : undefined}
           play={play}
           touch={compact}
+          extras={!compact}
           exposedTargets={new Set(play.controls.map(c => c.target))}
           onChange={update}
           onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))}
@@ -740,7 +789,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       {!compact && (backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />)}
       {shown === 'controls' && renderControls(false)}
 
-      {(compact ? tab === 'mappings' : sideView.drawer) && renderMappings(false)}
+      {(compact ? tab === 'mappings' && !phoneOwn : sideView.drawer) && renderMappings(false, compact)}
+      {compact && <PlayRailBar />}
       {bigPanel}
       {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
       <AudioReadersHost compact={compact} />
@@ -750,6 +800,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
 }
 
 const DRAWER_HEIGHT_KEY = 'shader-studio:play:drawerHeight';
+/** Pages that aren't a whole sidebar section: a phone shows them in place of its tab's section. */
+const OWN_PAGES: ReadonlySet<RailPage> = new Set<RailPage>(['actions', 'signals', 'background', 'midi-file', 'pad-grid']);
 /** The split view's big panel lays cards out in as many columns as fit. */
 const PANEL_GRID: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', columnGap: 10, alignItems: 'start' };
 const PANEL_GRID_WIDE: React.CSSProperties = { ...PANEL_GRID, gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))' };
@@ -1163,12 +1215,17 @@ function RangeEditor({ min, max, onRange }: { min: number; max: number; onRange:
 
 interface AudioNodeOption { id: string; label: string; bands: number }
 
-function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, onAddPair, onUpdatePair, onRemovePair, audioNodes, nullLayers, layerRefs }: {
+function MappingsDrawer({ play, mode, grid = false, pages = false, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, onAddPair, onUpdatePair, onRemovePair, audioNodes, nullLayers, layerRefs }: {
   play: PlayRecord;
-  /** `drawer`: folds under the controls with a draggable top edge. `tab`: fills the page (phones, the split view's panel). */
-  mode: 'drawer' | 'tab';
+  /**
+   * `drawer`: folds under the controls with a draggable top edge. `tab`: fills the page (phones, the split view's panel).
+   * `workspace`: the rail's full-width page: a table grouped by source, filters, and the selected mapping's editor beside it.
+   */
+  mode: 'drawer' | 'tab' | 'workspace';
   /** The rows as cards in columns (the split view's panel). */
   grid?: boolean;
+  /** The MIDI file and the pad grid have pages of their own: leave them out. */
+  pages?: boolean;
   height: number;
   onResizeStart: (e: React.PointerEvent) => void;
   open: boolean;
@@ -1247,9 +1304,55 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const toggleRow = (id: string) => setCollapsed(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const allCollapsed = play.mappings.length > 0 && play.mappings.every(m => collapsed.has(m.id));
+  const workspace = mode === 'workspace';
+  const rowFor = (m: PlayMapping, opts: { collapsed: boolean; fixed?: boolean }) => (
+    <MappingRow
+      key={m.id}
+      mapping={m}
+      control={play.controls.find(c => c.id === m.controlId)}
+      controls={play.controls}
+      audioNodes={audioNodes}
+      nullLayers={nullLayers}
+      layerRefs={layerRefs}
+      meter={meters.get(m.id) ?? 0}
+      learning={learnFor === m.id}
+      assigned={assigned?.id === m.id}
+      collapsed={opts.collapsed}
+      fixed={opts.fixed}
+      onToggle={() => toggleRow(m.id)}
+      onLearn={() => setLearnFor(l => (l === m.id ? null : m.id))}
+      onUpdate={patch => onUpdate(m.id, patch)}
+      onRemove={() => onRemove(m.id)}
+    />
+  );
+  const status = (
+    <>
+      {(learnFor || usesMidi(play)) && (
+        <div style={{ margin: '4px 0 6px', padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field }}>
+          <MidiStatusChip />
+        </div>
+      )}
+      {(usesHands(play) || (learnFor && handFeed.getStatus() !== 'unsupported')) && (
+        <div style={{ margin: '4px 0 6px', padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field }}>
+          <HandsChip />
+        </div>
+      )}
+      {learnFor && (
+        <div style={{ margin: '6px 0 2px', padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 12px ${fontFamily.ui}` }}>
+          {learnTrigger
+            ? <>Press a key, hit a note{handFeed.isOn() ? ', make a hand gesture' : ''}{play.signals?.length ? ' or fire a signal' : ''}… </>
+            : <>Move a knob, hit a note, press a key{handFeed.isOn() ? ', move a finger' : ''}{play.signals?.length ? ' or fire a signal' : ''}… </>}
+          <span style={{ fontWeight: 500, opacity: 0.8 }}>Esc to cancel</span>
+        </div>
+      )}
+    </>
+  );
+  const emptyBody = noControls
+    ? 'Add a control first, then map an input onto it.'
+    : `Press Learn and move a knob or a key, or add a row by hand. ${midiEngine.blockReason() ?? (midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}.` : '')} Connecting Ableton, a controller, OSC or live audio for the first time? The ⓘ button above walks you through it.`;
 
   return (
-    <div style={mode === 'tab'
+    <div data-mappings={mode} style={mode !== 'drawer'
       ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }
       : { position: 'relative', flexShrink: 0, display: 'flex', flexDirection: 'column', height: open ? height : undefined, maxHeight: '85%', borderTop: `1px solid ${tk.border.default}` }}>
       {mode === 'drawer' && open && (
@@ -1268,7 +1371,7 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
         onClick={mode === 'drawer' ? onToggle : undefined}
         extra={open && (
           <>
-            {play.mappings.length > 1 && (
+            {play.mappings.length > 1 && !workspace && (
               <IconButton
                 icon={allCollapsed ? 'chevD' : 'chevU'}
                 label={allCollapsed ? 'Expand all mappings' : 'Collapse all mappings'}
@@ -1284,62 +1387,156 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
           </>
         )}
       />
-      {open && (
+      {open && workspace && (
+        <MappingsWorkspace
+          play={play}
+          meters={meters}
+          status={status}
+          empty={<EmptyState title="Nothing mapped" body={emptyBody} />}
+          renderRow={m => rowFor(m, { collapsed: false, fixed: true })}
+          pairs={play.pairs?.length ? <PairMappingsSection play={play} grid={false} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} /> : null}
+          layerRefs={layerRefs}
+          onUpdate={onUpdate}
+        />
+      )}
+      {open && !workspace && (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: grid ? '8px 16px 16px' : '6px 12px 12px' }}>
-          {(learnFor || usesMidi(play)) && (
-            <div style={{ margin: '4px 0 6px', padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field }}>
-              <MidiStatusChip />
-            </div>
-          )}
-          {(usesHands(play) || (learnFor && handFeed.getStatus() !== 'unsupported')) && (
-            <div style={{ margin: '4px 0 6px', padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field }}>
-              <HandsChip />
-            </div>
-          )}
-          {learnFor && (
-            <div style={{ margin: '6px 0 2px', padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 12px ${fontFamily.ui}` }}>
-              {learnTrigger
-                ? <>Press a key, hit a note{handFeed.isOn() ? ', make a hand gesture' : ''}{play.signals?.length ? ' or fire a signal' : ''}… </>
-                : <>Move a knob, hit a note, press a key{handFeed.isOn() ? ', move a finger' : ''}{play.signals?.length ? ' or fire a signal' : ''}… </>}
-              <span style={{ fontWeight: 500, opacity: 0.8 }}>Esc to cancel</span>
-            </div>
-          )}
+          {status}
           <SoloStrip kind="mapping" total={play.mappings.length} />
-          {play.midiFile && <MidiFileSlot />}
+          {play.midiFile && !pages && <MidiFileSlot />}
           {play.mappings.length === 0 ? (
-            <EmptyState
-              title="Nothing mapped"
-              body={noControls
-                ? 'Add a control first, then map an input onto it.'
-                : `Press Learn and move a knob or a key, or add a row by hand. ${midiEngine.blockReason() ?? (midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}.` : '')} Connecting Ableton, a controller, OSC or live audio for the first time? The ⓘ button above walks you through it.`}
-            />
-          ) : <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => (
-            <MappingRow
-              key={m.id}
-              mapping={m}
-              control={play.controls.find(c => c.id === m.controlId)}
-              controls={play.controls}
-              audioNodes={audioNodes}
-              nullLayers={nullLayers}
-              layerRefs={layerRefs}
-              meter={meters.get(m.id) ?? 0}
-              learning={learnFor === m.id}
-              assigned={assigned?.id === m.id}
-              collapsed={collapsed.has(m.id)}
-              onToggle={() => toggleRow(m.id)}
-              onLearn={() => setLearnFor(l => (l === m.id ? null : m.id))}
-              onUpdate={patch => onUpdate(m.id, patch)}
-              onRemove={() => onRemove(m.id)}
-            />
-          ))}</div>}
+            <EmptyState title="Nothing mapped" body={emptyBody} />
+          ) : <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => rowFor(m, { collapsed: collapsed.has(m.id) }))}</div>}
           {!!play.pairs?.length && (
             <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
           )}
-          {!play.midiFile && <MidiFileSlot />}
-          <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><PadGridCard /></ProLock>
+          {!play.midiFile && !pages && <MidiFileSlot />}
+          {!pages && <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><PadGridCard /></ProLock>}
         </div>
       )}
       {guideOpen && <ConnectGuide onClose={() => setGuideOpen(false)} />}
+    </div>
+  );
+}
+
+// ── Mappings workspace (the rail's full-width page) ─────────────────────────
+
+/**
+ * Mappings full width: a table of source → control, grouped by the kind of
+ * source (mappingGroups.ts), with live meters, a search and group filters;
+ * the selected mapping's editor beside it. Up and down move the selection.
+ */
+function MappingsWorkspace({ play, meters, status, empty, renderRow, pairs, layerRefs, onUpdate }: {
+  play: PlayRecord;
+  meters: Map<string, number>;
+  /** MIDI and hands status, the Learn prompt. */
+  status: ReactNode;
+  empty: ReactNode;
+  renderRow: (m: PlayMapping) => ReactNode;
+  pairs: ReactNode;
+  layerRefs: LayerRef[];
+  onUpdate: (id: string, patch: Partial<PlayMapping>) => void;
+}) {
+  const tk = useTokens();
+  const [query, setQuery] = useState('');
+  const [group, setGroup] = useState<MappingGroupId | 'all'>('all');
+  const [picked, setPicked] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
+  const label = useCallback((m: PlayMapping) => ({
+    source: sourceLabel(m.source, play.controls, layerRefs),
+    control: play.controls.find(c => c.id === m.controlId)?.label ?? 'missing control',
+  }), [play.controls, layerRefs]);
+  const counts = useMemo(() => groupCounts(play.mappings), [play.mappings]);
+  const shownGroup = group !== 'all' && counts.some(c => c.id === group) ? group : 'all';
+  const groups = useMemo(() => groupMappings(play.mappings, label, query, shownGroup), [play.mappings, label, query, shownGroup]);
+  const visible = groups.flatMap(g => g.rows);
+  const selected = play.mappings.find(m => m.id === picked) ?? visible[0];
+  const pick = (id: string, focus = false) => {
+    setPicked(id);
+    if (focus) requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[data-mapping-row="${CSS.escape(id)}"]`)?.focus());
+  };
+  const onListKey = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const i = visible.findIndex(m => m.id === selected?.id);
+    const next = visible[Math.max(0, Math.min(visible.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+    if (!next) return;
+    e.preventDefault();
+    pick(next.id, true);
+  };
+  const chip = (id: MappingGroupId | 'all', text: string, n: number) => {
+    const on = shownGroup === id;
+    return (
+      <button key={id} type="button" aria-pressed={on} onClick={() => setGroup(id)} style={{
+        height: 26, padding: '0 10px', border: 0, borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap',
+        background: on ? tk.bg.selected : tk.bg.field, color: on ? tk.accent.text : tk.text.secondary, font: `600 11px ${fontFamily.ui}`,
+      }}>{text} <span style={{ font: `500 10.5px ${fontFamily.mono}`, color: on ? tk.accent.text : tk.text.faint }}>{n}</span></button>
+    );
+  };
+  return (
+    <div data-mappings-workspace="" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {play.mappings.length > 0 && (
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '8px 16px', borderBottom: `1px solid ${tk.border.subtle}` }}>
+          <Field placeholder="Search sources and controls" aria-label="Search mappings" value={query} onChange={e => setQuery(e.target.value)} height={28} style={{ width: 240 }} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
+          {counts.length > 1 && chip('all', 'All', play.mappings.length)}
+          {counts.length > 1 && counts.map(c => chip(c.id, c.label, c.count))}
+        </div>
+      )}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        <div data-pane="list" ref={listRef} onKeyDown={onListKey} style={{ width: 'clamp(340px, 48%, 560px)', flexShrink: 0, overflowY: 'auto', padding: '8px 12px 16px 16px', borderRight: `1px solid ${tk.border.default}` }}>
+          {status}
+          <SoloStrip kind="mapping" total={play.mappings.length} />
+          {play.mappings.length === 0 ? empty
+            : groups.length === 0 ? <div style={{ padding: '14px 4px', color: tk.text.faint }}>No mapping matches.</div>
+            : groups.map(g => (
+              <section key={g.id} data-mapping-group={g.id} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '6px 4px 4px', color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                  <span>{g.label}</span>
+                  <span style={{ font: `500 10.5px ${fontFamily.mono}`, letterSpacing: 0 }}>{g.rows.length}</span>
+                </div>
+                <div role="listbox" aria-label={g.label} style={{ borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden' }}>
+                  {g.rows.map((m, i) => {
+                    const l = label(m);
+                    const on = m.id === selected?.id;
+                    const meter = meters.get(m.id) ?? 0;
+                    return (
+                      <div
+                        key={m.id}
+                        role="option"
+                        aria-selected={on}
+                        tabIndex={on ? 0 : -1}
+                        data-mapping-row={m.id}
+                        onClick={() => pick(m.id)}
+                        style={{
+                          display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) 12px minmax(0, 1fr) 56px auto', alignItems: 'center', columnGap: 8,
+                          minHeight: 36, padding: '0 6px 0 10px', cursor: 'pointer', outline: 'none',
+                          borderTop: i ? `1px solid ${tk.border.subtle}` : undefined,
+                          background: on ? tk.bg.selected : 'transparent', boxShadow: on ? `inset 2px 0 0 ${tk.accent.base}` : undefined,
+                          opacity: m.enabled ? 1 : 0.55,
+                        }}
+                      >
+                        <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex' }}><Toggle checked={m.enabled} onChange={enabled => onUpdate(m.id, { enabled })} /></span>
+                        <span title={l.source} style={{ font: `600 12px ${fontFamily.ui}`, color: on ? tk.accent.text : tk.text.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.source}</span>
+                        <Icon name="chevR" size={12} style={{ color: tk.text.faint }} />
+                        <span title={l.control} style={{ font: `12px ${fontFamily.ui}`, color: tk.text.secondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.control}</span>
+                        <MappingMeter input={meter} output={applyCurve(meter, m.curve, m.curveY)} on={m.enabled} margin="0" />
+                        <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex' }}><SoloButton kind="mapping" id={m.id} /></span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          {pairs}
+        </div>
+        <div data-pane="side" style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '8px 16px 16px' }}>
+          {selected ? (
+            <>
+              <div style={{ margin: '6px 2px 0', color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Edit</div>
+              <div data-mapping-editor={selected.id} style={{ maxWidth: 640 }}>{renderRow(selected)}</div>
+            </>
+          ) : play.mappings.length ? <div style={{ padding: '14px 4px', color: tk.text.faint }}>Pick a mapping to edit it here.</div> : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1470,7 +1667,7 @@ function PairMappingsSection({ play, grid, audioNodes, layerRefs, onAdd, onUpdat
   );
 }
 
-function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, assigned = false, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
+function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, assigned = false, collapsed, fixed = false, onToggle, onLearn, onUpdate, onRemove }: {
   mapping: PlayMapping;
   control: PlayControl | undefined;
   controls: PlayControl[];
@@ -1482,6 +1679,8 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   /** The row was just given its knob (lib/midiAutoLearn.ts): a brief highlight. */
   assigned?: boolean;
   collapsed: boolean;
+  /** Always open, with no fold chevron (the workspace's editor). */
+  fixed?: boolean;
   onToggle: () => void;
   onLearn: () => void;
   onUpdate: (patch: Partial<PlayMapping>) => void;
@@ -1519,7 +1718,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
     boxShadow: `inset 0 0 0 1px ${learning || assigned ? tk.accent.base : tk.border.default}`, opacity: m.enabled ? 1 : 0.55,
     transition: assigned ? 'none' : 'background 0.9s ease-out, box-shadow 0.9s ease-out',
   };
-  const chevron = <IconButton icon={collapsed ? 'chevR' : 'chevD'} label={collapsed ? 'Expand mapping' : 'Collapse mapping'} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />;
+  const chevron = fixed ? null : <IconButton icon={collapsed ? 'chevR' : 'chevD'} label={collapsed ? 'Expand mapping' : 'Collapse mapping'} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />;
 
   if (collapsed) {
     return (
