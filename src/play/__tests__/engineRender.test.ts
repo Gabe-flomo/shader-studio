@@ -149,7 +149,7 @@ describe('the rendered sound', () => {
     expect(decodeEngineRender(new Uint8Array([1, 2]))).toBeNull();
     expect(decodeEngineRender(reply({ frames: 10 }, [0], [0]))).toBeNull(); // says 10 frames, has 1
     const short = reply({ frames: 1 }, [1], [1]);
-    expect(decodeEngineRender(short.buffer.slice(0, short.length))).not.toBeNull();
+    expect(decodeEngineRender(short.slice(0, short.length))).not.toBeNull();
   });
 
   it('puts the render under the mix from 0, slid earlier by the units\' latency, and a mix of the engine alone is a mix', async () => {
