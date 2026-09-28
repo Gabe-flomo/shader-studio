@@ -48,6 +48,9 @@ export const RELEASES: Release[] = [
       { area: 'Play', text: 'Big layer editors in the split view share one layout: a section strip to jump around, tidier rows, and labels that wrap instead of overflowing.' },
       { area: 'Desktop', text: 'Plug-in windows open at the plug-in\'s own size, resize only where the plug-in allows, and remember where you left them.' },
       { area: 'Files', text: 'Linked folders: point the app at folders on your disk, and every picker (pads, video, images, fonts, songs) reads from them without copying.', link: { kind: 'doc', path: 'docs/linked-folders.md' } },
+      { area: 'Play', text: 'The Audio engine has a tape: record each rack on its own track, overdub, punch in with a count-in, up to 60 s, and render it. One lead rack takes the MIDI.', link: { kind: 'doc', path: 'docs/arrangement.md' } },
+      { area: 'Play', text: 'Split view: fold the sidebar into an icon rail, pages take the full width, and Controls show live graphs grouped by rack, layer or reader.', link: { kind: 'doc', path: 'docs/split-view.md' } },
+      { area: 'Play', text: 'A relationship\'s members nest under it in the Layers list, with role chips.' },
     ],
   },
   {
