@@ -3,7 +3,7 @@
  * exports (a full HTML page or a paste-in embed snippet). Plain ES2020, no
  * imports, no framework.
  *
- *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still(), renderAt(t, o), seekVideos(t) }
+ *   ShaderStudioPlay.mount(element, bundle, options) → { destroy(), pause(), play(), get(id), set(id, v), fire(id), still(), renderAt(t, o), renderAtAsync(t, o), seekVideos(t), setPixelSize(s) }
  *
  * bundle:  { title, fragmentShader, uniforms, paramBindings, play, aspect, passes?, media? }
  *   passes: { stateful, echo: { copies, delay } | null, particles: [{ vertexShader, fragmentShader, count, shape }] }
@@ -1101,7 +1101,7 @@ void main() {
     let needsDraw = true;
     // pixelSize: a drawing buffer of exactly that many pixels, whatever the box's size on screen
     // (a capture at 1920 × 1080 shown scaled down); the box is then measured untransformed.
-    const pixelSize = opts.pixelSize && opts.pixelSize.w > 0 && opts.pixelSize.h > 0 ? opts.pixelSize : null;
+    let pixelSize = opts.pixelSize && opts.pixelSize.w > 0 && opts.pixelSize.h > 0 ? opts.pixelSize : null;
     const layout = () => {
       const r = pixelSize ? { width: stage.clientWidth, height: stage.clientHeight } : stage.getBoundingClientRect();
       let w = r.width, h = r.height;
@@ -1948,6 +1948,21 @@ void main() {
     }
     // Held by renderAt: the picture stays what it drew until play() lets the clock run again.
     let held = false;
+    // Which renderAt is current: a newer one (or play()) makes a chunked renderAtAsync stop where it is.
+    let renderGen = 0;
+    /** Stop the clock and start the layers and feedback over for a deterministic render (renderAt / renderAtAsync). */
+    const beginRender = o => {
+      const gen = ++renderGen;
+      held = true; setPlaying(false);
+      const fdt = o.dt > 0 ? o.dt : 1 / 60;
+      const steps = Array.isArray(o.steps) ? o.steps : [];
+      if (K) K.reset(o.seed > 0 ? o.seed : 1);
+      if (finishR) finishR.reset();
+      dropTargets(); frame = 0; smooth.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); lastTime = -Infinity;
+      return { gen, fdt, steps };
+    };
+    /** One deterministic frame at clock time `at`. */
+    const stepTo = (at, fdt) => { time = Math.max(0, +at || 0); frame++; tickMappings(fdt); paint(fdt, false); };
     function tick(now) {
       if (!alive) return;
       if (!follow) raf = requestAnimationFrame(tick);
@@ -2096,7 +2111,7 @@ void main() {
         for (const k in uniformValues) { const v = uniformValues[k]; if (typeof v === 'number') uniforms[k] = v; else if (Array.isArray(v)) uniforms[k] = v.slice(); }
         return { t: time, playing, pointer: [mouse.x, mouse.y, mouse.down ? 1 : 0, mouse.over ? 1 : 0], uniforms, layers };
       },
-      play() { held = false; setPlaying(true); },
+      play() { renderGen++; held = false; setPlaying(true); },
       /**
        * Draw the frame at `t` seconds, the same every time: the clock stops and
        * the picture holds until play(). The layers and feedback start over
@@ -2108,15 +2123,42 @@ void main() {
        */
       renderAt(t, o) {
         o = o || {};
-        held = true; setPlaying(false);
-        const fdt = o.dt > 0 ? o.dt : 1 / 60;
-        const steps = Array.isArray(o.steps) ? o.steps : [];
-        if (K) K.reset(o.seed > 0 ? o.seed : 1);
-        if (finishR) finishR.reset();
-        dropTargets(); frame = 0; smooth.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); lastTime = -Infinity;
-        for (const at of steps) { time = Math.max(0, +at || 0); frame++; tickMappings(fdt); paint(fdt, false); }
-        time = Math.max(0, +t || 0); frame++; tickMappings(fdt); paint(fdt, false);
+        const { fdt, steps } = beginRender(o);
+        for (const at of steps) stepTo(at, fdt);
+        stepTo(t, fdt);
         return o.capture ? composite() : null;
+      },
+      /**
+       * renderAt in chunks: the same steps in the same order (so the same
+       * picture), but the work yields to the page every `budgetMs` (12) of
+       * it, with `onProgress(done, total)` between chunks, so a long warm-up
+       * keeps a slider moving. Resolves null when superseded: another
+       * renderAt or renderAtAsync began, play() ran, `signal` aborted, or the
+       * mount was destroyed.
+       */
+      renderAtAsync(t, o) {
+        o = o || {};
+        const { gen, fdt, steps } = beginRender(o);
+        const budget = o.budgetMs > 0 ? o.budgetMs : 12;
+        const stale = () => !alive || gen !== renderGen || (o.signal && o.signal.aborted);
+        return (async () => {
+          let last = performance.now();
+          for (let i = 0; i < steps.length; i++) {
+            stepTo(steps[i], fdt);
+            if (performance.now() - last < budget) continue;
+            if (o.onProgress) o.onProgress(i + 1, steps.length + 1);
+            await new Promise(r => setTimeout(r, 0));
+            if (stale()) return null;
+            last = performance.now();
+          }
+          stepTo(t, fdt);
+          return o.capture ? composite() : null;
+        })();
+      },
+      /** Draw this many pixels from now on (a preview at its shown size, the capture at its full size); the layers redraw at the new size on the next renderAt. */
+      setPixelSize(s) {
+        pixelSize = s && s.w > 0 && s.h > 0 ? { w: s.w, h: s.h } : null;
+        layout();
       },
       /**
        * Bring every video layer (and a video background) to its exact frame at
