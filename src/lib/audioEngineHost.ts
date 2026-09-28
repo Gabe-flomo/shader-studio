@@ -422,6 +422,9 @@ class AudioEngineHost {
     })();
   }
 
+  /** The page's Web Audio arrived (it's wired when the picture first loads): racks reconciled before it get their web instruments now. */
+  webAudioReady(): void { if (this.target?.racks.length) this.kick(); }
+
   /** Wait for reconciling to settle (tests, and the card's Retry). */
   async settled(): Promise<void> { while (this.running) await this.running; }
 
@@ -804,7 +807,7 @@ function webSpectrum(an: AnalyserNode, rackId: string): EngineSpectrum {
 
 let webAudioImpl: AudioEngineHost['webCtx'] = null;
 /** The browser sample player plays through the app's audio engine (the master chain, recordings). Set by the app. */
-export function setEngineWebAudio(w: NonNullable<AudioEngineHost['webCtx']>): void { webAudioImpl = w; }
+export function setEngineWebAudio(w: NonNullable<AudioEngineHost['webCtx']>): void { webAudioImpl = w; audioEngineHost.webAudioReady(); }
 function defaultWebAudio() { return webAudioImpl; }
 
 let soundsImpl: SoundLoader | null = null;
