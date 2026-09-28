@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.14',
+    date: '2026-09-28',
+    title: 'Less on screen at once',
+    highlights: [
+      { area: 'Play', text: 'Editors open collapsed: one main section, the rest folded to a one-line summary. Expand all or fold all; each section remembers.' },
+    ],
+  },
+  {
     id: '2026.9.13',
     date: '2026-09-28',
     title: 'The Granulator',
