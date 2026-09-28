@@ -270,7 +270,8 @@ export const DEFAULT_HAND_STRICTNESS = 0.5;
 /** Does a setup read hands anywhere: a hand source, a gesture trigger (mapping or action), or a null following a hand? */
 export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings'>>): boolean {
   return (play.pairMappings ?? []).some(pairMappingUsesHands) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
-    || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId)))
+    || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId))
+    || (!!m.increment && ((m.increment.on === 'trigger' && triggerUsesHands(m.increment.trigger)) || (m.increment.on === 'repeat' && conditionUsesHands(m.increment.when)))))
     || (play.actions ?? []).some(a => triggerUsesHands(a.trigger))
     || play.layers.some(l => l.kind === 'null' && l.follow === 'hand');
 }
@@ -465,6 +466,78 @@ export interface PlayMapping {
   /** Colour controls only: which channel the mapping writes (all three when unset). */
   channel?: 0 | 1 | 2;
   enabled: boolean;
+  /**
+   * An Increment mapping (docs/increment-mapping.md): the control moves in
+   * steps within outMin..outMax instead of following the source. The source
+   * matters only for a threshold. Absent = an ordinary mapping.
+   */
+  increment?: PlayIncrement;
+}
+
+// ── Increment mappings (play/kit/increment.js) ──────────────────────────────
+
+/**
+ * What takes one increment:
+ *   trigger    a trigger firing: a signal (so an action or another increment), a key, a note, a beat…
+ *   threshold  the mapping's source reaching `threshold` (0..1), rising (and falling with `falling`)
+ *   repeat     every `every` seconds or beats, optionally only while `when` holds
+ */
+export type IncrementOn = 'trigger' | 'threshold' | 'repeat';
+export const INCREMENT_ONS: readonly IncrementOn[] = ['trigger', 'threshold', 'repeat'];
+/** How the step grows each time (play/kit/increment.js incStepSize). */
+export type IncrementGrowth = 'constant' | 'compound' | 'additive' | 'proportional';
+export const INCREMENT_GROWTHS: readonly IncrementGrowth[] = ['constant', 'compound', 'additive', 'proportional'];
+/** At the ends of the range: stop there, come round the other side, or turn back. */
+export type IncrementLimit = 'clamp' | 'wrap' | 'bounce';
+/** After `wrapAfter` steps: jump back to the start, slide back, or walk back step by step. */
+export type IncrementWrapBack = 'snap' | 'glide' | 'pingpong';
+export type IncrementGlideCurve = 'linear' | 'smooth' | 'in' | 'out';
+
+export interface PlayIncrement {
+  on: IncrementOn;
+  /** on 'trigger': what fires it (the trigger editor's kinds, a signal among them). */
+  trigger: TriggerSpec;
+  /** on 'threshold': where on the source's 0..1 it fires, how far back it must fall to re-arm, and whether the fall fires too. */
+  threshold: number;
+  hysteresis: number;
+  falling: boolean;
+  /** on 'repeat': every this many seconds or beats (at `bpm`), and only while `when` holds (when set). */
+  every: number;
+  unit: 'seconds' | 'beats';
+  bpm: number;
+  when?: ValueCondition;
+  /** The step, in the control's units (proportional: a percentage of the value). */
+  step: number;
+  growth: IncrementGrowth;
+  /** compound: × this each step; additive: + this each step. */
+  factor: number;
+  /** proportional: the smallest step, so a value at 0 still moves. */
+  minStep: number;
+  direction: 1 | -1;
+  limit: IncrementLimit;
+  /** Each step slides over this many ms (0 = jumps), along the curve. */
+  glideMs: number;
+  glideCurve: IncrementGlideCurve;
+  /** After this many steps, the next increment wraps back (0 = never). */
+  wrapAfter: number;
+  wrapBack: IncrementWrapBack;
+  /** Start from the control's value when the mapping starts ('current'), or from `startValue`. */
+  start: 'current' | 'value';
+  startValue: number;
+  /** A signal that sends it back to the start. */
+  resetOn?: string;
+  /** Signals it sends: on each step, and on each wrap-back. */
+  stepSignal?: string;
+  resetSignal?: string;
+}
+
+/** A new Increment: +step on every beat of a 120 bpm clock, clamped, never wrapping back. */
+export function defaultIncrement(step = 0.1, bpm = 120): PlayIncrement {
+  return {
+    on: 'repeat', trigger: { on: 'signal', signal: '' }, threshold: 0.5, hysteresis: 0.1, falling: false,
+    every: 1, unit: 'beats', bpm, step, growth: 'constant', factor: 2, minStep: 0.01, direction: 1, limit: 'clamp',
+    glideMs: 0, glideCurve: 'smooth', wrapAfter: 0, wrapBack: 'snap', start: 'current', startValue: 0,
+  };
 }
 
 // ── Layers (drawn over the picture in JavaScript: types/playLayers.ts) ─────
@@ -1348,6 +1421,44 @@ function parseMapping(raw: unknown, controlIds: Set<string>): PlayMapping | null
     const ys = curveY(m.curveY);
     if (ys) out.curveY = ys; else out.curve = 'linear';
   }
+  const inc = parseIncrement(m.increment);
+  if (inc) out.increment = inc;
+  return out;
+}
+
+const pick = <T extends string>(v: unknown, all: readonly T[], d: T): T => (typeof v === 'string' && (all as readonly string[]).includes(v) ? (v as T) : d);
+
+/** An Increment from a file, or null when there is none. Numbers out of reason are brought back in. */
+export function parseIncrement(raw: unknown): PlayIncrement | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const d = defaultIncrement();
+  const big = (x: number) => Math.max(-1e6, Math.min(1e6, x));
+  const out: PlayIncrement = {
+    on: pick(o.on, INCREMENT_ONS, d.on),
+    trigger: parseTrigger(o.trigger) ?? d.trigger,
+    threshold: Math.max(0, Math.min(1, num(o.threshold, d.threshold))),
+    hysteresis: Math.max(0, Math.min(1, num(o.hysteresis, d.hysteresis))),
+    falling: o.falling === true,
+    every: Math.max(0.01, Math.min(3600, num(o.every, d.every))),
+    unit: o.unit === 'seconds' ? 'seconds' : 'beats',
+    bpm: Math.max(1, Math.min(999, num(o.bpm, d.bpm))),
+    step: big(num(o.step, d.step)),
+    growth: pick(o.growth, INCREMENT_GROWTHS, d.growth),
+    factor: big(num(o.factor, d.factor)),
+    minStep: Math.max(0, big(num(o.minStep, d.minStep))),
+    direction: o.direction === -1 ? -1 : 1,
+    limit: pick<IncrementLimit>(o.limit, ['clamp', 'wrap', 'bounce'], 'clamp'),
+    glideMs: Math.max(0, Math.min(60000, num(o.glideMs, 0))),
+    glideCurve: pick<IncrementGlideCurve>(o.glideCurve, ['linear', 'smooth', 'in', 'out'], 'smooth'),
+    wrapAfter: Math.max(0, Math.min(100000, Math.round(num(o.wrapAfter, 0)))),
+    wrapBack: pick<IncrementWrapBack>(o.wrapBack, ['snap', 'glide', 'pingpong'], 'snap'),
+    start: o.start === 'value' ? 'value' : 'current',
+    startValue: big(num(o.startValue, 0)),
+  };
+  const when = parseCondition(o.when);
+  if (when) out.when = when;
+  for (const k of ['resetOn', 'stepSignal', 'resetSignal'] as const) if (typeof o[k] === 'string' && o[k]) out[k] = (o[k] as string).slice(0, 80);
   return out;
 }
 

@@ -2169,8 +2169,10 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (state.liveUniforms !== lastLive) { lastLive = state.liveUniforms; inputBus.setBindings(lastLive); }
       if (state.paramBindings !== lastBindings) { lastBindings = state.paramBindings; inputBus.setParamBindings(lastBindings); }
       // Play mappings: the record itself, and the sliders' values the engine falls back to.
-      if (state.play !== lastPlay) { lastPlay = state.play; feedPlay(); }
-      if (state.play !== lastPlay || state.nodes !== lastPlayNodes) {
+      // (Noted before lastPlay moves on, so a new control or a layer's own number reaches the engine's base values too.)
+      const playChanged = state.play !== lastPlay;
+      if (playChanged) { lastPlay = state.play; feedPlay(); }
+      if (playChanged || state.nodes !== lastPlayNodes) {
         lastPlayNodes = state.nodes;
         if (lastPlay.controls.length > 0) playEngine.setBaseValues(readBaseValues(lastPlayNodes, lastPlay));
       }

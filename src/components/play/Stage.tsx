@@ -22,7 +22,7 @@ import { APP_HEIGHT } from '../../lib/viewport';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { controlExists, readControlValue, targetParts } from '../../play/playControls';
-import { sourceLabel } from '../../play/playSources';
+import { mappingLabel } from '../../play/incrementUi';
 import { leftBehind } from '../../play/exportHtml';
 import { stagePageHtml } from '../../present/liveScript';
 import { playUses3D, useThreeSource } from '../../play/threeSource';
@@ -311,7 +311,7 @@ function useNarrow(px = 640) {
 function InputLegend({ play }: { play: PlayRecord }) {
   const rows = play.mappings.filter(m => m.enabled).map(m => ({
     id: m.id,
-    from: sourceLabel(m.source, play.controls, play.layers),
+    from: mappingLabel(m, play, true),
     to: play.controls.find(c => c.id === m.controlId)?.label ?? '—',
   }));
   if (!rows.length) return null;

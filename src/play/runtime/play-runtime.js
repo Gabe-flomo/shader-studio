@@ -1419,7 +1419,13 @@ void main() {
     const pairs = new Map((play.pairs || []).map(p => [p.id, p]));
     const pairMappings = (play.pairMappings || []).filter(m => m.enabled && pairs.has(m.pairId));
     const pairState = new Map();
+    // Increment mappings (the kit's increment.js, as the app runs them): their trigger and reset signal count presses like any other trigger.
+    const INC = typeof SSKit !== 'undefined' && SSKit.increment ? SSKit.increment : null;
+    const incMappings = play.mappings.filter(m => m.enabled && m.increment);
+    const incState = new Map(), incFire = new Map(), incCond = new Map();
     const allTriggers = play.mappings.filter(m => m.enabled && m.source.kind === 'trigger').map(m => m.source.trigger).concat(actions.map(a => a.trigger))
+      .concat(incMappings.filter(m => m.increment.on === 'trigger').map(m => m.increment.trigger))
+      .concat(incMappings.filter(m => m.increment.resetOn).map(m => ({ on: 'signal', signal: m.increment.resetOn })))
       .concat(pairMappings.filter(m => m.source.kind === 'value' && m.source.source.kind === 'trigger').map(m => m.source.source.trigger));
     const gamepad = i => (navigator.getGamepads ? navigator.getGamepads()[i] : null);
     const padQueue = [];
@@ -1431,6 +1437,7 @@ void main() {
       if (m.source.kind === 'trigger' && m.source.trigger.on === 'key') keysUsed.add(m.source.trigger.code);
     }
     for (const a of actions) if (a.trigger.on === 'key') keysUsed.add(a.trigger.code);
+    for (const m of incMappings) if (m.increment.on === 'trigger' && m.increment.trigger.on === 'key') keysUsed.add(m.increment.trigger.code);
     for (const m of pairMappings) { const s = m.source.kind === 'value' ? m.source.source : null; if (s && s.kind === 'key') keysUsed.add(s.code); if (s && s.kind === 'trigger' && s.trigger.on === 'key') keysUsed.add(s.trigger.code); }
     function readSource(s) {
       switch (s.kind) {
@@ -1504,7 +1511,7 @@ void main() {
       const r = SG ? SG.parseRef(ref) : null;
       if (!r) return null;
       if (r.kind === 'control') { const c = controls.get(r.id); const v = !c ? undefined : live.has(c.id) ? live.get(c.id) : base.get(c.id); return v === undefined ? null : Array.isArray(v) ? (v[0] + v[1] + v[2]) / 3 : v; }
-      if (r.kind === 'mapping') { const m = play.mappings.find(x => x.id === r.id); if (!m) return null; if (m.source.kind === 'trigger') { const st = trig.get(m.id); return st ? st.value : 0; } return readSource(m.source); }
+      if (r.kind === 'mapping') { const m = play.mappings.find(x => x.id === r.id); if (!m) return null; if (m.increment) { const st = incState.get(m.id); if (!st || !INC) return null; const rg = INC.range(m.outMin, m.outMax); return rg[1] > rg[0] ? Math.max(0, Math.min(1, (INC.fold(st.p, rg[0], rg[1], m.increment.limit) - rg[0]) / (rg[1] - rg[0]))) : 0; } if (m.source.kind === 'trigger') { const st = trig.get(m.id); return st ? st.value : 0; } return readSource(m.source); }
       if (r.kind === 'mouse') return r.axis === 'x' ? mouse.x : mouse.y;
       if (r.kind === 'distance') return anchorGap(r.a, r.b);
       const l = layersById.get(r.layerId);
@@ -1626,7 +1633,7 @@ void main() {
     // A condition on a distance to or from a hand point reads hands too.
     const condHands = c => { if (!c || typeof c.value !== 'string' || c.value.indexOf('dist:') !== 0) return false; const i = c.value.indexOf('|'); return i > 0 && (!!handAnchorOf(c.value.slice(5, i)) || !!handAnchorOf(c.value.slice(i + 1))); };
     const trigHands = t => t.on === 'hand' || (t.on === 'proximity' && (!!handAnchorOf(t.a) || !!handAnchorOf(t.b))) || (t.on === 'value' && condHands(t));
-    const usesHands = play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && trigHands(m.source.trigger)) || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!handAnchorOf(m.source.otherId || '')))
+    const usesHands = play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && trigHands(m.source.trigger)) || (!!m.increment && ((m.increment.on === 'trigger' && trigHands(m.increment.trigger)) || (m.increment.on === 'repeat' && condHands(m.increment.when)))) || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!handAnchorOf(m.source.otherId || '')))
       || actions.some(a => trigHands(a.trigger)) || play.layers.some(l => l.kind === 'null' && l.follow === 'hand')
       || pairMappings.some(m => (m.source.kind === 'position' ? !!handAnchorOf(m.source.anchor) : m.source.source.kind === 'hand' || (m.source.source.kind === 'trigger' && trigHands(m.source.source.trigger))) || condHands(m.a.when) || condHands(m.b.when));
     if (usesHands && B.hands) { shared.hands.assets = B.hands; if (!shared.hands.options) shared.hands.options = HK.options(play.hands); }
@@ -1698,6 +1705,36 @@ void main() {
         }
       }
     }
+    // An increment: where it starts (its explicit start, else the control's value; a colour: its channel, or full brightness).
+    function incStart(m) {
+      const inc = m.increment;
+      if (inc.start === 'value') return inc.startValue;
+      const b = base.get(m.controlId);
+      if (Array.isArray(b)) return m.channel === undefined || m.channel === null ? 1 : b[m.channel] || 0;
+      return typeof b === 'number' && isFinite(b) ? b : Math.min(m.outMin, m.outMax);
+    }
+    function incFires(slotId, t, dt) {
+      const inp = triggerInput(t);
+      const f = fireSlot(incFire, slotId, t, inp.presses, inp.gate);
+      return f.fresh ? 0 : stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt);
+    }
+    // One frame of an Increment mapping: what fired it (a trigger, a threshold, a repeat), that many steps, its signals, the value to write.
+    function tickIncrement(m, dt) {
+      const inc = m.increment, rg = INC.range(m.outMin, m.outMax);
+      let st = incState.get(m.id);
+      if (!st) { st = INC.create(incStart(m)); incState.set(m.id, st); }
+      if (inc.resetOn && incFires(m.id + ':reset', { on: 'signal', signal: inc.resetOn }, dt) > 0) INC.reset(st, incStart(m), false);
+      let count = 0;
+      if (inc.on === 'trigger') count = incFires(m.id, inc.trigger, dt);
+      else if (inc.on === 'threshold') count = INC.threshold(st, m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source), inc);
+      else {
+        let open = true;
+        if (inc.when && SG) { let c = incCond.get(m.id); if (!c) { c = SG.condNew(); incCond.set(m.id, c); } SG.condStep(c, readValue(inc.when.value), inc.when); open = c.open; }
+        count = INC.repeat(st, time, inc, open);
+      }
+      if (count > 0) for (const ev of INC.advance(st, inc, rg[0], rg[1], count)) { const sig = ev === 'step' ? inc.stepSignal : inc.resetSignal; if (sig) emitSignal(sig); }
+      return INC.glide(st, inc, rg[0], rg[1], dt);
+    }
     function tickMappings(dt) {
       tickPads();
       if (grains.wired) tickGrains();
@@ -1705,7 +1742,11 @@ void main() {
       tickAudioTriggers();
       tickZoneTriggers();
       // A clock sent back: axis swaps start on A again.
-      if (time < lastTime - 1e-6) for (const st of pairState.values()) st.swap = SG.swapNew();
+      if (time < lastTime - 1e-6) {
+        for (const st of pairState.values()) st.swap = SG.swapNew();
+        // Increments start over, so the same timeline steps the same way again.
+        for (const m of incMappings) { const st = incState.get(m.id); if (st) INC.reset(st, incStart(m), true); }
+      }
       lastTime = time;
       tickConditionTriggers();
       tickRelationshipSignals();
@@ -1715,12 +1756,16 @@ void main() {
       for (const m of play.mappings) {
         if (!m.enabled) continue;
         const c = controls.get(m.controlId); if (!c) continue;
-        const u = m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source);
-        if (u === null) continue;
-        const target = m.outMin + (m.outMax - m.outMin) * curve(u, m);
-        let v = smooth.get(m.id);
-        if (m.smoothMs <= 0 || v === undefined) v = target;
-        else { const a = 1 - Math.exp(-(dt * 1000) / m.smoothMs); v = v + (target - v) * a; if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target; }
+        let v;
+        if (m.increment) { if (!INC) continue; v = tickIncrement(m, dt); }
+        else {
+          const u = m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source);
+          if (u === null) continue;
+          const target = m.outMin + (m.outMax - m.outMin) * curve(u, m);
+          v = smooth.get(m.id);
+          if (m.smoothMs <= 0 || v === undefined) v = target;
+          else { const a = 1 - Math.exp(-(dt * 1000) / m.smoothMs); v = v + (target - v) * a; if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target; }
+        }
         if (smooth.get(m.id) !== v) moved = true;
         smooth.set(m.id, v);
         const at = actTarget(c.target);
@@ -2198,7 +2243,7 @@ void main() {
       const steps = Array.isArray(o.steps) ? o.steps : [];
       if (K) K.reset(o.seed > 0 ? o.seed : 1);
       if (finishR) finishR.reset();
-      dropTargets(); frame = 0; smooth.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); lastTime = -Infinity;
+      dropTargets(); frame = 0; smooth.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); incState.clear(); incFire.clear(); incCond.clear(); lastTime = -Infinity;
       return { gen, fdt, steps };
     };
     /** One deterministic frame at clock time `at`. */
