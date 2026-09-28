@@ -16,6 +16,7 @@ import { Toggle } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
+import { MidiMonitor } from './MidiMonitor';
 import { toast } from '../ui/toastStore';
 import { useReadersPanel } from './readersPanelUi';
 
@@ -77,11 +78,12 @@ export function OscStatusChip() {
  * ("CC 21 = 64 · ch 1"), so "is my controller getting through, and what does
  * this knob send?" has an answer on the page.
  */
-export function MidiStatusChip() {
+export function MidiStatusChip({ monitor: monitorAtFirst = false }: { monitor?: boolean } = {}) {
   const tk = useTokens();
   const [wm, setWm] = useState(() => midiEngine.webMidi());
   const [last, setLast] = useState(() => midiEngine.lastActivity());
   const [now, setNow] = useState(0);
+  const [monitor, setMonitor] = useState(monitorAtFirst);
   useEffect(() => {
     // A knob sends hundreds of messages a second: read the newest a few times a second, not per message.
     const id = window.setInterval(() => { setLast(midiEngine.lastActivity()); setNow(Date.now()); }, 250);
@@ -108,6 +110,9 @@ export function MidiStatusChip() {
         {(status === 'idle' || (status === 'denied' && !EMBEDDED) || busy.length > 0) && (
           <Button size="sm" onClick={() => void midiEngine.connectWebMidi({ retry: true }).then(() => setWm(midiEngine.webMidi()))}>Connect</Button>
         )}
+        {status !== 'unsupported' && (
+          <Button size="sm" variant={monitor ? 'secondary' : 'ghost'} icon="live" onClick={() => setMonitor(m => !m)} title="Every MIDI source the system knows and a live log of what each one sends">{monitor ? 'Hide monitor' : 'Monitor'}</Button>
+        )}
       </span>
       {why && status !== 'unsupported' && <span style={{ color: tk.status.danger, font: `11px/1.4 ${fontFamily.ui}` }}>{why}</span>}
       {status === 'ready' && inputs.length > 1 && (
@@ -129,6 +134,7 @@ export function MidiStatusChip() {
           {last ? `Last: ${last.text}${ago >= 3 ? ` · ${ago < 60 ? `${ago}s` : `${Math.round(ago / 60)} min`} ago` : ''}` : 'Nothing received yet: move a knob or play a note.'}
         </span>
       )}
+      {monitor && <span style={{ marginTop: 4, paddingTop: 8, borderTop: `1px solid ${tk.border.subtle}` }}><MidiMonitor /></span>}
     </span>
   );
 }

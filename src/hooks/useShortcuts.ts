@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useCallback, useRef } from 'react';
+import { keyboardClaimed } from '../lib/keyboardClaim';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -190,6 +191,8 @@ export function useShortcuts(
     const onKeyDown = (e: KeyboardEvent) => {
       // Suppress key-repeat for hold actions (don't re-fire on every repeat tick)
       if (e.repeat) return;
+      // An Audio engine rack playing from the keyboard owns every plain key (⌘ combos still work).
+      if (keyboardClaimed(e)) return;
 
       const tag      = (e.target as HTMLElement)?.tagName;
       const editable = tag === 'INPUT' || tag === 'TEXTAREA' || !!(e.target as HTMLElement)?.isContentEditable;

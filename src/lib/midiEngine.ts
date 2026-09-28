@@ -22,8 +22,10 @@ import { midiCcList, midiCcKey, liveChannelKey } from './midiOutputs';
 import { base64ToBytes, eventIndexAt, parseMidiFile, type MidiFileData } from './midiFile';
 import type { MidiLock, PlayMidiFile } from '../types/play';
 import { parseMidiLocks } from '../types/playMidi';
-import { selectMidiTransport, type MidiBackendStatus, type MidiOutPort, type MidiTransport } from './midiTransport';
+import { selectMidiTransport, type MidiBackendStatus, type MidiOutPort, type MidiSourceInfo, type MidiTransport } from './midiTransport';
 import { kmLockRead, kmLockRecord, kmRangeRead, type KmLockEntry } from '../play/kit/midi.js';
+import { midiMonitor, midiMessageLength } from './midiMonitor';
+import { isTypingTarget, keyboardClaimed } from './keyboardClaim';
 
 /** A seek further ahead than this skips to the new spot instead of firing everything in between. */
 const FILE_SKIP_S = 2;
@@ -99,12 +101,6 @@ export function midiNoteName(n: number): string {
   return `${NOTE_NAMES[clamped % 12]}${Math.floor(clamped / 12) - 1}`;
 }
 
-function isTypingTarget(el: EventTarget | null): boolean {
-  const node = el as HTMLElement | null;
-  const tag = node?.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!node?.isContentEditable;
-}
-
 // ─── Engine ───────────────────────────────────────────────────────────────────
 
 export class MidiEngine implements InputSource {
@@ -126,6 +122,8 @@ export class MidiEngine implements InputSource {
   constructor(opts: { tauri?: boolean } = {}) {
     this.transport = selectMidiTransport({
       bytes: (status, d1, d2, device) => { if (!this.offDevices.has(device)) this.handleBytes(status, d1, d2, device); },
+      // Sysex, clock, program change: not modelled here, but the Monitor shows them.
+      raw: (bytes, device, id, len) => midiMonitor.push(bytes, device, id, len),
       devices: inputs => this.emit({ kind: 'devices', inputs }),
     }, opts);
     for (const name of this.offDevices) this.transport.setDeviceEnabled(name, false);
@@ -138,6 +136,8 @@ export class MidiEngine implements InputSource {
   private keyboardHeld = new Map<string, number>(); // code → note number
   private onKeyDown = (e: KeyboardEvent) => {
     if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
+    // An Audio engine rack holding the keyboard (lib/rackKeyboard.ts) plays it instead.
+    if (keyboardClaimed(e)) return;
     // While the stand-in is on, these keys are a piano: swallow them before the
     // app's own shortcuts (registered in the bubble phase on window) see them.
     const consume = () => { e.preventDefault(); e.stopPropagation(); };
@@ -241,6 +241,7 @@ export class MidiEngine implements InputSource {
   handleBytes(status: number, d1: number, d2: number, device = ''): void {
     const type = status & 0xf0;
     const channel = (status & 0x0f) + 1;
+    midiMonitor.push(midiMessageLength(status) === 2 ? [status, d1] : [status, d1, d2], device);
     if (type >= 0x80 && type <= 0xe0) for (const l of this.rawListeners) l(status, d1, d2, device);
     switch (type) {
       case 0x90:
@@ -353,6 +354,11 @@ export class MidiEngine implements InputSource {
   /** Outputs with this name (lighting a controller's pads); none without MIDI out. */
   outputsNamed(name: string): MidiOutPort[] {
     return this.transport.outputsNamed(name);
+  }
+
+  /** Every input the system knows, connected or not, with ids and makers (the Monitor). */
+  sources(): MidiSourceInfo[] {
+    return this.transport.sources();
   }
 
   /**

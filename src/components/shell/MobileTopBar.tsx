@@ -17,6 +17,7 @@ import { exportEverything, importEverything } from '../../utils/libraryActions';
 import { Modal } from '../ui/Modal';
 import { LibraryPanel } from './LibraryPanel';
 import { HandsLive } from '../play/HandsChip';
+import { KeyboardPill } from '../play/engine/KeyboardPill';
 import { canOn, usePlan, type Feature } from '../../lib/plan';
 import { accountMenuItems } from '../account/accountMenu';
 import { rotateFullscreenLabel, useRotateFullscreen } from '../../lib/rotateFullscreen';
@@ -92,6 +93,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
       <span style={{ flex: 1 }} />
       {/* The graph's own actions; Present has its own file actions in its header. */}
       {page !== 'present' && page !== 'files' && <>
+        <KeyboardPill compact />
         <HandsLive compact />
         <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 34, height: 40 }} />
         <IconButton icon="redo" label="Redo" tooltip={false} onClick={redo} style={{ width: 34, height: 40 }} />

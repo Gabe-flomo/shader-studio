@@ -22,13 +22,15 @@ import { EMPTY_READERS, useReadersPanel, withReaders } from '../readersPanelUi';
 import { newReader, formatHz, READER_GAIN_MAX, READER_GAIN_MIN } from '../../../play/audioReaders';
 import { AUDIO_READERS_MAX, type AudioReader, type PlayAudioReaders, type PlayRecord } from '../../../types/play';
 import {
-  AE_EFFECTS_MAX, AE_INST, AE_PAD_BASE_NOTE, AE_ZONES_MAX, aeRack, aeSlot, auTarget, moveEffect, patchRack, patchSlot, zonesFor,
+  AE_EFFECTS_MAX, AE_INST, AE_PAD_BASE_NOTE, AE_ZONES_MAX, aeRack, aeSlot, auTarget, moveEffect, patchRack, patchSlot, setRackKeyboard, zonesFor,
   type AeRack, type AeSlot, type AeZone, type PlayAudioEngine,
 } from '../../../types/playAudioEngine';
 import { audioEngineHost, useEngineUi } from '../../../lib/audioEngineHost';
 import { formatParam, type AuParam } from '../../../lib/audioEngineProtocol';
 import { engineReaderInput } from '../../../lib/engineSound';
 import { midiEngine, midiNoteName } from '../../../lib/midiEngine';
+import { RACK_KEYBOARD_HINT, rackKeyboard, useRackKeyboard } from '../../../lib/rackKeyboard';
+import { Kbd } from '../../ui/Kbd';
 import { isAudioType } from '../../../lib/backgroundLibrary';
 import { useLibraryVideos } from '../../backgrounds/useBackgrounds';
 import { isTauri } from '../../../lib/midiTransport';
@@ -110,7 +112,7 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
       {!folded && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px 12px' }}>
           {rackError && <Note tone="bad">{rackError}</Note>}
-          <InputRow rack={rack} onPatch={patch} />
+          <InputRow rack={rack} onPatch={patch} onKeyboard={on => { audioEngineHost.releaseHeld(rack.id); edit(ae => setRackKeyboard(ae, rack.id, on)); }} touch={touch} />
           <RackSpectrum rack={rack} play={play} onChange={onChange} />
           <Keys rackId={rack.id} touch={touch} />
           <Caption>Instrument</Caption>
@@ -157,12 +159,21 @@ function Note({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 
 
 // ── What plays it ────────────────────────────────────────────────────────────
 
-function InputRow({ rack, onPatch }: { rack: AeRack; onPatch: (o: Partial<AeRack>) => void }) {
+/**
+ * Which MIDI input and channel play the rack (any device by default: a
+ * controller plugged in just works), and the computer keyboard toggle
+ * (lib/rackKeyboard.ts): on, every plain key plays this rack DAW-style and the
+ * app's shortcuts wait; one rack at a time, off by default.
+ */
+function InputRow({ rack, onPatch, onKeyboard, touch }: { rack: AeRack; onPatch: (o: Partial<AeRack>) => void; onKeyboard: (on: boolean) => void; touch: boolean }) {
   const tk = useTokens();
   const [devices, setDevices] = useState(() => midiEngine.webMidi().inputs);
-  const [kb, setKb] = useState(() => midiEngine.keyboard().enabled);
   useEffect(() => midiEngine.subscribe(e => { if (e.kind === 'devices') setDevices(midiEngine.webMidi().inputs); }), []);
-  useEffect(() => { const iv = window.setInterval(() => setKb(midiEngine.keyboard().enabled), 500); return () => window.clearInterval(iv); }, []);
+  const kbRack = useRackKeyboard(s => s.rackId);
+  const octave = useRackKeyboard(s => s.octave);
+  const velocity = useRackKeyboard(s => s.velocity);
+  const sustain = useRackKeyboard(s => s.sustain);
+  const live = kbRack === rack.id;
   const midiOptions = [
     { value: '', label: 'Any MIDI input' },
     { value: 'off', label: 'No MIDI' },
@@ -178,20 +189,40 @@ function InputRow({ rack, onPatch }: { rack: AeRack; onPatch: (o: Partial<AeRack
         <Select ariaLabel="MIDI input" value={rack.midi} options={midiOptions} onChange={v => { if (v !== 'off') void midiEngine.connectWebMidi(); reroute({ midi: v }); }} height={28} style={{ flex: '1 1 150px', minWidth: 0 }} />
         <Select ariaLabel="MIDI channel" value={String(rack.channel)} options={channels} onChange={v => reroute({ channel: Number(v) })} height={28} style={{ flex: '0 1 130px', minWidth: 0 }} />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingLeft: 70 }}>
-        <Toggle checked={rack.keyboard} onChange={v => reroute({ keyboard: v })} label="Computer keyboard and MIDI file" />
-        {rack.keyboard && (
-          <Toggle checked={kb} onChange={v => { midiEngine.setKeyboardEnabled(v); setKb(v); }} label={<span title="A–K play white keys from C, W E T Y U the black ones; Z/X octave, C/V velocity">Keys as a piano</span>} />
-        )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingLeft: 70 }}>
+        <Toggle checked={rack.keyboard} onChange={onKeyboard} label={<span title={RACK_KEYBOARD_HINT}>Computer keyboard</span>} />
+        {rack.keyboard && live && <span style={{ color: tk.accent.text, font: `600 11px ${fontFamily.ui}`, display: 'inline-flex', alignItems: 'center', gap: 5 }}>Playing this rack{sustain ? ' · sustain' : ''} <Kbd combo="escape" /> gives it back</span>}
+        {rack.keyboard && !live && <Note>Takes the keyboard while the Play page shows.</Note>}
       </div>
+      {rack.keyboard && (
+        <div style={{ display: 'grid', gridTemplateColumns: '64px auto 1fr', alignItems: 'center', gap: 6, paddingLeft: 6 }}>
+          <span style={labelStyle(tk)}>Octave</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <IconButton icon="minus" size="sm" label="Octave down (Z)" disabled={octave <= 0} onClick={() => rackKeyboard.setOctave(octave - 1)} />
+            <span style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.secondary, minWidth: 54, textAlign: 'center' }} title="The A key's note">A = {midiNoteName((octave + 1) * 12)}</span>
+            <IconButton icon="plus" size="sm" label="Octave up (X)" disabled={octave >= 8} onClick={() => rackKeyboard.setOctave(octave + 1)} />
+          </span>
+          <span />
+          <span style={labelStyle(tk)}>Velocity</span>
+          <span style={{ gridColumn: '2 / 4' }}>
+            <RulerSlider value={velocity} min={1} max={127} step={1} integer defaultValue={100} onChange={v => rackKeyboard.setVelocity(v)} ariaLabel="Keyboard velocity" touch={touch} />
+          </span>
+          <span />
+          <Note>{RACK_KEYBOARD_HINT}</Note>
+        </div>
+      )}
     </div>
   );
 }
+
+const EMPTY_HELD: number[] = [];
 
 /** Two octaves to click (Shift: full velocity), from C3. */
 function Keys({ rackId, touch }: { rackId: string; touch: boolean }) {
   const tk = useTokens();
   const [down, setDown] = useState<number | null>(null);
+  // The computer keyboard's notes light up here too.
+  const typed = useRackKeyboard(s => (s.rackId === rackId ? s.held : EMPTY_HELD));
   const base = 48;
   const whites = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24];
   const blacks: Record<number, number> = { 0: 1, 1: 3, 3: 6, 4: 8, 5: 10, 7: 13, 8: 15, 10: 18, 11: 20, 12: 22 };
@@ -203,7 +234,7 @@ function Keys({ rackId, touch }: { rackId: string; touch: boolean }) {
       onPointerDown={e => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); const r = e.currentTarget.getBoundingClientRect(); on(n, e.shiftKey ? 127 : Math.round(40 + 87 * Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)))); }}
       onPointerUp={off} onPointerCancel={off}
       style={{ position: 'absolute', border: 0, padding: 0, cursor: 'pointer', borderRadius: '0 0 4px 4px', ...style,
-        background: down === n ? tk.accent.base : black ? '#1d1d22' : '#fbfbfc', boxShadow: black ? `0 1px 2px ${alpha('#000', 0.35)}` : `inset -1px 0 0 ${alpha('#000', 0.28)}, inset 0 -1px 0 ${alpha('#000', 0.28)}` }} />
+        background: down === n || typed.includes(n) ? tk.accent.base : black ? '#1d1d22' : '#fbfbfc', boxShadow: black ? `0 1px 2px ${alpha('#000', 0.35)}` : `inset -1px 0 0 ${alpha('#000', 0.28)}, inset 0 -1px 0 ${alpha('#000', 0.28)}` }} />
   );
   const w = 100 / whites.length;
   return (

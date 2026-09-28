@@ -60,6 +60,8 @@ import { aeRack, aeSlot, aeSlotLabel, parseAuTarget, patchSlot } from '../../typ
 import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
+import { rackKeyboard } from '../../lib/rackKeyboard';
+import { keyboardClaimed } from '../../lib/keyboardClaim';
 import { HandsButton, HandsChip } from './HandsChip';
 import { handFeed } from '../../lib/handFeed';
 import { usesHands, type HandGesture } from '../../types/play';
@@ -149,14 +151,15 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   useEffect(() => {
     playEngine.setPerforming(true);
     usePlayUi.getState().setPerforming(true);
-    return () => { playEngine.setPerforming(false); usePlayUi.getState().setPerforming(false); usePlayUi.getState().clearSolo(); };
+    rackKeyboard.setPage(true);
+    return () => { rackKeyboard.setPage(false); playEngine.setPerforming(false); usePlayUi.getState().setPerforming(false); usePlayUi.getState().clearSolo(); };
   }, []);
   // An image, video or colour background replaces the shader while this page shows (the Studio keeps the graph).
   useEffect(() => playBackground.claim(), []);
   // H shows or hides the picture's guides, unless a mapping listens to H.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'KeyH' || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (e.code !== 'KeyH' || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || keyboardClaimed(e)) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
       if (playEngine.keyIsBound('KeyH')) return;

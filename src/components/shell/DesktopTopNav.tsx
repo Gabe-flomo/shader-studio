@@ -20,6 +20,7 @@ import { usePlan } from '../../lib/plan';
 import { Tooltip } from '../ui/Tooltip';
 import { WorkspaceChip } from '../workspace/WorkspacePanel';
 import { HandsLive } from '../play/HandsChip';
+import { KeyboardPill } from '../play/engine/KeyboardPill';
 import { reportFileResult, reportGlslImport } from './reportFileResult';
 import { importAnyFile } from './importAnyFile';
 import { SaveGraphForm, VersionsButton } from './GraphVersions';
@@ -99,6 +100,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
       </div>
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+        <KeyboardPill compact={compact} />
         <HandsLive compact={compact} />
         <WorkspaceChip compact={compact} />
         <IconButton icon="undo" label="Undo" shortcut={shortcuts.undo} onClick={undo} />

@@ -16,10 +16,26 @@ export type MidiBackendStatus = 'unsupported' | 'idle' | 'requesting' | 'ready' 
 
 /** Where a transport delivers what it receives. */
 export interface MidiSink {
-  /** One message; `device` is the input's name (what knob locks and pad grids match on). */
+  /** One channel message; `device` is the input's name (what knob locks and pad grids match on). */
   bytes(status: number, d1: number, d2: number, device: string): void;
+  /** A message the engine doesn't model (sysex, clock, program change…), for the Monitor. `len`: the whole length of a trimmed sysex. */
+  raw?(bytes: number[], device: string, id: string, len?: number): void;
   /** The connected inputs changed (plugged, unplugged, opened, refused). */
   devices(inputs: string[]): void;
+}
+
+/** One input as the Monitor lists it. */
+export interface MidiSourceInfo {
+  /** The transport's id (CoreMIDI's unique id in the desktop app, the browser's port id on the web). */
+  id: string;
+  name: string;
+  manufacturer: string;
+  /** The system remembers it but it isn't connected. */
+  offline: boolean;
+  /** We are listening to it. */
+  open: boolean;
+  /** It's there but couldn't be opened (another app has it), or the user switched it off. */
+  note: string;
 }
 
 /** A MIDI output to light a controller's pads. */
@@ -33,6 +49,8 @@ export interface MidiTransport {
   status(): MidiBackendStatus;
   /** Connected inputs, by name. */
   inputs(): string[];
+  /** Every input the system knows, connected or not, with ids (the Monitor). */
+  sources(): MidiSourceInfo[];
   /** Inputs that are there but couldn't be opened (another app has them). */
   busy(): string[];
   /** Ask for access and listen to every input; `retry` asks again after a refusal. */
@@ -64,7 +82,10 @@ export class WebMidiTransport implements MidiTransport {
   private onMidiMessage = (e: Event) => {
     const data = (e as MIDIMessageEvent).data;
     const input = e.target as MIDIInput | null;
-    if (data && data.length >= 1) this.sink.bytes(data[0], data[1] ?? 0, data[2] ?? 0, input?.name ?? input?.id ?? '');
+    if (!data || data.length < 1) return;
+    const device = input?.name ?? input?.id ?? '';
+    if (data[0] >= 0x80 && data[0] < 0xf0) this.sink.bytes(data[0], data[1] ?? 0, data[2] ?? 0, device);
+    else this.sink.raw?.(Array.from(data), device, input?.id ?? '');
   };
 
   private sink: MidiSink;
@@ -75,6 +96,15 @@ export class WebMidiTransport implements MidiTransport {
   busy(): string[] { return this.busyNames; }
   /** The browser keeps every input open; the engine filters a switched-off one. */
   setDeviceEnabled(): void {}
+
+  sources(): MidiSourceInfo[] {
+    const out: MidiSourceInfo[] = [];
+    this.access?.inputs.forEach(i => {
+      const name = i.name ?? i.id;
+      out.push({ id: i.id, name, manufacturer: i.manufacturer ?? '', offline: i.state !== 'connected', open: i.connection === 'open', note: this.busyNames.includes(name) ? 'another app has it' : '' });
+    });
+    return out;
+  }
 
   outputsNamed(name: string): MidiOutPort[] {
     const out: MidiOutPort[] = [];

@@ -28,6 +28,8 @@ import { playBackground } from './play/background'
 import { handFeed } from './lib/handFeed'
 import { playEngine } from './lib/playEngine'
 import { midiEngine } from './lib/midiEngine'
+import { midiMonitor } from './lib/midiMonitor'
+import { rackKeyboard } from './lib/rackKeyboard'
 import { padGrid } from './lib/padGrid'
 
 // The webcam turns off as soon as no layer or hand tracking uses it.
@@ -49,6 +51,8 @@ if (import.meta.env.DEV) {
     compileGraph, nodePreviewRenderer, loadExampleGraphs, resolveNodeAliases, getNodeDefinition, useTakes, takeApplier, playOverlay, playBackground, handFeed, playEngine,
     /** MIDI without a controller: `midiEngine.handleBytes(0xb0, 21, 64, 'Launch Control')` is a knob on channel 1 of that device. */
     midiEngine, padGrid,
+    /** The MIDI monitor's log (`midiMonitor.text()`), and the rack keyboard (`rackKeyboard.active()`). */
+    midiMonitor, rackKeyboard,
     /**
      * Hand tracking without a camera (the preview browser has none): feed the real tracker a video,
      * an image or a canvas instead, then start it. A URL ending in an image type is loaded as an image.

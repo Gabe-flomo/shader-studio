@@ -25,8 +25,8 @@ const store = vi.hoisted(() => {
 });
 
 import {
-  AE_INST, AE_PAD_BASE_NOTE, auPropId, auTarget, auTargetExists, controlsKeptFor, engineWithoutPlugins, fourCC, fourCCText, moveEffect, newRack,
-  parseAudioEngine, parseAuTarget, patchSlot, rackHears, readAuValue, unitKey, zoneForNote, zonesFor, type AeRack, type PlayAudioEngine,
+  AE_INST, AE_PAD_BASE_NOTE, auPropId, auTarget, auTargetExists, controlsKeptFor, engineWithoutPlugins, fourCC, fourCCText, keyboardRack, moveEffect, newRack,
+  parseAudioEngine, parseAuTarget, patchSlot, rackHears, readAuValue, setRackKeyboard, unitKey, zoneForNote, zonesFor, type AeRack, type PlayAudioEngine,
 } from '../../types/playAudioEngine';
 import { emptyPlayRecord, parsePlayRecord, parsePropTarget, type PlayRecord } from '../../types/play';
 import { allNotesOff, decodeFrame, formatParam, midiEventBytes, parseParamList, soundExt, FRAME_DB_FLOOR } from '../../lib/audioEngineProtocol';
@@ -169,15 +169,33 @@ describe('record edits', () => {
     expect(r.instrument?.zones?.map(z => [z.sampleId, z.lo, z.name])).toEqual([['snd_k', AE_PAD_BASE_NOTE, 'kick.wav'], ['snd_s', AE_PAD_BASE_NOTE + 2, 'Snare']]);
   });
 
-  it('routes MIDI by device and channel', () => {
-    const r = { keyboard: true, midi: '', channel: 0 };
+  it('routes MIDI by device and channel: any device and every channel by default', () => {
+    const r = newRack('rk_1', []);
+    expect([r.midi, r.channel, r.keyboard]).toEqual(['', 0, false]);
+    // The MIDI file and the keyboard stand-in (device '') count as a device for "any".
     expect(rackHears(r, '', 1)).toBe(true);
     expect(rackHears(r, 'Launchkey', 5)).toBe(true);
-    expect(rackHears({ ...r, keyboard: false }, '', 1)).toBe(false);
+    // An MPK mini's pads on channel 10 reach a rack on all channels.
+    expect(rackHears(r, 'MPK mini 3', 10)).toBe(true);
     expect(rackHears({ ...r, midi: 'off' }, 'Launchkey', 1)).toBe(false);
     expect(rackHears({ ...r, midi: 'Push' }, 'Launchkey', 1)).toBe(false);
+    expect(rackHears({ ...r, midi: 'Push' }, '', 1)).toBe(false);
     expect(rackHears({ ...r, midi: 'Push' }, 'Push', 1)).toBe(true);
     expect(rackHears({ ...r, channel: 2 }, 'Push', 1)).toBe(false);
+    expect(rackHears({ ...r, channel: 10 }, 'MPK mini 3', 10)).toBe(true);
+  });
+
+  it('gives the computer keyboard to one rack at a time, off unless the record says so', () => {
+    const ae: PlayAudioEngine = { racks: [newRack('rk_a', []), newRack('rk_b', [])] };
+    expect(keyboardRack(ae)).toBeUndefined();
+    const on = setRackKeyboard(ae, 'rk_b', true);
+    expect(on.racks.map(r => r.keyboard)).toEqual([false, true]);
+    expect(keyboardRack(on)?.id).toBe('rk_b');
+    const other = setRackKeyboard(on, 'rk_a', true);
+    expect(other.racks.map(r => r.keyboard)).toEqual([true, false]);
+    expect(setRackKeyboard(other, 'rk_a', false).racks.map(r => r.keyboard)).toEqual([false, false]);
+    // Old setups (no `keyboard` key) and anything but `true` mean off.
+    expect(parseAudioEngine({ racks: [{ id: 'rk_a' }, { id: 'rk_b', keyboard: true }, { id: 'rk_c', keyboard: 1 }] })!.racks.map(r => r.keyboard)).toEqual([false, true, false]);
   });
 });
 

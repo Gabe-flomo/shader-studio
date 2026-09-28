@@ -20,6 +20,7 @@
 
 import { inputBus, paramChannelKey, type InputSource, type InputWriter } from './inputBus';
 import { midiEngine, type MidiEvent } from './midiEngine';
+import { keyboardClaimed } from './keyboardClaim';
 import { padGrid } from './padGrid';
 import { kmNoteUnit } from '../play/kit/midi.js';
 import { audioEngine } from './audioEngine';
@@ -306,6 +307,8 @@ class PlayEngine implements InputSource {
   };
   private onKeyDown = (e: KeyboardEvent) => {
     if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
+    // A rack playing from the keyboard (lib/rackKeyboard.ts) has every plain key; mappings wait.
+    if (keyboardClaimed(e)) return;
     if (this.learnCb || this.learnTriggerCb) {
       e.preventDefault();
       e.stopPropagation();
