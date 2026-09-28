@@ -44,7 +44,7 @@ import { askConfirm } from '../ui/dialogStore';
 import { SoloButton, SoloStrip } from './Solo';
 import { LayerReadings } from './MapToMenu';
 import { Section } from './layers/Section';
-import { usePlayUi } from './playUi';
+import { clampLayersSplitRatio, LAYERS_SPLIT_DEFAULT_RATIO, usePlayUi } from './playUi';
 import { NOTE_REF_TYPE, noteRef } from './noteRefs';
 import { playOverlay, type ShapeDrawing } from '../../play/overlay';
 import { Button, IconButton } from '../ui/Button';
@@ -384,11 +384,73 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     </RowShell>
   );
 
-  // Split: the list beside the selected layer's editor.
+  // Split: the list beside the selected layer's editor, with a draggable divider between them
+  // (LAYERS_SPLIT_MIN_LIST_PX/LAYERS_SPLIT_MIN_EDITOR_PX so neither collapses; playUi.ts remembers the ratio).
   const editing = split ? play.layers.find(l => l.id === selected) : undefined;
+  const splitAreaRef = useRef<HTMLDivElement>(null);
+  const [splitTotal, setSplitTotal] = useState(0);
+  useEffect(() => {
+    if (!split) return;
+    const el = splitAreaRef.current;
+    if (!el) return;
+    const measure = () => setSplitTotal(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [split]);
+  const storedSplitRatio = usePlayUi(s => s.layersSplitRatio), setStoredSplitRatio = usePlayUi(s => s.setLayersSplitRatio);
+  const [dragSplitRatio, setDragSplitRatio] = useState<number | null>(null);
+  const splitRatio = clampLayersSplitRatio(dragSplitRatio ?? storedSplitRatio, splitTotal || undefined);
+  const startSplitDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const area = splitAreaRef.current;
+    if (!area) return;
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    let latest = splitRatio;
+    const onMove = (ev: PointerEvent) => {
+      const rect = area.getBoundingClientRect();
+      latest = clampLayersSplitRatio((ev.clientX - rect.left) / rect.width, rect.width);
+      setDragSplitRatio(latest);
+    };
+    const onUp = () => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
+      setDragSplitRatio(null);
+      setStoredSplitRatio(latest);
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
+  };
+  const nudgeSplit = (dir: -1 | 1) => {
+    const step = splitTotal > 0 ? 16 / splitTotal : 0.02;
+    setStoredSplitRatio(clampLayersSplitRatio(splitRatio + dir * step, splitTotal || undefined));
+  };
   const wrapSplit = (list: ReactNode) => !split ? list : (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+    <div ref={splitAreaRef} style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       {list}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the layer list"
+        aria-valuenow={Math.round(splitRatio * 100)}
+        tabIndex={0}
+        title="Drag to resize · double-click for the default width"
+        onPointerDown={startSplitDrag}
+        onDoubleClick={() => setStoredSplitRatio(LAYERS_SPLIT_DEFAULT_RATIO)}
+        onKeyDown={e => {
+          if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeSplit(-1); }
+          else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeSplit(1); }
+          else if (e.key === 'Enter') { e.preventDefault(); setStoredSplitRatio(LAYERS_SPLIT_DEFAULT_RATIO); }
+        }}
+        style={{ flexShrink: 0, width: 9, margin: '0 -4px', cursor: 'col-resize', touchAction: 'none', position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <span aria-hidden style={{ width: 1, height: '100%', background: tk.border.default }} />
+      </div>
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '6px 16px 16px' }}>
         {editing
           ? <LayerRow key={editing.id} {...rowProps(editing, false)} />
@@ -443,7 +505,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
           void addDroppedLayers(Array.from(e.dataTransfer.files), null, onChange, appDropMakers, entered);
         }}
         style={{ ...(split
-          ? { width: 'clamp(280px, 38%, 420px)', flexShrink: 0, overflowY: 'auto', padding: '6px 12px 12px 16px', borderRight: `1px solid ${tk.border.default}` }
+          ? { flex: `0 0 ${(splitRatio * 100).toFixed(2)}%`, minWidth: 0, overflowY: 'auto', padding: '6px 12px 12px 16px', borderRight: `1px solid ${tk.border.default}` }
           : { flex: 1, minHeight: play.notes && !top ? 110 : 0, overflowY: 'auto', padding: '6px 12px 12px' }),
         ...(fileDrag ? { boxShadow: `inset 0 0 0 2px ${tk.accent.base}`, background: alpha(tk.accent.base, 0.06) } : {}) }}>
         {fileDrag && (

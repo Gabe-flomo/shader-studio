@@ -19,6 +19,41 @@ const FOLD_KEY = 'shader-studio:play:folded';
 const PANEL_KEY = 'shader-studio:play:panel';
 const GUIDES_KEY = 'shader-studio:play:guides';
 const ALWAYS_EXPAND_KEY = 'shader-studio:play:alwaysExpandCards';
+const LAYERS_SPLIT_KEY = 'shader-studio:play:layersSplitRatio';
+
+/** The Layers page's list ↔ editor divider (LayersPanel's `split` mode): the list's share of the width, 0..1. */
+export const LAYERS_SPLIT_DEFAULT_RATIO = 0.38;
+/** Neither column collapses below these, in px (as long as the page has room for both). */
+export const LAYERS_SPLIT_MIN_LIST_PX = 220;
+export const LAYERS_SPLIT_MIN_EDITOR_PX = 360;
+const LAYERS_SPLIT_RATIO_MIN = 0.2;
+const LAYERS_SPLIT_RATIO_MAX = 0.7;
+
+/**
+ * The list's share of the Layers page's width, kept between the ratio bounds
+ * and, when the page's width `total` (px) is known, so the list and the
+ * editor keep their minimum widths. A page too small for both is left to the
+ * caller (it stacks instead of splitting), so this only clamps for a `total`
+ * that actually fits both minimums.
+ */
+export function clampLayersSplitRatio(ratio: number, total?: number, minList = LAYERS_SPLIT_MIN_LIST_PX, minEditor = LAYERS_SPLIT_MIN_EDITOR_PX): number {
+  let lo = LAYERS_SPLIT_RATIO_MIN, hi = LAYERS_SPLIT_RATIO_MAX;
+  if (total && total > 0) {
+    if (minList + minEditor > total) return 0.5;
+    lo = Math.max(lo, minList / total);
+    hi = Math.min(hi, 1 - minEditor / total);
+    if (lo > hi) return 0.5;
+  }
+  const r = Number.isFinite(ratio) ? ratio : LAYERS_SPLIT_DEFAULT_RATIO;
+  return Math.max(lo, Math.min(hi, r));
+}
+
+function loadLayersSplitRatio(): number {
+  try {
+    const v = Number(localStorage.getItem(LAYERS_SPLIT_KEY));
+    return Number.isFinite(v) && v > 0 ? clampLayersSplitRatio(v) : LAYERS_SPLIT_DEFAULT_RATIO;
+  } catch { return LAYERS_SPLIT_DEFAULT_RATIO; }
+}
 
 function loadAlwaysExpand(): boolean {
   try { return localStorage.getItem(ALWAYS_EXPAND_KEY) === '1'; } catch { return false; }
@@ -125,6 +160,9 @@ interface PlayUi {
   controlGroupTick: number;
   /** Open the Controls section at this control group ("Audio readers · Live"). */
   revealControlGroup: (group: string) => void;
+  /** The Layers page's list ↔ editor divider (LayersPanel's `split` mode): the list's share, 0..1, remembered. */
+  layersSplitRatio: number;
+  setLayersSplitRatio: (ratio: number) => void;
 }
 
 const NONE: ReadonlySet<string> = new Set();
@@ -222,5 +260,11 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   setAlwaysExpandCards: on => {
     try { localStorage.setItem(ALWAYS_EXPAND_KEY, on ? '1' : '0'); } catch { /* preference only */ }
     set({ alwaysExpandCards: on });
+  },
+  layersSplitRatio: loadLayersSplitRatio(),
+  setLayersSplitRatio: ratio => {
+    const clamped = clampLayersSplitRatio(ratio);
+    try { localStorage.setItem(LAYERS_SPLIT_KEY, String(Math.round(clamped * 1000) / 1000)); } catch { /* preference only */ }
+    set({ layersSplitRatio: clamped });
   },
 }));
