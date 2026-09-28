@@ -4,17 +4,19 @@
  * readers…), from a reader source or trigger, and from the Live audio chip.
  * A modal on a desktop, a sheet on a phone.
  *
- * Each reader is a source ("Reader · Kick", 0..1) and a trigger ("Audio
- * reader crosses"). They listen to the live input, or to the song in one of
- * the graph's Audio Input nodes, or to a Video layer's sound.
+ * Each reader is a control (0..1, in a group named after what the readers
+ * listen to, play/readerControls.ts), a source ("Reader · Kick") and a
+ * trigger ("Audio reader crosses"). They listen to the live input, or to the
+ * song in one of the graph's Audio Input nodes, a Video layer's sound, a
+ * Drum pad layer or an Audio engine rack.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { AUDIO_READERS_MAX, type AudioReader, type PlayAudioReaders, type PlayRecord, type TriggerSpec } from '../../types/play';
-import { READER_GAIN_MAX, READER_GAIN_MIN, READER_WIDTH_MAX, READER_WIDTH_MIN, formatHz, newReader } from '../../play/audioReaders';
-import { audioReaderBank } from '../../lib/audioReaderBank';
+import { AUDIO_READERS_MAX, type AudioReader, type PlayRecord, type TriggerSpec } from '../../types/play';
+import { READER_GAIN_MAX, READER_GAIN_MIN, READER_WIDTH_MAX, READER_WIDTH_MIN } from '../../play/audioReaders';
+import { addReader, newReader, patchReader, readerControlOf, removeReader, renameReader, setReaderInput } from '../../play/readerControls';
 import { audioEngine } from '../../lib/audioEngine';
 import { liveAudio, type LiveStatus } from '../../lib/liveAudio';
 import { padsLayerOfInput, videoLayerOfInput } from '../../types/playLayers';
@@ -30,8 +32,11 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { LiveAudioChip } from './chips';
 import { SpectrumView } from './SpectrumView';
 import { engineRackOfInput } from '../../lib/engineSound';
+export { ReaderMeter } from './ReaderDots';
 import { useCan } from '../../lib/plan';
-import { EMPTY_READERS as EMPTY, readerInputOptions, removeReader, usesReader, useReadersPanel, withReaders } from './readersPanelUi';
+import { EMPTY_READERS as EMPTY, readerInputOptions, usesReader, useReadersPanel } from './readersPanelUi';
+import { ReaderMeter, readerHex as hex, useReaderLevels as useLevels } from './ReaderDots';
+import { usePlayUi } from './playUi';
 
 /** Mounted once on the Play page. */
 export function AudioReadersHost({ compact }: { compact: boolean }) {
@@ -52,11 +57,13 @@ function thresholdsByReader(p: PlayRecord): Map<string, number[]> {
   return out;
 }
 
-/** What deleting a reader also removes: "Delete (and its 2 mappings)", or plain "Delete". */
+/** What deleting a reader also removes: "Delete, with its control and 2 mappings", or plain "Delete". */
 function deleteLabel(p: PlayRecord, id: string): string {
-  const m = p.mappings.filter(x => (x.source.kind === 'reader' && x.source.readerId === id) || (x.source.kind === 'trigger' && usesReader(x.source.trigger, id))).length;
+  const ctl = readerControlOf(p, id);
+  const m = p.mappings.filter(x => (x.source.kind === 'reader' && x.source.readerId === id) || (x.source.kind === 'trigger' && usesReader(x.source.trigger, id))
+    || (ctl && ((x.controlId === ctl.id && x.source.kind !== 'reader') || (x.source.kind === 'control' && x.source.controlId === ctl.id)))).length;
   const a = (p.actions ?? []).filter(x => usesReader(x.trigger, id)).length;
-  const parts = [m ? `${m} mapping${m === 1 ? '' : 's'}` : '', a ? `${a} action${a === 1 ? '' : 's'}` : ''].filter(Boolean);
+  const parts = [ctl ? 'control' : '', m ? `${m} mapping${m === 1 ? '' : 's'}` : '', a ? `${a} action${a === 1 ? '' : 's'}` : ''].filter(Boolean);
   return parts.length ? `Delete, with its ${parts.join(' and ')}` : 'Delete';
 }
 
@@ -80,27 +87,30 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
   const status = useLiveStatus();
   const engineOk = useCan('audio.engine');
 
-  const edit = (fn: (c: PlayAudioReaders) => PlayAudioReaders) => setPlay(p => withReaders(p, fn(p.audioReaders ?? EMPTY)));
-  const patch = (id: string, over: Partial<AudioReader>) => edit(c => ({ ...c, readers: c.readers.map(r => (r.id === id ? { ...r, ...over } : r)) }));
+  // What they listen to: the live input, or an Audio Input node's song.
+  const songs = nodes.filter(n => n.type === 'audioInput').map(n => ({
+    id: n.id,
+    label: (typeof n.params.label === 'string' && n.params.label.trim()) || 'Audio Input',
+  }));
+  const songLabel = (id: string) => songs.find(x => x.id === id)?.label;
+  // Every edit goes through play/readerControls.ts, so the reader's control follows (its name, its group).
+  const patch = (id: string, over: Partial<AudioReader>) => setPlay(p => patchReader(p, id, over));
   const add = (hz: number, topDb: number) => {
     if (readers.length >= AUDIO_READERS_MAX) return;
     const r = newReader(readerId(), hz, topDb, readers);
-    edit(c => ({ ...c, readers: [...c.readers, r] }));
+    setPlay(p => addReader(p, r, songLabel));
     setSelected(r.id);
   };
-  // Moving a reader renames it too while it still has its frequency for a name.
-  const move = (id: string, hz: number, gain: number) => {
-    const r = readers.find(x => x.id === id);
-    if (!r) return;
-    const auto = r.name === formatHz(r.hz);
-    patch(id, { hz, gain: Math.max(READER_GAIN_MIN, Math.min(READER_GAIN_MAX, gain)), ...(auto ? { name: formatHz(hz) } : {}) });
-  };
-  const reorder = (id: string, by: -1 | 1) => edit(c => {
+  // Moving a reader to another band renames it too while its name is still an automatic one.
+  const move = (id: string, hz: number, gain: number) => patch(id, { hz, gain: Math.max(READER_GAIN_MIN, Math.min(READER_GAIN_MAX, gain)) });
+  const rename = (id: string, name: string) => setPlay(p => renameReader(p, id, name));
+  const reorder = (id: string, by: -1 | 1) => setPlay(p => {
+    const c = p.audioReaders ?? EMPTY;
     const i = c.readers.findIndex(r => r.id === id), j = i + by;
-    if (i < 0 || j < 0 || j >= c.readers.length) return c;
+    if (i < 0 || j < 0 || j >= c.readers.length) return p;
     const next = [...c.readers];
     [next[i], next[j]] = [next[j], next[i]];
-    return { ...c, readers: next };
+    return { ...p, audioReaders: { ...c, readers: next } };
   });
   const remove = (id: string) => {
     setPlay(p => removeReader(p, id));
@@ -112,12 +122,6 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
     hide();
   };
   const togglePeak = (on: boolean) => { setPeak(on); try { localStorage.setItem(PEAK_KEY, on ? '1' : '0'); } catch { /* preference only */ } };
-
-  // What they listen to: the live input, or an Audio Input node's song.
-  const songs = nodes.filter(n => n.type === 'audioInput').map(n => ({
-    id: n.id,
-    label: (typeof n.params.label === 'string' && n.params.label.trim()) || 'Audio Input',
-  }));
   const inputOptions = readerInputOptions(cfg.input, songs.map(x => ({ ...x, file: audioEngine.isLoaded(x.id) ? audioEngine.getFileName(x.id) : null })), play.layers, play.audioEngine?.racks ?? []);
   const videoId = videoLayerOfInput(cfg.input);
   const video = videoId ? play.layers.find(v => v.id === videoId && v.kind === 'video') : undefined;
@@ -129,7 +133,7 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
   const sourceRow = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
       <span style={capStyle(tk)}>Listen to</span>
-      <Select ariaLabel="What the readers listen to" value={cfg.input} options={inputOptions} onChange={v => { if (videoLayerOfInput(v)) playVideoLayers.resumeAudio(); edit(c => ({ ...c, input: v })); }} height={28} style={{ flex: compact ? '1 1 100%' : '0 1 280px', minWidth: 0 }} />
+      <Select ariaLabel="What the readers listen to" value={cfg.input} options={inputOptions} onChange={v => { if (videoLayerOfInput(v)) playVideoLayers.resumeAudio(); setPlay(p => setReaderInput(p, v, songLabel)); }} height={28} style={{ flex: compact ? '1 1 100%' : '0 1 280px', minWidth: 0 }} />
       {!cfg.input && <LiveAudioChip readers={false} />}
       {!cfg.input && !testing && (
         <Button size="sm" icon="play" onClick={() => void liveAudio.startTest('loop')} title="A drum loop with a voice, made on the spot: try readers without a mic">Play test loop</Button>
@@ -195,6 +199,8 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
               canUse={!!mappingId}
               onSelect={() => setSelected(r.id)}
               onPatch={over => patch(r.id, over)}
+              onRename={name => rename(r.id, name)}
+              onControls={readerControlOf(play, r.id) ? () => { const g = readerControlOf(play, r.id)?.group ?? ''; hide(); usePlayUi.getState().revealControlGroup(g); } : undefined}
               onMove={by => reorder(r.id, by)}
               onRemove={() => remove(r.id)}
               onUse={() => use(r.id)}
@@ -203,7 +209,7 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
         </div>
       )}
       <div style={{ color: tk.text.faint, font: `11.5px/1.5 ${fontFamily.ui}` }}>
-        Each reader is a source in mappings (Live audio → Reader · name) and a trigger (Audio reader crosses). Drag a dot sideways to retune it, up or down to change how loud reads as full. Saved with the setup; recorded by takes; works on exported websites.
+        Each reader is a control on the panel (0–1, in its own group), a source in mappings (Live audio → Reader · name) and a trigger (Audio reader crosses). Drag a dot sideways to retune it, up or down to change how loud reads as full. Saved with the setup; recorded by takes; works on exported websites.
       </div>
     </div>
   );
@@ -227,40 +233,11 @@ function useLiveStatus(): LiveStatus {
   return s;
 }
 
-/** Readers' levels for the rows' meters, about 30 times a second. */
-function useLevels(readers: readonly AudioReader[]): Map<string, number | null> {
-  const [v, setV] = useState<Map<string, number | null>>(() => new Map());
-  useEffect(() => {
-    let raf = 0, last = 0;
-    const tick = (t: number) => {
-      raf = requestAnimationFrame(tick);
-      if (t - last < 33) return;
-      last = t;
-      audioReaderBank.update();
-      setV(prev => {
-        let changed = prev.size !== readers.length;
-        const next = new Map<string, number | null>();
-        for (const r of readers) {
-          const x = audioReaderBank.value(r.id);
-          const q = x === null ? null : Math.round(x * 100) / 100;
-          next.set(r.id, q);
-          if (prev.get(r.id) !== q) changed = true;
-        }
-        return changed ? next : prev;
-      });
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [readers]);
-  return v;
-}
-
 // ── One reader ───────────────────────────────────────────────────────────────
 
-const hex = (c: readonly number[]) => `#${c.slice(0, 3).map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('')}`;
 const fromHex = (h: string): [number, number, number] => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255) as [number, number, number];
 
-function ReaderRow({ reader: r, level, thresholds, deleteLabel, selected, first, last, compact, canUse, onSelect, onPatch, onMove, onRemove, onUse }: {
+function ReaderRow({ reader: r, level, thresholds, deleteLabel, selected, first, last, compact, canUse, onSelect, onPatch, onRename, onControls, onMove, onRemove, onUse }: {
   reader: AudioReader;
   level: number | null;
   thresholds: number[];
@@ -272,6 +249,9 @@ function ReaderRow({ reader: r, level, thresholds, deleteLabel, selected, first,
   canUse: boolean;
   onSelect: () => void;
   onPatch: (over: Partial<AudioReader>) => void;
+  onRename: (name: string) => void;
+  /** Show its control on the Controls section (none while the reader has no control yet). */
+  onControls?: () => void;
   onMove: (by: -1 | 1) => void;
   onRemove: () => void;
   onUse: () => void;
@@ -289,7 +269,7 @@ function ReaderRow({ reader: r, level, thresholds, deleteLabel, selected, first,
     </span>
   );
   const colour = hex(r.colour);
-  const commitName = () => { const v = name.trim(); if (v && v !== r.name) onPatch({ name: v.slice(0, 60) }); else setName(r.name); };
+  const commitName = () => { const v = name.trim(); if (v && v !== r.name) onRename(v); else setName(r.name); };
   const pct = level === null ? null : Math.round(level * 100);
   return (
     <div
@@ -308,6 +288,7 @@ function ReaderRow({ reader: r, level, thresholds, deleteLabel, selected, first,
         <ReaderMeter level={level} thresholds={thresholds} colour={colour} />
         <span style={{ width: 34, textAlign: 'right', font: `600 11px ${fontFamily.mono}`, color: pct === null ? tk.text.faint : tk.text.primary, flexShrink: 0 }}>{pct === null ? '–' : `${pct}%`}</span>
         {canUse && <Button size="sm" variant="primary" onClick={onUse} title="Make this reader the mapping's source">Use</Button>}
+        {onControls && !compact && <Button size="sm" variant="ghost" icon="sliders" onClick={onControls} title="Its control on the panel: map it as Another control, use it in conditions and pairs">Controls →</Button>}
         {!compact && <>
           <IconButton icon="chevU" label="Move up" size="sm" disabled={first} onClick={() => onMove(-1)} />
           <IconButton icon="chevD" label="Move down" size="sm" disabled={last} onClick={() => onMove(1)} />
@@ -316,36 +297,18 @@ function ReaderRow({ reader: r, level, thresholds, deleteLabel, selected, first,
       </div>
       {selected && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px 12px', flexWrap: 'wrap', marginTop: 8, paddingLeft: 26 }}>
-          {field('Freq', <NumberInput value={Math.round(r.hz)} min={20} max={20000} step={1} title="Centre frequency" onCommit={n => onPatch({ hz: Math.max(20, Math.min(20000, n)), ...(r.name === formatHz(r.hz) ? { name: formatHz(Math.max(20, Math.min(20000, n))) } : {}) })} style={{ ...num, width: 62 }} />, 'Hz', 'Centre frequency, 20–20,000 Hz')}
+          {field('Freq', <NumberInput value={Math.round(r.hz)} min={20} max={20000} step={1} title="Centre frequency" onCommit={n => onPatch({ hz: Math.max(20, Math.min(20000, n)) })} style={{ ...num, width: 62 }} />, 'Hz', 'Centre frequency, 20–20,000 Hz')}
           {field('Width', <NumberInput value={Math.round(r.width * 100) / 100} min={READER_WIDTH_MIN} max={READER_WIDTH_MAX} step={0.05} title="Bandwidth in octaves" onCommit={n => onPatch({ width: Math.max(READER_WIDTH_MIN, Math.min(READER_WIDTH_MAX, n)) })} style={num} />, 'oct', 'Bandwidth in octaves: 0.33 is a third of an octave; wider reads more of the neighbourhood')}
           {field('Gain', <NumberInput value={Math.round(r.gain)} min={READER_GAIN_MIN} max={READER_GAIN_MAX} step={1} title="Gain in dB" onCommit={n => onPatch({ gain: Math.max(READER_GAIN_MIN, Math.min(READER_GAIN_MAX, n)) })} style={num} />, 'dB', 'More gain: quieter sounds read as full (the dot sits lower)')}
           {field('Attack', <NumberInput value={r.attack} min={0} max={2000} step={5} title="Rise time, ms" onCommit={n => onPatch({ attack: Math.max(0, Math.min(2000, n)) })} style={num} />, 'ms', 'How fast it rises')}
           {field('Release', <NumberInput value={r.release} min={0} max={5000} step={10} title="Fall time, ms" onCommit={n => onPatch({ release: Math.max(0, Math.min(5000, n)) })} style={num} />, 'ms', 'How fast it falls back')}
           {compact && <span style={{ display: 'inline-flex', gap: 2, marginLeft: 'auto' }}>
+            {onControls && <Button size="sm" variant="ghost" icon="sliders" onClick={onControls} title="Its control on the panel">Controls →</Button>}
             <IconButton icon="chevU" label="Move up" size="sm" disabled={first} onClick={() => onMove(-1)} />
             <IconButton icon="chevD" label="Move down" size="sm" disabled={last} onClick={() => onMove(1)} />
           </span>}
         </div>
       )}
-    </div>
-  );
-}
-
-/** A reader's level now, with a tick at each threshold a trigger listens for. */
-export function ReaderMeter({ level, thresholds, colour, height = 8 }: { level: number | null; thresholds: number[]; colour: string; height?: number }) {
-  const tk = useTokens();
-  const v = level ?? 0;
-  const over = thresholds.some(t => v >= t);
-  return (
-    <div
-      role="meter" aria-label="Level" aria-valuemin={0} aria-valuemax={1} aria-valuenow={level ?? undefined}
-      title={thresholds.length ? `Level now; ticks: the thresholds triggers fire at (${thresholds.map(t => `${Math.round(t * 100)}%`).join(', ')})` : 'Level now'}
-      style={{ position: 'relative', flex: 1, minWidth: 48, height, borderRadius: height / 2, background: tk.bg.field, overflow: 'hidden' }}
-    >
-      <div style={{ width: `${v * 100}%`, height: '100%', background: level === null ? tk.text.disabled : colour, opacity: over ? 1 : 0.8, transition: 'width 50ms linear' }} />
-      {thresholds.map((t, i) => (
-        <span key={i} style={{ position: 'absolute', top: 0, bottom: 0, left: `calc(${t * 100}% - 1px)`, width: 2, background: tk.text.primary, opacity: 0.55 }} />
-      ))}
     </div>
   );
 }

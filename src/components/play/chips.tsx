@@ -4,7 +4,7 @@
  * (green on, amber starting, red failed), a short status, and the one button
  * that fixes it.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { oscClient, type OscStatus } from '../../lib/oscClient';
@@ -19,6 +19,9 @@ import { reportFileResult } from '../shell/reportFileResult';
 import { MidiMonitor } from './MidiMonitor';
 import { toast } from '../ui/toastStore';
 import { useReadersPanel } from './readersPanelUi';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { Popover } from '../ui/Popover';
+import { ReaderDots } from './ReaderDots';
 
 /**
  * Inside another site's frame (a preview on claude.ai, say) the browser refuses the camera,
@@ -139,9 +142,13 @@ export function MidiStatusChip({ monitor: monitorAtFirst = false }: { monitor?: 
   );
 }
 
-/** `readers`: offer the Audio readers panel (off inside the panel itself). */
+/** `readers`: offer the Audio readers panel and the readers on the live input (off inside the panel itself). */
 export function LiveAudioChip({ readers = true }: { readers?: boolean } = {}) {
   const tk = useTokens();
+  const play = useNodeGraphStore(s => s.play);
+  const liveReaders = readers && play.audioReaders && !play.audioReaders.input ? play.audioReaders.readers.length : 0;
+  const dotsRef = useRef<HTMLSpanElement>(null);
+  const [dotsOpen, setDotsOpen] = useState(false);
   const [status, setStatus] = useState<LiveStatus>(() => liveAudio.getStatus());
   const [devices, setDevices] = useState<Array<{ id: string; label: string }>>([]);
   const [deviceId, setDeviceId] = useState(() => liveAudio.getDeviceId());
@@ -159,6 +166,16 @@ export function LiveAudioChip({ readers = true }: { readers?: boolean } = {}) {
       {status !== 'on' && status !== 'unsupported' && <Button size="sm" onClick={() => void liveAudio.start(deviceId)}>Listen</Button>}
       {status === 'on' && <Button size="sm" variant="ghost" onClick={() => liveAudio.stop()}>Stop</Button>}
       {readers && <Button size="sm" variant="ghost" icon="wave" onClick={() => useReadersPanel.getState().show()} title="See the live spectrum and place readers on it">Spectrum</Button>}
+      {liveReaders > 0 && (
+        <span ref={dotsRef} style={{ display: 'inline-flex' }}>
+          <Button size="sm" variant={dotsOpen ? 'secondary' : 'ghost'} onClick={() => setDotsOpen(o => !o)} title="The readers on the live input, with their levels and their controls">{liveReaders} reader{liveReaders === 1 ? '' : 's'}</Button>
+        </span>
+      )}
+      {dotsOpen && (
+        <Popover anchorRef={dotsRef} onClose={() => setDotsOpen(false)} align="end" width={320} padding={8}>
+          <ReaderDots play={play} input="" />
+        </Popover>
+      )}
     </span>
   );
 }

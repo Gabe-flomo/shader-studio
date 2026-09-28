@@ -9,11 +9,13 @@
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { VideoLayer } from '../../../types/play';
-import { AUDIO_READERS_MAX, type AudioReader, type PlayAudioReaders } from '../../../types/play';
+import { AUDIO_READERS_MAX } from '../../../types/play';
 import { videoReaderInput } from '../../../types/playLayers';
 import { playVideoLayers } from '../../../play/videoLayers';
 import { videoSound } from '../../../lib/videoSound';
-import { READER_GAIN_MAX, READER_GAIN_MIN, formatHz, newReader } from '../../../play/audioReaders';
+import { READER_GAIN_MAX, READER_GAIN_MIN } from '../../../play/audioReaders';
+import { addReader, newReader, patchReader, setReaderInput } from '../../../play/readerControls';
+import { ReaderDots } from '../ReaderDots';
 import { Button } from '../../ui/Button';
 import { Segmented } from '../../ui/Choice';
 import { NumberInput } from '../../NodeGraph/NumberInput';
@@ -21,7 +23,7 @@ import { toast } from '../../ui/toastStore';
 import { fontFamily, radius } from '../../../theme/tokens';
 import { useTokens } from '../../../theme/themeStore';
 import { SpectrumView } from '../SpectrumView';
-import { EMPTY_READERS, useReadersPanel, withReaders } from '../readersPanelUi';
+import { EMPTY_READERS, useReadersPanel } from '../readersPanelUi';
 import { readerVideoNote, useVideoSoundState } from '../videoSoundUi';
 import { VIDEO_ACCEPT, sizeText } from '../backgroundFiles';
 import { Section } from './Section';
@@ -142,19 +144,16 @@ function SoundSection({ f, ctx, status }: { f: FieldKit; ctx: EditorContext; sta
   const [selected, setSelected] = useState('');
   const suspended = useSyncExternalStore(videoSound.subscribe, () => l.sound !== 'off' && playVideoLayers.audioSuspended());
 
-  const edit = (fn: (c: PlayAudioReaders) => PlayAudioReaders) => ctx.changePlay(p => withReaders(p, fn(p.audioReaders ?? EMPTY_READERS)));
-  const listenHere = () => { playVideoLayers.resumeAudio(); edit(c => ({ ...c, input: videoReaderInput(l.id) })); };
+  // Reader edits go through play/readerControls.ts: each reader comes with a control in "Audio readers · <layer>".
+  const listenHere = () => { playVideoLayers.resumeAudio(); ctx.changePlay(p => setReaderInput(p, videoReaderInput(l.id))); };
   const openPanel = () => { listenHere(); useReadersPanel.getState().show({ focus: selected || cfg.readers[0]?.id || '' }); };
   const add = (hz: number, topDb: number) => {
     if (!mine || cfg.readers.length >= AUDIO_READERS_MAX) return;
     const r = newReader(readerId(), hz, topDb, cfg.readers);
-    edit(c => ({ ...c, readers: [...c.readers, r] }));
+    ctx.changePlay(p => addReader(p, r));
     setSelected(r.id);
   };
-  const move = (id: string, hz: number, gain: number) => edit(c => ({
-    ...c,
-    readers: c.readers.map((r: AudioReader) => (r.id !== id ? r : { ...r, hz, gain: Math.max(READER_GAIN_MIN, Math.min(READER_GAIN_MAX, gain)), ...(r.name === formatHz(r.hz) ? { name: formatHz(hz) } : {}) })),
-  }));
+  const move = (id: string, hz: number, gain: number) => ctx.changePlay(p => patchReader(p, id, { hz, gain: Math.max(READER_GAIN_MIN, Math.min(READER_GAIN_MAX, gain)) }));
 
   const note = l.sound === 'off' ? '' : suspended ? 'The browser holds sound until you click: click anywhere on the page to start it.' : status === 'ready' ? readerVideoNote(l.label, state) : '';
   return (
@@ -178,12 +177,13 @@ function SoundSection({ f, ctx, status }: { f: FieldKit; ctx: EditorContext; sta
             spectrum={() => spectrumOf(l.id)}
             emptyText={status === 'ready' ? (state === 'paused' ? 'Paused' : 'No sound yet') : 'No video yet'}
           />
+          <div style={{ marginTop: 6 }}><ReaderDots play={ctx.play} input={videoReaderInput(l.id)} compact /></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
             {!mine && <Button size="sm" icon="wave" onClick={listenHere} title="Point the setup’s audio readers at this video’s sound">Readers listen here</Button>}
             <Button size="sm" variant={mine ? 'primary' : 'ghost'} icon="wave" onClick={openPanel} title="The full spectrum and the readers’ list, listening to this video">Audio readers…</Button>
             <span style={{ color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}`, flex: '1 1 160px', minWidth: 0 }}>
               {mine
-                ? cfg.readers.length ? `${cfg.readers.length} reader${cfg.readers.length === 1 ? '' : 's'} on this video: map them in Mappings (Live audio → Reader).` : 'Click the spectrum to place a reader.'
+                ? cfg.readers.length ? `${cfg.readers.length} reader${cfg.readers.length === 1 ? '' : 's'} on this video, each a control in Audio readers · ${l.label}.` : 'Click the spectrum to place a reader: it becomes a control.'
                 : cfg.input ? 'The readers listen to something else now.' : 'The readers listen to the live input now.'}
             </span>
           </div>

@@ -33,6 +33,12 @@ export interface PlayControl {
   step?: number;
   /** Action controls: the action's amount (particles for Burst, strength for Scatter). */
   amount?: number;
+  /**
+   * The panel shows controls with the same group under one heading, in the
+   * list's order ("Audio readers · Live": the readers' controls,
+   * play/readerControls.ts). Absent = ungrouped.
+   */
+  group?: string;
 }
 
 // ── Sources (what drives a control) ─────────────────────────────────────────
@@ -560,6 +566,25 @@ export function parseActionTarget(target: string): { layerId: string; do: Action
 
 /** A new action's default amount: Burst throws a handful, everything else is 1 (Go to: the first source). */
 export const defaultActionAmount = (kind: ActionKind) => (kind === 'burst' ? 60 : 1);
+
+export const READER_TARGET_PREFIX = 'reader:';
+
+/**
+ * Control target of an audio reader's level control (play/readerControls.ts):
+ * `reader:<readerId>::level`. It writes nothing (the reader's own mapping
+ * drives it), so other mappings, conditions and pairs can read the reader
+ * as a control.
+ */
+export function readerControlTarget(readerId: string): string {
+  return `${READER_TARGET_PREFIX}${readerId}::level`;
+}
+
+/** The reader a `reader:<id>::level` target names; null for any other target. */
+export function parseReaderTarget(target: string): { readerId: string } | null {
+  if (!target.startsWith(READER_TARGET_PREFIX) || !target.endsWith('::level')) return null;
+  const readerId = target.slice(READER_TARGET_PREFIX.length, -'::level'.length);
+  return readerId ? { readerId } : null;
+}
 
 export const LAYER_TARGET_PREFIX = 'layer:';
 
@@ -1255,6 +1280,7 @@ function parseControl(raw: unknown): PlayControl | null {
   };
   if (typeof c.step === 'number' && c.step > 0) out.step = c.step;
   if (act) out.amount = num(c.amount, defaultActionAmount(act.do));
+  if (typeof c.group === 'string' && c.group.trim()) out.group = c.group.trim().slice(0, 80);
   return out;
 }
 
@@ -1331,8 +1357,13 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   const audioFxIds = new Set(audioFxEffects(audioFx).map(x => `${x.chainId}:${x.effect.id}`));
   // Controls on an Audio Unit's parameter need that rack and slot.
   const audioEngine = parseAudioEngine(r.audioEngine);
+  // Readers first: a reader control, source or trigger needs its reader.
+  const audioReaders = parseAudioReaders(r.audioReaders);
+  const readerIds = new Set(audioReaders?.readers.map(x => x.id) ?? []);
   const keptControls = controls.filter(c => {
     if (parseAuTarget(c.target)) return auTargetExists(audioEngine, c.target);
+    const rt = parseReaderTarget(c.target);
+    if (rt) return readerIds.has(rt.readerId);
     const at = parseAudioFxTarget(c.target);
     if (at) return audioFxIds.has(`${at.chainId}:${at.effectId}`);
     const ft = parseFinishTarget(c.target);
@@ -1344,9 +1375,6 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   // A trigger or sensor on a layer needs that layer too.
   const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId);
   const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref);
-  // Readers first: a reader source or trigger needs its reader.
-  const audioReaders = parseAudioReaders(r.audioReaders);
-  const readerIds = new Set(audioReaders?.readers.map(x => x.id) ?? []);
   const triggerOk = (t: TriggerSpec) => t.on === 'zone' ? layerIds.has(t.layerId) : t.on === 'proximity' ? anchorOk(t.a) && anchorOk(t.b) : t.on === 'reader' ? readerIds.has(t.readerId) : true;
   const keptMappings = mappings.filter(m => keptIds.has(m.controlId)
     && (m.source.kind !== 'control' || keptIds.has(m.source.controlId))

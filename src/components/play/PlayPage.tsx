@@ -87,6 +87,8 @@ import { actionLabel } from './layers/help';
 import { AudioReadersHost } from './AudioReadersPanel';
 import { useReadersPanel } from './readersPanelUi';
 import { formatHz, formatWidth } from '../../play/audioReaders';
+import { addMissingReaderControls, readerSourceName, readersWithoutControls, removeReader, renameReader } from '../../play/readerControls';
+import { parseReaderTarget } from '../../types/play';
 import type { AudioReader } from '../../types/play';
 import type { PlayPairMapping } from '../../types/play';
 import { ContextMenuArea } from '../ui/ContextMenuArea';
@@ -180,6 +182,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const candidates = useMemo(() => collectPlayCandidates(nodes, paramBindings), [nodes, paramBindings]);
 
   const writeControl = useCallback((control: PlayControl, value: number | number[]) => {
+    // A reader's level control: its reader drives it; there is nothing to set by hand.
+    if (parseReaderTarget(control.target)) return;
     const ft = parseFinishTarget(control.target);
     if (ft) {
       if (typeof value === 'number') setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, ft.effectId, { [ft.key]: value }) }));
@@ -234,7 +238,13 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // Where a control comes from, and how to get there.
   const revealLayerFor = usePlayUi(s => s.reveal);
   const focusNode = useNodeGraphStore(s => s.focusNode);
+  const songLabel = useCallback((id: string) => { const n = nodes.find(x => x.id === id && x.type === 'audioInput'); return n ? ((typeof n.params.label === 'string' && n.params.label.trim()) || 'Audio Input') : undefined; }, [nodes]);
   const sourceOf = (c: PlayControl): ControlSource => {
+    const rt = parseReaderTarget(c.target);
+    if (rt) {
+      const r = play.audioReaders?.readers.find(x => x.id === rt.readerId);
+      return { kind: 'reader', title: r ? `Audio readers · ${readerSourceName(play, songLabel)}` : 'a deleted reader', param: r ? `${r.name} · ${formatHz(r.hz)} · ${formatWidth(r.width)}` : 'level', missing: !r, go: () => useReadersPanel.getState().show({ focus: rt.readerId }) };
+    }
     const at = parseActionTarget(c.target);
     if (at) {
       const l = play.layers.find(x => x.id === at.layerId);
@@ -380,6 +390,27 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       window.setTimeout(() => { el.style.boxShadow = was; }, 900);
     });
   }, [revealLayer, setTab, tk.accent.base]);
+  // Readers with no control (an older setup): offered once, until dismissed for this set of readers.
+  const missingReaderControls = useMemo(() => readersWithoutControls(play), [play]);
+  const missingReaderKey = missingReaderControls.map(r => r.id).join(',');
+  const [readerChipDismissed, setReaderChipDismissed] = useState('');
+  // "Controls →" on a source card: scroll to the control group and flash it.
+  const groupFocus = usePlayUi(s => s.controlGroupFocus), groupTick = usePlayUi(s => s.controlGroupTick);
+  useEffect(() => {
+    if (!groupTick || !groupFocus) return;
+    const ui = usePlayUi.getState();
+    if (ui.folded[`ctlgroup:${groupFocus}`]) ui.toggleFold(`ctlgroup:${groupFocus}`);
+    const raf = requestAnimationFrame(() => {
+      const sel = `[data-control-group="${CSS.escape(groupFocus)}"]`;
+      const el = rootRef.current?.querySelector<HTMLElement>(sel) ?? usePlaySplit.getState().host?.querySelector<HTMLElement>(sel);
+      if (!el) return;
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      const was = el.style.boxShadow;
+      el.style.boxShadow = `inset 0 0 0 2px ${tk.accent.base}`;
+      window.setTimeout(() => { el.style.boxShadow = was; }, 1200);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [groupTick, groupFocus, tk.accent.base]);
   // Layers a source or trigger can read: shapes (click, fill, hover), particles (speed, spread), cameras (motion), nulls (distance).
   const layerRefs = useMemo(() => play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind, ...(l.kind === 'shape' ? { shape: l.shape } : {}) })), [play.layers]);
   // Desktop: the drawer's height, dragged from its top edge and remembered.
@@ -495,6 +526,13 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           <span style={{ flex: 1, minWidth: 0 }}>This setup has {joinParts(lockedParts)} that need Pro. They’re kept as they are, and the rest plays on Free.</span>
         </button>
       )}
+      {missingReaderControls.length > 0 && readerChipDismissed !== missingReaderKey && (
+        <div data-reader-chip style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
+          <span style={{ flex: 1, minWidth: 0 }}>{missingReaderControls.length === 1 ? `The reader ${missingReaderControls[0].name} has no control yet.` : `${missingReaderControls.length} audio readers have no controls yet.`} Each reader can be a control here: its live level, to map as Another control or use in conditions.</span>
+          <Button size="sm" variant="primary" onClick={() => update(p => addMissingReaderControls(p, songLabel))} title="A 0–1 control per reader, in a group named after what they listen to">Add controls for {missingReaderControls.length} reader{missingReaderControls.length === 1 ? '' : 's'}</Button>
+          <IconButton icon="close" label="Not now" size="sm" onClick={() => setReaderChipDismissed(missingReaderKey)} />
+        </div>
+      )}
       {(() => {
         // Several controls whose nodes were grouped together: relink them in one go.
         const moved = play.controls.flatMap(c => {
@@ -518,7 +556,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             ? 'Add a node with a slider or a colour in the Studio first. Any live slider can be a control.'
             : 'Pick sliders and colours from the graph to build your panel. Then map MIDI, the mouse or keys onto them below.'}
         />
-      ) : <div style={inPanel ? PANEL_GRID : undefined}>{play.controls.map((c, i) => {
+      ) : <div style={inPanel ? PANEL_GRID : undefined}>{(() => {
+      const renderOne = (c: PlayControl, i: number): ReactNode => {
         const pair = pairOf(play, c.id);
         if (pair) {
           // A pair shows once, where its A is; B's own row is inside it.
@@ -569,7 +608,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers))}
           touch={compact}
           onChange={v => writeControl(c, v)}
-          onRename={label => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }))}
+          onRename={label => update(p => { const rt = parseReaderTarget(c.target); return rt ? renameReader(p, rt.readerId, label) : { ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }; })}
           onRange={(min, max) => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, min, max } : x) }))}
           onMove={dir => update(p => {
             const j = i + dir;
@@ -578,11 +617,28 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             [controls[i], controls[j]] = [controls[j], controls[i]];
             return { ...p, controls };
           })}
-          onRemove={() => update(p => ({ ...p, controls: p.controls.filter(x => x.id !== c.id), mappings: p.mappings.filter(m => m.controlId !== c.id) }))}
+          removeLabel={parseReaderTarget(c.target) ? 'Delete the reader (and this control)' : undefined}
+          onRemove={() => update(p => { const rt = parseReaderTarget(c.target); return rt ? removeReader(p, rt.readerId) : { ...p, controls: p.controls.filter(x => x.id !== c.id), mappings: p.mappings.filter(m => m.controlId !== c.id) }; })}
         />
         </ContextMenuArea>
         );
-      })}</div>}
+      };
+      // Controls with a group sit together under its heading, where the first of them is.
+      const items: ReactNode[] = [];
+      const shownGroups = new Set<string>();
+      play.controls.forEach((c, i) => {
+        if (!c.group) { items.push(renderOne(c, i)); return; }
+        if (shownGroups.has(c.group)) return;
+        shownGroups.add(c.group);
+        const members = play.controls.map((x, j) => [x, j] as const).filter(([x]) => x.group === c.group);
+        items.push(
+          <ControlGroup key={`group:${c.group}`} name={c.group} count={members.length} grid={inPanel}>
+            {members.map(([x, j]) => renderOne(x, j))}
+          </ControlGroup>,
+        );
+      });
+      return items;
+      })()}</div>}
     </div>
   );
   const renderMappings = (inPanel: boolean) => (
@@ -692,6 +748,28 @@ const DRAWER_HEIGHT_KEY = 'shader-studio:play:drawerHeight';
 /** The split view's big panel lays cards out in as many columns as fit. */
 const PANEL_GRID: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', columnGap: 10, alignItems: 'start' };
 const PANEL_GRID_WIDE: React.CSSProperties = { ...PANEL_GRID, gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))' };
+
+// ── A control group ──────────────────────────────────────────────────────────
+
+/** Controls under one heading (PlayControl.group), folded per group on this device; spans the split view's grid. */
+function ControlGroup({ name, count, grid, children }: { name: string; count: number; grid: boolean; children: ReactNode }) {
+  const tk = useTokens();
+  const key = `ctlgroup:${name}`;
+  const folded = usePlayUi(s => !!s.folded[key]);
+  const toggleFold = usePlayUi(s => s.toggleFold);
+  return (
+    <div data-control-group={name} style={{ marginTop: 8, padding: '4px 6px 6px', borderRadius: radius.card, background: alpha(tk.accent.base, 0.05), boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, transition: 'box-shadow 0.3s', ...(grid ? { gridColumn: '1 / -1' } : {}) }}>
+      <button type="button" onClick={() => toggleFold(key)} aria-expanded={!folded} title={folded ? 'Show the group' : 'Fold the group'}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', border: 0, background: 'none', padding: '4px 2px', cursor: 'pointer', color: tk.text.secondary, font: `600 11px ${fontFamily.ui}`, letterSpacing: '0.02em', textAlign: 'left' }}>
+        <Icon name={folded ? 'chevR' : 'chevD'} size={12} style={{ color: tk.text.faint }} />
+        <Icon name="wave" size={12} style={{ color: tk.text.faint }} />
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+        <span style={{ color: tk.text.faint, font: `500 10.5px ${fontFamily.mono}` }}>{count}</span>
+      </button>
+      {!folded && <div style={grid ? PANEL_GRID : undefined}>{children}</div>}
+    </div>
+  );
+}
 
 // ── Header + empty state ─────────────────────────────────────────────────────
 
@@ -892,9 +970,9 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
 // ── Control row ──────────────────────────────────────────────────────────────
 
 /** Where a control's value lives: a layer's property or a node's param. */
-interface ControlSource { kind: 'layer' | 'node'; title: string; param: string; within?: string; missing: boolean; go: () => void }
+interface ControlSource { kind: 'layer' | 'node' | 'reader'; title: string; param: string; within?: string; missing: boolean; go: () => void }
 
-function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, onMap, onNull, onAmount }: {
+function ControlRow({ control, index, count, exists, fate, onRelink, help, source, value, live, drivenBy, touch, onChange, onRename, onRange, onMove, onRemove, removeLabel = 'Remove from panel', onMap, onNull, onAmount }: {
   control: PlayControl;
   index: number;
   count: number;
@@ -915,6 +993,8 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
   onRange: (min: number, max: number) => void;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
+  /** What the trash does (a reader's control goes with its reader). */
+  removeLabel?: string;
   /** Add a mapping onto this control. */
   onMap: () => void;
   /** Add a Null on the picture that drives this control (sliders only). */
@@ -980,7 +1060,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
         <span style={{ display: 'flex', gap: 0, visibility: hover || touch ? 'visible' : 'hidden' }}>
           <IconButton icon="chevU" label="Move up" size="sm" disabled={index === 0} tooltip={false} onClick={() => onMove(-1)} />
           <IconButton icon="chevD" label="Move down" size="sm" disabled={index === count - 1} tooltip={false} onClick={() => onMove(1)} />
-          <IconButton icon="trash" label="Remove from panel" size="sm" tone="danger" tooltip={false} onClick={onRemove} />
+          <IconButton icon="trash" label={removeLabel} size="sm" tone="danger" tooltip={false} onClick={onRemove} />
         </span>
       </div>
       {control.kind === 'action' ? (
@@ -1020,7 +1100,7 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           <span style={{ flex: 1, minWidth: 0 }}>
             {fate.status === 'moved' ? <>Its node was grouped: it’s now inside <b>{fate.groups.join(' › ')}</b>.</>
               : fate.status === 'param' ? 'Its node is still there, but not this slider (the node changed, or the slider is wired or hidden).'
-              : source.kind === 'layer' ? 'Its layer was deleted.' : 'Its node was deleted.'}
+              : source.kind === 'layer' ? 'Its layer was deleted.' : source.kind === 'reader' ? 'Its reader was deleted.' : 'Its node was deleted.'}
           </span>
           {fate.status === 'moved' && <Button size="sm" variant="primary" onClick={() => onRelink(fate.target)} title="Point this control at the slider in its new place">Relink</Button>}
         </div>
@@ -1028,12 +1108,12 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
       {details && (
         <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 6, font: `12px/1.45 ${fontFamily.ui}`, color: tk.text.secondary }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Icon name={source.kind === 'layer' ? 'layoutCanvas' : 'nodes'} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
+            <Icon name={source.kind === 'layer' ? 'layoutCanvas' : source.kind === 'reader' ? 'wave' : 'nodes'} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
             <span style={{ flex: 1, minWidth: 0 }}>
-              {source.kind === 'layer' ? 'Layer' : 'Node'} <b style={{ color: source.missing ? tk.status.warningText : tk.text.primary }}>{source.title}</b>
+              {source.kind === 'layer' ? 'Layer' : source.kind === 'reader' ? 'Reader in' : 'Node'} <b style={{ color: source.missing ? tk.status.warningText : tk.text.primary }}>{source.title}</b>
               {source.within && <> in group <b>{source.within}</b></>} · {source.param}
             </span>
-            <Button size="sm" variant="ghost" disabled={source.missing} onClick={source.go}>{source.kind === 'layer' ? 'Go to layer' : 'Show in graph'}</Button>
+            <Button size="sm" variant="ghost" disabled={source.missing} onClick={source.go}>{source.kind === 'layer' ? 'Go to layer' : source.kind === 'reader' ? 'Open readers' : 'Show in graph'}</Button>
           </div>
           {help.hint && <div style={{ color: tk.text.muted }}>{help.hint}</div>}
           {help.comment && <div style={{ color: tk.text.muted }}><b>Note on the node:</b> {help.comment}</div>}

@@ -22,7 +22,9 @@ import { Select } from '../../ui/Select';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { toast } from '../../ui/toastStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
-import { EMPTY_READERS, useReadersPanel, withReaders } from '../readersPanelUi';
+import { EMPTY_READERS, useReadersPanel } from '../readersPanelUi';
+import { setReaderInput } from '../../../play/readerControls';
+import { ReaderDots } from '../ReaderDots';
 import { sizeText } from '../backgroundFiles';
 import { Section } from './Section';
 import { openLayerInSplit, usePlaySplit } from '../playSplit';
@@ -150,7 +152,7 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 
   const cfg = ctx.play.audioReaders ?? EMPTY_READERS;
   const mine = cfg.input === padsReaderInput(l.id);
-  const listenHere = () => ctx.changePlay(p => withReaders(p, { ...(p.audioReaders ?? EMPTY_READERS), input: padsReaderInput(l.id) }));
+  const listenHere = () => ctx.changePlay(p => setReaderInput(p, padsReaderInput(l.id)));
   const openReaders = () => { listenHere(); useReadersPanel.getState().show({ focus: cfg.readers[0]?.id || '' }); };
 
   const now = performance.now();
@@ -205,6 +207,7 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           {!mine && <Button size="sm" icon="wave" onClick={listenHere} title="Point the setup’s audio readers at these pads">Readers listen here</Button>}
           <Button size="sm" variant={mine ? 'primary' : 'ghost'} icon="wave" onClick={openReaders} title="The spectrum and readers, listening to these pads">Audio readers…</Button>
         </div>
+        {mine && <div style={{ marginTop: 6 }}><ReaderDots play={ctx.play} input={padsReaderInput(l.id)} compact /></div>}
       </Section>
 
       <Section kind="drumpad" title={`Pad ${sel + 1}${padHasSound(pad) ? ` · ${padName(pad, sel)}` : ''}`}>
