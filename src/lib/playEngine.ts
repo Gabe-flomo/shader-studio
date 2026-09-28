@@ -43,7 +43,13 @@ import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
 import { audioReaderBank } from './audioReaderBank';
 import { pickLearned, readerGate } from '../play/audioReaders';
-import { handFeed } from './handFeed';
+import { faceFeed, handFeed, poseFeed, trackerFeeds, type TrackerKind } from './handFeed';
+import { bakeTrack, trackerOptionsFor } from './trackBakes';
+import { fcCreate, fcGate, fcPoint, fcRead, fcUpdate } from '../play/kit/face.js';
+import { psCreate, psGate, psPoint, psRead, psUpdate } from '../play/kit/pose.js';
+import { tkDrive, tkDriver, tkHandsFrame, tkSubjectAge, tkVideoTime, type TkFrame, type TkSubject, type TkTrack } from '../play/kit/tracks.js';
+import { DEFAULT_FACE, DEFAULT_POSE, bakeFor, parseTrackAnchor, usesFace, usesPose, type PlayTracker } from '../types/playTracking';
+import type { VideoLayer } from '../types/playLayers';
 import { readDataSource } from '../play/dataLayer';
 import { hdAge, hdCreate, hdGate, hdPlacement, hdPoint, hdRead, hdTrackerOptions, hdUpdate, type HdState } from '../play/kit/hands.js';
 import { DEFAULT_HANDS, PAD_ANCHOR, parseHandAnchor, usesHands, type FireMode, type HandGesture, type HandSide, type PlayLayer } from '../types/play';
@@ -242,6 +248,20 @@ class PlayEngine implements InputSource {
   private handLearnFrom: Map<string, number> | null = null;
   private handLearnHeld: Set<string> | null = null;
 
+  // ── Face and pose tracking, and tracking a Video layer (docs/tracking.md) ──
+  private face: TkSubject = fcCreate();
+  private pose: TkSubject = psCreate();
+  private faceSeq = -1;
+  private poseSeq = -1;
+  private faceBound = false;
+  private poseBound = false;
+  /** Where each tracker last read its baked track (a jump replays the moments before, tracks.js tkDrive). */
+  private drivers: Record<TrackerKind, ReturnType<typeof tkDriver>> = { hands: tkDriver(), face: tkDriver(), pose: tkDriver() };
+  /** The Video layer each live feed tracks ('' the camera), so the feed is only told when it changes. */
+  private feedVideo: Record<TrackerKind, string> = { hands: '', face: '', pose: '' };
+  /** Video layers' elements (play/videoLayers.ts registers itself: it imports this module, not the other way round). */
+  private videoHost: { element(layerId: string): HTMLVideoElement | null } | null = null;
+
   private press(key: string, velocity = 1): void {
     this.presses.set(key, (this.presses.get(key) ?? 0) + 1);
     this.held.set(key, (this.held.get(key) ?? 0) + 1);
@@ -371,8 +391,13 @@ class PlayEngine implements InputSource {
     this.tiltIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'tilt');
     this.gamepadIsBound = record.mappings.some(m => m.enabled && m.source.kind === 'gamepad');
     this.handsBound = usesHands(record);
+    this.faceBound = usesFace(record);
+    this.poseBound = usesPose(record);
     audioReaderBank.setConfig(record.audioReaders);
     handFeed.configure(hdTrackerOptions(record.hands));
+    faceFeed.configure(trackerOptionsFor('face', record.face));
+    poseFeed.configure(trackerOptionsFor('pose', record.pose));
+    this.syncFeedSources();
     this.triggerKeysBound = new Set(this.allTriggers().map(triggerKey));
     this.oscIsBound = record.mappings.some(m => m.enabled && (m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')))
       || (record.pairMappings ?? []).some(m => m.enabled && m.source.kind === 'value' && (m.source.source.kind === 'osc' || (m.source.source.kind === 'trigger' && m.source.source.trigger.on === 'osc')))
@@ -573,6 +598,8 @@ class PlayEngine implements InputSource {
     if (pt) return pt;
     const hand = parseHandAnchor(ref);
     if (hand) return this.handPoint(hand.side, hand.point);
+    const tr = parseTrackAnchor(ref);
+    if (tr) return this.trackPoint(tr.kind, tr.point);
     const l = this.record.layers.find(x => x.id === ref);
     return l ? geoAnchor(l as unknown as PlayLayer & Record<string, unknown>, this.valueOf(l), this.aspect, this.reported, this.lookup) : null;
   }
@@ -742,18 +769,128 @@ class PlayEngine implements InputSource {
 
   // ── Hands ─────────────────────────────────────────────────────────────────
 
-  /** Take in the tracker's newest frame (placed where the Camera layer shows the camera), and let go of hands gone too long. */
+  /**
+   * Take in the tracker's newest frame (placed where the Camera layer shows
+   * the camera, or where the tracked Video layer shows its video), and let go
+   * of hands gone too long. A Video layer that has been analysed is read from
+   * its baked track at the video's own time instead (deterministic: takes,
+   * offline renders and scrubbing read the same landmarks every time).
+   */
   private updateHands(): void {
-    const { frame, seq } = handFeed.frame();
-    if (frame && seq !== this.handSeq) {
-      this.handSeq = seq;
-      const settings = this.record.hands ?? DEFAULT_HANDS;
+    const settings = this.record.hands ?? DEFAULT_HANDS;
+    const update = (frame: Parameters<typeof hdUpdate>[1]) => {
       const camAspect = frame.w > 0 && frame.h > 0 ? frame.w / frame.h : 16 / 9;
-      const place = hdPlacement(this.record, (l, k) => this.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]), camAspect, this.aspect, settings.mirror);
+      const place = hdPlacement(this.record, this.layerValueOf, camAspect, this.aspect, settings.mirror, settings.source);
       hdUpdate(this.hands, frame, { picAspect: this.aspect, place, smoothing: settings.smoothing, responsiveness: settings.responsiveness, maxHands: settings.maxHands, swap: settings.swap });
+    };
+    const baked = this.bakedTrack('hands');
+    if (baked) {
+      const vt = this.videoTimeOf(baked.layer, baked.track);
+      tkDrive(this.drivers.hands, baked.track, vt, () => { this.hands = hdCreate(); }, f => update(tkHandsFrame(f)));
+      hdAge(this.hands, vt * 1000);
+    } else {
+      this.drivers.hands.has = false;
+      const { frame, seq } = handFeed.frame();
+      if (frame && seq !== this.handSeq) { this.handSeq = seq; update(frame); }
+      hdAge(this.hands, typeof performance !== 'undefined' ? performance.now() : Date.now());
     }
-    hdAge(this.hands, typeof performance !== 'undefined' ? performance.now() : Date.now());
     handFeed.setCount(this.hands.count);
+  }
+
+  private layerValueOf = (l: PlayLayer, k: string) => this.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]);
+
+  /** Play/videoLayers.ts hands over the Video layers' elements (a free-running video's time, a live-tracked video's frames). */
+  setVideoHost(host: { element(layerId: string): HTMLVideoElement | null } | null): void { this.videoHost = host; this.syncFeedSources(); }
+
+  private trackerSettings(kind: TrackerKind): PlayTracker {
+    if (kind === 'hands') return this.record.hands ?? DEFAULT_HANDS;
+    return (kind === 'face' ? this.record.face : this.record.pose) ?? (kind === 'face' ? DEFAULT_FACE : DEFAULT_POSE);
+  }
+
+  /** The Video layer a tracker follows instead of the camera, or null. */
+  trackerVideo(kind: TrackerKind): VideoLayer | null {
+    const id = this.trackerSettings(kind).source;
+    const l = id ? this.record.layers.find(x => x.id === id) : undefined;
+    return l && l.kind === 'video' ? l : null;
+  }
+
+  /** The baked track a tracker reads now (its Video layer analysed, for the file it has now, loaded), or null: live. */
+  bakedTrack(kind: TrackerKind): { track: TkTrack; layer: VideoLayer } | null {
+    const layer = this.trackerVideo(kind);
+    if (!layer || !layer.videoId) return null;
+    const b = bakeFor(this.trackerSettings(kind).bakes, layer.id, layer.videoId, '');
+    const track = b ? bakeTrack(b.bake.key) : null;
+    return track && track.kind === kind ? { track, layer } : null;
+  }
+
+  /** Where a tracked Video layer is now (s): on the clock (exact in renders), or where its element is when it runs free. */
+  private videoTimeOf(layer: VideoLayer, track: TkTrack): number {
+    const el = layer.follow ? null : this.videoHost?.element(layer.id);
+    return tkVideoTime(layer, this.time, track.duration, el ? el.currentTime : null);
+  }
+
+  /** Point each live feed at its Video layer's element (tracking it live, before it is analysed), or back at the camera. */
+  private syncFeedSources(): void {
+    if (!this.record) return;
+    for (const kind of ['hands', 'face', 'pose'] as const) {
+      const id = this.trackerVideo(kind)?.id ?? '';
+      if (id === this.feedVideo[kind]) continue;
+      this.feedVideo[kind] = id;
+      trackerFeeds[kind].setVideoSource(id ? () => this.videoHost?.element(id) ?? null : null);
+    }
+  }
+
+  /** A face or body landmark on the picture (a null following it, an anchor), or null while it is out of view. */
+  trackPoint(kind: 'face' | 'pose', point: number): { x: number; y: number } | null {
+    return kind === 'face' ? fcPoint(this.face, point) : psPoint(this.pose, point);
+  }
+  /** Has the face or pose tracker seen anything (a null following it is then lost while nothing is in view)? */
+  trackLive(kind: 'face' | 'pose'): boolean { return (kind === 'face' ? this.face : this.pose).live; }
+  /** The face or body as the engine sees it now (the overlay draws it from this). */
+  trackState(kind: 'face' | 'pose'): TkSubject { return kind === 'face' ? this.face : this.pose; }
+
+  /** Face or pose: its baked track or its feed's newest frame, like updateHands. */
+  private updateSubject(kind: 'face' | 'pose'): void {
+    const settings = this.trackerSettings(kind);
+    const feed = kind === 'face' ? faceFeed : poseFeed;
+    const update = (frame: TkFrame) => {
+      const camAspect = frame.w > 0 && frame.h > 0 ? frame.w / frame.h : 16 / 9;
+      const place = hdPlacement(this.record, this.layerValueOf, camAspect, this.aspect, settings.mirror, settings.source);
+      const o = { picAspect: this.aspect, place, smoothing: settings.smoothing, responsiveness: settings.responsiveness };
+      if (kind === 'face') fcUpdate(this.face, frame, o); else psUpdate(this.pose, frame, o);
+    };
+    const reset = () => { if (kind === 'face') this.face = fcCreate(); else this.pose = psCreate(); };
+    const baked = this.bakedTrack(kind);
+    const st = () => (kind === 'face' ? this.face : this.pose);
+    if (baked) {
+      const vt = this.videoTimeOf(baked.layer, baked.track);
+      tkDrive(this.drivers[kind], baked.track, vt, reset, update);
+      tkSubjectAge(st(), vt * 1000);
+    } else {
+      this.drivers[kind].has = false;
+      const { frame, seq } = feed.frame();
+      const last = kind === 'face' ? this.faceSeq : this.poseSeq;
+      if (frame && seq !== last) { if (kind === 'face') this.faceSeq = seq; else this.poseSeq = seq; update(frame); }
+      tkSubjectAge(st(), typeof performance !== 'undefined' ? performance.now() : Date.now());
+    }
+    feed.setCount(st().present ? 1 : 0);
+  }
+
+  /** Face and pose gesture triggers: a press when a gesture starts, the release when it ends. */
+  private tickTrackTriggers(): void {
+    for (const t of this.allTriggers()) {
+      if (t.on !== 'face' && t.on !== 'pose') continue;
+      const key = triggerKey(t);
+      const on = t.on === 'face' ? fcGate(this.face, t.gesture) : psGate(this.pose, t.gesture);
+      const open = this.handGates.has(key);
+      if (on && !open) { this.handGates.add(key); this.press(key); }
+      else if (!on && open) { this.handGates.delete(key); this.release(key); }
+    }
+  }
+
+  /** Does a tracker read anything now: bound by the setup, its feed on, or state from before? */
+  private trackerActive(kind: 'face' | 'pose'): boolean {
+    return kind === 'face' ? this.faceBound || faceFeed.isOn() || this.face.live : this.poseBound || poseFeed.isOn() || this.pose.live;
   }
 
   /** The hands as the engine sees them now (the overlay draws the skeleton from this). */
@@ -911,6 +1048,10 @@ class PlayEngine implements InputSource {
         return readDataSource(source, k => this.sensors.get(k));
       case 'hand':
         return hdRead(this.hands, source.side, source.read, source.point, source.axis, source.gesture);
+      case 'face':
+        return fcRead(this.face, source.read, source.point, source.axis, source.gesture);
+      case 'pose':
+        return psRead(this.pose, source.read, source.point, source.axis, source.gesture);
       case 'null': {
         const base = this.layerBase(source.layerId, source.axis);
         if (base === null) return null;
@@ -1006,8 +1147,8 @@ class PlayEngine implements InputSource {
   setMuted(on: boolean): void {
     if (on === this.muted) return;
     this.muted = on;
-    // The take has every hand-driven value: the tracker rests meanwhile instead of fighting it.
-    handFeed.setPaused(on);
+    // The take has every hand-driven value: the trackers rest meanwhile instead of fighting it.
+    for (const f of Object.values(trackerFeeds)) f.setPaused(on);
     // Back live: every control gets its slider's value (or its mapping's) again.
     if (!on) for (const id of this.controls.keys()) this.restoreOnce.add(id);
     inputBus.wake();
@@ -1032,6 +1173,10 @@ class PlayEngine implements InputSource {
       this.tickHandTriggers();
       if (this.learnCb || this.learnTriggerCb) this.learnHands();
     }
+    const faceOn = this.trackerActive('face'), poseOn = this.trackerActive('pose');
+    if (faceOn) this.updateSubject('face');
+    if (poseOn) this.updateSubject('pose');
+    if (faceOn || poseOn) this.tickTrackTriggers();
     if (this.learnCb || this.learnTriggerCb) this.learnAudio();
     this.tickAudioTriggers();
     this.tickZoneTriggers();
@@ -1385,7 +1530,7 @@ class PlayEngine implements InputSource {
 
   /** Actions, layer-property mappings, reader controls and Learn run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || this.handsBound || handFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
+    return !!this.record.actions?.length || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || this.handsBound || handFeed.isOn() || this.faceBound || this.poseBound || faceFeed.isOn() || poseFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
@@ -1398,7 +1543,9 @@ class PlayEngine implements InputSource {
     // Held, or every N while held: keeps firing without anything else moving.
     if (this.allTriggers().some(t => firesWhileHeld(t.fire) && this.triggerInput(t).gate)) return true;
     // Tracking hands: landmarks arrive about 30 times a second, and smoothing and springs ease between them.
-    if (handFeed.isOn() && !handFeed.isPaused()) return true;
+    if (Object.values(trackerFeeds).some(f => f.isOn() && !f.isPaused())) return true;
+    // A baked track on a playing Video layer: the landmarks move with the video.
+    if ((['hands', 'face', 'pose'] as const).some(k => { const l = this.trackerVideo(k); return !!l && l.playing && (k === 'hands' ? this.handsBound : k === 'face' ? this.faceBound : this.poseBound); })) return true;
     // An axis mid-smoothing keeps drawing until it settles; so does an increment mid-glide, and a repeating one.
     if (this.pairMoving || this.incMoving) return true;
     if (this.record.mappings.some(m => m.enabled && m.increment?.on === 'repeat')) return true;
