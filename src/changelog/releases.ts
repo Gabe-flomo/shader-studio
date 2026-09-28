@@ -49,6 +49,8 @@ export const RELEASES: Release[] = [
       { area: 'Files', text: '.playfile is a Playfield-only file now: not a ZIP anyone can open; tampered files are refused; old files still open.', link: { kind: 'doc', path: 'docs/playfile-format.md' } },
       { area: 'Studio', text: 'The Convert and GLSL pages show the full canvas with its toolbar, with a Source / Converted / Split wipe on Convert.' },
       { area: 'Desktop', text: 'The projection editor\'s preview draws live, and corner handles stay reachable off the edge.' },
+      { area: 'Play', text: 'Relationship layer: make layers chase, flee, repel or attract each other, climb or avoid bright areas, and read back distance and closing speed.' },
+      { area: 'Play', text: 'Particles can Multiply: one buds into many, with an optional Goo look and annihilate-and-regrow loops.', link: { kind: 'example', key: 'playMultiply', page: 'play' } },
     ],
   },
   {
