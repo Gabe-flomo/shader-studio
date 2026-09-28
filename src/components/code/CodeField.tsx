@@ -155,7 +155,7 @@ export function CodeField({
       <div
         ref={scrollRef}
         onScroll={ac.close}
-        style={{ flex: grow ? 1 : undefined, minHeight, maxHeight, overflow: 'auto', display: 'flex', cursor: 'text' }}
+        style={{ flex: grow ? 1 : undefined, minHeight, maxHeight, overflow: 'auto', display: 'flex', alignItems: 'flex-start', cursor: 'text' }}
         onMouseDown={e => { if (e.target === e.currentTarget) { e.preventDefault(); taRef.current?.focus(); } }}
       >
         <div aria-hidden style={{
