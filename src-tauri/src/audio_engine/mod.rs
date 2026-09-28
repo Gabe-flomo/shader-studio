@@ -6,15 +6,20 @@
 //!   ffi.rs       the Objective-C half (native/audio_engine.m), as Result-returning calls
 //!   analysis.rs  FFT → the spectrum frames the page reads (`audio-engine://frame`)
 //!   params.rs    parameter descriptions, and the glide for mapped parameters
+//!   render.rs    a take's racks rendered offline (sample-exact replay) for a video's sound
+//!   tap.rs       the live engine's sound drained into a WAV for a real-time recording
 //!
 //! Every command is async so it runs off the main thread: loading an AUv3
 //! calls back on other threads, and plug-in windows are made on the main one.
 //! A worker thread (started with the first rack) glides parameters every
-//! 10 ms and sends a frame per sounding rack about 33 times a second.
+//! 10 ms, sends a frame per sounding rack about 33 times a second, and
+//! drains the recording tap while one is on.
 
 pub mod analysis;
 pub mod ffi;
 pub mod params;
+pub mod render;
+pub mod tap;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -37,16 +42,27 @@ struct RackAnalysis {
     quiet: u32,
 }
 
+/// The recording tap while it runs: the file it fills.
+struct TapRun {
+    path: PathBuf,
+    collector: tap::TapCollector<std::io::BufWriter<std::fs::File>>,
+}
+
 #[derive(Default)]
 struct Inner {
     racks: HashMap<String, RackAnalysis>,
     smoother: params::Smoother,
+    tap: Option<TapRun>,
 }
 
 #[derive(Default)]
 pub struct EngineState {
     inner: Arc<Mutex<Inner>>,
     worker: Mutex<bool>,
+    /// Web sounds uploaded for the next render, by rack id (render.rs).
+    render_inputs: Mutex<HashMap<String, Vec<f32>>>,
+    /// One render at a time.
+    rendering: Mutex<()>,
 }
 
 fn lock_err<T>(_: T) -> String {
@@ -96,18 +112,22 @@ fn worker(app: AppHandle, inner: Arc<Mutex<Inner>>) {
     let mut last = Instant::now();
     let mut tick = 0u32;
     let mut buf = vec![0.0f32; analysis::FFT_SIZE];
+    let mut tap_buf = vec![0.0f32; tap::DRAIN_FRAMES * 2];
     loop {
         std::thread::sleep(TICK);
         let now = Instant::now();
         let dt = now.duration_since(last).as_secs_f32();
         last = now;
         tick = tick.wrapping_add(1);
-        let (moves, racks) = match inner.lock() {
-            Ok(mut g) => (g.smoother.step(dt), if tick % FRAME_TICKS == 0 { g.racks.keys().cloned().collect::<Vec<_>>() } else { vec![] }),
+        let (moves, racks, tapping) = match inner.lock() {
+            Ok(mut g) => (g.smoother.step(dt), if tick % FRAME_TICKS == 0 { g.racks.keys().cloned().collect::<Vec<_>>() } else { vec![] }, g.tap.is_some()),
             Err(_) => return,
         };
         for ((rack, slot, address), v) in moves {
             let _ = ffi::param_set(&rack, &slot, address, v);
+        }
+        if tapping {
+            drain_tap(&inner, &mut tap_buf);
         }
         if racks.is_empty() {
             continue;
@@ -130,6 +150,25 @@ fn worker(app: AppHandle, inner: Arc<Mutex<Inner>>) {
                 f
             };
             let _ = app.emit(FRAME_EVENT, frame);
+        }
+    }
+}
+
+/// Everything the tap ring holds now, into the tap's file.
+fn drain_tap(inner: &Arc<Mutex<Inner>>, buf: &mut [f32]) {
+    loop {
+        let (n, from, _) = ffi::tap_read(buf);
+        if n == 0 {
+            return;
+        }
+        let Ok(mut g) = inner.lock() else { return };
+        let Some(t) = g.tap.as_mut() else { return };
+        if let Err(e) = t.collector.push(from, &buf[..n * 2]) {
+            log::warn!("[audio engine] tap write failed: {e}");
+            return;
+        }
+        if n < buf.len() / 2 {
+            return;
         }
     }
 }
@@ -345,9 +384,152 @@ pub async fn ae_open_ui(rack: String, slot: String, title: String) -> Result<(),
     ffi::open_ui(valid_id(&rack)?, valid_id(&slot)?, &title)
 }
 
+// ── Inputs fed from the page (a web sound through a rack's effects) ─────────
+
+/// The rack's source becomes an input the page feeds with `ae_rack_feed`; `capacity` frames of buffer.
+#[tauri::command]
+pub async fn ae_rack_input(state: State<'_, EngineState>, rack: String, capacity: u32) -> Result<(), String> {
+    let rack = valid_id(&rack)?;
+    state.inner.lock().map_err(lock_err)?.smoother.forget(rack, Some("inst"));
+    ffi::set_input(rack, capacity.clamp(1024, 1 << 22))
+}
+
+/// Interleaved stereo f32 LE frames (the body) for the rack in header `x-rack`; replies with the frames queued after.
+#[tauri::command]
+pub async fn ae_rack_feed(request: tauri::ipc::Request<'_>) -> Result<u64, String> {
+    let rack = request.headers().get("x-rack").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    let rack = valid_id(&rack)?;
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else { return Err("Send the sound's frames as the body".into()) };
+    ffi::feed(rack, &f32_le(bytes))
+}
+
+#[derive(Serialize)]
+pub struct InputStats {
+    queued: u64,
+    underruns: u64,
+}
+
+#[tauri::command]
+pub async fn ae_rack_input_stats(rack: String) -> Result<InputStats, String> {
+    let (queued, underruns) = ffi::input_stats(valid_id(&rack)?).ok_or("That rack has no input")?;
+    Ok(InputStats { queued, underruns })
+}
+
+/// Little-endian f32 bytes → samples (a trailing partial sample is dropped).
+pub fn f32_le(bytes: &[u8]) -> Vec<f32> {
+    bytes.chunks_exact(4).map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]])).collect()
+}
+
+// ── Offline rendering of a take ──────────────────────────────────────────────
+
+/// A web sound (interleaved stereo f32 LE, the body) as the source of rack `x-rack` in the next `ae_render_take`.
+#[tauri::command]
+pub async fn ae_render_input(state: State<'_, EngineState>, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    let rack = request.headers().get("x-rack").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    let rack = valid_id(&rack)?.to_string();
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else { return Err("Send the sound's frames as the body".into()) };
+    if bytes.len() > 200 * 1024 * 1024 {
+        return Err("That sound is too long to render through the engine".into());
+    }
+    state.render_inputs.lock().map_err(lock_err)?.insert(rack, f32_le(bytes));
+    Ok(())
+}
+
+/// Render the job's racks offline (render.rs); the reply is bytes: u32 LE JSON length, the JSON (`RenderInfo`), left f32 LE, right f32 LE.
+#[tauri::command]
+pub async fn ae_render_take(app: AppHandle, state: State<'_, EngineState>, job: render::RenderJob) -> Result<tauri::ipc::Response, String> {
+    let _one = state.rendering.lock().map_err(lock_err)?;
+    for r in &job.racks {
+        valid_id(&r.id)?;
+        for s in r.effects.iter().chain(r.instrument.iter()) {
+            valid_id(&s.id)?;
+        }
+    }
+    let inputs = std::mem::take(&mut *state.render_inputs.lock().map_err(lock_err)?);
+    let dir = sounds_dir(&app)?;
+    let sound_path = |id: &str| valid_id(id).ok().and_then(|id| cached_sound(&dir, id)).map(|p| p.to_string_lossy().into_owned());
+    let (info, left, right) = render::run(&job, &sound_path, inputs)?;
+    Ok(tauri::ipc::Response::new(render::pack_reply(&info, &left, &right)))
+}
+
+// ── The recording tap ────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct TapStarted {
+    path: String,
+    #[serde(rename = "sampleRate")]
+    sample_rate: f64,
+}
+
+/// Start collecting the live engine's sound into a WAV (for a real-time recording).
+#[tauri::command]
+pub async fn ae_tap_start(app: AppHandle, state: State<'_, EngineState>) -> Result<TapStarted, String> {
+    {
+        let g = state.inner.lock().map_err(lock_err)?;
+        if g.tap.is_some() {
+            return Err("A recording tap is already on".into());
+        }
+    }
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("engine-tap");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    let path = dir.join(format!("engine-{}-{stamp}.wav", std::process::id()));
+    let file = std::fs::File::create(&path).map_err(|e| format!("Couldn't make the tap's file: {e}"))?;
+    ffi::tap_start()?;
+    let rate = ffi::tap_info().map(|t| t.0).filter(|r| *r > 0.0).unwrap_or_else(ffi::sample_rate);
+    state.inner.lock().map_err(lock_err)?.tap = Some(TapRun { path: path.clone(), collector: tap::TapCollector::new(std::io::BufWriter::new(file), rate.round() as u32) });
+    start_worker(&app, &state)?;
+    Ok(TapStarted { path: path.to_string_lossy().into_owned(), sample_rate: rate })
+}
+
+#[derive(Serialize)]
+pub struct TapDone {
+    path: String,
+    frames: u64,
+    #[serde(rename = "sampleRate")]
+    sample_rate: f64,
+    /// Seconds after the start call that the file's first frame was rendered.
+    offset: f64,
+    /// Frames the ring lost (silence in the file).
+    lost: u64,
+}
+
+/// Stop the tap and finish its file.
+#[tauri::command]
+pub async fn ae_tap_stop(state: State<'_, EngineState>) -> Result<TapDone, String> {
+    ffi::tap_stop();
+    let (rate, install, first) = ffi::tap_info().unwrap_or((ffi::sample_rate(), 0, 0));
+    let mut buf = vec![0.0f32; tap::DRAIN_FRAMES * 2];
+    drain_tap(&state.inner, &mut buf);
+    let run = state.inner.lock().map_err(lock_err)?.tap.take().ok_or("No recording tap is on")?;
+    let (frames, lost, _) = run.collector.finish().map_err(|e| format!("Couldn't finish the tap's file: {e}"))?;
+    Ok(TapDone { path: run.path.to_string_lossy().into_owned(), frames, sample_rate: rate, offset: tap::start_offset(install, first), lost })
+}
+
+/// Remove a tap file once it's muxed (or given up on).
+#[tauri::command]
+pub async fn ae_tap_discard(app: AppHandle, path: String) -> Result<(), String> {
+    let dir = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("engine-tap");
+    let p = PathBuf::from(&path);
+    if p.parent() != Some(dir.as_path()) {
+        return Err("Not a tap file".into());
+    }
+    let _ = std::fs::remove_file(p);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn f32_bytes_are_read_little_endian_and_a_short_tail_dropped() {
+        let mut b = vec![];
+        b.extend_from_slice(&0.5f32.to_le_bytes());
+        b.extend_from_slice(&(-1.0f32).to_le_bytes());
+        b.extend_from_slice(&[1, 2]);
+        assert_eq!(f32_le(&b), vec![0.5, -1.0]);
+    }
 
     #[test]
     fn ids_are_checked() {
@@ -484,6 +666,72 @@ mod native {
         ffi::rack_remove("rk_s").unwrap();
         ffi::rack_remove("rk_test").unwrap();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A take with two notes, rendered in the render context (DLSMusicDevice + AUDelay): energy lands at the notes' samples and not before.
+    #[test]
+    #[ignore]
+    fn renders_a_take_s_notes_at_their_samples() {
+        let _ = ffi::configure_offline(48000.0);
+        let unit = |t: (u32, u32, u32)| UnitRef { kind: t.0, subtype: t.1, manufacturer: t.2 };
+        let slot = |id: &str, u: (u32, u32, u32), name: &str| render::SlotSpec { id: id.into(), unit: Some(unit(u)), zones: None, bypass: false, state: None, params: Default::default(), name: name.into() };
+        let job = render::RenderJob {
+            sample_rate: 48000.0,
+            seconds: 2.0,
+            racks: vec![render::RackSpec {
+                id: "rk_take".into(),
+                name: "Rack".into(),
+                instrument: Some(slot("inst", DLS, "DLS")),
+                effects: vec![slot("fx_d", DELAY, "AUDelay")],
+                volume: 1.0,
+                mute: false,
+                input: false,
+            }],
+            events: vec![
+                render::NoteEvent { t: 0.5, rack: "rk_take".into(), bytes: vec![0x90, 60, 110] },
+                render::NoteEvent { t: 0.9, rack: "rk_take".into(), bytes: vec![0x80, 60, 0] },
+                render::NoteEvent { t: 1.25, rack: "rk_take".into(), bytes: vec![0x90, 72, 110] },
+            ],
+            params: vec![],
+        };
+        let (info, l, r) = render::run(&job, &|_| None, Default::default()).expect("render");
+        assert_eq!(info.frames, 96000);
+        assert_eq!(l.len(), 96000);
+        assert!(info.notes.is_empty(), "{:?}", info.notes);
+        let win = |from: usize, to: usize| rms(&l[from..to]).max(rms(&r[from..to]));
+        // Silence before the first note; sound within a few ms after it.
+        assert!(win(0, 23800) < 1e-5, "silent before the note: {}", win(0, 23800));
+        assert!(win(24000, 24000 + 2400) > 1e-3, "sound right after the first note: {}", win(24000, 26400));
+        // The second note, at 1.25 s: louder there than in the gap just before it (the first let go at 0.9 s, the delay's tail decaying).
+        let before = win(60000 - 4800, 60000 - 200);
+        let after = win(60000, 60000 + 4800);
+        assert!(after > before * 1.5, "second note: before {before} after {after}");
+        println!("two-note render: before-note rms {:.2e}, first note {:.3}, gap {before:.3}, second note {after:.3}; reported latency {:?}", win(0, 23800), win(24000, 26400), info.latency);
+        // The render context closed: a second render opens fine.
+        let again = render::run(&job, &|_| None, Default::default()).expect("render again");
+        assert_eq!(again.1.len(), 96000);
+
+        // An input rack: a sine fed as the source goes through AUDelay and comes out with energy from the first frames (no added latency).
+        let sine: Vec<f32> = (0..48000).flat_map(|i| { let v = 0.5 * (2.0 * std::f32::consts::PI * 440.0 * i as f32 / 48000.0).sin(); [v, v] }).collect();
+        let mut inputs = std::collections::HashMap::new();
+        inputs.insert("rk_in".to_string(), sine);
+        let job2 = render::RenderJob {
+            sample_rate: 48000.0,
+            seconds: 1.0,
+            racks: vec![render::RackSpec { id: "rk_in".into(), name: "Send".into(), instrument: None, effects: vec![slot("fx_d", DELAY, "AUDelay")], volume: 1.0, mute: false, input: true }],
+            events: vec![],
+            params: vec![],
+        };
+        let (info2, l2, _) = render::run(&job2, &|_| None, inputs).expect("input render");
+        assert!(info2.notes.is_empty(), "{:?}", info2.notes);
+        assert!(rms(&l2[0..512]) > 0.1, "the fed sound comes through from the start: {}", rms(&l2[0..512]));
+        // A rack whose upload is missing is silent, with a note; a unit that isn't there is left out with a note.
+        let job3 = render::RenderJob { racks: vec![render::RackSpec { id: "rk_in".into(), name: "Send".into(), instrument: None, effects: vec![], volume: 1.0, mute: false, input: true }], ..job2.clone() };
+        assert!(render::run(&job3, &|_| None, Default::default()).is_err());
+        let job4 = render::RenderJob { racks: vec![render::RackSpec { effects: vec![slot("fx_x", (cc(b"aufx"), cc(b"zzzz"), cc(b"zzzz")), "Nope")], ..job.racks[0].clone() }], ..job.clone() };
+        let (info4, _, _) = render::run(&job4, &|_| None, Default::default()).expect("render without the missing unit");
+        assert_eq!(info4.notes.len(), 1, "{:?}", info4.notes);
+        assert!(info4.notes[0].contains("Nope"));
     }
 
     fn write_wav(path: &std::path::Path, rate: u32, samples: &[f32]) {

@@ -75,7 +75,7 @@ export function AudioEnginePanel({ play, onChange, touch, wide = false }: {
       </div>
       <div><Button size="sm" variant={racks.length ? 'secondary' : 'primary'} icon="plus" disabled={racks.length >= AE_RACKS_MAX} onClick={add}>Add a rack</Button></div>
       <span style={{ color: tk.text.faint, font: `11.5px/1.5 ${fontFamily.ui}` }}>
-        Takes record the notes you play into racks and any parameter you made a control. Frame-by-frame renders don’t include the Audio engine’s sound yet: record it in real time, with your own audio routing (docs/audio-engine.md).
+        Takes record the notes you play into racks and any parameter you made a control. {desktop ? 'Rendering a take renders the racks with it, and a real-time recording carries the engine’s sound. Sound in on a card sends a page sound through a rack’s effects.' : 'In the desktop app the engine’s sound is in recordings and renders too.'}
       </span>
     </div>
   );

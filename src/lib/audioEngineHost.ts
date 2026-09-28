@@ -23,10 +23,15 @@
  * driven value (playEngine.layerValue) and a changed one is sent to glide
  * there (the native side smooths). A value set on the card is kept in the
  * record and sent as it is.
+ *
+ * Sends (`rack.source`): the rack's source is a web sound the page feeds
+ * (lib/engineSend.ts) instead of an instrument. Renders and recordings:
+ * `renderTake` (a take's racks rendered offline natively) and the recording
+ * tap (`tapStart` / `tapStop` / `mux`), see lib/engineRender.ts.
  */
 import { create } from 'zustand';
 import {
-  AE_INST, AE_PAD_BASE_NOTE, aeRack, aeSlot, keyboardRack, parseAuTarget, auPropId, rackHears, unitKey, zoneForNote,
+  AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, aeRack, aeSlot, keyboardRack, parseAuTarget, auPropId, rackHears, unitKey, zoneForNote,
   type AeRack, type AeSlot, type AeZone, type PlayAudioEngine,
 } from '../types/playAudioEngine';
 import {
@@ -34,6 +39,8 @@ import {
   type AuParam, type EngineSpectrum, type NativeFrame,
 } from './audioEngineProtocol';
 import { engineSound } from './engineSound';
+import { engineSend, SEND_CAPACITY } from './engineSend';
+import { decodeEngineRender, type EngineRender, type EngineRenderJob, type TapDone } from './engineRender';
 import { midiEngine, type MidiEvent } from './midiEngine';
 import { isTauri } from './midiTransport';
 import { rackKeyboard } from './rackKeyboard';
@@ -44,8 +51,7 @@ type Listen = <T>(event: string, cb: (e: { payload: T }) => void) => Promise<() 
 type ValueOf = (id: string, key: string, base: number) => number;
 type Act = (a: { do: 'pad'; layerId: string; amount: number; vel: number }) => void;
 
-/** Where a note from a rack's input goes: `ae:<rackId>` pad actions. */
-export const RACK_ACT_PREFIX = 'ae:';
+export { RACK_ACT_PREFIX } from '../types/playAudioEngine';
 
 export interface EngineStatus {
   /** 'native': the desktop engine; 'web': the browser's sample player only; 'off': nothing to run. */
@@ -239,6 +245,8 @@ class AudioEngineHost {
     engineSound.setHost({ spectrum: id => this.spectrum(id), has: id => this.has(id) });
     // The rack holding the computer keyboard plays through the same door as MIDI (so takes record it).
     rackKeyboard.configure({ send: (rackId, bytes) => this.input(rackId, bytes) });
+    // A send's chunks go to the rack's input as raw bytes.
+    engineSend.configure({ feed: (rackId, pcm) => { void this.invoke?.('ae_rack_feed', new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength), { headers: { 'x-rack': rackId } }).catch(() => {}); } });
   }
 
   /** For tests and the browser build: the Tauri bridge, the Web Audio context, the Library's sounds. */
@@ -410,6 +418,7 @@ class AudioEngineHost {
     for (const id of [...this.mirror.keys()]) {
       if (racks.some(r => r.id === id)) continue;
       this.releaseHeld(id);
+      engineSend.stop(id);
       await inv('ae_rack_remove', { rack: id }).catch(() => {});
       this.mirror.delete(id);
       this.spectra.delete(id);
@@ -449,6 +458,8 @@ class AudioEngineHost {
   }
 
   private async syncInstrument(inv: Invoke, r: AeRack, n: NativeRack): Promise<void> {
+    if (r.source) { await this.syncSend(inv, r, n); return; }
+    if (n.inst?.key.startsWith('input:')) engineSend.stop(r.id);
     const s = r.instrument && (r.instrument.kind === 'sampler' || can('audio.plugins')) ? r.instrument : null;
     const key = desiredKey(s);
     const k = slotKey(r.id, AE_INST);
@@ -471,6 +482,34 @@ class AudioEngineHost {
       await this.syncParams(inv, r.id, s, n.inst);
     }
     if (s?.kind === 'sampler' && n.inst && !n.inst.failed) await this.syncZones(inv, r.id, s.zones ?? [], n.inst);
+  }
+
+  /** A send: the rack's source is a web sound the page feeds (engineSend.ts). */
+  private async syncSend(inv: Invoke, r: AeRack, n: NativeRack): Promise<void> {
+    const source = r.source!;
+    const key = `input:${source}`;
+    const k = slotKey(r.id, AE_INST);
+    if (n.inst?.key === key && !n.inst.failed) return;
+    this.releaseHeld(r.id);
+    setLoading(k, true);
+    try {
+      await inv('ae_rack_input', { rack: r.id, capacity: SEND_CAPACITY });
+      n.inst = { id: AE_INST, key, bypass: false, params: {}, zones: '', failed: false };
+      useEngineUi.setState(st => { const params = { ...st.params }; delete params[k]; return { params }; });
+      const wa = this.webCtx ?? defaultWebAudio();
+      const why = wa ? await engineSend.start(wa.ctx(), r.id, source, useEngineUi.getState().status.sampleRate) : 'The page’s sound isn’t running yet.';
+      setError(k, why);
+      if (why) n.inst.failed = true;
+    } catch (e) {
+      n.inst = { id: AE_INST, key, bypass: false, params: {}, zones: '', failed: true };
+      setError(k, String(e));
+    } finally { setLoading(k, false); }
+  }
+
+  /** How a send's input is doing (frames queued, render cycles that ran dry). */
+  async inputStats(rack: string): Promise<{ queued: number; underruns: number } | null> {
+    if (!this.invoke) return null;
+    try { return await this.invoke<{ queued: number; underruns: number }>('ae_rack_input_stats', { rack }); } catch { return null; }
   }
 
   private async syncZones(inv: Invoke, rack: string, zones: AeZone[], n: NativeSlot): Promise<void> {
@@ -587,6 +626,46 @@ class AudioEngineHost {
     try { await this.invoke('ae_open_ui', { rack, slot, title }); return null; } catch (e) { return String(e); }
   }
 
+  // ── Renders and recordings (engineRender.ts) ───────────────────────────────
+
+  /** Can the engine's sound be rendered or recorded here (the desktop engine, running racks)? */
+  renders(): boolean { return !!this.invoke && useEngineUi.getState().status.mode === 'native' && this.mirror.size > 0; }
+
+  /**
+   * Render a take's racks offline natively (render.rs). `inputs`: the web
+   * sounds of sends, interleaved stereo at the job's rate, by rack id. Throws
+   * with the engine's reason; null when there's no engine here.
+   */
+  async renderTake(job: EngineRenderJob, inputs: ReadonlyMap<string, Float32Array> = new Map()): Promise<EngineRender | null> {
+    if (!(await this.startNative()) || !this.invoke) return null;
+    for (const [rack, pcm] of inputs) await this.invoke('ae_render_input', new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength), { headers: { 'x-rack': rack } });
+    const raw = await this.invoke<ArrayBuffer | Uint8Array>('ae_render_take', { job });
+    const out = decodeEngineRender(raw);
+    if (!out) throw new Error('The engine’s render came back unreadable');
+    return out;
+  }
+
+  /** Start the recording tap (the engine's sound into a WAV); null when there's no engine here. */
+  async tapStart(): Promise<{ path: string; sampleRate: number } | null> {
+    if (!this.renders() || !this.invoke) return null;
+    return this.invoke<{ path: string; sampleRate: number }>('ae_tap_start');
+  }
+
+  async tapStop(): Promise<TapDone | null> {
+    if (!this.invoke) return null;
+    return this.invoke<TapDone>('ae_tap_stop');
+  }
+
+  /** Put the tap's WAV under a saved recording, `offset` seconds later than the picture, mixed with its own sound when `mix`. */
+  async mux(video: string, wav: string, offset: number, mix: boolean): Promise<void> {
+    if (!this.invoke) throw new Error('No desktop engine');
+    await this.invoke('mux_recording_audio', { video, wav, offset, mix });
+  }
+
+  async tapDiscard(path: string): Promise<void> {
+    await this.invoke?.('ae_tap_discard', { path }).catch(() => {});
+  }
+
   // ── MIDI in ────────────────────────────────────────────────────────────────
 
   private syncMidi(): void {
@@ -652,6 +731,7 @@ class AudioEngineHost {
 
   /** For tests: forget everything. */
   resetForTests(): void {
+    engineSend.stopAll();
     for (const w of this.web.values()) w.dispose();
     this.web.clear(); this.mirror.clear(); this.spectra.clear(); this.driven.clear(); this.held.clear();
     this.target = undefined; this.controls = []; this.running = null; this.again = false;

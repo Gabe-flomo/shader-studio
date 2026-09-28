@@ -23,10 +23,20 @@
  * Both carry the audio effects: real time taps the mix after the master
  * chain (audioEngine.ts), and the offline mix builds the same chains
  * (audioFxOffline.ts), following a take's recorded numbers when it has them.
+ *
+ * The Audio engine's racks (desktop) are tracks too (`engine:<rack>`): a
+ * frame-by-frame render of a take has them rendered offline natively
+ * (engineRender.ts) and put straight under the mix (`MixFx.engine`; live,
+ * the engine goes to its own output, past the page's master chain); a
+ * real-time recording gets them from the engine's tap, muxed in afterwards
+ * (ExportModal). A rack fed by a web sound (a send) takes that sound out of
+ * the mix (`sentTracks`): it's heard through the rack instead.
  */
 import { audioEngine, trackChainId } from './audioEngine';
 import type { PlayRecord } from '../types/play';
-import { layerChainId, type PlayAudioFx } from '../types/playAudioFx';
+import { layerChainId, MASTER_CHAIN, type PlayAudioFx } from '../types/playAudioFx';
+import type { AeRack } from '../types/playAudioEngine';
+import { placeEngineRender, type EngineRender } from './engineRender';
 import { offlineFx, type ValueAt } from './audioFxOffline';
 import type { GraphNode } from '../types/nodeGraph';
 import { videoLayerTimeAt, type VideoLayer } from '../types/playLayers';
@@ -46,6 +56,42 @@ export interface RecordingTrack {
   chain?: string;
   /** A Drum pad layer: its pads and their samples (it sounds only where a take hits it). */
   pads?: PadTrack;
+  /** An Audio engine rack (desktop): rendered natively, or tapped in real time; never mixed here itself. */
+  engine?: { rackId: string; source?: string };
+}
+
+/** The Audio engine's racks as tracks: each with an instrument or a send (`native`: the desktop engine runs). */
+export function engineTracks(racks: readonly AeRack[] | undefined, native: boolean): RecordingTrack[] {
+  if (!native) return [];
+  return (racks ?? []).filter(r => r.instrument || r.source).map(r => ({
+    key: `engine:${r.id}`, label: `Audio engine · ${r.name}`, clock: true, engine: { rackId: r.id, ...(r.source ? { source: r.source } : {}) },
+  }));
+}
+
+/**
+ * Split the tracks by the sends: `direct` are mixed as they are; `sent` maps
+ * a sending rack to the tracks it takes (a 'master' send takes every track;
+ * a chain send the tracks on that chain). A sent track isn't heard directly.
+ */
+export function sentTracks(tracks: readonly RecordingTrack[]): { direct: RecordingTrack[]; sent: Map<string, RecordingTrack[]> } {
+  const sends = tracks.filter(t => t.engine?.source).map(t => t.engine!);
+  const web = tracks.filter(t => !t.engine);
+  const sent = new Map<string, RecordingTrack[]>();
+  const taken = new Set<RecordingTrack>();
+  for (const s of sends) {
+    const mine = web.filter(t => (s.source === MASTER_CHAIN ? true : (t.chain ?? MASTER_CHAIN) === s.source));
+    sent.set(s.rackId, mine);
+    for (const t of mine) taken.add(t);
+  }
+  return { direct: tracks.filter(t => !taken.has(t)), sent };
+}
+
+/** The effects for a send's own mix: a chain send keeps its chain's effects but not the master chain's (the send leaves before it). */
+export function sendFx(fx: PlayAudioFx | undefined, source: string): PlayAudioFx | undefined {
+  if (!fx || source === MASTER_CHAIN) return fx;
+  const chains = { ...fx.chains };
+  delete chains[MASTER_CHAIN];
+  return { ...fx, chains };
 }
 
 /** A Drum pad layer in a mix: its settings when the export starts, and each pad's decoded sample. */
@@ -81,6 +127,8 @@ export interface MixFx {
   valueAt?: ValueAt;
   /** Drum pad hits (a take's), in mix seconds. */
   padHits?: readonly PadHit[];
+  /** The Audio engine's racks, rendered natively for this span (engineRender.ts): put straight under the mix. */
+  engine?: EngineRender | null;
 }
 
 /** How a Video layer's sound plays against the clock (its layer's settings when the export starts). */
@@ -163,7 +211,7 @@ export function recordingTracks(play: PlayRecord, nodes: readonly GraphNode[]): 
  * Null when there's nothing to mix.
  */
 export async function mixdown(tracks: readonly RecordingTrack[], duration: number, from = 0, sampleRate = 48000, fx?: MixFx): Promise<AudioBuffer | null> {
-  const songs = tracks.filter(t => !t.video && !t.pads).map(t => ({ t, b: audioEngine.buffer(t.key) })).filter((x): x is { t: RecordingTrack; b: AudioBuffer } => !!x.b);
+  const songs = tracks.filter(t => !t.video && !t.pads && !t.engine).map(t => ({ t, b: audioEngine.buffer(t.key) })).filter((x): x is { t: RecordingTrack; b: AudioBuffer } => !!x.b);
   return mixBuffers(tracks.filter(t => t.video || t.pads), songs, duration, from, sampleRate, fx);
 }
 
@@ -177,9 +225,12 @@ export async function mixBuffers(tracks: readonly RecordingTrack[], buffers: Rea
     if (b && plan) videos.push({ b, plan, chain: t.chain });
   }
   const pads = tracks.filter(t => t.pads && duration > 0);
-  if ((!buffers.length && !videos.length && !pads.length) || duration <= 0) return null;
+  const engine = fx?.engine && fx.engine.frames > 0 ? fx.engine : null;
+  if ((!buffers.length && !videos.length && !pads.length && !engine) || duration <= 0) return null;
   const ctx = new OfflineAudioContext(2, Math.max(1, Math.ceil(duration * sampleRate)), sampleRate);
   const chains = await offlineFx(ctx, fx?.fx, duration, fx?.valueAt);
+  // The Audio engine's racks: rendered already, past the page's chains (as live: the engine has its own output).
+  if (engine) placeEngineRender(ctx, engine, ctx.destination);
   for (const { b, plan, chain } of videos) {
     const src = ctx.createBufferSource();
     src.buffer = b;
