@@ -8,18 +8,22 @@
 //!   params.rs    parameter descriptions, and the glide for mapped parameters
 //!   render.rs    a take's racks rendered offline (sample-exact replay) for a video's sound
 //!   tap.rs       the live engine's sound drained into a WAV for a real-time recording
+//!   touch.rs     Configure's "touch to configure": which parameter changes are the person's
 //!
 //! Every command is async so it runs off the main thread: loading an AUv3
 //! calls back on other threads, and plug-in windows are made on the main one.
 //! A worker thread (started with the first rack) glides parameters every
-//! 10 ms, sends a frame per sounding rack about 33 times a second, and
-//! drains the recording tap while one is on.
+//! 10 ms, sends a frame per sounding rack about 33 times a second, drains
+//! the recording tap while one is on, and, while Configure watches a slot,
+//! drains its parameter changes about 33 times a second and sends the
+//! touched ones as `audio-engine:param-touched` (touch.rs).
 
 pub mod analysis;
 pub mod ffi;
 pub mod params;
 pub mod render;
 pub mod tap;
+pub mod touch;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -48,11 +52,31 @@ struct TapRun {
     collector: tap::TapCollector<std::io::BufWriter<std::fs::File>>,
 }
 
+/// A slot Configure is watching: what it decided so far, and its parameters' descriptions.
+struct Watch {
+    touch: touch::TouchWatch,
+    params: HashMap<u64, params::Param>,
+}
+
+/// A touched parameter, for the page (`audio-engine:param-touched`).
+#[derive(Serialize, Clone)]
+struct Touched {
+    rack: String,
+    slot: String,
+    /// Its description, `value` the newest.
+    param: params::Param,
+    /// The first time it moved in this watch.
+    first: bool,
+}
+
 #[derive(Default)]
 struct Inner {
     racks: HashMap<String, RackAnalysis>,
     smoother: params::Smoother,
     tap: Option<TapRun>,
+    watches: HashMap<(String, String), Watch>,
+    /// A take is rendering: touches are dropped.
+    render_busy: bool,
 }
 
 #[derive(Default)]
@@ -119,8 +143,8 @@ fn worker(app: AppHandle, inner: Arc<Mutex<Inner>>) {
         let dt = now.duration_since(last).as_secs_f32();
         last = now;
         tick = tick.wrapping_add(1);
-        let (moves, racks, tapping) = match inner.lock() {
-            Ok(mut g) => (g.smoother.step(dt), if tick % FRAME_TICKS == 0 { g.racks.keys().cloned().collect::<Vec<_>>() } else { vec![] }, g.tap.is_some()),
+        let (moves, racks, tapping, watching) = match inner.lock() {
+            Ok(mut g) => (g.smoother.step(dt), if tick % FRAME_TICKS == 0 { g.racks.keys().cloned().collect::<Vec<_>>() } else { vec![] }, g.tap.is_some(), !g.watches.is_empty()),
             Err(_) => return,
         };
         for ((rack, slot, address), v) in moves {
@@ -128,6 +152,9 @@ fn worker(app: AppHandle, inner: Arc<Mutex<Inner>>) {
         }
         if tapping {
             drain_tap(&inner, &mut tap_buf);
+        }
+        if watching && tick % FRAME_TICKS == 0 {
+            drain_watches(&app, &inner);
         }
         if racks.is_empty() {
             continue;
@@ -152,6 +179,56 @@ fn worker(app: AppHandle, inner: Arc<Mutex<Inner>>) {
             let _ = app.emit(FRAME_EVENT, frame);
         }
     }
+}
+
+/// What the watched slots' parameters did since the last drain: the touched ones to the page.
+fn drain_watches(app: &AppHandle, inner: &Arc<Mutex<Inner>>) {
+    let batches: Vec<touch::Batch> = serde_json::from_str(&ffi::watch_drain()).unwrap_or_default();
+    for b in batches {
+        let key = (b.rack.clone(), b.slot.clone());
+        let (touches, unknown) = {
+            let Ok(mut g) = inner.lock() else { return };
+            if b.gone {
+                g.watches.remove(&key);
+                continue;
+            }
+            let busy = g.render_busy;
+            let Some(w) = g.watches.get_mut(&key) else { continue };
+            let t = w.touch.take(&b);
+            if busy {
+                continue;
+            }
+            let unknown = t.iter().any(|t| !w.params.contains_key(&t.address));
+            (t, unknown)
+        };
+        if touches.is_empty() {
+            continue;
+        }
+        // A parameter the unit added since the watch began: read the descriptions again.
+        let fresh = if unknown { ffi::params(&b.rack, &b.slot).ok().map(|j| param_map(params::parse_params(&j))) } else { None };
+        let out: Vec<Touched> = {
+            let Ok(mut g) = inner.lock() else { return };
+            let Some(w) = g.watches.get_mut(&key) else { continue };
+            if let Some(f) = fresh {
+                w.params = f;
+            }
+            touches
+                .iter()
+                .filter_map(|t| {
+                    let mut param = w.params.get(&t.address)?.clone();
+                    param.value = t.value.clamp(param.min, param.max);
+                    Some(Touched { rack: b.rack.clone(), slot: b.slot.clone(), param, first: t.first })
+                })
+                .collect()
+        };
+        for t in out {
+            let _ = app.emit(touch::TOUCH_EVENT, t);
+        }
+    }
+}
+
+fn param_map(list: Vec<params::Param>) -> HashMap<u64, params::Param> {
+    list.into_iter().filter_map(|p| p.address.parse::<u64>().ok().map(|a| (a, p))).collect()
 }
 
 /// Everything the tap ring holds now, into the tap's file.
@@ -384,6 +461,25 @@ pub async fn ae_open_ui(rack: String, slot: String, title: String) -> Result<(),
     ffi::open_ui(valid_id(&rack)?, valid_id(&slot)?, &title)
 }
 
+/// Configure is on for a slot: watch its parameters, and send the ones the person touches (touch.rs).
+#[tauri::command]
+pub async fn ae_watch_start(app: AppHandle, state: State<'_, EngineState>, rack: String, slot: String) -> Result<(), String> {
+    let (rack, slot) = (valid_id(&rack)?, valid_id(&slot)?);
+    let list = params::parse_params(&ffi::params(rack, slot)?);
+    ffi::watch_start(rack, slot)?;
+    state.inner.lock().map_err(lock_err)?.watches.insert((rack.into(), slot.into()), Watch { touch: Default::default(), params: param_map(list) });
+    start_worker(&app, &state)
+}
+
+/// Configure is off: stop watching.
+#[tauri::command]
+pub async fn ae_watch_stop(state: State<'_, EngineState>, rack: String, slot: String) -> Result<(), String> {
+    let (rack, slot) = (valid_id(&rack)?, valid_id(&slot)?);
+    ffi::watch_stop(rack, slot);
+    state.inner.lock().map_err(lock_err)?.watches.remove(&(rack.to_string(), slot.to_string()));
+    Ok(())
+}
+
 // ── Inputs fed from the page (a web sound through a rack's effects) ─────────
 
 /// The rack's source becomes an input the page feeds with `ae_rack_feed`; `capacity` frames of buffer.
@@ -435,10 +531,31 @@ pub async fn ae_render_input(state: State<'_, EngineState>, request: tauri::ipc:
     Ok(())
 }
 
+/// While a take renders, Configure's touches are dropped (cleared however the render ends).
+struct RenderBusy(Arc<Mutex<Inner>>);
+
+impl RenderBusy {
+    fn new(inner: &Arc<Mutex<Inner>>) -> Self {
+        if let Ok(mut g) = inner.lock() {
+            g.render_busy = true;
+        }
+        RenderBusy(inner.clone())
+    }
+}
+
+impl Drop for RenderBusy {
+    fn drop(&mut self) {
+        if let Ok(mut g) = self.0.lock() {
+            g.render_busy = false;
+        }
+    }
+}
+
 /// Render the job's racks offline (render.rs); the reply is bytes: u32 LE JSON length, the JSON (`RenderInfo`), left f32 LE, right f32 LE.
 #[tauri::command]
 pub async fn ae_render_take(app: AppHandle, state: State<'_, EngineState>, job: render::RenderJob) -> Result<tauri::ipc::Response, String> {
     let _one = state.rendering.lock().map_err(lock_err)?;
+    let _busy = RenderBusy::new(&state.inner);
     for r in &job.racks {
         valid_id(&r.id)?;
         for s in r.effects.iter().chain(r.instrument.iter()) {
@@ -624,6 +741,15 @@ mod native {
         ffi::param_set("rk_test", "fx_l", addr, 200.0).unwrap();
         let after = params::parse_params(&ffi::params("rk_test", "fx_l").unwrap());
         assert!((after.iter().find(|p| p.address == cutoff.address).unwrap().value - 200.0).abs() < 1.0);
+        // Configure's watch: the host's own sets aren't touches; stopping ends it.
+        ffi::watch_start("rk_test", "fx_l").unwrap();
+        ffi::param_set("rk_test", "fx_l", addr, 300.0).unwrap();
+        let drained: Vec<touch::Batch> = serde_json::from_str(&ffi::watch_drain()).unwrap();
+        assert_eq!(drained.len(), 1);
+        assert!(!drained[0].gone && drained[0].changes.is_empty(), "{:?}", drained[0].changes);
+        ffi::watch_stop("rk_test", "fx_l");
+        assert_eq!(ffi::watch_drain(), "[]");
+        assert!(ffi::watch_start("render:rk_test", "fx_l").is_err(), "renders are never watched");
         ffi::effect_move("rk_test", "fx_r", 2).unwrap();
         ffi::bypass("rk_test", "fx_d", true).unwrap();
         ffi::midi("rk_test", 0x90, 57, 120).unwrap();

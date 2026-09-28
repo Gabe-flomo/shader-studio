@@ -27,8 +27,8 @@ The feel is borrowed from the OP-1's tape (record onto a running tape, overdub o
 
 On a rack card, **Configure** (the target icon) on the instrument or an effect picks up to **8** of its parameters (`RACK_CONTROLS_MAX`) as **rack controls**:
 
-- In the desktop app, on an Audio Unit: **move a control in the plug-in's own window** ("Its window" opens it). Configure reads the unit's parameters every 150 ms and offers what moved in the last 0.5 s as "Add <param>" (the offer stays 4 s). This polls `ae_params` (AUParameter values); a plug-in that doesn't report its window's moves to the host shows nothing, and after 20 s Configure says so. The parameter list is always there to pick from.
-- In a browser (a Granulator's settings) and always: **pick from the parameter list** (filterable).
+- In the desktop app, on an Audio Unit: **touch a control in the plug-in to add it**, as in Ableton. Configure opens the plug-in's window and the engine watches its parameters: whatever the person moves there is added at once, with its live value (with 8 already, the first on the strip makes room: "Replaced <name>"). Parameters that move on their own and preset changes aren't added; nothing is added while a take or the tape records. How it's detected: docs/audio-engine.md, "Configure: touch to configure". A plug-in that doesn't report its window's moves adds nothing, and after 20 s Configure says so.
+- **Pick from list…** (on the desktop), and in a browser (a Granulator's settings) always: the parameter list (filterable).
 
 Rack controls are ordinary Play controls on `au:<rack>:<slot>::<address>` in the group **"<rack> · <instrument or effect>"** (it follows renames): mappable to a MIDI knob, recorded by takes, recorded on the tape. They show as a strip of small faders on the rack card. Configure renames, reorders (the Controls tab's order follows) and removes them (the control, its mappings and its moves on the tape go too). Stored as the slot's `controls` (addresses, in order).
 
@@ -73,7 +73,7 @@ Each lane's waveform is its track rendered offline, alone (`lib/tapePreview.ts`)
 | The transport, playback, recording, touch automation | `src/lib/tape.ts` (wired by `lib/tapeWire.ts`, from `audioEngineWire.ts`) |
 | The tape as a take | `src/lib/tapeTake.ts` |
 | Lane previews | `src/lib/tapePreview.ts` |
-| Rack controls (pure) and Configure's window watch | `src/play/rackControls.ts`, `src/lib/paramWatch.ts` |
+| Rack controls (pure, `touchRackControl` for touch to configure) and the touched-parameter event | `src/play/rackControls.ts`, `src/lib/paramWatch.ts`; native side `src-tauri/src/audio_engine/touch.rs` |
 | UI | `src/components/play/engine/ArrangementPanel.tsx` (transport, lanes), `RackControls.tsx` (strip, Configure), `AudioEnginePanel.tsx` (the two views) |
 
 Perf: the transport ticks every 8 ms without touching React; the store changes only on phase and count-in beats. The playheads, the time readout and the faders' dots move on their own animation frame only while the tape runs; lanes redraw their canvas only when their track, preview or size changes.
@@ -82,14 +82,14 @@ Dev: `__shaderStudioDev.tape` / `useTape` / `audioEngine` (`audioEngine.setMaste
 
 ## Tests
 
-- `src/play/__tests__/arrangement.test.ts`: overdub keeps untouched spans (notes and automation), replace takes the span, per-track replace, the length set and extended to 60 s, count-in and metronome timing, loop wrap, note scheduling, mute/solo, fade in, parsing and migration, the tape in the Play record (a removed rack's track, Free), a take of the tape, Configure's window watch.
-- `src/lib/__tests__/tape.test.ts`: the runtime against a hand-moved clock: a first recording, extension and the 60 s cap, playback with loop wrap, mute, automation overrides, punch-in while playing, count-in pre-roll, per-track replace, arming, touched rack controls, undo steps, rack controls (add/rename/reorder/regroup/remove), and replay parity with the offline render (native job notes and a Granulator's pad hits).
+- `src/play/__tests__/arrangement.test.ts`: overdub keeps untouched spans (notes and automation), replace takes the span, per-track replace, the length set and extended to 60 s, count-in and metronome timing, loop wrap, note scheduling, mute/solo, fade in, parsing and migration, the tape in the Play record (a removed rack's track, Free), a take of the tape, the touched-parameter event.
+- `src/lib/__tests__/tape.test.ts`: the runtime against a hand-moved clock: a first recording, extension and the 60 s cap, playback with loop wrap, mute, automation overrides, punch-in while playing, count-in pre-roll, per-track replace, arming, touched rack controls, undo steps, rack controls (add/rename/reorder/regroup/remove; a touched parameter added, the first on the strip replaced when full, its mappings going too), and replay parity with the offline render (native job notes and a Granulator's pad hits).
 
 ## For the owner to try (desktop, AU racks)
 
 1. Two racks with Audio Unit synths (DLSMusicDevice). Arrangement → Record, play a MIDI keyboard for a few seconds, Record again to stop. The lane shows the notes, then the waveform (native render). Play: it loops through the synth, the spectrum and readers move.
 2. Select the second rack's card (it becomes the lead), Play, press Record while it plays, play a line, stop: the first rack's notes are untouched.
-3. Configure on the synth: open its window and turn a knob: "Add <knob>" appears. Add two. Map a MIDI knob to one; record while turning it: its line appears on the lane; play back: the fader's dot follows. Try a third-party AUv3 and an AUv2: whether the window's moves are reported.
+3. Configure on the synth: its window opens; turn a knob: it's added at once. Add two. Map a MIDI knob to one; record while turning it: its line appears on the lane; play back: the fader's dot follows. Try a third-party AUv3 and an AUv2: whether the window's moves are reported.
 4. Count-in 1 bar with the metronome on, record from the middle: the clicks line up with the notes already there; the new notes land after the point.
 5. Make a take → Record → render with FFmpeg: the video's sound has the tape.
 6. Record past the end until 60 s: the notice, the tape kept.

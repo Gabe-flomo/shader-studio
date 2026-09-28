@@ -830,6 +830,248 @@ int ae_slot_bypass(const char *rid, const char *sid, int bypass, char **err) {
   return 0;
 }
 
+// ── Touch to configure: watching a slot's parameters ─────────────────────────
+//
+// While Configure is on for a slot (docs/audio-engine.md, Configure), an
+// AUParameterTree observer queues every parameter change the unit reports,
+// and each drain also compares every value with a snapshot (for a unit that
+// doesn't report its window's moves to observers). Changes the host made
+// itself (ae_param_set: mappings, glides, the card) are left out. A local
+// event monitor notes clicks, drags and scrolls in the slot's plug-in window,
+// so the Rust side can tell a touch from a parameter that moves on its own
+// (touch.rs). Only live racks are watched; a render never is.
+
+#define AE_WATCH_QUEUE 4096
+#define AE_ACT_EVENTS 32
+/** A change within this long of the host's own set of that parameter is the host's (ns). */
+#define AE_HOST_SET_NS 300000000ull
+
+@interface AEWatch : NSObject
+@property (nonatomic, copy) NSString *rid;
+@property (nonatomic, copy) NSString *sid;
+@property (nonatomic, strong) AUParameterTree *tree;
+@property (nonatomic, assign) AUParameterObserverToken token;
+@property (nonatomic, strong) NSMutableArray *queue; // @[address, value, ns]; gWatchQLock
+@property (nonatomic, strong) NSMutableDictionary<NSNumber *, NSNumber *> *snap;
+@property (nonatomic, strong) NSMutableDictionary<NSNumber *, NSNumber *> *hostSet; // address → ns
+@property (nonatomic) uint64_t startNs;
+@end
+@implementation AEWatch
+@end
+
+/** What the person did in a plug-in window lately (gActLock). */
+@interface AEActivity : NSObject
+@property (nonatomic, strong) NSMutableArray<NSNumber *> *events; // ns, newest last
+@property (nonatomic) uint64_t downNs, upNs;
+@end
+@implementation AEActivity
+@end
+
+static NSMutableDictionary<NSString *, AEWatch *> *gWatches = nil; // "rack/slot"; under gLock
+static os_unfair_lock gWatchQLock = OS_UNFAIR_LOCK_INIT;
+static NSMutableDictionary<NSString *, AEActivity *> *gActivity = nil; // "rack/slot"; gActLock
+static os_unfair_lock gActLock = OS_UNFAIR_LOCK_INIT;
+static id gEventMonitor = nil; // main thread only
+
+static uint64_t ae_now_ns(void) { return ae_host_ns(mach_absolute_time()); }
+
+static NSString *ae_window_key(NSWindow *w) {
+  if (!w) return nil;
+  NSString *found = nil;
+  [gWinLock lock];
+  for (NSString *k in gWindows) if (gWindows[k] == w) { found = k; break; }
+  [gWinLock unlock];
+  return found;
+}
+
+static void ae_note_event(NSEvent *e) {
+  NSWindow *w = e.window;
+  NSString *key = ae_window_key(w);
+  if (!key) return;
+  // Only the plug-in's own area counts (not the title bar).
+  NSView *content = w.contentView;
+  if (content && ![content mouse:[content convertPoint:e.locationInWindow fromView:nil] inRect:content.bounds]) return;
+  uint64_t now = ae_now_ns();
+  os_unfair_lock_lock(&gActLock);
+  if (!gActivity) gActivity = [NSMutableDictionary new];
+  AEActivity *a = gActivity[key];
+  if (!a) { a = [AEActivity new]; a.events = [NSMutableArray new]; gActivity[key] = a; }
+  [a.events addObject:@(now)];
+  if (a.events.count > AE_ACT_EVENTS) [a.events removeObjectAtIndex:0];
+  NSEventType t = e.type;
+  if (t == NSEventTypeLeftMouseDown || t == NSEventTypeRightMouseDown || t == NSEventTypeOtherMouseDown) a.downNs = now;
+  if (t == NSEventTypeLeftMouseUp || t == NSEventTypeRightMouseUp || t == NSEventTypeOtherMouseUp) a.upNs = now;
+  os_unfair_lock_unlock(&gActLock);
+}
+
+/** The event monitor is on while anything is watched (called under gLock; the monitor itself is made on the main thread). */
+static void ae_watch_monitor(BOOL on) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (on && !gEventMonitor) {
+      NSEventMask mask = NSEventMaskLeftMouseDown | NSEventMaskLeftMouseUp | NSEventMaskLeftMouseDragged
+        | NSEventMaskRightMouseDown | NSEventMaskRightMouseUp | NSEventMaskOtherMouseDown | NSEventMaskOtherMouseUp
+        | NSEventMaskOtherMouseDragged | NSEventMaskScrollWheel;
+      gEventMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:mask handler:^NSEvent *(NSEvent *e) {
+        @try { ae_note_event(e); } @catch (NSException *x) { (void)x; }
+        return e;
+      }];
+    } else if (!on && gEventMonitor) {
+      [NSEvent removeMonitor:gEventMonitor];
+      gEventMonitor = nil;
+    }
+  });
+}
+
+static void ae_watch_end(NSString *key) {
+  AEWatch *w = gWatches[key];
+  if (!w) return;
+  if (w.token) [w.tree removeParameterObserver:w.token];
+  [gWatches removeObjectForKey:key];
+  os_unfair_lock_lock(&gActLock);
+  [gActivity removeObjectForKey:key];
+  os_unfair_lock_unlock(&gActLock);
+  if (!gWatches.count) ae_watch_monitor(NO);
+}
+
+static NSMutableDictionary<NSNumber *, NSNumber *> *ae_param_snapshot(AUParameterTree *tree) {
+  NSMutableDictionary *snap = [NSMutableDictionary new];
+  for (AUParameter *p in tree.allParameters) if (p.flags & kAudioUnitParameterFlag_IsWritable) snap[@(p.address)] = @(p.value);
+  return snap;
+}
+
+/** Start watching a live slot's parameters (again, from now, if it was). */
+int ae_watch_start(const char *rid, const char *sid, char **err) {
+  @autoreleasepool {
+    AE_GUARD_BEGIN
+      AERack *r = ae_rack(rid);
+      if (!r || r.cx != gLive) { ae_set_err(err, @"No such slot"); [gLock unlock]; return -3; }
+      NSString *slot = [NSString stringWithUTF8String:sid];
+      AVAudioUnit *u = ae_slot_unit(r, slot);
+      AUParameterTree *tree = u.AUAudioUnit.parameterTree;
+      if (!u || !tree) { ae_set_err(err, u ? @"It has no parameters" : @"No such slot"); [gLock unlock]; return -3; }
+      if (!gWatches) gWatches = [NSMutableDictionary new];
+      NSString *key = [NSString stringWithFormat:@"%@/%@", r.rid, slot];
+      ae_watch_end(key);
+      AEWatch *w = [AEWatch new];
+      w.rid = r.rid;
+      w.sid = slot;
+      w.tree = tree;
+      w.queue = [NSMutableArray new];
+      w.snap = ae_param_snapshot(tree);
+      w.hostSet = [NSMutableDictionary new];
+      w.startNs = ae_now_ns();
+      NSMutableArray *q = w.queue;
+      w.token = [tree tokenByAddingParameterObserver:^(AUParameterAddress address, AUValue value) {
+        uint64_t ns = ae_now_ns();
+        os_unfair_lock_lock(&gWatchQLock);
+        if (q.count < AE_WATCH_QUEUE) [q addObject:@[@(address), @(value), @(ns)]];
+        os_unfair_lock_unlock(&gWatchQLock);
+      }];
+      gWatches[key] = w;
+      ae_watch_monitor(YES);
+    AE_GUARD_END(-1)
+    return 0;
+  }
+}
+
+int ae_watch_stop(const char *rid, const char *sid) {
+  @autoreleasepool {
+    ae_init_globals();
+    [gLock lock];
+    @try { ae_watch_end([NSString stringWithFormat:@"%s/%s", rid ?: "", sid ?: ""]); } @catch (NSException *x) { (void)x; }
+    [gLock unlock];
+    return 0;
+  }
+}
+
+/** The host is setting a watched parameter: not a touch (under gLock). The observer token to set it with, so the watch isn't told. */
+static AUParameterObserverToken ae_watch_host_set(const char *rid, NSString *sid, AUParameter *p) {
+  if (!gWatches.count || !rid) return nil;
+  AEWatch *w = gWatches[[NSString stringWithFormat:@"%s/%@", rid, sid]];
+  if (!w) return nil;
+  w.hostSet[@(p.address)] = @(ae_now_ns());
+  return w.token;
+}
+
+static void ae_watch_after_set(const char *rid, NSString *sid, AUParameter *p) {
+  if (!gWatches.count || !rid) return;
+  AEWatch *w = gWatches[[NSString stringWithFormat:@"%s/%@", rid, sid]];
+  if (w) w.snap[@(p.address)] = @(p.value);
+}
+
+static BOOL ae_host_made(AEWatch *w, uint64_t address, uint64_t ns) {
+  NSNumber *at = w.hostSet[@(address)];
+  if (!at) return NO;
+  uint64_t h = at.unsignedLongLongValue;
+  return ns + 50000000ull >= h && ns <= h + AE_HOST_SET_NS;
+}
+
+/**
+ * JSON: what changed in each watched slot since the last drain, and what the
+ * person did in its window. Times are seconds since the watch started.
+ * [{"rack","slot","now","changes":[{"a":"12","v":0.5,"t":1.2}],"events":[t…],"down":t|null,"up":t|null,"gone":bool}]
+ */
+char *ae_watch_drain(void) {
+  @autoreleasepool {
+    ae_init_globals();
+    NSMutableArray *out = [NSMutableArray new];
+    [gLock lock];
+    @try {
+      uint64_t now = ae_now_ns();
+      for (NSString *key in [gWatches.allKeys copy]) {
+        AEWatch *w = gWatches[key];
+        uint64_t start = w.startNs;
+        double (^rel)(uint64_t) = ^double(uint64_t ns) { return ((double)ns - (double)start) / 1e9; };
+        AERack *r = gLive.racks[w.rid];
+        AVAudioUnit *u = r ? ae_slot_unit(r, w.sid) : nil;
+        if (!u || u.AUAudioUnit.parameterTree != w.tree) {
+          NSString *rid = w.rid, *sid = w.sid;
+          ae_watch_end(key);
+          [out addObject:@{ @"rack": rid, @"slot": sid, @"now": @(rel(now)), @"changes": @[], @"events": @[], @"down": [NSNull null], @"up": [NSNull null], @"gone": @YES }];
+          continue;
+        }
+        NSMutableArray *changes = [NSMutableArray new];
+        NSArray *queued;
+        os_unfair_lock_lock(&gWatchQLock);
+        queued = [w.queue copy];
+        [w.queue removeAllObjects];
+        os_unfair_lock_unlock(&gWatchQLock);
+        for (NSArray *c in queued) {
+          uint64_t a = [c[0] unsignedLongLongValue], ns = [c[2] unsignedLongLongValue];
+          if (ae_host_made(w, a, ns)) continue;
+          if (!w.snap[@(a)]) continue; // not a writable parameter (a meter, an output)
+          [changes addObject:@{ @"a": [NSString stringWithFormat:@"%llu", a], @"v": c[1], @"t": @(rel(ns)) }];
+        }
+        // Every value against the snapshot: what the observer wasn't told.
+        for (AUParameter *p in w.tree.allParameters) {
+          if (!(p.flags & kAudioUnitParameterFlag_IsWritable)) continue;
+          NSNumber *k = @(p.address);
+          float v = p.value;
+          NSNumber *was = w.snap[k];
+          w.snap[k] = @(v);
+          if (!was) continue;
+          float o = was.floatValue;
+          if (fabsf(v - o) <= 1e-6f * fmaxf(1.0f, fabsf(o))) continue;
+          if (ae_host_made(w, p.address, now)) continue;
+          [changes addObject:@{ @"a": [NSString stringWithFormat:@"%llu", (unsigned long long)p.address], @"v": @(v), @"t": @(rel(now)) }];
+        }
+        NSMutableArray *events = [NSMutableArray new];
+        id down = [NSNull null], up = [NSNull null];
+        os_unfair_lock_lock(&gActLock);
+        AEActivity *act = gActivity[key];
+        for (NSNumber *e in act.events) [events addObject:@(rel(e.unsignedLongLongValue))];
+        if (act.downNs) down = @(rel(act.downNs));
+        if (act.upNs) up = @(rel(act.upNs));
+        os_unfair_lock_unlock(&gActLock);
+        [out addObject:@{ @"rack": w.rid, @"slot": w.sid, @"now": @(rel(now)), @"changes": changes, @"events": events, @"down": down, @"up": up, @"gone": @NO }];
+      }
+    } @catch (NSException *x) { NSLog(@"[audio engine] watch drain failed: %@", x.reason); }
+    [gLock unlock];
+    NSData *json = [NSJSONSerialization dataWithJSONObject:out options:0 error:nil];
+    return ae_strdup(json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : @"[]");
+  }
+}
+
 /** JSON: a slot's parameters ("inst" is the instrument). */
 char *ae_params(const char *rid, const char *sid, char **err) {
   @autoreleasepool {
@@ -864,7 +1106,9 @@ int ae_param_set(const char *rid, const char *sid, uint64_t address, float value
     AUParameter *p = u ? [u.AUAudioUnit.parameterTree parameterWithAddress:address] : nil;
     if (!p) { ae_set_err(err, @"No such parameter"); [gLock unlock]; return -3; }
     float v = value < p.minValue ? p.minValue : value > p.maxValue ? p.maxValue : value;
-    [p setValue:v originator:nil];
+    NSString *slot = [NSString stringWithUTF8String:sid];
+    [p setValue:v originator:ae_watch_host_set(rid, slot, p)]; // a watch's own observer isn't told
+    ae_watch_after_set(rid, slot, p);
   AE_GUARD_END(-1)
   return 0;
 }
