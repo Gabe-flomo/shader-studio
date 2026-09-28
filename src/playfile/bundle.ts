@@ -30,6 +30,7 @@ import { FOLDERS_KEY, GRAPH_PREFIX, itemsOf, parseJson, type FileNode, type Inve
 import type { MutableKV } from '../files/mutate';
 import { sealDefinition, storedForm } from './sealing';
 import type { WriteItem } from './writer';
+import { mediaKindOf } from '../files/linkedRefs';
 
 export const PLAY_FILE_KIND = 'shader-studio-play';
 
@@ -228,12 +229,20 @@ function extFor(type: string): string {
 /** Every video id the graph, Play, presentation and library items name (also inside a library snapshot's escaped JSON). */
 export function videoIdsIn(items: readonly WriteItem[]): string[] {
   const out = new Set<string>();
-  const re = /\\?"(?:videoId|sampleId)\\?"\s*:\s*\\?"([^"\\]{1,200})\\?"/g;
+  const re = /\\?"(?:videoId|sampleId)\\?"\s*:\s*\\?"([^"\\]{1,400})\\?"/g;
   for (const it of items) {
     if (it.kind !== 'graph' && it.kind !== 'play' && it.kind !== 'presentation' && it.kind !== 'library') continue;
     const text = typeof it.data === 'string' ? it.data : '';
     if (!text.includes('videoId') && !text.includes('sampleId')) continue;
     for (const m of text.matchAll(re)) out.add(m[1]);
+  }
+  // A Background's video from a linked folder names it as `libraryId` (docs/linked-folders.md).
+  const linkedRe = /\\?"libraryId\\?"\s*:\s*\\?"(linked:[^"\\]{1,400})\\?"/g;
+  for (const it of items) {
+    if (it.kind !== 'graph' && it.kind !== 'play' && it.kind !== 'presentation' && it.kind !== 'library') continue;
+    const text = typeof it.data === 'string' ? it.data : '';
+    if (!text.includes('linked:')) continue;
+    for (const m of text.matchAll(linkedRe)) { const k = mediaKindOf(m[1]); if (k === 'video' || k === 'audio') out.add(m[1]); }
   }
   return [...out];
 }

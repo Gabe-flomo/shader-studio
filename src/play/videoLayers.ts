@@ -31,6 +31,8 @@ import { layerChainId } from '../types/playAudioFx';
 import { forgetMedia, rememberMedia } from '../lib/mediaSources';
 import { videoSound, type VideoSoundState } from '../lib/videoSound';
 import { playEngine } from '../lib/playEngine';
+import { isLinkedRef } from '../files/linkedRefs';
+import { onLinkedChange } from '../files/linkedFolders';
 
 /** What the layer card shows about a layer's file. */
 export type VideoFileStatus = 'none' | 'loading' | 'ready' | 'missing' | 'error';
@@ -70,6 +72,20 @@ class PlayVideoLayers {
 
   constructor() {
     videoSound.setHost({ analyser: id => this.analyser(id), state: id => this.soundState(id), file: id => this.file(id) });
+    // A video from a linked folder (docs/linked-folders.md) that changed on disk opens again; one that came back loads.
+    onLinkedChange(refs => {
+      let changed = false;
+      for (const l of this.layers) {
+        const e = this.entries.get(l.id);
+        if (!e || !isLinkedRef(e.videoId) || (refs ? !refs.includes(e.videoId) : e.status === 'ready' || e.status === 'loading')) continue;
+        const had = files.get(e.videoId);
+        if (had) { files.delete(e.videoId); try { URL.revokeObjectURL(had.url); } catch { /* gone */ } }
+        this.drop(l.id);
+        this.open(l);
+        changed = true;
+      }
+      if (changed) this.emit();
+    });
   }
 
   /** Something the card shows changed (loaded, missing, playing). Returns an unsubscribe. */

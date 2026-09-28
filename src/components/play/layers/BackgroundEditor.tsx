@@ -34,6 +34,11 @@ import type { FieldKit } from './fields';
 import { Section } from './Section';
 import { useShowing } from '../useQueueShowing';
 import { pickLibraryImage } from '../../backgrounds/libraryImage';
+import { openLinkedPicker } from '../../linked/linkedUi';
+import { LinkedRelinkButton, linkedMissingText, useLinkedAvailable } from '../../linked/LinkedPickButton';
+import { linkedImageSource, linkedVideoSource } from '../../linked/linkedSources';
+import { isLinkedRef } from '../../../files/linkedRefs';
+import { linkedProblem } from '../../../files/linkedFolders';
 
 type Tokens = FieldKit['tk'];
 /** A touch screen: HTML drag and drop doesn't work there, so reordering is in each source's menu. */
@@ -142,6 +147,23 @@ export function BackgroundEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }
     } catch (e) { toast.error(`Couldn’t use that ${want.kind}`, { message: e instanceof Error ? e.message : String(e) }); }
     finally { setBusy(false); }
   };
+  // Linked folders (docs/linked-folders.md): a picture embedded like a picked file, a video played from disk.
+  const linkedOk = useLinkedAvailable();
+  const fromLinked = async (kind: 'image' | 'video', replaceId?: string, ref?: string) => {
+    let use = ref, bytes = 0;
+    if (!use) {
+      const p = await openLinkedPicker({ filter: kind });
+      if (p?.kind !== 'file') return;
+      use = p.ref; bytes = p.entry.size;
+    }
+    setBusy(true);
+    try {
+      const prev = replaceId ? l.sources.find(s => s.id === replaceId) : undefined;
+      const item = kind === 'image' ? await linkedImageSource(use) : linkedVideoSource(use, bytes || prev?.bytes || 0, prev);
+      if (replaceId) replace(replaceId, item); else add([item]);
+    } catch (e) { toast.error(`Couldn’t use that ${kind}`, { message: e instanceof Error ? e.message : String(e) }); }
+    finally { setBusy(false); }
+  };
   const askFile = (kind: 'image' | 'video', replaceId?: string) => { fileFor.current = { kind, replace: replaceId }; (kind === 'image' ? imageInput : videoInput).current?.click(); };
   const set = (id: string, patch: Partial<BackgroundItem>) => change(p => updateSource(p, id, patch));
   const goTo = (i: number) => ctx.act('goto', i + 1);
@@ -155,6 +177,10 @@ export function BackgroundEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }
     { label: 'Image from your backgrounds…', icon: 'overlay', hint: 'Captured from a graph, or imported, in the Library', onSelect: () => { void fromLibrary(); } },
     { label: 'Image file…', icon: 'import', hint: 'PNG, JPG, WebP or SVG', onSelect: () => askFile('image') },
     { label: 'Video…', icon: 'play', hint: 'MP4, WebM or MOV', onSelect: () => askFile('video') },
+    ...(linkedOk ? [
+      { label: 'Image from a linked folder…', icon: 'link', hint: 'A picture on disk, kept in the setup like a file you pick', onSelect: () => { void fromLinked('image'); } },
+      { label: 'Video from a linked folder…', icon: 'link', hint: 'Plays from disk where it is: not copied', onSelect: () => { void fromLinked('video'); } },
+    ] as MenuItem[] : []),
     { label: 'Colour', icon: 'eye', hint: 'A flat colour', onSelect: () => add([{ id: newSourceId(), kind: 'colour', name: 'Colour', colour: [0.08, 0.08, 0.12] }]) },
   ];
 
@@ -239,7 +265,7 @@ export function BackgroundEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }
                     {!isOn && !isOut && <IconButton icon="play" label={`Show now (Go to ${i + 1})`} size="sm" onClick={() => goTo(i)} />}
                     <IconButton icon="more" label="Rename, duplicate, move, remove" size="sm" tooltip={false} onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ x: r.right - 200, y: r.bottom + 4, items: rowMenu(it, i) }); }} />
                   </div>
-                  {expanded && <SourceSettings it={it} tk={tk} busy={busy} onSet={patch => set(it.id, patch)} onFile={kind => askFile(kind, it.id)} onLibrary={() => { void fromLibrary(it.id); }} onGraph={() => setPicker({ replace: it.id })} />}
+                  {expanded && <SourceSettings it={it} tk={tk} busy={busy} onSet={patch => set(it.id, patch)} onFile={kind => askFile(kind, it.id)} onLinked={linkedOk ? (kind, ref) => { void fromLinked(kind, it.id, ref); } : undefined} onLibrary={() => { void fromLibrary(it.id); }} onGraph={() => setPicker({ replace: it.id })} />}
                 </div>
               </div>
             );
@@ -286,12 +312,14 @@ export function BackgroundEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }
 
 // ── One source's settings ────────────────────────────────────────────────────
 
-function SourceSettings({ it, tk, busy, onSet, onFile, onLibrary, onGraph }: {
+function SourceSettings({ it, tk, busy, onSet, onFile, onLinked, onLibrary, onGraph }: {
   it: BackgroundItem;
   tk: Tokens;
   busy: boolean;
   onSet: (patch: Partial<BackgroundItem>) => void;
   onFile: (kind: 'image' | 'video') => void;
+  /** From a linked folder (a ref: the relinked file). */
+  onLinked?: (kind: 'image' | 'video', ref?: string) => void;
   onLibrary: () => void;
   onGraph: () => void;
 }) {
@@ -338,18 +366,24 @@ function SourceSettings({ it, tk, busy, onSet, onFile, onLibrary, onGraph }: {
             <>
               <Button size="sm" icon="overlay" disabled={busy} onClick={onLibrary}>From your backgrounds…</Button>
               <Button size="sm" variant="ghost" icon="import" disabled={busy} onClick={() => onFile('image')}>{busy ? 'Loading…' : 'Replace with a file'}</Button>
+              {onLinked && <Button size="sm" variant="ghost" icon="link" disabled={busy} onClick={() => onLinked('image')}>Linked folder…</Button>}
             </>
           ))}
-          {it.libraryId && note('From the Library’s image backgrounds. A copy is kept in this setup, so it works when shared.')}
+          {it.libraryId && note(isLinkedRef(it.libraryId) ? 'From a linked folder. A copy is kept in this setup, so it works when shared.' : 'From the Library’s image backgrounds. A copy is kept in this setup, so it works when shared.')}
         </>
       );
       break;
     case 'video': {
       const missing = playBackground.queueVideoMissing(it);
+      const linked = isLinkedRef(it.libraryId);
       const el = !missing ? playBackground.queueVideo(it) : null;
       body = (
         <>
-          {row('File', <Button size="sm" icon="import" disabled={busy} onClick={() => onFile('video')}>{busy ? 'Loading…' : missing ? 'Load it again' : 'Replace video'}</Button>)}
+          {row('File', <>
+            <Button size="sm" icon="import" disabled={busy} onClick={() => onFile('video')}>{busy ? 'Loading…' : missing && !linked ? 'Load it again' : 'Replace video'}</Button>
+            {linked && missing && linkedProblem(it.libraryId!) && <LinkedRelinkButton id={it.libraryId!} filter="video" onRelinked={ref => onLinked?.('video', ref)} />}
+            {onLinked && !(linked && missing) && <Button size="sm" variant="ghost" icon="link" disabled={busy} onClick={() => onLinked('video')}>Linked folder…</Button>}
+          </>)}
           {!missing && row('Plays', (
             <>
               <Toggle checked={it.loop !== false} onChange={loop => onSet({ loop })} label="Loop" />
@@ -357,8 +391,10 @@ function SourceSettings({ it, tk, busy, onSet, onFile, onLibrary, onGraph }: {
               <Select ariaLabel="Speed" height={26} value={String(it.rate ?? 1)} options={BACKGROUND_RATES.map(r => ({ value: String(r), label: `${r}×` }))} onChange={v => onSet({ rate: Number(v) })} style={{ fontSize: 12 }} />
             </>
           ))}
-          {missing && note(`“${it.name}” (${sizeText(it.bytes ?? 0)}) was too big to save. Load it again to use it.`, 'warning')}
-          {!missing && !it.src && note(`Over ${sizeText(BACKGROUND_VIDEO_KEEP)}, so it plays until you reload: saves, play files and web pages leave it out. Trim or compress it to keep it.`, 'warning')}
+          {missing && linked && note(linkedProblem(it.libraryId!) ? linkedMissingText(it.libraryId!, it.name) : 'Reading it from its linked folder…', linkedProblem(it.libraryId!) ? 'warning' : 'faint')}
+          {missing && !linked && note(`“${it.name}” (${sizeText(it.bytes ?? 0)}) was too big to save. Load it again to use it.`, 'warning')}
+          {!missing && linked && note('Plays from its linked folder, read-only: not copied into the setup or the library. A .playfile export takes a copy along.')}
+          {!missing && !it.src && !linked && note(`Over ${sizeText(BACKGROUND_VIDEO_KEEP)}, so it plays until you reload: saves, play files and web pages leave it out. Trim or compress it to keep it.`, 'warning')}
           {el?.error && note('This browser can’t play that video. Try an MP4 (H.264) or a WebM.', 'warning')}
           {!missing && note('It follows the clock: pause the preview and it pauses; ↺ starts it over. Only the showing video plays.')}
         </>
