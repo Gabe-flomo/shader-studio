@@ -70,6 +70,8 @@ import { AudioEnginePanel } from './engine/AudioEnginePanel';
 import { aeRack, aeSlot, aeSlotLabel, parseAuTarget, patchSlot } from '../../types/playAudioEngine';
 import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
+import { MiniMapper } from './MiniMapper';
+import type { MiniMapperTarget } from './miniMapperCore';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
 import { rackKeyboard } from '../../lib/rackKeyboard';
 import { keyboardClaimed } from '../../lib/keyboardClaim';
@@ -349,15 +351,6 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       return { ...p, controls: [...p.controls, { id: playId('ctl'), target, kind: 'action', label: `${l.label} · ${actionLabel(kind, l)}`, min: 0, max: 1, amount: defaultActionAmount(kind) }] };
     });
   }, [update]);
-  const addLayerControl = useCallback((layerId: string, key: string) => {
-    update(p => {
-      const l = p.layers.find(x => x.id === layerId);
-      const d = l && layerNumericProps(l).find(x => x.key === key);
-      if (!l || !d || p.controls.some(c => c.target === layerTarget(layerId, key))) return p;
-      return { ...p, controls: [...p.controls, { id: playId('ctl'), target: layerTarget(layerId, key), kind: 'float', label: `${l.label} · ${d.label}`, min: d.min, max: d.max, ...(d.step ? { step: d.step } : {}) }] };
-    });
-  }, [update]);
-
   // A slider (or an X/Y pair) with a Null on the picture that drives it.
   const addWithNull = useCallback((drives: NullDrive[], label: string) => {
     // A null is a layer: Pro.
@@ -502,7 +495,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
         <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
         <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
-        <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} finish={finishOk ? finishCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddFinish={addFinishControl} sound={audioFxOk ? soundCandidates : NO_LAYER_CANDIDATES} onAddSound={addSoundControl} onAddAction={addActionControl} onAddNull={addWithNull} />
+        <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} finish={finishOk ? finishCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddFinish={addFinishControl} sound={audioFxOk ? soundCandidates : NO_LAYER_CANDIDATES} onAddSound={addSoundControl} onAddAction={addActionControl} onAddNull={addWithNull} />
         <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More" onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 200, y: r.bottom + 4 } : null); }} />
         </span>
@@ -916,7 +909,7 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 /** A layer's numbers, for the Add control menu. */
 interface LayerCandidates { id: string; label: string; props: Array<{ key: string; label: string; hint?: string; min: number; max: number; step?: number }>; actions: ActionKind[] }
 
-function AddControlButton({ candidates, layers, finish, sound, layerById, taken, onAdd, onAddLayer, onAddFinish, onAddSound, onAddAction, onAddNull, compact = false }: {
+function AddControlButton({ candidates, layers, finish, sound, layerById, taken, onAdd, onAddFinish, onAddSound, onAddAction, onAddNull, compact = false }: {
   /** Phones: the button is an icon, so the header's row of tools fits. */
   compact?: boolean;
   candidates: PlayCandidate[];
@@ -924,7 +917,6 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
   layerById: (id: string) => PlayLayer | undefined;
   taken: Set<string>;
   onAdd: (c: PlayCandidate) => void;
-  onAddLayer: (layerId: string, key: string) => void;
   /** The Finish stack's effects and their numbers. */
   finish: LayerCandidates[];
   onAddFinish: (effectId: string, key: string, withNull: boolean) => void;
@@ -940,16 +932,21 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [withNull, setWithNull] = useState(false);
+  // The target picked (search parameters first); its own popover then picks the source (miniMapper.ts).
+  const [pending, setPending] = useState<{ target: MiniMapperTarget; label: string } | null>(null);
   const pickGraph = (c: PlayCandidate) => {
-    if (!withNull || c.kind !== 'float') { onAdd(c); return; }
-    const { drives, label } = graphNullDrives(candidates, c);
-    onAddNull(drives, label);
+    if (withNull && c.kind === 'float') { const { drives, label } = graphNullDrives(candidates, c); onAddNull(drives, label); return; }
+    if (withNull) { onAdd(c); return; }
+    setPending({ target: { candidate: c }, label: candidateLabel(c) });
   };
   const pickLayer = (l: LayerCandidates, key: string) => {
-    if (!withNull) { onAddLayer(l.id, key); return; }
-    const layer = layerById(l.id);
-    const r = layer && layerNullDrives(layer, key);
-    if (r) onAddNull(r.drives, r.label);
+    if (withNull) {
+      const layer = layerById(l.id);
+      const r = layer && layerNullDrives(layer, key);
+      if (r) onAddNull(r.drives, r.label);
+      return;
+    }
+    setPending({ target: { layerId: l.id, key }, label: `${l.label} · ${l.props.find(p => p.key === key)?.label ?? key}` });
   };
   // Folders: 'graph', 'layers', and one per layer id. The graph starts open; layers start folded.
   const [unfolded, setUnfolded] = useState<Set<string>>(() => new Set(['graph', 'layers']));
@@ -1040,7 +1037,7 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
               <div key={f.id}>
                 {folder(`finish:${f.id}`, f.label, f.props.length, 14)}
                 {isOpen(`finish:${f.id}`) && f.props.map(pr => (
-                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { onAddFinish(f.id, pr.key, withNull); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
+                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { if (withNull) { onAddFinish(f.id, pr.key, withNull); close(); } else { setPending({ target: { effectId: f.id, key: pr.key }, label: `${f.label} · ${pr.label}` }); close(); } }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
                     <Icon name="curve" size={13} style={{ color: tk.text.faint }} />
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.label}</span>
                     {withNull && taken.has(finishTarget(f.id, pr.key)) && <span style={{ color: tk.text.faint, fontSize: 10.5 }}>on panel</span>}
@@ -1053,7 +1050,7 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
               <div key={f.id}>
                 {folder(f.id, f.label, f.props.length, 14)}
                 {isOpen(f.id) && f.props.map(pr => (
-                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { onAddSound(f.id, pr.key, withNull); close(); }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
+                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { if (withNull) { onAddSound(f.id, pr.key, withNull); close(); } else { setPending({ target: { audioFx: `${f.id}::${pr.key}` }, label: `${f.label} · ${pr.label}` }); close(); } }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
                     <Icon name="wave" size={13} style={{ color: tk.text.faint }} />
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.label}</span>
                     {withNull && taken.has(`${f.id}::${pr.key}`) && <span style={{ color: tk.text.faint, fontSize: 10.5 }}>on panel</span>}
@@ -1064,6 +1061,7 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
           </div>
         </Popover>
       )}
+      {pending && <MiniMapper anchorRef={anchor} target={pending.target} label={pending.label} onClose={() => setPending(null)} />}
     </span>
   );
 }

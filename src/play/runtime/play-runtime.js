@@ -1398,8 +1398,8 @@ void main() {
         const st = g.live ? g.live.stats() : null;
         if (!st) continue;
         const sum = GRK.summary(st), k = 'ae:' + g.r.id + '::';
-        sensors.set(k + 'grains', sum.grains); sensors.set(k + 'grainMean', sum.mean); sensors.set(k + 'grainSpread', sum.spread); sensors.set(k + 'grainLevel', sum.level); sensors.set(k + 'grainPitch', sum.pitch);
-        for (let i = 0; i < 16; i++) { sensors.set(k + 'grainPos' + (i + 1), i < st.count ? st.pos[i] : 0); sensors.set(k + 'grainAmp' + (i + 1), i < st.count ? Math.min(1, st.amp[i]) : 0); }
+        sensors.set(k + 'grains', sum.grains); sensors.set(k + 'grainMean', sum.mean); sensors.set(k + 'grainSpread', sum.spread); sensors.set(k + 'grainLevel', sum.level); sensors.set(k + 'grainPitch', sum.pitch); sensors.set(k + 'grainBandMean', sum.band || 0); sensors.set(k + 'grainEnergySum', sum.energy || 0);
+        for (let i = 0; i < 16; i++) { sensors.set(k + 'grainPos' + (i + 1), i < st.count ? st.pos[i] : 0); sensors.set(k + 'grainAmp' + (i + 1), i < st.count ? Math.min(1, st.amp[i]) : 0); sensors.set(k + 'grainBand' + (i + 1), i < st.count && st.band ? st.band[i] : 0); sensors.set(k + 'grainEnergy' + (i + 1), i < st.count && st.energy ? Math.min(1, st.energy[i] * 4) : 0); }
       }
     }
     // A rack's note: `ae:<id>` pad actions carry note + 1 and the velocity (0 lets it go).
@@ -1479,7 +1479,7 @@ void main() {
             const d = s.otherId ? anchorGap(s.layerId, s.otherId) : null;
             return d === null ? null : Math.min(1, d);
           }
-          const v = sensors.get(s.layerId + '::' + s.read + (s.read === 'grainPos' || s.read === 'grainAmp' ? (s.otherId || '1') : ''));
+          const v = sensors.get(s.layerId + '::' + s.read + (s.read === 'grainPos' || s.read === 'grainAmp' || s.read === 'grainBand' || s.read === 'grainEnergy' ? (s.otherId || '1') : ''));
           return v === undefined ? null : v;
         }
         case 'control': { const c = controls.get(s.controlId); if (!c) return null; const v = live.has(c.id) ? live.get(c.id) : base.get(c.id); if (v === undefined) return null; if (Array.isArray(v)) return (v[0] + v[1] + v[2]) / 3; const span = c.max - c.min; return span > 0 ? Math.max(0, Math.min(1, (v - c.min) / span)) : 0; }

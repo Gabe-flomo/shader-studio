@@ -48,6 +48,9 @@ import { Check, IconTile } from './fileUi';
 import { capsLabel } from './fileUiShared';
 import { HomeView, type HomeEntry } from './HomeView';
 import { ItemPage } from './ItemPage';
+import { loadLayerSets } from '../../play/layerSets';
+import { loadRackPresets } from '../../play/rackPresets';
+import { addLayerSetToPlay, applyRackPresetToPlay } from '../play/presetsUi';
 import { isPlayGraph, ITEM_KINDS, itemCode, itemRecord } from '../../files/itemCode';
 import { NodePage } from './NodePage';
 import { NodesListView } from './NodesListView';
@@ -69,6 +72,9 @@ const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in 
 /** A saved drum kit (Presets → Drum kits): it can leave as a .playfile with its samples. */
 const isDrumKit = (n: FileNode) => n.kind === 'preset' && n.id.startsWith('dkit:');
 const exportKit = async (n: FileNode) => reportFileResult(await exportPlayfile([n.id], { fileName: n.label, dependencies: false, success: `Exported the kit “${n.label}”` }), { failTitle: 'Couldn’t export the kit' });
+/** A saved layer set or rack preset (Presets → Layer sets / Racks, docs/presets.md): it can be added to Play from here. */
+const layerSetOf = (n: FileNode) => (n.kind === 'preset' && n.id.startsWith('lset:') ? loadLayerSets().find(x => x.id === n.id.slice(5)) : undefined);
+const rackPresetOf = (n: FileNode) => (n.kind === 'preset' && n.id.startsWith('rpre:') ? loadRackPresets().find(x => x.id === n.id.slice(5)) : undefined);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 type View = 'home' | 'browse' | 'cleanup' | 'workspace' | 'linked' | 'notes' | 'nodes';
@@ -287,6 +293,9 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     if (n.kind === 'graph') items.push({ label: 'Open in the Studio', icon: 'nodes', onSelect: () => { void openGraph(n.label); } });
     if (n.kind === 'presentation') items.push({ label: 'Open on Present', icon: 'slides', onSelect: () => { rememberLast(n.label); onNavigate?.('present'); } });
     if (isDrumKit(n)) items.push({ label: 'Save as a .playfile…', icon: 'export', hint: 'The kit with the samples it uses, in one file that opens anywhere', onSelect: () => { void exportKit(n); } });
+    const set = layerSetOf(n), rackP = rackPresetOf(n);
+    if (set) items.push({ label: 'Add to Play', icon: 'play', hint: 'Its layers, wired, at the top of the list in a folder of its own', onSelect: () => { addLayerSetToPlay(set, { afterSelected: false }); onNavigate?.('play'); } });
+    if (rackP) items.push({ label: 'Add as a track', icon: 'play', hint: 'A new rack in the Audio engine', onSelect: () => { applyRackPresetToPlay(rackP); onNavigate?.('play'); } });
     if (n.scope && n.kind !== 'folder') items.push({ label: 'New folder…', icon: 'folder', onSelect: async () => { const l = await askText('New folder', { label: 'Name', confirmLabel: 'Create' }); if (l?.trim()) { createFolder(n.scope!, l.trim()); syncApp(['assetbrowser_folders']); } } });
     if (n.kind === 'folder' && n.ref?.t === 'folder') {
       const { scope, folderId } = n.ref;
@@ -334,6 +343,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         : n.kind === 'presentation' ? { label: 'Open on Present', icon: 'slides', onClick: () => { rememberLast(n.label); onNavigate?.('present'); } }
         : n.kind === 'shader' ? { label: 'Open on the GLSL page', icon: 'code', onClick: () => openShader(n) }
         : n.kind === 'builderFn' ? { label: 'Open the Function Builder', icon: 'fn', onClick: () => onNavigate?.('fn') }
+        : layerSetOf(n) ? { label: 'Add to Play', icon: 'play', onClick: () => { addLayerSetToPlay(layerSetOf(n)!, { afterSelected: false }); onNavigate?.('play'); } }
+        : rackPresetOf(n) ? { label: 'Add as a track', icon: 'play', onClick: () => { applyRackPresetToPlay(rackPresetOf(n)!); onNavigate?.('play'); } }
         : null}
       onExportPlayfile={!n.private && n.kind !== 'palette' ? () => { void exportItemPlayfile(n); } : undefined}
       onExportReadable={() => { void exportReadable(n); }}

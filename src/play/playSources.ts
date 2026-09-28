@@ -479,6 +479,7 @@ export const SENSOR_LABELS: Record<SensorRead, string> = {
   born: 'Born this step', died: 'Died this step',
   gap: 'Gap', closing: 'Closing', chaseSpeed: 'Chase speed', sight: 'In sight', catch: 'Catch', sinceCatch: 'Since catch', catches: 'Catches', picture: 'Picture',
   grains: 'Grain count', grainMean: 'Grain position', grainSpread: 'Grain spread', grainLevel: 'Grain level', grainPitch: 'Grain pitch', grainPos: 'One grain’s position', grainAmp: 'One grain’s level',
+  grainBandMean: 'Grain band (mean)', grainEnergySum: 'Grain energy', grainBand: 'One grain’s band', grainEnergy: 'One grain’s energy',
 };
 export const SENSOR_HINTS: Record<SensorRead, string> = {
   fill: 'How full of particles the shape is: 0.5 is as dense as average, 1 is twice that or more.',
@@ -514,6 +515,10 @@ export const SENSOR_HINTS: Record<SensorRead, string> = {
   grainPitch: 'Granulator: the grains’ mean pitch, 0.5 as sampled, 0 four octaves down, 1 four up.',
   grainPos: 'Granulator: where one grain (its number) reads in the sample, 0 to 1; 0 when there is no such grain.',
   grainAmp: 'Granulator: one grain’s level now; 0 when there is no such grain.',
+  grainBandMean: 'Granulator, Spectral mode: the sounding grains’ mean band centre, 0 the bottom of the spectrum (20 Hz), 1 the top (log scale).',
+  grainEnergySum: 'Granulator, Spectral mode: how much energy the spectral grains carry together, 1 when loud.',
+  grainBand: 'Granulator, Spectral mode: one grain’s band centre (its number), 0 the bottom of the spectrum, 1 the top; 0 when there is no such grain.',
+  grainEnergy: 'Granulator, Spectral mode: one grain’s energy now (its band’s peaks, through its window); 0 when there is no such grain.',
   picture: 'The picture under this layer, in its Picture channel (brightness unless its relationship says otherwise). Reads while the layer is a member of a Relationship; on the relationship itself, the mean under its members.',
 };
 

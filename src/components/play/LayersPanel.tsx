@@ -24,17 +24,19 @@ import { extraRelationshipsOf, relationshipNesting, RELATION_ROLE_LABEL } from '
 import type { RelationRole } from '../../types/playLayers';
 import { addKindLayer } from '../../play/layerKinds';
 import { AddLayerMenu } from './layers/AddLayerMenu';
+import { SaveSetDialog } from './layers/SaveSetDialog';
+import { addLayerSetToPlay } from './presetsUi';
 import { P5ImportDialog, type P5ImportResult } from './layers/P5Import';
 import { p5LayerRecord } from './layers/p5Layer';
 import { BUILTIN_LAYER, type BuiltinVariant } from './layers/addLayerCatalog';
 import { script3dDefaults } from '../../types/playLayers';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { backgroundLayerOf, layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, parseActionTarget, parseLayerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
-import { buildTree, childrenOf, containerOf, groupLayerIds, groupOfLayer, groupPath, type ItemRef, type LayerGroup, type TreeNode } from '../../types/layerGroups';
+import { buildTree, childrenOf, containerOf, groupLayerIds, groupOfLayer, groupPath, newLayerHome, type ItemRef, type LayerGroup, type TreeNode } from '../../types/layerGroups';
 import { playId } from '../../play/playControls';
 import { handFeed } from '../../lib/handFeed';
 import { addHandPath, addNullFor, backgroundMenuItems, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, removeLayer, renameLayer, resetLayer } from './layerOps';
-import { addToGroup, canMove, createGroup, duplicateGroup, moveItem, moveItemTo, orderedItems, removeGroup, takeOutOfGroup, ungroup } from './groupOps';
+import { canMove, placeNewLayer, createGroup, duplicateGroup, moveItem, moveItemTo, orderedItems, removeGroup, takeOutOfGroup, ungroup } from './groupOps';
 import { BackgroundEditor } from './layers/BackgroundEditor';
 import { GroupCard } from './layers/GroupCard';
 import { layerLook } from './layers/layerLook';
@@ -114,7 +116,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     const id = playId('layer');
     let made: PlayLayer;
     try { made = p5LayerRecord(r.patch, r.startAt, id); } catch (e) { toast.error('The sketch does not compile', { message: (e as Error)?.message ?? String(e) }); return; }
-    onChange(p => { const next = { ...p, layers: [...p.layers, made] }; return entered ? addToGroup(next, id, entered) : next; });
+    onChange(p => { const next = { ...p, layers: [...p.layers, made] }; return placeNewLayer(next, id, entered); });
+    leaveSealed();
     setSelected(id);
     toast.success(`Imported “${r.title}”`, { message: `${1 + (r.patch.files.length)} file${r.patch.files.length ? 's' : ''} · open the Sketch editor from the layer to see its code and console.` });
   };
@@ -146,6 +149,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const enteredRaw = usePlayUi(s => s.entered), enter = usePlayUi(s => s.enter);
   const entered = enteredRaw && play.groups?.some(g => g.id === enteredRaw) ? enteredRaw : '';
   const path = entered ? groupPath(play.groups, entered) : [];
+  // A new layer doesn't join a sealed group (a Granulator's grain nulls): the list goes to where it landed.
+  const leaveSealed = () => { if (!entered) return; const home = newLayerHome(play.groups, entered); if (home !== entered) enter(home); };
   const rows = childrenOf(tree, entered);
   const inside = path[path.length - 1];
   const hiddenAbove = path.some(g => g.hidden);
@@ -167,7 +172,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
 
   const addKind = (k: LayerKindDef) => {
     const id = playId('layer');
-    onChange(p => { const next = addKindLayer(p, k, id); return entered ? addToGroup(next, id, entered) : next; });
+    onChange(p => { const next = addKindLayer(p, k, id); return placeNewLayer(next, id, entered); });
+    leaveSealed();
     setSelected(id);
   };
   const add = (kind: PlayLayerKind, variant?: BuiltinVariant) => {
@@ -184,7 +190,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     // A hand path: fingertip nulls (the missing ones) and a filled path between them; tracking starts.
     if (variant === 'handPath') {
       const id = playId('layer');
-      onChange(p => { const next = addHandPath(p, id).play; return entered ? addToGroup(next, id, entered) : next; });
+      onChange(p => { const next = addHandPath(p, id).play; return placeNewLayer(next, id, entered); });
+      leaveSealed();
       if (handFeed.getStatus() === 'off') void handFeed.start();
       setSelected(id);
       return;
@@ -196,8 +203,9 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     const n = play.layers.filter(l => l.kind === kind && (kind !== 'script' || (l.kind === 'script' && (l.mode === '3d') === is3d))).length + 1;
     const id = playId('layer');
     const made = defaultLayer(kind, id, `${is3d ? '3D Script' : KIND[kind].label} ${n}`);
-    // Added while the list shows a group: it goes in that group.
-    onChange(p => { const next = { ...p, layers: [...p.layers, is3d ? ({ ...made, ...script3dDefaults() } as PlayLayer) : made] }; return entered ? addToGroup(next, id, entered) : next; });
+    // Added while the list shows a group: it goes in that group (not a sealed one: a Granulator's grain nulls).
+    onChange(p => { const next = { ...p, layers: [...p.layers, is3d ? ({ ...made, ...script3dDefaults() } as PlayLayer) : made] }; return placeNewLayer(next, id, entered); });
+    leaveSealed();
     setSelected(id);
   };
   const patch = (id: string, fn: (l: PlayLayer) => PlayLayer) => onChange(p => ({ ...p, layers: p.layers.map(l => l.id === id ? fn(l) : l) }));
@@ -305,6 +313,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     const item: ItemRef = { kind: 'group', id: g.id };
     return [
       { label: 'Duplicate…', hint: 'Its layers alone, or with their controls and mappings', onSelect: () => setDuplicating(g) },
+      { label: 'Save as a set…', icon: 'layers', hint: 'Its layers with their controls, mappings and actions, to add anywhere', onSelect: () => setSavingSet(groupLayerIds(play, g.id)) },
       { label: 'Ungroup', hint: `${MOD}⇧G · the layers stay where they are`, onSelect: () => onChange(p => ungroup(p, g.id)) },
       'separator',
       { label: 'Move up', hint: 'Drawn earlier', disabled: !canMove(play, item, -1), onSelect: () => onChange(p => moveItem(p, item, -1)) },
@@ -314,6 +323,14 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     ];
   };
   const [duplicating, setDuplicating] = useState<LayerGroup | null>(null);
+  // "Save as a set…": the layers picked (a picked group brings every layer inside it), or the selected one.
+  const [savingSet, setSavingSet] = useState<string[] | null>(null);
+  const pickedLayerIds = (): string[] => {
+    const items = picked.length ? picked : selectedInView && backgroundLayerOf(play)?.id !== selected ? [selectedInView] : [];
+    const ids = new Set(items.flatMap(i => (i.kind === 'group' ? groupLayerIds(play, i.id) : [i.id])));
+    return play.layers.filter(l => ids.has(l.id) && l.kind !== 'background').map(l => l.id);
+  };
+  const saveSet = () => { const ids = pickedLayerIds(); if (ids.length) setSavingSet(ids); };
   const duplicateGroupAs = (g: LayerGroup, withControls: boolean) => {
     let made = '';
     onChange(p => { const r = duplicateGroup(p, g.id, withControls); made = r.id; return r.play; });
@@ -485,12 +502,17 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         <span ref={addRef} style={{ display: 'inline-flex' }}>
           <Button size="sm" icon="plus" aria-expanded={menu} onClick={() => setMenu(m => !m)}>Add layer</Button>
         </span>
-        {menu && <AddLayerMenu play={play} touch={touch} anchorRef={addRef} onAdd={add} onAddKind={addKind} onChange={onChange} onClose={() => setMenu(false)} />}
+        {menu && <AddLayerMenu play={play} touch={touch} anchorRef={addRef} onAdd={add} onAddKind={addKind} onAddSet={set => addLayerSetToPlay(set)} onChange={onChange} onClose={() => setMenu(false)} />}
         {importingP5 && <P5ImportDialog onCreate={addP5} onClose={() => setImportingP5(false)} />}
         <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More" size="sm" tooltip={false} onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 200, y: r.bottom + 4 } : null); }} />
         </span>
-        {pageMore && <Menu x={pageMore.x} y={pageMore.y} minWidth={200} onClose={() => setPageMore(null)} items={[startOverMenuItem(() => setPageMore(null))]} />}
+        {pageMore && <Menu x={pageMore.x} y={pageMore.y} minWidth={200} onClose={() => setPageMore(null)} items={[
+          { label: 'Save as a set…', icon: 'layers', disabled: !pickedLayerIds().length, hint: picked.length ? `The ${picked.length} picked, with their controls and mappings` : 'The selected layer (⇧/⌘-click to pick more)', onSelect: () => { setPageMore(null); saveSet(); } },
+          'separator',
+          startOverMenuItem(() => setPageMore(null)),
+        ]} />}
+        {savingSet && <SaveSetDialog play={play} layerIds={savingSet} onClose={saved => { setSavingSet(null); if (saved) clearPicks(); }} />}
       </div>
       {(picked.length > 0 || selectMode) && (
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 14px', borderBottom: `1px solid ${tk.border.default}`, background: alpha(tk.accent.base, 0.08) }}>
@@ -498,6 +520,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             {picked.length ? `${picked.length} selected` : touch ? 'Tap layers to select' : 'Click layers to select'}
           </span>
           {picked.some(i => i.kind === 'group') && <Button size="sm" variant="ghost" onClick={ungroupPicked} title={`Ungroup (${MOD}⇧G)`}>Ungroup</Button>}
+          <Button size="sm" variant="ghost" icon="layers" disabled={!picked.length} onClick={saveSet} title="The picked layers with their controls, mappings and actions, to add in any setup">Save as a set…</Button>
           <Button size="sm" variant="primary" icon="folder" disabled={!picked.length} onClick={groupPicked} title={`Group (${MOD}G)`}>Group</Button>
           <Button size="sm" variant="ghost" onClick={clearPicks}>{selectMode ? 'Done' : 'Clear'}</Button>
         </div>
