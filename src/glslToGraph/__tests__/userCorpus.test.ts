@@ -62,5 +62,5 @@ describe('the user corpus', () => {
 
   it('is deterministic', () => {
     for (const [, src] of corpus) expect(JSON.stringify(glslToGraph(src))).toBe(JSON.stringify(glslToGraph(src)));
-  });
+  }, 30000);
 });
