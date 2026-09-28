@@ -40,6 +40,9 @@ import { audioAccept, isAudioFile, notAudioMessage } from '../../lib/audioAccept
 import { PaletteEditor } from './FillEditor';
 import { LinkedBrowser } from '../linked/LinkedBrowser';
 import { useLinkedAvailable } from '../linked/LinkedPickButton';
+import { AutoPreviewToggle, SampleRow } from '../audio/SampleRow';
+import { useSamplePreview } from '../audio/useSamplePreview';
+import { stopPreview } from '../../lib/samplePreview';
 
 type Tab = 'images' | 'palettes' | 'videos' | 'sounds' | 'linked';
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 640;
@@ -137,6 +140,18 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   const sound = tab === 'sounds';
   const kindWord = sound ? 'sound' : 'video';
 
+  // Splice-style auditioning (docs/drum-pads.md): arrow through sounds and hear them as you
+  // go, through the shared preview player (not the master effects). Stops when the tab
+  // changes or the dialog closes.
+  const soundItems = useMemo(() => (sound ? snds.map(v => ({ id: v.id, meta: v })) : []), [sound, snds]);
+  const sp = useSamplePreview<{ id: string; meta: LibraryVideoMeta }>({
+    items: soundItems,
+    getSource: async ({ meta }) => (await getVideo(meta.id))?.blob ?? null,
+    onPick: () => {},
+  });
+  useEffect(() => { if (!sound) stopPreview(); }, [sound]);
+  useEffect(() => stopPreview, []);
+
   const needle = q.trim().toLowerCase();
   const imgs = useMemo(() => images ?? [], [images]);
   const byId = useMemo(() => new Map(imgs.map(m => [m.id, m])), [imgs]);
@@ -208,6 +223,14 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
     <Row key={v.id} compact={compact} picking={false} title={v.name} detail={videoDetail(v, uses?.get(v.id))}
       lead={<Thumb src={v.thumb || undefined} icon={isAudioType(v.type) ? 'wave' : 'play'} w={compact ? 64 : 80} h={compact ? 36 : 45} />}
       onPick={() => {}} onMenu={el => openMenu(el, videoMenu(v))} />
+  );
+  const soundRow = (v: LibraryVideoMeta) => (
+    <SampleRow key={v.id} title={v.name} detail={videoDetail(v, uses?.get(v.id))} thumb={v.thumb || undefined} w={compact ? 64 : 80} h={compact ? 36 : 45}
+      highlighted={sp.highlight === v.id} playing={sp.playingId === v.id && sp.playing} loading={sp.playingId === v.id && sp.loading}
+      progress={sp.playingId === v.id && sp.duration ? sp.position / sp.duration : 0} touch={compact}
+      onClick={() => sp.onRowClick({ id: v.id, meta: v })} onDoubleClick={() => sp.onRowDoubleClick({ id: v.id, meta: v })}
+      onTap={() => sp.onRowTap({ id: v.id, meta: v })} onPick={() => sp.onRowDoubleClick({ id: v.id, meta: v })}
+      onMenu={el => openMenu(el, videoMenu(v))} />
   );
   const paletteMenu = (p: Palette, el: HTMLElement): MenuItem[] => [
     ...(picking && pick !== 'image' ? [{ label: 'Use it', icon: 'check' as const, onSelect: () => onDone({ kind: 'palette', palette: p }) }, 'separator' as const] : []),
@@ -289,6 +312,7 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
               {unusedVideos.length ? `Clean up ${unusedVideos.length} unused (${formatSize(unusedVideos.reduce((n, v) => n + v.bytes, 0))})` : 'Nothing unused'}
             </Button>
             <span style={{ alignSelf: 'center', color: tk.text.faint, font: `500 11.5px ${fontFamily.ui}` }}>{formatSize(media.reduce((n, v) => n + v.bytes, 0))} in all</span>
+            {sound && <AutoPreviewToggle value={sp.autoPreview} onChange={sp.setAutoPreview} compact={compact} />}
           </>
         ) : (
           <Button size="sm" variant="primary" icon="plus" onClick={() => setEditing('new')}>New palette…</Button>
@@ -321,7 +345,12 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
     const list = needle ? media.filter(v => v.name.toLowerCase().includes(needle)) : media;
     body = videos === null ? empty('Loading…')
       : videoError ? empty(`${sound ? 'Sounds' : 'Videos'} can’t be kept in this browser: ${videoError}`)
-      : list.length ? <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{list.map(videoRow)}</div>
+      : list.length ? (
+        <div role="list" aria-label="Sounds" tabIndex={sound ? 0 : undefined} onKeyDown={sound ? sp.onKeyDown : undefined}
+          style={{ display: 'flex', flexDirection: 'column', gap: 2, outline: 'none' }}>
+          {list.map(sound ? soundRow : videoRow)}
+        </div>
+      )
       : empty(needle ? `No ${kindWord} called anything like “${q.trim()}”.` : sound
         ? 'No sounds yet. Upload some, or add a Drum pads layer on Play and drop a sample on a pad.'
         : 'No videos yet. Add a Video layer on Play and pick a file, or drop a video on the picture.');
