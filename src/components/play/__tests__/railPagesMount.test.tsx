@@ -123,7 +123,7 @@ describe('the rail’s full-width pages', () => {
     roots.push({ root, el });
     act(() => root.render(<PlayRail />));
     const cats = el.querySelectorAll('[data-rail-category]');
-    expect(Array.from(cats).map(c => c.getAttribute('data-rail-category'))).toEqual(['controls', 'layers', 'finish', 'engine', 'mappings']);
+    expect(Array.from(cats).map(c => c.getAttribute('data-rail-category'))).toEqual(['controls', 'layers', 'finish', 'engine']);
     act(() => (el.querySelector('[data-rail-category="layers"]') as HTMLButtonElement).click());
     expect(usePlaySplit.getState().railPage).toBe('layers');
     expect(el.querySelector('[data-popover]')).toBeNull();
@@ -134,7 +134,8 @@ describe('the rail’s full-width pages', () => {
     usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'layers' });
     const layers = categoryDef('layers');
     expect(layers.pages.length).toBeGreaterThan(1);
-    expect(categoryDef('controls').pages.length).toBe(1); // Controls stays a plain page, not a strip.
+    expect(categoryDef('controls').pages.length).toBe(4); // Controls & Mappings merged: a strip, not a plain page.
+    expect(categoryDef('engine').pages.length).toBe(1); // Engine stays a plain page, not a strip.
     const el = document.createElement('div');
     document.body.appendChild(el);
     const root = createRoot(el);
@@ -162,7 +163,7 @@ describe('the phone’s pages', () => {
     roots.push({ root, el });
     act(() => root.render(<PlayPage compact />));
     expect(el.querySelector('[data-play-railbar]')).not.toBeNull();
-    expect(el.querySelectorAll('[data-rail-category]').length).toBe(5);
+    expect(el.querySelectorAll('[data-rail-category]').length).toBe(4);
     act(() => usePlayUi.getState().showPage('signals'));
     expect(el.querySelector('[data-phone-page="signals"]')).not.toBeNull();
     act(() => usePlayUi.getState().showPage('layers'));

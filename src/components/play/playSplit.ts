@@ -19,7 +19,7 @@
  * (shell/PhoneSplit.tsx).
  */
 import { create } from 'zustand';
-import { usePlayUi, type PlayTab } from './playUi';
+import { tabForPage, usePlayUi, type PlayTab } from './playUi';
 import { categoryOf, firstPageOf, isRailPage, pageForTab, type RailCategory, type RailPage } from './railPages';
 
 export type SplitSide = 'left' | 'right' | 'top' | 'bottom';
@@ -88,12 +88,20 @@ export function parseSplitPrefs(raw: string | null): SplitPrefs {
   };
 }
 
-/** Only keep entries that name a real page under the category they claim. */
+/**
+ * Only keep entries that name a real page under the category they claim — or
+ * under a since-removed category's new home (`LEGACY_CATEGORY`: a save from
+ * before Controls and Mappings merged (2026-09-28) still has a `mappings` key,
+ * whose pages now live under `controls`).
+ */
+const LEGACY_CATEGORY: Readonly<Record<string, RailCategory>> = { mappings: 'controls' };
 function parseRailPageMemory(v: unknown): Partial<Record<RailCategory, RailPage>> {
   if (!v || typeof v !== 'object') return {};
   const out: Partial<Record<RailCategory, RailPage>> = {};
   for (const [cat, page] of Object.entries(v as Record<string, unknown>)) {
-    if (isRailPage(page) && categoryOf(page) === cat) out[cat as RailCategory] = page;
+    if (!isRailPage(page)) continue;
+    const real = categoryOf(page);
+    if (real === cat || LEGACY_CATEGORY[cat] === real) out[real] = page;
   }
   return out;
 }
@@ -261,7 +269,9 @@ export function showPageInSplit(page: RailPage): void {
   const split = usePlaySplit.getState();
   if (split.sidebar === 'rail') { split.setRailPage(page); return; }
   if (page === 'finish-picture' || page === 'finish-sound') usePlayUi.getState().setFinishView(page === 'finish-sound' ? 'sound' : 'picture');
-  split.setTab(categoryOf(page));
+  // The tab-strip's own section for this page, not the rail's icon grouping: Mappings is its
+  // own tab there even though it shares the Controls rail icon (railPages.ts, tabForPage).
+  split.setTab(tabForPage(page));
 }
 
 /**
@@ -277,6 +287,20 @@ export function goToMappings(): boolean {
   if (!split.available) return false;
   if (!split.on) split.setOn(true);
   showPageInSplit('mappings');
+  return true;
+}
+
+/**
+ * Open a rail category, wherever the split shows pages, on the page it was
+ * last left on (else its first) — the keyboard's own way in (⌘1–4 or ⌃1–4:
+ * App.tsx), same as clicking its rail icon. False when there's no split view
+ * on screen (phones; the bottom row's icons cover it there).
+ */
+export function goToRailCategory(cat: RailCategory): boolean {
+  const split = usePlaySplit.getState();
+  if (!split.available) return false;
+  if (!split.on) split.setOn(true);
+  showPageInSplit(usePlaySplit.getState().railPageMemory[cat] ?? firstPageOf(cat));
   return true;
 }
 

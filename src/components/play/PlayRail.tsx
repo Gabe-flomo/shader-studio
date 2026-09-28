@@ -19,7 +19,7 @@ import { Sheet } from '../ui/Sheet';
 import { Tooltip } from '../ui/Tooltip';
 import { RAIL_PX, usePlaySplit } from './playSplit';
 import { usePlayUi } from './playUi';
-import { RAIL_CATEGORIES, RAIL_PAGES, categoryBadge, categoryOf, pageCount, phonePageShown, stepIndex, type RailCategory, type RailCategoryDef, type RailPage } from './railPages';
+import { RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, categoryBadge, categoryOf, mappingsCountOf, pageCount, phonePageShown, stepIndex, type RailCategory, type RailCategoryDef, type RailPage } from './railPages';
 
 /** Categories that need Pro, and the plan feature that unlocks each. */
 function useLocked(): (cat: RailCategory) => boolean {
@@ -66,6 +66,7 @@ export function PlayRail() {
           active={active === c.id}
           open={false}
           badge={categoryBadge(c.id, play)}
+          hint={c.id === 'controls' && mappingsCountOf(play) > 0 ? `Mappings · ${mappingsCountOf(play)}` : undefined}
           locked={locked(c.id)}
           onPress={() => openCategory(c.id)}
         />
@@ -74,12 +75,14 @@ export function PlayRail() {
   );
 }
 
-function RailButton({ def, refFn, active, open, badge, locked, onPress, phone = false }: {
+function RailButton({ def, refFn, active, open, badge, hint, locked, onPress, phone = false }: {
   def: RailCategoryDef;
   refFn?: (el: HTMLButtonElement | null) => void;
   active: boolean;
   open: boolean;
   badge?: number;
+  /** An extra line in the desktop tooltip, under the description (Controls' mappings count). */
+  hint?: string;
   locked: boolean;
   onPress: () => void;
   /** The phone's bottom row: a label under the icon, no tooltip. */
@@ -126,7 +129,12 @@ function RailButton({ def, refFn, active, open, badge, locked, onPress, phone = 
   );
   if (phone) return button;
   return (
-    <Tooltip placement="right" label={`${def.label}${locked ? ' · Pro' : ''}`} description={def.description}>
+    <Tooltip
+      placement="right"
+      label={`${def.label}${locked ? ' · Pro' : ''}`}
+      description={hint ? `${def.description} (${hint})` : def.description}
+      shortcut={RAIL_CATEGORY_SHORTCUT[def.id]}
+    >
       {button}
     </Tooltip>
   );

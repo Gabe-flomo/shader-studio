@@ -38,21 +38,35 @@ clicking a tab switches, ←/→ move through the strip when it's focused
 Engine) shows no strip, just its description. ↑/↓ move through the rail's own
 icons.
 
-**Mappings is always reachable**: it's a rail category like the others, so its
-icon (with its count badge) is always on the rail, whatever page or category
-is open; ⌘⇧M jumps straight to it, opening the split first if it's closed
-(`goToMappings` in `playSplit.ts`). Phones get the same: Mappings is always
-one of the bottom row's icons.
+**Mappings is always reachable**: it shares the Controls icon (its rail
+category since 2026-09-28: the owner's call — the two were so closely
+related), so its tab is always one click from the rail, whatever page or
+category is open; ⌘⇧M jumps straight to it — on the Mappings tab specifically,
+not just the category — opening the split first if it's closed (`goToMappings`
+in `playSplit.ts`). Phones get the same: Controls' sheet always has a Mappings
+tab.
+
+**⌘1–4 jump to a rail category** (`railControls`/`railLayers`/`railFinish`/
+`railEngine` in `useShortcuts.ts`, wired in `App.tsx`; `goToRailCategory` in
+`playSplit.ts`), same as clicking its icon: the category opens on the page it
+was last on, else its first (so ⌘1 opens Controls & Mappings on whichever of
+the two it was left on). A plain browser tab claims ⌘1–4 for switching its own
+tabs before the page ever sees the keydown, so ⌃1–4 do the same four things
+there, fixed (not in the remappable shortcuts panel). Each rail icon's tooltip
+shows its ⌘ combo.
 
 The categories and pages are data (`railPages.ts`):
 
 | Category | Pages |
 | --- | --- |
-| Controls | Controls |
-| Layers | Layers · Actions · Signals · Background |
-| Finish | Picture · Sound |
-| Engine | Performance |
-| Mappings | Mappings · MIDI file · Pad grid |
+| Controls (⌘1 / ⌃1) | Controls · Mappings · MIDI file · Pad grid |
+| Layers (⌘2 / ⌃2) | Layers · Actions · Signals · Background |
+| Finish (⌘3 / ⌃3) | Picture · Sound |
+| Engine (⌘4 / ⌃4) | Arrangement |
+
+Controls' rail badge is the controls count (not mappings', so the two counts
+never get added into one confusing number); the mappings count sits in the
+icon's tooltip instead, alongside the ⌘1 combo.
 
 When the Engine's Arrangement view lands, it becomes a second Engine page
 (add it to `RAIL_PAGES` and the category's `pages`, and a case in PlayPage's
