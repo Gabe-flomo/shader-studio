@@ -241,6 +241,10 @@ export interface ParticlesLayer extends LayerBase {
   annihilateSignal: string;
   /** Multiply: a signal id sent whenever the colony empties out (or a Loop restarts). '' = none. */
   clearedSignal: string;
+  /** A signal id sent whenever one or more particles are born this step (a burst, a stream respawn, a Multiply bud). '' = none. */
+  bornSignal: string;
+  /** A signal id sent whenever one or more particles die this step (age, a kill boundary, annihilation, a Cull action). '' = none. */
+  diedSignal: string;
   spawn: 'anywhere' | 'edges' | 'center' | 'null';
   spawnRadius: number;
   /** Leaving the picture: come in the other side, bounce, be reborn (spawn setting), or reappear anywhere at random. */
@@ -658,6 +662,10 @@ export interface AgentsLayer extends LayerBase {
   gooSoft: number;
   opacity: number;
   blend: BlendMode;
+  /** A signal id sent whenever one or more agents are revived this step (a group's Respawn). '' = none. */
+  bornSignal: string;
+  /** A signal id sent whenever one or more agents die this step (a catch, an energy drain, a kill boundary). '' = none. */
+  diedSignal: string;
   [groupKey: `g${number}_${string}`]: number | RGB;
   [ruleKey: `r${number}_${string}`]: number;
 }
@@ -1425,7 +1433,7 @@ function agentDefaults(): Defaults<AgentsLayer> {
   const base: Record<string, unknown> = {
     toShader: true, rules: [], preset: '', groups: 1, seed: 1, spawn: 'random', spawnRadius: 0.3, startSpeed: 0.2, spin: 0, speed: 1, substeps: 1,
     look: 'dots', colourBy: 'group', palette: 1, colourSpan: 0.6, trail: 0, links: 'off', linkRadius: 0.06, linkOpacity: 0.35, linkWidth: 1, linkColor: [1, 1, 1],
-    gooBlend: 2.5, gooThreshold: 0.5, gooSoft: 0.2, opacity: 1, blend: 'normal',
+    gooBlend: 2.5, gooThreshold: 0.5, gooSoft: 0.2, opacity: 1, blend: 'normal', bornSignal: '', diedSignal: '',
     ...agentGroupDefaults(),
   };
   return { ...base, ...agPresetLayer('boids', null), g1_count: 200 } as unknown as Defaults<AgentsLayer>;
@@ -1445,7 +1453,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     attractor: 'none', force: 'gravitate', strength: 1, catchRadius: 0.02,
     emit: 'stream', spawn: 'anywhere', spawnRadius: 0.2, edges: 'wrap', life: 0, fade: 0, seed: 0, nullId: '',
     splitRate: 1, splitJitter: 0.3, splitChildren: 1, splitPush: 0.08, multSpread: 0.035, multLife: 'stay', multAfter: 'hold', grow: 'itself', fullness: 100,
-    returnSpring: 1, pairRadius: 0.3, seekSpeed: 0.15, loopHold: 6, splitSignal: '', fullSignal: '', annihilateSignal: '', clearedSignal: '',
+    returnSpring: 1, pairRadius: 0.3, seekSpeed: 0.15, loopHold: 6, splitSignal: '', fullSignal: '', annihilateSignal: '', clearedSignal: '', bornSignal: '', diedSignal: '',
     shape: 'dot', rotate: 'heading', sprite: '', crop: false, tintSprite: false, size: 2, sizeJitter: 0.3, opacity: 0.8,
     colour: 'tint', color: [1, 1, 1], palette: 1, paletteBy: 'heading',
     sizeBy: 'none', sizeAmount: 1, opacityBy: 'none', opacityAmount: 0.5, falloff: 0.3, links: 0,
@@ -1559,7 +1567,7 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     splitRate: N(0.01, 20), splitJitter: unit, splitChildren: N(1, 4, true), splitPush: N(0, 2), multSpread: N(0, 0.5),
     multLife: E('stay', 'flow', 'return', 'annihilate'), multAfter: E('loop', 'respawn', 'hold'), grow: E('itself', 'fullness'), fullness: N(0, 100),
     returnSpring: N(0, 10), pairRadius: N(0.02, 2), seekSpeed: N(0.005, 2), loopHold: N(0, 120),
-    splitSignal: S, fullSignal: S, annihilateSignal: S, clearedSignal: S,
+    splitSignal: S, fullSignal: S, annihilateSignal: S, clearedSignal: S, bornSignal: S, diedSignal: S,
     goo: B, gooBlend: N(1, 8), gooThreshold: N(0.01, 0.99), gooSoft: unit,
   },
   shape: {
@@ -1607,7 +1615,7 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     startSpeed: N(0, 5), spin: N(-10, 10), speed: N(0, 10), substeps: N(1, 4, true),
     look: E('dots', 'sprites', 'goo'), colourBy: E('group', 'speed', 'age', 'energy', 'heading'), palette: N(0, 9, true), colourSpan: N(0.01, 10), trail: unit,
     links: E('off', 'springs', 'near'), linkRadius: N(0.005, 0.5), linkOpacity: unit, linkWidth: N(0.25, 10), linkColor: C,
-    gooBlend: N(1, 8), gooThreshold: N(0.01, 0.99), gooSoft: unit, opacity: unit, blend: blendF,
+    gooBlend: N(1, 8), gooThreshold: N(0.01, 0.99), gooSoft: unit, opacity: unit, blend: blendF, bornSignal: S, diedSignal: S,
     ...Object.fromEntries(Array.from({ length: AG_GROUPS }, (_, i) => [
       [`g${i + 1}_count`, N(0, AG_MAX, true)], [`g${i + 1}_color`, C], [`g${i + 1}_size`, N(0.2, 60)], [`g${i + 1}_drain`, N(0, 10)], [`g${i + 1}_respawn`, N(0, 500)],
     ] as const).flat()),

@@ -15,6 +15,7 @@ import { fontFamily } from '../../../theme/tokens';
 import { usePlayUi } from '../playUi';
 import { AG_GROUPS, AG_MAX, AG_PRESETS, AG_RULES, AG_RULE_TYPES, agPresetLayer } from '../../../play/kit/agents.js';
 import { AGENT_MAX_RULES, newAgentRule, type AgentRule, type AgentRuleType, type AgentsLayer, type PlayLayer } from '../../../types/playLayers';
+import { addSignal } from '../../../play/pairs';
 import { BLENDS, BLEND_HINT, type Choice, type FieldKit } from './fields';
 import { Section } from './Section';
 import { BigEditorScaffold } from './BigEditorScaffold';
@@ -96,6 +97,13 @@ export function AgentsEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const countOptions: Choice[] = [{ value: '0', label: 'Any group' }, { value: '-1', label: 'Own group' }, { value: '-2', label: 'Other groups' }, ...Array.from({ length: groups }, (_, i) => ({ value: String(i + 1), label: `Group ${i + 1}` }))];
   const total = Array.from({ length: groups }, (_, i) => num(`g${i + 1}_count`) || 0).reduce((a, b) => a + b, 0);
   const faint: React.CSSProperties = { color: tk.text.faint, font: `11px ${fontFamily.ui}` };
+  const signals = ctx.play.signals ?? [];
+  const signalRow = (label: string, key: 'bornSignal' | 'diedSignal', hint: string) => f.row(label, (
+    <>
+      <Select ariaLabel={`Signal on ${label.toLowerCase()}`} value={f.get<string>(key)} options={[{ value: '', label: 'None' }, ...signals.map(s => ({ value: s.id, label: s.name }))]} onChange={v => f.set({ [key]: v })} height={26} style={{ flex: 1, minWidth: 0 }} />
+      <Button size="sm" variant="ghost" onClick={() => ctx.changePlay(p => { const r = addSignal(p); return { ...r.play, layers: r.play.layers.map(x => (x.id === l.id ? { ...x, [key]: r.id } : x)) }; })}>New signal</Button>
+    </>
+  ), hint);
 
   const ruleCard = (r: AgentRule, i: number) => {
     const def = AG_RULES[r.type];
@@ -128,6 +136,7 @@ export function AgentsEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const sections = [
     { id: 'agents-rules', label: 'Rules' },
     { id: 'agents-groups', label: 'Groups' },
+    { id: 'agents-signals', label: 'Signals out' },
     { id: 'agents-start', label: 'Start' },
     { id: 'agents-clock', label: 'Clock' },
     { id: 'agents-look', label: 'Look' },
@@ -169,6 +178,11 @@ export function AgentsEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           );
         })}
         {total > 3000 && f.note('Over 3000 agents the neighbour rules start to cost real time on slower machines; the simulation stays exact, it just takes longer each frame.')}
+      </Section>
+
+      <Section id="agents-signals" kind="agents" title="Signals out" hint="Named events other actions and mappings can react to. Pick a signal (or make one) for any you want to use; leave the rest as None.">
+        {signalRow('Born', 'bornSignal', 'Sent whenever one or more agents are revived this step — a group’s Respawn.')}
+        {signalRow('Died', 'diedSignal', 'Sent whenever one or more agents die this step — a Catch rule, an energy drain, or a kill boundary.')}
       </Section>
 
       <Section id="agents-start" kind="agents" title="Start" summary={`${l.spawn} · seed ${l.seed || 'take'}`} hint="Where they start and how, and the seed every random choice comes from. The same seed gives the same run every time, here, in renders and on a website.">

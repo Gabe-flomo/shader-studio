@@ -18,6 +18,7 @@ import { inputBus } from '../../lib/inputBus';
 import { useTakes } from '../../lib/takes';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { kitScript } from '../exportHtml';
+import { createLayerKit, type KitEnv } from '../kit/kit.js';
 import runtimeSource from '../runtime/play-runtime.js?raw';
 import { playableForPlan } from '../planGates';
 import {
@@ -440,6 +441,80 @@ describe('the web runtime', () => {
     // It did swap, and the signals did land.
     expect(app.some(r => r[1] !== undefined)).toBe(true);
     expect(app[app.length - 1][2]).toBe(1);
+  });
+});
+
+/**
+ * Drives the app the way the real app does: the engine's fired actions reach a real layer kit (so a
+ * Burst action really births particles), and the kit's readings feed back into the engine's sensors
+ * (so Born/Died can fire) — the same wiring the web runtime does internally in `runtimeRun`.
+ */
+function driveWithKit<T>(values: number[], read: () => T): T[] {
+  const kit = createLayerKit();
+  kit.reset(1);
+  const off = playEngine.onAction(a => kit.act(a));
+  const ctx = new El('canvas').getContext('2d') as unknown as CanvasRenderingContext2D;
+  const gl = new El('canvas') as unknown as HTMLCanvasElement;
+  const g = globalThis as { document?: unknown };
+  const hadDoc = g.document;
+  g.document = { createElement: () => new El('canvas') };
+  try {
+    let t = 1;
+    return values.map(v => {
+      playEngine.setBaseValues(new Map([['src', v]]));
+      kit.frame(ctx, playEngine.getRecord(), {
+        gl, W: 160, H: 90, dpr: 1, time: t, dt: 1 / 60,
+        value: (l, k) => playEngine.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]),
+        pointer: { x: 0.3, y: 0.6, over: false, down: false }, markers: false, editing: false, hidden: false, backdrop: [0, 0, 0], audio: null, camera: null, image: () => null,
+        sensor: (k, val) => playEngine.setSensor(k, val),
+        override: () => {},
+      } as KitEnv);
+      inputBus.tick(1 / 60, (t += 1 / 60));
+      return read();
+    });
+  } finally { off(); g.document = hadDoc; }
+}
+
+describe('born/died signals', () => {
+  it('a burst layer sends its Born signal once per burst and its Died signal once per frame particles expire, in the engine', () => {
+    const rec: PlayRecord = {
+      ...emptyPlayRecord(), controls: [control('src')],
+      layers: [{ ...burstLayer(), life: 0.1, seed: 7, bornSignal: 'bornSig', diedSignal: 'diedSig' } as PlayLayer],
+      actions: [act('burst', { on: 'value', ...cond('crossUp', 0.5) })],
+    };
+    playEngine.setRecord(rec);
+    const heard: string[] = [];
+    const off = playEngine.onSignal(id => heard.push(id));
+    // Two crossings (two bursts of 5), then many frames of nothing while the particles age out (life 0.1 s, jittered).
+    const values = [0.2, 0.6, 0.3, 0.7, ...Array.from({ length: 30 }, () => 0.7)];
+    driveWithKit(values, () => 0);
+    off();
+    expect(heard.filter(id => id === 'bornSig').length).toBe(2); // one per burst, not one per particle
+    expect(heard.filter(id => id === 'diedSig').length).toBeGreaterThan(0); // every particle dies eventually
+    expect(heard.filter(id => id === 'diedSig').length).toBeLessThanOrEqual(10); // never more than one per frame that had a death
+  });
+
+  it('the web runtime matches the app: the same burst/life sequence reaches the same signal count either way', () => {
+    const toggle = { kind: 'trigger' as const, mode: 'step' as const, attack: 0, decay: 0, sustain: 1, release: 0, steps: 20, velocity: false };
+    const rec: PlayRecord = {
+      ...emptyPlayRecord(),
+      controls: [control('src'), control('bornHits', { max: 20 }), control('diedHits', { max: 20 })],
+      layers: [{ ...burstLayer(), life: 0.1, seed: 7, bornSignal: 'bornSig', diedSignal: 'diedSig' } as PlayLayer],
+      actions: [act('burst', { on: 'value', ...cond('crossUp', 0.5) })],
+      mappings: [
+        { id: 'mb', controlId: 'bornHits', source: { ...toggle, trigger: { on: 'signal', signal: 'bornSig' } }, outMin: 0, outMax: 20, curve: 'linear', smoothMs: 0, enabled: true },
+        { id: 'md', controlId: 'diedHits', source: { ...toggle, trigger: { on: 'signal', signal: 'diedSig' } }, outMin: 0, outMax: 20, curve: 'linear', smoothMs: 0, enabled: true },
+      ],
+    };
+    const values = [0.2, 0.6, 0.3, 0.7, ...Array.from({ length: 30 }, () => 0.7)];
+    const ids = ['bornHits', 'diedHits'];
+    playEngine.setRecord(rec);
+    const app = driveWithKit(values, () => ids.map(id => playEngine.liveValue(id) as number | undefined));
+    const web = runtimeRun(rec, values, ids);
+    // Reading a mapping counter is one layer removed from the raw signal count (a mapping newly wired
+    // up "arms" on its first live frame rather than counting a press already under way), but that quirk
+    // is the same code path on both sides — so the app and the web runtime should still land in the same place.
+    expect(web[web.length - 1]).toEqual(app[app.length - 1]);
   });
 });
 

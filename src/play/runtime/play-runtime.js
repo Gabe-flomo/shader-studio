@@ -1634,6 +1634,21 @@ void main() {
         if (cleared > last.cleared && l.clearedSignal) emitSignal(l.clearedSignal);
       }
     }
+    // Every particles layer (any Emit mode) and every Agents layer: the kit counts how many were born and
+    // how many died, cumulative (the kit itself reports the delta as the born/died readings). A rise in
+    // either since last tick sends the layer's signal (once a tick, however many were involved).
+    const bornDiedSeen = new Map();
+    function tickBornDiedSignals() {
+      for (const l of play.layers) {
+        if (l.kind !== 'particles' && l.kind !== 'agents') continue;
+        const born = sensors.get(l.id + '::bornCount') || 0, died = sensors.get(l.id + '::diedCount') || 0;
+        const last = bornDiedSeen.get(l.id);
+        bornDiedSeen.set(l.id, { born, died });
+        if (!last) continue;
+        if (born > last.born && l.bornSignal) emitSignal(l.bornSignal);
+        if (died > last.died && l.diedSignal) emitSignal(l.diedSignal);
+      }
+    }
     function tickZoneTriggers() {
       for (const t of allTriggers) {
         if (t.on !== 'zone' || t.event === 'click') continue;
@@ -1767,6 +1782,7 @@ void main() {
       tickConditionTriggers();
       tickRelationshipSignals();
       tickMultiplySignals();
+      tickBornDiedSignals();
       tickActions(dt);
       const driven = new Set();
       let moved = false;

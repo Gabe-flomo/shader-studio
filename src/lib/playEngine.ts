@@ -480,6 +480,25 @@ class PlayEngine implements InputSource {
     }
   }
 
+  /**
+   * Every particles layer (any Emit mode) and every Agents layer: the kit counts how many were born and
+   * how many died, cumulative (`<id>::bornCount` / `<id>::diedCount`; the kit itself reports the delta as
+   * the `born` / `died` this-step readings). A rise in either since last tick sends the layer's Born /
+   * Died signal — once a tick, however many were involved (a burst of 200 fires once).
+   */
+  private bornDiedSeen = new Map<string, { born: number; died: number }>();
+  private tickBornDiedSignals(): void {
+    for (const l of this.record.layers) {
+      if (l.kind !== 'particles' && l.kind !== 'agents') continue;
+      const born = this.sensors.get(`${l.id}::bornCount`) ?? 0, died = this.sensors.get(`${l.id}::diedCount`) ?? 0;
+      const last = this.bornDiedSeen.get(l.id);
+      this.bornDiedSeen.set(l.id, { born, died });
+      if (!last) continue;
+      if (born > last.born && l.bornSignal) this.emitSignal(l.bornSignal);
+      if (died > last.died && l.diedSignal) this.emitSignal(l.diedSignal);
+    }
+  }
+
   /** The picture's width / height, for distances between nulls. */
   setAspect(aspect: number): void {
     if (aspect > 0 && Number.isFinite(aspect)) this.aspect = aspect;
@@ -1018,6 +1037,7 @@ class PlayEngine implements InputSource {
     this.tickConditionTriggers();
     this.tickRelationshipSignals();
     this.tickMultiplySignals();
+    this.tickBornDiedSignals();
     this.tickActions(dt);
     if (this.learnCb && this.performing) this.pollGamepadLearn();
     // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.

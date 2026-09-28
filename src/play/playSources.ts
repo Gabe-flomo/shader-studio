@@ -461,6 +461,7 @@ export function repeatHint(what: ActionKind | `mode:${TriggerMode}`, fire: FireS
 export const SENSOR_LABELS: Record<SensorRead, string> = {
   fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance', level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble', area: 'Area', perimeter: 'Perimeter',
   alive: 'Alive', centroidX: 'Centre X', centroidY: 'Centre Y', group1: 'Group 1 alive', group2: 'Group 2 alive', group3: 'Group 3 alive', group4: 'Group 4 alive',
+  born: 'Born this step', died: 'Died this step',
   gap: 'Gap', closing: 'Closing', chaseSpeed: 'Chase speed', sight: 'In sight', catch: 'Catch', sinceCatch: 'Since catch', catches: 'Catches', picture: 'Picture',
   grains: 'Grain count', grainMean: 'Grain position', grainSpread: 'Grain spread', grainLevel: 'Grain level', grainPitch: 'Grain pitch', grainPos: 'One grain’s position', grainAmp: 'One grain’s level',
 };
@@ -478,10 +479,12 @@ export const SENSOR_HINTS: Record<SensorRead, string> = {
   lowmid: 'Low-mids, 150–600 Hz: body, warmth, most voices.',
   highmid: 'High-mids, 600 Hz–3 kHz: snares, leads, presence.',
   treble: 'Treble, 3–12 kHz: hi-hats, cymbals, air.',
-  alive: 'Agents: the share of the layer’s agents alive, 0 none, 1 all of them.',
+  alive: 'Agents: the share of the layer’s agents alive, 0 none, 1 all of them. Particles: the same, of Count.',
   centroidX: 'Agents: where the live agents’ centre is across the picture, 0 the left edge, 1 the right.',
   centroidY: 'Agents: where the live agents’ centre is up the picture, 0 the bottom, 1 the top.',
   group1: 'Agents: the share of group 1 alive (its count is 1).', group2: 'Agents: the share of group 2 alive.', group3: 'Agents: the share of group 3 alive.', group4: 'Agents: the share of group 4 alive.',
+  born: 'How many were born this step: a burst, a stream respawn, a Multiply bud, an Agents respawn. 0 most steps.',
+  died: 'How many died this step: age, a kill boundary, an annihilation, a Cull action, a catch or an energy drain. 0 most steps.',
   gap: 'Relationship: how far apart its closest pair is (a chase: the closest chaser and prey), 0 touching, 1 a picture height or more.',
   closing: 'Relationship: how fast the closest pair is closing in. 0.5 is neither; 1 is closing at full speed, 0 parting at full speed.',
   chaseSpeed: 'Relationship: how fast the chasers move (repel and attract: everyone), against the Max speed.',
