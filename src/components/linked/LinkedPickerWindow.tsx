@@ -16,7 +16,7 @@ export function LinkedPickerWindow({ req, onDone }: { req: Omit<LinkedPickerRequ
   const tk = useTokens();
   const compact = narrow();
   const words = FILTER_WORDS[req.filter];
-  const title = req.title ?? (req.mode === 'folder' ? `Choose a folder of ${words.many}` : `Choose a ${words.one} from a linked folder`);
+  const title = req.title ?? (req.mode === 'folder' ? `Choose a folder of ${words.many}` : `Choose ${words.a} from a linked folder`);
   const note = <span style={{ color: tk.text.faint, font: `500 11.5px/1.5 ${fontFamily.ui}` }}>Used from where it is, read-only: nothing is copied into the library, and it doesn’t count toward the storage limit. A .playfile export takes a copy along.</span>;
   const body = <LinkedBrowser filter={req.filter} mode={req.mode} compact={compact} folderId={req.folderId} dir={req.dir} onPick={onDone} listHeight={compact ? '46dvh' : 'min(52vh, 460px)'} />;
   if (compact) return <Sheet title={title} onClose={() => onDone(null)} maxHeight="92dvh" zIndex={80}>{body}<div style={{ padding: '10px 2px 4px' }}>{note}</div></Sheet>;

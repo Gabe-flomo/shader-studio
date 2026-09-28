@@ -46,10 +46,10 @@ export const sizeWords = (b: number) => (b >= 1024 * 1024 ? `${(b / (1024 * 1024
 /** Seconds as m:ss.s under a minute's precision. */
 export const lengthWords = (s: number) => { const m = Math.floor(s / 60), r = s - m * 60; return m ? `${m}:${r < 10 ? '0' : ''}${r.toFixed(0)}` : `${r.toFixed(r < 10 ? 2 : 1)} s`; };
 
-export const FILTER_WORDS: Record<LinkedFilter, { one: string; many: string }> = {
-  any: { one: 'file', many: 'files' },
-  image: { one: 'image', many: 'images' },
-  video: { one: 'video', many: 'videos' },
-  audio: { one: 'sound', many: 'sounds' },
-  font: { one: 'font', many: 'fonts' },
+export const FILTER_WORDS: Record<LinkedFilter, { one: string; many: string; a: string }> = {
+  any: { one: 'file', many: 'files', a: 'a file' },
+  image: { one: 'image', many: 'images', a: 'an image' },
+  video: { one: 'video', many: 'videos', a: 'a video' },
+  audio: { one: 'sound', many: 'sounds', a: 'a sound' },
+  font: { one: 'font', many: 'fonts', a: 'a font' },
 };

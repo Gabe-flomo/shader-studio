@@ -32,7 +32,7 @@ export function LinkedPickButton({ filter, onPick, label, title, disabled, varia
   const ok = useLinkedAvailable();
   if (!ok) return null;
   return (
-    <Button size="sm" variant={variant} icon="link" disabled={disabled} title={title ?? `Use a ${FILTER_WORDS[filter].one} from a linked folder, read from disk where it is (not copied into the library)`}
+    <Button size="sm" variant={variant} icon="link" disabled={disabled} title={title ?? `Use ${FILTER_WORDS[filter].a} from a linked folder, read from disk where it is (not copied into the library)`}
       onClick={async () => { const p = await openLinkedPicker({ filter }); if (p?.kind === 'file') onPick(p.ref, p.entry); }}>
       {label ?? 'From a linked folder…'}
     </Button>

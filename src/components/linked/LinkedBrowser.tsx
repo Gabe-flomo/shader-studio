@@ -274,7 +274,7 @@ export function LinkedBrowser({ filter: pickerFilter, mode, onPick, compact = fa
         <div style={{ display: 'flex', gap: 12, minHeight: 0, flexDirection: compact ? 'column' : 'row' }}>
           <div style={{ flex: 1, minWidth: 0, maxHeight: listHeight, overflowY: 'auto', margin: '0 -4px', padding: '0 4px' }}>{list}</div>
           {!compact && mode !== 'folder' && (
-            <div style={{ width: 220, flexShrink: 0 }}>{preview ?? <Note>{mode === 'file' ? `Choose a ${words.one} to see it here. Double-click to use it straight away.` : `Choose a ${words.one} to see it here.`}</Note>}</div>
+            <div style={{ width: 220, flexShrink: 0 }}>{preview ?? <Note>{mode === 'file' ? `Choose ${words.a} to see it here. Double-click to use it straight away.` : `Choose ${words.a} to see it here.`}</Note>}</div>
           )}
           {compact && mode !== 'folder' && preview}
         </div>
