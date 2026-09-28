@@ -3,8 +3,16 @@ export interface GrParam {
   kind: 'number' | 'list' | 'toggle'; step: number; log: boolean; hint: string; values?: string[];
 }
 export type GrSettings = Record<string, number>;
-export interface GrStats { count: number; maxCount: number; pos: Float32Array; amp: Float32Array; pitch: Float32Array }
-export interface GrSummary { grains: number; mean: number; spread: number; level: number; pitch: number }
+export interface GrStats {
+  count: number; maxCount: number; pos: Float32Array; amp: Float32Array; pitch: Float32Array;
+  /** Spectral: each grain's band centre (0..1 on the log axis) and its energy now (0 for other grains). */
+  band: Float32Array; energy: Float32Array;
+  /** Emit / Spectral: the newest voice's travelling spawn points (0..1; places in the sample, or bands), how many (0: none), on which axis (1 time, 2 band, 0 none). */
+  heads: Float32Array; headCount: number; headAxis: number;
+}
+/** Spectral's analysis (grAnalyse): per STFT frame, up to `peaks` peaks, strongest first (fractional bins, sine amplitudes). */
+export interface GrSpectrum { size: number; hop: number; frames: number; peaks: number; len: number; bins: Float32Array; amps: Float32Array; count: Uint8Array; energy: Float32Array }
+export interface GrSummary { grains: number; mean: number; spread: number; level: number; pitch: number; band: number; energy: number }
 export interface GrEngine {
   setBuffer(channels: Float32Array[], rate: number): void;
   set(s: Partial<GrSettings>): void;
@@ -16,6 +24,8 @@ export interface GrEngine {
   frame(): number;
   process(left: Float32Array, right: Float32Array, n: number): void;
   stats(o: GrStats): GrStats;
+  setSpectrum(sp: GrSpectrum | null): void;
+  spectrum(): GrSpectrum | null;
   voicesOn(): number;
   reset(seed?: number): void;
   points(data: Float32Array, n: number, cutoff?: number): void;
@@ -31,6 +41,7 @@ export interface GrLive {
   bend(semis: number, when?: number): void;
   points(p: GrPoints | null): void;
   stats(): GrStats;
+  spectrum(): GrSpectrum | null;
   dispose(): void;
 }
 export interface GrRenderInput {
@@ -49,6 +60,9 @@ export interface GrRenderInput {
 export const GR_MAX_GRAINS: number;
 export const GR_MAX_VOICES: number;
 export const GR_MODES: readonly string[];
+export const GR_DIRS: readonly string[];
+export const GR_EDGES: readonly string[];
+export const GR_FFT_SIZES: readonly number[];
 export const GR_FILTERS: readonly string[];
 export const GR_WINDOWS: readonly string[];
 export const GR_PARAMS: readonly GrParam[];
@@ -58,7 +72,16 @@ export const GR_SYNTH_NAMES: Record<string, string>;
 export function grParam(k: string | number): GrParam | null;
 export function grDefaults(): GrSettings;
 export function grSettings(params: Record<string, number> | undefined, valueOf?: (address: string, base: number) => number): GrSettings;
-export function grMakeEngine(): (sampleRate: number, seed?: number) => GrEngine;
+export interface GrEngineFactory {
+  (sampleRate: number, seed?: number, opts?: { autoSpectrum?: boolean }): GrEngine;
+  analyse(channels: Float32Array[], size: number): GrSpectrum;
+  bandHz(u: number, nyquist: number): number;
+}
+export function grMakeEngine(): GrEngineFactory;
+export function grAnalyse(channels: Float32Array[], size?: number): GrSpectrum;
+export function grBufferSpectrum(b: AudioBuffer, size: number): GrSpectrum;
+export function grSpectrumImage(sp: GrSpectrum | null, cols: number, rows: number, rate: number): Float32Array;
+export function grReadStats(d: unknown, st: GrStats): GrStats;
 export function grNewStats(): GrStats;
 export function grSummary(st: GrStats): GrSummary;
 export function grRender(o: GrRenderInput): { left: Float32Array; right: Float32Array; maxCount: number };
