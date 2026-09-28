@@ -275,6 +275,40 @@ export function barsBeats(t: number, bpm: number): string {
   return neg ? `-${bar + 1}.${4 - beat}.${4 - sx}` : `${bar + 1}.${beat + 1}.${sx + 1}`;
 }
 
+/** "bar" or "bar.beat" or "bar.beat.sixteenth" (1-based) back to tape seconds, for the editable position readout. Null when it doesn't parse. */
+export function parseBarsBeats(text: string, bpm: number): number | null {
+  const m = text.trim().match(/^(\d+)(?:\.(\d+)(?:\.(\d+))?)?$/);
+  if (!m) return null;
+  const bar = Number(m[1]), beat = m[2] ? Number(m[2]) : 1, six = m[3] ? Number(m[3]) : 1;
+  if (bar < 1 || beat < 1 || beat > 4 || six < 1 || six > 4) return null;
+  const s = beatSeconds(bpm) / 4;
+  return Math.max(0, round6(((bar - 1) * 16 + (beat - 1) * 4 + (six - 1)) * s));
+}
+
+// ── The timeline as a scrubber ──────────────────────────────────────────────
+
+/** A dragged or clicked timeline position, snapped to the beat grid unless `free` (⇧: no snapping). */
+export function snapPoint(t: number, bpm: number, length: number, free: boolean): number {
+  const at = Math.max(0, Math.min(length > 0 ? length : Infinity, t));
+  if (free) return round6(at);
+  const step = beatSeconds(bpm);
+  return round6(Math.round(at / step) * step);
+}
+
+export type StepUnit = 'bar' | 'beat';
+
+/**
+ * |◀ ◀◀ ▶▶ ▶| (transportPlan's neighbours): the record point one bar (⌥:
+ * one beat) back or forward, snapped to that grid — from mid-bar, back goes
+ * to the start of the current bar first (like a DAW's locators), forward
+ * always advances. Clamped to [0, length].
+ */
+export function tapeStep(point: number, dir: -1 | 1, bpm: number, unit: StepUnit, length: number): number {
+  const step = unit === 'bar' ? beatSeconds(bpm) * 4 : beatSeconds(bpm);
+  const grid = dir < 0 ? Math.max(0, Math.ceil(point / step - 1e-6) - 1) : Math.floor(point / step + 1e-6) + 1;
+  return Math.max(0, Math.min(length > 0 ? length : 0, round6(grid * step)));
+}
+
 // ── The transport ───────────────────────────────────────────────────────────
 
 export type TransportPhase = 'stopped' | 'playing' | 'counting' | 'recording';

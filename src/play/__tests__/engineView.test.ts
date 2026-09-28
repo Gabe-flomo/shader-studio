@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  CLIP_COLUMNS, LISTENER, TRACK_COLORS, applyChainOrder, barsBeats, chainOrder, clipWave, deviceChain, engineTracks, listenerExact, moveTrack, reorderChain, rulerTicks, transportPlan, type Device,
+  CLIP_COLUMNS, LISTENER, TRACK_COLORS, applyChainOrder, barsBeats, chainOrder, clipWave, deviceChain, engineTracks, listenerExact, moveTrack, parseBarsBeats, reorderChain, rulerTicks, snapPoint, tapeStep, transportPlan, type Device,
 } from '../engineView';
 import {
   applyPasses, audibleArrangement, clipBounds, clipsWithPass, deleteClip, emptyArrangement, parseArrangement, setClipMute, trackClips, trimClip, type ArrTrack, type PlayArrangement,
@@ -254,6 +254,42 @@ describe('the ruler', () => {
     expect(barsBeats(0.5, 120)).toBe('1.2.1');
     expect(barsBeats(2.125, 120)).toBe('2.1.2');
     expect(barsBeats(-0.5, 120)).toBe('-1.4.1');
+  });
+
+  it('parses the editable "bar.beat[.sixteenth]" readout back to seconds', () => {
+    expect(parseBarsBeats('1', 120)).toBe(0);
+    expect(parseBarsBeats('1.2', 120)).toBe(0.5);
+    expect(parseBarsBeats('2.1.2', 120)).toBe(2.125);
+    expect(parseBarsBeats(' 3.1 ', 120)).toBe(4);
+    expect(parseBarsBeats('', 120)).toBeNull();
+    expect(parseBarsBeats('abc', 120)).toBeNull();
+    expect(parseBarsBeats('0.1', 120)).toBeNull(); // bars are 1-based
+    expect(parseBarsBeats('1.5', 120)).toBeNull(); // only 4 beats to a bar
+  });
+});
+
+describe('the timeline as a scrubber', () => {
+  it('snaps a clicked or dragged position to the beat grid', () => {
+    expect(snapPoint(0.62, 120, 8, false)).toBe(0.5); // nearest beat (0.5 s at 120 bpm)
+    expect(snapPoint(0.76, 120, 8, false)).toBe(1);
+    expect(snapPoint(0.62, 120, 8, true)).toBe(0.62); // ⇧: free, no snapping
+    expect(snapPoint(-1, 120, 8, false)).toBe(0); // never negative
+    expect(snapPoint(50, 120, 8, false)).toBe(8); // clamped to the tape's length
+    expect(snapPoint(50, 120, 0, false)).toBe(50); // no length yet (nothing recorded): unclamped
+  });
+
+  it('◀◀ / ▶▶ step one bar (⌥: one beat), snapped to that grid', () => {
+    // From mid-bar-1 (bar = 2 s at 120 bpm), back goes to the start of the current bar first.
+    expect(tapeStep(1.5, -1, 120, 'bar', 8)).toBe(0);
+    expect(tapeStep(2, -1, 120, 'bar', 8)).toBe(0); // already on the grid: the previous bar
+    expect(tapeStep(1.5, 1, 120, 'bar', 8)).toBe(2);
+    expect(tapeStep(2, 1, 120, 'bar', 8)).toBe(4);
+    // A beat step (0.5 s).
+    expect(tapeStep(0.6, -1, 120, 'beat', 8)).toBe(0.5);
+    expect(tapeStep(0.6, 1, 120, 'beat', 8)).toBe(1);
+    // Clamped to [0, length].
+    expect(tapeStep(0, -1, 120, 'bar', 8)).toBe(0);
+    expect(tapeStep(7, 1, 120, 'bar', 8)).toBe(8);
   });
 });
 

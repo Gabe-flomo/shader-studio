@@ -47,7 +47,7 @@ import { isTauri } from '../../../lib/midiTransport';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { MidiStatusChip } from '../chips';
 import {
-  TRACK_COLORS, barsBeats, clipWave, engineTracks, moveTrack, rulerTicks, type TrackInstrument, type TrackRow,
+  TRACK_COLORS, barsBeats, clipWave, engineTracks, moveTrack, parseBarsBeats, rulerTicks, snapPoint, tapeStep, type StepUnit, type TrackInstrument, type TrackRow,
 } from '../../../play/engineView';
 import { engineId, withEngine } from './engineOps';
 import { lockLead, selectRack } from './selectRack';
@@ -181,6 +181,8 @@ export function ArrangementPanel({ play, onChange, touch }: { play: PlayRecord; 
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (isTyping(e.target) || keyboardClaimed(e.nativeEvent)) return;
+    const st = useTape.getState();
+    const scrubbing = st.phase === 'recording' || st.phase === 'counting'; // scrubbing is ignored while recording
     if (e.key === ' ' && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault(); e.stopPropagation();
       tape.togglePlay();
@@ -189,6 +191,16 @@ export function ArrangementPanel({ play, onChange, touch }: { play: PlayRecord; 
       const name = racks.find(r => r.id === clipSel.rack)?.name ?? 'a track';
       editArr(a => deleteClip(a, clipSel.rack, clipSel.index), `Deleted a clip on ${name}`);
       setClipSel(null);
+    } else if (e.key === 'Home' && !scrubbing) {
+      e.preventDefault(); e.stopPropagation();
+      tape.setPoint(0);
+    } else if (e.key === 'End' && !scrubbing) {
+      e.preventDefault(); e.stopPropagation();
+      tape.setPoint(arr.length);
+    } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.metaKey && !e.ctrlKey && !scrubbing) {
+      e.preventDefault(); e.stopPropagation();
+      const unit: StepUnit = e.altKey ? 'beat' : 'bar';
+      tape.setPoint(tapeStep(tape.position(), e.key === 'ArrowLeft' ? -1 : 1, arr.bpm, unit, arr.length));
     }
   };
   // Space on a focused button would also click it on key-up: that's the transport's now.
@@ -260,7 +272,7 @@ function PickerFor({ rack, want, onChange, touch, onClose }: { rack: AeRack; wan
 
 // ── The transport ───────────────────────────────────────────────────────────
 
-function TransportButton({ label, onClick, active, tone, disabled, size, children }: { label: string; onClick: () => void; active?: boolean; tone?: 'danger'; disabled?: boolean; size: number; children: ReactNode }) {
+function TransportButton({ label, onClick, active, tone, disabled, size, children }: { label: string; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; active?: boolean; tone?: 'danger'; disabled?: boolean; size: number; children: ReactNode }) {
   const tk = useTokens();
   const on = active ? (tone === 'danger' ? tk.status.danger : tk.accent.base) : null;
   return (
@@ -272,6 +284,12 @@ function TransportButton({ label, onClick, active, tone, disabled, size, childre
   );
 }
 
+// |◀ ◀◀ ▶▶ ▶| — go to the start/end, and step a bar (⌥: a beat). No matching icon in the set: small inline glyphs.
+function GlyphToStart() { return <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><rect x="2.5" y="3" width="2" height="10" /><path d="M13 3v10L5 8z" /></svg>; }
+function GlyphToEnd() { return <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><rect x="11.5" y="3" width="2" height="10" /><path d="M3 3v10l8-5z" /></svg>; }
+function GlyphStepBack() { return <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M9 3v10L2.5 8z" /><path d="M14 3v10L7.5 8z" /></svg>; }
+function GlyphStepFwd() { return <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7 3v10L13.5 8z" /><path d="M2 3v10L8.5 8z" /></svg>; }
+
 /** Play/Pause, Stop, Record, Loop, Metronome, Count-in, BPM, where the tape is. */
 function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: PlayArrangement; touch: boolean; narrow: boolean }) {
   const tk = useTokens();
@@ -282,6 +300,7 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
   const mode = useTape(s => s.mode);
   const status = useEngineUi(s => s.status);
   const [midi, setMidi] = useState(false);
+  const [posEdit, setPosEdit] = useState<string | null>(null);
   const bbRef = useRef<HTMLSpanElement>(null), timeRef = useRef<HTMLSpanElement>(null);
   const length = arr.length;
   const running = phase !== 'stopped';
@@ -290,7 +309,7 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
   // The readouts follow the tape on their own frame while it runs (no React re-render per tick).
   useEffect(() => {
     const bb = bbRef.current, tm = timeRef.current;
-    if (!bb || !tm) return;
+    if (!bb || !tm || posEdit !== null) return;
     const write = () => { const p = tape.position(); bb.textContent = barsBeats(p, arr.bpm); tm.textContent = `${fmt(p)} / ${fmt(tape.shownLength())}`; };
     write();
     if (!running) return;
@@ -298,7 +317,13 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
     const loop = () => { write(); raf = requestAnimationFrame(loop); };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [running, point, length, arr.bpm]);
+  }, [running, point, length, arr.bpm, posEdit]);
+  const commitPos = () => {
+    const t = posEdit === null ? null : parseBarsBeats(posEdit, arr.bpm);
+    setPosEdit(null);
+    if (t !== null) tape.setPoint(Math.min(length || Infinity, t));
+  };
+  const startEdit = () => { if (!recording) setPosEdit(barsBeats(tape.position(), arr.bpm).split('.').slice(0, 2).join('.')); };
   const aloneName = alone ? play.audioEngine?.racks.find(r => r.id === alone)?.name : '';
   const playLabel = running ? (recording ? (phase === 'counting' ? 'Pause: cancel the count-in' : 'Pause: stop recording (kept) and hold here') : 'Pause (Space)') : length > 0 ? `Play from ${barsBeats(point, arr.bpm)} (Space)` : 'Nothing on the tape yet: press Record';
   const recLabel = recording ? 'Stop recording (keeps it: one undo step)'
@@ -316,8 +341,20 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
   return (
     <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 12px', borderBottom: `1px solid ${tk.border.default}`, background: tk.bg.panel }}>
       <div role="toolbar" aria-label="Transport" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
+        <TransportButton label="Go to the start (Home)" size={b} disabled={recording || (point === 0 && !running)} onClick={() => tape.setPoint(0)}>
+          <GlyphToStart />
+        </TransportButton>
+        <TransportButton label="One bar back (⌥: one beat; ← when the engine has focus)" size={b} disabled={recording} onClick={e => tape.setPoint(tapeStep(tape.position(), -1, arr.bpm, e.altKey ? 'beat' : 'bar', length))}>
+          <GlyphStepBack />
+        </TransportButton>
         <TransportButton label={playLabel} size={b} active={phase === 'playing'} disabled={!running && !(length > 0)} onClick={() => tape.togglePlay()}>
           <Icon name={running ? 'pause' : 'play'} size={15} />
+        </TransportButton>
+        <TransportButton label="One bar forward (⌥: one beat; → when the engine has focus)" size={b} disabled={recording} onClick={e => tape.setPoint(tapeStep(tape.position(), 1, arr.bpm, e.altKey ? 'beat' : 'bar', length))}>
+          <GlyphStepFwd />
+        </TransportButton>
+        <TransportButton label="Go to the end of the material (End)" size={b} disabled={recording || !(length > 0)} onClick={() => tape.setPoint(length)}>
+          <GlyphToEnd />
         </TransportButton>
         <TransportButton label="Stop: back to the start" size={b} disabled={!running && point === 0} onClick={() => tape.stopToStart()}>
           <span style={{ width: 10, height: 10, borderRadius: 1.5, background: 'currentColor' }} />
@@ -336,10 +373,19 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
           options={COUNT_INS.map(n => ({ value: String(n), label: n ? `Count-in ${n} bar${n > 1 ? 's' : ''}` : 'No count-in' }))}
           onChange={v => setArr(a => ({ ...a, countIn: Number(v) as CountIn }))} />
         <BpmField key={arr.bpm} bpm={arr.bpm} height={b} />
-        <span title="Where the tape is: bar.beat.sixteenth, and time / the tape’s length" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', height: b, boxSizing: 'border-box', borderRadius: radius.sm, background: tk.bg.field, minWidth: 0 }}>
-          <span ref={bbRef} aria-label="Position in bars and beats" style={{ font: `700 13px ${fontFamily.mono}`, color: recording ? tk.status.danger : tk.text.primary, fontVariantNumeric: 'tabular-nums', minWidth: 44 }} />
-          {!narrow && <span ref={timeRef} style={{ font: `11px ${fontFamily.mono}`, color: tk.text.muted, fontVariantNumeric: 'tabular-nums' }} />}
-          {narrow && <span ref={timeRef} style={{ display: 'none' }} />}
+        <span title={posEdit !== null ? 'Position: bar.beat, Enter to move there' : 'Where the tape is: bar.beat.sixteenth, and time / the tape’s length (click to edit)'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', height: b, boxSizing: 'border-box', borderRadius: radius.sm, background: tk.bg.field, minWidth: 0 }}>
+          {posEdit !== null ? (
+            <input autoFocus aria-label="Position: bar.beat" inputMode="decimal" value={posEdit} onChange={e => setPosEdit(e.target.value)}
+              onBlur={commitPos} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitPos(); } else if (e.key === 'Escape') { e.preventDefault(); setPosEdit(null); } }}
+              style={{ width: 56, height: b - 8, padding: '0 4px', borderRadius: radius.sm, border: `1px solid ${tk.border.strong}`, background: tk.bg.panel, color: tk.text.primary, font: `700 13px ${fontFamily.mono}`, boxSizing: 'border-box' }} />
+          ) : (
+            <span role="button" tabIndex={0} onClick={startEdit} onKeyDown={e => { if (e.key === 'Enter') startEdit(); }} style={{ cursor: recording ? 'default' : 'text' }}>
+              <span ref={bbRef} aria-label="Position in bars and beats" style={{ font: `700 13px ${fontFamily.mono}`, color: recording ? tk.status.danger : tk.text.primary, fontVariantNumeric: 'tabular-nums', minWidth: 44 }} />
+              {!narrow && <span ref={timeRef} style={{ font: `11px ${fontFamily.mono}`, color: tk.text.muted, fontVariantNumeric: 'tabular-nums', marginLeft: 6 }} />}
+              {narrow && <span ref={timeRef} style={{ display: 'none' }} />}
+            </span>
+          )}
         </span>
         {phase === 'counting' && <span style={{ font: `700 12px ${fontFamily.ui}`, color: tk.status.danger }}>Count-in · {count}</span>}
         <span style={{ flex: 1 }} />
@@ -429,16 +475,28 @@ function Timeline({ play, arr, racks, rows, span, lanes, phase, narrow, touch, m
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [running, span, point, arr.length, tick]);
-  const seek = useCallback((t: number) => {
+  // Click or drag the ruler or a lane to move the playhead: snapped to the
+  // beat grid, free (unsnapped) while ⇧ is held. Ignored while recording.
+  const seek = useCallback((t: number, free = false) => {
     if (useTape.getState().phase === 'recording' || useTape.getState().phase === 'counting') return;
-    tape.setPoint(Math.round(Math.max(0, t) * 20) / 20);
-  }, []);
-  const seekAt = (clientX: number) => {
+    tape.setPoint(snapPoint(t, arr.bpm, arr.length, free));
+  }, [arr.bpm, arr.length]);
+  const rulerTimeAt = (clientX: number): number => {
     const el = rulerRef.current;
-    if (!el) return;
+    if (!el) return 0;
     const r = el.getBoundingClientRect();
-    seek(Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * span);
+    return Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * span;
   };
+  /** Pointer-down on the ruler or a lane's empty stretch: seeks at once, then follows the drag. */
+  const scrub = useCallback((e: React.PointerEvent, timeAt: (clientX: number) => number) => {
+    if (useTape.getState().phase === 'recording' || useTape.getState().phase === 'counting') return;
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    seek(timeAt(e.clientX), e.shiftKey);
+    const move = (ev: PointerEvent) => seek(timeAt(ev.clientX), ev.shiftKey);
+    const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  }, [seek]);
   const recRacks = useMemo(() => (recording ? tape.recordingRacks(play) : []), [recording, play]);
   const ticks = useMemo(() => rulerTicks(span, arr.bpm, rulerW || 600), [span, arr.bpm, rulerW]);
   const [drag, setDrag] = useState<{ id: string; over: number } | null>(null);
@@ -456,9 +514,9 @@ function Timeline({ play, arr, racks, rows, span, lanes, phase, narrow, touch, m
         {!narrow && <span style={{ width: HEAD_W, flexShrink: 0, color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
           {rows.length} track{rows.length === 1 ? '' : 's'} · {arr.length > 0 ? `${arr.length.toFixed(1)} s of ${TAPE_MAX_SECONDS}` : 'empty tape'}
         </span>}
-        <div ref={rulerRef} role="slider" aria-label="Record point" aria-valuemin={0} aria-valuemax={arr.length} aria-valuenow={point} aria-valuetext={barsBeats(point, arr.bpm)} tabIndex={0}
-          onPointerDown={e => seekAt(e.clientX)}
-          onKeyDown={e => { if (e.key === 'ArrowLeft') tape.setPoint(point - 0.1); else if (e.key === 'ArrowRight') tape.setPoint(point + 0.1); else if (e.key === 'Home') tape.setPoint(0); }}
+        <div ref={rulerRef} role="slider" aria-label="Record point: click or drag to move it, snapped to the beat grid (⇧: free); Home/End and ←/→ step when the engine has focus"
+          aria-valuemin={0} aria-valuemax={arr.length} aria-valuenow={point} aria-valuetext={barsBeats(point, arr.bpm)} tabIndex={0}
+          onPointerDown={e => scrub(e, rulerTimeAt)}
           style={{ position: 'relative', flex: 1, minWidth: 0, height: 26, borderRadius: radius.sm, background: tk.bg.field, cursor: 'pointer', overflow: 'hidden' }}>
           {arr.loop && arr.length > 0 && (
             <span title="Loop: the tape plays round from here to its end" style={{ position: 'absolute', left: 0, width: `${Math.min(1, arr.length / span) * 100}%`, top: 0, height: 6, background: alpha(tk.accent.base, 0.55), borderRadius: '0 0 3px 3px' }} />
@@ -555,7 +613,7 @@ function VolumeBar({ value, onChange, label, touch }: { value: number; onChange:
 
 function Track({ play, arr, rack, row, index, count, track, span, preview, narrow, touch, recording, clipSel, onClipSel, onSeek, onPick, onMenu, onChange, registerHead, registerRec, onDragStart, onDragEnd }: {
   play: PlayRecord; arr: PlayArrangement; rack: AeRack; row: TrackRow; index: number; count: number; track: ArrTrack | undefined; span: number; preview: LanePreview | undefined;
-  narrow: boolean; touch: boolean; recording: boolean; clipSel: number; onClipSel: (index: number) => void; onSeek: (t: number) => void; onPick: () => void;
+  narrow: boolean; touch: boolean; recording: boolean; clipSel: number; onClipSel: (index: number) => void; onSeek: (t: number, free?: boolean) => void; onPick: () => void;
   onMenu: (m: { x: number; y: number; items: MenuItem[]; title?: string }) => void; onChange: Change; registerHead: RegisterEl; registerRec: RegisterEl;
   onDragStart: () => void; onDragEnd: () => void;
 }) {
@@ -630,7 +688,7 @@ const EDGE_PX = 7;
 
 function Lane({ rack, row, arr, track, span, preview, height, recording, selectedClip, onSelectClip, onSeek, onMenu, registerHead, registerRec, controls }: {
   rack: AeRack; row: TrackRow; arr: PlayArrangement; track: ArrTrack | undefined; span: number; preview: LanePreview | undefined; height: number; recording: boolean;
-  selectedClip: number; onSelectClip: (i: number) => void; onSeek: (t: number) => void;
+  selectedClip: number; onSelectClip: (i: number) => void; onSeek: (t: number, free?: boolean) => void;
   onMenu: (m: { x: number; y: number; items: MenuItem[]; title?: string }) => void; registerHead: RegisterEl; registerRec: RegisterEl; controls: PlayRecord['controls'];
 }) {
   const tk = useTokens();
@@ -702,7 +760,17 @@ function Lane({ rack, row, arr, track, span, preview, height, recording, selecte
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button === 2) return;
     const h = hit(e.clientX);
-    if (!h) { onSelectClip(-1); onSeek(timeAt(e.clientX)); return; }
+    if (!h) {
+      onSelectClip(-1);
+      if (useTape.getState().phase === 'recording' || useTape.getState().phase === 'counting') return; // scrubbing is ignored while recording
+      const el = e.currentTarget;
+      el.setPointerCapture(e.pointerId);
+      onSeek(timeAt(e.clientX), e.shiftKey);
+      const move = (ev: PointerEvent) => onSeek(timeAt(ev.clientX), ev.shiftKey);
+      const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); };
+      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+      return;
+    }
     onSelectClip(h.index);
     const phase = useTape.getState().phase;
     if (!h.edge || phase === 'recording' || phase === 'counting') return;
