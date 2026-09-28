@@ -671,6 +671,7 @@ function App() {
 
   const shortcutHandlers = useMemo(() => ({
     undo:           unlessScratch(() => undo()),
+    redo:           unlessScratch(() => useNodeGraphStore.getState().redo()),
     export:         unlessScratch(() => offerGraphExport(null)),
     import:         unlessScratch(() => { void importAnyFile(setPage); }),
     fitView:        () => _fitViewCallback?.(),

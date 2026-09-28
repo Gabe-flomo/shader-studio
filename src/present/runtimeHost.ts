@@ -61,6 +61,10 @@ export interface PlayMount {
   seekVideos?(t: number): Promise<void>;
   /** Draw this many pixels from now on (a preview at its shown size; the capture at its full size). */
   setPixelSize?(s: { w: number; h: number }): void;
+  /** Mount again on a fresh WebGL context from where the clock and the controls are (after a GPU reset the runtime does this itself). */
+  rebuild?(): void;
+  /** 'lost' while the browser has taken the GPU away; `restarts` counts the rebuilds so far. */
+  gpu?(): { state: 'ok' | 'lost'; restarts: number };
 }
 
 interface PlayRuntime {

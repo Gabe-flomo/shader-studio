@@ -44,6 +44,11 @@
  * layer(id) drawn alone after showAlone(ids)), and feedOut() (what a follower needs, from
  * this mount). A full-page export's mount is window.__sspMount.
  *
+ * When the browser takes the GPU away (webglcontextlost) the mount waits for it, then
+ * builds itself again from the same second with the controls where they were, and says
+ * "Graphics restarted" for a moment; if the GPU never comes back a Rebuild button tries
+ * afresh. rebuild() on the handle does the same on demand; gpu() says where it is.
+ *
  * The control API (for a host drawing its own panel): get(id) → { value, driven }
  * (the value a mapping gives it while one drives it), set(id, value) as if its
  * slider or colour moved, fire(id) presses an action control, still() → a PNG
@@ -113,6 +118,8 @@
 .ssp-colour{width:100%;height:30px;border:0;padding:0;background:none;border-radius:6px;cursor:pointer}
 .ssp-empty{color:#9a9da8;margin-top:10px}
 .ssp-error{position:absolute;inset:auto 12px 12px 12px;padding:10px 12px;border-radius:8px;background:#3a1216;color:#ffb4b4;font-size:12px}
+.ssp-gpu{position:absolute;left:12px;bottom:12px;z-index:3;display:flex;align-items:center;gap:10px;padding:7px 11px;border-radius:8px;background:rgba(21,22,28,.94);color:#e6e7ec;font-size:12px;box-shadow:0 2px 12px rgba(0,0,0,.45),inset 0 0 0 1px #33353f;pointer-events:auto}
+.ssp-gpu .ssp-btn{padding:3px 9px}
 @media (max-width:720px){.ssp:not(.ssp-bg){flex-direction:column}.ssp:not(.ssp-bg):not(.ssp-bare) .ssp-stage{flex:0 0 56%}.ssp-panel{width:auto;flex:1;border-left:0;border-top:1px solid #26272f}}
 `;
 
@@ -449,7 +456,127 @@ void main() {
   }
 
   // ── mount ────────────────────────────────────────────────────────────────
+  // ── GPU recovery ──────────────────────────────────────────────────────────
+  // The browser can take the GPU away (a driver reset, a laptop waking, too many
+  // contexts on the page): every program, texture and target a mount made is gone,
+  // and so is the Finish stack's context. mountOnce hands the loss up to here, which
+  // stops drawing, remembers where the clock and the controls were, and once the
+  // browser gives the GPU back (webglcontextrestored, which needs the loss event
+  // preventDefault-ed) mounts the same bundle again from that state: the picture
+  // carries on at the same second, the controls where they were set; feedback
+  // history and particles start over. A "Graphics restarted" note shows for a
+  // moment. When the browser never restores it, a Rebuild button tries afresh.
+  const GPU_WAIT_MS = 4000;
+  const GPU_NOTE_MS = 3500;
+
   function mount(root, B, opts) {
+    opts = opts || {};
+    const startAt = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0;
+    // What the next mount is told, so it carries on from where the lost one was.
+    const carry = { time: startAt, paused: !!opts.paused, pixelSize: opts.pixelSize || null, scripts: new Map(), alone: null, sound: false, values: null };
+    let inner = null, gen = 0, gpu = 'ok', waitTimer = 0, noteTimer = 0, alive = true, restarts = 0;
+    const notice = el('div', 'ssp-gpu');
+    notice.setAttribute('role', 'status');
+    notice.style.display = 'none';
+    const showNotice = (text, button) => {
+      notice.textContent = '';
+      notice.append(el('span', null, text));
+      if (button) { const b = el('button', 'ssp-btn', button.label); b.type = 'button'; b.addEventListener('click', button.onClick); notice.append(b); }
+      notice.style.display = 'flex';
+      const stage = root.querySelector('.ssp-stage');
+      if (stage && notice.parentNode !== stage) stage.append(notice);
+    };
+    const hideNotice = () => { notice.style.display = 'none'; };
+    const hooksFor = g => ({
+      lost() { if (alive && g === gen) onLost(); },
+      restored() { if (alive && g === gen && gpu === 'lost') rebuild(); },
+    });
+    /** Where the mount is: the clock, whether it plays, and each control's own value (not a mapping's). */
+    function remember() {
+      if (!inner || !inner.state) return;
+      const s = inner.state();
+      carry.time = s.time; carry.paused = !s.playing || s.held;
+      const values = new Map();
+      for (const c of (B.play && B.play.controls) || []) { const g = inner.get(c.id); if (g && !g.driven && g.value !== undefined && g.value !== null) values.set(c.id, g.value); }
+      carry.values = values;
+    }
+    function build() {
+      const g = ++gen;
+      const o = Object.assign({}, opts, { startTime: carry.time, paused: carry.paused });
+      if (carry.pixelSize) o.pixelSize = carry.pixelSize;
+      inner = mountOnce(root, B, o, hooksFor(g));
+      if (!inner.state) return false;  // no WebGL, or the shader failed: the stage says so
+      if (carry.values && inner.set) for (const [id, v] of carry.values) inner.set(id, v);
+      if (carry.scripts.size && inner.setScript) for (const [id, code] of carry.scripts) inner.setScript(id, code);
+      if (carry.alone && inner.showAlone) inner.showAlone(carry.alone);
+      if (carry.sound && inner.sound) inner.sound(true);
+      return true;
+    }
+    function onLost() {
+      if (gpu === 'lost') return;
+      gpu = 'lost';
+      remember();
+      showNotice('Graphics paused: waiting for the GPU to come back…');
+      clearTimeout(waitTimer);
+      waitTimer = setTimeout(() => {
+        if (gpu === 'lost') showNotice('The graphics driver hasn’t come back yet.', { label: 'Rebuild', onClick: () => rebuild() });
+      }, GPU_WAIT_MS);
+    }
+    /** Mount again from the remembered state (after a restore, the Rebuild button, or the handle's rebuild()). */
+    function rebuild() {
+      if (!alive) return;
+      clearTimeout(waitTimer); clearTimeout(noteTimer);
+      if (gpu !== 'lost') remember();
+      gen++;  // the old mount's context events (its destroy loses the context on purpose) are stale from here
+      const old = inner; inner = null;
+      if (old) { try { old.destroy(); } catch (e) { /* already gone */ } }
+      restarts++;
+      if (build()) {
+        gpu = 'ok';
+        showNotice('Graphics restarted');
+        noteTimer = setTimeout(hideNotice, GPU_NOTE_MS);
+      } else {
+        gpu = 'lost';
+        showNotice('The graphics couldn’t start again.', { label: 'Rebuild', onClick: () => rebuild() });
+      }
+    }
+    build();
+    const call = name => (...a) => (inner && typeof inner[name] === 'function' ? inner[name](...a) : undefined);
+    return {
+      destroy() {
+        alive = false;
+        clearTimeout(waitTimer); clearTimeout(noteTimer);
+        const old = inner; inner = null;
+        if (old) old.destroy();
+        if (notice.parentNode) notice.parentNode.removeChild(notice);
+      },
+      pause: call('pause'),
+      play: call('play'),
+      feed: call('feed'),
+      step: call('step'),
+      showAlone(ids) { carry.alone = Array.isArray(ids) && ids.length ? ids.slice() : null; call('showAlone')(ids); },
+      canvases: call('canvases'),
+      feedOut: call('feedOut'),
+      renderAt: call('renderAt'),
+      renderAtAsync(t, o) { const p = call('renderAtAsync')(t, o); return p || Promise.resolve(null); },
+      setPixelSize(s) { carry.pixelSize = s && s.w > 0 && s.h > 0 ? { w: s.w, h: s.h } : null; call('setPixelSize')(s); },
+      seekVideos(t) { const p = call('seekVideos')(t); return p || Promise.resolve(); },
+      get: call('get'),
+      set: call('set'),
+      fire: call('fire'),
+      hasSound: !!(inner && inner.hasSound),
+      sound(audible) { carry.sound = !!audible; call('sound')(audible); },
+      usesCamera: !!(inner && inner.usesCamera),
+      setScript(layerId, code) { if (typeof layerId === 'string' && typeof code === 'string') carry.scripts.set(layerId, code); call('setScript')(layerId, code); },
+      still: call('still'),
+      /** Mount again on a fresh context from where the clock and the controls are (what the Rebuild button does). */
+      rebuild() { rebuild(); },
+      /** 'ok', or 'lost' while the GPU is away; `restarts` counts the rebuilds so far. */
+      gpu() { return { state: gpu, restarts }; },
+    };
+  }
+
+  function mountOnce(root, B, opts, gpuHooks) {
     opts = opts || {};
     const mode = opts.mode === 'background' ? 'background' : 'player';
     const bg = mode === 'background';
@@ -518,6 +645,15 @@ void main() {
     const gl2 = !!gl;
     if (!gl) gl = glCanvas.getContext('webgl', ctxOpts);
     if (!gl) { stage.append(el('div', 'ssp-error', 'WebGL is not available in this browser.')); return { destroy() {} }; }
+    // Context loss (see mount above): stop drawing, tell the wrapper; preventDefault so the browser
+    // fires webglcontextrestored when the GPU is back. The Finish stack's context counts the same.
+    let ctxLost = false;
+    const watchContext = canvas => {
+      canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); ctxLost = true; if (gpuHooks) gpuHooks.lost(); });
+      canvas.addEventListener('webglcontextrestored', () => { if (gpuHooks) gpuHooks.restored(); });
+    };
+    watchContext(glCanvas);
+    if (finishR && fnCanvas) watchContext(fnCanvas);
     const passes = bgOnly ? {} : B.passes || {};
     const media = bgOnly ? { audio: (B.media || {}).audio } : B.media || {};
     const stateful = !!passes.stateful;
@@ -1968,7 +2104,7 @@ void main() {
       if (!follow) raf = requestAnimationFrame(tick);
       const dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
       lastNow = now;
-      if (held) return;
+      if (ctxLost || held) return;
       const running = (follow ? fed.playing : playing) && !reduced && !document.hidden && !(pauseOffscreen && !onScreen);
       runVideos(running);
       followBackground(running);
@@ -2121,8 +2257,11 @@ void main() {
        * where they would be. With `capture`, returns the picture and its
        * layers as one canvas; else null.
        */
+      /** Where the mount is, for a rebuild after the GPU is lost: the clock, whether it plays, and whether renderAt holds it. */
+      state() { return { time, playing, held, lost: ctxLost }; },
       renderAt(t, o) {
         o = o || {};
+        if (ctxLost) return null;
         const { fdt, steps } = beginRender(o);
         for (const at of steps) stepTo(at, fdt);
         stepTo(t, fdt);
@@ -2138,6 +2277,7 @@ void main() {
        */
       renderAtAsync(t, o) {
         o = o || {};
+        if (ctxLost) return Promise.resolve(null);
         const { gen, fdt, steps } = beginRender(o);
         const budget = o.budgetMs > 0 ? o.budgetMs : 12;
         const stale = () => !alive || gen !== renderGen || (o.signal && o.signal.aborted);

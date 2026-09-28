@@ -27,7 +27,8 @@ export type ShortcutMap = Record<string, string>; // actionId → combo
 
 export const DEFAULT_ACTIONS: ShortcutAction[] = [
   // Graph management
-  { id: 'undo',              label: 'Undo',                  group: 'Graph',      defaultCombo: 'cmd+z',       description: 'Undo last graph change' },
+  { id: 'undo',              label: 'Undo',                  group: 'Graph',      defaultCombo: 'cmd+z',       description: 'Undo the last change to the graph or the Play setup' },
+  { id: 'redo',              label: 'Redo',                  group: 'Graph',      defaultCombo: 'cmd+shift+z', description: 'Redo the change just undone' },
   { id: 'export',            label: 'Export graph',          group: 'Graph',      defaultCombo: 'cmd+s',       description: 'Export graph to file' },
   { id: 'import',            label: 'Import graph',          group: 'Graph',      defaultCombo: 'cmd+o',       description: 'Import graph from file' },
   // View

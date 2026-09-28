@@ -21,7 +21,7 @@ export function wireAudioEngine(): void {
   audioEngineHost.configure({ act: a => playOverlay.act(a) });
   // Esc, the top bar's pill, leaving Play or removing the rack: the record's toggle follows.
   rackKeyboard.configure({
-    release: rackId => useNodeGraphStore.getState().setPlay(p => (p.audioEngine?.racks.some(r => r.id === rackId && r.keyboard) ? { ...p, audioEngine: setRackKeyboard(p.audioEngine, rackId, false) } : p)),
+    release: rackId => useNodeGraphStore.getState().setPlay(p => (p.audioEngine?.racks.some(r => r.id === rackId && r.keyboard) ? { ...p, audioEngine: setRackKeyboard(p.audioEngine, rackId, false) } : p), false),
   });
   playOverlay.onPad(a => audioEngineHost.onPad(a));
   setEngineWebAudio({ ctx: () => audioEngine.context(), connect: n => audioEngine.connectOutside(n) });

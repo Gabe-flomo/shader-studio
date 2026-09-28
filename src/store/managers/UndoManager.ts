@@ -1,4 +1,5 @@
 import type { GraphNode } from '../../types/nodeGraph';
+import type { PlayRecord } from '../../types/play';
 
 /** What a step was, for the History panel: "Added Circle SDF", and the nodes it touched. */
 export interface UndoMeta {
@@ -8,13 +9,23 @@ export interface UndoMeta {
   nodeIds?: string[];
 }
 
+/** What undo and redo move between: the graph and the Play setup. */
+export interface UndoState { nodes: GraphNode[]; play: PlayRecord }
+
 /**
- * One step of history. On the undo stack `nodes` is the graph before the step; on the redo stack
- * it is the graph after it. The label and ids travel with the step between the two stacks.
+ * One step of history. On the undo stack the snapshots are the state before the step; on the
+ * redo stack they are the state after it. A step carries only what it changed: `nodes` for a
+ * graph edit, `play` for a Play edit (both for an action that replaced everything). The label
+ * and ids travel with the step between the two stacks.
+ *
+ * Graph snapshots are deep clones (node params are edited in place in a few spots). Play
+ * snapshots are the records themselves: every Play edit makes a new record and keeps the
+ * unchanged parts, so fifty steps share most of their memory.
  */
 export interface UndoEntry extends UndoMeta {
   id: number;
-  nodes: GraphNode[];
+  nodes?: GraphNode[];
+  play?: PlayRecord;
   /** When the step was made (ms since epoch). */
   at: number;
 }
@@ -38,10 +49,19 @@ export class UndoManager {
 
   /** Push a deep-clone of the current node list onto the undo stack — called
    *  before every mutating action, so it also invalidates the redo stack:
-   *  a fresh edit abandons whatever branch redo would have replayed. */
-  push(nodes: GraphNode[], meta?: UndoMeta): void {
+   *  a fresh edit abandons whatever branch redo would have replayed.
+   *  With `play`, the step restores the Play setup too (an action that replaces both). */
+  push(nodes: GraphNode[], meta?: UndoMeta, play?: PlayRecord): void {
     if (this.suspended > 0) return;
-    this.pushOnto(this.history, { id: nextEntryId++, nodes: structuredClone(nodes), at: Date.now(), ...meta });
+    this.pushOnto(this.history, { id: nextEntryId++, nodes: structuredClone(nodes), ...(play ? { play } : {}), at: Date.now(), ...meta });
+    this.redoStack.length = 0;
+    this.changed();
+  }
+
+  /** A Play edit: the record before it, kept by reference (see UndoEntry). */
+  pushPlay(play: PlayRecord, meta?: UndoMeta): void {
+    if (this.suspended > 0) return;
+    this.pushOnto(this.history, { id: nextEntryId++, play, at: Date.now(), ...meta });
     this.redoStack.length = 0;
     this.changed();
   }
@@ -62,30 +82,33 @@ export class UndoManager {
     this.changed();
   }
 
-  /** Step back: the graph before the newest step, with `current` kept for redo. */
-  undo(current: GraphNode[]): GraphNode[] | undefined {
+  /** The newest done step, if any. */
+  top(): UndoEntry | undefined { return this.history[this.history.length - 1]; }
+
+  /** Step back: the parts of the state the newest step changed, as they were before it; `current` is kept for redo. */
+  undo(current: UndoState): Partial<UndoState> | undefined {
     const e = this.history.pop();
     if (!e) return undefined;
-    this.pushOnto(this.redoStack, { ...e, nodes: structuredClone(current) });
+    this.pushOnto(this.redoStack, swapSnapshots(e, current));
     this.changed();
-    return e.nodes;
+    return snapshotOf(e);
   }
 
-  /** Step forward again: the graph after the step, with `current` kept for undo. */
-  redo(current: GraphNode[]): GraphNode[] | undefined {
+  /** Step forward again: the parts of the state the step changed, as they were after it; `current` is kept for undo. */
+  redo(current: UndoState): Partial<UndoState> | undefined {
     const e = this.redoStack.pop();
     if (!e) return undefined;
-    this.pushOnto(this.history, { ...e, nodes: structuredClone(current) });
+    this.pushOnto(this.history, swapSnapshots(e, current));
     this.changed();
-    return e.nodes;
+    return snapshotOf(e);
   }
 
   get canUndo(): number { return this.history.length; }
   get canRedo(): number { return this.redoStack.length; }
 
-  /** Done steps, oldest first (each one's `nodes` is the graph before it). */
+  /** Done steps, oldest first (each one's snapshots are the state before it). */
   done(): readonly UndoEntry[] { return this.history; }
-  /** Undone steps, the next one to redo last (each one's `nodes` is the graph after it). */
+  /** Undone steps, the next one to redo last (each one's snapshots are the state after it). */
   undone(): readonly UndoEntry[] { return this.redoStack; }
   getOrigin(): UndoOrigin | null { return this.origin; }
   /** True once the oldest steps have been dropped to stay within maxDepth. */
@@ -118,4 +141,19 @@ export class UndoManager {
     this.version++;
     for (const fn of this.listeners) fn();
   }
+}
+
+/** The entry moved to the other stack: the same step, its snapshots replaced by the current state of the parts it carries. */
+function swapSnapshots(e: UndoEntry, current: UndoState): UndoEntry {
+  const out: UndoEntry = { ...e };
+  if (e.nodes) out.nodes = structuredClone(current.nodes);
+  if (e.play) out.play = current.play;
+  return out;
+}
+
+function snapshotOf(e: UndoEntry): Partial<UndoState> {
+  const out: Partial<UndoState> = {};
+  if (e.nodes) out.nodes = e.nodes;
+  if (e.play) out.play = e.play;
+  return out;
 }
