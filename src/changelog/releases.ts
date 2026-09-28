@@ -39,6 +39,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.10',
+    date: '2026-09-28',
+    title: 'Projectors, Audio Units, and a better phone',
+    highlights: [
+      { area: 'Desktop', text: 'An output window for a projector or second display, with projection mapping: corner pins, mesh warps, masks, edge blends and test patterns.', link: { kind: 'doc', path: 'docs/projection.md' } },
+      { area: 'Desktop', text: 'The Audio engine: Audio Unit synths and effects on a Mac, played from MIDI or the keyboard, with reader dots on each rack\'s spectrum, and a Plugins setting.', link: { kind: 'doc', path: 'docs/audio-engine.md' } },
+      { area: 'Desktop', text: 'MIDI controllers work in the desktop app through a native bridge; knob lock, note ranges and pad grids come along.', link: { kind: 'doc', path: 'docs/midi.md' } },
+      { area: 'Phone', text: 'Turning the phone sideways keeps the phone layout, with a full-screen picture on Play; turning back restores it inside the safe area.' },
+      { area: 'Phone', text: 'Audio pickers open Files (not the video picker), the drum pads open in the split view or a sheet, and the Record dialog fits the screen.' },
+      { area: 'Play', text: 'Drum pads: Stop shows only while a sound plays, and tapping an empty pad adds a sound.', link: { kind: 'example', key: 'drumPads', page: 'play' } },
+      { area: 'Present', text: 'Capture a background: the time slider responds at once and settles when you let go.' },
+    ],
+  },
+  {
     id: '2026.9.9',
     date: '2026-09-27',
     title: 'p5 sketches, conditions, MIDI grids and sound effects',
