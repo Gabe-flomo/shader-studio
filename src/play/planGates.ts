@@ -39,7 +39,8 @@ export function sourceTypeNeedsPro(type: string): boolean {
 }
 
 export function mappingAllowed(m: PlayMapping, plan: Plan | null): boolean {
-  return canOn(plan, 'play.sources') || !sourceNeedsPro(m.source);
+  // An Increment (steps, signals, conditions) is a Pro way of moving a control, whatever drives it.
+  return canOn(plan, 'play.sources') || (!m.increment && !sourceNeedsPro(m.source));
 }
 
 /** A pair mapping on Free: the pointer as a position, or a Free source, with no conditions or swap signals (those are Pro sources). */
