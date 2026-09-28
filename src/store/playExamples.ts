@@ -25,6 +25,7 @@ import {
   type CondCmp, type PairAxis, type PlayPair, type PlayPairMapping, type PlaySignal, type RelationMember, type RelationRole, type RelationshipLayer, newRelationMember,
 } from '../types/play';
 import { DEFAULT_PAD_GRID, type PlayPadGrid } from '../types/playMidi';
+import type { PlayAudioEngine } from '../types/playAudioEngine';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 import type { DpSynth } from '../play/kit/drumPads.js';
 import type { GroupColour, LayerGroup } from '../types/layerGroups';
@@ -125,8 +126,9 @@ const rm = (id: string, role: RelationRole = 'member'): RelationMember => newRel
 /** A layer group (organisation in the Layers list: its layers must sit next to each other in `layers`). */
 const grp = (id: string, label: string, colour: GroupColour, layers: string[]): LayerGroup => ({ id, label, colour, layers });
 
-function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; audioFx?: PlayAudioFx; padGrid?: PlayPadGrid; signals?: PlaySignal[]; pairs?: PlayPair[]; pairMappings?: PlayPairMapping[]; notes: string }): PlayRecord {
+function play(p: { layers?: PlayLayer[]; groups?: LayerGroup[]; controls?: PlayControl[]; mappings?: PlayMapping[]; actions?: PlayAction[]; display?: PlayDisplay; takes?: PlayTake[]; audioReaders?: PlayAudioReaders; finish?: PlayFinish; audioFx?: PlayAudioFx; padGrid?: PlayPadGrid; signals?: PlaySignal[]; pairs?: PlayPair[]; pairMappings?: PlayPairMapping[]; audioEngine?: PlayAudioEngine; notes: string }): PlayRecord {
   const out: PlayRecord = { version: 1, controls: p.controls ?? [], mappings: p.mappings ?? [], layers: p.layers ?? [] };
+  if (p.audioEngine) out.audioEngine = p.audioEngine;
   if (p.groups?.length) out.groups = p.groups;
   if (p.actions?.length) out.actions = p.actions;
   out.notes = p.notes;
@@ -1835,6 +1837,62 @@ Distance reads only while both hands are in view, so the rings hold their size w
 • Select a pad and drag its waveform's edges, try Reverse, Gate and Loop, or drop a sound file of your own on it.
 • Add a Reverb to the Drums chain in Finish → Sound.
 • Record a take and render it: every hit lands in the video's sound at the moment you played it.`,
+  })),
+  ex('granulator', glowGraph({ radius: 0.12, falloff: 14, tint: [0.45, 0.7, 1] }), play({
+    audioEngine: {
+      racks: [{
+        id: 'gran', name: 'Granulator', effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false,
+        instrument: {
+          id: 'inst', kind: 'granulator', sample: { synth: 'vowel', name: 'Vowel' },
+          // By GR_PARAMS address: Cloud, position, spray, size, density, spread, pitch random, pan random,
+          // filter + cutoff, attack, release, scan LFO rate + depth, drone, level.
+          params: { 0: 2, 1: 0.35, 2: 0.12, 3: 140, 5: 28, 7: 7, 8: 0.15, 9: 0.7, 14: 1, 15: 7000, 17: 0.6, 20: 1.5, 24: 0.07, 25: 0.12, 28: 1, 33: 0.9 },
+        },
+      }],
+    },
+    audioFx: { chains: { 'rack:gran': { on: true, effects: [afx('reverb', 'verb', { type: 'hall', size: 0.7, decay: 3.2, mix: 0.3 })] } } },
+    audioReaders: {
+      input: 'engine:gran',
+      readers: [
+        reader('body', 'Body', 320, 1.2, 25, 3, 160, [1, 0.55, 0.35]),
+        reader('air', 'Air', 2600, 1.2, 35, 2, 120, [0.4, 0.8, 1]),
+      ],
+    },
+    layers: [
+      layer('null', 'g1', 'Grain 1', { x: 0.3, y: 0.3, size: 10 }),
+      layer('null', 'g2', 'Grain 2', { x: 0.5, y: 0.3, size: 10 }),
+      layer('null', 'g3', 'Grain 3', { x: 0.7, y: 0.3, size: 10 }),
+      layer('audio', 'bars', 'Spectrum', { style: 'bars', y: 0.12, w: 1.7, h: 0.16, bars: 64, colour: 'palette', palette: 1, opacity: 0.7, toShader: false }),
+    ],
+    controls: [
+      ctl('pos', 'au:gran:inst::1', 'Granulator · Position', 0, 1),
+      ctl('size', 'au:gran:inst::3', 'Granulator · Grain size', 2, 2000, 1),
+      ctl('radius', 'circ::radius', 'Glow (the grains’ body)', 0.05, 0.4),
+      ctl('count', 'grains:gran::grains', 'Grain count', 0, 64),
+      ctl('g1x', 'layer:g1::x', 'Grain 1 · x', 0, 1), ctl('g1y', 'layer:g1::y', 'Grain 1 · y', 0, 1),
+      ctl('g2x', 'layer:g2::x', 'Grain 2 · x', 0, 1), ctl('g2y', 'layer:g2::y', 'Grain 2 · y', 0, 1),
+      ctl('g3x', 'layer:g3::x', 'Grain 3 · x', 0, 1), ctl('g3y', 'layer:g3::y', 'Grain 3 · y', 0, 1),
+    ],
+    mappings: [
+      map('scan', 'pos', S.mouse('x'), 0.02, 0.98, { smoothMs: 80 }),
+      map('grainSize', 'size', S.mouse('y'), 25, 400, { curve: 'exp', smoothMs: 80 }),
+      map('glow', 'radius', { kind: 'reader', readerId: 'body' }, 0.07, 0.3, { smoothMs: 30 }),
+      map('count', 'count', S.sensor('ae:gran', 'grains'), 0, 64),
+      ...[1, 2, 3].flatMap(i => [
+        map(`g${i}x`, `g${i}x`, S.sensor('ae:gran', 'grainPos', String(i)), 0.05, 0.95),
+        map(`g${i}y`, `g${i}y`, S.sensor('ae:gran', 'grainAmp', String(i)), 0.25, 0.85, { smoothMs: 40 }),
+      ]),
+    ],
+    notes: `**What it shows.** A **Granulator**: an Audio engine rack whose instrument plays a sample as a cloud of short grains, up to 64 at once. Its sound feeds audio readers that swell the glow, and its grains ride three nulls across the picture. Move the mouse to play it: X scans through the sample, Y sets the grain size.
+
+**How it's built.** The rack **Granulator** (Engine tab) holds a Granulator in **Cloud** mode, with **Drone** on so it sounds without a key. Its sample is a generated **vowel** (a voice sliding from "ah" to "oo"), made when the example opens, so no audio file comes with it. Mouse X drives **Position** (\`au:gran:inst::1\`, a control like any Audio Unit parameter) and mouse Y the **Grain size** through an Exp curve. The sound goes through the rack's own Sound chain (Finish → Sound → Granulator: a hall reverb). The readers listen to the rack (**Listen to: Audio engine · Granulator**): **Body** at 320 Hz drives the glow, and **Air** at 2.6 kHz is strongest at the bright "ah" end (the left). The grains are sensors on the rack: **Grain count**, and grains 1–3's place in the sample (x) and level (y) drive the three nulls.
+
+**Try this.**
+• Click the picture first: the browser starts sound on a click. Mute the master if you only want to watch.
+• Engine tab → Granulator: switch **Classic**, **Flux** and **Cloud**, try **Freeze**, turn **Scan** to 1 for a time-stretch, or change the **Sample** to a pad chord or a drum.
+• Turn **Drone** off and play it from the card's keys, the computer keyboard (**Computer keyboard** on the card) or a MIDI keyboard: C4 plays the sample at its own pitch.
+• **Readouts → controls** and **Grains → nulls** on the card make more of these.
+• Record a take and render it: the grains come out the same every time (seeded).`,
   })),
   ex('audioEffects', glowGraph({ radius: 0.12, falloff: 12, tint: [1, 0.6, 0.3] }), play({
     audioFx: {
