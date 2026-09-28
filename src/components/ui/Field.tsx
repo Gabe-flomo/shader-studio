@@ -1,4 +1,4 @@
-import { useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useState, type InputHTMLAttributes, type ReactNode, type Ref } from 'react';
 import { TYPE_COLORS } from '../NodeGraph/typeColors';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -14,6 +14,8 @@ export function Field({
   mono?: boolean;
   invalid?: boolean;
   height?: number;
+  /** The input itself, for focusing it from outside. */
+  ref?: Ref<HTMLInputElement>;
 } & Omit<InputHTMLAttributes<HTMLInputElement>, 'prefix'>) {
   const tk = useTokens();
   const [focused, setFocused] = useState(false);

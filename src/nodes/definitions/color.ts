@@ -195,7 +195,7 @@ export const StopPaletteNode: NodeDefinition = {
   category: 'Color', subcategory: 'Palette',
   description:
     'A palette made from your own colour stops (up to 32). Angle picks where on it to sample; wire Time into Angle offset to cycle through the colours. ' +
-    'Paste a palette from anywhere (hex codes, a coolors.co link, rgb() values) and save your own presets from the tools under the stops. ' +
+    'The colours sit on one bar: click it to add a stop, drag a stop to reorder, click one for its colour. Paste a palette from anywhere (hex codes, a coolors.co link, rgb() values) and load or save palettes from the tools under the bar. ' +
     'Loop joins the last stop back to the first so cycling never jumps; Mirror runs there and back; Clamp holds the ends. Blend chooses smooth, linear or hard bands.',
   inputs: {
     value: { type: 'float', label: 'Angle', defaultValue: 0, hint: 'Where on the palette to sample. 0 → 1 goes once through every stop.' },
@@ -212,7 +212,7 @@ vec3 stopPaletteCurve(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t) {
     ...Object.fromEntries(Array.from({ length: STOP_PALETTE_MAX }, (_, i) => [`color${i}`, stopDefault(i)])),
   },
   paramDefs: {
-    stops: { label: 'Stops', type: 'select', hint: 'How many colours. Stops are evenly spaced along the palette. Paste a palette (below) to fill them from hex codes or a link.', options: Array.from({ length: STOP_PALETTE_MAX - 1 }, (_, i) => ({ value: String(i + 2), label: String(i + 2) })) },
+    stops: { label: 'Stops', type: 'select', hint: 'How many colours. Stops are evenly spaced along the palette: click the bar to add one, drag to reorder, Backspace to remove. Paste a palette (below) to fill them from hex codes or a link.', options: Array.from({ length: STOP_PALETTE_MAX - 1 }, (_, i) => ({ value: String(i + 2), label: String(i + 2) })) },
     wrap:  { label: 'Wrap', type: 'select', hint: 'Past the last stop: Loop blends back to the first (seamless cycling), Mirror runs back down, Clamp holds the end colours.', options: [
       { value: 'loop', label: 'Loop' }, { value: 'mirror', label: 'Mirror' }, { value: 'clamp', label: 'Clamp' },
     ] },

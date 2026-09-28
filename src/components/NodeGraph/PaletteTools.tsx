@@ -1,8 +1,10 @@
 /**
  * PaletteTools — the row of palette actions under a Palette or Stops Palette card:
  *
- *   Presets ▾   your saved palettes (either kind works on either node)
- *   Save        name and keep this palette
+ *   Presets ▾   the app's palettes (the Library's, built in and yours: the same picker as
+ *               Present and Play backgrounds) and presets saved here (either kind works on either node)
+ *   Save        name and keep this palette: a Stops Palette goes to the Library, a Palette to the presets
+ *   Reverse     (Stops Palette) the stops end to end
  *   Paste       read a palette from text: hex codes, a coolors.co link, rgb(), JSON…
  *   Copy hex    (Stops Palette) the stops as a hex list, to paste elsewhere
  *   → Stops ▾   (Palette) convert this cosine palette into editable colour stops:
@@ -19,7 +21,12 @@ import { Popover } from '../ui/Popover';
 import { askText, askConfirm } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import { paletteNodeCoeffs, STOP_PALETTE_MAX } from '../../nodes/definitions/color';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { usePalettes } from '../backgrounds/useBackgrounds';
+import { openBackgrounds } from '../backgrounds/backgroundsUi';
+import { freePaletteName, paletteCss, savePalette, type Palette } from '../../lib/backgroundLibrary';
+import { alpha } from '../../theme/tokens';
+import { evenStops } from '../ui/gradientStops';
+import { libraryPaletteColours, stopColoursOf } from './stopPaletteModel';
 import {
   parsePaletteText, rgbToHex, autoFitCosineStops, fitCosineStops, loadPalettePresets, savePalettePreset, deletePalettePreset,
   PALETTE_PRESETS_CHANGED, PASTE_FORMATS, type PalettePresetRecord, type RGB,
@@ -31,14 +38,8 @@ const coverage = (f: { period: number; seamless: boolean }) =>
   !f.seamless ? 'one trip — this palette never repeats exactly' : f.period > 1 ? `loops every ${f.period} (its full repeat)` : 'loops exactly';
 
 /** The stop colours a Stops Palette node currently has, in order. */
-function stopsOf(node: GraphNode): RGB[] {
-  const count = Math.max(2, Math.min(STOP_PALETTE_MAX, Math.round(Number(node.params.stops) || 5)));
-  const defaults = getNodeDefinition('stopPalette')?.defaultParams ?? {};
-  return Array.from({ length: count }, (_, i) => {
-    const v = node.params[`color${i}`] ?? defaults[`color${i}`];
-    return Array.isArray(v) && v.length >= 3 ? [Number(v[0]) || 0, Number(v[1]) || 0, Number(v[2]) || 0] as RGB : [0.5, 0.5, 0.5] as RGB;
-  });
-}
+const stopsOf = (node: GraphNode): RGB[] => stopColoursOf(node.params);
+
 
 function Swatches({ colors, height = 14 }: { colors: RGB[]; height?: number }) {
   return (
@@ -59,6 +60,9 @@ export function PaletteTools({ node }: { node: GraphNode }) {
     return () => window.removeEventListener(PALETTE_PRESETS_CHANGED, refresh);
   }, []);
 
+  const palettes = usePalettes();
+  const presetsBtn = useRef<HTMLSpanElement>(null);
+  const [presetsOpen, setPresetsOpen] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const openMenuAt = (e: React.MouseEvent, items: MenuItem[]) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -84,6 +88,16 @@ export function PaletteTools({ node }: { node: GraphNode }) {
       toast.info('Converted to a Stops Palette', { message: `“${p.name}” is a colour-stop palette, so this node now holds those stops. Undo to go back.` });
     }
   };
+
+  /** A Library palette (the same ones Present and Play backgrounds pick from) becomes this node's stops. */
+  const applyLibrary = (p: Palette) => {
+    const blendNow = String(node.params.blend ?? 'smooth');
+    const blend = p.style === 'bands' ? 'bands' : blendNow === 'bands' ? 'smooth' : undefined;
+    useNodeGraphStore.getState().setPaletteStops(node.id, libraryPaletteColours(p), { blend });
+    setPresetsOpen(false);
+    if (!isStops) toast.info('Converted to a Stops Palette', { message: `“${p.name}” is a colour-stop palette, so this node now holds its stops. Undo to go back.` });
+  };
+  const reverse = () => useNodeGraphStore.getState().setPaletteStops(node.id, [...stopsOf(node)].reverse());
 
   const presetItems = (): MenuItem[] => {
     const own = presets.filter(p => p.kind === (isStops ? 'stops' : 'cosine'));
@@ -116,11 +130,19 @@ export function PaletteTools({ node }: { node: GraphNode }) {
   }));
 
   const save = async () => {
+    if (isStops) {
+      // Colour stops are a Library palette: usable here, and as a Play or Present background.
+      const name = await askText('Save palette', { label: 'Name', initial: freePaletteName('My palette'), confirmLabel: 'Save' });
+      if (!name) return;
+      try {
+        const p = savePalette({ name, stops: evenStops(stopsOf(node)), style: String(node.params.blend ?? 'smooth') === 'bands' ? 'bands' : 'gradient', angle: 90 });
+        toast.success(`Saved “${p.name}”`, { message: 'In the Library’s backgrounds, under Palettes: pick it under Presets on any Palette node, or as a Play or Present background.' });
+      } catch (e) { toast.error('Couldn’t save the palette', { message: e instanceof Error ? e.message : String(e) }); }
+      return;
+    }
     const name = await askText('Save palette preset', { label: 'Name', initial: '', confirmLabel: 'Save' });
     if (!name) return;
-    const r = isStops
-      ? savePalettePreset({ name, kind: 'stops', stops: stopsOf(node), wrap: String(node.params.wrap ?? 'loop'), blend: String(node.params.blend ?? 'smooth') })
-      : savePalettePreset({ name, kind: 'cosine', cosine: paletteNodeCoeffs(node.params) });
+    const r = savePalettePreset({ name, kind: 'cosine', cosine: paletteNodeCoeffs(node.params) });
     if (r.ok) toast.success(`Saved “${name}”`, { message: 'Find it under Presets on any Palette or Stops Palette.' });
     else toast.error('Couldn’t save the preset', { message: r.error });
   };
@@ -182,8 +204,12 @@ export function PaletteTools({ node }: { node: GraphNode }) {
       ref={el => { cardRef.current = el?.closest<HTMLElement>('[data-node-id]') ?? null; }}
       style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '6px 10px 8px' }}
     >
-      <Button size="sm" variant="ghost" icon="presets" onClick={e => openMenuAt(e, presetItems())}>Presets</Button>
-      <Button size="sm" variant="ghost" icon="save" onClick={() => void save()}>Save</Button>
+      <span ref={presetsBtn} style={{ display: 'inline-flex' }}>
+        <Button size="sm" variant="ghost" icon="presets" aria-expanded={presetsOpen} onClick={() => setPresetsOpen(o => !o)}
+          title="The Library’s palettes (built in and yours, shared with Play and Present backgrounds) and presets saved here">Presets</Button>
+      </span>
+      <Button size="sm" variant="ghost" icon="save" onClick={() => void save()} title={isStops ? 'Keep these colours in the Library, to use here or as a background' : 'Save this palette as a preset'}>Save</Button>
+      {isStops && <Button size="sm" variant="ghost" icon="bidir" onClick={reverse} title="Turn the stops end to end">Reverse</Button>}
       <span ref={pasteBtn} style={{ display: 'inline-flex' }}>
         <Button size="sm" variant="ghost" icon="import" onClick={() => setPasteOpen(o => !o)}
           title="Paste hex codes, a coolors.co link, rgb()/hsl(), vec3() or a JSON list">Paste</Button>
@@ -193,6 +219,25 @@ export function PaletteTools({ node }: { node: GraphNode }) {
         : <Button size="sm" variant="ghost" icon="spark" onClick={e => openMenuAt(e, toStopsItems())} title="Turn this cosine palette into editable colour stops — Auto, or choose how many">→ Stops</Button>}
 
       {menu && <Menu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} minWidth={220} />}
+
+      {presetsOpen && (
+        <Popover anchorRef={presetsBtn} clearRef={cardRef} onClose={() => setPresetsOpen(false)} padding={10}>
+          <div style={{ width: 300, display: 'flex', flexDirection: 'column', gap: 8 }} onPointerDown={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 600 }}>Library palettes</div>
+            <div role="listbox" aria-label="Palettes" style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {[...palettes.filter(p => !p.preset), ...palettes.filter(p => p.preset)].map(p => (
+                <button key={p.id} type="button" role="option" aria-selected={false} title={`${p.name} · ${p.stops.length} colours${p.style === 'bands' ? ' · bands' : ''}`} onClick={() => applyLibrary(p)}
+                  style={{ width: 34, height: 22, flexShrink: 0, borderRadius: 6, border: 0, padding: 0, cursor: 'pointer', background: paletteCss(p, 90), boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.14)}` }} />
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <Button size="sm" variant="ghost" icon="overlay" onClick={async () => { const pk = await openBackgrounds({ pick: 'palette', title: 'Choose a palette' }); if (pk?.kind === 'palette') applyLibrary(pk.palette); }}>More…</Button>
+              <Button size="sm" variant="ghost" icon="presets" onClick={e => openMenuAt(e, presetItems())} title="Presets saved on Palette nodes (cosine palettes and older colour-stop presets)">Saved presets ▾</Button>
+            </div>
+            <div style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'normal' }}>{isStops ? 'A palette’s colours become this node’s stops, one each.' : 'A colour-stop palette turns this node into a Stops Palette holding it.'}</div>
+          </div>
+        </Popover>
+      )}
 
       {pasteOpen && (
         <Popover anchorRef={pasteBtn} clearRef={cardRef} onClose={() => setPasteOpen(false)} padding={10}>
