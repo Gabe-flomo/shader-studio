@@ -6,11 +6,11 @@ import { getTopNavFold, TOP_NAV_FOLD_WIDTH } from '../topNavFold';
 describe('getTopNavFold', () => {
   it('shows everything at full width', () => {
     const fold = getTopNavFold(1440);
-    expect(fold).toEqual({ iconOnly: false, foldAux: false, recordLabel: true, scrollTabs: false, hideWordmark: false });
+    expect(fold).toEqual({ iconOnly: false, foldAux: false, recordLabel: true, hideWordmark: false });
   });
 
   it('assumes the roomiest layout before the bar has been measured', () => {
-    expect(getTopNavFold(0)).toEqual({ iconOnly: false, foldAux: false, recordLabel: true, scrollTabs: false, hideWordmark: false });
+    expect(getTopNavFold(0)).toEqual({ iconOnly: false, foldAux: false, recordLabel: true, hideWordmark: false });
     expect(getTopNavFold(-1)).toEqual(getTopNavFold(0));
   });
 
@@ -21,13 +21,11 @@ describe('getTopNavFold', () => {
     expect(narrow.iconOnly).toBe(true);
   });
 
-  it('folds the least-used items into the overflow menu, and scrolls the tabs, together', () => {
+  it('folds the least-used items (Workspace/Keyboard/Hands, Rebuild, theme) into the overflow menu', () => {
     const above = getTopNavFold(TOP_NAV_FOLD_WIDTH.foldAux + 1);
     const below = getTopNavFold(TOP_NAV_FOLD_WIDTH.foldAux - 1);
     expect(above.foldAux).toBe(false);
-    expect(above.scrollTabs).toBe(false);
     expect(below.foldAux).toBe(true);
-    expect(below.scrollTabs).toBe(true);
   });
 
   it('drops the Record label only once narrower than the aux fold', () => {
@@ -46,7 +44,27 @@ describe('getTopNavFold', () => {
   });
 
   it('fits the bar\'s known trouble spot: fully folded well before 900px, fully open by 1440px', () => {
-    expect(getTopNavFold(900)).toEqual({ iconOnly: true, foldAux: true, recordLabel: false, scrollTabs: true, hideWordmark: true });
+    expect(getTopNavFold(900)).toEqual({ iconOnly: true, foldAux: true, recordLabel: false, hideWordmark: true });
     expect(getTopNavFold(1440).iconOnly).toBe(false);
+  });
+
+  // The status pills (Keyboard, Hands) render in the right-hand cluster only while `!foldAux`
+  // (DesktopTopNav.tsx); the slot decision below 900/1024/1180/1440 — the widths the pill-overlap
+  // bug was checked at — has to keep folding them into the "···" menu rather than trying to
+  // squeeze both pills' full labels in alongside everything else at borderline widths, because
+  // (unlike the tab strip) the right-hand cluster is deliberately never allowed to shrink below
+  // its own content's natural width — see DesktopTopNav.tsx and the class doc above. So this
+  // fold decision is what keeps the cluster's content small enough to actually fit in the common
+  // case; the *no-overlap* guarantee itself is structural (CSS), not this function's job.
+  it('slots the Keyboard/Hands pills into the overflow menu at every checked narrow width', () => {
+    for (const w of [900, 1024, 1180 - 1]) {
+      expect(getTopNavFold(w).foldAux).toBe(true);
+    }
+    // 1180 and 1440 (both pills' full labels, inline, alongside undo/redo/save/load/etc.) are the
+    // widths the bar was checked at with room to spare; foldAux only lifts once the bar is at
+    // least the foldAux threshold itself.
+    for (const w of [TOP_NAV_FOLD_WIDTH.foldAux, 1440]) {
+      expect(getTopNavFold(w).foldAux).toBe(false);
+    }
   });
 });

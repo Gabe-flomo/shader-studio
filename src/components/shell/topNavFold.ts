@@ -7,11 +7,17 @@
  *  1. `iconOnly`     — Import/GLSL/Export drop their text labels (icon + tooltip only), and the
  *                      current graph's name/version next to Save hides.
  *  2. `foldAux`      — the least-used items (Workspace chip, Keyboard pill, Hands pill, Rebuild,
- *                      theme toggle) move into the "···" overflow menu; the tab strip becomes
- *                      horizontally scrollable instead of shrinking the right cluster further.
+ *                      theme toggle) move into the "···" overflow menu.
  *  3. `recordLabel`  — false once things get very tight: Record drops its "Record" text, keeping
  *                      only the red dot + icon.
  *  4. `hideWordmark` — the brand block sheds "Playfield" last, keeping only the mark.
+ *
+ * The right-hand cluster (undo/redo, save/load, the fold stages above, record, account) is never
+ * allowed to shrink below its own content's natural width — DesktopTopNav deliberately leaves
+ * `minWidth: 0` off it — so it can never overlap the tab strip next to it; the tab strip is the
+ * one that gives way (it's always horizontally scrollable, so nothing it holds becomes
+ * unreachable). These fold stages exist to keep that cluster's *content* small before the bar
+ * gets that tight, not to prevent the overlap itself — that's structural.
  */
 export interface TopNavFold {
   /** Import/GLSL/Export show icons only; the saved-graph name next to Save hides. */
@@ -20,8 +26,6 @@ export interface TopNavFold {
   foldAux: boolean;
   /** Whether Record still shows its "Record" text (true = shown). */
   recordLabel: boolean;
-  /** Whether the tab strip should scroll horizontally instead of overflowing. */
-  scrollTabs: boolean;
   /** Whether the brand wordmark ("Playfield") is hidden, keeping only the mark. */
   hideWordmark: boolean;
 }
@@ -41,14 +45,12 @@ export const TOP_NAV_FOLD_WIDTH = {
  */
 export function getTopNavFold(width: number): TopNavFold {
   if (width <= 0) {
-    return { iconOnly: false, foldAux: false, recordLabel: true, scrollTabs: false, hideWordmark: false };
+    return { iconOnly: false, foldAux: false, recordLabel: true, hideWordmark: false };
   }
-  const foldAux = width < TOP_NAV_FOLD_WIDTH.foldAux;
   return {
     iconOnly: width < TOP_NAV_FOLD_WIDTH.iconOnly,
-    foldAux,
+    foldAux: width < TOP_NAV_FOLD_WIDTH.foldAux,
     recordLabel: width >= TOP_NAV_FOLD_WIDTH.recordLabel,
-    scrollTabs: foldAux,
     hideWordmark: width < TOP_NAV_FOLD_WIDTH.hideWordmark,
   };
 }

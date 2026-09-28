@@ -115,7 +115,11 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         role="tablist"
         style={{
           display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover, flexShrink: 1, minWidth: 0,
-          overflowX: fold.scrollTabs ? 'auto' : 'visible', scrollbarWidth: 'none',
+          // Always scrollable, not just once `fold.scrollTabs` kicks in: the right cluster
+          // (never shrinks below its own content — see below) can still squeeze this strip
+          // narrower than its tabs' natural width in between fold stages, and every tab has to
+          // stay reachable rather than clip silently.
+          overflowX: 'auto', scrollbarWidth: 'none',
         }}
       >
         {TABS.map(t => {
@@ -140,7 +144,12 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         })}
       </div>
 
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, minWidth: 0, flexShrink: 0 }}>
+      {/* No `minWidth: 0` here: this cluster must never shrink below its content's natural width
+          (buttons/pills don't wrap or shrink themselves) — that's what stops it overlapping the
+          tab strip when the bar gets tight. The tab strip (flexShrink: 1, minWidth: 0, scrollable)
+          gives way instead; see topNavFold.ts for the width stages that also reduce this cluster's
+          own content before it gets that far. */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, flexShrink: 0 }}>
         {!foldAux && <KeyboardPill compact={compact} />}
         {!foldAux && <HandsLive compact={compact} />}
         {!foldAux && <WorkspaceChip compact={compact} />}
