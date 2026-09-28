@@ -86,7 +86,7 @@ export interface NullLayer extends LayerBase {
   size: number;
   color: string;
   /** Chase the mouse, another null or a point on a tracked hand on a spring instead of staying put. */
-  follow: 'none' | 'mouse' | 'null' | 'hand' | 'agent';
+  follow: 'none' | 'mouse' | 'null' | 'hand' | 'agent' | 'face' | 'pose';
   /** follow 'null': the null; follow 'agent': the Agents layer. */
   followId: string;
   /** follow 'agent': which agent (0 is the first); while it is dead, the layer's centre. */
@@ -94,6 +94,8 @@ export interface NullLayer extends LayerBase {
   /** follow: 'hand': which hand (the performer's own; 'any' is the right one when it is in view) and which landmark (0 wrist … 8 index tip … 20 pinky tip). */
   handSide: 'left' | 'right' | 'any';
   handPoint: number;
+  /** follow: 'face' or 'pose': which landmark (face 0..477, 1 the nose tip; pose 0..32, 0 the nose). */
+  trackPoint: number;
   /** 0..1: how hard the spring pulls (low = lazy, high = snappy). */
   spring: number;
   /** 0..1: how much it overshoots and wobbles before settling. */
@@ -715,6 +717,8 @@ export interface VideoLayer extends LayerBase {
   scale: number;
   rotation: number;
   opacity: number;
+  /** Flip the picture left to right (hand, face and pose tracking of this video follow it). */
+  mirror: boolean;
   /** Background for the reveal matte. */
   color: RGB;
   blend: BlendMode;
@@ -1440,7 +1444,7 @@ function agentDefaults(): Defaults<AgentsLayer> {
 }
 
 const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind: K }>> } = {
-  null: { toShader: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7', follow: 'none', followId: '', agentIndex: 0, handSide: 'right', handPoint: 8, spring: 0.5, wobble: 0.3, role: 'none', radius: 0.04, strength: 1, tilt: 0 },
+  null: { toShader: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7', follow: 'none', followId: '', agentIndex: 0, handSide: 'right', handPoint: 8, trackPoint: 1, spring: 0.5, wobble: 0.3, role: 'none', radius: 0.04, strength: 1, tilt: 0 },
   text: {
     toShader: true, text: 'PLAY', x: 0.5, y: 0.5, size: 0.25, rotation: 0, opacity: 1, color: [1, 1, 1], font: 'sans', fontUrl: '', weight: 700, blend: 'normal', matte: 'over',
     sequence: false, interval: 0, transition: 'fade',
@@ -1481,7 +1485,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
   bodies: { toShader: true, source: 'letters', text: 'PLAY', count: 24, size: 48, gravity: 1, angle: 0, bounce: 0.35, friction: 0.3, font: 'sans', fontUrl: '', colour: 'tint', color: [1, 1, 1], palette: 1, solidPicture: false, threshold: 0.6, scatter: 1, opacity: 1, blend: 'normal' },
   camera: { toShader: true, x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], mirror: true, blend: 'normal', matte: 'over' },
   video: {
-    toShader: true, videoId: '', fileName: '', bytes: 0, fit: 'contain', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], blend: 'normal', matte: 'over',
+    toShader: true, videoId: '', fileName: '', bytes: 0, fit: 'contain', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, mirror: false, color: [0, 0, 0], blend: 'normal', matte: 'over',
     playing: true, loop: true, speed: 1, start: 0, follow: true, sound: 'off', volume: 0.8,
   },
   drumpad: { toShader: false, pads: Array.from({ length: DP_PADS }, emptyDrumPad), volume: 0.9, keys: true, midi: true, channel: 0, baseNote: 36, grid: true, ...drumPadNumbers() },
@@ -1545,7 +1549,7 @@ const unit = N(0, 1);
 
 const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
   null: {
-    toShader: B, x: N(), y: N(), size: N(0), color: { t: 'hex' }, follow: E('none', 'mouse', 'null', 'hand', 'agent'), followId: S, agentIndex: N(0, AG_MAX - 1, true), handSide: E('right', 'left', 'any'), handPoint: N(0, 20, true), spring: unit, wobble: unit,
+    toShader: B, x: N(), y: N(), size: N(0), color: { t: 'hex' }, follow: E('none', 'mouse', 'null', 'hand', 'agent', 'face', 'pose'), followId: S, agentIndex: N(0, AG_MAX - 1, true), handSide: E('right', 'left', 'any'), handPoint: N(0, 20, true), trackPoint: N(0, 477, true), spring: unit, wobble: unit,
     role: E('none', 'emitter', 'absorber', 'attract', 'repel', 'vortex'), radius: N(0.001), strength: N(0), tilt: N(0, 85),
   },
   text: {
@@ -1625,7 +1629,7 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     ...Object.fromEntries(Array.from({ length: DP_PADS }, (_, i) => DP_PARAMS.map(p => [dpKey(i, p.key), N(p.min, p.max)] as const)).flat()),
   },
   video: {
-    toShader: B, videoId: S, fileName: S, bytes: N(0), fit: E('height', 'contain', 'cover'), x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, blend: blendF, matte: matteF,
+    toShader: B, videoId: S, fileName: S, bytes: N(0), fit: E('height', 'contain', 'cover'), x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, mirror: B, color: C, blend: blendF, matte: matteF,
     playing: B, loop: B, speed: N(0.05, 8), start: N(0), follow: B, sound: E('off', 'listen', 'play'), volume: unit,
   },
   cloner: {

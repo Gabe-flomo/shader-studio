@@ -93,6 +93,10 @@ export type TriggerOn =
   | { on: 'zone'; layerId: string; event: 'click' | 'enter' | 'fill'; threshold: number }
   /** A hand gesture seen by hand tracking (docs/hand-tracking.md): fires when it starts, held while it lasts. */
   | { on: 'hand'; side: HandSide; gesture: HandGesture }
+  /** A face gesture (docs/tracking.md): the mouth opening, a smile, a blink, brows up, a face coming or going. */
+  | { on: 'face'; gesture: FaceGesture }
+  /** A body gesture (docs/tracking.md): hands up, arms out, a body coming or going. */
+  | { on: 'pose'; gesture: PoseGesture }
   /**
    * Two things on the picture closer than (or farther than) `distance`, in
    * picture heights between their centres. Once open, it closes only past
@@ -262,6 +266,10 @@ export interface PlayHands {
   strictness?: number;
   /** The three thresholds set by hand (Advanced), instead of Strictness. */
   confidence?: { detection: number; presence: number; tracking: number };
+  /** Track: a Video layer's id instead of the camera (docs/tracking.md). */
+  source?: string;
+  /** Baked tracks of Video layers (their frames are in the browser's track store). */
+  bakes?: TrackBakeRef[];
 }
 export const DEFAULT_HANDS: PlayHands = { smoothing: 0.5, overlay: true, colour: [0.35, 1, 0.75], mirror: true };
 export const DEFAULT_HAND_RESPONSIVENESS = 0.5;
@@ -398,6 +406,10 @@ export type PlaySource =
   | { kind: 'sensor'; layerId: string; read: SensorRead; otherId: string }
   /** A tracked hand (see HandRead). Every field is always present; the ones a read doesn't use are ignored. */
   | { kind: 'hand'; side: HandSide; read: HandRead; point: number; axis: 'x' | 'y' | 'z'; gesture: HandGesture }
+  /** A tracked face (docs/tracking.md, FaceRead). `point` is the landmark (0..477) or, for `blend`, the blendshape. */
+  | { kind: 'face'; read: FaceRead; point: number; axis: 'x' | 'y' | 'z'; gesture: FaceGesture }
+  /** A tracked body (docs/tracking.md, PoseRead). `point` is the landmark (0..32). */
+  | { kind: 'pose'; read: PoseRead; point: number; axis: 'x' | 'y' | 'z'; gesture: PoseGesture }
   /**
    * A dataset's current row (src/data/): `column`'s value there, 0..1 over
    * the column's min..max (a category column by its place among the values;
@@ -572,6 +584,7 @@ import { audioFxEffects, audioFxPropId, isAudioFxEmpty, parseAudioFx, parseAudio
 import { aeRack, auPropId, auTargetExists, isAudioEngineEmpty, isGranulatorRack, parseAudioEngine, parseAuTarget, parseGrainsTarget, rackOfSensorLayer, type PlayAudioEngine } from './playAudioEngine';
 import { arrangementFor, isArrangementEmpty, parseArrangement, type PlayArrangement } from './playArrangement';
 import { sgParseValueRef } from '../play/kit/signals.js';
+import { DEFAULT_FACE, DEFAULT_POSE, faceGesture, parseBakes, parseTracker, parseTrackerSource, parseTrackAnchor, poseGesture, type FaceGesture, type FaceRead, type PlayTracker, type PoseGesture, type PoseRead, type TrackBakeRef } from './playTracking';
 import { PAD_GRID_MAX, PAD_GRID_READS, parseMidiLocks, parseNoteRange, parsePadGrid, type MidiLock, type PadGridRead, type PlayPadGrid } from './playMidi';
 export type { MidiLock, PadGridRead, PlayPadGrid } from './playMidi';
 export type { LayerGroup } from './layerGroups';
@@ -870,6 +883,10 @@ export interface PlayRecord {
   takes?: PlayTake[];
   /** Hand tracking settings (smoothing, the skeleton overlay). Absent = DEFAULT_HANDS. */
   hands?: PlayHands;
+  /** Face tracking settings (docs/tracking.md). Absent = DEFAULT_FACE. */
+  face?: PlayTracker;
+  /** Body (pose) tracking settings. Absent = DEFAULT_POSE. */
+  pose?: PlayTracker;
   /** Audio readers: dots on the live spectrum, each a source and a trigger. Absent = none. */
   audioReaders?: PlayAudioReaders;
   /**
@@ -1175,6 +1192,8 @@ function parseTriggerOn(raw: unknown): TriggerOn | null {
       return layerId ? { on: 'zone', layerId, event, threshold: Math.max(0.01, Math.min(0.99, num(t.threshold, 0.5))) } : null;
     }
     case 'hand': return { on: 'hand', side: handSide(t.side), gesture: handGesture(t.gesture) };
+    case 'face': return { on: 'face', gesture: faceGesture(t.gesture) };
+    case 'pose': return { on: 'pose', gesture: poseGesture(t.gesture) };
     case 'proximity': {
       const a = str(t.a), b = str(t.b);
       if (!a || !b) return null;
@@ -1285,6 +1304,9 @@ function parseHands(v: unknown): PlayHands | null {
     const t = (x: unknown) => Math.max(0.05, Math.min(0.95, num(x, 0.6)));
     out.confidence = { detection: t(c.detection), presence: t(c.presence), tracking: t(c.tracking) };
   }
+  if (typeof h.source === 'string' && h.source) out.source = h.source.slice(0, 64);
+  const bakes = parseBakes(h.bakes);
+  if (bakes) out.bakes = bakes;
   return out;
 }
 
@@ -1400,6 +1422,7 @@ function parseSource(raw: unknown): PlaySource | null {
         gesture: handGesture(s.gesture),
       };
     }
+    case 'face': case 'pose': return parseTrackerSource(s.kind, s);
     case 'trigger': {
       const trigger = parseTrigger(s.trigger);
       if (!trigger) return null;
@@ -1570,7 +1593,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   // A granulator rack's grains read as sensors on `ae:<rackId>` (docs/granulator.md).
   const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId)
     || (src.kind === 'sensor' && isGranulatorRack(aeRack(audioEngine, rackOfSensorLayer(src.layerId))));
-  const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref);
+  const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref) || !!parseTrackAnchor(ref);
   const triggerOk = (t: TriggerSpec) => t.on === 'zone' ? layerIds.has(t.layerId) : t.on === 'proximity' ? anchorOk(t.a) && anchorOk(t.b) : t.on === 'reader' ? readerIds.has(t.readerId) : true;
   const keptMappings = mappings.filter(m => keptIds.has(m.controlId)
     && (m.source.kind !== 'control' || keptIds.has(m.source.controlId))
@@ -1623,6 +1646,10 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   if (disp) out.display = disp;
   const hands = parseHands(r.hands);
   if (hands) out.hands = hands;
+  const face = parseTracker(r.face, DEFAULT_FACE);
+  if (face) out.face = face;
+  const pose = parseTracker(r.pose, DEFAULT_POSE);
+  if (pose) out.pose = pose;
   if (audioReaders) out.audioReaders = audioReaders;
   if (finish) out.finish = finish;
   if (audioFx) out.audioFx = audioFx;
@@ -1805,5 +1832,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx) && isAudioEngineEmpty(play.audioEngine) && isArrangementEmpty(play.arrangement) && !play.projection && !play.backgroundMatte);
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.face && !play.pose && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx) && isAudioEngineEmpty(play.audioEngine) && isArrangementEmpty(play.arrangement) && !play.projection && !play.backgroundMatte);
 }
