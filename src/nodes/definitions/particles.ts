@@ -368,7 +368,7 @@ export const VectorFieldNode: NodeDefinition = {
     scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 20.0, step: 0.1  },
     speed:    { label: 'Speed',    type: 'float', min: 0.0, max: 5.0,  step: 0.05 },
     strength: { label: 'Strength', type: 'float', min: 0.0, max: 5.0,  step: 0.05 },
-    octaves:  { label: 'Octaves',  type: 'float', min: 1,   max: 6,    step: 1    },
+    octaves:  { label: 'Octaves',  type: 'float', min: 1,   max: 6,    step: 1, compileTime: true, hint: 'Recompiles when changed.' },
   },
   glslFunctions: [VF_NOISE_GLSL],
 

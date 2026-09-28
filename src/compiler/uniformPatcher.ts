@@ -70,7 +70,9 @@ export function defaultGlslVal(type: DataType | string): string {
  *
  * Skips:
  * - Nodes whose type is in SKIP_UNIFORM_TYPES (loop control nodes)
- * - Integer-step params (`step === 1`) — loop counts, octave counts, etc.
+ * - Params declared `compileTime: true` — loop bounds, array sizes and other
+ *   values the generated code needs as literals. A slider's `step` has no say:
+ *   a whole-number slider (Max Dist, Angle°) is still a live uniform.
  * - Non-float paramDefs (vec3, select, string)
  * - Keyframing a key that's also a real input socket (that key's static
  *   fallback param value is never read when the socket exists — the socket's
@@ -123,7 +125,6 @@ export function patchNodeParamsForUniforms(
       continue;
     }
     if (paramDef.type !== 'float') continue;  // otherwise only scalar floats
-    if (paramDef.step === 1) continue;         // integer param — keep baked
     if (!(key in node.inputs) && registerFn && !isKeyframeBypassed(node, key)) {
       const kfCfg = getKeyframeConfig(node, key);
       if (kfCfg) {

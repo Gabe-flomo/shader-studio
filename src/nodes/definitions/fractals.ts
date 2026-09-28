@@ -542,7 +542,7 @@ export const IFSNode: NodeDefinition = {
       { value: 'dragon',     label: 'Dragon Curve'    },
       { value: 'koch',       label: 'Koch (snowflake)'},
     ]},
-    iterations:     { label: 'Iterations',  type: 'float', min: 10,   max: 150,  step: 1, hint: 'Chaos game steps per pixel. More fills the attractor in; costs GPU time.' },
+    iterations:     { label: 'Iterations',  type: 'float', min: 10,   max: 150,  step: 1, compileTime: true, hint: 'Chaos game steps per pixel. More fills the attractor in; costs GPU time. Recompiles when changed.' },
     glow:           { label: 'Glow',        type: 'float', min: 0.001, max: 0.1,  step: 0.001, hint: 'How close a pixel must be to the attractor to light up. Smaller = sharper.' },
     scale:          { label: 'Scale',       type: 'float', min: 0.1,  max: 5.0,  step: 0.05, hint: 'Zoom of the fractal.' },
     offset_x:       { label: 'Offset X',    type: 'float', min: -3,   max: 3,    step: 0.01, hint: 'Slides the fractal horizontally.' },
@@ -925,7 +925,7 @@ export const ApollonianNode: NodeDefinition = {
     animate:        0.0,
   },
   paramDefs: {
-    iterations:     { label: 'Iterations',   type: 'float', min: 1,   max: 24,  step: 1, hint: 'Number of circle inversions. More = finer, deeper gasket.' },
+    iterations:     { label: 'Iterations',   type: 'float', min: 1,   max: 24,  step: 1, compileTime: true, hint: 'Number of circle inversions. More = finer, deeper gasket. Recompiles when changed.' },
     scale:          { label: 'Scale',        type: 'float', min: 1.0, max: 3.0, step: 0.01, hint: 'Inversion scale. Around 1.5 to 2 gives the classic packing.' },
     zoom:           { label: 'Zoom',         type: 'float', min: 0.1, max: 10,  step: 0.05, hint: 'Magnification of the view.' },
     center_x:       { label: 'Center X',     type: 'float', min: -5,  max: 5,   step: 0.01, hint: 'Slides the view horizontally.' },

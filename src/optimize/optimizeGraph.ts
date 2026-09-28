@@ -208,7 +208,7 @@ function optimizeList(nodes: GraphNode[], opts: OptimizeOptions & { protect: Rea
       const localId = `n${++seq}`;
       const p: Record<string, unknown> = { ...(def.defaultParams ?? {}), ...m.params };
       for (const [key, pd] of Object.entries(def.paramDefs ?? {})) {
-        if (!keepSliders || pd.type !== 'float' || pd.compileTime || pd.step === 1) continue;
+        if (!keepSliders || pd.type !== 'float' || pd.compileTime) continue;
         if (!isParamVisible(pd, m.params, def.defaultParams)) continue;
         if (m.inputs[key]?.connection) continue; // a wire took this slider over
         const v = p[key];
