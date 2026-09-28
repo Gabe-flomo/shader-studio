@@ -14,7 +14,7 @@ import { Select } from '../../ui/Select';
 import { fontFamily } from '../../../theme/tokens';
 import { usePlayUi } from '../playUi';
 import { AG_GROUPS, AG_MAX, AG_PRESETS, AG_RULES, AG_RULE_TYPES, agPresetLayer } from '../../../play/kit/agents.js';
-import { newAgentRule, type AgentRule, type AgentRuleType, type AgentsLayer, type PlayLayer } from '../../../types/playLayers';
+import { AGENT_MAX_RULES, newAgentRule, type AgentRule, type AgentRuleType, type AgentsLayer, type PlayLayer } from '../../../types/playLayers';
 import { BLENDS, BLEND_HINT, type Choice, type FieldKit } from './fields';
 import { Section } from './Section';
 import { BigEditorScaffold } from './BigEditorScaffold';
@@ -79,7 +79,7 @@ export function AgentsEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
     setRules(l.rules.filter(r => r.id !== id), drop);
   };
   const add = (type: string) => {
-    if (!AG_RULE_TYPES.includes(type)) return;
+    if (!AG_RULE_TYPES.includes(type) || l.rules.length >= AGENT_MAX_RULES) return;
     const { rule, numbers } = newAgentRule(l, type as AgentRuleType);
     setRules([...l.rules, rule], numbers);
     usePlayUi.getState().toggleFold(`agents-rule:${l.id}:${rule.id}`, false);
@@ -143,7 +143,9 @@ export function AgentsEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
       <Section id="agents-rules" kind="agents" title="Rules" primary summary={l.rules.length ? l.rules.map(r => AG_RULES[r.type]?.label ?? r.type).join(' · ') : 'None yet'} hint="An ordered stack: every step each agent adds up the steering of every rule that applies to it (weighted), then moves. Order matters only where one rule sets what the next sees (Max speed after the forces, a Boundary last).">
         {l.rules.map(ruleCard)}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 0 0' }}>
-          <Select ariaLabel="Add a rule" value="" options={[{ value: '', label: '+ Add a rule…' }, ...AG_RULE_TYPES.map(t => ({ value: t, label: AG_RULES[t].label }))]} onChange={add} height={26} style={{ flex: 1, minWidth: 0 }} />
+          {l.rules.length < AGENT_MAX_RULES
+            ? <Select ariaLabel="Add a rule" value="" options={[{ value: '', label: '+ Add a rule…' }, ...AG_RULE_TYPES.map(t => ({ value: t, label: AG_RULES[t].label }))]} onChange={add} height={26} style={{ flex: 1, minWidth: 0 }} />
+            : <span style={faint}>{AGENT_MAX_RULES} rules at most.</span>}
         </div>
         {!l.rules.length && f.note('No rules: the agents drift at their start speed. Add one, or pick a preset.')}
       </Section>
