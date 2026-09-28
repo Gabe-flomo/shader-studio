@@ -48,7 +48,7 @@ export function captureControls(input: PlayHtmlInput, mode: CaptureMode): PlayCo
  * video (seeked to its frame), lenses, cloners, data and the background are
  * functions of the time and the controls alone.
  */
-export const SIMULATED_LAYER_KINDS: ReadonlySet<PlayLayerKind> = new Set<PlayLayerKind>(['particles', 'brush', 'bodies', 'script', 'glyphs', 'contours', 'audio', 'drumpad', 'camera', 'relationship']);
+export const SIMULATED_LAYER_KINDS: ReadonlySet<PlayLayerKind> = new Set<PlayLayerKind>(['particles', 'brush', 'bodies', 'script', 'glyphs', 'contours', 'audio', 'drumpad', 'camera', 'relationship', 'agents']);
 
 /**
  * Does a frame at time t depend on the frames before it? Feedback and echo

@@ -58,6 +58,7 @@ import { makeFieldKit } from './layers/fields';
 import {
   AudioEditor, BodiesEditor, BrushEditor, CameraEditor, ContoursEditor, GlyphsEditor, ImageEditor, LensEditor, NullEditor, ParticlesEditor, ShapeEditor, TextEditor,
   type EditorContext, ClonerEditor, RelationshipEditor, ScriptEditor } from './layers/editors';
+import { AgentsEditor } from './layers/AgentsEditor';
 import { ActionsSection } from './layers/ActionsSection';
 import { SignalsList } from './ConditionFields';
 import { layerPositionPair } from '../../play/pairs';
@@ -745,6 +746,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
     case 'brush': body = <BrushEditor f={f} ctx={ctx} />; break;
     case 'bodies': body = <BodiesEditor f={f} ctx={ctx} />; break;
     case 'relationship': body = <RelationshipEditor f={f} ctx={ctx} />; break;
+    case 'agents': body = <AgentsEditor f={f} ctx={ctx} />; break;
     case 'cloner': body = <ClonerEditor f={f} ctx={ctx} />; break;
     case 'script': body = <ScriptEditor f={f} ctx={ctx} />; break;
     case 'background': body = <BackgroundEditor f={f} ctx={ctx} />; break;

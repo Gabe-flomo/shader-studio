@@ -404,7 +404,7 @@ export type PlaySource =
 export const DATA_ROW_COLUMN = '#row';
 
 /** Layer kinds with a centre on the picture: what proximity triggers and distance sensors can measure from. */
-export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data', 'video', 'relationship'];
+export const ANCHOR_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'particles', 'bodies', 'brush', 'script', 'cloner', 'data', 'video', 'relationship', 'agents'];
 
 /** Layer kinds a Relationship layer can move: they have an x and a y of their own (a relationship stands at its centroid). */
 export const RELATION_MEMBER_KINDS: readonly string[] = ['null', 'shape', 'text', 'image', 'camera', 'lens', 'audio', 'cloner', 'data', 'video', 'relationship'];
@@ -419,6 +419,7 @@ export const RELATION_MEMBER_KINDS: readonly string[] = ['null', 'shape', 'text'
  */
 export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble' | 'area' | 'perimeter'
   | 'gap' | 'closing' | 'chaseSpeed' | 'sight' | 'catch' | 'sinceCatch' | 'catches' | 'picture'
+  | 'alive' | 'centroidX' | 'centroidY' | 'group1' | 'group2' | 'group3' | 'group4'
   | 'grains' | 'grainMean' | 'grainSpread' | 'grainLevel' | 'grainPitch' | 'grainPos' | 'grainAmp';
 /** Granulator reads taken per grain (the grain's number in otherId). */
 export const PER_GRAIN_READS: readonly SensorRead[] = ['grainPos', 'grainAmp'];
@@ -426,6 +427,8 @@ export const PER_GRAIN_READS: readonly SensorRead[] = ['grainPos', 'grainAmp'];
 export function sensorKey(s: { layerId: string; read: string; otherId?: string }): string {
   return `${s.layerId}::${s.read}${PER_GRAIN_READS.includes(s.read as SensorRead) ? (s.otherId || '1') : ''}`;
 }
+/** An Agents layer's readings (docs/agents-layer.md). */
+export const AGENT_READS: readonly SensorRead[] = ['alive', 'speed', 'spread', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4', 'catch', 'catches', 'distance'];
 export const RELATION_READS: readonly SensorRead[] = ['gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'distance'];
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   shape: ['fill', 'hover', 'picture', 'distance'],
@@ -435,6 +438,7 @@ export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   audio: ['level', 'bass', 'lowmid', 'highmid', 'treble', 'picture', 'distance'],
   text: ['picture', 'distance'], image: ['picture', 'distance'], lens: ['picture', 'distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['picture', 'distance'], data: ['picture', 'distance'], video: ['picture', 'distance'],
   relationship: RELATION_READS,
+  agents: AGENT_READS,
   // A Granulator rack, as the sensor pickers list it (layer id `ae:<rackId>`).
   granulator: ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp'],
 };
@@ -611,6 +615,8 @@ export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', '
 export const ACTIONS_FOR: Record<string, readonly BuiltinActionKind[]> = {
   particles: ['burst', 'scatter', 'multiply', 'cull', 'reset', 'freeze', 'toggle', 'show', 'hide'],
   bodies: ['drop', 'scatter', 'reset', 'freeze', 'toggle', 'show', 'hide'],
+  // Reset starts the simulation over from its seed; Scatter throws every agent in a random direction.
+  agents: ['reset', 'scatter', 'freeze', 'toggle', 'show', 'hide'],
   text: ['next', 'prev', 'shuffle', 'reset', 'toggle', 'show', 'hide'],
   brush: ['clear', 'toggle', 'show', 'hide'],
   // Change background: the next, previous, a random or the Nth source; Reset goes back to what Index says.

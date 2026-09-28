@@ -29,6 +29,7 @@ import { DEFAULT_PAD_GRID, type PlayPadGrid } from '../types/playMidi';
 import type { PlayAudioEngine } from '../types/playAudioEngine';
 import { MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 import type { DpSynth } from '../play/kit/drumPads.js';
+import { agPresetLayer } from '../play/kit/agents.js';
 import type { GroupColour, LayerGroup } from '../types/layerGroups';
 
 // ── Record helpers ───────────────────────────────────────────────────────────
@@ -123,6 +124,16 @@ function drumKit(id: string, label: string, pads: Array<[DpSynth, { name?: strin
 /** A Relationship layer with `members` and its settings on top of the defaults. */
 function relationship(id: string, label: string, members: RelationMember[], over: Partial<RelationshipLayer> & Record<string, unknown>): PlayLayer {
   return { ...defaultLayer('relationship', id, label), members, ...over } as PlayLayer;
+}
+/**
+ * An Agents layer set up from a preset (agents.js AG_PRESETS), with `over` on top. The default
+ * layer's own rule numbers that the preset doesn't use are left out, as the parser would.
+ */
+function agentsLayer(id: string, label: string, preset: string, over: Record<string, unknown> = {}): PlayLayer {
+  const base = defaultLayer('agents', id, label);
+  const out: Record<string, unknown> = { ...base, ...agPresetLayer(preset, base), ...over };
+  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+  return out as unknown as PlayLayer;
 }
 /** A member of a relationship at its defaults. */
 const rm = (id: string, role: RelationRole = 'member'): RelationMember => newRelationMember(id, role);
@@ -1209,6 +1220,48 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
 • Move the glow (its Center in the graph) and watch them follow.
 • Switch Mode to **Keep a distance**: they can't cross the boundary and bounce at it instead.
 • Turn on Show forces: the green arrows are the picture's pull, the white ones velocities.`,
+  })),
+  ex('playBoids', layersGlowGraph({ falloff: 70, tint: [0.35, 0.6, 1] }), play({
+    layers: [agentsLayer('flock', 'Flock', 'boids', {
+      g1_count: 320, seed: 3, g1_color: [0.8, 0.95, 1],
+      rules: [...(agPresetLayer('boids', null)!.rules as unknown[]), { id: 'r7', type: 'flee', on: true, group: 0, targetGroup: 0, mode: '', target: 'pointer', targetId: '', channel: 'brightness', k: 3 }],
+      r7_weight: 3, r7_speed: 0.8, r7_radius: 0.18, r7_x: 0.5, r7_y: 0.5,
+    })],
+    controls: [
+      ctl('align', 'layer:flock::r1_weight', 'Align', 0, 3),
+      ctl('cohere', 'layer:flock::r2_weight', 'Cohere', 0, 3),
+      ctl('separate', 'layer:flock::r3_weight', 'Separate', 0, 4),
+      ctl('speed', 'layer:flock::speed', 'Speed', 0, 3),
+    ],
+    notes: `**What it shows.** An **Agents** layer: 320 agents moved by a stack of rules, the classic **boids**. Each one looks only at its neighbours: **Align** turns it the way they are heading, **Cohere** pulls it toward their middle, **Separate** keeps it from bumping into them. A little **Wander** and a **Max speed** with a minimum keep the flock moving, and **Boundary: Wrap** sends them round the edges. A seventh rule, **Flee** from the pointer, lets you part the flock with the mouse.
+
+**How it's built.** Layers → Agents, preset **Boids**, drawn as arrows coloured by heading, with a short trail. The glow is the Layers node: SDF Glow around whatever the layers draw. Every rule's weight and radius is a normal control: the four on the panel are Align, Cohere, Separate and the simulation's Speed.
+
+**Try this.**
+• Turn **Separate** down to 0: the flock collapses into tight knots. Turn **Align** to 0: they stop agreeing where to go.
+• Open a rule and raise its **Radius**: they see further and the flock gets bigger and slower to turn.
+• Look → Draw: **Goo**, and the flock becomes a liquid.
+• Seed: the whole run is seeded. Start over replays exactly the same flight, and a take renders it exactly.`,
+  })),
+  ex('playPredatorPrey', layersGlowGraph({ falloff: 60, tint: [1, 0.5, 0.35] }), play({
+    layers: [agentsLayer('world', 'Predators and prey', 'predatorPrey', { seed: 11, g1_color: [0.55, 0.9, 1], g2_color: [1, 0.4, 0.3] })],
+    controls: [
+      ctl('flee', 'layer:world::r4_weight', 'Prey · Flee', 0, 6),
+      ctl('hunt', 'layer:world::r6_speed', 'Predators · Speed', 0, 1.5),
+      ctl('drain', 'layer:world::g2_drain', 'Predators · Energy drain', 0, 0.5),
+      ctl('respawn', 'layer:world::g1_respawn', 'Prey · Respawn', 0, 20),
+      colourCtl('tint', 'glow::tint', 'Tint (flashes on a catch)'),
+    ],
+    mappings: [map('flash', 'tint', S.sensor('world', 'catch'), 0.6, 1.8, { smoothMs: 60 })],
+    notes: `**What it shows.** Two **groups** in one Agents layer. The prey (blue, group 1) flock like boids and **flee** any predator within reach. The predators (red, group 2) **seek** the nearest prey and **catch** it when they touch: the prey dies and the predator gains **energy**. Predators lose energy all the time (**Energy drain**), so one that stops catching starves; prey and predators **respawn** at a rate of their own. Every catch flashes the glow through the layer's **Catch** reading.
+
+**How it's built.** Layers → Agents, preset **Predator–prey**. Rules can apply to one group and look at another: the prey's Align and Cohere count only prey, their Separate counts everyone, their Flee targets group 2; the predators' Seek targets group 1, and their Catch rule catches group 1. **Boundary: Steer away** keeps everyone inside the picture.
+
+**Try this.**
+• Raise **Predators · Speed** past the prey's top speed (0.45): the prey can't outrun them and the flock thins.
+• Raise **Energy drain**: predators starve between catches and blink out, then respawn.
+• Set **Prey · Respawn** to 0: once eaten, prey stay eaten.
+• Map the layer's **Group 1 alive** or **Catches** reading onto anything.`,
   })),
   ex('playShapeTriggers', quietGraph(), play({
     layers: [

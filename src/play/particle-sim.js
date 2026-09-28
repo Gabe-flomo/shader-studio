@@ -988,22 +988,28 @@ export function gooField(st, p, env, gw, gh, cell) {
     const r = Math.max(0.3, base * (1 - p.sizeJitter * st.r[i]) * modScale(p.sizeBy, p.sizeAmount, st, i, p, env) * st.zs[i]);
     const w = modScale(p.opacityBy, p.opacityAmount, st, i, p, env) * fadeOf(st, i, p);
     if (w <= 0.004) continue;
-    const R = r * blend, c = rgbOf(st, i, p, env, zones);
-    const px = st.x[i] * W, py = (1 - st.y[i]) * H;
-    const x0 = Math.max(0, Math.floor((px - R) / cell)), x1 = Math.min(gw - 1, Math.floor((px + R) / cell));
-    const y0 = Math.max(0, Math.floor((py - R) / cell)), y1 = Math.min(gh - 1, Math.floor((py + R) / cell));
-    const R2 = R * R;
-    for (let gy = y0; gy <= y1; gy++) {
-      const dy = (gy + 0.5) * cell - py, row = gy * gw;
-      for (let gx = x0; gx <= x1; gx++) {
-        const dx = (gx + 0.5) * cell - px, d2 = dx * dx + dy * dy;
-        if (d2 >= R2) continue;
-        const q = 1 - d2 / R2, k = q * q * w, o = row + gx;
-        v[o] += k; rgb[o * 3] += k * c[0]; rgb[o * 3 + 1] += k * c[1]; rgb[o * 3 + 2] += k * c[2];
-      }
-    }
+    gooSplat(v, rgb, gw, gh, cell, st.x[i] * W, (1 - st.y[i]) * H, r * blend, w, rgbOf(st, i, p, env, zones));
   }
   return { v, rgb };
+}
+
+/**
+ * Add one blob's bump to a goo field: centre (px, py) and reach R in pixels,
+ * weight w, colour c (0..1). Shared by particles and the Agents layer.
+ */
+export function gooSplat(v, rgb, gw, gh, cell, px, py, R, w, c) {
+  const x0 = Math.max(0, Math.floor((px - R) / cell)), x1 = Math.min(gw - 1, Math.floor((px + R) / cell));
+  const y0 = Math.max(0, Math.floor((py - R) / cell)), y1 = Math.min(gh - 1, Math.floor((py + R) / cell));
+  const R2 = R * R;
+  for (let gy = y0; gy <= y1; gy++) {
+    const dy = (gy + 0.5) * cell - py, row = gy * gw;
+    for (let gx = x0; gx <= x1; gx++) {
+      const dx = (gx + 0.5) * cell - px, d2 = dx * dx + dy * dy;
+      if (d2 >= R2) continue;
+      const q = 1 - d2 / R2, k = q * q * w, o = row + gx;
+      v[o] += k; rgb[o * 3] += k * c[0]; rgb[o * 3 + 1] += k * c[1]; rgb[o * 3 + 2] += k * c[2];
+    }
+  }
 }
 
 /** Cell size for the goo grid (px): at most ~160k cells, and never coarser than a quarter of a blob's reach unless the grid would pass ~400k cells. */
@@ -1017,11 +1023,20 @@ function drawGoo(ctx, st, p, env) {
   const cell = gooCell(W, H, Math.max(1, p.size * (env.dpr || 1) * Math.max(1, p.gooBlend ?? 2.5)));
   const gw = Math.max(1, Math.ceil(W / cell)), gh = Math.max(1, Math.ceil(H / cell));
   const { v, rgb } = gooField(st, p, env, gw, gh, cell);
+  gooBlit(ctx, st, v, rgb, gw, gh, cell, p.gooThreshold ?? 0.5, p.gooSoft ?? 0.2, alpha);
+}
+
+/**
+ * Cut a goo field at the threshold and draw it scaled up over the picture.
+ * `holder` keeps the small canvas between frames (its `goo` and `gooImg`).
+ */
+export function gooBlit(ctx, holder, v, rgb, gw, gh, cell, t, soft, alpha) {
+  const st = holder;
   if (!st.goo || st.goo.width !== gw || st.goo.height !== gh) {
     st.goo = document.createElement('canvas'); st.goo.width = gw; st.goo.height = gh;
     st.gooImg = st.goo.getContext('2d').createImageData(gw, gh);
   }
-  const img = st.gooImg, d = img.data, t = p.gooThreshold ?? 0.5, soft = p.gooSoft ?? 0.2;
+  const img = st.gooImg, d = img.data;
   for (let k = 0, n = gw * gh; k < n; k++) {
     const f = v[k], o = k * 4;
     const a = f > 0 ? gooAlpha(f, t, soft) : 0;
