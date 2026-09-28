@@ -23,7 +23,7 @@ import { TYPE_COLORS } from './typeColors';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
-import { hasCustomRange, paramSliderRange, rangePatch, resetRangePatch } from '../../nodes/sliderRange';
+import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } from '../../nodes/sliderRange';
 import { frozenValueOf } from '../../nodes/sliderFreeze';
 import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -3989,11 +3989,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             const isKeyframed = node.inputs[key]?.type === 'float' && !node.inputs[key]?.connection
               && socketHasKeyframes(node, key) && !isKeyframeBypassed(node, key);
 
-            // A typed value becomes the new max (by magnitude), so the ruler can reach it
-            const handleTyped = (n: number) => {
-              if (Math.abs(n) > 0) updateNodeParams(node.id, { [`__scMax_${key}`]: Math.abs(n) });
-              setFloat(key, String(n));
-            };
 
             return (
               <div
@@ -4021,8 +4016,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                     step={adaptiveStep(val, step)}
                     defaultValue={typeof defVal === 'number' ? defVal : (effMin + effMax) / 2}
                     onChange={v => setFloat(key, String(v))}
-                    onType={handleTyped}
-                    onRange={(lo, hi) => updateNodeParams(node.id, rangePatch(key, lo, hi))}
+                    onType={n => setFloat(key, String(n))}
+                    // Typing past the range widens it (rangeAfterTyping): the card keeps the new range.
+                    onRange={(lo, hi) => updateNodeParams(node.id, extendRangePatch(key, lo, hi))}
+                    hard={paramDef.hard}
                     ariaLabel={paramDef.label}
                     touch={isTouchDevice}
                     disabled={!!drive}

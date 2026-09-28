@@ -399,7 +399,8 @@ function NumRow({ e, p, label, touch, exposed, onSet, onExpose }: { e: FinishHos
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
       <Label text={label ?? p.label} hint={p.hint || undefined} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <RulerSlider value={num(e, p.key)} min={p.min} max={p.max} step={p.step} defaultValue={p.value} onChange={onSet} ariaLabel={`${finishHostLabel(e)} ${p.label}`} touch={touch} integer={p.step === 1 && p.max - p.min === 1} />
+        {/* An effect's ranges are the effect's own (a 0–1 amount, a hue in degrees) and the Finish kit clamps stored values into them, so they're hard. */}
+        <RulerSlider value={num(e, p.key)} min={p.min} max={p.max} step={p.step} defaultValue={p.value} hard onChange={onSet} ariaLabel={`${finishHostLabel(e)} ${p.label}`} touch={touch} integer={p.step === 1 && p.max - p.min === 1} />
       </div>
       <IconButton icon={exposed ? 'check' : 'plus'} size="sm" active={exposed} disabled={exposed} label={exposed ? 'Already a control' : `Make ${p.label} a control, to map audio, an LFO or the mouse onto it`} onClick={() => onExpose(p)} />
     </div>

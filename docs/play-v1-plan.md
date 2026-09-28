@@ -123,6 +123,8 @@ Hand tracking (docs/hand-tracking.md) adds a **Hands** group to the source list,
 
 Add control lists the graph's live params and, in a folder per layer, every layer number. A control named after its layer follows the layer's renames. The chevron on a control (or a tap on the card) opens its details: where it comes from with **Go to layer** / **Show in graph** (the Studio opens centred on the node), the hint and node note, the range, and what drives it.
 
+Sliders everywhere (a card's params, an expression block's inputs, a Play control, a layer's numbers) follow one rule: **typing a value sets the range**. Click the value chip and type a number: past the max, it becomes the new max (0 → N; −N → N on a bidirectional slider); below the min of a one-way slider, the new min; inside the range, it's just the value, and the range never shrinks on its own (a card's **Reset range** does that). A stored value past the range is never clamped: the slider widens to hold it. The slider itself has no min/max fields, and its right-click is the row's menu (Add to Play, Pair with…); explicit min/max fields live only in the mappings drawer, on a mapping's output range. A few ranges are physical limits (a layer's opacity, a drum pad's numbers, Finish, audio effects and rack params) and clamp what's typed.
+
 The panel is S, M or L wide; the picture's shape is the row of little frames in the preview header.
 
 MIDI inside another site's frame (a preview on claude.ai, for example) is blocked by that site; the app now says so instead of showing nothing.

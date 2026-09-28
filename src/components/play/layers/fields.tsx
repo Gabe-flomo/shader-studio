@@ -122,7 +122,7 @@ export function makeFieldKit({ l, tk, touch, exposedTargets, set, onExpose, onEx
           <>
             {label(shortLabel ?? def.label, def.hint)}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <RulerSlider value={value} min={def.min} max={def.max} step={def.step ?? 0.01} defaultValue={fallback} onChange={v => set({ [key]: v })} onType={v => set({ [key]: v })} ariaLabel={`${l.label} ${def.label}`} touch={touch} />
+              <RulerSlider value={value} min={def.min} max={def.max} step={def.step ?? 0.01} defaultValue={fallback} onChange={v => set({ [key]: v })} onType={v => set({ [key]: v })} hard={def.hard} ariaLabel={`${l.label} ${def.label}`} touch={touch} />
             </div>
             {touch || COARSE
               // No right-click on a phone or tablet: the + opens the same menu.

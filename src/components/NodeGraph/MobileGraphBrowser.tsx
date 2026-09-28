@@ -51,7 +51,7 @@ import { suggestQuickAdds } from './quickAdds';
 import { wirePath } from './wirePath';
 import { RulerSlider } from '../ui/RulerSlider';
 import { rangeIncluding } from '../ui/rulerMath';
-import { hasCustomRange, paramSliderRange, rangePatch, resetRangePatch } from '../../nodes/sliderRange';
+import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } from '../../nodes/sliderRange';
 import { PlayParamActions } from '../play/PlayParamActions';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
@@ -2592,11 +2592,10 @@ export function MobileGraphBrowser() {
                     defaultValue={typeof defVal === 'number' ? defVal : (effMin + effMax) / 2}
                     disabled={isExternallyDriven || !!driver || playDriven.has(`${node.id}::${key}`)}
                     onChange={v => updateNodeParams(node.id, { [key]: v }, { immediate: true })}
-                    onType={n => {
-                      if (Math.abs(n) > effMax) setCustomMax(n);
-                      updateNodeParams(node.id, { [key]: n }, { immediate: true });
-                    }}
-                    onRange={(lo, hi) => updateNodeParams(node.id, rangePatch(key, lo, hi), { immediate: true })}
+                    onType={n => updateNodeParams(node.id, { [key]: n }, { immediate: true })}
+                    // Typing past the range widens it (rangeAfterTyping): the card keeps the new range.
+                    onRange={(lo, hi) => updateNodeParams(node.id, extendRangePatch(key, lo, hi), { immediate: true })}
+                    hard={pd.hard}
                     ariaLabel={inp.label}
                   />
                 </div>
