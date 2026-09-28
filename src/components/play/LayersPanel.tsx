@@ -32,11 +32,11 @@ import { BUILTIN_LAYER, type BuiltinVariant } from './layers/addLayerCatalog';
 import { script3dDefaults } from '../../types/playLayers';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { backgroundLayerOf, layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, parseActionTarget, parseLayerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
-import { buildTree, childrenOf, containerOf, groupLayerIds, groupOfLayer, groupPath, type ItemRef, type LayerGroup, type TreeNode } from '../../types/layerGroups';
+import { buildTree, childrenOf, containerOf, groupLayerIds, groupOfLayer, groupPath, newLayerHome, type ItemRef, type LayerGroup, type TreeNode } from '../../types/layerGroups';
 import { playId } from '../../play/playControls';
 import { handFeed } from '../../lib/handFeed';
 import { addHandPath, addNullFor, backgroundMenuItems, driveWithNull, duplicateLayer, layerMenuItems, layerNullDrives, removeLayer, renameLayer, resetLayer } from './layerOps';
-import { addToGroup, canMove, createGroup, duplicateGroup, moveItem, moveItemTo, orderedItems, removeGroup, takeOutOfGroup, ungroup } from './groupOps';
+import { canMove, placeNewLayer, createGroup, duplicateGroup, moveItem, moveItemTo, orderedItems, removeGroup, takeOutOfGroup, ungroup } from './groupOps';
 import { BackgroundEditor } from './layers/BackgroundEditor';
 import { GroupCard } from './layers/GroupCard';
 import { layerLook } from './layers/layerLook';
@@ -116,7 +116,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     const id = playId('layer');
     let made: PlayLayer;
     try { made = p5LayerRecord(r.patch, r.startAt, id); } catch (e) { toast.error('The sketch does not compile', { message: (e as Error)?.message ?? String(e) }); return; }
-    onChange(p => { const next = { ...p, layers: [...p.layers, made] }; return entered ? addToGroup(next, id, entered) : next; });
+    onChange(p => { const next = { ...p, layers: [...p.layers, made] }; return placeNewLayer(next, id, entered); });
+    leaveSealed();
     setSelected(id);
     toast.success(`Imported “${r.title}”`, { message: `${1 + (r.patch.files.length)} file${r.patch.files.length ? 's' : ''} · open the Sketch editor from the layer to see its code and console.` });
   };
@@ -148,6 +149,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const enteredRaw = usePlayUi(s => s.entered), enter = usePlayUi(s => s.enter);
   const entered = enteredRaw && play.groups?.some(g => g.id === enteredRaw) ? enteredRaw : '';
   const path = entered ? groupPath(play.groups, entered) : [];
+  // A new layer doesn't join a sealed group (a Granulator's grain nulls): the list goes to where it landed.
+  const leaveSealed = () => { if (!entered) return; const home = newLayerHome(play.groups, entered); if (home !== entered) enter(home); };
   const rows = childrenOf(tree, entered);
   const inside = path[path.length - 1];
   const hiddenAbove = path.some(g => g.hidden);
@@ -169,7 +172,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
 
   const addKind = (k: LayerKindDef) => {
     const id = playId('layer');
-    onChange(p => { const next = addKindLayer(p, k, id); return entered ? addToGroup(next, id, entered) : next; });
+    onChange(p => { const next = addKindLayer(p, k, id); return placeNewLayer(next, id, entered); });
+    leaveSealed();
     setSelected(id);
   };
   const add = (kind: PlayLayerKind, variant?: BuiltinVariant) => {
@@ -186,7 +190,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     // A hand path: fingertip nulls (the missing ones) and a filled path between them; tracking starts.
     if (variant === 'handPath') {
       const id = playId('layer');
-      onChange(p => { const next = addHandPath(p, id).play; return entered ? addToGroup(next, id, entered) : next; });
+      onChange(p => { const next = addHandPath(p, id).play; return placeNewLayer(next, id, entered); });
+      leaveSealed();
       if (handFeed.getStatus() === 'off') void handFeed.start();
       setSelected(id);
       return;
@@ -198,8 +203,9 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     const n = play.layers.filter(l => l.kind === kind && (kind !== 'script' || (l.kind === 'script' && (l.mode === '3d') === is3d))).length + 1;
     const id = playId('layer');
     const made = defaultLayer(kind, id, `${is3d ? '3D Script' : KIND[kind].label} ${n}`);
-    // Added while the list shows a group: it goes in that group.
-    onChange(p => { const next = { ...p, layers: [...p.layers, is3d ? ({ ...made, ...script3dDefaults() } as PlayLayer) : made] }; return entered ? addToGroup(next, id, entered) : next; });
+    // Added while the list shows a group: it goes in that group (not a sealed one: a Granulator's grain nulls).
+    onChange(p => { const next = { ...p, layers: [...p.layers, is3d ? ({ ...made, ...script3dDefaults() } as PlayLayer) : made] }; return placeNewLayer(next, id, entered); });
+    leaveSealed();
     setSelected(id);
   };
   const patch = (id: string, fn: (l: PlayLayer) => PlayLayer) => onChange(p => ({ ...p, layers: p.layers.map(l => l.id === id ? fn(l) : l) }));

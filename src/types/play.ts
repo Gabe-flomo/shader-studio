@@ -422,14 +422,16 @@ export const RELATION_MEMBER_KINDS: readonly string[] = ['null', 'shape', 'text'
  * catch (1 on a catch, fading), sinceCatch, catches (20 = 1). picture is the picture's channel under a layer
  * that is a member of a relationship (`<memberId>::picture`), and the mean under the relationship's members.
  * A Granulator rack (layer id `ae:<rackId>`, docs/granulator.md) reads its grains: grains (count ÷ 64),
- * grainMean, grainSpread, grainLevel, grainPitch, and one grain's grainPos / grainAmp (otherId: its number, 1..16).
+ * grainMean, grainSpread, grainLevel, grainPitch, grainBandMean / grainEnergySum (Spectral), and one grain's
+ * grainPos / grainAmp / grainBand / grainEnergy (otherId: its number, 1..16).
  */
 export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble' | 'area' | 'perimeter'
   | 'gap' | 'closing' | 'chaseSpeed' | 'sight' | 'catch' | 'sinceCatch' | 'catches' | 'picture'
   | 'alive' | 'centroidX' | 'centroidY' | 'group1' | 'group2' | 'group3' | 'group4' | 'born' | 'died'
-  | 'grains' | 'grainMean' | 'grainSpread' | 'grainLevel' | 'grainPitch' | 'grainPos' | 'grainAmp';
+  | 'grains' | 'grainMean' | 'grainSpread' | 'grainLevel' | 'grainPitch' | 'grainPos' | 'grainAmp'
+  | 'grainBandMean' | 'grainEnergySum' | 'grainBand' | 'grainEnergy';
 /** Granulator reads taken per grain (the grain's number in otherId). */
-export const PER_GRAIN_READS: readonly SensorRead[] = ['grainPos', 'grainAmp'];
+export const PER_GRAIN_READS: readonly SensorRead[] = ['grainPos', 'grainAmp', 'grainBand', 'grainEnergy'];
 /** Where a sensor source's reading is kept: `<layerId>::<read>`, or `<layerId>::<read><N>` for one grain's. */
 export function sensorKey(s: { layerId: string; read: string; otherId?: string }): string {
   return `${s.layerId}::${s.read}${PER_GRAIN_READS.includes(s.read as SensorRead) ? (s.otherId || '1') : ''}`;
@@ -447,7 +449,7 @@ export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   relationship: RELATION_READS,
   agents: AGENT_READS,
   // A Granulator rack, as the sensor pickers list it (layer id `ae:<rackId>`).
-  granulator: ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp'],
+  granulator: ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainBandMean', 'grainEnergySum', 'grainPos', 'grainAmp', 'grainBand', 'grainEnergy'],
 };
 /** A path shape (corners that are nulls) also reads its area, perimeter and spread. */
 const PATH_READS: readonly SensorRead[] = ['area', 'perimeter', 'spread', 'fill', 'hover', 'distance'];
@@ -1288,7 +1290,7 @@ function parseHands(v: unknown): PlayHands | null {
   return out;
 }
 
-const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'alive', 'born', 'died', 'grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp']);
+const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'alive', 'born', 'died', 'grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp', 'grainBandMean', 'grainEnergySum', 'grainBand', 'grainEnergy']);
 
 function parseAction(raw: unknown): PlayAction | null {
   if (!raw || typeof raw !== 'object') return null;

@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.18',
+    date: '2026-09-28',
+    title: 'Granulator: Emit and Spectral',
+    highlights: [
+      { area: 'Play', text: 'Granulator Emit mode: grains shoot from spawn points that travel through the sample, forwards, backwards or both, and wrap, bounce or jump at the ends.', link: { kind: 'doc', path: 'docs/granulator.md' } },
+      { area: 'Play', text: 'Granulator Spectral mode: grains play frequency bands, not slices; drag the band on the spectrogram, and each grain\'s band and energy can drive the picture.', link: { kind: 'doc', path: 'docs/granulator.md' } },
+      { area: 'Play', text: 'Grains → nulls puts the nulls in their own folder, and layers you add later stay out of it.' },
+      { area: 'Play', text: 'The granulator\'s generated samples are down to the pad chord; setups that used the others play the pad chord.' },
+    ],
+  },
+  {
     id: '2026.9.17',
     date: '2026-09-28',
     title: 'Plug-ins that talk back, quick links, one Controls tab',

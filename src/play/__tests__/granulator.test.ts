@@ -11,7 +11,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { AudioWorkletNode as NodeWorkletNode, OfflineAudioContext as NodeOffline } from 'node-web-audio-api';
 import {
-  GR_MAX_GRAINS, GR_PARAMS, grCreate, grFromDefaults, grFromPoints, type GrThing, grLoadWorklet, grMakeEngine, grNewStats, grParam, grRender, grSettings, grSummary, grSynthData, grWorkletSource,
+  GR_MAX_GRAINS, GR_PARAMS, GR_SYNTHS, grCreate, grFromDefaults, grFromPoints, type GrThing, grLoadWorklet, grMakeEngine, grNewStats, grParam, grRender, grSettings, grSummary, grSynthData, grWorkletSource,
 } from '../kit/granulator.js';
 import {
   AE_INST, auTarget, auTargetExists, controlsKeptFor, grainsTarget, parseAudioEngine, parseGrainsTarget, readAuValue, type AeRack, type PlayAudioEngine,
@@ -41,7 +41,8 @@ function crossingsHz(d: Float32Array, from: number, to: number, rate = SR): numb
   return n / ((to - from) / rate);
 }
 function rms(d: Float32Array, from: number, to: number): number { from = Math.floor(from); to = Math.floor(to); let s = 0; for (let i = from; i < to; i++) s += d[i] * d[i]; return Math.sqrt(s / Math.max(1, to - from)); }
-const sine = grSynthData('sine', SR); // 220 Hz, 2 s
+/** A 220 Hz sine, 2 s (the retired generated "sine" sample, made here). */
+const sine = (() => { const d = new Float32Array(2 * SR); for (let i = 0; i < d.length; i++) d[i] = 0.9 * Math.sin(2 * Math.PI * 220 * i / SR); return d; })();
 
 /** Run the engine in 128-frame blocks, noting the grain count after each. */
 function runCounting(settings: Record<string, number>, seconds: number, notes: Array<[number, number]> = [[60, 1]]) {
@@ -283,7 +284,7 @@ describe('in Web Audio (node-web-audio-api, offline)', () => {
     const ctx = new NodeOffline(2, SR, SR) as unknown as OfflineAudioContext;
     const b = ctx.createBuffer(1, sine.length, SR);
     b.getChannelData(0).set(sine);
-    const rack: AeRack = { id: 'gr', name: 'Grains', effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false, instrument: { id: AE_INST, kind: 'granulator', sample: { synth: 'sine', name: 'Sine' }, params: { 3: 80, 9: 0, 2: 0, 17: 0, 21: 3 } } };
+    const rack: AeRack = { id: 'gr', name: 'Grains', effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false, instrument: { id: AE_INST, kind: 'granulator', sample: { synth: 'pad', name: 'Pad chord' }, params: { 3: 80, 9: 0, 2: 0, 17: 0, 21: 3 } } };
     const tracks = grainTracks([rack], () => b);
     expect(tracks).toHaveLength(1);
     expect(tracks[0].chain).toBe(rackChainId('gr'));
@@ -307,7 +308,7 @@ describe('the host', () => {
     const ctx = new NodeOffline(2, SR / 2, SR) as unknown as AudioContext;
     const sensors = new Map<string, number>();
     audioEngineHost.configure({ invoke: null, webAudio: { ctx: () => ctx, connect: n => { n.connect(ctx.destination); return () => {}; } }, sensor: (k, v) => sensors.set(k, v), act: null });
-    const rack: AeRack = { id: 'gr', name: 'Grains', effects: [], keyboard: false, midi: 'off', channel: 0, volume: 1, mute: false, instrument: { id: AE_INST, kind: 'granulator', sample: { synth: 'sine', name: 'Sine' }, params: { 17: 0, 9: 0 } } };
+    const rack: AeRack = { id: 'gr', name: 'Grains', effects: [], keyboard: false, midi: 'off', channel: 0, volume: 1, mute: false, instrument: { id: AE_INST, kind: 'granulator', sample: { synth: 'pad', name: 'Pad chord' }, params: { 17: 0, 9: 0 } } };
     audioEngineHost.frame({ racks: [rack] }, []);
     await audioEngineHost.settled();
     const g = audioEngineHost.granulator('gr');
@@ -332,7 +333,7 @@ describe('the host', () => {
 describe('the record', () => {
   const rack = (over: Partial<AeRack> = {}): AeRack => ({
     id: 'gr', name: 'Grains', effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false,
-    instrument: { id: AE_INST, kind: 'granulator', sample: { synth: 'vowel', name: 'Vowel' }, params: { 1: 0.4, 0: 2 } }, ...over,
+    instrument: { id: AE_INST, kind: 'granulator', sample: { synth: 'pad', name: 'Pad chord' }, params: { 1: 0.4, 0: 2 } }, ...over,
   });
   const ae = (): PlayAudioEngine => ({ racks: [rack()] });
 
@@ -343,6 +344,15 @@ describe('the record', () => {
     const lib = parseAudioEngine({ racks: [rack({ instrument: { id: AE_INST, kind: 'granulator', sample: { sampleId: 'snd_1', name: 'Voice' } } })] })!;
     expect(lib.racks[0].instrument!.sample).toEqual({ sampleId: 'snd_1', name: 'Voice' });
     expect(parseAudioEngine(ae())).toEqual(ae());
+    // Retired generated samples (2026-09-28) come back as the pad chord; a drum pad's drum stays.
+    for (const synth of ['vowel', 'bell', 'pluck', 'noise', 'sine']) {
+      const old = parseAudioEngine({ racks: [rack({ instrument: { id: AE_INST, kind: 'granulator', sample: { synth, name: synth } } })] })!;
+      expect(old.racks[0].instrument!.sample).toEqual({ synth: 'pad', name: 'Pad chord' });
+    }
+    const drum = parseAudioEngine({ racks: [rack({ instrument: { id: AE_INST, kind: 'granulator', sample: { synth: 'kick', name: 'Kick' } } })] })!;
+    expect(drum.racks[0].instrument!.sample).toEqual({ synth: 'kick', name: 'Kick' });
+    expect(GR_SYNTHS).toEqual(['pad']);
+    expect(grSynthData('vowel', SR)).toEqual(grSynthData('pad', SR));
   });
 
   it('every setting is a target; its value reads back (the default when unset)', () => {
