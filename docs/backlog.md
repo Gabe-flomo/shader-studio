@@ -70,3 +70,16 @@ Asked 28 September 2026. A lighter Playfield packaged as an Audio Unit, VST3 and
 - **Where the picture goes:** the plugin window, an output window on a second display or projector, and Syphon (Mac) or NDI so Resolume, OBS or a video track can take the feed.
 - **How:** a native plugin shell (JUCE, or Rust `nih-plug`) embedding a web view that runs the existing website runtime (`play-runtime.js`), so there is one codebase. Costs: a second product to sign and ship, DAW quirks, a web view inside a plugin window on each platform, and its own licence check.
 - **When:** after the Audio engine settles and the licence work is done.
+
+## The Files page as a home (asked 28 September 2026)
+
+Make Files data-driven and discoverable. Inspiration: dashboard layouts with a greeting card, stat tiles with small charts, card grids and a calendar (the owner sent four references).
+
+- **Overview first.** Files opens on a home view:
+  - **Activity:** saves, renders, takes and imports over the last week or month as small charts and totals ("14 saves this week"), with the calendar days that had activity.
+  - **Recent:** a carousel of rendered thumbnails of recent Plays, graphs and GLSL files (posters already exist for examples; render or cache posters for saved work), each opening the item.
+  - **Most used:** nodes, functions, layer kinds and node patterns you use most.
+  - The tree, Notes, Clean up, Workspace and App settings stay as sections beside it.
+- **Pattern discovery.** Find recurring node patterns (common links such as UV → Circle SDF → SDF Glow, and uncommon ones) across a **scope you choose**: your saved graphs, a folder, your groups, the examples, imported graphs, or GLSL files (converted in the background when the converter succeeds). Show patterns as small graph cards with counts, "where it appears", and one-click actions: insert the pattern, make it a group, save it as a preset. Rank by frequency and by rarity.
+- **Item pages.** Opening a function, graph, node or preset in Files shows a compact page: the code (folded, small), a live output preview, its controls (tweakable on the page, updating the preview), where it's used, notes and credits, and actions (open, export, duplicate, delete).
+- **Node pages.** For a node: what it does, its inputs and outputs with hints, a live visual chosen by type (a plot for float functions like the Function Builder, a field/grid or arrows for vectors, a colour swatch for colours), example graphs that use it, and "insert into the current graph".
