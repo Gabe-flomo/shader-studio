@@ -21,6 +21,7 @@
 
 pub mod analysis;
 pub mod ffi;
+pub mod keys;
 pub mod params;
 pub mod render;
 pub mod safety;

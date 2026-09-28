@@ -1807,6 +1807,143 @@ static NSScreen *ae_screen_for(const double *saved) {
 static void ae_rect_out(NSRect r, double *o) { o[0] = r.origin.x; o[1] = r.origin.y; o[2] = r.size.width; o[3] = r.size.height; }
 static NSRect ae_rect_in(const double *o) { return NSMakeRect(o[0], o[1], o[2], o[3]); }
 
+// ── Computer-keyboard notes from a plug-in window ───────────────────────────
+//
+// While a rack plays from the computer keyboard (src/lib/rackKeyboard.ts) the
+// page turns forwarding on (`ae_keys_forward`). A key the plug-in's view
+// doesn't use travels up the responder chain to its window: AEPlugWindow's
+// keyDown: sends it to the page (`plugin-window:key`, the same code/key/
+// modifiers/repeat a DOM KeyboardEvent has) and swallows it. So typing into a
+// plug-in's text field (the field takes the key) stays the plug-in's, and so
+// do keys a plug-in handles itself. ⌘/⌃/⌥ combos and Tab are never forwarded.
+// A local monitor sends the key-up of every key forwarded down (whoever takes
+// the up) and Shift (sustain); the window losing key focus sends "blur", which
+// lets go of held notes, as the app's own window losing focus does.
+
+typedef void (*AEKeyCallback)(const char *json);
+static AEKeyCallback gKeyCallback = NULL; // main thread
+static BOOL gKeyForward = NO;             // main thread
+static id gKeyMonitor = nil;              // main thread
+static NSMutableSet<NSNumber *> *gKeysDown = nil; // key codes forwarded down; main thread
+static BOOL gShiftL = NO, gShiftR = NO;
+
+/** A macOS virtual key code → the DOM `KeyboardEvent.code` (positional, like the page's mapping); nil for keys never forwarded. */
+static NSString *ae_dom_code(unsigned short k) {
+  static NSDictionary<NSNumber *, NSString *> *m = nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    m = @{
+      @0: @"KeyA", @1: @"KeyS", @2: @"KeyD", @3: @"KeyF", @4: @"KeyH", @5: @"KeyG", @6: @"KeyZ", @7: @"KeyX",
+      @8: @"KeyC", @9: @"KeyV", @11: @"KeyB", @12: @"KeyQ", @13: @"KeyW", @14: @"KeyE", @15: @"KeyR",
+      @16: @"KeyY", @17: @"KeyT", @18: @"Digit1", @19: @"Digit2", @20: @"Digit3", @21: @"Digit4", @22: @"Digit6",
+      @23: @"Digit5", @24: @"Equal", @25: @"Digit9", @26: @"Digit7", @27: @"Minus", @28: @"Digit8", @29: @"Digit0",
+      @30: @"BracketRight", @31: @"KeyO", @32: @"KeyU", @33: @"BracketLeft", @34: @"KeyI", @35: @"KeyP",
+      @37: @"KeyL", @38: @"KeyJ", @39: @"Quote", @40: @"KeyK", @41: @"Semicolon", @42: @"Backslash",
+      @43: @"Comma", @44: @"Slash", @45: @"KeyN", @46: @"KeyM", @47: @"Period", @49: @"Space", @50: @"Backquote",
+      @53: @"Escape", @123: @"ArrowLeft", @124: @"ArrowRight", @125: @"ArrowDown", @126: @"ArrowUp",
+    };
+  });
+  return m[@(k)];
+}
+
+static void ae_key_send(NSString *type, NSString *code, NSEvent *e, BOOL repeat) {
+  if (!gKeyCallback) return;
+  NSEventModifierFlags f = e ? e.modifierFlags : 0;
+  NSString *key = @"";
+  if (e && (e.type == NSEventTypeKeyDown || e.type == NSEventTypeKeyUp)) key = e.charactersIgnoringModifiers ?: @"";
+  NSDictionary *d = @{
+    @"type": type, @"code": code ?: @"", @"key": key, @"repeat": @(repeat),
+    @"shift": @((f & NSEventModifierFlagShift) != 0), @"meta": @((f & NSEventModifierFlagCommand) != 0),
+    @"ctrl": @((f & NSEventModifierFlagControl) != 0), @"alt": @((f & NSEventModifierFlagOption) != 0),
+    @"window": ae_window_key(e.window) ?: @"",
+  };
+  NSData *json = [NSJSONSerialization dataWithJSONObject:d options:0 error:nil];
+  if (!json) return;
+  NSString *s = [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding];
+  gKeyCallback(s.UTF8String);
+}
+
+/** A key the plug-in's view didn't take reached its window: the page's, when a rack has the keyboard. YES when forwarded (and so swallowed). */
+static BOOL ae_key_down_unhandled(NSEvent *e) {
+  if (!gKeyForward || !gKeyCallback || !ae_window_key(e.window)) return NO;
+  NSEventModifierFlags f = e.modifierFlags;
+  if (f & (NSEventModifierFlagCommand | NSEventModifierFlagControl | NSEventModifierFlagOption)) return NO;
+  // A Cocoa text field or view editing (only reaches here if it passed the key on).
+  if ([e.window.firstResponder isKindOfClass:NSText.class]) return NO;
+  NSString *code = ae_dom_code(e.keyCode);
+  if (!code) return NO;
+  if (!gKeysDown) gKeysDown = [NSMutableSet new];
+  [gKeysDown addObject:@(e.keyCode)];
+  ae_key_send(@"down", code, e, e.isARepeat);
+  return YES;
+}
+
+/** Let go of everything forwarded (the window lost key focus, forwarding stopped). */
+static void ae_keys_blur(void) {
+  BOOL any = gKeysDown.count || gShiftL || gShiftR;
+  [gKeysDown removeAllObjects];
+  gShiftL = gShiftR = NO;
+  if (any) ae_key_send(@"blur", @"", nil, NO);
+}
+
+/** The key-up of a key forwarded down, and Shift, in a plug-in window. Main thread. */
+static NSEvent *ae_key_monitor(NSEvent *e) {
+  if (!gKeyForward || !ae_window_key(e.window)) return e;
+  if (e.type == NSEventTypeKeyUp) {
+    if (![gKeysDown containsObject:@(e.keyCode)]) return e;
+    [gKeysDown removeObject:@(e.keyCode)];
+    ae_key_send(@"up", ae_dom_code(e.keyCode), e, NO);
+    return nil; // ours: its down was
+  }
+  if (e.type == NSEventTypeFlagsChanged && (e.keyCode == 56 || e.keyCode == 60)) {
+    // Which Shift from the device bits (NX_DEVICELSHIFTKEYMASK 0x2, NX_DEVICERSHIFTKEYMASK 0x4).
+    BOOL left = e.keyCode == 56;
+    BOOL down = (e.modifierFlags & (left ? 0x2 : 0x4)) != 0;
+    BOOL *was = left ? &gShiftL : &gShiftR;
+    if (down != *was) {
+      *was = down;
+      // A Cocoa text field keeps Shift for capitals; sustain is only for playing.
+      if (!down || ![e.window.firstResponder isKindOfClass:NSText.class]) ae_key_send(down ? @"down" : @"up", left ? @"ShiftLeft" : @"ShiftRight", e, NO);
+    }
+  }
+  return e;
+}
+
+/** The page's rack keyboard is on (1) or off (0); `cb` gets each forwarded key as JSON (on the main thread). */
+void ae_keys_forward(int on, AEKeyCallback cb) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (cb) gKeyCallback = cb;
+    gKeyForward = on != 0;
+    if (gKeyForward && !gKeyMonitor) {
+      gKeyMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyUp | NSEventMaskFlagsChanged handler:^NSEvent *(NSEvent *e) {
+        @try { return ae_key_monitor(e); } @catch (NSException *x) { (void)x; return e; }
+      }];
+    } else if (!gKeyForward && gKeyMonitor) {
+      [NSEvent removeMonitor:gKeyMonitor];
+      gKeyMonitor = nil;
+      [gKeysDown removeAllObjects];
+      gShiftL = gShiftR = NO;
+    }
+  });
+}
+
+/** Tests: the DOM code for a macOS key code ("" for none; static, don't free). */
+const char *ae_key_code_name(unsigned short k) {
+  NSString *c = ae_dom_code(k);
+  return c ? c.UTF8String : "";
+}
+
+/** A plug-in window: keys its view passes on come to the page while a rack has the keyboard. */
+@interface AEPlugWindow : NSWindow
+@end
+@implementation AEPlugWindow
+- (void)keyDown:(NSEvent *)e {
+  BOOL sent = NO;
+  @try { sent = ae_key_down_unhandled(e); } @catch (NSException *x) { (void)x; }
+  if (!sent) [super keyDown:e];
+}
+@end
+
 static char kAEPlugWin;
 static char kAEPrefSize;
 
@@ -1898,10 +2035,12 @@ static char kAEPrefSize;
 }
 
 - (void)windowDidMove:(NSNotification *)n { (void)n; [self remember]; }
+- (void)windowDidResignKey:(NSNotification *)n { (void)n; ae_keys_blur(); } // held notes let go, as the app's window losing focus does
 - (void)windowDidEndLiveResize:(NSNotification *)n { (void)n; [self remember]; }
 
 - (void)windowWillClose:(NSNotification *)n {
   (void)n;
+  ae_keys_blur();
   [self remember];
   [self stop];
   NSWindow *w = self.window;
@@ -1969,7 +2108,7 @@ static void ae_show_window(NSString *key, NSString *unitKey, NSString *title, NS
   ae_win_place(wantF, c.axes, limits, hasSaved ? saved : NULL, scr, out);
   NSRect frame = ae_rect_in(out);
 
-  NSWindow *w = [[NSWindow alloc] initWithContentRect:[NSWindow contentRectForFrameRect:frame styleMask:style] styleMask:style backing:NSBackingStoreBuffered defer:NO];
+  NSWindow *w = [[AEPlugWindow alloc] initWithContentRect:[NSWindow contentRectForFrameRect:frame styleMask:style] styleMask:style backing:NSBackingStoreBuffered defer:NO];
   w.releasedWhenClosed = NO;
   w.title = title;
   [w setFrame:frame display:NO];
