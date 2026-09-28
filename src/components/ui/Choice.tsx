@@ -5,13 +5,15 @@ import { displayCombo } from '../../hooks/useShortcuts';
 
 /** On/off switch. Replaces checkboxes everywhere. `tall` gives it a 40px tap target (phones). */
 export function Toggle({
-  checked, onChange, label, disabled = false, tall = false,
+  checked, onChange, label, disabled = false, tall = false, fullWidth = false,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: ReactNode;
   disabled?: boolean;
   tall?: boolean;
+  /** The label wraps onto more lines instead of overflowing, filling whatever width the parent gives it (a field row). */
+  fullWidth?: boolean;
 }) {
   const tk = useTokens();
   const dark = useThemeMode() === 'dark';
@@ -25,9 +27,10 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       style={{
-        display: 'inline-flex', alignItems: 'center', gap: 7, border: 0, background: 'none', padding: 0,
+        display: fullWidth ? 'flex' : 'inline-flex', alignItems: 'center', gap: 7, border: 0, background: 'none', padding: 0,
+        width: fullWidth ? '100%' : undefined,
         font: `12px ${fontFamily.ui}`, color: tk.text.secondary, cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap', textAlign: 'left', maxWidth: '100%',
+        opacity: disabled ? 0.45 : 1, whiteSpace: fullWidth ? undefined : 'nowrap', textAlign: 'left', maxWidth: '100%',
         minHeight: tall ? 40 : undefined,
       }}
     >
@@ -46,7 +49,7 @@ export function Toggle({
         />
       </span>
       {/* A long label (a song's name) breaks onto a second line instead of running off a phone. */}
-      {label !== undefined && <span style={{ whiteSpace: 'normal', minWidth: 0 }}>{label}</span>}
+      {label !== undefined && <span style={{ whiteSpace: 'normal', minWidth: 0, flex: fullWidth ? '1 1 auto' : undefined, overflowWrap: 'break-word' }}>{label}</span>}
     </button>
   );
 }

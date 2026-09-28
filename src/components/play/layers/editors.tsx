@@ -27,6 +27,7 @@ import { BLENDS, BLEND_HINT, type Choice, type FieldKit } from './fields';
 import { ImagePicker, SpritePicker } from './pickers';
 import { FIELD_HELP, ZONE_HELP } from './help';
 import { Section } from './Section';
+import { BigEditorScaffold } from './BigEditorScaffold';
 import { AudioSourceRows, FontRow } from './rows';
 import { extractScriptParams } from './scriptExamples';
 import { Segmented } from '../../ui/Choice';
@@ -256,11 +257,17 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
   const flock = g<number>('flock');
   const nullPick = (why: string) => f.pick('Null', 'nullId', nulls(ctx), 'Add a Null layer first', why, () => ctx.createNull('nullId'));
   return (
-    <>
+    <BigEditorScaffold sections={[
+      { id: 'particles-motion', label: 'Motion' },
+      { id: 'particles-birth', label: 'Birth and death' },
+      { id: 'particles-flocking', label: 'Flocking' },
+      { id: 'particles-attractor', label: 'Attractor' },
+      { id: 'particles-look', label: 'Look' },
+    ]}>
       {f.row('Count', <NumberInput value={g<number>('count')} min={1} max={5000} step={50} title="How many particles (up to 5000)" onCommit={n => f.set({ count: Math.max(1, Math.min(5000, Math.round(n))) })} style={f.numStyle} />, 'How many particles. Changing it keeps the ones already moving.')}
       {f.toggle('Show field', 'showField', 'Draw the field and forces while editing', 'Arrows show where the field points; the attractor, nulls with a role and force zones show their pull. Only while the Layers tab is open, never in recordings or on websites.')}
 
-      <Section kind="particles" title="Motion">
+      <Section id="particles-motion" kind="particles" title="Motion">
         {f.seg('Field', 'field', (Object.keys(FIELD_HELP) as ParticleField[]).map(k => ({ value: k, label: FIELD_HELP[k].label, title: FIELD_HELP[k].title })),
           'Where each particle wants to go. Flow, Climb and Descend read the picture; Noise is its own drifting field; None leaves it to the forces.')}
         {f.note(<><b style={{ color: f.tk.text.secondary }}>{help.title}.</b> {help.body}</>)}
@@ -277,7 +284,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         {f.prop('collide')}
       </Section>
 
-      <Section kind="particles" title="Birth and death">
+      <Section id="particles-birth" kind="particles" title="Birth and death">
         {f.seg('Emit', 'emit', [
           { value: 'stream', label: 'Stream', title: 'Always alive, reborn when they leave' }, { value: 'burst', label: 'Bursts', title: 'Born only by a Burst action' },
           { value: 'multiply', label: 'Multiply', title: 'One particle is born and keeps splitting until there are Count of them' },
@@ -322,6 +329,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
       </Section>
 
       <Section
+        id="particles-flocking"
         kind="particles"
         title="Flocking"
         hint="Boids: each particle also steers by the neighbours it can see. It still follows the field, the mouse and the zones."
@@ -335,7 +343,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         {f.note('Flock is how much the flock wins over the field. Sight is how far each one sees; inside its Personal space, neighbours are pushed away. The Play example “Flocking” has good starting points.')}
       </Section>
 
-      <Section kind="particles" title="Attractor">
+      <Section id="particles-attractor" kind="particles" title="Attractor">
         {f.seg('Pulled by', 'attractor', [
           { value: 'none', label: 'Nothing' }, { value: 'mouse', label: 'Mouse', title: 'The pointer while it is over the picture' },
           { value: 'press', label: 'Press', title: 'The pointer, only while a button is held' }, { value: 'null', label: 'Null', title: 'A null layer' },
@@ -351,7 +359,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         )}
       </Section>
 
-      <Section kind="particles" title="Look">
+      <Section id="particles-look" kind="particles" title="Look">
         {f.select('Shape', 'shape', [
           { value: 'dot', label: 'Dot' }, { value: 'square', label: 'Square' }, { value: 'triangle', label: 'Triangle' }, { value: 'streak', label: 'Streak' },
           { value: 'ring', label: 'Ring' }, { value: 'star', label: 'Star' }, { value: 'image', label: 'Image / SVG' },
@@ -381,7 +389,7 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
         {f.select('Blend', 'blend', BLENDS, BLEND_HINT)}
         {f.toggle('Mask', 'reveal', 'Picture through particles', 'The particles become a mask: each one shows the picture under it instead of a colour. Hide the picture (Background → Layers only) to see the shader only where particles are.')}
       </Section>
-    </>
+    </BigEditorScaffold>
   );
 }
 
@@ -413,7 +421,7 @@ export function ShapeEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         {shape === 'layer' && f.pick('Layer', 'sourceId', sources, 'Add a Text or Image layer first', 'The text, image or camera layer whose shape this is. It follows that layer as it moves.')}
         {shape === 'picture' && f.prop('threshold')}
         {shape === 'path' && <PathRows f={f} ctx={ctx} />}
-        {f.toggle('Invert', 'invert', 'Swap inside and outside: the fill covers everything but the shape, particles and triggers treat the outside as inside, and a matte made from it shows the other side')}
+        {f.toggle('Invert', 'invert', 'Swap inside and outside', 'The fill covers everything but the shape, particles and triggers treat the outside as inside, and a matte made from it shows the other side.')}
       </Section>
       {geometric && (
         <Section kind="shape" title="Position">
@@ -1008,9 +1016,17 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
   const alphaLayers = ctx.layers.filter(x => x.id !== l.id && x.kind !== 'relationship' && x.kind !== 'null' && x.kind !== 'drumpad');
   const small: React.CSSProperties = { ...f.numStyle, width: 50 };
   const faint: React.CSSProperties = { color: f.tk.text.faint, font: '11px Inter, system-ui, sans-serif' };
+  const sections = [
+    { id: 'rel-members', label: 'Members' },
+    { id: 'rel-relationship', label: 'Relationship' },
+    { id: 'rel-motion', label: 'Motion' },
+    { id: 'rel-walls', label: 'Walls' },
+    ...(chase ? [{ id: 'rel-catch', label: 'Catch' }] : []),
+    { id: 'rel-debug', label: 'Debug' },
+  ];
   return (
-    <>
-      <Section kind="relationship" title="Members" hint={`Layers with a position: nulls, shapes, text, images, video, the camera… and other relationships (each stands at its members’ centre and moves as a group). Up to ${RELATION_MAX_MEMBERS}; every pair costs a little, so keep it to what you need. A member’s X and Y are driven from here (drag it on the picture to put it back where you want).`}>
+    <BigEditorScaffold sections={sections}>
+      <Section id="rel-members" kind="relationship" title="Members" hint={`Layers with a position: nulls, shapes, text, images, video, the camera… and other relationships (each stands at its members’ centre and moves as a group). Up to ${RELATION_MAX_MEMBERS}; every pair costs a little, so keep it to what you need. A member’s X and Y are driven from here (drag it on the picture to put it back where you want).`}>
         {candidates.length
           ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '2px 0 6px 68px' }}>{candidates.map(chip)}</div>
           : f.note('Add a Null, Shape, Text or Image layer to make it a member.')}
@@ -1041,7 +1057,7 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
         })}
         {members.length === 1 && f.note('One member has nothing to relate to: add another.')}
       </Section>
-      <Section kind="relationship" title="Relationship">
+      <Section id="rel-relationship" kind="relationship" title="Relationship">
         {f.seg('Kind', 'relation', [
           { value: 'chase', label: 'Chase', title: 'Chasers hunt the closest prey in sight; prey flees. A catch sends a signal.' },
           { value: 'repel', label: 'Repel', title: 'Everyone pushes apart when closer than a distance' },
@@ -1057,10 +1073,10 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
           {f.props('strength', l.attractMode === 'keep' ? 'minDistance' : 'falloff')}
         </>}
       </Section>
-      <Section kind="relationship" title="Motion" hint="What keeps the motion looking natural rather than stuck: how stiff the soft contacts are, how much of a bounce is kept, how quickly things slow down, and a speed cap.">
+      <Section id="rel-motion" kind="relationship" title="Motion" hint="What keeps the motion looking natural rather than stuck: how stiff the soft contacts are, how much of a bounce is kept, how quickly things slow down, and a speed cap.">
         {f.props('springiness', 'bounciness', 'damping', 'maxSpeed')}
       </Section>
-      <Section kind="relationship" title="Walls" hint="What a member does at the picture’s edge, by role. Escape lets it leave: prey out of the picture is out of sight (the chaser wanders) and comes back after the delay, at the far side if Respawn at says so.">
+      <Section id="rel-walls" kind="relationship" title="Walls" hint="What a member does at the picture’s edge, by role. Escape lets it leave: prey out of the picture is out of sight (the chaser wanders) and comes back after the delay, at the far side if Respawn at says so.">
         {chase
           ? <>{f.select('Chasers', 'wallChaser', RELATION_WALLS)}{f.select('Prey', 'wallPrey', RELATION_WALLS)}</>
           : f.select('Members', 'wallMember', RELATION_WALLS)}
@@ -1068,7 +1084,7 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
         {f.prop('respawnDelay')}
       </Section>
       {chase && (
-        <Section kind="relationship" title="Catch" hint="A chaser within the catch radius of a prey catches it: the Catch reading pulses, Catches counts up, and the signal (if any) fires. One catch per approach.">
+        <Section id="rel-catch" kind="relationship" title="Catch" hint="A chaser within the catch radius of a prey catches it: the Catch reading pulses, Catches counts up, and the signal (if any) fires. One catch per approach.">
           {f.prop('catchRadius')}
           {f.seg('Then', 'onCatch', [{ value: 'none', label: 'Nothing' }, { value: 'respawn', label: 'Respawn prey' }, { value: 'swap', label: 'Swap roles', title: 'The prey becomes the chaser and the chaser the prey (until the layer runs again)' }])}
           {f.row('Signal', (
@@ -1079,9 +1095,9 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
           ), 'Sent on every catch. Actions and trigger mappings fire on it: flash the background, burst particles, step the text.')}
         </Section>
       )}
-      <Section kind="relationship" title="Debug">
+      <Section id="rel-debug" kind="relationship" title="Debug">
         {f.toggle('Overlay', 'debug', 'Show forces', 'With the guides on: sight and flee radii, a line from each chaser to its target, velocity arrows (white) and the picture’s pull (green). Never in renders or the finished picture.')}
       </Section>
-    </>
+    </BigEditorScaffold>
   );
 }

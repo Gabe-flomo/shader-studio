@@ -27,6 +27,7 @@ import { toast } from '../../ui/toastStore';
 import { moveItem } from '../../../lib/reorder';
 import { playId } from '../../../play/playControls';
 import { Section } from '../layers/Section';
+import { BigEditorScaffold } from '../layers/BigEditorScaffold';
 import { usePlayUi } from '../playUi';
 import { CurveEditor } from './CurveEditor';
 import { AudioFxPanel } from './AudioFxPanel';
@@ -490,7 +491,14 @@ function GradeEditor({ e, k, touch, onPatch, onReplace }: { e: FinishEffect; k: 
     </div>
   );
   return (
-    <>
+    <BigEditorScaffold sections={[
+      { id: 'grade-basic', label: 'Basic' },
+      { id: 'grade-curves', label: 'Curves' },
+      { id: 'grade-wheels', label: 'Colour wheels' },
+      { id: 'grade-split', label: 'Split toning' },
+      { id: 'grade-hsl', label: 'HSL secondary' },
+      { id: 'grade-tone', label: 'Tone and amount' },
+    ]}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
         <Label text="Look" hint="A starting point: it sets the controls below, which you can then change. Your own grades can be saved as looks." />
         <div style={{ flex: 1, minWidth: 140 }}>
@@ -499,7 +507,7 @@ function GradeEditor({ e, k, touch, onPatch, onReplace }: { e: FinishEffect; k: 
         <IconButton icon="save" size="sm" label="Save this grade as a look" onClick={() => { void save(); }} />
         {savedCurrent && <IconButton icon="trash" size="sm" tone="danger" label={`Delete the saved look “${savedCurrent.name}”`} onClick={() => { void remove(); }} />}
       </div>
-      <Section kind="finish-grade" title="Basic" hint="Light and white balance, like Lightroom’s Basic panel.">
+      <Section id="grade-basic" kind="finish-grade" title="Basic" hint="Light and white balance, like Lightroom’s Basic panel.">
         {k.nums('exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks')}
         <div style={{ height: 4 }} />
         <div style={{ position: 'relative' }}>
@@ -512,10 +520,10 @@ function GradeEditor({ e, k, touch, onPatch, onReplace }: { e: FinishEffect; k: 
         </div>
         {k.nums('vibrance', 'saturation')}
       </Section>
-      <Section kind="finish-grade" title="Curves" hint="Tone curves for all channels or one, and hue curves for single colours.">
+      <Section id="grade-curves" kind="finish-grade" title="Curves" hint="Tone curves for all channels or one, and hue curves for single colours.">
         <CurveEditor curves={curves} onChange={c => onPatch({ curves: c })} touch={touch} />
       </Section>
-      <Section kind="finish-grade" title="Colour wheels" hint="Lift, gamma and gain: push the shadows, mid-tones and highlights toward a colour, and set their level.">
+      <Section id="grade-wheels" kind="finish-grade" title="Colour wheels" hint="Lift, gamma and gain: push the shadows, mid-tones and highlights toward a colour, and set their level.">
         <div style={{ ...wheels, marginTop: 8 } as React.CSSProperties}>
           <ColourWheel title="Shadows" hint="Lift: the darkest tones. Drag toward a colour; the slider raises or lowers them." x={num(e, 'liftX')} y={num(e, 'liftY')} level={num(e, 'liftL')} onMove={(x, y) => onPatch({ liftX: x, liftY: y })} onLevel={v => onPatch({ liftL: v })} touch={touch} />
           <ColourWheel title="Midtones" hint="Gamma: the middle tones." x={num(e, 'gammaX')} y={num(e, 'gammaY')} level={num(e, 'gammaL')} onMove={(x, y) => onPatch({ gammaX: x, gammaY: y })} onLevel={v => onPatch({ gammaL: v })} touch={touch} />
@@ -523,25 +531,25 @@ function GradeEditor({ e, k, touch, onPatch, onReplace }: { e: FinishEffect; k: 
         </div>
         <Note>Drag a puck toward a colour (hold Shift for finer moves); double-click a wheel to centre it. Each wheel’s numbers can be mapped: add them from Controls → Add control → Finish.</Note>
       </Section>
-      <Section kind="finish-grade" title="Split toning" hint="One colour for the highlights, another for the shadows.">
+      <Section id="grade-split" kind="finish-grade" title="Split toning" hint="One colour for the highlights, another for the shadows.">
         {hueTrack('splitHiHue')}
         {k.num('splitHiSat')}
         {hueTrack('splitShHue')}
         {k.num('splitShSat')}
         {k.num('splitBalance')}
       </Section>
-      <Section kind="finish-grade" title="HSL secondary" hint="Pick a range of colours and change only those: a greener grass, a less orange sky.">
+      <Section id="grade-hsl" kind="finish-grade" title="HSL secondary" hint="Pick a range of colours and change only those: a greener grass, a less orange sky.">
         {hueTrack('hslHue')}
         {k.nums('hslRange', 'hslSoft', 'hslShift', 'hslSat', 'hslLum')}
         {num(e, 'hslRange') === 0 && <Note>Raise Range to pick the colours around the hue.</Note>}
       </Section>
-      <Section kind="finish-grade" title="Tone and amount" hint="A film-like shoulder for the highlights (the Tone Map node’s modes), and how much of the grade shows.">
+      <Section id="grade-tone" kind="finish-grade" title="Tone and amount" hint="A film-like shoulder for the highlights (the Tone Map node’s modes), and how much of the grade shows.">
         <Row label="Tone map" hint="Applied in linear light after Exposure and white balance: raise Exposure to push more into the shoulder.">
           <Select ariaLabel="Tone map" value={e.tone ?? 'none'} height={26} options={TONE_OPTIONS} onChange={v => onPatch({ tone: v })} />
         </Row>
         {k.num('amount')}
       </Section>
-    </>
+    </BigEditorScaffold>
   );
 }
 

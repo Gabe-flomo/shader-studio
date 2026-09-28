@@ -58,6 +58,8 @@ The picture is a texture. Things drawn over it in JavaScript feed the bus, and t
 
 **One kit, two hosts.** Everything a layer does is in `src/play/kit/` (geometry, drawing, bodies, the frame orchestrator) and `src/play/particle-sim.js`, as plain JS. The app's overlay and the web runtime are thin hosts that hand the kit the pointer, live audio, the camera and images each frame; the exporter inlines the kit into the page. Every layer kind is described once in `src/types/playLayers.ts`: its interface, its defaults, and a schema that checks a file's values (a bad or missing value falls back to the default, so old and hand-edited files load).
 
+**Editors with lots of settings** (drum pads, particles, relationship, video, Finish → Grade) get the full editor treatment in the split view's big Layers panel: a shared scaffold with a jump strip once a card has 4+ sections. See docs/editor-layout.md.
+
 The kinds:
 
 - **Null.** A point to drag or animate. Its X and Y are a mapping source, and every number on every layer can be made a control (the + beside it). A null can **follow** the mouse or another null on a spring (Spring, Wobble), and can take a **particle role**: emitter, absorber, attract, repel or vortex.
