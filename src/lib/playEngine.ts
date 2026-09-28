@@ -1135,6 +1135,11 @@ class PlayEngine implements InputSource {
     return st ? { n: st.n, count: st.count } : null;
   }
 
+  /** Is an increment's repeat condition met now (for the editor)? */
+  incrementCondOpen(mappingId: string): boolean {
+    return this.incCond.get(mappingId)?.open ?? false;
+  }
+
   /** The editor's Reset: back to the start (the control's value now, or the explicit start), growth and direction too. */
   resetIncrement(mappingId: string): void {
     const st = this.incStates.get(mappingId);

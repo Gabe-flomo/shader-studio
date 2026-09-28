@@ -103,6 +103,10 @@ import { PairCard, PairMappingRow, pairMappingLabel } from './PairControls';
 import { makePair, newPairMapping, pairOf, partnerTarget, positionPair, unpair } from '../../play/pairs';
 import { pairDrives, signalSource } from '../../lib/playEngine';
 import { SIGNAL_SOURCE } from './sourcePickerSections';
+import { IncrementEditor } from './IncrementEditor';
+import { incrementSummary } from '../../play/incrementUi';
+import { defaultIncrement, type PlayIncrement } from '../../types/play';
+import { recordBpm } from '../../types/playArrangement';
 
 // ── Live values (polled, not per store write) ───────────────────────────────
 
@@ -1474,9 +1478,9 @@ function MappingsWorkspace({ play, meters, status, empty, renderRow, pairs, laye
   const [picked, setPicked] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const label = useCallback((m: PlayMapping) => ({
-    source: sourceLabel(m.source, play.controls, layerRefs),
+    source: m.increment ? `Increment ${incrementSummary(m.increment, play.signals, layerRefs)}` : sourceLabel(m.source, play.controls, layerRefs),
     control: play.controls.find(c => c.id === m.controlId)?.label ?? 'missing control',
-  }), [play.controls, layerRefs]);
+  }), [play.controls, play.signals, layerRefs]);
   const counts = useMemo(() => groupCounts(play.mappings), [play.mappings]);
   const shownGroup = group !== 'all' && counts.some(c => c.id === group) ? group : 'all';
   const groups = useMemo(() => groupMappings(play.mappings, label, query, shownGroup), [play.mappings, label, query, shownGroup]);
@@ -1750,6 +1754,21 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
     transition: assigned ? 'none' : 'background 0.9s ease-out, box-shadow 0.9s ease-out',
   };
   const chevron = fixed ? null : <IconButton icon={collapsed ? 'chevR' : 'chevD'} label={collapsed ? 'Expand mapping' : 'Collapse mapping'} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />;
+  // Follow (the control moves with the source) or Increment (it moves in steps: docs/increment-mapping.md).
+  const setKind = (k: 'follow' | 'increment') => {
+    if (k === 'follow') { onUpdate({ increment: undefined }); return; }
+    if (!allSources) { openProSheet('play.sources'); return; }
+    const span = Math.abs(m.outMax - m.outMin);
+    const step = span > 0 ? Math.round((span / 8) * 1000) / 1000 : 0.1;
+    onUpdate({ increment: defaultIncrement(step, recordBpm(useNodeGraphStore.getState().play.mappings)) });
+  };
+  const kindPicker = (
+    <Segmented size="sm" ariaLabel="Kind" value={m.increment ? 'increment' : 'follow'} onChange={setKind} options={[
+      { value: 'follow', label: 'Follow', title: 'The control follows the source smoothly' },
+      { value: 'increment', label: 'Increment', title: 'The control moves in steps: on a trigger, a threshold or a repeat' },
+    ]} />
+  );
+  const summary = m.increment ? incrementSummary(m.increment, signals, layerRefs) : '';
 
   if (collapsed) {
     return (
@@ -1759,7 +1778,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
           <button type="button" onClick={onToggle} title="Expand" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `500 12px ${fontFamily.ui}`, textAlign: 'left' }}>
             {waiting
               ? <MidiWaitChip title="This row has no knob yet: the first CC that moves on any device becomes its CC" />
-              : <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{sourceLabel(m.source, controls, layerRefs)}</span>}
+              : <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={m.increment ? 'Increment' : undefined}>{m.increment ? summary : sourceLabel(m.source, controls, layerRefs)}</span>}
             <Icon name="chevR" size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: tk.text.secondary }}>{control?.label ?? 'missing control'}</span>
           </button>
@@ -1768,6 +1787,53 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
           <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} />
         </div>
         <MappingMeter input={meter} output={shaped} on={m.enabled} margin="2px 0 0 22px" />
+      </div>
+    );
+  }
+
+  if (m.increment) {
+    const inc = m.increment as PlayIncrement;
+    return (
+      <div style={{ ...frame, padding: '8px 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {chevron}
+          <span style={{ ...labelStyle, width: 40 }}>Kind</span>
+          {kindPicker}
+          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: tk.text.muted, font: `500 11.5px ${fontFamily.ui}` }} title={summary}>{summary}</span>
+          <SoloButton kind="mapping" id={m.id} />
+          <IconButton icon="trash" label="Remove mapping" size="sm" tone="danger" onClick={onRemove} />
+        </div>
+        {!allSources && (
+          <button type="button" onClick={() => openProSheet('play.sources')} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', margin: '6px 0 0', padding: '6px 8px', border: 0, borderRadius: radius.md, cursor: 'pointer', background: alpha(tk.accent.base, 0.08), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}`, textAlign: 'left' }}>
+            <ProBadge />
+            <span style={{ flex: 1, minWidth: 0 }}>Increments need Pro. It’s kept as it is but doesn’t run on Free.</span>
+          </button>
+        )}
+        <MappingMeter input={meter} output={meter} on={m.enabled} margin="6px 0 2px 60px" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+          <span style={labelStyle}>Control</span>
+          <Select ariaLabel="Control" value={m.controlId} options={controls.map(c => ({ value: c.id, label: c.label }))} onChange={retarget} height={26} style={{ flex: 1, minWidth: 0 }} />
+          {control?.kind === 'color' && (
+            <Select ariaLabel="Colour channel" value={m.channel === undefined ? 'all' : `${m.channel}`} options={COLOUR_CHANNELS} onChange={v => onUpdate({ channel: v === 'all' ? undefined : (parseInt(v, 10) as 0 | 1 | 2) })} height={26} />
+          )}
+          <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} label={m.enabled ? 'On' : 'Off'} />
+        </div>
+        <IncrementEditor
+          mapping={{ ...m, increment: inc }}
+          control={control}
+          layers={layerRefs}
+          numStyle={numStyle}
+          labelStyle={labelStyle}
+          onUpdate={onUpdate}
+          sourceEditor={<>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <span style={labelStyle}>Source</span>
+              <GroupedPicker ariaLabel="Source" value={type} sections={sourceSections} onChange={pickSource} height={26} style={{ flex: 1, minWidth: 0 }} width={300} searchPlaceholder="Search sources" />
+              <IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />
+            </div>
+            <SourceOptions source={m.source} audioNodes={audioNodes} layerRefs={layerRefs} numStyle={numStyle} labelStyle={labelStyle} onChange={source => onUpdate({ source })} />
+          </>}
+        />
       </div>
     );
   }
@@ -1841,6 +1907,7 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <NumberInput value={m.smoothMs} min={0} max={5000} step={10} title="Smoothing time in milliseconds" onCommit={n => onUpdate({ smoothMs: Math.max(0, n) })} style={numStyle} />
         <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
         <span style={{ flex: 1 }} />
+        {kindPicker}
         <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} label={m.enabled ? 'On' : 'Off'} />
       </div>
       {m.source.kind === 'midi' && m.source.signal === 'note' && !m.source.range && (
