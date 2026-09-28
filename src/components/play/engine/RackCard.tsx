@@ -48,16 +48,28 @@ import { engineId, withEngine } from './engineOps';
 import { sendChoices, sendLabel } from '../../../lib/engineSend';
 import { GranulatorPanel } from './GranulatorPanel';
 import { AUDIO_FX_EFFECTS, rackChainId } from '../../../types/playAudioFx';
+import { RACK_CONTROLS_MAX } from '../../../types/playArrangement';
+import { hasOwnRouting } from '../../../types/playAudioEngine';
+import { regroupRackControls } from '../../../play/rackControls';
+import { ConfigurePanel, RackControlsStrip } from './RackControls';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
-export function RackCard({ rack, play, onChange, touch, index, count }: {
+export function RackCard({ rack, play, onChange, touch, index, count, selected = false, lead = false, locked = false, onSelect, onLock }: {
   rack: AeRack;
   play: PlayRecord;
   onChange: Change;
   touch: boolean;
   index: number;
   count: number;
+  /** The selected card (docs/audio-engine.md, "The lead rack"). */
+  selected?: boolean;
+  /** This rack takes the MIDI no rack's own routing claims. */
+  lead?: boolean;
+  /** It's locked as the lead. */
+  locked?: boolean;
+  onSelect?: () => void;
+  onLock?: (on: boolean) => void;
 }) {
   const tk = useTokens();
   const [picking, setPicking] = useState<'instrument' | 'effect' | null>(null);
@@ -78,7 +90,7 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
         : c.kind === 'granulator'
           ? (rack.instrument?.kind === 'granulator' ? rack.instrument : { id: AE_INST, kind: 'granulator', sample: { synth: 'pad', name: 'Pad chord' } })
           : { id: AE_INST, kind: 'au', unit: { type: c.unit.type, subtype: c.unit.subtype, manufacturer: c.unit.manufacturer, name: c.unit.name, vendor: c.unit.vendor } };
-      edit(ae => patchRack(ae, rack.id, { instrument: inst }));
+      onChange(p => regroupRackControls(withEngine(p, patchRack(p.audioEngine, rack.id, { instrument: inst }))));
     } else if (c.kind === 'au') {
       if (rack.effects.length >= AE_EFFECTS_MAX) { toast.error(`A rack takes ${AE_EFFECTS_MAX} effects at most`); return; }
       const fx: AeSlot = { id: engineId('fx'), kind: 'au', unit: { type: c.unit.type, subtype: c.unit.subtype, manufacturer: c.unit.manufacturer, name: c.unit.name, vendor: c.unit.vendor } };
@@ -97,7 +109,7 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
   const rename = async () => {
     const name = await askText('Rename rack', { initial: rack.name, confirmLabel: 'Rename' });
     // The readers' control group is named after the rack: it follows.
-    if (name && name.trim()) onChange(p => regroupReaderControls(withEngine(p, patchRack(p.audioEngine, rack.id, { name: name.trim().slice(0, 60) }))));
+    if (name && name.trim()) onChange(p => regroupRackControls(regroupReaderControls(withEngine(p, patchRack(p.audioEngine, rack.id, { name: name.trim().slice(0, 60) })))));
   };
   const move = (by: -1 | 1) => edit(ae => {
     const racks = [...(ae?.racks ?? [])];
@@ -108,7 +120,8 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
   });
 
   return (
-    <div style={{ borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, display: 'flex', flexDirection: 'column' }}>
+    <div onPointerDownCapture={onSelect} aria-current={selected || undefined}
+      style={{ borderRadius: radius.card, background: tk.bg.panel, boxShadow: selected ? `inset 0 0 0 1.5px ${tk.accent.base}, 0 0 0 3px ${alpha(tk.accent.base, 0.14)}` : `inset 0 0 0 1px ${tk.border.default}`, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 8px 8px 12px', borderBottom: folded ? 'none' : `1px solid ${tk.border.subtle}` }}>
         <IconButton icon={folded ? 'chevR' : 'chevD'} size="sm" label={folded ? 'Open' : 'Fold'} onClick={() => setFolded(f => !f)} />
         <Icon name="piano" size={15} style={{ color: tk.text.faint }} />
@@ -116,7 +129,9 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
         <span style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
           {rack.source ? `Sends ${sendLabel(rack.source, play.layers)}` : rack.instrument ? aeSlotName(rack.instrument) : 'No instrument'}{rack.effects.length ? ` · ${rack.effects.length} effect${rack.effects.length === 1 ? '' : 's'}` : ''}
         </span>
+        {lead && <LeadChip locked={locked} own={hasOwnRouting(rack)} />}
         <span style={{ flex: 1 }} />
+        {onLock && <IconButton icon="lock" size="sm" active={locked} label={locked ? 'Unlock: the selected card leads again' : 'Lock as lead: this rack keeps the MIDI input while you select other cards to edit them'} onClick={() => onLock(!locked)} />}
         <IconButton icon={rack.mute ? 'eyeOff' : 'wave'} size="sm" active={rack.mute} label={rack.mute ? 'Unmute' : 'Mute'} onClick={() => { if (!rack.mute) audioEngineHost.releaseHeld(rack.id); patch({ mute: !rack.mute }); }} />
         <IconButton icon="chevU" size="sm" label="Move up" disabled={index === 0} onClick={() => move(-1)} />
         <IconButton icon="chevD" size="sm" label="Move down" disabled={index === count - 1} onClick={() => move(1)} />
@@ -129,6 +144,7 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
           {desktop && <SourceRow rack={rack} play={play} onPatch={o => { audioEngineHost.releaseHeld(rack.id); edit(ae => patchRack(ae, rack.id, r => ({ ...r, ...o, ...(o.source ? { keyboard: false } : {}) }))); }} />}
           <RackSpectrum rack={rack} play={play} onChange={onChange} />
           {!rack.source && <Keys rackId={rack.id} touch={touch} />}
+          <RackControlsStrip rack={rack} play={play} onChange={onChange} touch={touch} />
           {rack.source ? (
             <SendView rack={rack} play={play} />
           ) : (
@@ -164,6 +180,17 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
       )}
       {picking && <UnitPicker want={picking} compact={touch} onPick={pick} onClose={() => setPicking(null)} />}
     </div>
+  );
+}
+
+/** "Lead" (and "Locked") on the card that takes the MIDI input. */
+function LeadChip({ locked, own }: { locked: boolean; own: boolean }) {
+  const tk = useTokens();
+  return (
+    <span title={own ? 'The lead, but this rack has its own MIDI device or channel: it plays what that sends' : locked ? 'Locked as the lead: it takes MIDI notes, the computer keyboard and pad hits' : 'The lead: it takes MIDI notes, the computer keyboard and pad hits (select another card to hand them over, or lock it)'}
+      style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 999, background: alpha(tk.accent.base, 0.14), color: tk.accent.text, font: `700 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+      {locked && <Icon name="lock" size={10} />}Lead{locked ? ' · locked' : ''}
+    </span>
   );
 }
 
@@ -390,7 +417,9 @@ function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk, first
   const error = useEngineUi(s => s.errors[key]);
   const loading = useEngineUi(s => !!s.loading[key]);
   const [open, setOpen] = useState(false);
+  const [configuring, setConfiguring] = useState(false);
   const isAu = slot.kind === 'au';
+  const canConfigure = slot.kind === 'granulator' || (isAu && desktop && pluginsOk);
   const name = aeSlotName(slot);
   const openWindow = async () => {
     const why = await audioEngineHost.openUi(rack.id, slot.id, `${rack.name} · ${name}`);
@@ -413,6 +442,7 @@ function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk, first
         </span>
         {isAu && desktop && pluginsOk && <IconButton icon="popout" size="sm" label="Open the plug-in’s window" onClick={() => void openWindow()} />}
         {isAu && desktop && pluginsOk && <IconButton icon="sliders" size="sm" active={open} label={open ? 'Hide parameters' : 'Parameters'} onClick={() => setOpen(o => !o)} />}
+        {canConfigure && <IconButton icon="target" size="sm" active={configuring} label={configuring ? 'Done configuring' : `Configure: pick up to ${RACK_CONTROLS_MAX} rack controls${isAu ? ' (move them in its window, or pick from the list)' : ''}`} onClick={() => setConfiguring(c => !c)} />}
         {onBypass && <IconButton icon="bypass" size="sm" active={!!slot.bypass} label={slot.bypass ? 'Turn back on' : 'Bypass'} onClick={onBypass} />}
         {onMove && <IconButton icon="chevU" size="sm" label="Earlier" disabled={first} onClick={() => onMove(-1)} />}
         {onMove && <IconButton icon="chevD" size="sm" label="Later" disabled={last} onClick={() => onMove(1)} />}
@@ -426,6 +456,7 @@ function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk, first
           <Button size="sm" variant="ghost" icon="rebuild" onClick={() => audioEngineHost.retry(rack.id, slot.id)}>Try again</Button>
         </div>
       )}
+      {configuring && <ConfigurePanel rack={rack} slot={slot} play={play} onChange={onChange} desktop={desktop} onClose={() => setConfiguring(false)} />}
       {slot.kind === 'sampler' && <SamplerZones rack={rack} slot={slot} onChange={onChange} />}
       {slot.kind === 'granulator' && <GranulatorPanel rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} />}
       {isAu && open && desktop && pluginsOk && <Params rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} onKeep={() => void keepState()} />}

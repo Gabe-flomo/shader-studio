@@ -665,6 +665,12 @@ class AudioEngineHost {
     } catch { return []; }
   }
 
+  /** A slot's parameters as they are now, without touching the card's list (Configure watches the plug-in's window with it). */
+  async readParams(rack: string, slot: string): Promise<AuParam[] | null> {
+    if (!this.invoke) return null;
+    try { return parseParamList(await this.invoke<unknown>('ae_params', { rack, slot })); } catch { return null; }
+  }
+
   /** A slot's whole state, to keep in the record. */
   async slotState(rack: string, slot: string): Promise<string | null> {
     if (!this.invoke) return null;
