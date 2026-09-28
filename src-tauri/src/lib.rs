@@ -11,6 +11,7 @@ mod workspace;
 mod linked;
 mod osc_listener;
 mod output_window;
+mod recovery;
 
 // ── FFmpeg session state ──────────────────────────────────────────────────────
 
@@ -322,6 +323,7 @@ pub fn run() {
         .manage(linked::LinkedState::default())
         .manage(playfile::OpenedFiles(Mutex::new(Vec::new())))
         .manage(output_window::OutputState::default())
+        .manage(recovery::SessionState::default())
         .invoke_handler(tauri::generate_handler![
             start_ffmpeg_encode,
             send_frame_rgba,
@@ -399,8 +401,17 @@ pub fn run() {
             output_window::output_fullscreen,
             output_window::output_record_put,
             output_window::output_record_get,
+            recovery::session_start,
+            recovery::session_note,
+            recovery::autosave_write,
+            recovery::autosave_list,
+            recovery::autosave_read,
+            recovery::autosave_remove,
+            recovery::autosave_reveal,
         ])
         .setup(|app| {
+            // Crash recovery (docs/crash-recovery.md): the previous launch's marker is kept for the page, this one's written.
+            recovery::start(app.handle());
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -413,6 +424,10 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app, _event| {
+            // A clean quit: the next launch doesn't offer to recover.
+            if let tauri::RunEvent::Exit = &_event {
+                recovery::clean_exit(_app);
+            }
             // A .playfile opened with the app (Finder, the Dock): kept for the web side to take
             // at launch, and announced for when it's already running (src/playfile.rs).
             #[cfg(any(target_os = "macos", target_os = "ios"))]
