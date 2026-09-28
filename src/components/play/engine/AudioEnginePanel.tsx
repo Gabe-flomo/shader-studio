@@ -89,7 +89,7 @@ function EngineHeader({ desktop, touch }: { desktop: boolean; touch: boolean }) 
   const [midi, setMidi] = useState(false);
   useEffect(() => { if (desktop) void audioEngineHost.refreshOutputs(); }, [desktop, status.ready]);
   const line = !desktop
-    ? 'In this browser: the sample player, through the page’s sound.'
+    ? 'In this browser: the sample player and the Granulator, through the page’s sound.'
     : status.error ? status.error
       : status.ready ? `Running at ${Math.round(status.sampleRate / 100) / 10} kHz.` : 'Starts with the first rack.';
   return (

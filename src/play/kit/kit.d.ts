@@ -16,6 +16,8 @@ export interface KitEnv {
   guides?: CanvasRenderingContext2D | null;
   /** Layers to also draw alone (even hidden), read back with layerCanvas(id). */
   alphaLayers?: readonly string[] | null;
+  /** Sample the picture's coarse grid even when no layer reads it (a Granulator's things read their brightness). */
+  needCoarse?: boolean;
   pointer: KitPointer;
   markers: boolean;
   editing: boolean;
@@ -79,6 +81,7 @@ export interface LayerKit {
   isAnimated(record: PlayRecord): boolean;
   /** A layer drawn alone on the last frame (listed in env.alphaLayers), or null. */
   layerCanvas(id: string): HTMLCanvasElement | null;
+  grainThings(record: PlayRecord, sourceId: string, boundaryId: string, value: (l: PlayLayer, key: string) => number, aspect: number): { things: GrainThing[]; cx: number; cy: number; all: number };
   /**
    * The Background layer's plan for this frame (null without one): what the
    * host must render first (graphs) and keep playing (videos). Carries out
@@ -90,3 +93,5 @@ export interface LayerKit {
 }
 
 export function createLayerKit(): LayerKit;
+
+export interface GrainThing { id: number; x: number; y: number; vx: number; vy: number; age: number; size: number; bright: number; born: boolean }

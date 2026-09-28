@@ -10,8 +10,13 @@
  * mapping engine keeps their driven values under the prop id
  * `au:<rackId>:<slotId>` like the audio effects' numbers.
  *
+ * A granulator (docs/granulator.md) keeps its settings the same way, by
+ * GR_PARAMS address, so each one is a target like an Audio Unit parameter.
+ *
  * Pure: types, parsing, targets and record edits. lib/audioEngineHost.ts runs it.
  */
+import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
+
 
 /** An Audio Unit, by its component description (four-char codes as numbers), with its names for showing. */
 export interface AeUnitRef {
@@ -40,10 +45,21 @@ export interface AeZone {
 /** The instrument's slot id. */
 export const AE_INST = 'inst';
 
+/**
+ * A granulator's sample (docs/granulator.md): a kept sound from the Library
+ * (`sampleId`, named like a zone's so the Library's "used by", clean-up and
+ * bundling find it), or a generated one (`synth`: play/kit/granulator.js GR_SYNTHS).
+ */
+export interface AeGrainSample {
+  sampleId?: string;
+  synth?: string;
+  name: string;
+}
+
 export interface AeSlot {
   /** `inst` for the instrument; an effect's own id. */
   id: string;
-  kind: 'au' | 'sampler';
+  kind: 'au' | 'sampler' | 'granulator';
   /** kind 'au'. */
   unit?: AeUnitRef;
   /** An effect passed straight through. */
@@ -54,7 +70,20 @@ export interface AeSlot {
   state?: string;
   /** kind 'sampler'. */
   zones?: AeZone[];
+  /** kind 'granulator': its sample (its settings are `params`, by GR_PARAMS address). */
+  sample?: AeGrainSample;
+  /** kind 'granulator': "Grains from" a layer: each thing inside the boundary plays grains (docs/granulator.md). */
+  from?: AeGrainFrom;
 }
+
+/** One link: a thing's prop (GR_FROM_PROPS) sets a grain setting (GR_FROM_TARGETS) between min (at 0) and max (at 1). */
+export interface AeGrainLink { prop: string; target: string; on: boolean; min: number; max: number }
+/**
+ * A layer drives the grains: `source` a particles, bodies, null or
+ * Relationship layer; `boundary` a shape layer (only things inside it play;
+ * '' is the whole picture); `births` a thing just born plays a grain at once.
+ */
+export interface AeGrainFrom { source: string; boundary: string; births: boolean; links: AeGrainLink[] }
 
 export interface AeRack {
   id: string;
@@ -155,25 +184,65 @@ export function aeSlot(rack: AeRack | undefined, slotId: string): AeSlot | undef
   return slotId === AE_INST ? rack.instrument ?? undefined : rack.effects.find(e => e.id === slotId);
 }
 
-/** Does a target name a slot the record has (an Audio Unit one)? */
+/** Does a target name a slot the record has (an Audio Unit one, or a granulator's setting)? */
 export function auTargetExists(ae: PlayAudioEngine | undefined, target: string): boolean {
   const t = parseAuTarget(target);
   const s = t ? aeSlot(aeRack(ae, t.rackId), t.slotId) : undefined;
+  if (s?.kind === 'granulator') return !!grParam(t!.address);
   return !!s && s.kind === 'au';
 }
 
-/** A target's value as the record keeps it, or undefined (never set on the card, or gone). */
+/** A target's value as the record keeps it, or undefined (never set on the card, or gone). A granulator's unset setting reads its default. */
 export function readAuValue(ae: PlayAudioEngine | undefined, target: string): number | undefined {
   const t = parseAuTarget(target);
   if (!t) return undefined;
-  const v = aeSlot(aeRack(ae, t.rackId), t.slotId)?.params?.[t.address];
-  return typeof v === 'number' ? v : undefined;
+  const s = aeSlot(aeRack(ae, t.rackId), t.slotId);
+  const v = s?.params?.[t.address];
+  if (typeof v === 'number') return v;
+  return s?.kind === 'granulator' ? grParam(t.address)?.value : undefined;
+}
+
+/** The instrument's name: "Sample player", "Granulator", or the Audio Unit's. */
+export function aeSlotName(slot: AeSlot): string {
+  return slot.kind === 'sampler' ? 'Sample player' : slot.kind === 'granulator' ? 'Granulator' : slot.unit?.name ?? 'Audio Unit';
 }
 
 /** "Rack 1 · Juno · Cutoff" style labels: the rack and the slot's name. */
 export function aeSlotLabel(rack: AeRack, slot: AeSlot): string {
-  const what = slot.kind === 'sampler' ? 'Sample player' : slot.unit?.name ?? 'Audio Unit';
-  return `${rack.name} · ${what}`;
+  return `${rack.name} · ${aeSlotName(slot)}`;
+}
+
+/** Is this rack's instrument a granulator? */
+export const isGranulatorRack = (r: AeRack | undefined): boolean => r?.instrument?.kind === 'granulator';
+
+// ── Grain readouts (docs/granulator.md) ────────────────────────────────────
+
+/**
+ * A granulator rack reports its grains as sensors on `ae:<rackId>` (so a
+ * mapping's Sensor source reads them): GRAIN_READS, and per grain
+ * `grainPos<N>` / `grainAmp<N>` (N 1..GRAIN_EACH).
+ */
+export const GRAIN_READS = ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch'] as const;
+export type GrainRead = (typeof GRAIN_READS)[number];
+export const GRAIN_EACH = 16;
+export const grainSensorLayer = (rackId: string) => `${RACK_ACT_PREFIX}${rackId}`;
+/** The rack a sensor's layer id names (`ae:<rackId>`), or ''. */
+export const rackOfSensorLayer = (layerId: string) => (layerId.startsWith(RACK_ACT_PREFIX) ? layerId.slice(RACK_ACT_PREFIX.length) : '');
+export const GRAIN_READ_LABELS: Record<GrainRead, string> = { grains: 'Grain count', grainMean: 'Grain position (mean)', grainSpread: 'Grain spread', grainLevel: 'Grain level', grainPitch: 'Grain pitch' };
+
+/**
+ * Control target of a grain readout's control (`grains:<rackId>::<read>`).
+ * It writes nothing: a sensor → control mapping drives it, so the readout
+ * shows on the Controls tab and other mappings can read it as a control.
+ */
+export const GRAINS_TARGET_PREFIX = 'grains:';
+export const grainsTarget = (rackId: string, read: GrainRead) => `${GRAINS_TARGET_PREFIX}${rackId}::${read}`;
+export function parseGrainsTarget(target: string): { rackId: string; read: GrainRead } | null {
+  if (!target.startsWith(GRAINS_TARGET_PREFIX)) return null;
+  const rest = target.slice(GRAINS_TARGET_PREFIX.length), i = rest.indexOf('::');
+  if (i <= 0) return null;
+  const read = rest.slice(i + 2) as GrainRead;
+  return GRAIN_READS.includes(read) && ID.test(rest.slice(0, i)) ? { rackId: rest.slice(0, i), read } : null;
 }
 
 // ── Record edits ────────────────────────────────────────────────────────────
@@ -223,7 +292,11 @@ export function moveEffect(ae: PlayAudioEngine | undefined, rackId: string, slot
 
 /** The record's controls without the ones on slots that are gone (a removed rack, effect or instrument). */
 export function controlsKeptFor<T extends { target: string }>(controls: readonly T[], ae: PlayAudioEngine | undefined): T[] {
-  return controls.filter(c => !parseAuTarget(c.target) || auTargetExists(ae, c.target));
+  return controls.filter(c => {
+    const g = parseGrainsTarget(c.target);
+    if (g) return isGranulatorRack(aeRack(ae, g.rackId));
+    return !parseAuTarget(c.target) || auTargetExists(ae, c.target);
+  });
 }
 
 /** The zone a note plays (the last one covering it, as the native sample player picks), or undefined. */
@@ -304,6 +377,24 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
     if (sid !== AE_INST) return null; // the sample player is an instrument
     return { id: sid, kind: 'sampler', zones: parseZones(o.zones) };
   }
+  if (o.kind === 'granulator') {
+    if (sid !== AE_INST) return null; // an instrument too
+    const slot: AeSlot = { id: sid, kind: 'granulator' };
+    const params = parseParams(o.params);
+    if (params) {
+      const kept: Record<string, number> = {};
+      for (const [a, v] of Object.entries(params)) { const p = grParam(a); if (p) kept[a] = Math.max(p.min, Math.min(p.max, v)); }
+      if (Object.keys(kept).length) slot.params = kept;
+    }
+    const from = parseGrainFrom(o.from);
+    if (from) slot.from = from;
+    const sm = o.sample && typeof o.sample === 'object' ? o.sample as Record<string, unknown> : null;
+    if (sm) {
+      if (typeof sm.sampleId === 'string' && ID.test(sm.sampleId)) slot.sample = { sampleId: sm.sampleId, name: text(sm.name, 'Sound', 120) };
+      else if (typeof sm.synth === 'string' && GR_SYNTHS.includes(sm.synth)) slot.sample = { synth: sm.synth, name: text(sm.name, GR_SYNTH_NAMES[sm.synth] ?? sm.synth, 120) };
+    }
+    return slot;
+  }
   const unit = parseUnit(o.unit);
   if (!unit) return null;
   const slot: AeSlot = { id: sid, kind: 'au', unit };
@@ -312,6 +403,23 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
   if (params) slot.params = params;
   if (typeof o.state === 'string' && o.state.length <= 2_000_000 && /^[A-Za-z0-9+/=]+$/.test(o.state)) slot.state = o.state;
   return slot;
+}
+
+/** A granulator's "Grains from", or undefined when it names no source. */
+export function parseGrainFrom(raw: unknown): AeGrainFrom | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.source !== 'string' || !ID.test(o.source)) return undefined;
+  const links: AeGrainLink[] = [];
+  for (const x of Array.isArray(o.links) ? o.links : []) {
+    if (links.length >= GR_FROM_LINKS_MAX || !x || typeof x !== 'object') continue;
+    const l = x as Record<string, unknown>;
+    const t = typeof l.target === 'string' ? GR_FROM_TARGETS[l.target] : undefined;
+    if (!t || typeof l.prop !== 'string' || !GR_FROM_PROPS.includes(l.prop)) continue;
+    const lo = Math.min(t.min, -48, 0), hi = Math.max(t.max, 20000);
+    links.push({ prop: l.prop, target: l.target as string, on: l.on !== false, min: num(l.min, t.min, lo, hi), max: num(l.max, t.max, lo, hi) });
+  }
+  return { source: o.source, boundary: typeof o.boundary === 'string' && ID.test(o.boundary) ? o.boundary : '', births: o.births !== false, links };
 }
 
 /** The engine from a file, or undefined when it has no racks. */

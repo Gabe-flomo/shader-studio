@@ -22,7 +22,8 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
 import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
-import { sensorReadsFor, type SensorRead } from '../../types/play';
+import { PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '../../types/play';
+import { GRAIN_EACH, grainSensorLayer, isGranulatorRack, parseGrainsTarget } from '../../types/playAudioEngine';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
 import { applyCurve, playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
@@ -183,7 +184,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
 
   const writeControl = useCallback((control: PlayControl, value: number | number[]) => {
     // A reader's level control: its reader drives it; there is nothing to set by hand.
-    if (parseReaderTarget(control.target)) return;
+    if (parseReaderTarget(control.target) || parseGrainsTarget(control.target)) return;
     const ft = parseFinishTarget(control.target);
     if (ft) {
       if (typeof value === 'number') setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, ft.effectId, { [ft.key]: value }) }));
@@ -412,7 +413,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     return () => cancelAnimationFrame(raf);
   }, [groupTick, groupFocus, tk.accent.base]);
   // Layers a source or trigger can read: shapes (click, fill, hover), particles (speed, spread), cameras (motion), nulls (distance).
-  const layerRefs = useMemo(() => play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind, ...(l.kind === 'shape' ? { shape: l.shape } : {}) })), [play.layers]);
+  // Granulator racks read like layers in the sensor pickers (their grains: docs/granulator.md), as `ae:<rackId>`.
+  const layerRefs = useMemo(() => [
+    ...play.layers.map(l => ({ id: l.id, label: l.label, kind: l.kind, ...(l.kind === 'shape' ? { shape: l.shape } : {}) })),
+    ...(play.audioEngine?.racks ?? []).filter(isGranulatorRack).map(r => ({ id: grainSensorLayer(r.id), label: `${r.name} · grains`, kind: 'granulator' })),
+  ], [play.layers, play.audioEngine]);
   // Desktop: the drawer's height, dragged from its top edge and remembered.
   const rootRef = useRef<HTMLDivElement>(null);
   const [drawerH, setDrawerH] = useState<number>(() => {
@@ -1773,7 +1778,9 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
         <>
           {row(<>
             <Select ariaLabel="Sensor layer" value={source.layerId} options={sensing.map(l => ({ value: l.id, label: l.label }))} onChange={v => { const r = sensorReadsFor(layerRefs.find(l => l.id === v)); onChange({ ...source, layerId: v, read: r.includes(source.read) ? source.read : r[0] ?? 'fill' }); }} height={26} />
-            {reads.length > 1 && <Segmented size="sm" ariaLabel="Reads" value={source.read} options={reads.map(r => ({ value: r, label: SENSOR_LABELS[r], title: SENSOR_HINTS[r] }))} onChange={v => onChange({ ...source, read: v })} />}
+            {reads.length > 1 && reads.length <= 4 && <Segmented size="sm" ariaLabel="Reads" value={source.read} options={reads.map(r => ({ value: r, label: SENSOR_LABELS[r], title: SENSOR_HINTS[r] }))} onChange={v => onChange({ ...source, read: v })} />}
+            {reads.length > 4 && <Select ariaLabel="Reads" value={source.read} options={reads.map(r => ({ value: r, label: SENSOR_LABELS[r] }))} onChange={v => onChange({ ...source, read: v as SensorRead })} height={26} />}
+            {PER_GRAIN_READS.includes(source.read) && <Select ariaLabel="Which grain" value={source.otherId || '1'} options={Array.from({ length: GRAIN_EACH }, (_, i) => ({ value: String(i + 1), label: `Grain ${i + 1}` }))} onChange={v => onChange({ ...source, otherId: v })} height={26} />}
             {reads.length === 1 && hint(SENSOR_LABELS[reads[0]])}
             {source.read === 'distance' && <>{hint('to')}<AnchorPicker value={source.otherId} layers={layerRefs} exclude={source.layerId} ariaLabel="Distance to" onChange={otherId => onChange({ ...source, otherId })} /></>}
           </>)}

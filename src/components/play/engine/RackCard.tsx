@@ -28,7 +28,7 @@ import { addReader, newReader, patchReader, regroupReaderControls, setReaderInpu
 import { AUDIO_READERS_MAX, type PlayRecord } from '../../../types/play';
 import { ReaderDots } from '../ReaderDots';
 import {
-  AE_EFFECTS_MAX, AE_INST, AE_PAD_BASE_NOTE, AE_ZONES_MAX, aeRack, aeSlot, auTarget, moveEffect, patchRack, patchSlot, setRackKeyboard, zonesFor,
+  AE_EFFECTS_MAX, AE_INST, AE_PAD_BASE_NOTE, AE_ZONES_MAX, aeRack, aeSlot, aeSlotName, auTarget, moveEffect, patchRack, patchSlot, setRackKeyboard, zonesFor,
   type AeRack, type AeSlot, type AeZone, type PlayAudioEngine,
 } from '../../../types/playAudioEngine';
 import { audioEngineHost, useEngineUi } from '../../../lib/audioEngineHost';
@@ -46,6 +46,8 @@ import { playId } from '../../../play/playControls';
 import { usePlayUi } from '../playUi';
 import { engineId, withEngine } from './engineOps';
 import { sendChoices, sendLabel } from '../../../lib/engineSend';
+import { GranulatorPanel } from './GranulatorPanel';
+import { AUDIO_FX_EFFECTS, rackChainId } from '../../../types/playAudioFx';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -65,6 +67,7 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
   const edit = (fn: (ae: PlayAudioEngine | undefined) => PlayAudioEngine) => onChange(p => withEngine(p, fn(p.audioEngine)));
   const patch = (over: Partial<AeRack>) => edit(ae => patchRack(ae, rack.id, over));
   const errors = useEngineUi(s => s.errors);
+  const grain = rack.instrument?.kind === 'granulator' && !rack.source;
   const rackError = errors[`${rack.id}/rack`];
 
   const pick = (c: UnitChoice) => {
@@ -72,7 +75,9 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
     if (picking === 'instrument') {
       const inst: AeSlot = c.kind === 'sampler'
         ? { id: AE_INST, kind: 'sampler', zones: rack.instrument?.kind === 'sampler' ? rack.instrument.zones : [] }
-        : { id: AE_INST, kind: 'au', unit: { type: c.unit.type, subtype: c.unit.subtype, manufacturer: c.unit.manufacturer, name: c.unit.name, vendor: c.unit.vendor } };
+        : c.kind === 'granulator'
+          ? (rack.instrument?.kind === 'granulator' ? rack.instrument : { id: AE_INST, kind: 'granulator', sample: { synth: 'pad', name: 'Pad chord' } })
+          : { id: AE_INST, kind: 'au', unit: { type: c.unit.type, subtype: c.unit.subtype, manufacturer: c.unit.manufacturer, name: c.unit.name, vendor: c.unit.vendor } };
       edit(ae => patchRack(ae, rack.id, { instrument: inst }));
     } else if (c.kind === 'au') {
       if (rack.effects.length >= AE_EFFECTS_MAX) { toast.error(`A rack takes ${AE_EFFECTS_MAX} effects at most`); return; }
@@ -109,7 +114,7 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
         <Icon name="piano" size={15} style={{ color: tk.text.faint }} />
         <button type="button" onClick={() => void rename()} title="Rename" style={{ border: 0, background: 'none', padding: 0, cursor: 'text', color: tk.text.primary, font: `650 13px ${fontFamily.ui}`, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rack.name}</button>
         <span style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-          {rack.source ? `Sends ${sendLabel(rack.source, play.layers)}` : rack.instrument ? (rack.instrument.kind === 'sampler' ? 'Sample player' : rack.instrument.unit?.name) : 'No instrument'}{rack.effects.length ? ` · ${rack.effects.length} effect${rack.effects.length === 1 ? '' : 's'}` : ''}
+          {rack.source ? `Sends ${sendLabel(rack.source, play.layers)}` : rack.instrument ? aeSlotName(rack.instrument) : 'No instrument'}{rack.effects.length ? ` · ${rack.effects.length} effect${rack.effects.length === 1 ? '' : 's'}` : ''}
         </span>
         <span style={{ flex: 1 }} />
         <IconButton icon={rack.mute ? 'eyeOff' : 'wave'} size="sm" active={rack.mute} label={rack.mute ? 'Unmute' : 'Mute'} onClick={() => { if (!rack.mute) audioEngineHost.releaseHeld(rack.id); patch({ mute: !rack.mute }); }} />
@@ -137,7 +142,9 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
               )}
             </>
           )}
-          <Caption>Effects{rack.effects.length ? ` · ${rack.effects.length}` : ''}</Caption>
+          {grain && <GrainChainRow rack={rack} play={play} />}
+          <Caption>{grain ? 'Audio Unit effects' : 'Effects'}{rack.effects.length ? ` · ${rack.effects.length}` : ''}</Caption>
+          {grain && <Note>A Granulator plays in the page’s own audio: its Sound effects above shape it. Audio Unit effects stay on the rack but aren’t heard after it.</Note>}
           {rack.effects.map((e, i) => (
             <SlotView key={e.id} rack={rack} slot={e} play={play} onChange={onChange} touch={touch} desktop={desktop} pluginsOk={pluginsOk}
               first={i === 0} last={i === rack.effects.length - 1}
@@ -289,6 +296,23 @@ function SendView({ rack, play }: { rack: AeRack; play: PlayRecord }) {
   );
 }
 
+/** A Granulator's Sound chain (`rack:<id>`, Finish → Sound): how many effects, and the way there. */
+function GrainChainRow({ rack, play }: { rack: AeRack; play: PlayRecord }) {
+  const tk = useTokens();
+  const chain = play.audioFx?.chains[rackChainId(rack.id)];
+  const n = chain?.effects.length ?? 0;
+  const open = () => { usePlayUi.getState().setFinishView('sound'); usePlayUi.getState().setTab('finish'); };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <span style={{ ...labelStyle(tk), width: 64 }}>Sound fx</span>
+      <span style={{ flex: '1 1 140px', color: tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>
+        {n ? `${chain!.effects.map(e => AUDIO_FX_EFFECTS[e.kind].label).join(' → ')}${chain!.on ? '' : ' (off)'}` : 'None yet: filter, echo, reverb, distortion, compressor.'}
+      </span>
+      <Button size="sm" variant="ghost" icon="sliders" onClick={open} title="Finish → Sound: this rack’s own chain">Sound effects…</Button>
+    </div>
+  );
+}
+
 const EMPTY_HELD: number[] = [];
 
 /** Two octaves to click (Shift: full velocity), from C3. */
@@ -367,7 +391,7 @@ function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk, first
   const loading = useEngineUi(s => !!s.loading[key]);
   const [open, setOpen] = useState(false);
   const isAu = slot.kind === 'au';
-  const name = slot.kind === 'sampler' ? 'Sample player' : slot.unit?.name ?? 'Audio Unit';
+  const name = aeSlotName(slot);
   const openWindow = async () => {
     const why = await audioEngineHost.openUi(rack.id, slot.id, `${rack.name} · ${name}`);
     if (why) toast.error('The plug-in window didn’t open', { message: why });
@@ -382,7 +406,7 @@ function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk, first
   return (
     <div style={{ borderRadius: radius.md, background: tk.bg.field, padding: '8px 8px 8px 10px', display: 'flex', flexDirection: 'column', gap: 6, opacity: slot.bypass || offline ? 0.7 : 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <Icon name={slot.id === AE_INST ? (isAu ? 'piano' : 'import') : 'wave'} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
+        <Icon name={slot.id === AE_INST ? (isAu ? 'piano' : slot.kind === 'granulator' ? 'wave' : 'import') : 'wave'} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
         <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <b style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}{loading ? ' · loading…' : ''}</b>
           {isAu && <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{slot.unit?.vendor}{slot.state ? ' · settings kept' : ''}</span>}
@@ -403,6 +427,7 @@ function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk, first
         </div>
       )}
       {slot.kind === 'sampler' && <SamplerZones rack={rack} slot={slot} onChange={onChange} />}
+      {slot.kind === 'granulator' && <GranulatorPanel rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} />}
       {isAu && open && desktop && pluginsOk && <Params rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} onKeep={() => void keepState()} />}
     </div>
   );

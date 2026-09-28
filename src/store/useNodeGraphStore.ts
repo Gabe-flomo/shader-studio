@@ -1560,7 +1560,15 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
     });
     if (Object.keys(files).length) layerPads[l.id] = files;
   }
-  return { textures, videos, audio, ...(Object.keys(layerVideos).length ? { layerVideos } : {}), ...(Object.keys(layerPads).length ? { layerPads } : {}) };
+  // Granulator racks' Library samples: remembered by lib/webGranulator.ts when each loaded (the same `dsample:<sampleId>` key).
+  const rackSamples: NonNullable<PlayMedia['rackSamples']> = {};
+  for (const r of st.play.audioEngine?.racks ?? []) {
+    const sm = r.instrument?.kind === 'granulator' ? r.instrument.sample : undefined;
+    if (!sm?.sampleId) continue;
+    const m = mediaSource(`dsample:${sm.sampleId}`);
+    rackSamples[r.id] = { label: `${r.name} · Granulator`, name: sm.name || m?.name || '', src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : 0) };
+  }
+  return { textures, videos, audio, ...(Object.keys(layerVideos).length ? { layerVideos } : {}), ...(Object.keys(layerPads).length ? { layerPads } : {}), ...(Object.keys(rackSamples).length ? { rackSamples } : {}) };
 }
 
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({

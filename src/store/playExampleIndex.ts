@@ -93,6 +93,7 @@ const ROWS: Array<[string, string, string]> = [
   ['finishHalation', 'Finish: halation', 'Film’s red-to-white halo on a test scene: lamps halate and grow, paper and teal don’t.'],
   ['finishTime', 'Finish: time displacement', 'Slit-scan: the top of the picture is 30 frames behind the bottom, over a drifting shader and a comet layer.'],
   ['drumPads', 'Drum pads', 'A 4 × 4 sampler of generated drums: hit pads with keys, clicks or MIDI; the kick pulses the glow and the hats throw sparks. Silent until you play.'],
+  ['granulator', 'Granulator', 'A cloud of grains from a generated vowel: the mouse scans the sample and sets the grain size, a reader swells the glow, and three grains ride nulls; then particles inside a drifting ring play bells. Click first to hear it.'],
   ['audioEffects', 'Audio effects', 'A filter swept by the mouse and a ping-pong echo on the master bus, with a reader hearing the result. Press Play test loop.'],
   // Bigger pieces that put several techniques together (their graphs live in exampleGraphs.ts).
   ['particleGlow', 'Particle Glow', 'Emitter, absorber and flock, glowing through the Layers node.'],

@@ -28,7 +28,7 @@ import { formatDuration } from '../lib/midiFile';
 import { recordingBaseName, recordingPath, saveRecording } from '../utils/recordingsFolder';
 import { RecordingsSetting } from './shell/RecordingsSetting';
 import { audioEngine } from '../lib/audioEngine';
-import { engineTracks, mixdown, padHitsOf, recordingTracks, wavBytes, type MixFx } from '../lib/recordingAudio';
+import { engineTracks, grainTracks, mixdown, padHitsOf, recordingTracks, wavBytes, type MixFx } from '../lib/recordingAudio';
 import { renderEngineForExport } from '../lib/engineExport';
 import { engineTapOffset } from '../lib/engineRender';
 import { audioEngineHost, useEngineUi } from '../lib/audioEngineHost';
@@ -186,7 +186,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   // Sound: only songs already in Playfield, never the microphone. The Audio engine's racks
   // (desktop) are tracks too: rendered natively frame by frame, tapped in real time (lib/engineExport.ts).
   const engineOn = useEngineUi(s => s.status.mode === 'native');
-  const tracks = external ? [] : [...recordingTracks(play, nodes), ...engineTracks(can('audio.engine') ? play.audioEngine?.racks : undefined, inTauri && engineOn)];
+  const tracks = external ? [] : [...recordingTracks(play, nodes), ...engineTracks(can('audio.engine') ? play.audioEngine?.racks : undefined, inTauri && engineOn), ...grainTracks(can('audio.engine') ? play.audioEngine?.racks : undefined)];
   const hasEngine = tracks.some(t => t.engine);
   const [engineNotes, setEngineNotes] = useState<string[]>([]);
   // The audio effects in an offline mix: the record's chains, their numbers from the take (or as they are now).

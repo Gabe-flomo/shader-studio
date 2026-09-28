@@ -18,7 +18,7 @@ import { openProSheet, useCan } from '../../../lib/plan';
 import { isTauri } from '../../../lib/midiTransport';
 import { PluginsDialog, scanPlugins } from './PluginsDialog';
 
-export type UnitChoice = { kind: 'sampler' } | { kind: 'au'; unit: AuUnitInfo };
+export type UnitChoice = { kind: 'sampler' } | { kind: 'granulator' } | { kind: 'au'; unit: AuUnitInfo };
 
 export function UnitPicker({ want, compact, onPick, onClose }: {
   want: 'instrument' | 'effect';
@@ -50,6 +50,7 @@ export function UnitPicker({ want, compact, onPick, onClose }: {
   const body = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: compact ? 0 : '12px 16px 16px' }}>
       {want === 'instrument' && item('sampler', 'import', 'Sample player', 'Sounds from the Library, one per key or one across the keyboard. Works in the browser too.', () => onPick({ kind: 'sampler' }))}
+      {want === 'instrument' && item('granulator', 'wave', 'Granulator', 'Up to 64 grains from a sample: Classic, Flux and Cloud modes, scan, freeze, FM, a filter. Works in the browser too.', () => onPick({ kind: 'granulator' }))}
       {!desktop ? (
         <span style={{ padding: '10px 4px', color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
           Audio Unit {want === 'instrument' ? 'synths' : 'effects'} run in the desktop app on a Mac. A setup made there keeps them, and they play again when it’s opened there.

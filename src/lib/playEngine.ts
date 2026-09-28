@@ -34,6 +34,8 @@ import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../typ
 import { geoAnchor } from '../play/kit/geometry.js';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
+import { sensorKey } from '../types/play';
+import { parseGrainsTarget } from '../types/playAudioEngine';
 import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parsePropTarget, parseReaderTarget } from '../types/play';
 import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
@@ -837,7 +839,7 @@ class PlayEngine implements InputSource {
           return d === null ? null : Math.min(1, d);
         }
         if (AUDIO_READS.has(source.read)) return this.audioBand(source.layerId, source.read as LiveBand);
-        return this.sensors.get(`${source.layerId}::${source.read}`) ?? null;
+        return this.sensors.get(sensorKey(source)) ?? null;
       }
       case 'data':
         return readDataSource(source, k => this.sensors.get(k));
@@ -1029,7 +1031,7 @@ class PlayEngine implements InputSource {
       if (lt) {
         this.layerLive.delete(`${lt.layerId}::${lt.key}`);
         this.layerMoved = true;
-      } else if (control && base !== undefined && !parseReaderTarget(control.target)) {
+      } else if (control && base !== undefined && !parseReaderTarget(control.target) && !parseGrainsTarget(control.target)) {
         write(paramChannelKey(bindingKeyOf(control.target)), Array.isArray(base) ? [...base] : base);
       }
       this.live.delete(id);
@@ -1045,8 +1047,8 @@ class PlayEngine implements InputSource {
       // A layer property or a Finish effect's number: not a uniform. The overlay reads it after this tick.
       const lk = `${layerTarget.layerId}::${layerTarget.key}`;
       if (this.layerLive.get(lk) !== v) { this.layerLive.set(lk, v); this.layerMoved = true; }
-    } else if (!parseReaderTarget(control.target)) {
-      // A reader's level control has no uniform: the value is kept as the control's live value only.
+    } else if (!parseReaderTarget(control.target) && !parseGrainsTarget(control.target)) {
+      // A reader's level control (or a granulator's grain readout) has no uniform: the value is kept as the control's live value only.
       write(paramChannelKey(bindingKeyOf(control.target)), v);
     }
     this.live.set(control.id, v);

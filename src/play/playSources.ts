@@ -461,6 +461,7 @@ export function repeatHint(what: ActionKind | `mode:${TriggerMode}`, fire: FireS
 export const SENSOR_LABELS: Record<SensorRead, string> = {
   fill: 'Fill', hover: 'Hover', speed: 'Speed', spread: 'Spread', motion: 'Motion', distance: 'Distance', level: 'Level', bass: 'Bass', lowmid: 'Low-mid', highmid: 'High-mid', treble: 'Treble', area: 'Area', perimeter: 'Perimeter',
   gap: 'Gap', closing: 'Closing', chaseSpeed: 'Chase speed', sight: 'In sight', catch: 'Catch', sinceCatch: 'Since catch', catches: 'Catches', picture: 'Picture',
+  grains: 'Grain count', grainMean: 'Grain position', grainSpread: 'Grain spread', grainLevel: 'Grain level', grainPitch: 'Grain pitch', grainPos: 'One grain’s position', grainAmp: 'One grain’s level',
 };
 export const SENSOR_HINTS: Record<SensorRead, string> = {
   fill: 'How full of particles the shape is: 0.5 is as dense as average, 1 is twice that or more.',
@@ -483,6 +484,13 @@ export const SENSOR_HINTS: Record<SensorRead, string> = {
   catch: 'Relationship: 1 on the frame a chaser catches its prey, fading out over a quarter of a second.',
   sinceCatch: 'Relationship: how long since the last catch, 1 at ten seconds or more (and before the first).',
   catches: 'Relationship: how many catches so far, 1 at twenty or more.',
+  grains: 'Granulator: how many grains are sounding, 1 at 64.',
+  grainMean: 'Granulator: where in the sample the grains read on average, 0 the start, 1 the end.',
+  grainSpread: 'Granulator: how scattered the grains are through the sample, 0 all at one spot.',
+  grainLevel: 'Granulator: how loud the grains are on average.',
+  grainPitch: 'Granulator: the grains’ mean pitch, 0.5 as sampled, 0 four octaves down, 1 four up.',
+  grainPos: 'Granulator: where one grain (its number) reads in the sample, 0 to 1; 0 when there is no such grain.',
+  grainAmp: 'Granulator: one grain’s level now; 0 when there is no such grain.',
   picture: 'The picture under this layer, in its Picture channel (brightness unless its relationship says otherwise). Reads while the layer is a member of a Relationship; on the relationship itself, the mean under its members.',
 };
 

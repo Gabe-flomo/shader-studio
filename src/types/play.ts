@@ -413,9 +413,18 @@ export const RELATION_MEMBER_KINDS: readonly string[] = ['null', 'shape', 'text'
  * fast that pair closes: 0.5 still, 1 closing at full speed, 0 parting), chaseSpeed, sight (a chaser sees prey),
  * catch (1 on a catch, fading), sinceCatch, catches (20 = 1). picture is the picture's channel under a layer
  * that is a member of a relationship (`<memberId>::picture`), and the mean under the relationship's members.
+ * A Granulator rack (layer id `ae:<rackId>`, docs/granulator.md) reads its grains: grains (count ÷ 64),
+ * grainMean, grainSpread, grainLevel, grainPitch, and one grain's grainPos / grainAmp (otherId: its number, 1..16).
  */
 export type SensorRead = 'fill' | 'hover' | 'speed' | 'spread' | 'motion' | 'distance' | 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble' | 'area' | 'perimeter'
-  | 'gap' | 'closing' | 'chaseSpeed' | 'sight' | 'catch' | 'sinceCatch' | 'catches' | 'picture';
+  | 'gap' | 'closing' | 'chaseSpeed' | 'sight' | 'catch' | 'sinceCatch' | 'catches' | 'picture'
+  | 'grains' | 'grainMean' | 'grainSpread' | 'grainLevel' | 'grainPitch' | 'grainPos' | 'grainAmp';
+/** Granulator reads taken per grain (the grain's number in otherId). */
+export const PER_GRAIN_READS: readonly SensorRead[] = ['grainPos', 'grainAmp'];
+/** Where a sensor source's reading is kept: `<layerId>::<read>`, or `<layerId>::<read><N>` for one grain's. */
+export function sensorKey(s: { layerId: string; read: string; otherId?: string }): string {
+  return `${s.layerId}::${s.read}${PER_GRAIN_READS.includes(s.read as SensorRead) ? (s.otherId || '1') : ''}`;
+}
 export const RELATION_READS: readonly SensorRead[] = ['gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'distance'];
 export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   shape: ['fill', 'hover', 'picture', 'distance'],
@@ -425,6 +434,8 @@ export const SENSOR_READS_FOR: Record<string, readonly SensorRead[]> = {
   audio: ['level', 'bass', 'lowmid', 'highmid', 'treble', 'picture', 'distance'],
   text: ['picture', 'distance'], image: ['picture', 'distance'], lens: ['picture', 'distance'], bodies: ['distance'], brush: ['distance'], script: ['distance'], cloner: ['picture', 'distance'], data: ['picture', 'distance'], video: ['picture', 'distance'],
   relationship: RELATION_READS,
+  // A Granulator rack, as the sensor pickers list it (layer id `ae:<rackId>`).
+  granulator: ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp'],
 };
 /** A path shape (corners that are nulls) also reads its area, perimeter and spread. */
 const PATH_READS: readonly SensorRead[] = ['area', 'perimeter', 'spread', 'fill', 'hover', 'distance'];
@@ -473,7 +484,7 @@ import { parseProjection, type ProjectionRecord } from './projection';
 import { parseLayerGroups, tidyGroups, type LayerGroup } from './layerGroups';
 import { finishHosts, finishPropId, isFinishEmpty, parseFinish, parseFinishTarget, type PlayFinish } from './playFinish';
 import { audioFxEffects, audioFxPropId, isAudioFxEmpty, parseAudioFx, parseAudioFxTarget, type PlayAudioFx } from './playAudioFx';
-import { auPropId, auTargetExists, isAudioEngineEmpty, parseAudioEngine, parseAuTarget, type PlayAudioEngine } from './playAudioEngine';
+import { aeRack, auPropId, auTargetExists, isAudioEngineEmpty, isGranulatorRack, parseAudioEngine, parseAuTarget, parseGrainsTarget, rackOfSensorLayer, type PlayAudioEngine } from './playAudioEngine';
 import { sgParseValueRef } from '../play/kit/signals.js';
 import { PAD_GRID_MAX, PAD_GRID_READS, parseMidiLocks, parseNoteRange, parsePadGrid, type MidiLock, type PadGridRead, type PlayPadGrid } from './playMidi';
 export type { MidiLock, PadGridRead, PlayPadGrid } from './playMidi';
@@ -1152,7 +1163,7 @@ function parseHands(v: unknown): PlayHands | null {
   return out;
 }
 
-const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture']);
+const SENSOR_READS: ReadonlySet<string> = new Set<SensorRead>(['fill', 'hover', 'speed', 'spread', 'motion', 'distance', 'level', 'bass', 'lowmid', 'highmid', 'treble', 'area', 'perimeter', 'gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches', 'picture', 'grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainPos', 'grainAmp']);
 
 function parseAction(raw: unknown): PlayAction | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -1375,6 +1386,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   const readerIds = new Set(audioReaders?.readers.map(x => x.id) ?? []);
   const keptControls = controls.filter(c => {
     if (parseAuTarget(c.target)) return auTargetExists(audioEngine, c.target);
+    const gt = parseGrainsTarget(c.target);
+    if (gt) return isGranulatorRack(aeRack(audioEngine, gt.rackId));
     const rt = parseReaderTarget(c.target);
     if (rt) return readerIds.has(rt.readerId);
     const at = parseAudioFxTarget(c.target);
@@ -1386,7 +1399,9 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   });
   const keptIds = new Set(keptControls.map(c => c.id));
   // A trigger or sensor on a layer needs that layer too.
-  const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId);
+  // A granulator rack's grains read as sensors on `ae:<rackId>` (docs/granulator.md).
+  const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId)
+    || (src.kind === 'sensor' && isGranulatorRack(aeRack(audioEngine, rackOfSensorLayer(src.layerId))));
   const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref);
   const triggerOk = (t: TriggerSpec) => t.on === 'zone' ? layerIds.has(t.layerId) : t.on === 'proximity' ? anchorOk(t.a) && anchorOk(t.b) : t.on === 'reader' ? readerIds.has(t.readerId) : true;
   const keptMappings = mappings.filter(m => keptIds.has(m.controlId)

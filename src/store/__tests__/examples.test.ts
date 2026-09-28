@@ -1,3 +1,4 @@
+import { aeRack, auTargetExists, isGranulatorRack, parseAuTarget, parseGrainsTarget } from '../../types/playAudioEngine';
 import { describe, expect, it, vi } from 'vitest';
 import { parseAudioFxTarget, readAudioFxValue } from '../../types/playAudioFx';
 import { compileGraph } from '../../compiler/graphCompiler';
@@ -79,6 +80,10 @@ describe('bundled examples', () => {
         if (ft) { if (!effectIds.has(ft.effectId)) problems.push(`${k}: control "${c.label}" targets a missing Finish effect ${ft.effectId}`); continue; }
         const at = parseAudioFxTarget(c.target);
         if (at) { if (readAudioFxValue(play.audioFx, c.target) === undefined) problems.push(`${k}: control "${c.label}" targets a missing audio effect ${at.effectId}`); continue; }
+        // A Granulator's setting, or its grain readout (docs/granulator.md): the rack must be there.
+        if (parseAuTarget(c.target)) { if (!auTargetExists(play.audioEngine, c.target)) problems.push(`${k}: control "${c.label}" targets a missing rack setting ${c.target}`); continue; }
+        const gt = parseGrainsTarget(c.target);
+        if (gt) { if (!isGranulatorRack(aeRack(play.audioEngine, gt.rackId))) problems.push(`${k}: control "${c.label}" reads grains of a missing rack ${gt.rackId}`); continue; }
         const lt = parseLayerTarget(c.target) ?? parseActionTarget(c.target);
         if (lt ? !layerIds.has(lt.layerId) : !targets.has(c.target)) problems.push(`${k}: control "${c.label}" targets ${c.target}, which is not a live param or layer`);
       }
