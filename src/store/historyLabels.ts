@@ -4,6 +4,7 @@
  * from this diff ("Changed Radius 0.3 → 0.42", "Connected UV → Circle SDF").
  */
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
+import type { PlayRecord } from '../types/play';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 
@@ -291,37 +292,54 @@ export interface TimelineStep {
   before: GraphNode[];
   after: GraphNode[];
   nodeIds: string[];
+  /** A Play edit: the setup before and after it (describePlayChange says what changed). Absent for a graph-only step. */
+  play?: { before: PlayRecord; after: PlayRecord };
   /** Undos that bring the graph back to just after this step (0 for the current one). */
   undoToHere: number;
   /** Redos that bring the graph forward to just after this step (0 unless undone). */
   redoToHere: number;
 }
 
-interface EntryLike { id: number; nodes: GraphNode[]; at: number; label?: string; nodeIds?: string[] }
+interface EntryLike { id: number; nodes?: GraphNode[]; play?: PlayRecord; at: number; label?: string; nodeIds?: string[] }
+export interface TimelineState { nodes: GraphNode[]; play: PlayRecord }
 
 /**
  * Every step the undo history holds, oldest first: the done ones (the last is where the graph is
- * now), then the undone ones in the order redo would replay them.
+ * now), then the undone ones in the order redo would replay them. A step carries a snapshot of
+ * what it changed only (the graph, the Play setup, or both), so the state around a step is read
+ * from the nearest step that holds that part, or from `current`.
  */
-export function buildTimeline(done: readonly EntryLike[], undone: readonly EntryLike[], current: GraphNode[]): TimelineStep[] {
+export function buildTimeline(done: readonly EntryLike[], undone: readonly EntryLike[], current: GraphNode[] | TimelineState): TimelineStep[] {
+  const now: TimelineState = Array.isArray(current) ? { nodes: current, play: { version: 1, controls: [], mappings: [], layers: [] } } : current;
   const out: TimelineStep[] = [];
-  done.forEach((e, i) => {
-    const after = done[i + 1]?.nodes ?? current;
-    out.push({
-      id: e.id, at: e.at, nodeIds: e.nodeIds ?? [], before: e.nodes, after,
-      label: e.label ?? describeDiff(diffGraphs(e.nodes, after)),
-      status: i === done.length - 1 ? 'current' : 'done',
-      undoToHere: done.length - 1 - i, redoToHere: 0,
-    });
-  });
+  // Done steps, newest first: each one's "after" is the state the next step started from.
+  const doneSteps: TimelineStep[] = [];
+  let nextNodes = now.nodes, nextPlay = now.play;
+  for (let i = done.length - 1; i >= 0; i--) {
+    const e = done[i];
+    const afterNodes = nextNodes, afterPlay = nextPlay;
+    const beforeNodes = e.nodes ?? afterNodes, beforePlay = e.play ?? afterPlay;
+    doneSteps.push(step(e, beforeNodes, afterNodes, beforePlay, afterPlay, i === done.length - 1 ? 'current' : 'done', done.length - 1 - i, 0));
+    nextNodes = beforeNodes; nextPlay = beforePlay;
+  }
+  out.push(...doneSteps.reverse());
+  // Undone steps: the last is the next to redo, and starts from the state now.
+  let prevNodes = now.nodes, prevPlay = now.play;
   for (let j = undone.length - 1; j >= 0; j--) {
     const e = undone[j];
-    const before = j === undone.length - 1 ? current : undone[j + 1].nodes;
-    out.push({
-      id: e.id, at: e.at, nodeIds: e.nodeIds ?? [], before, after: e.nodes,
-      label: e.label ?? describeDiff(diffGraphs(before, e.nodes)),
-      status: 'undone', undoToHere: 0, redoToHere: undone.length - j,
-    });
+    const beforeNodes = prevNodes, beforePlay = prevPlay;
+    const afterNodes = e.nodes ?? beforeNodes, afterPlay = e.play ?? beforePlay;
+    out.push(step(e, beforeNodes, afterNodes, beforePlay, afterPlay, 'undone', 0, undone.length - j));
+    prevNodes = afterNodes; prevPlay = afterPlay;
   }
   return out;
+}
+
+function step(e: EntryLike, before: GraphNode[], after: GraphNode[], playBefore: PlayRecord, playAfter: PlayRecord, status: TimelineStep['status'], undoToHere: number, redoToHere: number): TimelineStep {
+  return {
+    id: e.id, at: e.at, nodeIds: e.nodeIds ?? [], before, after,
+    ...(e.play ? { play: { before: playBefore, after: playAfter } } : {}),
+    label: e.label ?? (e.nodes ? describeDiff(diffGraphs(before, after)) : 'Changed the Play setup'),
+    status, undoToHere, redoToHere,
+  };
 }

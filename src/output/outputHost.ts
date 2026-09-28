@@ -188,7 +188,7 @@ export function currentProjection(): ProjectionRecord {
 export function setProjection(next: ProjectionRecord, before?: ProjectionRecord): void {
   if (!can('play.projection')) return;
   if (before) mappingHistory.push(before);
-  useNodeGraphStore.getState().setPlay(p => ({ ...p, projection: next }));
+  useNodeGraphStore.getState().setPlay(p => ({ ...p, projection: next }), false);
 }
 
 let dragBase: ProjectionRecord | null = null;
@@ -200,11 +200,11 @@ function applyEdit(next: ProjectionRecord, commit: boolean): void {
 
 export function undoMapping(): void {
   const prev = mappingHistory.undo(currentProjection());
-  if (prev) useNodeGraphStore.getState().setPlay(p => ({ ...p, projection: prev }));
+  if (prev) useNodeGraphStore.getState().setPlay(p => ({ ...p, projection: prev }), false);
 }
 export function redoMapping(): void {
   const next = mappingHistory.redo(currentProjection());
-  if (next) useNodeGraphStore.getState().setPlay(p => ({ ...p, projection: next }));
+  if (next) useNodeGraphStore.getState().setPlay(p => ({ ...p, projection: next }), false);
 }
 
 /** Which layers each layer-or-group surface shows alone. */
