@@ -94,10 +94,10 @@ function EntryThumb({ folderId, entry, w, h, big = false, onPreview }: { folderI
   const kind = mediaKindOf(entry.name);
   const wave = kind === 'audio';
   return (
-    <span ref={ref} style={{ width: w, height: h, flexShrink: 0, borderRadius: radius.sm, overflow: 'hidden', background: wave ? alpha(tk.accent.base, 0.08) : tk.bg.render, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.08)}` }}>
+    <span ref={ref} style={{ width: w, height: h, flexShrink: 0, borderRadius: radius.sm, overflow: 'hidden', background: entry.dir ? tk.bg.field : wave || kind === 'font' ? alpha(tk.accent.base, 0.08) : tk.bg.render, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.08)}` }}>
       {p?.thumb
         ? <img src={p.thumb} alt="" style={{ width: '100%', height: '100%', objectFit: wave || kind === 'font' ? 'contain' : big ? 'contain' : 'cover', display: 'block' }} />
-        : <Icon name={entry.dir ? 'folder' : KIND_ICON[kind ?? ''] ?? 'overlay'} size={big ? 26 : 14} style={{ color: wave ? tk.accent.base : alpha('#ffffff', 0.45) }} />}
+        : <Icon name={entry.dir ? 'folder' : KIND_ICON[kind ?? ''] ?? 'overlay'} size={big ? 26 : 14} style={{ color: entry.dir ? tk.text.muted : wave || kind === 'font' ? tk.accent.base : alpha('#ffffff', 0.45) }} />}
     </span>
   );
 }

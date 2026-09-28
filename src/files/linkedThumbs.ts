@@ -99,7 +99,7 @@ async function makePreview(kind: string, blob: Blob, name: string): Promise<Link
       c.width = 160; c.height = 90;
       const g = c.getContext('2d');
       if (!g) return null;
-      g.fillStyle = '#e8eaf2';
+      g.fillStyle = '#7d93f0';
       g.font = `48px "${family}"`;
       g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText('Aa', 80, 48);

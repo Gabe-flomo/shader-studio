@@ -67,7 +67,7 @@ export function LinkedFoldersView({ compact = false, folderId: wanted }: { compa
       <p style={note}>
         Folders on your computer (a samples folder, images, videos, fonts) that every picker can browse: drum pads, image and video layers, backgrounds, fonts.
         A file is used from where it is, read-only. Nothing is copied into the library, so linked files don’t count toward the storage limit.
-        A .playfile export takes a copy of the files it uses along.
+        A .playfile export takes a copy of the files it uses along; library and profile ZIPs keep only the references (the folders stay yours).
       </p>
       {support === 'none' && (
         <div style={{ padding: '12px 14px', borderRadius: radius.lg, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, ...note }}>{UNSUPPORTED_TEXT}</div>
