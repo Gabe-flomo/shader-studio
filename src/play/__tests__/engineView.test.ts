@@ -261,19 +261,31 @@ describe('the transport', () => {
   const plan = (cmd: 'toggle' | 'stop' | 'record', phase: 'stopped' | 'playing' | 'counting' | 'recording', position = 3.25) => transportPlan(cmd, { phase, position });
 
   it('Play/Pause is one toggle from any state', () => {
-    expect(plan('toggle', 'stopped')).toEqual({ stop: false, play: true, record: false, point: null });
-    expect(plan('toggle', 'playing')).toEqual({ stop: true, play: false, record: false, point: 3.25 });
-    expect(plan('toggle', 'recording')).toEqual({ stop: true, play: false, record: false, point: 3.25 });
-    expect(plan('toggle', 'counting')).toEqual({ stop: true, play: false, record: false, point: null });
+    expect(plan('toggle', 'stopped')).toEqual({ stop: false, play: true, record: false, point: null, timePlaying: true });
+    expect(plan('toggle', 'playing')).toEqual({ stop: true, play: false, record: false, point: 3.25, timePlaying: false });
+    expect(plan('toggle', 'recording')).toEqual({ stop: true, play: false, record: false, point: 3.25, timePlaying: false });
+    expect(plan('toggle', 'counting')).toEqual({ stop: true, play: false, record: false, point: null, timePlaying: false });
     expect(plan('toggle', 'playing', -0.4).point).toBe(0);
   });
 
   it('Stop stops whatever runs and goes back to the start', () => {
-    for (const ph of ['playing', 'recording', 'counting'] as const) expect(plan('stop', ph)).toEqual({ stop: true, play: false, record: false, point: 0 });
-    expect(plan('stop', 'stopped')).toEqual({ stop: false, play: false, record: false, point: 0 });
+    for (const ph of ['playing', 'recording', 'counting'] as const) expect(plan('stop', ph)).toEqual({ stop: true, play: false, record: false, point: 0, timePlaying: false });
+    expect(plan('stop', 'stopped')).toEqual({ stop: false, play: false, record: false, point: 0, timePlaying: false });
   });
 
-  it('Record keeps its own rules (record, punch in, stop recording)', () => {
-    expect(plan('record', 'playing')).toEqual({ stop: false, play: false, record: true, point: null });
+  it('Record keeps its own rules (record, punch in, stop recording) and never touches the time transport', () => {
+    expect(plan('record', 'playing')).toEqual({ stop: false, play: false, record: true, point: null, timePlaying: null });
+  });
+
+  it('the engine’s Play/Pause is authoritative over the page’s time transport (owner: it should override the Studio settings)', () => {
+    // Play from stopped: starts the tape and the time transport together.
+    expect(plan('toggle', 'stopped').timePlaying).toBe(true);
+    // Pause while playing, recording, or counting in: pauses both, wherever the tape is.
+    expect(plan('toggle', 'playing').timePlaying).toBe(false);
+    expect(plan('toggle', 'recording').timePlaying).toBe(false);
+    expect(plan('toggle', 'counting').timePlaying).toBe(false);
+    // Stop always leaves the time transport paused, even already stopped.
+    expect(plan('stop', 'playing').timePlaying).toBe(false);
+    expect(plan('stop', 'stopped').timePlaying).toBe(false);
   });
 });

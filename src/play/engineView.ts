@@ -291,14 +291,22 @@ export type TransportCommand = 'toggle' | 'stop' | 'record';
  *            playing → punch in, recording or counting → stop recording
  *
  * `point`: where the record point goes afterwards (null: unchanged).
+ *
+ * `timePlaying`: what the engine's Play/Pause (and Space) does to the page's
+ * time transport, so it's authoritative over the Studio's own play state
+ * (docs/arrangement.md; the owner's "if we hit play/pause on the Audio
+ * engine page, it should override the Studio settings and play/pause the
+ * track"): true starts it with the tape, false pauses it (Pause and Stop
+ * both leave it paused), null for Record, which has its own rules and
+ * doesn't touch it.
  */
-export function transportPlan(cmd: TransportCommand, s: { phase: TransportPhase; position: number }): { stop: boolean; play: boolean; record: boolean; point: number | null } {
+export function transportPlan(cmd: TransportCommand, s: { phase: TransportPhase; position: number }): { stop: boolean; play: boolean; record: boolean; point: number | null; timePlaying: boolean | null } {
   const running = s.phase !== 'stopped';
-  if (cmd === 'stop') return { stop: running, play: false, record: false, point: 0 };
-  if (cmd === 'record') return { stop: false, play: false, record: true, point: null };
-  if (!running) return { stop: false, play: true, record: false, point: null };
-  if (s.phase === 'counting') return { stop: true, play: false, record: false, point: null };
-  return { stop: true, play: false, record: false, point: Math.max(0, round6(s.position)) };
+  if (cmd === 'stop') return { stop: running, play: false, record: false, point: 0, timePlaying: false };
+  if (cmd === 'record') return { stop: false, play: false, record: true, point: null, timePlaying: null };
+  if (!running) return { stop: false, play: true, record: false, point: null, timePlaying: true };
+  if (s.phase === 'counting') return { stop: true, play: false, record: false, point: null, timePlaying: false };
+  return { stop: true, play: false, record: false, point: Math.max(0, round6(s.position)), timePlaying: false };
 }
 
 function round6(v: number): number { return Math.round(v * 1e6) / 1e6 + 0; }
