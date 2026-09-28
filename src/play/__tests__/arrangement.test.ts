@@ -11,6 +11,12 @@ import {
   mergeAuto, mergeNotes, mergePass, noteEvents, noteSpans, parseArrangement, punchIn, recordBpm, tapePosition, tapeSpans, unionSpans,
   type ArrNote, type ArrPass, type ArrTrack, type PlayArrangement,
 } from '../../types/playArrangement';
+import { emptyPlayRecord, parsePlayRecord, parseTake, type PlayRecord } from '../../types/play';
+import { withEngine } from '../../components/play/engine/engineOps';
+import { playableForPlan } from '../planGates';
+import { arrangementTake } from '../../lib/tapeTake';
+import { trackAt } from '../../lib/takePlayback';
+import { ParamWatch, movedParams } from '../../lib/paramWatch';
 
 const T = 'au:rk1:inst::3';
 const note = (t: number, n: number, d = 0.2, v = 0.8): ArrNote => ({ t, n, v, d });
@@ -193,5 +199,58 @@ describe('parsing', () => {
 
   it('unionSpans joins overlaps', () => {
     expect(unionSpans([[2, 3], [0, 1], [0.5, 1.5]])).toEqual([[0, 1.5], [2, 3]]);
+  });
+});
+
+describe('in the Play record', () => {
+  const rack = (id: string) => ({ id, name: id, instrument: { id: 'inst', kind: 'granulator', sample: { synth: 'pad', name: 'Pad' } }, effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false });
+  const tape = { length: 2, loop: true, bpm: 120, metronome: false, countIn: 0, fade: 0, tracks: { rk1: { notes: [{ t: 0.5, n: 60, v: 1, d: 0.2 }], auto: {}, arm: true }, rk2: { notes: [{ t: 1, n: 40, v: 1, d: 0.2 }], auto: {}, arm: true } } };
+
+  it('parses with the record; a track for a rack the file lacks goes', () => {
+    const p = parsePlayRecord({ ...emptyPlayRecord(), audioEngine: { racks: [rack('rk1')] }, arrangement: tape });
+    expect(Object.keys(p.arrangement!.tracks)).toEqual(['rk1']);
+    expect(p.arrangement!.length).toBe(2);
+    expect(parsePlayRecord({ ...emptyPlayRecord(), arrangement: { tracks: {} } }).arrangement).toBeUndefined();
+  });
+
+  it('removing a rack takes its track; Free plays no tape', () => {
+    const p = parsePlayRecord({ ...emptyPlayRecord(), audioEngine: { racks: [rack('rk1'), rack('rk2')] }, arrangement: tape });
+    const out = withEngine(p, { racks: p.audioEngine!.racks.filter(r => r.id !== 'rk2') });
+    expect(Object.keys(out.arrangement!.tracks)).toEqual(['rk1']);
+    expect(playableForPlan(p, 'free').arrangement).toBeUndefined();
+    expect(playableForPlan(p, 'pro').arrangement).toBe(p.arrangement);
+  });
+
+  it('a take keeps that the tape played along', () => {
+    const take = { id: 't1', name: 'Take 1', from: 0, length: 2, tracks: [], events: [], tape: { at: 0, made: true } };
+    expect(parseTake(take)!.tape).toEqual({ at: 0, made: true });
+    expect(parseTake({ ...take, tape: { at: 'x' } })!.tape).toBeUndefined();
+  });
+
+  it('the tape as a take: its notes as pad events, its automation as control tracks', () => {
+    const p = { controls: [{ id: 'c1', target: 'au:rk1:inst::1', kind: 'float', label: 'Position', min: 0, max: 1 }], arrangement: { ...tape, tracks: { ...tape.tracks, rk1: { ...tape.tracks.rk1, auto: { 'au:rk1:inst::1': [0, 0.2, 2, 0.8] } } } } } as unknown as PlayRecord;
+    const take = arrangementTake(p, 'Tape 1', { loops: 2 })!;
+    expect(take.length).toBe(4);
+    expect(take.events.filter(e => (e.vel ?? 1) > 0).map(e => [e.t, e.layerId, e.amount])).toEqual([[0.5, 'ae:rk1', 61], [1, 'ae:rk2', 41], [2.5, 'ae:rk1', 61], [3, 'ae:rk2', 41]]);
+    expect(take.tracks).toHaveLength(1);
+    expect(trackAt(take.tracks[0], 1)).toBeCloseTo(0.5, 2);
+    expect(parseTake(JSON.parse(JSON.stringify(take)))).toBeTruthy();
+    expect(arrangementTake({ controls: [], arrangement: undefined }, 'x')).toBeNull();
+  });
+});
+
+describe('watching a plug-in’s window (Configure)', () => {
+  it('offers what moved, most recent first, live within half a second', () => {
+    expect(movedParams(null, new Map([['1', 0]]))).toEqual([]);
+    expect(movedParams(new Map([['1', 0], ['2', 5]]), new Map([['1', 0.5], ['2', 5], ['3', 1]]))).toEqual(['1']);
+    const w = new ParamWatch();
+    w.push(new Map([['1', 0], ['2', 0]]), 0);
+    expect(w.heard()).toBe(false);
+    w.push(new Map([['1', 0.2], ['2', 0]]), 150);
+    w.push(new Map([['1', 0.2], ['2', 0.4]]), 300);
+    expect(w.offers(400)).toEqual([{ address: '2', live: true }, { address: '1', live: true }]);
+    expect(w.offers(800)).toEqual([{ address: '2', live: true }, { address: '1', live: false }]);
+    expect(w.offers(5000)).toEqual([]);
+    expect(w.heard()).toBe(true);
   });
 });
