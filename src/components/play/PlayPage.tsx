@@ -27,6 +27,8 @@ import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
 import { applyCurve, playEngine, sampleCurve, type ControlValue } from '../../lib/playEngine';
 import { midiEngine, midiNoteName } from '../../lib/midiEngine';
+import { ASSIGN_FLASH_MS, claimMidiListen, isUnassignedCc, startMidiAutoLearn } from '../../lib/midiAutoLearn';
+import { MidiWaitChip } from './MidiSourceOptions';
 import {
   candidateLabel, collectPlayCandidates, controlExists, controlHelp, findTargetNode, locateTarget, playId, readControlValue, targetParts, type PlayCandidate, type TargetFate,
 } from '../../play/playControls';
@@ -1126,6 +1128,25 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
     return stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [learnFor, onAdd, onUpdate]);
+  // While a Learn runs, an unassigned CC row doesn't take the knob (lib/midiAutoLearn.ts).
+  useEffect(() => (learnFor ? claimMidiListen() : undefined), [learnFor]);
+  // A CC row without a knob takes the first CC that moves; the row flashes to say so.
+  const [assigned, setAssigned] = useState<{ id: string; at: number } | null>(null);
+  const mappingsRef = useRef(play.mappings);
+  mappingsRef.current = play.mappings;
+  useEffect(() => {
+    if (!play.mappings.some(m => isUnassignedCc(m.source))) return;
+    void midiEngine.connectWebMidi();
+    return startMidiAutoLearn({
+      mappings: () => mappingsRef.current,
+      assign: (id, source) => { onUpdate(id, { source }); setAssigned({ id, at: Date.now() }); },
+    });
+  }, [play.mappings, onUpdate]);
+  useEffect(() => {
+    if (!assigned) return;
+    const t = window.setTimeout(() => setAssigned(null), ASSIGN_FLASH_MS);
+    return () => window.clearTimeout(t);
+  }, [assigned]);
   useEffect(() => {
     if (!learnFor) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setLearnFor(null); };
@@ -1174,7 +1195,7 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
             <Button size="sm" icon="spark" variant={learnFor === 'new' ? 'primary' : 'secondary'} disabled={noControls} onClick={() => setLearnFor(l => (l === 'new' ? null : 'new'))}>
               {learnFor === 'new' ? 'Listening…' : 'Learn'}
             </Button>
-            <Button size="sm" icon="plus" disabled={noControls} onClick={() => onAdd(allSources ? { kind: 'midi', signal: 'cc', channel: 0, cc: 1 } : { kind: 'mouse', axis: 'x' })}>Add</Button>
+            <Button size="sm" icon="plus" disabled={noControls} onClick={() => onAdd(allSources ? { kind: 'midi', signal: 'cc', channel: 0 } : { kind: 'mouse', axis: 'x' })}>Add</Button>
           </>
         )}
       />
@@ -1218,6 +1239,7 @@ function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open,
               layerRefs={layerRefs}
               meter={meters.get(m.id) ?? 0}
               learning={learnFor === m.id}
+              assigned={assigned?.id === m.id}
               collapsed={collapsed.has(m.id)}
               onToggle={() => toggleRow(m.id)}
               onLearn={() => setLearnFor(l => (l === m.id ? null : m.id))}
@@ -1363,7 +1385,7 @@ function PairMappingsSection({ play, grid, audioNodes, layerRefs, onAdd, onUpdat
   );
 }
 
-function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
+function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, layerRefs, meter, learning, assigned = false, collapsed, onToggle, onLearn, onUpdate, onRemove }: {
   mapping: PlayMapping;
   control: PlayControl | undefined;
   controls: PlayControl[];
@@ -1372,6 +1394,8 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
   layerRefs: LayerRef[];
   meter: number;
   learning: boolean;
+  /** The row was just given its knob (lib/midiAutoLearn.ts): a brief highlight. */
+  assigned?: boolean;
   collapsed: boolean;
   onToggle: () => void;
   onLearn: () => void;
@@ -1404,7 +1428,12 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
 
   // Where the source lands after the curve (0..1 of the range): what the control actually gets.
   const shaped = applyCurve(meter, m.curve, m.curveY);
-  const frame = { marginTop: 6, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${learning ? tk.accent.base : tk.border.default}`, opacity: m.enabled ? 1 : 0.55 };
+  const waiting = isUnassignedCc(m.source);
+  const frame = {
+    marginTop: 6, borderRadius: radius.card, background: assigned ? alpha(tk.accent.base, 0.12) : tk.bg.panel,
+    boxShadow: `inset 0 0 0 1px ${learning || assigned ? tk.accent.base : tk.border.default}`, opacity: m.enabled ? 1 : 0.55,
+    transition: assigned ? 'none' : 'background 0.9s ease-out, box-shadow 0.9s ease-out',
+  };
   const chevron = <IconButton icon={collapsed ? 'chevR' : 'chevD'} label={collapsed ? 'Expand mapping' : 'Collapse mapping'} size="sm" tooltip={false} onClick={onToggle} style={{ marginLeft: -6 }} />;
 
   if (collapsed) {
@@ -1413,7 +1442,9 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26 }}>
           {chevron}
           <button type="button" onClick={onToggle} title="Expand" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `500 12px ${fontFamily.ui}`, textAlign: 'left' }}>
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{sourceLabel(m.source, controls, layerRefs)}</span>
+            {waiting
+              ? <MidiWaitChip title="This row has no knob yet: the first CC that moves on any device becomes its CC" />
+              : <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{sourceLabel(m.source, controls, layerRefs)}</span>}
             <Icon name="chevR" size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: tk.text.secondary }}>{control?.label ?? 'missing control'}</span>
           </button>
@@ -1446,8 +1477,9 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
             ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a second control</span>
             : <Select ariaLabel="Source control" value={m.source.controlId} options={otherControls.map(c => ({ value: c.id, label: c.label }))} onChange={v => onUpdate({ source: { kind: 'control', controlId: v } })} height={26} style={{ flex: 1, minWidth: 0 }} />
         )}
-        {m.source.kind === 'midi' && m.source.signal === 'cc' && (
-          <NumberInput value={m.source.cc ?? 1} min={0} max={127} step={1} title="CC number" onCommit={n => onUpdate({ source: { ...m.source, kind: 'midi', signal: 'cc', channel: m.source.kind === 'midi' ? m.source.channel : 0, cc: Math.max(0, Math.min(127, Math.round(n))) } })} style={{ ...numStyle, width: 44 }} />
+        {m.source.kind === 'midi' && m.source.signal === 'cc' && (waiting
+          ? <MidiWaitChip title="This row has no knob yet: the first CC that moves on any device becomes its CC (or type one in the Knob row below)" />
+          : <NumberInput value={m.source.cc ?? 0} min={0} max={127} step={1} title="CC number" onCommit={n => onUpdate({ source: { ...m.source, kind: 'midi', signal: 'cc', channel: m.source.kind === 'midi' ? m.source.channel : 0, cc: Math.max(0, Math.min(127, Math.round(n))) } })} style={{ ...numStyle, width: 44 }} />
         )}
         {m.source.kind === 'midi' && (
           <Select ariaLabel="MIDI channel" value={`${m.source.channel}`} options={CHANNELS} onChange={v => onUpdate({ source: { ...(m.source as Extract<PlaySource, { kind: 'midi' }>), channel: parseInt(v, 10) || 0 } })} height={26} style={{ flexShrink: 0 }} />

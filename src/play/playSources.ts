@@ -178,7 +178,8 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
   // A note range carries over between note, velocity and gate; locks stay with a CC.
   const range = prev.kind === 'midi' && prev.range ? { range: prev.range } : {};
   switch (t) {
-    case 'midi:cc': return { kind: 'midi', signal: 'cc', channel, cc: prev.kind === 'midi' && prev.cc !== undefined ? prev.cc : 1, ...(prev.kind === 'midi' && prev.locks ? { locks: prev.locks } : {}) };
+    // A CC row starts without a knob: the first CC that moves becomes its CC (lib/midiAutoLearn.ts).
+    case 'midi:cc': return { kind: 'midi', signal: 'cc', channel, ...(prev.kind === 'midi' && prev.cc !== undefined ? { cc: prev.cc } : {}), ...(prev.kind === 'midi' && prev.locks ? { locks: prev.locks } : {}) };
     case 'midi:note': return { kind: 'midi', signal: 'note', channel, ...range };
     case 'midi:velocity': return { kind: 'midi', signal: 'velocity', channel, ...range };
     case 'midi:gate': return { kind: 'midi', signal: 'gate', channel, ...range };
@@ -228,7 +229,7 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   const ch = s.channel === 0 ? '' : ` · ch. ${s.channel}`;
   const range = s.range ? ` ${kmNoteName(s.range[0])}–${kmNoteName(s.range[1])}` : '';
   switch (s.signal) {
-    case 'cc': return s.locks?.length ? `CC ${s.locks.map(l => l.cc).join(', ')} · locked` : `CC ${s.cc ?? 1}${ch}`;
+    case 'cc': return s.locks?.length ? `CC ${s.locks.map(l => l.cc).join(', ')} · locked` : s.cc === undefined ? 'MIDI CC · turn a knob' : `CC ${s.cc}${ch}`;
     case 'note': return `Note${range}${ch}`;
     case 'velocity': return `Velocity${range}${ch}`;
     case 'gate': return `Gate${range}${ch}`;

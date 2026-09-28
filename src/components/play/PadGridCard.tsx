@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { padGrid } from '../../lib/padGrid';
 import { midiEngine } from '../../lib/midiEngine';
+import { claimMidiListen } from '../../lib/midiAutoLearn';
 import { DEFAULT_PAD_GRID, PAD_GRID_LAYOUTS, PAD_GRID_MAX, PAD_GRID_MODES, type PadGridLayout, type PlayPadGrid } from '../../types/playMidi';
 import { kmLayoutOf, kmLearnGrid, kmNoteName } from '../../play/kit/midi.js';
 import { padsForCells } from './midiUi';
@@ -57,7 +58,9 @@ function PadGridEditor({ pg }: { pg: PlayPadGrid }) {
   const [padRows, setPadRows] = useState(geo.rows);
   useEffect(() => {
     if (!learn) return;
-    return midiEngine.subscribe(e => {
+    // Waiting for pads: an unassigned CC row doesn't take a knob meanwhile (lib/midiAutoLearn.ts).
+    const release = claimMidiListen();
+    const off = midiEngine.subscribe(e => {
       if (e.kind !== 'noteOn') return;
       if (learn.step === 'bl') { setLearn({ step: 'tr', bl: e.note, device: e.device ?? '' }); return; }
       const g = kmLearnGrid(learn.bl ?? e.note, e.note, padCols, padRows);
@@ -69,6 +72,7 @@ function PadGridEditor({ pg }: { pg: PlayPadGrid }) {
       patch({ layout: 'learned', learned: g, device: learn.device || pg.device });
       toast.success('Pads learned', { message: `${g.cols} × ${g.rows} pads, ${g.origin} bottom-left, ${g.rowStep} notes a row.` });
     });
+    return () => { off(); release(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [learn, padCols, padRows, pg]);
 
