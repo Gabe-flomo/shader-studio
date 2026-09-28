@@ -56,7 +56,7 @@ import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 import { rlCreate, rlStep, rlPlace, rlShift, rlDraw, rlPictureOf, RL_MAX_MEMBERS, RL_READS } from './relationship.js';
 import { agCreate, agStep, agDraw, agReset, agScatter, agElements, agElement, AG_READS } from './agents.js';
 import { hdDraw } from './hands.js';
-import { kmApplyMasks, kmApplyTrack, kmMatteSources, kmTrackOf } from './mattes.js';
+import { kmApplyBackgroundMatte, kmApplyMasks, kmApplyTrack, kmMatteSources, kmTrackOf } from './mattes.js';
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 import { kdState, kdAct, kdPlan, kdTextItems, kdFrame, kdDrawTable, kdColumn, kdText, kdChunkText, kdWrapText, kdScriptView } from './data.js';
 
@@ -281,8 +281,11 @@ export function createLayerKit() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, W, H);
-    // A transparent export keeps the backdrop out: only the layers, over nothing.
-    if (bq) { if (!bq.direct && !env.transparent) ctx.drawImage(gl, 0, 0); }
+    // A transparent export keeps the backdrop out: only the layers, over nothing. A background
+    // matte needs the picture painted onto the overlay even when it would otherwise show straight
+    // off the GL canvas (bq.direct, the plain shader), so there is something on `ctx` to cut.
+    const bgMatte = record.backgroundMatte;
+    if (bq) { if ((!bq.direct || bgMatte) && !env.transparent) ctx.drawImage(gl, 0, 0); }
     else if (env.hidden && !env.transparent) { ctx.fillStyle = klCss(env.backdrop || [0, 0, 0]); ctx.fillRect(0, 0, W, H); }
     else if (env.background && !env.transparent) ctx.drawImage(gl, 0, 0);
     const layers = record.layers;
@@ -290,7 +293,7 @@ export function createLayerKit() {
     // is in use, copy the shader in underneath first so multiply, screen, difference… act on it too.
     // (Not with the Layers node: there the shader already shows the layers.)
     const shaderOnGl = bq ? bq.direct : !env.background && !env.hidden;
-    if (shaderOnGl && !env.transparent && !env.shaderTap && env.gl && layers.some(l => l.visible !== false && l.blend && l.blend !== 'normal')) {
+    if (shaderOnGl && !env.transparent && !env.shaderTap && env.gl && (bgMatte || layers.some(l => l.visible !== false && l.blend && l.blend !== 'normal'))) {
       try { ctx.drawImage(env.gl, 0, 0, W, H); } catch (err) { /* no picture to copy yet */ }
     }
     const ids = new Set(layers.map(l => l.id));
@@ -310,6 +313,8 @@ export function createLayerKit() {
     // Layers the host wants drawn alone (the Finish stack's time map reads one's alpha): run and drawn like a matte, even hidden.
     const alphaIds = env.alphaLayers && env.alphaLayers.length ? env.alphaLayers.filter(id => byId.has(id)) : null;
     if (alphaIds) for (const id of alphaIds) matteSources.add(id);
+    // The Background's own matte layer runs (and draws on its own canvas) even while hidden, like any other matte.
+    if (bgMatte && byId.has(bgMatte.id)) matteSources.add(bgMatte.id);
     const live = matteSources.size ? layers.filter(l => isVisible(l) || matteSources.has(l.id)) : vis;
 
     // 1. Nulls that follow something ride a spring; their position is reported back to the host.
@@ -967,6 +972,13 @@ export function createLayerKit() {
       if (l.masks && l.masks.length && l.kind !== 'background') kmApplyMasks(pool, o, l, k => env.value(l, k), W, H);
       rendered.set(l.id, off);
       return off;
+    }
+    // The Background matted by a layer: cut what is already on `ctx` (painted above) by that
+    // layer's alpha or luma, same as a layer's own track matte, before anything else draws over it.
+    if (bgMatte && !env.transparent) {
+      const ml = byId.get(bgMatte.id);
+      const mc = ml && renderLayer(ml);
+      if (mc) kmApplyBackgroundMatte(pool, ctx, mc, bgMatte, W, H);
     }
     // Text, images and the camera with a Reveal or Luma picture matte already chose how they meet the picture.
     const blendOf = l => ((l.kind === 'text' || l.kind === 'image' || l.kind === 'camera' || l.kind === 'video') && l.matte !== 'over') ? 'source-over' : KL_BLEND[l.blend] || 'source-over';
