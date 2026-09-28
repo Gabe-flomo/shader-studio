@@ -68,6 +68,32 @@ export function addRackControl(p: PlayRecord, rackId: string, slotId: string, pa
   return out;
 }
 
+/** What touching a parameter in the plug-in's window did (`touchRackControl`). */
+export interface TouchResult {
+  record: PlayRecord;
+  /** It became a rack control. */
+  added: boolean;
+  /** The slot was full: this one (the first on the strip, the oldest unless reordered) made room. */
+  replaced?: { address: string; label: string };
+}
+
+/**
+ * Configure's "touch to configure": a parameter the person moved in the
+ * plug-in's window becomes a rack control. Already one: nothing changes.
+ * The slot full: the first on the strip goes (its mappings and tape moves
+ * with it, as removing does) and the touched one joins at the end. One undo step.
+ */
+export function touchRackControl(p: PlayRecord, rackId: string, slotId: string, param: RackParamInfo): TouchResult {
+  const rack = aeRack(p.audioEngine, rackId), slot = aeSlot(rack, slotId);
+  if (!rack || !slot) return { record: p, added: false };
+  const live = rackControlsOf(p, rack, slot);
+  if (live.some(c => c.address === param.address)) return { record: p, added: false };
+  if (live.length < RACK_CONTROLS_MAX) return { record: addRackControl(p, rackId, slotId, param), added: true };
+  const oldest = live[0];
+  const record = addRackControl(removeRackControl(p, rackId, slotId, oldest.address), rackId, slotId, param);
+  return { record, added: true, replaced: { address: oldest.address, label: oldest.control.label } };
+}
+
 /** Stop being a rack control: the Play control and its mappings go too. */
 export function removeRackControl(p: PlayRecord, rackId: string, slotId: string, address: string): PlayRecord {
   const rack = aeRack(p.audioEngine, rackId), slot = aeSlot(rack, slotId);

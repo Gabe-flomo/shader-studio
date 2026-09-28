@@ -44,6 +44,7 @@ import {
   type AuParam, type EngineSpectrum, type NativeFrame,
 } from './audioEngineProtocol';
 import { engineSound } from './engineSound';
+import { TOUCH_EVENT, parseTouched, type TouchedParam } from './paramWatch';
 import { engineSend, SEND_CAPACITY } from './engineSend';
 import { decodeEngineRender, type EngineRender, type EngineRenderJob, type TapDone } from './engineRender';
 import { midiEngine, type MidiEvent } from './midiEngine';
@@ -683,6 +684,22 @@ class AudioEngineHost {
     const ns = slot === AE_INST ? n?.inst : n?.effects.find(e => e.id === slot);
     if (ns) ns.params[address] = value;
     this.sendParam(rack, slot, address, value, false);
+  }
+
+  /**
+   * Configure's "touch to configure" (paramWatch.ts): watch the slot's
+   * parameters; each one the person moves in its window arrives at `onTouch`.
+   * Resolves to a stop function, or a reason it can't watch.
+   */
+  async watchTouches(rack: string, slot: string, onTouch: (t: TouchedParam) => void): Promise<(() => void) | string> {
+    if (!(await this.bridge()) || !this.invoke || !this.listen) return 'Touch to configure works in the desktop app.';
+    const invoke = this.invoke;
+    const un = await this.listen<unknown>(TOUCH_EVENT, e => {
+      const t = parseTouched(e.payload);
+      if (t && t.rack === rack && t.slot === slot) onTouch(t);
+    });
+    try { await invoke('ae_watch_start', { rack, slot }); } catch (e) { un(); return String(e); }
+    return () => { un(); void invoke('ae_watch_stop', { rack, slot }).catch(() => {}); };
   }
 
   async openUi(rack: string, slot: string, title: string): Promise<string | null> {

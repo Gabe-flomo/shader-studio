@@ -1,10 +1,11 @@
 /**
  * RackControls — a rack's controls on its card (docs/arrangement.md,
  * Configure): the compact strip of faders (up to 8 per instrument or effect)
- * and Configure, where they're picked. On the desktop, Configure watches the
- * plug-in's own window: move a knob there and it's offered ("Add Cutoff");
- * the parameter list is always there too (the only way in a browser, and for
- * a plug-in that doesn't report its window's moves).
+ * and Configure, where they're picked. On the desktop, Configure opens the
+ * plug-in's own window and adds whatever the person touches there ("touch to
+ * configure", paramWatch.ts); "Pick from list…" keeps the whole parameter
+ * list (the only way in a browser, and for a plug-in with no window or one
+ * that doesn't report its window's moves).
  *
  * The faders are ordinary Play controls (play/rackControls.ts): mappable to a
  * MIDI knob, recorded by takes and on the tape. While the tape plays, a
@@ -19,14 +20,15 @@ import { askText } from '../../ui/dialogStore';
 import { toast } from '../../ui/toastStore';
 import type { PlayRecord } from '../../../types/play';
 import { RACK_CONTROLS_MAX } from '../../../types/playArrangement';
-import { aeSlotName, auPropId, patchSlot, type AeRack, type AeSlot } from '../../../types/playAudioEngine';
+import { aeRack, aeSlot, aeSlotName, auPropId, patchSlot, type AeRack, type AeSlot } from '../../../types/playAudioEngine';
 import { audioEngineHost, useEngineUi } from '../../../lib/audioEngineHost';
 import { formatParam, type AuParam } from '../../../lib/audioEngineProtocol';
-import { ParamWatch, WATCH_EVERY_MS } from '../../../lib/paramWatch';
+import { WATCH_QUIET_MS, type TouchedParam } from '../../../lib/paramWatch';
 import { playEngine } from '../../../lib/playEngine';
 import { useTape } from '../../../lib/tape';
+import { useTakes } from '../../../lib/takes';
 import { GR_PARAMS } from '../../../play/kit/granulator.js';
-import { addRackControl, moveRackControl, rackControlsOf, removeRackControl, renameRackControl, type RackParamInfo } from '../../../play/rackControls';
+import { addRackControl, moveRackControl, rackControlsOf, removeRackControl, renameRackControl, touchRackControl, type RackParamInfo } from '../../../play/rackControls';
 import { withEngine } from './engineOps';
 import { usePlayUi } from '../playUi';
 
@@ -149,6 +151,74 @@ function MiniFader({ label, value, min, max, step, onChange, format, touch, live
 
 // ── Configure ────────────────────────────────────────────────────────────────
 
+/** Is a take or the tape recording? Touches then change nothing (a knob turned is being recorded, not configured). */
+const recordingNow = () => {
+  const takes = useTakes.getState().phase, tp = useTape.getState().phase;
+  return takes === 'recording' || takes === 'countdown' || tp === 'recording' || tp === 'counting';
+};
+
+/**
+ * "Touch to configure": while `on`, the plug-in's window opens and the engine
+ * watches its parameters; each one the person moves there becomes a rack
+ * control (the first on the strip makes room when full, with a notice).
+ * Values seen while watching are kept in the record when Configure closes.
+ */
+function useTouchToConfigure(on: boolean, rack: AeRack, slot: AeSlot, play: PlayRecord, onChange: Change) {
+  const title = `${rack.name} · ${aeSlotName(slot)}`;
+  const playRef = useRef(play);
+  const changeRef = useRef(onChange);
+  const titleRef = useRef(title);
+  useEffect(() => { playRef.current = play; changeRef.current = onChange; titleRef.current = title; });
+  const [live, setLive] = useState<Record<string, number>>({});
+  const [recent, setRecent] = useState<string | null>(null);
+  const [quiet, setQuiet] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!on) return;
+    let alive = true, heard = false;
+    let stop: (() => void) | null = null;
+    const seen: Record<string, number> = {};
+    const onTouch = (t: TouchedParam) => {
+      if (!alive || recordingNow()) return;
+      heard = true;
+      seen[t.param.address] = t.param.value;
+      setQuiet(false);
+      setLive(l => ({ ...l, [t.param.address]: t.param.value }));
+      setRecent(t.param.address);
+      const res = touchRackControl(playRef.current, rack.id, slot.id, info(t.param));
+      if (!res.added) return;
+      playRef.current = res.record; // the next touch sees it before the re-render
+      changeRef.current(p => touchRackControl(p, rack.id, slot.id, info(t.param)).record);
+      if (res.replaced) toast.info(`Replaced ${res.replaced.label}`, { message: `with ${t.param.name}: ${RACK_CONTROLS_MAX} rack controls at most. Undo brings it back.` });
+    };
+    void (async () => {
+      const why = await audioEngineHost.openUi(rack.id, slot.id, titleRef.current);
+      if (why && alive) toast.error('The plug-in window didn’t open', { message: why });
+      const r = await audioEngineHost.watchTouches(rack.id, slot.id, onTouch);
+      if (typeof r === 'string') { if (alive) setError(r); return; }
+      if (alive) stop = r; else r();
+    })();
+    const q = setTimeout(() => { if (alive && !heard) setQuiet(true); }, WATCH_QUIET_MS);
+    return () => {
+      alive = false;
+      clearTimeout(q);
+      stop?.();
+      // Keep where the touched rack controls were left.
+      const s = aeSlot(aeRack(playRef.current.audioEngine, rack.id), slot.id);
+      if (!s) return;
+      const moved: Record<string, number> = {};
+      for (const a of s.controls ?? []) if (a in seen && s.params?.[a] !== seen[a]) moved[a] = seen[a];
+      if (Object.keys(moved).length) {
+        changeRef.current(p => {
+          const cur = aeSlot(aeRack(p.audioEngine, rack.id), slot.id);
+          return cur ? withEngine(p, patchSlot(p.audioEngine, rack.id, slot.id, { params: { ...cur.params, ...moved } })) : p;
+        });
+      }
+    };
+  }, [on, rack.id, slot.id]);
+  return { live, recent, quiet, error };
+}
+
 /** Pick up to RACK_CONTROLS_MAX of a slot's parameters as rack controls; rename, reorder, remove them. */
 export function ConfigurePanel({ rack, slot, play, onChange, desktop, onClose }: {
   rack: AeRack; slot: AeSlot; play: PlayRecord; onChange: Change; desktop: boolean; onClose: () => void;
@@ -157,6 +227,9 @@ export function ConfigurePanel({ rack, slot, play, onChange, desktop, onClose }:
   const params = useSlotParams(rack, slot);
   const current = rackControlsOf(play, rack, slot);
   const full = current.length >= RACK_CONTROLS_MAX;
+  const watching = desktop && slot.kind === 'au';
+  const touch = useTouchToConfigure(watching, rack, slot, play, onChange);
+  const [listOpen, setListOpen] = useState(!watching);
   const [q, setQ] = useState('');
   const have = new Set(current.map(c => c.address));
   const add = (p: AuParam) => {
@@ -164,28 +237,61 @@ export function ConfigurePanel({ rack, slot, play, onChange, desktop, onClose }:
     onChange(pr => addRackControl(pr, rack.id, slot.id, info(p)));
   };
   const shown = (params ?? []).filter(p => !have.has(p.address) && (!q || p.name.toLowerCase().includes(q.toLowerCase()))).slice(0, 60);
-  const watching = desktop && slot.kind === 'au';
+  const byAddr = new Map((params ?? []).map(p => [p.address, p]));
+  const valueText = (address: string) => {
+    const p = byAddr.get(address);
+    const v = touch.live[address] ?? slot.params?.[address] ?? p?.value;
+    if (v === undefined) return '';
+    return p ? formatParam(p, v) : slot.kind === 'granulator' ? fmtGr(address, v) : String(Math.round(v * 100) / 100);
+  };
+  const openWindow = async () => {
+    const why = await audioEngineHost.openUi(rack.id, slot.id, `${rack.name} · ${aeSlotName(slot)}`);
+    if (why) toast.error('The plug-in window didn’t open', { message: why });
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 8px 8px 10px', borderRadius: radius.md, boxShadow: `inset 0 0 0 1.5px ${tk.accent.base}`, background: alpha(tk.accent.base, 0.04) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <b style={{ flex: 1, font: `650 12px ${fontFamily.ui}`, color: tk.text.primary }}>Configure · {current.length} of {RACK_CONTROLS_MAX} rack controls</b>
         <Button size="sm" variant="ghost" onClick={onClose}>Done</Button>
       </div>
-      <span style={{ color: tk.text.muted, font: `11.5px/1.45 ${fontFamily.ui}` }}>
-        Rack controls sit on this card as faders, in <b>{rack.name} · {aeSlotName(slot)}</b> on the Controls tab: map a MIDI knob to one, and the tape records its moves.
-      </span>
-      {current.map(({ address, control }, i) => (
-        <div key={address} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ flex: 1, minWidth: 0, color: tk.text.secondary, font: `12px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {control.label}</span>
-          <IconButton icon="edit" size="sm" label="Rename" onClick={async () => { const n = await askText('Rename rack control', { initial: control.label, confirmLabel: 'Rename' }); if (n) onChange(p => renameRackControl(p, rack.id, slot.id, address, n)); }} />
-          <IconButton icon="chevU" size="sm" label="Earlier" disabled={i === 0} onClick={() => onChange(p => moveRackControl(p, rack.id, slot.id, address, -1))} />
-          <IconButton icon="chevD" size="sm" label="Later" disabled={i === current.length - 1} onClick={() => onChange(p => moveRackControl(p, rack.id, slot.id, address, 1))} />
-          <IconButton icon="close" size="sm" label="Remove this rack control (its mappings and its moves on the tape go too)" onClick={() => onChange(p => removeRackControl(p, rack.id, slot.id, address))} />
+      {watching && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 8px', borderRadius: radius.sm, background: tk.bg.field }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {!touch.error && <span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger, animation: 'tapePulse 1.2s ease-in-out infinite' }} />}
+            <span style={{ flex: 1, minWidth: 0, color: tk.text.secondary, font: `600 11.5px ${fontFamily.ui}` }}>
+              {touch.error ? 'Couldn’t watch the plug-in.' : `Touch a control in the plug-in to add it${full ? ' (the first here makes room)' : ''}.`}
+            </span>
+            <Button size="sm" variant="ghost" icon="popout" onClick={() => void openWindow()}>Its window</Button>
+          </div>
+          {touch.error && <span style={{ color: tk.text.muted, font: `11px ${fontFamily.ui}` }}>{touch.error} Pick from the list instead.</span>}
+          {!touch.error && touch.quiet && <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Nothing touched yet: this plug-in may not tell the host about its window’s moves. Pick from the list instead.</span>}
+          <style>{'@keyframes tapePulse { 0%,100% { opacity: 1 } 50% { opacity: 0.45 } }'}</style>
         </div>
-      ))}
+      )}
+      {!watching && (
+        <span style={{ color: tk.text.muted, font: `11.5px/1.45 ${fontFamily.ui}` }}>
+          Rack controls sit on this card as faders, in <b>{rack.name} · {aeSlotName(slot)}</b> on the Controls tab: map a MIDI knob to one, and the tape records its moves.
+        </span>
+      )}
+      {current.map(({ address, control }, i) => {
+        const hot = touch.recent === address;
+        return (
+          <div key={address} style={{ display: 'flex', alignItems: 'center', gap: 4, borderRadius: radius.sm, padding: '0 0 0 4px', background: hot ? alpha(tk.accent.base, 0.12) : 'transparent', transition: 'background 200ms' }}>
+            <span style={{ flex: 1, minWidth: 0, color: hot ? tk.text.primary : tk.text.secondary, font: `${hot ? 600 : 400} 12px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {i + 1}. {control.label} <span style={{ color: tk.text.faint, font: `11px ${fontFamily.mono}` }}>{valueText(address)}</span>
+            </span>
+            <IconButton icon="edit" size="sm" label="Rename" onClick={async () => { const n = await askText('Rename rack control', { initial: control.label, confirmLabel: 'Rename' }); if (n) onChange(p => renameRackControl(p, rack.id, slot.id, address, n)); }} />
+            <IconButton icon="chevU" size="sm" label="Earlier" disabled={i === 0} onClick={() => onChange(p => moveRackControl(p, rack.id, slot.id, address, -1))} />
+            <IconButton icon="chevD" size="sm" label="Later" disabled={i === current.length - 1} onClick={() => onChange(p => moveRackControl(p, rack.id, slot.id, address, 1))} />
+            <IconButton icon="close" size="sm" label="Remove this rack control (its mappings and its moves on the tape go too)" onClick={() => onChange(p => removeRackControl(p, rack.id, slot.id, address))} />
+          </div>
+        );
+      })}
       {current.length > 0 && <div><Button size="sm" variant="ghost" icon="sliders" onClick={() => usePlayUi.getState().revealControlGroup(`${rack.name} · ${aeSlotName(slot)}`)}>On the Controls tab</Button></div>}
-      {watching && <WindowWatch rack={rack} slot={slot} have={have} full={full} onAdd={add} />}
-      {params === null ? (
+      {watching && !listOpen ? (
+        <button type="button" onClick={() => setListOpen(true)}
+          style={{ alignSelf: 'flex-start', border: 0, padding: 0, background: 'none', color: tk.text.muted, font: `11.5px ${fontFamily.ui}`, textDecoration: 'underline', cursor: 'pointer' }}>Pick from list…</button>
+      ) : params === null ? (
         <span style={{ color: tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>{slot.kind === 'au' && !desktop ? 'Audio Unit parameters are listed in the desktop app.' : 'Reading its parameters…'}</span>
       ) : !params.length ? (
         <span style={{ color: tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>It has no parameters to pick.</span>
@@ -201,55 +307,6 @@ export function ConfigurePanel({ rack, slot, play, onChange, desktop, onClose }:
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-/** Watching the plug-in's window: what moved there lately, offered to add. */
-function WindowWatch({ rack, slot, have, full, onAdd }: { rack: AeRack; slot: AeSlot; have: Set<string>; full: boolean; onAdd: (p: AuParam) => void }) {
-  const tk = useTokens();
-  const [offers, setOffers] = useState<Array<{ p: AuParam; live: boolean }>>([]);
-  const [heard, setHeard] = useState(false);
-  const [since] = useState(() => performance.now());
-  const [quiet, setQuiet] = useState(false);
-  useEffect(() => {
-    const w = new ParamWatch();
-    let on = true;
-    const tick = async () => {
-      const list = await audioEngineHost.readParams(rack.id, slot.id);
-      if (!on || !list) return;
-      const now = performance.now();
-      w.push(new Map(list.map(p => [p.address, p.value])), now);
-      const byAddr = new Map(list.map(p => [p.address, p]));
-      setOffers(w.offers(now).filter(o => byAddr.has(o.address)).map(o => ({ p: byAddr.get(o.address)!, live: o.live })));
-      setHeard(w.heard());
-      setQuiet(!w.heard() && now - since > 20000);
-    };
-    const id = setInterval(() => void tick(), WATCH_EVERY_MS);
-    void tick();
-    return () => { on = false; clearInterval(id); };
-  }, [rack.id, slot.id, since]);
-  const openWindow = async () => {
-    const why = await audioEngineHost.openUi(rack.id, slot.id, `${rack.name} · ${aeSlotName(slot)}`);
-    if (why) toast.error('The plug-in window didn’t open', { message: why });
-  };
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 8px', borderRadius: radius.sm, background: tk.bg.field }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger, animation: 'tapePulse 1.2s ease-in-out infinite' }} />
-        <span style={{ flex: 1, color: tk.text.secondary, font: `11.5px ${fontFamily.ui}` }}>Move a control in the plug-in’s window to add it.</span>
-        <Button size="sm" variant="ghost" icon="popout" onClick={() => void openWindow()}>Its window</Button>
-      </div>
-      {offers.map(({ p, live }) => (
-        <div key={p.address} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ flex: 1, minWidth: 0, color: live ? tk.text.primary : tk.text.muted, font: `${live ? 600 : 500} 12px ${fontFamily.ui}` }}>{p.name} <span style={{ color: tk.text.faint, font: `11px ${fontFamily.mono}` }}>{formatParam(p, p.value)}</span></span>
-          {have.has(p.address)
-            ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Added</span>
-            : <Button size="sm" variant={live ? 'primary' : 'secondary'} disabled={full} onClick={() => onAdd(p)}>Add {p.name}</Button>}
-        </div>
-      ))}
-      {!heard && quiet && <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Nothing reported yet: this plug-in may not tell the host about its window’s moves. Pick from the list below instead.</span>}
-      <style>{'@keyframes tapePulse { 0%,100% { opacity: 1 } 50% { opacity: 0.45 } }'}</style>
     </div>
   );
 }
