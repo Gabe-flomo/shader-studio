@@ -19,7 +19,8 @@
 import { ClockFollower, initialOutputState, reduceOutput, takeActions, type DownMsg, type OutputRecord, type OutputState } from './protocol';
 import { getRecord, isDesktopApp, outputLink, setDesktopFullscreen } from './transport';
 import { WarpRenderer, type WarpSources } from './warpRenderer';
-import { arrowStep, drawHandles, hitTest, moveHandle, nudge, surfaceOf, type HandleRef } from './mappingEdit';
+import { arrowStep, drawHandles, handlesOf, hitTest, isOffView, moveHandle, nudge, sameRef, surfaceOf, type HandleRef } from './mappingEdit';
+import { FrameLoop } from './frameLoop';
 import { defaultProjection, displayProjection, TEST_PATTERNS, type ProjectionRecord } from '../types/projection';
 
 interface PlayMount {
@@ -168,7 +169,6 @@ function surfaceLayerImage(id: string, c: ReturnType<PlayMount['canvases']>): HT
 }
 
 function loop(now: number): void {
-  requestAnimationFrame(loop);
   frames++;
   // A frame went missing (or none yet): ask for everything again, at most twice a second.
   if ((state.needsFull || !state.record) && now - lastHello > 500) hello();
@@ -206,7 +206,9 @@ function loop(now: number): void {
 // For a look from the console (and the app's own checks): the state and the player.
 (window as unknown as { __pfOutput: unknown }).__pfOutput = { state: () => state, mount: () => mount, clock: () => clock.at(performance.now()) };
 if (!warp.ok) showStatus('WebGL 2 isn’t available here.', 'The output needs it to draw the mapping.');
-requestAnimationFrame(loop);
+// Every animation frame of this window's own; when the browser holds those back (the app has focus and
+// this window is counted as background, or the tab is hidden), a timer keeps the picture moving at ~30 fps.
+new FrameLoop(loop, { fallbackHz: 30 }).start();
 
 // ── Status back to the main window ─────────────────────────────────────────
 
@@ -239,7 +241,7 @@ function showHint(): void {
 
 // ── Editing on the output ──────────────────────────────────────────────────
 
-let drag: { ref: HandleRef; start: ProjectionRecord; last: { x: number; y: number }; moved: boolean } | null = null;
+let drag: { ref: HandleRef; start: ProjectionRecord; last: { x: number; y: number }; moved: boolean; relative: boolean } | null = null;
 let activeRef: HandleRef | null = null;
 let sendQueued = false;
 
@@ -262,14 +264,16 @@ handleCanvas.addEventListener('pointerdown', e => {
   const sid = surfaceOf(ref);
   if (sid && sid !== state.ui.selected) link.send({ type: 'ui', ui: { selected: sid } });
   if (!ref) return;
-  drag = { ref, start: p, last: u, moved: false };
+  // A handle grabbed at the edge (it lies off the projector) follows the pointer's movement, not its place.
+  const spot = handlesOf(p, state.ui.selected).find(h => sameRef(h.ref, ref));
+  drag = { ref, start: p, last: u, moved: false, relative: !!spot && isOffView(spot.x, spot.y) };
   handleCanvas.setPointerCapture(e.pointerId);
 });
 handleCanvas.addEventListener('pointermove', e => {
   if (!drag) return;
   const u = toUnit(e);
   const p = projectionNow();
-  localProjection = drag.ref.kind === 'surface' || drag.ref.kind === 'maskBody'
+  localProjection = drag.ref.kind === 'surface' || drag.ref.kind === 'maskBody' || drag.relative
     ? nudge(p, drag.ref, u.x - drag.last.x, u.y - drag.last.y)
     : moveHandle(p, drag.ref, u.x, u.y);
   drag.last = u;

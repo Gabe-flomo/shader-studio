@@ -1,7 +1,7 @@
 /** Projection mapping maths: the corner pin's homography, the mesh warp, the triangles, the edge blend and the edit helpers. */
 import { describe, expect, it } from 'vitest';
 import { apply, applyHomog, blendRamp, invert, isConvexQuad, meshEval, multiply, outputToSquare, pointInPolygon, quadToQuad, squareToQuad, surfaceGeometry, surfacePoint, MESH_SUBDIV, type Mat3 } from '../warp';
-import { arrowStep, hitTest, MappingHistory, moveHandle, nudge } from '../mappingEdit';
+import { arrowStep, clampHandle, HANDLE_EDGE_INSET, hitTest, isOffView, MappingHistory, moveHandle, nudge } from '../mappingEdit';
 import { defaultMesh, defaultProjection, fullQuad, meshGrid, newSurface, type ProjQuad } from '../../types/projection';
 
 const close = (a: { x: number; y: number }, b: { x: number; y: number }, d = 1e-9) => {
@@ -211,5 +211,54 @@ describe('editing', () => {
     expect(h.redo(a)).toBe(b);
     h.push(b);
     expect(h.canRedo()).toBe(false);
+  });
+});
+
+describe('handles off the view', () => {
+  it('leaves a handle inside the view where it is', () => {
+    const at = clampHandle(0.25, 0.5, 800, 400);
+    expect(at).toEqual({ x: 200, y: 200, clamped: false, dx: 0, dy: 0 });
+  });
+
+  it('pins a handle past the right edge to that edge, inset, pointing right', () => {
+    const at = clampHandle(1.3, 0.5, 800, 400);
+    expect(at.clamped).toBe(true);
+    expect(at.x).toBe(800 - HANDLE_EDGE_INSET);
+    expect(at.y).toBe(200);
+    expect(at.dx).toBeCloseTo(1); expect(at.dy).toBeCloseTo(0);
+  });
+
+  it('pins a handle past a corner to that corner, pointing diagonally', () => {
+    const at = clampHandle(-0.5, -0.5, 400, 400);
+    expect(at.x).toBe(HANDLE_EDGE_INSET); expect(at.y).toBe(HANDLE_EDGE_INSET);
+    expect(at.dx).toBeCloseTo(-Math.SQRT1_2); expect(at.dy).toBeCloseTo(-Math.SQRT1_2);
+  });
+
+  it('counts a handle in the inset band as pulled back too, so it stays whole', () => {
+    const at = clampHandle(0.999, 0.5, 1000, 500);
+    expect(at.clamped).toBe(true);
+    expect(at.x).toBe(1000 - HANDLE_EDGE_INSET);
+  });
+
+  it('never insets past the middle of a tiny view', () => {
+    const at = clampHandle(2, 2, 10, 10);
+    expect(at.x).toBe(5); expect(at.y).toBe(5);
+  });
+
+  it('isOffView is the unit square', () => {
+    expect(isOffView(0.5, 0.5)).toBe(false);
+    expect(isOffView(0, 1)).toBe(false);
+    expect(isOffView(1.01, 0.5)).toBe(true);
+    expect(isOffView(0.5, -0.01)).toBe(true);
+  });
+
+  it('a press at the edge takes hold of the corner pinned there', () => {
+    const p = defaultProjection();
+    p.surfaces[0] = { ...newSurface('A', [{ x: 0.1, y: 0.1 }, { x: 1.4, y: 0.1 }, { x: 1.4, y: 0.9 }, { x: 0.1, y: 0.9 }]), id: 's1' };
+    // The top-right corner sits at x = 1.4: drawn at the right edge, inset, at y = 0.1.
+    const px = (1000 - HANDLE_EDGE_INSET) / 1000;
+    expect(hitTest(p, 's1', px, 0.1, 1000, 1000)).toEqual({ kind: 'corner', surfaceId: 's1', index: 1 });
+    // Away from that spot, the press falls through to the surface's body.
+    expect(hitTest(p, 's1', 0.7, 0.5, 1000, 1000)).toEqual({ kind: 'surface', surfaceId: 's1' });
   });
 });

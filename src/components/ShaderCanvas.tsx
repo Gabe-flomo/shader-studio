@@ -500,6 +500,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const unsubWake = inputBus.onWake(requestRender);
     // Play's background: opening or leaving the Play page, a new source, a video's first frame.
     const unsubBackground = playBackground.onChange(requestRender);
+    // The Mapping editor's preview takes the live picture: a still one is drawn once so it has something to show.
+    playOverlay.setWake(requestRender);
     // Hidden container (another page is showing) → treat like a hidden tab.
     const io = typeof IntersectionObserver !== 'undefined'
       ? new IntersectionObserver(entries => {
@@ -2053,6 +2055,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       unsubRender();
       unsubWake();
       unsubBackground();
+      playOverlay.setWake(null);
       unsubQueueGraphs();
       pruneBgPrograms(new Set());
       io?.disconnect();
