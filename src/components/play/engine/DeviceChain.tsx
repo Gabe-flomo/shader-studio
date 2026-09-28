@@ -22,15 +22,16 @@ import { Icon } from '../../ui/Icon';
 import type { IconName } from '../../ui/iconPaths';
 import { Menu, type MenuItem } from '../../ui/Menu';
 import type { PlayRecord } from '../../../types/play';
-import { AE_EFFECTS_MAX, AE_INST, patchSlot, setRackKeyboard, patchRack, type AeRack, type PlayAudioEngine } from '../../../types/playAudioEngine';
+import { AE_EFFECTS_MAX, AE_INST, patchSlot, setRackKeyboard, patchRack, readAuValue, type AeRack, type AeSlot, type PlayAudioEngine } from '../../../types/playAudioEngine';
 import { AUDIO_FX_EFFECTS, MASTER_CHAIN, patchChain } from '../../../types/playAudioFx';
 import { audioEngineHost, useEnginePrefs, useEngineUi } from '../../../lib/audioEngineHost';
 import { ENGINE_MASTER, engineReaderInput } from '../../../lib/engineSound';
 import { isTauri } from '../../../lib/midiTransport';
 import { useCan } from '../../../lib/plan';
 import { setReaderInput } from '../../../play/readerControls';
-import { LISTENER, applyChainOrder, chainOrder, deviceChain, reorderChain, type Device, type TrackRow } from '../../../play/engineView';
-import { usePlayUi } from '../playUi';
+import { LISTENER, applyChainOrder, chainOrder, deviceChain, deviceControlSummary, reorderChain, type Device, type TrackRow } from '../../../play/engineView';
+import { rackControlsOf } from '../../../play/rackControls';
+import { usePlayUi, deviceFoldKey } from '../playUi';
 import { withEngine } from './engineOps';
 import { GrainChainRow, InputRow, Keys, Note, RackSpectrum, SendView, SlotView, SourceRow, useRackEdits } from './RackParts';
 import { RackControlsStrip } from './RackControls';
@@ -39,9 +40,17 @@ type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
 const DRAG_TYPE = 'application/x-engine-device';
 
-/** One device: a titled panel in the chain. */
-function DevicePanel({ title, icon, color, width, children, grip, actions, dim = false, narrow }: {
+/**
+ * One device: a titled panel in the chain. `folded`/`onToggleFold` (Task:
+ * collapsible devices in a rack): folds it to the header alone, with
+ * `summary` (a one-line readout of its rack controls) in place of `actions`.
+ * Only for devices with their own header here (input, send, soundfx,
+ * Listener); the instrument and effects fold through SlotView instead, since
+ * they draw their own header inside `children`.
+ */
+function DevicePanel({ title, icon, color, width, children, grip, actions, dim = false, narrow, folded, onToggleFold, summary }: {
   title?: ReactNode; icon?: IconName; color?: string; width: number; children: ReactNode; grip?: ReactNode; actions?: ReactNode; dim?: boolean; narrow: boolean;
+  folded?: boolean; onToggleFold?: () => void; summary?: string;
 }) {
   const tk = useTokens();
   return (
@@ -49,14 +58,16 @@ function DevicePanel({ title, icon, color, width, children, grip, actions, dim =
       boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden', opacity: dim ? 0.72 : 1 }}>
       {color && <span aria-hidden style={{ height: 3, flexShrink: 0, background: color }} />}
       {title !== undefined && (
-        <header style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 6px 6px 8px', borderBottom: `1px solid ${tk.border.subtle}`, minWidth: 0 }}>
+        <header style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 6px 6px 8px', borderBottom: folded ? undefined : `1px solid ${tk.border.subtle}`, minWidth: 0 }}>
+          {onToggleFold && <IconButton icon={folded ? 'chevR' : 'chevD'} size="sm" label={folded ? 'Expand' : 'Collapse to its name, on/off and a summary'} onClick={onToggleFold} />}
           {grip}
           {icon && <Icon name={icon} size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />}
-          <b style={{ flex: 1, minWidth: 0, font: `650 12px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</b>
-          {actions}
+          <b onDoubleClick={onToggleFold} style={{ flex: folded ? '0 1 auto' : 1, minWidth: 0, font: `650 12px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: onToggleFold ? 'pointer' : undefined }}>{title}</b>
+          {folded && summary && <span title={summary} style={{ flex: 1, minWidth: 0, color: tk.text.faint, font: `10.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>}
+          {!folded && actions}
         </header>
       )}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 9px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
+      {!folded && <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 9px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>}
     </section>
   );
 }
@@ -89,6 +100,15 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
   const listening = (play.audioReaders?.input ?? '') === engineReaderInput(rack.id);
   const devices = deviceChain(rack, { listening, listenAt: play.audioEngine?.listenAt, native });
   const order = chainOrder(devices);
+  // Collapsible devices (Task: collapsible devices in a rack): remembered per device, "Collapse all / Expand all" in the rack header.
+  const folded = usePlayUi(s => s.folded);
+  const toggleFold = usePlayUi(s => s.toggleFold);
+  const toggleFoldMany = usePlayUi(s => s.toggleFoldMany);
+  const isFolded = (key: string) => !!folded[deviceFoldKey(rack.id, key)];
+  const foldToggle = (key: string) => toggleFold(deviceFoldKey(rack.id, key), !isFolded(key));
+  const deviceKeys = devices.map(d => d.key);
+  const anyFolded = deviceKeys.some(isFolded);
+  const summaryFor = (slot: AeSlot): string => deviceControlSummary(rackControlsOf(play, rack, slot).map(({ control }) => ({ label: control.label, value: readAuValue(play.audioEngine, control.target) ?? 0 })));
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
@@ -127,7 +147,8 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
     switch (d.kind) {
       case 'input':
         return (
-          <DevicePanel key="input" narrow={narrow} width={narrow ? 300 : 300} title={rack.source ? 'Sound in' : 'MIDI in'} icon="keyboard" color={row.color}>
+          <DevicePanel key="input" narrow={narrow} width={narrow ? 300 : 300} title={rack.source ? 'Sound in' : 'MIDI in'} icon="keyboard" color={row.color}
+            folded={isFolded('input')} onToggleFold={() => foldToggle('input')}>
             {rackError && <Note tone="bad">{rackError}</Note>}
             {!rack.source && <InputRow rack={rack} onPatch={o => edits.patch(o)} onKeyboard={on => { audioEngineHost.releaseHeld(rack.id); edits.edit(ae => setRackKeyboard(ae, rack.id, on)); }} touch={touch} />}
             {desktop && <SourceRow rack={rack} play={play} onPatch={o => { audioEngineHost.releaseHeld(rack.id); edits.edit(ae => patchRack(ae, rack.id, r => ({ ...r, ...o, ...(o.source ? { keyboard: false } : {}) }))); }} />}
@@ -135,7 +156,11 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
           </DevicePanel>
         );
       case 'send':
-        return <DevicePanel key="send" narrow={narrow} width={280} title="Send" icon="import"><SendView rack={rack} play={play} /></DevicePanel>;
+        return (
+          <DevicePanel key="send" narrow={narrow} width={280} title="Send" icon="import" folded={isFolded('send')} onToggleFold={() => foldToggle('send')}>
+            <SendView rack={rack} play={play} />
+          </DevicePanel>
+        );
       case 'instrument': {
         if (!d.slot) {
           return (
@@ -149,7 +174,8 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
         return (
           <DevicePanel key="inst" narrow={narrow} width={w}>
             <SlotView rack={rack} slot={d.slot} play={play} onChange={onChange} touch={touch} desktop={desktop} pluginsOk={pluginsOk}
-              onReplace={() => onPick('instrument')} onRemove={() => edits.removeSlot(AE_INST)}>
+              onReplace={() => onPick('instrument')} onRemove={() => edits.removeSlot(AE_INST)}
+              folded={isFolded(AE_INST)} onToggleFold={() => foldToggle(AE_INST)} summary={summaryFor(d.slot)}>
               <RackControlsStrip rack={rack} play={play} onChange={onChange} touch={touch} only={AE_INST} />
             </SlotView>
           </DevicePanel>
@@ -157,7 +183,7 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
       }
       case 'soundfx':
         return (
-          <DevicePanel key="soundfx" narrow={narrow} width={240} title="Sound effects" icon="sliders">
+          <DevicePanel key="soundfx" narrow={narrow} width={240} title="Sound effects" icon="sliders" folded={isFolded('soundfx')} onToggleFold={() => foldToggle('soundfx')}>
             <GrainChainRow rack={rack} play={play} />
             <Note>A Granulator plays in the page’s own audio: this chain (Finish → Sound) shapes it.</Note>
           </DevicePanel>
@@ -171,7 +197,8 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
                 grip={!touch ? <Grip label="Drag to move it in the chain" /> : undefined}
                 first={i === 0} last={i === order.length - 1} onMove={by => stepBy(d.key, by)}
                 onBypass={() => edits.edit(ae => patchSlot(ae, rack.id, d.slot.id, { bypass: !d.slot.bypass }))}
-                onRemove={() => edits.removeSlot(d.slot.id)}>
+                onRemove={() => edits.removeSlot(d.slot.id)}
+                folded={isFolded(d.key)} onToggleFold={() => foldToggle(d.key)} summary={summaryFor(d.slot)}>
                 <RackControlsStrip rack={rack} play={play} onChange={onChange} touch={touch} only={d.slot.id} />
                 {!d.heard && !d.slot.bypass && <Note>{rack.instrument?.kind === 'granulator' && !rack.source ? 'Not heard after a Granulator: its Sound effects shape it.' : 'Heard in the desktop app on a Mac; kept here.'}</Note>}
               </SlotView>
@@ -181,10 +208,12 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
       }
       case 'listener': {
         const i = order.indexOf(LISTENER);
+        const listenerFolded = isFolded(LISTENER);
         return (
           <div key="listener" {...draggable(LISTENER)} style={{ display: 'flex', maxHeight: '100%', minHeight: 0 }}>
             <DevicePanel narrow={narrow} width={300} title="Listener" icon="target"
               grip={!touch ? <Grip label="Drag to move the Listener between effects" /> : undefined}
+              folded={listenerFolded} onToggleFold={() => foldToggle(LISTENER)}
               actions={<>
                 <IconButton icon="chevL" size="sm" label="Earlier in the chain" disabled={i <= 0} onClick={() => stepBy(LISTENER, -1)} />
                 <IconButton icon="chevR" size="sm" label="Later in the chain" disabled={i >= order.length - 1} onClick={() => stepBy(LISTENER, 1)} />
@@ -223,6 +252,11 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
         <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
           {devices.length - 1} device{devices.length === 2 ? '' : 's'}{!touch ? ' · drag effects and the Listener to reorder' : ''}
         </span>
+        <span style={{ flex: 1 }} />
+        <Button size="sm" variant="ghost" icon={anyFolded ? 'chevD' : 'chevR'}
+          onClick={() => toggleFoldMany(deviceKeys.map(k => deviceFoldKey(rack.id, k)), !anyFolded)}>
+          {anyFolded ? 'Expand all' : 'Collapse all'}
+        </Button>
       </div>
       <div role="list" aria-label={`${rack.name}’s devices`}
         style={{ flex: 1, minHeight: narrow ? undefined : 0, display: 'flex', alignItems: narrow ? 'flex-start' : 'stretch', overflowX: 'auto', overflowY: 'hidden', padding: '0 12px 10px', height: narrow ? 460 : undefined, scrollSnapType: narrow ? 'x proximity' : undefined }}>

@@ -76,6 +76,9 @@ export function unregisterSection(kind: string, title: string): void {
   sectionTitles.get(kind)?.delete(title);
 }
 
+/** A device block's fold key in a rack's chain (Task: collapsible devices in a rack), kept in `folded` alongside the layer editors' sections. */
+export function deviceFoldKey(rackId: string, deviceKey: string): string { return `aeDevice:${rackId}:${deviceKey}`; }
+
 function loadGuides(): boolean {
   try { return localStorage.getItem(GUIDES_KEY) !== '0'; } catch { return true; }
 }
@@ -120,6 +123,8 @@ interface PlayUi {
   /** Open (or fold) every registered Section of a kind at once. */
   expandAllSections: (kind: string) => void;
   collapseAllSections: (kind: string) => void;
+  /** Fold (or unfold) several keys at once ("Collapse all / Expand all" on a rack's device chain). */
+  toggleFoldMany: (keys: readonly string[], next: boolean) => void;
   /** "Always expand cards": the sidebar's layer cards skip the header-only collapse. */
   alwaysExpandCards: boolean;
   setAlwaysExpandCards: (on: boolean) => void;
@@ -255,6 +260,13 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
     if (!titles?.size) return;
     const folded = { ...get().folded };
     for (const title of titles) folded[`${kind}:${title}`] = true;
+    try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch { /* preference only */ }
+    set({ folded });
+  },
+  toggleFoldMany: (keys, next) => {
+    if (!keys.length) return;
+    const folded = { ...get().folded };
+    for (const k of keys) folded[k] = next;
     try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch { /* preference only */ }
     set({ folded });
   },
