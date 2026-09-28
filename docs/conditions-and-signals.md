@@ -44,6 +44,7 @@ A **signal** is a named event the setup defines (Layers → **Signals**: add, re
 - **When a signal fires** is a trigger kind: actions and trigger mappings fire on it. In a mapping's Source picker each signal is also listed under **From the setup** (a trigger on it playing an envelope).
 - An **axis swap** can send a signal on each swap (below).
 - **Learn** takes a signal: while listening, fire one (▶ on the list, or anything that sends it) and it becomes the trigger or the source.
+- An **Increment** mapping steps a control on a signal (or a threshold, or a repeat) and can send a signal on each step and each wrap-back, so increments chain: docs/increment-mapping.md.
 
 Signals pass down a chain in the same frame: A sends S1, an action on S1 sends S2, an action on S2 bursts particles, all in one frame, in whatever order the actions are listed. Two guards keep a loop from hanging the page (`sgRunActions`):
 

@@ -22,7 +22,7 @@
 
 ## Sources
 
-A mapping is `source → range → curve → smoothing → control`. Every source reads as 0..1. A source that has never produced a reading (a knob nobody touched) leaves its control alone.
+A mapping is `source → range → curve → smoothing → control`. Every source reads as 0..1. A source that has never produced a reading (a knob nobody touched) leaves its control alone. An **Increment** mapping (Kind → Increment) moves its control in steps instead, on a trigger, a threshold or a repeat: docs/increment-mapping.md.
 
 **In, today.** Listed in the order the drop-down shows them: what everyone has first, hardware last.
 

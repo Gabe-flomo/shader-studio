@@ -29,6 +29,7 @@ const ROWS: Array<[string, string, string]> = [
   ['playProximity', 'Proximity: fire when close', 'Two nulls come close: a burst once, then a trail of sparks every 3 frames while they stay.'],
   ['playConditions', 'Conditions and signals', 'When a distance or a slider crosses a line, send a signal; a chain of signals bursts particles and steps the words.'],
   ['playPairs', 'Pairs, XY pads and axis swap', 'Two controls as one: an XY pad, an LFO that walks X then Y with an axis swap, and a pair with a per-axis condition.'],
+  ['playIncrement', 'Increments: move in steps', 'Controls that step instead of following: on the beat with a growing step, on a signal with a bounce, on a threshold with a wrap.'],
   ['playTextMattes', 'Text: over, reveal, luma', 'Three ways text meets the picture.'],
   ['playLayersOnly', 'Picture: layers only', 'Hide the shader and show it only through the layers.'],
   ['playTextSequence', 'Text sequences', 'One line at a time, stepped by keys or a timer, with transitions.'],
