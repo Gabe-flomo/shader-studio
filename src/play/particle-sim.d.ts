@@ -11,7 +11,6 @@ export interface ParticleState {
   /** Multiply's colony state (null until the first step). */
   mx: { phase: 'start' | 'grow' | 'full'; full: number; idle: number; respawn: number; cycles: number; reached: boolean } | null;
   /** Annihilation bursts still showing: where, how old (s), and the sparks' angle. */
-  fx: Array<{ x: number; y: number; t: number; a: number }>;
 }
 /** A particles layer's settings with numbers already driven (the id, label and kind are not read). */
 export type ParticleParams = Omit<ParticlesLayer, 'id' | 'label' | 'kind' | 'visible' | 'toShader'> & Partial<Pick<ParticlesLayer, 'id' | 'label' | 'kind' | 'visible' | 'toShader'>>;

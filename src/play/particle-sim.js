@@ -137,7 +137,7 @@ function allocParticles(n) {
     alive: new Uint8Array(n), cool: new Float32Array(n), zt: new Int16Array(n).fill(-1), zs: new Float32Array(n).fill(1),
     // Multiply: seconds to the next split, the partner an annihilating particle seeks, where it was born.
     split: new Float32Array(n), mate: new Int32Array(n).fill(-1), bx: new Float32Array(n), by: new Float32Array(n),
-    seed: 0, mx: null, fx: [],
+    seed: 0, mx: null,
   };
 }
 
@@ -155,7 +155,7 @@ export function resizeParticles(st, count, rand = Math.random, dead = false) {
   const n = Math.max(1, count | 0);
   if (n === st.count) return st;
   const out = allocParticles(n);
-  out.seed = st.seed; out.mx = st.mx; out.fx = st.fx;
+  out.seed = st.seed; out.mx = st.mx;
   const keep = Math.min(n, st.count);
   for (const k of ['x', 'y', 'vx', 'vy', 'age', 'life', 'r', 'alive', 'cool', 'zt', 'zs', 'split', 'mate', 'bx', 'by']) out[k].set(st[k].subarray(0, keep));
   for (let i = 0; i < keep; i++) if (out.mate[i] >= n) out.mate[i] = -1;
@@ -256,7 +256,7 @@ export function scatterParticles(st, p, strength, rand = Math.random) {
 /** Every particle reborn. */
 export function resetParticles(st, p, env, rand = Math.random) {
   // Multiply starts over from one particle.
-  if (p.emit === 'multiply') { st.alive.fill(0); st.mate.fill(-1); st.mx = null; st.fx = []; return; }
+  if (p.emit === 'multiply') { st.alive.fill(0); st.mate.fill(-1); st.mx = null; return; }
   for (let i = 0; i < st.count; i++) {
     if (p.emit === 'burst') { st.alive[i] = 0; continue; }
     spawn(st, i, p, env, rand);
@@ -354,7 +354,6 @@ export function stepParticles(st, p, env, rand = Math.random) {
   const ey = 1 / Math.max(sh || 36, 1), ex = ey / aspect;
   const zones = env.zones || [];
   const mult = p.emit === 'multiply';
-  if (st.fx.length) stepBursts(st, dt);
   if (mult) {
     multiplyLife(st, p, env, rand, dt);
     // Only Flow hands them to the field and forces; the other life modes move them here.
@@ -612,7 +611,7 @@ function separate(st, p, env) {
 //   return      a spring pulls each back to where it was born
 //   annihilate  once the colony first fills, each (grown-up) particle pairs
 //               with a random unpaired one within Pair radius; the two seek
-//               each other and die in a small burst when they touch (a loop
+//               each other and die when they touch (a loop
 //               emptying out pairs them all at once; hold and respawn pair a
 //               few at a time, so the colony churns near full)
 // And after the count is reached (multAfter):
@@ -779,9 +778,8 @@ function multiplyMove(st, p, env, rand, dt) {
     if (mode === 'annihilate' && m >= 0 && st.alive[m]) {
       const dx = (st.x[m] - x) * aspect, dy = st.y[m] - y, d = Math.hypot(dx, dy);
       if (d < contact) {
-        // Touch: both go, with a small burst where they met.
+        // Touch: both simply go. (No burst: the owner wants them to combine and vanish.)
         st.alive[i] = 0; st.alive[m] = 0; st.mate[i] = -1; st.mate[m] = -1;
-        if (st.fx.length < 256) st.fx.push({ x: (x + st.x[m]) / 2, y: (y + st.y[m]) / 2, t: 0, a: rand() * TAU });
         continue;
       }
       vx += ((dx / d) * seek - vx) * seekK; vy += ((dy / d) * seek - vy) * seekK;
@@ -833,33 +831,6 @@ function spreadPass(st, p, env, dt) {
       }
     }
   }
-}
-
-/** Annihilation bursts age and go (0.7 s). */
-const BURST_LIFE = 0.7;
-function stepBursts(st, dt) {
-  for (const b of st.fx) b.t += dt;
-  if (st.fx[0].t > BURST_LIFE) st.fx = st.fx.filter(b => b.t <= BURST_LIFE);
-}
-
-function drawBursts(ctx, st, p, env, css) {
-  const W = env.W, H = env.H, r0 = Math.max(1.5, (p.size || 2) * (env.dpr || 1)), alpha = env.alpha == null ? 1 : env.alpha;
-  ctx.strokeStyle = css; ctx.fillStyle = css; ctx.lineWidth = Math.max(1, r0 * 0.35);
-  for (const b of st.fx) {
-    const u = b.t / BURST_LIFE, a = Math.min(1, alpha) * (1 - u) * (1 - u);
-    if (a <= 0.004) continue;
-    const cx = b.x * W, cy = (1 - b.y) * H, rr = r0 * (1 + u * 5);
-    ctx.globalAlpha = a;
-    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
-    // Six sparks flying out.
-    ctx.beginPath();
-    for (let k = 0; k < 6; k++) {
-      const ang = b.a + (k * TAU) / 6, d0 = rr * 1.2, d1 = rr * 1.2 + r0 * (1.5 + 2 * u);
-      ctx.moveTo(cx + Math.cos(ang) * d0, cy + Math.sin(ang) * d0); ctx.lineTo(cx + Math.cos(ang) * d1, cy + Math.sin(ang) * d1);
-    }
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
 }
 
 // ── Goo (metaballs) ─────────────────────────────────────────────────────────
@@ -1049,7 +1020,6 @@ export function drawParticles(ctx, st, p, env) {
   const zones = env.zones || [];
   const zoneCss = zones.map(z => z.action === 'tint' ? 'rgb(' + Math.round(z.tint[0] * 255) + ',' + Math.round(z.tint[1] * 255) + ',' + Math.round(z.tint[2] * 255) + ')' : null);
   const hasTintZones = zoneCss.some(Boolean);
-  if (st.fx.length) drawBursts(ctx, st, p, env, p.colour === 'palette' ? paletteCssAt(p.palette, 0.9) : fixed);
   if (p.goo) { drawGoo(ctx, st, p, env); return; }
   if (p.links > 0) drawLinks(ctx, st, p, env, fixed, alpha);
   // Fast path: one colour, one opacity, round or square dots → a single path.
