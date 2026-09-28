@@ -1,7 +1,8 @@
 /**
  * audioReaderBank.ts — the setup's audio readers, read from the live input,
  * an Audio Input node's song or a Video layer's sound (`video:<layerId>`,
- * see videoSound.ts), once per frame on the wall clock
+ * see videoSound.ts), a Drum pad layer's pads, or an Audio engine rack
+ * (`engine:<rackId>`, lib/engineSound.ts), once per frame on the wall clock
  * (sound is real time, whatever the graph clock does).
  *
  * The Play engine reads levels here for reader sources and triggers; the
@@ -15,8 +16,9 @@ import { audioEngine } from './audioEngine';
 import { videoSound } from './videoSound';
 import { padsLayerOfInput, videoLayerOfInput } from '../types/playLayers';
 import { padSound } from './padSound';
+import { engineRackOfInput, engineSound } from './engineSound';
 
-export type ReaderInputState = 'live-on' | 'live-off' | 'song' | 'song-missing' | 'video' | 'video-missing' | 'pads' | 'pads-missing';
+export type ReaderInputState = 'live-on' | 'live-off' | 'song' | 'song-missing' | 'video' | 'video-missing' | 'pads' | 'pads-missing' | 'engine' | 'engine-missing';
 
 class AudioReaderBank {
   private cfg: PlayAudioReaders | undefined;
@@ -44,6 +46,8 @@ class AudioReaderBank {
     if (video) return videoSound.analyser(video) ? 'video' : 'video-missing';
     const pads = padsLayerOfInput(input);
     if (pads) return padSound.analyser(pads) ? 'pads' : 'pads-missing';
+    const rack = engineRackOfInput(input);
+    if (rack) return engineSound.has(rack) ? 'engine' : 'engine-missing';
     return audioEngine.isLoaded(input) ? 'song' : 'song-missing';
   }
 
@@ -53,6 +57,12 @@ class AudioReaderBank {
     if (!input) {
       const raw = liveAudio.raw();
       return raw ? { freq: raw.freq, sampleRate: raw.sampleRate } : null;
+    }
+    // An Audio engine rack: its latest frame (the desktop engine's FFT, or the browser sample player's analyser).
+    const rack = engineRackOfInput(input);
+    if (rack) {
+      const s = engineSound.spectrum(rack);
+      return s ? { freq: s.freq, sampleRate: s.sampleRate } : null;
     }
     const video = videoLayerOfInput(input), pads = padsLayerOfInput(input);
     const an = video ? videoSound.analyser(video) : pads ? padSound.analyser(pads) : audioEngine.getAnalyser(input);

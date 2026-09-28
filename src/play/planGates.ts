@@ -12,6 +12,7 @@
  */
 import type { PlayMapping, PlayPairMapping, PlayRecord, PlaySource, TriggerSpec } from '../types/play';
 import { canOn, type Plan } from '../lib/plan';
+import { engineWithoutPlugins } from '../types/playAudioEngine';
 
 /** Sources Free can map from. `control` is another slider on the panel: controls are Free. */
 export const FREE_SOURCE_KINDS: ReadonlySet<PlaySource['kind']> = new Set(['mouse', 'key', 'live', 'reader', 'audio', 'control']);
@@ -55,7 +56,7 @@ const cache = new WeakMap<PlayRecord, PlayRecord>();
  * mappings Free can run. The input is never changed.
  */
 export function playableForPlan(record: PlayRecord, plan: Plan | null): PlayRecord {
-  if (canOn(plan, 'play.layers') && canOn(plan, 'play.sources') && canOn(plan, 'play.backgrounds') && canOn(plan, 'play.midiFile') && canOn(plan, 'play.finish') && canOn(plan, 'play.audioFx')) return record;
+  if (canOn(plan, 'play.layers') && canOn(plan, 'play.sources') && canOn(plan, 'play.backgrounds') && canOn(plan, 'play.midiFile') && canOn(plan, 'play.finish') && canOn(plan, 'play.audioFx') && canOn(plan, 'audio.engine') && canOn(plan, 'audio.plugins')) return record;
   const hit = cache.get(record);
   if (hit) return hit;
   const out: PlayRecord = {
@@ -69,6 +70,7 @@ export function playableForPlan(record: PlayRecord, plan: Plan | null): PlayReco
     padGrid: canOn(plan, 'play.sources') ? record.padGrid : undefined,
     finish: canOn(plan, 'play.finish') ? record.finish : undefined,
     audioFx: canOn(plan, 'play.audioFx') ? record.audioFx : undefined,
+    audioEngine: !record.audioEngine || !canOn(plan, 'audio.engine') ? undefined : canOn(plan, 'audio.plugins') ? record.audioEngine : engineWithoutPlugins(record.audioEngine),
     display: record.display ? { picture: true, backdrop: record.display.backdrop } : undefined,
   };
   cache.set(record, out);
@@ -85,6 +87,9 @@ export function proOnlyParts(record: PlayRecord, plan: Plan | null): string[] {
   if (!canOn(plan, 'play.backgrounds') && record.display?.source && record.display.source !== 'shader') out.push('the background');
   if (!canOn(plan, 'play.midiFile') && record.midiFile) out.push('the MIDI file');
   if (!canOn(plan, 'play.finish') && record.finish?.effects.some(e => e.enabled) && record.finish.on) out.push('the Finish stack');
+  const racks = record.audioEngine?.racks.length ?? 0;
+  if (!canOn(plan, 'audio.engine') && racks) out.push(`${racks} Audio engine rack${racks === 1 ? '' : 's'}`);
+  else if (!canOn(plan, 'audio.plugins') && record.audioEngine?.racks.some(r => r.instrument?.kind === 'au' || r.effects.length)) out.push('the Audio Unit plug-ins');
   if (!canOn(plan, 'play.audioFx') && Object.values(record.audioFx?.chains ?? {}).some(c => c.on && c.effects.some(e => e.enabled))) out.push('the audio effects');
   return out;
 }

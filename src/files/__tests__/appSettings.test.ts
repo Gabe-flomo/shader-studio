@@ -59,7 +59,7 @@ describe('the App settings group', () => {
     expect(settings.children!.map(c => c.label)).toEqual(['Learned parameter roles', 'Sign-ins', 'App settings']);
     const app = inv.byId.get(APP_SETTINGS_ID)!;
     expect(app.treeLeaf).toBe(true);
-    expect(app.children!.map(c => c.label)).toEqual(['Appearance and keys', 'Studio', 'Play', 'Present', 'Camera, MIDI and OSC', 'Other']);
+    expect(app.children!.map(c => c.label)).toEqual(['Appearance and keys', 'Studio', 'Play', 'Present', 'Camera, MIDI, OSC and audio', 'Other']);
     expect(countLeaves(app.children)).toBe(7);
     // Readable names, never the raw key as the detail.
     const shortcuts = inv.byId.get('setting:shader-studio:shortcuts')!;

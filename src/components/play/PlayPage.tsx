@@ -55,6 +55,8 @@ import { setLayerDropHandler } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
 import { sidebarView, useBigTab, usePlaySplit } from './playSplit';
+import { AudioEnginePanel } from './engine/AudioEnginePanel';
+import { aeRack, aeSlot, aeSlotLabel, parseAuTarget, patchSlot } from '../../types/playAudioEngine';
 import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
@@ -183,6 +185,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       if (typeof value === 'number') setPlay(p => ({ ...p, audioFx: patchAudioFxEffect(p.audioFx, at.chainId, at.effectId, { [at.key]: value }) }));
       return;
     }
+    const au = parseAuTarget(control.target);
+    if (au) {
+      if (typeof value === 'number') setPlay(p => ({ ...p, audioEngine: patchSlot(p.audioEngine, au.rackId, au.slotId, { params: { ...aeSlot(aeRack(p.audioEngine, au.rackId), au.slotId)?.params, [au.address]: value } }) }));
+      return;
+    }
     const lt = parseLayerTarget(control.target);
     if (lt) {
       if (typeof value === 'number') setPlay(p => ({ ...p, layers: p.layers.map(l => l.id === lt.layerId ? { ...l, [lt.key]: value } as typeof l : l) }));
@@ -202,6 +209,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const layersOk = useCan('play.layers');
   const finishOk = useCan('play.finish');
   const audioFxOk = useCan('play.audioFx');
+  const engineOk = useCan('audio.engine');
   const backgroundsOk = useCan('play.backgrounds');
   const websiteOk = useCan('export.website');
   const takesOk = useCan('play.takes');
@@ -231,6 +239,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     if (af) {
       const e = audioFxEffect(play.audioFx, af.chainId, af.effectId);
       return { kind: 'layer', title: e ? `Sound · ${AUDIO_FX_EFFECTS[e.kind].label}` : 'a removed audio effect', param: (e && audioFxParam(e.kind, af.key)?.label) ?? af.key, missing: !e, go: () => { if (e) usePlayUi.getState().revealAudioFx(e.id); } };
+    }
+    const aut = parseAuTarget(c.target);
+    if (aut) {
+      const r = aeRack(play.audioEngine, aut.rackId), sl = aeSlot(r, aut.slotId);
+      return { kind: 'layer', title: r && sl ? aeSlotLabel(r, sl) : 'a removed Audio Unit', param: c.label.split(' · ').pop() ?? aut.address, missing: !sl, go: () => usePlayUi.getState().setTab('engine') };
     }
     const ft = parseFinishTarget(c.target);
     if (ft) {
@@ -595,6 +608,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         ? <LayersPanel play={play} touch={false} split={splitWide} big exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))} />
         : <LockedLayers play={play} />)}
       {big === 'finish' && (finishOk ? <FinishPanel play={play} onChange={update} touch={false} wide={splitWide} /> : <LockedFinish play={play} />)}
+      {big === 'engine' && <AudioEnginePanel play={play} onChange={update} touch={false} wide={splitWide} />}
       {big === 'mappings' && renderMappings(true)}
     </div>,
     splitHost,
@@ -626,6 +640,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             ...(compact || sideView.tabs.includes('controls') ? [{ value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` }] : []),
             ...(compact || sideView.tabs.includes('layers') ? [{ value: 'layers' as const, label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}${layersOk ? '' : ' · Pro'}` }] : []),
             ...(compact || sideView.tabs.includes('finish') ? [{ value: 'finish' as const, label: `Finish${play.finish?.effects.length ? ` · ${play.finish.effects.length}` : ''}${finishOk ? '' : ' · Pro'}`, title: 'Grade, lens, film and time effects over the whole picture, and effects on the sound' }] : []),
+            ...(compact || sideView.tabs.includes('engine') ? [{ value: 'engine' as const, label: `Engine${play.audioEngine?.racks.length ? ` · ${play.audioEngine.racks.length}` : ''}${engineOk ? '' : ' · Pro'}`, title: 'The Audio engine: racks of synths (Audio Units on a Mac, or the sample player) and effects, played from MIDI and the keyboard' }] : []),
             ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length + (play.pairMappings?.length ?? 0) ? ` · ${play.mappings.length + (play.pairMappings?.length ?? 0)}` : ''}` }] : []),
           ]}
         />
@@ -644,6 +659,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))}
         />
       )}
+      {shown === 'engine' && <AudioEnginePanel play={play} onChange={update} touch={compact} />}
       {shown === 'finish' && (finishOk ? <FinishPanel play={play} onChange={update} touch={compact} /> : <LockedFinish play={play} />)}
       {shown === 'controls' && controlsHeader}
       {canvasRow && !compact && (
@@ -697,7 +713,8 @@ function PanelHeader({ title, hint, extra, onClick, chevron }: { title: string; 
 /** Does anything in the setup listen to MIDI (a MIDI source, a note trigger or an action fired by a note)? */
 function usesMidi(play: PlayRecord): boolean {
   return !!play.padGrid || play.mappings.some(m => m.source.kind === 'midi' || m.source.kind === 'pad' || (m.source.kind === 'trigger' && m.source.trigger.on === 'note'))
-    || (play.actions ?? []).some(a => a.trigger.on === 'note');
+    || (play.actions ?? []).some(a => a.trigger.on === 'note')
+    || !!play.audioEngine?.racks.some(r => r.midi !== 'off');
 }
 
 function EmptyState({ title, body }: { title: string; body: string }) {

@@ -12,6 +12,8 @@ import { playEngine } from '../lib/playEngine';
 import { midiEngine } from '../lib/midiEngine';
 import { layerAudio } from '../lib/layerAudio';
 import { audioFxHost } from '../lib/audioFx';
+import { audioEngineHost } from '../lib/audioEngineHost';
+import { wireAudioEngine } from '../lib/audioEngineWire';
 import { readBaseValues } from '../play/playControls';
 import { playOverlay } from '../play/overlay';
 import { CompareHandle } from './play/finish/CompareHandle';
@@ -29,11 +31,12 @@ import { attachLayerDrop } from '../play/layerDrop';
 import { videoEngine } from '../lib/videoEngine';
 import { renderKeepAlive } from '../lib/renderKeepAlive';
 import { emitTimeTick } from '../lib/timeTick';
+import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
 import { seededRandom, stringSeed } from '../play/particle-sim.js';
 import { recordFrame, recordGpuPass, recordGpuCompile, setGpuTimerSupport, registerShaderCostMeasurer } from '../lib/perfStats';
-import { getBreakpoint, isMobile } from '../hooks/useBreakpoint';
+import { viewportSnapshot } from '../lib/viewport';
 import { onRebuild } from '../lib/rebuild';
 import { buildPreviewUniforms } from './previewUniforms';
 import { DataTextureBinder } from '../data/dataTextures';
@@ -173,6 +176,7 @@ function buildFontTexture(): THREE.CanvasTexture {
 const FONT_TEXTURE = buildFontTexture();
 /** An audio effect's number as mappings drive it now (audioFxHost.frame). */
 const fxValueOf = (id: string, key: string, base: number) => playEngine.layerValue(id, key, base);
+wireAudioEngine();
 
 // Minimal fallback shaders so Three.js doesn't throw on first render
 const FALLBACK_VERTEX = `
@@ -456,7 +460,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Phones keep 'low-power' for battery.
     const renderer = new THREE.WebGLRenderer({
       antialias: false,
-      powerPreference: isMobile(getBreakpoint(window.innerWidth)) ? 'low-power' : 'high-performance',
+      powerPreference: viewportSnapshot().breakpoint === 'mobile' ? 'low-power' : 'high-performance',
     });
     renderer.setSize(1, 1);
     // Drawing buffer = CSS size × renderScale. Normally 1; raised only while
@@ -1250,6 +1254,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         if (layers.some(l => l.kind === 'audio')) layerAudio.followClock(layers.filter(l => l.kind === 'audio' && l.input === 'file').map(l => l.id), elapsed, timePlayingRef.current);
         // Audio effects: the chains follow the record as it plays (Free: none), their numbers the mappings (lib/audioFx.ts).
         audioFxHost.frame(playEngine.getRecord().audioFx, fxValueOf);
+        // The Audio engine's racks follow the record too, and mapped plug-in parameters glide (lib/audioEngineHost.ts).
+        const rec = playEngine.getRecord();
+        audioEngineHost.frame(rec.audioEngine, rec.controls, fxValueOf);
       }
       material.uniforms.u_time.value = elapsed;
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
@@ -1285,6 +1292,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       }
       // A knob turned while the clock is paused still has to show; so does a layer a mapping moved.
       if (inputBus.changed() || playEngine.layerChanged()) needsRender = true;
+      // The output window (a projector) follows this frame: clock, uniforms, layer numbers (src/output/outputHost.ts).
+      if (outputTap.frame) outputTap.frame(elapsed, timePlayingRef.current, material.uniforms, renderer.domElement);
       // Draw live spectrum into any open AudioInputModal canvases
       for (const audioId of audioIdsRef.current) {
         if (!audioSpectrumRegistry.has(audioId)) continue;
@@ -2137,6 +2146,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       playOverlay.setRecord(shown);
       // The chains change at once (frames may be paused), then follow their numbers every frame.
       audioFxHost.frame(shown.audioFx, fxValueOf);
+      audioEngineHost.frame(shown.audioEngine, shown.controls, fxValueOf);
       requestRenderRef.current();
     };
     feedPlay();

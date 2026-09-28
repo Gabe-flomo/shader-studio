@@ -27,7 +27,7 @@ export function countVideoRefs(raw: string, id: string): number {
 }
 
 /** Every use of each of these videos, by id. */
-export function videoUses(ids: readonly string[], kv: ReadKV, open?: { name: string | null; layers: readonly PlayLayer[] } | null): Map<string, VideoUse[]> {
+export function videoUses(ids: readonly string[], kv: ReadKV, open?: { name: string | null; layers: readonly PlayLayer[]; sounds?: readonly string[] } | null): Map<string, VideoUse[]> {
   const out = new Map<string, VideoUse[]>(ids.map(id => [id, []]));
   if (!ids.length) return out;
   const want = new Set(ids);
@@ -47,7 +47,8 @@ export function videoUses(ids: readonly string[], kv: ReadKV, open?: { name: str
     }
   }
   if (open) {
-    const refs = open.layers.flatMap(l => (l.kind === 'video' ? [l.videoId] : l.kind === 'drumpad' ? l.pads.map(p => p.sampleId) : []));
+    // Video layers' files, drum pads' samples, and the Audio engine's sample player sounds (`sounds`).
+    const refs = [...open.layers.flatMap(l => (l.kind === 'video' ? [l.videoId] : l.kind === 'drumpad' ? l.pads.map(p => p.sampleId) : [])), ...(open.sounds ?? [])];
     for (const id of refs) {
       if (!id || !want.has(id)) continue;
       const list = out.get(id)!;

@@ -82,6 +82,11 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      // The output window (docs/projection.md) is a page of its own: the picture and the mapping, no app.
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        output: fileURLToPath(new URL('./output.html', import.meta.url)),
+      },
       output: {
         // Vendor code in its own chunks so an app change doesn't make returning
         // users re-download Three.js and React; example graphs and the

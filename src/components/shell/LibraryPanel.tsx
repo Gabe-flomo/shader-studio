@@ -20,6 +20,7 @@ import { summary } from '../workspace/workspaceUi';
 import { countInSet, DOWNLOAD_SETS, formatSize, LIBRARY_REFRESH_EVENTS, libraryStats, STORAGE_LIMIT, takeSnapshot, type LibraryKind, type LibraryStats } from '../../utils/library';
 import { toast } from '../ui/toastStore';
 import { RecordingsSetting } from './RecordingsSetting';
+import { PluginsSetting } from '../play/engine/PluginsDialog';
 import { LinkedOpenSettingControl } from './GraphLinks';
 import { openBackgrounds, openCapture } from '../backgrounds/backgroundsUi';
 import { useBackgroundImages, useLibraryVideos } from '../backgrounds/useBackgrounds';
@@ -140,6 +141,9 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
 
       <span style={{ ...label, marginTop: 8 }}>Save recordings to</span>
       <RecordingsSetting />
+
+      <span style={{ ...label, marginTop: 8 }}>Plugins</span>
+      <PluginsSetting />
 
       <span style={{ ...label, marginTop: 8 }}>Linked presentations</span>
       <LinkedOpenSettingControl />

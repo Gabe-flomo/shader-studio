@@ -10,7 +10,7 @@ Collected from the owner's notes on 27 September 2026. Each item is planned, not
 4. **Actions and controls:** done (condition triggers, signals, pair controls, axis swap); what's left is under its heading.
 5. **MIDI:** knob lock, key-press note ranges, grid controllers (Push, Launchpad).
 6. **Audio:** built-in effects → a drum pad sampler layer → Audio Unit hosting → VST3 hosting.
-7. **Older open items:** a pop-out Present/Stage window, GPU recovery on Present/Stage, undo for Play, live sliders inside 3D groups.
+7. **Older open items:** the pop-out window is built as the output window (`projection.md`: a projector or second display, projection mapping, the Stage's Present canvas on it); left: test it on real projectors, a camera of its own for Camera layers there. GPU recovery on Present/Stage, undo for Play, live sliders inside 3D groups.
 8. **Waiting on the owner:** the licence service, payments and hosting (see `accounts-and-plans.md`), encrypted Pro code, the paper texture image.
 
 ## Finish stack follow-ups
@@ -53,10 +53,7 @@ Built: effect chains (filter, echo, reverb, distortion, compressor) on each soun
 - **Drum pad sampler layer:** shipped (docs/drum-pads.md). Follow-ups:
   - Banks (A/B), a Sounds tab in the Library, pad samples in presentations, the pad grid on websites.
   - Slicing, time-stretch, and filter or pitch envelopes per pad.
-- **Plugin hosting (desktop only):**
-  - Audio Units first (AVAudioEngine and AVAudioUnit), then VST3 (check the SDK licence).
-  - List parameters as mapping targets and open the plugin's own window.
-  - Needs a native audio engine, the disable-library-validation entitlement, matching chip builds, and ideally plugins running out of process.
+- **Plugin hosting (desktop only):** Audio Units shipped in the Audio engine (docs/audio-engine.md). Follow-ups are listed there: web sounds through AU effects, the engine's sound in recordings and renders, VST3.
 
 ## Later / skipped
 

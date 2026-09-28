@@ -57,19 +57,21 @@ describe('split ratio', () => {
 
 describe('sidebar beside the big panel', () => {
   it('is unchanged without a split', () => {
-    expect(sidebarView('controls', null)).toEqual({ tab: 'controls', tabs: ['controls', 'layers', 'finish'], drawer: true });
-    expect(sidebarView('layers', null)).toEqual({ tab: 'layers', tabs: ['controls', 'layers', 'finish'], drawer: true });
-    expect(sidebarView('finish', null)).toEqual({ tab: 'finish', tabs: ['controls', 'layers', 'finish'], drawer: true });
+    expect(sidebarView('controls', null)).toEqual({ tab: 'controls', tabs: ['controls', 'layers', 'finish', 'engine'], drawer: true });
+    expect(sidebarView('layers', null)).toEqual({ tab: 'layers', tabs: ['controls', 'layers', 'finish', 'engine'], drawer: true });
+    expect(sidebarView('finish', null)).toEqual({ tab: 'finish', tabs: ['controls', 'layers', 'finish', 'engine'], drawer: true });
     // Desktop has no Mappings tab (it's the drawer): Controls shows.
     expect(sidebarView('mappings', null).tab).toBe('controls');
   });
 
   it('never shows what the panel shows', () => {
-    expect(sidebarView('controls', 'controls')).toEqual({ tab: 'layers', tabs: ['layers', 'finish'], drawer: true });
-    expect(sidebarView('layers', 'layers')).toEqual({ tab: 'controls', tabs: ['controls', 'finish'], drawer: true });
-    expect(sidebarView('finish', 'finish')).toEqual({ tab: 'controls', tabs: ['controls', 'layers'], drawer: true });
-    expect(sidebarView('finish', 'layers')).toEqual({ tab: 'finish', tabs: ['controls', 'finish'], drawer: true });
-    expect(sidebarView('layers', 'mappings')).toEqual({ tab: 'layers', tabs: ['controls', 'layers', 'finish'], drawer: false });
+    expect(sidebarView('controls', 'controls')).toEqual({ tab: 'layers', tabs: ['layers', 'finish', 'engine'], drawer: true });
+    expect(sidebarView('layers', 'layers')).toEqual({ tab: 'controls', tabs: ['controls', 'finish', 'engine'], drawer: true });
+    expect(sidebarView('finish', 'finish')).toEqual({ tab: 'controls', tabs: ['controls', 'layers', 'engine'], drawer: true });
+    expect(sidebarView('finish', 'layers')).toEqual({ tab: 'finish', tabs: ['controls', 'finish', 'engine'], drawer: true });
+    expect(sidebarView('engine', 'engine')).toEqual({ tab: 'controls', tabs: ['controls', 'layers', 'finish'], drawer: true });
+    expect(sidebarView('engine', null).tab).toBe('engine');
+    expect(sidebarView('layers', 'mappings')).toEqual({ tab: 'layers', tabs: ['controls', 'layers', 'finish', 'engine'], drawer: false });
   });
 });
 

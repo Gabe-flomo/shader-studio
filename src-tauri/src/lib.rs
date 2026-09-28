@@ -3,11 +3,13 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, State};
 
+mod audio_engine;
 mod data_fetch;
 mod midi;
 mod playfile;
 mod workspace;
 mod osc_listener;
+mod output_window;
 
 // ── FFmpeg session state ──────────────────────────────────────────────────────
 
@@ -245,8 +247,10 @@ pub fn run() {
         .manage(FfmpegState(Mutex::new(None)))
         .manage(OscState(Mutex::new(None)))
         .manage(midi::MidiState::default())
+        .manage(audio_engine::EngineState::default())
         .manage(workspace::WatchState(Mutex::new(None)))
         .manage(playfile::OpenedFiles(Mutex::new(Vec::new())))
+        .manage(output_window::OutputState::default())
         .invoke_handler(tauri::generate_handler![
             start_ffmpeg_encode,
             send_frame_rgba,
@@ -259,6 +263,29 @@ pub fn run() {
             midi::midi_open_output,
             midi::midi_close_output,
             midi::midi_send,
+            audio_engine::ae_status,
+            audio_engine::ae_units,
+            audio_engine::ae_rack_create,
+            audio_engine::ae_rack_remove,
+            audio_engine::ae_rack_volume,
+            audio_engine::ae_set_instrument,
+            audio_engine::ae_set_sampler,
+            audio_engine::ae_sound_has,
+            audio_engine::ae_sound_put,
+            audio_engine::ae_sampler_zone,
+            audio_engine::ae_effect_insert,
+            audio_engine::ae_effect_remove,
+            audio_engine::ae_effect_move,
+            audio_engine::ae_bypass,
+            audio_engine::ae_params,
+            audio_engine::ae_param_set,
+            audio_engine::ae_state_get,
+            audio_engine::ae_state_set,
+            audio_engine::ae_midi,
+            audio_engine::ae_outputs,
+            audio_engine::ae_set_output,
+            audio_engine::ae_master,
+            audio_engine::ae_open_ui,
             open_url,
             data_fetch::fetch_url,
             data_fetch::kaggle_account,
@@ -277,6 +304,12 @@ pub fn run() {
             playfile::open_file_read,
             playfile::signing_key_get,
             playfile::signing_key_save,
+            output_window::output_monitors,
+            output_window::output_open,
+            output_window::output_close,
+            output_window::output_fullscreen,
+            output_window::output_record_put,
+            output_window::output_record_get,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

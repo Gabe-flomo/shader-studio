@@ -21,7 +21,11 @@ import { Tooltip } from '../../ui/Tooltip';
 import { Icon } from '../../ui/Icon';
 import { Menu, type MenuItem } from '../../ui/Menu';
 import type { IconName } from '../../ui/iconPaths';
-import { askConfirm, askText } from '../../ui/dialogStore';
+import { askChoice, askConfirm, askText } from '../../ui/dialogStore';
+import { isTauri } from '../../../lib/midiTransport';
+import { can, openProSheet } from '../../../lib/plan';
+import { engineId, rackFromPads, withEngine } from '../engine/engineOps';
+import type { DrumPadLayer } from '../../../types/playLayers';
 import { toast } from '../../ui/toastStore';
 import { moveItem } from '../../../lib/reorder';
 import { playId } from '../../../play/playControls';
@@ -96,6 +100,38 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
     return { ...r, controls: [...r.controls, control] };
   });
 
+  // "+ Audio Unit effect" (desktop): Audio Units run in the Audio engine, on its racks. A Drum pad layer's pads can play
+  // there (a rack with its samples that follows its hits); the page's other sounds can't pass through it yet.
+  const audioUnitFor = async (chainId: string) => {
+    if (!can('audio.engine') || !can('audio.plugins')) { openProSheet('audio.plugins'); return; }
+    const layer = chainId.startsWith('layer:') ? play.layers.find(l => l.id === chainId.slice(6)) : undefined;
+    if (layer?.kind === 'drumpad') {
+      const pads = layer as DrumPadLayer;
+      const existing = play.audioEngine?.racks.find(r => r.pads === pads.id);
+      const pick = await askChoice('Audio Unit effects play in the Audio engine', [
+        { id: 'cancel', label: 'Not now', variant: 'ghost' },
+        { id: 'engine', label: existing ? 'Show its rack' : 'Play the pads in the engine', variant: 'primary' },
+      ], { message: existing
+        ? `${pads.label} already plays in the Audio engine (${existing.name}). Add Audio Unit effects on that rack.`
+        : `A rack with ${pads.label}’s samples follows its hits (pad 1 is C2), so Audio Unit effects on that rack shape them. The layer’s own sound is turned down (its Volume, which you can turn back up) so you hear the engine.` });
+      if (pick !== 'engine') return;
+      if (!existing) {
+        onChange(p => {
+          const racks = p.audioEngine?.racks ?? [];
+          const next = withEngine(p, { racks: [...racks, rackFromPads(engineId('rk'), pads, racks)] });
+          return { ...next, layers: next.layers.map(l => (l.id === pads.id ? { ...l, volume: 0 } as typeof l : l)) };
+        });
+      }
+      usePlayUi.getState().setTab('engine');
+      return;
+    }
+    const pick = await askChoice('Audio Unit effects play in the Audio engine', [
+      { id: 'cancel', label: 'Not now', variant: 'ghost' },
+      { id: 'engine', label: 'Open the Audio engine', variant: 'primary' },
+    ], { message: 'Audio Units run in the desktop app’s Audio engine, on its racks: an instrument (a synth or the sample player) and its effects. This sound plays in the page and can’t pass through them yet. Put the sound in the Library’s Sounds and play it from a rack’s sample player, or use the built-in effects here.' });
+    if (pick === 'engine') usePlayUi.getState().setTab('engine');
+  };
+
   const [presetMenu, setPresetMenu] = useState<{ x: number; y: number; chainId: string } | null>(null);
   const presetItems = (chainId: string): MenuItem[] => {
     const chain = fx.chains[chainId];
@@ -137,6 +173,7 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
             onRemoveChain={() => setFx(f => { const chains = { ...f.chains }; delete chains[src.id]; return { ...f, chains }; })}
             onExpose={(e, p) => expose(src.id, e, p, src.label)}
             onPresets={ev => { const r = (ev.currentTarget as HTMLElement).getBoundingClientRect(); setPresetMenu({ x: r.left, y: r.bottom + 4, chainId: src.id }); }}
+            onAudioUnit={isTauri() ? () => void audioUnitFor(src.id) : undefined}
           />
         ))}
       </div>
@@ -148,7 +185,7 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
   );
 }
 
-function ChainCard({ source, chain, touch, exposed, onChain, onRemoveChain, onExpose, onPresets }: {
+function ChainCard({ source, chain, touch, exposed, onChain, onRemoveChain, onExpose, onPresets, onAudioUnit }: {
   source: Source;
   chain: AudioFxChain | undefined;
   touch: boolean;
@@ -157,11 +194,14 @@ function ChainCard({ source, chain, touch, exposed, onChain, onRemoveChain, onEx
   onRemoveChain: () => void;
   onExpose: (e: AudioFxEffect, p: AfParam) => void;
   onPresets: (ev: React.MouseEvent) => void;
+  /** The desktop app: "+ Audio Unit effect…" (the Audio engine). */
+  onAudioUnit?: () => void;
 }) {
   const tk = useTokens();
   const c = chain ?? emptyChain();
   const gone = source.icon === 'warning';
   const add = (kind: string) => {
+    if (kind === '__au') { onAudioUnit?.(); return; }
     if (!AUDIO_FX_EFFECTS[kind as AudioFxKind]) return;
     const e = newAudioFxEffect(kind as AudioFxKind);
     onChain(x => ({ ...x, on: true, effects: [...x.effects, e] }));
@@ -180,7 +220,7 @@ function ChainCard({ source, chain, touch, exposed, onChain, onRemoveChain, onEx
           ? <IconButton icon="trash" size="sm" label="Remove this chain" onClick={onRemoveChain} />
           : <div style={{ minWidth: 130 }}>
               <Select ariaLabel={`Add an effect to ${source.label}`} value="" height={26} onChange={add}
-                options={[{ value: '', label: '+ Add effect' }, ...AUDIO_FX_KINDS.map(k => ({ value: k, label: AUDIO_FX_EFFECTS[k].label }))]} />
+                options={[{ value: '', label: '+ Add effect' }, ...AUDIO_FX_KINDS.map(k => ({ value: k, label: AUDIO_FX_EFFECTS[k].label })), ...(onAudioUnit ? [{ value: '__au', label: '+ Audio Unit effect…' }] : [])]} />
             </div>}
       </div>
       {c.effects.length > 0 && (
