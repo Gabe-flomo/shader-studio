@@ -65,6 +65,13 @@ export interface TapeDeps {
   driven(propId: string, key: string): number | undefined;
   /** The metronome's click (only called when the metronome is on). */
   click(accent: boolean): void;
+  /**
+   * The engine's Play/Pause and Space are authoritative over the page's
+   * time transport (docs/arrangement.md): true starts it with the tape,
+   * false pauses it. Only called by togglePlay()/stopToStart(), and only
+   * with true once the tape is actually running.
+   */
+  setTimePlaying(playing: boolean): void;
   notice(title: string, message?: string): void;
   /** Run `fn` every few ms until the returned stop is called. */
   every(fn: () => void): () => void;
@@ -181,6 +188,12 @@ export class Tape {
     if (plan.point !== null) useTape.setState({ point: Math.max(0, Math.min(this.arr().length || 0, plan.point)) });
     if (plan.play) this.play();
     if (plan.record) this.record();
+    // Authoritative over the page's time transport (Task: engine Play/Pause
+    // drives the Studio, not the other way round): pausing/stopping always
+    // pauses it; starting only follows through if the tape actually started
+    // (play() can bail out with a notice when there's nothing on the tape).
+    if (plan.timePlaying === false) this.d.setTimePlaying(false);
+    else if (plan.timePlaying === true && this.running()) this.d.setTimePlaying(true);
   }
 
   /** Play from `at` (a take recording along with the tape). */

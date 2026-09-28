@@ -43,6 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-09-28',
     title: 'Plug-ins that talk back, quick links, one Controls tab',
     highlights: [
+      { area: 'Play', text: 'Arrangement: Play/Pause runs the picture too, the timeline scrubs (|◀ ◀◀ ▶▶ ▶|, Home/End, editable bar.beat), and devices fold to a header.' },
       { area: 'Desktop', text: 'Move a rack control and the plug-in\'s own knob follows; A–K keep playing notes while the plug-in window is in front.', link: { kind: 'doc', path: 'docs/audio-engine.md' } },
       { area: 'Play', text: 'Quick link: ⌘-click one control, then another, and pick the direction to map them — an audio reader onto a radius in two clicks.' },
       { area: 'Play', text: 'Controls and Mappings share one rail category with tabs; ⌘1–4 jump to Controls, Layers, Finish and Engine.', link: { kind: 'doc', path: 'docs/split-view.md' } },

@@ -37,6 +37,7 @@ let clicks: number[];
 let overrides: Map<string, number>;
 let driven: Map<string, number>;
 let input: ((rack: string, bytes: number[]) => void) | null;
+let timePlaying: boolean[];
 
 const deps: TapeDeps = {
   now: () => clock,
@@ -46,6 +47,7 @@ const deps: TapeDeps = {
   override: (id, key, v) => { const k = `${id}::${key}`; if (v === null) overrides.delete(k); else overrides.set(k, v); },
   driven: (id, key) => driven.get(`${id}::${key}`),
   click: () => clicks.push(clock / 1000),
+  setTimePlaying: playing => timePlaying.push(playing),
   notice: t => notices.push(t),
   every: () => () => {},
   onInput: fn => { input = fn; return () => { input = null; }; },
@@ -62,7 +64,7 @@ const arr = () => play.arrangement!;
 beforeEach(() => {
   tape.resetForTests();
   tape.configure(deps);
-  clock = 0; sent = []; commits = []; notices = []; clicks = []; overrides = new Map(); driven = new Map(); input = null;
+  clock = 0; sent = []; commits = []; notices = []; clicks = []; overrides = new Map(); driven = new Map(); input = null; timePlaying = [];
   play = { version: 1, controls: [], mappings: [], layers: [], audioEngine: { racks: [rack('rk1', 'Rack 1'), rack('rk2', 'Rack 2')] } };
 });
 
@@ -312,6 +314,35 @@ describe('the Arrangement view’s transport: one Play/Pause, a separate Stop', 
     expect(useTape.getState()).toMatchObject({ phase: 'stopped', point: 0 });
     tape.setPoint(2); tape.stopToStart();
     expect(useTape.getState().point).toBe(0);
+  });
+
+  it('Play/Pause is authoritative over the page’s time transport (owner: it should override the Studio settings and play/pause the track)', () => {
+    tape.togglePlay(); // starts the tape and the time transport together
+    expect(timePlaying).toEqual([true]);
+    runTo(1.5);
+    tape.togglePlay(); // pauses both, wherever the tape is
+    expect(timePlaying).toEqual([true, false]);
+    tape.togglePlay();
+    expect(timePlaying).toEqual([true, false, true]);
+  });
+
+  it('Stop leaves the time transport paused', () => {
+    tape.togglePlay(); runTo(1.2);
+    timePlaying = [];
+    tape.stopToStart();
+    expect(timePlaying).toEqual([false]);
+    // Stop while already stopped still leaves it paused.
+    tape.stopToStart();
+    expect(timePlaying).toEqual([false, false]);
+  });
+
+  it('Play/Pause doesn’t touch the time transport when the tape has nothing to play', () => {
+    play = { ...play, arrangement: undefined };
+    timePlaying = [];
+    tape.togglePlay();
+    expect(useTape.getState().phase).toBe('stopped');
+    expect(timePlaying).toEqual([]);
+    expect(notices).toContain('Nothing on the tape yet');
   });
 
   it('Play/Pause while recording keeps the recording and pauses there', () => {
