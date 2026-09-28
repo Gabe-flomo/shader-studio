@@ -12,7 +12,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { AUTOSAVE_MODES, type AutosaveMode } from '../../files/autosave';
 import { formatClock, restoreSnapshot, useAutosave } from '../../files/recovery';
 import { crashedPlugins, usePluginSettings } from '../../lib/pluginSettings';
-import { retryPlugin } from '../../lib/pluginSafety';
+import { TIMEOUT_NOTE, loadAnyway, retryPlugin } from '../../lib/pluginSafety';
 import { cardStyle } from './fileUiShared';
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -79,6 +79,7 @@ export function AutosaveSettings() {
         <div style={{ ...cardStyle(tk), overflow: 'hidden' }} aria-label="Plug-ins switched off for crashing">
           {crashed.map((c, i) => (
             <Row key={c.code} first={i === 0} label={nameOf(c.code)} detail={`${c.why}${c.at ? ` · ${formatClock(c.at)}` : ''}. Switched off in Plugins.`}>
+              {c.why === TIMEOUT_NOTE && <Button size="sm" variant="ghost" onClick={() => { void loadAnyway(c.code, nameOf(c.code)); }} title="Load it without a trial (it may be waiting for a licence dialog the trial can’t show)">Load anyway</Button>}
               <Button size="sm" icon="reset" onClick={() => { void retryPlugin(c.code, nameOf(c.code)); }}>Try again</Button>
             </Row>
           ))}

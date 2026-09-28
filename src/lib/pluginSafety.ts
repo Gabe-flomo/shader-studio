@@ -71,6 +71,17 @@ export async function retryPlugin(code: string, name = code): Promise<ProbeRepor
   return report;
 }
 
+/** Trust a plug-in whose trial didn't finish (one that waits for a licence dialog, say) without trying again: it's loaded in the app next time. */
+export async function loadAnyway(code: string, name = code): Promise<void> {
+  if (!isTauri()) return;
+  try { await invoke<unknown>('ae_plugin_retry', { code, force: true }); }
+  catch (e) { toast.error(`Couldn’t switch ${name} back on`, { details: e instanceof Error ? e.message : String(e) }); return; }
+  usePluginSettings.getState().clearCrash(code);
+  toast.success(`${name} is switched on again`, { message: 'It’s loaded without a trial next time. If it takes Playfield down, the next launch offers to recover your work.' });
+}
+
+export const TIMEOUT_NOTE = crashNote('timeout');
+
 let installed = false;
 
 /**

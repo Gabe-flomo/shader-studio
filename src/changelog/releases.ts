@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.16',
+    date: '2026-09-28',
+    title: 'Crash recovery',
+    highlights: [
+      { area: 'Files', text: 'Autosave: the open project is saved aside every 5 minutes (or every minute, or on every change) in Files → App settings.', link: { kind: 'doc', path: 'docs/crash-recovery.md' } },
+      { area: 'Files', text: 'If Playfield closes unexpectedly, the next launch offers to recover what you hadn\'t saved, untitled or not.', link: { kind: 'doc', path: 'docs/crash-recovery.md' } },
+      { area: 'Desktop', text: 'Plug-ins load in their own process where macOS allows, so a crashing one takes itself down, not Playfield.', link: { kind: 'doc', path: 'docs/audio-engine.md' } },
+      { area: 'Desktop', text: 'A new or updated plug-in is tried out safely first; one that crashes is switched off with a Try again button instead of crashing the app.', link: { kind: 'doc', path: 'docs/audio-engine.md' } },
+    ],
+  },
+  {
     id: '2026.9.15',
     date: '2026-09-28',
     title: 'Agents',
