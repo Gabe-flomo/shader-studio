@@ -22,9 +22,11 @@ import { Icon } from '../../ui/Icon';
 import { toast } from '../../ui/toastStore';
 import { askConfirm, askText } from '../../ui/dialogStore';
 import { SpectrumView } from '../SpectrumView';
-import { EMPTY_READERS, useReadersPanel, withReaders } from '../readersPanelUi';
-import { newReader, formatHz, READER_GAIN_MAX, READER_GAIN_MIN } from '../../../play/audioReaders';
-import { AUDIO_READERS_MAX, type AudioReader, type PlayAudioReaders, type PlayRecord } from '../../../types/play';
+import { EMPTY_READERS, useReadersPanel } from '../readersPanelUi';
+import { READER_GAIN_MAX, READER_GAIN_MIN } from '../../../play/audioReaders';
+import { addReader, newReader, patchReader, regroupReaderControls, setReaderInput } from '../../../play/readerControls';
+import { AUDIO_READERS_MAX, type PlayRecord } from '../../../types/play';
+import { ReaderDots } from '../ReaderDots';
 import {
   AE_EFFECTS_MAX, AE_INST, AE_PAD_BASE_NOTE, AE_ZONES_MAX, aeRack, aeSlot, auTarget, moveEffect, patchRack, patchSlot, setRackKeyboard, zonesFor,
   type AeRack, type AeSlot, type AeZone, type PlayAudioEngine,
@@ -89,7 +91,8 @@ export function RackCard({ rack, play, onChange, touch, index, count }: {
   };
   const rename = async () => {
     const name = await askText('Rename rack', { initial: rack.name, confirmLabel: 'Rename' });
-    if (name && name.trim()) patch({ name: name.trim().slice(0, 60) });
+    // The readers' control group is named after the rack: it follows.
+    if (name && name.trim()) onChange(p => regroupReaderControls(withEngine(p, patchRack(p.audioEngine, rack.id, { name: name.trim().slice(0, 60) }))));
   };
   const move = (by: -1 | 1) => edit(ae => {
     const racks = [...(ae?.racks ?? [])];
@@ -327,27 +330,25 @@ function RackSpectrum({ rack, play, onChange }: { rack: AeRack; play: PlayRecord
   const input = engineReaderInput(rack.id);
   const mine = cfg.input === input;
   const [selected, setSelected] = useState('');
-  const edit = (fn: (c: PlayAudioReaders) => PlayAudioReaders) => onChange(p => withReaders(p, fn(p.audioReaders ?? EMPTY_READERS)));
-  const listenHere = () => edit(c => ({ ...c, input }));
+  // Reader edits go through play/readerControls.ts: each reader comes with a control in "Audio readers · <rack>".
+  const listenHere = () => onChange(p => setReaderInput(p, input));
   const add = (hz: number, topDb: number) => {
     if (!mine || cfg.readers.length >= AUDIO_READERS_MAX) return;
     const r = newReader(readerId(), hz, topDb, cfg.readers);
-    edit(c => ({ ...c, readers: [...c.readers, r] }));
+    onChange(p => addReader(p, r));
     setSelected(r.id);
   };
-  const move = (id: string, hz: number, gain: number) => edit(c => ({
-    ...c,
-    readers: c.readers.map((r: AudioReader) => (r.id !== id ? r : { ...r, hz, gain: Math.max(READER_GAIN_MIN, Math.min(READER_GAIN_MAX, gain)), ...(r.name === formatHz(r.hz) ? { name: formatHz(hz) } : {}) })),
-  }));
+  const move = (id: string, hz: number, gain: number) => onChange(p => patchReader(p, id, { hz, gain: Math.max(READER_GAIN_MIN, Math.min(READER_GAIN_MAX, gain)) }));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <SpectrumView compact readers={mine ? cfg.readers : []} selected={selected} peakHold={false} height={92}
         canAdd={mine && cfg.readers.length < AUDIO_READERS_MAX} onSelect={setSelected} onAdd={add} onMove={move}
         spectrum={() => audioEngineHost.spectrum(rack.id)} emptyText="Silent: play a note" />
+      <ReaderDots play={play} input={input} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {!mine && <Button size="sm" icon="wave" onClick={listenHere} title="Point the setup’s audio readers at this rack’s sound">Readers listen here</Button>}
         <Button size="sm" variant={mine ? 'primary' : 'ghost'} icon="wave" onClick={() => { listenHere(); useReadersPanel.getState().show({ focus: selected || cfg.readers[0]?.id || '' }); }}>Audio readers…</Button>
-        <span style={{ flex: '1 1 140px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{mine ? 'Click the spectrum to place a reader; each drives controls like any audio reader.' : 'The readers listen to something else now.'}</span>
+        <span style={{ flex: '1 1 140px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{mine ? 'Click the spectrum to place a reader: it becomes a control in Audio readers · ' + rack.name + '.' : 'The readers listen to something else now.'}</span>
       </div>
     </div>
   );

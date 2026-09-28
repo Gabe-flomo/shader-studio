@@ -79,6 +79,11 @@ interface PlayUi {
   setFinishView: (v: 'picture' | 'sound') => void;
   /** Open the Finish tab's Sound view at this audio effect. */
   revealAudioFx: (effectId: string) => void;
+  /** The control group to scroll to and flash on the Controls section (bumped with controlGroupTick). */
+  controlGroupFocus: string;
+  controlGroupTick: number;
+  /** Open the Controls section at this control group ("Audio readers · Live"). */
+  revealControlGroup: (group: string) => void;
 }
 
 const NONE: ReadonlySet<string> = new Set();
@@ -106,6 +111,9 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   finishView: 'picture',
   setFinishView: finishView => set({ finishView }),
   revealAudioFx: id => set({ tab: 'finish', finishView: 'sound', finishFocus: id, finishTick: get().finishTick + 1 }),
+  controlGroupFocus: '',
+  controlGroupTick: 0,
+  revealControlGroup: group => set({ tab: 'controls', controlGroupFocus: group, controlGroupTick: get().controlGroupTick + 1 }),
   mask: '',
   setMask: mask => set({ mask }),
   panel: loadPanel(),
