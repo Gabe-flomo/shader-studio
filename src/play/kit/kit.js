@@ -938,7 +938,7 @@ export function createLayerKit() {
       W, H, dpr, alpha: 1, sprite: l.shape === 'image' ? env.image(l.sprite) : null,
     };
     let s = parts.get(l.id);
-    const dead = l.emit === 'burst';
+    const dead = l.emit === 'burst' || l.emit === 'multiply';
     if (!s || s.seedUsed !== l.seed || s.emit !== l.emit) {
       // Its own seed wins; unseeded, it follows the session's (a take) or Math.random.
       const rand = l.seed ? seededRandom(l.seed) : rngFor(l.id, 'particles');

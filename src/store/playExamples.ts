@@ -1018,6 +1018,29 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
 • Turn Layers only off (under Background).
 • Change the particles' field.`,
   })),
+  ex('playMultiply', layersGlowGraph({ falloff: 45, tint: [0.3, 0.7, 1] }), play({
+    layers: [layer('particles', 'cells', 'Cells', {
+      count: 200, emit: 'multiply', spawn: 'center', spawnRadius: 0, field: 'none', edges: 'bounce', seed: 7,
+      splitRate: 1.2, splitJitter: 0.35, splitChildren: 1, splitPush: 0.06, multSpread: 0.028, multLife: 'annihilate', multAfter: 'loop',
+      pairRadius: 0.25, seekSpeed: 0.12, loopHold: 0,
+      goo: true, gooBlend: 2.4, gooThreshold: 0.45, gooSoft: 0.15, size: 9, sizeJitter: 0.3,
+      colour: 'tint', color: [0.75, 1, 0.95], opacity: 1, trail: 0, blend: 'normal',
+    })],
+    controls: [
+      ctl('rate', 'layer:cells::splitRate', 'Cells · Split rate', 0.2, 4),
+      ctl('blend', 'layer:cells::gooBlend', 'Cells · Goo blend', 1, 5),
+      ctl('thresh', 'layer:cells::gooThreshold', 'Cells · Goo threshold', 0.1, 0.9),
+    ],
+    notes: `**What it shows.** With **Emit: Multiply** a particles layer starts as one particle. Each one buds after about 1 ÷ **Split rate** seconds (with a little **Split jitter**, so it isn't clockwork) until the **Count** is reached: here one cell becomes two hundred in about seven seconds.
+
+**How it's built.** **Goo** draws the particles as metaballs: every particle adds a soft bump to one field, and the field is cut at **Goo threshold**. Touching cells merge into one blob and part with a stretching neck. **Once born: Annihilate** pairs each cell with a random neighbour once the colony is full; the two close in and vanish in a small burst. **When full: Loop** stops the splitting, and when the colony has cleared it grows again from one. The glow is the Layers node: SDF Glow around whatever the layers draw.
+
+**Try this.**
+• Once born: **Stay**, and When full: **Hold**, for a colony that just grows.
+• Raise Goo blend: cells merge from further apart, with longer necks.
+• Buds 3: each split adds three cells, so it fills much faster.
+• Turn Goo off to see the particles themselves.`,
+  })),
 
   // ─ Shapes and zones ─
   ex('playWalls', quietGraph(), play({
