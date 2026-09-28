@@ -12,7 +12,7 @@
 import { create } from 'zustand';
 import type { PlayRecord } from '../../types/play';
 
-export type PlayTab = 'controls' | 'layers' | 'finish' | 'mappings';
+export type PlayTab = 'controls' | 'layers' | 'finish' | 'engine' | 'mappings';
 
 const FOLD_KEY = 'shader-studio:play:folded';
 const PANEL_KEY = 'shader-studio:play:panel';

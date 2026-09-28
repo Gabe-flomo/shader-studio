@@ -49,6 +49,8 @@ export const FEATURES = {
   'play.audioFx': { plan: 'pro', label: 'Audio effects: reverb, echo, filter, distortion and compression on the sounds and the master bus' },
   'play.takes': { plan: 'pro', label: 'Recording performances as takes and rendering them frame by frame' },
   'play.midiFile': { plan: 'pro', label: 'Playing a MIDI file into Play' },
+  'audio.engine': { plan: 'pro', label: 'The Audio engine: racks with a sample player, played from MIDI and the keyboard, with readers on their sound' },
+  'audio.plugins': { plan: 'pro', label: 'Audio Unit synths and effects in the Audio engine (the desktop app on a Mac)' },
   'play.output': { plan: 'pro', label: 'The output window: the picture alone on a projector or second display, full screen, in step with the app' },
   'play.projection': { plan: 'pro', label: 'Projection mapping: corner pins, mesh warps, masks, edge blends and test patterns on the output' },
   convert: { plan: 'pro', label: 'Convert: GLSL into nodes' },
