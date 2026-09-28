@@ -116,7 +116,7 @@ describe('the rail’s state', () => {
   });
 
   it('opening the rail starts on the panel’s page, measures, and leaves the sidebar’s layout alone', () => {
-    usePlaySplit.setState({ tab: 'finish', ratio: 0.5 });
+    usePlaySplit.setState({ tab: 'finish', ratio: 0.5, sidebar: 'full' });
     usePlayUi.setState({ finishView: 'sound' });
     setAreaMeasure(() => ({ total: 1000, sidebarPx: 460 }));
     usePlaySplit.getState().setSidebar('rail');

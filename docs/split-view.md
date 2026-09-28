@@ -3,7 +3,9 @@
 *Written 28 Sep 2026.*
 
 The split view puts a big panel beside the Play picture (⌘⇧L, or the split
-button in the preview's toolbar). The panel sits left, right, above or below
+button in the preview's toolbar). It is how the Play page opens: split, with
+the sidebar folded into the icon rail (`DEFAULT_SPLIT`; saves from before this
+was the default take it once, keeping their side, ratio and page). The panel sits left, right, above or below
 the picture; the divider between them drags (double-click: half and half).
 State lives in `src/components/play/playSplit.ts`; the frame (bar, divider,
 rail) in `PlaySplitArea.tsx`; PlayPage renders the panel's content through a
