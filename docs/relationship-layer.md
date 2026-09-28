@@ -45,7 +45,8 @@ picture heights per second.
 **Sight** and runs at it (**Speed**, **Acceleration**, **Turn rate**: a low
 turn rate makes wide arcs). With nothing in sight it **wanders**: a slow walk
 along a smooth noise of the clock, so it is the same in every run. Prey runs
-from any chaser within its **Flee distance**; otherwise it wanders a little
+from any chaser within its **Flee distance**, at 85% of the speed (so a chase
+in the open ends in a catch, not a stalemate); otherwise it wanders a little
 too. One chaser with many prey, or one prey with many chasers, both work.
 
 **Repel.** Every pair closer than **Repel within** pushes apart. The **curve**

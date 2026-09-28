@@ -1112,7 +1112,7 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
       layer('shape', 'prey', 'Prey', { shape: 'circle', x: 0.7, y: 0.55, w: 0.07, h: 0.07, action: 'none', fill: [0.5, 0.9, 1], fillOpacity: 0.9, strokeWidth: 0 }),
       layer('null', 'hunter', 'Hunter', { x: 0.2, y: 0.4, size: 12, color: '#ff7a50' }),
       layer('particles', 'pop', 'Pop', { count: 600, emit: 'burst', spawn: 'null', nullId: 'hunter', spawnRadius: 0.02, field: 'none', speed: 1.2, life: 0.9, fade: 0.6, size: 2, colour: 'palette', palette: 3, paletteBy: 'age', trail: 0.3, blend: 'screen' }),
-      relationship('chase', 'Chase', [rm('hunter', 'chaser'), rm('prey', 'prey')], { relation: 'chase', speed: 0.55, accel: 2.5, turn: 0.5, sight: 0.55, flee: 0.3, wander: 0.6, wallChaser: 'bounce', wallPrey: 'escape', respawnAt: 'far', respawnDelay: 1.2, catchRadius: 0.03, onCatch: 'respawn', catchSignal: 'caught', debug: true }),
+      relationship('chase', 'Chase', [rm('hunter', 'chaser'), rm('prey', 'prey')], { relation: 'chase', speed: 0.55, accel: 2.5, turn: 0.5, sight: 0.55, flee: 0.3, wander: 0.6, wallChaser: 'bounce', wallPrey: 'bounce', respawnAt: 'far', respawnDelay: 1.2, catchRadius: 0.03, onCatch: 'respawn', catchSignal: 'caught', debug: true }),
     ],
     controls: [colourCtl('tint', 'glow::tint', 'Tint (flashes on a catch)'), ctl('radius', 'circ::radius', 'Radius (closing speed)', 0.04, 0.3)],
     signals: [{ id: 'caught', name: 'Caught' }],
@@ -1123,11 +1123,12 @@ It adds to the field, attractors and zones, so a flock can still follow the pict
     actions: [act('burst', { on: 'signal', signal: 'caught' }, 'burst', 'pop', 200)],
     notes: `**What it shows.** A **Relationship** layer moves other layers with a force between them. Here it's a **chase**: Hunter (a null) runs at Prey (a circle) whenever Prey is within its sight, and wanders when it isn't; Prey flees when Hunter comes close. A **catch** (Hunter within the catch radius) sends the **Caught** signal, which flashes the glow and bursts particles; Prey respawns on the far side.
 
-**How it's built.** Layers → Relationship → members: Hunter as the chaser, Prey as the prey. Prey's wall is **Escape**: it may run off the picture, where the chaser loses sight of it, and it comes back after 1.2 s at the far side. The relationship's **Closing** reading (how fast the closest pair is closing in) drives the glow's radius. **Show forces** is on: the dashed rings are the sight and flee distances, the orange line runs from the chaser to its target, white arrows are velocities.
+**How it's built.** Layers → Relationship → members: Hunter as the chaser, Prey as the prey. Prey runs a little slower than Hunter, so it gets cornered and caught; it respawns at the far side. The relationship's **Closing** reading (how fast the closest pair is closing in) drives the glow's radius. **Show forces** is on: the dashed rings are the sight and flee distances, the orange line runs from the chaser to its target, white arrows are velocities.
 
 **Try this.**
 • Drag Prey somewhere: the chase starts again from there.
 • Turn Sight down until Hunter can't see Prey: it wanders until Prey strays close.
+• Set Prey's wall to **Escape**: it may run off the picture (out of sight, so Hunter wanders) and comes back after the delay on the far side.
 • Set Then to **Swap roles**: the caught becomes the catcher.
 • Map Gap, Chase speed or In sight (in the Readings section) onto anything.`,
   })),

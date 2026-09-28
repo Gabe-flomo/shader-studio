@@ -103,7 +103,7 @@ describe('the relationship simulation', () => {
     expect(respawn.xs.some(x => Math.abs(x - 0.9) < 1e-9)).toBe(true); // back at its own place at once
     const escape = shot('escape');
     expect(Math.max(...escape.xs)).toBeGreaterThan(1.1); // allowed out
-    expect(escape.st.m.get('p')!.escaped).toBe(false); // and back after the delay, at its own place
+    // Back after the delay, at its own place (it may well have run off again by the end).
     const gone = escape.xs.findIndex(x => x > 1.1);
     expect(escape.xs.slice(gone).some(x => Math.abs(x - 0.9) < 1e-9)).toBe(true);
     // The chaser's own wall is separate: bounce kept it in the picture all along.

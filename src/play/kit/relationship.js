@@ -25,6 +25,8 @@ export const RL_MAX_MEMBERS = 24;
 export const RL_READS = ['gap', 'closing', 'chaseSpeed', 'sight', 'catch', 'sinceCatch', 'catches'];
 /** A member's radius for walls and catches, in picture heights. */
 const RL_RADIUS = 0.02;
+/** Prey runs at this share of the chase speed, so a chase in the open ends in a catch rather than a stalemate. */
+const RL_PREY_SPEED = 0.85;
 /** Seconds since the last catch that read as 1 (`sinceCatch`), and catches that read as 1 (`catches`). */
 const RL_SINCE_FULL = 10, RL_CATCHES_FULL = 20;
 
@@ -195,8 +197,8 @@ export function rlStep(st, l, v, dt, time, aspect, members, rand) {
           if (d < flee && d > 1e-6) { const w = (flee - d) / flee; fx += dx / d * w; fy += dy / d * w; threat = Math.max(threat, w); }
         }
         if (threat > 0) {
-          const m = Math.hypot(fx, fy) || 1;
-          rlSteer(p, fx / m * speed, fy / m * speed, accel * h / p.mass, turnRate * h);
+          const m = Math.hypot(fx, fy) || 1, ps = speed * RL_PREY_SPEED;
+          rlSteer(p, fx / m * ps, fy / m * ps, accel * h / p.mass, turnRate * h);
         } else {
           const ang = rlNoise(time * 0.3 + p.seed * 0.5, p.seed + 7) * Math.PI * 4;
           rlSteer(p, Math.cos(ang) * speed * 0.25 * wander, Math.sin(ang) * speed * 0.25 * wander, accel * 0.5 * h / p.mass, turnRate * 0.5 * h);
