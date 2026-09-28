@@ -587,6 +587,27 @@ function startRecheck(): void {
   if (linkedSupport() === 'browser') window.setInterval(() => { if (document.visibilityState === 'visible' && (cache.size || problems.size)) void recheckLinked(); }, 15_000);
 }
 
+/**
+ * Development: link a folder made in the browser's private file system (OPFS)
+ * with these files, so the browser path (a real directory handle) can be tried
+ * where the folder picker can't be clicked through.
+ */
+export async function devLinkOpfs(name: string, files: Record<string, Blob | string>, kind?: LinkedKindHint): Promise<LinkedFolder> {
+  type W = { getDirectoryHandle(n: string, o?: { create?: boolean }): Promise<W>; getFileHandle(n: string, o?: { create?: boolean }): Promise<{ createWritable(): Promise<{ write(d: Blob | string): Promise<void>; close(): Promise<void> }> }> };
+  const root = await (navigator.storage as unknown as { getDirectory(): Promise<W> }).getDirectory();
+  const top = await root.getDirectoryHandle(`linked-${name}`, { create: true });
+  for (const [path, data] of Object.entries(files)) {
+    const parts = path.split('/');
+    let d = top;
+    for (const p of parts.slice(0, -1)) d = await d.getDirectoryHandle(p, { create: true });
+    const w = await (await d.getFileHandle(parts[parts.length - 1], { create: true })).createWritable();
+    await w.write(data);
+    await w.close();
+  }
+  await loadLinkedFolders();
+  return addLinkedFolder({ name, backend: 'browser', handle: top as unknown as BrowserDirHandle, kind });
+}
+
 /** Tests: forget everything. */
 export function resetLinkedForTests(): void {
   for (const w of watchers.values()) w();

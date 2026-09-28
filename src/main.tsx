@@ -10,6 +10,7 @@ import { SignInPage } from './components/account/SignInPage'
 import { GATE_USERS, OPEN_SESSION, isGateOn, rememberSignIn, restoreSignIn, sessionFor, verifyLogin } from './auth/gate'
 import { usePlan } from './lib/plan'
 import { BackgroundsHost } from './components/backgrounds/BackgroundsHost'
+import { LinkedPickerHost } from './components/linked/LinkedPickerHost'
 import { PerformanceBar } from './components/PerformanceBar'
 import { useNodeGraphStore } from './store/useNodeGraphStore'
 import { compileGraph } from './compiler/graphCompiler'
@@ -53,6 +54,8 @@ if (import.meta.env.DEV) {
     midiEngine, padGrid,
     /** The MIDI monitor's log (`midiMonitor.text()`), and the rack keyboard (`rackKeyboard.active()`). */
     midiMonitor, rackKeyboard,
+    /** Linked folders without a folder picker: `(await linked()).devLinkOpfs('Samples', { 'kick.wav': blob })` links a folder in the browser's private file system. */
+    linked: () => import('./files/linkedFolders'),
     /**
      * Hand tracking without a camera (the preview browser has none): feed the real tracker a video,
      * an image or a canvas instead, then start it. A URL ending in an image type is loaded as an image.
@@ -77,7 +80,7 @@ if (import.meta.env.DEV) {
 // Dev-only component gallery for the redesign primitives: open the app with #ui.
 // import.meta.env.DEV is false in production builds, so the gallery isn't bundled.
 function startApp() {
-  root.render(<><App /><Toaster /><BackgroundsHost /><DialogHost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><PerformanceBar /></>)
+  root.render(<><App /><Toaster /><BackgroundsHost /><LinkedPickerHost /><DialogHost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><PerformanceBar /></>)
   // Songs stop when the graph that owns them is closed or they're deleted.
   void import('./lib/audioSync').then(m => m.startAudioSync())
   // The workspace folder (desktop app; a picked folder in Chrome/Edge) starts once the app is up;

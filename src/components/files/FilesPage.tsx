@@ -56,6 +56,8 @@ import { duplicateNode } from '../../files/duplicate';
 import { graphFileText } from '../../playfile/bundle';
 import { saveTextFile } from '../../utils/fileIO';
 import { WorkspaceBanner, WorkspaceEntry, WorkspaceView } from '../workspace/WorkspacePanel';
+import { LinkedFoldersEntry, LinkedFoldersGroup, LinkedFoldersView } from '../linked/LinkedFoldersView';
+import { useLinkedFolders } from '../../files/linkedFolders';
 import { OPEN_WORKSPACE_VIEW, takeWorkspaceViewRequest } from '../workspace/workspaceUi';
 import { OPEN_CLEANUP_VIEW } from '../../files/storageLimit';
 import { takeCleanupRequest } from '../../files/storageLimitApp';
@@ -68,7 +70,7 @@ const isDrumKit = (n: FileNode) => n.kind === 'preset' && n.id.startsWith('dkit:
 const exportKit = async (n: FileNode) => reportFileResult(await exportPlayfile([n.id], { fileName: n.label, dependencies: false, success: `Exported the kit “${n.label}”` }), { failTitle: 'Couldn’t export the kit' });
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-type View = 'home' | 'browse' | 'cleanup' | 'workspace' | 'notes' | 'nodes';
+type View = 'home' | 'browse' | 'cleanup' | 'workspace' | 'linked' | 'notes' | 'nodes';
 /** The GLSL page reads these when it mounts: the editor's text and which saved shader it is. */
 const GLSL_EDITOR_KEY = 'shader-studio:glsl-editor';
 const GLSL_OPEN_KEY = 'glsl-editor:open-shader';
@@ -77,6 +79,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   const tk = useTokens();
   const { inv, building, estimate, usage } = useFilesInventory();
   const [view, setView] = useState<View>(() => (takeWorkspaceViewRequest() ? 'workspace' : takeCleanupRequest() ? 'cleanup' : 'home'));
+  /** The linked folder the Linked folders view shows. */
+  const [linkedId, setLinkedId] = useState<string | undefined>(undefined);
   /** The node type whose page is shown (the Nodes view). */
   const [nodeType, setNodeType] = useState<string | null>(null);
   /** On a phone, an item's page opens in a sheet over where you are. */
@@ -340,6 +344,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   ) : null;
   const cleanup = <CleanUpView inv={inv} compact={compact} onShow={open} onRemove={remove} />;
   const workspace = <WorkspaceView compact={compact} />;
+  const linked = <LinkedFoldersView compact={compact} folderId={linkedId} />;
   const notes = <NotesView inv={inv} compact={compact} onGoTo={n => { void goToNote(n); }} onDelete={n => { deleteNoteWithUndo(n); }} />;
   const entries: HomeEntry[] = [
     { id: 'browse', icon: 'folder', label: 'Browse', sub: 'Everything saved, as a tree', tint: tk.accent.base, onClick: () => open('section:graphs') },
@@ -347,6 +352,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     { id: 'notes', icon: 'comment', label: 'Notes', sub: notesCount ? `${plural(notesCount, 'note')}: Play notes and node comments` : 'No notes yet', count: notesCount, tint: tk.accent.base, onClick: () => show('notes') },
     { id: 'cleanup', icon: 'spark', label: 'Clean up', sub: cleanupCount ? `${plural(cleanupCount, 'suggestion')}: old versions, unused files, duplicates` : 'Nothing to clean up', count: cleanupCount, tint: tk.status.success, onClick: () => show('cleanup') },
     { id: 'workspace', icon: 'folder', label: 'Workspace folder', sub: 'A folder on this computer that mirrors what’s saved', tint: tk.status.warning, onClick: () => show('workspace') },
+    { id: 'linked', icon: 'link', label: 'Linked folders', sub: 'Folders of samples, images, videos and fonts, used in place', tint: tk.accent.base, onClick: () => show('linked') },
     { id: 'settings', icon: 'sliders', label: 'App settings', sub: 'Theme, shortcuts, panel sizes: reset to default here', tint: tk.text.muted, onClick: () => open(APP_SETTINGS_ID) },
   ];
   const home = <HomeView inv={inv} compact={compact} estimate={estimate} usage={usage} entries={entries} onOpen={open} onOpenNode={openNodePage} onOpenWhereItBelongs={openWhereItBelongs}
@@ -354,8 +360,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
       {inv.sections.map((s, i) => <SectionRow key={s.id} node={s} first={i === 0} state={checkState(s.id)} onCheck={on => onCheck(s.id, on)} onOpen={() => open(s.id)} />)}
     </div> : undefined} />;
   const nodesView = nodeType ? <NodePage type={nodeType} compact={compact} inv={inv} onOpen={open} onNavigate={onNavigate} /> : <NodesListView compact={compact} onOpenNode={openNodePage} />;
-  const special = (v: View) => (v === 'home' ? home : v === 'nodes' ? nodesView : v === 'cleanup' ? cleanup : v === 'workspace' ? workspace : v === 'notes' ? notes : null);
-  const specialCrumb = (v: View) => (v === 'nodes' && nodeType ? [{ id: 'nodes', label: 'Nodes', kind: 'section' as const, section: 'nodes' as const, size: 0 }, { id: `nodetype:${nodeType}`, label: getNodeDefinition(nodeType)?.label ?? nodeType, kind: 'node' as const, section: 'nodes' as const, size: 0 }] : crumb(v === 'cleanup' ? 'Clean up' : v === 'workspace' ? 'Workspace folder' : v === 'notes' ? 'Notes' : v === 'nodes' ? 'Nodes' : 'Home'));
+  const special = (v: View) => (v === 'home' ? home : v === 'nodes' ? nodesView : v === 'cleanup' ? cleanup : v === 'workspace' ? workspace : v === 'linked' ? linked : v === 'notes' ? notes : null);
+  const specialCrumb = (v: View) => (v === 'nodes' && nodeType ? [{ id: 'nodes', label: 'Nodes', kind: 'section' as const, section: 'nodes' as const, size: 0 }, { id: `nodetype:${nodeType}`, label: getNodeDefinition(nodeType)?.label ?? nodeType, kind: 'node' as const, section: 'nodes' as const, size: 0 }] : crumb(v === 'cleanup' ? 'Clean up' : v === 'workspace' ? 'Workspace folder' : v === 'linked' ? 'Linked folders' : v === 'notes' ? 'Notes' : v === 'nodes' ? 'Nodes' : 'Home'));
   const banner = view !== 'workspace' && <WorkspaceBanner compact={compact} onOpen={() => setView('workspace')} />;
   const crumb = (label: string) => [{ id: view, label, kind: 'section' as const, section: 'graphs' as const, size: 0 }];
 
@@ -426,11 +432,13 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
           <CleanUpEntry count={cleanupCount} active={view === 'cleanup'} onClick={() => show('cleanup')} dense />
           <NotesEntry count={notesCount} active={view === 'notes'} onClick={() => show('notes')} dense />
           <WorkspaceEntry active={view === 'workspace'} onClick={() => show('workspace')} />
+          <LinkedFoldersEntry active={view === 'linked'} onClick={() => show('linked')} />
         </div>
         <div style={{ ...capsLabel(tk), padding: '12px 18px 6px' }}>Everything saved</div>
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 10px 16px' }}>
           <FilesTree sections={inv.sections} current={view === 'browse' ? current : null} expanded={expanded} onSelect={open}
             onToggle={id => setExpanded(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; })} />
+          <LinkedGroup current={view === 'linked' ? linkedId ?? null : null} onOpen={id => { setLinkedId(id); show('linked'); }} />
         </div>
       </aside>
       <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -499,6 +507,19 @@ function SectionRow({ node, first, state, onCheck, onOpen }: { node: FileNode; f
         <span style={{ fontSize: 11.5, color: tk.text.muted }}>{n ? `${plural(n, 'item')} · ${formatSize(node.size)}` : 'Nothing saved'}</span>
       </span>
       <Icon name="chevR" size={14} style={{ color: tk.text.faint }} />
+    </div>
+  );
+}
+
+/** The sidebar's Linked folders group under the tree (only when there are some). */
+function LinkedGroup({ current, onOpen }: { current: string | null; onOpen: (id: string) => void }) {
+  const tk = useTokens();
+  const count = useLinkedFolders(s => s.folders.length);
+  if (!count) return null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ ...capsLabel(tk), padding: '8px 8px 4px' }}>Linked folders</div>
+      <LinkedFoldersGroup current={current} onOpen={onOpen} />
     </div>
   );
 }
