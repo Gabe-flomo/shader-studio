@@ -19,7 +19,7 @@ import { Icon } from '../ui/Icon';
 import { ProBadge } from '../account/ProSheet';
 import { openProSheet } from '../../lib/plan';
 import { triggerLabel } from '../../play/playSources';
-import { addSignal } from '../../play/pairs';
+import { addSignal, layerSignalListeners, layerSignalSenders } from '../../play/pairs';
 import { backgroundLayerOf, SIGNAL_ACTION, type PlayAction, type PlayRecord } from '../../types/play';
 import { ActionsSection, addAction } from './layers/ActionsSection';
 import { SignalsList } from './ConditionFields';
@@ -172,6 +172,8 @@ export function signalLinks(play: PlayRecord, id: string): SignalLinks {
     if (m.swap?.signal === id) heardBy.push(`Swap on ${pair}`);
     if (m.swap?.backSignal === id) heardBy.push(`Swap back on ${pair}`);
   }
+  for (const s of layerSignalSenders(play)) if (s.id === id) sentBy.push(s.label);
+  for (const s of layerSignalListeners(play)) if (s.id === id) heardBy.push(s.label);
   return { sentBy, heardBy };
 }
 
