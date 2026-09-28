@@ -344,7 +344,9 @@ export function createLayerKit() {
         else if (live || s.seen) handLost.add(l.id);
         else target = { x: l.x, y: l.y };
       }
-      if (target) {
+      // The clock stopped (paused, scrubbing a tracked video): a null on a tracked point sits on it, so a scrub shows where it is then.
+      if (target && !(dt > 0) && (l.follow === 'hand' || l.follow === 'face' || l.follow === 'pose') && s.seen) { s.x = target.x; s.y = target.y; s.vx = 0; s.vy = 0; }
+      else if (target) {
         const k = 4 + Math.pow(env.value(l, 'spring'), 2) * 400, zeta = 1 - Math.min(0.95, env.value(l, 'wobble') * 0.95), c = 2 * zeta * Math.sqrt(k);
         for (let i = 0; i < 4; i++) {
           const h = dt / 4;

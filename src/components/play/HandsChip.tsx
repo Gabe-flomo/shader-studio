@@ -248,7 +248,9 @@ export function HandsPill() {
   const { status, count } = useHands();
   const performing = usePlayUi(s => s.performing);
   const needs = useNodeGraphStore(s => usesHands(s.play));
-  if (!performing || !needs || status === 'on' || status === 'unsupported') return null;
+  const from = useFromVideo('hands');
+  // Hands from an analysed video need nothing turned on.
+  if (!performing || !needs || from.baked || status === 'on' || status === 'unsupported') return null;
   const busy = status === 'starting';
   return (
     <button
@@ -264,7 +266,7 @@ export function HandsPill() {
       }}
     >
       <Icon name="hand" size={15} />
-      {busy ? 'Starting hand tracking…' : status === 'blocked' || status === 'error' ? `${handsText(status, count).replace('Hands: ', '')} · Try again` : 'Enable hand tracking'}
+      {busy ? 'Starting hand tracking…' : status === 'blocked' || status === 'error' ? `${handsText(status, count).replace('Hands: ', '')} · Try again` : from.layer ? `Track hands in “${from.layer.label}”` : 'Enable hand tracking'}
     </button>
   );
 }

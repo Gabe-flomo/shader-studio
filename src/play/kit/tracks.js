@@ -199,8 +199,13 @@ export function tkDrive(drv, track, vt, reset, update) {
   if (jump) {
     reset();
     const step = 1 / Math.max(1, track.fps || 30);
-    const from = Math.max(0, vt - TK_PRIME_S);
-    for (let k = 0; from + k * step < vt - 1e-6; k++) update(tkSample(track, from + k * step));
+    const from = vt - TK_PRIME_S;
+    // Near the start there is less video before: the first frame stands in for it (so a hand there still appears).
+    for (let k = 0; from + k * step < vt - 1e-6; k++) {
+      const t = from + k * step, s = tkSample(track, Math.max(0, t));
+      s.t = t * 1000;
+      update(s);
+    }
   }
   update(tkSample(track, vt));
   drv.last = vt; drv.has = true;
