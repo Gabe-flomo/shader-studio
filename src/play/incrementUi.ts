@@ -2,8 +2,8 @@
  * incrementUi.ts — words for Increment mappings (docs/increment-mapping.md):
  * the one-line summary a folded mapping row shows, and the pickers' options.
  */
-import type { IncrementGlideCurve, IncrementGrowth, IncrementLimit, IncrementOn, IncrementWrapBack, PlayIncrement, PlaySignal } from '../types/play';
-import { signalName, triggerLabel } from './playSources';
+import type { IncrementGlideCurve, IncrementGrowth, IncrementLimit, IncrementOn, IncrementWrapBack, PlayIncrement, PlayMapping, PlaySignal } from '../types/play';
+import { signalName, sourceLabel, triggerLabel } from './playSources';
 
 const num = (n: number) => `${Math.round(n * 1000) / 1000}`;
 
@@ -24,6 +24,12 @@ export function incrementSummary(inc: PlayIncrement, signals: ReadonlyArray<Play
   if (inc.wrapAfter > 0) extra.push(`${inc.wrapBack === 'pingpong' ? 'ping-pong' : 'wrap'} ${inc.wrapAfter}`);
   if (inc.glideMs > 0) extra.push(`glide ${Math.round(inc.glideMs)} ms`);
   return extra.length ? `${s}, ${extra.join(', ')}` : s;
+}
+
+/** What drives a control, in words: "Increment" (with `full`, its summary: "Increment +0.5 on beat"), else its source's name. */
+export function mappingLabel(m: { source: PlayMapping['source']; increment?: PlayIncrement }, play: { controls: ReadonlyArray<{ id: string; label: string }>; layers: ReadonlyArray<{ id: string; label: string }>; signals?: ReadonlyArray<PlaySignal> }, full = false): string {
+  if (m.increment) return full ? `Increment ${incrementSummary(m.increment, play.signals, play.layers)}` : 'Increment';
+  return sourceLabel(m.source, play.controls, play.layers);
 }
 
 export const INCREMENT_ON_OPTIONS: { value: IncrementOn; label: string; title: string }[] = [

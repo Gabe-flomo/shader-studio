@@ -104,7 +104,7 @@ import { makePair, newPairMapping, pairOf, partnerTarget, positionPair, unpair }
 import { pairDrives, signalSource } from '../../lib/playEngine';
 import { SIGNAL_SOURCE } from './sourcePickerSections';
 import { IncrementEditor } from './IncrementEditor';
-import { incrementSummary } from '../../play/incrementUi';
+import { incrementSummary, mappingLabel } from '../../play/incrementUi';
 import { defaultIncrement, type PlayIncrement } from '../../types/play';
 import { recordBpm } from '../../types/playArrangement';
 
@@ -545,7 +545,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             live={[liveValues.get(c.id), liveValues.get(cb.id)]}
             drivenA={pms.some(m => pairDrives(m, pair, c.id)) || play.mappings.some(m => m.enabled && m.controlId === c.id)}
             drivenB={pms.some(m => pairDrives(m, pair, cb.id)) || play.mappings.some(m => m.enabled && m.controlId === cb.id)}
-            drivenBy={[...pms.map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === c.id || m.controlId === cb.id)).map(m => sourceLabel(m.source, play.controls, play.layers))]}
+            drivenBy={[...pms.map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === c.id || m.controlId === cb.id)).map(m => mappingLabel(m, play))]}
             onChange={(ctl, v) => writeControl(ctl, v)}
             onRename={label => update(p => ({ ...p, pairs: (p.pairs ?? []).map(x => (x.id === pair.id ? { ...x, label } : x)) }))}
             onPosition={position => update(p => ({ ...p, pairs: (p.pairs ?? []).map(x => (x.id === pair.id ? { ...x, position } : x)) }))}
@@ -579,7 +579,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       onAmount={amount => update(p => ({ ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, amount } : x) }))}
       value={readControlValue(nodes, c.target, play)}
       live={liveValues.get(c.id)}
-      drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => sourceLabel(m.source, play.controls, play.layers))}
+      drivenBy={play.mappings.filter(m => m.enabled && m.controlId === c.id).map(m => mappingLabel(m, play))}
       touch={compact}
       onChange={v => writeControl(c, v)}
       onRename={label => update(p => { const rt = parseReaderTarget(c.target); return rt ? renameReader(p, rt.readerId, label) : { ...p, controls: p.controls.map(x => x.id === c.id ? { ...x, label } : x) }; })}
@@ -605,9 +605,9 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     if (key.startsWith('pair:')) {
       const pair = play.pairs?.find(p => `pair:${p.id}` === key);
       if (!pair) return [];
-      return [...(play.pairMappings ?? []).filter(m => m.enabled && m.pairId === pair.id).map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === pair.a || m.controlId === pair.b)).map(m => sourceLabel(m.source, play.controls, play.layers))];
+      return [...(play.pairMappings ?? []).filter(m => m.enabled && m.pairId === pair.id).map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === pair.a || m.controlId === pair.b)).map(m => mappingLabel(m, play))];
     }
-    return play.mappings.filter(m => m.enabled && m.controlId === key).map(m => sourceLabel(m.source, play.controls, play.layers));
+    return play.mappings.filter(m => m.enabled && m.controlId === key).map(m => mappingLabel(m, play));
   };
   const renderControls = (inPanel: boolean) => (
     <div style={{ flex: 1, minHeight: play.notes && !compact && !inPanel ? 110 : 0, overflowY: 'auto', padding: inPanel ? '8px 16px 16px' : '6px 12px 12px' }}>
