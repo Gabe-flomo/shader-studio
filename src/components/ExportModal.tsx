@@ -27,7 +27,10 @@ import { formatDuration } from '../lib/midiFile';
 import { recordingBaseName, recordingPath, saveRecording } from '../utils/recordingsFolder';
 import { RecordingsSetting } from './shell/RecordingsSetting';
 import { audioEngine } from '../lib/audioEngine';
-import { mixdown, padHitsOf, recordingTracks, wavBytes, type MixFx } from '../lib/recordingAudio';
+import { engineTracks, mixdown, padHitsOf, recordingTracks, wavBytes, type MixFx } from '../lib/recordingAudio';
+import { renderEngineForExport } from '../lib/engineExport';
+import { engineTapOffset } from '../lib/engineRender';
+import { audioEngineHost, useEngineUi } from '../lib/audioEngineHost';
 import { takeValueAt } from '../lib/audioFxOffline';
 import { playEngine } from '../lib/playEngine';
 import { rollingSeconds, takeApplier, useTakes } from '../lib/takes';
@@ -179,11 +182,25 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const [pictureChoice, setPicture] = useState<TransparentPicture | null>(null);
   const picture: TransparentPicture = pictureChoice === 'own' && !ownAlpha ? 'luma' : pictureChoice ?? (ownAlpha ? 'own' : 'luma');
   const nothingShows = transparent && picture === 'drop' && !hasLayers;
-  // Sound: only songs already in Playfield, never the microphone.
-  const tracks = external ? [] : recordingTracks(play, nodes);
+  // Sound: only songs already in Playfield, never the microphone. The Audio engine's racks
+  // (desktop) are tracks too: rendered natively frame by frame, tapped in real time (lib/engineExport.ts).
+  const engineOn = useEngineUi(s => s.status.mode === 'native');
+  const tracks = external ? [] : [...recordingTracks(play, nodes), ...engineTracks(can('audio.engine') ? play.audioEngine?.racks : undefined, inTauri && engineOn)];
+  const hasEngine = tracks.some(t => t.engine);
+  const [engineNotes, setEngineNotes] = useState<string[]>([]);
   // The audio effects in an offline mix: the record's chains, their numbers from the take (or as they are now).
   // Drum pads sound where the take hit them, each at the moment it landed.
   const mixFx = (from: number): MixFx => ({ fx: can('play.audioFx') ? play.audioFx : undefined, valueAt: takeValueAt(take, from, (id, k, b) => playEngine.layerValue(id, k, b)), padHits: padHitsOf(take, from) });
+  /** The offline mix for a span: the engine's racks rendered natively first, then everything under one roof. */
+  const mixSpan = async (from: number, length: number) => {
+    const e = await renderEngineForExport(play, take, tracks, from, length, mixFx(from));
+    setEngineNotes(e.notes);
+    return mixdown(e.tracks, length, from, 48000, { ...mixFx(from), engine: e.engine });
+  };
+  // A real-time recording with the engine: its tap (a WAV) and when it and the recorder started, for the mux.
+  const engineTapRef = useRef<{ path: string; tapAt: number; recAt: number } | null>(null);
+  const savedPathRef = useRef('');
+  const [muxing, setMuxing] = useState(false);
   const [withAudio, setWithAudio] = useState(true);
   const sound = withAudio && tracks.length > 0;
   const clockSongs = tracks.some(t => t.clock);
@@ -403,14 +420,23 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         videoBitsPerSecond: bitrate * 1_000_000,
         mimeType: current.format.mimeType,
         name: filename || 'shader graph',
-        onSaved: where => setOutputPath(where),
+        onSaved: where => { savedPathRef.current = where; setOutputPath(where); },
         audio: sound ? audioEngine.recordingStream() : null,
         verbose: false,
         autoDownload: true,
         onError: (msg) => setErrorMsg(msg),
       });
       recorderRef.current = rec;
-      await rec.start();
+      engineTapRef.current = null;
+      savedPathRef.current = '';
+      setEngineNotes([]);
+      if (sound && hasEngine) {
+        // The engine's sound from as close to the recorder's start as we can get: the tap first, the recorder right after.
+        const tapAt = performance.now();
+        const tap = await audioEngineHost.tapStart().catch(e => { setEngineNotes([`The Audio engine isn’t in this recording: ${e}`]); return null; });
+        await rec.start();
+        if (tap) engineTapRef.current = { path: tap.path, tapAt, recAt: performance.now() };
+      } else await rec.start();
       setState('recording');
       startPolling();
       rafRef.current = requestAnimationFrame(captureLoop);
@@ -433,7 +459,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         restoreScale();
         // Wait for the file to be written (Tauri's save dialog waits on the
         // user) so a save failure is reported instead of showing "done".
-        r.whenStopped().then(() => setTimeout(() => setState(r.error ? 'error' : 'done'), 400));
+        r.whenStopped().then(() => finishEngineTap(r)).then(() => setTimeout(() => setState(r.error ? 'error' : 'done'), 400));
       }
     }, 200);
     return () => clearInterval(id);
@@ -478,7 +504,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       const target = await recordingPath(`${filename || 'shader graph'}.${codecExt(useCodec)}`);
       if (!target) { restoreScale(); setState('idle'); return; }
       // The songs mixed for the export's length, from the clock's 0 (where the frames start).
-      const mix = sound ? await mixdown(tracks, span.length, span.from, 48000, mixFx(span.from)) : null;
+      const mix = sound ? await mixSpan(span.from, span.length) : null;
       const run = runFfmpegEncode({
         outputPath: target,
         width: w,
@@ -595,7 +621,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         setElapsed((performance.now() - startT) / 1000);
       }
       if (sound) {
-        const mix = await mixdown(tracks, span.length, span.from, 48000, mixFx(span.from));
+        const mix = await mixSpan(span.from, span.length);
         if (mix) add(`${base}.wav`, wavBytes(mix));
       }
       zip.end();
@@ -645,8 +671,27 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       // If an auto-stop already began, still wait for its save to finish.
       if (r) await (r.isRecording ? r.stop() : r.whenStopped());
       restoreScale();
+      if (r) await finishEngineTap(r);
       setTimeout(() => setState(r?.error ? 'error' : 'done'), 400);
     }
+  };
+
+  /** The engine's tap after a real-time recording: stop it and put its WAV under the saved video (lib/engineRender.ts). */
+  const finishEngineTap = async (r: CanvasRecorder) => {
+    const tap = engineTapRef.current;
+    if (!tap) return;
+    engineTapRef.current = null;
+    setMuxing(true);
+    try {
+      const done = await audioEngineHost.tapStop();
+      const video = savedPathRef.current;
+      if (!done) return;
+      if (r.error || !video || done.frames === 0) { await audioEngineHost.tapDiscard(done.path); return; }
+      await audioEngineHost.mux(video, done.path, engineTapOffset(tap.tapAt, done.offset, tap.recAt), r.hasAudio);
+      if (done.lost > 0) setEngineNotes([`The Audio engine’s sound has ${Math.round(done.lost / done.sampleRate * 1000)} ms of silence where the app fell behind.`]);
+    } catch (e) {
+      setEngineNotes([`The Audio engine’s sound couldn’t be added to the recording: ${e instanceof Error ? e.message : String(e)}`]);
+    } finally { setMuxing(false); }
   };
 
   const handleScreenshot = async () => {
@@ -910,6 +955,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                     : mode === 'ffmpeg'
                       ? 'Mixed from the clock’s 0, lined up with the frames.'
                       : 'Recorded as it plays. Songs only: the microphone is never recorded.'}
+                  {hasEngine && (offline
+                    ? (take ? ' The Audio engine’s racks are rendered natively from the take’s notes and controls.' : ' The Audio engine plays only what a take recorded: render a take to hear its racks.')
+                    : ' The Audio engine’s sound is tapped natively and added to the file when the recording stops.')}
                 </Help>
               </Section>
             )}
@@ -1051,7 +1099,14 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
             </div>
             {!manualStop && <ProgressBar value={captureProgress} />}
             {stats}
+            {muxing && <Help>Adding the Audio engine’s sound to the recording…</Help>}
           </div>
+        )}
+
+        {engineNotes.length > 0 && !isBusy && (
+          <Callout tone="warning" title="Audio engine">
+            {engineNotes.join(' ')}
+          </Callout>
         )}
 
         {isEncoding && (

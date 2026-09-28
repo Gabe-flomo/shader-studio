@@ -179,6 +179,75 @@ fn stop_ffmpeg_encode(state: State<FfmpegState>) -> Result<(), String> {
     Ok(())
 }
 
+/// FFmpeg's arguments to put `wav` under a finished recording `video` (its
+/// picture copied, never re-encoded), written to `out`: the WAV shifted by
+/// `offset` seconds (positive: it starts later than the picture), mixed with
+/// the video's own sound when it has one (`mix`), else as the sound track.
+pub fn mux_args(video: &str, wav: &str, offset: f64, mix: bool, out: &str) -> Vec<String> {
+    let mut a: Vec<String> = vec!["-y".into(), "-i".into(), video.into(), "-itsoffset".into(), format!("{offset:.4}"), "-i".into(), wav.into()];
+    if mix {
+        // Both at full level; the mix stays under 0 dBFS as each source did (no normalisation).
+        a.extend(["-filter_complex", "[0:a][1:a]amix=inputs=2:duration=first:normalize=0[a]", "-map", "0:v:0", "-map", "[a]"].map(String::from));
+    } else {
+        a.extend(["-map", "0:v:0", "-map", "1:a:0", "-shortest"].map(String::from));
+    }
+    let aac = std::path::Path::new(out).extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("mp4") || e.eq_ignore_ascii_case("m4v"));
+    a.extend(["-c:v", "copy", "-c:a", if aac { "aac" } else { "pcm_s16le" }].map(String::from));
+    if aac {
+        a.extend(["-b:a", "320k", "-movflags", "+faststart"].map(String::from));
+    }
+    a.push(out.into());
+    a
+}
+
+/// Put the Audio engine's recording (`wav`, from `ae_tap_stop`) under a real-time
+/// recording `video` in place: `offset` seconds later than the picture, mixed with
+/// the video's own sound when `mix`. The WAV is removed afterwards.
+#[tauri::command]
+async fn mux_recording_audio(video: String, wav: String, offset: f64, mix: bool) -> Result<(), String> {
+    ffmpeg_sidecar::download::auto_download().map_err(|e| e.to_string())?;
+    let ffmpeg_path = ffmpeg_sidecar::paths::ffmpeg_path();
+    let vp = std::path::Path::new(&video);
+    if !vp.is_file() || !std::path::Path::new(&wav).is_file() {
+        return Err("The recording or the engine's sound file is missing".into());
+    }
+    let ext = vp.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
+    let stem = vp.file_stem().and_then(|s| s.to_str()).unwrap_or("recording");
+    let out = vp.with_file_name(format!("{stem}.engine-mix.{ext}"));
+    let out_s = out.to_string_lossy().into_owned();
+    let status = Command::new(&ffmpeg_path)
+        .args(mux_args(&video, &wav, if offset.is_finite() { offset.clamp(-5.0, 5.0) } else { 0.0 }, mix, &out_s))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("Failed to run FFmpeg: {e}"))?;
+    let _ = std::fs::remove_file(&wav);
+    if !status.status.success() {
+        let _ = std::fs::remove_file(&out);
+        let msg = String::from_utf8_lossy(&status.stderr);
+        return Err(format!("FFmpeg couldn't add the engine's sound: {}", msg.lines().last().unwrap_or("").trim()));
+    }
+    std::fs::rename(&out, vp).map_err(|e| format!("Couldn't replace the recording: {e}"))
+}
+
+#[cfg(test)]
+mod mux_tests {
+    use super::mux_args;
+
+    #[test]
+    fn mixes_with_the_video_s_own_sound_or_takes_the_track_over() {
+        let a = mux_args("/v/a.mp4", "/t/e.wav", 0.0125, true, "/v/a.engine-mix.mp4");
+        assert!(a.windows(2).any(|w| w == ["-itsoffset", "0.0125"]));
+        assert!(a.iter().any(|x| x.contains("amix=inputs=2")));
+        assert!(a.windows(2).any(|w| w == ["-c:v", "copy"]) && a.windows(2).any(|w| w == ["-c:a", "aac"]));
+        let b = mux_args("/v/a.mov", "/t/e.wav", -0.5, false, "/v/a.engine-mix.mov");
+        assert!(b.windows(2).any(|w| w == ["-map", "1:a:0"]) && b.contains(&"-shortest".to_string()));
+        assert!(b.windows(2).any(|w| w == ["-c:a", "pcm_s16le"]));
+        assert!(!b.iter().any(|x| x.contains("amix")));
+    }
+}
+
 // ── App entry point ───────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -286,6 +355,15 @@ pub fn run() {
             audio_engine::ae_set_output,
             audio_engine::ae_master,
             audio_engine::ae_open_ui,
+            audio_engine::ae_rack_input,
+            audio_engine::ae_rack_feed,
+            audio_engine::ae_rack_input_stats,
+            audio_engine::ae_render_input,
+            audio_engine::ae_render_take,
+            audio_engine::ae_tap_start,
+            audio_engine::ae_tap_stop,
+            audio_engine::ae_tap_discard,
+            mux_recording_audio,
             open_url,
             data_fetch::fetch_url,
             data_fetch::kaggle_account,

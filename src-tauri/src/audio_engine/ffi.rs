@@ -33,6 +33,17 @@ mod sys {
         #[allow(dead_code)] // tests
         pub fn ae_render_offline(out: *mut f32, frames: c_int, err: *mut *mut c_char) -> c_int;
         pub fn ae_open_ui(rack: *const c_char, slot: *const c_char, title: *const c_char, err: *mut *mut c_char) -> c_int;
+        pub fn ae_rack_set_input(rack: *const c_char, capacity: u32, err: *mut *mut c_char) -> c_int;
+        pub fn ae_rack_feed(rack: *const c_char, pcm: *const f32, frames: u32, err: *mut *mut c_char) -> i64;
+        pub fn ae_rack_input_stats(rack: *const c_char, queued: *mut u64, underruns: *mut u64) -> c_int;
+        pub fn ae_rack_latency(rack: *const c_char) -> f64;
+        pub fn ae_render_open(rate: f64, err: *mut *mut c_char) -> c_int;
+        pub fn ae_render_close() -> c_int;
+        pub fn ae_render_stereo(left: *mut f32, right: *mut f32, frames: c_int, err: *mut *mut c_char) -> c_int;
+        pub fn ae_tap_start(err: *mut *mut c_char) -> u64;
+        pub fn ae_tap_read(out: *mut f32, max: c_int, from: *mut u64, written: *mut u64) -> c_int;
+        pub fn ae_tap_info(rate: *mut f64, install_ns: *mut u64, first_ns: *mut u64) -> c_int;
+        pub fn ae_tap_stop() -> c_int;
     }
 }
 
@@ -183,6 +194,72 @@ mod imp {
         let (r, s, t) = (cstr(rack), cstr(slot), cstr(title));
         check(unsafe { sys::ae_open_ui(r.as_ptr(), s.as_ptr(), t.as_ptr(), &mut e) }, e, "Opening the plug-in window")
     }
+
+    // ── Inputs fed from the page ────────────────────────────────────────────
+    /// The rack's source becomes an input the page feeds, with `capacity` frames of buffer.
+    pub fn set_input(rack: &str, capacity: u32) -> Result<(), String> {
+        let mut e = ptr::null_mut();
+        let r = cstr(rack);
+        check(unsafe { sys::ae_rack_set_input(r.as_ptr(), capacity, &mut e) }, e, "Making the input")
+    }
+    /// Interleaved stereo frames for the rack's input; how many are queued after.
+    pub fn feed(rack: &str, pcm: &[f32]) -> Result<u64, String> {
+        let mut e = ptr::null_mut();
+        let r = cstr(rack);
+        let n = unsafe { sys::ae_rack_feed(r.as_ptr(), pcm.as_ptr(), (pcm.len() / 2) as u32, &mut e) };
+        let err = unsafe { take(e) };
+        if n < 0 { Err(err.unwrap_or_else(|| "Feeding the input failed".into())) } else { Ok(n as u64) }
+    }
+    /// (frames queued, render cycles that ran dry) of a rack's input.
+    pub fn input_stats(rack: &str) -> Option<(u64, u64)> {
+        let r = cstr(rack);
+        let (mut q, mut u) = (0u64, 0u64);
+        (unsafe { sys::ae_rack_input_stats(r.as_ptr(), &mut q, &mut u) } == 0).then_some((q, u))
+    }
+    /// Seconds of latency the rack's units report.
+    pub fn rack_latency(rack: &str) -> f64 {
+        let r = cstr(rack);
+        unsafe { sys::ae_rack_latency(r.as_ptr()) }
+    }
+
+    // ── Offline rendering (racks named "render:…") ─────────────────────────
+    pub fn render_open(rate: f64) -> Result<(), String> {
+        let mut e = ptr::null_mut();
+        check(unsafe { sys::ae_render_open(rate, &mut e) }, e, "Opening the render")
+    }
+    pub fn render_close() { unsafe { sys::ae_render_close() }; }
+    /// Render `left.len()` frames of the offline engine into both channels; how many were rendered.
+    pub fn render_stereo(left: &mut [f32], right: &mut [f32]) -> Result<usize, String> {
+        let n = left.len().min(right.len());
+        let mut e = ptr::null_mut();
+        let got = unsafe { sys::ae_render_stereo(left.as_mut_ptr(), right.as_mut_ptr(), n as c_int, &mut e) };
+        let err = unsafe { take(e) };
+        if got < 0 { Err(err.unwrap_or_else(|| "Render failed".into())) } else { Ok(got as usize) }
+    }
+
+    // ── The main-mixer tap ─────────────────────────────────────────────────
+    /// Start the tap; the install time (mach ns).
+    pub fn tap_start() -> Result<u64, String> {
+        let mut e = ptr::null_mut();
+        let at = unsafe { sys::ae_tap_start(&mut e) };
+        let err = unsafe { take(e) };
+        match err {
+            Some(m) => Err(m),
+            None => Ok(at),
+        }
+    }
+    /// Drain up to `out.len() / 2` frames: (frames, frame count of the first, frames written so far).
+    pub fn tap_read(out: &mut [f32]) -> (usize, u64, u64) {
+        let (mut from, mut written) = (0u64, 0u64);
+        let n = unsafe { sys::ae_tap_read(out.as_mut_ptr(), (out.len() / 2) as c_int, &mut from, &mut written) };
+        (n.max(0) as usize, from, written)
+    }
+    /// (sample rate, install ns, first buffer ns) while the tap is on.
+    pub fn tap_info() -> Option<(f64, u64, u64)> {
+        let (mut rate, mut a, mut b) = (0f64, 0u64, 0u64);
+        (unsafe { sys::ae_tap_info(&mut rate, &mut a, &mut b) } == 0).then_some((rate, a, b))
+    }
+    pub fn tap_stop() { unsafe { sys::ae_tap_stop() }; }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -213,6 +290,17 @@ mod imp {
     pub fn set_output(_: u32) -> Result<(), String> { Err(NO.into()) }
     pub fn render_offline(_: &mut [f32]) -> Result<usize, String> { Err(NO.into()) }
     pub fn open_ui(_: &str, _: &str, _: &str) -> Result<(), String> { Err(NO.into()) }
+    pub fn set_input(_: &str, _: u32) -> Result<(), String> { Err(NO.into()) }
+    pub fn feed(_: &str, _: &[f32]) -> Result<u64, String> { Err(NO.into()) }
+    pub fn input_stats(_: &str) -> Option<(u64, u64)> { None }
+    pub fn rack_latency(_: &str) -> f64 { 0.0 }
+    pub fn render_open(_: f64) -> Result<(), String> { Err(NO.into()) }
+    pub fn render_close() {}
+    pub fn render_stereo(_: &mut [f32], _: &mut [f32]) -> Result<usize, String> { Err(NO.into()) }
+    pub fn tap_start() -> Result<u64, String> { Err(NO.into()) }
+    pub fn tap_read(_: &mut [f32]) -> (usize, u64, u64) { (0, 0, 0) }
+    pub fn tap_info() -> Option<(f64, u64, u64)> { None }
+    pub fn tap_stop() {}
 }
 
 pub use imp::*;
