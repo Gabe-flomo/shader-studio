@@ -35,6 +35,7 @@ const SOURCE_GROUPS: { heading: string; entries: Entry[] }[] = [
     { value: 'lfo', label: 'LFO', icon: 'wave', description: 'Sine, triangle, saw or square', keywords: 'oscillator' },
     { value: 'noise', label: 'Noise', icon: 'dice', description: 'Smooth, drifting, random or stepped', keywords: 'random perlin' },
     { value: 'clock', label: 'Clock', icon: 'clock', description: 'A shape in time with a BPM', keywords: 'bpm tempo beat' },
+    { value: 'fn', label: 'Function', icon: 'fn', description: 'A formula over time, like sin(t * 2) * 0.5 + 0.5', keywords: 'formula expression math equation' },
   ] },
   { heading: 'Live audio', entries: [
     { value: 'live', label: 'Audio band', icon: 'live', description: 'Level, bass, mids or treble of the live input', keywords: 'microphone mic' },
