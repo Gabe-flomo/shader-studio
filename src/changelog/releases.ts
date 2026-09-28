@@ -43,6 +43,10 @@ export const RELEASES: Release[] = [
     date: '2026-09-28',
     title: 'Agents',
     highlights: [
+      { area: 'Play', text: 'Pausing time (Space) now freezes the layers too — agents, particles and relationships hold still until you play again.' },
+      { area: 'Play', text: 'The Layers page has a draggable divider between the list and the editor.' },
+      { area: 'Desktop', text: 'Configure by touch: turn a knob in the plug-in\'s own window and it becomes a rack control, like Ableton. The full list is still a click away.', link: { kind: 'doc', path: 'docs/audio-engine.md' } },
+      { area: 'Play', text: 'The Signals page now shows which layers send a signal (Multiply, Relationship, Increment) and who listens.' },
       { area: 'Play', text: 'A Function source: type a formula of t (seconds) and b (beats) — sin(t*2)*0.5+0.5, fract(b/4), noise(t) — and map it like any source.' },
       { area: 'Play', text: 'Goo edges are sharp at any size, and Agents gravity is ten times gentler so the whole slider is usable.' },
       { area: 'Studio', text: 'The preview bar follows the theme in light mode.' },
