@@ -160,8 +160,11 @@ export function GradientStopsEditor({
               aria-pressed={on}
               title={w ? 'Wired from a socket' : fixedSpacing ? 'Drag to reorder · click for its colour · Backspace removes' : 'Drag to move · click for its colour · double-click to type its place · Backspace removes'}
               onPointerDown={e => {
+                // preventDefault keeps text from being selected during the drag, but also keeps the
+                // browser from focusing the handle: focus it by hand so ← → and Backspace reach it.
                 e.preventDefault(); e.stopPropagation();
-                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                e.currentTarget.focus();
+                e.currentTarget.setPointerCapture(e.pointerId);
                 select(i);
                 drag.current = { i, moved: false, startX: e.clientX };
               }}
