@@ -725,13 +725,17 @@ class PlayOverlay {
       layerAlpha: id => this.kit.layerCanvas(id), width: Math.round(W * fs), height: Math.round(H * fs), time,
     });
     this.showFinish(finished);
-    if (this.composite) {
-      const c = this.composite;
-      if (c.width !== gl.width || c.height !== gl.height) { c.width = gl.width; c.height = gl.height; }
-      const x = c.getContext('2d')!;
-      if (finished && this.finishEl) x.drawImage(this.finishEl, 0, 0, c.width, c.height);
-      else { x.drawImage(gl, 0, 0); x.drawImage(canvas, 0, 0, c.width, c.height); }
-    }
+    // Copied here, in the same animation frame the picture was drawn: the GL canvas keeps no
+    // drawing buffer between frames, so a copy taken from another loop reads black.
+    if (this.composite) this.fillComposite(this.composite, gl, canvas, finished);
+    if (this.livePicture) this.fillComposite(this.livePicture, gl, canvas, finished);
+  }
+
+  private fillComposite(c: HTMLCanvasElement, gl: HTMLCanvasElement, canvas: HTMLCanvasElement, finished: boolean): void {
+    if (c.width !== gl.width || c.height !== gl.height) { c.width = gl.width; c.height = gl.height; }
+    const x = c.getContext('2d')!;
+    if (finished && this.finishEl) x.drawImage(this.finishEl, 0, 0, c.width, c.height);
+    else { x.drawImage(gl, 0, 0); x.drawImage(canvas, 0, 0, c.width, c.height); }
   }
 
   private drawOutline(ctx: CanvasRenderingContext2D, W: number, H: number, dpr: number): void {
@@ -758,8 +762,39 @@ class PlayOverlay {
     return this.composite;
   }
 
-  /** The WebGL canvas the last frame was drawn on (the Mapping editor's preview snapshots it). */
+  /** The WebGL canvas the last frame was drawn on. */
   pictureCanvas(): HTMLCanvasElement | null { return this.lastGl; }
+
+  // ── The live picture (the Mapping editor's preview) ────────────────────────
+
+  private livePicture: HTMLCanvasElement | null = null;
+  private livePictureRefs = 0;
+  private wake: (() => void) | null = null;
+
+  /** ShaderCanvas: how to draw a frame now (the live picture asks for one when first taken). */
+  setWake(fn: (() => void) | null): void { this.wake = fn; }
+
+  /**
+   * A canvas holding the finished picture (shader, layers, Finish) as of the
+   * last frame drawn, refreshed inside the render loop every time it draws.
+   * Draw it as a texture every frame; never copy the GL canvas from outside
+   * the loop. Release when done (shared between takers).
+   */
+  acquirePicture(): { canvas: HTMLCanvasElement; release: () => void } {
+    if (!this.livePicture) this.livePicture = document.createElement('canvas');
+    this.livePictureRefs++;
+    // A paused, still picture hasn't been drawn since the last change: ask for one frame so the canvas fills.
+    this.wake?.();
+    let released = false;
+    return {
+      canvas: this.livePicture,
+      release: () => {
+        if (released) return;
+        released = true;
+        if (--this.livePictureRefs <= 0) { this.livePictureRefs = 0; this.livePicture = null; }
+      },
+    };
+  }
 
   /** Picture + layers as they are now, for a screenshot. */
   snapshot(gl: HTMLCanvasElement): HTMLCanvasElement {

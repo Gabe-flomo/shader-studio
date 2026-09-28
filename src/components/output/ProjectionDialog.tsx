@@ -24,7 +24,8 @@ import { useCan, requireFeature } from '../../lib/plan';
 import { playOverlay } from '../../play/overlay';
 import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
 import { WarpRenderer } from '../../output/warpRenderer';
-import { arrowStep, drawHandles, hitTest, moveHandle, nudge, surfaceOf, type HandleRef } from '../../output/mappingEdit';
+import { arrowStep, drawHandles, handlesOf, hitTest, isOffView, moveHandle, nudge, sameRef, surfaceOf, type HandleRef } from '../../output/mappingEdit';
+import { FrameLoop, watchVisible } from '../../output/frameLoop';
 import { isConvexQuad } from '../../output/warp';
 import { isDesktopApp } from '../../output/transport';
 import {
@@ -344,7 +345,12 @@ function Preview({ projection, aspect, outputPx, selected, pattern, canEdit, dra
   const [box, setBox] = useState({ w: 0, h: 0 });
   // The newest props for the draw loop and the handlers, without restarting them.
   const live = useRef({ projection, selected, pattern, drawingMask, active: null as HandleRef | null });
-  const drag = useRef<{ ref: HandleRef; before: ProjectionRecord; last: { x: number; y: number }; moved: boolean } | null>(null);
+  const drag = useRef<{ ref: HandleRef; before: ProjectionRecord; last: { x: number; y: number }; moved: boolean; relative: boolean } | null>(null);
+  const endDrag = () => {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.moved) mappingHistory.push(d.before);
+  };
   useEffect(() => {
     const L = live.current;
     L.projection = projection; L.selected = selected; L.pattern = pattern; L.drawingMask = drawingMask;
@@ -362,25 +368,22 @@ function Preview({ projection, aspect, outputPx, selected, pattern, canEdit, dra
     return w / h > aspect ? { w: Math.round(h * aspect), h: Math.round(h) } : { w: Math.round(w), h: Math.round(w / aspect) };
   }, [box, aspect]);
 
-  // The draw loop: a snapshot of the app's picture about 15 times a second, warped every frame.
+  // The draw loop: every frame while the preview can be seen, the app's live picture (a canvas the
+  // render loop refreshes each time it draws, so it is never a stale or cleared frame) warped onto
+  // the surfaces, then the handles over it. Hidden (the tab, or scrolled away), it rests.
   useEffect(() => {
     const gl = glRef.current, hc = hRef.current;
     if (!gl || !hc) return;
     const warp = new WarpRenderer(gl);
-    let snap: HTMLCanvasElement | null = null, lastSnap = 0, raf = 0;
-    const tick = (now: number) => {
-      raf = requestAnimationFrame(tick);
+    const picture = playOverlay.acquirePicture();
+    const draw = () => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const W = Math.max(1, Math.round(gl.clientWidth * dpr)), H = Math.max(1, Math.round(gl.clientHeight * dpr));
       if (gl.width !== W || gl.height !== H) { gl.width = W; gl.height = H; }
       if (hc.width !== W || hc.height !== H) { hc.width = W; hc.height = H; }
-      if (now - lastSnap > 66) {
-        lastSnap = now;
-        const pic = playOverlay.pictureCanvas();
-        if (pic && pic.width > 0) { try { snap = playOverlay.snapshot(pic); } catch { /* the canvas went away */ } }
-      }
+      const pic = picture.canvas.width > 0 && picture.canvas.height > 0 ? picture.canvas : null;
       const L = live.current;
-      warp.render(L.projection, { shader: snap, layers: null, finished: snap, surfaceLayers: () => snap }, L.pattern, L.selected);
+      warp.render(L.projection, { shader: pic, layers: null, finished: pic, surfaceLayers: () => pic }, L.pattern, L.selected);
       const x = hc.getContext('2d')!;
       x.clearRect(0, 0, W, H);
       drawHandles(x, L.projection, L.selected, drag.current?.ref ?? L.active, W, H, dpr);
@@ -391,8 +394,10 @@ function Preview({ projection, aspect, outputPx, selected, pattern, canEdit, dra
         x.restore();
       }
     };
-    raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); warp.dispose(); };
+    const loop = new FrameLoop(draw);
+    const unwatch = watchVisible(gl, v => loop.setVisible(v));
+    loop.start();
+    return () => { unwatch(); loop.stop(); picture.release(); warp.dispose(); };
   }, []);
 
   const unit = (e: { clientX: number; clientY: number }) => {
@@ -449,7 +454,10 @@ function Preview({ projection, aspect, outputPx, selected, pattern, canEdit, dra
             const sid = surfaceOf(ref);
             if (sid && sid !== L.selected) setOutputUi({ selected: sid });
             if (!ref) return;
-            drag.current = { ref, before: L.projection, last: u, moved: false };
+            // A handle grabbed at the edge (it sits outside the preview) follows the pointer's movement, not its place.
+            const spot = handlesOf(L.projection, L.selected).find(h => sameRef(h.ref, ref));
+            const relative = !!spot && isOffView(spot.x, spot.y);
+            drag.current = { ref, before: L.projection, last: u, moved: false, relative };
             e.currentTarget.setPointerCapture(e.pointerId);
           }}
           onPointerMove={e => {
@@ -457,16 +465,13 @@ function Preview({ projection, aspect, outputPx, selected, pattern, canEdit, dra
             if (!d) return;
             const u = unit(e);
             const p = live.current.projection;
-            const next = d.ref.kind === 'surface' || d.ref.kind === 'maskBody' ? nudge(p, d.ref, u.x - d.last.x, u.y - d.last.y) : moveHandle(p, d.ref, u.x, u.y);
+            const next = d.ref.kind === 'surface' || d.ref.kind === 'maskBody' || d.relative ? nudge(p, d.ref, u.x - d.last.x, u.y - d.last.y) : moveHandle(p, d.ref, u.x, u.y);
             d.last = u; d.moved = true;
             live.current.projection = next;
             setProjection(next);
           }}
-          onPointerUp={() => {
-            const d = drag.current;
-            drag.current = null;
-            if (d?.moved) mappingHistory.push(d.before);
-          }}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
         />
       </div>
     </div>

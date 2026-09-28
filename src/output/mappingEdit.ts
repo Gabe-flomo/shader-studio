@@ -42,10 +42,43 @@ export function handlesOf(p: ProjectionRecord, selected: string | null): Handle[
   return out;
 }
 
+/** Where a handle is drawn: in place, or (off the view) pinned to the edge with an arrow pointing to where it really is. */
+export interface HandleSpot {
+  /** Where it is drawn, in pixels. */
+  x: number; y: number;
+  /** It sits outside the view and was pulled back to the edge. */
+  clamped: boolean;
+  /** Where it really is, from the drawn spot (unit vector), when clamped. */
+  dx: number; dy: number;
+}
+
+/** How far in from the edge (pixels) a pulled-back handle is drawn, so it stays whole and grabbable. */
+export const HANDLE_EDGE_INSET = 12;
+
+/**
+ * Where to draw a handle at unit position (ux, uy) in a W × H view: as it is
+ * when it's inside, else pinned to the nearest point of the view's edge (inset
+ * by `inset` pixels) with the direction it lies in.
+ */
+export function clampHandle(ux: number, uy: number, W: number, H: number, inset = HANDLE_EDGE_INSET): HandleSpot {
+  const px = ux * W, py = uy * H;
+  const m = Math.min(inset, W / 2, H / 2);
+  const cx = Math.min(Math.max(px, m), W - m), cy = Math.min(Math.max(py, m), H - m);
+  if (cx === px && cy === py) return { x: px, y: py, clamped: false, dx: 0, dy: 0 };
+  const len = Math.hypot(px - cx, py - cy) || 1;
+  return { x: cx, y: cy, clamped: true, dx: (px - cx) / len, dy: (py - cy) / len };
+}
+
+/** Is the handle at unit (x, y) outside the view? */
+export function isOffView(x: number, y: number): boolean {
+  return x < 0 || x > 1 || y < 0 || y > 1;
+}
+
 /**
  * What a press at output point (x, y) takes hold of, within `radius` pixels of
  * a handle (W × H the view's size). Corners win over mesh points; missing every
- * handle, the selected surface's body (or a mask's) moves as a whole.
+ * handle, the selected surface's body (or a mask's) moves as a whole. Handles
+ * outside the view are met where they are drawn, pinned to the edge.
  */
 export function hitTest(p: ProjectionRecord, selected: string | null, x: number, y: number, W: number, H: number, radius = 14): HandleRef | null {
   let best: HandleRef | null = null, bestD = radius * radius;
@@ -53,7 +86,8 @@ export function hitTest(p: ProjectionRecord, selected: string | null, x: number,
   // Later handles are drawn on top: check them first so a tie goes to what's seen.
   for (let i = hs.length - 1; i >= 0; i--) {
     const h = hs[i];
-    const dx = (h.x - x) * W, dy = (h.y - y) * H;
+    const at = clampHandle(h.x, h.y, W, H);
+    const dx = at.x - x * W, dy = at.y - y * H;
     const d = dx * dx + dy * dy;
     const bias = h.ref.kind === 'corner' ? 0.8 : 1;
     if (d * bias < bestD) { bestD = d * bias; best = h.ref; }
@@ -153,11 +187,13 @@ export function drawHandles(ctx: CanvasRenderingContext2D, p: ProjectionRecord, 
       for (let j = 0; j < s.mesh.rows; j++) { ctx.beginPath(); for (let i = 0; i < s.mesh.cols; i++) { const q = P[j * s.mesh.cols + i]; if (i) ctx.lineTo(q.x * W, q.y * H); else ctx.moveTo(q.x * W, q.y * H); } ctx.stroke(); }
       for (let i = 0; i < s.mesh.cols; i++) { ctx.beginPath(); for (let j = 0; j < s.mesh.rows; j++) { const q = P[j * s.mesh.cols + i]; if (j) ctx.lineTo(q.x * W, q.y * H); else ctx.moveTo(q.x * W, q.y * H); } ctx.stroke(); }
     }
-    // The name at the top-left corner.
+    // The name at the top-left corner (kept in view when that corner isn't).
     ctx.setLineDash([]);
     ctx.font = `${12 * dpr}px system-ui, sans-serif`;
     ctx.fillStyle = sel ? BLUE : 'rgba(255,255,255,0.7)';
-    ctx.fillText(s.name, s.corners[0].x * W + 8 * dpr, s.corners[0].y * H + 18 * dpr);
+    const c0 = clampHandle(s.corners[0].x, s.corners[0].y, W, H, HANDLE_EDGE_INSET * dpr);
+    const tw = ctx.measureText(s.name).width;
+    ctx.fillText(s.name, Math.min(c0.x + 8 * dpr, Math.max(4 * dpr, W - tw - 4 * dpr)), Math.min(c0.y + 18 * dpr, H - 6 * dpr));
   }
   for (const m of p.masks) {
     if (!m.enabled) continue;
@@ -169,18 +205,37 @@ export function drawHandles(ctx: CanvasRenderingContext2D, p: ProjectionRecord, 
   ctx.setLineDash([]);
   for (const h of handlesOf(p, selected)) {
     const on = sameRef(h.ref, active);
+    const colour = on ? '#ffffff' : h.ref.kind === 'mask' ? AMBER : h.ref.kind === 'mesh' ? 'rgba(91,140,255,0.9)' : BLUE;
     const r = (h.ref.kind === 'corner' ? 7 : 5) * dpr;
-    ctx.beginPath(); ctx.arc(h.x * W, h.y * H, r, 0, Math.PI * 2);
-    ctx.fillStyle = on ? '#ffffff' : h.ref.kind === 'mask' ? AMBER : h.ref.kind === 'mesh' ? 'rgba(91,140,255,0.9)' : BLUE;
+    // A handle outside the view is drawn at the edge, with an arrow pointing to where it is, so it can still be seen and grabbed.
+    const at = clampHandle(h.x, h.y, W, H, HANDLE_EDGE_INSET * dpr);
+    const hx = at.x, hy = at.y;
+    if (at.clamped) drawArrow(ctx, hx, hy, at.dx, at.dy, r + 4 * dpr, colour, dpr);
+    ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI * 2);
+    ctx.fillStyle = colour;
     ctx.fill();
     ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 * dpr; ctx.stroke();
-    if (h.ref.kind === 'corner' && ('surfaceId' in h.ref) && h.ref.surfaceId === selected) {
+    if (h.ref.kind === 'corner' && ('surfaceId' in h.ref) && h.ref.surfaceId === selected && !at.clamped) {
       // Corner crosshairs: exact alignment on the projector.
       ctx.strokeStyle = on ? '#ffffff' : BLUE; ctx.lineWidth = 1 * dpr;
-      ctx.beginPath(); ctx.moveTo(h.x * W - 18 * dpr, h.y * H); ctx.lineTo(h.x * W + 18 * dpr, h.y * H); ctx.moveTo(h.x * W, h.y * H - 18 * dpr); ctx.lineTo(h.x * W, h.y * H + 18 * dpr); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx - 18 * dpr, hy); ctx.lineTo(hx + 18 * dpr, hy); ctx.moveTo(hx, hy - 18 * dpr); ctx.lineTo(hx, hy + 18 * dpr); ctx.stroke();
     }
   }
   ctx.restore();
+}
+
+/** A small filled arrowhead just past (x, y) in direction (dx, dy). */
+function drawArrow(ctx: CanvasRenderingContext2D, x: number, y: number, dx: number, dy: number, from: number, colour: string, dpr: number): void {
+  const len = 8 * dpr, half = 5 * dpr;
+  const tx = x + dx * (from + len), ty = y + dy * (from + len);
+  const bx = x + dx * from, by = y + dy * from;
+  ctx.beginPath();
+  ctx.moveTo(tx, ty);
+  ctx.lineTo(bx - dy * half, by + dx * half);
+  ctx.lineTo(bx + dy * half, by - dx * half);
+  ctx.closePath();
+  ctx.fillStyle = colour; ctx.fill();
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1 * dpr; ctx.stroke();
 }
 
 // ── Undo ────────────────────────────────────────────────────────────────────

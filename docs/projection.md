@@ -30,7 +30,9 @@ The mapping saves with the Play (in its record, `play.projection`), so it goes w
 - **Editing.** Drag corners, mesh points and mask points in the preview or on the output. Drag inside the selected surface (or a mask) to move all of it. Arrow keys nudge, ⌘Z and ⇧⌘Z undo and redo, and **H** shows or hides the handles on the output. On the output, **P** steps through the test patterns and **Esc** leaves edit mode.
 - A mapping that changes nothing shows the picture whole (letterboxed) rather than stretched to the output's shape. The first edit starts from that fitted position, so nothing jumps.
 
-The preview shows the whole picture on every surface, from a snapshot of the app's picture about 15 times a second. The output shows each surface's own source at full frame rate.
+The preview shows the whole picture on every surface, live: it redraws every animation frame while it can be seen (and rests while the tab is hidden), from a copy of the app's finished picture that the render loop refreshes each time it draws a frame, so it moves without a handle being touched. The output shows each surface's own source at full frame rate.
+
+A corner, mesh point or mask point that lies outside the preview (or off the projector) is still shown: its handle is pinned to the nearest edge with an arrow pointing to where it really is, and dragging that pinned handle moves the point by the same amount the pointer moves.
 
 ## Present and the Stage
 
@@ -46,6 +48,7 @@ The output runs its **own renderer**: the website player (`src/play/runtime/play
 - **Frames**, about 60 a second: the clock, the pointer, and only the uniforms and layer numbers that changed (every uniform of the app's material, so controls, mappings, MIDI and audio nodes all come through). A full frame goes out on request and every 120 frames. If a frame goes missing, the output waits for the next full one.
 - **Actions** (bursts, drops, next line…) ride in the frames and are fired by the output's layer kit.
 - **The clock** runs on between frames. Small differences ease in; a seek snaps.
+- **The output's own frames.** The output draws on its own window's animation frames, whether or not the app has focus. When the browser holds those frames back (a window counted as background, a hidden tab), a timer keeps it drawing at about 30 a second (`src/output/frameLoop.ts`).
 - The output draws the player's canvases through the **warp pass** (`src/output/warpRenderer.ts`, WebGL2) as its last step: surfaces, then masks through the stencil buffer.
 
 Transport: Tauri events between the two windows in the desktop app (`pf-output-down` and `pf-output-up`), or a `BroadcastChannel` in the browser. The protocol is in `src/output/protocol.ts`.
