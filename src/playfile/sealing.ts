@@ -21,9 +21,7 @@ import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type { SealedBlob, UserNodeDefinition } from '../types/userNode';
 import { fromBase64, fromUtf8, toBase64, utf8 } from './bytes';
-
-/** Not a secret from anyone who reads the app's code: see the module comment. */
-const APP_SEAL_SECRET = 'playfield/sealed-node-pack/v1/4f1c9a2e-7b7d-4a53-9d0e-2c8f6b1e5a90';
+import { SEALED_NODE_SECRET } from './secret';
 const INFO = utf8('playfield sealed node v1');
 
 interface SealedPayload {
@@ -34,7 +32,7 @@ interface SealedPayload {
 }
 
 function keyFor(salt: Uint8Array): Uint8Array {
-  return hkdf(sha256, utf8(APP_SEAL_SECRET), salt, INFO, 32);
+  return hkdf(sha256, utf8(SEALED_NODE_SECRET), salt, INFO, 32);
 }
 
 const random = (n: number) => crypto.getRandomValues(new Uint8Array(n));

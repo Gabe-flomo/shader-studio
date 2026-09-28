@@ -223,6 +223,15 @@ makes it impossible for software that runs on the buyer's machine.
    if its files were modified): modest, and easy to overdo.
 5. **Periodic online checks** (decided: every 7 days, with a 30-day offline
    grace): stronger against shared licences while keeping "works offline".
+6. **The `.playfile` envelope** (shipped: container v2,
+   [playfile-format.md](playfile-format.md), "Container v2"): a `.playfile` is
+   no longer a ZIP any archive tool opens; it's encrypted (AES-256-GCM, a key
+   per file from an app-embedded secret and the file's salt) and a changed file
+   is refused. This is obscurity, like sealing: it stops casual opening,
+   extraction and importing elsewhere, not someone who reads the app's code for
+   the secret. The step up, when it's wanted, is a licence-bound key released
+   by the Rust side (layers 2 and 3 above) for files meant for one buyer, with
+   the shared secret kept for files meant for anyone.
 
 Suggested: 1 + 2 + 3 for the desktop app. The browser version signs in and
 checks online each session, and gets its Pro code from the server only after

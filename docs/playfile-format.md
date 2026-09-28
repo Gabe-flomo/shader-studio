@@ -2,19 +2,23 @@
 
 Playfield's one file format (milestones 3 and 4 of
 [accounts-and-plans.md](accounts-and-plans.md)). A `.playfile` is a ZIP with a
-`manifest.json` and one file per item. It carries a graph, a Play setup, a
-presentation, a node pack, GLSL shaders, background images, presets or a whole
-profile, or several of these at once. Every older format still opens, and the
-readable formats are still offered next to it wherever the app downloads
-something.
+`manifest.json` and one file per item, wrapped since **container v2** in an
+encrypted envelope so that only Playfield opens it (see
+[Container v2](#container-v2-the-envelope)). It carries a graph, a Play setup,
+a presentation, a node pack, GLSL shaders, background images, presets or a
+whole profile, or several of these at once. Every older format still opens
+(v1 plain-ZIP files forever), and the readable formats are still offered next
+to it wherever the app downloads something.
 
 The code is in `src/playfile/`:
 
 | File | What it does |
 |---|---|
 | `format.ts` | Types, versions, kinds, limits, safe paths |
-| `writer.ts` | The one writer: items in, ZIP + manifest out, signed if asked |
-| `reader.ts` | The one reader: every check before anything is imported |
+| `container.ts` | The v2 envelope: header, HKDF key, AES-256-GCM, wrap and unwrap |
+| `secret.ts` | The app-embedded secrets (container, sealing), with what they are and aren't worth |
+| `writer.ts` | The one writer: items in, ZIP + manifest, wrapped in the envelope, signed if asked |
+| `reader.ts` | The one reader: v2 unwrapped (or a v1 ZIP taken as is), then every check before anything is imported |
 | `signing.ts` | Ed25519 keys, signatures, fingerprints, trusted authors |
 | `sealing.ts` | Sealed node packs: AES-256-GCM at rest |
 | `bundle.ts` | What an export puts in (items and their dependencies) |
@@ -33,9 +37,11 @@ are read too.
 
 ## Layout
 
+The ZIP inside the envelope (what a v1 file is, bare):
+
 ```
 manifest.json                      what is inside (below)
-README.txt                         a note for someone who unzips it
+README.txt                         a note for anyone who gets the ZIP out
 graphs/<Name>.graph.json           a graph file, exactly what "Export as readable JSON" writes
 plays/<Name>.play.json             a Play file (a graph with kind "shader-studio-play")
 presentations/<Title>.present.json a presentation, pictures and fonts embedded
@@ -70,8 +76,10 @@ for a path, but the item's real name is the manifest's `name`.
 }
 ```
 
-- `version` is the container format (1). A reader refuses a newer one and says
-  "made by a newer Playfield"; it reads every older one.
+- `version` is the manifest's layout version (1). A reader refuses a newer one
+  and says "made by a newer Playfield"; it reads every older one. The envelope
+  around the ZIP has its own version byte (2); a v2 file's manifest still says
+  `version: 1`, because the envelope changed, not the layout.
 - `kinds` is a summary; `items` is what counts.
 - `author` is optional. `name` is whatever the author typed; `publicKey` is
   there when the file is signed.
@@ -102,7 +110,13 @@ for the compiler.
 
 `readPlayfile` checks everything before an item is shown:
 
-- the file's size (256 MB), the number of entries (2000), each item's
+- the file's size (256 MB) first of all, then, for a v2 file, the header: its
+  version, the ciphertext length against the file's, the ZIP's declared size
+  against the same 256 MB, all before anything is decrypted or inflated; the
+  GCM tag refuses a changed or damaged file ("This file was modified or
+  damaged"); a file that is neither a v2 container nor a ZIP is "Not a
+  Playfield file";
+- the number of entries (2000), each item's
   unpacked size (128 MB), the manifest's (1 MB) and the total unpacked
   (512 MB), both as the ZIP declares them and as they actually come out;
 - every path: relative, `/`-separated, no `..`, `.`, empty parts, drive
@@ -258,10 +272,13 @@ Install.
 - **Drop** a `.playfile` anywhere on the window (browser and desktop).
 - **Desktop:** `.playfile` is registered with the app (`bundle.fileAssociations`
   in `src-tauri/tauri.conf.json`, UTI `com.shaderstudio.playfile` conforming to
-  `public.zip-archive`), so double-clicking one or dropping it on the Dock icon
-  opens it. `RunEvent::Opened` (macOS) keeps the paths for the web side to take
-  at launch and announces them while running; `open_file_read` reads only
-  container files, up to 256 MB. On Windows and Linux the association is
+  `public.data` only, MIME `application/x-playfile`: not an archive type, so
+  Finder and Archive Utility don't offer to expand it), so double-clicking one
+  or dropping it on the Dock icon opens it. `RunEvent::Opened` (macOS) keeps
+  the paths for the web side to take at launch and announces them while
+  running; `open_file_read` reads only container files, up to 256 MB, and
+  hands the bytes to the web side unchanged: nothing native parses the
+  container, so the envelope lives in one place (`container.ts`). On Windows and Linux the association is
   registered by the bundle, but a file passed on the command line isn't read
   yet.
 
@@ -270,9 +287,75 @@ Install.
 
 ## The workspace folder
 
-Unchanged: it keeps graphs, presentations and shaders as readable files. A
-published node is written in its stored form, so a sealed node's file holds
-its encrypted blob, not its code.
+Unchanged, by design: it keeps graphs, presentations and shaders as readable
+files, since it's the place for working with them in other tools, syncing and
+version control. The envelope is for files that leave the app as one thing to
+share; it isn't applied to the folder. A published node is written in its
+stored form, so a sealed node's file holds its encrypted blob, not its code.
+
+## Container v2: the envelope
+
+Since container v2 a `.playfile` is no longer a ZIP that any archive tool
+opens. Renaming one to `.zip` shows nothing; `unzip`, 7-Zip, Finder and
+Archive Utility refuse it, and another app can't import its contents. The
+bytes are:
+
+```
+offset  size  field
+     0     4  magic "PLYF"
+     4     1  container version (2)
+     5     1  flags: bit 0 = the payload is deflated before encryption
+     6     2  reserved (0)
+     8     4  ciphertext length, little-endian (includes the 16-byte GCM tag)
+    12     4  payload length once decrypted and inflated (the v1 ZIP's size)
+    16    16  salt, random per file
+    32    12  nonce, random per file
+    44     …  ciphertext: the v1 ZIP, deflated, then AES-256-GCM
+```
+
+- The key is **HKDF-SHA-256** of a secret that ships in the app
+  (`src/playfile/secret.ts`) and the file's own salt, so every file has its
+  own key: no single static key opens every file in the ecosystem, and one
+  file's key doesn't open another.
+- The whole header is the GCM's additional data. A changed byte anywhere (the
+  ciphertext, the tag, the salt, the nonce, the flags, a length field) fails
+  the tag, and the file is refused: **"This file was modified or damaged, so it
+  wasn't opened."** The hashes and the signature inside still work as before;
+  the tag just refuses a damaged file before they're looked at.
+- Lengths come first. The file's size is checked against the 256 MB limit,
+  then the header's ciphertext length against the file's and its ZIP size
+  against the same limit, before anything is decrypted; the inflate writes
+  into a buffer of exactly the declared size. Then the ZIP is read with every
+  check a v1 file gets.
+- AES runs through WebCrypto where the page has it (every https page,
+  localhost, the desktop app) and through `@noble/ciphers` otherwise (a
+  plain-http LAN address); both give the same bytes, and tests run both.
+- The manifest, its signature and sealed node packs are unchanged inside the
+  payload: a signed file's signature and a sealed pack's blobs are exactly what
+  a v1 file would hold. Every export writes v2; the reader opens v1 too, and
+  always will.
+- "Export as readable JSON" (graphs, Play setups), `.present.json`, and the
+  readable ZIPs the tables above list stay the explicit readable routes.
+
+### What it stops, and what it doesn't (be honest about it)
+
+It stops the casual paths: opening a `.playfile` as an archive, extracting a
+graph or a node pack out of one, importing its contents into another app or a
+script, and passing off a changed file as the original (the tag refuses it).
+
+It does **not** stop someone who wants in. The secret is a string in the app's
+JavaScript (and in the desktop binary): anyone who reads the app's code has
+it, and with it and the file's salt can derive the key and get the ZIP out.
+So this is obscurity, the same limit sealing has. Nothing in the app or the
+docs should call it protection against a determined person.
+
+A later step, if it's wanted: derive the key from something the app doesn't
+carry for everyone. Pro or licence-bound keys (a per-licence key the Rust
+side releases only for a valid licence, as accounts-and-plans.md §9 suggests
+for the Pro code itself), so a file can be made openable only by a given
+licence or account, with the app-embedded secret kept as the fallback for
+files meant for anyone. That's a new container version with a key-id field,
+not a change to this one.
 
 ## Node packs
 
@@ -285,7 +368,9 @@ and its examples are opened from the pack's entry in the node list. See
 
 ## Tests
 
-`src/playfile/__tests__/container.test.ts` (the container, validation,
-signing with both backends, sealing) and `importExport.test.ts` (bundling,
+`src/playfile/__tests__/container.test.ts` (the container, the v2 envelope:
+a round trip per kind, not a valid ZIP, tampered bytes refused, v1 still
+opens, wrong magic refused, limits checked from the header before decrypting,
+both AES backends; validation; signing with both backends; sealing) and `importExport.test.ts` (bundling,
 the import preview and keep both / replace, each kind's round trip, sealed
 packs compiling, links, the Free/Pro matrix, older formats).

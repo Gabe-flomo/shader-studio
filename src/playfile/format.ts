@@ -3,20 +3,30 @@
  * limits. The full spec is docs/playfile-format.md; the writer is writer.ts and
  * the reader reader.ts.
  *
- * A .playfile is a ZIP holding `manifest.json` and one file per item.
- * The manifest lists every item with its kind, path, size and SHA-256, and can
- * carry the author's Ed25519 signature over all of that.
+ * A .playfile is a ZIP holding `manifest.json` and one file per item, wrapped
+ * (since container v2) in an encrypted envelope so that only Playfield opens
+ * it (container.ts). The manifest lists every item with its kind, path, size
+ * and SHA-256, and can carry the author's Ed25519 signature over all of that.
  */
 
 export const PLAYFILE_FORMAT = 'playfile';
 /** Names the format had while it was being built (.playfield, .play): still read. */
 export const LEGACY_FORMATS: readonly string[] = ['playfield', 'play'];
-/** The container format this app writes. A reader refuses a newer one (it says so) and reads every older one. */
+/** The manifest's format version (the ZIP's layout). A reader refuses a newer one (it says so) and reads every older one. */
 export const PLAYFILE_VERSION = 1;
+/**
+ * The container's version: 1 is a plain ZIP (read forever, never written any
+ * more), 2 the encrypted envelope this app writes (container.ts). The manifest
+ * inside a v2 file is still `version: 1`: the envelope changed, not the layout.
+ */
+export const CONTAINER_VERSION = 2;
 export const PLAYFILE_EXT = '.playfile';
 /** Every extension Import offers for the container. */
 export const CONTAINER_ACCEPT = '.playfile,.playfield,.play';
-export const PLAYFILE_MIME = 'application/x-playfile+zip';
+/** Is this file name one of the container's extensions? (What it holds is told by its bytes: reader.ts isPlayfile.) */
+export const isContainerName = (name: string): boolean => /\.(playfile|playfield|play)$/i.test(name);
+/** Not `+zip` any more: a v2 file isn't one (v1 files were `application/x-playfile+zip`). */
+export const PLAYFILE_MIME = 'application/x-playfile';
 export const MANIFEST_PATH = 'manifest.json';
 
 /**
@@ -113,6 +123,11 @@ export const DEFAULT_LIMITS: PlayfileLimits = {
   pathLength: 240,
   nameLength: 200,
 };
+
+/** "1.5 MB" / "300 KB", for limit messages. */
+export function formatBytes(n: number): string {
+  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(n >= 10 * 1024 * 1024 ? 0 : 1)} MB` : `${Math.ceil(n / 1024)} KB`;
+}
 
 /** A file this reader won't open, with a sentence saying why. */
 export class PlayfileError extends Error {
