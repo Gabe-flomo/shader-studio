@@ -117,14 +117,15 @@ describe('count-in and metronome timing', () => {
   });
 
   it('metronome beats sit on the tempo grid from the tape’s 0', () => {
-    expect(beatsIn(0, 2, 120)).toEqual([0, 0.5, 1, 1.5]);
+    expect(beatsIn(-0.01, 1.5, 120)).toEqual([0, 0.5, 1, 1.5]);
     expect(beatsIn(0.1, 1.1, 90)).toEqual([0.666667]);
+    expect(beatsIn(0.5, 0.9, 120)).toEqual([]);
   });
 });
 
 describe('loop wrap and scheduling', () => {
   it('a tick across the end wraps to the start', () => {
-    expect(tapeSpans(3.9, 4.1, 4, true)).toEqual({ spans: [[3.9, 4], [0, expect.closeTo(0.1, 6)]], wrapped: true });
+    expect(tapeSpans(3.9, 4.1, 4, true)).toEqual({ spans: [[3.9, 4], [-1e-9, expect.closeTo(0.1, 6)]], wrapped: true });
     expect(tapePosition(9, 4, true)).toBe(1);
   });
 
@@ -134,13 +135,14 @@ describe('loop wrap and scheduling', () => {
   });
 
   it('a pre-roll counts down to 0 before playing', () => {
-    expect(tapeSpans(-0.1, 0.1, 4, true).spans).toEqual([[-0.1, 0], [0, 0.1]]);
+    expect(tapeSpans(-0.1, 0.1, 4, true).spans).toEqual([[-0.1, 0], [-1e-9, 0.1]]);
   });
 
   it('note ons and offs in a span; offs cut at the tape’s end', () => {
     const t = { notes: [note(0.5, 60, 0.3), note(3.9, 62, 0.5)] };
     expect(noteEvents(t, 0, 1)).toEqual([{ t: 0.5, n: 60, v: 0.8, on: true }, { t: 0.8, n: 60, v: 0, on: false }]);
-    expect(noteEvents(t, 3.8, 4.01, 4).map(e => [e.t, e.on])).toEqual([[3.9, true], [4, false]]);
+    expect(noteEvents(t, 3.8, 4, 4).map(e => [e.t, e.on])).toEqual([[3.9, true], [4, false]]);
+    expect(noteEvents(t, 0.5, 0.8)).toEqual([{ t: 0.8, n: 60, v: 0, on: false }]);
   });
 
   it('mute and solo', () => {

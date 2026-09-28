@@ -33,7 +33,7 @@ export type CountIn = (typeof COUNT_INS)[number];
 /** Longest fade-in attack (ms). */
 export const FADE_MAX_MS = 2000;
 /** A control moved and let go is still "touched" this long after its last move (s). */
-export const TOUCH_HOLD = 0.25;
+export const TOUCH_HOLD = 0.5;
 /** Notes shorter than this are stretched to it (a tap still sounds). */
 export const NOTE_MIN = 0.01;
 
@@ -99,19 +99,20 @@ export function punchIn(point: number, bars: number, bpm: number): { start: numb
   return { start: round6(point - n * b), beats };
 }
 
-/** Metronome beats (tape seconds) in [a, b): on the tempo's grid from the tape's 0. */
+/** Metronome beats (tape seconds) in (a, b]: on the tempo's grid from the tape's 0. */
 export function beatsIn(a: number, b: number, bpm: number): number[] {
   const s = beatSeconds(bpm), out: number[] = [];
-  for (let k = Math.ceil(a / s - 1e-9); k * s < b - 1e-9; k++) out.push(round6(k * s));
+  for (let k = Math.floor(a / s + 1e-9) + 1; k * s <= b + 1e-9; k++) out.push(round6(k * s));
   return out;
 }
 
 /**
  * The tape spans a transport tick covers, from tape time `prev` to `now`
  * (both unwrapped: seconds since the transport started, offset by its start
- * position). Looping wraps at `length`; without a loop, or with no length,
- * the span runs on. Returns each piece as [a, b) in tape seconds, and
- * whether the tape wrapped (the runtime lets held notes go there).
+ * position), each as (a, b]: what's due after the last tick, up to this one.
+ * Looping wraps at `length` (a lap after the wrap starts just before 0, so a
+ * note at 0 plays); without a loop, or with no length, the span runs on.
+ * `wrapped`: the tape went round (the runtime lets held notes go there).
  */
 export function tapeSpans(prev: number, now: number, length: number, loop: boolean): { spans: Array<[number, number]>; wrapped: boolean } {
   if (!(now > prev)) return { spans: [], wrapped: false };
@@ -120,12 +121,12 @@ export function tapeSpans(prev: number, now: number, length: number, loop: boole
   let wrapped = false;
   let a = prev;
   // Positions before 0 (a pre-roll) play nothing but still count down to 0.
-  if (a < 0) { spans.push([a, Math.min(0, now)]); a = 0; if (now <= 0) return { spans, wrapped }; }
-  let lapA = Math.floor(a / length), lapB = Math.floor((now - 1e-9) / length);
+  if (a < 0) { spans.push([a, Math.min(0, now)]); if (now <= 0) return { spans, wrapped }; a = -1e-9; }
+  let lapA = Math.floor(Math.max(0, a) / length), lapB = Math.floor((now - 1e-9) / length);
   if (lapB - lapA > 4) lapA = lapB - 4; // a long stall: only the last few laps
   for (let lap = lapA; lap <= lapB; lap++) {
-    const s = Math.max(a, lap * length), e = Math.min(now, (lap + 1) * length);
-    if (e > s) spans.push([s - lap * length, e - lap * length]);
+    const s = lap === lapA ? a - lap * length : -1e-9, e = Math.min(now, (lap + 1) * length) - lap * length;
+    if (e > s) spans.push([s, e]);
     if (lap > lapA) wrapped = true;
   }
   return { spans, wrapped };
@@ -139,13 +140,13 @@ export function tapePosition(t: number, length: number, loop: boolean): number {
 
 export interface NoteEvent { t: number; n: number; v: number; on: boolean }
 
-/** A track's note ons and offs in [a, b) (offs at t + d, never past `end`). Sorted; an off before an on at the same time. */
+/** A track's note ons and offs in (a, b] (offs at t + d, never past `end`). Sorted; an off before an on at the same time. */
 export function noteEvents(track: Pick<ArrTrack, 'notes'>, a: number, b: number, end = Infinity): NoteEvent[] {
   const out: NoteEvent[] = [];
   for (const x of track.notes) {
-    if (x.t >= a && x.t < b) out.push({ t: x.t, n: x.n, v: x.v, on: true });
+    if (x.t > a && x.t <= b) out.push({ t: x.t, n: x.n, v: x.v, on: true });
     const off = Math.min(end, x.t + x.d);
-    if (off >= a && off < b) out.push({ t: off, n: x.n, v: 0, on: false });
+    if (off > a && off <= b) out.push({ t: off, n: x.n, v: 0, on: false });
   }
   return out.sort((p, q) => p.t - q.t || (p.on === q.on ? 0 : p.on ? 1 : -1));
 }
@@ -394,7 +395,7 @@ export function parseArrangement(raw: unknown): PlayArrangement | undefined {
 }
 
 /** A clock source's tempo in the record's mappings (the Clock (BPM) source), else 120. */
-export function recordBpm(mappings: ReadonlyArray<{ source: { kind: string } & Record<string, unknown> }>): number {
+export function recordBpm(mappings: ReadonlyArray<{ source: { kind: string; bpm?: unknown } }>): number {
   for (const m of mappings) if (m.source.kind === 'clock' && fin(m.source.bpm)) return clamp(m.source.bpm, 20, 300);
   return 120;
 }
