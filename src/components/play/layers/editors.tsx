@@ -280,8 +280,28 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
       <Section kind="particles" title="Birth and death">
         {f.seg('Emit', 'emit', [
           { value: 'stream', label: 'Stream', title: 'Always alive, reborn when they leave' }, { value: 'burst', label: 'Bursts', title: 'Born only by a Burst action' },
-        ], 'Stream keeps every particle alive. Bursts starts empty: a Burst action (a key, a kick drum…) throws out a handful, which live for their Life and then vanish.')}
+          { value: 'multiply', label: 'Multiply', title: 'One particle is born and keeps splitting until there are Count of them' },
+        ], 'Stream keeps every particle alive. Bursts starts empty: a Burst action (a key, a kick drum…) throws out a handful, which live for their Life and then vanish. Multiply starts with one particle that buds and splits until the Count is reached.')}
         {g('emit') === 'burst' && <Buttons><Button size="sm" icon="spark" onClick={() => ctx.act('burst', 80)}>Burst 80 now</Button></Buttons>}
+        {g('emit') === 'multiply' && (
+          <>
+            {f.props('splitRate', 'splitJitter', 'splitChildren', 'splitPush')}
+            {f.seg('Once born', 'multLife', [
+              { value: 'stay', label: 'Stay', title: 'Drift apart gently and stop' }, { value: 'flow', label: 'Flow', title: 'Follow the field and forces like other particles' },
+              { value: 'return', label: 'Return', title: 'Spring back to where they were born' }, { value: 'annihilate', label: 'Annihilate', title: 'Pair up, seek each other and vanish in a burst' },
+            ], 'What a particle does after it buds. Annihilate starts once the colony first fills: each pairs with a random neighbour within Pair radius, they close in and both vanish in a small burst.')}
+            {g('multLife') !== 'flow' && f.prop('multSpread')}
+            {g('multLife') === 'return' && f.prop('returnSpring')}
+            {g('multLife') === 'annihilate' && f.props('pairRadius', 'seekSpeed')}
+            {f.seg('When full', 'multAfter', [
+              { value: 'loop', label: 'Loop', title: 'Stop splitting; start over from one when they are gone' }, { value: 'respawn', label: 'Respawn', title: 'The dead come back at the spawn point and multiply again' },
+              { value: 'hold', label: 'Hold', title: 'Keep splitting to stay at the full count' },
+            ], 'After the Count is reached. Loop stops splitting and starts again from one particle when they are gone (or after Loop hold). Respawn brings the dead back where the colony began. Hold keeps the survivors splitting to stay full.')}
+            {g('multAfter') === 'loop' && f.prop('loopHold')}
+            {f.note('The first particle is born where Born says; with Seed set, every run grows the same way.')}
+            <Buttons><Button size="sm" variant="ghost" onClick={() => ctx.act('reset')}>Start over from one</Button></Buttons>
+          </>
+        )}
         {f.seg('Born', 'spawn', [
           { value: 'anywhere', label: 'Anywhere' }, { value: 'edges', label: 'Edges' }, { value: 'center', label: 'Centre' }, { value: 'null', label: 'At a null' },
         ], 'Where new and respawned particles appear. Emitter shapes and emitter nulls take over when there are any.')}
@@ -355,7 +375,9 @@ export function ParticlesEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
             {f.seg('Pick by', 'paletteBy', [{ value: 'heading', label: 'Heading' }, { value: 'speed', label: 'Speed' }, { value: 'age', label: 'Age' }, { value: 'brightness', label: 'Brightness' }], 'What chooses each particle\'s place on the gradient.')}
           </>
         )}
-        {f.props('links', 'opacity', 'trail')}
+        {f.toggle('Goo', 'goo', 'Metaballs: touching particles merge into blobs', 'Draws the particles as one smooth field: particles that touch merge into an organic blob and part with a stretching neck. Colour still comes from Tint, Picture or Palette.')}
+        {g<boolean>('goo') && f.props('gooBlend', 'gooThreshold', 'gooSoft')}
+        {f.props(...(g('goo') ? [] : ['links']), 'opacity', 'trail')}
         {f.select('Blend', 'blend', BLENDS, BLEND_HINT)}
         {f.toggle('Mask', 'reveal', 'Picture through particles', 'The particles become a mask: each one shows the picture under it instead of a colour. Hide the picture (Background → Layers only) to see the shader only where particles are.')}
       </Section>

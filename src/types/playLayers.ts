@@ -197,8 +197,33 @@ export interface ParticlesLayer extends LayerBase {
   /** A particle this close to the attractor (picture heights) respawns. */
   catchRadius: number;
   // Birth and death
-  /** stream: always alive, reborn when they leave. burst: born only by a Burst action, gone when their life ends. */
-  emit: 'stream' | 'burst';
+  /**
+   * stream: always alive, reborn when they leave. burst: born only by a Burst action, gone when their life ends.
+   * multiply: one particle is born and keeps splitting until there are `count` (see particle-sim.js, Multiply).
+   */
+  emit: 'stream' | 'burst' | 'multiply';
+  /** Multiply: splits per second per particle (the population doubles about every 1 / splitRate s). */
+  splitRate: number;
+  /** Multiply, 0..1: how uneven the time between splits is (up to ±80%). */
+  splitJitter: number;
+  /** Multiply, 1..4: buds per split. */
+  splitChildren: number;
+  /** Multiply: how hard a bud and its parent push apart (picture heights / s). */
+  splitPush: number;
+  /** Multiply (stay, return, annihilate): neighbours closer than this (picture heights) drift apart. 0 = off. */
+  multSpread: number;
+  /** Multiply: once born, drift apart and stop · follow the field and forces · spring back to the birth point · pair up and annihilate. */
+  multLife: 'stay' | 'flow' | 'return' | 'annihilate';
+  /** Multiply, once the count is reached: start over from one when they're gone · the dead come back at the origin · stay full. */
+  multAfter: 'loop' | 'respawn' | 'hold';
+  /** Multiply · return: spring strength back to the birth point. */
+  returnSpring: number;
+  /** Multiply · annihilate: how far a particle looks for a partner (picture heights). */
+  pairRadius: number;
+  /** Multiply · annihilate: how fast partners close in (picture heights / s). */
+  seekSpeed: number;
+  /** Multiply · loop: seconds at the full count before starting over (0 = only when they're gone). */
+  loopHold: number;
   spawn: 'anywhere' | 'edges' | 'center' | 'null';
   spawnRadius: number;
   /** Leaving the picture: come in the other side, bounce, be reborn (spawn setting), or reappear anywhere at random. */
@@ -239,6 +264,14 @@ export interface ParticlesLayer extends LayerBase {
   reveal: boolean;
   /** 0 = no trail, 1 = long trails. */
   trail: number;
+  /** Goo: draw the particles as metaballs, one smooth field that merges touching particles into blobs. */
+  goo: boolean;
+  /** Goo: how far each particle's field reaches, as a multiple of its size (the smooth-min radius). */
+  gooBlend: number;
+  /** Goo, 0..1: where the summed field becomes goo (lower = fatter blobs that merge sooner). */
+  gooThreshold: number;
+  /** Goo, 0..1: 0 = a hard edge; higher = a softer one. */
+  gooSoft: number;
   blend: BlendMode;
 }
 
@@ -1262,10 +1295,12 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     flock: 0, flockRadius: 0.06, flockAlign: 1, flockCohere: 0.6, flockSeparate: 1.2, flockSpace: 0.4, scatter: 1, showField: false,
     attractor: 'none', force: 'gravitate', strength: 1, catchRadius: 0.02,
     emit: 'stream', spawn: 'anywhere', spawnRadius: 0.2, edges: 'wrap', life: 0, fade: 0, seed: 0, nullId: '',
+    splitRate: 1, splitJitter: 0.3, splitChildren: 1, splitPush: 0.08, multSpread: 0.035, multLife: 'stay', multAfter: 'hold',
+    returnSpring: 1, pairRadius: 0.3, seekSpeed: 0.15, loopHold: 6,
     shape: 'dot', rotate: 'heading', sprite: '', crop: false, tintSprite: false, size: 2, sizeJitter: 0.3, opacity: 0.8,
     colour: 'tint', color: [1, 1, 1], palette: 1, paletteBy: 'heading',
     sizeBy: 'none', sizeAmount: 1, opacityBy: 'none', opacityAmount: 0.5, falloff: 0.3, links: 0,
-    reveal: false, trail: 0.6, blend: 'normal',
+    reveal: false, trail: 0.6, goo: false, gooBlend: 2.5, gooThreshold: 0.5, gooSoft: 0.2, blend: 'normal',
   },
   shape: {
     toShader: true, shape: 'box', x: 0.5, y: 0.5, w: 0.3, h: 0.2, rotation: 0, round: 0, points: [], sourceId: '', threshold: 0.5, invert: false,
@@ -1364,11 +1399,14 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
     flat: E('wander', 'settle'), readFrom: E('picture', 'camera'), detail: E('coarse', 'fine'), collide: unit,
     flock: unit, flockRadius: N(0.005, 0.5), flockAlign: N(0, 2), flockCohere: N(0, 2), flockSeparate: N(0, 2), flockSpace: N(0.05, 1), scatter: N(0, 10), showField: B,
     attractor: E('none', 'mouse', 'press', 'null'), force: E('gravitate', 'spiral', 'repel'), strength: N(0), catchRadius: N(0),
-    emit: E('stream', 'burst'), spawn: E('anywhere', 'edges', 'center', 'null'), spawnRadius: N(0), edges: E('wrap', 'bounce', 'respawn', 'random'), life: N(0), fade: unit, seed: N(0, 1e9, true), nullId: S,
+    emit: E('stream', 'burst', 'multiply'), spawn: E('anywhere', 'edges', 'center', 'null'), spawnRadius: N(0), edges: E('wrap', 'bounce', 'respawn', 'random'), life: N(0), fade: unit, seed: N(0, 1e9, true), nullId: S,
     shape: E('dot', 'square', 'triangle', 'streak', 'ring', 'star', 'image'), rotate: E('heading', 'spin', 'none'), sprite: S, crop: B, tintSprite: B,
     size: N(0.1), sizeJitter: unit, opacity: unit, colour: E('tint', 'picture', 'palette'), color: C, palette: N(0, 9, true),
     paletteBy: E('heading', 'speed', 'age', 'brightness'), sizeBy: { t: 'enum', values: MODS }, sizeAmount: N(), opacityBy: { t: 'enum', values: MODS }, opacityAmount: N(),
     falloff: N(0.01), links: N(0, 0.5), reveal: B, trail: unit, blend: blendF,
+    splitRate: N(0.01, 20), splitJitter: unit, splitChildren: N(1, 4, true), splitPush: N(0, 2), multSpread: N(0, 0.5),
+    multLife: E('stay', 'flow', 'return', 'annihilate'), multAfter: E('loop', 'respawn', 'hold'), returnSpring: N(0, 10), pairRadius: N(0.02, 2), seekSpeed: N(0.005, 2), loopHold: N(0, 120),
+    goo: B, gooBlend: N(1, 8), gooThreshold: N(0.01, 0.99), gooSoft: unit,
   },
   shape: {
     toShader: B, shape: E('box', 'circle', 'line', 'polygon', 'layer', 'picture', 'path'), x: N(), y: N(), w: N(0.001), h: N(0.001), rotation: N(), round: N(0, 0.5),
@@ -1708,6 +1746,15 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'scatter', label: 'Scatter', min: 0, max: 5, hint: 'How hard a Scatter (the button, or an action) kicks them. Multiplies the action\'s amount.' },
     { key: 'catchRadius', label: 'Catch', min: 0, max: 0.3, hint: 'Particles this close to the attractor are caught and respawn (fraction of picture height). 0 = never caught.' },
     { key: 'spawnRadius', label: 'Spawn radius', min: 0, max: 0.8, hint: 'Spawn at centre or at a null: how wide the birth circle is (fraction of picture height).' },
+    { key: 'splitRate', label: 'Split rate', min: 0.1, max: 5, hint: 'Multiply: splits per second for each particle. The population doubles about every 1 ÷ this seconds (1 = 200 particles in about 8 s).' },
+    { key: 'splitJitter', label: 'Split jitter', min: 0, max: 1, hint: 'Multiply: how uneven the time between splits is, so the colony doesn\'t divide in lockstep. 0 = like clockwork.' },
+    { key: 'splitChildren', label: 'Buds', min: 1, max: 4, step: 1, hint: 'Multiply: how many new particles each split adds (1 = split in two).' },
+    { key: 'splitPush', label: 'Bud push', min: 0, max: 0.4, hint: 'Multiply: how hard a new bud and its parent push apart (fraction of picture height per second).' },
+    { key: 'multSpread', label: 'Spread', min: 0, max: 0.15, hint: 'Multiply (Stay, Return, Annihilate): neighbours closer than this drift apart, so the colony grows outward like cells (fraction of picture height). 0 = they pile up.' },
+    { key: 'returnSpring', label: 'Return spring', min: 0, max: 5, hint: 'Multiply · Return: how hard each particle is pulled back to where it was born.' },
+    { key: 'pairRadius', label: 'Pair radius', min: 0.02, max: 1, hint: 'Multiply · Annihilate: how far a particle looks for a partner (fraction of picture height).' },
+    { key: 'seekSpeed', label: 'Seek speed', min: 0.01, max: 1, hint: 'Multiply · Annihilate: how fast partners close in on each other (fraction of picture height per second).' },
+    { key: 'loopHold', label: 'Loop hold (s)', min: 0, max: 30, hint: 'Multiply · Loop: seconds at the full count before starting over from one particle. 0 = only when they are all gone.' },
     { key: 'life', label: 'Life (s)', min: 0, max: 20, hint: 'Seconds before a particle respawns (each lives 60–140% of this). 0 = they live forever and only respawn at edges or when caught.' },
     { key: 'fade', label: 'Fade', min: 0, max: 1, hint: 'Fade in when born and out before dying, as a fraction of the life. With no life set, particles only fade in.' },
     { key: 'size', label: 'Size', min: 0.5, max: 40, step: 0.5, hint: 'Particle radius in pixels.' },
@@ -1718,6 +1765,9 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'links', label: 'Links', min: 0, max: 0.3, hint: 'Plexus: join particles closer than this with lines (fraction of picture height). 0 = off. Works best under ~1500 particles.' },
     OPACITY,
     { key: 'trail', label: 'Trail', min: 0, max: 1, hint: 'How long the streaks behind particles last. 0 = no trail; 1 = long, slow-fading trails.' },
+    { key: 'gooBlend', label: 'Goo blend', min: 1, max: 6, hint: 'Goo: how far each particle\'s field reaches, as a multiple of its size. Higher = particles merge from further apart, with longer necks.' },
+    { key: 'gooThreshold', label: 'Goo threshold', min: 0.05, max: 0.95, hint: 'Goo: where the summed field becomes goo. Lower = fatter blobs that merge sooner; higher = thinner ones that part sooner.' },
+    { key: 'gooSoft', label: 'Goo edge', min: 0, max: 1, hint: 'Goo: 0 = a hard edge; higher = a soft, glowing one.' },
   ],
   shape: [
     X('Centre of the shape'), Y('Centre of the shape'),

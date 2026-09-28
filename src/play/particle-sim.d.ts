@@ -5,7 +5,13 @@ export interface ParticleState {
   x: Float32Array; y: Float32Array; vx: Float32Array; vy: Float32Array;
   age: Float32Array; life: Float32Array; r: Float32Array;
   alive: Uint8Array; cool: Float32Array; zt: Int16Array; zs: Float32Array;
+  /** Multiply: seconds to the next split, the partner an annihilating particle seeks (-1 = none), where it was born. */
+  split: Float32Array; mate: Int32Array; bx: Float32Array; by: Float32Array;
   seed: number;
+  /** Multiply's colony state (null until the first step). */
+  mx: { phase: 'start' | 'grow' | 'full'; full: number; idle: number; respawn: number; cycles: number; reached: boolean } | null;
+  /** Annihilation bursts still showing: where, how old (s), and the sparks' angle. */
+  fx: Array<{ x: number; y: number; t: number; a: number }>;
 }
 /** A particles layer's settings with numbers already driven (the id, label and kind are not read). */
 export type ParticleParams = Omit<ParticlesLayer, 'id' | 'label' | 'kind' | 'visible' | 'toShader'> & Partial<Pick<ParticlesLayer, 'id' | 'label' | 'kind' | 'visible' | 'toShader'>>;
@@ -42,3 +48,7 @@ export function modulator(by: ParticleParams['sizeBy'], st: ParticleState, i: nu
 export interface FieldSample { x: number; y: number; fx: number; fy: number; settle: boolean; ax: number; ay: number }
 export function particleFieldGrid(p: ParticleParams, env: ParticleEnv, cols: number, rows: number, seed?: number): FieldSample[];
 export function drawParticles(ctx: CanvasRenderingContext2D, st: ParticleState, p: ParticleParams, env: ParticleEnv & { W: number; H: number }): void;
+export function gooAlpha(v: number, threshold: number, soft: number): number;
+export function gooKernel(d: number, R: number): number;
+export function gooCell(W: number, H: number, reach: number): number;
+export function gooField(st: ParticleState, p: ParticleParams, env: ParticleEnv & { W: number; H: number }, gw: number, gh: number, cell: number): { v: Float32Array; rgb: Float32Array };

@@ -135,7 +135,9 @@ function allocParticles(n) {
     x: new Float32Array(n), y: new Float32Array(n), vx: new Float32Array(n), vy: new Float32Array(n),
     age: new Float32Array(n), life: new Float32Array(n), r: new Float32Array(n),
     alive: new Uint8Array(n), cool: new Float32Array(n), zt: new Int16Array(n).fill(-1), zs: new Float32Array(n).fill(1),
-    seed: 0,
+    // Multiply: seconds to the next split, the partner an annihilating particle seeks, where it was born.
+    split: new Float32Array(n), mate: new Int32Array(n).fill(-1), bx: new Float32Array(n), by: new Float32Array(n),
+    seed: 0, mx: null, fx: [],
   };
 }
 
@@ -153,9 +155,10 @@ export function resizeParticles(st, count, rand = Math.random, dead = false) {
   const n = Math.max(1, count | 0);
   if (n === st.count) return st;
   const out = allocParticles(n);
-  out.seed = st.seed;
+  out.seed = st.seed; out.mx = st.mx; out.fx = st.fx;
   const keep = Math.min(n, st.count);
-  for (const k of ['x', 'y', 'vx', 'vy', 'age', 'life', 'r', 'alive', 'cool', 'zt', 'zs']) out[k].set(st[k].subarray(0, keep));
+  for (const k of ['x', 'y', 'vx', 'vy', 'age', 'life', 'r', 'alive', 'cool', 'zt', 'zs', 'split', 'mate', 'bx', 'by']) out[k].set(st[k].subarray(0, keep));
+  for (let i = 0; i < keep; i++) if (out.mate[i] >= n) out.mate[i] = -1;
   for (let i = keep; i < n; i++) { out.x[i] = rand(); out.y[i] = rand(); out.r[i] = rand(); out.age[i] = 0; out.life[i] = 0.6 + rand() * 0.8; out.alive[i] = dead ? 0 : 1; }
   return out;
 }
@@ -206,6 +209,9 @@ function spawn(st, i, p, env, rand) {
   st.cool[i] = 0;
 }
 
+/** Burst and multiply layers keep a pool of unborn particles; stream layers are always all alive. */
+const pooled = p => p.emit === 'burst' || p.emit === 'multiply';
+
 /** A layer's lifetime in seconds for particle i (0 = forever). Burst particles always die. */
 function lifeOf(st, i, p) {
   const life = p.emit === 'burst' && !(p.life > 0) ? 2.5 : p.life;
@@ -221,13 +227,14 @@ export function burstParticles(st, p, env, amount, rand = Math.random) {
   let n = Math.max(0, Math.round(amount));
   const kick = (p.speed * 0.18 + 0.05) * 1.6;
   for (let i = 0; i < st.count && n > 0; i++) {
-    if (p.emit === 'burst' && st.alive[i]) continue;
+    if (pooled(p) && st.alive[i]) continue;
     spawn(st, i, p, env, rand);
+    st.split[i] = splitInterval(p, rand); st.mate[i] = -1; st.bx[i] = st.x[i]; st.by[i] = st.y[i];
     const a = rand() * TAU, k = kick * (0.4 + rand() * 0.8);
     st.vx[i] = Math.cos(a) * k; st.vy[i] = Math.sin(a) * k;
     n--;
   }
-  if (n > 0 && p.emit !== 'burst') return;
+  if (n > 0 && !pooled(p)) return;
   // Not enough unborn particles: recycle the oldest.
   while (n > 0) {
     let oldest = -1, age = -1;
@@ -248,6 +255,8 @@ export function scatterParticles(st, p, strength, rand = Math.random) {
 
 /** Every particle reborn. */
 export function resetParticles(st, p, env, rand = Math.random) {
+  // Multiply starts over from one particle.
+  if (p.emit === 'multiply') { st.alive.fill(0); st.mate.fill(-1); st.mx = null; st.fx = []; return; }
   for (let i = 0; i < st.count; i++) {
     if (p.emit === 'burst') { st.alive[i] = 0; continue; }
     spawn(st, i, p, env, rand);
@@ -344,6 +353,13 @@ export function stepParticles(st, p, env, rand = Math.random) {
   // One sample row, the same physical distance across and up.
   const ey = 1 / Math.max(sh || 36, 1), ex = ey / aspect;
   const zones = env.zones || [];
+  const mult = p.emit === 'multiply';
+  if (st.fx.length) stepBursts(st, dt);
+  if (mult) {
+    multiplyLife(st, p, env, rand, dt);
+    // Only Flow hands them to the field and forces; the other life modes move them here.
+    if (p.multLife !== 'flow') { multiplyMove(st, p, env, rand, dt); return; }
+  }
   for (const z of zones) z.total += st.count;
   // With an emitter, particles leaving the picture come back out of it.
   const emitting = !!(env.emitters && env.emitters.length);
@@ -479,7 +495,7 @@ export function stepParticles(st, p, env, rand = Math.random) {
       if (emitting && p.emit !== 'burst') respawn = true;
     }
     st.x[i] = x; st.y[i] = y; st.vx[i] = vx; st.vy[i] = vy;
-    if (respawn) spawn(st, i, p, env, rand);
+    if (respawn) { if (mult) st.alive[i] = 0; else spawn(st, i, p, env, rand); }
   }
   if (p.collide > 0) separate(st, p, env);
 }
@@ -584,6 +600,379 @@ function separate(st, p, env) {
   }
 }
 
+// ── Multiply: one particle buds into the whole population ───────────────────
+//
+// Emit: Multiply starts with one particle at the spawn point. Every particle
+// splits after its own interval (1 / Split rate seconds, ± Split jitter) into
+// itself and `splitChildren` buds, born on top of it and pushed apart, until
+// the layer's count is reached: the population roughly doubles every
+// 1 / splitRate seconds. What they do once born (multLife):
+//   stay        drift apart (Spread keeps neighbours apart) and stop
+//   flow        the layer's field, attractor and zones move them, as usual
+//   return      a spring pulls each back to where it was born
+//   annihilate  once the colony first fills, each (grown-up) particle pairs
+//               with a random unpaired one within Pair radius; the two seek
+//               each other and die in a small burst when they touch (a loop
+//               emptying out pairs them all at once; hold and respawn pair a
+//               few at a time, so the colony churns near full)
+// And after the count is reached (multAfter):
+//   loop        no more splitting: when (almost) all are gone, or Loop hold
+//               seconds after filling, start again from one particle
+//   respawn     the dead come back at the spawn point, one per split interval,
+//               and everyone keeps splitting to refill
+//   hold        survivors keep splitting to stay at the full count
+// Everything draws on `rand`, in a fixed order, so a seeded layer (or a take)
+// replays exactly.
+
+/** Seconds until a particle's next split: 1 / splitRate, ± up to 80% jitter. */
+function splitInterval(p, rand) {
+  const rate = Math.max(0.01, p.splitRate ?? 1), j = Math.min(1, Math.max(0, p.splitJitter ?? 0));
+  return (1 + j * 0.8 * (rand() * 2 - 1)) / rate;
+}
+
+function birth(st, i, x, y, vx, vy, p, rand) {
+  st.x[i] = x; st.y[i] = y; st.vx[i] = vx; st.vy[i] = vy;
+  st.age[i] = 0; st.life[i] = 0.6 + rand() * 0.8; st.alive[i] = 1; st.cool[i] = 0;
+  st.split[i] = splitInterval(p, rand); st.mate[i] = -1; st.bx[i] = x; st.by[i] = y;
+}
+
+/** One particle where the layer spawns (at rest): the start of a colony, or a respawn at the origin. */
+function seedOne(st, i, p, env, rand) {
+  spawn(st, i, p, env, rand);
+  birth(st, i, st.x[i], st.y[i], 0, 0, p, rand);
+}
+
+/** Particle radius in picture heights (for contact and budding distances). */
+const radiusH = (p, env) => Math.max(0.002, ((p.size || 2) * (env.dpr || 1)) / Math.max(1, env.H || 720));
+
+/** The colony's state: phase start → grow → full, the time spent full, and the respawn clock. */
+function multState(st) {
+  if (!st.mx) st.mx = { phase: 'start', full: 0, idle: 0, respawn: 0, cycles: 0, reached: false };
+  return st.mx;
+}
+
+/** Births, deaths, pairing and restarts, before anything moves. */
+function multiplyLife(st, p, env, rand, dt) {
+  const mx = multState(st), n = st.count, after = p.multAfter || 'loop', mode = p.multLife || 'stay';
+  if (mx.phase === 'start') {
+    st.alive.fill(0); st.mate.fill(-1);
+    seedOne(st, 0, p, env, rand);
+    mx.phase = 'grow'; mx.full = 0; mx.idle = 0; mx.respawn = 0; mx.reached = false;
+    return;
+  }
+  let alive = 0;
+  for (let i = 0; i < n; i++) alive += st.alive[i];
+  if (mx.phase === 'grow' && alive >= n) { mx.phase = 'full'; mx.full = 0; mx.reached = true; }
+  if (mx.phase === 'full') mx.full += dt;
+  // Loop: once full, no more splitting; start over when they're gone (or after Loop hold).
+  if (after === 'loop' && mx.phase === 'full') {
+    const hold = p.loopHold > 0 && mx.full > p.loopHold;
+    if (alive < 2 || hold) {
+      mx.idle += dt;
+      // A short pause on an empty picture (or straight away when the hold runs out).
+      if (hold || mx.idle > 0.6) { mx.phase = 'start'; mx.cycles++; multiplyLife(st, p, env, rand, dt); }
+      return;
+    }
+    mx.idle = 0;
+  } else if (alive === 0) {
+    // Hold and respawn: all gone, so begin again from one.
+    seedOne(st, 0, p, env, rand);
+    mx.phase = 'grow';
+    return;
+  }
+  const splitting = !(after === 'loop' && mx.phase === 'full');
+  // Respawn: the dead come back at the origin, one per split interval.
+  if (after === 'respawn' && mx.reached && alive < n) {
+    mx.respawn += dt;
+    const every = 1 / Math.max(0.01, p.splitRate ?? 1);
+    while (mx.respawn >= every && alive < n) {
+      mx.respawn -= every;
+      let d = 0; while (d < n && st.alive[d]) d++;
+      if (d < n) { seedOne(st, d, p, env, rand); alive++; }
+    }
+  } else mx.respawn = 0;
+  // Splits: each particle whose clock runs out buds into free slots (not while it seeks a partner).
+  if (splitting && alive < n) {
+    const kids = Math.max(1, Math.min(4, Math.round(p.splitChildren ?? 1)));
+    const push = Math.max(0, p.splitPush ?? 0.08), gap = radiusH(p, env) * 0.3, aspect = env.aspect || 1;
+    let free = 0;
+    for (let i = 0; i < n && alive < n; i++) {
+      if (!st.alive[i] || st.mate[i] >= 0) continue;
+      st.split[i] -= dt;
+      if (st.split[i] > 0) continue;
+      st.split[i] = splitInterval(p, rand);
+      const a0 = rand() * TAU;
+      for (let k = 0; k < kids; k++) {
+        while (free < n && st.alive[free]) free++;
+        if (free >= n) break;
+        const a = a0 + (k * TAU) / kids, cx = Math.cos(a), cy = Math.sin(a);
+        birth(st, free, st.x[i] + (cx * gap) / aspect, st.y[i] + cy * gap, st.vx[i] + cx * push, st.vy[i] + cy * push, p, rand);
+        // Budding: one bud pushes its parent back the other way.
+        if (kids === 1) { st.vx[i] -= cx * push; st.vy[i] -= cy * push; }
+        alive++;
+      }
+    }
+  }
+  if (mode === 'annihilate' && mx.reached) {
+    // A loop emptying out pairs everyone at once; hold and respawn pair a few at a time
+    // (each about every 4 split intervals), so budding keeps up and the colony churns near full.
+    const clearing = after === 'loop' && mx.phase === 'full';
+    pairUp(st, p, env, rand, clearing, clearing ? 1 : 1 - Math.exp(-dt * Math.max(0.01, p.splitRate ?? 1) * 0.25));
+  }
+}
+
+/**
+ * Annihilate: a grown-up unpaired particle (older than one split interval)
+ * picks, with probability `chance` this step, a random unpaired partner
+ * within Pair radius. `anyone`
+ * (a loop emptying out) lets the lonely ones pair with the nearest particle
+ * however far, so the colony always clears.
+ */
+function pairUp(st, p, env, rand, anyone, chance) {
+  const n = st.count, aspect = env.aspect || 1;
+  for (let i = 0; i < n; i++) { const m = st.mate[i]; if (m >= 0 && (!st.alive[i] || !st.alive[m] || st.mate[m] !== i)) st.mate[i] = -1; }
+  const grown = 1 / Math.max(0.01, p.splitRate ?? 1);
+  const ready = i => st.alive[i] && st.mate[i] < 0 && st.age[i] >= grown;
+  const R = Math.max(0.02, p.pairRadius ?? 0.3);
+  const cols = Math.max(1, Math.ceil(aspect / R)), rows = Math.max(1, Math.ceil(1 / R));
+  const head = new Int32Array(cols * rows).fill(-1), next = new Int32Array(n);
+  const cellOf = i => Math.min(rows - 1, Math.max(0, Math.floor(st.y[i] / R))) * cols + Math.min(cols - 1, Math.max(0, Math.floor((st.x[i] * aspect) / R)));
+  for (let i = n - 1; i >= 0; i--) if (ready(i)) { const h = cellOf(i); next[i] = head[h]; head[h] = i; }
+  let lonely = 0;
+  for (let i = 0; i < n; i++) {
+    if (!ready(i) || (chance < 1 && rand() >= chance)) continue;
+    const X = st.x[i] * aspect, Y = st.y[i], cx = Math.floor(X / R), cy = Math.floor(Y / R);
+    let pick = -1, seen = 0;
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const gx = cx + ox, gy = cy + oy;
+      if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
+      for (let j = head[gy * cols + gx]; j >= 0; j = next[j]) {
+        if (j === i || st.mate[j] >= 0) continue;
+        if (Math.hypot(st.x[j] * aspect - X, st.y[j] - Y) > R) continue;
+        seen++;
+        if (rand() * seen < 1) pick = j; // a random one of them (reservoir)
+      }
+    }
+    if (pick < 0 && anyone && lonely++ < 8) {
+      let best = Infinity;
+      for (let j = 0; j < n; j++) {
+        if (j === i || !st.alive[j] || st.mate[j] >= 0) continue;
+        const d = Math.hypot(st.x[j] * aspect - X, st.y[j] - Y);
+        if (d < best) { best = d; pick = j; }
+      }
+    }
+    if (pick >= 0) { st.mate[i] = pick; st.mate[pick] = i; }
+  }
+}
+
+/** Motion for stay, return and annihilate (flow uses the normal step). */
+function multiplyMove(st, p, env, rand, dt) {
+  const n = st.count, aspect = env.aspect || 1, mode = p.multLife || 'stay';
+  const damp = Math.exp(-dt * 2.2), seekK = 1 - Math.exp(-dt * 4);
+  const spring = Math.max(0, p.returnSpring ?? 1) * 6, seek = Math.max(0.005, p.seekSpeed ?? 0.15);
+  const contact = Math.max(0.008, radiusH(p, env) * 2);
+  if ((p.multSpread ?? 0) > 0) spreadPass(st, p, env, dt);
+  for (let i = 0; i < n; i++) {
+    if (!st.alive[i]) continue;
+    let x = st.x[i], y = st.y[i], vx = st.vx[i], vy = st.vy[i];
+    const m = st.mate[i];
+    if (mode === 'annihilate' && m >= 0 && st.alive[m]) {
+      const dx = (st.x[m] - x) * aspect, dy = st.y[m] - y, d = Math.hypot(dx, dy);
+      if (d < contact) {
+        // Touch: both go, with a small burst where they met.
+        st.alive[i] = 0; st.alive[m] = 0; st.mate[i] = -1; st.mate[m] = -1;
+        if (st.fx.length < 256) st.fx.push({ x: (x + st.x[m]) / 2, y: (y + st.y[m]) / 2, t: 0, a: rand() * TAU });
+        continue;
+      }
+      vx += ((dx / d) * seek - vx) * seekK; vy += ((dy / d) * seek - vy) * seekK;
+    } else {
+      if (mode === 'return') { vx += (st.bx[i] - x) * aspect * spring * dt; vy += (st.by[i] - y) * spring * dt; }
+      vx *= damp; vy *= damp;
+    }
+    x += (vx / aspect) * dt; y += vy * dt;
+    st.age[i] += dt;
+    const life = lifeOf(st, i, p);
+    if (life > 0 && st.age[i] > life) { st.alive[i] = 0; continue; }
+    if (x < 0 || x > 1 || y < 0 || y > 1) {
+      if (p.edges === 'wrap') { x -= Math.floor(x); y -= Math.floor(y); }
+      else if (p.edges === 'bounce') {
+        if (x < 0) { x = -x; vx = -vx; } else if (x > 1) { x = 2 - x; vx = -vx; }
+        if (y < 0) { y = -y; vy = -vy; } else if (y > 1) { y = 2 - y; vy = -vy; }
+      } else { st.alive[i] = 0; continue; }
+    }
+    st.x[i] = x; st.y[i] = y; st.vx[i] = vx; st.vy[i] = vy; st.zt[i] = -1; st.zs[i] = 1;
+  }
+}
+
+/** Spread: neighbours closer than multSpread push each other gently apart (seeking pairs are left alone). */
+function spreadPass(st, p, env, dt) {
+  const n = st.count, aspect = env.aspect || 1, S = Math.max(0.004, p.multSpread);
+  const cols = Math.max(1, Math.ceil(aspect / S)), rows = Math.max(1, Math.ceil(1 / S));
+  if (cols * rows > 400000) return;
+  const head = new Int32Array(cols * rows).fill(-1), next = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
+    if (!st.alive[i] || st.mate[i] >= 0) continue;
+    const h = Math.min(rows - 1, Math.max(0, Math.floor(st.y[i] / S))) * cols + Math.min(cols - 1, Math.max(0, Math.floor((st.x[i] * aspect) / S)));
+    next[i] = head[h]; head[h] = i;
+  }
+  const k = 0.6 * dt;
+  for (let i = 0; i < n; i++) {
+    if (!st.alive[i] || st.mate[i] >= 0) continue;
+    const X = st.x[i] * aspect, Y = st.y[i], cx = Math.floor(X / S), cy = Math.floor(Y / S);
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const gx = cx + ox, gy = cy + oy;
+      if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue;
+      for (let j = head[gy * cols + gx]; j >= 0; j = next[j]) {
+        if (j <= i) continue;
+        let dx = st.x[j] * aspect - X, dy = st.y[j] - Y, d = Math.hypot(dx, dy);
+        if (d >= S) continue;
+        // Right on top of each other: part along the slot's own angle.
+        if (d < 1e-6) { const a = st.r[i] * TAU; dx = Math.cos(a); dy = Math.sin(a); d = 1; }
+        const f = ((1 - Math.min(d, S) / S) * k) / d;
+        st.vx[i] -= dx * f; st.vy[i] -= dy * f; st.vx[j] += dx * f; st.vy[j] += dy * f;
+      }
+    }
+  }
+}
+
+/** Annihilation bursts age and go (0.7 s). */
+const BURST_LIFE = 0.7;
+function stepBursts(st, dt) {
+  for (const b of st.fx) b.t += dt;
+  if (st.fx[0].t > BURST_LIFE) st.fx = st.fx.filter(b => b.t <= BURST_LIFE);
+}
+
+function drawBursts(ctx, st, p, env, css) {
+  const W = env.W, H = env.H, r0 = Math.max(1.5, (p.size || 2) * (env.dpr || 1)), alpha = env.alpha == null ? 1 : env.alpha;
+  ctx.strokeStyle = css; ctx.fillStyle = css; ctx.lineWidth = Math.max(1, r0 * 0.35);
+  for (const b of st.fx) {
+    const u = b.t / BURST_LIFE, a = Math.min(1, alpha) * (1 - u) * (1 - u);
+    if (a <= 0.004) continue;
+    const cx = b.x * W, cy = (1 - b.y) * H, rr = r0 * (1 + u * 5);
+    ctx.globalAlpha = a;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
+    // Six sparks flying out.
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) {
+      const ang = b.a + (k * TAU) / 6, d0 = rr * 1.2, d1 = rr * 1.2 + r0 * (1.5 + 2 * u);
+      ctx.moveTo(cx + Math.cos(ang) * d0, cy + Math.sin(ang) * d0); ctx.lineTo(cx + Math.cos(ang) * d1, cy + Math.sin(ang) * d1);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── Goo (metaballs) ─────────────────────────────────────────────────────────
+//
+// Each particle adds a smooth bump k(d) = (1 − d²/R²)² (R = its radius ×
+// Blend) to a field; wherever the sum passes Threshold is inside the goo.
+// Two particles close enough that their bumps add past the threshold between
+// them merge into one blob, and a neck stretches and snaps as they part.
+// Edge softness blends from a hard edge to a soft one. A lone particle's blob
+// has radius R·√(1 − √threshold).
+//
+// Cost: the field is summed on the CPU on a grid of ~160k cells (a 1080p
+// picture gets ~3.6 px cells; small blobs get finer cells, up to ~400k), and
+// each particle touches (2R / cell)² cells: a few hundred particles are
+// ~30–60k adds, then one pass over the grid and a putImageData of the small
+// canvas, drawn scaled up with smoothing (which antialiases the edge over
+// about one cell). Roughly 1–3 ms a frame at 1080p for 200 particles; the
+// grid pass dominates, so the cost barely grows with the particle count.
+
+/** The goo's opacity at field value v: hard (soft 0) or a smoothstep band around the threshold. */
+export function gooAlpha(v, threshold, soft) {
+  const t = Math.min(0.99, Math.max(0.01, threshold));
+  if (!(soft > 0)) return v >= t ? 1 : 0;
+  const s = Math.min(1, soft), lo = t * (1 - s), hi = t + (1 - t) * s;
+  const a = Math.min(1, Math.max(0, (v - lo) / Math.max(1e-6, hi - lo)));
+  return a * a * (3 - 2 * a);
+}
+
+/** One particle's bump at distance d with reach R: 1 at the middle, 0 at R and beyond, smooth both ends. */
+export function gooKernel(d, R) {
+  if (d >= R) return 0;
+  const q = 1 - (d * d) / (R * R);
+  return q * q;
+}
+
+/** A particle's colour as 0..1 numbers (tint, zone tint, picture or palette). */
+function rgbOf(st, i, p, env, zones) {
+  const zt = st.zt[i];
+  if (zt >= 0 && zones[zt] && zones[zt].action === 'tint') return zones[zt].tint;
+  if (p.colour === 'picture' && env.sample) {
+    const sw = env.sw, sh = env.sh, s = env.sample;
+    const px = Math.max(0, Math.min(sw - 1, Math.floor(st.x[i] * sw))), py = Math.max(0, Math.min(sh - 1, Math.floor((1 - st.y[i]) * sh))), k = (py * sw + px) * 4;
+    return [s[k] / 255, s[k + 1] / 255, s[k + 2] / 255];
+  }
+  if (p.colour === 'palette') {
+    const t = p.paletteBy === 'speed' || p.paletteBy === 'age' || p.paletteBy === 'brightness' ? modulator(p.paletteBy, st, i, p, env) : Math.atan2(st.vy[i], st.vx[i]) / TAU + 0.5;
+    return paletteColour(p.palette, t);
+  }
+  return p.color;
+}
+
+/**
+ * The goo field on a gw × gh grid of `cell`-pixel cells over a W × H picture:
+ * v (the summed bumps) and rgb (colour × bump, summed; divide by v for the
+ * blend of the colours there).
+ */
+export function gooField(st, p, env, gw, gh, cell) {
+  const v = new Float32Array(gw * gh), rgb = new Float32Array(gw * gh * 3);
+  const W = env.W, H = env.H, base = p.size * (env.dpr || 1), blend = Math.max(1, p.gooBlend ?? 2.5), zones = env.zones || [];
+  for (let i = 0; i < st.count; i++) {
+    if (!st.alive[i]) continue;
+    const r = Math.max(0.3, base * (1 - p.sizeJitter * st.r[i]) * modScale(p.sizeBy, p.sizeAmount, st, i, p, env) * st.zs[i]);
+    const w = modScale(p.opacityBy, p.opacityAmount, st, i, p, env) * fadeOf(st, i, p);
+    if (w <= 0.004) continue;
+    const R = r * blend, c = rgbOf(st, i, p, env, zones);
+    const px = st.x[i] * W, py = (1 - st.y[i]) * H;
+    const x0 = Math.max(0, Math.floor((px - R) / cell)), x1 = Math.min(gw - 1, Math.floor((px + R) / cell));
+    const y0 = Math.max(0, Math.floor((py - R) / cell)), y1 = Math.min(gh - 1, Math.floor((py + R) / cell));
+    const R2 = R * R;
+    for (let gy = y0; gy <= y1; gy++) {
+      const dy = (gy + 0.5) * cell - py, row = gy * gw;
+      for (let gx = x0; gx <= x1; gx++) {
+        const dx = (gx + 0.5) * cell - px, d2 = dx * dx + dy * dy;
+        if (d2 >= R2) continue;
+        const q = 1 - d2 / R2, k = q * q * w, o = row + gx;
+        v[o] += k; rgb[o * 3] += k * c[0]; rgb[o * 3 + 1] += k * c[1]; rgb[o * 3 + 2] += k * c[2];
+      }
+    }
+  }
+  return { v, rgb };
+}
+
+/** Cell size for the goo grid (px): at most ~160k cells, and never coarser than a quarter of a blob's reach unless the grid would pass ~400k cells. */
+export function gooCell(W, H, reach) {
+  const budget = Math.sqrt((W * H) / 160000), floor = Math.sqrt((W * H) / 400000);
+  return Math.max(1, floor, Math.min(budget, reach / 4));
+}
+
+function drawGoo(ctx, st, p, env) {
+  const W = env.W, H = env.H, alpha = env.alpha == null ? 1 : env.alpha;
+  const cell = gooCell(W, H, Math.max(1, p.size * (env.dpr || 1) * Math.max(1, p.gooBlend ?? 2.5)));
+  const gw = Math.max(1, Math.ceil(W / cell)), gh = Math.max(1, Math.ceil(H / cell));
+  const { v, rgb } = gooField(st, p, env, gw, gh, cell);
+  if (!st.goo || st.goo.width !== gw || st.goo.height !== gh) {
+    st.goo = document.createElement('canvas'); st.goo.width = gw; st.goo.height = gh;
+    st.gooImg = st.goo.getContext('2d').createImageData(gw, gh);
+  }
+  const img = st.gooImg, d = img.data, t = p.gooThreshold ?? 0.5, soft = p.gooSoft ?? 0.2;
+  for (let k = 0, n = gw * gh; k < n; k++) {
+    const f = v[k], o = k * 4;
+    const a = f > 0 ? gooAlpha(f, t, soft) : 0;
+    if (a <= 0) { d[o + 3] = 0; continue; }
+    const inv = 255 / f;
+    d[o] = rgb[k * 3] * inv; d[o + 1] = rgb[k * 3 + 1] * inv; d[o + 2] = rgb[k * 3 + 2] * inv; d[o + 3] = a * 255;
+  }
+  st.goo.getContext('2d').putImageData(img, 0, 0);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.globalAlpha = Math.min(1, alpha);
+  ctx.drawImage(st.goo, 0, 0, gw * cell, gh * cell);
+  ctx.restore();
+}
+
 /**
  * A particle's 0..1 reading of what its size or opacity follows:
  *   brightness  the picture under it          speed  how fast it moves (vs max)
@@ -660,6 +1049,8 @@ export function drawParticles(ctx, st, p, env) {
   const zones = env.zones || [];
   const zoneCss = zones.map(z => z.action === 'tint' ? 'rgb(' + Math.round(z.tint[0] * 255) + ',' + Math.round(z.tint[1] * 255) + ',' + Math.round(z.tint[2] * 255) + ')' : null);
   const hasTintZones = zoneCss.some(Boolean);
+  if (st.fx.length) drawBursts(ctx, st, p, env, p.colour === 'palette' ? paletteCssAt(p.palette, 0.9) : fixed);
+  if (p.goo) { drawGoo(ctx, st, p, env); return; }
   if (p.links > 0) drawLinks(ctx, st, p, env, fixed, alpha);
   // Fast path: one colour, one opacity, round or square dots → a single path.
   if ((p.shape === 'dot' || p.shape === 'square' || (p.shape === 'image' && !sprite)) && p.colour === 'tint' && p.opacityBy === 'none' && !(p.fade > 0) && !hasTintZones) {
