@@ -43,6 +43,9 @@ export const RELEASES: Release[] = [
     date: '2026-09-28',
     title: 'Agents',
     highlights: [
+      { area: 'Play', text: 'A Function source: type a formula of t (seconds) and b (beats) — sin(t*2)*0.5+0.5, fract(b/4), noise(t) — and map it like any source.' },
+      { area: 'Play', text: 'Goo edges are sharp at any size, and Agents gravity is ten times gentler so the whole slider is usable.' },
+      { area: 'Studio', text: 'The preview bar follows the theme in light mode.' },
       { area: 'Play', text: 'An Agents layer: a crowd of entities steered by a stack of rules (seek, flee, flock, orbit, gravity, springs, fields), with Boids and Predator-prey presets.', link: { kind: 'example', key: 'playBoids', page: 'play' } },
     ],
   },
