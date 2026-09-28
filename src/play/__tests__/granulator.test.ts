@@ -11,7 +11,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { AudioWorkletNode as NodeWorkletNode, OfflineAudioContext as NodeOffline } from 'node-web-audio-api';
 import {
-  GR_MAX_GRAINS, GR_PARAMS, grCreate, grLoadWorklet, grMakeEngine, grNewStats, grParam, grRender, grSettings, grSummary, grSynthData, grWorkletSource,
+  GR_MAX_GRAINS, GR_PARAMS, grCreate, grFromDefaults, grFromPoints, type GrThing, grLoadWorklet, grMakeEngine, grNewStats, grParam, grRender, grSettings, grSummary, grSynthData, grWorkletSource,
 } from '../kit/granulator.js';
 import {
   AE_INST, auTarget, auTargetExists, controlsKeptFor, grainsTarget, parseAudioEngine, parseGrainsTarget, readAuValue, type AeRack, type PlayAudioEngine,
@@ -23,6 +23,8 @@ import { addGrainNulls, addGrainReadouts } from '../grainControls';
 import { kitScript, leftBehind, playBundle, type PlayHtmlInput } from '../exportHtml';
 import { audioEngineHost } from '../../lib/audioEngineHost';
 import { usePlan } from '../../lib/plan';
+import { grainLog } from '../../lib/grainFrom';
+import { parseGrainFrom } from '../../types/playAudioEngine';
 
 const SR = 48000;
 beforeAll(() => {
@@ -175,6 +177,74 @@ describe('the engine', () => {
     const L = new Float32Array(128), R = new Float32Array(128);
     for (let f = 0; f < SR / 4; f += 128) e.process(L, R, 128);
     expect(e.voicesOn()).toBe(2);
+  });
+});
+
+describe('grains from a layer', () => {
+  const thing = (id: number, x: number, y: number, o: Partial<GrThing> = {}): GrThing => ({ id, x, y, vx: 0, vy: 0, age: 0.5, size: 0.5, bright: 0.5, born: false, ...o });
+  const settings = grSettings(undefined);
+
+  it('links set each thing’s grains; the closest to the centre first, up to the cap', () => {
+    const cfg = grFromDefaults();
+    const p = grFromPoints([thing(1, 0.9, 0.5), thing(2, 0.5, 1, { vx: 0.5 }), thing(3, 0.1, 0, { age: 0 })], 0.5, 0.5, cfg, settings);
+    expect(p.n).toBe(3);
+    const row = (i: number) => Array.from(p.data.subarray(i * 8, i * 8 + 8));
+    // Closest to the centre first: thing 1 (0.4 away), then 2 (0.5), then 3 (about 0.64).
+    expect(row(0)[0]).toBe(1);
+    expect(row(0)[1]).toBeCloseTo(0.9); // X → file position
+    expect(row(1)[0]).toBe(2);
+    expect(row(1)[2]).toBeCloseTo(12); // Y 1 → pitch +12
+    expect(row(1)[3]).toBeCloseTo(300); // speed 1 → 300 ms
+    expect(row(2)[4]).toBeCloseTo(1); // age 0 → full level
+    expect(row(2)[2]).toBeCloseTo(-12);
+    const capped = grFromPoints(Array.from({ length: 100 }, (_, i) => thing(i, i / 100, 0.5)), 0.5, 0.5, cfg, { ...settings, cap: 10 });
+    expect(capped.n).toBe(10);
+    const ids = Array.from({ length: 10 }, (_, i) => capped.data[i * 8]);
+    expect(ids.every(id => Math.abs(id / 100 - 0.5) <= 0.06)).toBe(true);
+    // Cutoff is one filter: the things' mean.
+    const cut = grFromPoints([thing(1, 0, 0, { bright: 0 }), thing(2, 1, 1, { bright: 1 })], 0.5, 0.5, { births: true, links: [{ prop: 'bright', target: 'cutoff', on: true, min: 1000, max: 3000 }] }, settings);
+    expect(cut.cutoff).toBeCloseTo(2000);
+  });
+
+  it('density follows the number of things inside; a thing just born plays at once', () => {
+    const count = (n: number, born = false, secs = 1) => {
+      const e = grMakeEngine()(SR, 3);
+      e.set(quiet({ fromRate: 10, size: 20 }));
+      e.setBuffer([sine], SR);
+      const p = grFromPoints(Array.from({ length: n }, (_, i) => thing(i, 0.2 + i * 0.01, 0.5, { born })), 0.5, 0.5, grFromDefaults(), settings);
+      e.points(p.data, p.n, p.cutoff);
+      const L = new Float32Array(128), R = new Float32Array(128), st = grNewStats();
+      let spawned = 0, prev = 0;
+      for (let f = 0; f < secs * SR; f += 128) { e.process(L, R, 128); const c = e.stats(st).count; if (c > prev) spawned += c - prev; prev = c; }
+      return { spawned, first: (() => { const e2 = grMakeEngine()(SR, 3); e2.set(quiet({ fromRate: 1 })); e2.setBuffer([sine], SR); e2.points(p.data, p.n, NaN); const l = new Float32Array(4096), r = new Float32Array(4096); e2.process(l, r, 4096); return l.findIndex(v => Math.abs(v) > 1e-7); })() };
+    };
+    const one = count(1).spawned, four = count(4).spawned;
+    expect(one).toBeGreaterThan(7);
+    expect(four).toBeGreaterThan(one * 3);
+    // Born: the first grain starts on the first frames; not: somewhere in its first interval.
+    expect(count(3, true).first).toBeGreaterThanOrEqual(0);
+    expect(count(3, true).first).toBeLessThan(4);
+    const later = count(3, false).first;
+    expect(later === -1 || later > 4).toBe(true);
+  });
+
+  it('a render replays the logged things, the same twice; the record keeps the setup', () => {
+    grainLog.clear();
+    const p = grFromPoints([thing(1, 0.3, 0.5), thing(2, 0.6, 0.8)], 0.5, 0.5, grFromDefaults(), settings);
+    grainLog.put('gr', { t: 0, pts: p, inside: 2 });
+    grainLog.put('gr', { t: 0.5, pts: { data: new Float32Array(0), n: 0, cutoff: NaN }, inside: 0 });
+    expect(grainLog.at('gr', 0.25)?.n).toBe(2);
+    expect(grainLog.at('gr', 0.75)?.n).toBe(0);
+    const run = () => grRender({ channels: [sine], sampleRate: SR, frames: SR, settings: quiet({ fromRate: 20 }), pointsAt: t => grainLog.at('gr', t) }).left;
+    const a = run(), b = run();
+    expect(rms(a, 0.05 * SR, 0.45 * SR)).toBeGreaterThan(0.01);
+    expect(rms(a, 0.8 * SR, SR)).toBe(0);
+    expect(Array.from(a)).toEqual(Array.from(b));
+    grainLog.clear();
+    const from = { ...grFromDefaults(), source: 'parts', boundary: 'circle' };
+    expect(parseGrainFrom(JSON.parse(JSON.stringify(from)))).toEqual(from);
+    expect(parseGrainFrom({ source: '' })).toBeUndefined();
+    expect(parseGrainFrom({ source: 'p', links: [{ prop: 'nope', target: 'pitch' }, { prop: 'x', target: 'pan', min: -1, max: 1 }] })!.links).toEqual([{ prop: 'x', target: 'pan', on: true, min: -1, max: 1 }]);
   });
 });
 

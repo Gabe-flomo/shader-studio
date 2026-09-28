@@ -1848,6 +1848,23 @@ Distance reads only while both hands are in view, so the rings hold their size w
           // filter + cutoff, attack, release, scan LFO rate + depth, drone, level.
           params: { 0: 2, 1: 0.35, 2: 0.12, 3: 140, 5: 28, 7: 7, 8: 0.15, 9: 0.7, 14: 1, 15: 7000, 17: 0.6, 20: 1.5, 24: 0.07, 25: 0.12, 28: 1, 33: 0.9 },
         },
+      }, {
+        // Part two: the particles inside the ring play a bell, each at its own place and pitch.
+        id: 'ring', name: 'Particle bells', effects: [], keyboard: false, midi: 'off', channel: 0, volume: 1, mute: false,
+        instrument: {
+          id: 'inst', kind: 'granulator', sample: { synth: 'bell', name: 'Bell' },
+          // Cloud, grain size, pan random, cap, level, grains per thing.
+          params: { 0: 2, 3: 120, 9: 0.2, 29: 48, 33: 0.6, 35: 3 },
+          from: {
+            source: 'flow', boundary: 'hoop', births: true,
+            links: [
+              { prop: 'x', target: 'position', on: true, min: 0, max: 0.6 },
+              { prop: 'y', target: 'pitch', on: true, min: -12, max: 12 },
+              { prop: 'speed', target: 'size', on: true, min: 40, max: 300 },
+              { prop: 'age', target: 'amp', on: true, min: 1, max: 0 },
+            ],
+          },
+        },
       }],
     },
     audioFx: { chains: { 'rack:gran': { on: true, effects: [afx('reverb', 'verb', { type: 'hall', size: 0.7, decay: 3.2, mix: 0.3 })] } } },
@@ -1863,8 +1880,11 @@ Distance reads only while both hands are in view, so the rings hold their size w
       layer('null', 'g2', 'Grain 2', { x: 0.5, y: 0.3, size: 10 }),
       layer('null', 'g3', 'Grain 3', { x: 0.7, y: 0.3, size: 10 }),
       layer('audio', 'bars', 'Spectrum', { style: 'bars', y: 0.12, w: 1.7, h: 0.16, bars: 64, colour: 'palette', palette: 1, opacity: 0.7, toShader: false }),
+      layer('particles', 'flow', 'Flow', { count: 220, field: 'noise', noiseScale: 2, speed: 0.5, life: 4, fade: 0.6, size: 2.2, colour: 'palette', palette: 1, paletteBy: 'age', trail: 0.4, blend: 'screen' }),
+      layer('shape', 'hoop', 'Ring', { shape: 'circle', x: 0.5, y: 0.5, w: 0.3, h: 0.3, fill: [0.4, 0.8, 1], stroke: [0.4, 0.8, 1] }),
     ],
     controls: [
+      ctl('hoopX', 'layer:hoop::x', 'Ring · x', 0, 1),
       ctl('pos', 'au:gran:inst::1', 'Granulator · Position', 0, 1),
       ctl('size', 'au:gran:inst::3', 'Granulator · Grain size', 2, 2000, 1),
       ctl('radius', 'circ::radius', 'Glow (the grains’ body)', 0.05, 0.4),
@@ -1878,6 +1898,7 @@ Distance reads only while both hands are in view, so the rings hold their size w
       map('grainSize', 'size', S.mouse('y'), 25, 400, { curve: 'exp', smoothMs: 80 }),
       map('glow', 'radius', { kind: 'reader', readerId: 'body' }, 0.07, 0.3, { smoothMs: 30 }),
       map('count', 'count', S.sensor('ae:gran', 'grains'), 0, 64),
+      map('hoopDrift', 'hoopX', S.lfo('sine', 0.05), 0.25, 0.75),
       ...[1, 2, 3].flatMap(i => [
         map(`g${i}x`, `g${i}x`, S.sensor('ae:gran', 'grainPos', String(i)), 0.05, 0.95),
         map(`g${i}y`, `g${i}y`, S.sensor('ae:gran', 'grainAmp', String(i)), 0.25, 0.85, { smoothMs: 40 }),
@@ -1892,7 +1913,9 @@ Distance reads only while both hands are in view, so the rings hold their size w
 • Engine tab → Granulator: switch **Classic**, **Flux** and **Cloud**, try **Freeze**, turn **Scan** to 1 for a time-stretch, or change the **Sample** to a pad chord or a drum.
 • Turn **Drone** off and play it from the card's keys, the computer keyboard (**Computer keyboard** on the card) or a MIDI keyboard: C4 plays the sample at its own pitch.
 • **Readouts → controls** and **Grains → nulls** on the card make more of these.
-• Record a take and render it: the grains come out the same every time (seeded).`,
+• Record a take and render it: the grains come out the same every time (seeded).
+
+**Part two: grains from the particles.** A second rack, **Particle bells**, plays a generated bell from the **Flow** particles: under **Grains from a layer**, its Source is Flow and its boundary is the **Ring** circle (an LFO drifts it across). Each particle inside plays 3 grains a second: its X sets where in the bell it reads, Y its pitch (±12 semitones), its speed the grain size, and its age the level, so a particle fades out of the sound as it fades out of sight. More particles in the ring make more grains, and a particle born inside plays at once. Move the Ring, point the boundary at a drawn path, or change the links.`,
   })),
   ex('audioEffects', glowGraph({ radius: 0.12, falloff: 12, tint: [1, 0.6, 0.3] }), play({
     audioFx: {
