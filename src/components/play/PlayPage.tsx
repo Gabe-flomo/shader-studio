@@ -80,6 +80,7 @@ import { ColourPad } from './ColourPad';
 import { useLiveValues } from './useLiveValues';
 import { useStage } from './stageStore';
 import { useTakes } from '../../lib/takes';
+import { startOverMenuItem } from '../../play/startOver';
 import { SoloButton, SoloStrip } from './Solo';
 import { GuidesToggle } from './GuidesToggle';
 import { OpenPlayableButton } from './OpenPlayable';
@@ -101,7 +102,7 @@ import { parseReaderTarget } from '../../types/play';
 import type { AudioReader } from '../../types/play';
 import type { PlayPairMapping } from '../../types/play';
 import { ContextMenuArea } from '../ui/ContextMenuArea';
-import type { MenuItem } from '../ui/Menu';
+import { Menu, type MenuItem } from '../ui/Menu';
 import { PairCard, PairMappingRow, pairMappingLabel } from './PairControls';
 import { makePair, newPairMapping, pairOf, partnerTarget, positionPair, unpair } from '../../play/pairs';
 import { pairDrives, signalSource } from '../../lib/playEngine';
@@ -163,6 +164,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const [embedOpen, setEmbedOpen] = useState(false);
   const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
+  const pageMoreRef = useRef<HTMLSpanElement>(null);
+  const [pageMore, setPageMore] = useState<{ x: number; y: number } | null>(null);
 
   // Mouse and keyboard sources listen only while this page shows. Solo is for this page only.
   useEffect(() => {
@@ -497,6 +500,10 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
         <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
         <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} finish={finishOk ? finishCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddLayer={addLayerControl} onAddFinish={addFinishControl} sound={audioFxOk ? soundCandidates : NO_LAYER_CANDIDATES} onAddSound={addSoundControl} onAddAction={addActionControl} onAddNull={addWithNull} />
+        <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
+          <IconButton icon="more" label="More" onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 200, y: r.bottom + 4 } : null); }} />
+        </span>
+        {pageMore && <Menu x={pageMore.x} y={pageMore.y} minWidth={200} onClose={() => setPageMore(null)} items={[startOverMenuItem(() => setPageMore(null))]} />}
       </>
     )}
   />;

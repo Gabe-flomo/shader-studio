@@ -10,12 +10,15 @@
  * the right) and at most two columns: a list, and what the selected item
  * does beside it. Below WIDE_PANEL_PX the columns stack.
  */
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
-import { Toggle } from '../ui/Choice';
+import { Segmented, Toggle } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
+import { Popover } from '../ui/Popover';
+import { Select } from '../ui/Select';
+import { RulerSlider } from '../ui/RulerSlider';
 import { ProBadge } from '../account/ProSheet';
 import { openProSheet } from '../../lib/plan';
 import { triggerLabel } from '../../play/playSources';
@@ -26,6 +29,7 @@ import { SignalsList } from './ConditionFields';
 import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
 import { usePlayUi } from './playUi';
+import { backgroundMatteCandidates, backgroundMatteSummary, patchBackgroundMatte, setBackgroundMatte } from '../../play/mattes';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -236,9 +240,12 @@ export function BackgroundPage({ play, onChange, locked }: { play: PlayRecord; o
           <span style={{ flex: 1 }}>The picture is the shader on Free. Images, video, gradients and other graphs as the background are part of Pro.</span>
         </button>
       ) : (
-        <div style={{ borderRadius: radius.card, overflow: 'hidden', boxShadow: `inset 0 0 0 1px ${tk.border.default}`, background: tk.bg.panel }}>
-          <BackgroundRow play={play} onChange={onChange} />
-        </div>
+        <>
+          <div style={{ borderRadius: radius.card, overflow: 'hidden', boxShadow: `inset 0 0 0 1px ${tk.border.default}`, background: tk.bg.panel }}>
+            <BackgroundRow play={play} onChange={onChange} />
+          </div>
+          <BackgroundMatteRow play={play} onChange={onChange} />
+        </>
       )}
       {layer && (
         <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
@@ -250,5 +257,88 @@ export function BackgroundPage({ play, onChange, locked }: { play: PlayRecord; o
         </div>
       )}
     </CardPage>
+  );
+}
+
+/** The Matte button and its summary, under the Background row: another layer cuts the picture. */
+function BackgroundMatteRow({ play, onChange }: { play: PlayRecord; onChange: Change }) {
+  const tk = useTokens();
+  const matteRef = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+  const t = play.backgroundMatte;
+  const matte = t ? play.layers.find(l => l.id === t.id) : undefined;
+  const summary = backgroundMatteSummary(play);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+      <span ref={matteRef} style={{ display: 'inline-flex' }}>
+        <Button
+          size="sm"
+          icon="link"
+          aria-expanded={open}
+          title={matte ? `Matte: ${summary}` : 'Show the picture only where another layer is'}
+          onClick={() => setOpen(o => !o)}
+          style={matte ? { background: tk.bg.selected, color: tk.accent.text, borderColor: 'transparent' } : undefined}
+        >
+          {matte ? `Matte · ${matte.label}` : 'Matte'}
+        </Button>
+      </span>
+      {summary && <span style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}` }}>{summary}</span>}
+      {open && (
+        <Popover anchorRef={matteRef} onClose={() => setOpen(false)} width={300} padding={12}>
+          <BackgroundMattePanel play={play} onChange={onChange} onClose={() => setOpen(false)} />
+        </Popover>
+      )}
+    </div>
+  );
+}
+
+/** Pick the Background's matte, how it is read, its soft edge and what shows outside it. */
+function BackgroundMattePanel({ play, onChange, onClose }: { play: PlayRecord; onChange: Change; onClose: () => void }) {
+  const tk = useTokens();
+  const t = play.backgroundMatte;
+  const matte = t ? play.layers.find(l => l.id === t.id) : undefined;
+  const candidates = backgroundMatteCandidates(play.layers);
+  const label: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62, flexShrink: 0 };
+  const row = (name: string, children: ReactNode) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}><span style={label}>{name}</span>{children}</div>
+  );
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Icon name="link" size={14} style={{ color: tk.text.faint }} />
+        <span style={{ font: `650 12.5px ${fontFamily.ui}`, color: tk.text.primary }}>Matte</span>
+      </div>
+      <div style={{ marginTop: 4, color: tk.text.muted, font: `11.5px/1.45 ${fontFamily.ui}` }}>
+        Show the picture only where another layer is: its solid parts (Alpha) or its bright parts (Luma).
+      </div>
+      {row('Layer', (
+        <Select
+          ariaLabel="Background matte layer"
+          height={28}
+          style={{ flex: 1 }}
+          value={t?.id ?? ''}
+          onChange={id => onChange(p => setBackgroundMatte(p, id))}
+          options={[
+            { value: '', label: 'None' },
+            ...candidates.map(x => ({ value: x.id, label: `${x.label}${x.visible ? '' : ' (hidden)'}` })),
+          ]}
+        />
+      ))}
+      {t && matte && (
+        <>
+          {row('By', <Segmented size="sm" ariaLabel="Matte by" value={t.mode} options={[{ value: 'alpha', label: 'Alpha', title: 'Where the matte is solid' }, { value: 'luma', label: 'Luma', title: 'Where the matte is bright' }]} onChange={mode => onChange(p => patchBackgroundMatte(p, { mode }))} />)}
+          {row('Invert', <Toggle checked={!!t.invert} onChange={invert => onChange(p => patchBackgroundMatte(p, { invert }))} label={t.invert ? 'Where the matte isn’t' : 'Where the matte is'} />)}
+          {row('Soft edge', <RulerSlider ariaLabel="Soft edge" value={t.feather ?? 0} min={0} max={100} step={1} hard onChange={feather => onChange(p => patchBackgroundMatte(p, { feather }))} />)}
+          {row('Outside', <RulerSlider ariaLabel="Opacity outside" value={t.opacityOutside ?? 0} min={0} max={1} step={0.01} hard onChange={opacityOutside => onChange(p => patchBackgroundMatte(p, { opacityOutside }))} />)}
+          {matte.kind !== 'background' && row('Matte', <Toggle checked={matte.visible !== false} onChange={visible => onChange(p => ({ ...p, layers: p.layers.map(x => (x.id === matte.id ? { ...x, visible } : x)) }))} label="Show it on the picture too" />)}
+          <div style={{ display: 'flex', gap: 6, marginTop: 12, alignItems: 'center' }}>
+            <Button size="sm" onClick={() => { onClose(); usePlayUi.getState().reveal(matte.id); }}>Go to {matte.label}</Button>
+            <span style={{ flex: 1 }} />
+            <Button size="sm" variant="ghost" onClick={() => onChange(p => setBackgroundMatte(p, ''))}>Remove</Button>
+          </div>
+          <div style={{ marginTop: 8, color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{matte.visible !== false ? 'shown on its own too' : 'hidden, working as the matte'}</div>
+        </>
+      )}
+    </div>
   );
 }

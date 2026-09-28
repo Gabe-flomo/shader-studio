@@ -69,6 +69,7 @@ import { matteUsers } from '../../types/playLayers';
 import { dragFileCount, dragHasFiles } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
+import { startOverMenuItem } from '../../play/startOver';
 
 const KIND = BUILTIN_LAYER;
 
@@ -105,6 +106,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const mode = useThemeMode();
   const addRef = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState(false);
+  const pageMoreRef = useRef<HTMLSpanElement>(null);
+  const [pageMore, setPageMore] = useState<{ x: number; y: number } | null>(null);
   const [importingP5, setImportingP5] = useState(false);
   const addP5 = (r: P5ImportResult) => {
     setImportingP5(false);
@@ -484,6 +487,10 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         </span>
         {menu && <AddLayerMenu play={play} touch={touch} anchorRef={addRef} onAdd={add} onAddKind={addKind} onChange={onChange} onClose={() => setMenu(false)} />}
         {importingP5 && <P5ImportDialog onCreate={addP5} onClose={() => setImportingP5(false)} />}
+        <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
+          <IconButton icon="more" label="More" size="sm" tooltip={false} onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 200, y: r.bottom + 4 } : null); }} />
+        </span>
+        {pageMore && <Menu x={pageMore.x} y={pageMore.y} minWidth={200} onClose={() => setPageMore(null)} items={[startOverMenuItem(() => setPageMore(null))]} />}
       </div>
       {(picked.length > 0 || selectMode) && (
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 14px', borderBottom: `1px solid ${tk.border.default}`, background: alpha(tk.accent.base, 0.08) }}>

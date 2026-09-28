@@ -149,6 +149,21 @@ export function kmMatteSources(layers, drawn) {
   return out;
 }
 
+// ── The Background's matte ──────────────────────────────────────────────────
+
+/**
+ * The Background's final opacity, 0..1, from its matte value `m` (0..1, not
+ * yet inverted) and what shows outside it: 0 hides the picture outside the
+ * matte completely (a plain cut, like a layer's own track matte); up to 1
+ * only dims it there instead. Pure maths, shared by the canvas pass below.
+ */
+export function kmBackgroundMatteValue(m, invert, opacityOutside) {
+  const v = Math.max(0, Math.min(1, m));
+  const inside = invert ? 1 - v : v;
+  const outside = Math.max(0, Math.min(1, opacityOutside || 0));
+  return outside + (1 - outside) * inside;
+}
+
 // ── Canvas ───────────────────────────────────────────────────────────────────
 
 function kmReset(x) {
@@ -173,6 +188,65 @@ export function kmApplyTrack(pool, o, matte, t, W, H) {
     o.drawImage(matte, 0, 0);
   }
   o.globalCompositeOperation = 'source-over';
+}
+
+/**
+ * Cut the picture already painted on `o` (the Background) by `matte`'s alpha
+ * or luma, same maths as a layer's own track matte (kmApplyTrack), plus a
+ * soft edge (feather, in device pixels: the shape's blurred shadow, at half
+ * size, as kmOneMask does for a mask) and an opacity for what sits outside
+ * the matte instead of a plain cut (kmBackgroundMatteValue).
+ */
+export function kmApplyBackgroundMatte(pool, o, matte, t, W, H) {
+  let alphaSrc = matte, aw = W, ah = H;
+  if (t.mode === 'luma') {
+    const k = Math.min(1, KM_LUMA_SIDE / Math.max(W, H)), lw = Math.max(1, Math.round(W * k)), lh = Math.max(1, Math.round(H * k));
+    const c = klCanvas(pool, 'kbLuma', lw, lh), x = c.getContext('2d', { willReadFrequently: true });
+    kmReset(x); x.clearRect(0, 0, lw, lh); x.drawImage(matte, 0, 0, lw, lh);
+    let img;
+    try { img = x.getImageData(0, 0, lw, lh); } catch (e) { return; }
+    kmLumaToAlpha(img.data, false); // invert and the outside opacity are applied uniformly below
+    x.putImageData(img, 0, 0);
+    alphaSrc = c; aw = lw; ah = lh;
+  }
+  const f = Math.max(0, t.feather || 0);
+  let cut = alphaSrc, cw = aw, ch = ah;
+  if (f >= 1) {
+    // The matte's silhouette, blurred: drawn at half size so its shadow (the soft edge) lands
+    // in the other half of a double-width canvas (kmOneMask does the same for a mask's feather).
+    const hw = Math.max(1, Math.ceil(W / 2)), hh = Math.max(1, Math.ceil(H / 2));
+    const b = klCanvas(pool, 'kbSoft', hw * 2, hh), y = b.getContext('2d');
+    kmReset(y); y.clearRect(0, 0, hw * 2, hh);
+    y.shadowColor = '#fff'; y.shadowBlur = f / 2; y.shadowOffsetX = -hw;
+    y.drawImage(alphaSrc, 0, 0, aw, ah, hw, 0, hw, hh);
+    kmReset(y);
+    cut = b; cw = hw; ch = hh;
+  }
+  if (t.invert) {
+    const i = klCanvas(pool, 'kbInv', W, H), z = i.getContext('2d');
+    kmReset(z); z.fillStyle = '#fff'; z.fillRect(0, 0, W, H);
+    z.globalCompositeOperation = 'destination-out'; z.drawImage(cut, 0, 0, cw, ch, 0, 0, W, H); z.globalCompositeOperation = 'source-over';
+    cut = i; cw = W; ch = H;
+  }
+  const outside = Math.max(0, Math.min(1, t.opacityOutside || 0));
+  if (outside <= 0) {
+    // A plain cut: the same destination-in / destination-out a layer's own track matte uses.
+    o.globalCompositeOperation = 'destination-in';
+    o.drawImage(cut, 0, 0, cw, ch, 0, 0, W, H);
+    o.globalCompositeOperation = 'source-over';
+    return;
+  }
+  // Everywhere dimmed to `outside`, with the plain cut laid over it at full strength:
+  // bg·(cutAlpha + outside·(1 − cutAlpha)) — kmBackgroundMatteValue's formula, in two GPU passes.
+  const orig = klCanvas(pool, 'kbOrig', W, H), ox = orig.getContext('2d');
+  kmReset(ox); ox.clearRect(0, 0, W, H); ox.drawImage(o.canvas, 0, 0); kmReset(ox);
+  const layer = klCanvas(pool, 'kbLayer', W, H), lx = layer.getContext('2d');
+  kmReset(lx); lx.clearRect(0, 0, W, H); lx.drawImage(orig, 0, 0);
+  lx.globalCompositeOperation = 'destination-in'; lx.drawImage(cut, 0, 0, cw, ch, 0, 0, W, H); kmReset(lx);
+  o.clearRect(0, 0, W, H);
+  o.globalAlpha = outside; o.drawImage(orig, 0, 0); o.globalAlpha = 1;
+  o.drawImage(layer, 0, 0);
+  kmReset(o);
 }
 
 /** One mask as white-with-alpha: the shape, grown or shrunk, softened, inverted. { el, w, h }: the part of `el` that holds it (half size when feathered). */
