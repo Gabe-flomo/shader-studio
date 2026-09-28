@@ -33,6 +33,9 @@
  *              out of view is then "lost" (a path shape's Hand lost) even before it first saw it;
  *              without tracking, one that never saw its hand rests where it was placed
  *   hands      { state, colour } to draw the hands' skeleton, or null (optional; the host decides when: the app has its own switch for it, apart from the guides)
+ *   track(kind, point)  a tracked face's or body's landmark ('face' 0..477, 'pose' 0..32) on the picture, or null (optional)
+ *   trackLive(kind)     that tracker has seen a frame: a null following it is lost while nothing is in view (optional)
+ *   tracks     [{ kind: 'face' | 'pose', state, colour }] to draw the face and the body, or null (optional, like hands)
  *   three      three.js (three-slim.js) for 3D Script layers, or null
  *   data(ref)  a dataset by id or name: { id, name, result } (its frozen result,
  *              Normalize applied), or null (optional)
@@ -56,6 +59,8 @@ import { bdCreate, bdDrop, bdScatter, bdStep, bdDraw } from './bodies.js';
 import { rlCreate, rlStep, rlPlace, rlShift, rlDraw, rlPictureOf, RL_MAX_MEMBERS, RL_READS } from './relationship.js';
 import { agCreate, agStep, agDraw, agReset, agScatter, agElements, agElement, AG_READS } from './agents.js';
 import { hdDraw } from './hands.js';
+import { fcDraw } from './face.js';
+import { psDraw } from './pose.js';
 import { kmApplyBackgroundMatte, kmApplyMasks, kmApplyTrack, kmMatteSources, kmTrackOf } from './mattes.js';
 import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 import { kdState, kdAct, kdPlan, kdTextItems, kdFrame, kdDrawTable, kdColumn, kdText, kdChunkText, kdWrapText, kdScriptView } from './data.js';
@@ -329,12 +334,14 @@ export function createLayerKit() {
       if (!s) { s = { x: l.x, y: l.y, vx: 0, vy: 0 }; springs.set(l.id, s); }
       let target = l.follow === 'mouse' ? (pointer.over ? pointer : null)
         : l.follow === 'hand' ? (env.hand ? env.hand(l.handSide, l.handPoint) : null)
+        : l.follow === 'face' || l.follow === 'pose' ? (env.track ? env.track(l.follow, l.trackPoint | 0) : null)
         // An agent of an Agents layer (as it was last frame): its number, or the layer's centre while that one is dead.
         : l.follow === 'agent' ? (ags.has(l.followId) ? agElement(ags.get(l.followId), Math.round(l.agentIndex || 0)) || agentCentre(l.followId) : null)
         : nullPos(record, { value: (n, k) => (springs.has(n.id) && n.id !== l.id ? springs.get(n.id)[k] : env.value(n, k)) }, l.followId);
-      if (l.follow === 'hand') {
+      if (l.follow === 'hand' || l.follow === 'face' || l.follow === 'pose') {
+        const live = l.follow === 'hand' ? handsLive : !!(env.track && env.trackLive && env.trackLive(l.follow));
         if (target) s.seen = true;
-        else if (handsLive || s.seen) handLost.add(l.id);
+        else if (live || s.seen) handLost.add(l.id);
         else target = { x: l.x, y: l.y };
       }
       if (target) {
@@ -1072,6 +1079,7 @@ export function createLayerKit() {
     // With `guides` (a context of the same size) they go there instead, above whatever the host lays over the layers.
     const gx = env.guides || ctx;
     if (env.hands) hdDraw(gx, env.hands.state, W, H, dpr, env.hands.colour);
+    if (env.tracks) for (const t of env.tracks) (t.kind === 'face' ? fcDraw : psDraw)(gx, t.state, W, H, dpr, t.colour);
     if (env.markers) for (const l of vis) if (l.kind === 'null') klDrawNull(gx, l, env.value(l, 'x'), env.value(l, 'y'), env.value(l, 'size'), dpr, W, H, l.role && l.role !== 'none' ? env.value(l, 'radius') * H : 0);
     // A relationship's forces (its Show forces switch): with the guides, never in the finished picture.
     if (env.markers) for (const l of vis) if (l.kind === 'relationship' && l.debug && rels.has(l.id)) rlDraw(gx, rels.get(l.id), l, k => env.value(l, k), W, H, dpr, aspect);

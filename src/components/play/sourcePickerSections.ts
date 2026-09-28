@@ -62,6 +62,32 @@ const SOURCE_GROUPS: { heading: string; entries: Entry[] }[] = [
     { value: 'hand:gesture', label: 'Gesture held', icon: 'hand', description: 'Fist, pinch, point…' },
     { value: 'hand:spread', label: 'Distance between the hands', icon: 'hand', description: 'Palm to palm' },
   ] },
+  { heading: 'Face', entries: [
+    { value: 'face:point', label: 'Face point', icon: 'face', description: 'X, Y or Z of a point: nose tip, chin, an iris…', keywords: 'landmark nose eye mouth' },
+    { value: 'face:mouthOpen', label: 'Mouth open', icon: 'face', description: 'Closed to wide open', keywords: 'jaw' },
+    { value: 'face:smile', label: 'Smile', icon: 'face', description: 'Both mouth corners up' },
+    { value: 'face:browsUp', label: 'Brows up', icon: 'face', description: 'Surprise', keywords: 'eyebrows' },
+    { value: 'face:browsDown', label: 'Brows down', icon: 'face', description: 'A frown', keywords: 'eyebrows' },
+    { value: 'face:blinkLeft', label: 'Blink left', icon: 'face', description: 'The left eye closing', keywords: 'wink eye' },
+    { value: 'face:blinkRight', label: 'Blink right', icon: 'face', description: 'The right eye closing', keywords: 'wink eye' },
+    { value: 'face:jaw', label: 'Jaw sideways', icon: 'face', description: 'Left to right' },
+    { value: 'face:yaw', label: 'Head turn', icon: 'face', description: 'Yaw: looking left or right', keywords: 'yaw rotate' },
+    { value: 'face:pitch', label: 'Head nod', icon: 'face', description: 'Pitch: looking up or down', keywords: 'pitch' },
+    { value: 'face:roll', label: 'Head tilt', icon: 'face', description: 'Roll: toward a shoulder', keywords: 'roll' },
+    { value: 'face:blend', label: 'Any blendshape', icon: 'face', description: 'One of MediaPipe’s 52 face shapes', keywords: 'blendshape expression' },
+    { value: 'face:size', label: 'Face nearness', icon: 'face', description: 'How big the face looks' },
+    { value: 'face:present', label: 'Face in view', icon: 'face', description: 'On while a face is seen' },
+    { value: 'face:gesture', label: 'Face gesture held', icon: 'face', description: 'Mouth open, smile, blink…' },
+  ] },
+  { heading: 'Pose', entries: [
+    { value: 'pose:point', label: 'Body point', icon: 'body', description: 'X, Y or Z of a wrist, elbow, knee…', keywords: 'landmark skeleton' },
+    { value: 'pose:visibility', label: 'Point visible', icon: 'body', description: 'How sure the model is a point is in view' },
+    { value: 'pose:lean', label: 'Shoulder lean', icon: 'body', description: 'The shoulders’ tilt' },
+    { value: 'pose:spread', label: 'Wrists apart', icon: 'body', description: 'Wrist to wrist', keywords: 'arms' },
+    { value: 'pose:size', label: 'Body nearness', icon: 'body', description: 'How big the body looks' },
+    { value: 'pose:present', label: 'Body in view', icon: 'body', description: 'On while a body is seen' },
+    { value: 'pose:gesture', label: 'Pose gesture held', icon: 'body', description: 'Hands up, arms out…' },
+  ] },
 ];
 
 /**
@@ -107,6 +133,8 @@ const TRIGGER_GROUPS: { heading: string; kinds: { on: TriggerSpec['on']; label: 
   { heading: 'Layers & hands', kinds: [
     { on: 'zone', label: 'Shape', icon: 'layoutCanvas', description: 'A shape is clicked, entered or filled' },
     { on: 'hand', label: 'Hand gesture', icon: 'hand', description: 'Pinch, fist, point, open palm…' },
+    { on: 'face', label: 'Face gesture', icon: 'face', description: 'Mouth opens, smile, blink, brows up…' },
+    { on: 'pose', label: 'Pose gesture', icon: 'body', description: 'Hands up, one hand up, arms out…' },
     { on: 'proximity', label: 'Proximity', icon: 'bidir', description: 'Two layers or hands come close' },
   ] },
   { heading: 'Conditions & signals', kinds: [

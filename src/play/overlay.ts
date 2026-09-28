@@ -15,6 +15,7 @@
 
 import type { ActionKind, PlayLayer, PlayRecord } from '../types/play';
 import { DEFAULT_HANDS, emptyPlayRecord } from '../types/play';
+import { DEFAULT_FACE, DEFAULT_POSE } from '../types/playTracking';
 import { playEngine } from '../lib/playEngine';
 import { liveAudio } from '../lib/liveAudio';
 import { layerAudio } from '../lib/layerAudio';
@@ -686,6 +687,10 @@ class PlayOverlay {
       hand: forExport || this.replaying ? undefined : (side, point) => playEngine.handPoint(side as 'left' | 'right' | 'any', point),
       handsLive: !forExport && !this.replaying && playEngine.handState().live,
       hands: this.handsOverlay(forExport),
+      // Face and body tracking, the same way.
+      track: forExport || this.replaying ? undefined : (kind, point) => playEngine.trackPoint(kind, point),
+      trackLive: kind => !forExport && !this.replaying && playEngine.trackLive(kind),
+      tracks: this.tracksOverlay(forExport),
       // The graph's Layers node can't read the layers while the graph isn't running.
       shaderTap: forExport || playBackground.active() || (playBackground.layerActive() && !planShowsThis(this.lastQueue)) ? undefined : this.shaderTap ?? undefined,
       scriptStatus: forExport ? undefined : setScriptStatus,
@@ -709,6 +714,18 @@ class PlayOverlay {
     if (!st.live) return null;
     const h = this.record.hands ?? DEFAULT_HANDS;
     return h.overlay ? { state: st, colour: h.colour } : null;
+  }
+
+  /** The face and the body over the picture, each with its own Show on picture switch and colour. */
+  private tracksOverlay(forExport: boolean): KitEnv['tracks'] {
+    if (forExport || this.replaying) return null;
+    const out: NonNullable<KitEnv['tracks']> = [];
+    for (const kind of ['face', 'pose'] as const) {
+      const st = playEngine.trackState(kind);
+      const s = this.record[kind] ?? (kind === 'face' ? DEFAULT_FACE : DEFAULT_POSE);
+      if (st.live && s.overlay) out.push({ kind, state: st, colour: s.colour });
+    }
+    return out.length ? out : null;
   }
 
   draw(gl: HTMLCanvasElement, time: number, dt: number): void {
