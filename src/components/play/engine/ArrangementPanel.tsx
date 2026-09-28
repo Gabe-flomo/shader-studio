@@ -132,7 +132,7 @@ export function ArrangementPanel({ play, touch }: { play: PlayRecord; onChange: 
           <Select ariaLabel="Count-in" value={String(arr.countIn)} height={28} style={{ flex: '0 1 130px', minWidth: 0 }}
             options={COUNT_INS.map(n => ({ value: String(n), label: n ? `Count-in ${n} bar${n > 1 ? 's' : ''}` : 'No count-in' }))}
             onChange={v => setArr(a => ({ ...a, countIn: Number(v) as CountIn }))} />
-          <BpmField bpm={arr.bpm} />
+          <BpmField key={arr.bpm} bpm={arr.bpm} />
           <Select ariaLabel="Fade in" value={String(arr.fade)} height={28} style={{ flex: '0 1 140px', minWidth: 0 }}
             options={[0, 10, 50, 200, 500, 1000].map(ms => ({ value: String(ms), label: ms ? `Fade in ${ms} ms` : 'No fade in' }))}
             onChange={v => setArr(a => ({ ...a, fade: Number(v) }))} />
@@ -172,7 +172,6 @@ export function ArrangementPanel({ play, touch }: { play: PlayRecord; onChange: 
 function BpmField({ bpm }: { bpm: number }) {
   const tk = useTokens();
   const [text, setText] = useState(String(bpm));
-  useEffect(() => setText(String(bpm)), [bpm]);
   const commit = () => {
     const v = Number(text);
     if (Number.isFinite(v) && v >= 20 && v <= 300) setArr(a => ({ ...a, bpm: Math.round(v * 10) / 10 })); else setText(String(bpm));

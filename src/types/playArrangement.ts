@@ -122,7 +122,8 @@ export function tapeSpans(prev: number, now: number, length: number, loop: boole
   let a = prev;
   // Positions before 0 (a pre-roll) play nothing but still count down to 0.
   if (a < 0) { spans.push([a, Math.min(0, now)]); if (now <= 0) return { spans, wrapped }; a = -1e-9; }
-  let lapA = Math.floor(Math.max(0, a) / length), lapB = Math.floor((now - 1e-9) / length);
+  const lapB = Math.floor((now - 1e-9) / length);
+  let lapA = Math.floor(Math.max(0, a) / length);
   if (lapB - lapA > 4) lapA = lapB - 4; // a long stall: only the last few laps
   for (let lap = lapA; lap <= lapB; lap++) {
     const s = lap === lapA ? a - lap * length : -1e-9, e = Math.min(now, (lap + 1) * length) - lap * length;
