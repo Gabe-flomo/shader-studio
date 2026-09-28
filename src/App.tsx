@@ -53,6 +53,8 @@ import type { Stage as StageT } from './components/play/Stage';
 import type { ConvertPage as ConvertPageT } from './components/convert/ConvertPage';
 import { requestConvert } from './components/convert/convertHandoff';
 import { useStage } from './components/play/stageStore';
+import { hostsCanvas, usePageCanvas } from './components/shell/pageCanvasStore';
+import { usePreviewHost } from './lib/previewHost';
 import { OutputButton } from './components/output/OutputButton';
 import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './components/KeyboardShortcutsModal';
 import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
@@ -643,14 +645,18 @@ function App() {
   const historyPopped = useHistoryWindow(s => s.open);
   // Node search palette
   // showSearchPalette is now in the store (searchPaletteOpen / setSearchPaletteOpen)
-  const shaderCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const offlineRenderRef = useRef<OfflineRenderHandle | null>(null);
-  const handleCanvasReady = useCallback((c: HTMLCanvasElement) => { shaderCanvasRef.current = c; }, []);
+  // The preview's canvas and offline renderer register with lib/previewHost: Record and Snapshot take the
+  // picture from whichever ShaderCanvas is mounted (this file's, or a page hosting the canvas itself).
+  const handleCanvasReady = useCallback((c: HTMLCanvasElement) => { usePreviewHost.getState().setCanvas(c); }, []);
   const handleRegisterOfflineRender = useCallback((handle: OfflineRenderHandle) => {
-    offlineRenderRef.current = handle;
+    usePreviewHost.getState().setOffline(handle);
     // Dev-only, like window.__shaderStudio: scripted checks render offline frames through it.
     if (import.meta.env.DEV) (window as unknown as { __shaderStudioOffline?: OfflineRenderHandle }).__shaderStudioOffline = handle;
   }, []);
+
+  // A page hosting the main canvas itself (Convert, GLSL: shell/PageCanvas.tsx): the preview column steps aside.
+  const pageLayouts = usePageCanvas(s => s.layout);
+  const hosted = hostsCanvas(page, pageLayouts);
 
   const [showHistogram, setShowHistogram] = useState(false);
   const [histData, setHistData]           = useState<HistogramData | null>(null);
@@ -675,7 +681,7 @@ function App() {
     export:         unlessScratch(() => offerGraphExport(null)),
     import:         unlessScratch(() => { void importAnyFile(setPage); }),
     fitView:        () => _fitViewCallback?.(),
-    fullscreen:     () => { if (page === 'present') void toggleFullscreenTarget('present'); else if (page === 'studio' || page === 'play') void toggleFullscreenTarget('canvas'); },
+    fullscreen:     () => { if (page === 'present') void toggleFullscreenTarget('present'); else if (page === 'studio' || page === 'play' || hosted) void toggleFullscreenTarget('canvas'); },
     toggleCode:     () => setShowCode(v => !v),
     toggleRecord:   () => setShowExport(v => !v),
     rebuild:        () => { void rebuildWithToast(); },
@@ -717,7 +723,7 @@ function App() {
     filterUVOutputs:() => setNodeHighlightFilter('uv-out'),
     shortcuts:      () => setPage(p => p === 'shortcuts' ? 'studio' : 'shortcuts'),
     playSplit:      () => { const sp = usePlaySplit.getState(); if (sp.available) sp.toggle(); },
-  }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll, setPage, page]);
+  }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll, setPage, page, hosted]);
 
   const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);
   const holdHandlers = useMemo(() => ({
@@ -890,8 +896,8 @@ function App() {
         />
         {showExport && (
           <ExportModal
-            canvas={recordSource ?? shaderCanvasRef.current}
-            offlineRender={recordSource ? null : offlineRenderRef.current}
+            canvas={recordSource ?? usePreviewHost.getState().canvas}
+            offlineRender={recordSource ? null : usePreviewHost.getState().offline}
             external={!!recordSource}
             onClose={() => { setShowExport(false); setRecordSource(null); }}
           />
@@ -1118,7 +1124,7 @@ function App() {
 
         {/* Export modal */}
         {showExport && (
-          <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
+          <ExportModal canvas={usePreviewHost.getState().canvas} offlineRender={usePreviewHost.getState().offline} onClose={() => setShowExport(false)} />
         )}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
         <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />
@@ -1153,7 +1159,7 @@ function App() {
             <PlayPage compact />
           </div>
         </div>
-        {showExport && <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />}
+        {showExport && <ExportModal canvas={usePreviewHost.getState().canvas} offlineRender={usePreviewHost.getState().offline} onClose={() => setShowExport(false)} />}
       </div>
     );
   }
@@ -1303,7 +1309,7 @@ function App() {
             {errorPopup}
           </div>
         </div>
-        {showExport && <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />}
+        {showExport && <ExportModal canvas={usePreviewHost.getState().canvas} offlineRender={usePreviewHost.getState().offline} onClose={() => setShowExport(false)} />}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
         <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />
         {showTabletHistory && (
@@ -1392,7 +1398,7 @@ function App() {
         </div>
 
         {/* Resize Divider — hidden when preview is floated, and on Play (the picture fills the space) */}
-        {!previewFloated && page !== 'play' && (
+        {!previewFloated && page !== 'play' && !hosted && (
           <div
             onMouseDown={handleDividerMouseDown}
             onTouchStart={handleDividerTouchStart}
@@ -1402,8 +1408,8 @@ function App() {
           </div>
         )}
 
-        {/* Right: Shader Preview — hidden when floated. A render surface, so it's dark in both themes. */}
-        {!previewFloated && (
+        {/* Right: Shader Preview — hidden when floated or when the page hosts the canvas itself. A render surface, so it's dark in both themes. */}
+        {!previewFloated && !hosted && (
           <ThemeOverrideContext.Provider value="dark">
             <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
               <PreviewHeader>
@@ -1459,7 +1465,7 @@ function App() {
       )}
 
       {showExport && (
-        <ExportModal canvas={shaderCanvasRef.current} offlineRender={offlineRenderRef.current} onClose={() => setShowExport(false)} />
+        <ExportModal canvas={usePreviewHost.getState().canvas} offlineRender={usePreviewHost.getState().offline} onClose={() => setShowExport(false)} />
       )}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
       {historyPopped && <HistoryWindow />}
