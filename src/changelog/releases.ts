@@ -44,6 +44,9 @@ export const RELEASES: Release[] = [
     title: 'Less on screen at once',
     highlights: [
       { area: 'Play', text: 'Editors open collapsed: one main section, the rest folded to a one-line summary. Expand all or fold all; each section remembers.' },
+      { area: 'Files', text: 'Sample browsers audition like Splice: arrow down plays the next sound, left restarts, right skips 3 s, Enter picks. Auto-preview can be turned off.' },
+      { area: 'Play', text: 'Multiply particles that annihilate now just meet and vanish, with no burst.', link: { kind: 'doc', path: 'docs/particles-multiply.md' } },
+      { area: 'Studio', text: 'The top bar fits narrower windows: labels drop first, rarely used buttons fold into a ··· menu, and nothing runs off the edge.' },
     ],
   },
   {
