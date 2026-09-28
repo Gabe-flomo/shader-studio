@@ -115,6 +115,20 @@ We built:
 - **Takes and renders**: notes and parameter moves are recorded as for any rack. A frame-by-frame render replays them into the pure engine, sample-exactly, with the same seed, so two renders of one take are identical to the bit.
 - **Exported web pages**: the runtime plays granulator racks (Drone, MIDI, mapped parameters, readers, readouts), carrying a Library sample in the page when it fits and making a generated tone when that is the sample.
 
+### Grains from a layer (visuals → grains)
+
+The card's **Grains from a layer** section (folded until used) lets a layer play the grains:
+
+- **Source**: a particles layer, a bodies layer, a null, or a Relationship layer's members. **Inside**: a shape layer as the boundary (any shape, a drawn path too: a hand path works), or the whole picture. The card shows how many things are inside now ("5 in").
+- Each thing inside plays **Grains per thing** a second (setting 35, a mapping target) while it stays inside, so the density follows the number of things. When more than the Grain cap are inside, the ones closest to the boundary's centre play. Cloud mode spaces each thing's grains at random; the others space them evenly. With **A particle just born plays a grain at once** (particles only, on by default), a burst of particles is a burst of grains.
+- **Links**: up to 6 rows, each "a thing's number → a grain setting", on or off, from a value (at 0) to a value (at 1).
+  - The numbers (each 0–1): X, Y, speed, heading, age (of its life), size, brightness under it (from the coarse picture), and distance to the boundary's centre.
+  - The settings: file position, pitch, grain size, amplitude, pan, filter cutoff (one filter: the mean of the things'), and spray.
+  - The defaults are X → file position, Y → pitch ±12, speed → grain size 40–300 ms, and age → amplitude 1–0.
+- **Where it runs.** The kit reads the things (`grainThings` in kit/kit.js) after every frame the layers step. `lib/grainFrom.ts` turns them into points (`grFromPoints`) for the live granulator. During a render it logs each frame's points by time, and the offline mix replays them into the pure engine (`pointsAt`). The layers are deterministic in a render (the take's seed) and the grains are seeded, so the result is the same every time. Exported pages do the same in the runtime.
+- **Limit: FFmpeg renders.** The FFmpeg render mixes the sound before it draws the frames, so it replays the points logged by the last pass over that span. Render to a PNG sequence (which mixes after the frames), or record in real time, for the exact grains of that pass. The PNG sequence and real-time recordings are exact.
+- The example's second part plays a generated bell from the Flow particles inside a drifting Ring.
+
 Not built (yet):
 
 - **Capture / Grab** of live input into the sample buffer.
@@ -122,4 +136,37 @@ Not built (yet):
 - **MPE** (per-note Slide and Press), mono and glide, key scaling of the pitch and envelopes.
 - FRAGMENTS' **Rhythmic** tempo-synced grains and Portal's **scale-locked pitch**.
 - A per-grain array for the Particles layer to spawn from directly. The per-grain sensors and **Grains → nulls** cover that for now.
+- Link ranges as mapping targets (Grains per thing is one). The ranges are edited on the card.
 - Audio Unit effects after a granulator on the desktop: its sound is in Web Audio, and a send into a native rack is possible (lib/engineSend.ts) but isn't wired for it.
+
+## Where things are
+
+| Piece | File |
+| --- | --- |
+| The engine (grains, modes, envelopes, filter, FM, scan, points), the worklet, the offline render, generated samples, Grains from's links | `src/play/kit/granulator.js` (+ `.d.ts`) |
+| The record: the `granulator` slot, its sample, `from`, grain readout targets (`grains:<rack>::<read>`), sensors on `ae:<rack>` | `src/types/playAudioEngine.ts`, `src/types/play.ts` (`SensorRead`, `sensorKey`) |
+| Live in Web Audio: the rack, its Sound chain `rack:<id>`, readouts as sensors | `src/lib/webGranulator.ts`, `src/lib/audioEngineHost.ts` |
+| Grains from a layer: the overlay's tap, the render log | `src/lib/grainFrom.ts`, `src/play/overlay.ts` (`setGrainTap`), `src/play/kit/kit.js` (`grainThings`) |
+| Renders (a take's notes and settings, sample-exact) | `src/lib/recordingAudio.ts` (`grainTracks`, `renderGrains`) |
+| The card | `src/components/play/engine/GranulatorPanel.tsx` (in `RackCard.tsx`) |
+| Readouts → controls, Grains → nulls | `src/play/grainControls.ts` |
+| Exported pages | `src/play/runtime/play-runtime.js` (granulator racks), `src/play/exportHtml.ts` (the kit, carried samples) |
+| The example | `src/store/playExamples.ts` (`granulator`) |
+| Tests | `src/play/__tests__/granulator.test.ts` |
+
+## Tests
+
+`src/play/__tests__/granulator.test.ts` renders into buffers only (nothing reaches a speaker). It covers:
+
+- the grain count never passes the cap (64, 10, 1) and reaches it
+- Classic, Flux and Cloud differ, both in how many grains overlap and in how that count varies, and in their samples
+- pitch shift and MIDI note → pitch, measured by zero crossings on a 220 Hz sine (+12 st gives 440 Hz, C5 over a C4 root gives 440 Hz, a fifth is ×1.5)
+- two renders with one seed are identical to the bit, and another seed differs
+- a note lands on its exact sample
+- Drone, Hold and Freeze, and the voice count
+- the real AudioWorklet in an `OfflineAudioContext` (node-web-audio-api): silent before the note, then at +12 st
+- an offline mix with a take's note on its sample, the same twice
+- the host running a rack in Web Audio and reporting sensors
+- the record: parsing, targets, readouts kept and dropped with the rack, Grains → nulls
+- the web export: the carried sample, and the page's kit
+- Grains from a layer: the links, closest first up to the cap, the cutoff mean, density following the count, births firing at once, a logged render replayed identically, and parsing
