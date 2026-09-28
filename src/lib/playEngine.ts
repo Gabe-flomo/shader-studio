@@ -34,6 +34,7 @@ import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../typ
 import { geoAnchor } from '../play/kit/geometry.js';
 import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
+import { sensorKey } from '../types/play';
 import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parsePropTarget, parseReaderTarget } from '../types/play';
 import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
@@ -837,7 +838,7 @@ class PlayEngine implements InputSource {
           return d === null ? null : Math.min(1, d);
         }
         if (AUDIO_READS.has(source.read)) return this.audioBand(source.layerId, source.read as LiveBand);
-        return this.sensors.get(`${source.layerId}::${source.read}`) ?? null;
+        return this.sensors.get(sensorKey(source)) ?? null;
       }
       case 'data':
         return readDataSource(source, k => this.sensors.get(k));

@@ -10,6 +10,7 @@
  *   synth         the MIDI tone synth (lib/toneSynth.ts)
  *   layer:<id>    an audio layer's song, or a Video layer's sound
  *   node:<id>     an Audio Input node's song
+ *   rack:<id>     an Audio engine rack's Granulator (docs/granulator.md)
  */
 import { AF_EFFECTS, AF_KINDS, afNewEffect, afNormaliseEffect, afShownParams, type AfEffect, type AfKind, type AfParam } from '../play/kit/audioFx.js';
 
@@ -38,7 +39,10 @@ export const layerChainId = (layerId: string) => `layer:${layerId}`;
 /** The chain an Audio Input node's song goes through. */
 export const nodeChainId = (nodeId: string) => `node:${nodeId}`;
 
-const CHAIN_ID = /^(master|synth|layer:[^\s]+|node:[^\s]+)$/;
+/** The chain an Audio engine rack's Granulator plays through. */
+export const rackChainId = (rackId: string) => `rack:${rackId}`;
+
+const CHAIN_ID = /^(master|synth|layer:[^\s]+|node:[^\s]+|rack:[^\s]+)$/;
 export const isChainId = (id: string) => CHAIN_ID.test(id);
 
 // ── Control targets ─────────────────────────────────────────────────────────
