@@ -42,6 +42,12 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'playSplit',         label: 'Split the Play view',   group: 'View',       defaultCombo: 'cmd+shift+l', description: 'On the Play page: the picture beside a big Controls, Layers or Mappings panel, or back to the full picture' },
   { id: 'playRail',          label: 'Fold the Play sidebar', group: 'View',       defaultCombo: 'cmd+shift+b', description: 'On the Play page, split: fold the sidebar into a rail of icons so the panel takes its width, one page at a time; again to bring it back' },
   { id: 'gotoMappings',      label: 'Go to Mappings',        group: 'View',       defaultCombo: 'cmd+shift+m', description: 'On the Play page: open the split (if it’s closed) and show Mappings' },
+  // The rail's own categories. A plain browser tab claims ⌘1–4 for switching its own tabs before the
+  // page ever sees the keydown, so App.tsx also binds ⌃1–4 to the same four, fixed (not remappable here).
+  { id: 'railControls',      label: 'Go to Controls & Mappings', group: 'View',   defaultCombo: 'cmd+1',       description: 'On the Play page: open the split (if it’s closed) and show Controls & Mappings, on the tab it was last on. Also ⌃1' },
+  { id: 'railLayers',        label: 'Go to Layers',          group: 'View',       defaultCombo: 'cmd+2',       description: 'On the Play page: open the split (if it’s closed) and show Layers, on the page it was last on. Also ⌃2' },
+  { id: 'railFinish',        label: 'Go to Finish',          group: 'View',       defaultCombo: 'cmd+3',       description: 'On the Play page: open the split (if it’s closed) and show Finish, on the page it was last on. Also ⌃3' },
+  { id: 'railEngine',        label: 'Go to Engine',          group: 'View',       defaultCombo: 'cmd+4',       description: 'On the Play page: open the split (if it’s closed) and show the Audio engine. Also ⌃4' },
   // Node graph — add nodes
   { id: 'addNode',           label: 'Open node palette',     group: 'Add Nodes',  defaultCombo: 'a',           description: 'Open the add-node palette' },
   { id: 'addUV',             label: 'Add UV node',           group: 'Add Nodes',  defaultCombo: 'u',           description: 'Instantly add a UV node' },

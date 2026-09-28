@@ -22,7 +22,7 @@ import { canvasFrameRef as canvasFrame, exitFullscreen, isFullscreenKey, isTypin
 import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
 import { PlaySplitArea, SplitButton } from './components/play/PlaySplitArea';
-import { goToMappings, usePlaySplit } from './components/play/playSplit';
+import { goToMappings, goToRailCategory, usePlaySplit } from './components/play/playSplit';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './components/shell/rebuildAction';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
@@ -725,6 +725,10 @@ function App() {
     playSplit:      () => { const sp = usePlaySplit.getState(); if (sp.available) sp.toggle(); },
     playRail:       () => { const sp = usePlaySplit.getState(); if (sp.available) sp.toggleRail(); },
     gotoMappings:   () => goToMappings(),
+    railControls:   () => goToRailCategory('controls'),
+    railLayers:     () => goToRailCategory('layers'),
+    railFinish:     () => goToRailCategory('finish'),
+    railEngine:     () => goToRailCategory('engine'),
   }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll, setPage, page, hosted]);
 
   const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);
@@ -748,6 +752,23 @@ function App() {
     };
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
+  }, [page]);
+  // ⌃1–4 do what ⌘1–4 (railControls/Layers/Finish/Engine, useShortcuts.ts) do: a plain browser tab
+  // claims ⌘1–4 for switching its own tabs before the page ever sees the keydown, so this fixed,
+  // unremappable fallback is the only way those four reach the rail there (App.tsx, not useShortcuts's
+  // customizable map — the same four ids fire either way).
+  useEffect(() => {
+    if (page !== 'play') return;
+    const CTRL_RAIL_CATS = { '1': 'controls', '2': 'layers', '3': 'finish', '4': 'engine' } as const;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || isTyping(e.target)) return;
+      const cat = CTRL_RAIL_CATS[e.key as keyof typeof CTRL_RAIL_CATS];
+      if (!cat) return;
+      e.preventDefault();
+      goToRailCategory(cat);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [page]);
   useTimeHotkeys();
 

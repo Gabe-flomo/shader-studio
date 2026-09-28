@@ -1,18 +1,25 @@
 /**
  * railPages.ts — what the split view's icon rail offers (docs/split-view.md,
- * "Rail and full-width pages"): the Play page's categories (Controls, Layers,
- * Finish, Engine, Mappings), each with its pages. A page is what the big
- * panel shows full width once the sidebar is collapsed into the rail; the
- * phone's bottom row offers the same pages in a sheet.
+ * "Rail and full-width pages"): the Play page's categories (Controls —
+ * Mappings included, Layers, Finish, Engine), each with its pages. A page is
+ * what the big panel shows full width once the sidebar is collapsed into the
+ * rail; the phone's bottom row offers the same pages in a sheet.
  *
  * Pure data and helpers: PlayRail.tsx draws the rail and its drawer,
  * PlayPage renders each page into the panel.
  */
 import type { PlayRecord } from '../../types/play';
 import type { IconName } from '../ui/iconPaths';
-import type { PlayTab } from './playUi';
+import { tabForPage, type PlayTab } from './playUi';
 
-export type RailCategory = PlayTab;
+/**
+ * The rail's own grouping of pages, which sections its icons (RAIL_CATEGORIES
+ * below). It used to be the same union as PlayTab (the sidebar's own tab-strip
+ * sections, playUi.ts), one category per tab; Controls and Mappings merged
+ * into one rail category (the owner's call, 2026-09-28) while the tab-strip
+ * elsewhere still keeps them apart, so the two unions parted ways here.
+ */
+export type RailCategory = 'controls' | 'layers' | 'finish' | 'engine';
 
 export type RailPage =
   | 'controls'
@@ -47,18 +54,27 @@ export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
   'finish-picture': { id: 'finish-picture', category: 'finish', label: 'Picture', description: 'Grade, lens, film and time effects over the whole picture' },
   'finish-sound': { id: 'finish-sound', category: 'finish', label: 'Sound', description: 'Reverb, echo, filter and more on each sound and the master' },
   'engine-performance': { id: 'engine-performance', category: 'engine', label: 'Arrangement', description: 'Racks of synths and effects, played live' },
-  mappings: { id: 'mappings', category: 'mappings', label: 'Mappings', description: 'Inputs onto controls: source, range, curve, smoothing' },
-  'midi-file': { id: 'midi-file', category: 'mappings', label: 'MIDI file', description: 'A MIDI file played as if from a controller' },
-  'pad-grid': { id: 'pad-grid', category: 'mappings', label: 'Pad grid', description: 'A grid of pads from a controller, read as sources' },
+  mappings: { id: 'mappings', category: 'controls', label: 'Mappings', description: 'Inputs onto controls: source, range, curve, smoothing' },
+  'midi-file': { id: 'midi-file', category: 'controls', label: 'MIDI file', description: 'A MIDI file played as if from a controller' },
+  'pad-grid': { id: 'pad-grid', category: 'controls', label: 'Pad grid', description: 'A grid of pads from a controller, read as sources' },
 };
 
 export const RAIL_CATEGORIES: readonly RailCategoryDef[] = [
-  { id: 'controls', label: 'Controls', icon: 'sliders', description: 'The panel people play', pages: ['controls'] },
+  { id: 'controls', label: 'Controls', icon: 'sliders', description: 'The panel people play, and what maps onto it', pages: ['controls', 'mappings', 'midi-file', 'pad-grid'] },
   { id: 'layers', label: 'Layers', icon: 'layers', description: 'Layers, actions, signals and the background', pages: ['layers', 'actions', 'signals', 'background'] },
   { id: 'finish', label: 'Finish', icon: 'curve', description: 'Effects over the picture and the sound', pages: ['finish-picture', 'finish-sound'] },
   { id: 'engine', label: 'Engine', icon: 'piano', description: 'The Audio engine', pages: ['engine-performance'] },
-  { id: 'mappings', label: 'Mappings', icon: 'bidir', description: 'Mappings, the MIDI file and the pad grid', pages: ['mappings', 'midi-file', 'pad-grid'] },
 ];
+
+/**
+ * Each rail category's keyboard shortcut (⌘1–4; useShortcuts.ts's own
+ * `DEFAULT_ACTIONS` strings must match — App.tsx wires these up, and also
+ * binds the ⌃ equivalent, since a plain browser tab claims ⌘1–4 for its own
+ * tabs before the page ever sees the keydown).
+ */
+export const RAIL_CATEGORY_SHORTCUT: Readonly<Record<RailCategory, string>> = {
+  controls: 'cmd+1', layers: 'cmd+2', finish: 'cmd+3', engine: 'cmd+4',
+};
 
 export const RAIL_PAGE_IDS = Object.keys(RAIL_PAGES) as RailPage[];
 
@@ -79,10 +95,20 @@ export function firstPageOf(cat: RailCategory): RailPage {
   return categoryDef(cat).pages[0];
 }
 
-/** The page matching what the tab-strip panel shows (the rail starts where the panel was). */
+/**
+ * The page matching what the tab-strip panel shows (the rail starts where the
+ * panel was). Independent of the rail's own category grouping (RailCategory):
+ * Mappings is its own tab-strip tab even though it shares the Controls rail
+ * icon.
+ */
 export function pageForTab(tab: PlayTab, finishView: 'picture' | 'sound' = 'picture'): RailPage {
-  if (tab === 'finish') return finishView === 'sound' ? 'finish-sound' : 'finish-picture';
-  return firstPageOf(tab);
+  switch (tab) {
+    case 'finish': return finishView === 'sound' ? 'finish-sound' : 'finish-picture';
+    case 'mappings': return 'mappings';
+    case 'engine': return 'engine-performance';
+    case 'layers': return 'layers';
+    default: return 'controls';
+  }
 }
 
 /** How many things a page holds, for the drawer (undefined: nothing worth counting). */
@@ -100,12 +126,22 @@ export function pageCount(page: RailPage, play: PlayRecord): number | undefined 
   }
 }
 
-/** The small number on a rail icon: only where a count helps at a glance (layers, mappings). */
+/**
+ * The small number on a rail icon: only where a count helps at a glance
+ * (layers, controls). Controls carries Mappings too now, but the badge stays
+ * the controls count — the mappings count goes in the tooltip instead
+ * (PlayRail.tsx), so the two counts don't get added into one confusing number.
+ */
 export function categoryBadge(cat: RailCategory, play: PlayRecord): number | undefined {
   const n = cat === 'layers' ? play.layers.length
-    : cat === 'mappings' ? play.mappings.length + (play.pairMappings?.length ?? 0)
+    : cat === 'controls' ? play.controls.length
     : 0;
   return n > 0 ? n : undefined;
+}
+
+/** The mappings count for the Controls rail icon's tooltip (pair mappings included). */
+export function mappingsCountOf(play: PlayRecord): number {
+  return play.mappings.length + (play.pairMappings?.length ?? 0);
 }
 
 /**
@@ -115,7 +151,7 @@ export function categoryBadge(cat: RailCategory, play: PlayRecord): number | und
  */
 export function phonePageShown(tab: PlayTab, finishView: 'picture' | 'sound', picked: RailPage | ''): RailPage {
   if (tab === 'finish') return pageForTab(tab, finishView);
-  if (picked && categoryOf(picked) === tab) return picked;
+  if (picked && tabForPage(picked) === tab) return picked;
   return pageForTab(tab, finishView);
 }
 

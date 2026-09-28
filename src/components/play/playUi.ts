@@ -164,12 +164,19 @@ interface PlayUi {
 
 const NONE: ReadonlySet<string> = new Set();
 
-/** Each page's tab (kept here as well as in railPages.ts, so this module needs nothing from it at run time). */
+/**
+ * Each page's tab-strip section (kept here rather than railPages.ts: it's
+ * about the sidebar's own tabs, not the rail's icon grouping — Mappings
+ * shares the Controls rail icon but keeps its own tab here, so this needs
+ * nothing from railPages.ts at run time beyond the RailPage type).
+ */
 const PAGE_TABS: Record<RailPage, PlayTab> = {
   controls: 'controls', layers: 'layers', actions: 'layers', signals: 'layers', background: 'layers',
   'finish-picture': 'finish', 'finish-sound': 'finish', 'engine-performance': 'engine',
   mappings: 'mappings', 'midi-file': 'mappings', 'pad-grid': 'mappings',
 };
+/** The tab-strip section a rail page belongs to (independent of the rail's own category grouping). */
+export function tabForPage(page: RailPage): PlayTab { return PAGE_TABS[page]; }
 
 /** The record as it plays with solo applied (the same object when nothing is soloed). */
 export function applySolo(p: PlayRecord, layers: ReadonlySet<string>, mappings: ReadonlySet<string>): PlayRecord {
