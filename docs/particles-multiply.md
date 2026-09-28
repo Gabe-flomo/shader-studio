@@ -72,6 +72,27 @@ A Multiply layer can send a named signal (pick one, or make a new one, under **S
 
 Other actions and mappings react to these the same way they react to any signal: "When: a signal fires" on a trigger, or a Send a signal action chained onto it.
 
+## Signals: Born and Died (every Emit mode)
+
+Every particles layer — Stream, Bursts or Multiply — has two more signals under **Signals out**, in **Birth and death**: **Born** and **Died**. They fire once a step, however many particles were involved (a burst of 200 fires Born once, not two hundred times):
+
+| Signal | Fires when |
+|---|---|
+| **Born** | One or more particles are born this step: a Burst action, a stream particle respawning (end of life, or leaving the picture under **At the edges: Respawn** or **Random**), or a Multiply bud (by itself, by Fullness, or the Multiply action). |
+| **Died** | One or more particles die this step: age (a burst particle's Life running out), leaving the picture at a kill boundary (a burst particle under **At the edges: Respawn**), a Multiply annihilation, or the Cull action. |
+
+A Stream particle is "always alive, reborn when it leaves" (see Emit above): leaving or ageing out never counts as a death for it, only a birth (it reappears). Wrap and Bounce are neither — the particle never left. Multiply's own Split/Full/Annihilate/Cleared signals above still fire alongside Born/Died; Born mirrors Split's buds one-for-one, and Died mirrors Annihilate's pair deaths (two deaths per pair) plus any age or edge deaths under Stay/Flow/Return.
+
+The **Agents** layer has the same two signals, under its own **Signals out** section: **Born** fires when a group's Respawn revives an agent, and **Died** fires when a Catch rule, an energy drain, or a kill boundary (Boundary: Die) removes one.
+
+### Readings
+
+Every particles layer (and Agents) also gets two readings for mappings and triggers, alongside **Speed** and **Spread** (Agents: alongside **Alive** and the rest): **Born** and **Died** — how many were born or died this step (0 most steps), and **Alive** — the share of the layer's particles alive right now, 0 none, 1 all of Count. A "When a value…" trigger can watch these directly (for example, above 0) instead of picking a signal.
+
+### Determinism
+
+Born and Died are counted from the same seeded random source as everything else in the layer, so a take and an offline render fire them on the same frame as the app did, and the website export fires them identically too (the layer kit and the counting are the same code, shared, not reimplemented for the browser).
+
 ## Goo (metaballs)
 
 Look → **Goo**. Each particle adds a smooth bump `k(d) = (1 − d²/R²)²` to one field, with `R` = its size × **Goo blend**. Where the sum passes **Goo threshold** is goo. Particles close enough that their bumps add past the threshold between them merge into one blob; as they part, a neck stretches and snaps. A lone particle's blob has radius `R·√(1 − √threshold)`.

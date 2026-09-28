@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.16',
+    date: '2026-09-28',
+    title: 'Signals from every particle, tabs on the rail',
+    highlights: [
+      { area: 'Play', text: 'Every particles layer and Agents can send a Born and a Died signal, and reads how many were born or died this step.', link: { kind: 'doc', path: 'docs/particles-multiply.md' } },
+      { area: 'Play', text: 'Rail categories open straight to their pages, shown as tabs in the panel header; ⌘⇧M jumps to Mappings from anywhere.', link: { kind: 'doc', path: 'docs/split-view.md' } },
+    ],
+  },
+  {
     id: '2026.9.15',
     date: '2026-09-28',
     title: 'Agents',

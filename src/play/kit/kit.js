@@ -83,6 +83,14 @@ export function createLayerKit() {
   let queue = [];
   let coarse = null, fine = null, camSample = null, camPrev = null, motion = 0;
   const sensorVals = new Map();
+  // Signals: the cumulative born/died count last seen for each particles or agents layer, so the this-step
+  // born/died readings (`<id>::born` / `<id>::died`) can be the delta rather than the running total.
+  const bornDiedSeen = new Map();
+  function bornDiedDelta(id, born, died) {
+    const last = bornDiedSeen.get(id);
+    bornDiedSeen.set(id, { born, died });
+    return last ? { born: Math.max(0, born - last.born), died: Math.max(0, died - last.died) } : { born: 0, died: 0 };
+  }
 
   function sampleInto(name, src, w, h, mirror) {
     const c = klCanvas(pool, name, w, h), x = c.getContext('2d', { willReadFrequently: true });
@@ -829,6 +837,11 @@ export function createLayerKit() {
       const r = st.reads;
       for (const k of AG_READS) report(env, l.id + '::' + k, k === 'centroidX' || k === 'centroidY' ? (isFinite(r[k]) ? r[k] : 0.5) : r[k] || 0);
       report(env, l.id + '::ax', r.count ? r.centroidX : NaN); report(env, l.id + '::ay', r.count ? r.centroidY : NaN);
+      // Signals: the cumulative counts (for the play engine's Born/Died signal edge-detection: a catch,
+      // an energy drain, a kill boundary, a prey respawn) and the this-step delta (the born/died readings).
+      report(env, l.id + '::bornCount', st.evBorn);
+      report(env, l.id + '::diedCount', st.evDied);
+      { const bd = bornDiedDelta(l.id, st.evBorn, st.evDied); report(env, l.id + '::born', bd.born); report(env, l.id + '::died', bd.died); }
       elemCache.delete(l.id);
       agDraw(c, st, l, v, W, H, dpr, aspect, KL_BLEND[l.blend] || 'source-over');
     }
@@ -1017,6 +1030,12 @@ export function createLayerKit() {
           report(env, l.id + '::speed', Math.min(1, sp / n / maxV));
           report(env, l.id + '::spread', Math.min(1, Math.sqrt(Math.max(0, mxx / n - mx * mx + myy / n - my * my)) / (0.29 * Math.hypot(aspect, 1))));
         } else { report(env, l.id + '::speed', 0); report(env, l.id + '::spread', 0); }
+        report(env, l.id + '::alive', sim.count ? n / sim.count : 0);
+        // Signals (every emit mode): the cumulative counts (for the play engine's Born/Died signal
+        // edge-detection) and the this-step delta (the born/died readings, a mapping source).
+        report(env, l.id + '::bornCount', sim.evBorn);
+        report(env, l.id + '::diedCount', sim.evDied);
+        { const bd = bornDiedDelta(l.id, sim.evBorn, sim.evDied); report(env, l.id + '::born', bd.born); report(env, l.id + '::died', bd.died); }
         if (l.emit === 'multiply' && sim.mx) {
           report(env, l.id + '::split', sim.mx.splits);
           report(env, l.id + '::full', sim.mx.fulls);
@@ -1239,6 +1258,6 @@ export function createLayerKit() {
      * makes every random choice after this repeatable; none or 0 is Math.random.
      */
     background,
-    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); ags.clear(); relDriven = new Set(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); },
+    reset(seed) { sessionSeed = seed > 0 ? seed : 0; rngs.clear(); for (const st of bqSketches.values()) klSketchDispose(st); bqStates.clear(); bqSketches.clear(); bqLast = null; dStates.clear(); dsCurrent.clear(); parts.clear(); for (const st of scripts.values()) klSketchDispose(st); scripts.clear(); scriptPresses.clear(); bodies.clear(); brushes.clear(); springs.clear(); rels.clear(); relGrids.clear(); ags.clear(); relDriven = new Set(); paths.clear(); pathFades.clear(); texts.clear(); audios.clear(); masks.clear(); frozen.clear(); shown.clear(); queue = []; sensorVals.clear(); bornDiedSeen.clear(); },
   };
 }
