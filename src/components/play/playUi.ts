@@ -18,6 +18,28 @@ export type PlayTab = 'controls' | 'layers' | 'finish' | 'engine' | 'mappings';
 const FOLD_KEY = 'shader-studio:play:folded';
 const PANEL_KEY = 'shader-studio:play:panel';
 const GUIDES_KEY = 'shader-studio:play:guides';
+const ALWAYS_EXPAND_KEY = 'shader-studio:play:alwaysExpandCards';
+
+function loadAlwaysExpand(): boolean {
+  try { return localStorage.getItem(ALWAYS_EXPAND_KEY) === '1'; } catch { return false; }
+}
+
+/**
+ * Which Section titles exist for each layer/effect kind, so "Expand all" /
+ * "Collapse all" (the editor header, BigEditorScaffold's strip) know every
+ * key to flip without the store needing to know about editors. Plain module
+ * state, not reactive: Section registers itself on mount and the buttons
+ * read it only when clicked.
+ */
+const sectionTitles = new Map<string, Set<string>>();
+export function registerSection(kind: string, title: string): void {
+  let s = sectionTitles.get(kind);
+  if (!s) { s = new Set(); sectionTitles.set(kind, s); }
+  s.add(title);
+}
+export function unregisterSection(kind: string, title: string): void {
+  sectionTitles.get(kind)?.delete(title);
+}
 
 function loadGuides(): boolean {
   try { return localStorage.getItem(GUIDES_KEY) !== '0'; } catch { return true; }
@@ -31,7 +53,7 @@ function loadPanel(): PanelSize {
   try { const v = localStorage.getItem(PANEL_KEY); return v === 's' || v === 'm' || v === 'l' ? v : 'm'; } catch { return 'm'; }
 }
 
-function loadFolded(): Record<string, true> {
+function loadFolded(): Record<string, boolean> {
   try { const v = JSON.parse(localStorage.getItem(FOLD_KEY) ?? '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
 }
 
@@ -52,9 +74,20 @@ interface PlayUi {
   setMask: (id: string) => void;
   /** Open the Layers tab at this layer: selected, expanded and scrolled into view. */
   reveal: (id: string) => void;
-  /** Folded editor sections, keyed `<kind>:<section>`. */
-  folded: Record<string, true>;
-  toggleFold: (key: string) => void;
+  /**
+   * Folded editor sections, keyed `<kind>:<section>`. An explicit override
+   * (from a click, or Expand/Collapse all); a section with no entry here
+   * falls back to its own default (folded unless it's the editor's primary
+   * one — `Section`'s `primary` prop decides that, not this store).
+   */
+  folded: Record<string, boolean>;
+  toggleFold: (key: string, next: boolean) => void;
+  /** Open (or fold) every registered Section of a kind at once. */
+  expandAllSections: (kind: string) => void;
+  collapseAllSections: (kind: string) => void;
+  /** "Always expand cards": the sidebar's layer cards skip the header-only collapse. */
+  alwaysExpandCards: boolean;
+  setAlwaysExpandCards: (on: boolean) => void;
   /** How wide the Play panel is. */
   panel: PanelSize;
   setPanel: (size: PanelSize) => void;
@@ -164,10 +197,30 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   },
   clearSolo: () => set({ soloLayers: NONE, soloMappings: NONE }),
   folded: loadFolded(),
-  toggleFold: key => {
-    const folded = { ...get().folded };
-    if (folded[key]) delete folded[key]; else folded[key] = true;
+  toggleFold: (key, next) => {
+    const folded = { ...get().folded, [key]: next };
     try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch { /* preference only */ }
     set({ folded });
+  },
+  expandAllSections: kind => {
+    const titles = sectionTitles.get(kind);
+    if (!titles?.size) return;
+    const folded = { ...get().folded };
+    for (const title of titles) folded[`${kind}:${title}`] = false;
+    try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch { /* preference only */ }
+    set({ folded });
+  },
+  collapseAllSections: kind => {
+    const titles = sectionTitles.get(kind);
+    if (!titles?.size) return;
+    const folded = { ...get().folded };
+    for (const title of titles) folded[`${kind}:${title}`] = true;
+    try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch { /* preference only */ }
+    set({ folded });
+  },
+  alwaysExpandCards: loadAlwaysExpand(),
+  setAlwaysExpandCards: on => {
+    try { localStorage.setItem(ALWAYS_EXPAND_KEY, on ? '1' : '0'); } catch { /* preference only */ }
+    set({ alwaysExpandCards: on });
   },
 }));

@@ -413,7 +413,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   useEffect(() => {
     if (!groupTick || !groupFocus) return;
     const ui = usePlayUi.getState();
-    if (ui.folded[`ctlgroup:${groupFocus}`]) ui.toggleFold(`ctlgroup:${groupFocus}`);
+    if (ui.folded[`ctlgroup:${groupFocus}`]) ui.toggleFold(`ctlgroup:${groupFocus}`, false);
     const raf = requestAnimationFrame(() => {
       const sel = `[data-control-group="${CSS.escape(groupFocus)}"]`;
       const el = rootRef.current?.querySelector<HTMLElement>(sel) ?? usePlaySplit.getState().host?.querySelector<HTMLElement>(sel);
@@ -839,7 +839,7 @@ function ControlGroup({ name, count, grid, children }: { name: string; count: nu
   const toggleFold = usePlayUi(s => s.toggleFold);
   return (
     <div data-control-group={name} style={{ marginTop: 8, padding: '4px 6px 6px', borderRadius: radius.card, background: alpha(tk.accent.base, 0.05), boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, transition: 'box-shadow 0.3s', ...(grid ? { gridColumn: '1 / -1' } : {}) }}>
-      <button type="button" onClick={() => toggleFold(key)} aria-expanded={!folded} title={folded ? 'Show the group' : 'Fold the group'}
+      <button type="button" onClick={() => toggleFold(key, !folded)} aria-expanded={!folded} title={folded ? 'Show the group' : 'Fold the group'}
         style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', border: 0, background: 'none', padding: '4px 2px', cursor: 'pointer', color: tk.text.secondary, font: `600 11px ${fontFamily.ui}`, letterSpacing: '0.02em', textAlign: 'left' }}>
         <Icon name={folded ? 'chevR' : 'chevD'} size={12} style={{ color: tk.text.faint }} />
         <Icon name="wave" size={12} style={{ color: tk.text.faint }} />

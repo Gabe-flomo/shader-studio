@@ -71,6 +71,11 @@ import { appDropMakers } from './dropMakers';
 
 const KIND = BUILTIN_LAYER;
 
+/** "Expand all" / "Collapse all", in a layer card's header once its editor is open. */
+const EXPAND_ALL_BTN = (tk: ReturnType<typeof useTokens>): React.CSSProperties => ({
+  border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.faint, font: `600 10.5px ${fontFamily.ui}`,
+});
+
 /** Dragging a row to reorder it: the drag's data type, and which row it is (dragover can't read the data). */
 const ROW_TYPE = 'application/x-playfield-row';
 let draggingRow: ItemRef | null = null;
@@ -111,6 +116,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   };
   const selected = usePlayUi(s => s.selected), setSelected = usePlayUi(s => s.select), revealTick = usePlayUi(s => s.revealTick);
   const mask = usePlayUi(s => s.mask);
+  const alwaysExpand = usePlayUi(s => s.alwaysExpandCards), setAlwaysExpand = usePlayUi(s => s.setAlwaysExpandCards);
   const [drawing, setDrawing] = useState<ShapeDrawing | null>(null);
   useEffect(() => { playOverlay.setEditing(true, selected, mask); }, [selected, mask]);
   // A mask picked (or drawn) on the picture opens in its layer's card.
@@ -400,6 +406,11 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         <span style={{ font: `650 13px ${fontFamily.ui}` }}>Layers</span>
         {layerCount > 0 && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}` }}>{layerCount}</span>}
         <span style={{ flex: 1 }} />
+        {!split && layerCount > 4 && !selectMode && (
+          <Tooltip label="Always expand cards" description="Off: with this many layers, an unselected card shows only its header — it opens when you pick it, so the list isn't a wall of every card's settings at once.">
+            <Button size="sm" variant={alwaysExpand ? 'primary' : 'ghost'} onClick={() => setAlwaysExpand(!alwaysExpand)}>Always expand</Button>
+          </Tooltip>
+        )}
         {layerCount > 1 && !selectMode && (
           <Tooltip label="Select layers to group" description={`Or ⇧-click and ${MOD}-click cards, then ${MOD}G.`}>
             <Button size="sm" variant="ghost" onClick={() => setPicked(picked, true)}>Select</Button>
@@ -683,7 +694,17 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   const tk = useTokens();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(l.label);
-  const [open, setOpen] = useState(true);
+  // With more than a handful of layers, an unselected card is just its header row (name, kind, visibility) —
+  // it opens on selection, so the list doesn't turn into a wall of every card's settings at once. A manual
+  // fold/unfold (the chevron) sticks until the layer's selected state changes again; "Always expand cards"
+  // (the Layers header) turns the whole thing off.
+  const alwaysExpand = usePlayUi(s => s.alwaysExpandCards);
+  const manyLayers = !headerOnly && layers.length > 4;
+  const collapsedByDefault = manyLayers && !alwaysExpand;
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  useEffect(() => { setManualOpen(null); }, [selected]);
+  const open = manualOpen !== null ? manualOpen : !collapsedByDefault || selected;
+  const setOpen = (next: boolean | ((o: boolean) => boolean)) => setManualOpen(typeof next === 'function' ? next(open) : next);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const moreRef = useRef<HTMLSpanElement>(null);
   // Shown from elsewhere (a link in the notes, the picture's menu): open it.
@@ -735,6 +756,8 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   const shows = open && !headerOnly;
   const summary = !shows ? matteMaskSummary(play, l) : '';
   const reveal = usePlayUi(s => s.reveal);
+  const expandAllSections = usePlayUi(s => s.expandAllSections);
+  const collapseAllSections = usePlayUi(s => s.collapseAllSections);
 
   // Relationship nesting: a member row indents under its relationship's row (12px on a phone, 18px
   // otherwise — the same as a group's children), with a connector and a role chip.
@@ -835,6 +858,12 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
       )}
       {shows && (
         <>
+          {!isBackground && l.kind !== 'null' && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, margin: '4px 2px 0' }}>
+              <button type="button" onClick={() => expandAllSections(l.kind)} style={EXPAND_ALL_BTN(tk)}>Expand all</button>
+              <button type="button" onClick={() => collapseAllSections(l.kind)} style={EXPAND_ALL_BTN(tk)}>Collapse all</button>
+            </div>
+          )}
           <MatteMaskBar f={f} play={play} changePlay={onChangePlay} drawing={maskDrawing} onSelect={onSelect} />
           {body}
           {SENSOR_READS_FOR[l.kind] && l.kind !== 'null' && (

@@ -201,7 +201,7 @@ export function BackgroundEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }
     <>
       <input ref={imageInput} type="file" accept={IMAGE_ACCEPT} style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void pickFile(file); else fileFor.current = null; }} />
       <input ref={videoInput} type="file" accept={VIDEO_ACCEPT} style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void pickFile(file); else fileFor.current = null; }} />
-      <Section kind="background" title="Queue" hint="One source shows at a time, under every other layer. Only the one showing runs (and the one fading out during a crossfade): a graph that isn't showing costs nothing. Everything that reads the picture reads what shows.">
+      <Section kind="background" title="Queue" primary hint="One source shows at a time, under every other layer. Only the one showing runs (and the one fading out during a crossfade): a graph that isn't showing costs nothing. Everything that reads the picture reads what shows.">
         <div role="list" aria-label="Background sources" style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}
           onDragOver={e => { if (drag) e.preventDefault(); }}
           onDrop={e => { if (!drag) return; e.preventDefault(); const { id, over } = drag; setDrag(null); change(p => moveSource(p, id, over)); }}

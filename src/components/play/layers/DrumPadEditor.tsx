@@ -74,7 +74,7 @@ function DrumPadSummary({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const text = (t: string) => <span style={{ color: tk.text.muted, font: `11.5px/1.4 ${fontFamily.ui}` }}>{t}</span>;
   return (
     <>
-      <Section kind="drumpad" title="Pads">
+      <Section kind="drumpad" title="Pads" primary>
         <div data-drum-summary style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6 }}>
           <div role="grid" aria-label="Drum pads (mini)" style={{ display: 'grid', gridTemplateColumns: `repeat(${DP_COLS}, 18px)`, gap: 3, flexShrink: 0 }}>
             {ROWS.flatMap(r => Array.from({ length: DP_COLS }, (_, c) => r * DP_COLS + c)).map(i => {
@@ -182,12 +182,12 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
   const note = (text: string) => <div style={{ margin: '6px 0 0 0', color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>{text}</div>;
 
   return (
-    <BigEditorScaffold sections={[
+    <BigEditorScaffold kind="drumpad" sections={[
       { id: 'drumpad-pads', label: 'Pads' },
       { id: 'drumpad-sound', label: `Pad ${sel + 1}` },
       { id: 'drumpad-kit', label: 'Kit' },
     ]}>
-      <Section id="drumpad-pads" kind="drumpad" title="Pads">
+      <Section id="drumpad-pads" kind="drumpad" title="Pads" primary summary={`${l.pads.filter(padHasSound).length} of ${DP_PADS} loaded`}>
         <input ref={fileRef} type="file" accept={SAMPLE_ACCEPT} style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void load(sel, file); }} />
         <div role="grid" aria-label="Drum pads" style={{ display: 'grid', gridTemplateColumns: `repeat(${DP_COLS}, minmax(0, 1fr))`, gap: 5, marginTop: 6 }}>
           {ROWS.flatMap(r => Array.from({ length: DP_COLS }, (_, c) => r * DP_COLS + c)).map(i => {
@@ -237,7 +237,7 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         {mine && <div style={{ marginTop: 6 }}><ReaderDots play={ctx.play} input={padsReaderInput(l.id)} compact /></div>}
       </Section>
 
-      <Section id="drumpad-sound" kind="drumpad" title={`Pad ${sel + 1}${padHasSound(pad) ? ` · ${padName(pad, sel)}` : ''}`}>
+      <Section id="drumpad-sound" kind="drumpad" title={`Pad ${sel + 1}${padHasSound(pad) ? ` · ${padName(pad, sel)}` : ''}`} summary={padHasSound(pad) ? `${pad.mode} · choke ${pad.choke || 'none'}` : 'Empty'}>
         {f.row('Sound', (
           <>
             <Button size="sm" icon="import" disabled={busy === sel} onClick={() => fileRef.current?.click()}>{status === 'missing' ? 'Pick it again' : pad.sampleId ? 'Replace…' : 'Choose file…'}</Button>
@@ -271,7 +271,7 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         )}
       </Section>
 
-      <Section id="drumpad-kit" kind="drumpad" title="Kit">
+      <Section id="drumpad-kit" kind="drumpad" title="Kit" summary={`${l.keys ? 'Keys' : ''}${l.keys && l.midi ? ' · ' : ''}${l.midi ? 'MIDI' : ''}${!l.keys && !l.midi ? 'No triggers' : ''}`}>
         <DrumKitRow f={f} ctx={ctx} />
         {f.prop('volume')}
         {f.toggle('Keys', 'keys', 'Z X C V · A S D F · Q W E R · 1 2 3 4', 'On the Play page, these keys play pads 1–16 (the bottom row is 1–4, like the pads above).')}

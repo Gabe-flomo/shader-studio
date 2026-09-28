@@ -100,7 +100,7 @@ export function DataLayerEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext })
     : result.kind === 'text' ? `Text · ${n.toLocaleString()} ${l.split === 'lines' ? 'lines' : l.split === 'letters' ? 'letters' : l.split === 'words' ? 'words' : 'chunks'}${l.order !== 'text' ? ' (each once)' : ''}`
     : 'A JSON value: scripts can read it with s.data(); the layer draws tables and text.';
   const datasetSection = (
-    <Section kind="data" title="Dataset">
+    <Section kind="data" title="Dataset" primary>
       {f.row('Dataset', list.length ? (
         <>
           <Select ariaLabel="Dataset" value={l.dataset} height={26} style={{ flex: 1, minWidth: 0 }}

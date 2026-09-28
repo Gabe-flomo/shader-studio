@@ -273,7 +273,7 @@ function EffectCard({ chainId, effect: e, index, count, dimmed, touch, exposed, 
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => {
     if (!focused || !el) return;
-    if (usePlayUi.getState().folded[foldKey]) toggleFold(foldKey);
+    if (usePlayUi.getState().folded[foldKey]) toggleFold(foldKey, false);
     el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusTick, focused, el]);
@@ -306,12 +306,12 @@ function EffectCard({ chainId, effect: e, index, count, dimmed, touch, exposed, 
       >
         {!touch && <Icon name="grip" size={12} style={{ color: tk.text.disabled, flexShrink: 0 }} />}
         <Icon name={def.icon as IconName} size={14} style={{ color: e.enabled ? tk.accent.base : tk.text.faint, flexShrink: 0 }} />
-        <button type="button" onClick={() => toggleFold(foldKey)} aria-expanded={!folded} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `650 12.5px ${fontFamily.ui}`, textAlign: 'left' }}>
+        <button type="button" onClick={() => toggleFold(foldKey, !folded)} aria-expanded={!folded} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `650 12.5px ${fontFamily.ui}`, textAlign: 'left' }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{def.label}</span>
           {(e.type || e.curve) ? <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>{OPTION_LABELS[String(e.type ?? e.curve)] ?? ''}</span> : null}
         </button>
         <Toggle checked={e.enabled} onChange={enabled => onPatch({ enabled })} />
-        <IconButton icon={folded ? 'chevR' : 'chevD'} size="sm" label={folded ? 'Show settings' : 'Fold'} onClick={() => toggleFold(foldKey)} />
+        <IconButton icon={folded ? 'chevR' : 'chevD'} size="sm" label={folded ? 'Show settings' : 'Fold'} onClick={() => toggleFold(foldKey, !folded)} />
         <IconButton icon="more" size="sm" label="Move, reset or remove" onClick={ev => { const r = (ev.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ x: r.right - 190, y: r.bottom + 4 }); }} />
       </div>
       {!folded && (

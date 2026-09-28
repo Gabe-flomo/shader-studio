@@ -93,3 +93,43 @@ describe('big editors mount without console errors', () => {
     });
   }
 });
+
+describe('a big editor collapses to its primary section by default', () => {
+  beforeEach(() => usePlayUi.setState({ folded: {} }));
+
+  it('the relationship editor mounts with only Members open', () => {
+    const { f, ctx } = ctxFor('relationship', 'rl1');
+    const host = mount(<RelationshipEditor f={f} ctx={ctx} />);
+    const headings = Array.from(host.querySelectorAll('button[aria-expanded]'));
+    const open = headings.filter(b => b.getAttribute('aria-expanded') === 'true').map(b => b.textContent?.trim());
+    expect(open).toEqual(['Members']);
+  });
+
+  it('unfolding Walls, then mounting the same kind again, keeps it open', () => {
+    const { f, ctx } = ctxFor('relationship', 'rl2');
+    const host = mount(<RelationshipEditor f={f} ctx={ctx} />);
+    const walls = Array.from(host.querySelectorAll('button[aria-expanded]')).find(b => b.textContent?.startsWith('Walls'));
+    expect(walls).toBeTruthy();
+    act(() => walls!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(walls!.getAttribute('aria-expanded')).toBe('true');
+
+    // A different layer of the same kind ("switch layers and back"): Walls is still open.
+    const { f: f2, ctx: ctx2 } = ctxFor('relationship', 'rl3');
+    const host2 = mount(<RelationshipEditor f={f2} ctx={ctx2} />);
+    const walls2 = Array.from(host2.querySelectorAll('button[aria-expanded]')).find(b => b.textContent?.startsWith('Walls'));
+    expect(walls2!.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('the scaffold strip offers Expand all / Collapse all for a big editor with a kind', () => {
+    const { f, ctx } = ctxFor('relationship', 'rl4');
+    const host = mount(<RelationshipEditor f={f} ctx={ctx} />);
+    const buttons = Array.from(host.querySelectorAll('button')).map(b => b.textContent);
+    expect(buttons).toContain('Expand all');
+    expect(buttons).toContain('Collapse all');
+
+    const expandAll = Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Expand all')!;
+    act(() => expandAll.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const headings = Array.from(host.querySelectorAll('button[aria-expanded]'));
+    expect(headings.every(b => b.getAttribute('aria-expanded') === 'true')).toBe(true);
+  });
+});

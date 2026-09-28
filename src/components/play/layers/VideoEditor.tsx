@@ -85,14 +85,14 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
         : '';
 
   return (
-    <BigEditorScaffold sections={[
+    <BigEditorScaffold kind="video" sections={[
       { id: 'video-file', label: 'Video' },
       { id: 'video-playback', label: 'Playback' },
       { id: 'video-sound', label: 'Sound' },
       { id: 'video-position', label: 'Position' },
       { id: 'video-look', label: 'Look' },
     ]}>
-      <Section id="video-file" kind="video" title="Video">
+      <Section id="video-file" kind="video" title="Video" primary summary={l.videoId ? `${l.fileName}${l.bytes ? ` · ${sizeText(l.bytes)}` : ''}` : 'No video yet'}>
         <input ref={fileRef} type="file" accept={VIDEO_ACCEPT} style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void pick(file); }} />
         {!l.videoId ? (
           <div style={{ marginTop: 6, padding: '12px 12px', borderRadius: radius.md, background: tk.bg.field, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
@@ -114,7 +114,7 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
         ))}
         {fileNote && hint(fileNote)}
       </Section>
-      <Section id="video-playback" kind="video" title="Playback">
+      <Section id="video-playback" kind="video" title="Playback" summary={`${l.playing ? 'Playing' : 'Paused'} · ${l.speed}×${l.loop ? ' · loop' : ''}`}>
         {f.row('Play', (
           <>
             <Button size="sm" icon={l.playing ? 'pause' : 'play'} onClick={() => { playVideoLayers.resumeAudio(); f.set({ playing: !l.playing }); }}>{l.playing ? 'Pause' : 'Play'}</Button>
@@ -127,12 +127,12 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
         {f.toggle('Clock', 'follow', 'Follow the clock', 'On: frame t of the clock shows start + t × speed, so takes and rendered videos show exactly the same frames. Off: it runs on its own (a render still follows the clock).')}
       </Section>
       <SoundSection f={f} ctx={ctx} status={status} />
-      <Section id="video-position" kind="video" title="Position">
+      <Section id="video-position" kind="video" title="Position" summary={l.fit}>
         {f.seg('Fit', 'fit', FITS, 'The size at Scale 1: the whole frame inside the picture, filling it, or as tall as it.')}
         {f.props('x', 'y', 'scale', 'rotation')}
         {f.note('Drag it on the picture, or pull a corner to resize.')}
       </Section>
-      <Section id="video-look" kind="video" title="Look">
+      <Section id="video-look" kind="video" title="Look" summary={`opacity ${l.opacity.toFixed(2)} · ${l.matte}`}>
         {f.prop('opacity')}
         {matteRows(f, pictureHidden)}
       </Section>
@@ -174,7 +174,7 @@ function SoundSection({ f, ctx, status }: { f: FieldKit; ctx: EditorContext; sta
 
   const note = l.sound === 'off' ? '' : suspended ? 'The browser holds sound until you click: click anywhere on the page to start it.' : status === 'ready' ? readerVideoNote(l.label, state) : '';
   return (
-    <Section id="video-sound" kind="video" title="Sound">
+    <Section id="video-sound" kind="video" title="Sound" summary={l.sound === 'off' ? 'Off' : `${l.sound === 'play' ? 'Playing' : 'Listening'}${mine ? ` · ${cfg.readers.length} reader${cfg.readers.length === 1 ? '' : 's'}` : ''}`}>
       {f.row('Sound', (
         <Segmented size="sm" ariaLabel="Sound" value={l.sound} options={SOUNDS} onChange={v => { playVideoLayers.resumeAudio(); f.set({ sound: v }); }} />
       ), 'Off: muted. Listen: its sound goes to the analysis (audio readers, the spectrum below) without being heard. Play: heard through the master volume as well.')}
