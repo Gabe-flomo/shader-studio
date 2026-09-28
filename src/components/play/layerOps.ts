@@ -322,15 +322,26 @@ export function addAudioFxPropControl(p: PlayRecord, target: string): PlayRecord
   return { ...p, controls: [...p.controls, { id: playId('ctl'), ...c }] };
 }
 
-/** Map `source` onto the control at `target` (made first if needed), across its whole range. Returns the record and the control. */
-export function mapSourceTo(p: PlayRecord, source: PlaySource, target: { control: string } | { candidate: PlayCandidate } | { layerId: string; key: string } | { effectId: string; key: string } | { audioFx: string }, smoothMs = 60): { play: PlayRecord; control?: PlayControl } {
+/** A mapping's target: an existing control, a graph candidate, or a layer/Finish/sound number. */
+export type MapTarget = { control: string } | { candidate: PlayCandidate } | { layerId: string; key: string } | { effectId: string; key: string } | { audioFx: string };
+
+/**
+ * The control `target` names, made first if it doesn't exist yet (no mapping: the "Control
+ * only" path a source picker offers alongside its sources). Shared by mapSourceTo.
+ */
+export function resolveTargetControl(p: PlayRecord, target: MapTarget): { play: PlayRecord; control?: PlayControl } {
   let rec = p, targetKey: string;
   if ('control' in target) targetKey = p.controls.find(c => c.id === target.control)?.target ?? '';
   else if ('audioFx' in target) { rec = addAudioFxPropControl(rec, target.audioFx); targetKey = target.audioFx; }
   else if ('candidate' in target) { rec = addCandidateControl(rec, target.candidate); targetKey = target.candidate.target; }
   else if ('effectId' in target) { rec = addFinishPropControl(rec, target.effectId, target.key); targetKey = finishTarget(target.effectId, target.key); }
   else { rec = addLayerPropControl(rec, target.layerId, target.key); targetKey = layerTarget(target.layerId, target.key); }
-  const control = rec.controls.find(c => c.target === targetKey);
+  return { play: rec, control: rec.controls.find(c => c.target === targetKey) };
+}
+
+/** Map `source` onto the control at `target` (made first if needed), across its whole range. Returns the record and the control. */
+export function mapSourceTo(p: PlayRecord, source: PlaySource, target: MapTarget, smoothMs = 60): { play: PlayRecord; control?: PlayControl } {
+  const { play: rec, control } = resolveTargetControl(p, target);
   if (!control) return { play: p };
   const mapping: PlayMapping = { id: playId('map'), controlId: control.id, source, outMin: control.min, outMax: control.max, curve: 'linear', smoothMs, enabled: true };
   return { play: { ...rec, mappings: [...rec.mappings, mapping] }, control };
