@@ -93,7 +93,7 @@ describe('parsing', () => {
         { id: 'rk_a', name: 'Keys', instrument: { kind: 'au', unit: DLS, params: { 1: 0.5, x: 2, 2: 'no' }, state: 'QUJD' }, effects: [{ id: 'fx_d', kind: 'au', unit: DELAY, bypass: true }, { id: 'fx_d', kind: 'au', unit: LOWPASS }, { id: 'fx_s', kind: 'sampler' }, { id: 'inst', kind: 'au', unit: DELAY }], keyboard: false, midi: 'Launchkey', channel: 3, volume: 5, mute: true, pads: 'layer_1' },
         { id: 'rk_a', name: 'Duplicate' },
         { id: 'bad id', name: 'Bad' },
-        { id: 'rk_b', instrument: { kind: 'sampler', zones: [{ sampleId: 'snd_1', name: 'Kick', lo: 40, hi: 36, root: 36, gain: 9 }, { sampleId: '../x', lo: 1 }] } },
+        { id: 'rk_b', instrument: { kind: 'sampler', zones: [{ sampleId: 'snd_1', name: 'Kick', lo: 40, hi: 36, root: 36, gain: 9 }, { sampleId: '../x', lo: 1 }, { sampleId: 'linked:lf_1/Kicks/808.wav', name: '808.wav', lo: 41, hi: 41, root: 41 }, { sampleId: 'linked:', lo: 42 }] } },
       ],
     })!;
     expect(ae.racks.map(r => r.id)).toEqual(['rk_a', 'rk_b']);
@@ -101,7 +101,11 @@ describe('parsing', () => {
     expect(a.instrument).toEqual({ id: AE_INST, kind: 'au', unit: DLS, params: { 1: 0.5 }, state: 'QUJD' });
     expect(a.effects).toEqual([{ id: 'fx_d', kind: 'au', unit: DELAY, bypass: true }]);
     expect([a.keyboard, a.midi, a.channel, a.volume, a.mute, a.pads]).toEqual([false, 'Launchkey', 3, 2, true, 'layer_1']);
-    expect(ae.racks[1].instrument?.zones).toEqual([{ sampleId: 'snd_1', name: 'Kick', lo: 36, hi: 40, root: 36, gain: 2 }]);
+    // A linked folder's file (docs/linked-folders.md) keeps its reference like a Library id; a malformed one is dropped.
+    expect(ae.racks[1].instrument?.zones).toEqual([
+      { sampleId: 'snd_1', name: 'Kick', lo: 36, hi: 40, root: 36, gain: 2 },
+      { sampleId: 'linked:lf_1/Kicks/808.wav', name: '808.wav', lo: 41, hi: 41, root: 41, gain: 1 },
+    ]);
     expect(ae.racks[1].name).toBe('Rack 2');
     expect(parseAudioEngine({ racks: [] })).toBeUndefined();
     expect(parseAudioEngine('nope')).toBeUndefined();
