@@ -668,7 +668,8 @@ function draw(s) {
  * saturated teal patch and a row of small lamps, on a dark wall.
  */
 export const SKETCH_HALATION = `// A test scene for film halation. The picture is 8-bit, so "brighter than
-// white" can only show as "clipped at 1.0": the lamps clip, the paper doesn't.
+// white" can only show as "clipped at 1.0": the lamps clip, the paper doesn't
+// (it still bleeds a thin red rim: it is over the threshold, just not over white).
 const params = {
   paper: { value: 0.9, min: 0.5, max: 1, step: 0.01, label: 'Paper white' },
   lamps: { value: 1, min: 0, max: 1, step: 0.01, label: 'Lamps' },
@@ -680,7 +681,7 @@ function draw(s) {
   ctx.fillStyle = '#16161b';
   ctx.fillRect(0, 0, W, H);
   const label = (text, x, y) => { ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = (2.6 * u) + 'px system-ui, sans-serif'; ctx.fillText(text, x, y); };
-  // A grey ramp from black to white: halation should start only at its very top.
+  // A grey ramp from black to white: the red bleed fades in from about two thirds along (0.70 on screen).
   const g = ctx.createLinearGradient(8 * u, 0, W - 8 * u, 0);
   g.addColorStop(0, '#000'); g.addColorStop(1, '#fff');
   ctx.fillStyle = g;

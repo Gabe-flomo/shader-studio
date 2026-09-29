@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.20',
+    date: '2026-09-28',
+    title: 'Halation, measured',
+    highlights: [
+      { area: 'Play', text: 'Halation now matches a real film-emulation grade: a thin red bleed hugging bright edges and glints, landing on the darker picture beside them.', link: { kind: 'example', key: 'finishHalation', page: 'play' } },
+      { area: 'Play', text: 'Halation has a Conserve slider (the bright part gives up what it bleeds), and its presets and defaults follow the measurement.', link: { kind: 'doc', path: 'docs/finish-stack.md' } },
+    ],
+  },
+  {
     id: '2026.9.19',
     date: '2026-09-28',
     title: 'Spread, sample index, Remap ranges',

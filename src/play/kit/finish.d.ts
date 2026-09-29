@@ -49,7 +49,21 @@ export function fnWheel(x: number, y: number): [number, number, number];
 export function fnGradePixel(rgb: readonly number[], grade: Record<string, unknown>, lut: Uint8Array | null): number[];
 export function fnEnergy(x: number, headroom: number, knee?: number): number;
 export function fnSoftThreshold(v: number, thr: number, knee: number): number;
-export function fnHalationTerms(E: readonly number[], thresholdStops: number): [number, number, number];
+/** Halation's measured shape and colour, and its controls' defaults (see finish.js). */
+export const FN_HAL: Readonly<{
+  sigma: number; gain: number; tail: number; knee: number; recv: readonly [number, number]; greenKnee: number; blue: number;
+  amount: number; reach: number; threshold: number; headroom: number; warmth: number; growth: number; conserve: number; model: number;
+}>;
+export const FN_HALATION_PRESETS: ReadonlyArray<{ name: string; values: Readonly<Record<string, number>> }>;
+export function fnMigrateHalation<T extends { kind: string; model?: unknown; [key: string]: unknown }>(e: T): T;
+export function fnHalSource(rgb: readonly number[], thresholdStops: number, headroom: number): [number, number];
+export function fnHalSpread(d: number, height?: number): number;
+export function fnHalTailMix(reach: number): { strength: number; wide: number };
+export function fnHalTailEdge(d: number, reach?: number, height?: number): number;
+export function fnHalEdgeBleed(d: number, src: number, amount?: number, reach?: number, height?: number): number;
+export function fnHalReceive(red: number): number;
+export function fnHalTint(dR: number, warmth: number): [number, number, number];
+export function fnHalPixel(rgb: readonly number[], bleed: number, src: number, p?: Partial<Record<'amount' | 'warmth' | 'growth' | 'conserve' | 'white', number>>): number[];
 
 export interface FnRing { readonly size: number; readonly count: number; readonly head: number; reset(): void; slotForWrite(): number; push(): void; slotFor(back: number): number }
 export function fnRing(size: number): FnRing;

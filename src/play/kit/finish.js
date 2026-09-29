@@ -40,6 +40,36 @@ import { FN_TONE_GLSL, FN_TONE_FUNCTIONS, FN_CRT_MASK_GLSL } from './finishGlsl.
  */
 const FN_P = (key, label, min, max, step, value, hint, hidden) => ({ key, label, min, max, step, value, hint: hint || '', hidden: !!hidden });
 
+/**
+ * Halation's shape and colour, measured from the reference (the Joo.Works
+ * "ACES lite Halation" PowerGrade: before/after frames, docs/finish-stack.md
+ * "Halation"). Distances are pixels of a 1080-line picture (scaled with the
+ * picture's height).
+ *
+ *   sigma      the tight bleed's falloff. It is a max-spread, not a blur: at a
+ *              distance d from a bright part the bleed is that part's excess ×
+ *              e^(−d²/2σ²), so a two-pixel glint bleeds as far and as strongly
+ *              as the edge of a big bright shape (as the reference does)
+ *   gain       the tight bleed's strength at Amount 1
+ *   tail       the Reach tail's strength from Reach 0.5 up: a true blur of the
+ *              excess, the wide haze. Reach 0 → 0.5 fades it in at σ ≈ 16 px
+ *              (the glow chain's eighth level); 0.5 → 1 widens it to σ ≈ 32
+ *              (the sixteenth), at the same strength
+ *   knee       the threshold's soft knee, as a fraction of the threshold
+ *   recv       the bleed lands only on what is darker than this (linear red):
+ *              all of it below recv[0], none above recv[1]. So the bright part
+ *              itself never turns red; its dark surroundings do
+ *   greenKnee  green joins where the bleed is strong: dG = warmth · dR² / (dR + greenKnee)
+ *   blue       blue in the bleed, per unit of red (a little is taken away)
+ * and the controls' defaults (Amount 1 is the reference's strength).
+ */
+export const FN_HAL = {
+  sigma: 4.5, gain: 1.04, tail: 0.52, knee: 0.3, recv: [0.17, 0.53], greenKnee: 0.076, blue: -0.07,
+  amount: 1, reach: 0.5, threshold: -1.15, headroom: 6, warmth: 0.26, growth: 0.2, conserve: 0.03,
+  /** The halation model saved with each effect; older records are migrated by fnMigrateHalation. */
+  model: 2,
+};
+
 export const FN_EFFECTS = {
   grade: {
     label: 'Grade', group: 'Colour', icon: 'sliders',
@@ -128,14 +158,15 @@ export const FN_EFFECTS = {
   },
   halation: {
     label: 'Halation', group: 'Film', icon: 'sun',
-    summary: 'Film’s red-to-white halo around very bright light',
+    summary: 'Film’s thin red bleed around bright edges',
     params: [
-      FN_P('amount', 'Amount', 0, 2, 0.01, 0.7, 'How strong the halo is.'),
-      FN_P('reach', 'Reach', 0, 1, 0.01, 0.5, 'How far the halo spreads.'),
-      FN_P('threshold', 'Threshold', -1, 4, 0.05, 0.5, 'How bright light has to be to halate, in stops above white. Only light brighter than white halates.'),
-      FN_P('headroom', 'Highlight headroom', 1, 16, 0.5, 6, 'How much brighter than white the brightest parts of an ordinary picture are taken to be, in stops. More makes clipped highlights (lamps, the sun) far brighter than white paper.'),
-      FN_P('warmth', 'Warmth', 0, 1, 0.01, 0.5, 'Red halo (0) or warm red-orange (1): how much the green layer joins in.'),
-      FN_P('growth', 'Growth', 0, 1, 0.01, 0.4, 'The white spread: very bright sources look bigger than they are.'),
+      FN_P('amount', 'Amount', 0, 2, 0.01, FN_HAL.amount, 'How strong the bleed is. 1 matches the reference grade.'),
+      FN_P('reach', 'Reach', 0, 1, 0.01, FN_HAL.reach, 'A wide, soft tail on top of the tight bleed that hugs the edges. 0 keeps only the tight bleed.'),
+      FN_P('threshold', 'Threshold', -4, 4, 0.05, FN_HAL.threshold, 'How bright the red in a part has to be to bleed, in stops from white in linear light: -1.15 (0.70 on screen) is where the reference starts, fading in from about 0.6. Above 0 only light brighter than white bleeds.'),
+      FN_P('headroom', 'Highlight headroom', 1, 16, 0.5, FN_HAL.headroom, 'How much brighter than white the clipped parts of an ordinary picture are taken to be, in stops. More makes clipped highlights (lamps, the sun) bleed further than a white that is merely bright.'),
+      FN_P('warmth', 'Warmth', 0, 1, 0.01, FN_HAL.warmth, 'Red (0) to orange (1): how much green joins the bleed where it is strongest, right at the edge.'),
+      FN_P('growth', 'Growth', 0, 1, 0.01, FN_HAL.growth, 'A tight white spread around light brighter than white: very bright sources look bigger than they are.'),
+      FN_P('conserve', 'Conserve', 0, 1, 0.01, FN_HAL.conserve, 'How much the bright part itself darkens as its light bleeds out: 0 only adds the bleed, 1 takes the part down to the threshold.'),
     ],
   },
   grain: {
@@ -182,6 +213,16 @@ export const FN_EFFECTS = {
   },
 };
 
+/**
+ * Halation presets for the card (they only set the sliders). Classic cine is
+ * the reference's own measurement; Subtle and Strong sit either side of it.
+ */
+export const FN_HALATION_PRESETS = [
+  { name: 'Subtle', values: { amount: 0.6, reach: 0.3, threshold: -0.9, headroom: 5, warmth: 0.15, growth: 0.1, conserve: 0.03 } },
+  { name: 'Classic cine', values: { amount: FN_HAL.amount, reach: FN_HAL.reach, threshold: FN_HAL.threshold, headroom: FN_HAL.headroom, warmth: FN_HAL.warmth, growth: FN_HAL.growth, conserve: FN_HAL.conserve } },
+  { name: 'Strong', values: { amount: 1.6, reach: 0.8, threshold: -1.5, headroom: 8, warmth: 0.35, growth: 0.5, conserve: 0.15 } },
+];
+
 /** The kinds in the Add menu's order. Each kind appears at most once in a stack. */
 export const FN_KINDS = ['grade', 'lens', 'chroma', 'vignette', 'crt', 'bloom', 'halation', 'grain', 'flicker', 'shake', 'time'];
 export const FN_TONE_MODES = ['none', 'aces', 'agx', 'hable', 'reinhard2', 'unreal', 'lottes', 'uchimura', 'tanh', 'oklab'];
@@ -222,7 +263,24 @@ export function fnDefaultEffect(kind, id) {
   for (const p of def.params) e[p.key] = p.value;
   if (kind === 'grade') { e.tone = 'none'; e.curves = fnDefaultCurves(); }
   if (kind === 'time') { e.map = 'slit'; e.layerId = ''; e.quality = 'medium'; }
+  if (kind === 'halation') e.model = FN_HAL.model;
   return e;
+}
+
+/**
+ * A halation effect saved before the reference model (no `model`): the keys
+ * keep their meanings (Threshold is still stops from white on the headroom
+ * estimate, so a saved stack halates the same parts it did), but Amount's
+ * scale changed: the old default 0.7 is the new 1. Conserve starts at its
+ * default. Returns a new object; one already on the model comes back as is.
+ */
+export function fnMigrateHalation(e) {
+  if (!e || e.kind !== 'halation' || e.model === FN_HAL.model) return e;
+  const out = Object.assign({}, e, { model: FN_HAL.model });
+  const a = typeof e.amount === 'number' && isFinite(e.amount) ? e.amount : 0.7;
+  out.amount = Math.round(Math.min(2, Math.max(0, a / 0.7)) * 100) / 100;
+  if (typeof e.conserve !== 'number' || !isFinite(e.conserve)) out.conserve = FN_HAL.conserve;
+  return out;
 }
 
 /** Can this effect run: a built-in kind, or a custom effect with code. */
@@ -622,14 +680,76 @@ export function fnSoftThreshold(v, thr, knee) {
   const q = Math.max(0, Math.min(2 * k, v - thr + k));
   return Math.max(q * q / (4 * k), v - thr);
 }
-/** Halation's three source terms (red, green, white) from linear scene energy. */
-export function fnHalationTerms(E, thresholdStops) {
+/**
+ * Halation's two sources from a linear pixel: [red, white]. Red is the red
+ * channel's scene energy over the threshold (a soft knee of FN_HAL.knee × the
+ * threshold): what bleeds. White is the dimmest channel's energy over 1.5 × white:
+ * only light brighter than white in every channel grows (Growth).
+ */
+export function fnHalSource(rgb, thresholdStops, headroom) {
   const thr = Math.pow(2, thresholdStops);
-  return [
-    fnSoftThreshold(E[0], thr, thr * 0.5),
-    fnSoftThreshold(E[1], thr * 1.5, thr * 0.75) * 0.7,
-    fnSoftThreshold(E[2], thr * 4, thr * 2) * 0.5,
-  ];
+  const red = fnSoftThreshold(fnEnergy(rgb[0], headroom), thr, thr * FN_HAL.knee);
+  const white = fnSoftThreshold(fnEnergy(Math.min(rgb[0], rgb[1], rgb[2]), headroom), 1.5, 0.5);
+  return [red, white];
+}
+/** The tight bleed's falloff at a distance (px at `height` lines) from a source: e^(−d²/2σ²), σ scaled with the picture. */
+export function fnHalSpread(d, height = 1080) {
+  const s = FN_HAL.sigma * height / 1080;
+  return Math.exp(-d * d / (2 * s * s));
+}
+/** A gaussian blur (σ px) of a half plane, at a distance d outside its edge: erfc(d / σ√2) / 2, so 0.5 at the edge. */
+function fnHalfPlane(d, s) {
+  const x = Math.max(0, d) / (s * Math.SQRT2);
+  // Abramowitz & Stegun 7.1.26
+  const t = 1 / (1 + 0.3275911 * x);
+  return 0.5 * t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429)))) * Math.exp(-x * x);
+}
+/** The Reach tail's strength and width mix: strength × FN_HAL.tail, and how far from the eighth level (σ 16) toward the sixteenth (σ 32). */
+export function fnHalTailMix(reach) {
+  const r = Math.min(1, Math.max(0, reach));
+  return { strength: Math.min(1, r * 2), wide: Math.max(0, r * 2 - 1) };
+}
+/** The Reach tail at a distance d outside a straight edge, per unit of source (px at `height` lines). */
+export function fnHalTailEdge(d, reach = FN_HAL.reach, height = 1080) {
+  const m = fnHalTailMix(reach), k = height / 1080;
+  return FN_HAL.tail * m.strength * ((1 - m.wide) * fnHalfPlane(d, 16 * k) + m.wide * fnHalfPlane(d, 32 * k));
+}
+/**
+ * The bleed (linear red, before the receive mask) at a distance d outside a
+ * straight bright edge whose red source is `src`: the tight max-spread plus
+ * the Reach tail. The radius profile the docs strip draws.
+ */
+export function fnHalEdgeBleed(d, src, amount = FN_HAL.amount, reach = FN_HAL.reach, height = 1080) {
+  return amount * src * (FN_HAL.gain * fnHalSpread(d, height) + fnHalTailEdge(d, reach, height));
+}
+/** How much of the bleed a pixel takes, by its own linear red: all of it when dark, none when it is itself bright. */
+export function fnHalReceive(red) {
+  const [a, b] = FN_HAL.recv, t = Math.min(1, Math.max(0, (red - a) / (b - a)));
+  return 1 - t * t * (3 - 2 * t);
+}
+/** The bleed's colour from its red (linear): green joins only where it is strong (orange at the edge, red further out), a little blue goes. */
+export function fnHalTint(dR, warmth) {
+  const r = Math.max(0, dR);
+  return [r, warmth * r * r / (r + FN_HAL.greenKnee), FN_HAL.blue * r];
+}
+/**
+ * One pixel of halation, in linear light: `rgb` the pixel, `bleed` what
+ * reaches it (linear red, from fnHalEdgeBleed or the shader's levels),
+ * `src` its own red source over the threshold in linear light (for
+ * Conserve), `white` the growth reaching it. The shader does the same.
+ */
+export function fnHalPixel(rgb, bleed, src, p = {}) {
+  const v = k => (typeof p[k] === 'number' ? p[k] : FN_HAL[k]);
+  const dR = Math.max(0, bleed) * fnHalReceive(rgb[0]);
+  const t = fnHalTint(dR, v('warmth'));
+  const take = v('conserve') * Math.min(1, v('amount')) * Math.max(0, src);
+  const w = Math.max(0, p.white || 0) * v('growth') * v('amount');
+  t[2] = Math.max(t[2], -0.5 * rgb[2]); // never more than half the pixel's own blue, so a black surround keeps its hue
+  return rgb.map((c, i) => {
+    const x = Math.max(0, c - take) + t[i];
+    const tone = [1, 0.95, 0.9][i];
+    return Math.max(0, x + (1 - Math.min(1, x)) * (1 - Math.exp(-w * tone)));
+  });
 }
 
 // ── The frame ring (time displacement) ───────────────────────────────────────
@@ -697,6 +817,11 @@ float fnEnergy1(float x, float headroom) {
   float u = min(1.0, (x - knee) / (1.0 - knee)) * uMax;
   return knee + (1.0 - knee) * u / (1.0 - u);
 }
+// Halation's sources (fnHalSource): red over the threshold, and the dimmest channel over white. h = threshold stops, headroom, knee.
+vec2 fnHalSrc(vec3 x, vec3 h) {
+  float thr = exp2(h.x);
+  return vec2(fnSoft(fnEnergy1(x.r, h.y), thr, thr * h.z), fnSoft(fnEnergy1(min(x.r, min(x.g, x.b)), h.y), 1.5, 0.5));
+}
 `;
 
 const FN_VS = `#version 300 es
@@ -704,6 +829,9 @@ in vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
 
 /** `#define`s naming each number of a kind as a component of its vec4 array. */
+/** A number as a GLSL float literal. */
+const fnGl = v => { const t = String(Math.round(v * 1e6) / 1e6); return /[.e]/.test(t) ? t : t + '.0'; };
+
 function fnDefines(kind) {
   const ps = FN_EFFECTS[kind].params;
   const n = Math.ceil(ps.length / 4);
@@ -820,6 +948,7 @@ export function fnBuildFinal(effects, opts = {}) {
 }
 `;
   if (glow) src += `uniform sampler2D uQ0, uQ1, uE0, uE1, uG0, uG1;\nuniform float uGlowFloat;\nvec3 glowDec(vec3 v) { return uGlowFloat > 0.5 ? v : v / max(vec3(1e-4), 1.0 - v); }\n`;
+  if (has('halation')) src += 'uniform sampler2D uHM;\n';
   if (has('grade')) src += (opts.tone && opts.tone !== 'none' ? FN_TONE_GLSL + '\n' : '') + FN_GRADE(opts.tone || 'none', !!opts.hueCurves, opts.curves !== false || !!opts.hueCurves);
   if (has('crt')) src += FN_CRT_MASK_GLSL + '\n';
   if (time) {
@@ -903,14 +1032,19 @@ vec4 fetch(vec2 q) {
     c = toSrgb(x + (1.0 - x) * (1.0 - exp(-b * bloom_amount * 1.5)));
   }`);
     if (k === 'halation') ops.push(`{
-    // Red reaches furthest (the eighth and sixteenth levels), green less far, and the white growth stays tight.
-    vec3 q1 = glowDec(texture(uQ1, p).rgb), e1 = glowDec(texture(uE1, p).rgb), g1 = glowDec(texture(uG1, p).rgb);
-    float red = mix(e1.r, g1.r, halation_reach);
-    float grn = mix(q1.g, e1.g, halation_reach);
-    float wht = q1.b;
-    vec3 halo = vec3(1.0, 0.06, 0.015) * red * 1.6 + vec3(0.3, 0.75, 0.05) * grn * (0.1 + 1.2 * halation_warmth) + vec3(1.0, 0.95, 0.9) * wht * halation_growth * 1.5;
+    // The tight bleed (a max-spread of the red source, half size) plus the Reach tail (a blur: the eighth level, widening to the sixteenth); fnHalPixel does the same.
+    vec3 hm = glowDec(texture(uHM, p).rgb);
+    float tail = mix(glowDec(texture(uE1, p).rgb).r, glowDec(texture(uG1, p).rgb).r, clamp(halation_reach * 2.0 - 1.0, 0.0, 1.0)) * min(1.0, halation_reach * 2.0);
     vec3 x = toLin(c);
-    c = toSrgb(x + (1.0 - x) * (1.0 - exp(-halo * halation_amount * 0.08)));
+    float bleed = halation_amount * (${fnGl(FN_HAL.gain)} * hm.r + ${fnGl(FN_HAL.tail)} * tail);
+    float dR = max(bleed, 0.0) * (1.0 - smoothstep(${fnGl(FN_HAL.recv[0])}, ${fnGl(FN_HAL.recv[1])}, x.r));
+    vec3 tint = vec3(dR, halation_warmth * dR * dR / (dR + ${fnGl(FN_HAL.greenKnee)}), max(${fnGl(FN_HAL.blue)} * dR, -0.5 * x.b));
+    float thr = exp2(halation_threshold);
+    float take = halation_conserve * min(halation_amount, 1.0) * fnSoft(x.r, thr, thr * ${fnGl(FN_HAL.knee)});
+    x = max(x - take, 0.0) + tint;
+    float w = hm.g * halation_growth * halation_amount;
+    x = max(x + (1.0 - min(x, 1.0)) * (1.0 - exp(-w * vec3(1.0, 0.95, 0.9))), 0.0);
+    c = toSrgb(x);
   }`);
     if (k === 'grain') ops.push(`{
     float cell = max(0.5, grain_size * uRes.y / 1080.0);
@@ -974,12 +1108,11 @@ layout(location = 0) out vec4 o0;
 layout(location = 1) out vec4 o1;
 uniform float uGlowFloat;
 uniform vec4 uBloom;   // threshold, knee, -, -
-uniform vec4 uHal;     // threshold stops, headroom, -, -
+uniform vec4 uHal;     // threshold stops, headroom, knee, -
 vec3 enc(vec3 v) { return uGlowFloat > 0.5 ? v : v / (1.0 + v); }
 void main() {
   vec2 base = floor(gl_FragCoord.xy) * 4.0;
   vec3 b = vec3(0.0), h = vec3(0.0);
-  float thr = exp2(uHal.x);
   const int STEP = ${halation ? 1 : 2};
   const float N = ${halation ? '16.0' : '4.0'};
   for (int j = 0; j < 4; j += STEP) for (int i = 0; i < 4; i += STEP) {
@@ -987,11 +1120,53 @@ void main() {
     vec4 s = scene(p);
     vec3 x = toLin(s.a > 1e-5 ? s.rgb / s.a : vec3(0.0)) * s.a;
     ${bloom ? 'float mx = max(x.r, max(x.g, x.b)); b += x * (fnSoft(mx, uBloom.x, uBloom.x * 0.5 + 0.05) / max(mx, 1e-4));' : crtGlow ? 'b += x;' : ''}
-    ${halation ? `vec3 E = vec3(fnEnergy1(x.r, uHal.y), fnEnergy1(x.g, uHal.y), fnEnergy1(x.b, uHal.y));
-    h += vec3(fnSoft(E.r, thr, thr * 0.5), fnSoft(E.g, thr * 1.5, thr * 0.75) * 0.7, fnSoft(E.b, thr * 4.0, thr * 2.0) * 0.5);` : ''}
+    ${halation ? 'h += vec3(fnHalSrc(x, uHal.xyz), 0.0);' : ''}
   }
   o0 = vec4(enc(b / N), 1.0);
   o1 = vec4(enc(h / N), 1.0);
+}
+`;
+
+/** Halation's half-size source: the largest red and white sources (fnHalSrc) of each 2 × 2 block, so a one-pixel glint survives. */
+const FN_HAL_PRE = `${FN_COMMON}
+out vec4 o0;
+uniform float uGlowFloat;
+uniform vec4 uHal;     // threshold stops, headroom, knee, -
+void main() {
+  vec2 base = floor(gl_FragCoord.xy) * 2.0;
+  vec2 m = vec2(0.0);
+  for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
+    vec4 s = scene((base + vec2(float(i), float(j)) + 0.5) / uSrcRes);
+    vec3 x = toLin(s.a > 1e-5 ? s.rgb / s.a : vec3(0.0)) * s.a;
+    m = max(m, fnHalSrc(x, uHal.xyz));
+  }
+  vec3 v = vec3(m, 0.0);
+  o0 = vec4(uGlowFloat > 0.5 ? v : v / (1.0 + v), 1.0);
+}
+`;
+
+/**
+ * Halation's max-spread, one direction: the largest of each texel within
+ * 4.5 σ times e^(−i²/2σ²). Two passes (across, then down) give the 2D
+ * max-spread exactly, since the gaussian factors.
+ */
+const FN_HAL_MAX = `#version 300 es
+precision highp float;
+uniform sampler2D uA;
+uniform vec2 uRes, uDir;
+uniform float uSigma, uGlowFloat;
+out vec4 o0;
+vec3 dec(vec3 v) { return uGlowFloat > 0.5 ? v : v / max(vec3(1e-4), 1.0 - v); }
+void main() {
+  vec2 p = gl_FragCoord.xy / uRes;
+  vec3 m = dec(texture(uA, p).rgb);
+  float k = -0.5 / max(uSigma * uSigma, 1e-4), reach = uSigma * 4.5 + 0.5;
+  for (int i = 1; i <= 64; i++) {
+    float fi = float(i);
+    if (fi > reach) break;
+    m = max(m, max(dec(texture(uA, p + uDir * fi).rgb), dec(texture(uA, p - uDir * fi).rgb)) * exp(fi * fi * k));
+  }
+  o0 = vec4(uGlowFloat > 0.5 ? m : m / (1.0 + m), 1.0);
 }
 `;
 
@@ -1127,6 +1302,9 @@ export function fnCreate(canvasIn) {
   // The glow levels: a quarter (q), an eighth (e) and a sixteenth (g) of the frame, each blurred across (…t) then down (…b).
   const GLOW_LEVELS = ['q', 'qt', 'qb', 'et', 'eb', 'gt', 'gb'];
   let glowT = null;
+  // Halation's half-size levels: its source (pre), the max-spread across (t) and then down (m).
+  const HAL_LEVELS = ['pre', 't', 'm'];
+  let halT = null;
   let outT = null;
   let ringT = null; // { key, tex, fb, w, h, ring }
 
@@ -1189,7 +1367,7 @@ export function fnCreate(canvasIn) {
     const bv = (k, d) => (bloom ? (value ? value(bloom, k) : bloom[k]) : d);
     const hv = (k, d) => (hal ? (value ? value(hal, k) : hal[k]) : d);
     gl.uniform4f(loc(pre, 'uBloom'), bv('threshold', 0.7), 0, 0, 0);
-    gl.uniform4f(loc(pre, 'uHal'), hv('threshold', 0.5), hv('headroom', 6), 0, 0);
+    gl.uniform4f(loc(pre, 'uHal'), hv('threshold', FN_HAL.threshold), hv('headroom', FN_HAL.headroom), FN_HAL.knee, 0);
     draw(glowT.q.fb, qw, qh);
     const blur = compile('blur', FN_BLUR);
     if (!blur) return false;
@@ -1205,6 +1383,38 @@ export function fnCreate(canvasIn) {
     pass(T.q, T.qt, 1, 0); pass(T.qt, T.qb, 0, 1);
     pass(T.qb, T.et, 2, 0); pass(T.et, T.eb, 0, 1.5);
     pass(T.eb, T.gt, 2, 0); pass(T.gt, T.gb, 0, 1.5);
+    if (hal) return halPasses(input, W, H, pixelsMode, hv);
+    return true;
+  }
+
+  // Halation's tight bleed at half size: the largest source of each 2 × 2 block, then the max-spread across and down.
+  function halPasses(input, W, H, pixelsMode, hv) {
+    const hw = Math.max(1, Math.ceil(W / 2)), hh = Math.max(1, Math.ceil(H / 2));
+    const key = `${hw}x${hh}`;
+    if (!halT || halT.key !== key) {
+      if (halT) for (const k of HAL_LEVELS) dropTarget(halT[k]);
+      halT = { key, pre: target(hw, hh, 1, floatGlow), t: target(hw, hh, 1, floatGlow), m: target(hw, hh, 1, floatGlow) };
+    }
+    const pre = compile('halpre', FN_HAL_PRE);
+    if (!pre) return false;
+    gl.useProgram(pre.prog);
+    common(pre, hw, hh, input, W, H, pixelsMode);
+    gl.uniform1f(loc(pre, 'uGlowFloat'), floatGlow ? 1 : 0);
+    gl.uniform4f(loc(pre, 'uHal'), hv('threshold', FN_HAL.threshold), hv('headroom', FN_HAL.headroom), FN_HAL.knee, 0);
+    draw(halT.pre.fb, hw, hh);
+    const mx = compile('halmax', FN_HAL_MAX);
+    if (!mx) return false;
+    gl.useProgram(mx.prog);
+    gl.uniform1f(loc(mx, 'uGlowFloat'), floatGlow ? 1 : 0);
+    // σ in half-size texels: FN_HAL.sigma px of a 1080-line picture, scaled with this one.
+    gl.uniform1f(loc(mx, 'uSigma'), FN_HAL.sigma * (H / 1080) / 2);
+    const pass = (from, to, dx, dy) => {
+      gl.uniform2f(loc(mx, 'uRes'), to.w, to.h);
+      gl.uniform2f(loc(mx, 'uDir'), dx / from.w, dy / from.h);
+      bindTex(mx, 'uA', 0, from.texs[0]);
+      draw(to.fb, to.w, to.h);
+    };
+    pass(halT.pre, halT.t, 1, 0); pass(halT.t, halT.m, 0, 1);
     return true;
   }
 
@@ -1297,6 +1507,7 @@ export function fnCreate(canvasIn) {
       bindTex(fin, 'uQ0', unit++, glowT.qb.texs[0]); bindTex(fin, 'uQ1', unit++, glowT.qb.texs[1]);
       bindTex(fin, 'uE0', unit++, glowT.eb.texs[0]); bindTex(fin, 'uE1', unit++, glowT.eb.texs[1]);
       bindTex(fin, 'uG0', unit++, glowT.gb.texs[0]); bindTex(fin, 'uG1', unit++, glowT.gb.texs[1]);
+      if (halT && effects.some(e => e.kind === 'halation')) bindTex(fin, 'uHM', unit++, halT.m.texs[0]);
     }
     if (ring) {
       bindTex(fin, 'uRing', unit++, ring.tex, gl.TEXTURE_2D_ARRAY);
@@ -1341,6 +1552,7 @@ export function fnCreate(canvasIn) {
       for (const e of programs.values()) if (e) gl.deleteProgram(e.prog);
       programs.clear();
       if (glowT) for (const k of GLOW_LEVELS) dropTarget(glowT[k]);
+      if (halT) for (const k of HAL_LEVELS) dropTarget(halT[k]);
       dropTarget(outT);
       if (ringT) { gl.deleteTexture(ringT.tex); gl.deleteFramebuffer(ringT.fb); }
       const lose = gl.getExtension('WEBGL_lose_context');

@@ -93,7 +93,7 @@ const ROWS: Array<[string, string, string]> = [
   ['finishGrade', 'Finish: grade and lens', 'A grade, lens distortion, chromatic aberration and a vignette over the shader and a layer; the mouse sets the white balance.'],
   ['finishLooks', 'Finish: looks and split toning', 'Teal & orange as a starting point: split toning, colour wheels and curves you can keep changing.'],
   ['finishScreen', 'Finish: CRT, bloom, grain and shake', 'A curved CRT with its shadow mask and glow, bloom, grain and flicker; Space shakes the camera.'],
-  ['finishHalation', 'Finish: halation', 'Film’s red-to-white halo on a test scene: lamps halate and grow, paper and teal don’t.'],
+  ['finishHalation', 'Finish: halation', 'Film’s thin red bleed on a test scene: bright edges and lamps bleed red onto the dark beside them; teal doesn’t.'],
   ['finishTime', 'Finish: time displacement', 'Slit-scan: the top of the picture is 30 frames behind the bottom, over a drifting shader and a comet layer.'],
   ['drumPads', 'Drum pads', 'A 4 × 4 sampler of generated drums: hit pads with keys, clicks or MIDI; the kick pulses the glow and the hats throw sparks. Silent until you play.'],
   ['granulator', 'Granulator', 'A cloud of grains from the generated pad chord: the mouse scans the sample and sets the grain size, a reader swells the glow, and three grains ride nulls; then particles inside a drifting ring play it as chimes. Click first to hear it.'],
