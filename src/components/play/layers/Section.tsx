@@ -63,7 +63,7 @@ export function Section({ kind, title, hint, on, onToggle, id, primary, summary,
   const onState = switched ? !!on : undefined;
   useLayoutEffect(() => { setMeta?.(tabKey, { summary: summaryText, hint, on: onState }); }, [setMeta, tabKey, summaryText, hint, onState]);
 
-  if (tabs && tabs.mode === 'pending') return <div ref={rootRef} id={id} hidden />;
+  // 'pending' (the host's first render, and server rendering): the stacked card below, so the first paint isn't empty.
   if (tabs && tabs.mode === 'tabs') {
     const open = tabs.active === tabKey;
     const keep = open || tabs.mounted.has(tabKey);

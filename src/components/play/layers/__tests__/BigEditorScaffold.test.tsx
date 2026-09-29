@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { Section } from '../Section';
 import { BigEditorScaffold } from '../BigEditorScaffold';
 import { DrumPadEditor } from '../DrumPadEditor';
 import { ParticlesEditor, RelationshipEditor } from '../editors';
@@ -56,14 +57,22 @@ function ctxFor(kind: PlayLayerKind, id: string): { f: ReturnType<typeof makeFie
 }
 
 describe('BigEditorScaffold', () => {
-  it('shows the jump strip only with 4 or more sections', () => {
-    const three = mount(<BigEditorScaffold sections={[{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }]}><div>body</div></BigEditorScaffold>);
-    expect(three.querySelector('[role="tablist"]')).toBeNull();
+  it('shows a tab strip once two or more Sections are inside; one section shows plainly', () => {
+    const one = mount(<BigEditorScaffold kind="t1" sections={[{ id: 'a', label: 'A' }]}><Section kind="t1" id="a" title="A" primary><div>body a</div></Section></BigEditorScaffold>);
+    expect(one.querySelector('[role="tablist"]')).toBeNull();
+    expect(one.textContent).toContain('body a');
 
-    const four = mount(<BigEditorScaffold sections={[{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }, { id: 'd', label: 'D' }]}><div>body</div></BigEditorScaffold>);
-    const strip = four.querySelector('[role="tablist"]');
+    const two = mount(<BigEditorScaffold kind="t2" sections={[{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }]}>
+      <Section kind="t2" id="a" title="A" primary><div>body a</div></Section>
+      <Section kind="t2" id="b" title="B"><div>body b</div></Section>
+    </BigEditorScaffold>);
+    const strip = two.querySelector('[role="tablist"]');
     expect(strip).not.toBeNull();
-    expect(strip!.querySelectorAll('[role="tab"]').length).toBe(4);
+    expect(strip!.querySelectorAll('[role="tab"]').length).toBe(2);
+    // One section at a time: the primary is open, the other is a hidden panel.
+    expect(two.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain('A');
+    const panels = Array.from(two.querySelectorAll('[role="tabpanel"]'));
+    expect(panels.filter(p => !p.hasAttribute('hidden')).map(p => p.getAttribute('aria-label'))).toEqual(['A']);
   });
 
   it('always renders its children, strip or not', () => {
@@ -94,42 +103,47 @@ describe('big editors mount without console errors', () => {
   }
 });
 
-describe('a big editor collapses to its primary section by default', () => {
-  beforeEach(() => usePlayUi.setState({ folded: {} }));
+describe('a big editor opens on its primary section, as tabs', () => {
+  beforeEach(() => usePlayUi.setState({ folded: {}, sectionTabs: {}, sectionsShowAll: false }));
 
-  it('the relationship editor mounts with only Members open', () => {
+  const activeTab = (host: HTMLElement) => host.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim();
+  const tabNamed = (host: HTMLElement, name: string) => Array.from(host.querySelectorAll<HTMLElement>('[role="tab"]')).find(b => b.textContent?.trim().startsWith(name));
+
+  it('the relationship editor mounts on Members, with only that panel showing', () => {
     const { f, ctx } = ctxFor('relationship', 'rl1');
     const host = mount(<RelationshipEditor f={f} ctx={ctx} />);
-    const headings = Array.from(host.querySelectorAll('button[aria-expanded]'));
-    const open = headings.filter(b => b.getAttribute('aria-expanded') === 'true').map(b => b.textContent?.trim());
-    expect(open).toEqual(['Members']);
+    expect(activeTab(host)).toContain('Members');
+    const shown = Array.from(host.querySelectorAll('[role="tabpanel"]')).filter(p => !p.hasAttribute('hidden')).map(p => p.getAttribute('aria-label'));
+    expect(shown).toEqual(['Members']);
   });
 
-  it('unfolding Walls, then mounting the same kind again, keeps it open', () => {
+  it('opening Walls is remembered', () => {
     const { f, ctx } = ctxFor('relationship', 'rl2');
     const host = mount(<RelationshipEditor f={f} ctx={ctx} />);
-    const walls = Array.from(host.querySelectorAll('button[aria-expanded]')).find(b => b.textContent?.startsWith('Walls'));
+    const walls = tabNamed(host, 'Walls');
     expect(walls).toBeTruthy();
     act(() => walls!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(walls!.getAttribute('aria-expanded')).toBe('true');
+    expect(activeTab(host)).toContain('Walls');
 
-    // A different layer of the same kind ("switch layers and back"): Walls is still open.
-    const { f: f2, ctx: ctx2 } = ctxFor('relationship', 'rl3');
-    const host2 = mount(<RelationshipEditor f={f2} ctx={ctx2} />);
-    const walls2 = Array.from(host2.querySelectorAll('button[aria-expanded]')).find(b => b.textContent?.startsWith('Walls'));
-    expect(walls2!.getAttribute('aria-expanded')).toBe('true');
+    // Mounted again ("switch layers and back"): still on Walls. (Under a LayerRow the memory is per layer; an editor on its own remembers per kind.)
+    const again = mount(<RelationshipEditor f={f} ctx={ctx} />);
+    expect(activeTab(again)).toContain('Walls');
   });
 
-  it('the scaffold strip offers Expand all / Collapse all for a big editor with a kind', () => {
+  it('Show all stacks the sections (folded, with Expand all / Collapse all) for every editor', () => {
     const { f, ctx } = ctxFor('relationship', 'rl4');
     const host = mount(<RelationshipEditor f={f} ctx={ctx} />);
+    const showAll = Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Show all')!;
+    expect(showAll).toBeTruthy();
+    act(() => showAll.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(host.querySelector('[role="tablist"]')).toBeNull();
     const buttons = Array.from(host.querySelectorAll('button')).map(b => b.textContent);
     expect(buttons).toContain('Expand all');
     expect(buttons).toContain('Collapse all');
-
+    const headings = () => Array.from(host.querySelectorAll('button[aria-expanded]'));
+    expect(headings().filter(b => b.getAttribute('aria-expanded') === 'true').map(b => b.textContent?.trim())).toEqual(['Members']);
     const expandAll = Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Expand all')!;
     act(() => expandAll.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const headings = Array.from(host.querySelectorAll('button[aria-expanded]'));
-    expect(headings.every(b => b.getAttribute('aria-expanded') === 'true')).toBe(true);
+    expect(headings().every(b => b.getAttribute('aria-expanded') === 'true')).toBe(true);
   });
 });
