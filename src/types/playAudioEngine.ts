@@ -364,7 +364,7 @@ export const isGranulatorRack = (r: AeRack | undefined): boolean => r?.instrumen
 /**
  * A granulator rack reports its grains as sensors on `ae:<rackId>` (so a
  * mapping's Sensor source reads them): GRAIN_READS, and per grain
- * `grainPos<N>` / `grainAmp<N>` / `grainBand<N>` / `grainEnergy<N>` (N 1..GRAIN_EACH).
+ * `grainPos<N>` / `grainAmp<N>` / `grainBand<N>` / `grainEnergy<N>` / `grainRow<N>` (N 1..GRAIN_EACH).
  */
 export const GRAIN_READS = ['grains', 'grainMean', 'grainSpread', 'grainLevel', 'grainPitch', 'grainBandMean', 'grainEnergySum'] as const;
 export type GrainRead = (typeof GRAIN_READS)[number];

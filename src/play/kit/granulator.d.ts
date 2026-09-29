@@ -5,6 +5,8 @@ export interface GrParam {
 export type GrSettings = Record<string, number>;
 export interface GrStats {
   count: number; maxCount: number; pos: Float32Array; amp: Float32Array; pitch: Float32Array;
+  /** Where a grain is drawn (docs/granulator.md): its pill's length (grain size, 0..1 of the sample) and its stable row (0..1, pan-based when Pan random is on, else a hash of its slot). */
+  size: Float32Array; row: Float32Array;
   /** Spectral: each grain's band centre (0..1 on the log axis) and its energy now (0 for other grains). */
   band: Float32Array; energy: Float32Array;
   /** Emit / Spectral: the newest voice's travelling spawn points (0..1; places in the sample, or bands), how many (0: none), on which axis (1 time, 2 band, 0 none). */
@@ -86,6 +88,10 @@ export function grSpectrumImage(sp: GrSpectrum | null, cols: number, rows: numbe
 export function grReadStats(d: unknown, st: GrStats): GrStats;
 export function grNewStats(): GrStats;
 export function grSummary(st: GrStats): GrSummary;
+export function grIdHash(id: number): number;
+export function grGrainRow(id: number, pan: number, hasPan: boolean): number;
+export function grGrainSpan(pos: number, size: number): [number, number];
+export function grGrainOpacity(amp: number): number;
 export function grRender(o: GrRenderInput): { left: Float32Array; right: Float32Array; maxCount: number };
 export function grWorkletSource(): string;
 export function grLoadWorklet(ctx: BaseAudioContext): Promise<boolean>;

@@ -130,12 +130,31 @@ We built:
   - `grainSpread`: the positions' spread, 0–1
   - `grainLevel`: the mean amplitude
   - `grainPitch`: the mean pitch, 0.5 = unshifted, ±48 st at the ends
-  - per grain, `grainPos` / `grainAmp` with the grain's number (1–16)
+  - per grain, `grainPos` / `grainAmp` / `grainRow` with the grain's number (1–16)
 
   - Spectral: `grainBandMean` (the sounding grains' mean band centre, 0–1 on the Band axis), `grainEnergySum`, and per grain `grainBand` / `grainEnergy`, so visuals can follow spectral grains
   - the card also draws Emit's and Spectral's **spawn points** (triangles on the top edge for places in the sample, on the left edge for bands); the worklet posts them with the grains
 
-  **Readouts → controls** makes controls for count, mean and spread (a group "Grains · <rack>"). **Grains → nulls** makes a few null layers that ride grains 1–8 (x = position in the file, y = level), which particles, paths and the rest can follow.
+  **Readouts → controls** makes controls for count, mean and spread (a group "Grains · <rack>"). **Grains → nulls** makes a few null layers that ride grains 1–8 (x = position in the file, y = the grain's stable row — see below), which particles, paths and the rest can follow.
+
+### Where a grain is drawn / where its null goes (2026-09-28, after Serum 2's Granular view)
+
+Grains used to rise and fade back on an arc (height from amplitude). They're drawn **straight** instead, everywhere a grain shows up:
+
+- **The card's waveform** (Classic, Flux, Cloud, Emit): each grain is a short horizontal **pill**, its **x** where it currently reads (moving straight along the time axis as it plays — forward, backward, or Emit's travelling spawn points, whichever set it), its **length** its grain size (as a share of the sample's own duration, so a longer grain draws a longer pill), and its **y** a **stable row** for its life (see below). Its **opacity** follows its amplitude envelope (`grGrainOpacity(amp)`), so it fades in and out with the grain, never fully gone while it sounds and never past opaque. Colour is the rack's accent.
+- **The card's spectrogram** (Spectral): the same pill, but oriented along the **frequency** axis (its natural moving axis there): its x stays the grain's file position (already meaningful in time), and it spans its **band** ± half of Band width vertically. Same opacity rule, from its energy.
+- **The playhead** is a thin vertical line, drawn once, not per grain.
+- No arcs anywhere; at most 64 pills a frame (the grain cap), cheap canvas strokes with round line caps.
+
+**The grain's row** (`grGrainRow(id, pan, hasPan)`, `GrStats.row`) is 0–1, stable for as long as that grain sounds (its engine slot never changes hands while it's on):
+
+- **Pan-based when Pan random is on** (`> 0`): pan (−1..1) maps straight across the row, so the layout means something — a grain panned left draws low, one panned right draws high (or the reverse, depending which edge you call which).
+- **A hash of its slot otherwise** (`grIdHash`, a stable non-random function of the grain's id — not the seeded RNG the grains themselves use), so grains still spread out over the height instead of stacking on one line.
+- Either way it's nudged a little off dead centre (0.5), so a pill never sits exactly on the waveform's zero line.
+
+**Grains → nulls** carries the same mapping into the picture: a grain's null **x** = `grainPos` (0–1 along the sample), **y** = `grainRow` (0–1, pan-based when Pan random is on, else the id hash) — no more riding `grainAmp`. `GrStats.size` (the pill's length, 0–1 of the sample) has no null or sensor of its own: it only feeds the card's drawing, straight off `stats()`.
+
+Where the numbers come from: `grGrainRow` / `grGrainSpan` / `grGrainOpacity` / `grIdHash` in `src/play/kit/granulator.js` (attached to the engine factory as `create.grainRow` etc., so the worklet's self-contained copy and this module's exports are the same code, bit for bit); `GrStats.size` / `GrStats.row` fill in `stats()`, carried over the worklet's packed message (`grReadStats`) the same as `pos` / `amp`. The card (`GranulatorPanel.tsx`, `drawPill`) and `grainControls.ts` (`addGrainNulls`) are the two places that read them.
 
   **The nulls' folder.** Grains → nulls puts its nulls in a folder of their own at the top level of the layer list ("Grains · <rack>", "(2)" for a second batch). The folder is **sealed**: a layer added later never joins it, even while the list shows the folder (it lands in the nearest open group around it, or at the top level, and the list goes there). Only dropping a layer in puts one inside. Grains from a layer (nulls as the source) makes no layers, so it has no folder. `LayerGroup.sealed` (types/layerGroups.ts, `newLayerHome`), `placeNewLayer` (components/play/groupOps.ts).
 - **Output**: the granulator's sound goes through its own **Sound effect chain** (`rack:<id>`: Filter, Echo, Reverb, Distortion, Compressor, in Finish → Sound or on the card) to the page's master chain. The audio readers can listen to it (**Readers listen here** on the card). Audio Unit effects on a granulator rack are desktop-only and not wired to it (see Limits).
@@ -181,7 +200,7 @@ Not built (yet):
 | The example | `src/store/playExamples.ts` (`granulator`) |
 | Emit's spawn points, Spectral's analysis and partials | `src/play/kit/granulator.js` (`headsStep`, `analyse`, `pickPartials` inside the engine; `grAnalyse`, `grBufferSpectrum`, `grSpectrumImage`, `grReadStats`) |
 | The grain nulls' sealed folder | `src/play/grainControls.ts`, `src/types/layerGroups.ts` (`sealed`, `newLayerHome`), `src/components/play/groupOps.ts` (`placeNewLayer`) |
-| Tests | `src/play/__tests__/granulator.test.ts`, `granulatorModes.test.ts` (Emit, Spectral), `grainGroups.test.ts` (the sealed folder) |
+| Tests | `src/play/__tests__/granulator.test.ts`, `granulatorModes.test.ts` (Emit, Spectral), `grainGroups.test.ts` (the sealed folder), `grainLayout.test.ts` (where a grain is drawn) |
 
 ## Tests
 
@@ -207,3 +226,5 @@ Not built (yet):
 - Spectral: the analysis finds the right peaks with their amplitudes, the same every time; a low band plays the low tone and a high band the high one (zero crossings), Pitch multiplies and Shift adds hertz, an empty band is silent; band and energy readouts and the travelling bands; bit-exact renders per seed; the real AudioWorklet getting the analysis from the main thread; the worklet's packed readouts round-trip
 
 `src/play/__tests__/grainGroups.test.ts`: Grains → nulls makes a sealed top-level folder; a later layer stays outside it (even while the list shows it) or goes to the open group around it; a drop still puts one in; the seal survives a save.
+
+`src/play/__tests__/grainLayout.test.ts`: the pure layout helpers (`grIdHash`, `grGrainRow`, `grGrainSpan`, `grGrainOpacity`) — pan-based rows map straight across and clear dead centre, the id hash spreads grains when pan is off, span is pos ± half the grain size, opacity follows the envelope and clamps; a live engine's `stats()` fills plausible `size` / `row`, and the worklet's packed message round-trips them.

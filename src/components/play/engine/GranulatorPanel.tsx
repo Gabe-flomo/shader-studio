@@ -15,7 +15,7 @@ import { Segmented, Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { RulerSlider } from '../../ui/RulerSlider';
 import { toast } from '../../ui/toastStore';
-import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_PROP_NAMES, GR_FROM_TARGETS, GR_MODES, GR_SYNTHS, GR_SYNTH_NAMES, grFromDefaults, grNewStats, grParam, grSpectrumImage, grSummary, type GrParam } from '../../../play/kit/granulator.js';
+import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_PROP_NAMES, GR_FROM_TARGETS, GR_MODES, GR_SYNTHS, GR_SYNTH_NAMES, grFromDefaults, grGrainOpacity, grNewStats, grParam, grSpectrumImage, grSummary, type GrParam } from '../../../play/kit/granulator.js';
 import { AE_INST, aeRack, aeSlot, auPropId, auTarget, patchSlot, type AeGrainFrom, type AeGrainLink, type AeGrainSample, type AeRack, type AeSlot } from '../../../types/playAudioEngine';
 import type { PlayRecord } from '../../../types/play';
 import type { DrumPadLayer } from '../../../types/playLayers';
@@ -359,12 +359,20 @@ function GrainWave({ rack, mode, position, spray, band, bandWidth, fftSize, onPo
         } else if (st.headCount && st.headAxis === 2) {
           for (let i = 0; i < st.headCount; i++) { const y = h - st.heads[i] * h; g.beginPath(); g.moveTo(0, y - 4); g.lineTo(0, y + 4); g.lineTo(7, y); g.closePath(); g.fill(); }
         }
-        // The live grains: a dot where each reads, higher and bigger when louder (Spectral: at its band, bigger with its energy).
+        // The live grains: a straight pill, no arc (docs/granulator.md, "Where a grain is drawn"). Classic/Flux/Cloud/Emit:
+        // horizontal, its length its grain size, its x where it reads, its row (y) stable for its life (pan-based, or a
+        // hash of its slot). Spectral: the same, but along the frequency axis at its file position, spanning its band.
         for (let i = 0; i < st.count; i++) {
-          const a = Math.min(1, spectral ? st.energy[i] * 4 : st.amp[i]), x = st.pos[i] * w;
-          const y = spectral ? h - st.band[i] * h : h - 6 - a * (h - 12);
-          g.fillStyle = alpha(spectral ? tk.text.primary : tk.accent.base, 0.35 + 0.65 * a);
-          g.beginPath(); g.arc(x, y, 2 + 3 * a, 0, Math.PI * 2); g.fill();
+          const amp = Math.min(1, spectral ? st.energy[i] * 4 : st.amp[i]);
+          g.fillStyle = alpha(spectral ? tk.text.primary : tk.accent.base, grGrainOpacity(amp));
+          if (spectral) {
+            const x = st.pos[i] * w, half = Math.max(0.006, bandWidth / 2);
+            const y0 = h - Math.min(1, st.band[i] + half) * h, y1 = h - Math.max(0, st.band[i] - half) * h;
+            drawPill(g, x, y0, x, y1, Math.max(2, w / 90));
+          } else {
+            const x0 = (st.pos[i] - st.size[i] / 2) * w, x1 = (st.pos[i] + st.size[i] / 2) * w, y = st.row[i] * h;
+            drawPill(g, x0, y, x1, y, Math.max(2, h / 24));
+          }
         }
         if (st.count !== lastCount) { lastCount = st.count; setCount(st.count); }
       }
@@ -384,7 +392,7 @@ function GrainWave({ rack, mode, position, spray, band, bandWidth, fftSize, onPo
   const sum = grSummary(audioEngineHost.granulator(rack.id)?.stats() ?? grNewStats());
   return (
     <div>
-      <canvas ref={ref} aria-label={spectral ? 'Spectrogram: click or drag to set Position (across) and Band (up and down); dots are the grains sounding now, triangles the travelling bands' : 'Waveform: click or drag to set Position; dots are the grains sounding now, triangles the travelling spawn points'}
+      <canvas ref={ref} aria-label={spectral ? 'Spectrogram: click or drag to set Position (across) and Band (up and down); pills are the grains sounding now, spanning their band, triangles the travelling bands' : 'Waveform: click or drag to set Position; pills are the grains sounding now, spanning their grain size, triangles the travelling spawn points'}
         onPointerDown={e => { drag.current = true; e.currentTarget.setPointerCapture(e.pointerId); put(e); }}
         onPointerMove={e => { if (drag.current) put(e); }}
         onPointerUp={() => { drag.current = false; }} onPointerCancel={() => { drag.current = false; }}
@@ -396,6 +404,19 @@ function GrainWave({ rack, mode, position, spray, band, bandWidth, fftSize, onPo
       </div>
     </div>
   );
+}
+
+/** A short capsule from (x0,y0) to (x1,y1), `thick` wide, in the current fillStyle: a grain's pill, never an arc. */
+function drawPill(g: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, thick: number) {
+  g.save();
+  g.lineCap = 'round';
+  g.lineWidth = thick;
+  g.strokeStyle = g.fillStyle as string;
+  g.beginPath();
+  g.moveTo(x0, y0);
+  g.lineTo(x1, y1);
+  g.stroke();
+  g.restore();
 }
 
 /** A #rrggbb colour's channels (a soft blue for anything else). */
@@ -420,7 +441,7 @@ function Readouts({ rack, onChange }: { rack: AeRack; onChange: Change }) {
       </span>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <Button size="sm" icon="sliders" onClick={() => { onChange(p => addGrainReadouts(p, rack.id)); toast.success('Grain count, position and spread are controls', { message: `In “Grains · ${rack.name}”.`, action: { label: 'Show', onClick: show } }); }}>Readouts → controls</Button>
-        <Button size="sm" icon="target" onClick={() => { onChange(p => addGrainNulls(p, rack.id, 8)); toast.success('Eight nulls ride the grains', { message: 'x: where each grain reads, y: how loud. Point particles, paths or anything that follows a null at them.' }); }}>Grains → nulls</Button>
+        <Button size="sm" icon="target" onClick={() => { onChange(p => addGrainNulls(p, rack.id, 8)); toast.success('Eight nulls ride the grains', { message: 'x: where each grain reads, y: its own stable row. Point particles, paths or anything that follows a null at them.' }); }}>Grains → nulls</Button>
       </div>
     </div>
   );
