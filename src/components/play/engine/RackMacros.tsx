@@ -120,7 +120,7 @@ export function MacrosDevice({ rack, play, onChange, touch, narrow, color }: {
 
   const used = macros.filter(m => m.targets.length).length;
   return (
-    <section aria-label={`${rack.name}’s macros`} style={{ flex: `0 0 ${folded ? 200 : narrow ? 320 : 360}px`, width: folded ? 200 : narrow ? 320 : 360, maxWidth: narrow ? 'calc(100vw - 48px)' : undefined, minHeight: 0, maxHeight: '100%', display: 'flex', flexDirection: 'column', borderRadius: radius.md, background: tk.bg.panel,
+    <section aria-label={`${rack.name}’s macros`} style={{ flex: `0 0 ${folded ? 250 : narrow ? 320 : 360}px`, width: folded ? 250 : narrow ? 320 : 360, maxWidth: narrow ? 'calc(100vw - 48px)' : undefined, minHeight: 0, maxHeight: '100%', display: 'flex', flexDirection: 'column', borderRadius: radius.md, background: tk.bg.panel,
       boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden' }}>
       {color && <span aria-hidden style={{ height: 3, flexShrink: 0, background: color }} />}
       <header style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 6px 6px 8px', borderBottom: folded ? undefined : `1px solid ${tk.border.subtle}`, minWidth: 0 }}>
@@ -223,7 +223,7 @@ function MacroKnob({ rack, n, macro, touch, selected, learning, mapped, anchor, 
         <path d={arcPath(0, 1, size)} fill="none" stroke={tk.bg.field} strokeWidth={4} strokeLinecap="round" />
         {macro.value > 0.001 && <path d={arcPath(0, macro.value, size)} fill="none" stroke={col} strokeWidth={4} strokeLinecap="round" />}
         <line x1={size / 2} y1={size / 2} x2={x} y2={y} stroke={tk.text.primary} strokeWidth={2} strokeLinecap="round" />
-        <circle ref={liveRef} r={3} fill={tk.status.warning} style={{ opacity: 0 }} />
+        <circle ref={liveRef} r={3.5} fill={tk.status.warning} stroke={tk.bg.panel} strokeWidth={1.2} style={{ opacity: 0 }} />
       </svg>
       <span style={{ font: `10px ${fontFamily.mono}`, color: tk.text.muted }}>{Math.round(macro.value * 100)}%</span>
       <button type="button" onClick={onSelect} title={`${macro.name}: ${macro.targets.length ? macro.targets.map(t => t.name ?? t.address).join(', ') : 'nothing mapped yet'} (click to map)`}
