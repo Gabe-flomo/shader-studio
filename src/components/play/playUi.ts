@@ -53,6 +53,8 @@ function loadLayersSplitRatio(): number {
     const v = Number(localStorage.getItem(LAYERS_SPLIT_KEY));
     return Number.isFinite(v) && v > 0 ? clampLayersSplitRatio(v) : LAYERS_SPLIT_DEFAULT_RATIO;
   } catch { return LAYERS_SPLIT_DEFAULT_RATIO; }
+}
+
 const SHOW_ALL_KEY = 'shader-studio:play:sectionsShowAll';
 const TABS_KEY = 'shader-studio:play:sectionTabs';
 /** How many remembered tabs to keep (one per layer, mostly): the oldest go first. */
@@ -298,6 +300,7 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
     for (const k of keys) folded[k] = next;
     try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch { /* preference only */ }
     set({ folded });
+  },
   sectionsShowAll: loadShowAll(),
   setSectionsShowAll: on => {
     try { localStorage.setItem(SHOW_ALL_KEY, on ? '1' : '0'); } catch { /* preference only */ }
