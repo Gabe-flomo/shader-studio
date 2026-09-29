@@ -55,11 +55,13 @@ function useFolders() {
 /** assetFolders writes to localStorage and can throw when it is blocked. */
 const safely = (fn: () => void) => { try { fn(); } catch { /* storage blocked */ } };
 
-export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onAddSet, onChange, onClose }: {
+export function AddLayerMenu({ play, touch, anchorRef, initialSection, onAdd, onAddKind, onAddSet, onChange, onClose }: {
   play: PlayRecord;
   /** Phone layout: a bottom sheet with bigger rows. */
   touch: boolean;
   anchorRef: RefObject<HTMLElement | null>;
+  /** Opens with this section expanded and scrolled into view (the empty state's "Layer sets…"). */
+  initialSection?: 'sets';
   onAdd: (kind: PlayLayerKind, variant?: BuiltinVariant) => void;
   onAddKind: (def: LayerKindDef) => void;
   /** Add a saved layer set (docs/presets.md). */
@@ -72,7 +74,10 @@ export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onAddSe
   const installed = useInstalledKinds();
   const { folders, membership } = useFolders();
   const [query, setQuery] = useState('');
-  const [closed, setClosed] = useState(loadClosed);
+  const [closed, setClosed] = useState(() => {
+    const c = loadClosed();
+    return initialSection === 'sets' ? { ...c, 'section:sets': false } : c;
+  });
   const [active, setActive] = useState<string | null>(null);
   const [kindMenu, setKindMenu] = useState<{ x: number; y: number; entry: KindEntry; move?: boolean } | null>(null);
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; folder: FolderEntry } | null>(null);
@@ -161,6 +166,13 @@ export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onAddSe
     if (!active) return;
     scrollRef.current?.querySelector(`[data-row="${CSS.escape(active)}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [active]);
+  // Opened from "Layer sets…": jump straight to that section once the menu has laid out.
+  useEffect(() => {
+    if (initialSection !== 'sets') return;
+    const t = window.setTimeout(() => scrollRef.current?.querySelector('[data-section="section:sets"]')?.scrollIntoView({ block: 'start' }), 0);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSection]);
 
   // ── Folders ───────────────────────────────────────────────────────────────
   const newFolder = async (thenMove?: string) => {
@@ -222,6 +234,7 @@ export function AddLayerMenu({ play, touch, anchorRef, onAdd, onAddKind, onAddSe
 
   const sectionHead = (key: string, title: string, n: number, extra?: ReactNode, drop?: { target: string }) => (
     <div
+      data-section={key}
       {...(drop ? dropProps(drop.target, null) : {})}
       style={{ position: 'sticky', top: SEARCH_H, zIndex: 1, display: 'flex', alignItems: 'center', gap: 4, background: tk.bg.panel, borderTop: `1px solid ${tk.border.subtle}`, ...(drop ? dropStyle(drop.target) : {}) }}
     >

@@ -107,7 +107,13 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const tk = useTokens();
   const mode = useThemeMode();
   const addRef = useRef<HTMLSpanElement>(null);
-  const [menu, setMenu] = useState(false);
+  const emptyAddRef = useRef<HTMLSpanElement>(null);
+  const emptySetsRef = useRef<HTMLSpanElement>(null);
+  // Which button opened the Add layer menu: the header's, or one of the empty state's (so it
+  // drops down under whichever was pressed). 'sets' also jumps the menu to its Layer sets section.
+  const [menuAnchor, setMenuAnchor] = useState<'header' | 'empty' | 'sets' | null>(null);
+  const menu = menuAnchor !== null;
+  const menuAnchorRef = menuAnchor === 'empty' ? emptyAddRef : menuAnchor === 'sets' ? emptySetsRef : addRef;
   const pageMoreRef = useRef<HTMLSpanElement>(null);
   const [pageMore, setPageMore] = useState<{ x: number; y: number } | null>(null);
   const [importingP5, setImportingP5] = useState(false);
@@ -489,6 +495,11 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         <span style={{ font: `650 13px ${fontFamily.ui}` }}>Layers</span>
         {layerCount > 0 && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}` }}>{layerCount}</span>}
         <span style={{ flex: 1 }} />
+        {/* Add layer comes first among the optional buttons, so it's never the one pushed off when the
+            header is narrow (the list column of a split view, a medium panel width). */}
+        <span ref={addRef} style={{ display: 'inline-flex' }}>
+          <Button size="sm" icon="plus" aria-expanded={menuAnchor === 'header'} onClick={() => setMenuAnchor(a => (a === 'header' ? null : 'header'))}>Add layer</Button>
+        </span>
         {!split && layerCount > 4 && !selectMode && (
           <Tooltip label="Always expand cards" description="Off: with this many layers, an unselected card shows only its header — it opens when you pick it, so the list isn't a wall of every card's settings at once.">
             <Button size="sm" variant={alwaysExpand ? 'primary' : 'ghost'} onClick={() => setAlwaysExpand(!alwaysExpand)}>Always expand</Button>
@@ -499,10 +510,19 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             <Button size="sm" variant="ghost" onClick={() => setPicked(picked, true)}>Select</Button>
           </Tooltip>
         )}
-        <span ref={addRef} style={{ display: 'inline-flex' }}>
-          <Button size="sm" icon="plus" aria-expanded={menu} onClick={() => setMenu(m => !m)}>Add layer</Button>
-        </span>
-        {menu && <AddLayerMenu play={play} touch={touch} anchorRef={addRef} onAdd={add} onAddKind={addKind} onAddSet={set => addLayerSetToPlay(set)} onChange={onChange} onClose={() => setMenu(false)} />}
+        {menu && (
+          <AddLayerMenu
+            play={play}
+            touch={touch}
+            anchorRef={menuAnchorRef}
+            initialSection={menuAnchor === 'sets' ? 'sets' : undefined}
+            onAdd={add}
+            onAddKind={addKind}
+            onAddSet={set => addLayerSetToPlay(set)}
+            onChange={onChange}
+            onClose={() => setMenuAnchor(null)}
+          />
+        )}
         {importingP5 && <P5ImportDialog onCreate={addP5} onClose={() => setImportingP5(false)} />}
         <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More" size="sm" tooltip={false} onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 200, y: r.bottom + 4 } : null); }} />
@@ -568,6 +588,14 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
           <div style={{ margin: '18px 4px', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, lineHeight: 1.5 }}>
             <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>No layers yet</div>
             Layers sit on top of the picture: particles that flow along it, shapes that act as walls and emitters, text, images, falling letters, a brush, audio, ASCII, contours, a lens, your camera. Every number can be a control, and actions fire them from keys, beats and notes.
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span ref={emptyAddRef} style={{ display: 'inline-flex' }}>
+                <Button size="sm" variant="primary" icon="plus" aria-expanded={menuAnchor === 'empty'} onClick={() => setMenuAnchor(a => (a === 'empty' ? null : 'empty'))}>Add layer</Button>
+              </span>
+              <span ref={emptySetsRef} style={{ display: 'inline-flex' }}>
+                <Button size="sm" variant="ghost" icon="layers" aria-expanded={menuAnchor === 'sets'} onClick={() => setMenuAnchor(a => (a === 'sets' ? null : 'sets'))}>Layer sets…</Button>
+              </span>
+            </div>
           </div>
         ) : rows.map((n, i) => {
           const item = nodeItem(n);
