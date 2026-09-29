@@ -19,6 +19,17 @@ const FOLD_KEY = 'shader-studio:play:folded';
 const PANEL_KEY = 'shader-studio:play:panel';
 const GUIDES_KEY = 'shader-studio:play:guides';
 const ALWAYS_EXPAND_KEY = 'shader-studio:play:alwaysExpandCards';
+const SHOW_ALL_KEY = 'shader-studio:play:sectionsShowAll';
+const TABS_KEY = 'shader-studio:play:sectionTabs';
+/** How many remembered tabs to keep (one per layer, mostly): the oldest go first. */
+const TABS_KEEP = 300;
+
+function loadShowAll(): boolean {
+  try { return localStorage.getItem(SHOW_ALL_KEY) === '1'; } catch { return false; }
+}
+function loadTabs(): Record<string, string> {
+  try { const v = JSON.parse(localStorage.getItem(TABS_KEY) ?? '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
+}
 
 function loadAlwaysExpand(): boolean {
   try { return localStorage.getItem(ALWAYS_EXPAND_KEY) === '1'; } catch { return false; }
@@ -85,6 +96,25 @@ interface PlayUi {
   /** Open (or fold) every registered Section of a kind at once. */
   expandAllSections: (kind: string) => void;
   collapseAllSections: (kind: string) => void;
+  /**
+   * Layer editors show one Section at a time, as tabs (docs/editor-layout.md).
+   * "Show all" stacks them instead (the folded-by-default layout, with Expand
+   * all / Collapse all). One global choice, remembered.
+   */
+  sectionsShowAll: boolean;
+  setSectionsShowAll: (on: boolean) => void;
+  /**
+   * The open tab of each tabbed editor, keyed by its scope (`layer:<id>` for
+   * a layer, the kind for a one-off editor like Finish → Grade); the value is
+   * the Section's tab key (its `id`, or its title). No entry = the primary.
+   */
+  sectionTabs: Record<string, string>;
+  setSectionTab: (scope: string, key: string) => void;
+  /** A section something asked to show (bumped with sectionFocusTick): its tab opens, or in Show all it unfolds and scrolls into view. */
+  sectionFocus: { scope: string; key: string };
+  sectionFocusTick: number;
+  /** Open the Layers tab at this layer, on this section's tab (`key`: the Section's `id`, or its title). */
+  revealSection: (layerId: string, key: string) => void;
   /** "Always expand cards": the sidebar's layer cards skip the header-only collapse. */
   alwaysExpandCards: boolean;
   setAlwaysExpandCards: (on: boolean) => void;
@@ -217,6 +247,30 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
     for (const title of titles) folded[`${kind}:${title}`] = true;
     try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch { /* preference only */ }
     set({ folded });
+  },
+  sectionsShowAll: loadShowAll(),
+  setSectionsShowAll: on => {
+    try { localStorage.setItem(SHOW_ALL_KEY, on ? '1' : '0'); } catch { /* preference only */ }
+    set({ sectionsShowAll: on });
+  },
+  sectionTabs: loadTabs(),
+  setSectionTab: (scope, key) => {
+    if (get().sectionTabs[scope] === key) return;
+    const next = { ...get().sectionTabs };
+    delete next[scope];
+    next[scope] = key;
+    const keys = Object.keys(next);
+    for (const k of keys.slice(0, Math.max(0, keys.length - TABS_KEEP))) delete next[k];
+    try { localStorage.setItem(TABS_KEY, JSON.stringify(next)); } catch { /* preference only */ }
+    set({ sectionTabs: next });
+  },
+  sectionFocus: { scope: '', key: '' },
+  sectionFocusTick: 0,
+  revealSection: (layerId, key) => {
+    const scope = `layer:${layerId}`;
+    get().setSectionTab(scope, key);
+    set({ sectionFocus: { scope, key }, sectionFocusTick: get().sectionFocusTick + 1 });
+    get().reveal(layerId);
   },
   alwaysExpandCards: loadAlwaysExpand(),
   setAlwaysExpandCards: on => {
