@@ -25,7 +25,7 @@ import { NumberInput } from '../../NodeGraph/NumberInput';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import type { PlayRecord } from '../../../types/play';
 import {
-  AE_INST, MACRO_TARGETS_MAX, aeSlot, aeSlotName, macroPropId, rackMacros,
+  AE_INST, MACRO_TARGETS_MAX, aeSlot, aeSlotName, macroPropId, rackMacros, slotSetting,
   type AeRack, type AeSlot, type MacroCurve, type RackMacro, type RackMacroTarget,
 } from '../../../types/playAudioEngine';
 import { audioEngineHost } from '../../../lib/audioEngineHost';
@@ -43,7 +43,7 @@ import { TRACK_COLORS } from '../../../play/engineView';
 import { MiniMapper } from '../MiniMapper';
 import { wireSource } from '../miniMapperCore';
 import { usePlayUi, deviceFoldKey } from '../playUi';
-import { fmtGr, useSlotParams } from './RackControls';
+import { fmtSetting, useSlotParams } from './RackControls';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -253,7 +253,7 @@ function MacroMapEditor({ rack, n, play, onChange, onClose }: { rack: AeRack; n:
   const tk = useTokens();
   const m = rackMacros(rack)[n - 1];
   const full = m.targets.length >= MACRO_TARGETS_MAX;
-  const slots = [rack.instrument, ...rack.effects].filter((s): s is AeSlot => !!s && (s.kind === 'au' || s.kind === 'granulator'));
+  const slots = [rack.instrument, ...rack.effects].filter((s): s is AeSlot => !!s && (s.kind === 'au' || s.kind === 'granulator' || s.kind === 'sampler'));
   const has = (slot: string, address: string) => m.targets.some(t => t.slot === slot && t.address === address);
   const add = (p: MacroParamInfo) => {
     if (full) { toast.error(`Up to ${MACRO_TARGETS_MAX} parameters on a macro`); return; }
@@ -357,7 +357,7 @@ function TargetRow({ rack, n, index, target, macroValue, onChange }: { rack: AeR
   const slot = aeSlot(rack, target.slot);
   const params = useSlotParamsMaybe(rack, slot);
   const p = params?.find(x => x.address === target.address);
-  const fmt = (v: number) => (p ? formatParam(p, v) : slot?.kind === 'granulator' ? fmtGr(target.address, v) : String(round(v)));
+  const fmt = (v: number) => (p ? formatParam(p, v) : slotSetting(slot, target.address) ? fmtSetting(slot, target.address, v) : String(round(v)));
   const patch = (o: Partial<Pick<RackMacroTarget, 'min' | 'max' | 'curve' | 'points'>>) => onChange(pr => patchMacroTarget(pr, rack.id, n, index, o));
   const field = { width: 70, height: 24, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}`, textAlign: 'center' as const };
   const inverted = target.min > target.max;

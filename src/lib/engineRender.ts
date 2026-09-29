@@ -119,7 +119,8 @@ export function jobNotes(racks: readonly AeRack[], take: Pick<PlayTake, 'from' |
 
 /**
  * The take's parameter automation (controls on `au:` targets, and on macros:
- * each parameter the macro turns) as steps: the
+ * each parameter the macro turns) as steps: the Audio Units' only (a sample
+ * player's Sample index is already in the take's notes); the
  * value at 0, then every PARAM_STEP where it changed. Only for racks in `racks`.
  */
 export function jobParams(racks: readonly AeRack[], take: Pick<PlayTake, 'from' | 'tracks'> | null | undefined, from: number, length: number): JobParam[] {
@@ -137,6 +138,8 @@ export function jobParams(racks: readonly AeRack[], take: Pick<PlayTake, 'from' 
     } else {
       const t = parseAuTarget(tr.target);
       if (!t || !ids.has(t.rackId)) continue;
+      // Only an Audio Unit's parameters go to the engine: a sample player's Sample index already chose the take's notes.
+      if (aeSlot(racks.find(r => r.id === t.rackId), t.slotId)?.kind !== 'au') continue;
       outs.push({ rack: t.rackId, slot: t.slotId, address: t.address, value: v => v });
     }
     if (!outs.length) continue;

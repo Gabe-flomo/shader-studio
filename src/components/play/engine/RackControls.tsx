@@ -20,7 +20,7 @@ import { askText } from '../../ui/dialogStore';
 import { toast } from '../../ui/toastStore';
 import type { PlayRecord } from '../../../types/play';
 import { RACK_CONTROLS_MAX } from '../../../types/playArrangement';
-import { MACRO_TARGETS_MAX, aeRack, aeSlot, aeSlotName, auPropId, patchSlot, rackMacros, type AeRack, type AeSlot } from '../../../types/playAudioEngine';
+import { MACRO_TARGETS_MAX, aeRack, aeSlot, aeSlotName, auPropId, patchSlot, rackMacros, slotSetting, type AeRack, type AeSlot } from '../../../types/playAudioEngine';
 import { Menu, type MenuItem } from '../../ui/Menu';
 import { moveControlToMacro } from '../../../play/rackMacros';
 import { audioEngineHost, useEngineUi } from '../../../lib/audioEngineHost';
@@ -29,22 +29,23 @@ import { WATCH_QUIET_MS, type TouchedParam } from '../../../lib/paramWatch';
 import { playEngine } from '../../../lib/playEngine';
 import { useTape } from '../../../lib/tape';
 import { useTakes } from '../../../lib/takes';
-import { GR_PARAMS } from '../../../play/kit/granulator.js';
+import { GR_PARAMS, type GrParam } from '../../../play/kit/granulator.js';
+import { SI_PARAMS } from '../../../play/kit/samplerIndex.js';
 import { addRackControl, moveRackControl, rackControlsOf, removeRackControl, renameRackControl, touchRackControl, type RackParamInfo } from '../../../play/rackControls';
 import { withEngine } from './engineOps';
 import { usePlayUi } from '../playUi';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
-/** What a slot's parameters are: an Audio Unit's (listed by the engine), or a granulator's settings. */
+/** What a slot's parameters are: an Audio Unit's (listed by the engine), a granulator's settings, or the sample player's Sample index. */
 export function useSlotParams(rack: AeRack, slot: AeSlot): AuParam[] | null {
   const key = `${rack.id}/${slot.id}`;
   const au = useEngineUi(s => s.params[key]);
   useEffect(() => { if (slot.kind === 'au' && !au) void audioEngineHost.listParams(rack.id, slot.id); }, [au, rack.id, slot.id, slot.kind]);
   return useMemo(() => {
-    if (slot.kind === 'granulator') {
-      return GR_PARAMS.map(p => ({ address: String(p.addr), identifier: p.key, name: p.name, min: p.min, max: p.max, value: p.value, unit: p.unit, kind: p.kind as AuParam['kind'], step: p.step, log: p.log, ...(p.values ? { values: p.values as string[] } : {}) }));
-    }
+    const own = (list: readonly GrParam[]) => list.map(p => ({ address: String(p.addr), identifier: p.key, name: p.name, min: p.min, max: p.max, value: p.value, unit: p.unit, kind: p.kind as AuParam['kind'], step: p.step, log: p.log, ...(p.values ? { values: p.values as string[] } : {}) }));
+    if (slot.kind === 'granulator') return own(GR_PARAMS);
+    if (slot.kind === 'sampler') return own(SI_PARAMS);
     return slot.kind === 'au' ? au ?? null : [];
   }, [slot.kind, au]);
 }
@@ -82,19 +83,20 @@ function StripFader({ rack, slot, address, label, min, max, step, onChange, touc
 }) {
   const params = useEngineUi(s => s.params[`${rack.id}/${slot.id}`]);
   const p = params?.find(x => x.address === address);
-  const base = slot.params?.[address] ?? p?.value ?? (slot.kind === 'granulator' ? GR_PARAMS.find(g => String(g.addr) === address)?.value ?? min : min);
+  const base = slot.params?.[address] ?? p?.value ?? slotSetting(slot, address)?.value ?? min;
   const set = (v: number) => {
     if (slot.kind === 'au') audioEngineHost.setParamNow(rack.id, slot.id, address, v);
     onChange(pr => withEngine(pr, patchSlot(pr.audioEngine, rack.id, slot.id, { params: { ...slot.params, [address]: v } })));
   };
-  const text = (v: number) => (p ? formatParam(p, v) : slot.kind === 'granulator' ? fmtGr(address, v) : String(Math.round(v * 100) / 100));
+  const text = (v: number) => (p ? formatParam(p, v) : fmtSetting(slot, address, v));
   return <MiniFader label={label} value={base} min={min} max={max} step={step} onChange={set} format={text} touch={touch}
     live={() => playEngine.layerValue(auPropId(rack.id, slot.id), address, Number.NaN)} />;
 }
 
-export function fmtGr(address: string, v: number): string {
-  const g = GR_PARAMS.find(x => String(x.addr) === address);
-  if (!g) return String(v);
+/** A slot's own setting (a granulator's, the sample player's Sample index) as text; any other number rounded. */
+export function fmtSetting(slot: Pick<AeSlot, 'kind'> | undefined, address: string, v: number): string {
+  const g = slotSetting(slot, address);
+  if (!g) return String(Math.round(v * 100) / 100);
   return formatParam({ unit: g.unit, kind: g.kind as AuParam['kind'], values: g.values as string[] | undefined, min: g.min }, v);
 }
 
@@ -257,7 +259,7 @@ export function ConfigurePanel({ rack, slot, play, onChange, desktop, onClose }:
     const p = byAddr.get(address);
     const v = touch.live[address] ?? slot.params?.[address] ?? p?.value;
     if (v === undefined) return '';
-    return p ? formatParam(p, v) : slot.kind === 'granulator' ? fmtGr(address, v) : String(Math.round(v * 100) / 100);
+    return p ? formatParam(p, v) : fmtSetting(slot, address, v);
   };
   const openWindow = async () => {
     const why = await audioEngineHost.openUi(rack.id, slot.id, `${rack.name} · ${aeSlotName(slot)}`);

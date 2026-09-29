@@ -47,7 +47,10 @@ import { playId } from '../../../play/playControls';
 import { usePlayUi } from '../playUi';
 import { engineId, withEngine } from './engineOps';
 import { sendChoices, sendLabel } from '../../../lib/engineSend';
-import { GranulatorPanel } from './GranulatorPanel';
+import { GranulatorPanel, ParamRow } from './GranulatorPanel';
+import { Section } from '../layers/Section';
+import { siClamp, siParam } from '../../../play/kit/samplerIndex.js';
+import type { GrParam } from '../../../play/kit/granulator.js';
 import { AUDIO_FX_EFFECTS, rackChainId } from '../../../types/playAudioFx';
 import { RACK_CONTROLS_MAX } from '../../../types/playArrangement';
 import { regroupRackControls } from '../../../play/rackControls';
@@ -349,7 +352,7 @@ export function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk
   const [open, setOpen] = useState(false);
   const [configuring, setConfiguring] = useState(false);
   const isAu = slot.kind === 'au';
-  const canConfigure = slot.kind === 'granulator' || (isAu && desktop && pluginsOk);
+  const canConfigure = slot.kind === 'granulator' || slot.kind === 'sampler' || (isAu && desktop && pluginsOk);
   const name = aeSlotName(slot);
   const openWindow = async () => {
     const why = await audioEngineHost.openUi(rack.id, slot.id, `${rack.name} · ${name}`);
@@ -398,6 +401,7 @@ export function SlotView({ rack, slot, play, onChange, touch, desktop, pluginsOk
       )}
       {configuring && <ConfigurePanel rack={rack} slot={slot} play={play} onChange={onChange} desktop={desktop} onClose={() => setConfiguring(false)} />}
       {!collapsed && slot.kind === 'sampler' && <SamplerZones rack={rack} slot={slot} onChange={onChange} />}
+      {!collapsed && slot.kind === 'sampler' && <SamplerIndex rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} />}
       {!collapsed && slot.kind === 'granulator' && <GranulatorPanel rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} />}
       {!collapsed && isAu && open && desktop && pluginsOk && <Params rack={rack} slot={slot} play={play} onChange={onChange} touch={touch} onKeep={() => void keepState()} />}
     </div>
@@ -457,6 +461,52 @@ export function Params({ rack, slot, play, onChange, touch, onKeep }: { rack: Ae
       })}
       {!q && params.length > 200 && <Note>{params.length - 200} more: filter to find them.</Note>}
     </div>
+  );
+}
+
+// ── The sample player's Sample index ─────────────────────────────────────────
+
+/**
+ * The sample player's Sample index (docs/audio-engine.md, "Sample index"):
+ * Index, its mode, spread and seed, each with a + that makes it a control
+ * (`au:<rack>:inst::<address>`, like a granulator setting). Folded by
+ * default, with a one-line summary.
+ */
+export function SamplerIndex({ rack, slot, play, onChange, touch }: { rack: AeRack; slot: AeSlot; play: PlayRecord; onChange: Change; touch: boolean }) {
+  const exposed = useMemo(() => new Set(play.controls.map(c => c.target)), [play.controls]);
+  const valueOf = (key: string) => { const p = siParam(key)!; return slot.params?.[String(p.addr)] ?? p.value; };
+  const set = (key: string, v: number) => onChange(pr => {
+    const cur = aeSlot(aeRack(pr.audioEngine, rack.id), AE_INST);
+    if (cur?.kind !== 'sampler') return pr;
+    const p = siParam(key)!;
+    return withEngine(pr, patchSlot(pr.audioEngine, rack.id, AE_INST, { params: { ...cur.params, [String(p.addr)]: siClamp(key, v) } }));
+  });
+  const expose = (p: GrParam) => {
+    const target = auTarget(rack.id, AE_INST, String(p.addr));
+    const label = `${rack.name} · Sample player · ${p.name}`;
+    onChange(pr => {
+      if (pr.controls.some(c => c.target === target)) return pr;
+      toast.success(`${label} is a control`, { message: 'Map a source onto it in Mappings (an Increment, a beat, a signal, MIDI…).', action: { label: 'Show', onClick: () => usePlayUi.getState().setTab('controls') } });
+      return { ...pr, controls: [...pr.controls, { id: playId('ctl'), target, kind: 'float', label, min: p.min, max: p.max, ...(p.step ? { step: p.step } : {}) }] };
+    });
+  };
+  const mode = Math.round(valueOf('indexMode'));
+  const index = Math.round(valueOf('sampleIndex'));
+  const summary = mode === 1 ? `Random · seed ${Math.round(valueOf('indexSeed'))}`
+    : mode === 2 ? `Index ${index} ± ${Math.round(valueOf('indexSpread'))}`
+    : index ? `Index ${index}` : 'Off (Index 0): each note plays its own zone';
+  const keys = ['sampleIndex', 'indexMode', ...(mode === 2 ? ['indexSpread'] : []), ...(mode === 0 ? [] : ['indexSeed'])];
+  return (
+    <Section kind="engine-sampler" title="Sample index" summary={summary}
+      hint="A note plays the zone Index places on from the one it lands in (zones in key order, wrapping round), at the same distance from that zone’s root key. Takes record the note actually played.">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {keys.map(k => {
+          const p = siParam(k)!;
+          return <ParamRow key={k} p={p} value={valueOf(k)} touch={touch} soft={k === 'sampleIndex' || k === 'indexSpread'}
+            exposed={exposed.has(auTarget(rack.id, AE_INST, String(p.addr)))} onSet={v => set(k, v)} onExpose={() => expose(p)} />;
+        })}
+      </div>
+    </Section>
   );
 }
 

@@ -22,7 +22,10 @@
  * MIDI: the MIDI engine's messages (hardware, the keyboard stand-in, a MIDI
  * file) go to every rack that hears them (rackHears). Notes pass through the
  * Play overlay as `pad` actions on `ae:<rackId>` so a take records them and
- * plays them back; CC and pitch bend go straight to the rack.
+ * plays them back; CC and pitch bend go straight to the rack. A sample
+ * player rack's Sample index (play/kit/samplerIndex.js) rewrites each live
+ * note first, remembering what it sent so the note-off matches: the take and
+ * the tape record the note actually sent, and play it back unchanged.
  *
  * Mapped parameters: each frame, every control on an `au:` target reads its
  * driven value (playEngine.layerValue) and a changed one is sent to glide
@@ -54,6 +57,7 @@ import { can } from './plan';
 import { WebGranulatorRack } from './webGranulator';
 import type { GrPoints } from '../play/kit/granulator.js';
 import { macroParamTargets, macroValueOf } from '../play/rackMacros';
+import { siHold, siLetGo, siMode, siParam, siPick } from '../play/kit/samplerIndex.js';
 
 type Invoke = <T>(cmd: string, args?: unknown, options?: { headers?: Record<string, string> }) => Promise<T>;
 type Listen = <T>(event: string, cb: (e: { payload: T }) => void) => Promise<() => void>;
@@ -264,6 +268,12 @@ class AudioEngineHost {
   private act: Act | null = null;
   /** Notes sent to each rack and not let go, so a rack removed or re-routed stops cleanly. */
   private held = new Map<string, Set<number>>();
+  /** How mappings (and macros) drive parameters now, from the last frame: the Sample index reads it at each note. */
+  private valueOf: ValueOf | null = null;
+  /** Sample index: each sample player rack's live notes so far (the seeded picks' count). */
+  private siHits = new Map<string, number>();
+  /** Sample index: per rack, (channel, note) held → the notes sent for it, so note-offs match. */
+  private siHeld = new Map<string, Map<number, number[]>>();
 
   constructor() {
     engineSound.setHost({ spectrum: id => this.spectrum(id), has: id => this.has(id) });
@@ -405,7 +415,7 @@ class AudioEngineHost {
     this.controls = controls;
     // Macros (docs/audio-engine.md, "Macros"): a driven macro's value fanned out to the parameters it turns.
     const vo = valueOf ? macroValueOf(this.target, valueOf) : undefined;
-    if (vo) this.drive(vo);
+    if (vo) { this.valueOf = vo; this.drive(vo); }
     // Granulators: settings with their mappings, and the grains out as sensors.
     for (const w of this.web.values()) {
       if (w.kind !== 'granulator') continue;
@@ -817,6 +827,7 @@ class AudioEngineHost {
    * tape doesn't record itself). Notes go through a take.
    */
   input(rackId: string, bytes: number[], fromTape = false): void {
+    if (!fromTape) bytes = this.sampleIndex(rackId, bytes);
     if (!fromTape) for (const fn of this.inputTaps) fn(rackId, bytes);
     const kind = bytes[0] & 0xf0;
     if ((kind === 0x90 || kind === 0x80) && this.act) {
@@ -825,6 +836,39 @@ class AudioEngineHost {
       return;
     }
     this.send(rackId, bytes);
+  }
+
+  /**
+   * The Sample index (docs/audio-engine.md, "Sample index"): a live note for
+   * a sample player rack becomes the note of the zone Index picks; its
+   * note-off goes to the note its note-on was sent as. Everything else, and
+   * any other rack, passes as it is.
+   */
+  private sampleIndex(rackId: string, bytes: number[]): number[] {
+    const kind = bytes[0] & 0xf0;
+    if (kind === 0xb0 && (bytes[1] === 120 || bytes[1] === 123)) { this.siHeld.delete(rackId); return bytes; }
+    if (kind !== 0x90 && kind !== 0x80) return bytes;
+    const key = ((bytes[0] & 0x0f) << 7) | (bytes[1] & 0x7f);
+    const on = kind === 0x90 && bytes[2] > 0;
+    if (!on) {
+      const held = this.siHeld.get(rackId);
+      const sent = held ? siLetGo(held, key) : undefined;
+      return sent === undefined || sent === bytes[1] ? bytes : [bytes[0], sent, bytes[2] ?? 0];
+    }
+    const rack = aeRack(this.target, rackId), slot = rack?.instrument;
+    if (!rack || rack.source || slot?.kind !== 'sampler' || !slot.zones?.length) return bytes;
+    const val = (k: string) => {
+      const p = siParam(k)!, a = String(p.addr), base = slot.params?.[a] ?? p.value;
+      const v = this.valueOf ? this.valueOf(auPropId(rackId, AE_INST), a, base) : base;
+      return Number.isFinite(v) ? v : base;
+    };
+    const hit = (this.siHits.get(rackId) ?? 0) + 1;
+    this.siHits.set(rackId, hit);
+    const sent = siPick(slot.zones, bytes[1], val('sampleIndex'), siMode(val('indexMode')), val('indexSpread'), Math.round(val('indexSeed')), hit);
+    const held = this.siHeld.get(rackId) ?? new Map<number, number[]>();
+    this.siHeld.set(rackId, held);
+    siHold(held, key, sent);
+    return sent === bytes[1] ? bytes : [bytes[0], sent, bytes[2]];
   }
 
   /** A pad action (live, or from a take): a rack's own note, or a drum pad hit a rack follows. */
@@ -858,6 +902,7 @@ class AudioEngineHost {
   releaseHeld(rackId: string): void {
     const held = this.held.get(rackId);
     this.held.delete(rackId);
+    this.siHeld.delete(rackId);
     if (!held?.size) return;
     const w = this.web.get(rackId);
     if (w) { w.midi(0xb0, 123, 0); return; }
@@ -869,6 +914,7 @@ class AudioEngineHost {
     engineSend.stopAll();
     for (const w of this.web.values()) w.dispose();
     this.web.clear(); this.mirror.clear(); this.spectra.clear(); this.driven.clear(); this.held.clear();
+    this.siHits.clear(); this.siHeld.clear(); this.valueOf = null;
     this.target = undefined; this.controls = []; this.running = null; this.again = false;
     rackKeyboard.setTarget('');
     this.offMidi?.(); this.offMidi = null;
