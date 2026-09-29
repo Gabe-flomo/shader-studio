@@ -406,6 +406,71 @@ export function deleteClip(arr: PlayArrangement, rack: string, index: number): P
 }
 
 /** A clip muted (left out of playback, takes and renders) or back on. */
+// ── Editing notes on a MIDI clip (docs/arrangement.md, "Editing notes") ─────
+
+/** Notes sorted by time, then pitch: the order the tape plays them. */
+function sortNotes(notes: readonly ArrNote[]): ArrNote[] {
+  return [...notes].sort((a, b) => a.t - b.t || a.n - b.n);
+}
+
+/** A note kept inside the tape and MIDI's range: t ≥ 0, d ≥ NOTE_MIN, n 0..127, v 0.01..1, ends by `length` when the tape has one. */
+export function clampNote(n: ArrNote, length: number): ArrNote {
+  const max = length > 0 ? length : Infinity;
+  const t = Math.max(0, Math.min(Number.isFinite(max) ? Math.max(0, max - NOTE_MIN) : n.t, n.t));
+  const d = Math.max(NOTE_MIN, Math.min(Number.isFinite(max) ? max - t : n.d, n.d));
+  return { t: Math.round(t * 1e4) / 1e4, n: Math.max(0, Math.min(127, Math.round(n.n))), v: Math.max(0.01, Math.min(1, n.v)), d: Math.round(d * 1e4) / 1e4 };
+}
+
+/** The track with its clips extended to cover [t, t+d] (a note moved or added outside every clip would be silent). */
+function coverNote(track: ArrTrack, note: ArrNote, length: number): ArrTrack {
+  const clips = trackClips(track, length);
+  if (clips.some(c => note.t >= c.t - 1e-6 && note.t + note.d <= c.t + c.d + 1e-6)) return track;
+  return { ...track, clips: clipsWithPass(clips, note.t, note.t + note.d) };
+}
+
+/** Add a note (sorted in; the clip grows to cover it). Returns the arrangement and the note's index. */
+/** The tape grown to hold a note (edits never squash a note against the tape's end; the tape's cap still holds). */
+function lengthFor(arr: PlayArrangement, n: ArrNote): number {
+  return Math.min(TAPE_MAX_SECONDS, Math.max(arr.length, n.t + n.d));
+}
+
+export function addNote(arr: PlayArrangement, rack: string, note: ArrNote): { arr: PlayArrangement; index: number } {
+  const t = arr.tracks[rack] ?? emptyTrack();
+  const n = clampNote(note, TAPE_MAX_SECONDS);
+  const length = lengthFor(arr, n);
+  const notes = sortNotes([...t.notes, n]);
+  const track = coverNote({ ...t, notes }, n, length);
+  return { arr: { ...arr, length, tracks: { ...arr.tracks, [rack]: track } }, index: notes.indexOf(n) };
+}
+
+/** Change a note (time, pitch, length, velocity). Returns the arrangement and the note's new index (notes stay sorted). */
+export function patchNote(arr: PlayArrangement, rack: string, index: number, over: Partial<ArrNote>): { arr: PlayArrangement; index: number } {
+  const t = arr.tracks[rack];
+  const old = t?.notes[index];
+  if (!t || !old) return { arr, index };
+  const n = clampNote({ ...old, ...over }, TAPE_MAX_SECONDS);
+  const length = lengthFor(arr, n);
+  const notes = sortNotes(t.notes.map((x, i) => (i === index ? n : x)));
+  const track = coverNote({ ...t, notes }, n, length);
+  return { arr: { ...arr, length, tracks: { ...arr.tracks, [rack]: track } }, index: notes.indexOf(n) };
+}
+
+/** Remove a note. */
+export function deleteNote(arr: PlayArrangement, rack: string, index: number): PlayArrangement {
+  const t = arr.tracks[rack];
+  if (!t || !t.notes[index]) return arr;
+  return { ...arr, tracks: { ...arr.tracks, [rack]: { ...t, notes: t.notes.filter((_, i) => i !== index) } } };
+}
+
+/** The pitch range a lane draws: the track's own notes, at least an octave, centred when narrow. */
+export function notePitchRange(notes: readonly ArrNote[]): { lo: number; hi: number } {
+  let lo = 127, hi = 0;
+  for (const n of notes) { if (n.n < lo) lo = n.n; if (n.n > hi) hi = n.n; }
+  if (lo > hi) return { lo: 48, hi: 72 };
+  if (hi - lo < 12) { const c = (lo + hi) / 2; lo = Math.max(0, Math.min(115, Math.round(c - 6))); hi = lo + 12; }
+  return { lo, hi };
+}
+
 export function setClipMute(arr: PlayArrangement, rack: string, index: number, mute: boolean): PlayArrangement {
   const t = withClips(arr, rack);
   if (!t || !t.clips[index]) return arr;

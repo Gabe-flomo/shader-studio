@@ -134,3 +134,16 @@ velocity as opacity) or **Audio** (the rendered sound, or an envelope from the
 notes when the sound isn't available here). `ArrTrack.show` ('midi' | 'audio';
 absent = midi), kept when a track is cleared. Note editing on MIDI clips is the
 next step.
+
+
+## Editing notes
+
+*29 Sep 2026.* On a lane showing MIDI, notes can be edited in place: **drag** a
+note to move it in time (snapped to the beat; ⇧ free) and pitch (up or down a
+row), drag its **right edge** to lengthen it, **⌥-drag** up or down for
+velocity, **double-click** empty lane to add a note a beat long at that pitch,
+and **Delete** removes the selected note. A note moved or added outside every
+clip grows the clip to cover it (`addNote`, `patchNote`, `deleteNote`,
+`clampNote`, `notePitchRange` in `types/playArrangement.ts`); notes stay sorted
+by time. Each edit is one undo step, and takes and renders play the edited
+notes.
