@@ -135,4 +135,6 @@ spread** pads either way). Step Index from a beat, a signal (a particle's
 `born`), or an Increment to shuffle a kit live. The pad you hit still lights;
 takes record which pad's sound played (`slot`), so a render matches the take.
 `play/kit/drumPads.js` (`dpSlots`, `dpPickPad`, `dpHash01`), the same in
-website exports (`SSKit.drumPads.pick`).
+website exports (`SSKit.drumPads.pick`). The Audio engine's **Sample player**
+has the same Sample index over its zones (docs/audio-engine.md, "Sample index
+(the sample player)").

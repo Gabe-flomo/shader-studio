@@ -45,6 +45,7 @@ export const RELEASES: Release[] = [
     highlights: [
       { area: 'Play', text: 'Spread: put sliders in an order and one Amount offsets them along a curve; Shift rotates it, Reset starts from each minimum.', link: { kind: 'doc', path: 'docs/spread-control.md' } },
       { area: 'Play', text: 'Drum pads have a Sample index: step it from a beat or a signal and the same pad walks through every sound, or picks at random.' },
+      { area: 'Play', text: 'The Audio engine’s Sample player has a Sample index too: shift which zone each note plays (pitched zones keep their pitch), mappable, and recorded in takes.', link: { kind: 'doc', path: 'docs/audio-engine.md' } },
       { area: 'Studio', text: 'Remap has a Clamp output toggle and shows its ranges as two range rows.' },
     ],
   },

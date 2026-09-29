@@ -183,7 +183,8 @@ const MODE_NOTES = [
 ];
 
 /** One setting: a ruler (log ones on a log scale), a list, or a toggle, with its + for a control. */
-function ParamRow({ p, value, touch, exposed, onSet, onExpose }: { p: GrParam; value: number; touch: boolean; exposed: boolean; onSet: (v: number) => void; onExpose: () => void }) {
+/** One setting: its name, a slider (a list, a switch), and + to make it a control. `soft`: typing past the slider's end is kept. Shared with the sample player's Sample index. */
+export function ParamRow({ p, value, touch, exposed, onSet, onExpose, soft }: { p: GrParam; value: number; touch: boolean; exposed: boolean; onSet: (v: number) => void; onExpose: () => void; soft?: boolean }) {
   const tk = useTokens();
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(78px, 32%) 1fr 26px', alignItems: 'center', gap: 6 }}>
@@ -196,7 +197,7 @@ function ParamRow({ p, value, touch, exposed, onSet, onExpose }: { p: GrParam; v
       ) : p.log ? (
         <LogSlider p={p} value={value} onSet={onSet} />
       ) : (
-        <RulerSlider value={value} min={p.min} max={p.max} step={p.step || (p.max - p.min) / 1000} defaultValue={p.value} hard onChange={onSet} ariaLabel={p.name} touch={touch} integer={p.step === 1} />
+        <RulerSlider value={value} min={p.min} max={p.max} step={p.step || (p.max - p.min) / 1000} defaultValue={p.value} hard={!soft} onChange={onSet} ariaLabel={p.name} touch={touch} integer={p.step === 1} />
       )}
       <IconButton icon={exposed ? 'check' : 'plus'} size="sm" active={exposed} disabled={exposed} label={exposed ? 'Already a control' : `Make ${p.name} a control, to map the mouse, audio, MIDI or an LFO onto it`} onClick={onExpose} />
     </div>
