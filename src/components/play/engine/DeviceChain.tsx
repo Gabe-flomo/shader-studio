@@ -73,9 +73,10 @@ function DevicePanel({ title, icon, color, width, children, grip, actions, dim =
   );
 }
 
-function Grip({ label }: { label: string }) {
+/** The only draggable part of a device: dragging a slider inside the panel must move the slider, not the device. */
+function Grip({ label, drag }: { label: string; drag?: { draggable: boolean; onDragStart: (e: DragEvent) => void; onDragEnd: () => void } }) {
   const tk = useTokens();
-  return <span title={label} aria-hidden style={{ cursor: 'grab', color: tk.text.faint, display: 'inline-flex', flexShrink: 0 }}><Icon name="grip" size={13} /></span>;
+  return <span title={label} aria-hidden {...drag} style={{ cursor: 'grab', color: tk.text.faint, display: 'inline-flex', flexShrink: 0 }}><Icon name="grip" size={13} /></span>;
 }
 
 /** Where a dragged device lands: a thin gap between devices that lights up. */
@@ -192,10 +193,10 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
       case 'effect': {
         const i = order.indexOf(d.key);
         return (
-          <div key={d.key} {...draggable(d.key)} style={{ display: 'flex', maxHeight: '100%', minHeight: 0 }}>
+          <div key={d.key} style={{ display: 'flex', maxHeight: '100%', minHeight: 0 }}>
             <DevicePanel narrow={narrow} width={280} dim={!d.heard}>
               <SlotView rack={rack} slot={d.slot} play={play} onChange={onChange} touch={touch} desktop={desktop} pluginsOk={pluginsOk}
-                grip={!touch ? <Grip label="Drag to move it in the chain" /> : undefined}
+                grip={!touch ? <Grip label="Drag to move it in the chain" drag={draggable(d.key)} /> : undefined}
                 first={i === 0} last={i === order.length - 1} onMove={by => stepBy(d.key, by)}
                 onBypass={() => edits.edit(ae => patchSlot(ae, rack.id, d.slot.id, { bypass: !d.slot.bypass }))}
                 onRemove={() => edits.removeSlot(d.slot.id)}
@@ -211,9 +212,9 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
         const i = order.indexOf(LISTENER);
         const listenerFolded = isFolded(LISTENER);
         return (
-          <div key="listener" {...draggable(LISTENER)} style={{ display: 'flex', maxHeight: '100%', minHeight: 0 }}>
+          <div key="listener" style={{ display: 'flex', maxHeight: '100%', minHeight: 0 }}>
             <DevicePanel narrow={narrow} width={300} title="Listener" icon="target"
-              grip={!touch ? <Grip label="Drag to move the Listener between effects" /> : undefined}
+              grip={!touch ? <Grip label="Drag to move the Listener between effects" drag={draggable(LISTENER)} /> : undefined}
               folded={listenerFolded} onToggleFold={() => foldToggle(LISTENER)}
               actions={<>
                 <IconButton icon="chevL" size="sm" label="Earlier in the chain" disabled={i <= 0} onClick={() => stepBy(LISTENER, -1)} />
