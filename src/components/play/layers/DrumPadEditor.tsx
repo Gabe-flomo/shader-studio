@@ -99,7 +99,8 @@ function DrumPadSummary({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
             {text('Tap a pad to play it.')}
           </div>
         </div>
-        <div style={{ marginTop: 6 }}>{f.prop('volume')}</div>
+        <div style={{ marginTop: 6 }}>{f.prop('volume')}{f.props('sampleIndex', 'indexSpread')}
+        {f.select('Index mode', 'indexMode', [{ value: 'index', label: 'Index — its place plus Index' }, { value: 'random', label: 'Random — any pad, seeded' }, { value: 'spread', label: 'Index ± spread' }], 'Which pad’s sound a hit plays. Step Index from a beat, a signal or an Increment to walk through the sounds.')}</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
           <Button size="sm" variant="primary" icon={splitOk ? 'splitPanel' : 'sliders'} onClick={open} title={splitOk ? 'Edit the pads, their samples and how they play in the split view’s big Layers panel' : 'Edit the pads, their samples and how they play'}>
             {splitOk ? 'Open in split view' : 'Open full editor'}
@@ -274,6 +275,8 @@ function DrumPadFull({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
       <Section id="drumpad-kit" kind="drumpad" title="Kit" summary={`${l.keys ? 'Keys' : ''}${l.keys && l.midi ? ' · ' : ''}${l.midi ? 'MIDI' : ''}${!l.keys && !l.midi ? 'No triggers' : ''}`}>
         <DrumKitRow f={f} ctx={ctx} />
         {f.prop('volume')}
+        {f.props('sampleIndex', 'indexSpread')}
+        {f.select('Index mode', 'indexMode', [{ value: 'index', label: 'Index — its place plus Index' }, { value: 'random', label: 'Random — any pad, seeded' }, { value: 'spread', label: 'Index ± spread' }], 'Which pad’s sound a hit plays. Step Index from a beat, a signal or an Increment to walk through the sounds.')}
         {f.toggle('Keys', 'keys', 'Z X C V · A S D F · Q W E R · 1 2 3 4', 'On the Play page, these keys play pads 1–16 (the bottom row is 1–4, like the pads above).')}
         {f.toggle('MIDI', 'midi', 'Notes play the pads', 'MIDI notes from the base note up play pads 1–16 (36–51, a drum rack’s, by default). Velocity sets how hard.')}
         {l.midi && f.row('Notes', (

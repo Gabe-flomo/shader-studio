@@ -13,7 +13,7 @@
 
 import type { GraphNode, ParamDef, SubgraphData } from '../types/nodeGraph';
 import type { PlayControl, PlayControlKind, PlayRecord } from '../types/play';
-import { layerNumericProps, parseActionTarget, parseLayerTarget, parseReaderTarget } from '../types/play';
+import { layerNumericProps, parseActionTarget, parseLayerTarget, parseReaderTarget, parseSpreadTarget } from '../types/play';
 import { finishHost, finishParamOf, parseFinishTarget, patchFinishEffect, readFinishValue } from '../types/playFinish';
 import { audioFxEffect, audioFxParam, parseAudioFxTarget, patchAudioFxEffect, readAudioFxValue } from '../types/playAudioFx';
 import { aeRack, auTargetExists, isGranulatorRack, parseAuTarget, parseGrainsTarget, parseMacroTarget, readAuValue, readMacroValue } from '../types/playAudioEngine';
@@ -188,6 +188,8 @@ export function findTargetNode(nodes: GraphNode[], target: string): GraphNode | 
  * built-in description.
  */
 export function controlHelp(nodes: GraphNode[], target: string, play?: PlayRecord): { hint?: string; comment?: string } {
+  const st = parseSpreadTarget(target);
+  if (st) return { hint: st.key === 'amount' ? 'How far the Spread offsets its members: at the curve’s top, this much of each member’s range is added (−1 to 1).' : 'Rotates the Spread’s order: 1 makes the second member the first. Between whole numbers it glides.' };
   const at = parseAudioFxTarget(target);
   if (at) {
     const e = audioFxEffect(play?.audioFx, at.chainId, at.effectId);
@@ -227,6 +229,9 @@ export function readLayerValue(play: PlayRecord | undefined, target: string): nu
 /** The control's current value: a graph param (a group override wins over the inner node's own value) or a layer property. */
 export function readControlValue(nodes: GraphNode[], target: string, play?: PlayRecord): number | number[] | undefined {
   if (parseLayerTarget(target)) return readLayerValue(play, target);
+  // A Spread's Amount or Shift (docs/spread-control.md): kept on the Spread.
+  const st = parseSpreadTarget(target);
+  if (st) { const sp = play?.spreads?.find(x => x.id === st.spreadId); return sp ? sp[st.key] : undefined; }
   if (parseFinishTarget(target)) return readFinishValue(play?.finish, target);
   if (parseAudioFxTarget(target)) return readAudioFxValue(play?.audioFx, target);
   // An Audio Unit's parameter: the value kept in the setup (0 until one is set; the + keeps the plug-in's).
@@ -275,10 +280,12 @@ export function readBaseValues(nodes: GraphNode[], play: PlayRecord): Map<string
 
 /** A copy of `play` with driven layer properties written into their layers (for a play file export). */
 export function bakeLayerValues(play: PlayRecord, values: Map<string, number | number[]>): PlayRecord {
-  let layers = play.layers, finish = play.finish, audioFx = play.audioFx;
+  let layers = play.layers, finish = play.finish, audioFx = play.audioFx, spreads = play.spreads;
   for (const c of play.controls) {
     const v = values.get(c.id);
     if (typeof v !== 'number') continue;
+    const st = parseSpreadTarget(c.target);
+    if (st && spreads) { spreads = spreads.map(x => (x.id === st.spreadId ? { ...x, [st.key]: v } : x)); continue; }
     const at = parseAudioFxTarget(c.target);
     if (at && audioFx) { audioFx = patchAudioFxEffect(audioFx, at.chainId, at.effectId, { [at.key]: v }); continue; }
     const ft = parseFinishTarget(c.target);
@@ -287,7 +294,7 @@ export function bakeLayerValues(play: PlayRecord, values: Map<string, number | n
     if (!lt) continue;
     layers = layers.map(l => l.id === lt.layerId ? { ...l, [lt.key]: v } as typeof l : l);
   }
-  return layers === play.layers && finish === play.finish && audioFx === play.audioFx ? play : { ...play, layers, ...(finish ? { finish } : {}), ...(audioFx ? { audioFx } : {}) };
+  return layers === play.layers && finish === play.finish && audioFx === play.audioFx && spreads === play.spreads ? play : { ...play, layers, ...(finish ? { finish } : {}), ...(audioFx ? { audioFx } : {}), ...(spreads ? { spreads } : {}) };
 }
 
 /**
@@ -300,7 +307,7 @@ export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: 
   let out = nodes;
   for (const c of play.controls) {
     const v = values.get(c.id);
-    if (v === undefined || parseLayerTarget(c.target) || parseActionTarget(c.target) || parseFinishTarget(c.target) || parseAudioFxTarget(c.target) || parseReaderTarget(c.target)) continue;
+    if (v === undefined || parseLayerTarget(c.target) || parseActionTarget(c.target) || parseFinishTarget(c.target) || parseAudioFxTarget(c.target) || parseReaderTarget(c.target) || parseSpreadTarget(c.target)) continue;
     const value = Array.isArray(v) ? [v[0], v[1], v[2]] : v;
     const parts = c.target.split('::');
     const key = parts[parts.length - 1];
@@ -317,7 +324,7 @@ export function bakeControlValues(nodes: GraphNode[], play: PlayRecord, values: 
 
 let seq = 0;
 /** Ids for controls and mappings: unique within a session, readable in a file. */
-export function playId(prefix: 'ctl' | 'map' | 'layer' | 'act' | 'src' | 'pair' | 'pmap' | 'sig'): string {
+export function playId(prefix: 'ctl' | 'map' | 'layer' | 'act' | 'src' | 'pair' | 'pmap' | 'sig' | 'spr'): string {
   seq += 1;
   return `${prefix}_${Date.now().toString(36)}_${seq.toString(36)}`;
 }
@@ -335,7 +342,7 @@ export type TargetFate =
  * control can be pointed at the new path (group::…::node::param).
  */
 export function locateTarget(nodes: GraphNode[], target: string): TargetFate {
-  if (parseLayerTarget(target) || parseActionTarget(target) || parseFinishTarget(target) || parseAudioFxTarget(target) || parseReaderTarget(target)) return { status: 'ok' };
+  if (parseLayerTarget(target) || parseActionTarget(target) || parseFinishTarget(target) || parseAudioFxTarget(target) || parseReaderTarget(target) || parseSpreadTarget(target)) return { status: 'ok' };
   if (readControlValue(nodes, target) !== undefined) return { status: 'ok' };
   const parts = target.split('::');
   const nodeId = parts[parts.length - 2], key = parts[parts.length - 1];

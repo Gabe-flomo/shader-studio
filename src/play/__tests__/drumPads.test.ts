@@ -337,7 +337,7 @@ describe('the record', () => {
   });
   it('pads with a sound are mapping targets (`pad<N>_<key>`)', () => {
     const l = drums();
-    expect(layerNumericProps(l).map(p => p.key)).toEqual(['volume']);
+    expect(layerNumericProps(l).map(p => p.key)).toEqual(['volume', 'sampleIndex', 'indexSpread']);
     const k = { ...l, pads: l.pads.map((p, i) => (i === 2 ? { ...p, synth: 'hat' as const } : p)) };
     const keys = layerNumericProps(k).map(p => p.key);
     expect(keys).toContain('pad3_pitch');

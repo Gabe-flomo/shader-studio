@@ -69,6 +69,51 @@ export function dpPadOfNote(note, base) { const i = note - base; return i >= 0 &
 /** The pad under a grid cell (col, row from the bottom left), for the lower-left 4 × 4 of a pad grid; -1 outside. */
 export function dpPadOfCell(col, row) { return col >= 0 && col < DP_COLS && row >= 0 && row < DP_PADS / DP_COLS ? row * DP_COLS + col : -1; }
 
+// ── Sample index (docs/drum-pads.md, "Sample index") ─────────────────────────
+
+/**
+ * How a hit picks the pad whose sound it plays:
+ *   index   the hit pad's place among the pads that play something, plus Index (wrapping round)
+ *   random  a seeded random pad each hit
+ *   spread  as index, then a seeded random step of up to ±Spread
+ */
+export const DP_INDEX_MODES = ['index', 'random', 'spread'];
+
+/** 0..1 from a seed and a hit count: the same every time (a hit's random pad). */
+export function dpHash01(seed, n) {
+  let h = (Math.imul((seed | 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul((n | 0) + 0x632be5ab, 0xc2b2ae35)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
+  h = (h ^ (h >>> 16)) >>> 0;
+  return h / 4294967296;
+}
+
+/** The pads (0-based) that play something, in order: `has(i)` says whether pad i does. */
+export function dpSlots(has, count) {
+  const out = [];
+  for (let i = 0; i < (count || DP_PADS); i++) if (has(i)) out.push(i);
+  return out;
+}
+
+/**
+ * The pad (0-based) whose sound a hit on `pad` plays: its place among `slots`
+ * (the pads that play something) plus `index`, wrapping round, so the same
+ * pad walks through every sound as Index rises and different pads start at
+ * different ones. `mode` 'random' picks any slot from `r` (0..1, seeded);
+ * 'spread' adds a step of −spread..+spread from `r`. An empty pad, or a kit
+ * with no sounds, plays itself (silence).
+ */
+export function dpPickPad(slots, pad, index, mode, spread, r) {
+  const n = slots.length;
+  const s = slots.indexOf(pad);
+  if (!n || s < 0) return pad;
+  const u = typeof r === 'number' && isFinite(r) ? Math.max(0, Math.min(0.999999, r)) : 0;
+  if (mode === 'random') return slots[Math.floor(u * n)];
+  let k = s + Math.round(isFinite(index) ? index : 0);
+  if (mode === 'spread') { const w = Math.max(0, Math.round(spread || 0)); k += Math.floor(u * (2 * w + 1)) - w; }
+  return slots[((k % n) + n) % n];
+}
+
 /** Semitones → playback rate. */
 export function dpRate(pitch) { return Math.pow(2, (pitch || 0) / 12); }
 /** A hit's gain from its velocity (0..1): `amount` 0 ignores it, 1 follows it all the way. */
