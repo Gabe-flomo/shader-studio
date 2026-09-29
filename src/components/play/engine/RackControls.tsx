@@ -20,7 +20,9 @@ import { askText } from '../../ui/dialogStore';
 import { toast } from '../../ui/toastStore';
 import type { PlayRecord } from '../../../types/play';
 import { RACK_CONTROLS_MAX } from '../../../types/playArrangement';
-import { aeRack, aeSlot, aeSlotName, auPropId, patchSlot, type AeRack, type AeSlot } from '../../../types/playAudioEngine';
+import { MACRO_TARGETS_MAX, aeRack, aeSlot, aeSlotName, auPropId, patchSlot, rackMacros, type AeRack, type AeSlot } from '../../../types/playAudioEngine';
+import { Menu, type MenuItem } from '../../ui/Menu';
+import { moveControlToMacro } from '../../../play/rackMacros';
 import { audioEngineHost, useEngineUi } from '../../../lib/audioEngineHost';
 import { formatParam, type AuParam } from '../../../lib/audioEngineProtocol';
 import { WATCH_QUIET_MS, type TouchedParam } from '../../../lib/paramWatch';
@@ -35,7 +37,7 @@ import { usePlayUi } from '../playUi';
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
 /** What a slot's parameters are: an Audio Unit's (listed by the engine), or a granulator's settings. */
-function useSlotParams(rack: AeRack, slot: AeSlot): AuParam[] | null {
+export function useSlotParams(rack: AeRack, slot: AeSlot): AuParam[] | null {
   const key = `${rack.id}/${slot.id}`;
   const au = useEngineUi(s => s.params[key]);
   useEffect(() => { if (slot.kind === 'au' && !au) void audioEngineHost.listParams(rack.id, slot.id); }, [au, rack.id, slot.id, slot.kind]);
@@ -90,7 +92,7 @@ function StripFader({ rack, slot, address, label, min, max, step, onChange, touc
     live={() => playEngine.layerValue(auPropId(rack.id, slot.id), address, Number.NaN)} />;
 }
 
-function fmtGr(address: string, v: number): string {
+export function fmtGr(address: string, v: number): string {
   const g = GR_PARAMS.find(x => String(x.addr) === address);
   if (!g) return String(v);
   return formatParam({ unit: g.unit, kind: g.kind as AuParam['kind'], values: g.values as string[] | undefined, min: g.min }, v);
@@ -230,6 +232,19 @@ export function ConfigurePanel({ rack, slot, play, onChange, desktop, onClose }:
   const watching = desktop && slot.kind === 'au';
   const touch = useTouchToConfigure(watching, rack, slot, play, onChange);
   const [listOpen, setListOpen] = useState(!watching);
+  const [macroMenu, setMacroMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  // "Move to macro n": the control becomes a target of the macro (docs/audio-engine.md, "Macros") and leaves the strip.
+  const toMacro = (address: string, label: string, x: number, y: number) => setMacroMenu({
+    x, y, items: [
+      { heading: `Move ${label} to a macro` },
+      ...rackMacros(rack).map((m, i) => ({
+        label: `${m.name}${m.targets.length ? ` (${m.targets.length})` : ''}`, icon: 'sliders' as const, iconColor: m.color,
+        disabled: m.targets.length >= MACRO_TARGETS_MAX || m.targets.some(t => t.slot === slot.id && t.address === address),
+        hint: 'Its mappings and tape moves go; map the macro instead',
+        onSelect: () => onChange(p => moveControlToMacro(p, rack.id, slot.id, address, i + 1)),
+      })),
+    ],
+  });
   const [q, setQ] = useState('');
   const have = new Set(current.map(c => c.address));
   const add = (p: AuParam) => {
@@ -281,12 +296,14 @@ export function ConfigurePanel({ rack, slot, play, onChange, desktop, onClose }:
               {i + 1}. {control.label} <span style={{ color: tk.text.faint, font: `11px ${fontFamily.mono}` }}>{valueText(address)}</span>
             </span>
             <IconButton icon="edit" size="sm" label="Rename" onClick={async () => { const n = await askText('Rename rack control', { initial: control.label, confirmLabel: 'Rename' }); if (n) onChange(p => renameRackControl(p, rack.id, slot.id, address, n)); }} />
+            <IconButton icon="link" size="sm" label="Move to a macro" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); toMacro(address, control.label, r.left, r.bottom + 2); }} />
             <IconButton icon="chevU" size="sm" label="Earlier" disabled={i === 0} onClick={() => onChange(p => moveRackControl(p, rack.id, slot.id, address, -1))} />
             <IconButton icon="chevD" size="sm" label="Later" disabled={i === current.length - 1} onClick={() => onChange(p => moveRackControl(p, rack.id, slot.id, address, 1))} />
             <IconButton icon="close" size="sm" label="Remove this rack control (its mappings and its moves on the tape go too)" onClick={() => onChange(p => removeRackControl(p, rack.id, slot.id, address))} />
           </div>
         );
       })}
+      {macroMenu && <Menu x={macroMenu.x} y={macroMenu.y} items={macroMenu.items} onClose={() => setMacroMenu(null)} />}
       {current.length > 0 && <div><Button size="sm" variant="ghost" icon="sliders" onClick={() => usePlayUi.getState().revealControlGroup(`${rack.name} · ${aeSlotName(slot)}`)}>On the Controls tab</Button></div>}
       {watching && !listOpen ? (
         <button type="button" onClick={() => setListOpen(true)}

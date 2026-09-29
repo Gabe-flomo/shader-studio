@@ -67,7 +67,8 @@ import { ActionsPage, BackgroundPage, CardPage, SignalsPage } from './FullPages'
 import { groupCounts, groupMappings, type MappingGroupId } from './mappingGroups';
 import { ControlsBoard, type BoardSlot } from './ControlsBoard';
 import { AudioEnginePanel } from './engine/AudioEnginePanel';
-import { aeRack, aeSlot, aeSlotLabel, parseAuTarget, patchSlot } from '../../types/playAudioEngine';
+import { aeRack, aeSlot, aeSlotLabel, parseAuTarget, parseMacroTarget, patchSlot, rackMacros } from '../../types/playAudioEngine';
+import { setMacroValue } from '../../play/rackMacros';
 import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
 import { MiniMapper } from './MiniMapper';
@@ -220,6 +221,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       if (typeof value === 'number') setPlay(p => ({ ...p, audioEngine: patchSlot(p.audioEngine, au.rackId, au.slotId, { params: { ...aeSlot(aeRack(p.audioEngine, au.rackId), au.slotId)?.params, [au.address]: value } }) }));
       return;
     }
+    const mt = parseMacroTarget(control.target);
+    if (mt) {
+      if (typeof value === 'number') setPlay(p => setMacroValue(p, mt.rackId, mt.n, value));
+      return;
+    }
     const lt = parseLayerTarget(control.target);
     if (lt) {
       if (typeof value === 'number') setPlay(p => ({ ...p, layers: p.layers.map(l => l.id === lt.layerId ? { ...l, [lt.key]: value } as typeof l : l) }));
@@ -283,6 +289,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     if (aut) {
       const r = aeRack(play.audioEngine, aut.rackId), sl = aeSlot(r, aut.slotId);
       return { kind: 'layer', title: r && sl ? aeSlotLabel(r, sl) : 'a removed Audio Unit', param: c.label.split(' · ').pop() ?? aut.address, missing: !sl, go: () => usePlayUi.getState().setTab('engine') };
+    }
+    const mct = parseMacroTarget(c.target);
+    if (mct) {
+      const r = aeRack(play.audioEngine, mct.rackId);
+      return { kind: 'layer', title: r ? `${r.name} · Macros` : 'a removed rack', param: r ? rackMacros(r)[mct.n - 1].name : `Macro ${mct.n}`, missing: !r, go: () => usePlayUi.getState().setTab('engine') };
     }
     const ft = parseFinishTarget(c.target);
     if (ft) {

@@ -36,7 +36,7 @@
  */
 import { create } from 'zustand';
 import {
-  AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, aeRack, aeSlot, isGranulatorRack, keyboardRack, leadRackId, parseAuTarget, auPropId, rackPlays, unitKey, zoneForNote,
+  AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, aeRack, aeSlot, auTarget, isGranulatorRack, keyboardRack, leadRackId, parseAuTarget, auPropId, rackPlays, unitKey, zoneForNote,
   type AeRack, type AeSlot, type AeZone, type PlayAudioEngine,
 } from '../types/playAudioEngine';
 import {
@@ -53,6 +53,7 @@ import { rackKeyboard } from './rackKeyboard';
 import { can } from './plan';
 import { WebGranulatorRack } from './webGranulator';
 import type { GrPoints } from '../play/kit/granulator.js';
+import { macroParamTargets, macroValueOf } from '../play/rackMacros';
 
 type Invoke = <T>(cmd: string, args?: unknown, options?: { headers?: Record<string, string> }) => Promise<T>;
 type Listen = <T>(event: string, cb: (e: { payload: T }) => void) => Promise<() => void>;
@@ -402,11 +403,13 @@ class AudioEngineHost {
       this.kick();
     }
     this.controls = controls;
-    if (valueOf) this.drive(valueOf);
+    // Macros (docs/audio-engine.md, "Macros"): a driven macro's value fanned out to the parameters it turns.
+    const vo = valueOf ? macroValueOf(this.target, valueOf) : undefined;
+    if (vo) this.drive(vo);
     // Granulators: settings with their mappings, and the grains out as sensors.
     for (const w of this.web.values()) {
       if (w.kind !== 'granulator') continue;
-      w.update(valueOf);
+      w.update(vo);
       if (this.sensor) w.report(this.sensor);
     }
   }
@@ -433,9 +436,13 @@ class AudioEngineHost {
   private drive(valueOf: ValueOf): void {
     if (!this.invoke || !this.target) return;
     const seen = new Set<string>();
-    for (const c of this.controls) {
-      const t = parseAuTarget(c.target);
-      if (!t) continue;
+    // Rack controls' parameters, and the parameters macros turn.
+    const targets: Array<{ target: string; t: { rackId: string; slotId: string; address: string } }> = [];
+    for (const c of this.controls) { const t = parseAuTarget(c.target); if (t) targets.push({ target: c.target, t }); }
+    for (const t of macroParamTargets(this.target)) targets.push({ target: auTarget(t.rackId, t.slotId, t.address), t });
+    for (const c of targets) {
+      const t = c.t;
+      if (seen.has(c.target)) continue;
       const rack = aeRack(this.target, t.rackId), slot = aeSlot(rack, t.slotId);
       const nat = this.mirror.get(t.rackId);
       const ns = t.slotId === AE_INST ? nat?.inst : nat?.effects.find(e => e.id === t.slotId);

@@ -7,7 +7,7 @@
 import type { PlayRecord } from '../../../types/play';
 import { arrangementFor, isArrangementEmpty } from '../../../types/playArrangement';
 import type { DrumPadLayer } from '../../../types/playLayers';
-import { AE_INST, AE_PAD_BASE_NOTE, controlsKeptFor, newRack, type AeRack, type AeZone, type PlayAudioEngine } from '../../../types/playAudioEngine';
+import { AE_INST, AE_PAD_BASE_NOTE, controlsKeptFor, newRack, pruneMacroTargets, type AeRack, type AeZone, type PlayAudioEngine } from '../../../types/playAudioEngine';
 
 let seq = 0;
 /** An id for a rack (`rk`) or an effect (`fx`). */
@@ -19,6 +19,8 @@ export function engineId(prefix: 'rk' | 'fx'): string {
 /** The record with this engine: controls on removed slots, and their mappings, go too. */
 export function withEngine(p: PlayRecord, ae: PlayAudioEngine): PlayRecord {
   const out: PlayRecord = { ...p };
+  // Macro targets on slots that are gone go with them.
+  ae = pruneMacroTargets(ae);
   // A lock on a rack that's gone goes with it.
   if (ae.lock && !ae.racks.some(r => r.id === ae.lock)) { ae = { ...ae }; delete ae.lock; }
   if (ae.racks.length) out.audioEngine = ae; else delete out.audioEngine;

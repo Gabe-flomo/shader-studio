@@ -219,6 +219,8 @@
     if (t.startsWith('audiofx:')) { const i = t.lastIndexOf('::'); return i > 8 ? { layerId: t.slice(0, i), key: t.slice(i + 2) } : null; }
     // A Granulator rack's setting (au:<rackId>:inst::<address>, docs/granulator.md), kept under 'au:<rackId>:inst'.
     if (t.startsWith('au:')) { const i = t.indexOf('::'); return i > 3 ? { layerId: t.slice(0, i), key: t.slice(i + 2) } : null; }
+    // A rack's Macro Control (macro:<rackId>::<n>, docs/audio-engine.md "Macros"), kept under 'macro:<rackId>'.
+    if (t.startsWith('macro:')) { const i = t.indexOf('::'); return i > 6 ? { layerId: t.slice(0, i), key: t.slice(i + 2) } : null; }
     const fin = t.startsWith('finish:');
     if (!fin && !t.startsWith('layer:')) return null;
     const r = t.slice(fin ? 7 : 6); const i = r.lastIndexOf('::');
@@ -1270,6 +1272,13 @@ void main() {
     const afxChains = play.audioFx && play.audioFx.chains ? play.audioFx.chains : {};
     const afxPre = !!(play.audioFx && play.audioFx.analyse === 'pre');
     for (const cid of Object.keys(afxChains)) for (const e of afxChains[cid].effects || []) layersById.set('audiofx:' + cid + ':' + e.id, e);
+    // Racks' Macro Controls: each rack's macro values (1..8) are driven like layer properties under 'macro:<rackId>'.
+    const MCK = typeof SSKit !== 'undefined' && SSKit.macros ? SSKit.macros : null;
+    for (const r of (play.audioEngine && play.audioEngine.racks) || []) {
+      const mv = {};
+      (r.macros || []).forEach((m, i) => { mv[String(i + 1)] = typeof m.value === 'number' ? m.value : 0; });
+      layersById.set('macro:' + r.id, mv);
+    }
     const afxSlots = [];
     const afxUpdate = sl => sl.c.update(afxChains[sl.chainId], (e, k) => layerValue('audiofx:' + sl.chainId + ':' + e.id, k, e[k]), sl.ctx.currentTime);
     // A sound through its chain: inlet → chain → outlet (null: only analysed), the analyser after the chain (or before).
@@ -1394,13 +1403,26 @@ void main() {
     function tickGrains() {
       for (const g of grains.racks.values()) {
         const id = 'au:' + g.r.id + ':inst';
-        if (g.live) g.live.set(GRK.settings(g.params, (a, b) => layerValue(id, a, b)));
+        if (g.live) g.live.set(GRK.settings(g.params, (a, b) => grainMacro(g.r, a, layerValue(id, a, b))));
         const st = g.live ? g.live.stats() : null;
         if (!st) continue;
         const sum = GRK.summary(st), k = 'ae:' + g.r.id + '::';
         sensors.set(k + 'grains', sum.grains); sensors.set(k + 'grainMean', sum.mean); sensors.set(k + 'grainSpread', sum.spread); sensors.set(k + 'grainLevel', sum.level); sensors.set(k + 'grainPitch', sum.pitch); sensors.set(k + 'grainBandMean', sum.band || 0); sensors.set(k + 'grainEnergySum', sum.energy || 0);
         for (let i = 0; i < 16; i++) { sensors.set(k + 'grainPos' + (i + 1), i < st.count ? st.pos[i] : 0); sensors.set(k + 'grainAmp' + (i + 1), i < st.count ? Math.min(1, st.amp[i]) : 0); sensors.set(k + 'grainBand' + (i + 1), i < st.count && st.band ? st.band[i] : 0); sensors.set(k + 'grainEnergy' + (i + 1), i < st.count && st.energy ? Math.min(1, st.energy[i] * 4) : 0); }
       }
+    }
+    // A setting a driven macro turns: the macro's value through the target's curve and range (the kit's macros.js); else as it was.
+    function grainMacro(r, addr, fallback) {
+      if (!MCK || !r.macros) return fallback;
+      for (let i = 0; i < r.macros.length; i++) {
+        const m = r.macros[i];
+        for (const t of m.targets || []) {
+          if (t.slot !== 'inst' || t.address !== addr) continue;
+          const v = layerValue('macro:' + r.id, String(i + 1), NaN);
+          if (v === v) return MCK.value(v, t);
+        }
+      }
+      return fallback;
     }
     // A rack's note: `ae:<id>` pad actions carry note + 1 and the velocity (0 lets it go).
     function grainNote(rackId, note, vel) {

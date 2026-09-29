@@ -17,7 +17,7 @@
  */
 import { create } from 'zustand';
 import type { PlayRecord } from '../types/play';
-import { AE_INST, auTarget, isGranulatorRack, zoneForNote, type AeRack, type AeZone } from '../types/playAudioEngine';
+import { AE_INST, auTarget, isGranulatorRack, macroPropId, macroTarget, zoneForNote, type AeRack, type AeZone } from '../types/playAudioEngine';
 import { autoAt, type PlayArrangement } from '../types/playArrangement';
 import { tapeEvents } from './tapeTake';
 import { renderGrains, padHitsOf } from './recordingAudio';
@@ -94,8 +94,9 @@ async function renderLane(r: AeRack, arr: PlayArrangement): Promise<LanePreview>
     const frames = Math.max(1, Math.ceil(length * RATE));
     const ctx = new OfflineAudioContext(2, frames, RATE);
     const auto = arr.tracks[r.id].auto;
-    const b = renderGrains(ctx, { rackId: r.id, slot: r.instrument!, buffer, volume: r.volume }, padHitsOf(take, 0, length), frames,
-      (_id, key, base, t) => autoAt(auto[auTarget(r.id, AE_INST, key)], t) ?? base);
+    const b = renderGrains(ctx, { rackId: r.id, slot: r.instrument!, buffer, volume: r.volume, ...(r.macros ? { macros: r.macros } : {}) }, padHitsOf(take, 0, length), frames,
+      // A setting's own lane, or a macro's (macro:<rack> / n), which renderGrains reads through the macro's targets.
+      (id, key, base, t) => autoAt(auto[id === macroPropId(r.id) ? macroTarget(r.id, Number(key)) : auTarget(r.id, AE_INST, key)], t) ?? base);
     return { status: 'ok', peaks: peaksOf(b.getChannelData(0), b.getChannelData(1)), length };
   }
   if (audioEngineHost.renders()) {

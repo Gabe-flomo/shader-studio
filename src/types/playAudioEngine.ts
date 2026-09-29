@@ -17,6 +17,8 @@
  */
 import { RACK_CONTROLS_MAX } from './playArrangement';
 import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_RETIRED_SYNTHS, GR_SAMPLE_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
+import { MC_POINTS_MAX } from '../play/kit/macros.js';
+import type { PlayCurve } from './play';
 
 
 /** An Audio Unit, by its component description (four-char codes as numbers), with its names for showing. */
@@ -119,6 +121,51 @@ export interface AeRack {
   source?: string;
   /** The track's colour in the Arrangement (`#rrggbb`); absent: the palette's, by position (engineView.ts trackColor). */
   color?: string;
+  /**
+   * The rack's Macro Controls (docs/audio-engine.md, "Macros"): RACK_MACROS
+   * of them, each a knob that turns any number of its devices' parameters.
+   * Absent on a rack from before macros; always read with `rackMacros`, which
+   * gives RACK_MACROS empty ones then (the first edit stores them).
+   */
+  macros?: RackMacro[];
+}
+
+/**
+ * A macro's curve: the mappings' curves (PlayCurve: linear, exp, log) plus
+ * an S-curve; `custom` here is breakpoints (`points`) joined by a monotone
+ * cubic, not the mappings' drawn grid (play/kit/macros.js).
+ */
+export type MacroCurve = Exclude<PlayCurve, 'custom'> | 'scurve' | 'custom';
+export const MACRO_CURVES: readonly MacroCurve[] = ['linear', 'exp', 'log', 'scurve', 'custom'];
+
+/** One parameter a macro turns: a slot's parameter, its range (min above max inverts it) and curve. */
+export interface RackMacroTarget {
+  /** `inst` or an effect's id. */
+  slot: string;
+  /** The parameter's address (an Audio Unit's, or a granulator setting's GR_PARAMS address). */
+  address: string;
+  /** The parameter's value at macro 0 and at macro 1 (after the curve). */
+  min: number;
+  max: number;
+  curve: MacroCurve;
+  /** `curve: 'custom'`: breakpoints, flat [x, y, x, y…] in 0..1, x ascending (2..MC_POINTS_MAX points). */
+  points?: number[];
+  /** The parameter's name and full range, as known when it was added (for showing). */
+  name?: string;
+  lo?: number;
+  hi?: number;
+}
+
+/** A Macro Control: a knob (0..1) on the rack that fans out to its targets. */
+export interface RackMacro {
+  /** `m1`…`m8`: its place. */
+  id: string;
+  name: string;
+  /** 0..1. */
+  value: number;
+  /** `#rrggbb`. */
+  color?: string;
+  targets: RackMacroTarget[];
 }
 
 export interface PlayAudioEngine {
@@ -143,6 +190,10 @@ export const RACK_ACT_PREFIX = 'ae:';
 
 /** A send's source: the master bus, or a chain id. */
 export const isSendSource = (s: string) => /^(master|layer:[A-Za-z0-9_-]{1,64}|node:[A-Za-z0-9_-]{1,64})$/.test(s);
+
+/** Macro Controls per rack, and targets per macro. */
+export const RACK_MACROS = 8;
+export const MACRO_TARGETS_MAX = 16;
 
 /** Racks a setup makes (docs/arrangement.md: up to 8 racks, each an instrument and up to 8 effects). */
 export const AE_RACKS_MAX = 8;
@@ -202,6 +253,56 @@ export function parseAuTarget(target: string): { rackId: string; slotId: string;
 
 /** The id the mapping engine keeps a slot's driven parameters under. */
 export const auPropId = (rackId: string, slotId: string) => `${AU_TARGET_PREFIX}${rackId}:${slotId}`;
+
+/**
+ * A Macro Control's target (`macro:<rackId>::<n>`, n 1..RACK_MACROS): a
+ * Play control on it is what MIDI, readers, increments and the mini mapper
+ * drive; the mapping engine keeps its driven value under `macro:<rackId>`,
+ * key `<n>`, and the host fans it out to the macro's targets.
+ */
+export const MACRO_TARGET_PREFIX = 'macro:';
+export const macroTarget = (rackId: string, n: number) => `${MACRO_TARGET_PREFIX}${rackId}::${n}`;
+export const macroPropId = (rackId: string) => `${MACRO_TARGET_PREFIX}${rackId}`;
+export function parseMacroTarget(target: string): { rackId: string; n: number } | null {
+  if (!target.startsWith(MACRO_TARGET_PREFIX)) return null;
+  const rest = target.slice(MACRO_TARGET_PREFIX.length), i = rest.indexOf('::');
+  if (i <= 0) return null;
+  const rackId = rest.slice(0, i), key = rest.slice(i + 2), n = Number(key);
+  return ID.test(rackId) && /^[1-9]$/.test(key) && n <= RACK_MACROS ? { rackId, n } : null;
+}
+
+export const emptyMacro = (n: number): RackMacro => ({ id: `m${n}`, name: `Macro ${n}`, value: 0, targets: [] });
+export const emptyMacros = (): RackMacro[] => Array.from({ length: RACK_MACROS }, (_, i) => emptyMacro(i + 1));
+
+/** A rack's macros, always RACK_MACROS of them (empty ones for a rack that has none yet). */
+export function rackMacros(rack: Pick<AeRack, 'macros'> | undefined): RackMacro[] {
+  const have = rack?.macros ?? [];
+  if (have.length === RACK_MACROS) return have;
+  return Array.from({ length: RACK_MACROS }, (_, i) => have[i] ?? emptyMacro(i + 1));
+}
+
+/** A macro target's value now (the record's macro value; undefined when the rack is gone). */
+export function readMacroValue(ae: PlayAudioEngine | undefined, target: string): number | undefined {
+  const t = parseMacroTarget(target);
+  const r = t ? aeRack(ae, t.rackId) : undefined;
+  return r && t ? rackMacros(r)[t.n - 1].value : undefined;
+}
+
+/** A rack's automatable target (a parameter, or a macro) as the mapping engine keeps it: prop id and key. */
+export function rackTargetProp(target: string): { id: string; key: string } | null {
+  const au = parseAuTarget(target);
+  if (au) return { id: auPropId(au.rackId, au.slotId), key: au.address };
+  const m = parseMacroTarget(target);
+  return m ? { id: macroPropId(m.rackId), key: String(m.n) } : null;
+}
+
+/** The rack a parameter or macro target is on, or ''. */
+export const rackOfTarget = (target: string): string => parseAuTarget(target)?.rackId ?? parseMacroTarget(target)?.rackId ?? '';
+
+/** A parameter or macro target's value as the record keeps it. */
+export function readRackTargetValue(ae: PlayAudioEngine | undefined, target: string): number | undefined {
+  return parseMacroTarget(target) ? readMacroValue(ae, target) : readAuValue(ae, target);
+}
 
 export function aeRack(ae: PlayAudioEngine | undefined, rackId: string): AeRack | undefined {
   return ae?.racks.find(r => r.id === rackId);
@@ -283,7 +384,7 @@ export function newRack(id: string, existing: readonly AeRack[]): AeRack {
   let n = existing.length + 1;
   const names = new Set(existing.map(r => r.name));
   while (names.has(`Rack ${n}`)) n++;
-  return { id, name: `Rack ${n}`, instrument: null, effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false };
+  return { id, name: `Rack ${n}`, instrument: null, effects: [], keyboard: false, midi: '', channel: 0, volume: 1, mute: false, macros: emptyMacros() };
 }
 
 /** Give the computer keyboard to one rack (and to no other), or take it away. */
@@ -321,6 +422,8 @@ export function moveEffect(ae: PlayAudioEngine | undefined, rackId: string, slot
 /** The record's controls without the ones on slots that are gone (a removed rack, effect or instrument). */
 export function controlsKeptFor<T extends { target: string }>(controls: readonly T[], ae: PlayAudioEngine | undefined): T[] {
   return controls.filter(c => {
+    const mt = parseMacroTarget(c.target);
+    if (mt) return !!aeRack(ae, mt.rackId);
     const g = parseGrainsTarget(c.target);
     if (g) return isGranulatorRack(aeRack(ae, g.rackId));
     return !parseAuTarget(c.target) || auTargetExists(ae, c.target);
@@ -482,6 +585,56 @@ function parseRackControls(raw: unknown, ok: (address: string) => boolean): stri
   return out.length ? out : undefined;
 }
 
+/** Can a macro turn this slot's parameter? An Audio Unit's any, a granulator's its settings; the sample player has none. */
+export function macroCanTarget(slot: AeSlot | undefined, address: string): boolean {
+  if (!slot || !/^\d{1,20}$/.test(address)) return false;
+  return slot.kind === 'au' || (slot.kind === 'granulator' && !!grParam(address));
+}
+
+/** Breakpoints of a custom curve: pairs in 0..1, sorted by x, 2..MC_POINTS_MAX of them; undefined when there aren't two. */
+export function parseMacroPoints(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const pts: Array<[number, number]> = [];
+  for (let i = 0; i + 1 < raw.length && pts.length < MC_POINTS_MAX; i += 2) {
+    const x = raw[i], y = raw[i + 1];
+    if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) pts.push([Math.max(0, Math.min(1, x)), Math.max(0, Math.min(1, y))]);
+  }
+  pts.sort((a, b) => a[0] - b[0]);
+  return pts.length >= 2 ? pts.flat() : undefined;
+}
+
+/** A rack's macros from a file: always RACK_MACROS; targets only on its own slots' parameters a macro can turn. */
+export function parseMacros(raw: unknown, rack: Pick<AeRack, 'instrument' | 'effects'>): RackMacro[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const slotOf = (id: string) => (id === AE_INST ? rack.instrument ?? undefined : rack.effects.find(e => e.id === id));
+  const fin = (v: unknown, fb: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fb);
+  return Array.from({ length: RACK_MACROS }, (_, i) => {
+    const m = emptyMacro(i + 1);
+    const o = list[i] && typeof list[i] === 'object' ? list[i] as Record<string, unknown> : null;
+    if (!o) return m;
+    m.name = text(o.name, m.name, 40);
+    m.value = num(o.value, 0, 0, 1);
+    if (typeof o.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.color)) m.color = o.color;
+    const seen = new Set<string>();
+    for (const x of Array.isArray(o.targets) ? o.targets : []) {
+      if (m.targets.length >= MACRO_TARGETS_MAX || !x || typeof x !== 'object') continue;
+      const t = x as Record<string, unknown>;
+      if (typeof t.slot !== 'string' || typeof t.address !== 'string' || !macroCanTarget(slotOf(t.slot), t.address)) continue;
+      const key = `${t.slot}/${t.address}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const curve = typeof t.curve === 'string' && (MACRO_CURVES as readonly string[]).includes(t.curve) ? t.curve as MacroCurve : 'linear';
+      const out: RackMacroTarget = { slot: t.slot, address: t.address, min: fin(t.min, 0), max: fin(t.max, 1), curve };
+      if (curve === 'custom') { const pts = parseMacroPoints(t.points); if (pts) out.points = pts; else out.curve = 'linear'; }
+      if (typeof t.name === 'string' && t.name.trim()) out.name = t.name.slice(0, 80);
+      if (typeof t.lo === 'number' && Number.isFinite(t.lo)) out.lo = t.lo;
+      if (typeof t.hi === 'number' && Number.isFinite(t.hi)) out.hi = t.hi;
+      m.targets.push(out);
+    }
+    return m;
+  });
+}
+
 /** A granulator's "Grains from", or undefined when it names no source. */
 export function parseGrainFrom(raw: unknown): AeGrainFrom | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -532,6 +685,9 @@ export function parseAudioEngine(raw: unknown): PlayAudioEngine | undefined {
     if (typeof o.pads === 'string' && ID.test(o.pads)) rack.pads = o.pads;
     if (typeof o.source === 'string' && isSendSource(o.source)) rack.source = o.source;
     if (typeof o.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.color)) rack.color = o.color;
+    // Macro Controls: RACK_MACROS of them when the file has any. A file from before them keeps none
+    // stored, and reads as RACK_MACROS empty ones (`rackMacros`); the first edit writes them.
+    if (Array.isArray(o.macros)) rack.macros = parseMacros(o.macros, rack);
     racks.push(rack);
   }
   if (!racks.length) return undefined;
@@ -552,3 +708,22 @@ export function engineWithoutPlugins(ae: PlayAudioEngine): PlayAudioEngine {
 export function isAudioEngineEmpty(ae: PlayAudioEngine | undefined): boolean {
   return !ae || ae.racks.length === 0;
 }
+/** After slots go (an effect or instrument removed or replaced): targets on them go too. The engine as it was when nothing changed. */
+export function pruneMacroTargets(ae: PlayAudioEngine): PlayAudioEngine {
+  let changed = false;
+  const racks = ae.racks.map(r => {
+    if (!r.macros?.some(m => m.targets.length)) return r;
+    let rc = false;
+    const macros = r.macros.map(m => {
+      const targets = m.targets.filter(t => macroCanTarget(aeSlot(r, t.slot), t.address));
+      if (targets.length === m.targets.length) return m;
+      rc = true;
+      return { ...m, targets };
+    });
+    if (!rc) return r;
+    changed = true;
+    return { ...r, macros };
+  });
+  return changed ? { ...ae, racks } : ae;
+}
+

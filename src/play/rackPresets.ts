@@ -3,8 +3,9 @@
  * reusable piece: its instrument (an Audio Unit with its whole state, the
  * sample player's zones, or the Granulator's sample and settings), its
  * effects in order with their state and on/off, the rack controls picked with
- * Configure (≤ 8 a slot) and their values, a Granulator's Sound effects, the
- * Listener's place, its MIDI input and channel, volume and colour.
+ * Configure (≤ 8 a slot) and their values, its 8 Macro Controls (names,
+ * colours, values, targets, ranges and curves), a Granulator's Sound
+ * effects, the Listener's place, its MIDI input and channel, volume and colour.
  *
  * The boundary rule: a rack is a component, not a complete thing, so no
  * wiring travels with it: no mappings onto its controls, no tape, no
@@ -22,7 +23,7 @@
 import { safeSetItem, type FileResult } from '../utils/fileIO';
 import type { PlayControl, PlayRecord } from '../types/play';
 import {
-  AE_EFFECTS_MAX, AE_INST, AE_RACKS_MAX, aeRack, aeSlotName, auTarget, newRack, parseAudioEngine, parseAuTarget, parseGrainsTarget, unitKey,
+  AE_EFFECTS_MAX, AE_INST, AE_RACKS_MAX, aeRack, aeSlotName, auTarget, newRack, parseAudioEngine, parseGrainsTarget, rackMacros, rackOfTarget, unitKey,
   type AeRack, type AeSlot, type AeUnitRef, type PlayAudioEngine,
 } from '../types/playAudioEngine';
 import { RACK_CONTROLS_MAX } from '../types/playArrangement';
@@ -32,6 +33,7 @@ import { engineReaderInput, engineRackOfInput } from '../lib/engineSound';
 import { setReaderInput } from './readerControls';
 import { rackControlGroup } from './rackControls';
 import { playId } from './playControls';
+import { ensureMacroControl } from './rackMacros';
 
 export const RACK_PRESETS_KEY = 'shader-studio:rack-presets';
 export const RACK_PRESETS_CHANGED = 'rack-presets-changed';
@@ -78,6 +80,7 @@ export function rackPresetFrom(p: PlayRecord, rackId: string, name: string, stat
   const r: AeRack = {
     id: 'preset', name: rack.name, instrument: slot(rack.instrument), effects: rack.effects.map(e => slot(e)!),
     keyboard: false, midi: rack.midi, channel: rack.channel, volume: rack.volume, mute: false,
+    macros: clone(rackMacros(rack)),
     ...(rack.color ? { color: rack.color } : {}),
     ...(rack.source === MASTER_CHAIN ? { source: rack.source } : {}),
   };
@@ -92,7 +95,7 @@ export function rackPresetFrom(p: PlayRecord, rackId: string, name: string, stat
       if (c) controls.push({ slot: s.id, address: a, label: c.label, min: c.min, max: c.max, ...(c.step ? { step: c.step } : {}) });
     }
   }
-  const onRack = new Set(p.controls.filter(c => parseAuTarget(c.target)?.rackId === rack.id || parseGrainsTarget(c.target)?.rackId === rack.id).map(c => c.id));
+  const onRack = new Set(p.controls.filter(c => rackOfTarget(c.target) === rack.id || parseGrainsTarget(c.target)?.rackId === rack.id).map(c => c.id));
   const maps = p.mappings.filter(m => onRack.has(m.controlId)).length;
   if (maps) left.push(`${plural(maps, 'mapping')} onto its controls`);
   if (p.arrangement?.tracks[rack.id]?.notes.length || Object.keys(p.arrangement?.tracks[rack.id]?.auto ?? {}).length) left.push('its clips on the tape');
@@ -167,10 +170,12 @@ export function applyRackPreset(p: PlayRecord, preset: RackPreset, opts: ApplyOp
   instrument = keep(instrument, AE_INST);
   const fx = effects.map((e, i) => keep(e, fromIds[i])!);
   const base = old ?? newRack(rackId, racks);
+  // Its macros, their targets moved onto the slots that came in (ones on a slot left out go).
+  const macros = rackMacros(src).map(m => ({ ...m, targets: m.targets.flatMap(t => { const sid = slotIds.get(t.slot); return sid ? [{ ...t, slot: sid }] : []; }) }));
   const rack: AeRack = {
     ...base,
     name: old ? old.name : freeName(preset.name, new Set(racks.map(r => r.name))),
-    instrument, effects: fx,
+    instrument, effects: fx, macros,
     midi: src.midi, channel: src.channel, volume: src.volume, mute: false, keyboard: old?.keyboard ?? false,
     ...(old?.color ?? src.color ? { color: old?.color ?? src.color } : {}),
   };
@@ -181,7 +186,7 @@ export function applyRackPreset(p: PlayRecord, preset: RackPreset, opts: ApplyOp
   let out: PlayRecord = { ...p };
   if (old) {
     // The old devices' controls, their mappings and their automation go (the new ones come in below).
-    const gone = new Set(p.controls.filter(c => parseAuTarget(c.target)?.rackId === old.id || parseGrainsTarget(c.target)?.rackId === old.id).map(c => c.id));
+    const gone = new Set(p.controls.filter(c => rackOfTarget(c.target) === old.id || parseGrainsTarget(c.target)?.rackId === old.id).map(c => c.id));
     const goneTargets = new Set(p.controls.filter(c => gone.has(c.id)).map(c => c.target));
     const lostMaps = p.mappings.filter(m => gone.has(m.controlId) || (m.source.kind === 'control' && gone.has(m.source.controlId))).length;
     if (lostMaps) notes.push(`${plural(lostMaps, 'mapping')} onto the old devices’ controls went with them`);
@@ -207,6 +212,8 @@ export function applyRackPreset(p: PlayRecord, preset: RackPreset, opts: ApplyOp
     controls.push({ id: newId('ctl'), target: auTarget(rackId, sid, c.address), kind: 'float', label, min: c.min, max: c.max, ...(c.step ? { step: c.step } : {}), group: rackControlGroup(rack, s) });
   }
   if (controls.length) out = { ...out, controls: [...out.controls, ...controls] };
+  // Macros with targets get their Play controls (mappable at once; no mappings come with a preset).
+  macros.forEach((m, i) => { if (m.targets.length) out = ensureMacroControl(out, rackId, i + 1).play; });
 
   // A Granulator's Sound effects.
   const chainId = rackChainId(rackId);
@@ -261,6 +268,8 @@ export function rackPresetSummary(preset: RackPreset): string {
   if (r.effects.length) parts.push(plural(r.effects.length, 'effect'));
   if (preset.soundFx?.effects.length) parts.push(plural(preset.soundFx.effects.length, 'sound effect'));
   if (preset.controls.length) parts.push(plural(preset.controls.length, 'control'));
+  const macros = rackMacros(r).filter(m => m.targets.length).length;
+  if (macros) parts.push(plural(macros, 'macro'));
   return parts.join(' · ');
 }
 

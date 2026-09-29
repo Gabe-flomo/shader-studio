@@ -28,7 +28,7 @@ import {
   TAPE_MAX_SECONDS, TOUCH_HOLD, NOTE_MIN, applyPasses, audibleArrangement, audibleTracks, autoAt, beatsIn, emptyArrangement, noteEvents, punchIn, recordBpm, tapePosition, tapeSpans,
   type ArrNote, type ArrPass, type PlayArrangement,
 } from '../types/playArrangement';
-import { aeRack, auPropId, parseAuTarget, readAuValue } from '../types/playAudioEngine';
+import { aeRack, rackTargetProp, readRackTargetValue } from '../types/playAudioEngine';
 import { rackControlTargets } from '../play/rackControls';
 import { keepIndices } from './takePlayback';
 import { transportPlan, type TransportCommand } from '../play/engineView';
@@ -305,9 +305,10 @@ export class Tape {
 
   /** Each rack control's value as the performer sets it (by hand, or a mapped knob), without the tape. */
   private userValue(p: PlayRecord, target: string): number | undefined {
-    const t = parseAuTarget(target);
+    // A parameter (`au:`) or a macro (`macro:`): what drives it, else the record's value.
+    const t = rackTargetProp(target);
     if (!t) return undefined;
-    return this.d.driven(auPropId(t.rackId, t.slotId), t.address) ?? readAuValue(p.audioEngine, target);
+    return this.d.driven(t.id, t.key) ?? readRackTargetValue(p.audioEngine, target);
   }
 
   private sample(now: number, p: PlayRecord): void {
@@ -428,10 +429,10 @@ export class Tape {
       for (const [target, pts] of Object.entries(a.tracks[id].auto)) {
         // Touched while recording: the performer's value goes through.
         if ((this.rec?.auto.get(target)?.until ?? -Infinity) >= now) continue;
-        const t = parseAuTarget(target), v = autoAt(pts, at);
+        const t = rackTargetProp(target), v = autoAt(pts, at);
         if (!t || v === undefined) continue;
-        const key = `${auPropId(t.rackId, t.slotId)}\u0000${t.address}`;
-        this.d.override(auPropId(t.rackId, t.slotId), t.address, v);
+        const key = `${t.id}\u0000${t.key}`;
+        this.d.override(t.id, t.key, v);
         set.add(key);
       }
     }

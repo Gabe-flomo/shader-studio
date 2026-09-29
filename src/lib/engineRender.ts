@@ -18,7 +18,8 @@
  * later than the picture that file begins, for the mux.
  */
 import type { PlayTake } from '../types/play';
-import { AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, parseAuTarget, type AeRack, type AeSlot, type PlayAudioEngine } from '../types/playAudioEngine';
+import { AE_INST, AE_PAD_BASE_NOTE, RACK_ACT_PREFIX, aeSlot, parseAuTarget, parseMacroTarget, rackMacros, type AeRack, type AeSlot, type PlayAudioEngine } from '../types/playAudioEngine';
+import { mcTargetValue } from '../play/kit/macros.js';
 import { trackAt } from './takePlayback';
 
 /** Parameter automation is sampled this often (steps only where a value changed). */
@@ -117,7 +118,8 @@ export function jobNotes(racks: readonly AeRack[], take: Pick<PlayTake, 'from' |
 }
 
 /**
- * The take's parameter automation (controls on `au:` targets) as steps: the
+ * The take's parameter automation (controls on `au:` targets, and on macros:
+ * each parameter the macro turns) as steps: the
  * value at 0, then every PARAM_STEP where it changed. Only for racks in `racks`.
  */
 export function jobParams(racks: readonly AeRack[], take: Pick<PlayTake, 'from' | 'tracks'> | null | undefined, from: number, length: number): JobParam[] {
@@ -126,15 +128,25 @@ export function jobParams(racks: readonly AeRack[], take: Pick<PlayTake, 'from' 
   const ids = new Set(racks.map(r => r.id));
   for (const tr of take.tracks) {
     if (tr.kind !== 'control' || !tr.target || !tr.keys) continue;
-    const t = parseAuTarget(tr.target);
-    if (!t || !ids.has(t.rackId)) continue;
+    // A macro's track (docs/audio-engine.md, "Macros"): each Audio Unit parameter it turns, through its curve and range.
+    const mt = parseMacroTarget(tr.target);
+    const rack = mt ? racks.find(r => r.id === mt.rackId) : undefined;
+    const outs: Array<{ rack: string; slot: string; address: string; value: (v: number) => number }> = [];
+    if (mt && rack) {
+      for (const x of rackMacros(rack)[mt.n - 1].targets) if (aeSlot(rack, x.slot)?.kind === 'au') outs.push({ rack: rack.id, slot: x.slot, address: x.address, value: v => mcTargetValue(v, x) });
+    } else {
+      const t = parseAuTarget(tr.target);
+      if (!t || !ids.has(t.rackId)) continue;
+      outs.push({ rack: t.rackId, slot: t.slotId, address: t.address, value: v => v });
+    }
+    if (!outs.length) continue;
     let last: number | undefined;
     for (let s = 0; s < length; s += PARAM_STEP) {
       const v = trackAt(tr, from + s - take.from);
       const n = typeof v === 'number' ? v : v[0];
       if (!Number.isFinite(n) || n === last) continue;
       last = n;
-      out.push({ t: Math.round(s * 1e6) / 1e6, rack: t.rackId, slot: t.slotId, address: t.address, value: n });
+      for (const o of outs) out.push({ t: Math.round(s * 1e6) / 1e6, rack: o.rack, slot: o.slot, address: o.address, value: o.value(n) });
     }
   }
   return out;

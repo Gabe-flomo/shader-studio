@@ -35,6 +35,7 @@ import { usePlayUi, deviceFoldKey } from '../playUi';
 import { withEngine } from './engineOps';
 import { GrainChainRow, InputRow, Keys, Note, RackSpectrum, SendView, SlotView, SourceRow, useRackEdits } from './RackParts';
 import { RackControlsStrip } from './RackControls';
+import { MacrosDevice } from './RackMacros';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -231,7 +232,8 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
   };
 
   // Drop gaps sit before each movable device and after the last (indices into `order`).
-  const items: ReactNode[] = [];
+  // The rack's Macros come first (docs/audio-engine.md, "Macros"), folded to a summary until opened.
+  const items: ReactNode[] = [<MacrosDevice key="macros" rack={rack} play={play} onChange={onChange} touch={touch} narrow={narrow} color={row.color} />];
   let k = 0;
   for (const d of devices) {
     if (d.kind === 'effect' || d.kind === 'listener') {

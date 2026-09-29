@@ -8,7 +8,7 @@
  * second of a pair shows inside the first's card, so it isn't listed apart.
  */
 import { parseActionTarget, parseLayerTarget, parseReaderTarget, type PlayControl, type PlayRecord } from '../../types/play';
-import { aeRack, aeSlotName, parseAuTarget, parseGrainsTarget } from '../../types/playAudioEngine';
+import { aeRack, aeSlotName, parseAuTarget, parseGrainsTarget, parseMacroTarget } from '../../types/playAudioEngine';
 import { parseFinishTarget } from '../../types/playFinish';
 import { parseAudioFxTarget } from '../../types/playAudioFx';
 import { pairOf } from '../../play/pairs';
@@ -21,7 +21,7 @@ export function controlOrigin(c: PlayControl, play: PlayRecord): ControlOrigin {
   if (c.group) return { id: `group:${c.group}`, label: c.group, kind: parseReaderTarget(c.target) ? 'readers' : 'group' };
   if (parseReaderTarget(c.target)) return { id: 'readers', label: 'Audio readers', kind: 'readers' };
   const au = parseAuTarget(c.target), gr = parseGrainsTarget(c.target);
-  const rackId = au?.rackId ?? gr?.rackId;
+  const rackId = au?.rackId ?? gr?.rackId ?? parseMacroTarget(c.target)?.rackId;
   if (rackId) {
     const racks = play.audioEngine?.racks ?? [];
     const r = aeRack(play.audioEngine, rackId);
