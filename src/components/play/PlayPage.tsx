@@ -109,6 +109,9 @@ import type { AudioReader } from '../../types/play';
 import type { PlayPairMapping } from '../../types/play';
 import { ContextMenuArea } from '../ui/ContextMenuArea';
 import { Menu, type MenuItem } from '../ui/Menu';
+import { SpreadsSection } from './SpreadsSection';
+import { addToSpread, canSpread, makeSpread, removeFromSpread, spreadOf } from '../../play/spreads';
+import { wireSpreadResets } from '../../play/spreadReset';
 import { PairCard, PairMappingRow, pairMappingLabel } from './PairControls';
 import { makePair, newPairMapping, pairOf, partnerTarget, positionPair, unpair } from '../../play/pairs';
 import { pairDrives, signalSource } from '../../lib/playEngine';
@@ -525,6 +528,18 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     setDrawerOpen(true);
     if (compact) setTab('mappings');
   };
+  useEffect(() => { wireSpreadResets(); }, []);
+  /** Spread items for a slider's menu (docs/spread-control.md): join one, leave one, or start one with it. */
+  const spreadMenu = (id: string): MenuItem[] => {
+    const c = play.controls.find(x => x.id === id);
+    if (!canSpread(c)) return [];
+    const inSpread = spreadOf(play, id);
+    const items: MenuItem[] = [{ heading: 'Spread' }];
+    if (inSpread) items.push({ label: `Remove from ${inSpread.label}`, icon: 'close', onSelect: () => update(p => removeFromSpread(p, inSpread.id, id)) });
+    for (const sp of (play.spreads ?? []).filter(x => x.id !== inSpread?.id)) items.push({ label: `Add to ${sp.label}`, icon: 'sliders', hint: 'At the end of its order', onSelect: () => update(p => addToSpread(p, sp.id, id)) });
+    items.push({ label: 'New Spread with this', icon: 'plus', hint: 'A group of sliders offset together along a curve', onSelect: () => { update(p => makeSpread(p, [id]).play); toast.info('Spread made: its card is at the top of Controls'); } });
+    return items;
+  };
   const controlMenu = (id: string): MenuItem[] => {
     const c = play.controls.find(x => x.id === id);
     if (!c || c.kind !== 'float') return [{ label: 'Only sliders pair', disabled: true, onSelect: () => {} }];
@@ -541,7 +556,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       items.push({ label: o.label, icon: 'sliders', hint: 'Two sliders played together; map both at once, or one then the other', onSelect: () => update(p => makePair(p, id, o.id, false).play) });
       if (items.length > 14) break;
     }
-    return items;
+    return [...items, ...spreadMenu(id)];
   };
   const pairMenu = (pairId: string): MenuItem[] => [
     { label: 'Map onto the pair', icon: 'plus', onSelect: () => addPairMapping(pairId) },
@@ -682,7 +697,10 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             : 'Pick sliders and colours from the graph to build your panel. Then map MIDI, the mouse or keys onto them below.'}
         />
       ) : inPanel ? (
-        <ControlsBoard play={play} renderCard={renderOne} drivenBy={traceDrivenBy} flatView={renderFlatControls(true)} />
+        <>
+          <SpreadsSection play={play} nodes={nodes} liveValues={liveValues} update={update} />
+          <ControlsBoard play={play} renderCard={renderOne} drivenBy={traceDrivenBy} flatView={renderFlatControls(true)} />
+        </>
       ) : renderFlatControls(false)}
     </div>
   );

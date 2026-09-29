@@ -216,6 +216,8 @@
   // A layer property (layer:<id>::<key>), a Finish effect's number (finish:<effectId>::<key>, kept under the id 'finish:<effectId>'),
   // or an audio effect's (audiofx:<chainId>:<effectId>::<key>, kept under 'audiofx:<chainId>:<effectId>').
   function layerTarget(t) {
+    // A Spread's Amount or Shift (spread:<id>::amount), kept under 'spread:<id>' like a layer's numbers.
+    if (t.startsWith('spread:')) { const i = t.lastIndexOf('::'); return i > 7 ? { layerId: t.slice(0, i), key: t.slice(i + 2) } : null; }
     if (t.startsWith('audiofx:')) { const i = t.lastIndexOf('::'); return i > 8 ? { layerId: t.slice(0, i), key: t.slice(i + 2) } : null; }
     // A Granulator rack's setting (au:<rackId>:inst::<address>, docs/granulator.md), kept under 'au:<rackId>:inst'.
     if (t.startsWith('au:')) { const i = t.indexOf('::'); return i > 3 ? { layerId: t.slice(0, i), key: t.slice(i + 2) } : null; }
@@ -1350,13 +1352,23 @@ void main() {
       const k = drums.kits.get(a.layerId);
       if (!k) return;
       startDrums();
-      const pad = Math.round(a.amount) - 1, vel = a.vel == null ? 1 : a.vel, p = k.l.pads[pad];
-      if (!p || !k.sampler) return;
+      const pad = Math.round(a.amount) - 1, vel = a.vel == null ? 1 : a.vel;
+      if (!k.l.pads[pad] || !k.sampler) return;
       if (vel <= 0) { k.sampler.release(pad); return; }
-      const buf = k.buffers[pad];
+      // The sound comes from the indexed pad (docs/drum-pads.md "Sample index"); a take says which.
+      const src = a.slot >= 1 ? a.slot - 1 : pickSlot(k.l, pad);
+      const p = k.l.pads[src] || k.l.pads[pad];
+      const buf = k.buffers[src] || k.buffers[pad];
       if (!buf) return;
       k.out.gain.value = Math.max(0, value(k.l, 'volume'));
-      k.sampler.hit(pad, Object.assign(DPK.numbers(key => value(k.l, DPK.key(pad, key))), { buffer: buf, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: vel }));
+      k.sampler.hit(pad, Object.assign(DPK.numbers(key => value(k.l, DPK.key(src, key))), { buffer: buf, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: vel }));
+    }
+    const drumHits = new Map();
+    function pickSlot(l, pad) {
+      if (!DPK.pick) return pad;
+      const slots = DPK.slots(i => { const q = l.pads[i]; return !!q && (!!q.sampleId || !!q.synth); }, l.pads.length);
+      const n = (drumHits.get(l.id) || 0) + 1; drumHits.set(l.id, n);
+      return DPK.pick(slots, pad, value(l, 'sampleIndex'), l.indexMode || 'index', value(l, 'indexSpread'), DPK.hash(l.indexSeed || 0, n));
     }
     const drumHit = (pad, vel) => { for (const l of drumLayers) drumAct({ layerId: l.id, amount: pad + 1, vel }); };
     // Granulator racks (the kit's granulator.js, docs/granulator.md): each one's grains in an AudioWorklet (else a
@@ -1831,6 +1843,35 @@ void main() {
       return f.fresh ? 0 : stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt);
     }
     // One frame of an Increment mapping: what fired it (a trigger, a threshold, a repeat), that many steps, its signals, the value to write.
+    // Spreads (docs/spread-control.md): each member's value so far (a mapping's, else its own) plus
+    // Amount × curve(its place, rotated by Shift) × its range, clamped. Amount and Shift are the
+    // Spread's own controls, so a mapping on them lands in layerLive under 'spread:<id>'.
+    const SPK = typeof SSKit !== 'undefined' && SSKit.spread ? SSKit.spread : null;
+    function tickSpreads(driven) {
+      if (!SPK || !play.spreads || !play.spreads.length) return false;
+      let moved = false;
+      for (const sp of play.spreads) {
+        const n = sp.members.length; if (!n) continue;
+        const pid = 'spread:' + sp.id;
+        const amount = layerLive.has(pid + '::amount') ? layerLive.get(pid + '::amount') : sp.amount;
+        const shift = layerLive.has(pid + '::shift') ? layerLive.get(pid + '::shift') : sp.shift;
+        for (let i = 0; i < n; i++) {
+          const c = controls.get(sp.members[i]); if (!c || c.kind !== 'float') continue;
+          const w = SPK.weight(i, n, shift, sp.curve, sp.curveY, !!sp.invert);
+          const was = driven.has(c.id);
+          if (!was && (amount === 0 || w === 0)) continue;
+          const lt = layerTarget(c.target);
+          let b = was ? live.get(c.id) : base.get(c.id);
+          if (typeof b !== 'number' && lt) { const l = play.layers.find(x => x.id === lt.layerId); b = l ? l[lt.key] : undefined; }
+          if (typeof b !== 'number') continue;
+          const v = SPK.value(b, c.min, c.max, amount, w);
+          if (lt) layerLive.set(lt.layerId + '::' + lt.key, v);
+          else { const un = uniformFor(c); if (!un) continue; uniformValues[un] = v; }
+          live.set(c.id, v); driven.add(c.id); moved = true;
+        }
+      }
+      return moved;
+    }
     function tickIncrement(m, dt) {
       const inc = m.increment, rg = INC.range(m.outMin, m.outMax);
       let st = incState.get(m.id);
@@ -1906,6 +1947,7 @@ void main() {
         driven.add(c.id);
       }
       tickPairs(dt, driven);
+      if (tickSpreads(driven)) moved = true;
       for (const id of [...live.keys()]) if (!driven.has(id)) {
         moved = true;
         actLevel.delete(id);

@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.19',
+    date: '2026-09-28',
+    title: 'Spread, sample index, Remap ranges',
+    highlights: [
+      { area: 'Play', text: 'Spread: put sliders in an order and one Amount offsets them along a curve; Shift rotates it, Reset starts from each minimum.', link: { kind: 'doc', path: 'docs/spread-control.md' } },
+      { area: 'Play', text: 'Drum pads have a Sample index: step it from a beat or a signal and the same pad walks through every sound, or picks at random.' },
+      { area: 'Studio', text: 'Remap has a Clamp output toggle and shows its ranges as two range rows.' },
+    ],
+  },
+  {
     id: '2026.9.18',
     date: '2026-09-28',
     title: 'Granulator: Emit and Spectral',

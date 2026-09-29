@@ -15,7 +15,7 @@
  */
 
 import { LINKED_PREFIX, LINKED_REF_MAX, isLinkedRef } from '../files/linkedRefs';
-import { DP_CHOKES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
+import { DP_CHOKES, DP_INDEX_MODES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpIndexMode, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
 import { AG_GROUPS, AG_MAX, AG_RULES, AG_RULE_TYPES, AG_TARGETS, AG_CHANNELS, agPresetLayer } from '../play/kit/agents.js';
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'lighten' | 'darken' | 'difference' | 'exclusion' | 'add';
@@ -802,6 +802,19 @@ export interface DrumPadLayer extends LayerBase {
   baseNote: number;
   /** The pad grid's lower-left 4 × 4 plays the pads. */
   grid: boolean;
+  /**
+   * Sample index (docs/drum-pads.md): a hit on a pad plays the sound of the
+   * pad `Index` places further on among the pads that play something
+   * (wrapping round), so the same pad walks through every sound as Index
+   * rises. A layer number (`sampleIndex`), so it maps, increments and records.
+   */
+  sampleIndex: number;
+  /** index: the pad's place + Index. random: a seeded random pad each hit. spread: place + Index ± a seeded random step up to `indexSpread`. */
+  indexMode: DpIndexMode;
+  /** Spread mode: the random step's reach, in pads either way. A layer number too. */
+  indexSpread: number;
+  /** The random modes' seed: the same seed picks the same pads in the same order. */
+  indexSeed: number;
   [padKey: `pad${number}_${string}`]: number;
 }
 
@@ -1488,7 +1501,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     toShader: true, videoId: '', fileName: '', bytes: 0, fit: 'contain', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, mirror: false, color: [0, 0, 0], blend: 'normal', matte: 'over',
     playing: true, loop: true, speed: 1, start: 0, follow: true, sound: 'off', volume: 0.8,
   },
-  drumpad: { toShader: false, pads: Array.from({ length: DP_PADS }, emptyDrumPad), volume: 0.9, keys: true, midi: true, channel: 0, baseNote: 36, grid: true, ...drumPadNumbers() },
+  drumpad: { toShader: false, pads: Array.from({ length: DP_PADS }, emptyDrumPad), volume: 0.9, keys: true, midi: true, channel: 0, baseNote: 36, grid: true, sampleIndex: 0, indexMode: 'index', indexSpread: 1, indexSeed: 1, ...drumPadNumbers() },
   cloner: {
     toShader: true, sourceId: '', hideSource: true, arrange: 'grid', count: 12, cols: 5, rows: 3, x: 0.5, y: 0.5, x2: 0.9, y2: 0.5, spacingX: 0.25, spacingY: 0.25,
     radius: 0.3, startAngle: 0, sweep: 360, face: false, pathId: '', spread: 1, jitter: 0, seed: 1,
@@ -1626,6 +1639,7 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
   },
   drumpad: {
     toShader: B, pads: { t: 'drumpads' }, volume: N(0, 1.5), keys: B, midi: B, channel: N(0, 16, true), baseNote: N(0, 112, true), grid: B,
+    sampleIndex: N(-1000, 1000), indexMode: E(...DP_INDEX_MODES), indexSpread: N(0, DP_PADS), indexSeed: N(0, 999999, true),
     ...Object.fromEntries(Array.from({ length: DP_PADS }, (_, i) => DP_PARAMS.map(p => [dpKey(i, p.key), N(p.min, p.max)] as const)).flat()),
   },
   video: {
@@ -2018,7 +2032,11 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'scale', label: 'Scale', min: 0.05, max: 3, hint: 'Camera image height as a fraction of the picture height.' },
     ROT, OPACITY,
   ],
-  drumpad: [{ key: 'volume', label: 'Volume', min: 0, max: 1.5, hint: 'The whole kit’s level, after its effect chain.' }],
+  drumpad: [
+    { key: 'volume', label: 'Volume', min: 0, max: 1.5, hint: 'The whole kit’s level, after its effect chain.' },
+    { key: 'sampleIndex', label: 'Sample index', min: 0, max: DP_PADS - 1, step: 1, hint: 'Which sound a pad plays: its own place among the pads with sounds, plus Index, wrapping round. Step it with an Increment to walk through the kit.' },
+    { key: 'indexSpread', label: 'Index spread', min: 0, max: DP_PADS - 1, step: 1, hint: 'Index + random spread: how many pads either way a hit may land from Index (seeded, so a take repeats it).' },
+  ],
   video: [
     X('Centre of the video'), Y('Centre of the video'),
     { key: 'scale', label: 'Scale', min: 0.05, max: 3, hint: 'Size against the fitted size (Fit: Height makes 1 as tall as the picture).' },
@@ -2176,7 +2194,11 @@ function kindNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
   }
   // Each pad that plays something: its numbers, "Pad 3 · Pitch" (`pad3_pitch`).
   // A pad's numbers are the sampler's physical ranges (a start past the sample's end, a pan past the speakers), so they're hard.
-  if (l.kind === 'drumpad') return [...base, ...l.pads.flatMap((p, i) => (padHasSound(p) ? DP_PARAMS.map(d => ({ key: dpKey(i, d.key), label: `Pad ${i + 1} · ${d.label}`, min: d.min, max: d.max, step: d.step, hard: true, hint: d.hint })) : []))];
+  if (l.kind === 'drumpad') {
+    // Index runs over the pads that play something (0 … N−1).
+    const last = Math.max(1, l.pads.filter(padHasSound).length - 1);
+    return [...base.map(d => d.key === 'sampleIndex' || d.key === 'indexSpread' ? { ...d, max: last } : d), ...l.pads.flatMap((p, i) => (padHasSound(p) ? DP_PARAMS.map(d => ({ key: dpKey(i, d.key), label: `Pad ${i + 1} · ${d.label}`, min: d.min, max: d.max, step: d.step, hard: true, hint: d.hint })) : []))];
+  }
   // Each member that reacts to the picture: its strength, "Member 2 · Picture strength" (`m2_picture`).
   if (l.kind === 'agents') return [...base, ...agentNumericProps(l)];
   if (l.kind === 'relationship') return [...base, ...l.members.flatMap((m, i) => (m.picture !== 'off' ? [{ key: relationPictureKey(i), label: `Member ${i + 1} · Picture strength`, min: 0, max: 3, hint: `How hard member ${i + 1} climbs or descends the picture's ${m.channel}.` }] : []))];

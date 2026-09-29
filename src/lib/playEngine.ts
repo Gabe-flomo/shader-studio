@@ -38,7 +38,8 @@ import type { TriggerSpec } from '../types/play';
 import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
 import { sensorKey } from '../types/play';
 import { parseGrainsTarget } from '../types/playAudioEngine';
-import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parsePropTarget, parseReaderTarget } from '../types/play';
+import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parsePropTarget, parseReaderTarget, spreadPropId } from '../types/play';
+import { spValue, spWeight } from '../play/kit/spread.js';
 import { layerAudio } from './layerAudio';
 import { bandFromSpectrum, levelFromWave, liveAudio, LIVE_BANDS, type LiveBand } from './liveAudio';
 import { audioReaderBank } from './audioReaderBank';
@@ -229,6 +230,8 @@ class PlayEngine implements InputSource {
   /** Graph clock at the last tick: a clock sent back (rewind) starts axis swaps over. */
   private lastTime = -Infinity;
   private signalListeners = new Set<(id: string) => void>();
+  /** Reset-mode Spreads whose signal fired (play/spreadReset.ts writes their members' minimums). */
+  private spreadResetListeners = new Set<(spreadId: string) => void>();
   private actionListeners = new Set<(a: PlayAction) => void>();
   /** Action controls: the last mapped level, so a rise through 0.5 fires once. */
   private actionLevel = new Map<string, number>();
@@ -677,12 +680,19 @@ class PlayEngine implements InputSource {
     return () => { this.signalListeners.delete(cb); };
   }
 
+  /** Listen for Reset-mode Spreads' signals: the listener puts their members back to their minimums. */
+  onSpreadReset(cb: (spreadId: string) => void): () => void {
+    this.spreadResetListeners.add(cb);
+    return () => { this.spreadResetListeners.delete(cb); };
+  }
+
   /** A signal fires: its "When signal fires" triggers see a press (and its release) at once. Learn takes it too. */
   private emitSignal(id: string): void {
     const key = signalKey(id);
     this.press(key);
     this.release(key);
     for (const cb of this.signalListeners) cb(id);
+    for (const sp of this.record.spreads ?? []) if (sp.mode === 'reset' && sp.resetOn === id) for (const cb of this.spreadResetListeners) cb(sp.id);
     if (this.learnTriggerCb) this.finishLearnTrigger({ on: 'signal', signal: id });
     else if (this.learnCb) this.finishLearn(signalSource(id));
   }
@@ -1248,6 +1258,8 @@ class PlayEngine implements InputSource {
     }
     // Pair mappings, after the plain ones: on a control both drive, the pair's wins.
     this.tickPairs(dt, write, driven);
+    // Spreads, last: each member's value so far (a mapping's, else its slider's) plus the group's offset.
+    this.tickSpreads(write, driven);
     // A control that was driven last frame and isn't now: put the slider's value back once.
     for (const id of this.drivenLastFrame) if (!driven.has(id)) this.restoreOnce.add(id);
     for (const id of this.restoreOnce) {
@@ -1391,6 +1403,33 @@ class PlayEngine implements InputSource {
     }
   }
 
+  /**
+   * Spreads (docs/spread-control.md, play/kit/spread.js): each member is
+   * source → its base → + Amount × curve(its place, rotated by Shift) × its
+   * range → clamped to its range. Amount and Shift are the Spread's own
+   * controls (a mapping or a take moves them like layer numbers). A member
+   * with no offset and nothing driving it is left to its slider.
+   */
+  private tickSpreads(write: InputWriter, driven: Set<string>): void {
+    for (const sp of this.record.spreads ?? []) {
+      const n = sp.members.length;
+      if (!n) continue;
+      const pid = spreadPropId(sp.id);
+      const amount = this.layerValue(pid, 'amount', sp.amount);
+      const shift = this.layerValue(pid, 'shift', sp.shift);
+      for (let i = 0; i < n; i++) {
+        const c = this.controls.get(sp.members[i]);
+        if (!c || c.kind !== 'float') continue;
+        const w = spWeight(i, n, shift, sp.curve, sp.curveY, !!sp.invert);
+        const was = driven.has(c.id);
+        if (!was && (amount === 0 || w === 0)) continue;
+        const b = was ? this.live.get(c.id) : this.base.get(c.id);
+        if (typeof b !== 'number') continue;
+        this.writePlain(c, spValue(b, c.min, c.max, amount, w), write, driven);
+      }
+    }
+  }
+
   /** A pair mapping's 0..1 readings this frame for A and B (a position's x and y, or one source for both). */
   private pairReading(m: PlayPairMapping, dt: number): { ua: number | null; ub: number | null } {
     if (m.source.kind === 'position') {
@@ -1530,7 +1569,7 @@ class PlayEngine implements InputSource {
 
   /** Actions, layer-property mappings, reader controls and Learn run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || this.handsBound || handFeed.isOn() || this.faceBound || this.poseBound || faceFeed.isOn() || poseFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
+    return !!this.record.actions?.length || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || !!this.record.spreads?.some(sp => sp.members.length > 0) || this.handsBound || handFeed.isOn() || this.faceBound || this.poseBound || faceFeed.isOn() || poseFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */

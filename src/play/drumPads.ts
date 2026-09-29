@@ -36,13 +36,12 @@ import { audioAccept } from '../lib/audioAccept';
 import { isLinkedRef } from '../files/linkedRefs';
 import { onLinkedChange } from '../files/linkedFolders';
 import {
-  DP_PADS, dpCreateSampler, dpHitNumbers, dpKey, dpPadOfCell, dpPadOfKey, dpPadOfNote, dpPeaks, dpSynthBuffer, type DpSampler,
-} from './kit/drumPads.js';
+  DP_PADS, dpCreateSampler, dpHitNumbers, dpKey, dpPadOfCell, dpPadOfKey, dpPadOfNote, dpPeaks, dpSynthBuffer, type DpSampler, dpHash01, dpPickPad, dpSlots } from './kit/drumPads.js';
 
 /** What the card shows about a pad's sample. */
 export type PadStatus = 'empty' | 'loading' | 'ready' | 'missing' | 'error';
 
-export interface PadAction { do: 'pad'; layerId: string; amount: number; vel?: number; at?: number }
+export interface PadAction { do: 'pad'; layerId: string; amount: number; vel?: number; at?: number; /** The pad (1-based) whose sound played, after the sample index (docs/drum-pads.md). */ slot?: number }
 
 interface Sample { status: PadStatus; buffer: AudioBuffer | null; error: string; peaks: Float32Array | null }
 interface Kit { ctx: AudioContext; sampler: DpSampler; analyser: AnalyserNode; out: GainNode; vol: number; dispose: () => void }
@@ -66,6 +65,8 @@ class PlayDrumPads {
   private lit = new Map<string, { at: number; vel: number }>();
   private clock = { time: 0, wall: 0, playing: false };
   private actor: ((a: PadAction) => void) | null = null;
+  /** Hits so far per layer: the random index modes draw from the seed and this count, so a take repeats them. */
+  private hits = new Map<string, number>();
   private heldKeys = new Map<string, number>();
 
   constructor() {
@@ -251,8 +252,24 @@ class PlayDrumPads {
 
   /** Hit a pad (velocity 0..1): recorded in a take when one is recording. */
   trigger(layerId: string, pad: number, vel = 1): void {
-    const a: PadAction = { do: 'pad', layerId, amount: pad + 1, vel: Math.max(0.01, Math.min(1, vel)), at: this.clockNow() };
+    const l = this.layers.find(x => x.id === layerId);
+    const slot = l ? this.pickSlot(l, pad) + 1 : undefined;
+    const a: PadAction = { do: 'pad', layerId, amount: pad + 1, vel: Math.max(0.01, Math.min(1, vel)), at: this.clockNow(), ...(slot ? { slot } : {}) };
     if (this.actor) this.actor(a); else this.play(a);
+  }
+
+  /**
+   * The pad (0-based) whose sound a hit on `pad` plays, after the layer's
+   * sample index (docs/drum-pads.md "Sample index"): its place among the pads
+   * with sounds plus Index (wrapping), or a seeded random pad. Counts the hit.
+   */
+  pickSlot(l: DrumPadLayer, pad: number): number {
+    const slots = dpSlots((i: number) => padHasSound(l.pads[i]), DP_PADS);
+    const n = (this.hits.get(l.id) ?? 0) + 1;
+    this.hits.set(l.id, n);
+    const index = playEngine.layerValue(l.id, 'sampleIndex', l.sampleIndex ?? 0);
+    const spread = playEngine.layerValue(l.id, 'indexSpread', l.indexSpread ?? 0);
+    return dpPickPad(slots, pad, index, l.indexMode ?? 'index', spread, dpHash01(l.indexSeed ?? 0, n));
   }
 
   /** Let a pad go: only gate pads care (they fade over their release). */
@@ -264,7 +281,7 @@ class PlayDrumPads {
   }
 
   /** A hit (live, or from a take playing back): play it. */
-  play(a: { layerId: string; amount: number; vel?: number }): void {
+  play(a: { layerId: string; amount: number; vel?: number; slot?: number }): void {
     const l = this.layers.find(x => x.id === a.layerId);
     const pad = Math.round(a.amount) - 1;
     if (!l || !l.visible || pad < 0 || pad >= DP_PADS) return;
@@ -273,12 +290,14 @@ class PlayDrumPads {
     if (k.ctx.state === 'suspended') void k.ctx.resume();
     const vel = a.vel ?? 1;
     if (vel <= 0) { k.sampler.release(pad); return; }
-    const p = l.pads[pad];
+    // The sound comes from the indexed pad (recorded in the take as `slot`; older takes pick again).
+    const src = a.slot && a.slot >= 1 && a.slot <= DP_PADS ? a.slot - 1 : this.pickSlot(l, pad);
+    const p = l.pads[src] ?? l.pads[pad];
     this.lit.set(`${l.id}:${pad}`, { at: performance.now(), vel });
     this.emit();
     const buffer = this.buffer(p);
     if (!buffer) return;
-    k.sampler.hit(pad, { ...dpHitNumbers(key => this.num(l, pad, key)), buffer, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: vel });
+    k.sampler.hit(pad, { ...dpHitNumbers(key => this.num(l, src, key)), buffer, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: vel });
   }
 
   /** When a pad was last hit (performance.now) and how hard, for the card; null before any. */
