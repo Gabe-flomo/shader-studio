@@ -15,6 +15,10 @@
  * npm package), so tracking works offline and no frame leaves the machine.
  */
 import type { TrackerFrame, TrackerKind, TrackerOptions, TrackerSource, TrackerStats, TrackerHandle } from './handFeed';
+import { keepModelsEnabled, TRACKER_CACHE_VERSION } from './trackerCache';
+
+/** Dev only: `?slowTrackerFetch=1` paces the model download so the states are easy to see and screenshot (docs/tracking.md). */
+const SLOW_FETCH = import.meta.env.DEV && typeof location !== 'undefined' && new URLSearchParams(location.search).has('slowTrackerFetch');
 
 /** Frames a second to aim for. */
 const TARGET_FPS = 30;
@@ -27,11 +31,13 @@ export const MODEL_FILES: Record<TrackerKind, string> = { hands: 'hand_landmarke
 type WorkerOut =
   | { type: 'ready'; delegate: 'GPU' | 'CPU' }
   | { type: 'failed'; message: string }
+  | { type: 'progress'; phase: 'downloading' | 'loading'; loaded?: number; total?: number }
   | { type: 'result'; t: number; w: number; h: number; ms: number; hands: { side: 'left' | 'right'; score: number; lm: Float32Array }[]; items: { meta: Float32Array; lm: Float32Array }[] };
 export type TrackerResult = Extract<WorkerOut, { type: 'result' }>;
+export type TrackerLoadEvent = Extract<WorkerOut, { type: 'progress' }>;
 
-/** Start a worker with a kind's model loaded. Rejects when MediaPipe can't start here. */
-export async function openTrackerWorker(kind: TrackerKind, options: TrackerOptions): Promise<{ worker: Worker; delegate: 'GPU' | 'CPU' }> {
+/** Start a worker with a kind's model loaded. Rejects when MediaPipe can't start here. `onProgress` reports the download and the WASM/model init that follows (docs/tracking.md "Models"). */
+export async function openTrackerWorker(kind: TrackerKind, options: TrackerOptions, onProgress?: (p: TrackerLoadEvent) => void): Promise<{ worker: Worker; delegate: 'GPU' | 'CPU' }> {
   const base = `${import.meta.env.BASE_URL}mediapipe/`;
   const abs = (p: string) => new URL(p, window.location.href).href;
   const worker = new Worker(new URL('./trackerWorker.ts', import.meta.url), { type: 'module', name: `${kind}-tracker` });
@@ -39,10 +45,19 @@ export async function openTrackerWorker(kind: TrackerKind, options: TrackerOptio
     const onMsg = (e: MessageEvent<WorkerOut>) => {
       if (e.data.type === 'ready') { worker.removeEventListener('message', onMsg); resolve(e.data.delegate); }
       else if (e.data.type === 'failed') { worker.removeEventListener('message', onMsg); worker.terminate(); reject(new Error(e.data.message)); }
+      else if (e.data.type === 'progress') onProgress?.(e.data);
     };
     worker.addEventListener('message', onMsg);
     worker.addEventListener('error', e => { worker.terminate(); reject(new Error(e.message || `The ${kind} tracker worker failed to load`)); }, { once: true });
-    worker.postMessage({ type: 'init', kind, wasm: abs(`${base}wasm/`), model: abs(`${base}${MODEL_FILES[kind]}`), options });
+    worker.postMessage({
+      type: 'init', kind, options,
+      wasmJs: abs(`${base}wasm/vision_wasm_module_internal.js`),
+      wasmBin: abs(`${base}wasm/vision_wasm_module_internal.wasm`),
+      model: abs(`${base}${MODEL_FILES[kind]}`),
+      cacheModels: keepModelsEnabled(),
+      cacheVersion: TRACKER_CACHE_VERSION,
+      slow: SLOW_FETCH,
+    });
   });
   return { worker, delegate };
 }
@@ -72,8 +87,9 @@ export async function startTracker(o: {
   push: (f: TrackerFrame) => void;
   stats: (s: TrackerStats) => void;
   options: TrackerOptions;
+  onProgress?: (p: TrackerLoadEvent) => void;
 }): Promise<TrackerHandle> {
-  const { worker, delegate } = await openTrackerWorker(o.kind, o.options);
+  const { worker, delegate } = await openTrackerWorker(o.kind, o.options, o.onProgress);
 
   let alive = true, paused = false, busy = false, timer = 0;
   let lastSent = 0, lastVideoTime = -1;

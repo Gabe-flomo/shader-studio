@@ -15,6 +15,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { handFeed, type HandStatus } from '../../lib/handFeed';
+import { loadPct } from '../../lib/trackerCache';
 import { playEngine } from '../../lib/playEngine';
 import { hdTrackerOptions, hdTracks } from '../../play/kit/hands.js';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -26,22 +27,24 @@ import { Popover } from '../ui/Popover';
 import { RulerSlider } from '../ui/RulerSlider';
 import { usePlayUi } from './playUi';
 import { CameraChip } from './chips';
-import { TrackSource, TrackerChip, trackerText, useFromVideo, useTrackerStatus } from './TrackingChips';
+import { TrackSource, TrackerChip, trackerText, useFromVideo, useModelNote, useTrackerStatus } from './TrackingChips';
 
 /** Inside another site's frame the camera is refused without asking (see chips.tsx). */
 const EMBEDDED = typeof window !== 'undefined' && window.self !== window.top;
 
-/** Status and hands in view, kept current. */
-function useHands(): { status: HandStatus; count: number; paused: boolean } {
-  const [s, setS] = useState(() => ({ status: handFeed.getStatus(), count: handFeed.handCount(), paused: handFeed.isPaused() }));
-  useEffect(() => handFeed.onStatus(status => setS({ status, count: handFeed.handCount(), paused: handFeed.isPaused() })), []);
+/** Status, hands in view and the download progress (while status is 'downloading'), kept current. */
+function useHands(): { status: HandStatus; count: number; paused: boolean; progress: ReturnType<typeof handFeed.getProgress> } {
+  const [s, setS] = useState(() => ({ status: handFeed.getStatus(), count: handFeed.handCount(), paused: handFeed.isPaused(), progress: handFeed.getProgress() }));
+  useEffect(() => handFeed.onStatus(status => setS({ status, count: handFeed.handCount(), paused: handFeed.isPaused(), progress: handFeed.getProgress() })), []);
   return s;
 }
 
-function handsText(status: HandStatus, count: number, paused = false): string {
+function handsText(status: HandStatus, count: number, paused = false, progress: ReturnType<typeof handFeed.getProgress> = null): string {
   switch (status) {
     case 'on': return paused ? 'Hands: resting while a take plays' : count === 0 ? 'Hands: none in view' : count === 1 ? 'Hands: tracking 1 hand' : 'Hands: tracking 2 hands';
     case 'starting': return 'Hands: starting…';
+    case 'downloading': return `Hands: downloading the model${progress ? loadPct(progress) : ''}`;
+    case 'loading': return 'Hands: loading…';
     case 'blocked': return EMBEDDED ? 'Hands: camera blocked by this page' : 'Hands: camera blocked';
     case 'error': return 'Hands: couldn’t start';
     case 'unsupported': return 'Hands: not available here';
@@ -64,7 +67,7 @@ function useHandSettings(): [PlayHands, (patch: Partial<PlayHands>) => void] {
 
 export function HandsChip({ settings = true }: { settings?: boolean }) {
   const tk = useTokens();
-  const { status, count, paused } = useHands();
+  const { status, count, paused, progress } = useHands();
   const [hands, set] = useHandSettings();
   const from = useFromVideo('hands');
   const [open, setOpen] = useState(false);
@@ -76,13 +79,14 @@ export function HandsChip({ settings = true }: { settings?: boolean }) {
     const id = window.setInterval(() => setTick(t => t + 1), 1000);
     return () => window.clearInterval(id);
   }, [status]);
-  const colour = from.baked ? (count > 0 ? tk.status.success : tk.status.warning) : status === 'on' ? (paused ? tk.text.disabled : count > 0 ? tk.status.success : tk.status.warning) : status === 'starting' ? tk.status.warning : status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.disabled;
+  const busy = status === 'starting' || status === 'downloading' || status === 'loading';
+  const colour = from.baked ? (count > 0 ? tk.status.success : tk.status.warning) : status === 'on' ? (paused ? tk.text.disabled : count > 0 ? tk.status.success : tk.status.warning) : busy ? tk.status.warning : status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.disabled;
   const s = handFeed.stats;
   const title = status === 'on' ? `${s.fps} frames a second · the model takes ${s.inferMs} ms (${s.delegate || '…'}) · ${s.latencyMs} ms camera to landmarks` : handFeed.getMessage() || undefined;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-      <span title={title} style={{ color: status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.muted, font: `11px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{from.layer ? trackerText('hands', status, count, paused, from) : handsText(status, count, paused)}</span>
+      <span title={title} style={{ color: status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.muted, font: `11px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{from.layer ? trackerText('hands', status, count, paused, from, progress) : handsText(status, count, paused, progress)}</span>
       {status !== 'unsupported' && (
         <IconButton
           icon={hands.overlay ? 'eye' : 'eyeOff'} size="sm" active={hands.overlay}
@@ -131,6 +135,7 @@ function HandsSettings() {
   const onlySide = useNodeGraphStore(s => oneHandUsed(s.play));
   const [advanced, setAdvanced] = useState(!!hands.confidence);
   const video = useNodeGraphStore(s => { const l = hands.source ? s.play.layers.find(x => x.id === hands.source) : undefined; return l && l.kind === 'video' ? l : null; });
+  const modelNote = useModelNote('hands');
   const label = { color: tk.text.primary, font: `600 12px ${fontFamily.ui}` };
   const hint = { color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}`, margin: '3px 0 0' };
   const head = (text: string, right?: ReactNode) => (
@@ -205,7 +210,7 @@ function HandsSettings() {
       </div>
       <HandsReadout />
       <p style={{ ...hint, margin: 0, paddingTop: 8, borderTop: `1px solid ${tk.border.default}` }}>
-        Everything runs on this computer: camera frames never leave it.
+        Everything runs on this computer: camera frames never leave it. {modelNote}
       </p>
     </div>
   );
@@ -245,13 +250,13 @@ function HandsReadout() {
 
 /** Enable, on the picture, while the setup reads hands and tracking is off. */
 export function HandsPill() {
-  const { status, count } = useHands();
+  const { status, count, progress } = useHands();
   const performing = usePlayUi(s => s.performing);
   const needs = useNodeGraphStore(s => usesHands(s.play));
   const from = useFromVideo('hands');
   // Hands from an analysed video need nothing turned on.
   if (!performing || !needs || from.baked || status === 'on' || status === 'unsupported') return null;
-  const busy = status === 'starting';
+  const busy = status === 'starting' || status === 'downloading' || status === 'loading';
   return (
     <button
       type="button"
@@ -266,7 +271,7 @@ export function HandsPill() {
       }}
     >
       <Icon name="hand" size={15} />
-      {busy ? 'Starting hand tracking…' : status === 'blocked' || status === 'error' ? `${handsText(status, count).replace('Hands: ', '')} · Try again` : from.layer ? `Track hands in “${from.layer.label}”` : 'Enable hand tracking'}
+      {status === 'downloading' ? `Downloading the model${progress ? loadPct(progress) : ''}` : status === 'loading' ? 'Loading…' : busy ? 'Starting hand tracking…' : status === 'blocked' || status === 'error' ? `${handsText(status, count).replace('Hands: ', '')} · Try again` : from.layer ? `Track hands in “${from.layer.label}”` : 'Enable hand tracking'}
     </button>
   );
 }
@@ -320,11 +325,11 @@ export function HandsLive({ compact = false }: { compact?: boolean }) {
   const fs = useTrackerStatus('face'), ps = useTrackerStatus('pose');
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLSpanElement>(null);
-  const live = (x: { status: HandStatus }) => x.status === 'on' || x.status === 'starting';
+  const live = (x: { status: HandStatus }) => x.status === 'on' || x.status === 'starting' || x.status === 'downloading' || x.status === 'loading';
   if (!live(hs) && (live(fs) || live(ps))) {
     // Only the face or the body: the same light, for them.
     const s = live(fs) ? fs : ps, kind = live(fs) ? 'face' as const : 'pose' as const;
-    const colour = s.status === 'starting' ? tk.status.warning : s.count > 0 ? tk.status.success : tk.text.muted;
+    const colour = s.status === 'starting' || s.status === 'downloading' || s.status === 'loading' ? tk.status.warning : s.count > 0 ? tk.status.success : tk.text.muted;
     return (
       <span ref={anchor} style={{ display: 'inline-flex' }}>
         <button type="button" onClick={() => setOpen(o => !o)} title={`${trackerText(kind, s.status, s.count, s.paused)}. Click to stop or change settings.`}
@@ -342,8 +347,8 @@ export function HandsLive({ compact = false }: { compact?: boolean }) {
     );
   }
   const { status, count, paused } = hs;
-  if (status !== 'on' && status !== 'starting') return null;
-  const colour = status === 'starting' ? tk.status.warning : count > 0 ? tk.status.success : tk.text.muted;
+  if (status !== 'on' && status !== 'starting' && status !== 'downloading' && status !== 'loading') return null;
+  const colour = status === 'starting' || status === 'downloading' || status === 'loading' ? tk.status.warning : count > 0 ? tk.status.success : tk.text.muted;
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
       <style>{'@keyframes hands-live-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}'}</style>
@@ -356,7 +361,7 @@ export function HandsLive({ compact = false }: { compact?: boolean }) {
       >
         <span aria-hidden style={{ width: 7, height: 7, borderRadius: '50%', background: colour, animation: paused ? undefined : 'hands-live-pulse 1.6s ease-in-out infinite' }} />
         <Icon name="hand" size={13} />
-        {!compact && <span>{status === 'starting' ? 'Starting…' : count === 0 ? 'Hands' : `Hands · ${count}`}</span>}
+        {!compact && <span>{status === 'starting' || status === 'downloading' || status === 'loading' ? 'Starting…' : count === 0 ? 'Hands' : `Hands · ${count}`}</span>}
       </button>
       {open && (
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={320} padding={0}>
