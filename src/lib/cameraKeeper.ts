@@ -11,7 +11,7 @@
  */
 import type { PlayRecord } from '../types/play';
 import { cameraInput } from './cameraInput';
-import { handFeed } from './handFeed';
+import { trackerFeeds } from './handFeed';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 
 /** Does this Play setup show or read the camera? */
@@ -24,9 +24,11 @@ export function playUsesCamera(play: Pick<PlayRecord, 'layers'>): boolean {
 }
 
 function handsHoldCamera(): boolean {
-  const s = handFeed.getStatus();
-  // A dev/test source (a video instead of the webcam) doesn't hold the camera.
-  return (s === 'on' || s === 'starting') && handFeed.currentSource() === cameraInput.element();
+  // A tracker on a Video layer, or a dev/test source, doesn't hold the camera.
+  return Object.values(trackerFeeds).some(f => {
+    const s = f.getStatus();
+    return (s === 'on' || s === 'starting') && f.currentSource() === cameraInput.element();
+  });
 }
 
 let installed = false;
@@ -42,5 +44,5 @@ export function installCameraKeeper(): void {
   };
   let lastPlay = useNodeGraphStore.getState().play;
   useNodeGraphStore.subscribe(s => { if (s.play !== lastPlay) { lastPlay = s.play; check(); } });
-  handFeed.onStatus(() => check());
+  for (const f of Object.values(trackerFeeds)) f.onStatus(() => check());
 }

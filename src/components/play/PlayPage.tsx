@@ -77,6 +77,9 @@ import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
 import { rackKeyboard } from '../../lib/rackKeyboard';
 import { keyboardClaimed } from '../../lib/keyboardClaim';
 import { HandsButton, HandsChip } from './HandsChip';
+import { TrackPointPicker, TrackerChip } from './TrackingChips';
+import { BLEND_OPTIONS, FACE_GESTURE_OPTIONS, FACE_READ_HINTS, POSE_GESTURE_OPTIONS, POSE_READ_HINTS } from '../../play/trackSources';
+import type { FaceGesture, PoseGesture } from '../../types/playTracking';
 import { handFeed } from '../../lib/handFeed';
 import { usesHands, type HandGesture } from '../../types/play';
 import { ColourPad } from './ColourPad';
@@ -2103,6 +2106,23 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
           <div style={{ margin: '-2px 0 6px 60px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{HAND_READ_HINTS[source.read]}</div>
         </>
       );
+    case 'face':
+    case 'pose': {
+      const reads = source.kind === 'face' ? FACE_READ_HINTS : POSE_READ_HINTS;
+      return (
+        <>
+          {row(<>
+            {(source.read === 'point' || source.read === 'visibility') && <TrackPointPicker kind={source.kind} value={source.point} onChange={point => onChange({ ...source, point })} />}
+            {source.read === 'point' && <Segmented size="sm" ariaLabel="Axis" value={source.axis} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z', title: 'Toward the camera' }]} onChange={axis => onChange({ ...source, axis })} />}
+            {source.kind === 'face' && source.read === 'blend' && <Select ariaLabel="Blendshape" value={`${source.point}`} options={BLEND_OPTIONS} onChange={v => onChange({ ...source, point: parseInt(v, 10) || 0 })} height={26} style={{ flex: 1, minWidth: 0 }} />}
+            {source.kind === 'face' && source.read === 'gesture' && <Select ariaLabel="Face gesture" value={source.gesture} options={FACE_GESTURE_OPTIONS} onChange={v => onChange({ ...source, gesture: v as FaceGesture })} height={26} />}
+            {source.kind === 'pose' && source.read === 'gesture' && <Select ariaLabel="Pose gesture" value={source.gesture} options={POSE_GESTURE_OPTIONS} onChange={v => onChange({ ...source, gesture: v as PoseGesture })} height={26} />}
+            <TrackerChip kind={source.kind} />
+          </>)}
+          <div style={{ margin: '-2px 0 6px 60px', color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{(reads as Record<string, string>)[source.read]}</div>
+        </>
+      );
+    }
     case 'data':
       return <DataSourceOptions source={source} labelStyle={labelStyle} onChange={onChange} />;
     case 'midi':
