@@ -303,15 +303,15 @@ a barrel when $k > 0$, a pincushion below, with a zoom that keeps the frame fill
       glsl(LENS_GLSL, 'Lens distortion in the Finish pass', [[4, 4]]),
     ]),
     step('Grain, bloom and halation', [
-      interactive('finishHalation', `**Halation** is film's red halo. Light strong enough to pass through the film bounces off its back and exposes it again from behind, reaching the red layer first. So:
+      interactive('finishHalation', `**Halation** is film's red bleed. Light strong enough to pass through the film bounces off its back and exposes it again from behind, reaching the red layer first. So:
 
-• only very bright light does it: the lamps glow, the paper card (0.90) doesn't;
-• the halo goes red, then orange, then white as the light gets stronger;
-• the brightest sources look bigger than they are;
-• a colour with no red in it, like the teal patch, gets no red halo.
+• it hugs bright edges: a thin red rim on the darker picture right beside them, a few pixels wide;
+• the bright part itself stays clean, and the rim is orange where it is strongest;
+• a small glint bleeds as far as a big bright shape does;
+• a colour with no red in it, like the teal patch, gets none.
 
-A screen picture stops at white, so [[control:head]] guesses how much brighter the clipped parts really were. Push [[control:paper]] to 1.00 and the card clips and halates like a lamp. Try [[control:amount]], [[control:thr]], [[control:warm]] and [[control:grow]].`, [
-        ['amount', 'Amount'], ['thr', 'Threshold'], ['head', 'Highlight headroom'], ['warm', 'Warmth'], ['grow', 'Growth'], ['paper', 'Paper white'],
+The numbers are measured from a film-emulation grade. A screen picture stops at white, so [[control:head]] guesses how much brighter the clipped parts really were. Lower [[control:paper]] and the card's rim goes. Try [[control:amount]], [[control:thr]], [[control:warm]] and [[control:reach]].`, [
+        ['amount', 'Amount'], ['thr', 'Threshold'], ['head', 'Highlight headroom'], ['warm', 'Warmth'], ['reach', 'Reach'], ['paper', 'Paper white'],
       ]),
       text(`**Bloom** is the softer cousin: every bright part glows, in its own colour. **Film grain** follows brightness the way film does, strongest in the mid-tones. Both, with halation, read a few small blurred copies of the frame, so they stay cheap.`),
     ]),

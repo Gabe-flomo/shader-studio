@@ -1841,24 +1841,26 @@ Distance reads only while both hands are in view, so the rings hold their size w
   ex('finishHalation', glowGraph({ radius: 0.1 }), play({
     layers: [scriptLayer('scene', 'Test scene', SKETCH_HALATION)],
     display: { picture: true, backdrop: [0.05, 0.05, 0.06], source: 'colour' },
-    finish: { on: true, effects: [fx('halation', { amount: 0.8, reach: 0.55, threshold: 0.5, headroom: 6, warmth: 0.5, growth: 0.4 })] },
+    // The defaults are the measured reference (Classic cine).
+    finish: { on: true, effects: [fx('halation')] },
     controls: [
       ctl('amount', 'finish:halation::amount', 'Halation · Amount', 0, 2),
       ctl('reach', 'finish:halation::reach', 'Halation · Reach', 0, 1),
-      ctl('thr', 'finish:halation::threshold', 'Halation · Threshold', -1, 4),
+      ctl('thr', 'finish:halation::threshold', 'Halation · Threshold', -4, 4),
       ctl('head', 'finish:halation::headroom', 'Halation · Highlight headroom', 1, 16),
       ctl('warm', 'finish:halation::warmth', 'Halation · Warmth', 0, 1),
       ctl('grow', 'finish:halation::growth', 'Halation · Growth', 0, 1),
+      ctl('cons', 'finish:halation::conserve', 'Halation · Conserve', 0, 1),
       ctl('paper', 'layer:scene::p_paper', 'Test scene · Paper white', 0.5, 1),
     ],
-    notes: `**What it shows.** Film **halation**: a red-to-white halo around very bright light. Light strong enough to go right through the film bounces off its back and exposes it again from behind, reaching the red layer first. So the halo is red, then orange as the green layer joins, then white as the light gets stronger, and the brightest sources look bigger than they are.
+    notes: `**What it shows.** Film **halation**: light strong enough to go right through the film bounces off its back and exposes it again from behind, reaching the red layer first. It shows as a thin red bleed hugging bright edges, landing on the darker picture right beside them, orange where it is strongest. The defaults are measured from a film-emulation grade (the Joo.Works ACES lite Halation PowerGrade): the bleed starts when a part's red passes about 0.73 on screen, reaches only a few pixels, and never turns the bright part itself red.
 
-**How it's built.** A Script layer draws a test scene: a grey ramp, a paper-white card, a teal patch and a row of small lamps that clip. The Finish stack turns the picture back into light (linear), guesses how much brighter than white the clipped parts were (**Highlight headroom**), and lets only light above **Threshold** halate: red from the red channel, green from the green, and a tight white bloom from the strongest.
+**How it's built.** A Script layer draws a test scene: a grey ramp, a paper-white card, a teal patch and a row of small lamps that clip. The Finish stack turns the picture into linear light, takes the red over **Threshold** as the source (with **Highlight headroom** guessing how much brighter than white the clipped parts were), spreads it a few pixels (the same distance from a one-pixel glint as from a big card's edge), and adds it, tinted, only where the picture is darker. **Reach** adds a wider, softer haze.
 
 **Try this.**
-• The lamps glow red-orange and grow; the paper (0.90) stays clean; the teal patch makes no red halo; the ramp starts to glow only at its very end.
-• Raise Test scene · Paper white to 1.00: now the card clips too and halates like a lamp. An 8-bit picture can't tell a clipped card from a light, so keep paper below clipping, as a camera would.
-• Try Warmth, Growth and Headroom, or the Subtle, Classic cine and Strong presets on the Halation card.`,
+• The ramp bleeds red above and below from about three quarters along; the paper card gets a thin red rim on the dark wall; the teal patch makes none (no red in it); the clipped lamps bleed furthest.
+• Lower Test scene · Paper white to 0.60: the card drops under the threshold and its rim goes.
+• Try Warmth (red to orange), Reach (the wide haze), Conserve (the bright part gives up what it bleeds), or the Subtle, Classic cine and Strong presets on the Halation card.`,
   })),
   ex('finishTime', fbmGraph({ scale: 2.5, timeScale: 0.5, preset: '4' }), play({
     layers: [scriptLayer('comet', 'Comet', SKETCH_ORBIT)],

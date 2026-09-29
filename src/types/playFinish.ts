@@ -7,7 +7,7 @@
  */
 import {
   FN_EFFECTS, FN_KINDS, FN_TONE_MODES, FN_TIME_MAPS, FN_TIME_QUALITY, FN_CURVE_CHANNELS, FN_HUE_CURVES, FN_COMPARE_ID, FN_COMPARE_PARAMS,
-  fnDefaultEffect, fnDefaultCurves, fnDefaultCompare, fnParseCustom, type FnCompare, type FnCurves, type FnKind, type FnParam,
+  fnDefaultEffect, fnDefaultCurves, fnDefaultCompare, fnParseCustom, fnMigrateHalation, type FnCompare, type FnCurves, type FnKind, type FnParam,
 } from '../play/kit/finish.js';
 import type { SealedBlob } from './userNode';
 import { decryptPayload, encryptPayload } from '../playfile/sealing';
@@ -297,7 +297,9 @@ export function parseFinishEffect(raw: unknown): FinishEffect | null {
   const id = typeof r.id === 'string' && r.id.trim() ? r.id.slice(0, 80) : finishEffectId(kind);
   const e = newFinishEffect(kind, id);
   e.enabled = r.enabled !== false;
-  for (const p of FN_EFFECTS[kind].params) e[p.key] = clampNum(r[p.key], p);
+  // Halation saved before the reference model: its numbers move to the new scale first (fnMigrateHalation).
+  const src = kind === 'halation' ? fnMigrateHalation(r as { kind: string; [key: string]: unknown }) : r;
+  for (const p of FN_EFFECTS[kind].params) e[p.key] = clampNum(src[p.key], p);
   if (kind === 'grade') {
     e.tone = typeof r.tone === 'string' && FN_TONE_MODES.includes(r.tone) ? r.tone : 'none';
     e.curves = parseCurves(r.curves);

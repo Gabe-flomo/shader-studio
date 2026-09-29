@@ -7,7 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   FN_EFFECTS, FN_KINDS, fnActive, fnAnimated, fnBakeLut, fnBuildFinal, fnCurveEval, fnDefaultCurves, fnDefaultEffect, fnEnergy, fnGradePixel,
-  fnHalationTerms, fnHueCurveEval, fnHueCurvesUsed, fnCurvesNeutral, fnRing, fnRingSize, fnRunning, fnWheel, fnLuma, type FnEffect,
+  FN_HAL, FN_HALATION_PRESETS, fnHalSource, fnHalSpread, fnHalTailEdge, fnHalTailMix, fnHalEdgeBleed, fnHalReceive, fnHalTint, fnHalPixel, fnMigrateHalation,
+  fnHueCurveEval, fnHueCurvesUsed, fnCurvesNeutral, fnRing, fnRingSize, fnRunning, fnWheel, fnLuma, type FnEffect,
 } from '../kit/finish.js';
 import { FN_TONE_GLSL, FN_CRT_MASK_GLSL } from '../kit/finishGlsl.js';
 import { ToneMapNode, CrtMaskNode } from '../../nodes/definitions/effects';
@@ -172,18 +173,107 @@ describe('halation', () => {
     expect(fnEnergy(Math.pow(0.9, 2.2), 6)).toBeLessThan(1.1);
   });
 
-  it('only light over the threshold halates, per channel: a teal patch makes no red halo', () => {
-    const E = (display: number[], head = 6) => display.map(c => fnEnergy(Math.pow(c, 2.2), head));
-    const lamp = fnHalationTerms(E([1, 1, 1]), 0.5);
-    expect(lamp[0]).toBeGreaterThan(10); expect(lamp[1]).toBeGreaterThan(0); expect(lamp[2]).toBeGreaterThan(0);
-    const paper = fnHalationTerms(E([0.9, 0.9, 0.9]), 0.5);
-    expect(paper[0]).toBeLessThan(0.01);
-    const teal = fnHalationTerms(E([0, 1, 0.94]), 0.5);
-    expect(teal[0]).toBe(0);
-    // Brighter light halates more; the white term needs far more than the red one.
-    const mid = fnHalationTerms([3, 3, 3], 0.5), strong = fnHalationTerms([30, 30, 30], 0.5);
-    expect(strong[0]).toBeGreaterThan(mid[0]);
-    expect(mid[2]).toBeLessThan(mid[0] * 0.3);
+  it('only red over the threshold bleeds, with a soft knee: teal makes none, and the reference starts at linear 0.45', () => {
+    const lin = (display: number[]) => display.map(c => Math.pow(c, 2.2));
+    const thr = FN_HAL.threshold;
+    expect(Math.pow(2, thr)).toBeCloseTo(0.45, 2);
+    // Under the knee: nothing. A grey of display 0.55 (linear 0.27) is under 0.45 × (1 − 0.3).
+    expect(fnHalSource(lin([0.55, 0.55, 0.55]), thr, 6)[0]).toBe(0);
+    // Over it: the excess, rising steadily (the glints in the reference bleed in proportion to it).
+    const a = fnHalSource(lin([0.8, 0.8, 0.8]), thr, 6)[0], b = fnHalSource(lin([0.87, 0.87, 0.87]), thr, 6)[0];
+    expect(a).toBeGreaterThan(0.1); expect(b).toBeGreaterThan(a);
+    expect(b - a).toBeCloseTo(Math.pow(0.87, 2.2) - Math.pow(0.8, 2.2), 2);
+    // Teal has no red: no bleed however bright it is.
+    expect(fnHalSource(lin([0, 1, 0.94]), thr, 6)[0]).toBe(0);
+    // Only light over white in every channel grows (the white source): paper at 0.9 doesn't, a clipped lamp does.
+    expect(fnHalSource(lin([0.9, 0.9, 0.9]), thr, 6)[1]).toBeLessThan(0.01);
+    expect(fnHalSource([1, 1, 1], thr, 6)[1]).toBeGreaterThan(10);
+  });
+
+  it('the radius profile: a tight max-spread (σ 4.5 px at 1080 lines) plus a Reach tail, scaled with the picture', () => {
+    expect(fnHalSpread(0)).toBe(1);
+    // Half strength at σ·√(2 ln 2) ≈ 5.3 px, under 2 % by 12 px: the thin edge bleed the reference shows.
+    expect(fnHalSpread(4.5 * Math.sqrt(2 * Math.LN2))).toBeCloseTo(0.5, 6);
+    expect(fnHalSpread(12)).toBeLessThan(0.03);
+    // Measured at the dog's back (sky beside the edge), relative to 4 px: 6 px 0.59, 8 px 0.28, 10 px 0.11.
+    const rel = (d: number) => fnHalSpread(d) / fnHalSpread(4);
+    expect(rel(6)).toBeCloseTo(0.59, 1); expect(rel(8)).toBeCloseTo(0.28, 1); expect(rel(10)).toBeCloseTo(0.11, 1);
+    // Twice the lines, twice the distance.
+    expect(fnHalSpread(10, 2160)).toBeCloseTo(fnHalSpread(5, 1080), 9);
+    // The tail: 0 at Reach 0, the fitted strength from 0.5, and wider (not stronger) toward 1.
+    expect(fnHalTailEdge(3, 0)).toBe(0);
+    expect(fnHalTailMix(0.5)).toEqual({ strength: 1, wide: 0 });
+    expect(fnHalTailEdge(0, 0.5)).toBeCloseTo(FN_HAL.tail / 2, 3);
+    expect(fnHalTailEdge(40, 1)).toBeGreaterThan(fnHalTailEdge(40, 0.5));
+    // The whole bleed falls off steadily with distance, and Amount scales it.
+    let prev = Infinity;
+    for (let d = 0; d <= 60; d += 2) { const v = fnHalEdgeBleed(d, 0.3); expect(v).toBeLessThanOrEqual(prev); prev = v; }
+    expect(fnHalEdgeBleed(4, 0.3, 2)).toBeCloseTo(2 * fnHalEdgeBleed(4, 0.3, 1), 9);
+    // Most of it is within ~10 px: the tight part dominates near the edge.
+    expect(fnHalEdgeBleed(20, 0.3)).toBeLessThan(fnHalEdgeBleed(3, 0.3) * 0.25);
+  });
+
+  it('the tint is red with a touch of orange where strong, and takes a little blue away', () => {
+    const [r, g, b] = fnHalTint(0.2, FN_HAL.warmth);
+    expect(r).toBe(0.2); expect(b).toBeCloseTo(-0.014, 6);
+    expect(g / r).toBeGreaterThan(0.15); expect(g / r).toBeLessThan(0.3);
+    // Far out (a faint bleed) it is nearly pure red.
+    const far = fnHalTint(0.005, FN_HAL.warmth);
+    expect(far[1] / far[0]).toBeLessThan(0.02);
+    // Warmth 0 is pure red, 1 more orange.
+    expect(fnHalTint(0.2, 0)[1]).toBe(0);
+    expect(fnHalTint(0.2, 1)[1]).toBeGreaterThan(g);
+    expect(fnHalTint(-1, 1)).toEqual([0, 0, -0]);
+  });
+
+  it('lands on the dark side of an edge only, and Conserve takes it from the bright part', () => {
+    expect(fnHalReceive(0.05)).toBe(1);
+    expect(fnHalReceive(0.9)).toBe(0);
+    const sky = [0.29, 0.33, 0.4], dog = [0.83, 0.82, 0.8];
+    const out = fnHalPixel(sky, 0.2, 0);
+    expect(out[0] - sky[0]).toBeGreaterThan(0.1);
+    expect(out[2]).toBeLessThan(sky[2]);
+    // The bright part itself takes no bleed…
+    const hi = fnHalPixel(dog, 0.5, 0, { conserve: 0 });
+    hi.forEach((c, i) => expect(c).toBeCloseTo(dog[i], 9));
+    // …and with Conserve loses a share of its excess, evenly: 1 takes the red down to the threshold.
+    const src = dog[0] - Math.pow(2, FN_HAL.threshold);
+    const kept = fnHalPixel(dog, 0.5, src, { conserve: 1 });
+    expect(kept[0]).toBeCloseTo(Math.pow(2, FN_HAL.threshold), 6);
+    expect(fnHalPixel(dog, 0.5, src)[1]).toBeCloseTo(dog[1] - FN_HAL.conserve * src, 6);
+  });
+
+  it('presets are in range, Classic cine is the measured default, and old effects migrate', () => {
+    const params = FN_EFFECTS.halation.params;
+    for (const pr of FN_HALATION_PRESETS) {
+      for (const [k, v] of Object.entries(pr.values)) {
+        const p = params.find(q => q.key === k)!;
+        expect(p, `${pr.name}.${k}`).toBeTruthy();
+        expect(v).toBeGreaterThanOrEqual(p.min); expect(v).toBeLessThanOrEqual(p.max);
+      }
+      expect(Object.keys(pr.values).sort()).toEqual(params.map(p => p.key).sort());
+    }
+    const d = fnDefaultEffect('halation', 'h');
+    const classic = FN_HALATION_PRESETS.find(p => p.name === 'Classic cine')!;
+    for (const [k, v] of Object.entries(classic.values)) expect(d[k]).toBe(v);
+    expect(d.model).toBe(FN_HAL.model);
+    // An effect saved before the model: Amount rescales (old 0.7 = new 1), the rest keeps its meaning, Conserve gets its default.
+    const old = { id: 'h', kind: 'halation', enabled: true, amount: 0.7, reach: 0.55, threshold: 0.5, headroom: 6, warmth: 0.5, growth: 0.4 };
+    const m = fnMigrateHalation(old);
+    expect(m).toMatchObject({ amount: 1, reach: 0.55, threshold: 0.5, headroom: 6, warmth: 0.5, growth: 0.4, conserve: FN_HAL.conserve, model: FN_HAL.model });
+    expect(fnMigrateHalation({ ...old, amount: 1.8 }).amount).toBe(2);
+    expect(fnMigrateHalation(m)).toBe(m);
+    // Through the file parser too, and a current record round-trips unchanged.
+    const parsed = parseFinish({ effects: [old] })!.effects[0];
+    expect(parsed).toMatchObject({ amount: 1, conserve: FN_HAL.conserve, model: FN_HAL.model });
+    expect(parseFinish({ effects: [d] })!.effects[0]).toEqual(d);
+  });
+
+  it('the pass reads the half-size max-spread and the tail levels', () => {
+    const { src, glow } = fnBuildFinal([fnDefaultEffect('halation', 'h')]);
+    expect(glow).toBe(true);
+    expect(src).toContain('uniform sampler2D uHM;');
+    expect(src).toContain('halation_conserve');
   });
 });
 

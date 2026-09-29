@@ -44,7 +44,7 @@ import {
   finishParamOf, finishParamsOf, finishTarget, lookFromGrade, newCustomEffect, newFinishEffect, patchFinishEffect, withCustomCode,
   type FinishCompare, type FinishEffect, type FinishHost, type FinishKind, type PlayFinish,
 } from '../../../types/playFinish';
-import { FN_COMPARE_PARAMS, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam } from '../../../play/kit/finish.js';
+import { FN_COMPARE_PARAMS, FN_HALATION_PRESETS, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam } from '../../../play/kit/finish.js';
 
 const TONE_OPTIONS = [
   { value: 'none', label: 'None' }, { value: 'aces', label: 'ACES' }, { value: 'agx', label: 'AgX' }, { value: 'hable', label: 'Hable' },
@@ -58,12 +58,8 @@ const TIME_MAPS = [
   { value: 'radial', label: 'Radial', title: 'The past grows outward from a centre' },
   { value: 'layer', label: 'A layer', title: 'Where a layer is (even a hidden one), the past shows' },
 ];
-/** Halation presets: they only set the sliders. */
-const HALATION_PRESETS: Array<{ name: string; values: Record<string, number> }> = [
-  { name: 'Subtle', values: { amount: 0.4, reach: 0.35, threshold: 1, headroom: 5, warmth: 0.3, growth: 0.2 } },
-  { name: 'Classic cine', values: { amount: 0.8, reach: 0.55, threshold: 0.5, headroom: 6, warmth: 0.5, growth: 0.4 } },
-  { name: 'Strong', values: { amount: 1.4, reach: 0.8, threshold: 0, headroom: 8, warmth: 0.7, growth: 0.7 } },
-];
+/** Halation presets (the kit's): they only set the sliders. */
+const HALATION_PRESETS = FN_HALATION_PRESETS;
 
 /** The Finish tab: the picture's stack, or the sound's effect chains (AudioFxPanel). */
 export function FinishPanel(props: {
@@ -430,8 +426,8 @@ function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: Array<{ i
     case 'halation': return (
       <>
         {k.row('Preset', <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>{HALATION_PRESETS.map(pr => <Button key={pr.name} size="sm" onClick={() => onPatch(pr.values)}>{pr.name}</Button>)}</div>, 'Starting points: they only set the sliders below.')}
-        {k.nums('amount', 'reach', 'threshold', 'headroom', 'warmth', 'growth')}
-        {k.note(<>Film’s halo: light bright enough to pass through the film bounces back and exposes the red layer first, so the glow goes red, then orange, then white as the light gets stronger. Only light brighter than white does it: a lamp or the sun, not white paper. A colour with little red in it (teal, blue) makes no red halo. An 8-bit picture stops at white, so <b>Highlight headroom</b> guesses how much brighter the clipped parts really were.</>)}
+        {k.nums('amount', 'reach', 'threshold', 'headroom', 'warmth', 'growth', 'conserve')}
+        {k.note(<>Film’s halation: light bright enough to pass through the film bounces back and exposes the red layer from behind. It shows as a thin red bleed hugging bright edges and glints, landing on the darker picture right beside them (the bright part itself stays clean), orange where it is strongest. Only parts whose red is over <b>Threshold</b> bleed; a colour with little red in it (teal, blue) doesn’t. An 8-bit picture stops at white, so <b>Highlight headroom</b> guesses how much brighter the clipped parts really were. The defaults match a measured film-emulation grade.</>)}
       </>
     );
     case 'time': return <TimeEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
