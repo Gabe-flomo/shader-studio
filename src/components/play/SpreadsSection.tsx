@@ -49,7 +49,8 @@ function SpreadCard({ sp, play, nodes, liveValues, update }: {
   const tk = useTokens();
   const [open, setOpen] = useState(true);
   const [draft, setDraft] = useState<string | null>(null);
-  const liveNum = (id: string | undefined): number | undefined => { const v = id ? liveValues.get(id) : undefined; return typeof v === 'number' ? v : undefined; };
+  // A driven Amount or Shift shows its live value; otherwise the record's.
+  const liveNum = (id: string | undefined): number | undefined => { if (!id || !play.mappings.some(m => m.enabled && m.controlId === id)) return undefined; const v = liveValues.get(id); return typeof v === 'number' ? v : undefined; };
   const amountCtl = play.controls.find(c => c.target === spreadTarget(sp.id, 'amount'));
   const shiftCtl = play.controls.find(c => c.target === spreadTarget(sp.id, 'shift'));
   const amount = liveNum(amountCtl?.id) ?? sp.amount, shift = liveNum(shiftCtl?.id) ?? sp.shift;

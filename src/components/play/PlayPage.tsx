@@ -110,6 +110,7 @@ import type { PlayPairMapping } from '../../types/play';
 import { ContextMenuArea } from '../ui/ContextMenuArea';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { SpreadsSection } from './SpreadsSection';
+import { parseSpreadTarget } from '../../types/play';
 import { addToSpread, canSpread, makeSpread, removeFromSpread, spreadOf } from '../../play/spreads';
 import { wireSpreadResets } from '../../play/spreadReset';
 import { PairCard, PairMappingRow, pairMappingLabel } from './PairControls';
@@ -227,6 +228,12 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     const mt = parseMacroTarget(control.target);
     if (mt) {
       if (typeof value === 'number') setPlay(p => setMacroValue(p, mt.rackId, mt.n, value));
+      return;
+    }
+    // A Spread's Amount or Shift: the Spread keeps it (docs/spread-control.md).
+    const st = parseSpreadTarget(control.target);
+    if (st) {
+      if (typeof value === 'number') setPlay(p => ({ ...p, spreads: (p.spreads ?? []).map(x => (x.id === st.spreadId ? { ...x, [st.key]: value } : x)) }));
       return;
     }
     const lt = parseLayerTarget(control.target);
