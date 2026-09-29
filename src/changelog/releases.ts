@@ -43,6 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-09-28',
     title: 'Halation, measured',
     highlights: [
+      { area: 'Play', text: 'The Granulator and the Sample player pick sounds from linked folders too.' },
       { area: 'Play', text: 'Empty Layers and Mappings pages offer Add layer, Layer sets, Add control and Add mapping right there.' },
       { area: 'Play', text: 'Halation now matches a real film-emulation grade: a thin red bleed hugging bright edges and glints, landing on the darker picture beside them.', link: { kind: 'example', key: 'finishHalation', page: 'play' } },
       { area: 'Play', text: 'Halation has a Conserve slider (the bright part gives up what it bleeds), and its presets and defaults follow the measurement.', link: { kind: 'doc', path: 'docs/finish-stack.md' } },
