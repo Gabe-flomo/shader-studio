@@ -79,7 +79,13 @@ export interface KitDataset { id: string; name: string; result: import('../../da
 export type { BqPlan } from './queue.js';
 
 /** What the graph's Layers node reads: colour at half resolution, and a 16-bit packed distance grid (row 0 at the top). */
-export interface ShaderTap { color: HTMLCanvasElement; field: Uint8Array; gw: number; gh: number }
+/**
+ * What the Layers node reads each frame: the layers at full size (`layers`,
+ * the GPU distance field's source, see jfa.js) and half size (`color`), a
+ * signature that changes when they do, and the CPU fallback field (`field`,
+ * computed only when read: gw × gh, 16-bit packed, row 0 at the top).
+ */
+export interface ShaderTap { color: HTMLCanvasElement; layers: HTMLCanvasElement; sig: number; readonly field: Uint8Array; gw: number; gh: number }
 
 export interface LayerKit {
   frame(ctx: CanvasRenderingContext2D, record: PlayRecord, env: KitEnv): void;
