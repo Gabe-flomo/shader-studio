@@ -35,8 +35,8 @@ import { toast } from '../../ui/toastStore';
 import { askConfirm } from '../../ui/dialogStore';
 import type { PlayRecord } from '../../../types/play';
 import {
-  COUNT_INS, TAPE_MAX_SECONDS, clearTrack, clipBounds, deleteClip, emptyArrangement, patchTrack, recordBpm, setClipMute, trackClips, trimClip,
-  type ArrClip, type ArrTrack, type CountIn, type PlayArrangement,
+  COUNT_INS, NOTE_MIN, TAPE_MAX_SECONDS, addNote, clearTrack, clipBounds, deleteClip, deleteNote, emptyArrangement, notePitchRange, patchNote, patchTrack, recordBpm, setClipMute, trackClips, trimClip,
+  type ArrClip, type ArrNote, type ArrTrack, type CountIn, type PlayArrangement,
 } from '../../../types/playArrangement';
 import { AE_RACKS_MAX, newRack, patchRack, type AeRack } from '../../../types/playAudioEngine';
 import { tape, useTape, type TapePhase } from '../../../lib/tape';
@@ -726,6 +726,12 @@ function Lane({ rack, row, arr, track, span, preview, height, recording, selecte
   const recRef = useMemo(() => (el: HTMLElement | null) => registerRec(el, recSlot.current), [registerRec]);
   const [w, setW] = useState(0);
   const [trim, setTrim] = useState<{ index: number; t: number; d: number } | null>(null);
+  // Editing notes on a MIDI lane: the selected note, and one being dragged (drawn in place of the record's).
+  const [noteSel, setNoteSel] = useState(-1);
+  const [noteDrag, setNoteDrag] = useState<{ index: number; note: ArrNote } | null>(null);
+  const midi = (track?.show ?? 'midi') === 'midi';
+  const shownTrack = useMemo(() => (noteDrag && track ? { ...track, notes: track.notes.map((n, i) => (i === noteDrag.index ? noteDrag.note : n)) } : track), [track, noteDrag]);
+  useEffect(() => { if (noteSel >= 0 && !(track?.notes[noteSel])) setNoteSel(-1); }, [track, noteSel]);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -759,10 +765,31 @@ function Lane({ rack, row, arr, track, span, preview, height, recording, selecte
     // Past the tape's end: dimmed.
     if (arr.length > 0) { g.fillStyle = alpha(tk.text.primary, 0.05); g.fillRect(x(arr.length), 0, w - x(arr.length), height); }
     const wavePreview = preview?.status === 'ok' ? { peaks: preview.peaks, length: preview.length } : null;
-    clips.forEach((clip, i) => drawClip(g, clip, i === selectedClip, clip.mute ? tk.text.faint : color, x, height, track, wavePreview, tk, rack.name, controls));
-  }, [w, height, span, bpm, arr.length, clips, selectedClip, color, preview, track, tk, rack.name, controls]);
+    clips.forEach((clip, i) => drawClip(g, clip, i === selectedClip, clip.mute ? tk.text.faint : color, x, height, shownTrack, wavePreview, tk, rack.name, controls, noteSel));
+  }, [w, height, span, bpm, arr.length, clips, selectedClip, color, preview, shownTrack, tk, rack.name, controls, noteSel]);
 
   const timeAt = (clientX: number) => { const r = ref.current!.getBoundingClientRect(); return Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * span; };
+  /** The note under a point on a MIDI lane, and whether it's by its right edge (resize). */
+  const hitNote = (clientX: number, clientY: number): { index: number; edge: boolean } | null => {
+    if (!midi || !track?.notes.length) return null;
+    const r = ref.current!.getBoundingClientRect(), px = clientX - r.left, py = clientY - r.top;
+    const x = (t: number) => (t / span) * r.width;
+    for (let i = track.notes.length - 1; i >= 0; i--) {
+      const n = track.notes[i];
+      const clip = clips.find(c => n.t < c.t + c.d && n.t + n.d > c.t);
+      if (!clip) continue;
+      const band = noteBand(height, x(clip.t + clip.d) - x(clip.t));
+      const geo = noteGeometry(track.notes, band.top, band.bottom);
+      const a = x(n.t), b = x(n.t + Math.max(n.d, 0.02)), y0 = geo.y(n.n);
+      if (px >= a - 2 && px <= b + 2 && py >= y0 - 1 && py <= y0 + geo.rh + 1) return { index: i, edge: b - a > 10 && b - px < 5 };
+    }
+    return null;
+  };
+  const pitchAt = (clientY: number): number => {
+    const r = ref.current!.getBoundingClientRect();
+    const band = noteBand(height, 200);
+    return noteGeometry(track?.notes ?? [], band.top, band.bottom).pitchAt(clientY - r.top);
+  };
   const hit = (clientX: number): { index: number; edge: 'start' | 'end' | null } | null => {
     const r = ref.current!.getBoundingClientRect(), px = clientX - r.left;
     for (let i = 0; i < clips.length; i++) {
@@ -786,6 +813,38 @@ function Lane({ rack, row, arr, track, span, preview, height, recording, selecte
   };
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button === 2) return;
+    const phase0 = useTape.getState().phase;
+    const hn = phase0 === 'recording' || phase0 === 'counting' ? null : hitNote(e.clientX, e.clientY);
+    if (hn && track) {
+      // A note: select it; drag to move it in time and pitch, its right edge to lengthen it, ⌥-drag up/down for velocity.
+      e.stopPropagation();
+      setNoteSel(hn.index);
+      onSelectClip(-1);
+      const el = e.currentTarget;
+      el.setPointerCapture(e.pointerId);
+      const n0 = track.notes[hn.index], t0 = timeAt(e.clientX), y0 = e.clientY, p0 = pitchAt(e.clientY);
+      let cur: ArrNote = n0, moved = false;
+      const move = (ev: PointerEvent) => {
+        moved = true;
+        const dt = timeAt(ev.clientX) - t0;
+        if (ev.altKey) cur = { ...n0, v: Math.max(0.01, Math.min(1, n0.v + (y0 - ev.clientY) / 120)) };
+        else if (hn.edge) cur = { ...n0, d: Math.max(NOTE_MIN, snapPoint(n0.t + n0.d + dt, bpm, 0, ev.shiftKey) - n0.t) };
+        else cur = { ...n0, t: Math.max(0, snapPoint(n0.t + dt, bpm, 0, ev.shiftKey)), n: Math.max(0, Math.min(127, n0.n + (pitchAt(ev.clientY) - p0))) };
+        setNoteDrag({ index: hn.index, note: cur });
+      };
+      const up = () => {
+        el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+        setNoteDrag(null);
+        if (moved && (cur.t !== n0.t || cur.n !== n0.n || cur.d !== n0.d || cur.v !== n0.v)) {
+          let at = hn.index;
+          editArr(a => { const r = patchNote(a, rack.id, hn.index, cur); at = r.index; return r.arr; }, hn.edge ? `Lengthened a note on ${rack.name}` : `Moved a note on ${rack.name}`);
+          setNoteSel(at);
+        }
+      };
+      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+      return;
+    }
+    setNoteSel(-1);
     const h = hit(e.clientX);
     if (!h) {
       onSelectClip(-1);
@@ -826,10 +885,28 @@ function Lane({ rack, row, arr, track, span, preview, height, recording, selecte
   const style: CSSProperties = { display: 'block', width: '100%', height, borderRadius: radius.sm, background: tk.bg.field, cursor, touchAction: 'none' };
   return (
     <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-      <canvas ref={ref} style={style} onPointerDown={onPointerDown}
-        onPointerMove={e => { if (e.buttons) return; const h = hit(e.clientX); setCursor(h?.edge ? 'ew-resize' : 'pointer'); }}
+      <canvas ref={ref} style={style} onPointerDown={onPointerDown} tabIndex={0}
+        onDoubleClick={e => {
+          // A new note where you double-click a MIDI lane (a beat long, velocity 0.8), snapped to the beat (⇧ free).
+          if (!midi) return;
+          const phase = useTape.getState().phase;
+          if (phase === 'recording' || phase === 'counting' || hitNote(e.clientX, e.clientY)) return;
+          const t = snapPoint(timeAt(e.clientX), bpm, 0, e.shiftKey), d = 60 / Math.max(1, bpm);
+          const note: ArrNote = { t, n: pitchAt(e.clientY), v: 0.8, d };
+          let at = -1;
+          editArr(a => { const r = addNote(a, rack.id, note); at = r.index; return r.arr; }, `Added a note on ${rack.name}`);
+          setNoteSel(at);
+        }}
+        onKeyDown={e => {
+          if ((e.key === 'Delete' || e.key === 'Backspace') && noteSel >= 0) {
+            e.preventDefault(); e.stopPropagation();
+            editArr(a => deleteNote(a, rack.id, noteSel), `Deleted a note on ${rack.name}`);
+            setNoteSel(-1);
+          }
+        }}
+        onPointerMove={e => { if (e.buttons) return; const hn = hitNote(e.clientX, e.clientY); if (hn) { setCursor(hn.edge ? 'ew-resize' : 'grab'); return; } const h = hit(e.clientX); setCursor(h?.edge ? 'ew-resize' : 'pointer'); }}
         onContextMenu={e => { e.preventDefault(); const h = hit(e.clientX); if (h) { onSelectClip(h.index); clipMenu(h.index, e.clientX, e.clientY); } }}
-        aria-label={`${rack.name}’s lane: ${clips.length} clip${clips.length === 1 ? '' : 's'}. Click a clip to select it (drag its ends to trim), or the lane to set the record point.`} />
+        aria-label={`${rack.name}’s lane: ${clips.length} clip${clips.length === 1 ? '' : 's'}. Click a clip to select it (drag its ends to trim), or the lane to set the record point.${midi ? ' Drag a note to move it, its end to lengthen it, ⌥-drag for velocity, double-click to add one, Delete to remove it.' : ''}`} />
       {recording && <div ref={recRef} aria-hidden style={{ position: 'absolute', top: 2, bottom: 2, left: 0, width: 0, borderRadius: 3, background: alpha(tk.status.danger, 0.28), boxShadow: `inset 0 0 0 1px ${alpha(tk.status.danger, 0.8)}`, pointerEvents: 'none' }} />}
       <div ref={headRef} style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 2, marginLeft: -1, pointerEvents: 'none', background: recording ? tk.status.danger : tk.text.primary, opacity: 0.8 }} />
       {sel && !trim && (
@@ -844,9 +921,21 @@ function Lane({ rack, row, arr, track, span, preview, height, recording, selecte
   );
 }
 
+/** Where a MIDI lane draws each pitch: the track's own range (at least an octave), rows from the bottom up. Shared by drawing and hit-testing. */
+function noteGeometry(notes: readonly ArrNote[], top: number, bottom: number): { lo: number; hi: number; rh: number; y: (n: number) => number; pitchAt: (py: number) => number } {
+  const { lo, hi } = notePitchRange(notes);
+  const rows = hi - lo + 1, rh = Math.max(2, (bottom - top) / rows);
+  return { lo, hi, rh, y: n => bottom - (n - lo + 1) * rh, pitchAt: py => Math.max(0, Math.min(127, lo + Math.floor((bottom - py) / rh))) };
+}
+/** The lane's vertical band the notes sit in (drawClip's `top`/`bottom` for a clip with a title strip). */
+function noteBand(height: number, cw: number): { top: number; bottom: number } {
+  const strip = height >= 44 && cw > 30 ? 12 : 0;
+  return { top: 1.5 + strip + 2, bottom: height - 3.5 };
+}
+
 /** One clip: a rounded block in the track's colour, a title strip, the waveform (mirrored), the rack controls' moves as faint lines. */
 function drawClip(g: CanvasRenderingContext2D, clip: ArrClip, selected: boolean, color: string, x: (t: number) => number, height: number, track: ArrTrack | undefined,
-  preview: { peaks: Float32Array; length: number } | null, tk: ReturnType<typeof useTokens>, name: string, controls: PlayRecord['controls']): void {
+  preview: { peaks: Float32Array; length: number } | null, tk: ReturnType<typeof useTokens>, name: string, controls: PlayRecord['controls'], selectedNote = -1): void {
   const x0 = x(clip.t), x1 = x(clip.t + clip.d), cw = Math.max(2, x1 - x0);
   const r = Math.min(4, cw / 2);
   const strip = height >= 44 && cw > 30 ? 12 : 0;
@@ -876,21 +965,20 @@ function drawClip(g: CanvasRenderingContext2D, clip: ArrClip, selected: boolean,
       g.fillRect(x0 + i * step, mid - hh, Math.max(1, step - 0.25), hh * 2);
     }
   } else {
-    // MIDI: the notes as bars, pitch up the lane (the track's own range), velocity as opacity.
-    const notes = (track?.notes ?? []).filter(n => n.t < clip.t + clip.d && n.t + n.d > clip.t);
+    // MIDI: the notes as bars, pitch up the lane (the track's own range), velocity as opacity; the selected one outlined.
     const all = track?.notes ?? [];
-    let lo = 127, hi = 0;
-    for (const n of all) { if (n.n < lo) lo = n.n; if (n.n > hi) hi = n.n; }
-    if (lo > hi) { lo = 48; hi = 72; }
-    if (hi - lo < 12) { const c = (lo + hi) / 2; lo = Math.max(0, Math.round(c - 6)); hi = lo + 12; }
-    const rows = hi - lo + 1, rh = Math.max(2, (bottom - top) / rows);
-    for (const n of notes) {
+    const geo = noteGeometry(all, top, bottom);
+    let any = false;
+    all.forEach((n, i) => {
+      if (!(n.t < clip.t + clip.d && n.t + n.d > clip.t)) return;
+      any = true;
       const nx0 = Math.max(x0, x(n.t)), nx1 = Math.min(x1, x(n.t + Math.max(n.d, 0.02)));
-      const ny = bottom - (n.n - lo + 1) * rh;
+      const ny = geo.y(n.n);
       g.fillStyle = alpha(color, clip.mute ? 0.3 : 0.45 + 0.5 * Math.max(0, Math.min(1, n.v)));
-      g.fillRect(nx0, ny, Math.max(2, nx1 - nx0 - 0.5), Math.max(1.5, rh - 0.75));
-    }
-    if (!notes.length) { g.fillStyle = alpha(color, 0.35); g.fillRect(x0, mid - 0.5, cw, 1); }
+      g.fillRect(nx0, ny, Math.max(2, nx1 - nx0 - 0.5), Math.max(1.5, geo.rh - 0.75));
+      if (i === selectedNote) { g.strokeStyle = tk.text.primary; g.lineWidth = 1.5; g.strokeRect(nx0 + 0.75, ny + 0.75, Math.max(2, nx1 - nx0 - 0.5) - 1.5, Math.max(1.5, geo.rh - 0.75) - 1.5); }
+    });
+    if (!any) { g.fillStyle = alpha(color, 0.35); g.fillRect(x0, mid - 0.5, cw, 1); }
   }
   // Rack controls' moves inside the clip: thin lines across the control's range.
   g.lineWidth = 1;

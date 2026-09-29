@@ -260,3 +260,31 @@ describe('how a track shows its tape', () => {
     expect(clearTrack(arr, 'r1').tracks.r1.show).toBe('audio');
   });
 });
+
+
+describe('editing notes on a MIDI clip', () => {
+  it('adds, moves, lengthens and deletes notes, keeps them sorted, and grows the clip to cover them', async () => {
+    const { addNote, patchNote, deleteNote, clampNote, notePitchRange, emptyArrangement, trackClips } = await import('../../types/playArrangement');
+    let arr = { ...emptyArrangement(), length: 4 };
+    let r = addNote(arr, 'r1', { t: 1, n: 60, v: 0.8, d: 0.5 });
+    arr = r.arr;
+    expect(arr.tracks.r1.notes).toEqual([{ t: 1, n: 60, v: 0.8, d: 0.5 }]);
+    expect(trackClips(arr.tracks.r1, arr.length)[0]).toMatchObject({ t: 1, d: 0.5 });
+    r = addNote(arr, 'r1', { t: 0.25, n: 64, v: 1, d: 0.25 });
+    arr = r.arr;
+    expect(r.index).toBe(0);
+    expect(arr.tracks.r1.notes.map(n => n.t)).toEqual([0.25, 1]);
+    // Move the first note past the second: it re-sorts, the index follows it.
+    r = patchNote(arr, 'r1', 0, { t: 2, n: 200, d: 10 });
+    arr = r.arr;
+    expect(r.index).toBe(1);
+    expect(arr.tracks.r1.notes[1]).toMatchObject({ t: 2, n: 127, d: 2 }); // clamped to MIDI's range and the tape's end
+    expect(trackClips(arr.tracks.r1, arr.length).some(c => c.t <= 2 && c.t + c.d >= 4)).toBe(true);
+    arr = deleteNote(arr, 'r1', 1);
+    expect(arr.tracks.r1.notes.length).toBe(1);
+    expect(clampNote({ t: -1, n: 60, v: 2, d: 0 }, 0)).toEqual({ t: 0, n: 60, v: 1, d: 0.01 });
+    expect(notePitchRange([])).toEqual({ lo: 48, hi: 72 });
+    expect(notePitchRange([{ t: 0, n: 60, v: 1, d: 1 }])).toEqual({ lo: 54, hi: 66 });
+    expect(notePitchRange([{ t: 0, n: 30, v: 1, d: 1 }, { t: 0, n: 90, v: 1, d: 1 }])).toEqual({ lo: 30, hi: 90 });
+  });
+});

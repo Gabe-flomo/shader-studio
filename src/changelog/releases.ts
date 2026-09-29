@@ -43,6 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-09-29',
     title: 'Tabs on every layer editor',
     highlights: [
+      { area: 'Play', text: 'Edit notes on the tape: drag to move, drag the end to lengthen, ⌥-drag for velocity, double-click to add, Delete to remove.' },
       { area: 'Play', text: 'Tape clips show their MIDI notes again; a track can show as Audio instead (⋯ → Show the tape as).' },
       { area: 'Play', text: 'Layer editors work in tabs: one section at a time, remembered per layer, with Show all to stack them again.', link: { kind: 'doc', path: 'docs/editor-layout.md' } },
     ],
