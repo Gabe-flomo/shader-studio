@@ -111,6 +111,16 @@ export interface ParamDef {
    * over relying on `step === 1` as the signal.
    */
   compileTime?: boolean;
+  /**
+   * Groups this float param with another into one "range" row (a min/max pair rendered as two
+   * compact slots side by side, e.g. Remap's "Input range" [inMin … inMax]) instead of two full
+   * rows. Set this on the FIRST (lower) param of the pair; `with` names the second param's key
+   * and `label` is the row's shared heading. The underlying params are unchanged — still separate
+   * floats, each individually wired/keyframed/mapped — only the layout is combined. The second
+   * param's own `ParamDef` needs no `pair` field; it's found via `with` and skipped when the
+   * renderer reaches it directly.
+   */
+  pair?: { with: string; label: string };
 }
 
 // Node definition (blueprint)
