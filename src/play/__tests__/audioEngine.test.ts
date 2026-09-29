@@ -80,8 +80,9 @@ describe('four-char codes and targets', () => {
     expect(auTargetExists(ae, 'au:rk_a:fx_d::4')).toBe(true);
     expect(auTargetExists(ae, 'au:rk_a:fx_gone::4')).toBe(false);
     expect(auTargetExists(ae, 'au:rk_b:inst::4')).toBe(false);
-    // The sample player has no plug-in parameters.
-    expect(auTargetExists({ racks: [rack({ instrument: { id: AE_INST, kind: 'sampler', zones: [] } })] }, 'au:rk_a:inst::1')).toBe(false);
+    // The sample player has no plug-in parameters: only its Sample index settings (0..3, samplerIndex.test.ts).
+    expect(auTargetExists({ racks: [rack({ instrument: { id: AE_INST, kind: 'sampler', zones: [] } })] }, 'au:rk_a:inst::1')).toBe(true);
+    expect(auTargetExists({ racks: [rack({ instrument: { id: AE_INST, kind: 'sampler', zones: [] } })] }, 'au:rk_a:inst::7')).toBe(false);
   });
 });
 
