@@ -122,3 +122,23 @@ state changes again. "Always expand cards", in the Layers tab's header,
 turns this off for people who want every card open all the time. This
 only applies to the plain sidebar list — the split view's list is always
 header-only, with the full editor beside it.
+
+
+## Tabs by default
+
+*Added 29 Sep 2026.* Every layer editor with two or more `Section`s shows them as
+**tabs**: one section at a time, a strip of tabs on top (sticky in the big
+panel, a compact scrolling row in the sidebar card), the open tab remembered per
+layer (`playUi.ts` `sectionTabs`, scope `layer:<id>`; an editor on its own, like
+Finish → Grade, remembers per kind). A fresh layer opens on its `primary`
+section. Sections register themselves with the host (`sectionTabs.ts`), so a
+conditional section simply appears and disappears as a tab, and if the open one
+goes, the primary shows; a section with its own switch shows a dot for on/off,
+and a `summary` becomes the tab's tooltip. A tab opened once stays mounted while
+hidden, so nothing held inside it is lost on a switch. `revealSection(layerId,
+key)` opens a layer on a given tab (reveals from notes, controls and effects use
+it). **Show all**, at the end of the strip, stacks every section instead — the
+folded-by-default layout above, with Expand all / Collapse all — one global
+choice (`sectionsShowAll`); **Tabs** brings the strip back. ←/→ move between
+tabs when the strip has focus. Server rendering and the host's first render
+show the stacked cards, so the first paint isn't empty.

@@ -46,6 +46,7 @@ import { askConfirm } from '../ui/dialogStore';
 import { SoloButton, SoloStrip } from './Solo';
 import { LayerReadings } from './MapToMenu';
 import { Section } from './layers/Section';
+import { BigEditorScaffold } from './layers/BigEditorScaffold';
 import { clampLayersSplitRatio, LAYERS_SPLIT_DEFAULT_RATIO, usePlayUi } from './playUi';
 import { NOTE_REF_TYPE, noteRef } from './noteRefs';
 import { playOverlay, type ShapeDrawing } from '../../play/overlay';
@@ -74,11 +75,6 @@ import { appDropMakers } from './dropMakers';
 import { startOverMenuItem } from '../../play/startOver';
 
 const KIND = BUILTIN_LAYER;
-
-/** "Expand all" / "Collapse all", in a layer card's header once its editor is open. */
-const EXPAND_ALL_BTN = (tk: ReturnType<typeof useTokens>): React.CSSProperties => ({
-  border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.faint, font: `600 10.5px ${fontFamily.ui}`,
-});
 
 /** Dragging a row to reorder it: the drag's data type, and which row it is (dragover can't read the data). */
 const ROW_TYPE = 'application/x-playfield-row';
@@ -878,8 +874,6 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   const shows = open && !headerOnly;
   const summary = !shows ? matteMaskSummary(play, l) : '';
   const reveal = usePlayUi(s => s.reveal);
-  const expandAllSections = usePlayUi(s => s.expandAllSections);
-  const collapseAllSections = usePlayUi(s => s.collapseAllSections);
 
   // Relationship nesting: a member row indents under its relationship's row (12px on a phone, 18px
   // otherwise — the same as a group's children), with a connector and a role chip.
@@ -980,21 +974,18 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
       )}
       {shows && (
         <>
-          {!isBackground && l.kind !== 'null' && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, margin: '4px 2px 0' }}>
-              <button type="button" onClick={() => expandAllSections(l.kind)} style={EXPAND_ALL_BTN(tk)}>Expand all</button>
-              <button type="button" onClick={() => collapseAllSections(l.kind)} style={EXPAND_ALL_BTN(tk)}>Collapse all</button>
-            </div>
-          )}
           <MatteMaskBar f={f} play={play} changePlay={onChangePlay} drawing={maskDrawing} onSelect={onSelect} />
-          {body}
-          {SENSOR_READS_FOR[l.kind] && l.kind !== 'null' && (
-            <Section kind={l.kind} title={l.kind === 'audio' ? 'Bands' : 'Readings'} hint={l.kind === 'audio'
-              ? 'How loud each part of the sound is right now. Map… sends one to a control: bass to size, treble to sparkle.'
-              : 'What this layer measures right now. Map… sends it to a control.'}>
-              <LayerReadings layer={l} />
-            </Section>
-          )}
+          {/* The editor's Sections as tabs (or stacked, with Show all): docs/editor-layout.md. */}
+          <BigEditorScaffold scope={`layer:${l.id}`} compact={!big}>
+            {body}
+            {SENSOR_READS_FOR[l.kind] && l.kind !== 'null' && (
+              <Section kind={l.kind} title={l.kind === 'audio' ? 'Bands' : 'Readings'} hint={l.kind === 'audio'
+                ? 'How loud each part of the sound is right now. Map… sends one to a control: bass to size, treble to sparkle.'
+                : 'What this layer measures right now. Map… sends it to a control.'}>
+                <LayerReadings layer={l} />
+              </Section>
+            )}
+          </BigEditorScaffold>
           {l.kind !== 'null' && l.kind !== 'drumpad' && !isBackground && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
         </>
       )}

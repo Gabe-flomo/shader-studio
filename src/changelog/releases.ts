@@ -43,6 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-09-28',
     title: 'Halation, measured',
     highlights: [
+      { area: 'Play', text: 'Layer editors work in tabs: one section at a time, remembered per layer, with Show all to stack them again.', link: { kind: 'doc', path: 'docs/editor-layout.md' } },
       { area: 'Studio', text: 'The Layers node builds its distance field on the GPU: SDF Glow on layers is as smooth as on a shape.', link: { kind: 'example', key: 'particleGlow' } },
       { area: 'Play', text: 'Halation is bounded: a clipped white or a bright paper bleeds no more than a glint, so the rim stays thin and red-orange.' },
       { area: 'Play', text: 'Granulator grains draw as straight pills along the sample (length = grain size, each at its own height), and nulls from grains follow the same layout.' },
