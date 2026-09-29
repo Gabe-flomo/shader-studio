@@ -9,7 +9,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.hoisted(() => {
-  (globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} };
+  const g = globalThis as { localStorage?: unknown; window?: unknown; Worker?: unknown };
+  g.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} };
+  // TrackerFeed's constructor only checks these exist (docs/tracking.md: 'unsupported' otherwise);
+  // the worker itself is mocked below, so a plain stub is enough.
+  g.window = g.window ?? {};
+  g.Worker = g.Worker ?? class {};
 });
 
 vi.mock('../cameraInput', () => ({ cameraInput: { start: vi.fn(async () => 'on'), element: vi.fn(() => null) } }));
@@ -80,6 +85,8 @@ describe('TrackerFeed loading states', () => {
     const p1 = feed.start();
     const p2 = feed.start();
     expect(p1).toBe(p2);
+    // Let the mocked camera's own promise resolve before the tracker's is asked for.
+    await vi.waitFor(() => { if (!resolveTracker) throw new Error('not yet'); });
     resolveTracker({ stop: vi.fn(), setPaused: vi.fn(), setOptions: vi.fn() });
     await p1;
     expect(startTracker).toHaveBeenCalledTimes(1);

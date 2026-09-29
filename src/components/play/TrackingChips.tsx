@@ -13,7 +13,7 @@ import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { trackerFeeds, type TrackerKind, type TrackerLoadProgress, type TrackerStatus } from '../../lib/handFeed';
-import { loadPct, MODEL_BYTES, modelsBundled, sizeText, useTrackerCacheSettings } from '../../lib/trackerCache';
+import { loadPct, MODEL_BYTES, modelsBundled, sizeText as modelSizeText, useTrackerCacheSettings } from '../../lib/trackerCache';
 import { playEngine } from '../../lib/playEngine';
 import { BAKE_RATES, bakeSig, bakeState, onBakes, trackerOptionsFor } from '../../lib/trackBakes';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -51,7 +51,7 @@ export const isBusy = (status: TrackerStatus): boolean => status === 'starting' 
 export function useModelNote(kind: TrackerKind): string {
   const keepModels = useTrackerCacheSettings(s => s.keepModels);
   if (modelsBundled()) return 'Bundled with the app.';
-  return keepModels ? `Models are kept on this device — ${sizeText(MODEL_BYTES[kind])}.` : 'Downloaded when needed.';
+  return keepModels ? `Models are kept on this device — ${modelSizeText(MODEL_BYTES[kind])}.` : 'Downloaded when needed.';
 }
 
 /** Re-render when a bake finishes loading. */
