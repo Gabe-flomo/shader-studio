@@ -429,12 +429,18 @@ function coverNote(track: ArrTrack, note: ArrNote, length: number): ArrTrack {
 }
 
 /** Add a note (sorted in; the clip grows to cover it). Returns the arrangement and the note's index. */
+/** The tape grown to hold a note (edits never squash a note against the tape's end; the tape's cap still holds). */
+function lengthFor(arr: PlayArrangement, n: ArrNote): number {
+  return Math.min(TAPE_MAX_SECONDS, Math.max(arr.length, n.t + n.d));
+}
+
 export function addNote(arr: PlayArrangement, rack: string, note: ArrNote): { arr: PlayArrangement; index: number } {
   const t = arr.tracks[rack] ?? emptyTrack();
-  const n = clampNote(note, arr.length);
+  const n = clampNote(note, TAPE_MAX_SECONDS);
+  const length = lengthFor(arr, n);
   const notes = sortNotes([...t.notes, n]);
-  const track = coverNote({ ...t, notes }, n, arr.length);
-  return { arr: { ...arr, length: Math.max(arr.length, n.t + n.d), tracks: { ...arr.tracks, [rack]: track } }, index: notes.indexOf(n) };
+  const track = coverNote({ ...t, notes }, n, length);
+  return { arr: { ...arr, length, tracks: { ...arr.tracks, [rack]: track } }, index: notes.indexOf(n) };
 }
 
 /** Change a note (time, pitch, length, velocity). Returns the arrangement and the note's new index (notes stay sorted). */
@@ -442,10 +448,11 @@ export function patchNote(arr: PlayArrangement, rack: string, index: number, ove
   const t = arr.tracks[rack];
   const old = t?.notes[index];
   if (!t || !old) return { arr, index };
-  const n = clampNote({ ...old, ...over }, arr.length);
+  const n = clampNote({ ...old, ...over }, TAPE_MAX_SECONDS);
+  const length = lengthFor(arr, n);
   const notes = sortNotes(t.notes.map((x, i) => (i === index ? n : x)));
-  const track = coverNote({ ...t, notes }, n, arr.length);
-  return { arr: { ...arr, tracks: { ...arr.tracks, [rack]: track } }, index: notes.indexOf(n) };
+  const track = coverNote({ ...t, notes }, n, length);
+  return { arr: { ...arr, length, tracks: { ...arr.tracks, [rack]: track } }, index: notes.indexOf(n) };
 }
 
 /** Remove a note. */

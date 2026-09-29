@@ -278,8 +278,10 @@ describe('editing notes on a MIDI clip', () => {
     r = patchNote(arr, 'r1', 0, { t: 2, n: 200, d: 10 });
     arr = r.arr;
     expect(r.index).toBe(1);
-    expect(arr.tracks.r1.notes[1]).toMatchObject({ t: 2, n: 127, d: 2 }); // clamped to MIDI's range and the tape's end
-    expect(trackClips(arr.tracks.r1, arr.length).some(c => c.t <= 2 && c.t + c.d >= 4)).toBe(true);
+    expect(arr.tracks.r1.notes[1]).toMatchObject({ t: 2, n: 127, d: 10 }); // pitch clamped to MIDI's range; the tape grows to hold it
+    expect(arr.length).toBe(12);
+    expect(trackClips(arr.tracks.r1, arr.length).some(c => c.t <= 2 && c.t + c.d >= 12)).toBe(true);
+    expect(patchNote(arr, 'r1', 1, { t: 100 }).arr.length).toBe(60); // never past the tape's cap
     arr = deleteNote(arr, 'r1', 1);
     expect(arr.tracks.r1.notes.length).toBe(1);
     expect(clampNote({ t: -1, n: 60, v: 2, d: 0 }, 0)).toEqual({ t: 0, n: 60, v: 1, d: 0.01 });
