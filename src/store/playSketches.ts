@@ -681,7 +681,7 @@ function draw(s) {
   ctx.fillStyle = '#16161b';
   ctx.fillRect(0, 0, W, H);
   const label = (text, x, y) => { ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = (2.6 * u) + 'px system-ui, sans-serif'; ctx.fillText(text, x, y); };
-  // A grey ramp from black to white: the red bleed starts about three quarters along (0.73 on screen).
+  // A grey ramp from black to white: the red bleed fades in from about two thirds along (0.70 on screen).
   const g = ctx.createLinearGradient(8 * u, 0, W - 8 * u, 0);
   g.addColorStop(0, '#000'); g.addColorStop(1, '#fff');
   ctx.fillStyle = g;

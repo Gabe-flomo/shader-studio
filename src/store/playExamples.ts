@@ -1853,12 +1853,12 @@ Distance reads only while both hands are in view, so the rings hold their size w
       ctl('cons', 'finish:halation::conserve', 'Halation · Conserve', 0, 1),
       ctl('paper', 'layer:scene::p_paper', 'Test scene · Paper white', 0.5, 1),
     ],
-    notes: `**What it shows.** Film **halation**: light strong enough to go right through the film bounces off its back and exposes it again from behind, reaching the red layer first. It shows as a thin red bleed hugging bright edges, landing on the darker picture right beside them, orange where it is strongest. The defaults are measured from a film-emulation grade (the Joo.Works ACES lite Halation PowerGrade): the bleed starts when a part's red passes about 0.73 on screen, reaches only a few pixels, and never turns the bright part itself red.
+    notes: `**What it shows.** Film **halation**: light strong enough to go right through the film bounces off its back and exposes it again from behind, reaching the red layer first. It shows as a thin red bleed hugging bright edges, landing on the darker picture right beside them, orange where it is strongest. The defaults are measured from a film-emulation grade (the Joo.Works ACES lite Halation PowerGrade): the bleed starts when a part's red passes about 0.70 on screen, reaches only a few pixels, and never turns the bright part itself red.
 
 **How it's built.** A Script layer draws a test scene: a grey ramp, a paper-white card, a teal patch and a row of small lamps that clip. The Finish stack turns the picture into linear light, takes the red over **Threshold** as the source (with **Highlight headroom** guessing how much brighter than white the clipped parts were), spreads it a few pixels (the same distance from a one-pixel glint as from a big card's edge), and adds it, tinted, only where the picture is darker. **Reach** adds a wider, softer haze.
 
 **Try this.**
-• The ramp bleeds red above and below from about three quarters along; the paper card gets a thin red rim on the dark wall; the teal patch makes none (no red in it); the clipped lamps bleed furthest.
+• The ramp bleeds red above and below from about two thirds along; the paper card gets a thin red rim on the dark wall; the teal patch makes none (no red in it); the clipped lamps bleed furthest.
 • Lower Test scene · Paper white to 0.60: the card drops under the threshold and its rim goes.
 • Try Warmth (red to orange), Reach (the wide haze), Conserve (the bright part gives up what it bleeds), or the Subtle, Classic cine and Strong presets on the Halation card.`,
   })),

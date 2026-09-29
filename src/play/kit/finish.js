@@ -162,7 +162,7 @@ export const FN_EFFECTS = {
     params: [
       FN_P('amount', 'Amount', 0, 2, 0.01, FN_HAL.amount, 'How strong the bleed is. 1 matches the reference grade.'),
       FN_P('reach', 'Reach', 0, 1, 0.01, FN_HAL.reach, 'A wide, soft tail on top of the tight bleed that hugs the edges. 0 keeps only the tight bleed.'),
-      FN_P('threshold', 'Threshold', -4, 4, 0.05, FN_HAL.threshold, 'How bright the red in a part has to be to bleed, in stops from white in linear light: -1 is half of white (0.73 on screen), where the reference starts. Above 0 only light brighter than white bleeds.'),
+      FN_P('threshold', 'Threshold', -4, 4, 0.05, FN_HAL.threshold, 'How bright the red in a part has to be to bleed, in stops from white in linear light: -1.15 (0.70 on screen) is where the reference starts, fading in from about 0.6. Above 0 only light brighter than white bleeds.'),
       FN_P('headroom', 'Highlight headroom', 1, 16, 0.5, FN_HAL.headroom, 'How much brighter than white the clipped parts of an ordinary picture are taken to be, in stops. More makes clipped highlights (lamps, the sun) bleed further than a white that is merely bright.'),
       FN_P('warmth', 'Warmth', 0, 1, 0.01, FN_HAL.warmth, 'Red (0) to orange (1): how much green joins the bleed where it is strongest, right at the edge.'),
       FN_P('growth', 'Growth', 0, 1, 0.01, FN_HAL.growth, 'A tight white spread around light brighter than white: very bright sources look bigger than they are.'),
@@ -220,7 +220,7 @@ export const FN_EFFECTS = {
 export const FN_HALATION_PRESETS = [
   { name: 'Subtle', values: { amount: 0.6, reach: 0.3, threshold: -0.9, headroom: 5, warmth: 0.15, growth: 0.1, conserve: 0.03 } },
   { name: 'Classic cine', values: { amount: FN_HAL.amount, reach: FN_HAL.reach, threshold: FN_HAL.threshold, headroom: FN_HAL.headroom, warmth: FN_HAL.warmth, growth: FN_HAL.growth, conserve: FN_HAL.conserve } },
-  { name: 'Strong', values: { amount: 1.6, reach: 0.8, threshold: -1.5, headroom: 8, warmth: 0.5, growth: 0.5, conserve: 0.15 } },
+  { name: 'Strong', values: { amount: 1.6, reach: 0.8, threshold: -1.5, headroom: 8, warmth: 0.35, growth: 0.5, conserve: 0.15 } },
 ];
 
 /** The kinds in the Add menu's order. Each kind appears at most once in a stack. */
