@@ -153,8 +153,8 @@ fitted numbers; Classic cine and the defaults are that fit.
    max-spread, added as `x + (1 − x)(1 − e^(−w))`.
 
 `fnHalPixel` is one pixel of this on the CPU (for the tests). The ramp above
-and the PR's side-by-side were made with the same maths offline, which matches
-the shader to within 4/255 on the reference frame.
+was made with the same maths offline, which matches the shader to within 4/255
+on the reference frame.
 
 **Measuring the reference.** Two 8-bit Rec.709 exports of one 1920 × 1080
 frame (a white dog on wet sand: soft, low-contrast, specular glints), before
@@ -192,8 +192,7 @@ the bleed): mean squared error per channel 6.70 → 2.23, where the best
 3.09 (no halation) to 1.11; the old model (before this rebuild) left the frame
 unchanged, since nothing in it was brighter than its threshold.
 
-(The frames are the owner's reference exports and aren't in the repo; the
-side-by-side is in the PR.)
+(The frames are the owner's reference exports and aren't in the repo.)
 
 **Controls**:
 
