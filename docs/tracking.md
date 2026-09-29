@@ -23,10 +23,14 @@ A setup that reads hands shows **Enable hand tracking** on the picture, and a **
 | Status | Means |
 |---|---|
 | Hands: off | Not running. **Enable** opens the camera (the browser asks the first time) and starts the tracker. |
-| Hands: starting… | The model is loading (the first time in a session, about a second). |
+| Hands: starting… | The camera is opening (the browser or macOS asking, or the stream warming up). |
+| Hands: downloading the model (7.8 MB · 42%) | The model and MediaPipe's WebAssembly are coming in, with a running percentage once their size is known. Only on the first Enable in a browser that hasn't kept them (see *Models* below); on the desktop, and once they're cached, this is too quick to see. |
+| Hands: loading… | The WebAssembly and the model are being built into a running tracker (about a second). |
 | Hands: tracking 2 hands | Running; the number is the hands shown (a hand still appearing, or one ignored, doesn't count). Hover it for the frame rate and timings. |
 | Hands: none in view | Running, nobody's hands in the picture. |
 | Hands: camera blocked | The browser or macOS refused the camera. Allow it and press **Try again**. |
+
+Face and Pose show the same states, and so does **Analyse video** (below): the panel shows *Downloading the model…* and *Loading…* before it starts counting frames.
 
 Browsers only open the camera after a click, which is why there is a button. The camera is the same one a Camera layer shows: one stream, shared. Tracking works with no Camera layer, or with it hidden.
 
@@ -205,11 +209,27 @@ A page carries each tracker's analysis as base64 (listed with its size under wha
 
 Takes record hands like everything else: controls driven by hand sources and gesture envelopes are control tracks, following nulls are null tracks, and actions a gesture fired are events. Playing a take back rests the tracker (the take has every value, and a hand waved meanwhile changes nothing); rendering a take frame by frame reproduces it exactly. The skeleton overlay is a live guide and isn't part of a rendered take.
 
+## Models
+
+Each tracker's model, and MediaPipe's WebAssembly, load only the first time that tracker is enabled (or a video is analysed with it) — never up front.
+
+**Sizes**: the hand model (`hand_landmarker.task`) is 7.8 MB, the face model (`face_landmarker.task`) 3.8 MB, the body model (`pose_landmarker_lite.task`) 5.8 MB — float16 builds from Google's MediaPipe model storage. MediaPipe's own WebAssembly (shared by all three trackers) is a further ~12 MB.
+
+**Where they live**: on the desktop app they're bundled in (`public/mediapipe/`, installed with Playfield) — nothing to download, cache or clear, and App settings says so (*Bundled with the app*). In the browser they're served by the app itself (never fetched from the internet), and — with **Keep tracking models on this device** on (the default) — kept in this browser's own storage (Cache Storage) after the first download, so a reload never refetches them. Turn it off and each Enable downloads them fresh. **Clear models** in App settings (Camera, MIDI, OSC and audio) forgets what's cached, showing how much that is.
+
+**The states you see**: Enable (or Analyse video) goes off → **starting…** (the camera opening) → **downloading the model** (bytes coming in, with a percentage once the size is known — skipped once it's cached, or on the desktop) → **loading…** (building the tracker from those bytes, MediaPipe's own model init) → **tracking**. The same four steps show on Hands, Face and Pose, and on the Analyse video panel before it starts counting frames.
+
+**Warm-up**: App settings' **Warm up trackers when the app opens**, per tracker (off by default), loads that tracker's model into the cache as soon as Playfield opens — without turning on the camera — so the download is already done by the time you press Enable (the WASM/model init after it still takes its usual moment).
+
+**Versioning**: the cache is named by a version constant (`lib/trackerCache.ts` `TRACKER_CACHE_VERSION`); it's bumped whenever a model or the MediaPipe build changes, so an app update fetches the new bytes instead of reading stale ones from an old cache.
+
+**Seeing the download in dev**: `npm run dev` and open with `?slowTrackerFetch=1` — the worker paces each chunk, so the downloading state (and its percentage) is easy to watch and screenshot instead of finishing in a blink on localhost.
+
 ## How it works
 
-- **Models**: MediaPipe's Hand, Face and Pose Landmarkers (`@mediapipe/tasks-vision`; the float16 `hand_landmarker.task` 7.8 MB, `face_landmarker.task` 3.8 MB and `pose_landmarker_lite.task` 5.8 MB, from Google's MediaPipe model storage).
+- **Models**: MediaPipe's Hand, Face and Pose Landmarkers (`@mediapipe/tasks-vision`; sizes above, from Google's MediaPipe model storage).
 - **Files**: the models are in `public/mediapipe/`; MediaPipe's WebAssembly is served from the npm package at `<base>mediapipe/wasm/` (`vite.config.ts` serves it in dev and copies it into a build). The app never fetches anything from the internet for tracking.
-- **Loading**: nothing loads until a tracker is first enabled. `lib/handFeed.ts` (a `TrackerFeed` per tracker: status, the newest frame, the camera or a Video layer as the source) is tiny and in the main bundle; it imports `lib/trackerPump.ts` on demand, which starts `lib/trackerWorker.ts` in a module worker holding MediaPipe with that tracker's model. An analysis (`lib/trackBakes.ts analyseVideo`) starts a worker of its own.
+- **Loading**: nothing loads until a tracker is first enabled (see *Models* above for the states and the cache). `lib/handFeed.ts` (a `TrackerFeed` per tracker: status, the download/load progress, the newest frame, the camera or a Video layer as the source) is tiny and in the main bundle; it imports `lib/trackerPump.ts` on demand, which starts `lib/trackerWorker.ts` in a module worker holding MediaPipe with that tracker's model. The worker itself fetches the WebAssembly and the model (reporting progress and using Cache Storage, `lib/trackerCache.ts`), falling back to a plain URL load if that fails. An analysis (`lib/trackBakes.ts analyseVideo`) starts a worker of its own, and shows the same download/load phase before it starts on frames.
 - **Face and pose**: `play/kit/face.js` and `play/kit/pose.js` (readings, gestures, drawing) on a shared one-subject tracker in `play/kit/tracks.js` (placement, one-euro smoothing, appear and hold), which also holds the baked-track codec and `tkDrive`. Types and file reading: `types/playTracking.ts`; the UI: `components/play/TrackingChips.tsx` and `trackBakeJobs.ts`.
 - **Frames**: about 30 a second, never more than one in flight, the camera frame scaled to 480 px wide as an ImageBitmap and handed to the worker. The model runs there, GPU first (WebGL2 on an OffscreenCanvas), falling back to the CPU. The render loop never waits on it.
 - **Meaning**: `play/kit/hands.js` turns landmarks into hands on the picture (plausibility, tracks and steady sides, placement, mirroring, one-euro smoothing, the hold), readings and gestures. The same file runs in web exports, with the setup's settings (the page's tracker takes Hands to track and the thresholds when it starts).

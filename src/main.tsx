@@ -26,7 +26,7 @@ import { watchForStaleBuild } from './lib/staleBuild'
 import { takeApplier, useTakes } from './lib/takes'
 import { playOverlay } from './play/overlay'
 import { playBackground } from './play/background'
-import { handFeed } from './lib/handFeed'
+import { handFeed, warmupTrackers } from './lib/handFeed'
 import { playEngine } from './lib/playEngine'
 import { midiEngine } from './lib/midiEngine'
 import { midiMonitor } from './lib/midiMonitor'
@@ -41,6 +41,9 @@ installCameraKeeper()
 installTouchGuards()
 installStorageLimit()
 installViewportWatcher()
+// "Warm up trackers when the app opens" (App settings → Camera, MIDI, OSC and audio): loads a
+// tracker's model into Cache Storage now, without opening the camera, so Enable is instant later.
+void warmupTrackers()
 
 const root = createRoot(document.getElementById('root')!)
 watchForStaleBuild()

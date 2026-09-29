@@ -12,7 +12,8 @@
 import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { trackerFeeds, type TrackerKind, type TrackerStatus } from '../../lib/handFeed';
+import { trackerFeeds, type TrackerKind, type TrackerLoadProgress, type TrackerStatus } from '../../lib/handFeed';
+import { loadPct, MODEL_BYTES, modelsBundled, sizeText as modelSizeText, useTrackerCacheSettings } from '../../lib/trackerCache';
 import { playEngine } from '../../lib/playEngine';
 import { BAKE_RATES, bakeSig, bakeState, onBakes, trackerOptionsFor } from '../../lib/trackBakes';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -35,12 +36,22 @@ const EMBEDDED = typeof window !== 'undefined' && window.self !== window.top;
 export const TRACKER_ICONS: Record<TrackerKind, IconName> = { hands: 'hand', face: 'face', pose: 'body' };
 const NOUN: Record<TrackerKind, [string, string]> = { hands: ['hand', 'hands'], face: ['face', 'faces'], pose: ['body', 'bodies'] };
 
-/** A tracker's status, what it shows, and whether a take has it resting, kept current. */
-export function useTrackerStatus(kind: TrackerKind): { status: TrackerStatus; count: number; paused: boolean } {
+/** A tracker's status, what it shows, whether a take has it resting, and its download progress, kept current. */
+export function useTrackerStatus(kind: TrackerKind): { status: TrackerStatus; count: number; paused: boolean; progress: TrackerLoadProgress | null } {
   const feed = trackerFeeds[kind];
-  const [s, setS] = useState(() => ({ status: feed.getStatus(), count: feed.handCount(), paused: feed.isPaused() }));
-  useEffect(() => feed.onStatus(status => setS({ status, count: feed.handCount(), paused: feed.isPaused() })), [feed]);
+  const [s, setS] = useState(() => ({ status: feed.getStatus(), count: feed.handCount(), paused: feed.isPaused(), progress: feed.getProgress() }));
+  useEffect(() => feed.onStatus(status => setS({ status, count: feed.handCount(), paused: feed.isPaused(), progress: feed.getProgress() })), [feed]);
   return s;
+}
+
+/** Is a tracker's status one of the busy states between Enable and Tracking (docs/tracking.md "Models"). */
+export const isBusy = (status: TrackerStatus): boolean => status === 'starting' || status === 'downloading' || status === 'loading';
+
+/** The one-line note under Enable / a tracker's settings: bundled with the app, kept on this device, or downloaded each time (docs/tracking.md "Models"). Reactive to the "Keep tracking models" setting. */
+export function useModelNote(kind: TrackerKind): string {
+  const keepModels = useTrackerCacheSettings(s => s.keepModels);
+  if (modelsBundled()) return 'Bundled with the app.';
+  return keepModels ? `Models are kept on this device — ${modelSizeText(MODEL_BYTES[kind])}.` : 'Downloaded when needed.';
 }
 
 /** Re-render when a bake finishes loading. */
@@ -74,13 +85,15 @@ export function useFromVideo(kind: TrackerKind): { layer: VideoLayer | null; bak
   return { layer, baked: !!layer && !!playEngine.bakedTrack(kind) };
 }
 
-export function trackerText(kind: TrackerKind, status: TrackerStatus, count: number, paused = false, from: { layer: VideoLayer | null; baked: boolean } = { layer: null, baked: false }): string {
+export function trackerText(kind: TrackerKind, status: TrackerStatus, count: number, paused = false, from: { layer: VideoLayer | null; baked: boolean } = { layer: null, baked: false }, progress: TrackerLoadProgress | null = null): string {
   const name = TRACKER_NAMES[kind], [one, many] = NOUN[kind];
   const seen = count === 0 ? `no ${one} in view` : kind === 'hands' ? `${count} ${count === 1 ? one : many}` : `${one} in view`;
   if (from.baked && from.layer) return `${name}: from “${from.layer.label}” (analysed) · ${seen}`;
   switch (status) {
     case 'on': return paused ? `${name}: resting while a take plays` : from.layer ? `${name}: tracking “${from.layer.label}” live · ${seen}` : count === 0 ? `${name}: none in view` : kind === 'hands' ? `${name}: tracking ${count} ${count === 1 ? one : many}` : `${name}: tracking`;
     case 'starting': return `${name}: starting…`;
+    case 'downloading': return `${name}: downloading the model${progress ? loadPct(progress) : ''}`;
+    case 'loading': return `${name}: loading…`;
     case 'blocked': return EMBEDDED ? `${name}: camera blocked by this page` : `${name}: camera blocked`;
     case 'error': return `${name}: couldn’t start`;
     case 'unsupported': return `${name}: not available here`;
@@ -91,19 +104,19 @@ export function trackerText(kind: TrackerKind, status: TrackerStatus, count: num
 /** Face or pose: status, the eye, Enable / Stop and the settings. */
 export function TrackerChip({ kind, settings: showSettings = true }: { kind: 'face' | 'pose'; settings?: boolean }) {
   const tk = useTokens();
-  const { status, count, paused } = useTrackerStatus(kind);
+  const { status, count, paused, progress } = useTrackerStatus(kind);
   const [settings, set] = useTrackerSettings(kind);
   const from = useFromVideo(kind);
   const [open, setOpen] = useState(false);
   const gear = useRef<HTMLSpanElement>(null);
   const feed = trackerFeeds[kind];
-  const colour = from.baked ? (count > 0 ? tk.status.success : tk.status.warning) : status === 'on' ? (paused ? tk.text.disabled : count > 0 ? tk.status.success : tk.status.warning) : status === 'starting' ? tk.status.warning : status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.disabled;
+  const colour = from.baked ? (count > 0 ? tk.status.success : tk.status.warning) : status === 'on' ? (paused ? tk.text.disabled : count > 0 ? tk.status.success : tk.status.warning) : isBusy(status) ? tk.status.warning : status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.disabled;
   const s = feed.stats;
   const title = status === 'on' && !from.baked ? `${s.fps} frames a second · the model takes ${s.inferMs} ms (${s.delegate || '…'})` : feed.getMessage() || undefined;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: colour, flexShrink: 0 }} />
-      <span title={title} style={{ color: status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.muted, font: `11px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{trackerText(kind, status, count, paused, from)}</span>
+      <span title={title} style={{ color: status === 'blocked' || status === 'error' ? tk.status.danger : tk.text.muted, font: `11px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{trackerText(kind, status, count, paused, from, progress)}</span>
       {status !== 'unsupported' && (
         <IconButton icon={settings.overlay ? 'eye' : 'eyeOff'} size="sm" active={settings.overlay}
           label={settings.overlay ? `Hide the ${NOUN[kind][0]} on the picture (tracking keeps going)` : `Show the ${NOUN[kind][0]} on the picture`}
@@ -149,6 +162,7 @@ function TrackerSettings({ kind }: { kind: 'face' | 'pose' }) {
   const [s, set] = useTrackerSettings(kind);
   const camera = useNodeGraphStore(st => st.play.layers.find(l => l.kind === 'camera'));
   const layer = useSourceLayer(kind);
+  const modelNote = useModelNote(kind);
   const label = { color: tk.text.primary, font: `600 12px ${fontFamily.ui}` };
   const hint = { color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}`, margin: '3px 0 0' };
   const d = kind === 'face' ? DEFAULT_FACE : DEFAULT_POSE;
@@ -179,7 +193,7 @@ function TrackerSettings({ kind }: { kind: 'face' | 'pose' }) {
         <p style={hint}>{layer ? 'Tracking a video: that layer’s own Mirror decides.' : camera ? 'The Camera layer’s own Mirror decides this: the landmarks line up with the camera image it shows.' : 'Moving right moves right on the picture.'}</p>
       </div>
       <p style={{ ...hint, margin: 0, paddingTop: 8, borderTop: `1px solid ${tk.border.default}` }}>
-        Everything runs on this computer: frames never leave it. The {kind === 'face' ? 'face model (3.8 MB)' : 'body model (5.8 MB)'} loads the first time it’s enabled.
+        Everything runs on this computer: frames never leave it. {modelNote}
       </p>
     </div>
   );
@@ -222,10 +236,12 @@ export function BakePanel({ kind, layer }: { kind: TrackerKind; layer: VideoLaye
   const box = { marginTop: 6, padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field, display: 'flex', flexDirection: 'column' as const, gap: 6 };
   if (!layer.videoId) return <div style={box}><span style={small}>Pick a video for “{layer.label}” first.</span></div>;
   if (job && job.layerId === layer.id) {
+    const modelText = job.model?.phase === 'downloading' ? `Downloading the model${job.model.loaded !== undefined && job.model.total !== undefined ? loadPct({ loaded: job.model.loaded, total: job.model.total }) : ''}…`
+      : job.model?.phase === 'loading' ? 'Loading…' : null;
     return (
       <div style={box}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: tk.text.secondary, font: `600 11.5px ${fontFamily.ui}` }}>Analysing “{layer.label}”… {Math.round(job.progress * 100)}%</span>
+          <span style={{ color: tk.text.secondary, font: `600 11.5px ${fontFamily.ui}` }}>{modelText ?? `Analysing “${layer.label}”… ${Math.round(job.progress * 100)}%`}</span>
           <span style={{ flex: 1 }} />
           <Button size="sm" variant="ghost" onClick={() => cancelBake(kind)}>Cancel</Button>
         </div>
