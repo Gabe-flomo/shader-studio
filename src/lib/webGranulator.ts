@@ -152,6 +152,8 @@ export class WebGranulatorRack {
       set(`${id}::grainAmp${i + 1}`, i < st.count ? Math.min(1, st.amp[i]) : 0);
       set(`${id}::grainBand${i + 1}`, i < st.count ? st.band[i] : 0);
       set(`${id}::grainEnergy${i + 1}`, i < st.count ? Math.min(1, st.energy[i] * 4) : 0);
+      // Where it's drawn (docs/granulator.md): its stable row, pan-based when Pan random is on.
+      set(`${id}::grainRow${i + 1}`, i < st.count ? st.row[i] : 0);
     }
   }
 

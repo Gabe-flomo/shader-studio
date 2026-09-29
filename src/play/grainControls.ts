@@ -8,8 +8,10 @@
  *                      (targets `grains:<rack>::<read>`, which write nothing),
  *                      each driven by a sensor mapping, in "Grains · <rack>"
  *   addGrainNulls      null layers that ride grains 1..n: x is where the grain
- *                      reads in the sample, y its level (sensor mappings on
- *                      the nulls' x and y), for particles, paths and the rest.
+ *                      reads in the sample, y its stable row (pan-based when
+ *                      Pan random is on, else a hash of its slot; sensor
+ *                      mappings on the nulls' x and y), for particles, paths
+ *                      and the rest — straight, not the old arc.
  *                      They sit in their own sealed folder at the top level
  *                      ("Grains · <rack>"): layers added later never join it
  *                      (types/layerGroups.ts newLayerHome), only a drop does
@@ -56,8 +58,9 @@ function freeGroupName(groups: readonly LayerGroup[] | undefined, base: string):
 }
 
 /**
- * `n` null layers riding grains 1..n (x: the grain's place in the sample, y: its level), with their
- * mappings, in a sealed folder of their own at the top level (new layers don't join it).
+ * `n` null layers riding grains 1..n (x: the grain's place in the sample, y: its stable row —
+ * pan-based when Pan random is on, else a hash of its slot), with their mappings, in a sealed
+ * folder of their own at the top level (new layers don't join it).
  */
 export function addGrainNulls(p: PlayRecord, rackId: string, n = 8): PlayRecord {
   const rack = aeRack(p.audioEngine, rackId);
@@ -73,7 +76,7 @@ export function addGrainNulls(p: PlayRecord, rackId: string, n = 8): PlayRecord 
     const cx: PlayControl = { id: playId('ctl'), target: layerTarget(id, 'x'), kind: 'float', label: `Grain ${i} · x`, min: 0, max: 1, group: `${GRAIN_GROUP_PREFIX}${rack.name} · nulls` };
     const cy: PlayControl = { id: playId('ctl'), target: layerTarget(id, 'y'), kind: 'float', label: `Grain ${i} · y`, min: 0, max: 1, group: `${GRAIN_GROUP_PREFIX}${rack.name} · nulls` };
     controls.push(cx, cy);
-    mappings.push(mapping(cx.id, src, 'grainPos', 0.05, 0.95, String(i)), mapping(cy.id, src, 'grainAmp', 0.15, 0.85, String(i), 30));
+    mappings.push(mapping(cx.id, src, 'grainPos', 0.05, 0.95, String(i)), mapping(cy.id, src, 'grainRow', 0.05, 0.95, String(i)));
   }
   const group: LayerGroup = { id: playId('layer').replace(/^layer_/, 'grp_'), label: freeGroupName(p.groups, `${GRAIN_GROUP_PREFIX}${rack.name}`), colour: 'teal', layers: made, sealed: true };
   return tidyGroups({ ...p, layers, groups: [...(p.groups ?? []), group], controls: [...p.controls, ...controls], mappings: [...p.mappings, ...mappings] });

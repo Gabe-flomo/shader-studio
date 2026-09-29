@@ -395,7 +395,7 @@ describe('the record', () => {
     expect(p.layers.filter(l => l.kind === 'null')).toHaveLength(4);
     expect(p.controls).toHaveLength(8);
     const reads = p.mappings.map(m => (m.source.kind === 'sensor' ? `${m.source.read}${m.source.otherId}` : ''));
-    expect(reads).toEqual(['grainPos1', 'grainAmp1', 'grainPos2', 'grainAmp2', 'grainPos3', 'grainAmp3', 'grainPos4', 'grainAmp4']);
+    expect(reads).toEqual(['grainPos1', 'grainRow1', 'grainPos2', 'grainRow2', 'grainPos3', 'grainRow3', 'grainPos4', 'grainRow4']);
     expect(parsePlayRecord(JSON.parse(JSON.stringify(p))).mappings).toHaveLength(8);
   });
 
