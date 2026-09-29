@@ -53,6 +53,9 @@ Extra work only when asked for:
   sixteenth, each blurred with a separable 9-tap Gaussian: seven tiny passes.
   Half-float when `EXT_color_buffer_float` is there, else 8-bit with an
   `x / (1 + x)` encoding.
+- **Halation's tight bleed**: three half-size passes of its own (the largest
+  source of each 2 × 2 block, then a max-spread across and down), on top of
+  the glow chain, which gives it its Reach tail.
 - **Time**: a `TEXTURE_2D_ARRAY` ring of reduced frames, written after the final
   pass.
 - **Curves**: baked into a 256 × 2 `RGBA8` lookup when they change.
@@ -94,38 +97,127 @@ worst difference 1.4 / 255.
 | Vignette | Amount, Size, Roundness, Feather, Colour |
 | CRT | Curvature, Scanlines, Mask, Cell size, Stagger, Glow, Pulse. The mask is the CRT Mask node's GLSL. |
 | Bloom | Amount, Threshold, Radius, Tint |
-| Halation | Amount, Reach, Threshold, Highlight headroom, Warmth, Growth; presets Subtle, Classic cine, Strong |
+| Halation | Amount, Reach, Threshold, Highlight headroom, Warmth, Growth, Conserve; presets Subtle, Classic cine (the measured reference, and the defaults), Strong |
 | Film grain | Amount, Size (px at 1080p), Colour, Response (to brightness), Frames a second (0 holds it) |
 | Flicker | Amount, Speed |
 | Camera shake | Amount, Speed, Rotation, Gate weave; zoomed to hide the edges |
 
 ### Halation
 
-Modelled on how it happens in film: light strong enough to pass through the
-emulsion bounces off the film's back and re-exposes it from behind, reaching the
-red-sensitive layer first.
+Film halation: light strong enough to pass through the emulsion bounces off
+the film's back and re-exposes it from behind, reaching the red-sensitive
+layer first. On screen it is a **thin red bleed hugging bright edges**, landing
+on the darker picture right beside them.
 
-1. The prefilter decodes each pixel to linear light and estimates **scene
-   energy** with an inverse shoulder (`fnEnergy`): below a knee (0.75 linear)
-   nothing changes; above it the tones squeezed toward white open up so that
-   display 1.0 becomes `2^headroom`. It does this per pixel, before averaging, so
-   a one-pixel lamp keeps its energy.
-2. Three source terms, each a soft-knee threshold scaled by how far above it the
-   energy is: **red** from the red channel's energy, **green** from green (at 1.5×
-   the threshold, weaker), **white** from blue (at 4×, weakest: only extreme
-   light). A colour with little red makes no red halo.
-3. Red is taken from the wide levels (eighth and sixteenth, by Reach), green from
-   the quarter and eighth, white from the quarter only: red widest, white tight.
-4. Added back in linear light as `x + (1 − x)(1 − e^(−halo))`, which saturates
-   gently toward white instead of clipping, then re-encoded.
+The shape and colour are measured from a reference: the Joo.Works "ACES lite
+Halation" PowerGrade for DaVinci Resolve (the `.drx` is encrypted, so we
+measured what it does to a frame, below). `FN_HAL` in `finish.js` holds the
+fitted numbers; Classic cine and the defaults are that fit.
 
-So the halo goes red → warm red-orange → white as the source gets brighter, and
-the white term makes very bright sources look bigger.
+![A grey ramp on a dark wall before (top) and after (bottom) halation at the defaults: the red bleed starts about 0.6–0.78 along (the threshold, marked with its knee) and grows toward white; the clipped end bleeds furthest.](finish-stack/halation-ramp.png)
 
-**Limit of the 8-bit estimate.** Everything the finish sees is an 8-bit canvas,
-so a white card that clips at 1.0 is indistinguishable from a lamp. The
-`finishHalation` example keeps paper at 0.90 (as a correctly exposed picture
-would) and shows what happens when it's pushed to 1.00.
+**The pass**, all in linear light:
+
+1. **Source**: the red channel's scene energy over the threshold, with a soft
+   knee (`fnHalSource`). Threshold is in stops from white on the headroom
+   estimate (`fnEnergy`: below 0.75 linear nothing changes; above it the tones
+   squeezed toward white open up so that display 1.0 becomes `2^headroom`). The
+   default, −1.15 stops, is linear 0.45 (0.70 on screen), with a knee of ±30 %:
+   the bleed fades in from 0.59 to 0.78 on screen. A colour with no red (teal)
+   never bleeds. A second source, the dimmest channel over 1.5 × white, feeds
+   Growth: only light brighter than white in every channel.
+2. **Tight bleed: a max-spread, not a blur.** At half size, each 2 × 2 block
+   keeps its largest source (so a one-pixel glint survives), then a separable
+   pass takes, for each texel, the largest `source × e^(−d²/2σ²)` within 4.5 σ,
+   across and then down (exact for a gaussian, since it factors). σ is 4.5 px
+   of a 1080-line picture, scaled with the picture. So the bleed at a distance
+   *d* from a bright part is that part's excess × e^(−d²/2σ²) **whatever its
+   size**: a two-pixel glint bleeds as far and as strongly as the edge of a
+   big bright shape. That is what the reference does, and what a blur can't
+   (a blur makes small glints far weaker than edges).
+3. **Reach tail**: a true blur of the source from the glow chain (the eighth
+   level, σ ≈ 16 px, fading in over Reach 0 → 0.5 up to the fitted strength;
+   then widening to the sixteenth, σ ≈ 32 px, from 0.5 → 1). The faint wide
+   haze the reference also has.
+4. **Only onto the darker side**: the bleed is scaled by how dark the pixel
+   itself is (all of it below linear red 0.17, none above 0.53), so the bright
+   part never turns red; its surroundings do.
+5. **Tint** (`fnHalTint`): red, plus green where the bleed is strong,
+   `dG = warmth · dR² / (dR + 0.076)` (orange right at the edge, red further
+   out), minus a little blue, `0.07 · dR` (never more than half the pixel's
+   own blue, so a black surround keeps its hue).
+6. **Conserve**: the bright part darkens evenly by Conserve × its excess over
+   the threshold (1 takes its red down to the threshold). The reference
+   darkens highlights only slightly (1–2 of 255): default 0.03.
+7. **Growth**: a white spread from the second source, through the same
+   max-spread, added as `x + (1 − x)(1 − e^(−w))`.
+
+`fnHalPixel` is one pixel of this on the CPU (for the tests). The ramp above
+and the PR's side-by-side were made with the same maths offline, which matches
+the shader to within 4/255 on the reference frame.
+
+**Measuring the reference.** Two 8-bit Rec.709 exports of one 1920 × 1080
+frame (a white dog on wet sand: soft, low-contrast, specular glints), before
+and after the PowerGrade:
+
+- **Mean change by source brightness** (after − before, of 255):
+  luma 48–79 R +2.5/+2.0, G +0.2, B −0.2 (the dark pixels beside bright
+  edges: the bleed); luma 160–191 R +1.2/+0.5, G −0.2/−0.4, B −0.5/−0.7;
+  luma 224–255 all channels −1.3…−2.2 (highlights slightly darker).
+- **Threshold, from isolated glints** (24 local maxima on the sand): the
+  glints whose red peaks at 164 or below make no change at all; from 191 up
+  the bleed 3–6 px out grows in proportion to *linear red − 0.50*
+  (191 → +3, 206 → +13.5, 227 → +30 of 255). Fitting the whole frame put the
+  threshold at linear 0.45 with a 30 % knee (0.40–0.50 fit equally well).
+- **Radius**: around glints the bleed is a ring peaking 4 px from the centre
+  (the glint itself is untouched), half at ~7 px, 5 % by 12 px, a faint
+  tail to ~20 px. Across the dog's back into the sky, relative to 4 px out:
+  6 px 0.59, 8 px 0.28, 10 px 0.11. Both fit a gaussian falloff of σ ≈ 4.4 px
+  **from the source's edge**, with one strength for glints and edges alike
+  (≈ 0.8–1 × the excess), which is a max-spread, not a blur: a blur fitted to
+  the edges gives glints roughly a tenth of their measured bleed.
+- **Compositing**: the bleed lands only on pixels darker than the source; a
+  pixel of red 175 right beside a glint of 227 gets nothing, one of 93 goes
+  to 147. Additive in linear light (the edge falloff matches an additive
+  model; a pure lighten doesn't), gated by the receiving pixel's own red.
+- **Colour** of the positive bleed, in linear light: R 1 : G ≈ 0.27 : B ≈ −0.1
+  right beside a strong source, R 1 : G ≈ 0.04 : B ≈ −0.07 further out.
+- **Energy**: not conserved. The bleed adds far more light than the sources
+  lose (a 227 glint core drops by 1; its ring gains up to +54).
+
+The final numbers come from a least-squares fit of this model to the frame
+(σ, gain, tail, receive range, tint and conserve; 482,000 pixels in and around
+the bleed): mean squared error per channel 6.70 → 2.23, where the best
+*blur*-based model reached 4.03. On the whole frame the shader takes it from
+3.09 (no halation) to 1.11; the old model (before this rebuild) left the frame
+unchanged, since nothing in it was brighter than its threshold.
+
+(The frames are the owner's reference exports and aren't in the repo; the
+side-by-side is in the PR.)
+
+**Controls**:
+
+| Control | What it does |
+| --- | --- |
+| Amount | Scales the bleed (and Growth). 1 is the reference. |
+| Reach | The wide tail: 0 none, 0.5 the reference (σ 16 px), 1 wider (σ 32 px) |
+| Threshold | Stops from white; −1.15 is the reference (0.70 on screen). Above 0 only light over white bleeds (the old model's range) |
+| Highlight headroom | How far over white a clipped part is taken to be (stops): clipped lamps bleed further than merely bright paper |
+| Warmth | Green in the strong part of the bleed: 0 pure red, 1 orange |
+| Growth | White spread from light over white in every channel |
+| Conserve | How much the bright part itself gives up |
+
+**Older effects**: a halation saved before this model (no `model: 2`) keeps
+its numbers' meanings, but Amount is rescaled (old 0.7 = new 1, capped at 2)
+and Conserve gets its default (`fnMigrateHalation`, run by `parseFinish`). Its
+Threshold stays where it was (0.5 stops over white), so a saved stack still
+bleeds only from clipped highlights until the threshold is lowered or a
+preset is picked.
+
+**Limit of the 8-bit estimate.** Everything the finish sees is an 8-bit
+canvas, so a white card that clips at 1.0 is indistinguishable from a lamp.
+The `finishHalation` example keeps paper at 0.90: it gets the thin rim (it is
+over the threshold), and pushed to 1.00 it bleeds like a lamp.
 
 **Follow-up: the shader's own HDR.** When the graph ends in a Tone Map node,
 the Studio already renders it into a float target. Exposing that pre-tone-map
@@ -339,7 +431,7 @@ renderer per frame, measured as 60 frames between two GPU syncs:
 | Uploads + a trivial pass | 0.42 |
 | Grade (Teal & orange look) | 0.42 |
 | Grade + bloom + grain | 0.69 |
-| Halation | 0.72 |
+| Halation (reference model: glow chain + three half-size passes) | 0.77 |
 | Time displacement (Medium) | 0.45 |
 | All eleven effects | 1.08 |
 

@@ -744,6 +744,7 @@ export function fnHalPixel(rgb, bleed, src, p = {}) {
   const t = fnHalTint(dR, v('warmth'));
   const take = v('conserve') * Math.min(1, v('amount')) * Math.max(0, src);
   const w = Math.max(0, p.white || 0) * v('growth') * v('amount');
+  t[2] = Math.max(t[2], -0.5 * rgb[2]); // never more than half the pixel's own blue, so a black surround keeps its hue
   return rgb.map((c, i) => {
     const x = Math.max(0, c - take) + t[i];
     const tone = [1, 0.95, 0.9][i];
@@ -1037,7 +1038,7 @@ vec4 fetch(vec2 q) {
     vec3 x = toLin(c);
     float bleed = halation_amount * (${fnGl(FN_HAL.gain)} * hm.r + ${fnGl(FN_HAL.tail)} * tail);
     float dR = max(bleed, 0.0) * (1.0 - smoothstep(${fnGl(FN_HAL.recv[0])}, ${fnGl(FN_HAL.recv[1])}, x.r));
-    vec3 tint = vec3(dR, halation_warmth * dR * dR / (dR + ${fnGl(FN_HAL.greenKnee)}), ${fnGl(FN_HAL.blue)} * dR);
+    vec3 tint = vec3(dR, halation_warmth * dR * dR / (dR + ${fnGl(FN_HAL.greenKnee)}), max(${fnGl(FN_HAL.blue)} * dR, -0.5 * x.b));
     float thr = exp2(halation_threshold);
     float take = halation_conserve * min(halation_amount, 1.0) * fnSoft(x.r, thr, thr * ${fnGl(FN_HAL.knee)});
     x = max(x - take, 0.0) + tint;
