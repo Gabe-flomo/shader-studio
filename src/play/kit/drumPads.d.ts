@@ -47,3 +47,8 @@ export function dpCreateSampler(ctx: BaseAudioContext): DpSampler;
 export function dpSynthData(kind: string, rate: number): Float32Array;
 export function dpSynthBuffer(ctx: BaseAudioContext, kind: string): AudioBuffer;
 export function dpPeaks(data: Float32Array, n: number): Float32Array;
+export type DpIndexMode = 'index' | 'random' | 'spread';
+export const DP_INDEX_MODES: readonly DpIndexMode[];
+export function dpHash01(seed: number, n: number): number;
+export function dpSlots(has: (i: number) => boolean, count?: number): number[];
+export function dpPickPad(slots: readonly number[], pad: number, index: number, mode: DpIndexMode | string, spread: number, r: number): number;

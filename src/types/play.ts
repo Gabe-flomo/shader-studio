@@ -194,6 +194,60 @@ export interface PlayPairMapping {
   enabled: boolean;
 }
 
+// ── Spread (a group of controls offset along a curve, docs/spread-control.md) ─
+
+/** How much of Amount each place in a Spread's order gets (play/kit/spread.js). */
+export type SpreadCurve = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'exp' | 'sine' | 'custom';
+
+/**
+ * A Spread: controls in an order, each offset by the group's Amount times a
+ * curve of its place (first → last), rotated by Shift. A member's value is
+ *   source → member base → + Amount × curve(place) × member range → clamp
+ * so a mapping on a member still drives it and the offset rides on top.
+ * Amount and Shift are controls of their own (targets `spread:<id>::amount`
+ * and `spread:<id>::shift`), so they map, increment and record; the record's
+ * `amount` and `shift` are their slider values.
+ */
+export interface PlaySpread {
+  id: string;
+  label: string;
+  /** Member control ids, in order (float controls; a control is in one Spread at most). */
+  members: string[];
+  /** −1..1: at a curve value of 1, how much of each member's range is added. */
+  amount: number;
+  /** Rotates the order: 1 makes the second member the first. Fractional glides between places. */
+  shift: number;
+  curve: SpreadCurve;
+  /** Custom: breakpoints 0..1, evenly across the order. */
+  curveY?: number[];
+  /** Turn the curve upside down (the first gets the most). */
+  invert?: boolean;
+  /**
+   * offset: members keep their own values and the curve is added on top.
+   * reset: the same, and a Reset (the card's button, or `resetOn`) first puts
+   * every member back to its slider's minimum, "reset with adjusted values".
+   */
+  mode: 'offset' | 'reset';
+  /** Reset mode: a signal that resets. */
+  resetOn?: string;
+}
+export const SPREAD_TARGET_PREFIX = 'spread:';
+export const SPREADS_MAX = 32;
+/** The control target of a Spread's Amount or Shift. */
+export function spreadTarget(spreadId: string, key: 'amount' | 'shift'): string {
+  return `${SPREAD_TARGET_PREFIX}${spreadId}::${key}`;
+}
+/** A Spread's Amount or Shift control target, split; null for any other. */
+export function parseSpreadTarget(target: string): { spreadId: string; key: 'amount' | 'shift' } | null {
+  if (!target.startsWith(SPREAD_TARGET_PREFIX)) return null;
+  const rest = target.slice(SPREAD_TARGET_PREFIX.length);
+  const i = rest.lastIndexOf('::');
+  const key = rest.slice(i + 2);
+  return i > 0 && (key === 'amount' || key === 'shift') ? { spreadId: rest.slice(0, i), key } : null;
+}
+/** Where the engine keeps a Spread's driven Amount and Shift (like a layer's: `spread:<id>`). */
+export const spreadPropId = (spreadId: string) => `${SPREAD_TARGET_PREFIX}${spreadId}`;
+
 // ── Audio readers (dots on the live spectrum, play/audioReaders.ts) ─────────
 
 /**
@@ -741,6 +795,8 @@ export function parsePropTarget(target: string): { layerId: string; key: string 
   if (ft) return { layerId: finishPropId(ft.effectId), key: ft.key };
   const at = parseAudioFxTarget(target);
   if (at) return { layerId: audioFxPropId(at.chainId, at.effectId), key: at.key };
+  const st = parseSpreadTarget(target);
+  if (st) return { layerId: spreadPropId(st.spreadId), key: st.key };
   const au = parseAuTarget(target);
   return au ? { layerId: auPropId(au.rackId, au.slotId), key: au.address } : null;
 }
@@ -920,6 +976,8 @@ export interface PlayRecord {
   pairs?: PlayPair[];
   /** Mappings onto pairs (both axes at once, A or B, with axis swap). Absent = none. */
   pairMappings?: PlayPairMapping[];
+  /** Spreads: controls offset together along a curve (docs/spread-control.md). Absent = none. */
+  spreads?: PlaySpread[];
   /**
    * Projection mapping for the output window (types/projection.ts,
    * docs/projection.md): surfaces, corner pins, meshes, masks, edge blends.
@@ -969,6 +1027,8 @@ export interface TakeEvent {
   t: number; do: ActionKind; layerId: string; amount: number;
   /** A drum pad hit's velocity (0..1); 0 lets a gate pad go. Absent: 1. */
   vel?: number;
+  /** A drum pad hit: the pad (1-based) whose sound it played, after the sample index. Absent: its own. */
+  slot?: number;
 }
 
 /**
@@ -1577,7 +1637,11 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   // Readers first: a reader control, source or trigger needs its reader.
   const audioReaders = parseAudioReaders(r.audioReaders);
   const readerIds = new Set(audioReaders?.readers.map(x => x.id) ?? []);
+  // A Spread's Amount and Shift controls need their Spread.
+  const spreadIds = new Set((Array.isArray(r.spreads) ? r.spreads : []).map(x => (x && typeof x === 'object' ? str((x as Record<string, unknown>).id) : null)).filter((x): x is string => !!x));
   const keptControls = controls.filter(c => {
+    const sp = parseSpreadTarget(c.target);
+    if (sp) return spreadIds.has(sp.spreadId);
     if (parseAuTarget(c.target)) return auTargetExists(audioEngine, c.target);
     const gt = parseGrainsTarget(c.target);
     if (gt) return isGranulatorRack(aeRack(audioEngine, gt.rackId));
@@ -1630,6 +1694,15 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     if (ok) { seenPm.add(m.id); keptPm.push(m); }
   }
   if (keptPm.length) out.pairMappings = keptPm;
+  const spreads = parseSpreads(r.spreads, keptControls);
+  if (spreads.length) out.spreads = spreads;
+  if (spreads.length || out.controls.some(c => parseSpreadTarget(c.target))) {
+    // Amount and Shift controls only for the Spreads kept (and made for any a file lacks).
+    const ids = new Set(spreads.map(x => x.id));
+    out.controls = withSpreadControls(out.controls.filter(c => { const sp = parseSpreadTarget(c.target); return !sp || ids.has(sp.spreadId); }), spreads);
+    const ctl = new Set(out.controls.map(c => c.id));
+    out.mappings = out.mappings.filter(m => ctl.has(m.controlId) && (m.source.kind !== 'control' || ctl.has(m.source.controlId)));
+  }
   if (typeof r.notes === 'string' && r.notes.trim()) out.notes = r.notes.slice(0, 8000);
   const credit = parseSourceCredit(r.source);
   if (credit) out.source = credit;
@@ -1722,6 +1795,65 @@ function parsePairs(raw: unknown, controls: readonly PlayControl[]): PlayPair[] 
   return out;
 }
 
+const SPREAD_CURVES: ReadonlySet<string> = new Set<SpreadCurve>(['linear', 'easeIn', 'easeOut', 'easeInOut', 'exp', 'sine', 'custom']);
+
+/** Spreads whose members are float controls that exist (a control in one Spread at most, never a Spread's own Amount or Shift). */
+export function parseSpreads(raw: unknown, controls: readonly PlayControl[]): PlaySpread[] {
+  const floats = new Set(controls.filter(c => c.kind === 'float' && !parseSpreadTarget(c.target)).map(c => c.id));
+  const used = new Set<string>();
+  const seen = new Set<string>();
+  const out: PlaySpread[] = [];
+  for (const x of Array.isArray(raw) ? raw : []) {
+    if (out.length >= SPREADS_MAX) break;
+    if (!x || typeof x !== 'object') continue;
+    const o = x as Record<string, unknown>;
+    const id = str(o.id);
+    if (!id || seen.has(id) || id.includes('::')) continue;
+    seen.add(id);
+    const members: string[] = [];
+    for (const m of Array.isArray(o.members) ? o.members : []) {
+      if (typeof m !== 'string' || !floats.has(m) || used.has(m) || members.length >= 64) continue;
+      used.add(m); members.push(m);
+    }
+    const curve = str(o.curve);
+    const sp: PlaySpread = {
+      id: id.slice(0, 80),
+      label: (typeof o.label === 'string' && o.label.trim() ? o.label : 'Spread').slice(0, 120),
+      members,
+      amount: Math.max(-1000, Math.min(1000, num(o.amount, 0))),
+      shift: Math.max(-1000, Math.min(1000, num(o.shift, 0))),
+      curve: curve && SPREAD_CURVES.has(curve) ? (curve as SpreadCurve) : 'linear',
+      mode: o.mode === 'reset' ? 'reset' : 'offset',
+    };
+    if (sp.curve === 'custom') {
+      const ys = Array.isArray(o.curveY) ? o.curveY.filter((v): v is number => typeof v === 'number' && Number.isFinite(v)).slice(0, 32).map(v => Math.max(0, Math.min(1, v))) : [];
+      if (ys.length >= 2) sp.curveY = ys; else sp.curve = 'linear';
+    }
+    if (o.invert === true) sp.invert = true;
+    const resetOn = str(o.resetOn);
+    if (resetOn) sp.resetOn = resetOn.slice(0, 80);
+    out.push(sp);
+  }
+  return out;
+}
+
+/** The controls with each Spread's Amount and Shift controls (made when a file lacks them, after the Spread's first member). */
+export function withSpreadControls(controls: readonly PlayControl[], spreads: readonly PlaySpread[]): PlayControl[] {
+  let out = [...controls];
+  for (const sp of spreads) {
+    for (const key of ['amount', 'shift'] as const) {
+      const target = spreadTarget(sp.id, key);
+      if (out.some(c => c.target === target)) continue;
+      const c: PlayControl = key === 'amount'
+        ? { id: `${sp.id}:amount`, target, kind: 'float', label: `${sp.label} · Amount`, min: -1, max: 1, step: 0.01 }
+        : { id: `${sp.id}:shift`, target, kind: 'float', label: `${sp.label} · Shift`, min: 0, max: Math.max(1, sp.members.length - 1), step: 0.01 };
+      const after = out.findIndex(x => x.target === spreadTarget(sp.id, 'amount'));
+      if (key === 'shift' && after >= 0) out.splice(after + 1, 0, c); else out.push(c);
+    }
+  }
+  return out;
+}
+
 function parsePairAxis(raw: unknown): PairAxis {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const curve = str(o.curve);
@@ -1808,8 +1940,8 @@ export function parseTake(raw: unknown): PlayTake | null {
     const at = num(x.t), amount = num(x.amount);
     if (at === null || at < 0 || at > length + 1 || typeof x.do !== 'string' || typeof x.layerId !== 'string') continue;
     if (!(ACTION_KINDS as readonly string[]).includes(x.do) && !scriptActionKey(x.do)) continue;
-    const vel = num(x.vel);
-    events.push({ t: at, do: x.do as ActionKind, layerId: x.layerId, amount: amount ?? 1, ...(vel !== null ? { vel: Math.max(0, Math.min(1, vel)) } : {}) });
+    const vel = num(x.vel), slot = num(x.slot);
+    events.push({ t: at, do: x.do as ActionKind, layerId: x.layerId, amount: amount ?? 1, ...(vel !== null ? { vel: Math.max(0, Math.min(1, vel)) } : {}), ...(slot !== null && slot >= 1 && slot <= 128 ? { slot: Math.round(slot) } : {}) });
   }
   events.sort((a, b) => a.t - b.t);
   const dataFeeds = parseTakeDataFeeds(t.dataFeeds, length);
@@ -1834,5 +1966,5 @@ function rgb(v: unknown, fallback: [number, number, number]): [number, number, n
 
 /** True when there is nothing to save (the key is then left out of the file). */
 export function isPlayRecordEmpty(play: PlayRecord | undefined): boolean {
-  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.face && !play.pose && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx) && isAudioEngineEmpty(play.audioEngine) && isArrangementEmpty(play.arrangement) && !play.projection && !play.backgroundMatte);
+  return !play || (play.controls.length === 0 && play.mappings.length === 0 && play.layers.length === 0 && !play.layerKinds?.length && !play.actions?.length && !play.notes && !play.source && !play.midiFile && !play.padGrid && !play.takes?.length && !play.hands && !play.face && !play.pose && !play.audioReaders?.readers.length && !play.signals?.length && !play.pairs?.length && !play.spreads?.length && (!play.display || isDefaultDisplay(play.display)) && isFinishEmpty(play.finish) && isAudioFxEmpty(play.audioFx) && isAudioEngineEmpty(play.audioEngine) && isArrangementEmpty(play.arrangement) && !play.projection && !play.backgroundMatte);
 }
