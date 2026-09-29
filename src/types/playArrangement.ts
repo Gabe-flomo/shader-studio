@@ -49,6 +49,12 @@ export interface ArrTrack {
   /** Records when Record is pressed (default on). */
   arm: boolean;
   /**
+   * How the lane shows what it recorded (docs/arrangement.md, "Clips"): 'midi'
+   * (the default) draws the notes, 'audio' draws the track's rendered sound or an
+   * envelope from the notes. The tape is MIDI either way.
+   */
+  show?: 'midi' | 'audio';
+  /**
    * The clips on the lane (docs/arrangement.md, "Clips"): the spans recordings
    * covered, sorted, not overlapping. A muted clip's notes and moves don't
    * play. Absent on a tape recorded before clips: they're worked out from the
@@ -308,7 +314,7 @@ export function applyPasses(arr: PlayArrangement, passes: readonly ArrPass[], op
   return { ...arr, tracks, length, loop: arr.length > 0 ? arr.loop : true };
 }
 
-/** A track cleared (its notes, automation and clips; mute, solo and arm kept). */
+/** A track cleared (its notes, automation and clips; mute, solo, arm and how it shows kept). */
 export function clearTrack(arr: PlayArrangement, rack: string): PlayArrangement {
   const t = arr.tracks[rack];
   if (!t) return arr;
@@ -549,6 +555,7 @@ export function parseArrangement(raw: unknown): PlayArrangement | undefined {
       const track: ArrTrack = { notes: parseNotes(x.notes), auto: parseAuto(x.auto), arm: x.arm !== false };
       if (x.mute === true) track.mute = true;
       if (x.solo === true) track.solo = true;
+      if (x.show === 'audio') track.show = 'audio';
       const clips = parseClips(x.clips);
       if (clips) track.clips = clips;
       tracks[id] = track;

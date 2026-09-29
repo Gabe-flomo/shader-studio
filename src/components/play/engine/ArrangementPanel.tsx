@@ -9,8 +9,9 @@
  *               mute, solo, volume, meter; drag to reorder) and a lane on the
  *               bar/beat timeline with the loop brace, the record point and the
  *               playhead. Recordings are clips that look like audio (the
- *               track's rendered sound, or an envelope from its notes): select,
- *               mute, delete, trim their ends. No notes to edit.
+ *               notes by default, or the track's rendered sound / an envelope
+ *               from its notes when the track shows as Audio): select, mute,
+ *               delete, trim their ends. Note editing is a follow-up.
  *   master      the engine's output, at the bottom
  *   devices     the selected track's chain (DeviceChain.tsx), at the bottom
  *
@@ -657,6 +658,10 @@ function Track({ play, arr, rack, row, index, count, track, span, preview, narro
       { heading: 'Colour' },
       ...TRACK_COLORS.map((c, k) => ({ label: `Colour ${k + 1}${c === row.color ? ' ✓' : ''}`, icon: 'star' as IconName, iconColor: c, onSelect: () => recolor(c) })),
       'separator',
+      { heading: 'Show the tape as' },
+      { label: `MIDI notes${(track?.show ?? 'midi') === 'midi' ? ' ✓' : ''}`, icon: 'piano', hint: 'What was recorded, as notes', onSelect: () => patchT({ show: 'midi' }) },
+      { label: `Audio${track?.show === 'audio' ? ' ✓' : ''}`, icon: 'wave', hint: 'The track\'s rendered sound, or an envelope from the notes', onSelect: () => patchT({ show: 'audio' }) },
+      'separator',
       { label: row.locked ? 'Unlock the lead' : 'Lock as lead', icon: 'lock', hint: 'The lead takes MIDI notes, the computer keyboard and pad hits', onSelect: () => lockLead(rack.id, !row.locked) },
       { label: alone ? 'Record every armed track' : 'Record this track alone…', icon: 'record', hint: 'Replace or overdub just this track from the record point', onSelect: () => { useTape.setState({ selected: alone ? '' : rack.id }); } },
       { label: 'Move up', icon: 'chevU', disabled: index === 0, onSelect: () => move(-1) },
@@ -859,15 +864,33 @@ function drawClip(g: CanvasRenderingContext2D, clip: ArrClip, selected: boolean,
     g.textBaseline = 'middle';
     g.fillText(clip.mute ? `${name} (muted)` : name, x0 + 5, 1.5 + strip / 2 + 0.5, Math.max(0, cw - 10));
   }
-  // The waveform (the rendered sound, or an envelope drawn from the notes).
   const top = 1.5 + strip + 2, bottom = height - 3.5, mid = (top + bottom) / 2, amp = (bottom - top) / 2;
-  const cols = Math.max(8, Math.min(600, Math.round(cw / 1.5)));
-  const wave = clipWave(track, clip, cols, preview);
-  g.fillStyle = alpha(color, clip.mute ? 0.35 : 0.9);
-  const step = cw / cols;
-  for (let i = 0; i < cols; i++) {
-    const hh = Math.max(0.5, wave.peaks[i] * amp);
-    g.fillRect(x0 + i * step, mid - hh, Math.max(1, step - 0.25), hh * 2);
+  if (track?.show === 'audio') {
+    // The waveform (the rendered sound, or an envelope drawn from the notes).
+    const cols = Math.max(8, Math.min(600, Math.round(cw / 1.5)));
+    const wave = clipWave(track, clip, cols, preview);
+    g.fillStyle = alpha(color, clip.mute ? 0.35 : 0.9);
+    const step = cw / cols;
+    for (let i = 0; i < cols; i++) {
+      const hh = Math.max(0.5, wave.peaks[i] * amp);
+      g.fillRect(x0 + i * step, mid - hh, Math.max(1, step - 0.25), hh * 2);
+    }
+  } else {
+    // MIDI: the notes as bars, pitch up the lane (the track's own range), velocity as opacity.
+    const notes = (track?.notes ?? []).filter(n => n.t < clip.t + clip.d && n.t + n.d > clip.t);
+    const all = track?.notes ?? [];
+    let lo = 127, hi = 0;
+    for (const n of all) { if (n.n < lo) lo = n.n; if (n.n > hi) hi = n.n; }
+    if (lo > hi) { lo = 48; hi = 72; }
+    if (hi - lo < 12) { const c = (lo + hi) / 2; lo = Math.max(0, Math.round(c - 6)); hi = lo + 12; }
+    const rows = hi - lo + 1, rh = Math.max(2, (bottom - top) / rows);
+    for (const n of notes) {
+      const nx0 = Math.max(x0, x(n.t)), nx1 = Math.min(x1, x(n.t + Math.max(n.d, 0.02)));
+      const ny = bottom - (n.n - lo + 1) * rh;
+      g.fillStyle = alpha(color, clip.mute ? 0.3 : 0.45 + 0.5 * Math.max(0, Math.min(1, n.v)));
+      g.fillRect(nx0, ny, Math.max(2, nx1 - nx0 - 0.5), Math.max(1.5, rh - 0.75));
+    }
+    if (!notes.length) { g.fillStyle = alpha(color, 0.35); g.fillRect(x0, mid - 0.5, cw, 1); }
   }
   // Rack controls' moves inside the clip: thin lines across the control's range.
   g.lineWidth = 1;
