@@ -87,6 +87,10 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:osc:udpPort': S('OSC UDP port', 'devices'),
   'shader-studio:audio:plugins': S('Audio Unit plugins', 'devices', { hint: 'Every installed plugin is offered again, and none is marked New' }),
   'shader-studio:audio:engine': S('Audio engine output and volume', 'devices', { hint: 'The system output, full volume, not muted' }),
+  'shader-studio:settings:keepTrackerModels': S('Keep tracking models on this device', 'devices', { hint: 'Back to on: models are kept in Cache Storage' }),
+  'shader-studio:settings:warmupTracker:hands': S('Warm up hand tracking on open', 'devices'),
+  'shader-studio:settings:warmupTracker:face': S('Warm up face tracking on open', 'devices'),
+  'shader-studio:settings:warmupTracker:pose': S('Warm up body tracking on open', 'devices'),
   // Code editors
   'shader-studio:glsl-editor': S('GLSL page: the open code', 'editors'),
   'glsl-editor:open-shader': S('GLSL page: the open shader', 'editors'),

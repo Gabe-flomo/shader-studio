@@ -22,8 +22,19 @@ import type { HdFrame } from '../play/kit/hands.js';
 import type { TkFrame } from '../play/kit/tracks.js';
 
 export type TrackerKind = 'hands' | 'face' | 'pose';
-export type TrackerStatus = 'off' | 'starting' | 'on' | 'blocked' | 'error' | 'unsupported';
+/**
+ * 'starting' is the camera opening (before any model work starts);
+ * 'downloading' is the model and WebAssembly bytes coming in (getProgress()
+ * has how much of how many, when known); 'loading' is building the
+ * landmarker from them (WASM init, MediaPipe's own model load) — on the
+ * desktop, and once a model is cached, both are near-instant but still shown
+ * (docs/tracking.md "Models").
+ */
+export type TrackerStatus = 'off' | 'starting' | 'downloading' | 'loading' | 'on' | 'blocked' | 'error' | 'unsupported';
 export type HandStatus = TrackerStatus;
+
+/** How much of a tracker's model/WebAssembly has downloaded, while status is 'downloading'. Byte counts; `total` is 0 until the response's Content-Length is known. */
+export interface TrackerLoadProgress { loaded: number; total: number }
 
 export interface TrackerStats {
   /** Tracker frames a second, over the last second or so. */
@@ -70,6 +81,7 @@ export class TrackerFeed<F extends TrackerFrame = TrackerFrame> {
   private seq = 0;
   private count = 0;
   private options: TrackerOptions;
+  private progress: TrackerLoadProgress | null = null;
   stats: TrackerStats = { fps: 0, inferMs: 0, latencyMs: 0, delegate: '' };
 
   readonly kind: TrackerKind;
@@ -90,6 +102,8 @@ export class TrackerFeed<F extends TrackerFrame = TrackerFrame> {
     for (const l of this.listeners) l(this.status);
   }
   isOn(): boolean { return this.status === 'on'; }
+  /** How much of the model/WebAssembly has downloaded, while status is 'downloading'; null otherwise (or when the size isn't known yet). */
+  getProgress(): TrackerLoadProgress | null { return this.progress; }
 
   onStatus(cb: (s: TrackerStatus) => void): () => void {
     this.listeners.add(cb);
@@ -99,6 +113,7 @@ export class TrackerFeed<F extends TrackerFrame = TrackerFrame> {
   private setStatus(s: TrackerStatus, message = ''): void {
     this.status = s;
     this.message = message;
+    if (s !== 'downloading') this.progress = null;
     for (const l of this.listeners) l(s);
     inputBus.wake();
   }
@@ -146,12 +161,19 @@ export class TrackerFeed<F extends TrackerFrame = TrackerFrame> {
       }
       try {
         const { startTracker } = await import('./trackerPump');
+        this.setStatus('downloading');
         this.tracker = await startTracker({
           kind: this.kind,
           source: () => this.currentSource(),
           push: f => this.push(f as F),
           stats: s => { this.stats = s; },
           options: this.options,
+          onProgress: p => {
+            if (p.phase === 'loading') { this.setStatus('loading'); return; }
+            this.status = 'downloading';
+            this.progress = { loaded: p.loaded ?? 0, total: p.total ?? 0 };
+            for (const l of this.listeners) l(this.status);
+          },
         });
         this.tracker.setPaused(this.paused);
         this.setStatus('on');
@@ -198,3 +220,30 @@ export const handFeed = new TrackerFeed<HdFrame>('hands');
 export const faceFeed = new TrackerFeed<TkFrame>('face');
 export const poseFeed = new TrackerFeed<TkFrame>('pose');
 export const trackerFeeds = { hands: handFeed, face: faceFeed, pose: poseFeed } as const;
+
+/**
+ * "Warm up trackers when the app opens" (trackerCache.ts warmupEnabled): loads
+ * a tracker's model and the WebAssembly into Cache Storage without opening
+ * the camera or showing any status change, so the download is already done
+ * by the time someone presses Enable (the WASM/model init that follows still
+ * takes its usual moment). Never runs while a tracker is already on or
+ * starting, and never on the desktop (the models are bundled there already).
+ */
+export async function warmupTracker(kind: TrackerKind): Promise<void> {
+  const feed = trackerFeeds[kind];
+  if (feed.getStatus() !== 'off') return;
+  try {
+    const { modelsBundled } = await import('./trackerCache');
+    if (modelsBundled()) return;
+    const { openTrackerWorker } = await import('./trackerPump');
+    const { worker } = await openTrackerWorker(kind, feed.getOptions());
+    worker.postMessage({ type: 'close' });
+    window.setTimeout(() => worker.terminate(), 200);
+  } catch (e) { console.warn(`[${kind}] warm-up failed`, e); }
+}
+
+/** Warms up every tracker with "Warm up trackers when the app opens" on (called once from main.tsx). */
+export async function warmupTrackers(): Promise<void> {
+  const { warmupKinds } = await import('./trackerCache');
+  for (const kind of warmupKinds()) void warmupTracker(kind);
+}

@@ -11,6 +11,7 @@
  */
 import { tkDecode, tkEncode, tkToBase64, type TkRawFrame, type TkTrack } from '../play/kit/tracks.js';
 import type { TrackerKind, TrackerOptions } from './handFeed';
+import type { TrackerLoadEvent } from './trackerPump';
 import { inputBus } from './inputBus';
 import { hdTrackerOptions } from '../play/kit/hands.js';
 
@@ -141,7 +142,7 @@ export class BakeCancelled extends Error { constructor() { super('Analysis cance
  * hand that frame to the model and keep what it finds. `progress` gets 0..1.
  * Returns the encoded track and what it holds. Cancel with `signal`.
  */
-export async function analyseVideo(o: { kind: TrackerKind; blob: Blob; fps: number; options: TrackerOptions; progress?: (p: number) => void; signal?: AbortSignal }): Promise<{ bytes: Uint8Array; frames: number; duration: number; w: number; h: number }> {
+export async function analyseVideo(o: { kind: TrackerKind; blob: Blob; fps: number; options: TrackerOptions; progress?: (p: number) => void; onModelProgress?: (p: TrackerLoadEvent) => void; signal?: AbortSignal }): Promise<{ bytes: Uint8Array; frames: number; duration: number; w: number; h: number }> {
   const { openTrackerWorker, frameBitmap, sourceSize, resultFrame } = await import('./trackerPump');
   const url = URL.createObjectURL(o.blob);
   const v = document.createElement('video');
@@ -158,7 +159,7 @@ export async function analyseVideo(o: { kind: TrackerKind; blob: Blob; fps: numb
     const duration = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
     if (!duration) throw new Error('This video’s length isn’t known, so it can’t be analysed.');
     cancelled();
-    ({ worker } = await openTrackerWorker(o.kind, o.options));
+    ({ worker } = await openTrackerWorker(o.kind, o.options, o.onModelProgress));
     const fps = Math.max(1, Math.min(60, o.fps));
     const n = Math.max(1, Math.floor(Math.min(duration, BAKE_MAX_S) * fps) + 1);
     const frames: TkRawFrame[] = [];

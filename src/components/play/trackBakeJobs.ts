@@ -13,7 +13,9 @@ import { DEFAULT_HANDS, type PlayRecord } from '../../types/play';
 import { DEFAULT_FACE, DEFAULT_POSE, bakeFor, withBake, type PlayTracker, type TrackBakeRef } from '../../types/playTracking';
 import { toast } from '../ui/toastStore';
 
-export interface BakeJob { layerId: string; progress: number; abort: AbortController }
+/** The model downloading or loading (docs/tracking.md "Models"), before frame-by-frame analysis starts. */
+export interface BakeModelPhase { phase: 'downloading' | 'loading'; loaded?: number; total?: number }
+export interface BakeJob { layerId: string; progress: number; abort: AbortController; model?: BakeModelPhase }
 
 interface BakeJobs {
   jobs: Partial<Record<TrackerKind, BakeJob>>;
@@ -51,14 +53,18 @@ export async function startBake(kind: TrackerKind, layerId: string, fps: number)
   const options = trackerOptionsFor(kind, trackerSettingsOf(play, kind));
   const abort = new AbortController();
   const setJob = (job: BakeJob | undefined) => useBakeJobs.setState(s => ({ jobs: { ...s.jobs, [kind]: job } }));
-  setJob({ layerId, progress: 0, abort });
+  setJob({ layerId, progress: 0, abort, model: { phase: 'downloading' } });
   useBakeJobs.setState(s => ({ errors: { ...s.errors, [kind]: undefined } }));
-  let last = 0;
+  let last = 0, lastModel = 0;
   try {
     const r = await analyseVideo({
       kind, blob: file.blob, fps, options, signal: abort.signal,
       // Progress: a few updates a second, not one per frame.
       progress: p => { const now = performance.now(); if (now - last > 120 || p >= 1) { last = now; setJob({ layerId, progress: p, abort }); } },
+      onModelProgress: p => {
+        const now = performance.now();
+        if (now - lastModel > 80) { lastModel = now; setJob({ layerId, progress: 0, abort, model: { phase: p.phase, loaded: p.loaded, total: p.total } }); }
+      },
     });
     const key = newBakeKey(kind);
     const kept = await saveBake(key, r.bytes);

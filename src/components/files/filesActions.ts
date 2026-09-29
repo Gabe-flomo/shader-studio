@@ -48,6 +48,17 @@ export function syncApp(keys: string[]): void {
     if (any(k => k.startsWith('shader-studio-backgrounds:') || k === 'assetbrowser_folders')) resetBackgroundCache();
     // The theme is read once at start: follow a reset (or its undo) now.
     if (any(k => k === 'shader-studio:theme')) useThemeStore.setState({ mode: localStorage.getItem('shader-studio:theme') === 'dark' ? 'dark' : 'light' });
+    // Tracking models (docs/tracking.md): the keep/warm-up settings are read once into their own store.
+    if (any(k => k.startsWith('shader-studio:settings:keepTrackerModels') || k.startsWith('shader-studio:settings:warmupTracker:'))) {
+      void import('../../lib/trackerCache').then(({ useTrackerCacheSettings }) => useTrackerCacheSettings.setState({
+        keepModels: localStorage.getItem('shader-studio:settings:keepTrackerModels') !== '0',
+        warmup: {
+          hands: localStorage.getItem('shader-studio:settings:warmupTracker:hands') === '1',
+          face: localStorage.getItem('shader-studio:settings:warmupTracker:face') === '1',
+          pose: localStorage.getItem('shader-studio:settings:warmupTracker:pose') === '1',
+        },
+      }));
+    }
     const open = useNodeGraphStore.getState().currentGraph;
     if (open && localStorage.getItem(GRAPH_PREFIX + open.name) == null) useNodeGraphStore.setState({ currentGraph: null });
   } catch (e) { console.error('[files] refreshing the app after a change', e); }
