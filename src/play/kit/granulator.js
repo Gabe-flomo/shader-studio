@@ -161,6 +161,36 @@ export function grMakeEngine() {
     if (kind === 3) return Math.min(1, u * 64, (1 - u) * 64);
     return 0.5 - 0.5 * Math.cos(2 * Math.PI * u);
   }
+  // ── Where a grain is drawn (docs/granulator.md): straight, not an arc ──
+  /** A stable pseudo-random 0..1 for an integer id (a grain's slot), independent of any live random stream. */
+  function idHash(id) {
+    var x = (id * 2654435761) >>> 0;
+    x = (x ^ (x >>> 13)) >>> 0;
+    x = Math.imul(x, 2246822519) >>> 0;
+    x = (x ^ (x >>> 15)) >>> 0;
+    return x / 4294967296;
+  }
+  /**
+   * A grain's stable vertical row, 0..1 (0.5 the centre): pan-based when panning is
+   * meaningfully on (so the layout means something, straight across for straight
+   * pan), else a hash of its slot id so grains still spread over the height. Kept
+   * a little off dead centre either way, so a pill never sits on the zero line.
+   */
+  function grainRowAt(id, pan, hasPan) {
+    var t = hasPan ? 0.5 + 0.5 * (pan < -1 ? -1 : pan > 1 ? 1 : pan) : idHash(id);
+    if (t > 0.46 && t < 0.54) t = t < 0.5 ? 0.46 : 0.54;
+    return t;
+  }
+  /** A grain's pill span on its reading axis, either side of `pos`: its grain size in sample time (both 0..1 of the sample). */
+  function grainSpanAt(pos, size) {
+    var half = (size < 0 ? 0 : size) / 2;
+    return [pos - half, pos + half];
+  }
+  /** Opacity (0..1) from a grain's envelope amplitude: never fully gone while it sounds, never past opaque. */
+  function grainOpacityAt(amp) {
+    var a = amp < 0 ? 0 : amp > 1 ? 1 : amp;
+    return 0.15 + 0.85 * a;
+  }
   // ── Spectral: a sine table, an FFT, and the analysis (peaks per STFT frame) ──
   var TBL = 4096, SINE = new Float32Array(TBL + 1);
   for (var ti = 0; ti <= TBL; ti++) SINE[ti] = Math.sin(2 * Math.PI * ti / TBL);
@@ -286,7 +316,7 @@ export function grMakeEngine() {
     voices.push({ on: false, note: 60, vel: 1, stage: 2, level: 1, rate: 0, relRate: 0, scan: 0, wait: 0, alt: false, drone: false, latched: false, keyUp: false, order: 0, eh: newHeads(), sh: newHeads(), origin: 0 });
     var pts = [], ptCutoff = NaN;
     var grains = [];
-    for (var gi = 0; gi < MAXG; gi++) grains.push({ on: false, v: 0, pos: 0, rate: 1, len: 1, age: 0, amp: 0, gl: 0, gr: 0, semis: 0, band: 0, energy: 0, np: 0, pinc: new Float64Array(16), pamp: new Float64Array(16), pph: new Float64Array(16) });
+    for (var gi = 0; gi < MAXG; gi++) grains.push({ on: false, v: 0, pos: 0, rate: 1, len: 1, age: 0, amp: 0, gl: 0, gr: 0, pan: 0, semis: 0, band: 0, energy: 0, np: 0, pinc: new Float64Array(16), pamp: new Float64Array(16), pph: new Float64Array(16) });
     var live = 0;
 
     function wrap(x) { return x - Math.floor(x); }
@@ -433,7 +463,7 @@ export function grMakeEngine() {
       g.on = true; g.v = vIndex; g.len = len; g.age = 0; g.amp = amp; g.semis = semis;
       if (rRev < P.reverse) { g.rate = -rate; g.pos = start + len * rate; } else { g.rate = rate; g.pos = start; }
       if (mode === 4) { g.rate = 0; g.pos = start; }
-      g.gl = Math.cos((pan + 1) * Math.PI / 4); g.gr = Math.sin((pan + 1) * Math.PI / 4);
+      g.gl = Math.cos((pan + 1) * Math.PI / 4); g.gr = Math.sin((pan + 1) * Math.PI / 4); g.pan = pan;
       live++;
       if (live > maxCount) maxCount = live;
     }
@@ -459,7 +489,7 @@ export function grMakeEngine() {
       g.on = true; g.v = MAXV; g.len = len; g.age = 0; g.semis = semis; g.np = 0; g.band = 0; g.energy = 0;
       g.amp = Math.max(0, pt.amp) * (1 - P.levelRand * rLevel) / Math.sqrt(overlap);
       if (rRev < P.reverse) { g.rate = -rate; g.pos = start + len * rate; } else { g.rate = rate; g.pos = start; }
-      g.gl = Math.cos((pan + 1) * Math.PI / 4); g.gr = Math.sin((pan + 1) * Math.PI / 4);
+      g.gl = Math.cos((pan + 1) * Math.PI / 4); g.gr = Math.sin((pan + 1) * Math.PI / 4); g.pan = pan;
       live++;
       if (live > maxCount) maxCount = live;
     }
@@ -598,13 +628,18 @@ export function grMakeEngine() {
         frame += n;
       },
       stats: function (o) {
-        var c = 0;
+        var c = 0, hasPan = P.panRand > 1e-6;
         for (var i = 0; i < MAXG; i++) {
           var g = grains[i];
           if (!g.on) continue;
           o.pos[c] = bufLen ? wrap(g.pos / bufLen) : 0;
           o.amp[c] = windowAt(P.window | 0, g.age / g.len, P.skew) * g.amp * voices[g.v].level;
           o.pitch[c] = g.semis;
+          // Where it's drawn (docs/granulator.md, "no arcs"): its pill's length (grain size, a
+          // share of the sample's own time) and its stable row (i, the grain's own slot, is a
+          // stable id for its life: no reslotting happens while it sounds).
+          if (o.size) o.size[c] = bufDur > 0 ? (g.len / sr) / bufDur : 0;
+          if (o.row) o.row[c] = grainRowAt(i, g.pan, hasPan);
           if (o.band) { o.band[c] = g.band; o.energy[c] = g.np ? windowAt(P.window | 0, g.age / g.len, P.skew) * g.amp * voices[g.v].level * g.energy : 0; }
           c++;
         }
@@ -633,12 +668,44 @@ export function grMakeEngine() {
   }
   create.analyse = analyse;
   create.bandHz = bandHz;
+  create.idHash = idHash;
+  create.grainRow = grainRowAt;
+  create.grainSpan = grainSpanAt;
+  create.grainOpacity = grainOpacityAt;
   return create;
 }
 
 /** The readouts every engine fills (stats()). */
 export function grNewStats() {
-  return { count: 0, maxCount: 0, pos: new Float32Array(64), amp: new Float32Array(64), pitch: new Float32Array(64), band: new Float32Array(64), energy: new Float32Array(64), heads: new Float32Array(8), headCount: 0, headAxis: 0 };
+  return { count: 0, maxCount: 0, pos: new Float32Array(64), amp: new Float32Array(64), pitch: new Float32Array(64), size: new Float32Array(64), row: new Float32Array(64), band: new Float32Array(64), energy: new Float32Array(64), heads: new Float32Array(8), headCount: 0, headAxis: 0 };
+}
+
+// ── Where a grain is drawn / where its null goes (docs/granulator.md) ───────
+// Straight, not an arc: x its read position (or, Spectral, its band), the
+// pill's length its grain size in sample time, its row a stable per-grain
+// offset (pan-based when Pan random is on, else a hash of its slot so grains
+// still spread), opacity its envelope. These call the engine's own
+// self-contained versions (grMakeEngine, so the worklet and this module
+// agree bit for bit).
+
+/** A stable pseudo-random 0..1 for an integer id (a grain's slot). */
+export function grIdHash(id) {
+  return grMakeEngine().idHash(id);
+}
+
+/** A grain's stable row 0..1 (0.5 the centre): pan-based when `hasPan`, else a hash of `id`. */
+export function grGrainRow(id, pan, hasPan) {
+  return grMakeEngine().grainRow(id, pan, hasPan);
+}
+
+/** A grain's pill span `[start, end]` either side of `pos`, both 0..1 of the sample: its grain `size` (also 0..1). */
+export function grGrainSpan(pos, size) {
+  return grMakeEngine().grainSpan(pos, size);
+}
+
+/** Opacity (0..1) from a grain's envelope amplitude (0..1). */
+export function grGrainOpacity(amp) {
+  return grMakeEngine().grainOpacity(amp);
 }
 
 /**
@@ -772,7 +839,7 @@ class PfGranulator extends AudioWorkletProcessor {
     super();
     var p = (o && o.processorOptions) || {};
     this.e = grCreateEngine(sampleRate, p.seed || 1, { autoSpectrum: false });
-    this.st = { count: 0, maxCount: 0, pos: new Float32Array(64), amp: new Float32Array(64), pitch: new Float32Array(64), band: new Float32Array(64), energy: new Float32Array(64), heads: new Float32Array(8), headCount: 0, headAxis: 0 };
+    this.st = { count: 0, maxCount: 0, pos: new Float32Array(64), amp: new Float32Array(64), pitch: new Float32Array(64), size: new Float32Array(64), row: new Float32Array(64), band: new Float32Array(64), energy: new Float32Array(64), heads: new Float32Array(8), headCount: 0, headAxis: 0 };
     this.n = 0; this.alive = true;
     var self = this;
     this.port.onmessage = function (ev) { self.msg(ev.data); };
@@ -797,10 +864,14 @@ class PfGranulator extends AudioWorkletProcessor {
     this.e.sync(currentFrame);
     this.e.process(L, R, L.length);
     if (++this.n % 6 === 0) {
-      var s = this.e.stats(this.st), c = s.count, out = new Float32Array(12 + c * 5);
+      var s = this.e.stats(this.st), c = s.count, out = new Float32Array(12 + c * 7);
       out[0] = c; out[1] = s.maxCount; out[2] = s.headCount; out[3] = s.headAxis;
       for (var h = 0; h < 8; h++) out[4 + h] = s.heads[h];
-      for (var i = 0; i < c; i++) { out[12 + i] = s.pos[i]; out[12 + c + i] = s.amp[i]; out[12 + 2 * c + i] = s.pitch[i]; out[12 + 3 * c + i] = s.band[i]; out[12 + 4 * c + i] = s.energy[i]; }
+      for (var i = 0; i < c; i++) {
+        out[12 + i] = s.pos[i]; out[12 + c + i] = s.amp[i]; out[12 + 2 * c + i] = s.pitch[i];
+        out[12 + 3 * c + i] = s.band[i]; out[12 + 4 * c + i] = s.energy[i];
+        out[12 + 5 * c + i] = s.size[i]; out[12 + 6 * c + i] = s.row[i];
+      }
       this.port.postMessage(out, [out.buffer]);
     }
     return this.alive;
@@ -831,13 +902,17 @@ export function grLoadWorklet(ctx) {
   return p;
 }
 
-/** The worklet's packed readouts into `st`: count, most, spawn points, then per grain position, level, pitch, band, energy. */
+/** The worklet's packed readouts into `st`: count, most, spawn points, then per grain position, level, pitch, band, energy, size, row. */
 export function grReadStats(d, st) {
   if (!(d instanceof Float32Array) || d.length < 12) return st;
   const c = d[0] | 0;
   st.count = c; st.maxCount = d[1]; st.headCount = d[2] | 0; st.headAxis = d[3] | 0;
   for (let h = 0; h < 8; h++) st.heads[h] = d[4 + h];
-  for (let i = 0; i < c; i++) { st.pos[i] = d[12 + i]; st.amp[i] = d[12 + c + i]; st.pitch[i] = d[12 + 2 * c + i]; st.band[i] = d[12 + 3 * c + i]; st.energy[i] = d[12 + 4 * c + i]; }
+  for (let i = 0; i < c; i++) {
+    st.pos[i] = d[12 + i]; st.amp[i] = d[12 + c + i]; st.pitch[i] = d[12 + 2 * c + i];
+    st.band[i] = d[12 + 3 * c + i]; st.energy[i] = d[12 + 4 * c + i];
+    st.size[i] = d[12 + 5 * c + i]; st.row[i] = d[12 + 6 * c + i];
+  }
   return st;
 }
 
