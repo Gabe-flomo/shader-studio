@@ -18,7 +18,7 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
   document.head.appendChild(s);
 }
 import { toast } from '../ui/toastStore';
-import type { GraphNode, DataType, NodeDefinition } from '../../types/nodeGraph';
+import type { GraphNode, DataType, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
@@ -2790,8 +2790,158 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     updateNodeParams(node.id, { [key]: current }, { immediate: true });
   };
 
+  /**
+   * Renders one float param's row (value chip + ruler, or — while wired/keyframed/external —
+   * the chip explaining why it's locked). `compact` drops the row's own left padding, min-height
+   * and the bidir/reset range-tool buttons so two of these can share a single row; used by
+   * `ParamDef.pair` groups (Remap's Input range / Output range) alongside the normal, full-width
+   * rendering for an ordinary float param.
+   */
+  const renderFloatParam = (key: string, paramDef: ParamDef, compact = false): React.ReactNode => {
+    const rowStyle: React.CSSProperties = compact
+      ? { position: 'relative', display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }
+      : { position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 12px 4px 16px' };
+    const shortLabel = paramDef.label.trim().split(/\s+/).pop() ?? paramDef.label;
+    const labelNode = (muted: boolean, extra?: React.ReactNode) => compact
+      ? (
+        <span
+          title={paramDef.hint}
+          style={{
+            minWidth: 26, flexShrink: 0, color: muted ? tk.text.faint : tk.text.secondary, fontSize: 10.5,
+            textTransform: 'uppercase', letterSpacing: '0.03em',
+          }}
+        >{shortLabel}{extra}</span>
+      )
+      : <ParamLabel muted={muted} title={paramDef.hint}>{paramDef.label}{extra}</ParamLabel>;
+
+    // A connected matching input socket overrides the slider: show where the value comes from
+    const socketConn = node.inputs[key]?.connection;
+    const isSocketConnected = socketConn != null;
+    const isParamExternal = externalInputKeys?.has(key) ?? false;
+    const isParamExternallyDriven = externalParamKeys?.has(key) ?? false;
+    const paramInputKey = `__param_${key}`;
+    const paramInputConn = node.inputs[paramInputKey]?.connection;
+    const isParamInternallyWired = paramInputConn != null;
+    const lockIcon = <span style={{ marginLeft: 4, verticalAlign: -2, display: 'inline-flex' }}><Icon name="lock" size={11} /></span>;
+    if (isSocketConnected) {
+      const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, socketConn!.nodeId, socketConn!.outputKey);
+      return (
+        <div key={key} style={rowStyle}>
+          {labelNode(true, isParamExternal && lockIcon)}
+          <WiredChip source={socketConn!} expr={srcExpr} locked={isParamExternal} />
+        </div>
+      );
+    }
+    const val = typeof node.params[key] === 'number' ? (node.params[key] as number) : 0;
+    // A wire into another socket has taken this slider over (Center X under a wired Center):
+    // greyed, naming the source; hovering lights the wire and the node it comes from.
+    const driver = !isParamInternallyWired ? driverOf(node, key) : null;
+    if (driver) {
+      const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, driver.connection.nodeId, driver.connection.outputKey);
+      return (
+        <div key={key} data-param-key={key} style={rowStyle} title={`Set by the wire into ${driver.socketLabel}: this slider does nothing while it's connected`}
+          onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: driver.socketKey, dir: 'in' })}
+          onMouseLeave={() => onSocketHover?.(null)}>
+          {labelNode(true)}
+          <WiredChip source={driver.connection} expr={srcExpr} locked />
+          {!compact && <span style={{ color: tk.text.faint, font: `500 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>via {driver.socketLabel}</span>}
+        </div>
+      );
+    }
+    // Reserved for, or driven by, a wire from outside the group — show the value, locked
+    if (isParamExternal || isParamExternallyDriven) {
+      return (
+        <div key={key} style={rowStyle} title="Set from outside the group">
+          {labelNode(true, lockIcon)}
+          <RulerSlider value={val} min={paramDef.min ?? 0} max={paramDef.max ?? 1} step={paramDef.step ?? 0.01}
+            onChange={() => {}} disabled ariaLabel={paramDef.label} touch={isTouchDevice} />
+        </div>
+      );
+    }
+    // Wired inside the group through the param's own socket
+    if (isParamInternallyWired) {
+      const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, paramInputConn!.nodeId, paramInputConn!.outputKey);
+      return (
+        <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
+          {activeGroupId && (
+            <ParamSocket color={TYPE_COLORS.float} wired touch={isTouchDevice}
+              register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
+              onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
+          )}
+          {labelNode(true)}
+          <WiredChip source={paramInputConn!} expr={srcExpr} />
+          <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, paramInputKey)} />
+        </div>
+      );
+    }
+    const step = paramDef.step ?? 0.01;
+    const bidir = node.params[`__scBidir_${key}`] === true;
+    const customRange = hasCustomRange(node.params, key);
+    const { min: effMin, max: effMax } = paramSliderRange(node.params, key, paramDef);
+    const defVal = def?.defaultParams?.[key];
+    const hovered = hoveredSliderKey === key;
+    const drive = playDriven.get(`${node.id}::${key}`);
+    const isKeyframed = node.inputs[key]?.type === 'float' && !node.inputs[key]?.connection
+      && socketHasKeyframes(node, key) && !isKeyframeBypassed(node, key);
+
+    return (
+      <div
+        key={key}
+        data-param-key={key}
+        style={rowStyle}
+        onMouseDown={e => e.stopPropagation()}
+        onMouseEnter={() => { setHoveredSliderKey(key); setHoveredParamHint(paramDef.hint ?? null); }}
+        onMouseLeave={() => { setHoveredSliderKey(prev => prev === key ? null : prev); setHoveredParamHint(null); }}
+      >
+        {activeGroupId && (
+          <ParamSocket color={TYPE_COLORS.float} wired={false} touch={isTouchDevice}
+            register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
+            onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
+        )}
+        {labelNode(false)}
+        {drive && <PlayDriveChip drive={drive} />}
+        {isKeyframed ? (
+          <KeyframedRuler node={node} socketKey={key} label={paramDef.label} min={effMin} max={effMax} step={step} touch={isTouchDevice} />
+        ) : (
+          <RulerSlider
+            value={val}
+            min={effMin}
+            max={effMax}
+            step={adaptiveStep(val, step)}
+            defaultValue={typeof defVal === 'number' ? defVal : (effMin + effMax) / 2}
+            onChange={v => setFloat(key, String(v))}
+            onType={n => setFloat(key, String(n))}
+            // Typing past the range widens it (rangeAfterTyping): the card keeps the new range.
+            onRange={(lo, hi) => updateNodeParams(node.id, extendRangePatch(key, lo, hi))}
+            hard={paramDef.hard}
+            ariaLabel={paramDef.label}
+            touch={isTouchDevice}
+            disabled={!!drive}
+          />
+        )}
+        {/* Range tools: bidirectional (±max) and, after typing past the range, reset it.
+            Always there (faint until needed) so hovering never moves the slider under the pointer.
+            Skipped in compact (paired) rows — there's no room, and each end can still be typed past
+            its range to widen it. */}
+        {!compact && (
+          <div style={{ display: 'flex', gap: 1, marginRight: -6, opacity: hovered || bidir || customRange ? 1 : 0.4, transition: 'opacity 120ms' }}>
+            <CardButton icon="bidir" on={bidir}
+              label={bidir ? `Range is −${+effMax.toFixed(3)} to ${+effMax.toFixed(3)}: click for 0 to max` : 'Make the range run both ways (−max to max)'}
+              onClick={() => updateNodeParams(node.id, { [`__scBidir_${key}`]: !bidir, [`__scMin_${key}`]: null })} />
+            {customRange && (
+              <CardButton icon="reset" label="Reset the slider range" onClick={() => updateNodeParams(node.id, resetRangePatch(key))} />
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // An expression's knobs are drawn under their input row (renderKnobRow), not with the sliders.
   const paramDefs = Object.fromEntries(Object.entries(def.paramDefs ?? {}).filter(([k]) => !isKnobParamKey(node, k)));
+  // Param keys consumed as the second half of a `ParamDef.pair` group (e.g. Remap's inMax/outMax):
+  // rendered together with their pair's owner, so they're skipped when the loop reaches them directly.
+  const pairSecondaryKeys = new Set(Object.values(paramDefs).map(pd => pd.pair?.with).filter((v): v is string => !!v));
   // Hairline between the sockets, params and outputs sections
   const sectionRule = <div aria-hidden style={{ height: 1, background: tk.border.subtle, margin: '6px 0' }} />;
 
@@ -3876,6 +4026,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               : [paramDef.showWhen.value];
             if (!allowed.includes(watchedVal)) return null;
           }
+          // The second half of a `pair` group (e.g. Remap's inMax/outMax) is rendered by its
+          // owner below, in one row.
+          if (pairSecondaryKeys.has(key)) return null;
           // 'string' type → text input, or a code textarea for 'body'
           if (paramDef.type === 'string') {
             const val    = typeof node.params[key] === 'string' ? (node.params[key] as string) : '';
@@ -3918,125 +4071,25 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 12px 4px 16px',
           };
 
-          if (paramDef.type === 'float') {
-            // A connected matching input socket overrides the slider: show where the value comes from
-            const socketConn = node.inputs[key]?.connection;
-            const isSocketConnected = socketConn != null;
-            const isParamExternal = externalInputKeys?.has(key) ?? false;
-            const isParamExternallyDriven = externalParamKeys?.has(key) ?? false;
-            const paramInputKey = `__param_${key}`;
-            const paramInputConn = node.inputs[paramInputKey]?.connection;
-            const isParamInternallyWired = paramInputConn != null;
-            const lockIcon = <span style={{ marginLeft: 4, verticalAlign: -2, display: 'inline-flex' }}><Icon name="lock" size={11} /></span>;
-            if (isSocketConnected) {
-              const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, socketConn!.nodeId, socketConn!.outputKey);
-              return (
-                <div key={key} style={rowStyle}>
-                  <ParamLabel muted>{paramDef.label}{isParamExternal && lockIcon}</ParamLabel>
-                  <WiredChip source={socketConn!} expr={srcExpr} locked={isParamExternal} />
-                </div>
-              );
-            }
-            const val = typeof node.params[key] === 'number' ? (node.params[key] as number) : 0;
-            // A wire into another socket has taken this slider over (Center X under a wired Center):
-            // greyed, naming the source; hovering lights the wire and the node it comes from.
-            const driver = !isParamInternallyWired ? driverOf(node, key) : null;
-            if (driver) {
-              const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, driver.connection.nodeId, driver.connection.outputKey);
-              return (
-                <div key={key} data-param-key={key} style={rowStyle} title={`Set by the wire into ${driver.socketLabel}: this slider does nothing while it's connected`}
-                  onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: driver.socketKey, dir: 'in' })}
-                  onMouseLeave={() => onSocketHover?.(null)}>
-                  <ParamLabel muted>{paramDef.label}</ParamLabel>
-                  <WiredChip source={driver.connection} expr={srcExpr} locked />
-                  <span style={{ color: tk.text.faint, font: `500 10.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>via {driver.socketLabel}</span>
-                </div>
-              );
-            }
-            // Reserved for, or driven by, a wire from outside the group — show the value, locked
-            if (isParamExternal || isParamExternallyDriven) {
-              return (
-                <div key={key} style={rowStyle} title="Set from outside the group">
-                  <ParamLabel muted>{paramDef.label}{lockIcon}</ParamLabel>
-                  <RulerSlider value={val} min={paramDef.min ?? 0} max={paramDef.max ?? 1} step={paramDef.step ?? 0.01}
-                    onChange={() => {}} disabled ariaLabel={paramDef.label} touch={isTouchDevice} />
-                </div>
-              );
-            }
-            // Wired inside the group through the param's own socket
-            if (isParamInternallyWired) {
-              const srcExpr = getSourceExpr(shaderLines, nodeOutputVarMap, paramInputConn!.nodeId, paramInputConn!.outputKey);
-              return (
-                <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
-                  {activeGroupId && (
-                    <ParamSocket color={TYPE_COLORS.float} wired touch={isTouchDevice}
-                      register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
-                      onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
-                  )}
-                  <ParamLabel muted>{paramDef.label}</ParamLabel>
-                  <WiredChip source={paramInputConn!} expr={srcExpr} />
-                  <CardButton icon="unlink" label="Disconnect" onClick={() => disconnectInput(node.id, paramInputKey)} />
-                </div>
-              );
-            }
-            const step = paramDef.step ?? 0.01;
-            const bidir = node.params[`__scBidir_${key}`] === true;
-            const customRange = hasCustomRange(node.params, key);
-            const { min: effMin, max: effMax } = paramSliderRange(node.params, key, paramDef);
-            const defVal = def?.defaultParams?.[key];
-            const hovered = hoveredSliderKey === key;
-            const drive = playDriven.get(`${node.id}::${key}`);
-            const isKeyframed = node.inputs[key]?.type === 'float' && !node.inputs[key]?.connection
-              && socketHasKeyframes(node, key) && !isKeyframeBypassed(node, key);
-
-
+          // A pair group (Remap's Input range / Output range): one row, two compact slots, each
+          // still fully wired/keyframable/socketed via renderFloatParam — just squeezed together.
+          if (paramDef.type === 'float' && paramDef.pair) {
+            const otherKey = paramDef.pair.with;
+            const otherDef = paramDefs[otherKey];
             return (
-              <div
-                key={key}
-                data-param-key={key}
-                style={rowStyle}
-                onMouseDown={e => e.stopPropagation()}
-                onMouseEnter={() => { setHoveredSliderKey(key); setHoveredParamHint(paramDef.hint ?? null); }}
-                onMouseLeave={() => { setHoveredSliderKey(prev => prev === key ? null : prev); setHoveredParamHint(null); }}
-              >
-                {activeGroupId && (
-                  <ParamSocket color={TYPE_COLORS.float} wired={false} touch={isTouchDevice}
-                    register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
-                    onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
-                )}
-                <ParamLabel title={paramDef.hint}>{paramDef.label}</ParamLabel>
-                {drive && <PlayDriveChip drive={drive} />}
-                {isKeyframed ? (
-                  <KeyframedRuler node={node} socketKey={key} label={paramDef.label} min={effMin} max={effMax} step={step} touch={isTouchDevice} />
-                ) : (
-                  <RulerSlider
-                    value={val}
-                    min={effMin}
-                    max={effMax}
-                    step={adaptiveStep(val, step)}
-                    defaultValue={typeof defVal === 'number' ? defVal : (effMin + effMax) / 2}
-                    onChange={v => setFloat(key, String(v))}
-                    onType={n => setFloat(key, String(n))}
-                    // Typing past the range widens it (rangeAfterTyping): the card keeps the new range.
-                    onRange={(lo, hi) => updateNodeParams(node.id, extendRangePatch(key, lo, hi))}
-                    hard={paramDef.hard}
-                    ariaLabel={paramDef.label}
-                    touch={isTouchDevice}
-                    disabled={!!drive}
-                  />
-                )}
-                {/* Range tools: bidirectional (±max) and, after typing past the range, reset it.
-                    Always there (faint until needed) so hovering never moves the slider under the pointer. */}
-                <div style={{ display: 'flex', gap: 1, marginRight: -6, opacity: hovered || bidir || customRange ? 1 : 0.4, transition: 'opacity 120ms' }}>
-                  <CardButton icon="bidir" on={bidir}
-                    label={bidir ? `Range is −${+effMax.toFixed(3)} to ${+effMax.toFixed(3)}: click for 0 to max` : 'Make the range run both ways (−max to max)'}
-                    onClick={() => updateNodeParams(node.id, { [`__scBidir_${key}`]: !bidir, [`__scMin_${key}`]: null })} />
-                  {customRange && (
-                    <CardButton icon="reset" label="Reset the slider range" onClick={() => updateNodeParams(node.id, resetRangePatch(key))} />
-                  )}
+              <div key={key} style={{ padding: '4px 12px 4px 16px', display: 'flex', flexDirection: 'column', gap: 4 }} onMouseDown={e => e.stopPropagation()}>
+                <span style={{ color: tk.text.secondary, fontSize: 12.5 }}>{paramDef.pair.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {renderFloatParam(key, paramDef, true)}
+                  <span aria-hidden style={{ width: 8, height: 1, flexShrink: 0, borderRadius: 1, background: tk.border.default }} />
+                  {otherDef ? renderFloatParam(otherKey, otherDef, true) : null}
                 </div>
               </div>
             );
+          }
+
+          if (paramDef.type === 'float') {
+            return renderFloatParam(key, paramDef, false);
           }
 
           if (paramDef.type === 'vec3') {

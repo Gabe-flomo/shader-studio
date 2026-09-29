@@ -580,11 +580,20 @@ export const NormalizeVec2Node: NodeDefinition = {
   },
 };
 
+/**
+ * Version 2 adds the `clamp` toggle ("Clamp output" / safe remap): a guarded divide that also
+ * corrects for an inverted input range (inMin > inMax), replacing the older, simpler divide-by-
+ * zero guard. A save from before the toggle existed never has `clamp` in its params, so it reads
+ * as `false` — the classic, unguarded-for-inversion math, unchanged — while a node created since
+ * defaults to `true` (the owner called it "safe clamp"). See migrateParams below.
+ */
+export const REMAP_VERSION = 2;
+
 export const RemapNode: NodeDefinition = {
   type: 'remap',
   label: 'Remap',
   category: 'Math', subcategory: 'Interpolation',
-  description: 'Re-map a value from [inMin, inMax] to [outMin, outMax]. Smoothstep mode eases in/out. Great for turning a 0–1 noise into any range you need.',
+  description: 'Re-map a value from [inMin, inMax] to [outMin, outMax]. Smoothstep mode eases in/out. Clamp output keeps the result inside [outMin, outMax] even when the value falls outside the input range; off lets it extrapolate. Great for turning a 0–1 noise into any range you need.',
   inputs: {
     value:  { type: 'float', label: 'Value'      },
     inMin:  { type: 'float', label: 'In Min'     },
@@ -593,12 +602,22 @@ export const RemapNode: NodeDefinition = {
     outMax: { type: 'float', label: 'Out Max'    },
   },
   outputs: { result: { type: 'float', label: 'Result' } },
-  defaultParams: { inMin: 0.0, inMax: 1.0, outMin: 0.0, outMax: 1.0, smooth: 'linear' },
+  defaultParams: { inMin: 0.0, inMax: 1.0, outMin: 0.0, outMax: 1.0, smooth: 'linear', clamp: true, _schemaVersion: REMAP_VERSION },
+  version: REMAP_VERSION,
+  migrateParams: (params, fromVersion) => {
+    if (fromVersion >= REMAP_VERSION) return params;
+    // A save from before the toggle existed keeps its exact old behaviour.
+    return { ...params, clamp: params.clamp ?? false };
+  },
   paramDefs: {
-    inMin:  { label: 'In Min',  type: 'float', min: -10, max: 10, step: 0.01 },
+    inMin:  { label: 'In Min',  type: 'float', min: -10, max: 10, step: 0.01, pair: { with: 'inMax', label: 'Input range' } },
     inMax:  { label: 'In Max',  type: 'float', min: -10, max: 10, step: 0.01 },
-    outMin: { label: 'Out Min', type: 'float', min: -10, max: 10, step: 0.01 },
+    outMin: { label: 'Out Min', type: 'float', min: -10, max: 10, step: 0.01, pair: { with: 'outMax', label: 'Output range' } },
     outMax: { label: 'Out Max', type: 'float', min: -10, max: 10, step: 0.01 },
+    clamp: {
+      label: 'Clamp output', type: 'bool', compileTime: true,
+      hint: 'Safe remap: clamps t to 0–1 before mixing, so the result never leaves [Out Min, Out Max] and a zero-width or inverted input range can\'t divide badly. Off keeps the classic unclamped extrapolation.',
+    },
     smooth: { label: 'Mode', type: 'select', options: [
       { value: 'linear',      label: 'Linear'      },
       { value: 'smoothstep',  label: 'Smoothstep'  },
@@ -612,7 +631,16 @@ export const RemapNode: NodeDefinition = {
     const outMin = inputVars.outMin ?? p(node.params.outMin, 0.0);
     const outMax = inputVars.outMax ?? p(node.params.outMax, 1.0);
     const smooth = node.params.smooth === 'smoothstep';
-    const tExpr  = `clamp((${val} - ${inMin}) / max(${inMax} - ${inMin}, 0.0001), 0.0, 1.0)`;
+    // Default true for a fresh node (defaultParams); an old save is migrated to an explicit false.
+    const clampOn = node.params.clamp !== false;
+    const tExpr = clampOn
+      // Guarded divide: the denominator's magnitude is floored at 1e-6, and its sign follows
+      // (inMax - inMin) so an inverted range (inMin > inMax) still remaps the right way instead
+      // of flipping through the floor. (`sign()` would return 0 for an exact zero-width range,
+      // reintroducing the divide-by-zero it's meant to guard against, so the sign is written out.)
+      ? `clamp((${val} - ${inMin}) / (max(abs(${inMax} - ${inMin}), 1e-6) * (${inMax} - ${inMin} < 0.0 ? -1.0 : 1.0)), 0.0, 1.0)`
+      // Classic path, unchanged: a plain floor on the denominator (no sign correction).
+      : `clamp((${val} - ${inMin}) / max(${inMax} - ${inMin}, 0.0001), 0.0, 1.0)`;
     const normT  = smooth ? `smoothstep(0.0, 1.0, ${tExpr})` : tExpr;
     return {
       code: `    float ${id}_result = mix(${outMin}, ${outMax}, ${normT});\n`,
