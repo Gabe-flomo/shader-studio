@@ -248,3 +248,15 @@ describe('touch to configure (Configure)', () => {
     expect(parseTouched(null)).toBeNull();
   });
 });
+
+
+describe('how a track shows its tape', () => {
+  it('reads and keeps show: audio; midi is the default and survives a clear', async () => {
+    const { parseArrangement, clearTrack, emptyArrangement, patchTrack } = await import('../../types/playArrangement');
+    const arr = patchTrack({ ...emptyArrangement(), tracks: { r1: { notes: [{ t: 0, n: 60, v: 1, d: 0.5 }], auto: {}, arm: true } } }, 'r1', { show: 'audio' });
+    const back = parseArrangement(JSON.parse(JSON.stringify(arr)));
+    expect(back!.tracks.r1.show).toBe('audio');
+    expect(parseArrangement(JSON.parse(JSON.stringify(patchTrack(arr, 'r1', { show: 'midi' }))))!.tracks.r1.show).toBeUndefined();
+    expect(clearTrack(arr, 'r1').tracks.r1.show).toBe('audio');
+  });
+});

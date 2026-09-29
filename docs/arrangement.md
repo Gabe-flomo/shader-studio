@@ -123,3 +123,14 @@ Dev: `__shaderStudioDev.tape` / `useTape` / `audioEngine` (`audioEngine.setMaste
 4. Count-in 1 bar with the metronome on, record from the middle: the clicks line up with the notes already there; the new notes land after the point.
 5. Make a take → Record → render with FFmpeg: the video's sound has the tape.
 6. Record past the end until 60 s: the notice, the tape kept.
+
+
+## Showing the tape as MIDI or audio
+
+*29 Sep 2026.* The tape is MIDI underneath either way. A track's ⋯ menu → **Show
+the tape as** picks how its clips draw: **MIDI notes** (the default, back by the
+owner's request: each note a bar, pitch up the lane over the track's own range,
+velocity as opacity) or **Audio** (the rendered sound, or an envelope from the
+notes when the sound isn't available here). `ArrTrack.show` ('midi' | 'audio';
+absent = midi), kept when a track is cleared. Note editing on MIDI clips is the
+next step.
