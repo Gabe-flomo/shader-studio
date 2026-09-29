@@ -43,6 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-09-28',
     title: 'Halation, measured',
     highlights: [
+      { area: 'Desktop', text: 'Audio Unit effects after a Granulator are heard and open their windows: its sound is sent into the engine like Sound in.', link: { kind: 'doc', path: 'docs/granulator.md' } },
       { area: 'Play', text: 'The Granulator and the Sample player pick sounds from linked folders too.' },
       { area: 'Play', text: 'Empty Layers and Mappings pages offer Add layer, Layer sets, Add control and Add mapping right there.' },
       { area: 'Play', text: 'Halation now matches a real film-emulation grade: a thin red bleed hugging bright edges and glints, landing on the darker picture beside them.', link: { kind: 'example', key: 'finishHalation', page: 'play' } },

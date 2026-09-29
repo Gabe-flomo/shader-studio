@@ -201,7 +201,7 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
                 onRemove={() => edits.removeSlot(d.slot.id)}
                 folded={isFolded(d.key)} onToggleFold={() => foldToggle(d.key)} summary={summaryFor(d.slot)}>
                 <RackControlsStrip rack={rack} play={play} onChange={onChange} touch={touch} only={d.slot.id} />
-                {!d.heard && !d.slot.bypass && <Note>{rack.instrument?.kind === 'granulator' && !rack.source ? 'Not heard after a Granulator: its Sound effects shape it.' : 'Heard in the desktop app on a Mac; kept here.'}</Note>}
+                {!d.heard && !d.slot.bypass && <Note>Heard in the desktop app on a Mac; kept here.</Note>}
               </SlotView>
             </DevicePanel>
           </div>

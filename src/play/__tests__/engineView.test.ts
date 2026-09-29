@@ -190,11 +190,12 @@ describe('the device chain', () => {
     expect(keys(deviceChain(rack('a', { instrument: grain, effects: [au('fx')] }), { listening: false, native: true }))).toEqual(['input', 'inst', 'soundfx', 'fx']);
   });
 
-  it('which effects are heard: Audio Units on the desktop, not bypassed, not after a Granulator', () => {
+  it('which effects are heard: Audio Units on the desktop, not bypassed; after a Granulator too (its sound is sent in)', () => {
     const d = deviceChain(r, { listening: false, native: true }).filter(x => x.kind === 'effect');
     expect(d.map(x => x.kind === 'effect' && x.heard)).toEqual([true, false, true]);
     expect(deviceChain(r, { listening: false, native: false }).some(x => x.kind === 'effect' && x.heard)).toBe(false);
-    expect(deviceChain(rack('a', { instrument: grain, effects: [au('fx')] }), { listening: false, native: true }).some(x => x.kind === 'effect' && x.heard)).toBe(false);
+    expect(deviceChain(rack('a', { instrument: grain, effects: [au('fx')] }), { listening: false, native: true }).some(x => x.kind === 'effect' && x.heard)).toBe(true);
+    expect(deviceChain(rack('a', { instrument: grain, effects: [au('fx')] }), { listening: false, native: false }).some(x => x.kind === 'effect' && x.heard)).toBe(false);
   });
 
   it('a Listener reads where it sits when nothing heard comes after it, else after the chain (for now)', () => {
