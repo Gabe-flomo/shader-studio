@@ -42,6 +42,7 @@ import { RACK_KEYBOARD_HINT, rackKeyboard, useRackKeyboard } from '../../../lib/
 import { Kbd } from '../../ui/Kbd';
 import { isAudioType } from '../../../lib/backgroundLibrary';
 import { useLibraryVideos } from '../../backgrounds/useBackgrounds';
+import { LinkedPickButton } from '../../linked/LinkedPickButton';
 import type { UnitChoice } from './UnitPicker';
 import { playId } from '../../../play/playControls';
 import { usePlayUi } from '../playUi';
@@ -527,6 +528,8 @@ export function SamplerZones({ rack, slot, onChange }: { rack: AeRack; slot: AeS
     setAdding('');
   };
   const allKeys = () => setZones(zonesFor(sounds.slice(0, 16), 'keys'));
+  // A linked folder's sound (docs/linked-folders.md): read from disk where it is, not copied into the Library.
+  const addLinked = (ref: string, name: string) => setZones([...zones, ...zonesFor([{ id: ref, name }], 'keys', nextNote)]);
   const noteSel = (value: number, onPick: (n: number) => void, label: string) => (
     <Select ariaLabel={label} value={String(value)} height={24} onChange={v => onPick(Number(v))} style={{ minWidth: 0 }}
       options={Array.from({ length: 128 }, (_, n) => ({ value: String(n), label: `${midiNoteName(n)} (${n})` }))} />
@@ -550,6 +553,7 @@ export function SamplerZones({ rack, slot, onChange }: { rack: AeRack; slot: AeS
           options={[{ value: '', label: sounds.length ? 'A sound from the Library…' : 'No sounds in the Library yet' }, ...sounds.map(s => ({ value: s.id, label: s.name }))]} />
         <Button size="sm" disabled={!adding || zones.length >= AE_ZONES_MAX} onClick={() => addSound(adding, 'keys')} title={`On the next key (${midiNoteName(nextNote)})`}>Add on one key</Button>
         <Button size="sm" disabled={!adding || zones.length >= AE_ZONES_MAX} onClick={() => addSound(adding, 'pitched')} title="Across every key, at its own pitch on C4">Across the keys</Button>
+        <LinkedPickButton filter="audio" label="Linked folder…" disabled={zones.length >= AE_ZONES_MAX} title={`Add a sound from a linked folder, on the next key (${midiNoteName(nextNote)})`} onPick={(ref, e) => addLinked(ref, e.name)} />
         {sounds.length > 1 && zones.length === 0 && <Button size="sm" variant="ghost" onClick={allKeys}>Use the first {Math.min(16, sounds.length)} as a kit</Button>}
       </div>
     </div>
