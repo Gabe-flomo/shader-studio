@@ -11,13 +11,17 @@
  * `au:<rackId>:<slotId>` like the audio effects' numbers.
  *
  * A granulator (docs/granulator.md) keeps its settings the same way, by
- * GR_PARAMS address, so each one is a target like an Audio Unit parameter.
+ * GR_PARAMS address, so each one is a target like an Audio Unit parameter;
+ * the sample player keeps its Sample index settings the same way (SI_PARAMS,
+ * play/kit/samplerIndex.js; `slotSetting`).
  *
  * Pure: types, parsing, targets and record edits. lib/audioEngineHost.ts runs it.
  */
 import { RACK_CONTROLS_MAX } from './playArrangement';
 import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_RETIRED_SYNTHS, GR_SAMPLE_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
 import { MC_POINTS_MAX } from '../play/kit/macros.js';
+import { siClamp, siParam } from '../play/kit/samplerIndex.js';
+import type { GrParam } from '../play/kit/granulator.js';
 import type { PlayCurve } from './play';
 
 
@@ -72,7 +76,7 @@ export interface AeSlot {
   params?: Record<string, number>;
   /** The unit's whole state (its preset) as base64, kept with "Keep the plug-in's settings". */
   state?: string;
-  /** kind 'sampler'. */
+  /** kind 'sampler'. Its Sample index settings are `params` too, by SI_PARAMS address. */
   zones?: AeZone[];
   /** kind 'granulator': its sample (its settings are `params`, by GR_PARAMS address). */
   sample?: AeGrainSample;
@@ -317,8 +321,19 @@ export function aeSlot(rack: AeRack | undefined, slotId: string): AeSlot | undef
 export function auTargetExists(ae: PlayAudioEngine | undefined, target: string): boolean {
   const t = parseAuTarget(target);
   const s = t ? aeSlot(aeRack(ae, t.rackId), t.slotId) : undefined;
-  if (s?.kind === 'granulator') return !!grParam(t!.address);
+  if (s && s.kind !== 'au') return !!slotSetting(s, t!.address);
   return !!s && s.kind === 'au';
+}
+
+/**
+ * A setting the app itself keeps on a slot, by address: a granulator's
+ * (GR_PARAMS), or the sample player's Sample index (SI_PARAMS); null for an
+ * Audio Unit (its parameters are the plug-in's) or an unknown address.
+ */
+export function slotSetting(slot: Pick<AeSlot, 'kind'> | undefined, address: string): GrParam | null {
+  if (slot?.kind === 'granulator') return grParam(address);
+  if (slot?.kind === 'sampler') return siParam(address);
+  return null;
 }
 
 /** A target's value as the record keeps it, or undefined (never set on the card, or gone). A granulator's unset setting reads its default. */
@@ -328,7 +343,7 @@ export function readAuValue(ae: PlayAudioEngine | undefined, target: string): nu
   const s = aeSlot(aeRack(ae, t.rackId), t.slotId);
   const v = s?.params?.[t.address];
   if (typeof v === 'number') return v;
-  return s?.kind === 'granulator' ? grParam(t.address)?.value : undefined;
+  return slotSetting(s, t.address)?.value;
 }
 
 /** The instrument's name: "Sample player", "Granulator", or the Audio Unit's. */
@@ -539,7 +554,16 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
   if (!sid) return null;
   if (o.kind === 'sampler') {
     if (sid !== AE_INST) return null; // the sample player is an instrument
-    return { id: sid, kind: 'sampler', zones: parseZones(o.zones) };
+    const slot: AeSlot = { id: sid, kind: 'sampler', zones: parseZones(o.zones) };
+    const params = parseParams(o.params);
+    if (params) {
+      const kept: Record<string, number> = {};
+      for (const [a, v] of Object.entries(params)) if (siParam(a)) kept[a] = siClamp(a, v);
+      if (Object.keys(kept).length) slot.params = kept;
+    }
+    const rc = parseRackControls(o.controls, a => !!siParam(a));
+    if (rc) slot.controls = rc;
+    return slot;
   }
   if (o.kind === 'granulator') {
     if (sid !== AE_INST) return null; // an instrument too
@@ -585,10 +609,10 @@ function parseRackControls(raw: unknown, ok: (address: string) => boolean): stri
   return out.length ? out : undefined;
 }
 
-/** Can a macro turn this slot's parameter? An Audio Unit's any, a granulator's its settings; the sample player has none. */
+/** Can a macro turn this slot's parameter? An Audio Unit's any, a granulator's its settings, the sample player's its Sample index settings. */
 export function macroCanTarget(slot: AeSlot | undefined, address: string): boolean {
   if (!slot || !/^\d{1,20}$/.test(address)) return false;
-  return slot.kind === 'au' || (slot.kind === 'granulator' && !!grParam(address));
+  return slot.kind === 'au' || !!slotSetting(slot, address);
 }
 
 /** Breakpoints of a custom curve: pairs in 0..1, sorted by x, 2..MC_POINTS_MAX of them; undefined when there aren't two. */
