@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   FN_EFFECTS, FN_KINDS, fnActive, fnAnimated, fnBakeLut, fnBuildFinal, fnCurveEval, fnDefaultCurves, fnDefaultEffect, fnEnergy, fnGradePixel,
-  FN_HAL, FN_HALATION_PRESETS, fnHalSource, fnHalSpread, fnHalTailEdge, fnHalTailMix, fnHalEdgeBleed, fnHalReceive, fnHalTint, fnHalPixel, fnMigrateHalation,
+  FN_HAL, FN_HALATION_PRESETS, fnHalSat, fnHalSource, fnHalSpread, fnHalTailEdge, fnHalTailMix, fnHalEdgeBleed, fnHalReceive, fnHalTint, fnHalPixel, fnMigrateHalation,
   fnHueCurveEval, fnHueCurvesUsed, fnCurvesNeutral, fnRing, fnRingSize, fnRunning, fnWheel, fnLuma, type FnEffect,
 } from '../kit/finish.js';
 import { FN_TONE_GLSL, FN_CRT_MASK_GLSL } from '../kit/finishGlsl.js';
@@ -162,6 +162,19 @@ describe('looks', () => {
 });
 
 describe('halation', () => {
+  it('a clipped white bleeds no more than the reference\'s brightest glint (the source saturates)', () => {
+    // fnHalSat: linear for small excesses, never past the ceiling.
+    expect(fnHalSat(0.05, 0.3)).toBeCloseTo(0.05, 2);
+    expect(fnHalSat(0.3, 0.3)).toBeLessThan(0.3);
+    expect(fnHalSat(200, 0.3)).toBeLessThanOrEqual(0.3);
+    expect(fnHalSat(-1, 0.3)).toBe(0);
+    // A clipped white, a lamp under 6 stops of headroom and a bright paper all sit at the ceiling.
+    const thr = FN_HAL.threshold;
+    const white = fnHalSource([1, 1, 1], thr, 6)[0], lamp = fnHalSource([64, 64, 64], thr, 6)[0];
+    expect(white).toBeLessThanOrEqual(FN_HAL.srcMax);
+    expect(lamp).toBeLessThanOrEqual(FN_HAL.srcMax);
+    expect(lamp - white).toBeLessThan(0.02);
+  });
   it('turns display light back into scene light: mid-tones stay, white opens up to 2^headroom', () => {
     expect(fnEnergy(0.18, 6)).toBe(0.18);
     expect(fnEnergy(0.7, 6)).toBe(0.7);
@@ -182,12 +195,15 @@ describe('halation', () => {
     // Over it: the excess, rising steadily (the glints in the reference bleed in proportion to it).
     const a = fnHalSource(lin([0.8, 0.8, 0.8]), thr, 6)[0], b = fnHalSource(lin([0.87, 0.87, 0.87]), thr, 6)[0];
     expect(a).toBeGreaterThan(0.1); expect(b).toBeGreaterThan(a);
-    expect(b - a).toBeCloseTo(Math.pow(0.87, 2.2) - Math.pow(0.8, 2.2), 2);
+    // …through the soft ceiling (fnHalSat), so a brighter source bleeds more but never past srcMax.
+    const raw = (d: number) => Math.pow(d, 2.2) - Math.pow(2, thr);
+    expect(b - a).toBeCloseTo(fnHalSat(raw(0.87), FN_HAL.srcMax) - fnHalSat(raw(0.8), FN_HAL.srcMax), 2);
     // Teal has no red: no bleed however bright it is.
     expect(fnHalSource(lin([0, 1, 0.94]), thr, 6)[0]).toBe(0);
     // Only light over white in every channel grows (the white source): paper at 0.9 doesn't, a clipped lamp does.
     expect(fnHalSource(lin([0.9, 0.9, 0.9]), thr, 6)[1]).toBeLessThan(0.01);
-    expect(fnHalSource([1, 1, 1], thr, 6)[1]).toBeGreaterThan(10);
+    expect(fnHalSource([1, 1, 1], thr, 6)[1]).toBeGreaterThan(0.5);
+    expect(fnHalSource([1, 1, 1], thr, 6)[1]).toBeLessThanOrEqual(FN_HAL.whiteMax);
   });
 
   it('the radius profile: a tight max-spread (σ 4.5 px at 1080 lines) plus a Reach tail, scaled with the picture', () => {
