@@ -38,7 +38,9 @@ void main() {
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-// Seeds: (x, y) in texels, a disc radius in texels, w = 1 when it is a seed.
+// Seeds, in half floats (RGBA16F, 8 bytes a texel: the flood is bandwidth-bound): xy the seed's
+// offset from THIS texel in texels, z a disc radius in texels, w = 1 when there is one. Relative
+// offsets keep half-float precision where it matters: 1/32 texel within 32 texels of the seed.
 const JF_SEED = `#version 300 es
 precision highp float;
 uniform sampler2D u_src;
@@ -56,10 +58,10 @@ void main() {
     vec2 g = vec2(abs(r - a) > abs(a - l) ? r - a : a - l, abs(u - a) > abs(a - d) ? u - a : a - d);
     float gl = length(g);
     vec2 off = gl > 1e-4 ? g / gl * clamp((0.5 - a) / gl, -1.0, 1.0) : vec2(0.0);
-    o = vec4(p + off, 0.0, 1.0);
+    o = vec4(off, 0.0, 1.0);
   } else if (!inside && a > u_minCover && a >= max(max(l, r), max(d, u))) {
     // Only a faint peak: the texels of a soft edge around it are not dots of their own.
-    o = vec4(p, sqrt(a / 3.14159265), 1.0);
+    o = vec4(0.0, 0.0, sqrt(a / 3.14159265), 1.0);
   } else {
     o = vec4(0.0);
   }
@@ -73,17 +75,17 @@ uniform vec2 u_texel;
 uniform float u_step;
 out vec4 o;
 void main() {
-  vec2 p = gl_FragCoord.xy;
-  ivec2 ip = ivec2(p), sz = ivec2(u_size);
+  ivec2 ip = ivec2(gl_FragCoord.xy), sz = ivec2(u_size);
   vec4 best = vec4(0.0);
   float bd = 1e9;
   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-    ivec2 q = ip + ivec2(i, j) * int(u_step);
+    ivec2 o2 = ivec2(i, j) * int(u_step), q = ip + o2;
     if (q.x < 0 || q.y < 0 || q.x >= sz.x || q.y >= sz.y) continue;
     vec4 s = texelFetch(u_seeds, q, 0);
     if (s.w < 0.5) continue;
-    float dd = length((p - s.xy) * u_texel) - s.z * u_texel.y;
-    if (dd < bd) { bd = dd; best = s; }
+    vec2 rel = s.xy + vec2(o2);
+    float dd = length(rel * u_texel) - s.z * u_texel.y;
+    if (dd < bd) { bd = dd; best = vec4(rel, s.z, 1.0); }
   }
   o = best;
 }`;
@@ -99,7 +101,7 @@ out vec4 o;
 void main() {
   vec2 p = gl_FragCoord.xy;
   vec4 s = texelFetch(u_seeds, ivec2(p), 0);
-  float d = s.w > 0.5 ? length((p - s.xy) * u_texel) - s.z * u_texel.y : u_far;
+  float d = s.w > 0.5 ? length(s.xy * u_texel) - s.z * u_texel.y : u_far;
   if (texture(u_src, p / u_size).a >= 0.5) d = -d;
   o = vec4(clamp(d, -u_far, u_far), 0.0, 0.0, 1.0);
 }`;
@@ -128,20 +130,27 @@ export function jfSteps(gw, gh) {
  */
 export function jfReference(alpha, gw, gh, aspect, minCover) {
   const tx = 2 * aspect / gw, ty = 2 / gh, n = gw * gh;
-  let seeds = jfSeedGrid(alpha, gw, gh, minCover);
-  const metric = (px, py, s, j) => Math.hypot((px - s[j]) * tx, (py - s[j + 1]) * ty) - s[j + 2] * ty;
+  // As the GPU stores them: offsets from each texel, rounded to half floats.
+  const abs = jfSeedGrid(alpha, gw, gh, minCover);
+  let seeds = new Float32Array(n * 4);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    const i = (y * gw + x) * 4;
+    if (abs[i + 3] < 0.5) continue;
+    seeds[i] = jfHalf(abs[i] - x - 0.5); seeds[i + 1] = jfHalf(abs[i + 1] - y - 0.5); seeds[i + 2] = jfHalf(abs[i + 2]); seeds[i + 3] = 1;
+  }
+  const metric = (rx, ry, r) => Math.hypot(rx * tx, ry * ty) - r * ty;
   for (const k of jfSteps(gw, gh)) {
     const next = new Float32Array(n * 4);
     for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
-      const px = x + 0.5, py = y + 0.5, o = (y * gw + x) * 4;
+      const o = (y * gw + x) * 4;
       let bd = 1e9;
       for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
         const qx = x + i * k, qy = y + j * k;
         if (qx < 0 || qy < 0 || qx >= gw || qy >= gh) continue;
         const q = (qy * gw + qx) * 4;
         if (seeds[q + 3] < 0.5) continue;
-        const dd = metric(px, py, seeds, q);
-        if (dd < bd) { bd = dd; next[o] = seeds[q]; next[o + 1] = seeds[q + 1]; next[o + 2] = seeds[q + 2]; next[o + 3] = 1; }
+        const rx = seeds[q] + i * k, ry = seeds[q + 1] + j * k, dd = metric(rx, ry, seeds[q + 2]);
+        if (dd < bd) { bd = dd; next[o] = jfHalf(rx); next[o + 1] = jfHalf(ry); next[o + 2] = seeds[q + 2]; next[o + 3] = 1; }
       }
     }
     seeds = next;
@@ -149,14 +158,21 @@ export function jfReference(alpha, gw, gh, aspect, minCover) {
   const out = new Float32Array(n);
   for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
     const i = y * gw + x;
-    let d = seeds[i * 4 + 3] > 0.5 ? metric(x + 0.5, y + 0.5, seeds, i * 4) : JF_FAR;
+    let d = seeds[i * 4 + 3] > 0.5 ? metric(seeds[i * 4], seeds[i * 4 + 1], seeds[i * 4 + 2]) : JF_FAR;
     if (alpha[i] >= 0.5) d = -d;
     out[i] = Math.max(-JF_FAR, Math.min(JF_FAR, d));
   }
   return out;
 }
 
-/** The seed pass on the CPU: (x, y, disc radius, is-a-seed) per texel, in texels, as JF_SEED writes them. */
+/** x rounded to the nearest half float (11 significant bits), as an RGBA16F texture stores it. */
+export function jfHalf(x) {
+  if (x === 0 || !isFinite(x)) return x;
+  const e = Math.max(-14, Math.floor(Math.log2(Math.abs(x)))), ulp = Math.pow(2, e - 10);
+  return Math.round(x / ulp) * ulp;
+}
+
+/** The seed pass on the CPU: (x, y, disc radius, is-a-seed) per texel, in texels, ABSOLUTE positions (JF_SEED stores them relative to the texel). */
 export function jfSeedGrid(alpha, gw, gh, minCover) {
   const mc = minCover ?? JF_MIN_COVER, n = gw * gh;
   const A = (x, y) => alpha[Math.min(gh - 1, Math.max(0, y)) * gw + Math.min(gw - 1, Math.max(0, x))];
@@ -186,7 +202,8 @@ export function jfSeedGrid(alpha, gw, gh, minCover) {
 export function jfCreate(gl, opts) {
   const maxRes = (opts && opts.maxRes) || JF_MAX_RES;
   if (!gl || typeof WebGL2RenderingContext === 'undefined' || !(gl instanceof WebGL2RenderingContext)) return null;
-  if (!gl.getExtension('EXT_color_buffer_float')) return null;
+  // Half-float render targets: core-renderable only with one of these (checked again by framebuffer status).
+  if (!gl.getExtension('EXT_color_buffer_float') && !gl.getExtension('EXT_color_buffer_half_float')) return null;
   const compile = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
     if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { gl.deleteShader(s); return null; }
@@ -243,8 +260,8 @@ export function jfCreate(gl, opts) {
       if (size.gw !== gw || size.gh !== gh) {
         freeGrid();
         gl.activeTexture(gl.TEXTURE0);
-        ping = tex(gl.RGBA32F, gl.RGBA, gl.FLOAT, gl.NEAREST, size.gw, size.gh);
-        pong = tex(gl.RGBA32F, gl.RGBA, gl.FLOAT, gl.NEAREST, size.gw, size.gh);
+        ping = tex(gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.NEAREST, size.gw, size.gh);
+        pong = tex(gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.NEAREST, size.gw, size.gh);
         out = tex(gl.R16F, gl.RED, gl.HALF_FLOAT, gl.LINEAR, size.gw, size.gh);
         if (!complete(ping) || !complete(out)) { broken = true; freeGrid(); return null; }
         gw = size.gw; gh = size.gh;

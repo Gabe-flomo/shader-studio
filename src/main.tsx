@@ -58,6 +58,8 @@ if (import.meta.env.DEV) {
     midiMonitor, rackKeyboard,
     /** Linked folders without a folder picker: `(await linked()).devLinkOpfs('Samples', { 'kick.wav': blob })` links a folder in the browser's private file system. */
     linked: () => import('./files/linkedFolders'),
+    /** The Layers node's distance field (docs/layers-node.md): `(await layersField()).layersFieldMode()` is 'gpu' | 'cpu' | 'off'; `.setLayersFieldForceCpu(true)` compares with the old CPU field. */
+    layersField: () => import('./play/layersTexture'),
     /** The Audio engine's tape (docs/arrangement.md): `tape.record()`, `tape.play()`, `useTape.getState()`; `audioEngine.setMasterVolume(0)` for silent checks. */
     tape, useTape, audioEngine,
     /**

@@ -58,9 +58,10 @@ describe('Layers distance field: jump flood math', () => {
     for (let i = 0; i < jfa.length; i++) {
       const e = Math.abs(jfa[i] - ref[i]);
       worst = Math.max(worst, e);
-      if (e > 1e-6) off++;
+      if (e > 0.02 * texel) off++;
     }
-    // JFA+1 is exact here but for the odd texel, and never off by more than a fraction of a texel.
+    // JFA+1 finds the nearest seed but for the odd texel (the rest is half-float rounding of the
+    // stored offsets, well under a tenth of a texel), and is never off by more than a fraction of one.
     expect(off / jfa.length).toBeLessThan(0.01);
     expect(worst).toBeLessThan(0.25 * texel);
   });
@@ -85,8 +86,8 @@ describe('Layers distance field: jump flood math', () => {
     alpha[8 * gw + 8] = 0.2;
     const f = jfReference(alpha, gw, gh, 1);
     const r = Math.sqrt(0.2 / Math.PI) * (2 / gh);
-    expect(f[8 * gw + 8]).toBeCloseTo(-r, 5);
-    expect(f[8 * gw + 12]).toBeCloseTo(4 * (2 / gh) - r, 5);
+    expect(f[8 * gw + 8]).toBeCloseTo(-r, 4);
+    expect(f[8 * gw + 12]).toBeCloseTo(4 * (2 / gh) - r, 4);
     expect(jfReference(new Float32Array(gw * gh), gw, gh, 1).every(v => v === JF_FAR)).toBe(true);
   });
 });

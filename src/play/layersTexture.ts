@@ -70,9 +70,13 @@ export function layersFieldMode(): 'gpu' | 'cpu' | 'off' {
   return layersUniforms.u_layersFieldLinear.value > 0.5 ? 'gpu' : 'cpu';
 }
 
+let forceCpu = false;
+/** Dev tools: build the field the old way (CPU chamfer) even where the GPU could, to compare. */
+export function setLayersFieldForceCpu(on: boolean): void { forceCpu = on; }
+
 /** Build this frame's field on the GPU; false when it can't (the caller then uses the CPU one). */
 function gpuFieldFrom(tap: ShaderTap): boolean {
-  if (!renderer) return false;
+  if (!renderer || forceCpu) return false;
   if (jfa === undefined) jfa = jfCreate(renderer.getContext());
   if (!jfa) return false;
   const src = tap.layers;
