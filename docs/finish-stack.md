@@ -348,6 +348,14 @@ only in memory (`finishCustomCode`, `renderableFinish`), and the card shows its
 settings but not its code. As with sealed nodes, a website export must contain
 the shader's text, so `playBundle` puts the code in.
 
+**The source saturates.** The red source over the threshold goes through
+`srcMax · tanh(excess / srcMax)` (`fnHalSat`, `srcMax` 0.3): the reference's
+brightest glint (red 227, an excess of about 0.3) is about the most anything
+bleeds, so a clipped white, a lamp with six stops of headroom and a bright
+paper all bleed like that glint instead of two hundred times more, and the
+rim stays thin and red-orange rather than a wide yellow halo. The tail
+(Reach) defaults to 0.25.
+
 ### From a graph (next step)
 
 Not built yet: a **Picture** source node in the Studio (the finished frame as

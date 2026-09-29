@@ -52,11 +52,13 @@ export function fnSoftThreshold(v: number, thr: number, knee: number): number;
 /** Halation's measured shape and colour, and its controls' defaults (see finish.js). */
 export const FN_HAL: Readonly<{
   sigma: number; gain: number; tail: number; knee: number; recv: readonly [number, number]; greenKnee: number; blue: number;
-  amount: number; reach: number; threshold: number; headroom: number; warmth: number; growth: number; conserve: number; model: number;
+  amount: number; reach: number; threshold: number; headroom: number; warmth: number; growth: number; conserve: number; model: number; srcMax: number; whiteMax: number;
 }>;
 export const FN_HALATION_PRESETS: ReadonlyArray<{ name: string; values: Readonly<Record<string, number>> }>;
 export function fnMigrateHalation<T extends { kind: string; model?: unknown; [key: string]: unknown }>(e: T): T;
 export function fnHalSource(rgb: readonly number[], thresholdStops: number, headroom: number): [number, number];
+/** A halation source's soft ceiling: linear for small excesses, never past `max`. */
+export function fnHalSat(v: number, max: number): number;
 export function fnHalSpread(d: number, height?: number): number;
 export function fnHalTailMix(reach: number): { strength: number; wide: number };
 export function fnHalTailEdge(d: number, reach?: number, height?: number): number;
