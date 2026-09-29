@@ -49,7 +49,7 @@ import { engineId, withEngine } from './engineOps';
 import { sendChoices, sendLabel } from '../../../lib/engineSend';
 import { GranulatorPanel, ParamRow } from './GranulatorPanel';
 import { Section } from '../layers/Section';
-import { SI_MODE_NAMES, siClamp, siParam } from '../../../play/kit/samplerIndex.js';
+import { siClamp, siParam } from '../../../play/kit/samplerIndex.js';
 import type { GrParam } from '../../../play/kit/granulator.js';
 import { AUDIO_FX_EFFECTS, rackChainId } from '../../../types/playAudioFx';
 import { RACK_CONTROLS_MAX } from '../../../types/playArrangement';
@@ -491,7 +491,10 @@ export function SamplerIndex({ rack, slot, play, onChange, touch }: { rack: AeRa
     });
   };
   const mode = Math.round(valueOf('indexMode'));
-  const summary = `${SI_MODE_NAMES[mode] ?? 'Index'}${mode === 1 ? '' : ` · Index ${Math.round(valueOf('sampleIndex'))}`}${mode === 2 ? ` ± ${Math.round(valueOf('indexSpread'))}` : ''}`;
+  const index = Math.round(valueOf('sampleIndex'));
+  const summary = mode === 1 ? `Random · seed ${Math.round(valueOf('indexSeed'))}`
+    : mode === 2 ? `Index ${index} ± ${Math.round(valueOf('indexSpread'))}`
+    : index ? `Index ${index}` : 'Off (Index 0): each note plays its own zone';
   const keys = ['sampleIndex', 'indexMode', ...(mode === 2 ? ['indexSpread'] : []), ...(mode === 0 ? [] : ['indexSeed'])];
   return (
     <Section kind="engine-sampler" title="Sample index" summary={summary}
