@@ -207,3 +207,15 @@ Not built (yet):
 - Spectral: the analysis finds the right peaks with their amplitudes, the same every time; a low band plays the low tone and a high band the high one (zero crossings), Pitch multiplies and Shift adds hertz, an empty band is silent; band and energy readouts and the travelling bands; bit-exact renders per seed; the real AudioWorklet getting the analysis from the main thread; the worklet's packed readouts round-trip
 
 `src/play/__tests__/grainGroups.test.ts`: Grains → nulls makes a sealed top-level folder; a later layer stays outside it (even while the list shows it) or goes to the open group around it; a drop still puts one in; the seal survives a save.
+
+
+## Audio Unit effects after a Granulator
+
+*28 Sep 2026.* On the desktop, a Granulator track with Audio Unit effects gets a
+native rack too: the Granulator's sound (after its own Sound effects chain,
+`rack:<id>`) is sent into the engine the way **Sound in** sends a drum pad layer
+(`engineSend` → `ae_rack_input`), the effects run there, their windows open,
+and the track's volume and Listener read the native rack. Without Audio Unit
+effects the Granulator plays in the page as before. Renders: an offline render
+plays the Granulator itself; the Audio Units after it are captured in real-time
+recordings (`docs/audio-engine.md`, Sound in).

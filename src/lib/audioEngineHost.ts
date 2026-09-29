@@ -57,6 +57,10 @@ import { can } from './plan';
 import { WebGranulatorRack } from './webGranulator';
 import type { GrPoints } from '../play/kit/granulator.js';
 import { macroParamTargets, macroValueOf } from '../play/rackMacros';
+import { rackChainId } from '../types/playAudioFx';
+
+/** A Granulator rack that needs the native engine: Audio Unit effects follow it (docs/granulator.md). */
+const grainsSend = (r: AeRack): boolean => isGranulatorRack(r) && !r.source && r.effects.some(e => e.kind === 'au' && !!e.unit);
 import { siHold, siLetGo, siMode, siParam, siPick } from '../play/kit/samplerIndex.js';
 
 type Invoke = <T>(cmd: string, args?: unknown, options?: { headers?: Record<string, string> }) => Promise<T>;
@@ -512,10 +516,12 @@ class AudioEngineHost {
   private async reconcile(ae: PlayAudioEngine | undefined): Promise<void> {
     // Granulators run in Web Audio everywhere; the rest natively where the engine is.
     const all = ae?.racks ?? [];
-    const racks = all.filter(r => !isGranulatorRack(r) || !!r.source);
+    // A Granulator with Audio Unit effects after it also gets a native rack, fed its own sound
+    // (like Sound in), so the effects are heard and their windows open (docs/granulator.md).
+    const racks = all.filter(r => !isGranulatorRack(r) || !!r.source || grainsSend(r));
     const grains = all.filter(r => isGranulatorRack(r) && !r.source);
     const wantNative = racks.length > 0 && (await this.startNative());
-    if (!wantNative && racks.length && !this.native()) { this.reconcileWeb([...racks, ...grains]); return; }
+    if (!wantNative && racks.length && !this.native()) { this.reconcileWeb(all); return; }
     this.reconcileWeb(grains);
     const inv = this.invoke;
     if (!inv) return;
@@ -562,7 +568,8 @@ class AudioEngineHost {
   }
 
   private async syncInstrument(inv: Invoke, r: AeRack, n: NativeRack): Promise<void> {
-    if (r.source) { await this.syncSend(inv, r, n); return; }
+    if (r.source) { await this.syncSend(inv, r, n, r.source); return; }
+    if (isGranulatorRack(r)) { await this.syncSend(inv, r, n, rackChainId(r.id)); return; }
     if (n.inst?.key.startsWith('input:')) engineSend.stop(r.id);
     const s = r.instrument && (r.instrument.kind === 'sampler' || can('audio.plugins')) ? r.instrument : null;
     const key = desiredKey(s);
@@ -589,8 +596,7 @@ class AudioEngineHost {
   }
 
   /** A send: the rack's source is a web sound the page feeds (engineSend.ts). */
-  private async syncSend(inv: Invoke, r: AeRack, n: NativeRack): Promise<void> {
-    const source = r.source!;
+  private async syncSend(inv: Invoke, r: AeRack, n: NativeRack, source: string): Promise<void> {
     const key = `input:${source}`;
     const k = slotKey(r.id, AE_INST);
     if (n.inst?.key === key && !n.inst.failed) return;

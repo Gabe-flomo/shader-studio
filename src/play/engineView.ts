@@ -170,7 +170,7 @@ export type Device =
   | { kind: 'send'; key: 'send' }
   /** A Granulator's own Sound chain (Finish → Sound, `rack:<id>`). */
   | { kind: 'soundfx'; key: 'soundfx' }
-  /** An effect; `heard`: it shapes the sound here (Audio Units play in the desktop app, and not after a Granulator). */
+  /** An effect; `heard`: it shapes the sound here (Audio Units play in the desktop app; after a Granulator its sound is sent in). */
   | { kind: 'effect'; key: string; slot: AeSlot; index: number; heard: boolean }
   /** The audio readers' tap. `at`: after this many effects; `exact`: it reads there (else after the chain, for now). */
   | { kind: 'listener'; key: 'listener'; at: number; exact: boolean };
@@ -189,8 +189,9 @@ export function deviceControlSummary(controls: ReadonlyArray<{ label: string; va
 
 /** Does this effect shape the sound where the engine runs? */
 export function effectHeard(rack: Pick<AeRack, 'instrument' | 'source'>, slot: AeSlot, native: boolean): boolean {
-  if (slot.bypass || slot.kind !== 'au' || !native) return false;
-  return !(rack.instrument?.kind === 'granulator' && !rack.source);
+  // On the desktop a Granulator's sound is sent into its native rack when Audio Units follow it, so they are heard too.
+  void rack;
+  return !slot.bypass && slot.kind === 'au' && native;
 }
 
 /**
