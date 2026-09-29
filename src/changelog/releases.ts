@@ -43,6 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-09-28',
     title: 'Granulator: Emit and Spectral',
     highlights: [
+      { area: 'Play', text: 'Trackers say what they are doing (downloading, loading, tracking), keep their models on this device, and can warm up when the app opens.' },
       { area: 'Play', text: 'Track hands in an uploaded video: analyse the clip once and nulls, sources and gestures follow it exactly, in takes and on websites too.', link: { kind: 'doc', path: 'docs/tracking.md' } },
       { area: 'Play', text: 'Face and body tracking join Hands: mouth, smile, blinks, brows and head turns, plus 33 body points, on the camera or a video.' },
       { area: 'Play', text: 'Racks get 8 macro knobs, as in Ableton: each turns many parameters through its own range and curve, and is what you map MIDI or an LFO onto.', link: { kind: 'doc', path: 'docs/audio-engine.md' } },
