@@ -61,11 +61,21 @@ const FN_P = (key, label, min, max, step, value, hint, hidden) => ({ key, label,
  *              itself never turns red; its dark surroundings do
  *   greenKnee  green joins where the bleed is strong: dG = warmth · dR² / (dR + greenKnee)
  *   blue       blue in the bleed, per unit of red (a little is taken away)
+ *   srcMax     the red source saturates here (srcMax · tanh(excess / srcMax)):
+ *              the reference's brightest glint (red 227, excess ≈ 0.3) is
+ *              about the most anything bleeds, so a clipped white or a lamp
+ *              under 6 stops of headroom bleeds like that glint, not 200 times
+ *              more. Headroom now only decides how fast near-white saturates
+ *   whiteMax   the same for Growth's white source
  * and the controls' defaults (Amount 1 is the reference's strength).
  */
+/** A number as a GLSL float literal. */
+const fnGl = v => { const t = String(Math.round(v * 1e6) / 1e6); return /[.e]/.test(t) ? t : t + '.0'; };
+
 export const FN_HAL = {
   sigma: 4.5, gain: 1.04, tail: 0.52, knee: 0.3, recv: [0.17, 0.53], greenKnee: 0.076, blue: -0.07,
-  amount: 1, reach: 0.5, threshold: -1.15, headroom: 6, warmth: 0.26, growth: 0.2, conserve: 0.03,
+  srcMax: 0.3, whiteMax: 1,
+  amount: 1, reach: 0.25, threshold: -1.15, headroom: 6, warmth: 0.26, growth: 0.2, conserve: 0.03,
   /** The halation model saved with each effect; older records are migrated by fnMigrateHalation. */
   model: 2,
 };
@@ -690,7 +700,11 @@ export function fnHalSource(rgb, thresholdStops, headroom) {
   const thr = Math.pow(2, thresholdStops);
   const red = fnSoftThreshold(fnEnergy(rgb[0], headroom), thr, thr * FN_HAL.knee);
   const white = fnSoftThreshold(fnEnergy(Math.min(rgb[0], rgb[1], rgb[2]), headroom), 1.5, 0.5);
-  return [red, white];
+  return [fnHalSat(red, FN_HAL.srcMax), fnHalSat(white, FN_HAL.whiteMax)];
+}
+/** A source's soft ceiling: linear for small excesses, never past `max`. */
+export function fnHalSat(v, max) {
+  return max * Math.tanh(Math.max(0, v) / max);
 }
 /** The tight bleed's falloff at a distance (px at `height` lines) from a source: e^(−d²/2σ²), σ scaled with the picture. */
 export function fnHalSpread(d, height = 1080) {
@@ -820,7 +834,10 @@ float fnEnergy1(float x, float headroom) {
 // Halation's sources (fnHalSource): red over the threshold, and the dimmest channel over white. h = threshold stops, headroom, knee.
 vec2 fnHalSrc(vec3 x, vec3 h) {
   float thr = exp2(h.x);
-  return vec2(fnSoft(fnEnergy1(x.r, h.y), thr, thr * h.z), fnSoft(fnEnergy1(min(x.r, min(x.g, x.b)), h.y), 1.5, 0.5));
+  vec2 s = vec2(fnSoft(fnEnergy1(x.r, h.y), thr, thr * h.z), fnSoft(fnEnergy1(min(x.r, min(x.g, x.b)), h.y), 1.5, 0.5));
+  // Saturate (fnHalSat): a clipped white bleeds like the reference's brightest glint, no more.
+  const vec2 m = vec2(${fnGl(FN_HAL.srcMax)}, ${fnGl(FN_HAL.whiteMax)});
+  return m * tanh(min(s / m, vec2(9.0))); // capped: some drivers make tanh of a big number NaN
 }
 `;
 
@@ -829,9 +846,6 @@ in vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
 
 /** `#define`s naming each number of a kind as a component of its vec4 array. */
-/** A number as a GLSL float literal. */
-const fnGl = v => { const t = String(Math.round(v * 1e6) / 1e6); return /[.e]/.test(t) ? t : t + '.0'; };
-
 function fnDefines(kind) {
   const ps = FN_EFFECTS[kind].params;
   const n = Math.ceil(ps.length / 4);
