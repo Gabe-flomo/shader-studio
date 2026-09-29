@@ -7,7 +7,7 @@
  * "From the graph". Groups keep the panel's order (first control first); the
  * second of a pair shows inside the first's card, so it isn't listed apart.
  */
-import { parseActionTarget, parseLayerTarget, parseReaderTarget, type PlayControl, type PlayRecord } from '../../types/play';
+import { parseActionTarget, parseLayerTarget, parseReaderTarget, parseSpreadTarget, type PlayControl, type PlayRecord } from '../../types/play';
 import { aeRack, aeSlotName, parseAuTarget, parseGrainsTarget } from '../../types/playAudioEngine';
 import { parseFinishTarget } from '../../types/playFinish';
 import { parseAudioFxTarget } from '../../types/playAudioFx';
@@ -20,6 +20,8 @@ export interface ControlOrigin { id: string; label: string; kind: ControlOriginK
 export function controlOrigin(c: PlayControl, play: PlayRecord): ControlOrigin {
   if (c.group) return { id: `group:${c.group}`, label: c.group, kind: parseReaderTarget(c.target) ? 'readers' : 'group' };
   if (parseReaderTarget(c.target)) return { id: 'readers', label: 'Audio readers', kind: 'readers' };
+  const st = parseSpreadTarget(c.target);
+  if (st) return { id: `spread:${st.spreadId}`, label: play.spreads?.find(x => x.id === st.spreadId)?.label ?? 'Spread', kind: 'group' };
   const au = parseAuTarget(c.target), gr = parseGrainsTarget(c.target);
   const rackId = au?.rackId ?? gr?.rackId;
   if (rackId) {

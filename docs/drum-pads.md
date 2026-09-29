@@ -120,3 +120,19 @@ Node packs don't carry kits yet (a kit travels on its own as a `.playfile`).
 - Presentations' own copies of pad samples (a Play in a presentation plays generated drums, and its sample pads are silent on the page).
 - The pad grid on websites. Sample slicing, time-stretch, and filter or pitch envelopes per pad.
 - A MIDI file's notes play the pads live, but a render only hears hits recorded in a take.
+
+
+## Sample index
+
+*Added 28 Sep 2026.* A kit has a **Sample index** (a layer number, so it maps,
+increments and records): a hit on a pad plays the sound of the pad *Index*
+places further on among the pads that have sounds, wrapping round. Press the
+same pad while Index rises and it walks through every sound; different pads
+start at different places. **Index mode** picks how: *Index* (its place plus
+Index), *Random* (any pad with a sound, seeded so a take repeats it), or
+*Index ± spread* (its place plus Index plus a random step of up to **Index
+spread** pads either way). Step Index from a beat, a signal (a particle's
+`born`), or an Increment to shuffle a kit live. The pad you hit still lights;
+takes record which pad's sound played (`slot`), so a render matches the take.
+`play/kit/drumPads.js` (`dpSlots`, `dpPickPad`, `dpHash01`), the same in
+website exports (`SSKit.drumPads.pick`).
