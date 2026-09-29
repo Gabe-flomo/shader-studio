@@ -147,6 +147,10 @@ header) → **Save as preset…**, then a name. `rackPresetFrom` keeps:
   (bypass);
 - the **rack controls** picked with Configure (≤ 8 a slot), with their names,
   ranges and values (the values live in the slots' `params`);
+- its 8 **Macros** (docs/audio-engine.md, "Macros"): names, colours, values,
+  and each target's range and curve; targets on an effect move to the new
+  rack's effect ids, targets on a device left out go. A macro with targets
+  gets its Play control; mappings onto it don't come (wiring);
 - a Granulator's **Sound effects** (its `rack:<id>` chain, Finish → Sound);
 - the **Listener**, when the audio readers listen to this rack, and where it
   sits in the chain;
