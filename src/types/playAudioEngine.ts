@@ -21,6 +21,7 @@ import { RACK_CONTROLS_MAX } from './playArrangement';
 import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_TARGETS, GR_RETIRED_SYNTHS, GR_SAMPLE_SYNTHS, GR_SYNTH_NAMES, grParam } from '../play/kit/granulator.js';
 import { MC_POINTS_MAX } from '../play/kit/macros.js';
 import { siClamp, siParam } from '../play/kit/samplerIndex.js';
+import { parseLinkedRef } from '../files/linkedRefs';
 import type { GrParam } from '../play/kit/granulator.js';
 import type { PlayCurve } from './play';
 
@@ -237,6 +238,9 @@ export const AU_INSTRUMENT_TYPE = fourCC('aumu');
 export const AU_TARGET_PREFIX = 'au:';
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** A kept sound's id: the Library's (short, `ID`) or a linked folder's file reference (docs/linked-folders.md, longer). */
+const sampleRefOk = (id: string): boolean => ID.test(id) || !!parseLinkedRef(id);
 
 export function auTarget(rackId: string, slotId: string, address: string): string {
   return `${AU_TARGET_PREFIX}${rackId}:${slotId}::${address}`;
@@ -540,7 +544,7 @@ function parseZones(raw: unknown): AeZone[] {
     if (out.length >= AE_ZONES_MAX) break;
     if (!x || typeof x !== 'object') continue;
     const o = x as Record<string, unknown>;
-    if (typeof o.sampleId !== 'string' || !ID.test(o.sampleId)) continue;
+    if (typeof o.sampleId !== 'string' || !sampleRefOk(o.sampleId)) continue;
     const lo = Math.round(num(o.lo, 60, 0, 127)), hi = Math.round(num(o.hi, lo, 0, 127));
     out.push({ sampleId: o.sampleId, name: text(o.name, 'Sound', 120), lo: Math.min(lo, hi), hi: Math.max(lo, hi), root: Math.round(num(o.root, lo, 0, 127)), gain: num(o.gain, 1, 0, 2) });
   }
@@ -580,7 +584,7 @@ function parseSlot(raw: unknown, id?: string): AeSlot | null {
     if (rc) slot.controls = rc;
     const sm = o.sample && typeof o.sample === 'object' ? o.sample as Record<string, unknown> : null;
     if (sm) {
-      if (typeof sm.sampleId === 'string' && ID.test(sm.sampleId)) slot.sample = { sampleId: sm.sampleId, name: text(sm.name, 'Sound', 120) };
+      if (typeof sm.sampleId === 'string' && sampleRefOk(sm.sampleId)) slot.sample = { sampleId: sm.sampleId, name: text(sm.name, 'Sound', 120) };
       else if (typeof sm.synth === 'string' && GR_SAMPLE_SYNTHS.includes(sm.synth)) slot.sample = { synth: sm.synth, name: text(sm.name, GR_SYNTH_NAMES[sm.synth] ?? sm.synth, 120) };
       // A generated sample that was retired (pluck, vowel, bell, noise sweep, sine): the pad chord plays instead.
       else if (typeof sm.synth === 'string' && GR_RETIRED_SYNTHS.includes(sm.synth)) slot.sample = { synth: 'pad', name: GR_SYNTH_NAMES.pad };

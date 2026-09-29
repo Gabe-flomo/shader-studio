@@ -343,6 +343,12 @@ describe('the record', () => {
     expect(p.racks[0].instrument).toEqual({ id: AE_INST, kind: 'granulator', params: { 1: 1, 3: 50 } });
     const lib = parseAudioEngine({ racks: [rack({ instrument: { id: AE_INST, kind: 'granulator', sample: { sampleId: 'snd_1', name: 'Voice' } } })] })!;
     expect(lib.racks[0].instrument!.sample).toEqual({ sampleId: 'snd_1', name: 'Voice' });
+    // A linked folder's file (docs/linked-folders.md): the reference round-trips like a Library id.
+    const linked = parseAudioEngine({ racks: [rack({ instrument: { id: AE_INST, kind: 'granulator', sample: { sampleId: 'linked:lf_abc123/Kicks/808 kick.wav', name: '808 kick.wav' } } })] })!;
+    expect(linked.racks[0].instrument!.sample).toEqual({ sampleId: 'linked:lf_abc123/Kicks/808 kick.wav', name: '808 kick.wav' });
+    // A malformed linked reference (no folder id) is dropped like any bad id.
+    const badLinked = parseAudioEngine({ racks: [rack({ instrument: { id: AE_INST, kind: 'granulator', sample: { sampleId: 'linked:', name: 'x' } } })] })!;
+    expect(badLinked.racks[0].instrument!.sample).toBeUndefined();
     expect(parseAudioEngine(ae())).toEqual(ae());
     // Retired generated samples (2026-09-28) come back as the pad chord; a drum pad's drum stays.
     for (const synth of ['vowel', 'bell', 'pluck', 'noise', 'sine']) {

@@ -1,7 +1,8 @@
 /**
  * GranulatorPanel — a Granulator rack's instrument on its card
  * (docs/granulator.md): the sample (generated, a Library sound, a drum pad's,
- * or an upload), its waveform with the live grains drawn on it (click or drag
+ * an upload, or a linked folder's file, read from disk where it is), its
+ * waveform with the live grains drawn on it (click or drag
  * to set Position), the mode, and every setting in folding sections. Each
  * setting has a + that makes it a control (`au:<rack>:inst::<address>`, as
  * an Audio Unit parameter's), and the grains' readouts can become controls
@@ -26,6 +27,8 @@ import { playEngine } from '../../../lib/playEngine';
 import { addVideoFile, isAudioType } from '../../../lib/backgroundLibrary';
 import { audioAccept, isAudioFile, notAudioMessage } from '../../../lib/audioAccept';
 import { useLibraryVideos } from '../../backgrounds/useBackgrounds';
+import { LinkedPickButton, LinkedRelinkButton, linkedMissingText } from '../../linked/LinkedPickButton';
+import { isLinkedRef } from '../../../files/linkedRefs';
 import { playId } from '../../../play/playControls';
 import { addGrainNulls, addGrainReadouts } from '../../../play/grainControls';
 import { usePlayUi } from '../playUi';
@@ -270,15 +273,18 @@ function SampleRow({ rack, slot, play, onChange }: { rack: AeRack; slot: AeSlot;
     } finally { setBusy(false); }
   };
   const status = ui?.status;
+  const linked = isLinkedRef(current);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <span style={{ ...labelStyle(tk), width: 44 }}>Sample</span>
         <Select ariaLabel="The granulator’s sample" value={current} options={options} height={28} style={{ flex: '1 1 170px', minWidth: 0 }} onChange={pick} />
         <Button size="sm" variant="ghost" icon="import" disabled={busy} onClick={() => fileRef.current?.click()} title="Upload a sound: it goes into the Library’s Sounds">{busy ? 'Saving…' : 'Upload…'}</Button>
+        <LinkedPickButton filter="audio" label="Linked folder…" disabled={busy} onPick={(ref, e) => setSample({ sampleId: ref, name: e.name })} />
+        {status === 'missing' && linked && <LinkedRelinkButton id={current} filter="audio" onRelinked={ref => setSample({ sampleId: ref, name: ref.split('/').pop() ?? slot.sample?.name ?? 'Sample' })} />}
         <input ref={fileRef} type="file" accept={audioAccept()} style={{ display: 'none' }} onChange={e => void upload(e)} />
       </div>
-      {status === 'missing' && <span style={{ color: tk.status.danger, font: `11.5px ${fontFamily.ui}` }}>This sound isn’t in this browser’s Library. Upload it again, or pick another.</span>}
+      {status === 'missing' && <span style={{ color: tk.status.danger, font: `11.5px ${fontFamily.ui}` }}>{linked ? linkedMissingText(current, slot.sample?.name ?? '') : 'This sound isn’t in this browser’s Library. Upload it again, or pick another.'}</span>}
       {status === 'error' && <span style={{ color: tk.status.danger, font: `11.5px ${fontFamily.ui}` }}>{ui?.name || 'This browser couldn’t decode that sound.'}</span>}
     </div>
   );
