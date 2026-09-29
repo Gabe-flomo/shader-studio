@@ -504,6 +504,10 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     />
   ) : null;
 
+  // Shared with the Mappings empty state (rendered there too, when there's no control yet to map onto).
+  const addControlButtonEl = (
+    <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} finish={finishOk ? finishCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddFinish={addFinishControl} sound={audioFxOk ? soundCandidates : NO_LAYER_CANDIDATES} onAddSound={addSoundControl} onAddAction={addActionControl} onAddNull={addWithNull} />
+  );
   const controlsHeader = <PanelHeader
     title="Controls"
     hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
@@ -516,7 +520,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
         <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
         <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
-        <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} finish={finishOk ? finishCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddFinish={addFinishControl} sound={audioFxOk ? soundCandidates : NO_LAYER_CANDIDATES} onAddSound={addSoundControl} onAddAction={addActionControl} onAddNull={addWithNull} />
+        {addControlButtonEl}
         <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More" onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 200, y: r.bottom + 4 } : null); }} />
         </span>
@@ -751,6 +755,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       audioNodes={audioNodes}
       nullLayers={nullLayers}
       layerRefs={layerRefs}
+      addControlButton={addControlButtonEl}
     />
   );
   const exposeControl = (control: PlayControl) => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }));
@@ -1301,7 +1306,7 @@ function RangeEditor({ min, max, onRange }: { min: number; max: number; onRange:
 
 interface AudioNodeOption { id: string; label: string; bands: number }
 
-function MappingsDrawer({ play, mode, grid = false, pages = false, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, onAddPair, onUpdatePair, onRemovePair, audioNodes, nullLayers, layerRefs }: {
+function MappingsDrawer({ play, mode, grid = false, pages = false, height, onResizeStart, open, onToggle, onAdd, onUpdate, onRemove, onAddPair, onUpdatePair, onRemovePair, audioNodes, nullLayers, layerRefs, addControlButton }: {
   play: PlayRecord;
   /**
    * `drawer`: folds under the controls with a draggable top edge. `tab`: fills the page (phones, the split view's panel).
@@ -1325,6 +1330,9 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   audioNodes: AudioNodeOption[];
   nullLayers: { id: string; label: string }[];
   layerRefs: LayerRef[];
+  /** The Controls page's "Add control" button (its target picker, then the mini mapper for a source):
+   * offered in the empty state when there's no control yet to map onto. */
+  addControlButton: ReactNode;
 }) {
   const tk = useTokens();
   const meters = useSourceMeter(open ? play.mappings : EMPTY_MAPPINGS);
@@ -1436,6 +1444,17 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   const emptyBody = noControls
     ? 'Add a control first, then map an input onto it.'
     : `Press Learn and move a knob or a key, or add a row by hand. ${midiEngine.blockReason() ?? (midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}.` : '')} Connecting Ableton, a controller, OSC or live audio for the first time? The ⓘ button above walks you through it.`;
+  // Header's "+ Add": a mapping onto the default source (Learn instead picks it from the next input).
+  const addDefaultMapping = () => onAdd(allSources ? { kind: 'midi', signal: 'cc', channel: 0 } : { kind: 'mouse', axis: 'x' });
+  const emptyState = (
+    <div style={{ margin: '18px 4px', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, lineHeight: 1.5 }}>
+      <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>Nothing mapped</div>
+      {emptyBody}
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        {noControls ? addControlButton : <Button size="sm" icon="plus" onClick={addDefaultMapping}>Add mapping</Button>}
+      </div>
+    </div>
+  );
 
   return (
     <div data-mappings={mode} style={mode !== 'drawer'
@@ -1469,7 +1488,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
             <Button size="sm" icon="spark" variant={learnFor === 'new' ? 'primary' : 'secondary'} disabled={noControls} onClick={() => setLearnFor(l => (l === 'new' ? null : 'new'))}>
               {learnFor === 'new' ? 'Listening…' : 'Learn'}
             </Button>
-            <Button size="sm" icon="plus" disabled={noControls} onClick={() => onAdd(allSources ? { kind: 'midi', signal: 'cc', channel: 0 } : { kind: 'mouse', axis: 'x' })}>Add</Button>
+            <Button size="sm" icon="plus" disabled={noControls} onClick={addDefaultMapping}>Add</Button>
           </>
         )}
       />
@@ -1478,7 +1497,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
           play={play}
           meters={meters}
           status={status}
-          empty={<EmptyState title="Nothing mapped" body={emptyBody} />}
+          empty={emptyState}
           renderRow={m => rowFor(m, { collapsed: false, fixed: true })}
           pairs={play.pairs?.length ? <PairMappingsSection play={play} grid={false} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} /> : null}
           layerRefs={layerRefs}
@@ -1491,7 +1510,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
           <SoloStrip kind="mapping" total={play.mappings.length} />
           {play.midiFile && !pages && <MidiFileSlot />}
           {play.mappings.length === 0 ? (
-            <EmptyState title="Nothing mapped" body={emptyBody} />
+            emptyState
           ) : <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => rowFor(m, { collapsed: collapsed.has(m.id) }))}</div>}
           {!!play.pairs?.length && (
             <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
