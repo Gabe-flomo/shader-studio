@@ -31,6 +31,7 @@ import { sgCondNew, sgCondStep, sgParseValueRef, sgRunActions, sgScreenPoint, sg
 import { readFinishValue } from '../types/playFinish';
 import { AUDIO_FX_TARGET_PREFIX, readAudioFxValue } from '../types/playAudioFx';
 import { signalNames } from '../play/signalNames';
+import { playPerfOn, recordPlayCounts, recordPlayStage, type PlayStage } from './perfStats';
 import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../types/play';
 import { geoAnchor } from '../play/kit/geometry.js';
 import { fnEval } from '../play/kit/fn.js';
@@ -561,7 +562,7 @@ class PlayEngine implements InputSource {
   }
 
   private layerBase(layerId: string, key: string): number | null {
-    const layer = this.record.layers.find(l => l.id === layerId);
+    const layer = this.layerOf(layerId);
     if (!layer) return null;
     const v = (layer as unknown as Record<string, unknown>)[key];
     return typeof v === 'number' ? v : null;
@@ -570,7 +571,7 @@ class PlayEngine implements InputSource {
   /** An audio layer's bands, measured once a frame from its song (or the live input), times its Gain. */
   private audioBands = new Map<string, { frame: number; v: Record<LiveBand, number> }>();
   private audioBand(layerId: string, band: LiveBand): number | null {
-    const l = this.record.layers.find(x => x.id === layerId);
+    const l = this.layerOf(layerId);
     if (!l || l.kind !== 'audio') return null;
     let c = this.audioBands.get(layerId);
     if (!c || c.frame !== this.frame) {
@@ -603,7 +604,7 @@ class PlayEngine implements InputSource {
     if (hand) return this.handPoint(hand.side, hand.point);
     const tr = parseTrackAnchor(ref);
     if (tr) return this.trackPoint(tr.kind, tr.point);
-    const l = this.record.layers.find(x => x.id === ref);
+    const l = this.layerOf(ref);
     return l ? geoAnchor(l as unknown as PlayLayer & Record<string, unknown>, this.valueOf(l), this.aspect, this.reported, this.lookup) : null;
   }
 
@@ -618,23 +619,59 @@ class PlayEngine implements InputSource {
   }
   private reported = (key: string) => this.sensors.get(key);
   private lookup = (id: string) => {
-    const l = this.record.layers.find(x => x.id === id);
+    const l = this.layerOf(id);
     return l ? { layer: l as unknown as PlayLayer & Record<string, unknown>, value: this.valueOf(l) } : null;
   };
 
-  /** Every trigger in the record: mapping triggers and action triggers. */
-  private allTriggers(): TriggerSpec[] {
+  /**
+   * Lookups built once per record (setRecord hands over a new one on every
+   * change): the triggers, the enabled actions, and layers and mappings by id.
+   * The per-frame ticks read these instead of rebuilding or searching.
+   */
+  private indexed: PlayRecord | null = null;
+  private triggerList: TriggerSpec[] = [];
+  private enabledActions: PlayAction[] = [];
+  /** Condition and audio triggers, one per key, with their keys worked out. */
+  private condTriggers: { t: TriggerSpec; key: string }[] = [];
+  private audioTriggers: { t: TriggerSpec; key: string }[] = [];
+  private audioKeys = new Set<string>();
+  private layersById = new Map<string, PlayLayer>();
+  private mappingsById = new Map<string, PlayMapping>();
+  private index(): void {
+    if (this.indexed === this.record) return;
+    const r = this.record;
+    this.indexed = r;
     const out: TriggerSpec[] = [];
-    for (const m of this.record.mappings) if (m.enabled && m.source.kind === 'trigger') out.push(m.source.trigger);
-    for (const m of this.record.mappings) {
+    for (const m of r.mappings) if (m.enabled && m.source.kind === 'trigger') out.push(m.source.trigger);
+    for (const m of r.mappings) {
       if (!m.enabled || !m.increment) continue;
       if (m.increment.on === 'trigger') out.push(m.increment.trigger);
       if (m.increment.resetOn) out.push({ on: 'signal', signal: m.increment.resetOn });
     }
-    for (const a of this.record.actions ?? []) if (a.enabled) out.push(a.trigger);
-    for (const m of this.record.pairMappings ?? []) if (m.enabled && m.source.kind === 'value' && m.source.source.kind === 'trigger') out.push(m.source.source.trigger);
-    return out;
+    for (const a of r.actions ?? []) if (a.enabled) out.push(a.trigger);
+    for (const m of r.pairMappings ?? []) if (m.enabled && m.source.kind === 'value' && m.source.source.kind === 'trigger') out.push(m.source.source.trigger);
+    this.triggerList = out;
+    const unique = (want: (t: TriggerSpec) => boolean) => {
+      const seen = new Set<string>(), list: { t: TriggerSpec; key: string }[] = [];
+      for (const t of out) { if (!want(t)) continue; const key = triggerKey(t); if (!seen.has(key)) { seen.add(key); list.push({ t, key }); } }
+      return list;
+    };
+    this.condTriggers = unique(t => t.on === 'proximity' || t.on === 'value');
+    this.audioTriggers = unique(t => t.on === 'audio' || t.on === 'reader');
+    this.audioKeys = new Set(this.audioTriggers.map(a => a.key));
+    this.enabledActions = (r.actions ?? []).filter(a => a.enabled);
+    this.layersById = new Map(r.layers.map(l => [l.id, l]));
+    this.mappingsById = new Map(r.mappings.map(m => [m.id, m]));
   }
+  private layerOf(id: string): PlayLayer | undefined { this.index(); return this.layersById.get(id); }
+  private mappingOf(id: string): PlayMapping | undefined { this.index(); return this.mappingsById.get(id); }
+
+  /** Every trigger in the record: mapping triggers and action triggers. */
+  private allTriggers(): TriggerSpec[] {
+    this.index();
+    return this.triggerList;
+  }
+
 
   /**
    * A condition's value now (play/kit/signals.js sgParseValueRef): a control
@@ -653,7 +690,7 @@ class PlayEngine implements InputSource {
         return Array.isArray(v) ? (v[0] + v[1] + v[2]) / 3 : v;
       }
       case 'mapping': {
-        const m = this.record.mappings.find(x => x.id === r.id);
+        const m = this.mappingOf(r.id);
         return m ? this.readMapping(m) : null;
       }
       case 'mouse': return r.axis === 'x' ? this.mouseX : this.mouseY;
@@ -688,6 +725,7 @@ class PlayEngine implements InputSource {
 
   /** A signal fires: its "When signal fires" triggers see a press (and its release) at once. Learn takes it too. */
   private emitSignal(id: string): void {
+    this.signalCount++;
     const key = signalKey(id);
     this.press(key);
     this.release(key);
@@ -722,12 +760,10 @@ class PlayEngine implements InputSource {
    * its release; a crossing is a press and release in one frame.
    */
   private tickConditionTriggers(): void {
-    const seen = new Set<string>();
-    for (const t of this.allTriggers()) {
+    this.index();
+    for (const { t, key } of this.condTriggers) {
       if (t.on !== 'proximity' && t.on !== 'value') continue;
-      const key = triggerKey(t);
-      if (seen.has(key)) continue;
-      seen.add(key);
+      this.condCount++;
       const c: ValueCondition = t.on === 'proximity' ? proximityCondition(t) : t;
       let st = this.condStates.get(key);
       if (!st) { st = sgCondNew(); this.condStates.set(key, st); }
@@ -767,14 +803,15 @@ class PlayEngine implements InputSource {
    * frame, a limited depth, so a loop can't hang).
    */
   private tickActions(dt: number): void {
-    const actions = (this.record.actions ?? []).filter(a => a.enabled);
+    this.index();
+    const actions = this.enabledActions;
     if (!actions.length) return;
     sgRunActions(actions, a => {
       const { presses, gate } = this.triggerInput(a.trigger);
       // A new action starts from "no presses yet"; a beat that jumped (a seek) fires once.
       const { slot, fresh } = this.fireSlot(this.actionFire, a.id, a.trigger, presses, gate);
       return fresh ? 0 : Math.min(4, stepFire(slot.st, a.trigger.fire, presses, gate, dt));
-    }, a => { for (const cb of this.actionListeners) cb(a); }, id => this.emitSignal(id));
+    }, a => { for (const cb of this.actionListeners) cb(a); }, id => this.emitSignal(id), this.chainStats);
   }
 
   // ── Hands ─────────────────────────────────────────────────────────────────
@@ -820,7 +857,7 @@ class PlayEngine implements InputSource {
   /** The Video layer a tracker follows instead of the camera, or null. */
   trackerVideo(kind: TrackerKind): VideoLayer | null {
     const id = this.trackerSettings(kind).source;
-    const l = id ? this.record.layers.find(x => x.id === id) : undefined;
+    const l = id ? this.layerOf(id) : undefined;
     return l && l.kind === 'video' ? l : null;
   }
 
@@ -1126,12 +1163,9 @@ class PlayEngine implements InputSource {
     const live = liveAudio.isOn();
     if (live) liveAudio.update(this.frame);
     if (audioReaderBank.has()) audioReaderBank.update();
-    const seen = new Set<string>();
-    for (const t of this.allTriggers()) {
+    this.index();
+    for (const { t, key } of this.audioTriggers) {
       if (t.on !== 'audio' && t.on !== 'reader') continue;
-      const key = triggerKey(t);
-      if (seen.has(key)) continue;
-      seen.add(key);
       const open = this.audioGates.has(key);
       if (t.on === 'audio') {
         if (!live) continue;
@@ -1146,7 +1180,7 @@ class PlayEngine implements InputSource {
       }
     }
     // A trigger removed while open lets go.
-    for (const k of [...this.audioGates]) if (!seen.has(k)) { this.audioGates.delete(k); this.release(k); }
+    if (this.audioGates.size) for (const k of [...this.audioGates]) if (!this.audioKeys.has(k)) { this.audioGates.delete(k); this.release(k); }
   }
 
   /**
@@ -1169,7 +1203,21 @@ class PlayEngine implements InputSource {
     if (this.muted) this.live.set(controlId, value);
   }
 
+  /** Per-frame counts for the Performance panel (lib/perfStats.ts), kept only while it is open. */
+  private condCount = 0;
+  private signalCount = 0;
+  private chainStats = { depth: 0, tripped: false };
+
   tickInputs(dt: number, time: number, write: InputWriter): void {
+    if (!playPerfOn()) { this.tickInputsInner(dt, time, write, null); return; }
+    this.condCount = 0; this.signalCount = 0; this.chainStats.depth = 0; this.chainStats.tripped = false;
+    let t = performance.now();
+    const lap = (stage: PlayStage) => { const now = performance.now(); recordPlayStage(stage, now - t); t = now; };
+    this.tickInputsInner(dt, time, write, lap);
+    recordPlayCounts({ conditions: this.condCount, signals: this.signalCount, depth: this.chainStats.depth, guardTripped: this.chainStats.tripped });
+  }
+
+  private tickInputsInner(dt: number, time: number, write: InputWriter, lap: ((stage: PlayStage) => void) | null): void {
     this.time = time;
     this.frame++;
     if (this.muted) {
@@ -1194,14 +1242,17 @@ class PlayEngine implements InputSource {
     if (time < this.lastTime - 1e-6) {
       for (const st of this.pairState.values()) st.swap = sgSwapNew();
       // Increments start over from their start, so the same timeline steps the same way again.
-      for (const [id, st] of this.incStates) { const m = this.record.mappings.find(x => x.id === id); incReset(st, m ? this.incStart(m) : st.start, true); }
+      for (const [id, st] of this.incStates) { const m = this.mappingOf(id); incReset(st, m ? this.incStart(m) : st.start, true); }
     }
     this.lastTime = time;
+    lap?.('inputs');
     this.tickConditionTriggers();
     this.tickRelationshipSignals();
     this.tickMultiplySignals();
     this.tickBornDiedSignals();
+    lap?.('conditions');
     this.tickActions(dt);
+    lap?.('actions');
     if (this.learnCb && this.performing) this.pollGamepadLearn();
     // Gamepads are polled, not evented: a stick moving has to draw a frame even while the clock is paused.
     if (this.gamepadIsBound && this.performing) inputBus.wake();
@@ -1278,6 +1329,7 @@ class PlayEngine implements InputSource {
     }
     this.restoreOnce.clear();
     this.drivenLastFrame = driven;
+    lap?.('mappings');
   }
 
   /** Where an increment starts: its explicit start, else the control's value now (a colour: its channel, or full brightness). */
@@ -1346,7 +1398,7 @@ class PlayEngine implements InputSource {
   /** The editor's Reset: back to the start (the control's value now, or the explicit start), growth and direction too. */
   resetIncrement(mappingId: string): void {
     const st = this.incStates.get(mappingId);
-    const m = this.record.mappings.find(x => x.id === mappingId);
+    const m = this.mappingOf(mappingId);
     if (st && m) incReset(st, this.incStart(m), false);
     else this.incStates.delete(mappingId);
     inputBus.wake();

@@ -17,6 +17,8 @@ export interface KitEnv {
   guides?: CanvasRenderingContext2D | null;
   /** Layers to also draw alone (even hidden), read back with layerCanvas(id). */
   alphaLayers?: readonly string[] | null;
+  /** Each layer's step and draw time in ms, when the host is measuring (its Performance panel is open). */
+  layerTime?: (id: string, ms: number) => void;
   /** Sample the picture's coarse grid even when no layer reads it (a Granulator's things read their brightness). */
   needCoarse?: boolean;
   pointer: KitPointer;

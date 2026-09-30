@@ -89,12 +89,14 @@ export function sgCondStep(st, v, c) {
  * chain (A fires B, B fires C) runs within the frame. Each signal fires at
  * most once a frame and a chain stops after SG_DEPTH passes, so a loop (A
  * fires B fires A) can't hang the page. Returns the signals fired, in order.
+ * `stats` (optional) gets the deepest pass reached and whether the guard stopped a chain.
  */
-export function sgRunActions(actions, fires, run, emit) {
+export function sgRunActions(actions, fires, run, emit, stats) {
   const fired = new Set();
   const order = [];
   let wave = actions;
   for (let depth = 0; depth < SG_DEPTH && wave.length; depth++) {
+    if (stats) stats.depth = Math.max(stats.depth, depth + 1);
     let emitted = false;
     for (const a of wave) {
       const n = fires(a);
@@ -106,6 +108,8 @@ export function sgRunActions(actions, fires, run, emit) {
     }
     if (!emitted) break;
     wave = actions.filter(a => a.trigger && a.trigger.on === 'signal');
+    // The guard stops a chain that still had signals to pass on (for the Performance panel).
+    if (stats && depth === SG_DEPTH - 1 && wave.length) stats.tripped = true;
   }
   return order;
 }

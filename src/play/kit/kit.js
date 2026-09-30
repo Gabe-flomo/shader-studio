@@ -991,7 +991,7 @@ export function createLayerKit() {
     }
     // Text, images and the camera with a Reveal or Luma picture matte already chose how they meet the picture.
     const blendOf = l => ((l.kind === 'text' || l.kind === 'image' || l.kind === 'camera' || l.kind === 'video') && l.matte !== 'over') ? 'source-over' : KL_BLEND[l.blend] || 'source-over';
-    const drawLayer = (c, l) => {
+    const drawLayerNow = (c, l) => {
       if (!ownCanvas(l)) { drawOne(c, l, true); return; }
       const off = renderLayer(l);
       if (!off) return;
@@ -999,6 +999,9 @@ export function createLayerKit() {
       c.drawImage(off, 0, 0);
       c.globalCompositeOperation = 'source-over';
     };
+    // env.layerTime(id, ms): the host's Performance panel is open and wants each layer's cost.
+    const layerTime = env.layerTime;
+    const drawLayer = layerTime ? (c, l) => { const t0 = performance.now(); drawLayerNow(c, l); layerTime(l.id, performance.now() - t0); } : drawLayerNow;
     const drawn = l => isVisible(l);
     const tap = env.shaderTap;
     if (tap) {

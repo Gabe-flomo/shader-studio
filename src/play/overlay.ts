@@ -13,6 +13,7 @@
  * zone trigger. Everything else passes through. Module singleton, no React.
  */
 
+import { playPerfOn, recordPlayLayer, recordPlayStage } from '../lib/perfStats';
 import type { ActionKind, PlayLayer, PlayRecord } from '../types/play';
 import { DEFAULT_HANDS, emptyPlayRecord } from '../types/play';
 import { DEFAULT_FACE, DEFAULT_POSE } from '../types/playTracking';
@@ -749,7 +750,12 @@ class PlayOverlay {
     const env = this.env(gl, W, H, dpr, time, dt);
     if (gx) env.guides = gx;
     env.alphaLayers = this.alphaLayers();
+    // The Performance panel is open: time the whole overlay and each layer.
+    const timing = playPerfOn();
+    const t0 = timing ? performance.now() : 0;
+    if (timing) env.layerTime = recordPlayLayer;
     this.kit.frame(ctx, this.record, env);
+    if (timing) recordPlayStage('overlay', performance.now() - t0);
     this.grainTap?.(this.kit, this.record, this.aspect, time, false);
     const top = gx ?? ctx;
     if (this.drawing) this.drawOutline(top, W, H, dpr);

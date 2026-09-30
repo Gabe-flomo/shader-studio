@@ -4,7 +4,8 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
-import { getPerfSnapshot, subscribePerf, getShaderCostMeasurer, type PerfSnapshot } from '../../lib/perfStats';
+import { getPerfSnapshot, getPlayPerfSnapshot, subscribePerf, getShaderCostMeasurer, type PerfSnapshot, type PlayPerfSnapshot, type PlayStage } from '../../lib/perfStats';
+import { SG_DEPTH } from '../../play/kit/signals.js';
 import { shaderShape } from '../../lib/shaderShape';
 import { measureNodeCosts, type NodeCostReport } from '../../lib/nodeCost';
 import { SKIP_UNIFORM_TYPES } from '../../compiler/uniformPatcher';
@@ -20,6 +21,54 @@ function usePerfSnapshot(): PerfSnapshot {
   const [snap, setSnap] = useState(getPerfSnapshot);
   useEffect(() => subscribePerf(() => setSnap(getPerfSnapshot())), []);
   return snap;
+}
+
+function usePlayPerfSnapshot(): PlayPerfSnapshot {
+  const [snap, setSnap] = useState(getPlayPerfSnapshot);
+  useEffect(() => subscribePerf(() => setSnap(getPlayPerfSnapshot())), []);
+  return snap;
+}
+
+const STAGE_LABEL: Record<PlayStage, string> = {
+  inputs: 'Inputs', conditions: 'Conditions', actions: 'Actions', mappings: 'Mappings', overlay: 'Layers',
+};
+
+/**
+ * Play's share of the frame: the engine's stages (inputs, conditions,
+ * actions, mappings), the layers' drawing, and each layer's cost, against the
+ * frame budget. Counted only while this panel is open.
+ */
+function PlaySection({ section, caps, note }: { section: React.CSSProperties; caps: React.CSSProperties; note: React.CSSProperties }) {
+  const tk = useTokens();
+  const snap = usePlayPerfSnapshot();
+  const layers = useNodeGraphStore(s => s.play.layers);
+  const timed = snap.stages.filter(s => s.avg !== null);
+  if (!timed.length) return null;
+  const total = timed.reduce((a, s) => a + (s.avg ?? 0), 0);
+  const nameOf = (id: string) => layers.find(l => l.id === id)?.label ?? id;
+  const colours: Record<PlayStage, string> = { inputs: tk.text.faint, conditions: tk.status.warning, actions: tk.status.danger, mappings: tk.accent.base, overlay: tk.text.muted };
+  const nearGuard = snap.maxDepth >= SG_DEPTH - 1;
+  return (
+    <div style={section}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span style={caps}>Play</span>
+        <span style={{ ...caps, textTransform: 'none' }}>{total.toFixed(2)} ms · {Math.round((total / BUDGET_MS) * 100)}% of the frame</span>
+      </div>
+      <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', background: tk.bg.field }} aria-label="Play stages against the frame budget">
+        {timed.map(s => (
+          <span key={s.stage} title={`${STAGE_LABEL[s.stage]} ${(s.avg ?? 0).toFixed(2)} ms`} style={{ width: `${Math.min(100, ((s.avg ?? 0) / BUDGET_MS) * 100)}%`, background: colours[s.stage] }} />
+        ))}
+      </div>
+      {timed.map(s => <Bar key={s.stage} label={STAGE_LABEL[s.stage]} value={s.avg ?? 0} max={Math.max(total, 1e-3)} unit="ms" color={colours[s.stage]} />)}
+      {snap.layers.slice(0, 8).map(l => <Bar key={l.id} label={nameOf(l.id)} value={l.avg} max={Math.max(snap.layers[0].avg, 1e-3)} unit="ms" color={tk.text.muted} sub="layer" />)}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 12 }}>
+        <div><div style={{ font: `600 13px ${fontFamily.mono}`, color: tk.text.primary }}>{snap.conditions === null ? '—' : Math.round(snap.conditions)}</div><div style={note}>conditions a frame</div></div>
+        <div><div style={{ font: `600 13px ${fontFamily.mono}`, color: tk.text.primary }}>{snap.signals === null ? '—' : snap.signals.toFixed(snap.signals < 10 ? 2 : 0)}</div><div style={note}>signals a frame</div></div>
+        <div><div style={{ font: `600 13px ${fontFamily.mono}`, color: nearGuard ? tk.status.warning : tk.text.primary }}>{snap.maxDepth} / {SG_DEPTH}</div><div style={note}>deepest chain</div></div>
+      </div>
+      {snap.guardTrips > 0 && <div style={{ ...note, color: tk.status.warning }}>A signal chain hit the depth limit {snap.guardTrips} time{snap.guardTrips === 1 ? '' : 's'}: signals that fire each other in a loop stop after {SG_DEPTH} links a frame.</div>}
+    </div>
+  );
 }
 
 /** Live "4.2 ms" for the toolbar button; GPU time when available, CPU frame time otherwise. */
@@ -185,6 +234,8 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
           {(snap.readbacks ?? 0) >= 3 && <div style={note}>Each readback waits for the GPU. Close eye previews and scopes you are not watching.</div>}
         </div>
       )}
+
+      <PlaySection section={section} caps={caps} note={note} />
 
       <div style={section}>
         <div style={caps}>Compiles</div>
