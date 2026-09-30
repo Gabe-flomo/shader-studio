@@ -168,6 +168,17 @@ describe('the engine', () => {
     expect(app.some(v => (v ?? 0) >= 0.5)).toBe(true);
   });
 
+  it('on a website, two bands that differ only in their high edge keep apart', () => {
+    const narrow: TriggerSpec = { on: 'value', ...cond('between', 0.2, { hi: 0.4 }) };
+    const wide: TriggerSpec = { on: 'value', ...cond('between', 0.2, { hi: 0.9 }) };
+    const rec: PlayRecord = { ...emptyPlayRecord(), controls: [control('src'), control('flag'), control('flag2')], layers: [sparks()],
+      mappings: [flagOn(narrow), { ...flagOn(wide), controlId: 'flag2' }] };
+    const web = runtimeRun(rec, [0.1, 0.3, 0.6, 0.6], ['flag', 'flag2']);
+    const on = (v: number | undefined) => (v ?? 0) >= 0.5;
+    expect(on(web[3][0])).toBe(false);
+    expect(on(web[3][1])).toBe(true);
+  });
+
   it('has never reached starts over when the clock goes back', () => {
     const never: TriggerSpec = { on: 'value', ...cond('neverAbove', 0.7) };
     playEngine.setRecord({ ...emptyPlayRecord(), controls: [control('src'), control('flag')], layers: [sparks()], mappings: [flagOn(never)] });
