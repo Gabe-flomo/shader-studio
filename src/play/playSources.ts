@@ -356,6 +356,7 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
     case 'mapping': { const m = ctx.mappings?.find(x => x.id === r.id); return m ? `${sourceLabel(m.source, ctx.controls, ctx.layers)} (source)` : 'Missing mapping'; }
     case 'mouse': return `Mouse ${r.axis.toUpperCase()}`;
     case 'distance': return `${anchorLabel(r.a, ctx.layers)} ↔ ${anchorLabel(r.b, ctx.layers)}`;
+    case 'reading': return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${SENSOR_LABELS[r.read as SensorRead] ?? r.read}`;
     case 'prop': {
       if (r.layerId.startsWith('finish:')) {
         const f = finishTargetLabel(ctx.finish, `finish:${r.layerId.slice(7)}::${r.key}`);

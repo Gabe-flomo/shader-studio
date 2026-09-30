@@ -13,9 +13,10 @@
 import type { IconName } from '../ui/iconPaths';
 import type { PickerItem, PickerSection } from '../ui/groupedPickerModel';
 import { SENSOR_LABELS, sourceFromType, type SourceType } from '../../play/playSources';
-import { defaultIncrement, layerNumericProps, layerTarget, sensorReadsFor, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type SensorRead } from '../../types/play';
+import { defaultIncrement, layerNumericProps, layerTarget, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type SensorRead } from '../../types/play';
 import { mapSourceTo, resolveTargetControl, type MapTarget } from './layerOps';
 import { createSignalFrom, type SignalSource } from '../../play/createSignal';
+import { layerPorts } from '../../play/layerPorts';
 
 export type MiniMapperTarget = MapTarget;
 
@@ -83,8 +84,7 @@ export function miniMapperSections(ctx: MiniMapperContext): PickerSection[] {
   sections.push({ heading: 'Audio', items: audioItems });
   const layerItems: PickerItem[] = [];
   for (const l of play.layers) {
-    const reads = sensorReadsFor(l as { kind: string; shape?: string }).filter(r => r !== 'distance') as SensorRead[];
-    for (const r of reads) layerItems.push(sensorItem(l, r));
+    for (const r of layerPorts(l).readings) layerItems.push(sensorItem(l, r));
   }
   if (layerItems.length) sections.push({ heading: 'Layers', items: layerItems });
   sections.push({ heading: 'Generators', items: [

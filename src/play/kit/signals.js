@@ -226,6 +226,12 @@ export function sgParseValueRef(ref) {
     if (i <= 0 || i + 2 >= rest.length) return null;
     return { kind: 'prop', layerId: (fin ? 'finish:' : '') + rest.slice(0, i), key: rest.slice(i + 2) };
   }
+  // A layer's reading (what it measures: hover, fill, speed…), as its sensors report it.
+  if (ref.startsWith('read:')) {
+    const rest = ref.slice(5), i = rest.lastIndexOf('::');
+    if (i <= 0 || i + 2 >= rest.length) return null;
+    return { kind: 'reading', layerId: rest.slice(0, i), read: rest.slice(i + 2) };
+  }
   if (ref.startsWith('audiofx:')) {
     const i = ref.lastIndexOf('::');
     if (i <= 8 || i + 2 >= ref.length) return null;

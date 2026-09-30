@@ -15,7 +15,8 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { playEngine } from '../../lib/playEngine';
 import { sgParseValueRef, sgScreenPoint } from '../../play/kit/signals.js';
-import { COND_LABELS, anchorOptions, valueRefLabel, type LabelContext } from '../../play/playSources';
+import { COND_LABELS, SENSOR_HINTS, SENSOR_LABELS, anchorOptions, valueRefLabel, type LabelContext } from '../../play/playSources';
+import { layerPorts } from '../../play/layerPorts';
 import { addSignal, deleteSignal, renameSignal, signalUses } from '../../play/pairs';
 import { conditionBands, withUnit } from './conditionModel';
 import { PAD_ANCHOR, isBandCmp, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
@@ -44,6 +45,9 @@ export function valueSections(play: PlayRecord): PickerSection[] {
   if (floats.length) out.push({ heading: 'Controls', items: floats.map(c => ({ value: `ctl:${c.id}`, label: c.label, icon: 'sliders' as const, description: `${c.min} to ${c.max}` })) });
   const layerItems = play.layers.flatMap(l => layerNumericProps(l).map(d => ({ value: `layer:${l.id}::${d.key}`, label: `${l.label} · ${d.label}`, icon: 'layoutCanvas' as const, keywords: l.kind })));
   if (layerItems.length) out.push({ heading: 'Layers', items: layerItems });
+  // What layers measure (hover, fill, speed…): layerPorts' readings, watched straight from the layer.
+  const readingItems = play.layers.flatMap(l => layerPorts(l).readings.map(r => ({ value: `read:${l.id}::${r}`, label: `${l.label} · ${SENSOR_LABELS[r]}`, icon: 'eye' as const, description: SENSOR_HINTS[r], keywords: `${l.kind} reading sensor` })));
+  if (readingItems.length) out.push({ heading: 'Layer readings', items: readingItems });
   const finishItems = finishHosts(play.finish).flatMap(e => finishNumericProps(e).map(d => ({ value: `finish:${e.id}::${d.key}`, label: `${finishHostLabel(e)} · ${d.label}`, icon: 'spark' as const, keywords: 'finish' })));
   if (finishItems.length) out.push({ heading: 'Finish', items: finishItems });
   const soundItems = audioFxHosts(play.audioFx, play.layers).flatMap(h => h.params.map(d => ({ value: `${h.id}::${d.key}`, label: `${h.label} · ${d.label}`, icon: 'wave' as const, keywords: 'sound audio effect' })));

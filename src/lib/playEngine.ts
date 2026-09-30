@@ -37,7 +37,7 @@ import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../typ
 import { geoAnchor } from '../play/kit/geometry.js';
 import { fnEval } from '../play/kit/fn.js';
 import type { TriggerSpec } from '../types/play';
-import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource } from '../types/play';
+import type { LfoShape, PlayAction, PlayControl, PlayCurve, PlayMapping, PlayRecord, PlaySource, SensorRead } from '../types/play';
 import { sensorKey } from '../types/play';
 import { parseGrainsTarget } from '../types/playAudioEngine';
 import { CURVE_POINTS, emptyPlayRecord, parseActionTarget, parsePropTarget, parseReaderTarget, spreadPropId } from '../types/play';
@@ -705,6 +705,7 @@ class PlayEngine implements InputSource {
       }
       case 'mouse': return r.axis === 'x' ? this.mouseX : this.mouseY;
       case 'distance': return this.anchorGap(r.a, r.b);
+      case 'reading': return this.readSource({ kind: 'sensor', layerId: r.layerId, read: r.read as SensorRead, otherId: '' });
       case 'prop': {
         const base = r.layerId.startsWith('finish:')
           ? readFinishValue(this.record.finish, `${r.layerId}::${r.key}`) ?? null

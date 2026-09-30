@@ -4,6 +4,7 @@
  * mapping, and adding, renaming and deleting signals. Pure: each takes the
  * record and returns the next one. The engine (lib/playEngine.ts) plays them.
  */
+import { eventSignal, layerEvents } from './layerPorts';
 import type { PairAxis, PlayControl, PlayPair, PlayPairMapping, PlayRecord, PlaySignal, PairSource } from '../types/play';
 import { layerNumericProps, layerTarget, parseLayerTarget, SIGNALS_MAX } from '../types/play';
 import { pairedKey } from '../components/play/layerOps';
@@ -160,15 +161,10 @@ export function deleteSignal(play: PlayRecord, id: string): PlayRecord {
  */
 export function layerSignalSenders(play: PlayRecord): Array<{ id: string; label: string }> {
   const out: Array<{ id: string; label: string }> = [];
-  for (const l of play.layers) {
-    if (l.kind === 'particles' && l.emit === 'multiply') {
-      if (l.splitSignal) out.push({ id: l.splitSignal, label: `${l.label}: Split` });
-      if (l.fullSignal) out.push({ id: l.fullSignal, label: `${l.label}: Full` });
-      if (l.annihilateSignal) out.push({ id: l.annihilateSignal, label: `${l.label}: Annihilate` });
-      if (l.clearedSignal) out.push({ id: l.clearedSignal, label: `${l.label}: Cleared` });
-    } else if (l.kind === 'relationship' && l.catchSignal) {
-      out.push({ id: l.catchSignal, label: `${l.label}: Catch` });
-    }
+  // Every event a layer can send (layerPorts: Born and Died too, which the engine sends for particles and agents).
+  for (const l of play.layers) for (const e of layerEvents(l)) {
+    const id = eventSignal(l, e);
+    if (id) out.push({ id, label: `${l.label}: ${e.label}` });
   }
   for (const m of play.mappings) {
     const inc = m.increment;

@@ -66,7 +66,7 @@ export function mapTarget(target: string, f: RefFn): string {
   return f('graph', target);
 }
 
-/** A condition's value path (sgParseValueRef): `ctl:`, `map:`, `layer:<id>::<key>`, `dist:<A>|<B>`… */
+/** A condition's value path (sgParseValueRef): `ctl:`, `map:`, `layer:<id>::<key>`, `read:<id>::<read>`, `dist:<A>|<B>`… */
 export function mapValueRef(ref: string, f: RefFn): string {
   if (ref.startsWith('ctl:')) return `ctl:${f('control', ref.slice(4))}`;
   if (ref.startsWith('map:')) return `map:${f('mapping', ref.slice(4))}`;
@@ -76,6 +76,11 @@ export function mapValueRef(ref: string, f: RefFn): string {
     return `dist:${mapAnchor(ref.slice(5, i), f)}|${mapAnchor(ref.slice(i + 1), f)}`;
   }
   if (ref.startsWith(LAYER_TARGET_PREFIX)) return mapTarget(ref, f);
+  // A layer's reading: `read:<layerId>::<read>`.
+  if (ref.startsWith('read:')) {
+    const i = ref.lastIndexOf('::');
+    return i > 5 ? `read:${f('layer', ref.slice(5, i))}${ref.slice(i)}` : ref;
+  }
   if (ref.startsWith(FINISH_TARGET_PREFIX) || ref.startsWith(AUDIO_FX_TARGET_PREFIX)) return mapTarget(ref, f);
   return ref;
 }

@@ -18,7 +18,8 @@ export type SgValueRef =
   | { kind: 'mapping'; id: string }
   | { kind: 'mouse'; axis: 'x' | 'y' }
   | { kind: 'distance'; a: string; b: string }
-  | { kind: 'prop'; layerId: string; key: string };
+  | { kind: 'prop'; layerId: string; key: string }
+  | { kind: 'reading'; layerId: string; read: string };
 export function sgParseValueRef(ref: string): SgValueRef | null;
 export function sgScreenPoint(ref: string): { x: number; y: number } | null;
 export function sgValueKey(t: Pick<ValueCondition, 'value' | 'cmp' | 'threshold' | 'hysteresis' | 'tolerance' | 'hi' | 'unit'>): string;

@@ -10,7 +10,8 @@
  * the table (`condRanges` in the bundle) since the page has no property list.
  */
 import { sgParseValueRef } from './kit/signals.js';
-import { layerNumericProps, type PlayRecord, type ValueCondition } from '../types/play';
+import { layerNumericProps, type PlayRecord, type SensorRead, type ValueCondition } from '../types/play';
+import { readingRange } from './layerPorts';
 import { finishHost, finishParamOf } from '../types/playFinish';
 import { audioFxControlFor } from '../types/playAudioFx';
 
@@ -23,6 +24,7 @@ export function valueRange(play: PlayRecord, ref: string): ValueRange | null {
   switch (r.kind) {
     case 'mapping': case 'mouse': return [0, 1];
     case 'distance': return null;
+    case 'reading': return readingRange(r.read as SensorRead);
     case 'control': {
       const c = play.controls.find(x => x.id === r.id);
       if (!c) return null;

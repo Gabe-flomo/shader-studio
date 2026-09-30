@@ -1563,6 +1563,7 @@ void main() {
       if (r.kind === 'mapping') { const m = play.mappings.find(x => x.id === r.id); if (!m) return null; if (m.increment) { const st = incState.get(m.id); if (!st || !INC) return null; const rg = INC.range(m.outMin, m.outMax); return rg[1] > rg[0] ? Math.max(0, Math.min(1, (INC.fold(st.p, rg[0], rg[1], m.increment.limit) - rg[0]) / (rg[1] - rg[0]))) : 0; } if (m.source.kind === 'trigger') { const st = trig.get(m.id); return st ? st.value : 0; } return readSource(m.source); }
       if (r.kind === 'mouse') return r.axis === 'x' ? mouse.x : mouse.y;
       if (r.kind === 'distance') return anchorGap(r.a, r.b);
+      if (r.kind === 'reading') return readSource({ kind: 'sensor', layerId: r.layerId, read: r.read, otherId: '' });
       const l = layersById.get(r.layerId);
       return l && typeof l[r.key] === 'number' ? layerValue(r.layerId, r.key, l[r.key]) : null;
     }
