@@ -22,7 +22,7 @@ import type { ActionKind, FireMode, HandGesture, LiveAudioBand, TriggerMode, Tri
 import { parseHandAnchor } from '../../types/play';
 import {
   CHANNELS, HAND_GESTURE_OPTIONS, HAND_SIDES, LIVE_BAND_OPTIONS,
-  anchorChoice, anchorOptions, anchorPick, fireModes, fireOf, keyName, repeatHint, triggerFromKind, triggerLabel, withFire,
+  anchorChoice, anchorOptions, anchorPick, fireModes, fireOf, keyName, ordinal, repeatHint, triggerFromKind, triggerLabel, withFire,
 } from '../../play/playSources';
 import { playEngine } from '../../lib/playEngine';
 import { Segmented } from '../ui/Choice';
@@ -342,7 +342,28 @@ export function FirePicker({ trigger: t, what, numStyle, onChange }: {
   // One wrapping box beside the row's label, so N and its unit (and the hint) line up under the modes.
   return (
     <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-      <Segmented size="sm" ariaLabel="When it fires" value={f.mode} options={fireModes(t)} onChange={(mode: FireMode) => set({ mode })} />
+      <Segmented size="sm" ariaLabel="When it fires" value={f.mode} options={fireModes(t)} wrap onChange={(mode: FireMode) => {
+        // The counters start from their own defaults: every 4th; 3 within a second.
+        if (mode === 'nth') set({ mode, every: 4, unit: 'frames' });
+        else if (mode === 'within') set({ mode, every: 3, unit: 'seconds', window: 1 });
+        else if (f.mode === 'nth' || f.mode === 'within') set({ mode, every: 3, unit: 'frames' });
+        else set({ mode });
+      }} />
+      {f.mode === 'nth' && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>every</span>
+          <NumberInput value={f.every} min={2} max={999} step={1} title="Fire on every this-many-th time" onCommit={n => set({ every: Math.max(2, Math.min(999, Math.round(n))) })} style={{ ...numStyle, width: 40 }} />
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{ordinal(f.every).replace(/^\d+/, '')} time</span>
+        </span>
+      )}
+      {f.mode === 'within' && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <NumberInput value={f.every} min={2} max={64} step={1} title="How many times" onCommit={n => set({ every: Math.max(2, Math.min(64, Math.round(n))) })} style={{ ...numStyle, width: 36 }} />
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>times within</span>
+          <NumberInput value={f.window ?? 1} min={0.05} max={60} step={0.1} title="Seconds they all have to land within" onCommit={n => set({ window: Math.max(0.05, Math.min(60, n)) })} style={{ ...numStyle, width: 44 }} />
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>s</span>
+        </span>
+      )}
       {f.mode === 'every' && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <NumberInput

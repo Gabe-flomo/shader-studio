@@ -19,7 +19,7 @@ import { COND_LABELS, SENSOR_HINTS, SENSOR_LABELS, anchorOptions, valueRefLabel,
 import { layerPorts } from '../../play/layerPorts';
 import { addSignal, deleteSignal, renameSignal, signalUses } from '../../play/pairs';
 import { conditionBands, withUnit } from './conditionModel';
-import { PAD_ANCHOR, isBandCmp, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
+import { PAD_ANCHOR, isBandCmp, isDirectionCmp, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf } from '../../types/playFinish';
 import { audioFxControlFor, audioFxHosts } from '../../types/playAudioFx';
 import { GroupedPicker } from '../ui/GroupedPicker';
@@ -149,8 +149,8 @@ const round = (n: number) => Math.round(n * 1000) / 1000;
 /** The comparisons offered: every one for a trigger; the held ones (no crossings) for "only while". */
 function cmpOptions(crossings: boolean) {
   const all: CondCmp[] = crossings
-    ? ['above', 'below', 'crossUp', 'crossDown', 'between', 'outside', 'equals', 'not', 'neverAbove', 'neverBelow']
-    : ['above', 'below', 'between', 'outside', 'equals', 'not', 'neverAbove', 'neverBelow'];
+    ? ['above', 'below', 'crossUp', 'crossDown', 'between', 'outside', 'equals', 'not', 'rising', 'falling', 'changing', 'steady', 'neverAbove', 'neverBelow']
+    : ['above', 'below', 'between', 'outside', 'equals', 'not', 'rising', 'falling', 'changing', 'steady', 'neverAbove', 'neverBelow'];
   return all.map(v => ({ value: v, label: COND_LABELS[v].label, title: COND_LABELS[v].title }));
 }
 
@@ -186,15 +186,19 @@ export function ConditionFields({ cond: c, isOpen, crossings = true, onChange }:
   const equalsLike = c.cmp === 'equals' || c.cmp === 'not';
   const isBand = isBandCmp(c.cmp);
   const history = c.cmp === 'neverAbove' || c.cmp === 'neverBelow';
+  const direction = isDirectionCmp(c.cmp);
   const crossing = c.cmp === 'crossUp' || c.cmp === 'crossDown';
   const state = now.v === null ? 'No value yet' : crossing ? (now.open ? 'Past it: fires on the next crossing back and over' : 'Waiting for it to cross')
-    : history ? (now.open ? 'Not yet: holds until it gets there' : 'It has been there (a rewind starts over)') : now.open ? 'Met: firing' : 'Not met';
+    : history ? (now.open ? 'Not yet: holds until it gets there' : 'It has been there (a rewind starts over)')
+    : direction ? (now.open ? `${COND_LABELS[c.cmp].label}: firing` : `Not ${COND_LABELS[c.cmp].label.toLowerCase()}`) : now.open ? 'Met: firing' : 'Not met';
   const shownNum = (v: number) => (isPct ? `${Math.round(v * 100)}%` : fmt(v));
   // A threshold's ruler: in percent it reads 0–100 (stored as 0..1).
   const ruler = (value: number, set: (v: number) => void) => isPct
     ? { value: round(value * 100), min: 0, max: 100, step: 1, onChange: (v: number) => set(round(v / 100)), onType: (v: number) => set(round(v / 100)) }
     : { value, min: range.min, max: range.max, step: range.step, onChange: set, onType: set };
   const setCmp = (cmp: CondCmp) => {
+    // Which way it's going: the threshold becomes the dead-band, 1% of the range, with a half-second window.
+    if (isDirectionCmp(cmp) && !direction) { const span = range.max - range.min || 1; onChange({ ...c, cmp, threshold: round(span * 0.01), hysteresis: round(span * 0.005), window: c.window ?? 0.5, noise: c.noise ?? 0.3 }); return; }
     // A band starts a quarter of the range either side of the threshold's place.
     if (isBandCmp(cmp) && typeof c.hi !== 'number') { const q = (range.max - range.min) / 4; onChange({ ...c, cmp, threshold: round(Math.max(range.min, c.threshold - q)), hi: round(Math.min(range.max, c.threshold + q)) }); return; }
     onChange({ ...c, cmp });
@@ -226,12 +230,24 @@ export function ConditionFields({ cond: c, isOpen, crossings = true, onChange }:
         <Select ariaLabel="Comparison" value={c.cmp} options={cmpOptions(crossings)} onChange={v => setCmp(v as CondCmp)} height={26} style={{ minWidth: 150 }} />
         <span style={{ color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}`, flex: 1, minWidth: 120 }}>{COND_LABELS[c.cmp].title}</span>
       </div>
-      <div style={{ ...line, flexWrap: 'nowrap' }}>
+      {direction && (
+        <div style={line}>
+          <span style={cap}>Over</span>
+          <NumberInput value={c.window ?? 0.5} min={0.01} max={60} step={0.1} title="How far back “before” is, in seconds: longer is slower and steadier" onCommit={n => onChange({ ...c, window: Math.max(0.01, Math.min(60, n)) })} style={small} />
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>s</span>
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}`, marginLeft: 8 }} title="0%: quick, but it takes the noise. Higher: noise is smoothed away">Noise filter</span>
+          <NumberInput value={Math.round((c.noise ?? 0.3) * 100)} min={0} max={100} step={5} title="0%: quick, but it takes the noise. Higher: noise is smoothed away" onCommit={n => onChange({ ...c, noise: Math.max(0, Math.min(100, n)) / 100 })} style={small} />
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>%</span>
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}`, marginLeft: 8 }} title="How big a change counts as moving">Dead-band</span>
+          <NumberInput value={c.threshold} min={0} step={range.step} title="How big a change counts as moving (in the value's units, or its share of the range in %)" onCommit={n => onChange({ ...c, threshold: Math.max(0, n) })} style={small} />
+        </div>
+      )}
+      {!direction && <div style={{ ...line, flexWrap: 'nowrap' }}>
         <span style={cap} title={dist && !isPct ? 'In picture heights: 1 is the height of the picture' : undefined}>{equalsLike ? 'Value' : isBand ? 'Low edge' : 'Threshold'}{isPct ? ' %' : ''}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <RulerSlider ariaLabel={isBand ? 'Low edge' : 'Threshold'} {...ruler(c.threshold, threshold => onChange({ ...c, threshold }))} />
         </div>
-      </div>
+      </div>}
       {isBand && (
         <div style={{ ...line, flexWrap: 'nowrap' }}>
           <span style={cap}>High edge{isPct ? ' %' : ''}</span>
@@ -245,9 +261,9 @@ export function ConditionFields({ cond: c, isOpen, crossings = true, onChange }:
         <div role="meter" aria-label="Value now" aria-valuemin={range.min} aria-valuemax={range.max} aria-valuenow={nowShown ?? undefined}
           title="The shaded part is where it is met; the lighter strip is how far past it holds before letting go"
           style={{ position: 'relative', flex: 1, minWidth: 60, height: 8, borderRadius: 4, background: tk.bg.field }}>
-          {bands.met.map(([a, b], i) => <span key={`m${i}`} style={{ position: 'absolute', top: 0, bottom: 0, left: pct(Math.min(a, b)), width: `calc(${pct(Math.max(a, b))} - ${pct(Math.min(a, b))})`, borderRadius: 4, background: alpha(tk.accent.base, 0.28) }} />)}
-          {bands.hold.map(([a, b], i) => <span key={`h${i}`} style={{ position: 'absolute', top: 0, bottom: 0, left: pct(Math.min(a, b)), width: `calc(${pct(Math.max(a, b))} - ${pct(Math.min(a, b))})`, background: alpha(tk.accent.base, 0.12) }} />)}
-          {!equalsLike && <span style={{ position: 'absolute', top: -2, bottom: -2, left: pct(c.threshold), width: 2, marginLeft: -1, background: tk.accent.base }} />}
+          {!direction && bands.met.map(([a, b], i) => <span key={`m${i}`} style={{ position: 'absolute', top: 0, bottom: 0, left: pct(Math.min(a, b)), width: `calc(${pct(Math.max(a, b))} - ${pct(Math.min(a, b))})`, borderRadius: 4, background: alpha(tk.accent.base, 0.28) }} />)}
+          {!direction && bands.hold.map(([a, b], i) => <span key={`h${i}`} style={{ position: 'absolute', top: 0, bottom: 0, left: pct(Math.min(a, b)), width: `calc(${pct(Math.max(a, b))} - ${pct(Math.min(a, b))})`, background: alpha(tk.accent.base, 0.12) }} />)}
+          {!equalsLike && !direction && <span style={{ position: 'absolute', top: -2, bottom: -2, left: pct(c.threshold), width: 2, marginLeft: -1, background: tk.accent.base }} />}
           {isBand && typeof c.hi === 'number' && <span style={{ position: 'absolute', top: -2, bottom: -2, left: pct(c.hi), width: 2, marginLeft: -1, background: tk.accent.base }} />}
           {nowShown !== null && <span style={{
             position: 'absolute', top: '50%', left: pct(nowShown), width: 12, height: 12, marginLeft: -6, marginTop: -6, borderRadius: 6,

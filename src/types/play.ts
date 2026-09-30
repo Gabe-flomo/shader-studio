@@ -63,8 +63,15 @@ export type LiveAudioBand = 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
  *   every    while held: at the start, then every `every` frames or seconds
  *   release  when it lets go: the key comes up, the gesture ends, A moves away again
  */
-export type FireMode = 'once' | 'held' | 'every' | 'release';
-export interface FireSpec { mode: FireMode; every: number; unit: 'frames' | 'seconds' }
+export type FireMode = 'once' | 'held' | 'every' | 'release' | 'nth' | 'within';
+export interface FireSpec {
+  mode: FireMode;
+  /** every: frames or seconds between fires; nth: fire on every Nth press; within: how many presses. */
+  every: number;
+  unit: 'frames' | 'seconds';
+  /** within: the presses must all land within this many seconds. */
+  window?: number;
+}
 export const DEFAULT_FIRE: FireSpec = { mode: 'once', every: 3, unit: 'frames' };
 
 /**
@@ -133,8 +140,11 @@ export type TriggerOn =
  *   crossUp / crossDown   the moment it passes upward / downward (a tap)
  *   equals          while it is within `tolerance` of the threshold
  */
-export type CondCmp = 'below' | 'above' | 'crossUp' | 'crossDown' | 'equals' | 'not' | 'between' | 'outside' | 'neverAbove' | 'neverBelow';
-export const COND_CMPS: readonly CondCmp[] = ['below', 'above', 'crossUp', 'crossDown', 'equals', 'not', 'between', 'outside', 'neverAbove', 'neverBelow'];
+export type CondCmp = 'below' | 'above' | 'crossUp' | 'crossDown' | 'equals' | 'not' | 'between' | 'outside' | 'neverAbove' | 'neverBelow'
+  | 'rising' | 'falling' | 'changing' | 'steady';
+export const COND_CMPS: readonly CondCmp[] = ['below', 'above', 'crossUp', 'crossDown', 'equals', 'not', 'between', 'outside', 'neverAbove', 'neverBelow', 'rising', 'falling', 'changing', 'steady'];
+/** Comparisons about which way the value is going (the threshold is the dead-band). */
+export const isDirectionCmp = (c: CondCmp): boolean => c === 'rising' || c === 'falling' || c === 'changing' || c === 'steady';
 /** Comparisons with two edges (`threshold` the low one, `hi` the high one). */
 export const isBandCmp = (c: CondCmp): boolean => c === 'between' || c === 'outside';
 
@@ -161,6 +171,10 @@ export interface ValueCondition {
    * whatever the range. Absent: raw units.
    */
   unit?: 'pct';
+  /** Rising, falling, changing, steady: how far back "before" is, in seconds (the slow average; default 0.5). */
+  window?: number;
+  /** Rising, falling, changing, steady: 0..1, how much noise the fast average smooths away (0 = none; default 0.3). */
+  noise?: number;
 }
 
 /** A named signal: actions send it, triggers listen for it. */
@@ -1314,6 +1328,8 @@ export function parseCondition(raw: unknown): ValueCondition | null {
   const out: ValueCondition = { value, cmp, threshold: big(num(t.threshold, 0.5)), hysteresis: Math.max(0, big(num(t.hysteresis, 0))), tolerance: Math.max(0, big(num(t.tolerance, 0.01))) };
   if (typeof t.hi === 'number' && Number.isFinite(t.hi)) out.hi = big(t.hi);
   if (t.unit === 'pct') out.unit = 'pct';
+  if (typeof t.window === 'number' && Number.isFinite(t.window)) out.window = Math.max(0.01, Math.min(60, t.window));
+  if (typeof t.noise === 'number' && Number.isFinite(t.noise)) out.noise = Math.max(0, Math.min(1, t.noise));
   return out;
 }
 
@@ -1328,8 +1344,11 @@ function parseTrigger(raw: unknown): TriggerSpec | null {
 function parseFire(v: unknown): FireSpec | null {
   if (!v || typeof v !== 'object') return null;
   const f = v as Record<string, unknown>;
-  const mode = f.mode === 'held' || f.mode === 'every' || f.mode === 'release' ? f.mode : null;
+  const mode = f.mode === 'held' || f.mode === 'every' || f.mode === 'release' || f.mode === 'nth' || f.mode === 'within' ? f.mode : null;
   if (!mode) return null;
+  // Counters: every Nth press, or N presses within a few seconds.
+  if (mode === 'nth') return { mode, every: Math.max(2, Math.min(999, Math.round(num(f.every, 4)))), unit: 'frames' };
+  if (mode === 'within') return { mode, every: Math.max(2, Math.min(64, Math.round(num(f.every, 3)))), unit: 'seconds', window: Math.max(0.05, Math.min(60, num(f.window, 1))) };
   const unit = f.unit === 'seconds' ? 'seconds' : 'frames';
   const every = unit === 'frames' ? Math.max(1, Math.min(600, Math.round(num(f.every, 3)))) : Math.max(0.01, Math.min(60, num(f.every, 0.25)));
   return { mode, every, unit };

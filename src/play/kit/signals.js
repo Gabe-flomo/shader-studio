@@ -63,14 +63,55 @@ export function sgGate(open, v, cmp, threshold, hysteresis, tolerance, hi) {
   }
 }
 
-/** A condition's memory between frames: met or not, whether it has a reading yet, and the lowest and highest seen. */
+/** A condition's memory between frames: met or not, whether it has a reading yet, the lowest and highest seen, and a direction's two averages. */
 export function sgCondNew() {
-  return { open: false, known: false, lo: Infinity, hi: -Infinity };
+  return { open: false, known: false, lo: Infinity, hi: -Infinity, fast: NaN, slow: NaN };
 }
 
-/** The clock went back (a rewind): forget the lowest and highest seen, so the same timeline reads the same way again. */
+/** The clock went back (a rewind): forget the lowest and highest seen and the averages, so the same timeline reads the same way again. */
 export function sgCondRewind(st) {
-  st.lo = Infinity; st.hi = -Infinity;
+  st.lo = Infinity; st.hi = -Infinity; st.fast = NaN; st.slow = NaN;
+}
+
+/** Does this comparison look at which way the value is going (rising, falling, changing, steady)? */
+export function sgIsDirection(cmp) {
+  return cmp === 'rising' || cmp === 'falling' || cmp === 'changing' || cmp === 'steady';
+}
+
+/**
+ * Which way a value is going: a fast average against a slow one (the idea
+ * behind MACD), both following the value by the clock, so the frame rate
+ * doesn't change the answer. `window` (seconds, default 0.5) is how far back
+ * "before" is: the slow average's time constant. `noise` (0..1, default 0.3)
+ * is the fast one's, as a share of the window: 0 is the value itself (quick,
+ * but it takes the noise), higher smooths the noise away. Returns fast − slow:
+ * above 0 rising, below falling. A paused clock (dt 0) holds both.
+ */
+export function sgDirStep(st, x, window, noise, dt) {
+  if (!Number.isFinite(st.fast)) { st.fast = x; st.slow = x; return 0; }
+  const w = Math.max(0.01, window > 0 ? window : 0.5);
+  const tf = Math.max(0, Math.min(1, noise === undefined || noise === null ? 0.3 : noise)) * w;
+  const d = dt > 0 ? dt : 0;
+  st.fast = tf > 0 ? st.fast + (x - st.fast) * (1 - Math.exp(-d / tf)) : x;
+  st.slow += (x - st.slow) * (1 - Math.exp(-d / w));
+  return st.fast - st.slow;
+}
+
+/**
+ * A direction's gate on `diff` (fast − slow), `dead` the dead-band (how big a
+ * change counts as moving; the condition's threshold) with hysteresis `h`:
+ * rising opens over it and holds down to dead − h; falling mirrors it;
+ * changing is either way; steady is changing turned round.
+ */
+export function sgDirGate(open, diff, cmp, dead, h) {
+  const d = Math.max(0, dead || 0), hh = Math.max(0, h || 0);
+  const lo = Math.max(0, d - hh);
+  switch (cmp) {
+    case 'rising': return open ? diff > lo : diff > d;
+    case 'falling': return open ? diff < -lo : diff < -d;
+    case 'changing': return open ? Math.abs(diff) > lo : Math.abs(diff) > d;
+    default: return open ? Math.abs(diff) <= d + hh : Math.abs(diff) <= d;
+  }
 }
 
 /** Does this comparison look at the history (the lowest or highest seen) rather than the value now? */
@@ -107,8 +148,13 @@ export function sgIsCrossing(cmp) {
  * layer property's own), else the range seen so far. Has never reached
  * (neverAbove / neverBelow) holds while the highest (lowest) value seen has
  * stayed under (over) the threshold; it needs one reading first.
+ *
+ * Rising / falling / changing / steady (sgDirStep) compare a fast average
+ * with a slow one over `c.window` seconds, `c.noise` smoothing the fast one;
+ * the threshold is the dead-band. They follow the clock: `dt` is the frame
+ * step in seconds (1/60 when not given).
  */
-export function sgCondStep(st, v, c, range) {
+export function sgCondStep(st, v, c, range, dt) {
   const was = st.open;
   const ok = v !== null && v !== undefined && Number.isFinite(v);
   if (ok) { if (v < st.lo) st.lo = v; if (v > st.hi) st.hi = v; }
@@ -116,7 +162,8 @@ export function sgCondStep(st, v, c, range) {
   const lo = range ? range[0] : st.lo, hi = range ? range[1] : st.hi;
   const unit = x => (pct ? sgPct(x, lo, hi) : x);
   let now;
-  if (sgIsHistory(c.cmp)) now = st.hi >= st.lo && (c.cmp === 'neverAbove' ? unit(st.hi) < c.threshold : unit(st.lo) > c.threshold);
+  if (sgIsDirection(c.cmp)) now = ok && sgDirGate(was, sgDirStep(st, unit(v), c.window, c.noise, dt === undefined ? 1 / 60 : dt), c.cmp, c.threshold, c.hysteresis);
+  else if (sgIsHistory(c.cmp)) now = st.hi >= st.lo && (c.cmp === 'neverAbove' ? unit(st.hi) < c.threshold : unit(st.lo) > c.threshold);
   else now = sgGate(was, ok ? unit(v) : v, c.cmp, c.threshold, c.hysteresis, c.tolerance, c.hi);
   st.open = now;
   if (sgIsCrossing(c.cmp)) {
@@ -250,7 +297,8 @@ export function sgScreenPoint(ref) {
 
 /** The trigger key a value condition counts its presses under (its identity, not its firing mode). */
 export function sgValueKey(t) {
-  // A band's upper edge and the percent unit only when set, so keys of older conditions stay as they were.
+  // A band's upper edge, the percent unit and a direction's window and noise only when set, so keys of older conditions stay as they were.
   return 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance
-    + (Number.isFinite(t.hi) ? ':' + t.hi : '') + (t.unit === 'pct' ? ':pct' : '');
+    + (Number.isFinite(t.hi) ? ':' + t.hi : '') + (t.unit === 'pct' ? ':pct' : '')
+    + (Number.isFinite(t.window) ? ':w' + t.window : '') + (Number.isFinite(t.noise) ? ':n' + t.noise : '');
 }

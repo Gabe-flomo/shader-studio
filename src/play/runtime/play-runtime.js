@@ -162,13 +162,23 @@
     return '';
   }
   // Firing modes (once, held, every N frames or seconds, on release): how many times a trigger fires this frame.
-  function stepFire(st, fire, presses, gate, dt) {
+  function stepFire(st, fire, presses, gate, dt, now) {
     const fresh = Math.max(0, presses - st.seen); st.seen = presses;
     const was = st.held; st.held = gate;
     const mode = fire && fire.mode ? fire.mode : 'once';
     if (mode === 'once') return fresh;
     if (mode === 'release') return Math.max(0, (was ? 1 : 0) + fresh - (gate ? 1 : 0));
     if (mode === 'held') return gate || fresh > 0 ? 1 : 0;
+    // Counters (the app's play/triggers.ts stepFire): every Nth press, or N presses within a few seconds.
+    if (mode === 'nth') { const n = Math.max(2, Math.round(fire.every)); st.count = (st.count || 0) + fresh; const k = Math.floor(st.count / n); st.count -= k * n; return k; }
+    if (mode === 'within') {
+      const n = Math.max(2, Math.round(fire.every)), win = Math.max(0.05, fire.window || 1);
+      st.t = now !== undefined ? now : (st.t || 0) + (dt > 0 ? dt : 0); if (!st.times) st.times = [];
+      if (st.times.length && st.t < st.times[st.times.length - 1]) st.times.length = 0;
+      let k = 0;
+      for (let i = 0; i < fresh; i++) { st.times.push(st.t); if (st.times.length > n) st.times.shift(); if (st.times.length === n && st.t - st.times[0] <= win + 1e-6) { k++; st.times.length = 0; } }
+      return k;
+    }
     if (fresh > 0) { st.since = 0; return 1; }
     if (!gate) { st.since = 0; return 0; }
     st.since += fire.unit === 'frames' ? 1 : dt;
@@ -1585,7 +1595,7 @@ void main() {
       let st = trig.get(m.id);
       if (!st) { st = { seen: 0, value: 0, stage: 'idle', peak: 1, index: -1 }; trig.set(m.id, st); }
       if (f.fresh) st.seen = 0;
-      else f.slot.count += Math.min(4, stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt));
+      else f.slot.count += Math.min(4, stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt, time));
       return stepTrigger(st, s, f.slot.count, inp.gate, dt, vel);
     }
     const colourBuf = new Map();
@@ -1642,7 +1652,7 @@ void main() {
     const zoneGates = new Set();
     // Conditions, proximity among them: becoming true is a press, false again its release; a crossing is both at once.
     const condStates = new Map();
-    function tickConditionTriggers() {
+    function tickConditionTriggers(dt) {
       if (!SG) return;
       const seen = new Set();
       for (const t of allTriggers) {
@@ -1653,7 +1663,7 @@ void main() {
         const c = t.on === 'proximity' ? proximityCondition(t) : t;
         let st = condStates.get(k);
         if (!st) { st = SG.condNew(); condStates.set(k, st); }
-        const ev = SG.condStep(st, readValue(c.value), c, condRange(c));
+        const ev = SG.condStep(st, readValue(c.value), c, condRange(c), dt);
         if (ev === 'open') press(k);
         else if (ev === 'close') release(k);
         else if (ev === 'tap') { press(k); release(k); }
@@ -1797,10 +1807,14 @@ void main() {
     // Actions (burst, next line, drop…): by their trigger's mode, once per press unless it says every frame, every N or on release.
     // Send a signal passes its signal on down the chain in the same frame (each signal once a frame, a limited depth).
     function tickActions(dt) {
+      // A chain looks at signal-fired actions again in the same frame: their clocks move once a frame (as the app does).
+      const stepped = new Set();
       const fires = a => {
         const inp = triggerInput(a.trigger);
         const f = fireSlot(actionFire, a.id, a.trigger, inp.presses, inp.gate);
-        return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, dt));
+        const d = stepped.has(a.id) ? 0 : dt;
+        stepped.add(a.id);
+        return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, d, time));
       };
       if (SG) { SG.runActions(actions, fires, a => { if (K) K.act(a); }, emitSignal); return; }
       for (const a of actions) { const n = fires(a); if (a.do !== 'signal' && K) for (let i = 0; i < n; i++) K.act(a); }
@@ -1831,8 +1845,8 @@ void main() {
         else { const src = m.source.source; ua = ub = src.kind === 'trigger' ? readTrigger({ id: m.id, source: src }, dt) : readSource(src); }
         const swapping = !!m.swap && m.source.kind === 'value';
         let useA = swapping ? st.swap.axis === 'a' : m.affect !== 'b', useB = swapping ? st.swap.axis === 'b' : m.affect !== 'a';
-        if (m.a.when) { SG.condStep(st.condA, readValue(m.a.when.value), m.a.when, condRange(m.a.when)); if (!st.condA.open) useA = false; }
-        if (m.b.when) { SG.condStep(st.condB, readValue(m.b.when.value), m.b.when, condRange(m.b.when)); if (!st.condB.open) useB = false; }
+        if (m.a.when) { SG.condStep(st.condA, readValue(m.a.when.value), m.a.when, condRange(m.a.when), dt); if (!st.condA.open) useA = false; }
+        if (m.b.when) { SG.condStep(st.condB, readValue(m.b.when.value), m.b.when, condRange(m.b.when), dt); if (!st.condB.open) useB = false; }
         if (useA && ua !== null) st.a = smoothAxis(st.a, m.a.outMin + (m.a.outMax - m.a.outMin) * curve(ua, m.a), m.a, dt);
         if (useB && ub !== null) st.b = smoothAxis(st.b, m.b.outMin + (m.b.outMax - m.b.outMin) * curve(ub, m.b), m.b, dt);
         if (st.a !== undefined && (swapping || m.affect !== 'b')) writePlain(ca, st.a, driven);
@@ -1855,7 +1869,7 @@ void main() {
     function incFires(slotId, t, dt) {
       const inp = triggerInput(t);
       const f = fireSlot(incFire, slotId, t, inp.presses, inp.gate);
-      return f.fresh ? 0 : stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt);
+      return f.fresh ? 0 : stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt, time);
     }
     // One frame of an Increment mapping: what fired it (a trigger, a threshold, a repeat), that many steps, its signals, the value to write.
     // Spreads (docs/spread-control.md): each member's value so far (a mapping's, else its own) plus
@@ -1897,7 +1911,7 @@ void main() {
       else if (inc.on === 'threshold') count = INC.threshold(st, m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source), inc);
       else {
         let open = true;
-        if (inc.when && SG) { let c = incCond.get(m.id); if (!c) { c = SG.condNew(); incCond.set(m.id, c); } SG.condStep(c, readValue(inc.when.value), inc.when, condRange(inc.when)); open = c.open; }
+        if (inc.when && SG) { let c = incCond.get(m.id); if (!c) { c = SG.condNew(); incCond.set(m.id, c); } SG.condStep(c, readValue(inc.when.value), inc.when, condRange(inc.when), dt); open = c.open; }
         count = INC.repeat(st, time, inc, open);
       }
       if (count > 0) for (const ev of INC.advance(st, inc, rg[0], rg[1], count)) { const sig = ev === 'step' ? inc.stepSignal : inc.resetSignal; if (sig) emitSignal(sig); }
@@ -1915,9 +1929,15 @@ void main() {
         for (const st of pairState.values()) st.swap = SG.swapNew();
         // Increments start over, so the same timeline steps the same way again.
         for (const m of incMappings) { const st = incState.get(m.id); if (st) INC.reset(st, incStart(m), true); }
+        // Conditions forget the lowest and highest seen and a direction's averages, as the app does.
+        if (SG && SG.condRewind) {
+          for (const st of condStates.values()) SG.condRewind(st);
+          for (const st of incCond.values()) SG.condRewind(st);
+          for (const st of pairState.values()) { SG.condRewind(st.condA); SG.condRewind(st.condB); }
+        }
       }
       lastTime = time;
-      tickConditionTriggers();
+      tickConditionTriggers(dt);
       tickRelationshipSignals();
       tickMultiplySignals();
       tickBornDiedSignals();

@@ -333,6 +333,10 @@ export const COND_LABELS: Record<CondCmp, { label: string; word: string; title: 
   outside: { label: 'Outside', word: 'outside', title: 'While it is outside a band: under the low edge or over the high one' },
   neverAbove: { label: 'Never reached', word: 'has never reached', title: 'While the highest it has been is still under the threshold (starts over on a rewind)' },
   neverBelow: { label: 'Never dropped to', word: 'has never dropped to', title: 'While the lowest it has been is still over the threshold (starts over on a rewind)' },
+  rising: { label: 'Rising', word: 'is rising', title: 'While it is going up: its recent average is over its longer one by more than the dead-band' },
+  falling: { label: 'Falling', word: 'is falling', title: 'While it is going down: its recent average is under its longer one by more than the dead-band' },
+  changing: { label: 'Changing', word: 'is changing', title: 'While it is moving either way (its start is when a change begins, its end when it settles)' },
+  steady: { label: 'Steady', word: 'is steady', title: 'While it is not moving more than the dead-band' },
 };
 
 const round = (n: number) => `${Math.round(n * 1000) / 1000}`;
@@ -341,6 +345,7 @@ const round = (n: number) => `${Math.round(n * 1000) / 1000}`;
 export function conditionLabel(c: ValueCondition, ctx: LabelContext = {}): string {
   const pct = c.unit === 'pct';
   const n = (x: number) => (pct ? `${round(x * 100)}%` : round(x));
+  if (c.cmp === 'rising' || c.cmp === 'falling' || c.cmp === 'changing' || c.cmp === 'steady') return `${valueRefLabel(c.value, ctx)} ${COND_LABELS[c.cmp].word}`;
   const band = (c.cmp === 'between' || c.cmp === 'outside') && typeof c.hi === 'number';
   const what = band ? `${n(Math.min(c.threshold, c.hi!))} and ${n(Math.max(c.threshold, c.hi!))}` : n(c.threshold);
   const tol = c.cmp === 'equals' || c.cmp === 'not' ? ` ± ${n(c.tolerance)}` : '';
@@ -433,6 +438,8 @@ export function fireModes(t: TriggerSpec): { value: FireMode; label: string; tit
     { value: 'held', label: 'Continuously', title: `Every frame ${held}` },
     { value: 'every', label: 'Every N', title: `At the start, then every few frames or seconds ${held}` },
     { value: 'release', label: releaseLabel(t), title: t.on === 'proximity' ? 'When A moves away again' : t.on === 'reader' || t.on === 'audio' ? 'When the level falls back below the threshold (less the hysteresis)' : 'When it lets go: the key comes up, the gesture ends' },
+    { value: 'nth', label: 'Every Nth', title: 'Counts: fires on every Nth time it happens (the 4th, the 8th…)' },
+    { value: 'within', label: 'N within T', title: 'Counts: fires when it happens N times within a few seconds (a double tap, three hits in a second)' },
   ];
 }
 
@@ -456,7 +463,16 @@ export function fireLabel(t: TriggerSpec): string {
     case 'held': return 'Every frame';
     case 'every': return f.unit === 'frames' ? `Every ${f.every} frame${f.every === 1 ? '' : 's'}` : `Every ${f.every} s`;
     case 'release': return releaseLabel(t);
+    case 'nth': return `Every ${ordinal(f.every)} time`;
+    case 'within': return `${f.every} times within ${f.window ?? 1} s`;
   }
+}
+
+/** 2 → "2nd", 3 → "3rd", 11 → "11th". */
+export function ordinal(n: number): string {
+  const r = n % 100;
+  if (r >= 11 && r <= 13) return `${n}th`;
+  return `${n}${n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th'}`;
 }
 
 /**

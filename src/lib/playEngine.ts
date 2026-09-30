@@ -770,7 +770,7 @@ class PlayEngine implements InputSource {
    * margin its hysteresis): a condition becoming true is a press, false again
    * its release; a crossing is a press and release in one frame.
    */
-  private tickConditionTriggers(): void {
+  private tickConditionTriggers(dt: number): void {
     this.index();
     for (const { t, key } of this.condTriggers) {
       if (t.on !== 'proximity' && t.on !== 'value') continue;
@@ -778,7 +778,7 @@ class PlayEngine implements InputSource {
       const c: ValueCondition = t.on === 'proximity' ? proximityCondition(t) : t;
       let st = this.condStates.get(key);
       if (!st) { st = sgCondNew(); this.condStates.set(key, st); }
-      const ev = sgCondStep(st, this.readValue(c.value), c, this.rangeFor(c));
+      const ev = sgCondStep(st, this.readValue(c.value), c, this.rangeFor(c), dt);
       if (ev === 'open') this.press(key);
       else if (ev === 'close') this.release(key);
       else if (ev === 'tap') { this.press(key); this.release(key); }
@@ -813,15 +813,21 @@ class PlayEngine implements InputSource {
    * on down the chain in the same frame (sgRunActions: each signal once a
    * frame, a limited depth, so a loop can't hang).
    */
+  private steppedActions = new Set<string>();
   private tickActions(dt: number): void {
     this.index();
     const actions = this.enabledActions;
     if (!actions.length) return;
+    // A chain looks at signal-fired actions again in the same frame: their clocks (Every N, N within T) move once a frame.
+    const stepped = this.steppedActions;
+    stepped.clear();
     sgRunActions(actions, a => {
       const { presses, gate } = this.triggerInput(a.trigger);
       // A new action starts from "no presses yet"; a beat that jumped (a seek) fires once.
       const { slot, fresh } = this.fireSlot(this.actionFire, a.id, a.trigger, presses, gate);
-      return fresh ? 0 : Math.min(4, stepFire(slot.st, a.trigger.fire, presses, gate, dt));
+      const d = stepped.has(a.id) ? 0 : dt;
+      stepped.add(a.id);
+      return fresh ? 0 : Math.min(4, stepFire(slot.st, a.trigger.fire, presses, gate, d, this.time));
     }, a => { for (const cb of this.actionListeners) cb(a); }, id => this.emitSignal(id), this.chainStats);
   }
 
@@ -1161,7 +1167,7 @@ class PlayEngine implements InputSource {
     let st = this.triggerStates.get(m.id);
     if (!st) { st = newTriggerState(0); this.triggerStates.set(m.id, st); }
     if (fresh) st.seen = 0;
-    else slot.count += Math.min(4, stepFire(slot.st, t.fire, presses, gate, dt));
+    else slot.count += Math.min(4, stepFire(slot.st, t.fire, presses, gate, dt, this.time));
     return stepTrigger(st, src, slot.count, gate, dt, velocity);
   }
 
@@ -1261,7 +1267,7 @@ class PlayEngine implements InputSource {
     }
     this.lastTime = time;
     lap?.('inputs');
-    this.tickConditionTriggers();
+    this.tickConditionTriggers(dt);
     this.tickRelationshipSignals();
     this.tickMultiplySignals();
     this.tickBornDiedSignals();
@@ -1361,7 +1367,7 @@ class PlayEngine implements InputSource {
   private incFires(slotId: string, t: TriggerSpec, dt: number): number {
     const { presses, gate } = this.triggerInput(t);
     const { slot, fresh } = this.fireSlot(this.incFire, slotId, t, presses, gate);
-    return fresh ? 0 : stepFire(slot.st, t.fire, presses, gate, dt);
+    return fresh ? 0 : stepFire(slot.st, t.fire, presses, gate, dt, this.time);
   }
 
   /**
@@ -1383,7 +1389,7 @@ class PlayEngine implements InputSource {
       if (inc.when) {
         let c = this.incCond.get(m.id);
         if (!c) { c = sgCondNew(); this.incCond.set(m.id, c); }
-        sgCondStep(c, this.readValue(inc.when.value), inc.when, this.rangeFor(inc.when));
+        sgCondStep(c, this.readValue(inc.when.value), inc.when, this.rangeFor(inc.when), dt);
         open = c.open;
       }
       count = incRepeat(st, this.time, inc, open);
@@ -1455,8 +1461,8 @@ class PlayEngine implements InputSource {
       const swapping = !!m.swap && m.source.kind === 'value';
       let useA = swapping ? st.swap.axis === 'a' : m.affect !== 'b';
       let useB = swapping ? st.swap.axis === 'b' : m.affect !== 'a';
-      if (m.a.when) { sgCondStep(st.condA, this.readValue(m.a.when.value), m.a.when, this.rangeFor(m.a.when)); if (!st.condA.open) useA = false; }
-      if (m.b.when) { sgCondStep(st.condB, this.readValue(m.b.when.value), m.b.when, this.rangeFor(m.b.when)); if (!st.condB.open) useB = false; }
+      if (m.a.when) { sgCondStep(st.condA, this.readValue(m.a.when.value), m.a.when, this.rangeFor(m.a.when), dt); if (!st.condA.open) useA = false; }
+      if (m.b.when) { sgCondStep(st.condB, this.readValue(m.b.when.value), m.b.when, this.rangeFor(m.b.when), dt); if (!st.condB.open) useB = false; }
       if (useA && ua !== null) st.a = this.smoothAxis(st.a, mapValue(ua, m.a), m.a, dt);
       if (useB && ub !== null) st.b = this.smoothAxis(st.b, mapValue(ub, m.b), m.b, dt);
       // Only the axes this mapping drives (an edit from Both to A lets B go back to its slider).
