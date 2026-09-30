@@ -10,7 +10,7 @@ import { audioFxChainLabel, audioFxTargetLabel, parseAudioFxTarget, type PlayAud
 import { sgParseValueRef, sgScreenPoint } from './kit/signals.js';
 import { proximityCondition } from './triggers';
 import { signalNames } from './signalNames';
-import { ANCHOR_KINDS, DEFAULT_FIRE, PAD_ANCHOR, handAnchor, parseHandAnchor } from '../types/play';
+import { ANCHOR_KINDS, DEFAULT_FIRE, PAD_ANCHOR, handAnchor, layerNumericProps, parseHandAnchor, type PlayLayer } from '../types/play';
 import { HD_POINT_NAMES } from './kit/hands.js';
 import { datasetStore } from '../data/datasetStore';
 import { DATA_ROW_COLUMN } from '../types/play';
@@ -356,7 +356,10 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
         const f = audioFxTargetLabel(ctx.audioFx, target), t = parseAudioFxTarget(target);
         return f && t ? `${audioFxChainLabel(t.chainId, ctx.layers)} · ${f.effect} · ${f.param}` : `Sound · ${r.key}`;
       }
-      return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${r.key}`;
+      // Given whole layers (not just ids and labels), the property's own name: "Sparks · Spawn radius", not "spawnRadius".
+      const l = ctx.layers?.find(x => x.id === r.layerId);
+      const def = l && 'kind' in l ? layerNumericProps(l as unknown as PlayLayer).find(d => d.key === r.key) : undefined;
+      return `${l?.label ?? 'Missing layer'} · ${def?.label ?? r.key}`;
     }
   }
 }

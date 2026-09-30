@@ -24,7 +24,7 @@ import { RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, categoryBadge, cat
 /** Categories that need Pro, and the plan feature that unlocks each. */
 function useLocked(): (cat: RailCategory) => boolean {
   const layers = useCan('play.layers'), finish = useCan('play.finish'), engine = useCan('audio.engine');
-  return cat => (cat === 'layers' && !layers) || (cat === 'finish' && !finish) || (cat === 'engine' && !engine);
+  return cat => ((cat === 'layers' || cat === 'signals') && !layers) || (cat === 'finish' && !finish) || (cat === 'engine' && !engine);
 }
 
 /** The rail on the big panel's left edge (desktop and tablet split view). */
@@ -276,7 +276,7 @@ export function PlayRailBar() {
           key={c.id}
           phone
           def={c}
-          active={tab === c.id}
+          active={categoryOf(current) === c.id}
           open={sheet === c.id}
           badge={categoryBadge(c.id, play)}
           locked={locked(c.id)}

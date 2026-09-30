@@ -46,12 +46,12 @@ not just the category — opening the split first if it's closed (`goToMappings`
 in `playSplit.ts`). Phones get the same: Controls' sheet always has a Mappings
 tab.
 
-**⌘1–4 jump to a rail category** (`railControls`/`railLayers`/`railFinish`/
-`railEngine` in `useShortcuts.ts`, wired in `App.tsx`; `goToRailCategory` in
+**⌘1–5 jump to a rail category** (`railControls`/`railLayers`/`railFinish`/
+`railEngine`/`railSignals` in `useShortcuts.ts`, wired in `App.tsx`; `goToRailCategory` in
 `playSplit.ts`), same as clicking its icon: the category opens on the page it
 was last on, else its first (so ⌘1 opens Controls & Mappings on whichever of
 the two it was left on). A plain browser tab claims ⌘1–4 for switching its own
-tabs before the page ever sees the keydown, so ⌃1–4 do the same four things
+tabs before the page ever sees the keydown, so ⌃1–5 do the same five things
 there, fixed (not in the remappable shortcuts panel). Each rail icon's tooltip
 shows its ⌘ combo.
 
@@ -59,10 +59,17 @@ The categories and pages are data (`railPages.ts`):
 
 | Category | Pages |
 | --- | --- |
-| Controls (⌘1 / ⌃1) | Controls · Mappings · MIDI file · Pad grid |
-| Layers (⌘2 / ⌃2) | Layers · Actions · Signals · Background |
+| Mappings (⌘1 / ⌃1) | Controls · Mappings · MIDI file · Pad grid |
+| Layers (⌘2 / ⌃2) | Layers · Background |
+| Signals (⌘5 / ⌃5) | Signals |
 | Finish (⌘3 / ⌃3) | Picture · Sound |
 | Engine (⌘4 / ⌃4) | Arrangement |
+
+The first three are Play's three nouns (the simplification plan, 2026-09-30):
+Layers act on the picture, Mappings bring values in, Signals report what is
+happening and set things off. Signals sits third on the rail but keeps ⌘5,
+so the older shortcuts didn't move. The old Actions page folded into Signals;
+a saved `actions` page opens Signals.
 
 Controls' rail badge is the controls count (not mappings', so the two counts
 never get added into one confusing number); the mappings count sits in the
@@ -91,11 +98,16 @@ right) and at most two columns, stacking below 640 px (`WIDE_PANEL_PX`):
 - **Controls:** the Controls board (below).
 - **Layers:** the list beside the selected layer's editor, big editors in
   full with the jump strip (`BigEditorScaffold`, docs/editor-layout.md).
-  Actions and Signals move to their own pages.
-- **Actions:** a list (When → Do · layer, with its switch) beside the selected
-  action's editor.
-- **Signals:** the signals (rename, fire, delete) beside their connections:
-  what sends each one and what listens for it.
+  Signals has its own category.
+- **Signals:** one flow (`signalFlow.ts`). Each named signal is a card (rename,
+  fire, delete) with its **When** (the actions that send it, and layers that
+  do: Born, Died…) and its **Then** (the actions that fire on it, and the
+  mappings and swaps that listen), each with a + to add one. Reactions with no
+  signal between (a key bursts particles) are listed below. The selected
+  reaction's editor sits beside the list; a selected signal shows what it is
+  sent by and heard by. **Create a signal from it** in a slider's + menu (and
+  in a control's right-click menu) makes a signal that fires when the value
+  crosses the middle of its range (`play/createSignal.ts`) and opens it here.
 - **Background:** the background row, and a link to the Background layer's
   editor when there is one.
 - **Finish → Picture / Sound:** the stack or the sound's chains, without the
@@ -111,7 +123,7 @@ right) and at most two columns, stacking below 640 px (`WIDE_PANEL_PX`):
 
 **Phones** have no split view; the same categories are a row along the bottom
 of the panel (`PlayRailBar`), and a category with several pages opens them in
-a sheet. A page that isn't a whole section (Actions, Signals, Background, MIDI
+a sheet. A page that isn't a whole section (Signals, Background, MIDI
 file, Pad grid) shows in place of its tab (`usePlayUi.phonePage`).
 
 ## The Controls board
@@ -124,6 +136,9 @@ the controls are a board (`ControlsBoard.tsx`) instead of one grid:
   Sample player"), its layer, the Finish stack, the sound effects, or the
   graph ("From the graph"). Groups keep the panel's order and fold (remembered).
   A pair shows once, as its card.
+- **Layer cards:** a layer's controls sit in a small card of their own, and
+  its **+ Parameter** adds another of the layer's numbers to it (the ones not on
+  the panel yet).
 - **Live graphs:** each card has a small trace of its value over the last six
   seconds under its slider: a line for sliders, a filled level for audio
   readers, a step for buttons, a colour strip for colours, and a dot trail

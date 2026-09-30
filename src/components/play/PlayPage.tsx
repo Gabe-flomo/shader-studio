@@ -60,10 +60,10 @@ import { applyControlLink, LinkableControl, useControlLinkEscape } from './Contr
 import { setLayerDropHandler } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
-import { sidebarView, useBigPage, useBigTab, usePlaySplit } from './playSplit';
+import { goToSignal, sidebarView, useBigPage, useBigTab, usePlaySplit } from './playSplit';
 import { PlayRailBar } from './PlayRail';
 import { phonePageShown, type RailPage } from './railPages';
-import { ActionsPage, BackgroundPage, CardPage, SignalsPage } from './FullPages';
+import { BackgroundPage, CardPage, SignalsPage } from './FullPages';
 import { groupCounts, groupMappings, type MappingGroupId } from './mappingGroups';
 import { ControlsBoard, type BoardSlot } from './ControlsBoard';
 import { AudioEnginePanel } from './engine/AudioEnginePanel';
@@ -72,7 +72,7 @@ import { setMacroValue } from '../../play/rackMacros';
 import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
 import { MiniMapper } from './MiniMapper';
-import type { MiniMapperTarget } from './miniMapperCore';
+import { wireCreateSignal, type MiniMapperTarget } from './miniMapperCore';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
 import { rackKeyboard } from '../../lib/rackKeyboard';
 import { keyboardClaimed } from '../../lib/keyboardClaim';
@@ -551,9 +551,19 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     items.push({ label: 'New Spread with this', icon: 'plus', hint: 'A group of sliders offset together along a curve', onSelect: () => { update(p => makeSpread(p, [id]).play); toast.info('Spread made: its card is at the top of Controls'); } });
     return items;
   };
+  /** Create signal: watch this control (signalFlow.ts), then show the signal on the Signals page. */
+  const signalItems = (c: PlayControl | undefined): MenuItem[] => (c && c.kind !== 'color' ? [{
+    label: 'Create a signal from it', icon: 'bolt', hint: 'A signal when it crosses the middle of its range; tune it on the Signals page',
+    onSelect: () => {
+      const r = wireCreateSignal(play, { control: c.id });
+      if (!r) { toast.info('The setup has as many signals as it can hold'); return; }
+      update(() => r.play);
+      goToSignal(r.signalId);
+    },
+  }, 'separator'] : []);
   const controlMenu = (id: string): MenuItem[] => {
     const c = play.controls.find(x => x.id === id);
-    if (!c || c.kind !== 'float') return [{ label: 'Only sliders pair', disabled: true, onSelect: () => {} }];
+    if (!c || c.kind !== 'float') return [...signalItems(c), { label: 'Only sliders pair', disabled: true, onSelect: () => {} }];
     const partner = partnerTarget(c.target);
     const others = play.controls.filter(x => x.id !== id && x.kind === 'float' && !pairOf(play, x.id));
     const items: MenuItem[] = [];
@@ -567,7 +577,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       items.push({ label: o.label, icon: 'sliders', hint: 'Two sliders played together; map both at once, or one then the other', onSelect: () => update(p => makePair(p, id, o.id, false).play) });
       if (items.length > 14) break;
     }
-    return [...items, ...spreadMenu(id)];
+    return [...signalItems(c), ...items, ...spreadMenu(id)];
   };
   const pairMenu = (pairId: string): MenuItem[] => [
     { label: 'Map onto the pair', icon: 'plus', onSelect: () => addPairMapping(pairId) },
@@ -769,8 +779,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       case 'layers': return layersOk
         ? <LayersPanel play={play} touch={touch} split={wide} big extras={false} exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={exposeControl} />
         : <LockedLayers play={play} />;
-      case 'actions': return layersOk ? <ActionsPage play={play} onChange={update} wide={wide} /> : <LockedLayers play={play} />;
-      case 'signals': return <SignalsPage play={play} onChange={update} wide={wide} />;
+      case 'signals': return layersOk ? <SignalsPage play={play} onChange={update} wide={wide} /> : <LockedLayers play={play} />;
       case 'background': return <BackgroundPage play={play} onChange={update} locked={!backgroundsOk} />;
       case 'finish-picture':
       case 'finish-sound': return finishOk ? <FinishPanel play={play} onChange={update} touch={touch} wide={wide} only={page === 'finish-sound' ? 'sound' : 'picture'} /> : <LockedFinish play={play} />;
@@ -879,7 +888,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
 
 const DRAWER_HEIGHT_KEY = 'shader-studio:play:drawerHeight';
 /** Pages that aren't a whole sidebar section: a phone shows them in place of its tab's section. */
-const OWN_PAGES: ReadonlySet<RailPage> = new Set<RailPage>(['actions', 'signals', 'background', 'midi-file', 'pad-grid']);
+const OWN_PAGES: ReadonlySet<RailPage> = new Set<RailPage>(['signals', 'background', 'midi-file', 'pad-grid']);
 /** The split view's big panel lays cards out in as many columns as fit. */
 const PANEL_GRID: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', columnGap: 10, alignItems: 'start' };
 const PANEL_GRID_WIDE: React.CSSProperties = { ...PANEL_GRID, gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))' };

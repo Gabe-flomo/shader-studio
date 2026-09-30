@@ -729,6 +729,7 @@ function App() {
     railLayers:     () => goToRailCategory('layers'),
     railFinish:     () => goToRailCategory('finish'),
     railEngine:     () => goToRailCategory('engine'),
+    railSignals:    () => goToRailCategory('signals'),
   }), [undo, addRandomNode, exportGraph, _fitViewCallback, setNodeHighlightFilter, groupNodes, deselectAll, setPage, page, hosted]);
 
   const HOLD_FILTER_IDS = useMemo(() => new Set(['filterFloat', 'filterVec2', 'filterVec3', 'filterUVInputs', 'filterUVOutputs']), []);
@@ -759,7 +760,7 @@ function App() {
   // customizable map — the same four ids fire either way).
   useEffect(() => {
     if (page !== 'play') return;
-    const CTRL_RAIL_CATS = { '1': 'controls', '2': 'layers', '3': 'finish', '4': 'engine' } as const;
+    const CTRL_RAIL_CATS = { '1': 'controls', '2': 'layers', '3': 'finish', '4': 'engine', '5': 'signals' } as const;
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || isTyping(e.target)) return;
       const cat = CTRL_RAIL_CATS[e.key as keyof typeof CTRL_RAIL_CATS];

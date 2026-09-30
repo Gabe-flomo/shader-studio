@@ -28,14 +28,16 @@ describe('categories and pages', () => {
     expect(listed.map(([, p]) => p).sort()).toEqual([...RAIL_PAGE_IDS].sort());
     for (const [cat, page] of listed) expect(categoryOf(page)).toBe(cat);
     // Controls and Mappings are one rail category (the owner's call, 2026-09-28): they're so closely related.
-    expect(RAIL_CATEGORIES.map(c => c.id)).toEqual(['controls', 'layers', 'finish', 'engine']);
+    // Signals is a category of its own, one of Play's three nouns (simplification plan, 2026-09-30).
+    expect(RAIL_CATEGORIES.map(c => c.id)).toEqual(['controls', 'layers', 'signals', 'finish', 'engine']);
   });
 
   it('gives each category the pages the owner listed', () => {
     const pages = Object.fromEntries(RAIL_CATEGORIES.map(c => [c.id, c.pages.map(p => RAIL_PAGES[p].label)]));
     expect(pages).toEqual({
       controls: ['Controls', 'Mappings', 'MIDI file', 'Pad grid'],
-      layers: ['Layers', 'Actions', 'Signals', 'Background'],
+      layers: ['Layers', 'Background'],
+      signals: ['Signals'],
       finish: ['Picture', 'Sound'],
       engine: ['Arrangement'],
     });
@@ -58,8 +60,8 @@ describe('categories and pages', () => {
 
   it('counts what a page holds, and badges only layers and controls (the controls count, not mappings’)', () => {
     const play: PlayRecord = { ...emptyPlayRecord(), actions: [{ id: 'a', trigger: { on: 'key', code: 'Space' }, do: 'show', layerId: 'l', amount: 1, enabled: true }], signals: [{ id: 's', name: 'Hit' }, { id: 't', name: 'Go' }] };
-    expect(pageCount('actions', play)).toBe(1);
-    expect(pageCount('signals', play)).toBe(2);
+    // Signals holds the named signals and the reactions (the Actions page folded into it).
+    expect(pageCount('signals', play)).toBe(3);
     expect(pageCount('midi-file', play)).toBeUndefined();
     expect(categoryBadge('layers', play)).toBeUndefined();
     const withMappingsOnly: PlayRecord = { ...play, mappings: [{ id: 'm', controlId: 'c', source: { kind: 'key', code: 'KeyA' }, outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0, enabled: true }] };
@@ -69,12 +71,13 @@ describe('categories and pages', () => {
   });
 
   it('⌘1–4 open the rail categories, matching useShortcuts.ts', () => {
-    expect(RAIL_CATEGORY_SHORTCUT).toEqual({ controls: 'cmd+1', layers: 'cmd+2', finish: 'cmd+3', engine: 'cmd+4' });
+    expect(RAIL_CATEGORY_SHORTCUT).toEqual({ controls: 'cmd+1', layers: 'cmd+2', finish: 'cmd+3', engine: 'cmd+4', signals: 'cmd+5' });
     const map: ShortcutMap = Object.fromEntries(DEFAULT_ACTIONS.map(a => [a.id, a.defaultCombo]));
     expect(findShortcut(map, 'cmd+1')).toBe('railControls');
     expect(findShortcut(map, 'cmd+2')).toBe('railLayers');
     expect(findShortcut(map, 'cmd+3')).toBe('railFinish');
     expect(findShortcut(map, 'cmd+4')).toBe('railEngine');
+    expect(findShortcut(map, 'cmd+5')).toBe('railSignals');
     for (const cat of RAIL_CATEGORIES.map(c => c.id)) {
       expect(map[`rail${cat[0].toUpperCase()}${cat.slice(1)}`]).toBe(RAIL_CATEGORY_SHORTCUT[cat]);
     }
@@ -84,8 +87,10 @@ describe('categories and pages', () => {
     usePlaySplit.setState({ ...DEFAULT_SPLIT, on: false, available: true, sidebar: 'rail', railPageMemory: {} });
     expect(goToRailCategory('layers')).toBe(true);
     expect(usePlaySplit.getState()).toMatchObject({ on: true, railPage: 'layers' });
-    usePlaySplit.getState().setRailPage('signals');
+    usePlaySplit.getState().setRailPage('background');
     expect(goToRailCategory('layers')).toBe(true);
+    expect(usePlaySplit.getState().railPage).toBe('background');
+    expect(goToRailCategory('signals')).toBe(true);
     expect(usePlaySplit.getState().railPage).toBe('signals');
     usePlaySplit.setState({ available: false });
     expect(goToRailCategory('engine')).toBe(false);
@@ -114,7 +119,7 @@ describe('categories and pages', () => {
     expect(usePlayUi.getState()).toMatchObject({ tab: 'mappings', phonePage: 'pad-grid' });
     ui.showPage('finish-sound');
     expect(usePlayUi.getState()).toMatchObject({ tab: 'finish', finishView: 'sound' });
-    ui.showPage('actions');
+    ui.showPage('signals');
     ui.reveal('l1');
     expect(usePlayUi.getState()).toMatchObject({ tab: 'layers', phonePage: '' });
     ui.showPage('background');
@@ -182,14 +187,14 @@ describe('the rail’s state', () => {
     st.setSidebar('rail');
     st.openRailCategory('layers');
     expect(usePlaySplit.getState().railPage).toBe('layers');
-    st.setRailPage('signals');
+    st.setRailPage('background');
     st.openRailCategory('controls');
     expect(usePlaySplit.getState().railPage).toBe('controls');
     // Coming back to Layers: the page it was left on, not its first.
     st.openRailCategory('layers');
-    expect(usePlaySplit.getState().railPage).toBe('signals');
+    expect(usePlaySplit.getState().railPage).toBe('background');
     // Remembered across a reload.
-    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null).railPageMemory).toMatchObject({ layers: 'signals', controls: 'controls' });
+    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null).railPageMemory).toMatchObject({ layers: 'background', controls: 'controls' });
   });
 
   it('Mappings is always reachable: ⌘⇧M opens the split (if closed) and shows it', () => {

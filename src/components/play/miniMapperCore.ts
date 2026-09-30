@@ -13,8 +13,9 @@
 import type { IconName } from '../ui/iconPaths';
 import type { PickerItem, PickerSection } from '../ui/groupedPickerModel';
 import { SENSOR_LABELS, sourceFromType, type SourceType } from '../../play/playSources';
-import { defaultIncrement, sensorReadsFor, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type SensorRead } from '../../types/play';
+import { defaultIncrement, layerNumericProps, layerTarget, sensorReadsFor, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type SensorRead } from '../../types/play';
 import { mapSourceTo, resolveTargetControl, type MapTarget } from './layerOps';
+import { createSignalFrom, type SignalSource } from '../../play/createSignal';
 
 export type MiniMapperTarget = MapTarget;
 
@@ -24,6 +25,8 @@ export const CONTROL_ONLY = 'controlOnly';
 export const INCREMENT = 'increment';
 /** The picker's value for Learn: MiniMapper.tsx drives this one itself (it waits for an input). */
 export const MIDI_LEARN = 'midi:learn';
+/** The picker's value for Create signal: a signal that watches the target (signalFlow.ts createSignalFrom). */
+export const CREATE_SIGNAL = 'signal:create';
 
 const HAND_ENTRIES: { value: SourceType; label: string; icon: IconName; description: string }[] = [
   { value: 'hand:point', label: 'Fingertip or joint', icon: 'hand', description: 'X, Y or Z of one point on the hand' },
@@ -54,6 +57,9 @@ export function miniMapperSections(ctx: MiniMapperContext): PickerSection[] {
   const sections: PickerSection[] = [];
   sections.push({ heading: 'Control only', items: [
     { value: CONTROL_ONLY, label: 'Add as a control', icon: 'plus', description: 'No source — map anything onto it from Mappings later' },
+  ] });
+  sections.push({ heading: 'Signal', items: [
+    { value: CREATE_SIGNAL, label: 'Create a signal from it', icon: 'bolt', description: 'Watch it: a signal when it crosses the middle of its range, tuned on the Signals page' },
   ] });
   if (midiDevices.length) {
     sections.push({ heading: 'MIDI', items: [
@@ -129,4 +135,28 @@ export function wireMiniMapperPick(p: PlayRecord, value: string, target: MiniMap
   if (value.startsWith('control:')) return wireSource(p, { kind: 'control', controlId: value.slice('control:'.length) }, target);
   if (value.startsWith('reader:')) return wireSource(p, { kind: 'reader', readerId: value.slice('reader:'.length) }, target);
   return wireSource(p, sourceFromType(value as SourceType, { kind: 'mouse', axis: 'x' }), target);
+}
+
+/**
+ * What a signal made from `target` watches: a layer property straight from
+ * the layer (no control needed), anything else through its control (made
+ * first if it isn't on the panel yet).
+ */
+export function signalSourceFor(p: PlayRecord, target: MiniMapperTarget): { play: PlayRecord; src: SignalSource | null } {
+  if ('layerId' in target && 'key' in target) {
+    const l = p.layers.find(x => x.id === target.layerId);
+    const def = l && layerNumericProps(l).find(d => d.key === target.key);
+    if (l && def) return { play: p, src: { value: layerTarget(l.id, def.key), label: `${l.label} ${def.label.toLowerCase()}`, min: def.min, max: def.max } };
+  }
+  const { play, control } = resolveTargetControl(p, target);
+  if (!control || control.kind === 'color') return { play: p, src: null };
+  return { play, src: { value: `ctl:${control.id}`, label: control.label, min: control.kind === 'action' ? 0 : control.min, max: control.kind === 'action' ? 1 : control.max } };
+}
+
+/** Create signal: a signal watching the target and the action that sends it. Null when nothing can be watched (a colour) or the setup is full of signals. */
+export function wireCreateSignal(p: PlayRecord, target: MiniMapperTarget): { play: PlayRecord; signalId: string } | null {
+  const { play, src } = signalSourceFor(p, target);
+  if (!src) return null;
+  const r = createSignalFrom(play, src);
+  return r.signalId ? { play: r.play, signalId: r.signalId } : null;
 }

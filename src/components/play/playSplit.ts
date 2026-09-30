@@ -20,7 +20,7 @@
  */
 import { create } from 'zustand';
 import { tabForPage, usePlayUi, type PlayTab } from './playUi';
-import { categoryOf, firstPageOf, isRailPage, pageForTab, type RailCategory, type RailPage } from './railPages';
+import { categoryOf, currentRailPage, firstPageOf, isRailPage, pageForTab, type RailCategory, type RailPage } from './railPages';
 
 export type SplitSide = 'left' | 'right' | 'top' | 'bottom';
 /** The sidebar beside the big panel: all of it, a rail of icons, or nothing. */
@@ -82,7 +82,7 @@ export function parseSplitPrefs(raw: string | null): SplitPrefs {
     // `sidebarHidden` is how the hidden sidebar was saved before the rail.
     sidebar: !current ? DEFAULT_SPLIT.sidebar : SIDEBARS.includes(o.sidebar as SidebarMode) ? o.sidebar as SidebarMode : o.sidebarHidden === true ? 'hidden' : DEFAULT_SPLIT.sidebar,
     sidebarBefore: o.sidebarBefore === 'hidden' ? 'hidden' : 'full',
-    railPage: isRailPage(o.railPage) ? o.railPage : DEFAULT_SPLIT.railPage,
+    railPage: (() => { const pg = currentRailPage(o.railPage); return isRailPage(pg) ? pg : DEFAULT_SPLIT.railPage; })(),
     railRatio: typeof o.railRatio === 'number' && Number.isFinite(o.railRatio) ? clampRatio(o.railRatio) : null,
     railPageMemory: parseRailPageMemory(o.railPageMemory),
   };
@@ -95,13 +95,16 @@ export function parseSplitPrefs(raw: string | null): SplitPrefs {
  * whose pages now live under `controls`).
  */
 const LEGACY_CATEGORY: Readonly<Record<string, RailCategory>> = { mappings: 'controls' };
+/** Pages that moved to a category of their own: Signals (with Actions folded in) left Layers on 2026-09-30. */
+const MOVED_FROM: Readonly<Partial<Record<RailPage, string>>> = { signals: 'layers' };
 function parseRailPageMemory(v: unknown): Partial<Record<RailCategory, RailPage>> {
   if (!v || typeof v !== 'object') return {};
   const out: Partial<Record<RailCategory, RailPage>> = {};
-  for (const [cat, page] of Object.entries(v as Record<string, unknown>)) {
+  for (const [cat, saved] of Object.entries(v as Record<string, unknown>)) {
+    const page = currentRailPage(saved);
     if (!isRailPage(page)) continue;
     const real = categoryOf(page);
-    if (real === cat || LEGACY_CATEGORY[cat] === real) out[real] = page;
+    if (real === cat || LEGACY_CATEGORY[cat] === real || MOVED_FROM[page] === cat) out[real] = page;
   }
   return out;
 }
@@ -255,8 +258,11 @@ export const railActive = (s: Pick<PlaySplit, 'on' | 'available' | 'sidebar'>): 
 /** The panel's share as shown: the rail's own while the rail is out. */
 export const shownRatio = (s: Pick<SplitPrefs, 'sidebar' | 'ratio' | 'railRatio'>): number => (s.sidebar === 'rail' && s.railRatio !== null ? s.railRatio : s.ratio);
 
+/** A rail category as the tab-strip section it sits under (Signals has no tab of its own: it rides with Layers there). */
+const tabOfCategory = (c: RailCategory): PlayTab => (c === 'signals' ? 'layers' : c);
+
 /** The section the big panel shows, or null when there's no big panel on screen. */
-export const useBigTab = (): PlayTab | null => usePlaySplit(s => (s.on && s.available && s.host ? (s.sidebar === 'rail' ? categoryOf(s.railPage) : s.tab) : null));
+export const useBigTab = (): PlayTab | null => usePlaySplit(s => (s.on && s.available && s.host ? (s.sidebar === 'rail' ? tabOfCategory(categoryOf(s.railPage)) : s.tab) : null));
 
 /** The full-width page the panel shows in rail mode, or null (no rail, or no panel on screen). */
 export const useBigPage = (): RailPage | null => usePlaySplit(s => (s.on && s.available && s.host && s.sidebar === 'rail' ? s.railPage : null));
@@ -288,6 +294,19 @@ export function goToMappings(): boolean {
   if (!split.on) split.setOn(true);
   showPageInSplit('mappings');
   return true;
+}
+
+/**
+ * Show the Signals page with one signal or reaction selected (a signal just
+ * made from a slider's +, say): in the split view when there is one, else as
+ * the phone's page.
+ */
+export function goToSignal(id: string): void {
+  usePlayUi.getState().focusSignal(id);
+  const split = usePlaySplit.getState();
+  if (!split.available) { usePlayUi.getState().showPage('signals'); return; }
+  if (!split.on) split.setOn(true);
+  showPageInSplit('signals');
 }
 
 /**

@@ -299,7 +299,7 @@ export function SignalsList({ play, onChange, bare = false }: {
   );
 }
 
-function SignalRow({ name, uses, flash, onRename, onFire, onRemove }: { name: string; uses: number; flash: number; onRename: (n: string) => void; onFire: () => void; onRemove: () => void }) {
+export function SignalRow({ name, uses, flash, onRename, onFire, onRemove }: { name: string; uses: number; flash: number; onRename: (n: string) => void; onFire: () => void; onRemove: () => void }) {
   const tk = useTokens();
   const [draft, setDraft] = useState(name);
   useEffect(() => setDraft(name), [name]);
