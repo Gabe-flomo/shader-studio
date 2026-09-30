@@ -70,6 +70,17 @@ In the file a signal may carry `"when": { "kind": "trigger", "trigger": {…} }`
 
 Deleting a signal leaves what sent or listened for it in place, marked **Missing signal**. Signals themselves aren't recorded in takes: what they did is (the actions they fired, the controls they moved).
 
+## Captured values and Set
+
+A signal can **take** a value with it (sample and hold, on its card): **a number** (anything a condition can watch: a slider, a layer's number, a reading, a mapping's source) or **a position** (a layer's centre, a hand point, **the pinch point** halfway between the thumb and index tips, the **pointer on the picture**, a point), read **as it starts** (its rise), **as it ends** (its fall: "the radius it had when it dropped back") or **while true** (every frame: follows it). The card shows what it took last. A signal that is only sent takes its value when it is sent. Nothing to read (a hand out of view) keeps the last capture.
+
+- **Set…** (a number) maps the signal onto a control with the source **Set from a signal** (`{ "kind": "captured", "signal", "release" }`): the captured number is written as it is, not through the mapping's range. Nothing is written before the first capture, so the control keeps its own value. When the signal is false again: **Stay** (a hold: it keeps the value until the next capture), **Go back** (to its own slider, the way any mapping lets go) or **Go to** a resting value. The mapping's smoothing is the glide: 0 jumps, more slides.
+- **Move a layer here…** (a position) makes the layer's X and Y a position pair and drives it with a pair mapping whose Position is the anchor `sig:<id>`: it jumps there on each capture and stays (`sig:<id>:held` follows only while the signal is true). The axes' smoothing is the glide; X and Y share it, so it moves in a straight line.
+- **Positions as values:** `ax:x:<anchor>` / `ax:y:<anchor>` is one axis of a position (0..1, y up), so a region test is a band on each axis combined with All of (left half: `ax:x:… below 0.5`; a circle is a distance below a radius).
+- The engine's `mouse` is the whole window (as before); the **pointer on the picture** (`pointer`) is where a click on the picture lands, reported by the overlay. On a website both are the picture's pointer.
+
+A rewind forgets captures, so the same timeline sets the same way. In the file a signal carries `"capture": { "what": "pos:hand:right:21", "at": "rise" | "fall" | "held" }`.
+
 ## Pair controls
 
 Two controls played as one. On the Controls tab, right-click a slider (long-press on a phone):

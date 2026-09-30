@@ -15,17 +15,17 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { playEngine } from '../../lib/playEngine';
 import { sgParseValueRef, sgScreenPoint } from '../../play/kit/signals.js';
-import { COND_LABELS, SENSOR_HINTS, SENSOR_LABELS, anchorOptions, valueRefLabel, type LabelContext } from '../../play/playSources';
+import { COND_LABELS, SENSOR_HINTS, SENSOR_LABELS, anchorLayers, anchorOptions, valueRefLabel, type LabelContext } from '../../play/playSources';
 import { layerPorts } from '../../play/layerPorts';
 import { addSignal, deleteSignal, renameSignal, signalUses } from '../../play/pairs';
 import { conditionBands, withUnit } from './conditionModel';
-import { PAD_ANCHOR, isBandCmp, isDirectionCmp, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
+import { HAND_PINCH_POINT, PAD_ANCHOR, isBandCmp, isDirectionCmp, usesHands, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf } from '../../types/playFinish';
 import { audioFxControlFor, audioFxHosts } from '../../types/playAudioFx';
 import { GroupedPicker } from '../ui/GroupedPicker';
 import type { PickerSection } from '../ui/groupedPickerModel';
 import { sectionsFromOptions } from '../ui/groupedPickerModel';
-import { HAND_POINT_SECTIONS } from './sourcePickerSections';
+import { HAND_ANCHOR_SECTIONS } from './sourcePickerSections';
 import { Segmented } from '../ui/Choice';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { RulerSlider } from '../ui/RulerSlider';
@@ -48,6 +48,10 @@ export function valueSections(play: PlayRecord): PickerSection[] {
   // What layers measure (hover, fill, speed…): layerPorts' readings, watched straight from the layer.
   const readingItems = play.layers.flatMap(l => layerPorts(l).readings.map(r => ({ value: `read:${l.id}::${r}`, label: `${l.label} · ${SENSOR_LABELS[r]}`, icon: 'eye' as const, description: SENSOR_HINTS[r], keywords: `${l.kind} reading sensor` })));
   if (readingItems.length) out.push({ heading: 'Layer readings', items: readingItems });
+  // Where things are, one axis at a time (0..1, Y up): a region test is a band on X and one on Y, combined.
+  const posItems = anchorLayers(play.layers).flatMap(l => (['x', 'y'] as const).map(a => ({ value: `ax:${a}:${l.id}`, label: `${l.label} · position ${a.toUpperCase()}`, icon: 'target' as const, description: `Where its centre is ${a === 'x' ? 'across' : 'up'} the picture, 0 to 1`, keywords: 'position region inside where' })));
+  if (usesHands(play) || play.layers.some(l => l.kind === 'camera')) for (const side of ['right', 'left'] as const) for (const a of ['x', 'y'] as const) posItems.push({ value: `ax:${a}:hand:${side}:${HAND_PINCH_POINT}`, label: `${side === 'right' ? 'Right' : 'Left'} pinch point ${a.toUpperCase()}`, icon: 'target' as const, description: 'Halfway between the thumb and index tips', keywords: 'hand position region' });
+  if (posItems.length) out.push({ heading: 'Positions', items: posItems });
   const finishItems = finishHosts(play.finish).flatMap(e => finishNumericProps(e).map(d => ({ value: `finish:${e.id}::${d.key}`, label: `${finishHostLabel(e)} · ${d.label}`, icon: 'spark' as const, keywords: 'finish' })));
   if (finishItems.length) out.push({ heading: 'Finish', items: finishItems });
   const soundItems = audioFxHosts(play.audioFx, play.layers).flatMap(h => h.params.map(d => ({ value: `${h.id}::${d.key}`, label: `${h.label} · ${d.label}`, icon: 'wave' as const, keywords: 'sound audio effect' })));
@@ -122,7 +126,8 @@ export function DistanceAnchorPicker({ value, layers, exclude, ariaLabel, pads =
   const hand = parseHandAnchor(value);
   const sections = useMemo(() => [
     { heading: 'Pointer & picture', items: [
-      { value: 'mouse', label: 'Mouse', icon: 'mouse' as const, description: 'The pointer over the picture' },
+      { value: 'mouse', label: 'Mouse', icon: 'mouse' as const, description: 'The pointer across the whole window' },
+      { value: 'pointer', label: 'Pointer on the picture', icon: 'mouse' as const, description: 'Where the pointer is on the picture itself (where a click lands)' },
       { value: 'pt', label: 'A point on the picture', icon: 'target' as const, description: 'X and Y, 0 to 1 (Y up)' },
     ] },
     ...(pads || value === PAD_ANCHOR ? [{ heading: 'MIDI', items: [
@@ -136,7 +141,7 @@ export function DistanceAnchorPicker({ value, layers, exclude, ariaLabel, pads =
     <span style={{ display: 'inline-flex', gap: 4, minWidth: 0, flexWrap: 'wrap', alignItems: 'center' }}>
       <GroupedPicker ariaLabel={ariaLabel} value={pick} placeholder="Pick one" sections={sections} height={26} style={{ maxWidth: 170 }} width={240}
         onChange={v => onChange(v === 'pt' ? 'pt:0.5,0.5' : v.startsWith('hand:') ? `${v}:${hand?.point ?? 8}` : v)} />
-      {hand && <GroupedPicker ariaLabel={`${ariaLabel}: point on the hand`} value={`${hand.point}`} sections={HAND_POINT_SECTIONS} onChange={v => onChange(`hand:${hand.side}:${parseInt(v, 10) || 0}`)} height={26} style={{ maxWidth: 150 }} width={220} searchPlaceholder="Search points" />}
+      {hand && <GroupedPicker ariaLabel={`${ariaLabel}: point on the hand`} value={`${hand.point}`} sections={HAND_ANCHOR_SECTIONS} onChange={v => onChange(`hand:${hand.side}:${parseInt(v, 10) || 0}`)} height={26} style={{ maxWidth: 150 }} width={220} searchPlaceholder="Search points" />}
       {pt && <>
         <NumberInput value={pt.x} min={0} max={1} step={0.05} title="X, 0 left to 1 right" onCommit={n => onChange(`pt:${round(n)},${pt.y}`)} style={num} />
         <NumberInput value={pt.y} min={0} max={1} step={0.05} title="Y, 0 bottom to 1 top" onCommit={n => onChange(`pt:${pt.x},${round(n)}`)} style={num} />

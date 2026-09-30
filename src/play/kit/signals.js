@@ -314,6 +314,8 @@ export function sgParseValueRef(ref) {
     if (i <= 0 || i + 2 >= rest.length) return null;
     return { kind: 'prop', layerId: (fin ? 'finish:' : '') + rest.slice(0, i), key: rest.slice(i + 2) };
   }
+  // One axis of a position (an anchor): `ax:x:<anchor>` or `ax:y:<anchor>` (a region test is a band on each).
+  if (ref.startsWith('ax:x:') || ref.startsWith('ax:y:')) return ref.length > 5 ? { kind: 'axis', axis: ref[3], anchor: ref.slice(5) } : null;
   // A layer's reading (what it measures: hover, fill, speed…), as its sensors report it.
   if (ref.startsWith('read:')) {
     const rest = ref.slice(5), i = rest.lastIndexOf('::');

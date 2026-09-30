@@ -30,7 +30,8 @@ import { createSignalFrom } from '../../play/createSignal';
 import { goToSignal } from './playSplit';
 import { usePlayUi } from './playUi';
 
-export function MapToMenu({ source, label }: { source: PlaySource; label: string }) {
+/** `button`: the button's text (Map… by default); `smoothMs`: the new mapping's smoothing (a Set jumps: 0). */
+export function MapToMenu({ source, label, button = 'Map…', smoothMs = 60 }: { source: PlaySource; label: string; button?: string; smoothMs?: number }) {
   const tk = useTokens();
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
@@ -53,7 +54,7 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
 
   const pick = (target: Parameters<typeof mapSourceTo>[2]) => {
     let made: string | undefined;
-    setPlay(p => { const r = mapSourceTo(p, source, target); made = r.control?.label; return r.play; });
+    setPlay(p => { const r = mapSourceTo(p, source, target, smoothMs); made = r.control?.label; return r.play; });
     setOpen(false); setQ('');
     if (made) toast.success(`${label} → ${made}`, { message: 'Tune its range and curve in Mappings.', action: { label: 'Show', onClick: () => usePlayUi.getState().setTab('mappings') } });
   };
@@ -77,7 +78,7 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
   const empty = controls.length + graph.length + layers.length + finish.length + sound.length === 0;
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <Button size="sm" variant="ghost" icon="plus" onClick={() => setOpen(o => !o)} title={`Map ${label} onto a control`}>Map…</Button>
+      <Button size="sm" variant="ghost" icon="plus" onClick={() => setOpen(o => !o)} title={`Map ${label} onto a control`}>{button}</Button>
       {open && (
         <Popover anchorRef={anchor} onClose={() => { setOpen(false); setQ(''); }} align="end" width={300} padding={8}>
           <div style={{ padding: '2px 4px 6px', color: tk.text.faint, fontSize: 11.5 }}>Map <b style={{ color: tk.text.secondary }}>{label}</b> onto…</div>

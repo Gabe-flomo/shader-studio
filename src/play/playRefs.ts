@@ -27,7 +27,7 @@
  * Pure.
  */
 import {
-  ACTION_TARGET_PREFIX, LAYER_TARGET_PREFIX, PAD_ANCHOR, parseActionTarget, parseHandAnchor, parseLayerTarget, parseReaderTarget, readerControlTarget,
+  ACTION_TARGET_PREFIX, CAPTURE_POS, LAYER_TARGET_PREFIX, PAD_ANCHOR, SIGNAL_ANCHOR, parseActionTarget, parseHandAnchor, parseSignalAnchor, parseLayerTarget, parseReaderTarget, readerControlTarget,
   type PairSource, type PlayAction, type PlayControl, type PlayIncrement, type PlayMapping, type PlayPair, type PlayPairMapping, type PlaySignal, type PlaySource, type TriggerSpec, type ValueCondition,
 } from '../types/play';
 import type { PlayLayer } from '../types/playLayers';
@@ -41,7 +41,10 @@ export type RefFn = (kind: RefKind, id: string, where?: string) => string;
 
 /** A point on the picture: a layer's centre (a layer ref), or a hand point, the pad grid, the mouse or a fixed point (no ref). */
 export function mapAnchor(ref: string, f: RefFn): string {
-  if (!ref || parseHandAnchor(ref) || ref === PAD_ANCHOR || ref === 'mouse' || ref.startsWith('pt:')) return ref;
+  if (!ref || parseHandAnchor(ref) || ref === PAD_ANCHOR || ref === 'mouse' || ref === 'pointer' || ref.startsWith('pt:')) return ref;
+  // A signal's captured position.
+  const sa = parseSignalAnchor(ref);
+  if (sa) { const id = f('signal', sa.id); return id ? `${SIGNAL_ANCHOR}${id}${sa.held ? ':held' : ''}` : ''; }
   return f('layer', ref);
 }
 
@@ -76,6 +79,8 @@ export function mapValueRef(ref: string, f: RefFn): string {
     return `dist:${mapAnchor(ref.slice(5, i), f)}|${mapAnchor(ref.slice(i + 1), f)}`;
   }
   if (ref.startsWith(LAYER_TARGET_PREFIX)) return mapTarget(ref, f);
+  // One axis of a position: ax:x:<anchor>.
+  if (ref.startsWith('ax:x:') || ref.startsWith('ax:y:')) return `${ref.slice(0, 5)}${mapAnchor(ref.slice(5), f)}`;
   // A layer's reading: `read:<layerId>::<read>`.
   if (ref.startsWith('read:')) {
     const i = ref.lastIndexOf('::');
@@ -105,6 +110,7 @@ export function mapTrigger(t: TriggerSpec, f: RefFn): TriggerSpec {
 export function mapSource(s: PlaySource, f: RefFn): PlaySource {
   switch (s.kind) {
     case 'control': return { ...s, controlId: f('control', s.controlId) };
+    case 'captured': return { ...s, signal: f('signal', s.signal) };
     case 'null': return { ...s, layerId: f('layer', s.layerId) };
     case 'sensor':
       // A Granulator rack's grains read as a sensor on `ae:<rackId>`: a rack, not a layer.
@@ -147,6 +153,7 @@ export function mapAction(a: PlayAction, f: RefFn): PlayAction {
 /** A signal's own id and what it is defined by: its trigger, or the signals it combines. */
 export function mapSignal(s: PlaySignal, f: RefFn): PlaySignal {
   const out: PlaySignal = { ...s, id: f('signal', s.id) };
+  if (s.capture) out.capture = { ...s.capture, what: s.capture.what.startsWith(CAPTURE_POS) ? `${CAPTURE_POS}${mapAnchor(s.capture.what.slice(CAPTURE_POS.length), f)}` : mapValueRef(s.capture.what, f) };
   if (s.when?.kind === 'trigger') out.when = { kind: 'trigger', trigger: mapTrigger(s.when.trigger, f) };
   else if (s.when?.kind === 'logic') out.when = { ...s.when, inputs: s.when.inputs.map(i => f('signal', i)).filter(Boolean) };
   return out;

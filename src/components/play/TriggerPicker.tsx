@@ -12,7 +12,7 @@
  */
 import { openProSheet, useCan } from '../../lib/plan';
 import { FREE_TRIGGER_ONS } from '../../play/planGates';
-import { HAND_POINT_SECTIONS, triggerKindSections } from './sourcePickerSections';
+import { HAND_ANCHOR_SECTIONS, triggerKindSections } from './sourcePickerSections';
 import { GroupedPicker } from '../ui/GroupedPicker';
 import { sectionsFromOptions } from '../ui/groupedPickerModel';
 import { useEffect, useMemo, useState } from 'react';
@@ -225,7 +225,7 @@ export function AnchorPicker({ value, layers, exclude, ariaLabel, onChange }: {
   return (
     <span style={{ display: 'inline-flex', gap: 4, minWidth: 0, flexWrap: 'wrap' }}>
       <GroupedPicker ariaLabel={ariaLabel} value={known ? pick : ''} placeholder="Pick one" sections={sections} onChange={v => onChange(anchorChoice(v, value))} height={26} style={{ maxWidth: 170 }} width={220} />
-      {hand && <GroupedPicker ariaLabel={`${ariaLabel}: point on the hand`} value={`${hand.point}`} sections={HAND_POINT_SECTIONS} onChange={v => onChange(`hand:${hand.side}:${parseInt(v, 10) || 0}`)} height={26} style={{ maxWidth: 150 }} width={220} searchPlaceholder="Search points" />}
+      {hand && <GroupedPicker ariaLabel={`${ariaLabel}: point on the hand`} value={`${hand.point}`} sections={HAND_ANCHOR_SECTIONS} onChange={v => onChange(`hand:${hand.side}:${parseInt(v, 10) || 0}`)} height={26} style={{ maxWidth: 150 }} width={220} searchPlaceholder="Search points" />}
     </span>
   );
 }

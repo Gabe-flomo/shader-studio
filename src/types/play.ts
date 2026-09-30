@@ -87,8 +87,10 @@ export function handAnchor(side: HandSide, point: number): AnchorRef { return `$
 /** The hand and landmark of a `hand:<side>:<point>` anchor, or null for a layer anchor. */
 export function parseHandAnchor(ref: string): { side: HandSide; point: number } | null {
   const m = /^hand:(left|right|any):(\d{1,2})$/.exec(ref);
-  return m && Number(m[2]) <= 20 ? { side: m[1] as HandSide, point: Number(m[2]) } : null;
+  return m && Number(m[2]) <= HAND_PINCH_POINT ? { side: m[1] as HandSide, point: Number(m[2]) } : null;
 }
+/** The pinch point: halfway between the thumb tip (4) and the index tip (8), where a pinch lands (play/kit/hands.js hdPoint). */
+export const HAND_PINCH_POINT = 21;
 
 export type TriggerSpec = TriggerOn & { fire?: FireSpec };
 export type TriggerOn =
@@ -199,7 +201,27 @@ export type SignalDef =
  * became true) is what "When a signal fires" hears; held and on-release
  * firing modes hear its level and its fall. Actions can also send it.
  */
-export interface PlaySignal { id: string; name: string; when?: SignalDef }
+export interface PlaySignal { id: string; name: string; when?: SignalDef; capture?: SignalCapture }
+
+/**
+ * A value a signal takes with it (sample and hold): `what` is a condition
+ * value path (a number: `ctl:…`, `layer:…::…`, `read:…`) or `pos:<anchor>` (a
+ * position: a layer's centre, `hand:right:21` the pinch point, `mouse`…),
+ * read at its rise, at its fall, or every frame while it is true. A Set
+ * mapping (source `captured`) writes a number; a position is the anchor
+ * `sig:<id>` (a pair mapping's Position moves a shape there).
+ */
+export interface SignalCapture { what: string; at: 'rise' | 'fall' | 'held' }
+export const CAPTURE_POS = 'pos:';
+/** The anchor of a signal's captured position; `sig:<id>:held` only while the signal is true. */
+export const SIGNAL_ANCHOR = 'sig:';
+export function parseSignalAnchor(ref: string): { id: string; held: boolean } | null {
+  if (!ref.startsWith(SIGNAL_ANCHOR)) return null;
+  const rest = ref.slice(SIGNAL_ANCHOR.length);
+  const held = rest.endsWith(':held');
+  const id = held ? rest.slice(0, -5) : rest;
+  return id ? { id, held } : null;
+}
 export const SIGNALS_MAX = 64;
 
 // ── Pair controls (two values played as one) ────────────────────────────────
@@ -525,7 +547,17 @@ export type PlaySource =
    * Data layer (`layerId`, or the first showing the dataset) steps to, so the
    * value moves as its Offset or its actions move.
    */
-  | { kind: 'data'; dataset: string; column: string; layerId: string };
+  | { kind: 'data'; dataset: string; column: string; layerId: string }
+  /**
+   * Set: the number a signal captured (PlaySignal.capture), written as it is,
+   * not through the mapping's range. Nothing is written before the first
+   * capture. When the signal is false again: `stay` keeps the captured value
+   * (a hold), `back` lets the control go back to its own slider, `value` goes
+   * to `rest`. The mapping's smoothing is the glide (0 = jump).
+   */
+  | { kind: 'captured'; signal: string; release: CaptureRelease; rest?: number };
+
+export type CaptureRelease = 'stay' | 'back' | 'value';
 
 /** The data source's pseudo-column: how far through the rows (or chunks) the current one is, 0..1. */
 export const DATA_ROW_COLUMN = '#row';
@@ -1461,6 +1493,14 @@ function parseSource(raw: unknown): PlaySource | null {
   if (!raw || typeof raw !== 'object') return null;
   const s = raw as Record<string, unknown>;
   switch (s.kind) {
+    case 'captured': {
+      const signal = str(s.signal);
+      if (!signal) return null;
+      const release: CaptureRelease = s.release === 'back' || s.release === 'value' ? s.release : 'stay';
+      const out: PlaySource = { kind: 'captured', signal, release };
+      if (release === 'value') out.rest = num(s.rest, 0);
+      return out;
+    }
     case 'midi': {
       const signal = str(s.signal);
       if (!signal || !MIDI_SIGNALS.has(signal)) return null;
@@ -1846,6 +1886,10 @@ function parseSignals(raw: unknown): PlaySignal[] {
     const sig: PlaySignal = { id: id.slice(0, 80), name: (typeof o.name === 'string' && o.name.trim() ? o.name : 'Signal').slice(0, 60) };
     const when = parseSignalDef(o.when);
     if (when) sig.when = when;
+    const cap = o.capture as Record<string, unknown> | undefined;
+    if (cap && typeof cap === 'object' && typeof cap.what === 'string' && cap.what) {
+      sig.capture = { what: cap.what.slice(0, 200), at: cap.at === 'fall' || cap.at === 'held' ? cap.at : 'rise' };
+    }
     out.push(sig);
   }
   // A combination keeps only inputs that are signals of this setup (and not itself).

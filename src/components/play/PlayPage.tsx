@@ -22,7 +22,7 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
 import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
-import { PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '../../types/play';
+import { CAPTURE_POS, PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '../../types/play';
 import { GRAIN_EACH, grainSensorLayer, isGranulatorRack, parseGrainsTarget } from '../../types/playAudioEngine';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
@@ -1826,6 +1826,8 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
     if (!allSources && sourceTypeNeedsPro(v)) { openProSheet('play.sources'); return; }
     if (v.startsWith(SIGNAL_SOURCE)) { onUpdate({ source: signalSource(v.slice(SIGNAL_SOURCE.length)) }); return; }
     if (v === OPEN_READERS) { useReadersPanel.getState().show({ mappingId: m.id, focus: m.source.kind === 'reader' ? m.source.readerId : '' }); return; }
+    // Set: the first signal that captures a number, and no glide (it jumps).
+    if (v === 'captured' && m.source.kind !== 'captured') { onUpdate({ source: { kind: 'captured', signal: (signals ?? []).find(s => s.capture && !s.capture.what.startsWith(CAPTURE_POS))?.id ?? signals?.[0]?.id ?? '', release: 'stay' }, smoothMs: 0 }); return; }
     onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs), firstDataset()) });
   };
   const numStyle = { width: 58, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' as const };
@@ -1946,6 +1948,18 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
                 <Segmented size="sm" ariaLabel="Null axis" value={m.source.axis} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }]} onChange={v => onUpdate({ source: { kind: 'null', layerId: m.source.kind === 'null' ? m.source.layerId : '', axis: v } })} />
               </>
         )}
+        {m.source.kind === 'captured' && (() => {
+          const src = m.source;
+          return <>
+            <Select ariaLabel="Signal it takes the value from" value={src.signal} options={[...(signals ?? []).some(s => s.id === src.signal) ? [] : [{ value: src.signal, label: 'Pick a signal' }], ...(signals ?? []).map(s => ({ value: s.id, label: s.capture ? s.name : `${s.name} (captures nothing yet)` }))]} onChange={v => onUpdate({ source: { ...src, signal: v } })} height={26} style={{ flex: 1, minWidth: 0 }} />
+            <Segmented size="sm" ariaLabel="When the signal lets go" value={src.release} options={[
+              { value: 'stay', label: 'Stay', title: 'Keeps the value it was set to until the next capture' },
+              { value: 'back', label: 'Go back', title: 'The control goes back to its own slider when the signal is false' },
+              { value: 'value', label: 'Go to', title: 'Goes to a resting value when the signal is false' },
+            ]} onChange={release => onUpdate({ source: release === 'value' ? { ...src, release, rest: src.rest ?? 0 } : { kind: 'captured', signal: src.signal, release } })} />
+            {src.release === 'value' && <NumberInput value={src.rest ?? 0} step={0.01} title="Where it rests while the signal is false" onCommit={n => onUpdate({ source: { ...src, rest: n } })} style={{ ...numStyle, width: 52 }} />}
+          </>;
+        })()}
         {m.source.kind === 'control' && (
           otherControls.length === 0
             ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a second control</span>

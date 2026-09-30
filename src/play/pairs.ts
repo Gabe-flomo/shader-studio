@@ -6,7 +6,7 @@
  */
 import { eventSignal, layerEvents } from './layerPorts';
 import type { PairAxis, PlayControl, PlayPair, PlayPairMapping, PlayRecord, PlaySignal, PairSource } from '../types/play';
-import { layerNumericProps, layerTarget, parseLayerTarget, SIGNALS_MAX } from '../types/play';
+import { layerNumericProps, layerTarget, parseLayerTarget, parseSignalAnchor, SIGNALS_MAX } from '../types/play';
 import { pairedKey } from '../components/play/layerOps';
 import { playId, targetParts } from './playControls';
 
@@ -181,6 +181,12 @@ export function layerSignalListeners(play: PlayRecord): Array<{ id: string; labe
   const out: Array<{ id: string; label: string }> = [];
   // A combination reads the signals it combines.
   for (const s of play.signals ?? []) if (s.when?.kind === 'logic') for (const i of s.when.inputs) out.push({ id: i, label: `Combined into ${s.name}` });
+  // Set: a mapping writes what it captured; a pair moves to the position it captured.
+  for (const m of play.mappings) if (m.source.kind === 'captured' && m.source.signal) out.push({ id: m.source.signal, label: `Sets ${play.controls.find(c => c.id === m.controlId)?.label ?? 'a missing control'}` });
+  for (const m of play.pairMappings ?? []) {
+    const sa = m.source.kind === 'position' ? parseSignalAnchor(m.source.anchor) : null;
+    if (sa) out.push({ id: sa.id, label: `Moves ${play.pairs?.find(p => p.id === m.pairId)?.label ?? 'a pair'} to its position` });
+  }
   for (const m of play.mappings) {
     const inc = m.increment;
     if (inc?.resetOn) {

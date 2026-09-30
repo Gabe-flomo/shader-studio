@@ -111,7 +111,9 @@ describe('proximity', () => {
 
   it('hand anchors round-trip, and anything else is a layer', () => {
     expect(parseHandAnchor(handAnchor('left', 4))).toEqual({ side: 'left', point: 4 });
-    expect(parseHandAnchor('hand:right:21')).toBeNull();
+    // 21 is the pinch point (halfway between the thumb and index tips); 22 is nothing.
+    expect(parseHandAnchor('hand:right:21')).toEqual({ side: 'right', point: 21 });
+    expect(parseHandAnchor('hand:right:22')).toBeNull();
     expect(parseHandAnchor('layer_1')).toBeNull();
     expect(anchorChoice('hand:left', 'hand:right:12')).toBe('hand:left:12');
     expect(anchorChoice('hand:any', 'n1')).toBe('hand:any:8');

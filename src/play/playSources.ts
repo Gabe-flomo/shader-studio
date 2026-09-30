@@ -10,7 +10,7 @@ import { audioFxChainLabel, audioFxTargetLabel, parseAudioFxTarget, type PlayAud
 import { sgParseValueRef, sgScreenPoint } from './kit/signals.js';
 import { proximityCondition, pulseHz } from './triggers';
 import { signalNames } from './signalNames';
-import { ANCHOR_KINDS, DEFAULT_FIRE, PAD_ANCHOR, handAnchor, layerNumericProps, parseHandAnchor, type PlayLayer } from '../types/play';
+import { ANCHOR_KINDS, DEFAULT_FIRE, HAND_PINCH_POINT, PAD_ANCHOR, handAnchor, layerNumericProps, parseHandAnchor, parseSignalAnchor, type PlayLayer } from '../types/play';
 import { HD_POINT_NAMES } from './kit/hands.js';
 import { datasetStore } from '../data/datasetStore';
 import { DATA_ROW_COLUMN } from '../types/play';
@@ -24,7 +24,7 @@ import { parseTrackAnchor } from '../types/playTracking';
 export type HandSourceType = `hand:${HandRead}`;
 /** `reader:<id>`: one audio reader. */
 export type ReaderSourceType = `reader:${string}`;
-export type SourceType = FaceSourceType | PoseSourceType | 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | HandSourceType | ReaderSourceType;
+export type SourceType = FaceSourceType | PoseSourceType | 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | 'captured' | HandSourceType | ReaderSourceType;
 /** Not a source: the picker's entry that opens the Audio readers panel. */
 export const OPEN_READERS = 'readers:open';
 
@@ -56,6 +56,7 @@ export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[
   { value: 'null', label: 'Null position' },
   { value: 'sensor', label: 'Layer sensor (zone fill, speed…)' },
   { value: 'data', label: 'Data (the current row of a dataset)' },
+  { value: 'captured', label: 'Set from a signal (its captured value)' },
   { value: 'lfo', label: 'LFO' },
   { value: 'noise', label: 'Noise' },
   { value: 'clock', label: 'Clock (BPM)' },
@@ -211,6 +212,7 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
     case 'tilt': return { kind: 'tilt', axis: 'gamma' };
     case 'gamepad': return { kind: 'gamepad', pad: 0, control: 'axis', index: 0 };
     case 'data': return prev.kind === 'data' ? prev : { kind: 'data', dataset, column: DATA_ROW_COLUMN, layerId: '' };
+    case 'captured': return prev.kind === 'captured' ? prev : { kind: 'captured', signal: '', release: 'stay' };
     default: return prev;
   }
 }
@@ -237,6 +239,7 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'hand') return handSourceLabel(s);
   if (s.kind === 'face' || s.kind === 'pose') return trackSourceLabel(s);
   if (s.kind === 'pad') return padSourceLabel(s);
+  if (s.kind === 'captured') return `Set · ${signalName(s.signal)}’s value${s.release === 'back' ? ', then back' : s.release === 'value' ? `, then ${s.rest ?? 0}` : ''}`;
   const ch = s.channel === 0 ? '' : ` · ch. ${s.channel}`;
   const range = s.range ? ` ${kmNoteName(s.range[0])}–${kmNoteName(s.range[1])}` : '';
   switch (s.signal) {
@@ -362,6 +365,7 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
     case 'mouse': return `Mouse ${r.axis.toUpperCase()}`;
     case 'distance': return `${anchorLabel(r.a, ctx.layers)} ↔ ${anchorLabel(r.b, ctx.layers)}`;
     case 'reading': return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${SENSOR_LABELS[r.read as SensorRead] ?? r.read}`;
+    case 'axis': return `${anchorLabel(r.anchor, ctx.layers)} ${r.axis.toUpperCase()}`;
     case 'prop': {
       if (r.layerId.startsWith('finish:')) {
         const f = finishTargetLabel(ctx.finish, `finish:${r.layerId.slice(7)}::${r.key}`);
@@ -385,11 +389,14 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
 /** "Right · Index tip", "Mouse", "Point 0.5, 0.5", or the layer's name. */
 export function anchorLabel(ref: string, layers: ReadonlyArray<{ id: string; label: string }> = []): string {
   if (ref === 'mouse') return 'Mouse';
+  if (ref === 'pointer') return 'Pointer on the picture';
   if (ref === PAD_ANCHOR) return 'Pad grid · last pad';
   const pt = sgScreenPoint(ref);
   if (pt) return `Point ${round(pt.x)}, ${round(pt.y)}`;
   const h = parseHandAnchor(ref);
-  if (h) return `${SIDE_NAMES[h.side]} · ${HD_POINT_NAMES[h.point] ?? 'Point'}`;
+  if (h) return `${SIDE_NAMES[h.side]} · ${h.point === HAND_PINCH_POINT ? 'Pinch point' : HD_POINT_NAMES[h.point] ?? 'Point'}`;
+  const sa = parseSignalAnchor(ref);
+  if (sa) return `${signalName(sa.id)}’s position${sa.held ? ' (while true)' : ''}`;
   const tr = parseTrackAnchor(ref);
   if (tr) return trackAnchorLabel(tr.kind, tr.point);
   return layers.find(l => l.id === ref)?.label ?? (ref ? 'Missing layer' : 'Pick one');

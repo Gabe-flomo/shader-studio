@@ -5,6 +5,7 @@
  * audio readers under Live audio, and Pro marked where the plan lacks it.
  * Also the trigger-kind and hand-point pickers' sections. Pure.
  */
+import { HAND_PINCH_POINT } from '../../types/play';
 import type { PickerItem, PickerSection } from '../ui/groupedPickerModel';
 import type { IconName } from '../ui/iconPaths';
 import type { TriggerSpec } from '../../types/play';
@@ -30,6 +31,7 @@ const SOURCE_GROUPS: { heading: string; entries: Entry[] }[] = [
     { value: 'null', label: 'Null position', icon: 'target', description: 'Where a Null layer sits, X or Y' },
     { value: 'sensor', label: 'Layer sensor', icon: 'eye', description: 'Zone fill, speed, spread, distance…' },
     { value: 'data', label: 'Data', icon: 'table', description: 'A column of a dataset’s current row' },
+    { value: 'captured', label: 'Set from a signal', icon: 'target', description: 'The value a signal captured, written as it is (sample and hold)', keywords: 'capture sample hold set jump' },
   ] },
   { heading: 'Generators', entries: [
     { value: 'lfo', label: 'LFO', icon: 'wave', description: 'Sine, triangle, saw or square', keywords: 'oscillator' },
@@ -161,4 +163,10 @@ export const HAND_POINT_SECTIONS: PickerSection[] = [
   { heading: 'Fingertips', items: HAND_POINT_OPTIONS.filter(o => TIPS.has(o.value)) },
   { heading: 'Wrist & knuckles', items: HAND_POINT_OPTIONS.filter(o => KNUCKLES.has(o.value)) },
   { heading: 'Joints', items: HAND_POINT_OPTIONS.filter(o => !TIPS.has(o.value) && !KNUCKLES.has(o.value)) },
+];
+
+/** Points on a hand as a position (an anchor): the landmarks, and the pinch point halfway between the thumb and index tips. */
+export const HAND_ANCHOR_SECTIONS: PickerSection[] = [
+  { heading: 'Pinch', items: [{ value: String(HAND_PINCH_POINT), label: 'Pinch point', description: 'Halfway between the thumb tip and the index tip: where a pinch lands' }] },
+  ...HAND_POINT_SECTIONS,
 ];

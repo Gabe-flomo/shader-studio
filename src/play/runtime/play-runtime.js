@@ -198,7 +198,7 @@
   }
   // A proximity trigger is the distance case of a condition (the kit's signals.js): below or above, the margin its hysteresis.
   function proximityCondition(t) { return { value: 'dist:' + t.a + '|' + t.b, cmp: t.when === 'closer' ? 'below' : 'above', threshold: t.distance, hysteresis: t.margin, tolerance: 0 }; }
-  function handAnchorOf(ref) { const m = /^hand:(left|right|any):(\d{1,2})$/.exec(ref); return m && +m[2] <= 20 ? { side: m[1], point: +m[2] } : null; }
+  function handAnchorOf(ref) { const m = /^hand:(left|right|any):(\d{1,2})$/.exec(ref); return m && +m[2] <= 21 ? { side: m[1], point: +m[2] } : null; }
   function beatAt(bpm, beats, time) {
     const period = (60 / Math.max(1, bpm)) * Math.max(0.0625, beats);
     const count = Math.floor(time / period) + 1;
@@ -1532,6 +1532,13 @@ void main() {
           if (r.kind !== 'table' || !(r.rows > 0) || typeof SSKit === 'undefined' || !SSKit.data) return null;
           return SSKit.data.unit(SSKit.data.column(r, s.column), Math.max(0, Math.min(r.rows - 1, Math.round(row))));
         }
+        // Set (the app's playEngine): the number a signal captured; after it lets go, stay, go back or go to a value.
+        case 'captured': {
+          const v = sigPayload.get(s.signal);
+          if (typeof v !== 'number') return null;
+          if (s.release === 'stay' || sigLevel(s.signal)) return v;
+          return s.release === 'value' ? (s.rest || 0) : null;
+        }
         case 'sensor': {
           if (s.read === 'distance') {
             const d = s.otherId ? anchorGap(s.layerId, s.otherId) : null;
@@ -1548,7 +1555,14 @@ void main() {
     const anchorLookup = id => { const l = layersById.get(id); return l ? { layer: l, value: k => value(l, k) } : null; };
     const reported = k => sensors.get(k);
     function anchorAt(ref) {
-      if (ref === 'mouse') return { x: mouse.x, y: mouse.y };
+      // On a page the pointer is the picture's: `mouse` and `pointer` are the same.
+      if (ref === 'mouse' || ref === 'pointer') return { x: mouse.x, y: mouse.y };
+      // A signal's captured position: sig:<id>, or sig:<id>:held only while the signal is true.
+      if (ref.indexOf('sig:') === 0) {
+        const held = /:held$/.test(ref), id = ref.slice(4, held ? -5 : undefined);
+        const p = sigPayload.get(id);
+        return p && typeof p === 'object' && (!held || sigLevel(id)) ? p : null;
+      }
       // The pad grid's last pad (column across, row up, 0..1), like the Pad grid X and Y sources.
       if (ref === 'pad:last') {
         if (!padG) return null;
@@ -1577,6 +1591,7 @@ void main() {
       if (r.kind === 'mouse') return r.axis === 'x' ? mouse.x : mouse.y;
       if (r.kind === 'distance') return anchorGap(r.a, r.b);
       if (r.kind === 'reading') return readSource({ kind: 'sensor', layerId: r.layerId, read: r.read, otherId: '' });
+      if (r.kind === 'axis') { const p = anchorAt(r.anchor); return p ? (r.axis === 'x' ? p.x : p.y) : null; }
       const l = layersById.get(r.layerId);
       return l && typeof l[r.key] === 'number' ? layerValue(r.layerId, r.key, l[r.key]) : null;
     }
@@ -1674,8 +1689,19 @@ void main() {
     }
     // A signal: its "When signal fires" triggers see a press and its release at once.
     // Signals sent this frame (by an action or a layer): true for the frame, for combinations to read.
-    const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map();
-    function emitSignal(id) { sigSent.add(id); const k = 'sig:' + id; press(k); release(k); }
+    const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map(), sigPayload = new Map();
+    const sigById = new Map((play.signals || []).map(s => [s.id, s]));
+    function sigLevel(id) { return (sigLevels.get(id) || false) || sigSent.has(id); }
+    // What a signal captures (sample and hold): a number from a value path, or a position from pos:<anchor>.
+    function capture(s) {
+      const c = s.capture;
+      if (!c) return;
+      let v;
+      if (c.what.indexOf('pos:') === 0) { const p = anchorAt(c.what.slice(4)); v = p ? { x: p.x, y: p.y } : null; }
+      else v = readValue(c.what);
+      if (v !== null && v !== undefined) sigPayload.set(s.id, v);
+    }
+    function emitSignal(id) { sigSent.add(id); const s = sigById.get(id); if (s && s.capture && !s.when) capture(s); const k = 'sig:' + id; press(k); release(k); }
     // Level signals (the app's playEngine tickSignalLevels): each defined signal is true while its trigger is held or
     // met, or while its combination of others holds; rising presses its key and holds it, falling lets go.
     const sigDefs = (() => {
@@ -1696,6 +1722,8 @@ void main() {
         } else level = SG.logic(w.op, w.inputs.map(i => (sigLevels.get(i) || false) || sigSent.has(i)));
         const was = sigLevels.get(s.id) || false;
         sigLevels.set(s.id, level);
+        const at = s.capture && s.capture.at;
+        if ((at === 'rise' && level && !was) || (at === 'fall' && !level && was) || (at === 'held' && level)) capture(s);
         if (level && !was) press('sig:' + s.id);
         else if (!level && was) release('sig:' + s.id);
       }
@@ -1965,6 +1993,7 @@ void main() {
           for (const st of incCond.values()) SG.condRewind(st);
           for (const st of pairState.values()) { SG.condRewind(st.condA); SG.condRewind(st.condB); }
         }
+        sigPayload.clear();
       }
       lastTime = time;
       tickConditionTriggers(dt);
@@ -1983,7 +2012,8 @@ void main() {
         else {
           const u = m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source);
           if (u === null) continue;
-          const target = m.outMin + (m.outMax - m.outMin) * curve(u, m);
+          // Set writes the captured number itself; every other source goes through the range and curve.
+          const target = m.source.kind === 'captured' ? u : m.outMin + (m.outMax - m.outMin) * curve(u, m);
           v = smooth.get(m.id);
           if (m.smoothMs <= 0 || v === undefined) v = target;
           else { const a = 1 - Math.exp(-(dt * 1000) / m.smoothMs); v = v + (target - v) * a; if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target; }

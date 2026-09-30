@@ -25,6 +25,7 @@ export function valueRange(play: PlayRecord, ref: string): ValueRange | null {
     case 'mapping': case 'mouse': return [0, 1];
     case 'distance': return null;
     case 'reading': return readingRange(r.read as SensorRead);
+    case 'axis': return [0, 1];
     case 'control': {
       const c = play.controls.find(x => x.id === r.id);
       if (!c) return null;

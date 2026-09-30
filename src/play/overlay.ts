@@ -498,6 +498,9 @@ class PlayOverlay {
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
       const u = toUnit(e);
+      // Where it went down, for the engine's `pointer` anchor (a capture on the press reads it).
+      this.pointer.x = u.x; this.pointer.y = u.y; this.pointer.over = true;
+      playEngine.setPicturePointer(u.x, u.y);
       cancelHold();
       if (e.pointerType === 'touch' && !this.drawing && this.menuListeners.size) {
         const hit = this.layerAt(u);
@@ -562,6 +565,7 @@ class PlayOverlay {
       if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 8) cancelHold();
       const u = toUnit(e);
       this.pointer.x = u.x; this.pointer.y = u.y; this.pointer.over = u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1;
+      if (this.pointer.over) playEngine.setPicturePointer(u.x, u.y);
       const d = this.drawing;
       if (d && d.mode === 'lasso' && this.pointer.down && d.pts.length >= 2) {
         const lx = d.pts[d.pts.length - 2], ly = d.pts[d.pts.length - 1];
