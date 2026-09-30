@@ -72,6 +72,17 @@ describe('the file and the helpers', () => {
     expect(setLoop(setLoop(p, 'a|b', { speed: 2 }), 'a|b', { laps: 4 }).loops).toEqual([{ key: 'a|b', speed: 2, laps: 4 }]);
   });
 
+  it('a pair mapping on a captured position, an event spot or the picture pointer survives a reload', () => {
+    const raw = {
+      version: 1, layers: [defaultLayer('particles', 'p', 'P')], mappings: [], signals: [{ id: 's', name: 'S' }],
+      controls: [{ id: 'x', target: 'layer:p::x', kind: 'float', label: 'X', min: 0, max: 1 }, { id: 'y', target: 'layer:p::y', kind: 'float', label: 'Y', min: 0, max: 1 }],
+      pairs: [{ id: 'pr', label: 'P', a: 'x', b: 'y', position: true }],
+      pairMappings: ['sig:s', 'ev:p:annihilate', 'pointer', 'ev:gone:born'].map((anchor, i) => ({ id: `pm${i}`, pairId: 'pr', affect: 'both', enabled: true, source: { kind: 'position', anchor },
+        a: { outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0 }, b: { outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0 } })),
+    };
+    expect(parsePlayRecord(raw)?.pairMappings?.map(m => m.id)).toEqual(['pm0', 'pm1', 'pm2']);
+  });
+
   it('labels where each signal sits', () => {
     const play: PlayRecord = { ...emptyPlayRecord(), signals: [
       { id: 'lone', name: 'Lone' },
