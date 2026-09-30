@@ -8,7 +8,7 @@ import type { PlayFinish } from '../types/playFinish';
 import { finishTargetLabel } from '../types/playFinish';
 import { audioFxChainLabel, audioFxTargetLabel, parseAudioFxTarget, type PlayAudioFx } from '../types/playAudioFx';
 import { sgParseValueRef, sgScreenPoint } from './kit/signals.js';
-import { proximityCondition } from './triggers';
+import { proximityCondition, pulseHz } from './triggers';
 import { signalNames } from './signalNames';
 import { ANCHOR_KINDS, DEFAULT_FIRE, PAD_ANCHOR, handAnchor, layerNumericProps, parseHandAnchor, type PlayLayer } from '../types/play';
 import { HD_POINT_NAMES } from './kit/hands.js';
@@ -292,7 +292,7 @@ export function triggerLabel(t: TriggerSpec, layers: ReadonlyArray<{ id: string;
     case 'note': return `${t.note < 0 ? 'Any note' : `${NOTE_NAMES[t.note % 12]}${Math.floor(t.note / 12) - 1}`}${t.channel ? ` · ch. ${t.channel}` : ''}`;
     case 'mouse': return 'Click';
     case 'osc': return `OSC ${t.address}`;
-    case 'beat': return t.beats === 1 ? `Every beat @ ${t.bpm}` : `Every ${t.beats} beats @ ${t.bpm}`;
+    case 'beat': return t.unit === 'hz' ? `Pulse @ ${Math.round(pulseHz(t) * 1000) / 1000} Hz` : t.beats === 1 ? `Every beat @ ${t.bpm}` : `Every ${t.beats} beats @ ${t.bpm}`;
     case 'audio': return `${LIVE_BAND_LABELS[t.band]} hit`;
     case 'zone': return t.event === 'click' ? 'Click on shape' : t.event === 'enter' ? 'Pointer enters shape' : `Shape fills to ${Math.round(t.threshold * 100)}%`;
     case 'hand': return `${SIDE_NAMES[t.side]} · ${HAND_GESTURE_LABELS[t.gesture]}`;
@@ -328,13 +328,23 @@ export const COND_LABELS: Record<CondCmp, { label: string; word: string; title: 
   crossUp: { label: 'Crosses ↑', word: 'crosses up', title: 'The moment it passes the threshold going up' },
   crossDown: { label: 'Crosses ↓', word: 'crosses down', title: 'The moment it passes the threshold going down' },
   equals: { label: 'Equals', word: 'equals', title: 'While it is within the tolerance of the threshold' },
+  not: { label: 'Is not', word: 'is not', title: 'While it is further than the tolerance from the threshold' },
+  between: { label: 'Between', word: 'between', title: 'While it is inside a band: between the two edges' },
+  outside: { label: 'Outside', word: 'outside', title: 'While it is outside a band: under the low edge or over the high one' },
+  neverAbove: { label: 'Never reached', word: 'has never reached', title: 'While the highest it has been is still under the threshold (starts over on a rewind)' },
+  neverBelow: { label: 'Never dropped to', word: 'has never dropped to', title: 'While the lowest it has been is still over the threshold (starts over on a rewind)' },
 };
 
 const round = (n: number) => `${Math.round(n * 1000) / 1000}`;
 
 /** "Radius above 0.5", "Dot ↔ Box below 0.1", "Mouse X crosses up 0.8". */
 export function conditionLabel(c: ValueCondition, ctx: LabelContext = {}): string {
-  return `${valueRefLabel(c.value, ctx)} ${COND_LABELS[c.cmp].word} ${round(c.threshold)}${c.cmp === 'equals' ? ` ± ${round(c.tolerance)}` : ''}`;
+  const pct = c.unit === 'pct';
+  const n = (x: number) => (pct ? `${round(x * 100)}%` : round(x));
+  const band = (c.cmp === 'between' || c.cmp === 'outside') && typeof c.hi === 'number';
+  const what = band ? `${n(Math.min(c.threshold, c.hi!))} and ${n(Math.max(c.threshold, c.hi!))}` : n(c.threshold);
+  const tol = c.cmp === 'equals' || c.cmp === 'not' ? ` ± ${n(c.tolerance)}` : '';
+  return `${valueRefLabel(c.value, ctx)} ${COND_LABELS[c.cmp].word} ${what}${tol}`;
 }
 
 /** A condition's value in words: "Amount", "Dot · x", "Grade · Exposure", "Mouse X", "Dot ↔ Mouse". */
@@ -532,7 +542,7 @@ export const LIVE_BAND_OPTIONS = (Object.keys(LIVE_BAND_LABELS) as LiveAudioBand
 export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
   { value: 'key', label: 'Key' },
   { value: 'mouse', label: 'Click on the picture' },
-  { value: 'beat', label: 'Beat' },
+  { value: 'beat', label: 'Beat or pulse (BPM, Hz)' },
   { value: 'audio', label: 'Audio hit (live input)' },
   { value: 'reader', label: 'Audio reader crosses' },
   { value: 'note', label: 'MIDI note' },

@@ -27,10 +27,11 @@ import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
 import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
 import { incAdvance, incFold, incGlide, incGliding, incNew, incRange, incRepeat, incReset, incThreshold, type IncState } from '../play/kit/increment.js';
-import { sgCondNew, sgCondStep, sgParseValueRef, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
+import { sgCondNew, sgCondRewind, sgCondStep, sgParseValueRef, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
 import { readFinishValue } from '../types/playFinish';
 import { AUDIO_FX_TARGET_PREFIX, readAudioFxValue } from '../types/playAudioFx';
 import { signalNames } from '../play/signalNames';
+import { conditionRanges } from '../play/conditionRange';
 import { playPerfOn, recordPlayCounts, recordPlayStage, type PlayStage } from './perfStats';
 import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../types/play';
 import { geoAnchor } from '../play/kit/geometry.js';
@@ -635,6 +636,8 @@ class PlayEngine implements InputSource {
   private condTriggers: { t: TriggerSpec; key: string }[] = [];
   private audioTriggers: { t: TriggerSpec; key: string }[] = [];
   private audioKeys = new Set<string>();
+  /** Percent conditions' ranges by value path (play/conditionRange.ts). */
+  private condRanges: Record<string, [number, number]> = {};
   private layersById = new Map<string, PlayLayer>();
   private mappingsById = new Map<string, PlayMapping>();
   private index(): void {
@@ -659,9 +662,16 @@ class PlayEngine implements InputSource {
     this.condTriggers = unique(t => t.on === 'proximity' || t.on === 'value');
     this.audioTriggers = unique(t => t.on === 'audio' || t.on === 'reader');
     this.audioKeys = new Set(this.audioTriggers.map(a => a.key));
+    this.condRanges = conditionRanges(r);
     this.enabledActions = (r.actions ?? []).filter(a => a.enabled);
     this.layersById = new Map(r.layers.map(l => [l.id, l]));
     this.mappingsById = new Map(r.mappings.map(m => [m.id, m]));
+  }
+  /** The range a percent condition measures against (null: raw, or the range seen so far). */
+  private rangeFor(c: Pick<ValueCondition, 'unit' | 'value'>): [number, number] | null {
+    if (c.unit !== 'pct') return null;
+    this.index();
+    return this.condRanges[c.value] ?? null;
   }
   private layerOf(id: string): PlayLayer | undefined { this.index(); return this.layersById.get(id); }
   private mappingOf(id: string): PlayMapping | undefined { this.index(); return this.mappingsById.get(id); }
@@ -767,7 +777,7 @@ class PlayEngine implements InputSource {
       const c: ValueCondition = t.on === 'proximity' ? proximityCondition(t) : t;
       let st = this.condStates.get(key);
       if (!st) { st = sgCondNew(); this.condStates.set(key, st); }
-      const ev = sgCondStep(st, this.readValue(c.value), c);
+      const ev = sgCondStep(st, this.readValue(c.value), c, this.rangeFor(c));
       if (ev === 'open') this.press(key);
       else if (ev === 'close') this.release(key);
       else if (ev === 'tap') { this.press(key); this.release(key); }
@@ -1243,6 +1253,10 @@ class PlayEngine implements InputSource {
       for (const st of this.pairState.values()) st.swap = sgSwapNew();
       // Increments start over from their start, so the same timeline steps the same way again.
       for (const [id, st] of this.incStates) { const m = this.mappingOf(id); incReset(st, m ? this.incStart(m) : st.start, true); }
+      // Conditions forget the lowest and highest seen (has never reached, percent of the range seen).
+      for (const st of this.condStates.values()) sgCondRewind(st);
+      for (const st of this.incCond.values()) sgCondRewind(st);
+      for (const st of this.pairState.values()) { sgCondRewind(st.condA); sgCondRewind(st.condB); }
     }
     this.lastTime = time;
     lap?.('inputs');
@@ -1368,7 +1382,7 @@ class PlayEngine implements InputSource {
       if (inc.when) {
         let c = this.incCond.get(m.id);
         if (!c) { c = sgCondNew(); this.incCond.set(m.id, c); }
-        sgCondStep(c, this.readValue(inc.when.value), inc.when);
+        sgCondStep(c, this.readValue(inc.when.value), inc.when, this.rangeFor(inc.when));
         open = c.open;
       }
       count = incRepeat(st, this.time, inc, open);
@@ -1440,8 +1454,8 @@ class PlayEngine implements InputSource {
       const swapping = !!m.swap && m.source.kind === 'value';
       let useA = swapping ? st.swap.axis === 'a' : m.affect !== 'b';
       let useB = swapping ? st.swap.axis === 'b' : m.affect !== 'a';
-      if (m.a.when) { sgCondStep(st.condA, this.readValue(m.a.when.value), m.a.when); if (!st.condA.open) useA = false; }
-      if (m.b.when) { sgCondStep(st.condB, this.readValue(m.b.when.value), m.b.when); if (!st.condB.open) useB = false; }
+      if (m.a.when) { sgCondStep(st.condA, this.readValue(m.a.when.value), m.a.when, this.rangeFor(m.a.when)); if (!st.condA.open) useA = false; }
+      if (m.b.when) { sgCondStep(st.condB, this.readValue(m.b.when.value), m.b.when, this.rangeFor(m.b.when)); if (!st.condB.open) useB = false; }
       if (useA && ua !== null) st.a = this.smoothAxis(st.a, mapValue(ua, m.a), m.a, dt);
       if (useB && ub !== null) st.b = this.smoothAxis(st.b, mapValue(ub, m.b), m.b, dt);
       // Only the axes this mapping drives (an edit from Both to A lets B go back to its slider).

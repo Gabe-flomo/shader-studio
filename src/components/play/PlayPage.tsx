@@ -566,7 +566,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     if (!c || c.kind !== 'float') return [...signalItems(c), { label: 'Only sliders pair', disabled: true, onSelect: () => {} }];
     const partner = partnerTarget(c.target);
     const others = play.controls.filter(x => x.id !== id && x.kind === 'float' && !pairOf(play, x.id));
-    const items: MenuItem[] = [];
+    const items: MenuItem[] = [{
+      label: c.toggle ? 'Show as a slider' : 'Show as a switch', icon: c.toggle ? 'sliders' : 'check',
+      hint: c.toggle ? undefined : 'On and off: its high end and its low end',
+      onSelect: () => update(p => ({ ...p, controls: p.controls.map(x => { if (x.id !== id) return x; const n = { ...x }; if (x.toggle) delete n.toggle; else n.toggle = true; return n; }) })),
+    }, 'separator'];
     if (partner) items.push({
       label: `Add as position with ${partner.axis === 'y' ? 'Y' : 'X'}`, icon: 'target', hint: 'Its X/Y partner too, as one control with an XY pad',
       onSelect: () => { let ok = ''; update(p => { const r = positionPair(p, id, resolveGraphTarget); ok = r.pairId; return r.play; }); if (!ok) toast.info('No partner slider found for it'); },
@@ -1231,6 +1235,16 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
         // A mapping on a colour scales it or sets one channel; the rest comes from
         // this colour, so it stays editable while driven. The live result shows beside it.
         <ColourPad value={Array.isArray(value) ? value : [0, 0, 0]} live={driven && Array.isArray(live) ? live : undefined} disabled={!exists} onChange={onChange} />
+      ) : control.toggle ? (
+        // A switch: off is the low end, on the high end (a boolean control, a number underneath).
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Toggle
+            checked={typeof shown === 'number' && shown >= (control.min + control.max) / 2}
+            disabled={!exists || driven}
+            onChange={on => onChange(on ? control.max : control.min)}
+            label={typeof shown === 'number' && shown >= (control.min + control.max) / 2 ? 'On' : 'Off'}
+          />
+        </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>

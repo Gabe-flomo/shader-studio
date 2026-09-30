@@ -43,6 +43,7 @@ import { Button } from '../ui/Button';
 import { ReaderMeter } from './AudioReadersPanel';
 import { ConditionFields, SignalPicker } from './ConditionFields';
 import type { AudioReader } from '../../types/play';
+import { pulseForHz, pulseHz } from '../../play/triggers';
 
 export interface TriggerLayerRef { id: string; label: string; kind: string }
 
@@ -83,10 +84,20 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
         <LiveAudioChip />
       </>}
       {t.on === 'beat' && <>
-        <NumberInput value={t.bpm} min={1} max={999} step={1} title="Beats per minute" onCommit={n => onChange({ ...t, bpm: Math.max(1, n) })} style={{ ...numStyle, width: 48 }} />
-        {hint('bpm, every')}
-        <NumberInput value={t.beats} min={0.0625} max={64} step={1} title="Fire every this many beats" onCommit={n => onChange({ ...t, beats: Math.max(0.0625, n) })} style={{ ...numStyle, width: 40 }} />
-        {hint('beats')}
+        <Segmented size="sm" ariaLabel="Pulse unit" value={t.unit === 'hz' ? 'hz' : 'bpm'} options={[
+          { value: 'bpm', label: 'BPM', title: 'Every so many beats at a tempo' },
+          { value: 'hz', label: 'Hz', title: 'So many times a second' },
+        ]} onChange={u => { const n = { ...t }; if (u === 'hz') n.unit = 'hz'; else delete n.unit; onChange(n); }} />
+        {t.unit === 'hz' ? <>
+          {/* Hz is bpm / 60 / beats: a rate sets it as one beat at 60 × the rate. On the setup's clock either way, so takes and renders match. */}
+          <NumberInput value={Math.round(pulseHz(t) * 1000) / 1000} min={0.01} max={60} step={0.5} title="Pulses a second" onCommit={n => onChange({ ...t, ...pulseForHz(n) })} style={{ ...numStyle, width: 52 }} />
+          {hint('a second')}
+        </> : <>
+          <NumberInput value={t.bpm} min={1} max={999} step={1} title="Beats per minute" onCommit={n => onChange({ ...t, bpm: Math.max(1, n) })} style={{ ...numStyle, width: 48 }} />
+          {hint('bpm, every')}
+          <NumberInput value={t.beats} min={0.0625} max={64} step={1} title="Fire every this many beats" onCommit={n => onChange({ ...t, beats: Math.max(0.0625, n) })} style={{ ...numStyle, width: 40 }} />
+          {hint('beats')}
+        </>}
       </>}
       {t.on === 'zone' && (shapes.length === 0 ? hint('Add a Shape layer first') : <>
         <Select ariaLabel="Shape" value={t.layerId} options={shapes.map(s => ({ value: s.id, label: s.label }))} onChange={v => onChange({ ...t, layerId: v })} height={26} />

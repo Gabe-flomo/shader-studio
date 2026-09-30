@@ -17,7 +17,8 @@ import { playEngine } from '../../lib/playEngine';
 import { sgParseValueRef, sgScreenPoint } from '../../play/kit/signals.js';
 import { COND_LABELS, anchorOptions, valueRefLabel, type LabelContext } from '../../play/playSources';
 import { addSignal, deleteSignal, renameSignal, signalUses } from '../../play/pairs';
-import { PAD_ANCHOR, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
+import { conditionBands, withUnit } from './conditionModel';
+import { PAD_ANCHOR, isBandCmp, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf } from '../../types/playFinish';
 import { audioFxControlFor, audioFxHosts } from '../../types/playAudioFx';
 import { GroupedPicker } from '../ui/GroupedPicker';
@@ -141,9 +142,11 @@ export function DistanceAnchorPicker({ value, layers, exclude, ariaLabel, pads =
 }
 const round = (n: number) => Math.round(n * 1000) / 1000;
 
-/** The comparisons offered: all five for a trigger; the held ones (no crossings) for "only while". */
+/** The comparisons offered: every one for a trigger; the held ones (no crossings) for "only while". */
 function cmpOptions(crossings: boolean) {
-  const all: CondCmp[] = crossings ? ['below', 'above', 'crossUp', 'crossDown', 'equals'] : ['below', 'above', 'equals'];
+  const all: CondCmp[] = crossings
+    ? ['above', 'below', 'crossUp', 'crossDown', 'between', 'outside', 'equals', 'not', 'neverAbove', 'neverBelow']
+    : ['above', 'below', 'between', 'outside', 'equals', 'not', 'neverAbove', 'neverBelow'];
   return all.map(v => ({ value: v, label: COND_LABELS[v].label, title: COND_LABELS[v].title }));
 }
 
@@ -163,32 +166,52 @@ export function ConditionFields({ cond: c, isOpen, crossings = true, onChange }:
   const sections = useMemo(() => valueSections(play), [play]);
   const ref = sgParseValueRef(c.value);
   const dist = ref?.kind === 'distance' ? ref : null;
-  const range = useMemo(() => (dist ? { min: 0, max: 1, step: 0.01 } : valueRange(c.value, play)), [c.value, dist, play]);
+  const raw = useMemo(() => (dist ? { min: 0, max: 1, step: 0.01 } : valueRange(c.value, play)), [c.value, dist, play]);
+  const isPct = c.unit === 'pct';
+  // In percent the ruler runs 0..1 (shown as 0–100%); the value now is placed on it by the value's own range.
+  const range = isPct ? { min: 0, max: 1, step: 0.01 } : raw;
   const now = useConditionNow(c, isOpen);
+  const nowShown = now.v === null ? null : isPct ? (now.v - raw.min) / ((raw.max - raw.min) || 1) : now.v;
   const layerRefs = play.layers;
   const cap: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 58, flexShrink: 0 };
   const line: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 };
   const small = { width: 48, height: 22, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}`, textAlign: 'center' as const };
   const span = range.max - range.min || 1;
   const pct = (v: number) => `${Math.max(0, Math.min(1, (v - range.min) / span)) * 100}%`;
-  // The band where it is met, and the lighter strip it holds through (the hysteresis).
-  const th = c.threshold, h = c.hysteresis;
-  const below = c.cmp === 'below' || c.cmp === 'crossDown', equals = c.cmp === 'equals';
-  const band: [number, number] = equals ? [th - c.tolerance, th + c.tolerance] : below ? [range.min, th] : [th, range.max];
-  const hold: [number, number] = equals ? [th - c.tolerance - h, th + c.tolerance + h] : below ? [th, th + h] : [th - h, th];
+  const bands = conditionBands(c, range.min, range.max);
+  const equalsLike = c.cmp === 'equals' || c.cmp === 'not';
+  const isBand = isBandCmp(c.cmp);
+  const history = c.cmp === 'neverAbove' || c.cmp === 'neverBelow';
   const crossing = c.cmp === 'crossUp' || c.cmp === 'crossDown';
-  const state = now.v === null ? 'No value yet' : crossing ? (now.open ? 'Past it: fires on the next crossing back and over' : 'Waiting for it to cross') : now.open ? 'Met: firing' : 'Not met';
+  const state = now.v === null ? 'No value yet' : crossing ? (now.open ? 'Past it: fires on the next crossing back and over' : 'Waiting for it to cross')
+    : history ? (now.open ? 'Not yet: holds until it gets there' : 'It has been there (a rewind starts over)') : now.open ? 'Met: firing' : 'Not met';
+  const shownNum = (v: number) => (isPct ? `${Math.round(v * 100)}%` : fmt(v));
+  // A threshold's ruler: in percent it reads 0–100 (stored as 0..1).
+  const ruler = (value: number, set: (v: number) => void) => isPct
+    ? { value: round(value * 100), min: 0, max: 100, step: 1, onChange: (v: number) => set(round(v / 100)), onType: (v: number) => set(round(v / 100)) }
+    : { value, min: range.min, max: range.max, step: range.step, onChange: set, onType: set };
+  const setCmp = (cmp: CondCmp) => {
+    // A band starts a quarter of the range either side of the threshold's place.
+    if (isBandCmp(cmp) && typeof c.hi !== 'number') { const q = (range.max - range.min) / 4; onChange({ ...c, cmp, threshold: round(Math.max(range.min, c.threshold - q)), hi: round(Math.min(range.max, c.threshold + q)) }); return; }
+    onChange({ ...c, cmp });
+  };
   return (
     <div style={{ order: 1, flexBasis: '100%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2, padding: '8px 10px', borderRadius: radius.md, background: alpha(tk.text.primary, 0.03), boxShadow: `inset 0 0 0 1px ${tk.border.subtle}` }}>
       <div style={line}>
         <span style={cap}>Value</span>
         <GroupedPicker ariaLabel="Value" value={dist ? DIST : c.value} placeholder="Pick a value" sections={sections} height={26} style={{ flex: 1, minWidth: 120, maxWidth: 260 }} width={300} searchPlaceholder="Search values"
           onChange={v => {
-            if (v === DIST) { if (!dist) { const first = play.layers.find(l => l.kind === 'null')?.id ?? 'mouse'; onChange({ ...c, value: `dist:${first}|pt:0.5,0.5`, threshold: 0.15, hysteresis: 0.03 }); } return; }
-            const r = valueRange(v, play);
+            if (v === DIST) { if (!dist) { const first = play.layers.find(l => l.kind === 'null')?.id ?? 'mouse'; const rest: ValueCondition = { ...c }; delete rest.unit; onChange({ ...rest, value: `dist:${first}|pt:0.5,0.5`, threshold: 0.15, hysteresis: 0.03 }); } return; }
+            const r = isPct ? { min: 0, max: 1 } : valueRange(v, play);
             // A new value starts with its threshold in the middle of its range.
-            onChange({ ...c, value: v, threshold: round(r.min + (r.max - r.min) / 2), hysteresis: round((r.max - r.min) * 0.05), tolerance: round((r.max - r.min) * 0.02) });
+            const next: ValueCondition = { ...c, value: v, threshold: round(r.min + (r.max - r.min) / 2), hysteresis: round((r.max - r.min) * 0.05), tolerance: round((r.max - r.min) * 0.02) };
+            if (isBandCmp(c.cmp)) { next.threshold = round(r.min + (r.max - r.min) / 4); next.hi = round(r.min + (r.max - r.min) * 3 / 4); }
+            onChange(next);
           }} />
+        <Segmented size="sm" ariaLabel="Units" value={isPct ? 'pct' : 'raw'} onChange={u => onChange(withUnit(c, u, raw))} options={[
+          { value: 'raw', label: 'Raw', title: 'Thresholds in the value’s own units' },
+          { value: 'pct', label: '%', title: dist ? 'Thresholds as a share of the range seen so far (a distance has no fixed range)' : 'Thresholds as a share of the value’s range: 50% is its middle, whatever the range' },
+        ]} />
       </div>
       {dist && <>
         <div style={line}><span style={cap}>From</span><DistanceAnchorPicker value={dist.a} layers={layerRefs} exclude={dist.b} pads={!!play.padGrid} ariaLabel="Distance from" onChange={a => onChange({ ...c, value: `dist:${a}|${dist.b}` })} /></div>
@@ -196,28 +219,38 @@ export function ConditionFields({ cond: c, isOpen, crossings = true, onChange }:
       </>}
       <div style={line}>
         <span style={cap}>When</span>
-        <Segmented size="sm" ariaLabel="Comparison" value={c.cmp} options={cmpOptions(crossings)} onChange={cmp => onChange({ ...c, cmp })} wrap />
+        <Select ariaLabel="Comparison" value={c.cmp} options={cmpOptions(crossings)} onChange={v => setCmp(v as CondCmp)} height={26} style={{ minWidth: 150 }} />
+        <span style={{ color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}`, flex: 1, minWidth: 120 }}>{COND_LABELS[c.cmp].title}</span>
       </div>
       <div style={{ ...line, flexWrap: 'nowrap' }}>
-        <span style={cap} title={dist ? 'In picture heights: 1 is the height of the picture' : undefined}>{equals ? 'Equals' : 'Threshold'}</span>
+        <span style={cap} title={dist && !isPct ? 'In picture heights: 1 is the height of the picture' : undefined}>{equalsLike ? 'Value' : isBand ? 'Low edge' : 'Threshold'}{isPct ? ' %' : ''}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <RulerSlider ariaLabel="Threshold" value={c.threshold} min={range.min} max={range.max} step={range.step} onChange={threshold => onChange({ ...c, threshold })} onType={threshold => onChange({ ...c, threshold })} />
+          <RulerSlider ariaLabel={isBand ? 'Low edge' : 'Threshold'} {...ruler(c.threshold, threshold => onChange({ ...c, threshold }))} />
         </div>
       </div>
+      {isBand && (
+        <div style={{ ...line, flexWrap: 'nowrap' }}>
+          <span style={cap}>High edge{isPct ? ' %' : ''}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <RulerSlider ariaLabel="High edge" {...ruler(c.hi ?? c.threshold, hi => onChange({ ...c, hi }))} />
+          </div>
+        </div>
+      )}
       <div style={{ ...line, flexWrap: 'nowrap' }}>
         <span style={cap}>Now</span>
-        <div role="meter" aria-label="Value now" aria-valuemin={range.min} aria-valuemax={range.max} aria-valuenow={now.v ?? undefined}
+        <div role="meter" aria-label="Value now" aria-valuemin={range.min} aria-valuemax={range.max} aria-valuenow={nowShown ?? undefined}
           title="The shaded part is where it is met; the lighter strip is how far past it holds before letting go"
           style={{ position: 'relative', flex: 1, minWidth: 60, height: 8, borderRadius: 4, background: tk.bg.field }}>
-          <span style={{ position: 'absolute', top: 0, bottom: 0, left: pct(band[0]), width: `calc(${pct(band[1])} - ${pct(band[0])})`, borderRadius: 4, background: alpha(tk.accent.base, 0.28) }} />
-          <span style={{ position: 'absolute', top: 0, bottom: 0, left: pct(Math.min(hold[0], hold[1])), width: `calc(${pct(Math.max(hold[0], hold[1]))} - ${pct(Math.min(hold[0], hold[1]))})`, background: alpha(tk.accent.base, 0.12) }} />
-          {!equals && <span style={{ position: 'absolute', top: -2, bottom: -2, left: pct(th), width: 2, marginLeft: -1, background: tk.accent.base }} />}
-          {now.v !== null && <span style={{
-            position: 'absolute', top: '50%', left: pct(now.v), width: 12, height: 12, marginLeft: -6, marginTop: -6, borderRadius: 6,
+          {bands.met.map(([a, b], i) => <span key={`m${i}`} style={{ position: 'absolute', top: 0, bottom: 0, left: pct(Math.min(a, b)), width: `calc(${pct(Math.max(a, b))} - ${pct(Math.min(a, b))})`, borderRadius: 4, background: alpha(tk.accent.base, 0.28) }} />)}
+          {bands.hold.map(([a, b], i) => <span key={`h${i}`} style={{ position: 'absolute', top: 0, bottom: 0, left: pct(Math.min(a, b)), width: `calc(${pct(Math.max(a, b))} - ${pct(Math.min(a, b))})`, background: alpha(tk.accent.base, 0.12) }} />)}
+          {!equalsLike && <span style={{ position: 'absolute', top: -2, bottom: -2, left: pct(c.threshold), width: 2, marginLeft: -1, background: tk.accent.base }} />}
+          {isBand && typeof c.hi === 'number' && <span style={{ position: 'absolute', top: -2, bottom: -2, left: pct(c.hi), width: 2, marginLeft: -1, background: tk.accent.base }} />}
+          {nowShown !== null && <span style={{
+            position: 'absolute', top: '50%', left: pct(nowShown), width: 12, height: 12, marginLeft: -6, marginTop: -6, borderRadius: 6,
             background: now.open ? tk.accent.base : tk.bg.panel, boxShadow: `0 0 0 1.5px ${now.open ? tk.accent.base : tk.text.muted}`, transition: 'left 60ms linear',
           }} />}
         </div>
-        <span style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, width: 44, textAlign: 'right', flexShrink: 0 }}>{now.v === null ? '–' : fmt(now.v)}</span>
+        <span style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, width: 44, textAlign: 'right', flexShrink: 0 }}>{nowShown === null ? '–' : shownNum(nowShown)}</span>
       </div>
       <div style={{ ...line, justifyContent: 'space-between' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: now.open ? tk.accent.text : tk.text.muted, font: `500 11.5px ${fontFamily.ui}` }}>
@@ -225,12 +258,14 @@ export function ConditionFields({ cond: c, isOpen, crossings = true, onChange }:
           {state}
         </span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          {equals && <>
+          {equalsLike && <>
             <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }} title="How close counts as equal">±</span>
             <NumberInput value={c.tolerance} min={0} step={range.step} title="How close counts as equal" onCommit={n => onChange({ ...c, tolerance: Math.max(0, n) })} style={small} />
           </>}
-          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }} title="It lets go only this far past the threshold, so it doesn't flicker at the edge">Hysteresis</span>
-          <NumberInput value={c.hysteresis} min={0} step={range.step} title="How far back past the threshold it has to go to let go (or, for a crossing, to be ready again)" onCommit={n => onChange({ ...c, hysteresis: Math.max(0, n) })} style={small} />
+          {!history && <>
+            <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }} title="It lets go only this far past the threshold, so it doesn't flicker at the edge">Hysteresis</span>
+            <NumberInput value={c.hysteresis} min={0} step={range.step} title="How far back past the threshold it has to go to let go (or, for a crossing, to be ready again)" onCommit={n => onChange({ ...c, hysteresis: Math.max(0, n) })} style={small} />
+          </>}
         </span>
       </div>
     </div>

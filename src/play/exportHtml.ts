@@ -21,6 +21,7 @@
  * graph uses that it still can't run, `leftBehind` what stays out of the page,
  * and `mediaCarried` what each image, video or song adds to it.
  */
+import { conditionRanges } from './conditionRange';
 import runtimeSource from './runtime/play-runtime.js?raw';
 import particleSource from './particle-sim.js?raw';
 import geometrySource from './kit/geometry.js?raw';
@@ -367,6 +368,9 @@ export function playBundle(input: PlayHtmlInput) {
   delete play.source;
   // Takes are for rendering in the app; the page never plays them back.
   delete play.takes;
+  // Percent conditions measure against their value's range; the page has no list of layer properties, so it carries the table.
+  const ranges = conditionRanges(play);
+  if (Object.keys(ranges).length) (play as PlayRecord & { condRanges?: Record<string, [number, number]> }).condRanges = ranges;
   // Projection mapping is for the app's output window (docs/projection.md); a page never warps itself.
   delete play.projection;
   // Custom Finish effects from a sealed pack go in as code: the page compiles them (a shader reaches the GPU as text anyway).

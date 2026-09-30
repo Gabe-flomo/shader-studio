@@ -5,9 +5,11 @@
  * in the app, in a take and on a website. Pure: no DOM, no clock.
  *
  *   sgGate          is a value past a threshold (below, above, equal within a
- *                   tolerance), with hysteresis so it doesn't flicker at the edge
+ *                   tolerance, not equal, between or outside two edges), with
+ *                   hysteresis so it doesn't flicker at the edge
  *   sgCondStep      a condition over frames: opens, closes, or taps once for a
- *                   crossing (crosses up / crosses down)
+ *                   crossing (crosses up / crosses down); raw or as a share of
+ *                   the value's range; has never reached
  *   sgRunActions    one frame of actions, with signals passed on down a chain:
  *                   each signal at most once a frame, and at most SG_DEPTH links
  *   sgSwapStep      the axis swap of a pair mapping: drive A until it crosses a
@@ -23,12 +25,17 @@ export const SG_DEPTH = 8;
 /**
  * Is the condition met, given whether it was met last frame? `v` null (a hand
  * out of view, a missing layer) is never met.
- *   below   opens under `threshold`, holds until above threshold + hysteresis
- *   above   opens over `threshold`, holds until below threshold − hysteresis
- *   equals  opens within `tolerance` of it, holds until tolerance + hysteresis
- * A crossing reads as the level it crosses into (crossUp → above).
+ *   below    opens under `threshold`, holds until above threshold + hysteresis
+ *   above    opens over `threshold`, holds until below threshold − hysteresis
+ *   equals   opens within `tolerance` of it, holds until tolerance + hysteresis
+ *   not      the opposite of equals: opens further than `tolerance` from it,
+ *            holds until back within tolerance − hysteresis
+ *   between  opens inside `threshold`..`hi`, holds until hysteresis past an edge
+ *   outside  opens beyond either edge, holds until hysteresis back inside
+ * A crossing reads as the level it crosses into (crossUp → above). A band's
+ * edges can be given either way round.
  */
-export function sgGate(open, v, cmp, threshold, hysteresis, tolerance) {
+export function sgGate(open, v, cmp, threshold, hysteresis, tolerance, hi) {
   if (v === null || v === undefined || !Number.isFinite(v)) return false;
   const h = Math.max(0, hysteresis || 0);
   switch (cmp) {
@@ -38,14 +45,46 @@ export function sgGate(open, v, cmp, threshold, hysteresis, tolerance) {
       const tol = Math.max(0, tolerance || 0);
       return Math.abs(v - threshold) <= (open ? tol + h : tol);
     }
+    case 'not': {
+      const tol = Math.max(0, tolerance || 0);
+      return Math.abs(v - threshold) > (open ? Math.max(0, tol - h) : tol);
+    }
+    case 'between': case 'outside': {
+      const b = Number.isFinite(hi) ? hi : threshold;
+      const lo = Math.min(threshold, b), up = Math.max(threshold, b);
+      if (cmp === 'between') return open ? v >= lo - h && v <= up + h : v >= lo && v <= up;
+      // Outside lets go only once well inside; a band narrower than twice the hysteresis lets go at its middle.
+      if (!open) return v < lo || v > up;
+      const inLo = Math.min(lo + h, (lo + up) / 2), inHi = Math.max(up - h, (lo + up) / 2);
+      return !(v >= inLo && v <= inHi);
+    }
     default:
       return open ? v >= threshold - h : v > threshold;
   }
 }
 
-/** A condition's memory between frames. */
+/** A condition's memory between frames: met or not, whether it has a reading yet, and the lowest and highest seen. */
 export function sgCondNew() {
-  return { open: false, known: false };
+  return { open: false, known: false, lo: Infinity, hi: -Infinity };
+}
+
+/** The clock went back (a rewind): forget the lowest and highest seen, so the same timeline reads the same way again. */
+export function sgCondRewind(st) {
+  st.lo = Infinity; st.hi = -Infinity;
+}
+
+/** Does this comparison look at the history (the lowest or highest seen) rather than the value now? */
+export function sgIsHistory(cmp) {
+  return cmp === 'neverAbove' || cmp === 'neverBelow';
+}
+
+/**
+ * `v` as a share of a range: (v − lo) / (hi − lo). A range of nothing reads
+ * 0; a reversed range (hi < lo) works too. `range` is [lo, hi], or null for
+ * the range seen so far (unbounded readings: a speed, a count, a distance).
+ */
+export function sgPct(v, lo, hi) {
+  return hi === lo ? 0 : (v - lo) / (hi - lo);
 }
 
 /** Does this comparison fire on the crossing only (a tap), rather than while it holds? */
@@ -54,22 +93,35 @@ export function sgIsCrossing(cmp) {
 }
 
 /**
- * One frame of a condition (`c`: { cmp, threshold, hysteresis, tolerance })
- * reading `v`. Returns what happened:
+ * One frame of a condition (`c`: { cmp, threshold, hi, hysteresis,
+ * tolerance, unit }) reading `v`. Returns what happened:
  *   'open'   a level condition became true (a press that is held)
  *   'close'  it stopped being true (the release)
  *   'tap'    a crossing happened: a press and its release in one frame
  *   null     nothing changed
  * A crossing needs to have seen the other side first: a value already above
  * when it starts doesn't count as crossing up.
+ *
+ * `c.unit` 'pct': the thresholds (and hysteresis and tolerance) are shares of
+ * the value's range, 0..1: `range` ([lo, hi], the host's: a control's or a
+ * layer property's own), else the range seen so far. Has never reached
+ * (neverAbove / neverBelow) holds while the highest (lowest) value seen has
+ * stayed under (over) the threshold; it needs one reading first.
  */
-export function sgCondStep(st, v, c) {
+export function sgCondStep(st, v, c, range) {
   const was = st.open;
-  const now = sgGate(was, v, c.cmp, c.threshold, c.hysteresis, c.tolerance);
+  const ok = v !== null && v !== undefined && Number.isFinite(v);
+  if (ok) { if (v < st.lo) st.lo = v; if (v > st.hi) st.hi = v; }
+  const pct = c.unit === 'pct';
+  const lo = range ? range[0] : st.lo, hi = range ? range[1] : st.hi;
+  const unit = x => (pct ? sgPct(x, lo, hi) : x);
+  let now;
+  if (sgIsHistory(c.cmp)) now = st.hi >= st.lo && (c.cmp === 'neverAbove' ? unit(st.hi) < c.threshold : unit(st.lo) > c.threshold);
+  else now = sgGate(was, ok ? unit(v) : v, c.cmp, c.threshold, c.hysteresis, c.tolerance, c.hi);
   st.open = now;
   if (sgIsCrossing(c.cmp)) {
     const seen = st.known;
-    st.known = v !== null && v !== undefined && Number.isFinite(v);
+    st.known = ok;
     return now && !was && seen ? 'tap' : null;
   }
   st.known = v !== null && v !== undefined;
@@ -192,5 +244,7 @@ export function sgScreenPoint(ref) {
 
 /** The trigger key a value condition counts its presses under (its identity, not its firing mode). */
 export function sgValueKey(t) {
-  return 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance;
+  // A band's upper edge and the percent unit only when set, so keys of older conditions stay as they were.
+  return 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance
+    + (Number.isFinite(t.hi) ? ':' + t.hi : '') + (t.unit === 'pct' ? ':pct' : '');
 }

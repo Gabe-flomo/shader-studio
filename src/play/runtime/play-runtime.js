@@ -1566,6 +1566,9 @@ void main() {
       const l = layersById.get(r.layerId);
       return l && typeof l[r.key] === 'number' ? layerValue(r.layerId, r.key, l[r.key]) : null;
     }
+    // A percent condition's range (the app's play/conditionRange.ts, carried in the bundle); null: raw, or the range seen so far.
+    const condRanges = play.condRanges || {};
+    function condRange(c) { return c.unit === 'pct' ? condRanges[c.value] || null : null; }
     function triggerInput(t) {
       if (t.on === 'beat') { const b = beatAt(t.bpm, t.beats, time); return { presses: b.count, gate: b.gate }; }
       const k = triggerKey(t);
@@ -1649,7 +1652,7 @@ void main() {
         const c = t.on === 'proximity' ? proximityCondition(t) : t;
         let st = condStates.get(k);
         if (!st) { st = SG.condNew(); condStates.set(k, st); }
-        const ev = SG.condStep(st, readValue(c.value), c);
+        const ev = SG.condStep(st, readValue(c.value), c, condRange(c));
         if (ev === 'open') press(k);
         else if (ev === 'close') release(k);
         else if (ev === 'tap') { press(k); release(k); }
@@ -1827,8 +1830,8 @@ void main() {
         else { const src = m.source.source; ua = ub = src.kind === 'trigger' ? readTrigger({ id: m.id, source: src }, dt) : readSource(src); }
         const swapping = !!m.swap && m.source.kind === 'value';
         let useA = swapping ? st.swap.axis === 'a' : m.affect !== 'b', useB = swapping ? st.swap.axis === 'b' : m.affect !== 'a';
-        if (m.a.when) { SG.condStep(st.condA, readValue(m.a.when.value), m.a.when); if (!st.condA.open) useA = false; }
-        if (m.b.when) { SG.condStep(st.condB, readValue(m.b.when.value), m.b.when); if (!st.condB.open) useB = false; }
+        if (m.a.when) { SG.condStep(st.condA, readValue(m.a.when.value), m.a.when, condRange(m.a.when)); if (!st.condA.open) useA = false; }
+        if (m.b.when) { SG.condStep(st.condB, readValue(m.b.when.value), m.b.when, condRange(m.b.when)); if (!st.condB.open) useB = false; }
         if (useA && ua !== null) st.a = smoothAxis(st.a, m.a.outMin + (m.a.outMax - m.a.outMin) * curve(ua, m.a), m.a, dt);
         if (useB && ub !== null) st.b = smoothAxis(st.b, m.b.outMin + (m.b.outMax - m.b.outMin) * curve(ub, m.b), m.b, dt);
         if (st.a !== undefined && (swapping || m.affect !== 'b')) writePlain(ca, st.a, driven);
@@ -1893,7 +1896,7 @@ void main() {
       else if (inc.on === 'threshold') count = INC.threshold(st, m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source), inc);
       else {
         let open = true;
-        if (inc.when && SG) { let c = incCond.get(m.id); if (!c) { c = SG.condNew(); incCond.set(m.id, c); } SG.condStep(c, readValue(inc.when.value), inc.when); open = c.open; }
+        if (inc.when && SG) { let c = incCond.get(m.id); if (!c) { c = SG.condNew(); incCond.set(m.id, c); } SG.condStep(c, readValue(inc.when.value), inc.when, condRange(inc.when)); open = c.open; }
         count = INC.repeat(st, time, inc, open);
       }
       if (count > 0) for (const ev of INC.advance(st, inc, rg[0], rg[1], count)) { const sig = ev === 'step' ? inc.stepSignal : inc.resetSignal; if (sig) emitSignal(sig); }
@@ -2238,6 +2241,14 @@ void main() {
           input.oninput = () => { const h = input.value; setColour(c, [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255]); };
           row.append(input);
           readouts.set(c.id, { out, input, kind: 'color' });
+        } else if (c.toggle) {
+          // A switch (a boolean control): off is its low end, on its high end.
+          const input = el('input'); input.type = 'checkbox'; input.className = 'ssp-switch';
+          const b = base.get(c.id); input.checked = typeof b === 'number' && b >= (c.min + c.max) / 2;
+          input.onchange = () => { const v = input.checked ? c.max : c.min; setFloat(c, v); out.textContent = input.checked ? 'On' : 'Off'; };
+          out.textContent = input.checked ? 'On' : 'Off';
+          row.append(input);
+          readouts.set(c.id, { out, input, kind: 'toggle', mid: (c.min + c.max) / 2 });
         } else {
           const input = el('input'); input.type = 'range'; input.className = 'ssp-range';
           input.min = c.min; input.max = c.max; input.step = c.step || (c.max - c.min) / 400;
@@ -2263,7 +2274,8 @@ void main() {
         // A driven colour stays editable: mappings scale it or set one channel, starting from what the picker says.
         if (r.kind === 'color') { r.out.textContent = driven ? hex(v) : ''; continue; }
         r.input.disabled = driven;
-        if (driven) { r.input.value = v; r.out.textContent = fmt(v, r.step); }
+        if (driven && r.kind === 'toggle') { r.input.checked = v >= r.mid; r.out.textContent = r.input.checked ? 'On' : 'Off'; }
+        else if (driven) { r.input.value = v; r.out.textContent = fmt(v, r.step); }
       }
     };
 

@@ -34,6 +34,12 @@ export interface PlayControl {
   /** Action controls: the action's amount (particles for Burst, strength for Scatter). */
   amount?: number;
   /**
+   * A slider shown as a switch (a boolean control): off is `min`, on is `max`,
+   * a plain number underneath, so mappings, conditions and takes treat it as
+   * any other slider. Sliders only.
+   */
+  toggle?: boolean;
+  /**
    * The panel shows controls with the same group under one heading, in the
    * list's order ("Audio readers · Live": the readers' controls,
    * play/readerControls.ts). Absent = ungrouped.
@@ -85,7 +91,8 @@ export type TriggerOn =
   | { on: 'note'; channel: number; note: number }
   | { on: 'mouse' }
   | { on: 'osc'; address: string }
-  | { on: 'beat'; bpm: number; beats: number }
+  /** A pulse on the setup's clock: every `beats` beats at `bpm`. `unit` 'hz' shows it as a rate (bpm / 60 / beats per second); the timing is the same. */
+  | { on: 'beat'; bpm: number; beats: number; unit?: 'hz' }
   /**
    * A shape layer: `click` a press on it, `enter` the pointer moving onto it,
    * `fill` particles filling it past `threshold` (0..1, see the sensor source).
@@ -126,8 +133,10 @@ export type TriggerOn =
  *   crossUp / crossDown   the moment it passes upward / downward (a tap)
  *   equals          while it is within `tolerance` of the threshold
  */
-export type CondCmp = 'below' | 'above' | 'crossUp' | 'crossDown' | 'equals';
-export const COND_CMPS: readonly CondCmp[] = ['below', 'above', 'crossUp', 'crossDown', 'equals'];
+export type CondCmp = 'below' | 'above' | 'crossUp' | 'crossDown' | 'equals' | 'not' | 'between' | 'outside' | 'neverAbove' | 'neverBelow';
+export const COND_CMPS: readonly CondCmp[] = ['below', 'above', 'crossUp', 'crossDown', 'equals', 'not', 'between', 'outside', 'neverAbove', 'neverBelow'];
+/** Comparisons with two edges (`threshold` the low one, `hi` the high one). */
+export const isBandCmp = (c: CondCmp): boolean => c === 'between' || c === 'outside';
 
 /**
  * A condition on any value. `value` is a path (sgParseValueRef in
@@ -141,8 +150,17 @@ export interface ValueCondition {
   cmp: CondCmp;
   threshold: number;
   hysteresis: number;
-  /** equals: how close counts as equal. */
+  /** equals / not: how close counts as equal. */
   tolerance: number;
+  /** between / outside: the band's other edge (`threshold` is the first). */
+  hi?: number;
+  /**
+   * 'pct': the thresholds, hysteresis and tolerance are shares (0..1) of the
+   * value's range (a control's or a layer property's own, 0..1 for a mapping
+   * or the pointer, else the range seen so far), so 50% means the same
+   * whatever the range. Absent: raw units.
+   */
+  unit?: 'pct';
 }
 
 /** A named signal: actions send it, triggers listen for it. */
@@ -1251,7 +1269,7 @@ function parseTriggerOn(raw: unknown): TriggerOn | null {
     case 'note': return { on: 'note', channel: Math.max(0, Math.min(16, Math.round(num(t.channel, 0)))), note: Math.max(-1, Math.min(127, Math.round(num(t.note, -1)))) };
     case 'mouse': return { on: 'mouse' };
     case 'osc': { const address = str(t.address); return address && address.startsWith('/') ? { on: 'osc', address } : null; }
-    case 'beat': return { on: 'beat', bpm: Math.max(1, num(t.bpm, 120)), beats: Math.max(0.0625, num(t.beats, 1)) };
+    case 'beat': { const b: TriggerOn = { on: 'beat', bpm: Math.max(1, num(t.bpm, 120)), beats: Math.max(0.0625, num(t.beats, 1)) }; if (t.unit === 'hz') b.unit = 'hz'; return b; }
     case 'audio': return { on: 'audio', band: LIVE_BANDS_SET.has(t.band as string) ? (t.band as LiveAudioBand) : 'bass', threshold: Math.max(0.01, Math.min(0.99, num(t.threshold, 0.6))) };
     case 'zone': {
       const layerId = str(t.layerId);
@@ -1293,7 +1311,10 @@ export function parseCondition(raw: unknown): ValueCondition | null {
   if (!value || value.length > 400 || !sgParseValueRef(value)) return null;
   const cmp = typeof t.cmp === 'string' && (COND_CMPS as readonly string[]).includes(t.cmp) ? (t.cmp as CondCmp) : 'above';
   const big = (x: number) => Math.max(-1e6, Math.min(1e6, x));
-  return { value, cmp, threshold: big(num(t.threshold, 0.5)), hysteresis: Math.max(0, big(num(t.hysteresis, 0))), tolerance: Math.max(0, big(num(t.tolerance, 0.01))) };
+  const out: ValueCondition = { value, cmp, threshold: big(num(t.threshold, 0.5)), hysteresis: Math.max(0, big(num(t.hysteresis, 0))), tolerance: Math.max(0, big(num(t.tolerance, 0.01))) };
+  if (typeof t.hi === 'number' && Number.isFinite(t.hi)) out.hi = big(t.hi);
+  if (t.unit === 'pct') out.unit = 'pct';
+  return out;
 }
 
 /** A trigger with its firing mode: the mode is kept only when it isn't the default (so old files save unchanged). */
@@ -1524,6 +1545,7 @@ function parseControl(raw: unknown): PlayControl | null {
   };
   if (typeof c.step === 'number' && c.step > 0) out.step = c.step;
   if (act) out.amount = num(c.amount, defaultActionAmount(act.do));
+  if (kind === 'float' && c.toggle === true) out.toggle = true;
   if (typeof c.group === 'string' && c.group.trim()) out.group = c.group.trim().slice(0, 80);
   return out;
 }

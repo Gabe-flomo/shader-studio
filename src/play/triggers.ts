@@ -140,6 +140,17 @@ export function anchorDistance(a: { x: number; y: number }, b: { x: number; y: n
 }
 
 /** A beat trigger's press count and gate at `time` seconds: one press per `beats` beats, gate open for the first quarter (≤ 120 ms). */
+/** A beat trigger's rate in pulses a second. */
+export function pulseHz(t: { bpm: number; beats: number }): number {
+  return t.bpm / 60 / Math.max(0.0625, t.beats);
+}
+
+/** The tempo and beat count that pulse `hz` times a second (a tempo of at least 1 bpm; slower rates wait more beats). */
+export function pulseForHz(hz: number): { bpm: number; beats: number } {
+  const perMin = Math.max(0.01, Math.min(60, hz)) * 60;
+  return perMin >= 1 ? { bpm: perMin, beats: 1 } : { bpm: 1, beats: 1 / perMin };
+}
+
 export function beatAt(bpm: number, beats: number, time: number): { count: number; gate: boolean } {
   const period = (60 / Math.max(1, bpm)) * Math.max(0.0625, beats);
   const count = Math.floor(time / period) + 1;

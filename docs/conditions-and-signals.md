@@ -27,6 +27,11 @@ A distance's ends (anchors) are a layer (its centre, as proximity measures it), 
 - **Below** / **Above**: true while the value is under / over the threshold. Once true, it stays true until the value goes back past the threshold by the **hysteresis**, so a value hovering at the edge doesn't flicker.
 - **Equals**: true while the value is within the **tolerance** of the threshold (plus the hysteresis to let go).
 - **Crosses ↑** / **Crosses ↓**: the moment the value passes the threshold going up / down. It has to have been on the other side first (a value that starts above doesn't count as crossing up), and it is ready again only once it has gone back past the hysteresis.
+- **Is not**: equals turned round: true while the value is further than the tolerance from the threshold (it lets go once back within the tolerance less the hysteresis).
+- **Between** / **Outside**: a band with two edges (`threshold` and `hi`, either way round). Between is true inside it and holds until the hysteresis past an edge; Outside is true beyond either edge and lets go once the hysteresis back inside (at the middle, for a band narrower than twice the hysteresis).
+- **Never reached** / **Never dropped to**: true while the highest (lowest) value seen is still under (over) the threshold. It needs one reading first, and starts over when the clock goes back, so a replayed timeline reads the same.
+
+**Raw or %.** The switch beside the value puts the thresholds (and the hysteresis and tolerance) in the value's own units, or as a share of its range: 50% is the middle, whatever the range. The range is the control's own min and max, the layer property's, the Finish or sound effect number's, 0..1 for a mapping's reading and the pointer; a distance has none, so it uses the range seen so far. The range is looked up when the condition runs (`play/conditionRange.ts`), so widening a slider keeps 50% at its middle. Switching keeps the thresholds in the same place.
 
 A missing value (a hand out of view, a deleted layer) is never true, and a crossing forgets which side it was on.
 
@@ -103,11 +108,15 @@ All optional, and left out when empty (older files load unchanged):
 }
 ```
 
+A condition may also carry `hi` (a band's other edge) and `"unit": "pct"`; both are left out when unset.
+
+A slider can show as a switch (`"toggle": true` on a float control): off is its low end, on its high end, a plain number underneath, so mappings, conditions and takes see a slider. The Beat trigger's `"unit": "hz"` shows its pulse as a rate; the timing is the same (`bpm / 60 / beats` a second).
+
 A pair needs two different float controls, each in one pair at most; a pair mapping needs its pair. A condition whose value path isn't one is dropped with its trigger. A value path to something missing is kept and simply never holds.
 
 ## Website exports
 
-The runtime runs conditions, signals, pair mappings and axis swaps through the inlined kit (`SSKit.signals`), frame for frame like the app (`src/play/__tests__/conditionsSignals.test.ts` checks one against the other). The exported player's panel shows a position pair as an XY pad (`.ssp-xy`; an axis a mapping drives stays put) and any other pair as two sliders. The pad grid's last pad (`pad:last`) is read from the page's own pad grid.
+The runtime runs conditions, signals, pair mappings and axis swaps through the inlined kit (`SSKit.signals`), frame for frame like the app (`src/play/__tests__/conditionsSignals.test.ts` checks one against the other). A percent condition's range comes with the bundle (`condRanges`: value path → [lo, hi]), since the page has no list of layer properties. A switch shows as a checkbox. The exported player's panel shows a position pair as an XY pad (`.ssp-xy`; an axis a mapping drives stays put) and any other pair as two sliders. The pad grid's last pad (`pad:last`) is read from the page's own pad grid.
 
 ## Not yet
 
