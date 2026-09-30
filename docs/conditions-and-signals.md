@@ -71,6 +71,17 @@ Signals pass down a chain in the same frame: A sends S1, an action on S1 sends S
 
 A loop (S1 sends S2, S2 sends S1) therefore runs at most once around per frame.
 
+**Timing and chance** (on the card; `sgShapeStep` in `play/kit/signals.js`, the same on a website):
+
+- **Hold for** (`hold`, seconds): it must stay true this long before it counts, a debounce that ignores flickers.
+- **Linger** (`linger`): it stays true this long after it stops, so a one-frame pulse becomes a held level.
+- **Delay** (`delay`): its rise and its fall arrive this much later ("A sets off B half a second after"); at most 64 on the way. A signal sent by an action goes out when the next frame works it out.
+- **Chance** (`chance`, 10–100%; off is the signal's own switch): each time it starts, one roll decides whether the whole activation goes out: no level, no rise, no fall if not, so nothing downstream (actions, Set, combinations) sees it. The roll is a hash of the signal's `seed` and how many times it has started, so the same timeline rolls the same way and a render matches; **Re-roll** picks another seed.
+
+All four run on the setup's clock and start over on a rewind. Each is at most 10 s.
+
+A mapping can also have a **Delay** (`delayMs`, beside Smooth, at most 10 s): its value arrives that much later, before the smoothing (`sgLagStep`, a short ring of recent values read between samples). Several mappings from one source with growing delays make a trail that follows the leader.
+
 In the file a signal may carry `"when": { "kind": "trigger", "trigger": {…} }` or `"when": { "kind": "logic", "op": "and" | "or" | "not" | "xor", "inputs": ["sig_…"] }`; inputs that aren't signals of the setup are dropped.
 
 Deleting a signal leaves what sent or listened for it in place, marked **Missing signal**. Signals themselves aren't recorded in takes: what they did is (the actions they fired, the controls they moved).

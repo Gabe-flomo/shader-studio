@@ -29,7 +29,7 @@ import { addThen, addWhen, signalFlow } from './signalFlow';
 import { backgroundLayerOf, SIGNAL_ACTION, type PlayAction, type PlayRecord, type SignalDef, type SignalLogic } from '../../types/play';
 import { ActionsSection, addAction } from './layers/ActionsSection';
 import { SignalRow } from './ConditionFields';
-import { SignalCaptureEditor, SignalDefEditor } from './SignalDefEditor';
+import { SignalCaptureEditor, SignalDefEditor, SignalTimingEditor } from './SignalDefEditor';
 import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
 import { usePlayUi } from './playUi';
@@ -231,6 +231,7 @@ export function SignalsPage({ play, onChange, wide }: { play: PlayRecord; onChan
               </div>
               <SignalDefEditor signal={g.signal} play={play} onChange={onChange} />
               <SignalCaptureEditor signal={g.signal} play={play} onChange={onChange} />
+              <SignalTimingEditor signal={g.signal} onChange={onChange} />
               {(() => {
                 const links = signalLinks(play, g.signal.id);
                 // Actions are rows; its own definition is edited just above.

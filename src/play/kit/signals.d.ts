@@ -15,6 +15,16 @@ export function sgCondStep(st: SgCondState, v: number | null | undefined, c: Pic
 export function sgRunActions<A extends { do: string; signal?: string; trigger?: { on: string } }>(actions: readonly A[], fires: (a: A) => number, run: (a: A) => void, emit: (id: string) => void, stats?: { depth: number; tripped: boolean }): string[];
 export function sgLogic(op: string, levels: readonly boolean[]): boolean;
 export function sgSignalOrder(signals: ReadonlyArray<{ id: string; when?: { kind: string; inputs?: string[] } }>): { order: string[]; cyclic: Set<string> };
+export function sgHash01(seed: number, n: number): number;
+export interface SgShapeState { onAt: number; lastOn: number; held: boolean; n: number; pass: boolean; q: Array<[number, boolean]>; out: boolean; gated: boolean }
+export interface SgShapeOptions { hold?: number; linger?: number; chance?: number; seed?: number; delay?: number }
+export function sgShapeNew(): SgShapeState;
+export function sgShapeRewind(st: SgShapeState): void;
+export function sgShaped(o: SgShapeOptions | undefined): boolean;
+export function sgShapeStep(st: SgShapeState, raw: boolean, t: number, o: SgShapeOptions): boolean;
+export interface SgLagState { t: number[]; v: number[] }
+export function sgLagNew(): SgLagState;
+export function sgLagStep(st: SgLagState, t: number, v: number, delay: number): number | null;
 export interface SgSwapState { axis: 'a' | 'b'; prevA: number | null; prevB: number | null }
 export function sgSwapNew(): SgSwapState;
 export function sgSwapStep(st: SgSwapState, va: number | null | undefined, vb: number | null | undefined, sw: Pick<PairSwap, 'at' | 'dir' | 'backAt' | 'backDir'>): 'toA' | 'toB' | null;

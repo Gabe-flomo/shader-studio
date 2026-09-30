@@ -10,8 +10,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { playEngine } from '../../lib/playEngine';
-import { CAPTURE_POS, SIGNAL_INPUTS_MAX, layerNumericProps, type PlayRecord, type PlaySignal, type SignalCapture, type SignalDef, type SignalLogic } from '../../types/play';
+import { CAPTURE_POS, SIGNAL_CHANCE_MIN, SIGNAL_INPUTS_MAX, SIGNAL_TIME_MAX, layerNumericProps, type PlayRecord, type PlaySignal, type SignalCapture, type SignalDef, type SignalLogic } from '../../types/play';
 import { Button } from '../ui/Button';
+import { NumberInput } from '../NodeGraph/NumberInput';
+import { sgShaped } from '../../play/kit/signals.js';
 import { GroupedPicker } from '../ui/GroupedPicker';
 import { Menu } from '../ui/Menu';
 import { toast } from '../ui/toastStore';
@@ -184,6 +186,53 @@ export function SignalCaptureEditor({ signal: s, play, onChange }: { signal: Pla
                 }))]} />}
               </>}
           <span style={{ color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>Jumps, and stays until the next capture. Glide, Go back and Go to are in Mappings.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A signal's timing and chance (play/kit/signals.js sgShapeStep): Hold for
+ * (it must stay true this long first), Linger (it stays true this long after),
+ * Delay (its rise and fall arrive late: A sets off B half a second after) and
+ * Chance (10 to 100%: each activation rolls once, seeded, so the same timeline
+ * plays the same; Re-roll picks another sequence).
+ */
+export function SignalTimingEditor({ signal: s, onChange }: { signal: PlaySignal; onChange: Change }) {
+  const tk = useTokens();
+  const [open, setOpen] = useState(() => sgShaped(s));
+  const set = (patch: Partial<Pick<PlaySignal, 'delay' | 'hold' | 'linger' | 'chance' | 'seed'>>) => onChange(p => ({ ...p, signals: (p.signals ?? []).map(x => {
+    if (x.id !== s.id) return x;
+    const n: PlaySignal = { ...x, ...patch };
+    for (const k of ['delay', 'hold', 'linger'] as const) if (!(n[k]! > 0)) delete n[k];
+    if (!(n.chance! < 1)) delete n.chance;
+    return n;
+  }) }));
+  const cap: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' };
+  const num: React.CSSProperties = { width: 46, height: 24, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}`, textAlign: 'center' };
+  const word = (t: string, title?: string) => <span title={title} style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{t}</span>;
+  const secs = (k: 'delay' | 'hold' | 'linger', label: string, title: string) => <>
+    {word(label, title)}
+    <NumberInput value={s[k] ?? 0} min={0} max={SIGNAL_TIME_MAX} step={0.05} title={title} onCommit={n => set({ [k]: Math.max(0, Math.min(SIGNAL_TIME_MAX, n)) })} style={num} />
+    {word('s')}
+  </>;
+  const summary = [s.hold ? `hold ${s.hold}s` : '', s.linger ? `linger ${s.linger}s` : '', s.delay ? `delay ${s.delay}s` : '', s.chance !== undefined ? `${Math.round(s.chance * 100)}%` : ''].filter(Boolean).join(' · ');
+  return (
+    <div data-signal-timing={s.id} style={{ marginTop: 8, padding: '0 2px' }}>
+      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer' }}>
+        <span style={cap}>{open ? '▾' : '▸'} Timing and chance</span>
+        {!open && <span style={{ color: tk.text.secondary, font: `11px ${fontFamily.ui}` }}>{summary || 'at once, every time'}</span>}
+      </button>
+      {open && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
+          {secs('hold', 'Hold for', 'It must stay true this long before it counts (ignores flickers)')}
+          {secs('linger', 'Linger', 'It stays true this long after it stops (a pulse becomes a held level)')}
+          {secs('delay', 'Delay', 'Its start and its end arrive this much later')}
+          {word('Chance', 'Each time it starts, a roll decides whether it goes out at all (off is the signal’s own switch)')}
+          <NumberInput value={Math.round((s.chance ?? 1) * 100)} min={SIGNAL_CHANCE_MIN * 100} max={100} step={5} title="Chance each activation goes out, 10–100%" onCommit={n => set({ chance: Math.max(SIGNAL_CHANCE_MIN, Math.min(1, n / 100)) })} style={num} />
+          {word('%')}
+          {s.chance !== undefined && <Button size="sm" variant="ghost" icon="dice" title="Roll a different sequence (the same timeline still plays the same way)" onClick={() => set({ seed: Math.floor(Math.random() * 1e9) })}>Re-roll</Button>}
         </div>
       )}
     </div>

@@ -201,7 +201,25 @@ export type SignalDef =
  * became true) is what "When a signal fires" hears; held and on-release
  * firing modes hear its level and its fall. Actions can also send it.
  */
-export interface PlaySignal { id: string; name: string; when?: SignalDef; capture?: SignalCapture }
+export interface PlaySignal {
+  id: string;
+  name: string;
+  when?: SignalDef;
+  capture?: SignalCapture;
+  /** Seconds its rise and fall arrive late (play/kit/signals.js sgShapeStep). */
+  delay?: number;
+  /** Seconds it must stay true before it counts (a debounce). */
+  hold?: number;
+  /** Seconds it stays true after it stops (a pulse becomes a held level). */
+  linger?: number;
+  /** 0.1..1: the chance each activation goes out (a seeded roll per rise); absent = always. */
+  chance?: number;
+  /** The seed of its rolls: the same timeline rolls the same way. */
+  seed?: number;
+}
+/** A signal's timing and chance, at most 10 s each; chance 10% to 100% (off is the signal's own switch). */
+export const SIGNAL_TIME_MAX = 10;
+export const SIGNAL_CHANCE_MIN = 0.1;
 
 /**
  * A value a signal takes with it (sample and hold): `what` is a condition
@@ -641,6 +659,12 @@ export interface PlayMapping {
   curveY?: number[];
   /** Exponential smoothing time constant in ms (0 = snap). */
   smoothMs: number;
+  /**
+   * Delay in ms (at most 10 s): the value arrives this much later, before the
+   * smoothing (play/kit/signals.js sgLagStep). Several mappings from one
+   * source with growing delays make a trail that follows the leader.
+   */
+  delayMs?: number;
   /** Colour controls only: which channel the mapping writes (all three when unset). */
   channel?: 0 | 1 | 2;
   enabled: boolean;
@@ -1661,6 +1685,7 @@ function parseMapping(raw: unknown, controlIds: Set<string>): PlayMapping | null
     enabled: m.enabled !== false,
   };
   if (m.channel === 0 || m.channel === 1 || m.channel === 2) out.channel = m.channel;
+  if (typeof m.delayMs === 'number' && m.delayMs > 0) out.delayMs = Math.min(10000, m.delayMs);
   if (out.curve === 'custom') {
     const ys = curveY(m.curveY);
     if (ys) out.curveY = ys; else out.curve = 'linear';
@@ -1897,6 +1922,9 @@ function parseSignals(raw: unknown): PlaySignal[] {
     const sig: PlaySignal = { id: id.slice(0, 80), name: (typeof o.name === 'string' && o.name.trim() ? o.name : 'Signal').slice(0, 60) };
     const when = parseSignalDef(o.when);
     if (when) sig.when = when;
+    for (const k of ['delay', 'hold', 'linger'] as const) { const v = o[k]; if (typeof v === 'number' && v > 0) sig[k] = Math.min(SIGNAL_TIME_MAX, v); }
+    if (typeof o.chance === 'number' && o.chance < 1) sig.chance = Math.max(SIGNAL_CHANCE_MIN, o.chance);
+    if (typeof o.seed === 'number' && Number.isFinite(o.seed)) sig.seed = Math.round(o.seed);
     const cap = o.capture as Record<string, unknown> | undefined;
     if (cap && typeof cap === 'object' && typeof cap.what === 'string' && cap.what) {
       sig.capture = { what: cap.what.slice(0, 200), at: cap.at === 'fall' || cap.at === 'held' ? cap.at : 'rise' };

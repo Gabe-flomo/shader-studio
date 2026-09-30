@@ -20,6 +20,23 @@ import { layerPorts } from '../../play/layerPorts';
 
 export type MiniMapperTarget = MapTarget;
 
+/**
+ * The Random front door (the plan's Shake, Wander, Hop, Chaos): the Noise
+ * source's four kinds with rates that feel like their names. Seeded, so the
+ * same timeline plays the same way; a new seed each time one is made.
+ */
+export const RANDOM_PRESETS = [
+  { id: 'shake', label: 'Shake', description: 'Quick, smooth jitter around the middle', type: 'smooth', rate: 6 },
+  { id: 'wander', label: 'Wander', description: 'Drifts slowly, each step from the last', type: 'drift', rate: 0.5 },
+  { id: 'hop', label: 'Hop', description: 'Holds a random value, then jumps to another, once a second', type: 'stepped', rate: 1 },
+  { id: 'chaos', label: 'Chaos', description: 'A new random value every moment', type: 'random', rate: 30 },
+] as const;
+
+export function randomSource(id: (typeof RANDOM_PRESETS)[number]['id'], seed = Math.floor(Math.random() * 1000)): PlaySource {
+  const r = RANDOM_PRESETS.find(x => x.id === id)!;
+  return { kind: 'noise', type: r.type, rate: r.rate, seed, steps: 0 };
+}
+
 /** The picker's value for "no source": the control alone, mappable later. */
 export const CONTROL_ONLY = 'controlOnly';
 /** The picker's value for Increment: wires a placeholder source with defaults to tune in Mappings. */
@@ -87,6 +104,8 @@ export function miniMapperSections(ctx: MiniMapperContext): PickerSection[] {
     for (const r of layerPorts(l).readings) layerItems.push(sensorItem(l, r));
   }
   if (layerItems.length) sections.push({ heading: 'Layers', items: layerItems });
+  // Random, by feel (the Noise source underneath): shake, wander, hop, chaos.
+  sections.push({ heading: 'Random', items: RANDOM_PRESETS.map(r => ({ value: `random:${r.id}`, label: r.label, icon: 'dice' as const, description: r.description })) });
   sections.push({ heading: 'Generators', items: [
     { value: 'lfo', label: 'LFO', icon: 'wave', description: 'Sine, triangle, saw or square' },
     { value: 'noise', label: 'Noise', icon: 'dice', description: 'Smooth, drifting, random or stepped' },
@@ -134,6 +153,7 @@ export function wireMiniMapperPick(p: PlayRecord, value: string, target: MiniMap
   }
   if (value.startsWith('control:')) return wireSource(p, { kind: 'control', controlId: value.slice('control:'.length) }, target);
   if (value.startsWith('reader:')) return wireSource(p, { kind: 'reader', readerId: value.slice('reader:'.length) }, target);
+  if (value.startsWith('random:')) { const r = RANDOM_PRESETS.find(x => x.id === value.slice('random:'.length)); if (r) return wireSource(p, randomSource(r.id), target, 0); }
   return wireSource(p, sourceFromType(value as SourceType, { kind: 'mouse', axis: 'x' }), target);
 }
 

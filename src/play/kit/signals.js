@@ -254,6 +254,80 @@ export function sgSignalOrder(signals) {
   return { order, cyclic };
 }
 
+/** A repeatable 0..1 for (seed, n): the same timeline rolls the same way. */
+export function sgHash01(seed, n) {
+  let h = (Math.imul((seed | 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(n | 0, 0xc2b2ae35)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** A signal's timing and chance, between frames. */
+export function sgShapeNew() {
+  return { onAt: -1, lastOn: -Infinity, held: false, n: 0, pass: true, q: [], out: false, gated: false };
+}
+
+/** The clock went back: forget the rolls and what was on its way, so the same timeline plays the same. */
+export function sgShapeRewind(st) {
+  st.onAt = -1; st.lastOn = -Infinity; st.held = false; st.n = 0; st.pass = true; st.q.length = 0; st.out = false; st.gated = false;
+}
+
+/** Does a signal have timing or chance to work out (sgShapeStep)? */
+export function sgShaped(o) {
+  return !!o && ((o.delay || 0) > 0 || (o.hold || 0) > 0 || (o.linger || 0) > 0 || (typeof o.chance === 'number' && o.chance < 1));
+}
+
+/**
+ * A signal's level through its timing and chance, at `t` (seconds, the
+ * setup's clock): `raw` is what its definition says (or whether it was sent).
+ *   hold     it must stay true this long before it counts (a debounce, an on-delay)
+ *   linger   it stays true this long after it stops (an off-delay)
+ *   chance   0..1: each time it starts, a seeded roll decides whether this
+ *            whole activation goes out (no level, no rise, no fall if not)
+ *   delay    its rise and its fall both arrive this much later (at most 64
+ *            on the way; the oldest drop)
+ * Returns the level everything downstream sees.
+ */
+export function sgShapeStep(st, raw, t, o) {
+  const hold = Math.max(0, o.hold || 0), linger = Math.max(0, o.linger || 0);
+  if (raw) { if (st.onAt < 0) st.onAt = t; st.lastOn = t; } else st.onAt = -1;
+  const held = raw ? t - st.onAt >= hold - 1e-9 : st.held && t - st.lastOn < linger - 1e-9;
+  if (held && !st.held) { st.n++; const c = typeof o.chance === 'number' ? o.chance : 1; st.pass = c >= 1 || sgHash01(o.seed || 0, st.n) < c; }
+  st.held = held;
+  const gated = held && st.pass;
+  const d = Math.max(0, o.delay || 0);
+  if (d <= 0) { st.q.length = 0; st.out = gated; }
+  else {
+    if (gated !== st.gated) { st.q.push([t + d, gated]); if (st.q.length > 64) st.q.shift(); }
+    while (st.q.length && st.q[0][0] <= t + 1e-9) st.out = st.q.shift()[1];
+  }
+  st.gated = gated;
+  return st.out;
+}
+
+/**
+ * A value delayed by `delay` seconds (a mapping's Delay): a ring of the last
+ * values with their times, read at t − delay between the two nearest. Null
+ * until it has something that old (the mapping then writes nothing yet). At
+ * most `delay` × 120 + 2 samples kept.
+ */
+export function sgLagNew() {
+  return { t: [], v: [] };
+}
+export function sgLagStep(st, t, v, delay) {
+  if (st.t.length && t < st.t[st.t.length - 1]) { st.t.length = 0; st.v.length = 0; } // the clock went back
+  st.t.push(t); st.v.push(v);
+  const at = t - delay;
+  // Keep one sample older than what is read, and a bounded ring.
+  while (st.t.length > 2 && st.t[1] <= at) { st.t.shift(); st.v.shift(); }
+  const cap = Math.ceil(delay * 120) + 2;
+  while (st.t.length > cap) { st.t.shift(); st.v.shift(); }
+  if (st.t[0] > at + 1e-9) return null;
+  if (st.t.length === 1 || st.t[1] === st.t[0]) return st.v[0];
+  const k = Math.max(0, Math.min(1, (at - st.t[0]) / (st.t[1] - st.t[0])));
+  return st.v[0] + (st.v[1] - st.v[0]) * k;
+}
+
 /** An axis swap's memory: the axis being driven and each axis's last driven value. */
 export function sgSwapNew() {
   return { axis: 'a', prevA: null, prevB: null };

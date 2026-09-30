@@ -2013,6 +2013,11 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <span style={labelStyle}>Smooth</span>
         <NumberInput value={m.smoothMs} min={0} max={5000} step={10} title="Smoothing time in milliseconds" onCommit={n => onUpdate({ smoothMs: Math.max(0, n) })} style={numStyle} />
         <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+        {!m.increment && <>
+          <span style={{ ...labelStyle, width: 'auto', marginLeft: 6 }} title="The value arrives this much later (before the smoothing): several mappings from one source with growing delays follow one another">Delay</span>
+          <NumberInput value={m.delayMs ?? 0} min={0} max={10000} step={10} title="Delay in milliseconds (0 = none, at most 10 s)" onCommit={n => onUpdate({ delayMs: n > 0 ? Math.min(10000, n) : undefined })} style={numStyle} />
+          <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+        </>}
         <span style={{ flex: 1 }} />
         {kindPicker}
         <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} label={m.enabled ? 'On' : 'Off'} />

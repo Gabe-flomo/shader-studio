@@ -27,7 +27,7 @@ import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
 import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
 import { incAdvance, incFold, incGlide, incGliding, incNew, incRange, incRepeat, incReset, incThreshold, type IncState } from '../play/kit/increment.js';
-import { sgCondNew, sgCondRewind, sgCondStep, sgLogic, sgParseValueRef, sgSignalOrder, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
+import { sgCondNew, sgCondRewind, sgCondStep, sgLagNew, sgLagStep, sgLogic, sgParseValueRef, sgShapeNew, sgShapeRewind, sgShapeStep, sgShaped, sgSignalOrder, type SgLagState, type SgShapeState, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
 import { readFinishValue } from '../types/playFinish';
 import { AUDIO_FX_TARGET_PREFIX, readAudioFxValue } from '../types/playAudioFx';
 import { signalNames } from '../play/signalNames';
@@ -155,6 +155,13 @@ function sourceAnimates(s: PlaySource, triggerIdle: boolean): boolean {
 }
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+
+/** A signal's default seed for its rolls, from its id (the same setup rolls the same way). */
+export function seedOf(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
 
 /** How far around a position the picture's brightness is read, in picture heights. */
 export const PICTURE_PATCH = 0.05;
@@ -428,6 +435,8 @@ class PlayEngine implements InputSource {
     for (const id of [...this.mappingFire.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger') && !(record.pairMappings ?? []).some(m => m.id === id)) this.mappingFire.delete(id);
     // A signal that lost its definition (or went) lets go of its key.
     const defined = new Set(this.signalOrder.map(s => s.id));
+    for (const id of [...this.sigShape.keys()]) if (!defined.has(id) || !sgShaped(this.signalById.get(id))) this.sigShape.delete(id);
+    for (const id of [...this.mappingLag.keys()]) if (!record.mappings.some(m => m.id === id && (m.delayMs ?? 0) > 0)) this.mappingLag.delete(id);
     for (const [id, on] of [...this.sigLevels]) if (!defined.has(id)) { this.sigLevels.delete(id); this.sigSeen.delete(id); if (on) this.release(signalKey(id)); }
     // A signal that went (or stopped capturing) forgets what it captured.
     for (const id of [...this.sigPayload.keys()]) if (!this.signalById.get(id)?.capture) this.sigPayload.delete(id);
@@ -671,6 +680,8 @@ class PlayEngine implements InputSource {
   /** Signals with a definition of their own, in dependency order; the ones in a loop (read a frame late). */
   private signalOrder: PlaySignal[] = [];
   private signalById = new Map<string, PlaySignal>();
+  private signalWorked = new Set<string>();
+  private sigShape = new Map<string, SgShapeState>();
   private signalCycles = new Set<string>();
   /** Condition and audio triggers, one per key, with their keys worked out. */
   private condTriggers: { t: TriggerSpec; key: string }[] = [];
@@ -700,7 +711,9 @@ class PlayEngine implements InputSource {
     const sigs = r.signals ?? [];
     const { order, cyclic } = sgSignalOrder(sigs);
     const byId = new Map(sigs.map(s => [s.id, s]));
-    this.signalOrder = order.map(id => byId.get(id)!).filter(s => !!s.when);
+    // Worked out each frame: a definition, or timing and chance on a sent one.
+    this.signalOrder = order.map(id => byId.get(id)!).filter(s => !!s.when || sgShaped(s));
+    this.signalWorked = new Set(this.signalOrder.map(s => s.id));
     this.signalCycles = cyclic;
     this.signalById = byId;
     const unique = (want: (t: TriggerSpec) => boolean) => {
@@ -797,6 +810,8 @@ class PlayEngine implements InputSource {
   private sigLevels = new Map<string, boolean>();
   private sigSent = new Set<string>();
   private sigSeen = new Map<string, number>();
+  /** Mappings' delay lines (PlayMapping.delayMs). */
+  private mappingLag = new Map<string, SgLagState>();
   /** What each signal captured (a number, or a position 0..1 with y up): PlaySignal.capture. */
   private sigPayload = new Map<string, number | { x: number; y: number }>();
 
@@ -816,9 +831,10 @@ class PlayEngine implements InputSource {
     if (v !== null) this.sigPayload.set(s.id, v);
   }
 
-  /** Is a signal true now: its own definition, or sent this frame. */
+  /** Is a signal true now: its own definition (and timing), or sent this frame. */
   signalLevel(id: string): boolean {
-    return (this.sigLevels.get(id) ?? false) || this.sigSent.has(id);
+    this.index();
+    return this.signalWorked.has(id) ? this.sigLevels.get(id) ?? false : this.sigSent.has(id);
   }
 
   /** Is a signal part of a loop of combinations (each reads the others a frame late)? For the editor. */
@@ -837,16 +853,27 @@ class PlayEngine implements InputSource {
   private tickSignalLevels(): void {
     this.index();
     const sent = this.sigSent;
+    // A signal worked out here reads its level; any other is true in the frame it was sent.
+    const lvl = (i: string) => (this.signalWorked.has(i) ? this.sigLevels.get(i) ?? false : sent.has(i));
     for (const s of this.signalOrder) {
-      const w = s.when!;
+      const w = s.when;
       let level: boolean;
-      if (w.kind === 'trigger') {
+      if (w?.kind === 'trigger') {
         const { presses, gate } = this.triggerInput(w.trigger);
         const seen = this.sigSeen.get(s.id) ?? presses;
         this.sigSeen.set(s.id, presses);
         level = gate || presses > seen;
+      } else if (w?.kind === 'logic') {
+        level = sgLogic(w.op, w.inputs.map(lvl));
       } else {
-        level = sgLogic(w.op, w.inputs.map(i => (this.sigLevels.get(i) ?? false) || sent.has(i)));
+        // Sent, with timing or chance: what was sent since the last frame.
+        level = sent.has(s.id);
+      }
+      // Hold for, Linger, Chance and Delay (sgShapeStep), on the setup's clock.
+      if (sgShaped(s)) {
+        let st = this.sigShape.get(s.id);
+        if (!st) { st = sgShapeNew(); this.sigShape.set(s.id, st); }
+        level = sgShapeStep(st, level, this.time, { hold: s.hold, linger: s.linger, chance: s.chance, delay: s.delay, seed: s.seed ?? seedOf(s.id) });
       }
       const was = this.sigLevels.get(s.id) ?? false;
       this.sigLevels.set(s.id, level);
@@ -873,8 +900,10 @@ class PlayEngine implements InputSource {
   /** A signal is sent (by an action, a layer, the Fire button): its "When signal fires" triggers see a press (and its release) at once. */
   private emitSignal(id: string): void {
     this.sigSent.add(id);
-    // A sent signal captures when it is sent (its one-frame rise).
     const s = this.signalById.get(id);
+    // With timing or chance it goes out when the next frame works it out (tickSignalLevels), not now.
+    if (s && !s.when && sgShaped(s)) { inputBus.wake(); return; }
+    // A sent signal captures when it is sent (its one-frame rise).
     if (s?.capture && !s.when) this.capture(s);
     const key = signalKey(id);
     this.press(key);
@@ -1407,8 +1436,10 @@ class PlayEngine implements InputSource {
       for (const st of this.condStates.values()) sgCondRewind(st);
       for (const st of this.incCond.values()) sgCondRewind(st);
       for (const st of this.pairState.values()) { sgCondRewind(st.condA); sgCondRewind(st.condB); }
-      // Captures are forgotten, so the same timeline sets the same way again.
+      // Captures, rolls and signals on their way are forgotten, so the same timeline plays the same way again.
       this.sigPayload.clear();
+      for (const st of this.sigShape.values()) sgShapeRewind(st);
+      for (const st of this.mappingLag.values()) { st.t.length = 0; st.v.length = 0; }
     }
     this.lastTime = time;
     lap?.('inputs');
@@ -1437,7 +1468,15 @@ class PlayEngine implements InputSource {
         const reading = m.source.kind === 'trigger' ? this.readTrigger(m, dt) : this.readSource(m.source);
         if (reading === null) continue;
         // Set writes the captured number itself; every other source goes through the range and curve.
-        const target = m.source.kind === 'captured' ? reading : mapValue(reading, m);
+        let target = m.source.kind === 'captured' ? reading : mapValue(reading, m);
+        // Delay: the value arrives late (before the smoothing); nothing is written until it has that much.
+        if ((m.delayMs ?? 0) > 0) {
+          let lag = this.mappingLag.get(m.id);
+          if (!lag) { lag = sgLagNew(); this.mappingLag.set(m.id, lag); }
+          const late = sgLagStep(lag, this.time, target, m.delayMs! / 1000);
+          if (late === null) continue;
+          target = late;
+        }
         let st = this.state.get(m.id);
         if (!st) { st = { value: undefined }; this.state.set(m.id, st); }
         if (m.smoothMs <= 0 || st.value === undefined) {
@@ -1790,11 +1829,15 @@ class PlayEngine implements InputSource {
   /** Actions, layer-property mappings, reader controls and Learn run whatever the shader binds. */
   wantsTick(): boolean {
     // A signal with a definition (its level) or a capture works every frame, even with nothing on it yet.
-    return !!this.record.actions?.length || !!this.record.signals?.some(s => s.when || s.capture) || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || !!this.record.spreads?.some(sp => sp.members.length > 0) || this.handsBound || handFeed.isOn() || this.faceBound || this.poseBound || faceFeed.isOn() || poseFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
+    return !!this.record.actions?.length || !!this.record.signals?.some(s => s.when || s.capture || sgShaped(s)) || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || !!this.record.spreads?.some(sp => sp.members.length > 0) || this.handsBound || handFeed.isOn() || this.faceBound || this.poseBound || faceFeed.isOn() || poseFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
   isAnimating(): boolean {
+    // A signal on its way (a delay) or held on (a hold or a linger counting) needs the next frames.
+    for (const st of this.sigShape.values()) if (st.q.length || st.onAt >= 0 || st.held) return true;
+    // A mapping's delay line still catching up.
+    for (const st of this.mappingLag.values()) if (st.t.length > 1 && st.v[st.v.length - 1] !== st.v[0]) return true;
     if ((this.record.actions ?? []).some(a => a.enabled && a.trigger.on === 'beat')) return true;
     // Learning with sound listens every frame.
     if ((this.learnCb || this.learnTriggerCb) && (liveAudio.isOn() || audioReaderBank.live())) return true;

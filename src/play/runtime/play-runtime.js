@@ -1699,9 +1699,9 @@ void main() {
     }
     // A signal: its "When signal fires" triggers see a press and its release at once.
     // Signals sent this frame (by an action or a layer): true for the frame, for combinations to read.
-    const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map(), sigPayload = new Map();
+    const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map(), sigPayload = new Map(), mappingLag = new Map();
     const sigById = new Map((play.signals || []).map(s => [s.id, s]));
-    function sigLevel(id) { return (sigLevels.get(id) || false) || sigSent.has(id); }
+    function sigLevel(id) { return sigWorked.has(id) ? sigLevels.get(id) || false : sigSent.has(id); }
     // What a signal captures (sample and hold): a number from a value path, or a position from pos:<anchor>.
     function capture(s) {
       const c = s.capture;
@@ -1711,25 +1711,44 @@ void main() {
       else v = readValue(c.what);
       if (v !== null && v !== undefined) sigPayload.set(s.id, v);
     }
-    function emitSignal(id) { sigSent.add(id); const s = sigById.get(id); if (s && s.capture && !s.when) capture(s); const k = 'sig:' + id; press(k); release(k); }
+    function emitSignal(id) {
+      sigSent.add(id);
+      const s = sigById.get(id);
+      // With timing or chance it goes out when the next frame works it out.
+      if (s && !s.when && SG && SG.shaped && SG.shaped(s)) return;
+      if (s && s.capture && !s.when) capture(s);
+      const k = 'sig:' + id; press(k); release(k);
+    }
     // Level signals (the app's playEngine tickSignalLevels): each defined signal is true while its trigger is held or
     // met, or while its combination of others holds; rising presses its key and holds it, falling lets go.
     const sigDefs = (() => {
       const list = play.signals || [];
       if (!SG || !SG.order) return [];
       const byId = new Map(list.map(s => [s.id, s]));
-      return SG.order(list).order.map(id => byId.get(id)).filter(s => s && s.when);
+      // Worked out each frame: a definition, or timing and chance on a sent one (the app's playEngine).
+      return SG.order(list).order.map(id => byId.get(id)).filter(s => s && (s.when || (SG.shaped && SG.shaped(s))));
     })();
+    const sigWorked = new Set(sigDefs.map(s => s.id)), sigShape = new Map();
+    // The app's seedOf: a signal's default seed from its id.
+    function seedOf(id) { let h = 2166136261; for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619); return h >>> 0; }
     function tickSignalLevels() {
+      const lvl = i => (sigWorked.has(i) ? sigLevels.get(i) || false : sigSent.has(i));
       for (const s of sigDefs) {
         const w = s.when;
         let level;
-        if (w.kind === 'trigger') {
+        if (w && w.kind === 'trigger') {
           const inp = triggerInput(w.trigger);
           const seen = sigSeen.has(s.id) ? sigSeen.get(s.id) : inp.presses;
           sigSeen.set(s.id, inp.presses);
           level = inp.gate || inp.presses > seen;
-        } else level = SG.logic(w.op, w.inputs.map(i => (sigLevels.get(i) || false) || sigSent.has(i)));
+        } else if (w && w.kind === 'logic') level = SG.logic(w.op, w.inputs.map(lvl));
+        else level = sigSent.has(s.id);
+        // Hold for, Linger, Chance and Delay, on the setup's clock.
+        if (SG.shaped(s)) {
+          let st = sigShape.get(s.id);
+          if (!st) { st = SG.shapeNew(); sigShape.set(s.id, st); }
+          level = SG.shapeStep(st, level, time, { hold: s.hold, linger: s.linger, chance: s.chance, delay: s.delay, seed: typeof s.seed === 'number' ? s.seed : seedOf(s.id) });
+        }
         const was = sigLevels.get(s.id) || false;
         sigLevels.set(s.id, level);
         const at = s.capture && s.capture.at;
@@ -2004,6 +2023,8 @@ void main() {
           for (const st of pairState.values()) { SG.condRewind(st.condA); SG.condRewind(st.condB); }
         }
         sigPayload.clear();
+        for (const st of sigShape.values()) SG.shapeRewind(st);
+        for (const st of mappingLag.values()) { st.t.length = 0; st.v.length = 0; }
       }
       lastTime = time;
       tickConditionTriggers(dt);
@@ -2023,7 +2044,15 @@ void main() {
           const u = m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source);
           if (u === null) continue;
           // Set writes the captured number itself; every other source goes through the range and curve.
-          const target = m.source.kind === 'captured' ? u : m.outMin + (m.outMax - m.outMin) * curve(u, m);
+          let target = m.source.kind === 'captured' ? u : m.outMin + (m.outMax - m.outMin) * curve(u, m);
+          // Delay: the value arrives late, before the smoothing (the app's sgLagStep).
+          if (m.delayMs > 0 && SG && SG.lagStep) {
+            let lag = mappingLag.get(m.id);
+            if (!lag) { lag = SG.lagNew(); mappingLag.set(m.id, lag); }
+            const late = SG.lagStep(lag, time, target, m.delayMs / 1000);
+            if (late === null) continue;
+            target = late;
+          }
           v = smooth.get(m.id);
           if (m.smoothMs <= 0 || v === undefined) v = target;
           else { const a = 1 - Math.exp(-(dt * 1000) / m.smoothMs); v = v + (target - v) * a; if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target; }
