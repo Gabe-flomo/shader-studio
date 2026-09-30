@@ -10,17 +10,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { playEngine } from '../../lib/playEngine';
-import { CAPTURE_POS, SIGNAL_CHANCE_MIN, SIGNAL_INPUTS_MAX, SIGNAL_TIME_MAX, layerNumericProps, type PlayRecord, type PlaySignal, type SignalCapture, type SignalDef, type SignalLogic } from '../../types/play';
-import { Button } from '../ui/Button';
+import { CAPTURE_POS, SIGNAL_CHANCE_MIN, SIGNAL_INPUTS_MAX, SIGNAL_LINKS_MAX, SIGNAL_TIME_MAX, layerNumericProps, type PlayLoop, type PlayRecord, type PlaySignal, type SignalCapture, type SignalDef, type SignalLogic } from '../../types/play';
+import { Button, IconButton } from '../ui/Button';
+import { Field } from '../ui/Field';
+import { Icon } from '../ui/Icon';
+import { addSignal } from '../../play/pairs';
 import { NumberInput } from '../NodeGraph/NumberInput';
-import { sgShaped } from '../../play/kit/signals.js';
+import { SG_LOOP_PULSES, sgLinkPlan, sgShaped, type SgLoop } from '../../play/kit/signals.js';
 import { GroupedPicker } from '../ui/GroupedPicker';
 import { Menu } from '../ui/Menu';
 import { toast } from '../ui/toastStore';
 import { DistanceAnchorPicker, valueSections } from './ConditionFields';
 import { MapToMenu } from './MapToMenu';
-import { moveLayerToSignal } from './signalFlow';
-import { Segmented } from '../ui/Choice';
+import { SIGNAL_SHAPE_LABELS, addLink, moveLayerToSignal, removeLink, setLoop, type SignalShape } from './signalFlow';
+import { Segmented, Toggle } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { TriggerPicker } from './TriggerPicker';
 
@@ -51,7 +54,8 @@ function useSignalLevel(id: string): boolean {
   return on;
 }
 
-export function SignalDefEditor({ signal: s, play, onChange }: { signal: PlaySignal; play: PlayRecord; onChange: Change }) {
+/** `shape`: where it sits among the signals (signalFlow.ts signalStructure), shown as a chip. */
+export function SignalDefEditor({ signal: s, play, onChange, shape }: { signal: PlaySignal; play: PlayRecord; onChange: Change; shape?: SignalShape }) {
   const tk = useTokens();
   const level = useSignalLevel(s.id);
   const kind = s.when?.kind ?? 'sent';
@@ -76,6 +80,7 @@ export function SignalDefEditor({ signal: s, play, onChange }: { signal: PlaySig
           { value: 'logic', label: 'Combine', title: 'True from other signals: all of, any of, none of, exactly one of' },
         ]} />
         <span style={{ flex: 1 }} />
+        {shape && <span data-signal-shape={shape} title="Where it sits among the signals: links, combinations and relays" style={{ height: 18, padding: '0 6px', borderRadius: 9, display: 'inline-flex', alignItems: 'center', background: shape === 'loop' ? alpha(tk.accent.base, 0.15) : alpha(tk.text.primary, 0.06), color: shape === 'loop' ? tk.accent.text : tk.text.muted, font: `600 10px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>{SIGNAL_SHAPE_LABELS[shape]}</span>}
         <span title={level ? 'True now' : 'False now'} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: level ? tk.accent.text : tk.text.faint, font: `600 11px ${fontFamily.ui}` }}>
           <span style={{ width: 8, height: 8, borderRadius: 4, background: level ? tk.accent.base : tk.text.disabled, boxShadow: level ? `0 0 0 3px ${alpha(tk.accent.base, 0.2)}` : undefined }} />
           {level ? 'true' : 'false'}
@@ -235,6 +240,122 @@ export function SignalTimingEditor({ signal: s, onChange }: { signal: PlaySignal
           {s.chance !== undefined && <Button size="sm" variant="ghost" icon="dice" title="Roll a different sequence (the same timeline still plays the same way)" onClick={() => set({ seed: Math.floor(Math.random() * 1e9) })}>Re-roll</Button>}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A signal's links: when it rises (or falls), send another signal after a
+ * delay. A chain of links that comes back round is a loop (LoopsPanel).
+ */
+export function SignalLinksEditor({ signal: s, play, onChange }: { signal: PlaySignal; play: PlayRecord; onChange: Change }) {
+  const tk = useTokens();
+  const [adding, setAdding] = useState<{ to: string; delay: number; on: 'rise' | 'fall' } | null>(null);
+  const cap: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' };
+  const num: React.CSSProperties = { width: 46, height: 24, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}`, textAlign: 'center' };
+  const nameOf = (id: string) => play.signals?.find(x => x.id === id)?.name ?? 'Missing signal';
+  const links = s.links ?? [];
+  const full = links.length >= SIGNAL_LINKS_MAX;
+  const NEW = '__new';
+  const commit = () => {
+    if (!adding) return;
+    const a = adding;
+    onChange(p => {
+      let to = a.to, q = p;
+      if (to === NEW) { const r = addSignal(p, `After ${s.name}`); if (!r.id) return p; to = r.id; q = r.play; }
+      return addLink(q, s.id, { to, delay: a.delay, ...(a.on === 'fall' ? { on: 'fall' as const } : {}) });
+    });
+    setAdding(null);
+  };
+  return (
+    <div data-signal-links={s.id} style={{ marginTop: 8, padding: '0 2px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={cap}>Links</span>
+        <span style={{ flex: 1 }} />
+        {!adding && <Button size="sm" variant="ghost" icon="link" disabled={full} onClick={() => setAdding({ to: (play.signals ?? []).find(x => x.id !== s.id)?.id ?? NEW, delay: 0.5, on: 'rise' })}>Link</Button>}
+      </div>
+      {links.map((l, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 12px', color: tk.text.secondary, font: `11.5px/1.5 ${fontFamily.ui}` }}>
+          <span style={{ flex: 1 }}>{l.on === 'fall' ? 'When it ends' : 'When it starts'}, send <b style={{ color: tk.text.primary }}>{nameOf(l.to)}</b>{l.delay > 0 ? ` ${l.delay} s later` : ' next frame'}</span>
+          <IconButton icon="close" size="sm" label="Remove this link" onClick={() => onChange(p => removeLink(p, s.id, i))} />
+        </div>
+      ))}
+      {adding && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4, padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.text.primary, 0.03) }}>
+          <Segmented size="sm" ariaLabel="When" value={adding.on} onChange={on => setAdding({ ...adding, on })} options={[{ value: 'rise', label: 'Starts' }, { value: 'fall', label: 'Ends' }]} />
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>send</span>
+          <Select ariaLabel="Signal to send" value={adding.to} height={26} onChange={to => setAdding({ ...adding, to })}
+            options={[...(play.signals ?? []).map(x => ({ value: x.id, label: x.id === s.id ? `${x.name} (itself: a loop)` : x.name })), { value: NEW, label: '+ New signal' }]} />
+          <NumberInput value={adding.delay} min={0} max={SIGNAL_TIME_MAX} step={0.1} title="Seconds later (0: the next frame)" onCommit={n => setAdding({ ...adding, delay: Math.max(0, Math.min(SIGNAL_TIME_MAX, n)) })} style={num} />
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>s later</span>
+          <Button size="sm" onClick={commit}>Add</Button>
+          <Button size="sm" variant="ghost" onClick={() => setAdding(null)}>Cancel</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Polls a loop's pulses in flight and laps done while shown. */
+function useLoopNow(key: string): { inFlight: number; laps: number } {
+  const [now, setNow] = useState({ inFlight: 0, laps: 0 });
+  useEffect(() => {
+    const t = window.setInterval(() => { const n = playEngine.loopNow(key); setNow(p => (p.inFlight === n.inFlight && p.laps === n.laps ? p : n)); }, 150);
+    return () => window.clearInterval(t);
+  }, [key]);
+  return now;
+}
+
+/**
+ * The loops the links make (the plan's Loop object), derived from the links
+ * (the links are the truth; only settings are stored, by the members): its
+ * members in order, the time around, Run / Stop, Speed (scales every delay),
+ * Laps (0 endless), what a new start does while it runs, and Reset.
+ */
+export function LoopsPanel({ play, onChange }: { play: PlayRecord; onChange: Change }) {
+  const tk = useTokens();
+  const loops = useMemo(() => sgLinkPlan(play.signals ?? [], play.loops).loops, [play.signals, play.loops]);
+  if (!loops.length) return null;
+  return (
+    <div data-loops="" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+      {loops.map(l => <LoopCard key={l.key} loop={l} play={play} onChange={onChange} tk={tk} />)}
+    </div>
+  );
+}
+
+function LoopCard({ loop: l, play, onChange, tk }: { loop: SgLoop; play: PlayRecord; onChange: Change; tk: ReturnType<typeof useTokens> }) {
+  const now = useLoopNow(l.key);
+  const saved = play.loops?.find(x => x.key === l.key);
+  const nameOf = (id: string) => play.signals?.find(x => x.id === id)?.name ?? '?';
+  const num: React.CSSProperties = { width: 46, height: 24, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11px ${fontFamily.mono}`, textAlign: 'center' };
+  const word = (t: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{t}</span>;
+  const set = (patch: Partial<PlayLoop>) => onChange(p => setLoop(p, l.key, patch));
+  return (
+    <div data-loop={l.key} style={{ padding: '8px 10px', borderRadius: radius.card, background: alpha(tk.accent.base, 0.06), boxShadow: `inset 0 0 0 1px ${alpha(tk.accent.base, 0.35)}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Icon name="loop" size={14} style={{ color: tk.accent.text }} />
+        <Field value={saved?.name ?? ''} placeholder="Loop" aria-label="Loop name" onChange={e => set({ name: e.target.value || undefined })} height={24} style={{ flex: 1, minWidth: 80, maxWidth: 200 }} />
+        <span style={{ flex: 1 }} />
+        <Toggle checked={l.running} onChange={running => set({ running: running ? undefined : false })} label={l.running ? 'Running' : 'Stopped'} />
+      </div>
+      <div style={{ marginTop: 4, color: tk.text.secondary, font: `11.5px/1.45 ${fontFamily.ui}` }}>
+        {[...l.members, l.members[0]].map(nameOf).join(' → ')} · {Math.round(l.period * 100) / 100} s a lap
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        {word('Speed')}
+        <NumberInput value={l.speed} min={0.05} max={20} step={0.1} title="Scales every delay in the loop, like a tempo dial" onCommit={n => set({ speed: Math.max(0.05, Math.min(20, n)) === 1 ? undefined : Math.max(0.05, Math.min(20, n)) })} style={num} />
+        {word('×  Laps')}
+        <NumberInput value={l.laps} min={0} max={9999} step={1} title="How many times round, then it stops (0: endless)" onCommit={n => set({ laps: n > 0 ? Math.round(n) : undefined })} style={num} />
+        {word(l.laps ? '' : '(endless)')}
+        {word('Started again:')}
+        <Select ariaLabel="A start while it runs" value={l.policy} height={24} onChange={v => set({ policy: v === 'ignore' ? undefined : v as PlayLoop['policy'] })} options={[
+          { value: 'ignore', label: 'Ignore it' }, { value: 'add', label: 'Add a pulse' }, { value: 'restart', label: 'Restart' },
+        ]} />
+        <span style={{ flex: 1 }} />
+        <span style={{ color: now.inFlight ? tk.accent.text : tk.text.faint, font: `600 11px ${fontFamily.mono}` }}>{now.inFlight ? `${now.inFlight} going round · lap ${now.laps + 1}` : 'idle'}</span>
+        <Button size="sm" variant="ghost" icon="reset" onClick={() => playEngine.resetLoop(l.key)}>Reset</Button>
+      </div>
+      {l.branches && <div style={{ marginTop: 6, color: tk.status.warningText, font: `11.5px/1.4 ${fontFamily.ui}` }}>A signal in this loop links to two others in it, so pulses multiply each lap: at most {SG_LOOP_PULSES} go round at once.</div>}
     </div>
   );
 }

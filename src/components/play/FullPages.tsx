@@ -25,11 +25,11 @@ import { openProSheet } from '../../lib/plan';
 import { triggerLabel } from '../../play/playSources';
 import { addSignal, deleteSignal, layerSignalListeners, layerSignalSenders, renameSignal, signalUses } from '../../play/pairs';
 import { playEngine } from '../../lib/playEngine';
-import { addThen, addWhen, signalFlow } from './signalFlow';
+import { addThen, addWhen, signalFlow, signalStructure } from './signalFlow';
 import { backgroundLayerOf, SIGNAL_ACTION, type PlayAction, type PlayRecord, type SignalDef, type SignalLogic } from '../../types/play';
 import { ActionsSection, addAction } from './layers/ActionsSection';
 import { SignalRow } from './ConditionFields';
-import { SignalCaptureEditor, SignalDefEditor, SignalTimingEditor } from './SignalDefEditor';
+import { LoopsPanel, SignalCaptureEditor, SignalDefEditor, SignalLinksEditor, SignalTimingEditor } from './SignalDefEditor';
 import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
 import { usePlayUi } from './playUi';
@@ -185,6 +185,7 @@ function ActionRow({ a, play, on, onPick, onChange, indent = false }: { a: PlayA
 export function SignalsPage({ play, onChange, wide }: { play: PlayRecord; onChange: Change; wide: boolean }) {
   const tk = useTokens();
   const flow = signalFlow(play);
+  const shapes = signalStructure(play);
   const actions = play.actions ?? [];
   const signals = play.signals ?? [];
   // What's selected: a pick made here, or what something else asked to show since (a signal just made from a slider's +).
@@ -217,6 +218,7 @@ export function SignalsPage({ play, onChange, wide }: { play: PlayRecord; onChan
     ? <Empty title="Nothing happens yet" body="A signal reports that something happened: a key, a value crossing a line, a hand closing, particles colliding. Give it a When (what sends it) and a Then (what it sets off: burst the sparks, step the text). Or add a reaction straight away: When a key is pressed, do something to a layer. The + beside any slider can create a signal from it." />
     : (
       <div role="listbox" aria-label="Signals" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <LoopsPanel play={play} onChange={onChange} />
         {flow.groups.map(g => {
           const on = pickedSignal?.id === g.signal.id;
           return (
@@ -229,9 +231,10 @@ export function SignalsPage({ play, onChange, wide }: { play: PlayRecord; onChan
                   onRemove={() => onChange(p => deleteSignal(p, g.signal.id))}
                 />
               </div>
-              <SignalDefEditor signal={g.signal} play={play} onChange={onChange} />
+              <SignalDefEditor signal={g.signal} play={play} onChange={onChange} shape={shapes.get(g.signal.id)} />
               <SignalCaptureEditor signal={g.signal} play={play} onChange={onChange} />
               <SignalTimingEditor signal={g.signal} onChange={onChange} />
+              <SignalLinksEditor signal={g.signal} play={play} onChange={onChange} />
               {(() => {
                 const links = signalLinks(play, g.signal.id);
                 // Actions are rows; its own definition is edited just above.

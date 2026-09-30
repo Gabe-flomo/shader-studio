@@ -1711,13 +1711,20 @@ void main() {
       else v = readValue(c.what);
       if (v !== null && v !== undefined) sigPayload.set(s.id, v);
     }
+    // Links between signals and the loops they make (the app's playEngine: the kit's sgLink*).
+    const linkPlan = SG && SG.linkPlan ? SG.linkPlan(play.signals || [], play.loops || []) : null;
+    const links = SG && SG.linkNew ? SG.linkNew() : null;
+    let linkArriving = false;
+    const linkSent = new Set();
+    function linkFire(id, edge, external) { if (linkPlan && links) SG.linkFire(links, linkPlan, id, time, edge, external); }
     function emitSignal(id) {
       sigSent.add(id);
       const s = sigById.get(id);
       // With timing or chance it goes out when the next frame works it out.
-      if (s && !s.when && SG && SG.shaped && SG.shaped(s)) return;
+      if (s && !s.when && SG && SG.shaped && SG.shaped(s)) { if (linkArriving) linkSent.add(id); return; }
       if (s && s.capture && !s.when) capture(s);
       const k = 'sig:' + id; press(k); release(k);
+      linkFire(id, 'rise', !linkArriving);
     }
     // Level signals (the app's playEngine tickSignalLevels): each defined signal is true while its trigger is held or
     // met, or while its combination of others holds; rising presses its key and holds it, falling lets go.
@@ -1732,6 +1739,8 @@ void main() {
     // The app's seedOf: a signal's default seed from its id.
     function seedOf(id) { let h = 2166136261; for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619); return h >>> 0; }
     function tickSignalLevels() {
+      // Links arriving now: their signals are sent (a loop going round).
+      if (links) for (const id of SG.linkDue(links, time)) { linkArriving = true; try { emitSignal(id); } finally { linkArriving = false; } }
       const lvl = i => (sigWorked.has(i) ? sigLevels.get(i) || false : sigSent.has(i));
       for (const s of sigDefs) {
         const w = s.when;
@@ -1753,10 +1762,11 @@ void main() {
         sigLevels.set(s.id, level);
         const at = s.capture && s.capture.at;
         if ((at === 'rise' && level && !was) || (at === 'fall' && !level && was) || (at === 'held' && level)) capture(s);
-        if (level && !was) press('sig:' + s.id);
-        else if (!level && was) release('sig:' + s.id);
+        if (level && !was) { press('sig:' + s.id); linkFire(s.id, 'rise', !(!s.when && linkSent.has(s.id))); }
+        else if (!level && was) { release('sig:' + s.id); linkFire(s.id, 'fall', true); }
       }
       sigSent.clear();
+      linkSent.clear();
     }
     // Relationship layers: each catch the kit counted (`<id>::caught`) sends the layer's catch signal.
     const caughtSeen = new Map();
@@ -2023,6 +2033,7 @@ void main() {
           for (const st of pairState.values()) { SG.condRewind(st.condA); SG.condRewind(st.condB); }
         }
         sigPayload.clear();
+        if (links) SG.linkClear(links);
         for (const st of sigShape.values()) SG.shapeRewind(st);
         for (const st of mappingLag.values()) { st.t.length = 0; st.v.length = 0; }
       }

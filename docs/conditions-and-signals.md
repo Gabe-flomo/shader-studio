@@ -80,6 +80,10 @@ A loop (S1 sends S2, S2 sends S1) therefore runs at most once around per frame.
 
 All four run on the setup's clock and start over on a rewind. Each is at most 10 s.
 
+**Links** (on the card: *When it starts / ends, send B, 0.5 s later*): a signal sends others after a delay (`links: [{ to, delay, on }]`, at most 8; 0 is the next frame, so even a ring of 0-second links can't hang a frame). A chain of links that comes back round is a **loop** (Tarjan's strongly connected components, `sgLinkPlan`, worked out when the setup changes). Loops show at the top of the Signals page: their members and the time around, **Running / Stopped** (stopping drops what is going round), **Speed** (scales every delay in it), **Laps** (0 endless; counted from where it was started), what a new start does while it runs (**Ignore it**, **Add a pulse**, **Restart**), live status and **Reset**. At most 16 pulses go round a loop at once; a loop where one signal links to two others in it multiplies pulses each lap, and its card says so. The links are the truth: only a loop's settings are stored (`loops: [{ key: "a|b|c", speed, laps, running, policy, name }]`, keyed by its members). Everything runs on the setup's clock (a paused clock holds pulses where they are) and a rewind clears it.
+
+**Where a signal sits.** Each card has a chip: *on its own*, *starts a chain*, *in a chain*, *ends a chain*, *branches*, *merges* or *in a loop*, from the links, combinations and actions that relay one signal into another (`signalStructure`). Derived, nothing stored.
+
 A mapping can also have a **Delay** (`delayMs`, beside Smooth, at most 10 s): its value arrives that much later, before the smoothing (`sgLagStep`, a short ring of recent values read between samples). Several mappings from one source with growing delays make a trail that follows the leader.
 
 In the file a signal may carry `"when": { "kind": "trigger", "trigger": {…} }` or `"when": { "kind": "logic", "op": "and" | "or" | "not" | "xor", "inputs": ["sig_…"] }`; inputs that aren't signals of the setup are dropped.

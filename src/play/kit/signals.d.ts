@@ -25,6 +25,16 @@ export function sgShapeStep(st: SgShapeState, raw: boolean, t: number, o: SgShap
 export interface SgLagState { t: number[]; v: number[] }
 export function sgLagNew(): SgLagState;
 export function sgLagStep(st: SgLagState, t: number, v: number, delay: number): number | null;
+export const SG_LOOP_PULSES: number;
+export interface SgLinkEdge { from: string; to: string; delay: number; on: 'rise' | 'fall' }
+export interface SgLoop { key: string; members: string[]; entry: string; period: number; speed: number; laps: number; running: boolean; policy: 'ignore' | 'add' | 'restart'; branches: boolean }
+export interface SgLinkPlan { edges: SgLinkEdge[]; byFrom: Map<string, SgLinkEdge[]>; loops: SgLoop[]; loopOf: Map<string, SgLoop> }
+export interface SgLinkState { q: Array<{ at: number; to: string; loop: string }>; inFlight: Map<string, number>; laps: Map<string, number>; entry: Map<string, string> }
+export function sgLinkPlan(signals: ReadonlyArray<{ id: string; links?: ReadonlyArray<{ to: string; delay: number; on?: 'rise' | 'fall' }> }>, loopSettings?: ReadonlyArray<{ key: string; speed?: number; laps?: number; running?: boolean; policy?: string }>): SgLinkPlan;
+export function sgLinkNew(): SgLinkState;
+export function sgLinkClear(st: SgLinkState, loopKey?: string): void;
+export function sgLinkFire(st: SgLinkState, plan: SgLinkPlan, id: string, t: number, edge: 'rise' | 'fall', external: boolean): void;
+export function sgLinkDue(st: SgLinkState, t: number): string[];
 export interface SgSwapState { axis: 'a' | 'b'; prevA: number | null; prevB: number | null }
 export function sgSwapNew(): SgSwapState;
 export function sgSwapStep(st: SgSwapState, va: number | null | undefined, vb: number | null | undefined, sw: Pick<PairSwap, 'at' | 'dir' | 'backAt' | 'backDir'>): 'toA' | 'toB' | null;

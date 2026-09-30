@@ -328,6 +328,137 @@ export function sgLagStep(st, t, v, delay) {
   return st.v[0] + (st.v[1] - st.v[0]) * k;
 }
 
+// ── Links and loops ──────────────────────────────────────────────────────────
+
+/** Pulses a loop may have on their way at once (a branch inside a loop would double them every lap). */
+export const SG_LOOP_PULSES = 16;
+const SG_LINK_QUEUE = 256;
+
+/**
+ * Links between signals and the loops they make, worked out when the setup
+ * changes: each signal's `links` ({ to, delay, on: 'rise' | 'fall' }) are
+ * edges; a strongly connected group of them (Tarjan's algorithm) is a loop,
+ * with its settings from `loopSettings` (by key: its members' ids, sorted,
+ * joined by '|'): speed (scales every delay in it), laps (0 endless), running,
+ * policy for a start while it runs ('ignore', 'add', 'restart').
+ */
+export function sgLinkPlan(signals, loopSettings) {
+  const ids = new Set(signals.map(s => s.id));
+  const edges = [], byFrom = new Map();
+  for (const s of signals) for (const l of s.links || []) {
+    if (!l || !ids.has(l.to)) continue;
+    const e = { from: s.id, to: l.to, delay: Math.max(0, +l.delay || 0), on: l.on === 'fall' ? 'fall' : 'rise' };
+    edges.push(e);
+    if (!byFrom.has(s.id)) byFrom.set(s.id, []);
+    byFrom.get(s.id).push(e);
+  }
+  // Tarjan's strongly connected components over the links.
+  let index = 0;
+  const idx = new Map(), low = new Map(), onStack = new Set(), stack = [], groups = [];
+  const visit = v => {
+    idx.set(v, index); low.set(v, index); index++; stack.push(v); onStack.add(v);
+    for (const e of byFrom.get(v) || []) {
+      if (!idx.has(e.to)) { visit(e.to); low.set(v, Math.min(low.get(v), low.get(e.to))); }
+      else if (onStack.has(e.to)) low.set(v, Math.min(low.get(v), idx.get(e.to)));
+    }
+    if (low.get(v) === idx.get(v)) {
+      const g = [];
+      let w;
+      do { w = stack.pop(); onStack.delete(w); g.push(w); } while (w !== v);
+      if (g.length > 1 || (byFrom.get(v) || []).some(e => e.to === v)) groups.push(g);
+    }
+  };
+  for (const s of signals) if (!idx.has(s.id)) visit(s.id);
+  const settings = new Map((loopSettings || []).map(x => [x.key, x]));
+  const loops = [], loopOf = new Map();
+  for (const g of groups) {
+    const members = g.slice().sort();
+    const key = members.join('|');
+    const set = settings.get(key) || {};
+    const inLoop = new Set(members);
+    // The time around: follow the first link to another member from the first member until back.
+    let period = 0, at = members[0];
+    for (let i = 0; i < members.length + 1; i++) {
+      const e = (byFrom.get(at) || []).find(x => inLoop.has(x.to));
+      if (!e) break;
+      period += e.delay; at = e.to;
+      if (at === members[0]) break;
+    }
+    const speed = typeof set.speed === 'number' && set.speed > 0 ? set.speed : 1;
+    const loop = { key, members, entry: members[0], period: period / speed, speed, laps: Math.max(0, set.laps | 0), running: set.running !== false, policy: set.policy === 'add' || set.policy === 'restart' ? set.policy : 'ignore', branches: members.some(m => (byFrom.get(m) || []).filter(e => inLoop.has(e.to)).length > 1) };
+    loops.push(loop);
+    for (const m of members) loopOf.set(m, loop);
+  }
+  return { edges, byFrom, loops, loopOf };
+}
+
+/** Links' pulses on their way, and each loop's pulses in flight, laps done and where it was started. */
+export function sgLinkNew() {
+  return { q: [], inFlight: new Map(), laps: new Map(), entry: new Map() };
+}
+
+/** The clock went back, or a reset: nothing on its way. */
+export function sgLinkClear(st, loopKey) {
+  if (loopKey === undefined) { st.q.length = 0; st.inFlight.clear(); st.laps.clear(); st.entry.clear(); return; }
+  st.q = st.q.filter(p => p.loop !== loopKey);
+  st.inFlight.delete(loopKey); st.laps.delete(loopKey); st.entry.delete(loopKey);
+}
+
+/**
+ * Signal `id` rose (edge 'rise') or fell ('fall') at `t`: its links send on,
+ * each after its delay (a loop's scaled by its speed). `external`: not a link
+ * arriving (a key, a condition): in a loop that is a start, and while pulses
+ * are in flight the loop's policy decides (ignore it, add another pulse, or
+ * restart). Inside a loop: at most SG_LOOP_PULSES in flight; a pulse arriving
+ * back where the loop was started is a lap, and at its Laps it stops; a
+ * stopped loop sends nothing round.
+ */
+export function sgLinkFire(st, plan, id, t, edge, external) {
+  const out = plan.byFrom.get(id);
+  const here = plan.loopOf.get(id);
+  if (here && external) {
+    const busy = (st.inFlight.get(here.key) || 0) > 0;
+    if (busy && here.policy === 'ignore') return;
+    if (busy && here.policy === 'restart') sgLinkClear(st, here.key);
+    // A fresh start (nothing going round) counts its laps from here.
+    if (!busy || here.policy === 'restart') { st.laps.delete(here.key); st.entry.set(here.key, id); }
+  }
+  if (!out) return;
+  for (const e of out) {
+    if (e.on !== edge) continue;
+    const loop = here && plan.loopOf.get(e.to) === here ? here : null;
+    let d = e.delay;
+    if (loop) {
+      if (!loop.running) continue;
+      d = d / loop.speed;
+      const n = st.inFlight.get(loop.key) || 0;
+      if (n >= SG_LOOP_PULSES) continue;
+      if (e.to === (st.entry.get(loop.key) || loop.entry)) {
+        const laps = (st.laps.get(loop.key) || 0) + 1;
+        st.laps.set(loop.key, laps);
+        if (loop.laps > 0 && laps >= loop.laps) continue;
+      }
+      st.inFlight.set(loop.key, n + 1);
+    }
+    st.q.push({ at: t + d, to: e.to, loop: loop ? loop.key : '' });
+    if (st.q.length > SG_LINK_QUEUE) { const old = st.q.shift(); if (old.loop) st.inFlight.set(old.loop, Math.max(0, (st.inFlight.get(old.loop) || 1) - 1)); }
+  }
+}
+
+/** The links that arrive by `t`, oldest first (their signals are sent now). */
+export function sgLinkDue(st, t) {
+  if (!st.q.length) return [];
+  const due = [], keep = [];
+  for (const p of st.q) {
+    if (p.at <= t + 1e-9) {
+      due.push(p.to);
+      if (p.loop) st.inFlight.set(p.loop, Math.max(0, (st.inFlight.get(p.loop) || 1) - 1));
+    } else keep.push(p);
+  }
+  st.q = keep;
+  return due;
+}
+
 /** An axis swap's memory: the axis being driven and each axis's last driven value. */
 export function sgSwapNew() {
   return { axis: 'a', prevA: null, prevB: null };

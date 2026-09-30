@@ -158,6 +158,7 @@ export function mapAction(a: PlayAction, f: RefFn): PlayAction {
 /** A signal's own id and what it is defined by: its trigger, or the signals it combines. */
 export function mapSignal(s: PlaySignal, f: RefFn): PlaySignal {
   const out: PlaySignal = { ...s, id: f('signal', s.id) };
+  if (s.links) out.links = s.links.map(l => ({ ...l, to: f('signal', l.to) })).filter(l => l.to);
   if (s.capture) out.capture = { ...s.capture, what: s.capture.what.startsWith(CAPTURE_POS) ? `${CAPTURE_POS}${mapAnchor(s.capture.what.slice(CAPTURE_POS.length), f)}` : mapValueRef(s.capture.what, f) };
   if (s.when?.kind === 'trigger') out.when = { kind: 'trigger', trigger: mapTrigger(s.when.trigger, f) };
   else if (s.when?.kind === 'logic') out.when = { ...s.when, inputs: s.when.inputs.map(i => f('signal', i)).filter(Boolean) };

@@ -208,6 +208,12 @@ export interface PlaySignal {
   capture?: SignalCapture;
   /** Seconds its rise and fall arrive late (play/kit/signals.js sgShapeStep). */
   delay?: number;
+  /**
+   * Links: when it rises (or falls), send other signals, each after its own
+   * delay (play/kit/signals.js sgLinkFire). A chain of links that comes back
+   * round is a loop (PlayRecord.loops has its settings).
+   */
+  links?: SignalLink[];
   /** Seconds it must stay true before it counts (a debounce). */
   hold?: number;
   /** Seconds it stays true after it stops (a pulse becomes a held level). */
@@ -217,6 +223,17 @@ export interface PlaySignal {
   /** The seed of its rolls: the same timeline rolls the same way. */
   seed?: number;
 }
+export interface SignalLink { to: string; delay: number; on?: 'rise' | 'fall' }
+export const SIGNAL_LINKS_MAX = 8;
+
+/**
+ * A loop's settings (a ring of linked signals, found from the links): kept by
+ * `key`, its members' ids sorted and joined by '|', so the links stay the
+ * truth. Speed scales every delay in it; laps 0 is endless; running false
+ * stops it; policy is what a new start does while pulses are going round.
+ */
+export interface PlayLoop { key: string; name?: string; speed?: number; laps?: number; running?: boolean; policy?: 'ignore' | 'add' | 'restart' }
+
 /** A signal's timing and chance, at most 10 s each; chance 10% to 100% (off is the signal's own switch). */
 export const SIGNAL_TIME_MAX = 10;
 export const SIGNAL_CHANCE_MIN = 0.1;
@@ -1100,6 +1117,8 @@ export interface PlayRecord {
   signals?: PlaySignal[];
   /** Pair controls: two controls played as one (two sliders, an XY pad). Absent = none. */
   pairs?: PlayPair[];
+  /** Settings of loops of linked signals (speed, laps, running), by their members. Absent = defaults. */
+  loops?: PlayLoop[];
   /** Mappings onto pairs (both axes at once, A or B, with axis swap). Absent = none. */
   pairMappings?: PlayPairMapping[];
   /** Spreads: controls offset together along a curve (docs/spread-control.md). Absent = none. */
@@ -1805,7 +1824,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   // A granulator rack's grains read as sensors on `ae:<rackId>` (docs/granulator.md).
   const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId)
     || (src.kind === 'sensor' && isGranulatorRack(aeRack(audioEngine, rackOfSensorLayer(src.layerId))));
-  const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref) || !!parseTrackAnchor(ref);
+  // A layer, a hand or tracked point, the pointer on the picture, a signal's captured position, or where a particles layer's latest event was.
+  const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref) || !!parseTrackAnchor(ref) || ref === 'pointer' || !!parseSignalAnchor(ref) || (() => { const ev = parseEventAnchor(ref); return !!ev && layerIds.has(ev.layerId); })();
   const triggerOk = (t: TriggerSpec) => t.on === 'zone' ? layerIds.has(t.layerId) : t.on === 'proximity' ? anchorOk(t.a) && anchorOk(t.b) : t.on === 'reader' ? readerIds.has(t.readerId) : true;
   const keptMappings = mappings.filter(m => keptIds.has(m.controlId)
     && (m.source.kind !== 'control' || keptIds.has(m.source.controlId))
@@ -1828,6 +1848,18 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   }
   const signals = parseSignals(r.signals);
   if (signals.length) out.signals = signals;
+  const loops = (Array.isArray(r.loops) ? r.loops : []).flatMap((x: unknown) => {
+    const o = x as Record<string, unknown> | null;
+    if (!o || typeof o.key !== 'string' || !o.key) return [];
+    const l: PlayLoop = { key: o.key.slice(0, 1000) };
+    if (typeof o.name === 'string' && o.name.trim()) l.name = o.name.trim().slice(0, 60);
+    if (typeof o.speed === 'number' && o.speed > 0) l.speed = Math.max(0.05, Math.min(20, o.speed));
+    if (typeof o.laps === 'number' && o.laps > 0) l.laps = Math.min(9999, Math.round(o.laps));
+    if (o.running === false) l.running = false;
+    if (o.policy === 'add' || o.policy === 'restart') l.policy = o.policy;
+    return [l];
+  }).slice(0, SIGNALS_MAX);
+  if (loops.length) out.loops = loops;
   const pairs = parsePairs(r.pairs, keptControls);
   if (pairs.length) out.pairs = pairs;
   const pairIds = new Set(pairs.map(x => x.id));
@@ -1925,6 +1957,11 @@ function parseSignals(raw: unknown): PlaySignal[] {
     for (const k of ['delay', 'hold', 'linger'] as const) { const v = o[k]; if (typeof v === 'number' && v > 0) sig[k] = Math.min(SIGNAL_TIME_MAX, v); }
     if (typeof o.chance === 'number' && o.chance < 1) sig.chance = Math.max(SIGNAL_CHANCE_MIN, o.chance);
     if (typeof o.seed === 'number' && Number.isFinite(o.seed)) sig.seed = Math.round(o.seed);
+    const links = (Array.isArray(o.links) ? o.links : []).flatMap((l: unknown) => {
+      const x = l as Record<string, unknown> | null;
+      return x && typeof x.to === 'string' && x.to ? [{ to: x.to, delay: Math.max(0, Math.min(SIGNAL_TIME_MAX, num(x.delay, 0))), ...(x.on === 'fall' ? { on: 'fall' as const } : {}) }] : [];
+    }).slice(0, SIGNAL_LINKS_MAX);
+    if (links.length) sig.links = links;
     const cap = o.capture as Record<string, unknown> | undefined;
     if (cap && typeof cap === 'object' && typeof cap.what === 'string' && cap.what) {
       sig.capture = { what: cap.what.slice(0, 200), at: cap.at === 'fall' || cap.at === 'held' ? cap.at : 'rise' };
@@ -1934,6 +1971,8 @@ function parseSignals(raw: unknown): PlaySignal[] {
   // A combination keeps only inputs that are signals of this setup (and not itself).
   const ids = new Set(out.map(s => s.id));
   for (const s of out) if (s.when?.kind === 'logic') s.when = { ...s.when, inputs: s.when.inputs.filter(i => ids.has(i) && i !== s.id) };
+  // Links only to signals of this setup (a link to itself is a one-signal loop, and allowed).
+  for (const s of out) if (s.links) { const l = s.links.filter(x => ids.has(x.to)); if (l.length) s.links = l; else delete s.links; }
   return out;
 }
 

@@ -27,7 +27,7 @@ import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
 import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
 import { incAdvance, incFold, incGlide, incGliding, incNew, incRange, incRepeat, incReset, incThreshold, type IncState } from '../play/kit/increment.js';
-import { sgCondNew, sgCondRewind, sgCondStep, sgLagNew, sgLagStep, sgLogic, sgParseValueRef, sgShapeNew, sgShapeRewind, sgShapeStep, sgShaped, sgSignalOrder, type SgLagState, type SgShapeState, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
+import { sgCondNew, sgCondRewind, sgCondStep, sgLagNew, sgLagStep, sgLinkClear, sgLinkDue, sgLinkFire, sgLinkNew, sgLinkPlan, sgLogic, type SgLinkPlan, type SgLinkState, type SgLoop, sgParseValueRef, sgShapeNew, sgShapeRewind, sgShapeStep, sgShaped, sgSignalOrder, type SgLagState, type SgShapeState, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
 import { readFinishValue } from '../types/playFinish';
 import { AUDIO_FX_TARGET_PREFIX, readAudioFxValue } from '../types/playAudioFx';
 import { signalNames } from '../play/signalNames';
@@ -681,6 +681,12 @@ class PlayEngine implements InputSource {
   private signalOrder: PlaySignal[] = [];
   private signalById = new Map<string, PlaySignal>();
   private signalWorked = new Set<string>();
+  private linkPlan: SgLinkPlan = sgLinkPlan([]);
+  private links: SgLinkState = sgLinkNew();
+  /** True while a link's pulse is being sent (it isn't a new start of a loop). */
+  private linkArriving = false;
+  /** Sent-with-timing signals a link brought this frame (their rise, worked out below, isn't a new start). */
+  private linkSent = new Set<string>();
   private sigShape = new Map<string, SgShapeState>();
   private signalCycles = new Set<string>();
   /** Condition and audio triggers, one per key, with their keys worked out. */
@@ -714,6 +720,10 @@ class PlayEngine implements InputSource {
     // Worked out each frame: a definition, or timing and chance on a sent one.
     this.signalOrder = order.map(id => byId.get(id)!).filter(s => !!s.when || sgShaped(s));
     this.signalWorked = new Set(this.signalOrder.map(s => s.id));
+    // Links between signals, and the loops they make (their settings from the record).
+    this.linkPlan = sgLinkPlan(sigs, r.loops);
+    // A stopped loop cuts what it had going round.
+    for (const l of this.linkPlan.loops) if (!l.running) sgLinkClear(this.links, l.key);
     this.signalCycles = cyclic;
     this.signalById = byId;
     const unique = (want: (t: TriggerSpec) => boolean) => {
@@ -837,6 +847,22 @@ class PlayEngine implements InputSource {
     return this.signalWorked.has(id) ? this.sigLevels.get(id) ?? false : this.sigSent.has(id);
   }
 
+  /** The loops the links make (members, period, settings), for the Signals page. */
+  loops(): readonly SgLoop[] {
+    this.index();
+    return this.linkPlan.loops;
+  }
+
+  /** A loop now: pulses going round and laps done. */
+  loopNow(key: string): { inFlight: number; laps: number } {
+    return { inFlight: this.links.inFlight.get(key) ?? 0, laps: this.links.laps.get(key) ?? 0 };
+  }
+
+  /** Reset a loop: drop what it has going round and start its laps over. */
+  resetLoop(key: string): void {
+    sgLinkClear(this.links, key);
+  }
+
   /** Is a signal part of a loop of combinations (each reads the others a frame late)? For the editor. */
   signalInLoop(id: string): boolean {
     this.index();
@@ -852,6 +878,11 @@ class PlayEngine implements InputSource {
    */
   private tickSignalLevels(): void {
     this.index();
+    // Links arriving now: their signals are sent (a loop going round).
+    for (const id of sgLinkDue(this.links, this.time)) {
+      this.linkArriving = true;
+      try { this.emitSignal(id); } finally { this.linkArriving = false; }
+    }
     const sent = this.sigSent;
     // A signal worked out here reads its level; any other is true in the frame it was sent.
     const lvl = (i: string) => (this.signalWorked.has(i) ? this.sigLevels.get(i) ?? false : sent.has(i));
@@ -881,16 +912,23 @@ class PlayEngine implements InputSource {
       const at = s.capture?.at;
       if ((at === 'rise' && level && !was) || (at === 'fall' && !level && was) || (at === 'held' && level)) this.capture(s);
       const key = signalKey(s.id);
-      if (level && !was) { this.press(key); this.signalRose(s.id); }
-      else if (!level && was) this.release(key);
+      if (level && !was) {
+        this.press(key);
+        this.linkArriving = !s.when && this.linkSent.has(s.id);
+        try { this.signalRose(s.id); } finally { this.linkArriving = false; }
+      }
+      else if (!level && was) { this.release(key); sgLinkFire(this.links, this.linkPlan, s.id, this.time, 'fall', true); }
     }
     // One-frame levels of sent signals last until the next frame's combinations have read them.
     sent.clear();
+    this.linkSent.clear();
   }
 
   /** A signal rose (or was sent): the list flashes, Spreads set to reset hear it, Learn takes it. */
   private signalRose(id: string): void {
     this.signalCount++;
+    // Its links send on (a start of its loop, unless a link brought it).
+    sgLinkFire(this.links, this.linkPlan, id, this.time, 'rise', !this.linkArriving);
     for (const cb of this.signalListeners) cb(id);
     for (const sp of this.record.spreads ?? []) if (sp.mode === 'reset' && sp.resetOn === id) for (const cb of this.spreadResetListeners) cb(sp.id);
     if (this.learnTriggerCb) this.finishLearnTrigger({ on: 'signal', signal: id });
@@ -902,7 +940,7 @@ class PlayEngine implements InputSource {
     this.sigSent.add(id);
     const s = this.signalById.get(id);
     // With timing or chance it goes out when the next frame works it out (tickSignalLevels), not now.
-    if (s && !s.when && sgShaped(s)) { inputBus.wake(); return; }
+    if (s && !s.when && sgShaped(s)) { if (this.linkArriving) this.linkSent.add(id); inputBus.wake(); return; }
     // A sent signal captures when it is sent (its one-frame rise).
     if (s?.capture && !s.when) this.capture(s);
     const key = signalKey(id);
@@ -1438,6 +1476,7 @@ class PlayEngine implements InputSource {
       for (const st of this.pairState.values()) { sgCondRewind(st.condA); sgCondRewind(st.condB); }
       // Captures, rolls and signals on their way are forgotten, so the same timeline plays the same way again.
       this.sigPayload.clear();
+      sgLinkClear(this.links);
       for (const st of this.sigShape.values()) sgShapeRewind(st);
       for (const st of this.mappingLag.values()) { st.t.length = 0; st.v.length = 0; }
     }
@@ -1829,11 +1868,13 @@ class PlayEngine implements InputSource {
   /** Actions, layer-property mappings, reader controls and Learn run whatever the shader binds. */
   wantsTick(): boolean {
     // A signal with a definition (its level) or a capture works every frame, even with nothing on it yet.
-    return !!this.record.actions?.length || !!this.record.signals?.some(s => s.when || s.capture || sgShaped(s)) || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || !!this.record.spreads?.some(sp => sp.members.length > 0) || this.handsBound || handFeed.isOn() || this.faceBound || this.poseBound || faceFeed.isOn() || poseFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
+    return !!this.record.actions?.length || !!this.record.signals?.some(s => s.when || s.capture || sgShaped(s) || !!s.links?.length) || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || !!this.record.spreads?.some(sp => sp.members.length > 0) || this.handsBound || handFeed.isOn() || this.faceBound || this.poseBound || faceFeed.isOn() || poseFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */
   isAnimating(): boolean {
+    // A link's pulse on its way (a loop going round).
+    if (this.links.q.length) return true;
     // A signal on its way (a delay) or held on (a hold or a linger counting) needs the next frames.
     for (const st of this.sigShape.values()) if (st.q.length || st.onAt >= 0 || st.held) return true;
     // A mapping's delay line still catching up.
