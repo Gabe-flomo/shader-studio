@@ -25,7 +25,7 @@ export function valueRange(play: PlayRecord, ref: string): ValueRange | null {
     case 'mapping': case 'mouse': return [0, 1];
     case 'distance': return null;
     case 'reading': return readingRange(r.read as SensorRead);
-    case 'axis': return [0, 1];
+    case 'axis': case 'picture': return [0, 1];
     case 'control': {
       const c = play.controls.find(x => x.id === r.id);
       if (!c) return null;
@@ -48,7 +48,7 @@ export function valueRange(play: PlayRecord, ref: string): ValueRange | null {
   }
 }
 
-/** Every condition in the record: triggers of mappings, increments and actions, increments' repeat conditions, pair mappings' "only while". */
+/** Every condition in the record: triggers of mappings, increments, actions and signals' own definitions, increments' repeat conditions, pair mappings' "only while". */
 export function recordConditions(play: PlayRecord): ValueCondition[] {
   const out: ValueCondition[] = [];
   const trig = (t: { on: string } | undefined) => { if (t && t.on === 'value') out.push(t as unknown as ValueCondition); };
@@ -58,12 +58,19 @@ export function recordConditions(play: PlayRecord): ValueCondition[] {
     if (m.increment?.when) out.push(m.increment.when);
   }
   for (const a of play.actions ?? []) trig(a.trigger);
+  // A signal's own definition (a level signal).
+  for (const s of play.signals ?? []) if (s.when?.kind === 'trigger') trig(s.when.trigger);
   for (const m of play.pairMappings ?? []) {
     if (m.source.kind === 'value' && m.source.source.kind === 'trigger') trig(m.source.source.trigger);
     if (m.a.when) out.push(m.a.when);
     if (m.b.when) out.push(m.b.when);
   }
   return out;
+}
+
+/** Does anything read the picture's brightness (a `pic:` value in a condition or a capture)? The layer kit then samples its grid every frame. */
+export function readsPicture(play: PlayRecord): boolean {
+  return recordConditions(play).some(c => c.value.startsWith('pic:')) || (play.signals ?? []).some(s => !!s.capture?.what.startsWith('pic:'));
 }
 
 /** The ranges every percent condition needs, by value path (what a website export carries). */

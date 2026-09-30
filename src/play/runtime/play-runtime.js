@@ -1595,6 +1595,13 @@ void main() {
       if (r.kind === 'distance') return anchorGap(r.a, r.b);
       if (r.kind === 'reading') return readSource({ kind: 'sensor', layerId: r.layerId, read: r.read, otherId: '' });
       if (r.kind === 'axis') { const p = anchorAt(r.anchor); return p ? (r.axis === 'x' ? p.x : p.y) : null; }
+      // The picture's brightness, from the layer kit's grid of the last frame (the app's PICTURE_PATCH around a position).
+      if (r.kind === 'picture') {
+        if (!K || !K.pictureAt) return null;
+        if (r.region === 'all') return K.pictureAt(null, null, 0, r.ch);
+        const p = anchorAt(r.region);
+        return p ? K.pictureAt(p.x, p.y, 0.05, r.ch) : null;
+      }
       const l = layersById.get(r.layerId);
       return l && typeof l[r.key] === 'number' ? layerValue(r.layerId, r.key, l[r.key]) : null;
     }
@@ -2406,7 +2413,7 @@ void main() {
         override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },
         shaderTap: layersTap || undefined,
         data: dsEntry,
-        needCoarse: grainsBright,
+        needCoarse: grainsBright || !!play.readsPicture,
       });
       // "Grains from" a layer: each Granulator with a source takes the things inside its boundary, this frame.
       for (const g of grains.racks.values()) {

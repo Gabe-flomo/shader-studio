@@ -314,6 +314,11 @@ export function sgParseValueRef(ref) {
     if (i <= 0 || i + 2 >= rest.length) return null;
     return { kind: 'prop', layerId: (fin ? 'finish:' : '') + rest.slice(0, i), key: rest.slice(i + 2) };
   }
+  // The picture's brightness: `pic:<lum|r|g|b>:all`, or around a position (a layer's centre, a hand point, the pointer): `pic:lum:<anchor>`.
+  if (ref.startsWith('pic:')) {
+    const m = /^pic:(lum|r|g|b):(.+)$/.exec(ref);
+    return m ? { kind: 'picture', ch: m[1], region: m[2] } : null;
+  }
   // One axis of a position (an anchor): `ax:x:<anchor>` or `ax:y:<anchor>` (a region test is a band on each).
   if (ref.startsWith('ax:x:') || ref.startsWith('ax:y:')) return ref.length > 5 ? { kind: 'axis', axis: ref[3], anchor: ref.slice(5) } : null;
   // A layer's reading (what it measures: hover, fill, speed…), as its sensors report it.

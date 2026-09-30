@@ -13,6 +13,7 @@
  * zone trigger. Everything else passes through. Module singleton, no React.
  */
 
+import { readsPicture } from './conditionRange';
 import { playPerfOn, recordPlayLayer, recordPlayStage } from '../lib/perfStats';
 import type { ActionKind, PlayLayer, PlayRecord } from '../types/play';
 import { DEFAULT_HANDS, emptyPlayRecord } from '../types/play';
@@ -95,6 +96,8 @@ class PlayOverlay {
 
   constructor() {
     playEngine.onAction(a => this.fire({ do: a.do, layerId: a.layerId, amount: a.amount }));
+    // The picture's brightness (`pic:` values): what the layer kit sampled of the last frame.
+    playEngine.setPictureReader((x, y, r, ch) => this.kit.pictureAt(x, y, r, ch));
     // Drum pads: every hit goes through here (a take records it), and comes back to play.
     playDrumPads.setActor(a => this.fire(a));
     this.onPad(a => playDrumPads.play(a));
@@ -660,7 +663,7 @@ class PlayOverlay {
     const needsAudio = this.record.layers.some(l => l.kind === 'audio' && l.visible);
     return {
       gl, W, H, dpr, time, dt,
-      needCoarse: grainsReadPicture(this.record),
+      needCoarse: grainsReadPicture(this.record) || readsPicture(this.record),
       value: (l, k) => playEngine.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]),
       pointer: this.replayPointer ?? this.pointer,
       markers: !forExport && this.guides,

@@ -23,7 +23,7 @@ import { HAND_PINCH_POINT, PAD_ANCHOR, isBandCmp, isDirectionCmp, usesHands, lay
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf } from '../../types/playFinish';
 import { audioFxControlFor, audioFxHosts } from '../../types/playAudioFx';
 import { GroupedPicker } from '../ui/GroupedPicker';
-import type { PickerSection } from '../ui/groupedPickerModel';
+import type { PickerItem, PickerSection } from '../ui/groupedPickerModel';
 import { sectionsFromOptions } from '../ui/groupedPickerModel';
 import { HAND_ANCHOR_SECTIONS } from './sourcePickerSections';
 import { Segmented } from '../ui/Choice';
@@ -52,6 +52,14 @@ export function valueSections(play: PlayRecord): PickerSection[] {
   const posItems = anchorLayers(play.layers).flatMap(l => (['x', 'y'] as const).map(a => ({ value: `ax:${a}:${l.id}`, label: `${l.label} · position ${a.toUpperCase()}`, icon: 'target' as const, description: `Where its centre is ${a === 'x' ? 'across' : 'up'} the picture, 0 to 1`, keywords: 'position region inside where' })));
   if (usesHands(play) || play.layers.some(l => l.kind === 'camera')) for (const side of ['right', 'left'] as const) for (const a of ['x', 'y'] as const) posItems.push({ value: `ax:${a}:hand:${side}:${HAND_PINCH_POINT}`, label: `${side === 'right' ? 'Right' : 'Left'} pinch point ${a.toUpperCase()}`, icon: 'target' as const, description: 'Halfway between the thumb and index tips', keywords: 'hand position region' });
   if (posItems.length) out.push({ heading: 'Positions', items: posItems });
+  // How bright the picture is (last frame's, from a small grid): all of it, or around a layer or the pointer.
+  const picItems: PickerItem[] = [
+    { value: 'pic:lum:all', label: 'Brightness of the picture', icon: 'sun', description: 'The whole picture, 0 dark to 1 bright', keywords: 'luminance light dark' },
+    { value: 'pic:lum:pointer', label: 'Brightness at the pointer', icon: 'sun', description: 'Around the pointer on the picture', keywords: 'luminance light dark mouse' },
+    ...anchorLayers(play.layers).map(l => ({ value: `pic:lum:${l.id}`, label: `Brightness under ${l.label}`, icon: 'sun' as const, description: 'Around its centre, 0 dark to 1 bright', keywords: 'luminance light dark' })),
+    ...(['r', 'g', 'b'] as const).map(ch => ({ value: `pic:${ch}:all`, label: `${ch === 'r' ? 'Red' : ch === 'g' ? 'Green' : 'Blue'} of the picture`, icon: 'sun' as const, description: 'One colour channel of the whole picture', keywords: 'colour channel' })),
+  ];
+  out.push({ heading: 'Picture', items: picItems });
   const finishItems = finishHosts(play.finish).flatMap(e => finishNumericProps(e).map(d => ({ value: `finish:${e.id}::${d.key}`, label: `${finishHostLabel(e)} · ${d.label}`, icon: 'spark' as const, keywords: 'finish' })));
   if (finishItems.length) out.push({ heading: 'Finish', items: finishItems });
   const soundItems = audioFxHosts(play.audioFx, play.layers).flatMap(h => h.params.map(d => ({ value: `${h.id}::${d.key}`, label: `${h.label} · ${d.label}`, icon: 'wave' as const, keywords: 'sound audio effect' })));

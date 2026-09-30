@@ -96,6 +96,8 @@ export interface LayerKit {
   isAnimated(record: PlayRecord): boolean;
   /** A layer drawn alone on the last frame (listed in env.alphaLayers), or null. */
   layerCanvas(id: string): HTMLCanvasElement | null;
+  /** The last frame's picture brightness (0..1): 'lum' (Rec. 709), 'r', 'g' or 'b', around (x, y) within r picture heights, or the whole picture (x null). Null before a sample. */
+  pictureAt(x: number | null, y: number | null, r: number, ch: 'lum' | 'r' | 'g' | 'b'): number | null;
   grainThings(record: PlayRecord, sourceId: string, boundaryId: string, value: (l: PlayLayer, key: string) => number, aspect: number): { things: GrainThing[]; cx: number; cy: number; all: number };
   /**
    * The Background layer's plan for this frame (null without one): what the
@@ -110,3 +112,5 @@ export interface LayerKit {
 export function createLayerKit(): LayerKit;
 
 export interface GrainThing { id: number; x: number; y: number; vx: number; vy: number; age: number; size: number; bright: number; born: boolean }
+
+export function klPictureAt(grid: ArrayLike<number>, W: number, H: number, x: number | null, y: number | null, r: number, ch: 'lum' | 'r' | 'g' | 'b'): number | null;

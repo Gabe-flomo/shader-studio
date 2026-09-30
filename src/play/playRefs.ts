@@ -82,6 +82,8 @@ export function mapValueRef(ref: string, f: RefFn): string {
     return `dist:${mapAnchor(ref.slice(5, i), f)}|${mapAnchor(ref.slice(i + 1), f)}`;
   }
   if (ref.startsWith(LAYER_TARGET_PREFIX)) return mapTarget(ref, f);
+  // The picture's brightness around a position: pic:<ch>:<anchor> ('all' is the whole picture).
+  if (ref.startsWith('pic:')) { const m = /^(pic:(?:lum|r|g|b):)(.+)$/.exec(ref); return m ? (m[2] === 'all' ? ref : `${m[1]}${mapAnchor(m[2], f)}`) : ref; }
   // One axis of a position: ax:x:<anchor>.
   if (ref.startsWith('ax:x:') || ref.startsWith('ax:y:')) return `${ref.slice(0, 5)}${mapAnchor(ref.slice(5), f)}`;
   // A layer's reading: `read:<layerId>::<read>`.

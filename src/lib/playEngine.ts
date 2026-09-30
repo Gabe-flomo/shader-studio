@@ -156,6 +156,9 @@ function sourceAnimates(s: PlaySource, triggerIdle: boolean): boolean {
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
+/** How far around a position the picture's brightness is read, in picture heights. */
+export const PICTURE_PATCH = 0.05;
+
 /** Does a condition's value path read the pointer (mouse:x|y, or a distance to or from it)? */
 function readsMouse(ref: string | undefined): boolean {
   const r = ref ? sgParseValueRef(ref) : null;
@@ -341,6 +344,11 @@ class PlayEngine implements InputSource {
   };
   private pictureDown = false;
   private picturePointer: { x: number; y: number } | null = null;
+  private pictureReader: ((x: number | null, y: number | null, r: number, ch: 'lum' | 'r' | 'g' | 'b') => number | null) | null = null;
+  /** The overlay hands over its layer kit's picture reader (kit.pictureAt): `pic:` values read through it. */
+  setPictureReader(fn: typeof this.pictureReader): void {
+    this.pictureReader = fn;
+  }
   /** The overlay reports where the pointer is on the picture (the `pointer` anchor; `mouse` is the whole window). */
   setPicturePointer(x: number, y: number): void {
     this.picturePointer = { x, y };
@@ -748,6 +756,13 @@ class PlayEngine implements InputSource {
       case 'distance': return this.anchorGap(r.a, r.b);
       case 'reading': return this.readSource({ kind: 'sensor', layerId: r.layerId, read: r.read as SensorRead, otherId: '' });
       case 'axis': { const p = this.anchorAt(r.anchor); return p ? (r.axis === 'x' ? p.x : p.y) : null; }
+      case 'picture': {
+        // The overlay's layer kit reads last frame's picture (its coarse grid); around a position, a small patch.
+        if (!this.pictureReader) return null;
+        if (r.region === 'all') return this.pictureReader(null, null, 0, r.ch);
+        const p = this.anchorAt(r.region);
+        return p ? this.pictureReader(p.x, p.y, PICTURE_PATCH, r.ch) : null;
+      }
       case 'prop': {
         const base = r.layerId.startsWith('finish:')
           ? readFinishValue(this.record.finish, `${r.layerId}::${r.key}`) ?? null

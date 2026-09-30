@@ -19,6 +19,11 @@ A trigger kind for actions and trigger mappings. It watches one value and fires 
 | `map:<mapping>` | A mapping's source reading, 0 to 1 (a trigger mapping's envelope) |
 | `mouse:x`, `mouse:y` | The pointer, 0 to 1 (y up) |
 | `dist:<A>\|<B>` | How far apart two things are, in picture heights |
+| `read:<layer>::<read>` | What a layer measures (hover, fill, speed, alive…: docs/layer-contract.md), 0 to 1 but the counts |
+| `ax:x:<anchor>`, `ax:y:<anchor>` | One axis of a position (a layer's centre, a hand point, the pointer…), 0 to 1 (y up) |
+| `pic:<lum\|r\|g\|b>:all`, `pic:<lum\|r\|g\|b>:<anchor>` | How bright the last frame's picture is (Rec. 709 luminance, or one channel), 0 to 1: all of it, or around a position (within 0.05 picture heights: "the picture under this shape", at the pointer) |
+
+**The picture's brightness** is read from the small grid (64 × 36) the layer kit samples of the last frame (`klPictureAt` in `play/kit/kit.js`); a setup that reads it asks the kit to sample every frame (`readsPicture`), which costs one small readback a frame, visible in the Performance panel's Layers time. The older **Picture** reading (`read:<layer>::picture`) is a Relationship member's picture channel, reported only for members of a Relationship layer; for brightness anywhere else use `pic:`.
 
 A distance's ends (anchors) are a layer (its centre, as proximity measures it), a hand point (`hand:<side>:<point>`), the pointer (`mouse`), a point on the picture (`pt:<x>,<y>`, 0 to 1, y up), or the MIDI pad grid's last pad (`pad:last`: its column across and row up, 0 to 1, like the Pad grid X and Y sources; no position before a pad is hit). The pickers offer the last pad when the setup has a pad grid; it is most useful as a pair mapping's **Position** source.
 

@@ -366,6 +366,7 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
     case 'distance': return `${anchorLabel(r.a, ctx.layers)} ↔ ${anchorLabel(r.b, ctx.layers)}`;
     case 'reading': return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${SENSOR_LABELS[r.read as SensorRead] ?? r.read}`;
     case 'axis': return `${anchorLabel(r.anchor, ctx.layers)} ${r.axis.toUpperCase()}`;
+    case 'picture': return `${r.ch === 'lum' ? 'Brightness' : r.ch === 'r' ? 'Red' : r.ch === 'g' ? 'Green' : 'Blue'} ${r.region === 'all' ? 'of the picture' : `under ${anchorLabel(r.region, ctx.layers)}`}`;
     case 'prop': {
       if (r.layerId.startsWith('finish:')) {
         const f = finishTargetLabel(ctx.finish, `finish:${r.layerId.slice(7)}::${r.key}`);

@@ -25,7 +25,8 @@ export type SgValueRef =
   | { kind: 'distance'; a: string; b: string }
   | { kind: 'prop'; layerId: string; key: string }
   | { kind: 'reading'; layerId: string; read: string }
-  | { kind: 'axis'; axis: 'x' | 'y'; anchor: string };
+  | { kind: 'axis'; axis: 'x' | 'y'; anchor: string }
+  | { kind: 'picture'; ch: 'lum' | 'r' | 'g' | 'b'; region: string };
 export function sgParseValueRef(ref: string): SgValueRef | null;
 export function sgScreenPoint(ref: string): { x: number; y: number } | null;
 export function sgValueKey(t: Pick<ValueCondition, 'value' | 'cmp' | 'threshold' | 'hysteresis' | 'tolerance' | 'hi' | 'unit' | 'window' | 'noise'>): string;
