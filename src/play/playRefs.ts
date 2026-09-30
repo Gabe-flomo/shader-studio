@@ -28,7 +28,7 @@
  */
 import {
   ACTION_TARGET_PREFIX, LAYER_TARGET_PREFIX, PAD_ANCHOR, parseActionTarget, parseHandAnchor, parseLayerTarget, parseReaderTarget, readerControlTarget,
-  type PairSource, type PlayAction, type PlayControl, type PlayIncrement, type PlayMapping, type PlayPair, type PlayPairMapping, type PlaySource, type TriggerSpec, type ValueCondition,
+  type PairSource, type PlayAction, type PlayControl, type PlayIncrement, type PlayMapping, type PlayPair, type PlayPairMapping, type PlaySignal, type PlaySource, type TriggerSpec, type ValueCondition,
 } from '../types/play';
 import type { PlayLayer } from '../types/playLayers';
 import { parseAudioFxTarget, audioFxTarget, AUDIO_FX_TARGET_PREFIX } from '../types/playAudioFx';
@@ -141,6 +141,14 @@ export function mapAction(a: PlayAction, f: RefFn): PlayAction {
   const layerId = !a.layerId ? a.layerId : a.layerId.startsWith(RACK_ACT_PREFIX) ? f('foreign', a.layerId) : f('layer', a.layerId);
   const out: PlayAction = { ...a, layerId, trigger: mapTrigger(a.trigger, f) };
   if (a.signal) out.signal = f('signal', a.signal);
+  return out;
+}
+
+/** A signal's own id and what it is defined by: its trigger, or the signals it combines. */
+export function mapSignal(s: PlaySignal, f: RefFn): PlaySignal {
+  const out: PlaySignal = { ...s, id: f('signal', s.id) };
+  if (s.when?.kind === 'trigger') out.when = { kind: 'trigger', trigger: mapTrigger(s.when.trigger, f) };
+  else if (s.when?.kind === 'logic') out.when = { ...s.when, inputs: s.when.inputs.map(i => f('signal', i)).filter(Boolean) };
   return out;
 }
 

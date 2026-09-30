@@ -45,7 +45,13 @@ A missing value (a hand out of view, a deleted layer) is never true, and a cross
 
 ## Signals
 
-A **signal** is a named event the setup defines (Layers → **Signals**: add, rename, fire by hand with ▶, delete).
+A **signal** is one true/false value the setup names, watched every frame (the **Signals** page, ⌘5: add, rename, fire by hand with ▶, delete). It has three views: its **level** (true now), its **rise** (it just became true) and its **fall** (it just became false). What makes it true, on its card:
+
+- **When sent**: true in the frame something sends it (an action's Send a signal, a layer's Born, an increment's step), so a one-frame pulse.
+- **While…**: its own trigger: true while a key is held, a condition is met, a hand is closed, the picture is pressed; a tap (a crossing, an OSC message) is true for its one frame.
+- **Combine**: from other signals' levels: **All of** (hover AND click), **Any of**, **None of** (NOT), **Exactly one of**. Combinations are worked out after what they read (`sgSignalOrder`, sorted when the setup changes); a loop (A reads B reads A) reads the others a frame late, which also makes a latch, and the card says so. At most 8 inputs.
+
+A signal's rise presses its key and holds it until the fall, so "When a signal fires" hears all three through the firing modes: **Once** is the rise, **Continuously** the level, **When it stops** the fall. Levels are worked out once a frame after conditions and before actions (`tickSignalLevels` in `lib/playEngine.ts`, the same in the web runtime); a signal sent by an action is visible to combinations on the next frame. A dot on the card shows whether it is true now.
 
 - **Send a signal** is an action: in an action's **Do**, pick Send a signal and the signal. It needs no layer.
 - **When a signal fires** is a trigger kind: actions and trigger mappings fire on it. In a mapping's Source picker each signal is also listed under **From the setup** (a trigger on it playing an envelope).
@@ -59,6 +65,8 @@ Signals pass down a chain in the same frame: A sends S1, an action on S1 sends S
 - a chain passes through at most 8 links a frame (`SG_DEPTH`). Whatever is left carries on next frame, so a long chain is late by a frame, not lost.
 
 A loop (S1 sends S2, S2 sends S1) therefore runs at most once around per frame.
+
+In the file a signal may carry `"when": { "kind": "trigger", "trigger": {…} }` or `"when": { "kind": "logic", "op": "and" | "or" | "not" | "xor", "inputs": ["sig_…"] }`; inputs that aren't signals of the setup are dropped.
 
 Deleting a signal leaves what sent or listened for it in place, marked **Missing signal**. Signals themselves aren't recorded in takes: what they did is (the actions they fired, the controls they moved).
 

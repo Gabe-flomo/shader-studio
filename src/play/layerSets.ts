@@ -52,7 +52,7 @@ import { videoLayerOfInput, videoReaderInput, padsLayerOfInput, padsReaderInput,
 import { pruneGroups, tidyGroups, type LayerGroup } from '../types/layerGroups';
 import type { PlayAudioFx } from '../types/playAudioFx';
 import { isLinkedRef, linkedName } from '../files/linkedRefs';
-import { mapAction, mapControl, mapLayerRefs, mapMapping, mapPair, mapPairMapping, mapTarget, type RefFn, type RefKind } from './playRefs';
+import { mapAction, mapControl, mapLayerRefs, mapMapping, mapPair, mapPairMapping, mapSignal, mapTarget, type RefFn, type RefKind } from './playRefs';
 import { playId } from './playControls';
 
 export const LAYER_SETS_KEY = 'shader-studio:layer-sets';
@@ -403,13 +403,15 @@ export function loadLayerSet(p: PlayRecord, set: Pick<LayerSet, 'name' | 'play' 
   for (const r of readerIds) ids.reader.set(r, newId('reader'));
   for (const x of pairs) ids.pair.set(x.id, newId('pair'));
   // Signals are names: one the setup already has (by name) is the same signal.
-  const newSignals: PlaySignal[] = [];
+  const fresh: PlaySignal[] = [];
   for (const s of src.signals ?? []) {
     const have = p.signals?.find(x => x.name === s.name);
     if (have) ids.signal.set(s.id, have.id);
-    else { const id = newId('sig'); ids.signal.set(s.id, id); newSignals.push({ id, name: s.name }); }
+    else { ids.signal.set(s.id, newId('sig')); fresh.push(s); }
   }
   const f: RefFn = (k, id) => ids[k].get(id) ?? id;
+  // New signals keep what they are defined by (a trigger, or the signals they combine), pointed at the new ids.
+  const newSignals: PlaySignal[] = fresh.map(s => mapSignal(s, f));
 
   // Layers, named apart from the setup's.
   const layerNames = new Set(p.layers.map(l => l.label));

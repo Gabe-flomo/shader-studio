@@ -26,9 +26,10 @@ import { triggerLabel } from '../../play/playSources';
 import { addSignal, deleteSignal, layerSignalListeners, layerSignalSenders, renameSignal, signalUses } from '../../play/pairs';
 import { playEngine } from '../../lib/playEngine';
 import { addThen, addWhen, signalFlow } from './signalFlow';
-import { backgroundLayerOf, SIGNAL_ACTION, type PlayAction, type PlayRecord } from '../../types/play';
+import { backgroundLayerOf, SIGNAL_ACTION, type PlayAction, type PlayRecord, type SignalDef, type SignalLogic } from '../../types/play';
 import { ActionsSection, addAction } from './layers/ActionsSection';
 import { SignalRow } from './ConditionFields';
+import { SignalDefEditor } from './SignalDefEditor';
 import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
 import { usePlayUi } from './playUi';
@@ -129,8 +130,20 @@ export function signalLinks(play: PlayRecord, id: string): SignalLinks {
     if (m.swap?.backSignal === id) heardBy.push(`Swap back on ${pair}`);
   }
   for (const s of layerSignalSenders(play)) if (s.id === id) sentBy.push(s.label);
+  // Its own definition: a trigger it follows, or the signals it combines.
+  const self = play.signals?.find(s => s.id === id);
+  if (self?.when) sentBy.unshift(signalDefLabel(self.when, play));
   for (const s of layerSignalListeners(play)) if (s.id === id) heardBy.push(s.label);
   return { sentBy, heardBy };
+}
+
+const LOGIC_WORDS: Record<SignalLogic, string> = { and: 'All of', or: 'Any of', not: 'None of', xor: 'Exactly one of' };
+
+/** "Key Space (held)", "All of: Hover, Click": what a level signal follows. */
+export function signalDefLabel(w: SignalDef, play: PlayRecord): string {
+  if (w.kind === 'trigger') return `Its own: ${triggerLabel(w.trigger, play.layers, { layers: play.layers, controls: play.controls, signals: play.signals })}`;
+  const names = w.inputs.map(i => play.signals?.find(s => s.id === i)?.name ?? 'Missing signal');
+  return `${LOGIC_WORDS[w.op]}: ${names.length ? names.join(', ') : 'nothing yet'}`;
 }
 
 /** One action as a row: "Key Space" over "→ Burst · Sparks". */
@@ -216,11 +229,14 @@ export function SignalsPage({ play, onChange, wide }: { play: PlayRecord; onChan
                   onRemove={() => onChange(p => deleteSignal(p, g.signal.id))}
                 />
               </div>
+              <SignalDefEditor signal={g.signal} play={play} onChange={onChange} />
               {(() => {
                 const links = signalLinks(play, g.signal.id);
-                const notActions = (xs: string[]) => xs.filter(x => !x.startsWith('Action:'));
+                // Actions are rows; its own definition is edited just above.
+                const def = g.signal.when ? signalDefLabel(g.signal.when, play) : '';
+                const notActions = (xs: string[]) => xs.filter(x => !x.startsWith('Action:') && x !== def);
                 return <>
-                  {part('When', g.when, notActions(links.sentBy), 'Nothing sends it yet.', () => addAndPick(p => addWhen(p, g.signal.id)), 'When')}
+                  {part('When', g.when, notActions(links.sentBy), g.signal.when ? 'Only what it is true from, above. Actions can send it too.' : 'Nothing sends it yet.', () => addAndPick(p => addWhen(p, g.signal.id)), 'When')}
                   {part('Then', g.then, notActions(links.heardBy), 'It sets nothing off yet.', () => addAndPick(p => addThen(p, g.signal.id)), 'Then')}
                 </>;
               })()}

@@ -213,6 +213,47 @@ export function sgRunActions(actions, fires, run, emit, stats) {
   return order;
 }
 
+/**
+ * A combination of signals' levels: and (all true; nothing combined is
+ * never true), or (any), not (none of them), xor (exactly one).
+ */
+export function sgLogic(op, levels) {
+  let n = 0;
+  for (const x of levels) if (x) n++;
+  switch (op) {
+    case 'or': return n > 0;
+    case 'not': return n === 0;
+    case 'xor': return n === 1;
+    default: return levels.length > 0 && n === levels.length;
+  }
+}
+
+/**
+ * The order to work signals out in each frame: a combination after the
+ * signals it reads (a topological sort, done when the setup changes). A loop
+ * (A reads B reads A) can't be ordered: its members are listed in `cyclic`,
+ * and each reads the others' levels from the frame before (a unit delay).
+ * `signals`: [{ id, when }].
+ */
+export function sgSignalOrder(signals) {
+  const byId = new Map(signals.map(s => [s.id, s]));
+  const state = new Map(); // 1 visiting, 2 done
+  const order = [], cyclic = new Set();
+  const visit = (id, path) => {
+    const st = state.get(id);
+    if (st === 2) return;
+    if (st === 1) { for (let i = path.lastIndexOf(id); i < path.length; i++) cyclic.add(path[i]); return; }
+    state.set(id, 1);
+    const s = byId.get(id);
+    const w = s && s.when;
+    if (w && w.kind === 'logic') { path.push(id); for (const i of w.inputs) if (byId.has(i)) visit(i, path); path.pop(); }
+    state.set(id, 2);
+    order.push(id);
+  };
+  for (const s of signals) visit(s.id, []);
+  return { order, cyclic };
+}
+
 /** An axis swap's memory: the axis being driven and each axis's last driven value. */
 export function sgSwapNew() {
   return { axis: 'a', prevA: null, prevB: null };

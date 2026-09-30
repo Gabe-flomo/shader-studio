@@ -179,6 +179,8 @@ export function layerSignalSenders(play: PlayRecord): Array<{ id: string; label:
 /** Signal fields that listen for a signal outside of an action or a mapping source: an Increment's Reset on. */
 export function layerSignalListeners(play: PlayRecord): Array<{ id: string; label: string }> {
   const out: Array<{ id: string; label: string }> = [];
+  // A combination reads the signals it combines.
+  for (const s of play.signals ?? []) if (s.when?.kind === 'logic') for (const i of s.when.inputs) out.push({ id: i, label: `Combined into ${s.name}` });
   for (const m of play.mappings) {
     const inc = m.increment;
     if (inc?.resetOn) {

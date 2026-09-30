@@ -1481,7 +1481,9 @@ void main() {
     const allTriggers = play.mappings.filter(m => m.enabled && m.source.kind === 'trigger').map(m => m.source.trigger).concat(actions.map(a => a.trigger))
       .concat(incMappings.filter(m => m.increment.on === 'trigger').map(m => m.increment.trigger))
       .concat(incMappings.filter(m => m.increment.resetOn).map(m => ({ on: 'signal', signal: m.increment.resetOn })))
-      .concat(pairMappings.filter(m => m.source.kind === 'value' && m.source.source.kind === 'trigger').map(m => m.source.source.trigger));
+      .concat(pairMappings.filter(m => m.source.kind === 'value' && m.source.source.kind === 'trigger').map(m => m.source.source.trigger))
+      // A signal defined by a trigger listens to it like any other (the app's playEngine does the same).
+      .concat((play.signals || []).filter(s => s.when && s.when.kind === 'trigger').map(s => s.when.trigger));
     const gamepad = i => (navigator.getGamepads ? navigator.getGamepads()[i] : null);
     const padQueue = [];
     function tickPads() { if (!padG) return; for (const m of padQueue.splice(0)) KM.gridMessage(padG, padCfg, m[0], m[1], m[2], m[3], time); }
@@ -1492,6 +1494,7 @@ void main() {
       if (m.source.kind === 'trigger' && m.source.trigger.on === 'key') keysUsed.add(m.source.trigger.code);
     }
     for (const a of actions) if (a.trigger.on === 'key') keysUsed.add(a.trigger.code);
+    for (const s of play.signals || []) if (s.when && s.when.kind === 'trigger' && s.when.trigger.on === 'key') keysUsed.add(s.when.trigger.code);
     for (const m of incMappings) if (m.increment.on === 'trigger' && m.increment.trigger.on === 'key') keysUsed.add(m.increment.trigger.code);
     for (const m of pairMappings) { const s = m.source.kind === 'value' ? m.source.source : null; if (s && s.kind === 'key') keysUsed.add(s.code); if (s && s.kind === 'trigger' && s.trigger.on === 'key') keysUsed.add(s.trigger.code); }
     function readSource(s) {
@@ -1670,7 +1673,34 @@ void main() {
       }
     }
     // A signal: its "When signal fires" triggers see a press and its release at once.
-    function emitSignal(id) { const k = 'sig:' + id; press(k); release(k); }
+    // Signals sent this frame (by an action or a layer): true for the frame, for combinations to read.
+    const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map();
+    function emitSignal(id) { sigSent.add(id); const k = 'sig:' + id; press(k); release(k); }
+    // Level signals (the app's playEngine tickSignalLevels): each defined signal is true while its trigger is held or
+    // met, or while its combination of others holds; rising presses its key and holds it, falling lets go.
+    const sigDefs = (() => {
+      const list = play.signals || [];
+      if (!SG || !SG.order) return [];
+      const byId = new Map(list.map(s => [s.id, s]));
+      return SG.order(list).order.map(id => byId.get(id)).filter(s => s && s.when);
+    })();
+    function tickSignalLevels() {
+      for (const s of sigDefs) {
+        const w = s.when;
+        let level;
+        if (w.kind === 'trigger') {
+          const inp = triggerInput(w.trigger);
+          const seen = sigSeen.has(s.id) ? sigSeen.get(s.id) : inp.presses;
+          sigSeen.set(s.id, inp.presses);
+          level = inp.gate || inp.presses > seen;
+        } else level = SG.logic(w.op, w.inputs.map(i => (sigLevels.get(i) || false) || sigSent.has(i)));
+        const was = sigLevels.get(s.id) || false;
+        sigLevels.set(s.id, level);
+        if (level && !was) press('sig:' + s.id);
+        else if (!level && was) release('sig:' + s.id);
+      }
+      sigSent.clear();
+    }
     // Relationship layers: each catch the kit counted (`<id>::caught`) sends the layer's catch signal.
     const caughtSeen = new Map();
     function tickRelationshipSignals() {
@@ -1941,6 +1971,7 @@ void main() {
       tickRelationshipSignals();
       tickMultiplySignals();
       tickBornDiedSignals();
+      tickSignalLevels();
       tickActions(dt);
       const driven = new Set();
       let moved = false;

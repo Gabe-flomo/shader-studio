@@ -27,13 +27,13 @@ import { audioEngine } from './audioEngine';
 import { oscClient, oscNumber, type OscMessage } from './oscClient';
 import { anchorDistance, beatAt, firesWhileHeld, newFireState, newTriggerState, noiseAt, proximityCondition, signalKey, stepFire, stepTrigger, triggerKey, type FireState, type TriggerState } from '../play/triggers';
 import { incAdvance, incFold, incGlide, incGliding, incNew, incRange, incRepeat, incReset, incThreshold, type IncState } from '../play/kit/increment.js';
-import { sgCondNew, sgCondRewind, sgCondStep, sgParseValueRef, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
+import { sgCondNew, sgCondRewind, sgCondStep, sgLogic, sgParseValueRef, sgSignalOrder, sgRunActions, sgScreenPoint, sgSwapNew, sgSwapStep, type SgCondState, type SgSwapState } from '../play/kit/signals.js';
 import { readFinishValue } from '../types/playFinish';
 import { AUDIO_FX_TARGET_PREFIX, readAudioFxValue } from '../types/playAudioFx';
 import { signalNames } from '../play/signalNames';
 import { conditionRanges } from '../play/conditionRange';
 import { playPerfOn, recordPlayCounts, recordPlayStage, type PlayStage } from './perfStats';
-import type { PairAxis, PlayPair, PlayPairMapping, ValueCondition } from '../types/play';
+import type { PairAxis, PlayPair, PlayPairMapping, PlaySignal, ValueCondition } from '../types/play';
 import { geoAnchor } from '../play/kit/geometry.js';
 import { fnEval } from '../play/kit/fn.js';
 import type { TriggerSpec } from '../types/play';
@@ -409,6 +409,9 @@ class PlayEngine implements InputSource {
       || (record.actions ?? []).some(a => a.enabled && a.trigger.on === 'osc');
     for (const id of [...this.actionFire.keys()]) if (!(record.actions ?? []).some(a => a.id === id)) this.actionFire.delete(id);
     for (const id of [...this.mappingFire.keys()]) if (!record.mappings.some(m => m.id === id && m.source.kind === 'trigger') && !(record.pairMappings ?? []).some(m => m.id === id)) this.mappingFire.delete(id);
+    // A signal that lost its definition (or went) lets go of its key.
+    const defined = new Set(this.signalOrder.map(s => s.id));
+    for (const [id, on] of [...this.sigLevels]) if (!defined.has(id)) { this.sigLevels.delete(id); this.sigSeen.delete(id); if (on) this.release(signalKey(id)); }
     const condKeys = new Set(this.allTriggers().filter(t => t.on === 'proximity' || t.on === 'value').map(triggerKey));
     for (const [k, st] of [...this.condStates]) if (!condKeys.has(k)) { this.condStates.delete(k); if (st.open) this.release(k); }
     oscClient.setWanted(this.oscIsBound || oscClient.getStatus() === 'connected');
@@ -632,6 +635,9 @@ class PlayEngine implements InputSource {
   private indexed: PlayRecord | null = null;
   private triggerList: TriggerSpec[] = [];
   private enabledActions: PlayAction[] = [];
+  /** Signals with a definition of their own, in dependency order; the ones in a loop (read a frame late). */
+  private signalOrder: PlaySignal[] = [];
+  private signalCycles = new Set<string>();
   /** Condition and audio triggers, one per key, with their keys worked out. */
   private condTriggers: { t: TriggerSpec; key: string }[] = [];
   private audioTriggers: { t: TriggerSpec; key: string }[] = [];
@@ -653,7 +659,15 @@ class PlayEngine implements InputSource {
     }
     for (const a of r.actions ?? []) if (a.enabled) out.push(a.trigger);
     for (const m of r.pairMappings ?? []) if (m.enabled && m.source.kind === 'value' && m.source.source.kind === 'trigger') out.push(m.source.source.trigger);
+    // A signal defined by a trigger listens to it like any other (its keys bound, its condition ticked).
+    for (const s of r.signals ?? []) if (s.when?.kind === 'trigger') out.push(s.when.trigger);
     this.triggerList = out;
+    // Signals in the order their levels are worked out: a combination after what it reads.
+    const sigs = r.signals ?? [];
+    const { order, cyclic } = sgSignalOrder(sigs);
+    const byId = new Map(sigs.map(s => [s.id, s]));
+    this.signalOrder = order.map(id => byId.get(id)!).filter(s => !!s.when);
+    this.signalCycles = cyclic;
     const unique = (want: (t: TriggerSpec) => boolean) => {
       const seen = new Set<string>(), list: { t: TriggerSpec; key: string }[] = [];
       for (const t of out) { if (!want(t)) continue; const key = triggerKey(t); if (!seen.has(key)) { seen.add(key); list.push({ t, key }); } }
@@ -734,16 +748,71 @@ class PlayEngine implements InputSource {
     return () => { this.spreadResetListeners.delete(cb); };
   }
 
-  /** A signal fires: its "When signal fires" triggers see a press (and its release) at once. Learn takes it too. */
-  private emitSignal(id: string): void {
+  // ── Level signals ─────────────────────────────────────────────────────────
+
+  /** Each defined signal's level (true now); what was sent this frame by an action or a layer (a one-frame level). */
+  private sigLevels = new Map<string, boolean>();
+  private sigSent = new Set<string>();
+  private sigSeen = new Map<string, number>();
+
+  /** Is a signal true now: its own definition, or sent this frame. */
+  signalLevel(id: string): boolean {
+    return (this.sigLevels.get(id) ?? false) || this.sigSent.has(id);
+  }
+
+  /** Is a signal part of a loop of combinations (each reads the others a frame late)? For the editor. */
+  signalInLoop(id: string): boolean {
+    this.index();
+    return this.signalCycles.has(id);
+  }
+
+  /**
+   * Work out each defined signal's level (play/kit/signals.js sgLogic for
+   * combinations), in dependency order: rising presses its key and holds it,
+   * falling lets go, so "When a signal fires" fires on the rise, Continuously
+   * while it is true and When it stops on the fall. A combination reads what
+   * other signals were sent this frame so far and what was sent last frame.
+   */
+  private tickSignalLevels(): void {
+    this.index();
+    const sent = this.sigSent;
+    for (const s of this.signalOrder) {
+      const w = s.when!;
+      let level: boolean;
+      if (w.kind === 'trigger') {
+        const { presses, gate } = this.triggerInput(w.trigger);
+        const seen = this.sigSeen.get(s.id) ?? presses;
+        this.sigSeen.set(s.id, presses);
+        level = gate || presses > seen;
+      } else {
+        level = sgLogic(w.op, w.inputs.map(i => (this.sigLevels.get(i) ?? false) || sent.has(i)));
+      }
+      const was = this.sigLevels.get(s.id) ?? false;
+      this.sigLevels.set(s.id, level);
+      const key = signalKey(s.id);
+      if (level && !was) { this.press(key); this.signalRose(s.id); }
+      else if (!level && was) this.release(key);
+    }
+    // One-frame levels of sent signals last until the next frame's combinations have read them.
+    sent.clear();
+  }
+
+  /** A signal rose (or was sent): the list flashes, Spreads set to reset hear it, Learn takes it. */
+  private signalRose(id: string): void {
     this.signalCount++;
-    const key = signalKey(id);
-    this.press(key);
-    this.release(key);
     for (const cb of this.signalListeners) cb(id);
     for (const sp of this.record.spreads ?? []) if (sp.mode === 'reset' && sp.resetOn === id) for (const cb of this.spreadResetListeners) cb(sp.id);
     if (this.learnTriggerCb) this.finishLearnTrigger({ on: 'signal', signal: id });
     else if (this.learnCb) this.finishLearn(signalSource(id));
+  }
+
+  /** A signal is sent (by an action, a layer, the Fire button): its "When signal fires" triggers see a press (and its release) at once. */
+  private emitSignal(id: string): void {
+    this.sigSent.add(id);
+    const key = signalKey(id);
+    this.press(key);
+    this.release(key);
+    this.signalRose(id);
   }
 
   /** Fire a signal by hand (its button on the signals list): what listens for it sees it on the next frame. */
@@ -1271,6 +1340,7 @@ class PlayEngine implements InputSource {
     this.tickRelationshipSignals();
     this.tickMultiplySignals();
     this.tickBornDiedSignals();
+    this.tickSignalLevels();
     lap?.('conditions');
     this.tickActions(dt);
     lap?.('actions');

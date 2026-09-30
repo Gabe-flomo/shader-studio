@@ -13,6 +13,8 @@ export function sgDirGate(open: boolean, diff: number, cmp: CondCmp, dead: numbe
 export function sgPct(v: number, lo: number, hi: number): number;
 export function sgCondStep(st: SgCondState, v: number | null | undefined, c: Pick<ValueCondition, 'cmp' | 'threshold' | 'hysteresis' | 'tolerance' | 'hi' | 'unit' | 'window' | 'noise'>, range?: readonly [number, number] | null, dt?: number): 'open' | 'close' | 'tap' | null;
 export function sgRunActions<A extends { do: string; signal?: string; trigger?: { on: string } }>(actions: readonly A[], fires: (a: A) => number, run: (a: A) => void, emit: (id: string) => void, stats?: { depth: number; tripped: boolean }): string[];
+export function sgLogic(op: string, levels: readonly boolean[]): boolean;
+export function sgSignalOrder(signals: ReadonlyArray<{ id: string; when?: { kind: string; inputs?: string[] } }>): { order: string[]; cyclic: Set<string> };
 export interface SgSwapState { axis: 'a' | 'b'; prevA: number | null; prevB: number | null }
 export function sgSwapNew(): SgSwapState;
 export function sgSwapStep(st: SgSwapState, va: number | null | undefined, vb: number | null | undefined, sw: Pick<PairSwap, 'at' | 'dir' | 'backAt' | 'backDir'>): 'toA' | 'toB' | null;

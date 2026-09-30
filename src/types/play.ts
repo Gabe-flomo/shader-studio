@@ -177,8 +177,29 @@ export interface ValueCondition {
   noise?: number;
 }
 
-/** A named signal: actions send it, triggers listen for it. */
-export interface PlaySignal { id: string; name: string }
+/** How a signal combines others: all of them, any, none (not), exactly one. */
+export type SignalLogic = 'and' | 'or' | 'not' | 'xor';
+export const SIGNAL_LOGICS: readonly SignalLogic[] = ['and', 'or', 'not', 'xor'];
+/** A signal combines at most this many others. */
+export const SIGNAL_INPUTS_MAX = 8;
+
+/**
+ * What makes a signal true, when it has a definition of its own (a level
+ * signal): a trigger (true while it is held or met: a key down, a condition
+ * true, a hand closed; a tap is true for its one frame), or a combination of
+ * other signals' levels. Without one, a signal is true only in the frame
+ * something sends it.
+ */
+export type SignalDef =
+  | { kind: 'trigger'; trigger: TriggerSpec }
+  | { kind: 'logic'; op: SignalLogic; inputs: string[] };
+
+/**
+ * A named signal: one true/false value, watched every frame. Its rise (it
+ * became true) is what "When a signal fires" hears; held and on-release
+ * firing modes hear its level and its fall. Actions can also send it.
+ */
+export interface PlaySignal { id: string; name: string; when?: SignalDef }
 export const SIGNALS_MAX = 64;
 
 // ── Pair controls (two values played as one) ────────────────────────────────
@@ -362,8 +383,9 @@ export const DEFAULT_HAND_RESPONSIVENESS = 0.5;
 export const DEFAULT_HAND_STRICTNESS = 0.5;
 
 /** Does a setup read hands anywhere: a hand source, a gesture trigger (mapping or action), or a null following a hand? */
-export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings'>>): boolean {
-  return (play.pairMappings ?? []).some(pairMappingUsesHands) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
+export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings' | 'signals'>>): boolean {
+  return (play.pairMappings ?? []).some(pairMappingUsesHands)
+    || (play.signals ?? []).some(s => s.when?.kind === 'trigger' && triggerUsesHands(s.when.trigger)) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
     || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId))
     || (!!m.increment && ((m.increment.on === 'trigger' && triggerUsesHands(m.increment.trigger)) || (m.increment.on === 'repeat' && conditionUsesHands(m.increment.when)))))
     || (play.actions ?? []).some(a => triggerUsesHands(a.trigger))
@@ -1821,9 +1843,27 @@ function parseSignals(raw: unknown): PlaySignal[] {
     const id = str(o.id);
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push({ id: id.slice(0, 80), name: (typeof o.name === 'string' && o.name.trim() ? o.name : 'Signal').slice(0, 60) });
+    const sig: PlaySignal = { id: id.slice(0, 80), name: (typeof o.name === 'string' && o.name.trim() ? o.name : 'Signal').slice(0, 60) };
+    const when = parseSignalDef(o.when);
+    if (when) sig.when = when;
+    out.push(sig);
   }
+  // A combination keeps only inputs that are signals of this setup (and not itself).
+  const ids = new Set(out.map(s => s.id));
+  for (const s of out) if (s.when?.kind === 'logic') s.when = { ...s.when, inputs: s.when.inputs.filter(i => ids.has(i) && i !== s.id) };
   return out;
+}
+
+function parseSignalDef(raw: unknown): SignalDef | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const w = raw as Record<string, unknown>;
+  if (w.kind === 'trigger') { const trigger = parseTrigger(w.trigger); return trigger ? { kind: 'trigger', trigger } : null; }
+  if (w.kind === 'logic') {
+    const op = (SIGNAL_LOGICS as readonly unknown[]).includes(w.op) ? w.op as SignalLogic : 'and';
+    const inputs = [...new Set((Array.isArray(w.inputs) ? w.inputs : []).filter((x): x is string => typeof x === 'string' && !!x))].slice(0, SIGNAL_INPUTS_MAX);
+    return { kind: 'logic', op, inputs };
+  }
+  return null;
 }
 
 /** Pairs of two different float controls that exist; a control is in one pair at most. */
