@@ -1059,6 +1059,10 @@ export function createLayerKit() {
         // edge-detection) and the this-step delta (the born/died readings, a mapping source).
         report(env, l.id + '::bornCount', sim.evBorn);
         report(env, l.id + '::diedCount', sim.evDied);
+        // Where the latest birth, death and annihilation happened (the anchors ev:<layer>:born|died|annihilate).
+        report(env, l.id + '::bornX', sim.bornX); report(env, l.id + '::bornY', sim.bornY);
+        report(env, l.id + '::diedX', sim.diedX); report(env, l.id + '::diedY', sim.diedY);
+        report(env, l.id + '::annihilateX', sim.annX); report(env, l.id + '::annihilateY', sim.annY);
         { const bd = bornDiedDelta(l.id, sim.evBorn, sim.evDied); report(env, l.id + '::born', bd.born); report(env, l.id + '::died', bd.died); }
         if (l.emit === 'multiply' && sim.mx) {
           report(env, l.id + '::split', sim.mx.splits);

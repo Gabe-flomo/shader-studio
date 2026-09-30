@@ -130,6 +130,10 @@ export function DistanceAnchorPicker({ value, layers, exclude, ariaLabel, pads =
       { value: 'pointer', label: 'Pointer on the picture', icon: 'mouse' as const, description: 'Where the pointer is on the picture itself (where a click lands)' },
       { value: 'pt', label: 'A point on the picture', icon: 'target' as const, description: 'X and Y, 0 to 1 (Y up)' },
     ] },
+    // Where a particles layer's latest birth, death or annihilation (Multiply) happened.
+    ...(layers.some(l => l.kind === 'particles') ? [{ heading: 'Particle events', items: layers.filter(l => l.kind === 'particles').flatMap(l => ([['born', 'latest birth'], ['died', 'latest death'], ['annihilate', 'latest annihilation']] as const).map(([e, w]) => ({
+      value: `ev:${l.id}:${e}`, label: `${l.label} · ${w}`, icon: 'spark' as const, description: e === 'annihilate' ? 'Where two particles last met and vanished (Multiply, Annihilate)' : `Where a particle was last ${e === 'born' ? 'born' : 'lost'}`, keywords: 'particle event where',
+    }))) }] : []),
     ...(pads || value === PAD_ANCHOR ? [{ heading: 'MIDI', items: [
       { value: PAD_ANCHOR, label: 'Pad grid · last pad', icon: 'grid' as const, description: 'The last pad hit: its column across and row up, 0 to 1', keywords: 'midi launchpad pad' },
     ] }] : []),

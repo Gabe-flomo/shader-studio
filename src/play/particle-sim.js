@@ -142,8 +142,16 @@ function allocParticles(n) {
     // kit and play engine diff this between frames to fire `<layer>.born` / `<layer>.died` (once a frame,
     // however many particles were involved) and to report "born/died this step" readings.
     evBorn: 0, evDied: 0,
+    // Where the latest birth, death and annihilation happened (0..1; NaN before the first): what a
+    // signal captures, as the anchor ev:<layer>:born|died|annihilate. Several in one step: the last wins.
+    bornX: NaN, bornY: NaN, diedX: NaN, diedY: NaN, annX: NaN, annY: NaN,
   };
 }
+
+/** A birth at (x, y): counted, and remembered as the latest. */
+function evBorn(st, x, y) { st.evBorn++; st.bornX = x; st.bornY = y; }
+/** `n` deaths, the latest at (x, y). */
+function evDied(st, x, y, n = 1) { st.evDied += n; st.diedX = x; st.diedY = y; }
 
 /** Fresh state for `count` particles. `rand` is injectable for tests. `dead` starts them unborn (burst mode). */
 export function createParticles(count, rand = Math.random, dead = false) {
@@ -160,6 +168,7 @@ export function resizeParticles(st, count, rand = Math.random, dead = false) {
   if (n === st.count) return st;
   const out = allocParticles(n);
   out.seed = st.seed; out.mx = st.mx; out.evBorn = st.evBorn; out.evDied = st.evDied;
+  for (const k of ['bornX', 'bornY', 'diedX', 'diedY', 'annX', 'annY']) out[k] = st[k];
   const keep = Math.min(n, st.count);
   for (const k of ['x', 'y', 'vx', 'vy', 'age', 'life', 'r', 'alive', 'cool', 'zt', 'zs', 'split', 'mate', 'bx', 'by']) out[k].set(st[k].subarray(0, keep));
   for (let i = 0; i < keep; i++) if (out.mate[i] >= n) out.mate[i] = -1;
@@ -236,7 +245,7 @@ export function burstParticles(st, p, env, amount, rand = Math.random) {
     st.split[i] = splitInterval(p, rand); st.mate[i] = -1; st.bx[i] = st.x[i]; st.by[i] = st.y[i];
     const a = rand() * TAU, k = kick * (0.4 + rand() * 0.8);
     st.vx[i] = Math.cos(a) * k; st.vy[i] = Math.sin(a) * k;
-    n--; st.evBorn++;
+    n--; evBorn(st, st.x[i], st.y[i]);
   }
   if (n > 0 && !pooled(p)) return;
   // Not enough unborn particles: recycle the oldest.
@@ -247,7 +256,7 @@ export function burstParticles(st, p, env, amount, rand = Math.random) {
     spawn(st, oldest, p, env, rand);
     const a = rand() * TAU, k = kick * (0.4 + rand() * 0.8);
     st.vx[oldest] = Math.cos(a) * k; st.vy[oldest] = Math.sin(a) * k;
-    n--; st.evBorn++;
+    n--; evBorn(st, st.x[oldest], st.y[oldest]);
   }
 }
 
@@ -481,24 +490,24 @@ export function stepParticles(st, p, env, rand = Math.random) {
     // 7. Edges and lifetime.
     const life = lifeOf(st, i, p);
     const expired = life > 0 && st.age[i] > life;
-    if (expired && p.emit === 'burst') { st.alive[i] = 0; st.evDied++; st.x[i] = x; st.y[i] = y; continue; }
+    if (expired && p.emit === 'burst') { st.alive[i] = 0; evDied(st, x, y); st.x[i] = x; st.y[i] = y; continue; }
     respawn = respawn || expired;
     const out = x < 0 || x > 1 || y < 0 || y > 1;
     if (out && !respawn) {
       if (p.edges === 'wrap') { x -= Math.floor(x); y -= Math.floor(y); }
       else if (p.edges === 'random') {
         // Somewhere new, still heading the same way (and fading in again, if the layer fades) — a rebirth.
-        x = rand(); y = rand(); st.age[i] = 0; st.evBorn++;
+        x = rand(); y = rand(); st.age[i] = 0; evBorn(st, x, y);
       }
       else if (p.edges === 'bounce') {
         if (x < 0) { x = -x; vx = -vx; } else if (x > 1) { x = 2 - x; vx = -vx; }
         if (y < 0) { y = -y; vy = -vy; } else if (y > 1) { y = 2 - y; vy = -vy; }
-      } else if (p.emit === 'burst') { st.alive[i] = 0; st.evDied++; continue; }
+      } else if (p.emit === 'burst') { st.alive[i] = 0; evDied(st, x, y); continue; }
       else respawn = true;
       if (emitting && p.emit !== 'burst') respawn = true;
     }
     st.x[i] = x; st.y[i] = y; st.vx[i] = vx; st.vy[i] = vy;
-    if (respawn) { if (mult) { st.alive[i] = 0; st.evDied++; } else { spawn(st, i, p, env, rand); st.evBorn++; } }
+    if (respawn) { if (mult) { st.alive[i] = 0; evDied(st, x, y); } else { spawn(st, i, p, env, rand); evBorn(st, st.x[i], st.y[i]); } }
   }
   if (p.collide > 0) separate(st, p, env);
 }
@@ -637,7 +646,7 @@ function birth(st, i, x, y, vx, vy, p, rand) {
   st.x[i] = x; st.y[i] = y; st.vx[i] = vx; st.vy[i] = vy;
   st.age[i] = 0; st.life[i] = 0.6 + rand() * 0.8; st.alive[i] = 1; st.cool[i] = 0;
   st.split[i] = splitInterval(p, rand); st.mate[i] = -1; st.bx[i] = x; st.by[i] = y;
-  st.evBorn++;
+  evBorn(st, x, y);
 }
 
 /** One particle where the layer spawns (at rest): the start of a colony, or a respawn at the origin. */
@@ -702,7 +711,7 @@ function cullYoungest(st, count) {
     if (m >= 0) st.mate[m] = -1;
     st.mate[youngest] = -1;
     st.alive[youngest] = 0;
-    st.evDied++;
+    evDied(st, st.x[youngest], st.y[youngest]);
   }
 }
 
@@ -878,7 +887,10 @@ function multiplyMove(st, p, env, rand, dt) {
       if (d < contact) {
         // Touch: both simply go. (No burst: the owner wants them to combine and vanish.)
         st.alive[i] = 0; st.alive[m] = 0; st.mate[i] = -1; st.mate[m] = -1;
-        st.evDied += 2;
+        // Where they met: halfway between the two.
+        const ax = (x + st.x[m]) / 2, ay = (y + st.y[m]) / 2;
+        evDied(st, ax, ay, 2);
+        st.annX = ax; st.annY = ay;
         if (st.mx) st.mx.annihilations++;
         continue;
       }
@@ -890,13 +902,13 @@ function multiplyMove(st, p, env, rand, dt) {
     x += (vx / aspect) * dt; y += vy * dt;
     st.age[i] += dt;
     const life = lifeOf(st, i, p);
-    if (life > 0 && st.age[i] > life) { st.alive[i] = 0; st.evDied++; continue; }
+    if (life > 0 && st.age[i] > life) { st.alive[i] = 0; evDied(st, x, y); continue; }
     if (x < 0 || x > 1 || y < 0 || y > 1) {
       if (p.edges === 'wrap') { x -= Math.floor(x); y -= Math.floor(y); }
       else if (p.edges === 'bounce') {
         if (x < 0) { x = -x; vx = -vx; } else if (x > 1) { x = 2 - x; vx = -vx; }
         if (y < 0) { y = -y; vy = -vy; } else if (y > 1) { y = 2 - y; vy = -vy; }
-      } else { st.alive[i] = 0; st.evDied++; continue; }
+      } else { st.alive[i] = 0; evDied(st, x, y); continue; }
     }
     st.x[i] = x; st.y[i] = y; st.vx[i] = vx; st.vy[i] = vy; st.zt[i] = -1; st.zs[i] = 1;
   }

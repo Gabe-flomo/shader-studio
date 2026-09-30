@@ -10,7 +10,7 @@ import { audioFxChainLabel, audioFxTargetLabel, parseAudioFxTarget, type PlayAud
 import { sgParseValueRef, sgScreenPoint } from './kit/signals.js';
 import { proximityCondition, pulseHz } from './triggers';
 import { signalNames } from './signalNames';
-import { ANCHOR_KINDS, DEFAULT_FIRE, HAND_PINCH_POINT, PAD_ANCHOR, handAnchor, layerNumericProps, parseHandAnchor, parseSignalAnchor, type PlayLayer } from '../types/play';
+import { ANCHOR_KINDS, DEFAULT_FIRE, HAND_PINCH_POINT, PAD_ANCHOR, handAnchor, layerNumericProps, parseEventAnchor, parseHandAnchor, parseSignalAnchor, type PlayLayer } from '../types/play';
 import { HD_POINT_NAMES } from './kit/hands.js';
 import { datasetStore } from '../data/datasetStore';
 import { DATA_ROW_COLUMN } from '../types/play';
@@ -397,6 +397,8 @@ export function anchorLabel(ref: string, layers: ReadonlyArray<{ id: string; lab
   if (h) return `${SIDE_NAMES[h.side]} · ${h.point === HAND_PINCH_POINT ? 'Pinch point' : HD_POINT_NAMES[h.point] ?? 'Point'}`;
   const sa = parseSignalAnchor(ref);
   if (sa) return `${signalName(sa.id)}’s position${sa.held ? ' (while true)' : ''}`;
+  const ev = parseEventAnchor(ref);
+  if (ev) return `${layers.find(l => l.id === ev.layerId)?.label ?? 'Missing layer'} · latest ${ev.event === 'born' ? 'birth' : ev.event === 'died' ? 'death' : 'annihilation'}`;
   const tr = parseTrackAnchor(ref);
   if (tr) return trackAnchorLabel(tr.kind, tr.point);
   return layers.find(l => l.id === ref)?.label ?? (ref ? 'Missing layer' : 'Pick one');

@@ -12,6 +12,15 @@ does, so nothing new is stored:
 | **events** | The signals it can send, each with the layer field naming the signal: particles' Born and Died (and Split, Full, Annihilate, Cleared in Multiply), agents' Born and Died, a relationship's Catch. | `layerEvents` |
 | **position** | Whether its centre is an anchor (distances, proximity, position mappings). | `ANCHOR_KINDS` |
 
+**Where events happen.** A particles layer also remembers where its latest
+birth, death and annihilation (Multiply) happened (`particle-sim.js`: the
+last one in a step wins; an annihilation is halfway between the two that
+met), reported as `<id>::bornX/Y`, `::diedX/Y`, `::annihilateX/Y`. The anchor
+`ev:<id>:born|died|annihilate` is that spot, so a signal on the event can
+capture it and move a layer there ("when a particle annihilates, the circle
+jumps to where it happened"). A signal made with **New** beside a particle
+event takes that position already. No position before the first event.
+
 Readings are 0 to 1 except the counts (Born this step, Died this step): a
 percent condition on those uses the range seen so far (`readingRange`).
 

@@ -27,7 +27,7 @@
  * Pure.
  */
 import {
-  ACTION_TARGET_PREFIX, CAPTURE_POS, LAYER_TARGET_PREFIX, PAD_ANCHOR, SIGNAL_ANCHOR, parseActionTarget, parseHandAnchor, parseSignalAnchor, parseLayerTarget, parseReaderTarget, readerControlTarget,
+  ACTION_TARGET_PREFIX, CAPTURE_POS, EVENT_ANCHOR, LAYER_TARGET_PREFIX, parseEventAnchor, PAD_ANCHOR, SIGNAL_ANCHOR, parseActionTarget, parseHandAnchor, parseSignalAnchor, parseLayerTarget, parseReaderTarget, readerControlTarget,
   type PairSource, type PlayAction, type PlayControl, type PlayIncrement, type PlayMapping, type PlayPair, type PlayPairMapping, type PlaySignal, type PlaySource, type TriggerSpec, type ValueCondition,
 } from '../types/play';
 import type { PlayLayer } from '../types/playLayers';
@@ -42,6 +42,9 @@ export type RefFn = (kind: RefKind, id: string, where?: string) => string;
 /** A point on the picture: a layer's centre (a layer ref), or a hand point, the pad grid, the mouse or a fixed point (no ref). */
 export function mapAnchor(ref: string, f: RefFn): string {
   if (!ref || parseHandAnchor(ref) || ref === PAD_ANCHOR || ref === 'mouse' || ref === 'pointer' || ref.startsWith('pt:')) return ref;
+  // A particles layer's latest event.
+  const ev = parseEventAnchor(ref);
+  if (ev) { const id = f('layer', ev.layerId); return id ? `${EVENT_ANCHOR}${id}:${ev.event}` : ''; }
   // A signal's captured position.
   const sa = parseSignalAnchor(ref);
   if (sa) { const id = f('signal', sa.id); return id ? `${SIGNAL_ANCHOR}${id}${sa.held ? ':held' : ''}` : ''; }

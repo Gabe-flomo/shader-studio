@@ -55,7 +55,7 @@ import { DEFAULT_FACE, DEFAULT_POSE, bakeFor, parseTrackAnchor, usesFace, usesPo
 import type { VideoLayer } from '../types/playLayers';
 import { readDataSource } from '../play/dataLayer';
 import { hdAge, hdCreate, hdGate, hdPlacement, hdPoint, hdRead, hdTrackerOptions, hdUpdate, type HdState } from '../play/kit/hands.js';
-import { CAPTURE_POS, DEFAULT_HANDS, PAD_ANCHOR, parseHandAnchor, parseSignalAnchor, usesHands, type FireMode, type HandGesture, type HandSide, type PlayLayer } from '../types/play';
+import { CAPTURE_POS, DEFAULT_HANDS, PAD_ANCHOR, parseEventAnchor, parseHandAnchor, parseSignalAnchor, usesHands, type FireMode, type HandGesture, type HandSide, type PlayLayer } from '../types/play';
 
 /** A trigger's firing-mode state, with the mode it was made for (a changed mode starts afresh). */
 interface FireSlot { mode: FireMode; st: FireState; count: number }
@@ -611,6 +611,12 @@ class PlayEngine implements InputSource {
     if (ref === 'mouse') return { x: this.mouseX, y: this.mouseY };
     // The pointer on the picture (0..1, y up), as the overlay last saw it over the picture.
     if (ref === 'pointer') return this.picturePointer;
+    // Where a particles layer's latest birth, death or annihilation was (reported by the kit).
+    const ev = parseEventAnchor(ref);
+    if (ev) {
+      const x = this.sensors.get(`${ev.layerId}::${ev.event}X`), y = this.sensors.get(`${ev.layerId}::${ev.event}Y`);
+      return x !== undefined && y !== undefined && Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+    }
     // A signal's captured position (sig:<id>, or sig:<id>:held only while the signal is true).
     const sa = parseSignalAnchor(ref);
     if (sa) {
@@ -1768,7 +1774,8 @@ class PlayEngine implements InputSource {
 
   /** Actions, layer-property mappings, reader controls and Learn run whatever the shader binds. */
   wantsTick(): boolean {
-    return !!this.record.actions?.length || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || !!this.record.spreads?.some(sp => sp.members.length > 0) || this.handsBound || handFeed.isOn() || this.faceBound || this.poseBound || faceFeed.isOn() || poseFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
+    // A signal with a definition (its level) or a capture works every frame, even with nothing on it yet.
+    return !!this.record.actions?.length || !!this.record.signals?.some(s => s.when || s.capture) || this.isLearning() || this.record.mappings.some(m => m.enabled && !!m.increment) || this.allTriggers().some(t => t.on === 'proximity' || t.on === 'value') || !!this.record.pairMappings?.some(m => m.enabled) || !!this.record.spreads?.some(sp => sp.members.length > 0) || this.handsBound || handFeed.isOn() || this.faceBound || this.poseBound || faceFeed.isOn() || poseFeed.isOn() || this.record.controls.some(c => c.kind === 'action' || parsePropTarget(c.target) !== null || parseReaderTarget(c.target) !== null);
   }
 
   /** Something (a trigger or a noise row) moves on its own, so the render loop must keep drawing. */

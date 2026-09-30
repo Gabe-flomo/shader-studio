@@ -213,6 +213,17 @@ export interface PlaySignal { id: string; name: string; when?: SignalDef; captur
  */
 export interface SignalCapture { what: string; at: 'rise' | 'fall' | 'held' }
 export const CAPTURE_POS = 'pos:';
+/**
+ * Where a particles layer's latest event happened (play/particle-sim.js): the
+ * anchor `ev:<layerId>:born|died|annihilate`, read from its sensors
+ * (`<id>::bornX`…). No position before the first such event.
+ */
+export type ParticleEvent = 'born' | 'died' | 'annihilate';
+export const EVENT_ANCHOR = 'ev:';
+export function parseEventAnchor(ref: string): { layerId: string; event: ParticleEvent } | null {
+  const m = /^ev:(.+):(born|died|annihilate)$/.exec(ref);
+  return m ? { layerId: m[1], event: m[2] as ParticleEvent } : null;
+}
 /** The anchor of a signal's captured position; `sig:<id>:held` only while the signal is true. */
 export const SIGNAL_ANCHOR = 'sig:';
 export function parseSignalAnchor(ref: string): { id: string; held: boolean } | null {

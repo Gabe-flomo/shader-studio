@@ -1557,6 +1557,9 @@ void main() {
     function anchorAt(ref) {
       // On a page the pointer is the picture's: `mouse` and `pointer` are the same.
       if (ref === 'mouse' || ref === 'pointer') return { x: mouse.x, y: mouse.y };
+      // Where a particles layer's latest birth, death or annihilation was (the kit reports it).
+      const evm = /^ev:(.+):(born|died|annihilate)$/.exec(ref);
+      if (evm) { const x = sensors.get(evm[1] + '::' + evm[2] + 'X'), y = sensors.get(evm[1] + '::' + evm[2] + 'Y'); return isFinite(x) && isFinite(y) && x !== undefined && y !== undefined ? { x, y } : null; }
       // A signal's captured position: sig:<id>, or sig:<id>:held only while the signal is true.
       if (ref.indexOf('sig:') === 0) {
         const held = /:held$/.test(ref), id = ref.slice(4, held ? -5 : undefined);
