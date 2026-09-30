@@ -31,7 +31,9 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { Popover } from '../ui/Popover';
 import { Sheet } from '../ui/Sheet';
 import { usePlayUi } from './playUi';
-import { MIDI_LEARN, miniMapperSections, wireMiniMapperPick, wireSource, type MiniMapperTarget } from './miniMapperCore';
+import { CREATE_SIGNAL, MIDI_LEARN, miniMapperSections, wireCreateSignal, wireMiniMapperPick, wireSource, type MiniMapperTarget } from './miniMapperCore';
+import { goToSignal } from './playSplit';
+import { toast } from '../ui/toastStore';
 import { audioReaderBank } from '../../lib/audioReaderBank';
 
 /** The MIDI device names seen so far, kept fresh (gates the MIDI section: only shown when a device is present). */
@@ -41,7 +43,7 @@ function useMidiDeviceNames(): string[] {
   return names;
 }
 
-const DEFAULT_OPEN = new Set(['Control only']);
+const DEFAULT_OPEN = new Set(['Control only', 'Signal']);
 
 export function MiniMapper({ anchorRef, target, label, onClose }: {
   anchorRef: React.RefObject<HTMLElement | null>;
@@ -76,6 +78,14 @@ export function MiniMapper({ anchorRef, target, label, onClose }: {
 
   const pick = (value: string) => {
     if (value === MIDI_LEARN) { setLearning(true); return; }
+    if (value === CREATE_SIGNAL) {
+      const r = wireCreateSignal(play, target);
+      if (!r) { toast.info('Nothing to watch here', { message: 'A colour can’t be watched yet, or the setup has as many signals as it can hold.' }); return; }
+      setPlay(() => r.play);
+      onClose();
+      goToSignal(r.signalId);
+      return;
+    }
     finishPick(wireMiniMapperPick(play, value, target));
   };
 
@@ -99,14 +109,16 @@ export function MiniMapper({ anchorRef, target, label, onClose }: {
   const openMappings = () => { usePlayUi.getState().setTab('mappings'); onClose(); };
 
   const asSheet = typeof window !== 'undefined' && menuAsSheet(window.innerWidth);
-  const Frame = ({ title, children }: { title: string; children: ReactNode }) => asSheet
+  // A plain function, not a component: a component made here would be a new type each render, and
+  // every hover (which re-renders) would remount the list under the pointer and lose the click.
+  const frame = (title: string, children: ReactNode) => asSheet
     ? <Sheet title={title} onClose={onClose} maxHeight="80dvh">{children}</Sheet>
     : <Popover anchorRef={anchorRef} onClose={onClose} align="end" width={300} padding={10}>{children}</Popover>;
 
   if (wired) {
     if (!control) { onClose(); return null; }
     return (
-      <Frame title={`${control.label}`}>
+      frame(control.label, <>
         <div style={{ padding: asSheet ? '0 4px 4px' : 0 }}>
           <div style={{ color: tk.text.faint, fontSize: 11.5, marginBottom: 8 }}>
             <b style={{ color: tk.text.secondary }}>{control.label}</b>
@@ -126,7 +138,7 @@ export function MiniMapper({ anchorRef, target, label, onClose }: {
             <Button size="sm" variant="ghost" onClick={onClose}>Done</Button>
           </div>
         </div>
-      </Frame>
+      </>)
     );
   }
 
@@ -136,7 +148,7 @@ export function MiniMapper({ anchorRef, target, label, onClose }: {
   };
 
   return (
-    <Frame title={`Map ${label}`}>
+    frame(`Map ${label}`, <>
       <div style={{ padding: asSheet ? '0 4px 4px' : 0 }} onKeyDown={onListKey}>
         {!asSheet && <div style={{ padding: '2px 4px 6px', color: tk.text.faint, fontSize: 11.5 }}>Map <b style={{ color: tk.text.secondary }}>{label}</b> onto…</div>}
         <Field autoFocus={!asSheet} placeholder="Search sources" value={query} onChange={e => { setQuery(e.target.value); setActive(null); }} height={30} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
@@ -178,6 +190,6 @@ export function MiniMapper({ anchorRef, target, label, onClose }: {
           ))}
         </div>
       </div>
-    </Frame>
+    </>)
   );
 }

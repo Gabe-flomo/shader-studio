@@ -27,8 +27,8 @@
  * Pure.
  */
 import {
-  ACTION_TARGET_PREFIX, LAYER_TARGET_PREFIX, PAD_ANCHOR, parseActionTarget, parseHandAnchor, parseLayerTarget, parseReaderTarget, readerControlTarget,
-  type PairSource, type PlayAction, type PlayControl, type PlayIncrement, type PlayMapping, type PlayPair, type PlayPairMapping, type PlaySource, type TriggerSpec, type ValueCondition,
+  ACTION_TARGET_PREFIX, CAPTURE_POS, EVENT_ANCHOR, LAYER_TARGET_PREFIX, parseEventAnchor, PAD_ANCHOR, SIGNAL_ANCHOR, parseActionTarget, parseHandAnchor, parseSignalAnchor, parseLayerTarget, parseReaderTarget, readerControlTarget,
+  type PairSource, type PlayAction, type PlayControl, type PlayIncrement, type PlayMapping, type PlayPair, type PlayPairMapping, type PlaySignal, type PlaySource, type TriggerSpec, type ValueCondition,
 } from '../types/play';
 import type { PlayLayer } from '../types/playLayers';
 import { parseAudioFxTarget, audioFxTarget, AUDIO_FX_TARGET_PREFIX } from '../types/playAudioFx';
@@ -41,7 +41,13 @@ export type RefFn = (kind: RefKind, id: string, where?: string) => string;
 
 /** A point on the picture: a layer's centre (a layer ref), or a hand point, the pad grid, the mouse or a fixed point (no ref). */
 export function mapAnchor(ref: string, f: RefFn): string {
-  if (!ref || parseHandAnchor(ref) || ref === PAD_ANCHOR || ref === 'mouse' || ref.startsWith('pt:')) return ref;
+  if (!ref || parseHandAnchor(ref) || ref === PAD_ANCHOR || ref === 'mouse' || ref === 'pointer' || ref.startsWith('pt:')) return ref;
+  // A particles layer's latest event.
+  const ev = parseEventAnchor(ref);
+  if (ev) { const id = f('layer', ev.layerId); return id ? `${EVENT_ANCHOR}${id}:${ev.event}` : ''; }
+  // A signal's captured position.
+  const sa = parseSignalAnchor(ref);
+  if (sa) { const id = f('signal', sa.id); return id ? `${SIGNAL_ANCHOR}${id}${sa.held ? ':held' : ''}` : ''; }
   return f('layer', ref);
 }
 
@@ -66,7 +72,7 @@ export function mapTarget(target: string, f: RefFn): string {
   return f('graph', target);
 }
 
-/** A condition's value path (sgParseValueRef): `ctl:`, `map:`, `layer:<id>::<key>`, `dist:<A>|<B>`… */
+/** A condition's value path (sgParseValueRef): `ctl:`, `map:`, `layer:<id>::<key>`, `read:<id>::<read>`, `dist:<A>|<B>`… */
 export function mapValueRef(ref: string, f: RefFn): string {
   if (ref.startsWith('ctl:')) return `ctl:${f('control', ref.slice(4))}`;
   if (ref.startsWith('map:')) return `map:${f('mapping', ref.slice(4))}`;
@@ -76,6 +82,15 @@ export function mapValueRef(ref: string, f: RefFn): string {
     return `dist:${mapAnchor(ref.slice(5, i), f)}|${mapAnchor(ref.slice(i + 1), f)}`;
   }
   if (ref.startsWith(LAYER_TARGET_PREFIX)) return mapTarget(ref, f);
+  // The picture's brightness around a position: pic:<ch>:<anchor> ('all' is the whole picture).
+  if (ref.startsWith('pic:')) { const m = /^(pic:(?:lum|r|g|b):)(.+)$/.exec(ref); return m ? (m[2] === 'all' ? ref : `${m[1]}${mapAnchor(m[2], f)}`) : ref; }
+  // One axis of a position: ax:x:<anchor>.
+  if (ref.startsWith('ax:x:') || ref.startsWith('ax:y:')) return `${ref.slice(0, 5)}${mapAnchor(ref.slice(5), f)}`;
+  // A layer's reading: `read:<layerId>::<read>`.
+  if (ref.startsWith('read:')) {
+    const i = ref.lastIndexOf('::');
+    return i > 5 ? `read:${f('layer', ref.slice(5, i))}${ref.slice(i)}` : ref;
+  }
   if (ref.startsWith(FINISH_TARGET_PREFIX) || ref.startsWith(AUDIO_FX_TARGET_PREFIX)) return mapTarget(ref, f);
   return ref;
 }
@@ -100,6 +115,7 @@ export function mapTrigger(t: TriggerSpec, f: RefFn): TriggerSpec {
 export function mapSource(s: PlaySource, f: RefFn): PlaySource {
   switch (s.kind) {
     case 'control': return { ...s, controlId: f('control', s.controlId) };
+    case 'captured': return { ...s, signal: f('signal', s.signal) };
     case 'null': return { ...s, layerId: f('layer', s.layerId) };
     case 'sensor':
       // A Granulator rack's grains read as a sensor on `ae:<rackId>`: a rack, not a layer.
@@ -136,6 +152,16 @@ export function mapAction(a: PlayAction, f: RefFn): PlayAction {
   const layerId = !a.layerId ? a.layerId : a.layerId.startsWith(RACK_ACT_PREFIX) ? f('foreign', a.layerId) : f('layer', a.layerId);
   const out: PlayAction = { ...a, layerId, trigger: mapTrigger(a.trigger, f) };
   if (a.signal) out.signal = f('signal', a.signal);
+  return out;
+}
+
+/** A signal's own id and what it is defined by: its trigger, or the signals it combines. */
+export function mapSignal(s: PlaySignal, f: RefFn): PlaySignal {
+  const out: PlaySignal = { ...s, id: f('signal', s.id) };
+  if (s.links) out.links = s.links.map(l => ({ ...l, to: f('signal', l.to) })).filter(l => l.to);
+  if (s.capture) out.capture = { ...s.capture, what: s.capture.what.startsWith(CAPTURE_POS) ? `${CAPTURE_POS}${mapAnchor(s.capture.what.slice(CAPTURE_POS.length), f)}` : mapValueRef(s.capture.what, f) };
+  if (s.when?.kind === 'trigger') out.when = { kind: 'trigger', trigger: mapTrigger(s.when.trigger, f) };
+  else if (s.when?.kind === 'logic') out.when = { ...s.when, inputs: s.when.inputs.map(i => f('signal', i)).filter(Boolean) };
   return out;
 }
 

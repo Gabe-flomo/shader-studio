@@ -158,17 +158,27 @@
     return x;
   }
   function triggerKey(t) {
-    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'face': return 'face:' + t.gesture; case 'pose': return 'pose:' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; case 'value': return 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance; case 'signal': return 'sig:' + t.signal; }
+    switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'face': return 'face:' + t.gesture; case 'pose': return 'pose:' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; case 'value': return typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals.valueKey(t) : 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance; case 'signal': return 'sig:' + t.signal; }
     return '';
   }
   // Firing modes (once, held, every N frames or seconds, on release): how many times a trigger fires this frame.
-  function stepFire(st, fire, presses, gate, dt) {
+  function stepFire(st, fire, presses, gate, dt, now) {
     const fresh = Math.max(0, presses - st.seen); st.seen = presses;
     const was = st.held; st.held = gate;
     const mode = fire && fire.mode ? fire.mode : 'once';
     if (mode === 'once') return fresh;
     if (mode === 'release') return Math.max(0, (was ? 1 : 0) + fresh - (gate ? 1 : 0));
     if (mode === 'held') return gate || fresh > 0 ? 1 : 0;
+    // Counters (the app's play/triggers.ts stepFire): every Nth press, or N presses within a few seconds.
+    if (mode === 'nth') { const n = Math.max(2, Math.round(fire.every)); st.count = (st.count || 0) + fresh; const k = Math.floor(st.count / n); st.count -= k * n; return k; }
+    if (mode === 'within') {
+      const n = Math.max(2, Math.round(fire.every)), win = Math.max(0.05, fire.window || 1);
+      st.t = now !== undefined ? now : (st.t || 0) + (dt > 0 ? dt : 0); if (!st.times) st.times = [];
+      if (st.times.length && st.t < st.times[st.times.length - 1]) st.times.length = 0;
+      let k = 0;
+      for (let i = 0; i < fresh; i++) { st.times.push(st.t); if (st.times.length > n) st.times.shift(); if (st.times.length === n && st.t - st.times[0] <= win + 1e-6) { k++; st.times.length = 0; } }
+      return k;
+    }
     if (fresh > 0) { st.since = 0; return 1; }
     if (!gate) { st.since = 0; return 0; }
     st.since += fire.unit === 'frames' ? 1 : dt;
@@ -188,7 +198,7 @@
   }
   // A proximity trigger is the distance case of a condition (the kit's signals.js): below or above, the margin its hysteresis.
   function proximityCondition(t) { return { value: 'dist:' + t.a + '|' + t.b, cmp: t.when === 'closer' ? 'below' : 'above', threshold: t.distance, hysteresis: t.margin, tolerance: 0 }; }
-  function handAnchorOf(ref) { const m = /^hand:(left|right|any):(\d{1,2})$/.exec(ref); return m && +m[2] <= 20 ? { side: m[1], point: +m[2] } : null; }
+  function handAnchorOf(ref) { const m = /^hand:(left|right|any):(\d{1,2})$/.exec(ref); return m && +m[2] <= 21 ? { side: m[1], point: +m[2] } : null; }
   function beatAt(bpm, beats, time) {
     const period = (60 / Math.max(1, bpm)) * Math.max(0.0625, beats);
     const count = Math.floor(time / period) + 1;
@@ -1471,7 +1481,9 @@ void main() {
     const allTriggers = play.mappings.filter(m => m.enabled && m.source.kind === 'trigger').map(m => m.source.trigger).concat(actions.map(a => a.trigger))
       .concat(incMappings.filter(m => m.increment.on === 'trigger').map(m => m.increment.trigger))
       .concat(incMappings.filter(m => m.increment.resetOn).map(m => ({ on: 'signal', signal: m.increment.resetOn })))
-      .concat(pairMappings.filter(m => m.source.kind === 'value' && m.source.source.kind === 'trigger').map(m => m.source.source.trigger));
+      .concat(pairMappings.filter(m => m.source.kind === 'value' && m.source.source.kind === 'trigger').map(m => m.source.source.trigger))
+      // A signal defined by a trigger listens to it like any other (the app's playEngine does the same).
+      .concat((play.signals || []).filter(s => s.when && s.when.kind === 'trigger').map(s => s.when.trigger));
     const gamepad = i => (navigator.getGamepads ? navigator.getGamepads()[i] : null);
     const padQueue = [];
     function tickPads() { if (!padG) return; for (const m of padQueue.splice(0)) KM.gridMessage(padG, padCfg, m[0], m[1], m[2], m[3], time); }
@@ -1482,6 +1494,7 @@ void main() {
       if (m.source.kind === 'trigger' && m.source.trigger.on === 'key') keysUsed.add(m.source.trigger.code);
     }
     for (const a of actions) if (a.trigger.on === 'key') keysUsed.add(a.trigger.code);
+    for (const s of play.signals || []) if (s.when && s.when.kind === 'trigger' && s.when.trigger.on === 'key') keysUsed.add(s.when.trigger.code);
     for (const m of incMappings) if (m.increment.on === 'trigger' && m.increment.trigger.on === 'key') keysUsed.add(m.increment.trigger.code);
     for (const m of pairMappings) { const s = m.source.kind === 'value' ? m.source.source : null; if (s && s.kind === 'key') keysUsed.add(s.code); if (s && s.kind === 'trigger' && s.trigger.on === 'key') keysUsed.add(s.trigger.code); }
     function readSource(s) {
@@ -1519,6 +1532,13 @@ void main() {
           if (r.kind !== 'table' || !(r.rows > 0) || typeof SSKit === 'undefined' || !SSKit.data) return null;
           return SSKit.data.unit(SSKit.data.column(r, s.column), Math.max(0, Math.min(r.rows - 1, Math.round(row))));
         }
+        // Set (the app's playEngine): the number a signal captured; after it lets go, stay, go back or go to a value.
+        case 'captured': {
+          const v = sigPayload.get(s.signal);
+          if (typeof v !== 'number') return null;
+          if (s.release === 'stay' || sigLevel(s.signal)) return v;
+          return s.release === 'value' ? (s.rest || 0) : null;
+        }
         case 'sensor': {
           if (s.read === 'distance') {
             const d = s.otherId ? anchorGap(s.layerId, s.otherId) : null;
@@ -1535,7 +1555,17 @@ void main() {
     const anchorLookup = id => { const l = layersById.get(id); return l ? { layer: l, value: k => value(l, k) } : null; };
     const reported = k => sensors.get(k);
     function anchorAt(ref) {
-      if (ref === 'mouse') return { x: mouse.x, y: mouse.y };
+      // On a page the pointer is the picture's: `mouse` and `pointer` are the same.
+      if (ref === 'mouse' || ref === 'pointer') return { x: mouse.x, y: mouse.y };
+      // Where a particles layer's latest birth, death or annihilation was (the kit reports it).
+      const evm = /^ev:(.+):(born|died|annihilate)$/.exec(ref);
+      if (evm) { const x = sensors.get(evm[1] + '::' + evm[2] + 'X'), y = sensors.get(evm[1] + '::' + evm[2] + 'Y'); return isFinite(x) && isFinite(y) && x !== undefined && y !== undefined ? { x, y } : null; }
+      // A signal's captured position: sig:<id>, or sig:<id>:held only while the signal is true.
+      if (ref.indexOf('sig:') === 0) {
+        const held = /:held$/.test(ref), id = ref.slice(4, held ? -5 : undefined);
+        const p = sigPayload.get(id);
+        return p && typeof p === 'object' && (!held || sigLevel(id)) ? p : null;
+      }
       // The pad grid's last pad (column across, row up, 0..1), like the Pad grid X and Y sources.
       if (ref === 'pad:last') {
         if (!padG) return null;
@@ -1563,9 +1593,21 @@ void main() {
       if (r.kind === 'mapping') { const m = play.mappings.find(x => x.id === r.id); if (!m) return null; if (m.increment) { const st = incState.get(m.id); if (!st || !INC) return null; const rg = INC.range(m.outMin, m.outMax); return rg[1] > rg[0] ? Math.max(0, Math.min(1, (INC.fold(st.p, rg[0], rg[1], m.increment.limit) - rg[0]) / (rg[1] - rg[0]))) : 0; } if (m.source.kind === 'trigger') { const st = trig.get(m.id); return st ? st.value : 0; } return readSource(m.source); }
       if (r.kind === 'mouse') return r.axis === 'x' ? mouse.x : mouse.y;
       if (r.kind === 'distance') return anchorGap(r.a, r.b);
+      if (r.kind === 'reading') return readSource({ kind: 'sensor', layerId: r.layerId, read: r.read, otherId: '' });
+      if (r.kind === 'axis') { const p = anchorAt(r.anchor); return p ? (r.axis === 'x' ? p.x : p.y) : null; }
+      // The picture's brightness, from the layer kit's grid of the last frame (the app's PICTURE_PATCH around a position).
+      if (r.kind === 'picture') {
+        if (!K || !K.pictureAt) return null;
+        if (r.region === 'all') return K.pictureAt(null, null, 0, r.ch);
+        const p = anchorAt(r.region);
+        return p ? K.pictureAt(p.x, p.y, 0.05, r.ch) : null;
+      }
       const l = layersById.get(r.layerId);
       return l && typeof l[r.key] === 'number' ? layerValue(r.layerId, r.key, l[r.key]) : null;
     }
+    // A percent condition's range (the app's play/conditionRange.ts, carried in the bundle); null: raw, or the range seen so far.
+    const condRanges = play.condRanges || {};
+    function condRange(c) { return c.unit === 'pct' ? condRanges[c.value] || null : null; }
     function triggerInput(t) {
       if (t.on === 'beat') { const b = beatAt(t.bpm, t.beats, time); return { presses: b.count, gate: b.gate }; }
       const k = triggerKey(t);
@@ -1581,7 +1623,7 @@ void main() {
       let st = trig.get(m.id);
       if (!st) { st = { seen: 0, value: 0, stage: 'idle', peak: 1, index: -1 }; trig.set(m.id, st); }
       if (f.fresh) st.seen = 0;
-      else f.slot.count += Math.min(4, stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt));
+      else f.slot.count += Math.min(4, stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt, time));
       return stepTrigger(st, s, f.slot.count, inp.gate, dt, vel);
     }
     const colourBuf = new Map();
@@ -1638,7 +1680,7 @@ void main() {
     const zoneGates = new Set();
     // Conditions, proximity among them: becoming true is a press, false again its release; a crossing is both at once.
     const condStates = new Map();
-    function tickConditionTriggers() {
+    function tickConditionTriggers(dt) {
       if (!SG) return;
       const seen = new Set();
       for (const t of allTriggers) {
@@ -1649,14 +1691,83 @@ void main() {
         const c = t.on === 'proximity' ? proximityCondition(t) : t;
         let st = condStates.get(k);
         if (!st) { st = SG.condNew(); condStates.set(k, st); }
-        const ev = SG.condStep(st, readValue(c.value), c);
+        const ev = SG.condStep(st, readValue(c.value), c, condRange(c), dt);
         if (ev === 'open') press(k);
         else if (ev === 'close') release(k);
         else if (ev === 'tap') { press(k); release(k); }
       }
     }
     // A signal: its "When signal fires" triggers see a press and its release at once.
-    function emitSignal(id) { const k = 'sig:' + id; press(k); release(k); }
+    // Signals sent this frame (by an action or a layer): true for the frame, for combinations to read.
+    const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map(), sigPayload = new Map(), mappingLag = new Map();
+    const sigById = new Map((play.signals || []).map(s => [s.id, s]));
+    function sigLevel(id) { return sigWorked.has(id) ? sigLevels.get(id) || false : sigSent.has(id); }
+    // What a signal captures (sample and hold): a number from a value path, or a position from pos:<anchor>.
+    function capture(s) {
+      const c = s.capture;
+      if (!c) return;
+      let v;
+      if (c.what.indexOf('pos:') === 0) { const p = anchorAt(c.what.slice(4)); v = p ? { x: p.x, y: p.y } : null; }
+      else v = readValue(c.what);
+      if (v !== null && v !== undefined) sigPayload.set(s.id, v);
+    }
+    // Links between signals and the loops they make (the app's playEngine: the kit's sgLink*).
+    const linkPlan = SG && SG.linkPlan ? SG.linkPlan(play.signals || [], play.loops || []) : null;
+    const links = SG && SG.linkNew ? SG.linkNew() : null;
+    let linkArriving = false;
+    const linkSent = new Set();
+    function linkFire(id, edge, external) { if (linkPlan && links) SG.linkFire(links, linkPlan, id, time, edge, external); }
+    function emitSignal(id) {
+      sigSent.add(id);
+      const s = sigById.get(id);
+      // With timing or chance it goes out when the next frame works it out.
+      if (s && !s.when && SG && SG.shaped && SG.shaped(s)) { if (linkArriving) linkSent.add(id); return; }
+      if (s && s.capture && !s.when) capture(s);
+      const k = 'sig:' + id; press(k); release(k);
+      linkFire(id, 'rise', !linkArriving);
+    }
+    // Level signals (the app's playEngine tickSignalLevels): each defined signal is true while its trigger is held or
+    // met, or while its combination of others holds; rising presses its key and holds it, falling lets go.
+    const sigDefs = (() => {
+      const list = play.signals || [];
+      if (!SG || !SG.order) return [];
+      const byId = new Map(list.map(s => [s.id, s]));
+      // Worked out each frame: a definition, or timing and chance on a sent one (the app's playEngine).
+      return SG.order(list).order.map(id => byId.get(id)).filter(s => s && (s.when || (SG.shaped && SG.shaped(s))));
+    })();
+    const sigWorked = new Set(sigDefs.map(s => s.id)), sigShape = new Map();
+    // The app's seedOf: a signal's default seed from its id.
+    function seedOf(id) { let h = 2166136261; for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619); return h >>> 0; }
+    function tickSignalLevels() {
+      // Links arriving now: their signals are sent (a loop going round).
+      if (links) for (const id of SG.linkDue(links, time)) { linkArriving = true; try { emitSignal(id); } finally { linkArriving = false; } }
+      const lvl = i => (sigWorked.has(i) ? sigLevels.get(i) || false : sigSent.has(i));
+      for (const s of sigDefs) {
+        const w = s.when;
+        let level;
+        if (w && w.kind === 'trigger') {
+          const inp = triggerInput(w.trigger);
+          const seen = sigSeen.has(s.id) ? sigSeen.get(s.id) : inp.presses;
+          sigSeen.set(s.id, inp.presses);
+          level = inp.gate || inp.presses > seen;
+        } else if (w && w.kind === 'logic') level = SG.logic(w.op, w.inputs.map(lvl));
+        else level = sigSent.has(s.id);
+        // Hold for, Linger, Chance and Delay, on the setup's clock.
+        if (SG.shaped(s)) {
+          let st = sigShape.get(s.id);
+          if (!st) { st = SG.shapeNew(); sigShape.set(s.id, st); }
+          level = SG.shapeStep(st, level, time, { hold: s.hold, linger: s.linger, chance: s.chance, delay: s.delay, seed: typeof s.seed === 'number' ? s.seed : seedOf(s.id) });
+        }
+        const was = sigLevels.get(s.id) || false;
+        sigLevels.set(s.id, level);
+        const at = s.capture && s.capture.at;
+        if ((at === 'rise' && level && !was) || (at === 'fall' && !level && was) || (at === 'held' && level)) capture(s);
+        if (level && !was) { press('sig:' + s.id); linkFire(s.id, 'rise', !(!s.when && linkSent.has(s.id))); }
+        else if (!level && was) { release('sig:' + s.id); linkFire(s.id, 'fall', true); }
+      }
+      sigSent.clear();
+      linkSent.clear();
+    }
     // Relationship layers: each catch the kit counted (`<id>::caught`) sends the layer's catch signal.
     const caughtSeen = new Map();
     function tickRelationshipSignals() {
@@ -1793,10 +1904,14 @@ void main() {
     // Actions (burst, next line, drop…): by their trigger's mode, once per press unless it says every frame, every N or on release.
     // Send a signal passes its signal on down the chain in the same frame (each signal once a frame, a limited depth).
     function tickActions(dt) {
+      // A chain looks at signal-fired actions again in the same frame: their clocks move once a frame (as the app does).
+      const stepped = new Set();
       const fires = a => {
         const inp = triggerInput(a.trigger);
         const f = fireSlot(actionFire, a.id, a.trigger, inp.presses, inp.gate);
-        return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, dt));
+        const d = stepped.has(a.id) ? 0 : dt;
+        stepped.add(a.id);
+        return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, d, time));
       };
       if (SG) { SG.runActions(actions, fires, a => { if (K) K.act(a); }, emitSignal); return; }
       for (const a of actions) { const n = fires(a); if (a.do !== 'signal' && K) for (let i = 0; i < n; i++) K.act(a); }
@@ -1827,8 +1942,8 @@ void main() {
         else { const src = m.source.source; ua = ub = src.kind === 'trigger' ? readTrigger({ id: m.id, source: src }, dt) : readSource(src); }
         const swapping = !!m.swap && m.source.kind === 'value';
         let useA = swapping ? st.swap.axis === 'a' : m.affect !== 'b', useB = swapping ? st.swap.axis === 'b' : m.affect !== 'a';
-        if (m.a.when) { SG.condStep(st.condA, readValue(m.a.when.value), m.a.when); if (!st.condA.open) useA = false; }
-        if (m.b.when) { SG.condStep(st.condB, readValue(m.b.when.value), m.b.when); if (!st.condB.open) useB = false; }
+        if (m.a.when) { SG.condStep(st.condA, readValue(m.a.when.value), m.a.when, condRange(m.a.when), dt); if (!st.condA.open) useA = false; }
+        if (m.b.when) { SG.condStep(st.condB, readValue(m.b.when.value), m.b.when, condRange(m.b.when), dt); if (!st.condB.open) useB = false; }
         if (useA && ua !== null) st.a = smoothAxis(st.a, m.a.outMin + (m.a.outMax - m.a.outMin) * curve(ua, m.a), m.a, dt);
         if (useB && ub !== null) st.b = smoothAxis(st.b, m.b.outMin + (m.b.outMax - m.b.outMin) * curve(ub, m.b), m.b, dt);
         if (st.a !== undefined && (swapping || m.affect !== 'b')) writePlain(ca, st.a, driven);
@@ -1851,7 +1966,7 @@ void main() {
     function incFires(slotId, t, dt) {
       const inp = triggerInput(t);
       const f = fireSlot(incFire, slotId, t, inp.presses, inp.gate);
-      return f.fresh ? 0 : stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt);
+      return f.fresh ? 0 : stepFire(f.slot.st, t.fire, inp.presses, inp.gate, dt, time);
     }
     // One frame of an Increment mapping: what fired it (a trigger, a threshold, a repeat), that many steps, its signals, the value to write.
     // Spreads (docs/spread-control.md): each member's value so far (a mapping's, else its own) plus
@@ -1893,7 +2008,7 @@ void main() {
       else if (inc.on === 'threshold') count = INC.threshold(st, m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source), inc);
       else {
         let open = true;
-        if (inc.when && SG) { let c = incCond.get(m.id); if (!c) { c = SG.condNew(); incCond.set(m.id, c); } SG.condStep(c, readValue(inc.when.value), inc.when); open = c.open; }
+        if (inc.when && SG) { let c = incCond.get(m.id); if (!c) { c = SG.condNew(); incCond.set(m.id, c); } SG.condStep(c, readValue(inc.when.value), inc.when, condRange(inc.when), dt); open = c.open; }
         count = INC.repeat(st, time, inc, open);
       }
       if (count > 0) for (const ev of INC.advance(st, inc, rg[0], rg[1], count)) { const sig = ev === 'step' ? inc.stepSignal : inc.resetSignal; if (sig) emitSignal(sig); }
@@ -1911,12 +2026,23 @@ void main() {
         for (const st of pairState.values()) st.swap = SG.swapNew();
         // Increments start over, so the same timeline steps the same way again.
         for (const m of incMappings) { const st = incState.get(m.id); if (st) INC.reset(st, incStart(m), true); }
+        // Conditions forget the lowest and highest seen and a direction's averages, as the app does.
+        if (SG && SG.condRewind) {
+          for (const st of condStates.values()) SG.condRewind(st);
+          for (const st of incCond.values()) SG.condRewind(st);
+          for (const st of pairState.values()) { SG.condRewind(st.condA); SG.condRewind(st.condB); }
+        }
+        sigPayload.clear();
+        if (links) SG.linkClear(links);
+        for (const st of sigShape.values()) SG.shapeRewind(st);
+        for (const st of mappingLag.values()) { st.t.length = 0; st.v.length = 0; }
       }
       lastTime = time;
-      tickConditionTriggers();
+      tickConditionTriggers(dt);
       tickRelationshipSignals();
       tickMultiplySignals();
       tickBornDiedSignals();
+      tickSignalLevels();
       tickActions(dt);
       const driven = new Set();
       let moved = false;
@@ -1928,7 +2054,16 @@ void main() {
         else {
           const u = m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source);
           if (u === null) continue;
-          const target = m.outMin + (m.outMax - m.outMin) * curve(u, m);
+          // Set writes the captured number itself; every other source goes through the range and curve.
+          let target = m.source.kind === 'captured' ? u : m.outMin + (m.outMax - m.outMin) * curve(u, m);
+          // Delay: the value arrives late, before the smoothing (the app's sgLagStep).
+          if (m.delayMs > 0 && SG && SG.lagStep) {
+            let lag = mappingLag.get(m.id);
+            if (!lag) { lag = SG.lagNew(); mappingLag.set(m.id, lag); }
+            const late = SG.lagStep(lag, time, target, m.delayMs / 1000);
+            if (late === null) continue;
+            target = late;
+          }
           v = smooth.get(m.id);
           if (m.smoothMs <= 0 || v === undefined) v = target;
           else { const a = 1 - Math.exp(-(dt * 1000) / m.smoothMs); v = v + (target - v) * a; if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target; }
@@ -2238,6 +2373,14 @@ void main() {
           input.oninput = () => { const h = input.value; setColour(c, [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255]); };
           row.append(input);
           readouts.set(c.id, { out, input, kind: 'color' });
+        } else if (c.toggle) {
+          // A switch (a boolean control): off is its low end, on its high end.
+          const input = el('input'); input.type = 'checkbox'; input.className = 'ssp-switch';
+          const b = base.get(c.id); input.checked = typeof b === 'number' && b >= (c.min + c.max) / 2;
+          input.onchange = () => { const v = input.checked ? c.max : c.min; setFloat(c, v); out.textContent = input.checked ? 'On' : 'Off'; };
+          out.textContent = input.checked ? 'On' : 'Off';
+          row.append(input);
+          readouts.set(c.id, { out, input, kind: 'toggle', mid: (c.min + c.max) / 2 });
         } else {
           const input = el('input'); input.type = 'range'; input.className = 'ssp-range';
           input.min = c.min; input.max = c.max; input.step = c.step || (c.max - c.min) / 400;
@@ -2263,7 +2406,8 @@ void main() {
         // A driven colour stays editable: mappings scale it or set one channel, starting from what the picker says.
         if (r.kind === 'color') { r.out.textContent = driven ? hex(v) : ''; continue; }
         r.input.disabled = driven;
-        if (driven) { r.input.value = v; r.out.textContent = fmt(v, r.step); }
+        if (driven && r.kind === 'toggle') { r.input.checked = v >= r.mid; r.out.textContent = r.input.checked ? 'On' : 'Off'; }
+        else if (driven) { r.input.value = v; r.out.textContent = fmt(v, r.step); }
       }
     };
 
@@ -2309,7 +2453,7 @@ void main() {
         override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },
         shaderTap: layersTap || undefined,
         data: dsEntry,
-        needCoarse: grainsBright,
+        needCoarse: grainsBright || !!play.readsPicture,
       });
       // "Grains from" a layer: each Granulator with a source takes the things inside its boundary, this frame.
       for (const g of grains.racks.values()) {

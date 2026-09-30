@@ -19,6 +19,11 @@ A trigger kind for actions and trigger mappings. It watches one value and fires 
 | `map:<mapping>` | A mapping's source reading, 0 to 1 (a trigger mapping's envelope) |
 | `mouse:x`, `mouse:y` | The pointer, 0 to 1 (y up) |
 | `dist:<A>\|<B>` | How far apart two things are, in picture heights |
+| `read:<layer>::<read>` | What a layer measures (hover, fill, speed, alive…: docs/layer-contract.md), 0 to 1 but the counts |
+| `ax:x:<anchor>`, `ax:y:<anchor>` | One axis of a position (a layer's centre, a hand point, the pointer…), 0 to 1 (y up) |
+| `pic:<lum\|r\|g\|b>:all`, `pic:<lum\|r\|g\|b>:<anchor>` | How bright the last frame's picture is (Rec. 709 luminance, or one channel), 0 to 1: all of it, or around a position (within 0.05 picture heights: "the picture under this shape", at the pointer) |
+
+**The picture's brightness** is read from the small grid (64 × 36) the layer kit samples of the last frame (`klPictureAt` in `play/kit/kit.js`); a setup that reads it asks the kit to sample every frame (`readsPicture`), which costs one small readback a frame, visible in the Performance panel's Layers time. The older **Picture** reading (`read:<layer>::picture`) is a Relationship member's picture channel, reported only for members of a Relationship layer; for brightness anywhere else use `pic:`.
 
 A distance's ends (anchors) are a layer (its centre, as proximity measures it), a hand point (`hand:<side>:<point>`), the pointer (`mouse`), a point on the picture (`pt:<x>,<y>`, 0 to 1, y up), or the MIDI pad grid's last pad (`pad:last`: its column across and row up, 0 to 1, like the Pad grid X and Y sources; no position before a pad is hit). The pickers offer the last pad when the setup has a pad grid; it is most useful as a pair mapping's **Position** source.
 
@@ -27,10 +32,17 @@ A distance's ends (anchors) are a layer (its centre, as proximity measures it), 
 - **Below** / **Above**: true while the value is under / over the threshold. Once true, it stays true until the value goes back past the threshold by the **hysteresis**, so a value hovering at the edge doesn't flicker.
 - **Equals**: true while the value is within the **tolerance** of the threshold (plus the hysteresis to let go).
 - **Crosses ↑** / **Crosses ↓**: the moment the value passes the threshold going up / down. It has to have been on the other side first (a value that starts above doesn't count as crossing up), and it is ready again only once it has gone back past the hysteresis.
+- **Is not**: equals turned round: true while the value is further than the tolerance from the threshold (it lets go once back within the tolerance less the hysteresis).
+- **Between** / **Outside**: a band with two edges (`threshold` and `hi`, either way round). Between is true inside it and holds until the hysteresis past an edge; Outside is true beyond either edge and lets go once the hysteresis back inside (at the middle, for a band narrower than twice the hysteresis).
+- **Never reached** / **Never dropped to**: true while the highest (lowest) value seen is still under (over) the threshold. It needs one reading first, and starts over when the clock goes back, so a replayed timeline reads the same.
+
+- **Rising** / **Falling** / **Changing** / **Steady**: which way the value is going. A fast average of the value is compared with a slow one (the idea behind MACD), both following the clock, so the frame rate doesn't change the answer (`sgDirStep` in `play/kit/signals.js`). **Over** (`window`, seconds) is how far back "before" is; the **Noise filter** (`noise`, 0–100%) smooths the fast average (0%: quick, but it takes the noise); the **Dead-band** (the threshold) is how big a change counts as moving, with the hysteresis below it. Changing starts when a change begins and ends when the value settles, so "when the change ends" is Changing's *When it stops*. A rewind starts the averages over.
+
+**Raw or %.** The switch beside the value puts the thresholds (and the hysteresis and tolerance) in the value's own units, or as a share of its range: 50% is the middle, whatever the range. The range is the control's own min and max, the layer property's, the Finish or sound effect number's, 0..1 for a mapping's reading and the pointer; a distance has none, so it uses the range seen so far. The range is looked up when the condition runs (`play/conditionRange.ts`), so widening a slider keeps 50% at its middle. Switching keeps the thresholds in the same place.
 
 A missing value (a hand out of view, a deleted layer) is never true, and a crossing forgets which side it was on.
 
-**Firing modes** work as for every trigger: Once when it becomes true, Continuously or Every N while it stays true, and **When it stops** when it becomes false. A crossing is a single tap (a press and its release in one frame), so it fires once in every mode.
+**Firing modes** work as for every trigger: Once when it becomes true, Continuously or Every N while it stays true, and **When it stops** when it becomes false. Two modes count instead: **Every Nth** fires on every Nth time it happens (the 4th, the 8th…), and **N within T** fires when it happens N times within T seconds (then it needs N fresh ones), timed by the setup's clock so takes and renders count the same. A signal passed down a chain several times in one frame moves an action's clock once. A crossing is a single tap (a press and its release in one frame), so it fires once in every mode.
 
 **The meter** in the editor shows the value now against its range, the threshold, the shaded part where the condition is met and the lighter strip of the hysteresis.
 
@@ -38,7 +50,13 @@ A missing value (a hand out of view, a deleted layer) is never true, and a cross
 
 ## Signals
 
-A **signal** is a named event the setup defines (Layers → **Signals**: add, rename, fire by hand with ▶, delete).
+A **signal** is one true/false value the setup names, watched every frame (the **Signals** page, ⌘5: add, rename, fire by hand with ▶, delete). It has three views: its **level** (true now), its **rise** (it just became true) and its **fall** (it just became false). What makes it true, on its card:
+
+- **When sent**: true in the frame something sends it (an action's Send a signal, a layer's Born, an increment's step), so a one-frame pulse.
+- **While…**: its own trigger: true while a key is held, a condition is met, a hand is closed, the picture is pressed; a tap (a crossing, an OSC message) is true for its one frame.
+- **Combine**: from other signals' levels: **All of** (hover AND click), **Any of**, **None of** (NOT), **Exactly one of**. Combinations are worked out after what they read (`sgSignalOrder`, sorted when the setup changes); a loop (A reads B reads A) reads the others a frame late, which also makes a latch, and the card says so. At most 8 inputs.
+
+A signal's rise presses its key and holds it until the fall, so "When a signal fires" hears all three through the firing modes: **Once** is the rise, **Continuously** the level, **When it stops** the fall. Levels are worked out once a frame after conditions and before actions (`tickSignalLevels` in `lib/playEngine.ts`, the same in the web runtime); a signal sent by an action is visible to combinations on the next frame. A dot on the card shows whether it is true now.
 
 - **Send a signal** is an action: in an action's **Do**, pick Send a signal and the signal. It needs no layer.
 - **When a signal fires** is a trigger kind: actions and trigger mappings fire on it. In a mapping's Source picker each signal is also listed under **From the setup** (a trigger on it playing an envelope).
@@ -53,7 +71,35 @@ Signals pass down a chain in the same frame: A sends S1, an action on S1 sends S
 
 A loop (S1 sends S2, S2 sends S1) therefore runs at most once around per frame.
 
+**Timing and chance** (on the card; `sgShapeStep` in `play/kit/signals.js`, the same on a website):
+
+- **Hold for** (`hold`, seconds): it must stay true this long before it counts, a debounce that ignores flickers.
+- **Linger** (`linger`): it stays true this long after it stops, so a one-frame pulse becomes a held level.
+- **Delay** (`delay`): its rise and its fall arrive this much later ("A sets off B half a second after"); at most 64 on the way. A signal sent by an action goes out when the next frame works it out.
+- **Chance** (`chance`, 10–100%; off is the signal's own switch): each time it starts, one roll decides whether the whole activation goes out: no level, no rise, no fall if not, so nothing downstream (actions, Set, combinations) sees it. The roll is a hash of the signal's `seed` and how many times it has started, so the same timeline rolls the same way and a render matches; **Re-roll** picks another seed.
+
+All four run on the setup's clock and start over on a rewind. Each is at most 10 s.
+
+**Links** (on the card: *When it starts / ends, send B, 0.5 s later*): a signal sends others after a delay (`links: [{ to, delay, on }]`, at most 8; 0 is the next frame, so even a ring of 0-second links can't hang a frame). A chain of links that comes back round is a **loop** (Tarjan's strongly connected components, `sgLinkPlan`, worked out when the setup changes). Loops show at the top of the Signals page: their members and the time around, **Running / Stopped** (stopping drops what is going round), **Speed** (scales every delay in it), **Laps** (0 endless; counted from where it was started), what a new start does while it runs (**Ignore it**, **Add a pulse**, **Restart**), live status and **Reset**. At most 16 pulses go round a loop at once; a loop where one signal links to two others in it multiplies pulses each lap, and its card says so. The links are the truth: only a loop's settings are stored (`loops: [{ key: "a|b|c", speed, laps, running, policy, name }]`, keyed by its members). Everything runs on the setup's clock (a paused clock holds pulses where they are) and a rewind clears it.
+
+**Where a signal sits.** Each card has a chip: *on its own*, *starts a chain*, *in a chain*, *ends a chain*, *branches*, *merges* or *in a loop*, from the links, combinations and actions that relay one signal into another (`signalStructure`). Derived, nothing stored.
+
+A mapping can also have a **Delay** (`delayMs`, beside Smooth, at most 10 s): its value arrives that much later, before the smoothing (`sgLagStep`, a short ring of recent values read between samples). Several mappings from one source with growing delays make a trail that follows the leader.
+
+In the file a signal may carry `"when": { "kind": "trigger", "trigger": {…} }` or `"when": { "kind": "logic", "op": "and" | "or" | "not" | "xor", "inputs": ["sig_…"] }`; inputs that aren't signals of the setup are dropped.
+
 Deleting a signal leaves what sent or listened for it in place, marked **Missing signal**. Signals themselves aren't recorded in takes: what they did is (the actions they fired, the controls they moved).
+
+## Captured values and Set
+
+A signal can **take** a value with it (sample and hold, on its card): **a number** (anything a condition can watch: a slider, a layer's number, a reading, a mapping's source) or **a position** (a layer's centre, a hand point, **the pinch point** halfway between the thumb and index tips, the **pointer on the picture**, a point), read **as it starts** (its rise), **as it ends** (its fall: "the radius it had when it dropped back") or **while true** (every frame: follows it). The card shows what it took last. A signal that is only sent takes its value when it is sent. Nothing to read (a hand out of view) keeps the last capture.
+
+- **Set…** (a number) maps the signal onto a control with the source **Set from a signal** (`{ "kind": "captured", "signal", "release" }`): the captured number is written as it is, not through the mapping's range. Nothing is written before the first capture, so the control keeps its own value. When the signal is false again: **Stay** (a hold: it keeps the value until the next capture), **Go back** (to its own slider, the way any mapping lets go) or **Go to** a resting value. The mapping's smoothing is the glide: 0 jumps, more slides.
+- **Move a layer here…** (a position) makes the layer's X and Y a position pair and drives it with a pair mapping whose Position is the anchor `sig:<id>`: it jumps there on each capture and stays (`sig:<id>:held` follows only while the signal is true). The axes' smoothing is the glide; X and Y share it, so it moves in a straight line.
+- **Positions as values:** `ax:x:<anchor>` / `ax:y:<anchor>` is one axis of a position (0..1, y up), so a region test is a band on each axis combined with All of (left half: `ax:x:… below 0.5`; a circle is a distance below a radius).
+- The engine's `mouse` is the whole window (as before); the **pointer on the picture** (`pointer`) is where a click on the picture lands, reported by the overlay. On a website both are the picture's pointer.
+
+A rewind forgets captures, so the same timeline sets the same way. In the file a signal carries `"capture": { "what": "pos:hand:right:21", "at": "rise" | "fall" | "held" }`.
 
 ## Pair controls
 
@@ -103,11 +149,15 @@ All optional, and left out when empty (older files load unchanged):
 }
 ```
 
+A condition may also carry `hi` (a band's other edge) and `"unit": "pct"`; both are left out when unset.
+
+A slider can show as a switch (`"toggle": true` on a float control): off is its low end, on its high end, a plain number underneath, so mappings, conditions and takes see a slider. The Beat trigger's `"unit": "hz"` shows its pulse as a rate; the timing is the same (`bpm / 60 / beats` a second).
+
 A pair needs two different float controls, each in one pair at most; a pair mapping needs its pair. A condition whose value path isn't one is dropped with its trigger. A value path to something missing is kept and simply never holds.
 
 ## Website exports
 
-The runtime runs conditions, signals, pair mappings and axis swaps through the inlined kit (`SSKit.signals`), frame for frame like the app (`src/play/__tests__/conditionsSignals.test.ts` checks one against the other). The exported player's panel shows a position pair as an XY pad (`.ssp-xy`; an axis a mapping drives stays put) and any other pair as two sliders. The pad grid's last pad (`pad:last`) is read from the page's own pad grid.
+The runtime runs conditions, signals, pair mappings and axis swaps through the inlined kit (`SSKit.signals`), frame for frame like the app (`src/play/__tests__/conditionsSignals.test.ts` checks one against the other). A percent condition's range comes with the bundle (`condRanges`: value path → [lo, hi]), since the page has no list of layer properties. A switch shows as a checkbox. The exported player's panel shows a position pair as an XY pad (`.ssp-xy`; an axis a mapping drives stays put) and any other pair as two sliders. The pad grid's last pad (`pad:last`) is read from the page's own pad grid.
 
 ## Not yet
 

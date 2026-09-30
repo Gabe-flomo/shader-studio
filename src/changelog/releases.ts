@@ -39,6 +39,21 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.9.22',
+    date: '2026-09-30',
+    title: 'Signals, simplified',
+    highlights: [
+      { area: 'Play', text: 'Signals has its own page (⌘5): each signal shows what makes it true, what sends it and what it sets off.', link: { kind: 'doc', path: 'docs/conditions-and-signals.md' } },
+      { area: 'Play', text: 'Any slider’s + can create a signal from it; signals can watch a layer’s readings, the picture’s brightness and positions.' },
+      { area: 'Play', text: 'New conditions: between, outside, is not, never reached, rising, falling, steady, every Nth, N within T, and % of range.' },
+      { area: 'Play', text: 'Signals combine (All of, Any of, None of) and follow a key or condition while it holds: hover AND click.' },
+      { area: 'Play', text: 'A signal can capture a value or a position; Set and Move a layer here make shapes jump to it (a pinch point, a click, a particle collision).' },
+      { area: 'Play', text: 'Hold for, Linger, Delay and Chance on signals; Delay on mappings; Shake, Wander, Hop and Chaos in the + menu.' },
+      { area: 'Play', text: 'Link signals into chains and loops, with Run/Stop, Speed and Laps.' },
+      { area: 'Studio', text: 'The Performance panel shows what Play costs each frame, per stage and per layer.' },
+    ],
+  },
+  {
     id: '2026.9.21',
     date: '2026-09-29',
     title: 'Tabs on every layer editor',

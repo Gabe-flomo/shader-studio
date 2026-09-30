@@ -8,9 +8,9 @@ import type { PlayFinish } from '../types/playFinish';
 import { finishTargetLabel } from '../types/playFinish';
 import { audioFxChainLabel, audioFxTargetLabel, parseAudioFxTarget, type PlayAudioFx } from '../types/playAudioFx';
 import { sgParseValueRef, sgScreenPoint } from './kit/signals.js';
-import { proximityCondition } from './triggers';
+import { proximityCondition, pulseHz } from './triggers';
 import { signalNames } from './signalNames';
-import { ANCHOR_KINDS, DEFAULT_FIRE, PAD_ANCHOR, handAnchor, parseHandAnchor } from '../types/play';
+import { ANCHOR_KINDS, DEFAULT_FIRE, HAND_PINCH_POINT, PAD_ANCHOR, handAnchor, layerNumericProps, parseEventAnchor, parseHandAnchor, parseSignalAnchor, type PlayLayer } from '../types/play';
 import { HD_POINT_NAMES } from './kit/hands.js';
 import { datasetStore } from '../data/datasetStore';
 import { DATA_ROW_COLUMN } from '../types/play';
@@ -24,7 +24,7 @@ import { parseTrackAnchor } from '../types/playTracking';
 export type HandSourceType = `hand:${HandRead}`;
 /** `reader:<id>`: one audio reader. */
 export type ReaderSourceType = `reader:${string}`;
-export type SourceType = FaceSourceType | PoseSourceType | 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | HandSourceType | ReaderSourceType;
+export type SourceType = FaceSourceType | PoseSourceType | 'mouse:x' | 'mouse:y' | 'mouse:down' | 'key' | 'trigger' | 'control' | 'null' | 'sensor' | 'lfo' | 'noise' | 'clock' | 'fn' | 'live' | 'audio' | 'tilt' | 'gamepad' | 'osc' | 'midi:cc' | 'midi:note' | 'midi:velocity' | 'midi:gate' | 'midi:bend' | 'pad' | 'data' | 'captured' | HandSourceType | ReaderSourceType;
 /** Not a source: the picker's entry that opens the Audio readers panel. */
 export const OPEN_READERS = 'readers:open';
 
@@ -56,6 +56,7 @@ export const SOURCE_TYPES: { value: SourceType; label: string; group?: string }[
   { value: 'null', label: 'Null position' },
   { value: 'sensor', label: 'Layer sensor (zone fill, speed…)' },
   { value: 'data', label: 'Data (the current row of a dataset)' },
+  { value: 'captured', label: 'Set from a signal (its captured value)' },
   { value: 'lfo', label: 'LFO' },
   { value: 'noise', label: 'Noise' },
   { value: 'clock', label: 'Clock (BPM)' },
@@ -211,6 +212,7 @@ export function sourceFromType(t: SourceType, prev: PlaySource, otherControlId =
     case 'tilt': return { kind: 'tilt', axis: 'gamma' };
     case 'gamepad': return { kind: 'gamepad', pad: 0, control: 'axis', index: 0 };
     case 'data': return prev.kind === 'data' ? prev : { kind: 'data', dataset, column: DATA_ROW_COLUMN, layerId: '' };
+    case 'captured': return prev.kind === 'captured' ? prev : { kind: 'captured', signal: '', release: 'stay' };
     default: return prev;
   }
 }
@@ -237,6 +239,7 @@ export function sourceLabel(s: PlaySource, controls: ReadonlyArray<{ id: string;
   if (s.kind === 'hand') return handSourceLabel(s);
   if (s.kind === 'face' || s.kind === 'pose') return trackSourceLabel(s);
   if (s.kind === 'pad') return padSourceLabel(s);
+  if (s.kind === 'captured') return `Set · ${signalName(s.signal)}’s value${s.release === 'back' ? ', then back' : s.release === 'value' ? `, then ${s.rest ?? 0}` : ''}`;
   const ch = s.channel === 0 ? '' : ` · ch. ${s.channel}`;
   const range = s.range ? ` ${kmNoteName(s.range[0])}–${kmNoteName(s.range[1])}` : '';
   switch (s.signal) {
@@ -292,7 +295,7 @@ export function triggerLabel(t: TriggerSpec, layers: ReadonlyArray<{ id: string;
     case 'note': return `${t.note < 0 ? 'Any note' : `${NOTE_NAMES[t.note % 12]}${Math.floor(t.note / 12) - 1}`}${t.channel ? ` · ch. ${t.channel}` : ''}`;
     case 'mouse': return 'Click';
     case 'osc': return `OSC ${t.address}`;
-    case 'beat': return t.beats === 1 ? `Every beat @ ${t.bpm}` : `Every ${t.beats} beats @ ${t.bpm}`;
+    case 'beat': return t.unit === 'hz' ? `Pulse @ ${Math.round(pulseHz(t) * 1000) / 1000} Hz` : t.beats === 1 ? `Every beat @ ${t.bpm}` : `Every ${t.beats} beats @ ${t.bpm}`;
     case 'audio': return `${LIVE_BAND_LABELS[t.band]} hit`;
     case 'zone': return t.event === 'click' ? 'Click on shape' : t.event === 'enter' ? 'Pointer enters shape' : `Shape fills to ${Math.round(t.threshold * 100)}%`;
     case 'hand': return `${SIDE_NAMES[t.side]} · ${HAND_GESTURE_LABELS[t.gesture]}`;
@@ -328,13 +331,28 @@ export const COND_LABELS: Record<CondCmp, { label: string; word: string; title: 
   crossUp: { label: 'Crosses ↑', word: 'crosses up', title: 'The moment it passes the threshold going up' },
   crossDown: { label: 'Crosses ↓', word: 'crosses down', title: 'The moment it passes the threshold going down' },
   equals: { label: 'Equals', word: 'equals', title: 'While it is within the tolerance of the threshold' },
+  not: { label: 'Is not', word: 'is not', title: 'While it is further than the tolerance from the threshold' },
+  between: { label: 'Between', word: 'between', title: 'While it is inside a band: between the two edges' },
+  outside: { label: 'Outside', word: 'outside', title: 'While it is outside a band: under the low edge or over the high one' },
+  neverAbove: { label: 'Never reached', word: 'has never reached', title: 'While the highest it has been is still under the threshold (starts over on a rewind)' },
+  neverBelow: { label: 'Never dropped to', word: 'has never dropped to', title: 'While the lowest it has been is still over the threshold (starts over on a rewind)' },
+  rising: { label: 'Rising', word: 'is rising', title: 'While it is going up: its recent average is over its longer one by more than the dead-band' },
+  falling: { label: 'Falling', word: 'is falling', title: 'While it is going down: its recent average is under its longer one by more than the dead-band' },
+  changing: { label: 'Changing', word: 'is changing', title: 'While it is moving either way (its start is when a change begins, its end when it settles)' },
+  steady: { label: 'Steady', word: 'is steady', title: 'While it is not moving more than the dead-band' },
 };
 
 const round = (n: number) => `${Math.round(n * 1000) / 1000}`;
 
 /** "Radius above 0.5", "Dot ↔ Box below 0.1", "Mouse X crosses up 0.8". */
 export function conditionLabel(c: ValueCondition, ctx: LabelContext = {}): string {
-  return `${valueRefLabel(c.value, ctx)} ${COND_LABELS[c.cmp].word} ${round(c.threshold)}${c.cmp === 'equals' ? ` ± ${round(c.tolerance)}` : ''}`;
+  const pct = c.unit === 'pct';
+  const n = (x: number) => (pct ? `${round(x * 100)}%` : round(x));
+  if (c.cmp === 'rising' || c.cmp === 'falling' || c.cmp === 'changing' || c.cmp === 'steady') return `${valueRefLabel(c.value, ctx)} ${COND_LABELS[c.cmp].word}`;
+  const band = (c.cmp === 'between' || c.cmp === 'outside') && typeof c.hi === 'number';
+  const what = band ? `${n(Math.min(c.threshold, c.hi!))} and ${n(Math.max(c.threshold, c.hi!))}` : n(c.threshold);
+  const tol = c.cmp === 'equals' || c.cmp === 'not' ? ` ± ${n(c.tolerance)}` : '';
+  return `${valueRefLabel(c.value, ctx)} ${COND_LABELS[c.cmp].word} ${what}${tol}`;
 }
 
 /** A condition's value in words: "Amount", "Dot · x", "Grade · Exposure", "Mouse X", "Dot ↔ Mouse". */
@@ -346,6 +364,9 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
     case 'mapping': { const m = ctx.mappings?.find(x => x.id === r.id); return m ? `${sourceLabel(m.source, ctx.controls, ctx.layers)} (source)` : 'Missing mapping'; }
     case 'mouse': return `Mouse ${r.axis.toUpperCase()}`;
     case 'distance': return `${anchorLabel(r.a, ctx.layers)} ↔ ${anchorLabel(r.b, ctx.layers)}`;
+    case 'reading': return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${SENSOR_LABELS[r.read as SensorRead] ?? r.read}`;
+    case 'axis': return `${anchorLabel(r.anchor, ctx.layers)} ${r.axis.toUpperCase()}`;
+    case 'picture': return `${r.ch === 'lum' ? 'Brightness' : r.ch === 'r' ? 'Red' : r.ch === 'g' ? 'Green' : 'Blue'} ${r.region === 'all' ? 'of the picture' : `under ${anchorLabel(r.region, ctx.layers)}`}`;
     case 'prop': {
       if (r.layerId.startsWith('finish:')) {
         const f = finishTargetLabel(ctx.finish, `finish:${r.layerId.slice(7)}::${r.key}`);
@@ -356,7 +377,10 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
         const f = audioFxTargetLabel(ctx.audioFx, target), t = parseAudioFxTarget(target);
         return f && t ? `${audioFxChainLabel(t.chainId, ctx.layers)} · ${f.effect} · ${f.param}` : `Sound · ${r.key}`;
       }
-      return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${r.key}`;
+      // Given whole layers (not just ids and labels), the property's own name: "Sparks · Spawn radius", not "spawnRadius".
+      const l = ctx.layers?.find(x => x.id === r.layerId);
+      const def = l && 'kind' in l ? layerNumericProps(l as unknown as PlayLayer).find(d => d.key === r.key) : undefined;
+      return `${l?.label ?? 'Missing layer'} · ${def?.label ?? r.key}`;
     }
   }
 }
@@ -366,11 +390,16 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
 /** "Right · Index tip", "Mouse", "Point 0.5, 0.5", or the layer's name. */
 export function anchorLabel(ref: string, layers: ReadonlyArray<{ id: string; label: string }> = []): string {
   if (ref === 'mouse') return 'Mouse';
+  if (ref === 'pointer') return 'Pointer on the picture';
   if (ref === PAD_ANCHOR) return 'Pad grid · last pad';
   const pt = sgScreenPoint(ref);
   if (pt) return `Point ${round(pt.x)}, ${round(pt.y)}`;
   const h = parseHandAnchor(ref);
-  if (h) return `${SIDE_NAMES[h.side]} · ${HD_POINT_NAMES[h.point] ?? 'Point'}`;
+  if (h) return `${SIDE_NAMES[h.side]} · ${h.point === HAND_PINCH_POINT ? 'Pinch point' : HD_POINT_NAMES[h.point] ?? 'Point'}`;
+  const sa = parseSignalAnchor(ref);
+  if (sa) return `${signalName(sa.id)}’s position${sa.held ? ' (while true)' : ''}`;
+  const ev = parseEventAnchor(ref);
+  if (ev) return `${layers.find(l => l.id === ev.layerId)?.label ?? 'Missing layer'} · latest ${ev.event === 'born' ? 'birth' : ev.event === 'died' ? 'death' : 'annihilation'}`;
   const tr = parseTrackAnchor(ref);
   if (tr) return trackAnchorLabel(tr.kind, tr.point);
   return layers.find(l => l.id === ref)?.label ?? (ref ? 'Missing layer' : 'Pick one');
@@ -419,6 +448,8 @@ export function fireModes(t: TriggerSpec): { value: FireMode; label: string; tit
     { value: 'held', label: 'Continuously', title: `Every frame ${held}` },
     { value: 'every', label: 'Every N', title: `At the start, then every few frames or seconds ${held}` },
     { value: 'release', label: releaseLabel(t), title: t.on === 'proximity' ? 'When A moves away again' : t.on === 'reader' || t.on === 'audio' ? 'When the level falls back below the threshold (less the hysteresis)' : 'When it lets go: the key comes up, the gesture ends' },
+    { value: 'nth', label: 'Every Nth', title: 'Counts: fires on every Nth time it happens (the 4th, the 8th…)' },
+    { value: 'within', label: 'N within T', title: 'Counts: fires when it happens N times within a few seconds (a double tap, three hits in a second)' },
   ];
 }
 
@@ -442,7 +473,16 @@ export function fireLabel(t: TriggerSpec): string {
     case 'held': return 'Every frame';
     case 'every': return f.unit === 'frames' ? `Every ${f.every} frame${f.every === 1 ? '' : 's'}` : `Every ${f.every} s`;
     case 'release': return releaseLabel(t);
+    case 'nth': return `Every ${ordinal(f.every)} time`;
+    case 'within': return `${f.every} times within ${f.window ?? 1} s`;
   }
+}
+
+/** 2 → "2nd", 3 → "3rd", 11 → "11th". */
+export function ordinal(n: number): string {
+  const r = n % 100;
+  if (r >= 11 && r <= 13) return `${n}th`;
+  return `${n}${n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th'}`;
 }
 
 /**
@@ -529,7 +569,7 @@ export const LIVE_BAND_OPTIONS = (Object.keys(LIVE_BAND_LABELS) as LiveAudioBand
 export const TRIGGER_KINDS: { value: TriggerSpec['on']; label: string }[] = [
   { value: 'key', label: 'Key' },
   { value: 'mouse', label: 'Click on the picture' },
-  { value: 'beat', label: 'Beat' },
+  { value: 'beat', label: 'Beat or pulse (BPM, Hz)' },
   { value: 'audio', label: 'Audio hit (live input)' },
   { value: 'reader', label: 'Audio reader crosses' },
   { value: 'note', label: 'MIDI note' },

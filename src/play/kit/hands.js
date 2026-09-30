@@ -477,6 +477,8 @@ export function hdGate(st, side, gesture) {
 export function hdPoint(st, side, point) {
   const h = hdHandFor(st, side);
   if (!h.present) return null;
+  // 21: the pinch point, halfway between the thumb tip (4) and the index tip (8). It stays put as a pinch closes, where the index tip moves.
+  if ((point | 0) === 21) return { x: (h.pts[12] + h.pts[24]) / 2, y: (h.pts[13] + h.pts[25]) / 2 };
   const i = Math.max(0, Math.min(20, point | 0));
   return { x: h.pts[i * 3], y: h.pts[i * 3 + 1] };
 }

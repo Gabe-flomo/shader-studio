@@ -13,6 +13,8 @@
  * zone trigger. Everything else passes through. Module singleton, no React.
  */
 
+import { readsPicture } from './conditionRange';
+import { playPerfOn, recordPlayLayer, recordPlayStage } from '../lib/perfStats';
 import type { ActionKind, PlayLayer, PlayRecord } from '../types/play';
 import { DEFAULT_HANDS, emptyPlayRecord } from '../types/play';
 import { DEFAULT_FACE, DEFAULT_POSE } from '../types/playTracking';
@@ -94,6 +96,8 @@ class PlayOverlay {
 
   constructor() {
     playEngine.onAction(a => this.fire({ do: a.do, layerId: a.layerId, amount: a.amount }));
+    // The picture's brightness (`pic:` values): what the layer kit sampled of the last frame.
+    playEngine.setPictureReader((x, y, r, ch) => this.kit.pictureAt(x, y, r, ch));
     // Drum pads: every hit goes through here (a take records it), and comes back to play.
     playDrumPads.setActor(a => this.fire(a));
     this.onPad(a => playDrumPads.play(a));
@@ -497,6 +501,9 @@ class PlayOverlay {
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
       const u = toUnit(e);
+      // Where it went down, for the engine's `pointer` anchor (a capture on the press reads it).
+      this.pointer.x = u.x; this.pointer.y = u.y; this.pointer.over = true;
+      playEngine.setPicturePointer(u.x, u.y);
       cancelHold();
       if (e.pointerType === 'touch' && !this.drawing && this.menuListeners.size) {
         const hit = this.layerAt(u);
@@ -561,6 +568,7 @@ class PlayOverlay {
       if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 8) cancelHold();
       const u = toUnit(e);
       this.pointer.x = u.x; this.pointer.y = u.y; this.pointer.over = u.x >= 0 && u.x <= 1 && u.y >= 0 && u.y <= 1;
+      if (this.pointer.over) playEngine.setPicturePointer(u.x, u.y);
       const d = this.drawing;
       if (d && d.mode === 'lasso' && this.pointer.down && d.pts.length >= 2) {
         const lx = d.pts[d.pts.length - 2], ly = d.pts[d.pts.length - 1];
@@ -655,7 +663,7 @@ class PlayOverlay {
     const needsAudio = this.record.layers.some(l => l.kind === 'audio' && l.visible);
     return {
       gl, W, H, dpr, time, dt,
-      needCoarse: grainsReadPicture(this.record),
+      needCoarse: grainsReadPicture(this.record) || readsPicture(this.record),
       value: (l, k) => playEngine.layerValue(l.id, k, (l as unknown as Record<string, number>)[k]),
       pointer: this.replayPointer ?? this.pointer,
       markers: !forExport && this.guides,
@@ -749,7 +757,12 @@ class PlayOverlay {
     const env = this.env(gl, W, H, dpr, time, dt);
     if (gx) env.guides = gx;
     env.alphaLayers = this.alphaLayers();
+    // The Performance panel is open: time the whole overlay and each layer.
+    const timing = playPerfOn();
+    const t0 = timing ? performance.now() : 0;
+    if (timing) env.layerTime = recordPlayLayer;
     this.kit.frame(ctx, this.record, env);
+    if (timing) recordPlayStage('overlay', performance.now() - t0);
     this.grainTap?.(this.kit, this.record, this.aspect, time, false);
     const top = gx ?? ctx;
     if (this.drawing) this.drawOutline(top, W, H, dpr);

@@ -34,6 +34,12 @@ export interface PlayControl {
   /** Action controls: the action's amount (particles for Burst, strength for Scatter). */
   amount?: number;
   /**
+   * A slider shown as a switch (a boolean control): off is `min`, on is `max`,
+   * a plain number underneath, so mappings, conditions and takes treat it as
+   * any other slider. Sliders only.
+   */
+  toggle?: boolean;
+  /**
    * The panel shows controls with the same group under one heading, in the
    * list's order ("Audio readers · Live": the readers' controls,
    * play/readerControls.ts). Absent = ungrouped.
@@ -57,8 +63,15 @@ export type LiveAudioBand = 'level' | 'bass' | 'lowmid' | 'highmid' | 'treble';
  *   every    while held: at the start, then every `every` frames or seconds
  *   release  when it lets go: the key comes up, the gesture ends, A moves away again
  */
-export type FireMode = 'once' | 'held' | 'every' | 'release';
-export interface FireSpec { mode: FireMode; every: number; unit: 'frames' | 'seconds' }
+export type FireMode = 'once' | 'held' | 'every' | 'release' | 'nth' | 'within';
+export interface FireSpec {
+  mode: FireMode;
+  /** every: frames or seconds between fires; nth: fire on every Nth press; within: how many presses. */
+  every: number;
+  unit: 'frames' | 'seconds';
+  /** within: the presses must all land within this many seconds. */
+  window?: number;
+}
 export const DEFAULT_FIRE: FireSpec = { mode: 'once', every: 3, unit: 'frames' };
 
 /**
@@ -74,8 +87,10 @@ export function handAnchor(side: HandSide, point: number): AnchorRef { return `$
 /** The hand and landmark of a `hand:<side>:<point>` anchor, or null for a layer anchor. */
 export function parseHandAnchor(ref: string): { side: HandSide; point: number } | null {
   const m = /^hand:(left|right|any):(\d{1,2})$/.exec(ref);
-  return m && Number(m[2]) <= 20 ? { side: m[1] as HandSide, point: Number(m[2]) } : null;
+  return m && Number(m[2]) <= HAND_PINCH_POINT ? { side: m[1] as HandSide, point: Number(m[2]) } : null;
 }
+/** The pinch point: halfway between the thumb tip (4) and the index tip (8), where a pinch lands (play/kit/hands.js hdPoint). */
+export const HAND_PINCH_POINT = 21;
 
 export type TriggerSpec = TriggerOn & { fire?: FireSpec };
 export type TriggerOn =
@@ -85,7 +100,8 @@ export type TriggerOn =
   | { on: 'note'; channel: number; note: number }
   | { on: 'mouse' }
   | { on: 'osc'; address: string }
-  | { on: 'beat'; bpm: number; beats: number }
+  /** A pulse on the setup's clock: every `beats` beats at `bpm`. `unit` 'hz' shows it as a rate (bpm / 60 / beats per second); the timing is the same. */
+  | { on: 'beat'; bpm: number; beats: number; unit?: 'hz' }
   /**
    * A shape layer: `click` a press on it, `enter` the pointer moving onto it,
    * `fill` particles filling it past `threshold` (0..1, see the sensor source).
@@ -126,8 +142,13 @@ export type TriggerOn =
  *   crossUp / crossDown   the moment it passes upward / downward (a tap)
  *   equals          while it is within `tolerance` of the threshold
  */
-export type CondCmp = 'below' | 'above' | 'crossUp' | 'crossDown' | 'equals';
-export const COND_CMPS: readonly CondCmp[] = ['below', 'above', 'crossUp', 'crossDown', 'equals'];
+export type CondCmp = 'below' | 'above' | 'crossUp' | 'crossDown' | 'equals' | 'not' | 'between' | 'outside' | 'neverAbove' | 'neverBelow'
+  | 'rising' | 'falling' | 'changing' | 'steady';
+export const COND_CMPS: readonly CondCmp[] = ['below', 'above', 'crossUp', 'crossDown', 'equals', 'not', 'between', 'outside', 'neverAbove', 'neverBelow', 'rising', 'falling', 'changing', 'steady'];
+/** Comparisons about which way the value is going (the threshold is the dead-band). */
+export const isDirectionCmp = (c: CondCmp): boolean => c === 'rising' || c === 'falling' || c === 'changing' || c === 'steady';
+/** Comparisons with two edges (`threshold` the low one, `hi` the high one). */
+export const isBandCmp = (c: CondCmp): boolean => c === 'between' || c === 'outside';
 
 /**
  * A condition on any value. `value` is a path (sgParseValueRef in
@@ -141,12 +162,112 @@ export interface ValueCondition {
   cmp: CondCmp;
   threshold: number;
   hysteresis: number;
-  /** equals: how close counts as equal. */
+  /** equals / not: how close counts as equal. */
   tolerance: number;
+  /** between / outside: the band's other edge (`threshold` is the first). */
+  hi?: number;
+  /**
+   * 'pct': the thresholds, hysteresis and tolerance are shares (0..1) of the
+   * value's range (a control's or a layer property's own, 0..1 for a mapping
+   * or the pointer, else the range seen so far), so 50% means the same
+   * whatever the range. Absent: raw units.
+   */
+  unit?: 'pct';
+  /** Rising, falling, changing, steady: how far back "before" is, in seconds (the slow average; default 0.5). */
+  window?: number;
+  /** Rising, falling, changing, steady: 0..1, how much noise the fast average smooths away (0 = none; default 0.3). */
+  noise?: number;
 }
 
-/** A named signal: actions send it, triggers listen for it. */
-export interface PlaySignal { id: string; name: string }
+/** How a signal combines others: all of them, any, none (not), exactly one. */
+export type SignalLogic = 'and' | 'or' | 'not' | 'xor';
+export const SIGNAL_LOGICS: readonly SignalLogic[] = ['and', 'or', 'not', 'xor'];
+/** A signal combines at most this many others. */
+export const SIGNAL_INPUTS_MAX = 8;
+
+/**
+ * What makes a signal true, when it has a definition of its own (a level
+ * signal): a trigger (true while it is held or met: a key down, a condition
+ * true, a hand closed; a tap is true for its one frame), or a combination of
+ * other signals' levels. Without one, a signal is true only in the frame
+ * something sends it.
+ */
+export type SignalDef =
+  | { kind: 'trigger'; trigger: TriggerSpec }
+  | { kind: 'logic'; op: SignalLogic; inputs: string[] };
+
+/**
+ * A named signal: one true/false value, watched every frame. Its rise (it
+ * became true) is what "When a signal fires" hears; held and on-release
+ * firing modes hear its level and its fall. Actions can also send it.
+ */
+export interface PlaySignal {
+  id: string;
+  name: string;
+  when?: SignalDef;
+  capture?: SignalCapture;
+  /** Seconds its rise and fall arrive late (play/kit/signals.js sgShapeStep). */
+  delay?: number;
+  /**
+   * Links: when it rises (or falls), send other signals, each after its own
+   * delay (play/kit/signals.js sgLinkFire). A chain of links that comes back
+   * round is a loop (PlayRecord.loops has its settings).
+   */
+  links?: SignalLink[];
+  /** Seconds it must stay true before it counts (a debounce). */
+  hold?: number;
+  /** Seconds it stays true after it stops (a pulse becomes a held level). */
+  linger?: number;
+  /** 0.1..1: the chance each activation goes out (a seeded roll per rise); absent = always. */
+  chance?: number;
+  /** The seed of its rolls: the same timeline rolls the same way. */
+  seed?: number;
+}
+export interface SignalLink { to: string; delay: number; on?: 'rise' | 'fall' }
+export const SIGNAL_LINKS_MAX = 8;
+
+/**
+ * A loop's settings (a ring of linked signals, found from the links): kept by
+ * `key`, its members' ids sorted and joined by '|', so the links stay the
+ * truth. Speed scales every delay in it; laps 0 is endless; running false
+ * stops it; policy is what a new start does while pulses are going round.
+ */
+export interface PlayLoop { key: string; name?: string; speed?: number; laps?: number; running?: boolean; policy?: 'ignore' | 'add' | 'restart' }
+
+/** A signal's timing and chance, at most 10 s each; chance 10% to 100% (off is the signal's own switch). */
+export const SIGNAL_TIME_MAX = 10;
+export const SIGNAL_CHANCE_MIN = 0.1;
+
+/**
+ * A value a signal takes with it (sample and hold): `what` is a condition
+ * value path (a number: `ctl:…`, `layer:…::…`, `read:…`) or `pos:<anchor>` (a
+ * position: a layer's centre, `hand:right:21` the pinch point, `mouse`…),
+ * read at its rise, at its fall, or every frame while it is true. A Set
+ * mapping (source `captured`) writes a number; a position is the anchor
+ * `sig:<id>` (a pair mapping's Position moves a shape there).
+ */
+export interface SignalCapture { what: string; at: 'rise' | 'fall' | 'held' }
+export const CAPTURE_POS = 'pos:';
+/**
+ * Where a particles layer's latest event happened (play/particle-sim.js): the
+ * anchor `ev:<layerId>:born|died|annihilate`, read from its sensors
+ * (`<id>::bornX`…). No position before the first such event.
+ */
+export type ParticleEvent = 'born' | 'died' | 'annihilate';
+export const EVENT_ANCHOR = 'ev:';
+export function parseEventAnchor(ref: string): { layerId: string; event: ParticleEvent } | null {
+  const m = /^ev:(.+):(born|died|annihilate)$/.exec(ref);
+  return m ? { layerId: m[1], event: m[2] as ParticleEvent } : null;
+}
+/** The anchor of a signal's captured position; `sig:<id>:held` only while the signal is true. */
+export const SIGNAL_ANCHOR = 'sig:';
+export function parseSignalAnchor(ref: string): { id: string; held: boolean } | null {
+  if (!ref.startsWith(SIGNAL_ANCHOR)) return null;
+  const rest = ref.slice(SIGNAL_ANCHOR.length);
+  const held = rest.endsWith(':held');
+  const id = held ? rest.slice(0, -5) : rest;
+  return id ? { id, held } : null;
+}
 export const SIGNALS_MAX = 64;
 
 // ── Pair controls (two values played as one) ────────────────────────────────
@@ -330,8 +451,9 @@ export const DEFAULT_HAND_RESPONSIVENESS = 0.5;
 export const DEFAULT_HAND_STRICTNESS = 0.5;
 
 /** Does a setup read hands anywhere: a hand source, a gesture trigger (mapping or action), or a null following a hand? */
-export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings'>>): boolean {
-  return (play.pairMappings ?? []).some(pairMappingUsesHands) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
+export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings' | 'signals'>>): boolean {
+  return (play.pairMappings ?? []).some(pairMappingUsesHands)
+    || (play.signals ?? []).some(s => s.when?.kind === 'trigger' && triggerUsesHands(s.when.trigger)) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
     || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId))
     || (!!m.increment && ((m.increment.on === 'trigger' && triggerUsesHands(m.increment.trigger)) || (m.increment.on === 'repeat' && conditionUsesHands(m.increment.when)))))
     || (play.actions ?? []).some(a => triggerUsesHands(a.trigger))
@@ -471,7 +593,17 @@ export type PlaySource =
    * Data layer (`layerId`, or the first showing the dataset) steps to, so the
    * value moves as its Offset or its actions move.
    */
-  | { kind: 'data'; dataset: string; column: string; layerId: string };
+  | { kind: 'data'; dataset: string; column: string; layerId: string }
+  /**
+   * Set: the number a signal captured (PlaySignal.capture), written as it is,
+   * not through the mapping's range. Nothing is written before the first
+   * capture. When the signal is false again: `stay` keeps the captured value
+   * (a hold), `back` lets the control go back to its own slider, `value` goes
+   * to `rest`. The mapping's smoothing is the glide (0 = jump).
+   */
+  | { kind: 'captured'; signal: string; release: CaptureRelease; rest?: number };
+
+export type CaptureRelease = 'stay' | 'back' | 'value';
 
 /** The data source's pseudo-column: how far through the rows (or chunks) the current one is, 0..1. */
 export const DATA_ROW_COLUMN = '#row';
@@ -544,6 +676,12 @@ export interface PlayMapping {
   curveY?: number[];
   /** Exponential smoothing time constant in ms (0 = snap). */
   smoothMs: number;
+  /**
+   * Delay in ms (at most 10 s): the value arrives this much later, before the
+   * smoothing (play/kit/signals.js sgLagStep). Several mappings from one
+   * source with growing delays make a trail that follows the leader.
+   */
+  delayMs?: number;
   /** Colour controls only: which channel the mapping writes (all three when unset). */
   channel?: 0 | 1 | 2;
   enabled: boolean;
@@ -979,6 +1117,8 @@ export interface PlayRecord {
   signals?: PlaySignal[];
   /** Pair controls: two controls played as one (two sliders, an XY pad). Absent = none. */
   pairs?: PlayPair[];
+  /** Settings of loops of linked signals (speed, laps, running), by their members. Absent = defaults. */
+  loops?: PlayLoop[];
   /** Mappings onto pairs (both axes at once, A or B, with axis swap). Absent = none. */
   pairMappings?: PlayPairMapping[];
   /** Spreads: controls offset together along a curve (docs/spread-control.md). Absent = none. */
@@ -1251,7 +1391,7 @@ function parseTriggerOn(raw: unknown): TriggerOn | null {
     case 'note': return { on: 'note', channel: Math.max(0, Math.min(16, Math.round(num(t.channel, 0)))), note: Math.max(-1, Math.min(127, Math.round(num(t.note, -1)))) };
     case 'mouse': return { on: 'mouse' };
     case 'osc': { const address = str(t.address); return address && address.startsWith('/') ? { on: 'osc', address } : null; }
-    case 'beat': return { on: 'beat', bpm: Math.max(1, num(t.bpm, 120)), beats: Math.max(0.0625, num(t.beats, 1)) };
+    case 'beat': { const b: TriggerOn = { on: 'beat', bpm: Math.max(1, num(t.bpm, 120)), beats: Math.max(0.0625, num(t.beats, 1)) }; if (t.unit === 'hz') b.unit = 'hz'; return b; }
     case 'audio': return { on: 'audio', band: LIVE_BANDS_SET.has(t.band as string) ? (t.band as LiveAudioBand) : 'bass', threshold: Math.max(0.01, Math.min(0.99, num(t.threshold, 0.6))) };
     case 'zone': {
       const layerId = str(t.layerId);
@@ -1293,7 +1433,12 @@ export function parseCondition(raw: unknown): ValueCondition | null {
   if (!value || value.length > 400 || !sgParseValueRef(value)) return null;
   const cmp = typeof t.cmp === 'string' && (COND_CMPS as readonly string[]).includes(t.cmp) ? (t.cmp as CondCmp) : 'above';
   const big = (x: number) => Math.max(-1e6, Math.min(1e6, x));
-  return { value, cmp, threshold: big(num(t.threshold, 0.5)), hysteresis: Math.max(0, big(num(t.hysteresis, 0))), tolerance: Math.max(0, big(num(t.tolerance, 0.01))) };
+  const out: ValueCondition = { value, cmp, threshold: big(num(t.threshold, 0.5)), hysteresis: Math.max(0, big(num(t.hysteresis, 0))), tolerance: Math.max(0, big(num(t.tolerance, 0.01))) };
+  if (typeof t.hi === 'number' && Number.isFinite(t.hi)) out.hi = big(t.hi);
+  if (t.unit === 'pct') out.unit = 'pct';
+  if (typeof t.window === 'number' && Number.isFinite(t.window)) out.window = Math.max(0.01, Math.min(60, t.window));
+  if (typeof t.noise === 'number' && Number.isFinite(t.noise)) out.noise = Math.max(0, Math.min(1, t.noise));
+  return out;
 }
 
 /** A trigger with its firing mode: the mode is kept only when it isn't the default (so old files save unchanged). */
@@ -1307,8 +1452,11 @@ function parseTrigger(raw: unknown): TriggerSpec | null {
 function parseFire(v: unknown): FireSpec | null {
   if (!v || typeof v !== 'object') return null;
   const f = v as Record<string, unknown>;
-  const mode = f.mode === 'held' || f.mode === 'every' || f.mode === 'release' ? f.mode : null;
+  const mode = f.mode === 'held' || f.mode === 'every' || f.mode === 'release' || f.mode === 'nth' || f.mode === 'within' ? f.mode : null;
   if (!mode) return null;
+  // Counters: every Nth press, or N presses within a few seconds.
+  if (mode === 'nth') return { mode, every: Math.max(2, Math.min(999, Math.round(num(f.every, 4)))), unit: 'frames' };
+  if (mode === 'within') return { mode, every: Math.max(2, Math.min(64, Math.round(num(f.every, 3)))), unit: 'seconds', window: Math.max(0.05, Math.min(60, num(f.window, 1))) };
   const unit = f.unit === 'seconds' ? 'seconds' : 'frames';
   const every = unit === 'frames' ? Math.max(1, Math.min(600, Math.round(num(f.every, 3)))) : Math.max(0.01, Math.min(60, num(f.every, 0.25)));
   return { mode, every, unit };
@@ -1399,6 +1547,14 @@ function parseSource(raw: unknown): PlaySource | null {
   if (!raw || typeof raw !== 'object') return null;
   const s = raw as Record<string, unknown>;
   switch (s.kind) {
+    case 'captured': {
+      const signal = str(s.signal);
+      if (!signal) return null;
+      const release: CaptureRelease = s.release === 'back' || s.release === 'value' ? s.release : 'stay';
+      const out: PlaySource = { kind: 'captured', signal, release };
+      if (release === 'value') out.rest = num(s.rest, 0);
+      return out;
+    }
     case 'midi': {
       const signal = str(s.signal);
       if (!signal || !MIDI_SIGNALS.has(signal)) return null;
@@ -1524,6 +1680,7 @@ function parseControl(raw: unknown): PlayControl | null {
   };
   if (typeof c.step === 'number' && c.step > 0) out.step = c.step;
   if (act) out.amount = num(c.amount, defaultActionAmount(act.do));
+  if (kind === 'float' && c.toggle === true) out.toggle = true;
   if (typeof c.group === 'string' && c.group.trim()) out.group = c.group.trim().slice(0, 80);
   return out;
 }
@@ -1547,6 +1704,7 @@ function parseMapping(raw: unknown, controlIds: Set<string>): PlayMapping | null
     enabled: m.enabled !== false,
   };
   if (m.channel === 0 || m.channel === 1 || m.channel === 2) out.channel = m.channel;
+  if (typeof m.delayMs === 'number' && m.delayMs > 0) out.delayMs = Math.min(10000, m.delayMs);
   if (out.curve === 'custom') {
     const ys = curveY(m.curveY);
     if (ys) out.curveY = ys; else out.curve = 'linear';
@@ -1666,7 +1824,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   // A granulator rack's grains read as sensors on `ae:<rackId>` (docs/granulator.md).
   const layerOk = (src: PlaySource) => (src.kind !== 'null' && src.kind !== 'sensor') || layerIds.has(src.layerId)
     || (src.kind === 'sensor' && isGranulatorRack(aeRack(audioEngine, rackOfSensorLayer(src.layerId))));
-  const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref) || !!parseTrackAnchor(ref);
+  // A layer, a hand or tracked point, the pointer on the picture, a signal's captured position, or where a particles layer's latest event was.
+  const anchorOk = (ref: string) => layerIds.has(ref) || !!parseHandAnchor(ref) || !!parseTrackAnchor(ref) || ref === 'pointer' || !!parseSignalAnchor(ref) || (() => { const ev = parseEventAnchor(ref); return !!ev && layerIds.has(ev.layerId); })();
   const triggerOk = (t: TriggerSpec) => t.on === 'zone' ? layerIds.has(t.layerId) : t.on === 'proximity' ? anchorOk(t.a) && anchorOk(t.b) : t.on === 'reader' ? readerIds.has(t.readerId) : true;
   const keptMappings = mappings.filter(m => keptIds.has(m.controlId)
     && (m.source.kind !== 'control' || keptIds.has(m.source.controlId))
@@ -1689,6 +1848,18 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   }
   const signals = parseSignals(r.signals);
   if (signals.length) out.signals = signals;
+  const loops = (Array.isArray(r.loops) ? r.loops : []).flatMap((x: unknown) => {
+    const o = x as Record<string, unknown> | null;
+    if (!o || typeof o.key !== 'string' || !o.key) return [];
+    const l: PlayLoop = { key: o.key.slice(0, 1000) };
+    if (typeof o.name === 'string' && o.name.trim()) l.name = o.name.trim().slice(0, 60);
+    if (typeof o.speed === 'number' && o.speed > 0) l.speed = Math.max(0.05, Math.min(20, o.speed));
+    if (typeof o.laps === 'number' && o.laps > 0) l.laps = Math.min(9999, Math.round(o.laps));
+    if (o.running === false) l.running = false;
+    if (o.policy === 'add' || o.policy === 'restart') l.policy = o.policy;
+    return [l];
+  }).slice(0, SIGNALS_MAX);
+  if (loops.length) out.loops = loops;
   const pairs = parsePairs(r.pairs, keptControls);
   if (pairs.length) out.pairs = pairs;
   const pairIds = new Set(pairs.map(x => x.id));
@@ -1780,9 +1951,41 @@ function parseSignals(raw: unknown): PlaySignal[] {
     const id = str(o.id);
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push({ id: id.slice(0, 80), name: (typeof o.name === 'string' && o.name.trim() ? o.name : 'Signal').slice(0, 60) });
+    const sig: PlaySignal = { id: id.slice(0, 80), name: (typeof o.name === 'string' && o.name.trim() ? o.name : 'Signal').slice(0, 60) };
+    const when = parseSignalDef(o.when);
+    if (when) sig.when = when;
+    for (const k of ['delay', 'hold', 'linger'] as const) { const v = o[k]; if (typeof v === 'number' && v > 0) sig[k] = Math.min(SIGNAL_TIME_MAX, v); }
+    if (typeof o.chance === 'number' && o.chance < 1) sig.chance = Math.max(SIGNAL_CHANCE_MIN, o.chance);
+    if (typeof o.seed === 'number' && Number.isFinite(o.seed)) sig.seed = Math.round(o.seed);
+    const links = (Array.isArray(o.links) ? o.links : []).flatMap((l: unknown) => {
+      const x = l as Record<string, unknown> | null;
+      return x && typeof x.to === 'string' && x.to ? [{ to: x.to, delay: Math.max(0, Math.min(SIGNAL_TIME_MAX, num(x.delay, 0))), ...(x.on === 'fall' ? { on: 'fall' as const } : {}) }] : [];
+    }).slice(0, SIGNAL_LINKS_MAX);
+    if (links.length) sig.links = links;
+    const cap = o.capture as Record<string, unknown> | undefined;
+    if (cap && typeof cap === 'object' && typeof cap.what === 'string' && cap.what) {
+      sig.capture = { what: cap.what.slice(0, 200), at: cap.at === 'fall' || cap.at === 'held' ? cap.at : 'rise' };
+    }
+    out.push(sig);
   }
+  // A combination keeps only inputs that are signals of this setup (and not itself).
+  const ids = new Set(out.map(s => s.id));
+  for (const s of out) if (s.when?.kind === 'logic') s.when = { ...s.when, inputs: s.when.inputs.filter(i => ids.has(i) && i !== s.id) };
+  // Links only to signals of this setup (a link to itself is a one-signal loop, and allowed).
+  for (const s of out) if (s.links) { const l = s.links.filter(x => ids.has(x.to)); if (l.length) s.links = l; else delete s.links; }
   return out;
+}
+
+function parseSignalDef(raw: unknown): SignalDef | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const w = raw as Record<string, unknown>;
+  if (w.kind === 'trigger') { const trigger = parseTrigger(w.trigger); return trigger ? { kind: 'trigger', trigger } : null; }
+  if (w.kind === 'logic') {
+    const op = (SIGNAL_LOGICS as readonly unknown[]).includes(w.op) ? w.op as SignalLogic : 'and';
+    const inputs = [...new Set((Array.isArray(w.inputs) ? w.inputs : []).filter((x): x is string => typeof x === 'string' && !!x))].slice(0, SIGNAL_INPUTS_MAX);
+    return { kind: 'logic', op, inputs };
+  }
+  return null;
 }
 
 /** Pairs of two different float controls that exist; a control is in one pair at most. */

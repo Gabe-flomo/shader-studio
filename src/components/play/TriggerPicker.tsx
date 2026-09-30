@@ -12,7 +12,7 @@
  */
 import { openProSheet, useCan } from '../../lib/plan';
 import { FREE_TRIGGER_ONS } from '../../play/planGates';
-import { HAND_POINT_SECTIONS, triggerKindSections } from './sourcePickerSections';
+import { HAND_ANCHOR_SECTIONS, triggerKindSections } from './sourcePickerSections';
 import { GroupedPicker } from '../ui/GroupedPicker';
 import { sectionsFromOptions } from '../ui/groupedPickerModel';
 import { useEffect, useMemo, useState } from 'react';
@@ -22,7 +22,7 @@ import type { ActionKind, FireMode, HandGesture, LiveAudioBand, TriggerMode, Tri
 import { parseHandAnchor } from '../../types/play';
 import {
   CHANNELS, HAND_GESTURE_OPTIONS, HAND_SIDES, LIVE_BAND_OPTIONS,
-  anchorChoice, anchorOptions, anchorPick, fireModes, fireOf, keyName, repeatHint, triggerFromKind, triggerLabel, withFire,
+  anchorChoice, anchorOptions, anchorPick, fireModes, fireOf, keyName, ordinal, repeatHint, triggerFromKind, triggerLabel, withFire,
 } from '../../play/playSources';
 import { playEngine } from '../../lib/playEngine';
 import { Segmented } from '../ui/Choice';
@@ -43,6 +43,7 @@ import { Button } from '../ui/Button';
 import { ReaderMeter } from './AudioReadersPanel';
 import { ConditionFields, SignalPicker } from './ConditionFields';
 import type { AudioReader } from '../../types/play';
+import { pulseForHz, pulseHz } from '../../play/triggers';
 
 export interface TriggerLayerRef { id: string; label: string; kind: string }
 
@@ -83,10 +84,20 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
         <LiveAudioChip />
       </>}
       {t.on === 'beat' && <>
-        <NumberInput value={t.bpm} min={1} max={999} step={1} title="Beats per minute" onCommit={n => onChange({ ...t, bpm: Math.max(1, n) })} style={{ ...numStyle, width: 48 }} />
-        {hint('bpm, every')}
-        <NumberInput value={t.beats} min={0.0625} max={64} step={1} title="Fire every this many beats" onCommit={n => onChange({ ...t, beats: Math.max(0.0625, n) })} style={{ ...numStyle, width: 40 }} />
-        {hint('beats')}
+        <Segmented size="sm" ariaLabel="Pulse unit" value={t.unit === 'hz' ? 'hz' : 'bpm'} options={[
+          { value: 'bpm', label: 'BPM', title: 'Every so many beats at a tempo' },
+          { value: 'hz', label: 'Hz', title: 'So many times a second' },
+        ]} onChange={u => { const n = { ...t }; if (u === 'hz') n.unit = 'hz'; else delete n.unit; onChange(n); }} />
+        {t.unit === 'hz' ? <>
+          {/* Hz is bpm / 60 / beats: a rate sets it as one beat at 60 × the rate. On the setup's clock either way, so takes and renders match. */}
+          <NumberInput value={Math.round(pulseHz(t) * 1000) / 1000} min={0.01} max={60} step={0.5} title="Pulses a second" onCommit={n => onChange({ ...t, ...pulseForHz(n) })} style={{ ...numStyle, width: 52 }} />
+          {hint('a second')}
+        </> : <>
+          <NumberInput value={t.bpm} min={1} max={999} step={1} title="Beats per minute" onCommit={n => onChange({ ...t, bpm: Math.max(1, n) })} style={{ ...numStyle, width: 48 }} />
+          {hint('bpm, every')}
+          <NumberInput value={t.beats} min={0.0625} max={64} step={1} title="Fire every this many beats" onCommit={n => onChange({ ...t, beats: Math.max(0.0625, n) })} style={{ ...numStyle, width: 40 }} />
+          {hint('beats')}
+        </>}
       </>}
       {t.on === 'zone' && (shapes.length === 0 ? hint('Add a Shape layer first') : <>
         <Select ariaLabel="Shape" value={t.layerId} options={shapes.map(s => ({ value: s.id, label: s.label }))} onChange={v => onChange({ ...t, layerId: v })} height={26} />
@@ -214,7 +225,7 @@ export function AnchorPicker({ value, layers, exclude, ariaLabel, onChange }: {
   return (
     <span style={{ display: 'inline-flex', gap: 4, minWidth: 0, flexWrap: 'wrap' }}>
       <GroupedPicker ariaLabel={ariaLabel} value={known ? pick : ''} placeholder="Pick one" sections={sections} onChange={v => onChange(anchorChoice(v, value))} height={26} style={{ maxWidth: 170 }} width={220} />
-      {hand && <GroupedPicker ariaLabel={`${ariaLabel}: point on the hand`} value={`${hand.point}`} sections={HAND_POINT_SECTIONS} onChange={v => onChange(`hand:${hand.side}:${parseInt(v, 10) || 0}`)} height={26} style={{ maxWidth: 150 }} width={220} searchPlaceholder="Search points" />}
+      {hand && <GroupedPicker ariaLabel={`${ariaLabel}: point on the hand`} value={`${hand.point}`} sections={HAND_ANCHOR_SECTIONS} onChange={v => onChange(`hand:${hand.side}:${parseInt(v, 10) || 0}`)} height={26} style={{ maxWidth: 150 }} width={220} searchPlaceholder="Search points" />}
     </span>
   );
 }
@@ -331,7 +342,28 @@ export function FirePicker({ trigger: t, what, numStyle, onChange }: {
   // One wrapping box beside the row's label, so N and its unit (and the hint) line up under the modes.
   return (
     <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-      <Segmented size="sm" ariaLabel="When it fires" value={f.mode} options={fireModes(t)} onChange={(mode: FireMode) => set({ mode })} />
+      <Segmented size="sm" ariaLabel="When it fires" value={f.mode} options={fireModes(t)} wrap onChange={(mode: FireMode) => {
+        // The counters start from their own defaults: every 4th; 3 within a second.
+        if (mode === 'nth') set({ mode, every: 4, unit: 'frames' });
+        else if (mode === 'within') set({ mode, every: 3, unit: 'seconds', window: 1 });
+        else if (f.mode === 'nth' || f.mode === 'within') set({ mode, every: 3, unit: 'frames' });
+        else set({ mode });
+      }} />
+      {f.mode === 'nth' && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>every</span>
+          <NumberInput value={f.every} min={2} max={999} step={1} title="Fire on every this-many-th time" onCommit={n => set({ every: Math.max(2, Math.min(999, Math.round(n))) })} style={{ ...numStyle, width: 40 }} />
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{ordinal(f.every).replace(/^\d+/, '')} time</span>
+        </span>
+      )}
+      {f.mode === 'within' && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <NumberInput value={f.every} min={2} max={64} step={1} title="How many times" onCommit={n => set({ every: Math.max(2, Math.min(64, Math.round(n))) })} style={{ ...numStyle, width: 36 }} />
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>times within</span>
+          <NumberInput value={f.window ?? 1} min={0.05} max={60} step={0.1} title="Seconds they all have to land within" onCommit={n => set({ window: Math.max(0.05, Math.min(60, n)) })} style={{ ...numStyle, width: 44 }} />
+          <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>s</span>
+        </span>
+      )}
       {f.mode === 'every' && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <NumberInput

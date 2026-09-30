@@ -17,6 +17,8 @@ export interface KitEnv {
   guides?: CanvasRenderingContext2D | null;
   /** Layers to also draw alone (even hidden), read back with layerCanvas(id). */
   alphaLayers?: readonly string[] | null;
+  /** Each layer's step and draw time in ms, when the host is measuring (its Performance panel is open). */
+  layerTime?: (id: string, ms: number) => void;
   /** Sample the picture's coarse grid even when no layer reads it (a Granulator's things read their brightness). */
   needCoarse?: boolean;
   pointer: KitPointer;
@@ -94,6 +96,8 @@ export interface LayerKit {
   isAnimated(record: PlayRecord): boolean;
   /** A layer drawn alone on the last frame (listed in env.alphaLayers), or null. */
   layerCanvas(id: string): HTMLCanvasElement | null;
+  /** The last frame's picture brightness (0..1): 'lum' (Rec. 709), 'r', 'g' or 'b', around (x, y) within r picture heights, or the whole picture (x null). Null before a sample. */
+  pictureAt(x: number | null, y: number | null, r: number, ch: 'lum' | 'r' | 'g' | 'b'): number | null;
   grainThings(record: PlayRecord, sourceId: string, boundaryId: string, value: (l: PlayLayer, key: string) => number, aspect: number): { things: GrainThing[]; cx: number; cy: number; all: number };
   /**
    * The Background layer's plan for this frame (null without one): what the
@@ -108,3 +112,5 @@ export interface LayerKit {
 export function createLayerKit(): LayerKit;
 
 export interface GrainThing { id: number; x: number; y: number; vx: number; vy: number; age: number; size: number; bright: number; born: boolean }
+
+export function klPictureAt(grid: ArrayLike<number>, W: number, H: number, x: number | null, y: number | null, r: number, ch: 'lum' | 'r' | 'g' | 'b'): number | null;

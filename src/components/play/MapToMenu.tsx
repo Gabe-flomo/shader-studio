@@ -13,7 +13,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { candidateLabel, collectPlayCandidates } from '../../play/playControls';
 import { SENSOR_HINTS, SENSOR_LABELS } from '../../play/playSources';
 import { playEngine } from '../../lib/playEngine';
-import { layerNumericProps, sensorReadsFor, layerTarget, type PlayLayer, type PlaySource, type SensorRead } from '../../types/play';
+import { layerNumericProps, layerTarget, type PlayLayer, type PlaySource } from '../../types/play';
 import { finishHostLabel, finishHosts, finishNumericProps, finishTarget } from '../../types/playFinish';
 import { audioFxHosts } from '../../types/playAudioFx';
 import { useTokens } from '../../theme/themeStore';
@@ -25,9 +25,13 @@ import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { toast } from '../ui/toastStore';
 import { mapSourceTo } from './layerOps';
+import { layerPorts, readingRange } from '../../play/layerPorts';
+import { createSignalFrom } from '../../play/createSignal';
+import { goToSignal } from './playSplit';
 import { usePlayUi } from './playUi';
 
-export function MapToMenu({ source, label }: { source: PlaySource; label: string }) {
+/** `button`: the button's text (Map… by default); `smoothMs`: the new mapping's smoothing (a Set jumps: 0). */
+export function MapToMenu({ source, label, button = 'Map…', smoothMs = 60 }: { source: PlaySource; label: string; button?: string; smoothMs?: number }) {
   const tk = useTokens();
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
@@ -50,7 +54,7 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
 
   const pick = (target: Parameters<typeof mapSourceTo>[2]) => {
     let made: string | undefined;
-    setPlay(p => { const r = mapSourceTo(p, source, target); made = r.control?.label; return r.play; });
+    setPlay(p => { const r = mapSourceTo(p, source, target, smoothMs); made = r.control?.label; return r.play; });
     setOpen(false); setQ('');
     if (made) toast.success(`${label} → ${made}`, { message: 'Tune its range and curve in Mappings.', action: { label: 'Show', onClick: () => usePlayUi.getState().setTab('mappings') } });
   };
@@ -74,7 +78,7 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
   const empty = controls.length + graph.length + layers.length + finish.length + sound.length === 0;
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <Button size="sm" variant="ghost" icon="plus" onClick={() => setOpen(o => !o)} title={`Map ${label} onto a control`}>Map…</Button>
+      <Button size="sm" variant="ghost" icon="plus" onClick={() => setOpen(o => !o)} title={`Map ${label} onto a control`}>{button}</Button>
       {open && (
         <Popover anchorRef={anchor} onClose={() => { setOpen(false); setQ(''); }} align="end" width={300} padding={8}>
           <div style={{ padding: '2px 4px 6px', color: tk.text.faint, fontSize: 11.5 }}>Map <b style={{ color: tk.text.secondary }}>{label}</b> onto…</div>
@@ -116,7 +120,8 @@ export function MapToMenu({ source, label }: { source: PlaySource; label: string
 /** A layer's readings (audio bands, a shape's fill…) with meters and Map…, in its editor. */
 export function LayerReadings({ layer }: { layer: PlayLayer }) {
   const tk = useTokens();
-  const reads = sensorReadsFor(layer as { kind: string; shape?: string }).filter(r => r !== 'distance') as SensorRead[];
+  const reads = layerPorts(layer).readings;
+  const setPlay = useNodeGraphStore(s => s.setPlay);
   const [vals, setVals] = useState<Record<string, number | null>>({});
   useEffect(() => {
     if (!reads.length) return;
@@ -142,6 +147,12 @@ export function LayerReadings({ layer }: { layer: PlayLayer }) {
               <div style={{ width: `${Math.round((v ?? 0) * 100)}%`, height: '100%', background: v == null ? 'transparent' : alpha(tk.accent.base, 0.85), transition: 'width 90ms linear' }} />
             </div>
             <MapToMenu source={{ kind: 'sensor', layerId: layer.id, read: r, otherId: '' }} label={`${layer.label} ${SENSOR_LABELS[r].toLowerCase()}`} />
+            <Button size="sm" variant="ghost" icon="bolt" title={`Create a signal when ${layer.label}’s ${SENSOR_LABELS[r].toLowerCase()} crosses the middle`} onClick={() => {
+              const range = readingRange(r) ?? [0, 1];
+              let made = '';
+              setPlay(p => { const x = createSignalFrom(p, { value: `read:${layer.id}::${r}`, label: `${layer.label} ${SENSOR_LABELS[r].toLowerCase()}`, min: range[0], max: range[1] }); made = x.signalId; return x.play; });
+              if (made) goToSignal(made);
+            }}>Signal</Button>
           </div>
         );
       })}

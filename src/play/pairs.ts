@@ -4,8 +4,9 @@
  * mapping, and adding, renaming and deleting signals. Pure: each takes the
  * record and returns the next one. The engine (lib/playEngine.ts) plays them.
  */
+import { eventSignal, layerEvents } from './layerPorts';
 import type { PairAxis, PlayControl, PlayPair, PlayPairMapping, PlayRecord, PlaySignal, PairSource } from '../types/play';
-import { layerNumericProps, layerTarget, parseLayerTarget, SIGNALS_MAX } from '../types/play';
+import { layerNumericProps, layerTarget, parseLayerTarget, parseSignalAnchor, SIGNALS_MAX } from '../types/play';
 import { pairedKey } from '../components/play/layerOps';
 import { playId, targetParts } from './playControls';
 
@@ -160,15 +161,10 @@ export function deleteSignal(play: PlayRecord, id: string): PlayRecord {
  */
 export function layerSignalSenders(play: PlayRecord): Array<{ id: string; label: string }> {
   const out: Array<{ id: string; label: string }> = [];
-  for (const l of play.layers) {
-    if (l.kind === 'particles' && l.emit === 'multiply') {
-      if (l.splitSignal) out.push({ id: l.splitSignal, label: `${l.label}: Split` });
-      if (l.fullSignal) out.push({ id: l.fullSignal, label: `${l.label}: Full` });
-      if (l.annihilateSignal) out.push({ id: l.annihilateSignal, label: `${l.label}: Annihilate` });
-      if (l.clearedSignal) out.push({ id: l.clearedSignal, label: `${l.label}: Cleared` });
-    } else if (l.kind === 'relationship' && l.catchSignal) {
-      out.push({ id: l.catchSignal, label: `${l.label}: Catch` });
-    }
+  // Every event a layer can send (layerPorts: Born and Died too, which the engine sends for particles and agents).
+  for (const l of play.layers) for (const e of layerEvents(l)) {
+    const id = eventSignal(l, e);
+    if (id) out.push({ id, label: `${l.label}: ${e.label}` });
   }
   for (const m of play.mappings) {
     const inc = m.increment;
@@ -183,6 +179,14 @@ export function layerSignalSenders(play: PlayRecord): Array<{ id: string; label:
 /** Signal fields that listen for a signal outside of an action or a mapping source: an Increment's Reset on. */
 export function layerSignalListeners(play: PlayRecord): Array<{ id: string; label: string }> {
   const out: Array<{ id: string; label: string }> = [];
+  // A combination reads the signals it combines.
+  for (const s of play.signals ?? []) if (s.when?.kind === 'logic') for (const i of s.when.inputs) out.push({ id: i, label: `Combined into ${s.name}` });
+  // Set: a mapping writes what it captured; a pair moves to the position it captured.
+  for (const m of play.mappings) if (m.source.kind === 'captured' && m.source.signal) out.push({ id: m.source.signal, label: `Sets ${play.controls.find(c => c.id === m.controlId)?.label ?? 'a missing control'}` });
+  for (const m of play.pairMappings ?? []) {
+    const sa = m.source.kind === 'position' ? parseSignalAnchor(m.source.anchor) : null;
+    if (sa) out.push({ id: sa.id, label: `Moves ${play.pairs?.find(p => p.id === m.pairId)?.label ?? 'a pair'} to its position` });
+  }
   for (const m of play.mappings) {
     const inc = m.increment;
     if (inc?.resetOn) {

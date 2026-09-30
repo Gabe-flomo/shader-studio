@@ -22,7 +22,7 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlaySource } from '../../types/play';
 import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
-import { PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '../../types/play';
+import { CAPTURE_POS, PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '../../types/play';
 import { GRAIN_EACH, grainSensorLayer, isGranulatorRack, parseGrainsTarget } from '../../types/playAudioEngine';
 import { ConnectGuide } from './ConnectGuide';
 import type { LfoShape, LiveAudioBand, TriggerSpec } from '../../types/play';
@@ -60,10 +60,10 @@ import { applyControlLink, LinkableControl, useControlLinkEscape } from './Contr
 import { setLayerDropHandler } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
-import { sidebarView, useBigPage, useBigTab, usePlaySplit } from './playSplit';
+import { goToSignal, sidebarView, useBigPage, useBigTab, usePlaySplit } from './playSplit';
 import { PlayRailBar } from './PlayRail';
 import { phonePageShown, type RailPage } from './railPages';
-import { ActionsPage, BackgroundPage, CardPage, SignalsPage } from './FullPages';
+import { BackgroundPage, CardPage, SignalsPage } from './FullPages';
 import { groupCounts, groupMappings, type MappingGroupId } from './mappingGroups';
 import { ControlsBoard, type BoardSlot } from './ControlsBoard';
 import { AudioEnginePanel } from './engine/AudioEnginePanel';
@@ -72,7 +72,7 @@ import { setMacroValue } from '../../play/rackMacros';
 import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
 import { MiniMapper } from './MiniMapper';
-import type { MiniMapperTarget } from './miniMapperCore';
+import { wireCreateSignal, type MiniMapperTarget } from './miniMapperCore';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
 import { rackKeyboard } from '../../lib/rackKeyboard';
 import { keyboardClaimed } from '../../lib/keyboardClaim';
@@ -551,12 +551,26 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     items.push({ label: 'New Spread with this', icon: 'plus', hint: 'A group of sliders offset together along a curve', onSelect: () => { update(p => makeSpread(p, [id]).play); toast.info('Spread made: its card is at the top of Controls'); } });
     return items;
   };
+  /** Create signal: watch this control (signalFlow.ts), then show the signal on the Signals page. */
+  const signalItems = (c: PlayControl | undefined): MenuItem[] => (c && c.kind !== 'color' ? [{
+    label: 'Create a signal from it', icon: 'bolt', hint: 'A signal when it crosses the middle of its range; tune it on the Signals page',
+    onSelect: () => {
+      const r = wireCreateSignal(play, { control: c.id });
+      if (!r) { toast.info('The setup has as many signals as it can hold'); return; }
+      update(() => r.play);
+      goToSignal(r.signalId);
+    },
+  }, 'separator'] : []);
   const controlMenu = (id: string): MenuItem[] => {
     const c = play.controls.find(x => x.id === id);
-    if (!c || c.kind !== 'float') return [{ label: 'Only sliders pair', disabled: true, onSelect: () => {} }];
+    if (!c || c.kind !== 'float') return [...signalItems(c), { label: 'Only sliders pair', disabled: true, onSelect: () => {} }];
     const partner = partnerTarget(c.target);
     const others = play.controls.filter(x => x.id !== id && x.kind === 'float' && !pairOf(play, x.id));
-    const items: MenuItem[] = [];
+    const items: MenuItem[] = [{
+      label: c.toggle ? 'Show as a slider' : 'Show as a switch', icon: c.toggle ? 'sliders' : 'check',
+      hint: c.toggle ? undefined : 'On and off: its high end and its low end',
+      onSelect: () => update(p => ({ ...p, controls: p.controls.map(x => { if (x.id !== id) return x; const n = { ...x }; if (x.toggle) delete n.toggle; else n.toggle = true; return n; }) })),
+    }, 'separator'];
     if (partner) items.push({
       label: `Add as position with ${partner.axis === 'y' ? 'Y' : 'X'}`, icon: 'target', hint: 'Its X/Y partner too, as one control with an XY pad',
       onSelect: () => { let ok = ''; update(p => { const r = positionPair(p, id, resolveGraphTarget); ok = r.pairId; return r.play; }); if (!ok) toast.info('No partner slider found for it'); },
@@ -567,7 +581,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       items.push({ label: o.label, icon: 'sliders', hint: 'Two sliders played together; map both at once, or one then the other', onSelect: () => update(p => makePair(p, id, o.id, false).play) });
       if (items.length > 14) break;
     }
-    return [...items, ...spreadMenu(id)];
+    return [...signalItems(c), ...items, ...spreadMenu(id)];
   };
   const pairMenu = (pairId: string): MenuItem[] => [
     { label: 'Map onto the pair', icon: 'plus', onSelect: () => addPairMapping(pairId) },
@@ -769,8 +783,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       case 'layers': return layersOk
         ? <LayersPanel play={play} touch={touch} split={wide} big extras={false} exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={exposeControl} />
         : <LockedLayers play={play} />;
-      case 'actions': return layersOk ? <ActionsPage play={play} onChange={update} wide={wide} /> : <LockedLayers play={play} />;
-      case 'signals': return <SignalsPage play={play} onChange={update} wide={wide} />;
+      case 'signals': return layersOk ? <SignalsPage play={play} onChange={update} wide={wide} /> : <LockedLayers play={play} />;
       case 'background': return <BackgroundPage play={play} onChange={update} locked={!backgroundsOk} />;
       case 'finish-picture':
       case 'finish-sound': return finishOk ? <FinishPanel play={play} onChange={update} touch={touch} wide={wide} only={page === 'finish-sound' ? 'sound' : 'picture'} /> : <LockedFinish play={play} />;
@@ -879,7 +892,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
 
 const DRAWER_HEIGHT_KEY = 'shader-studio:play:drawerHeight';
 /** Pages that aren't a whole sidebar section: a phone shows them in place of its tab's section. */
-const OWN_PAGES: ReadonlySet<RailPage> = new Set<RailPage>(['actions', 'signals', 'background', 'midi-file', 'pad-grid']);
+const OWN_PAGES: ReadonlySet<RailPage> = new Set<RailPage>(['signals', 'background', 'midi-file', 'pad-grid']);
 /** The split view's big panel lays cards out in as many columns as fit. */
 const PANEL_GRID: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', columnGap: 10, alignItems: 'start' };
 const PANEL_GRID_WIDE: React.CSSProperties = { ...PANEL_GRID, gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))' };
@@ -1222,6 +1235,16 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
         // A mapping on a colour scales it or sets one channel; the rest comes from
         // this colour, so it stays editable while driven. The live result shows beside it.
         <ColourPad value={Array.isArray(value) ? value : [0, 0, 0]} live={driven && Array.isArray(live) ? live : undefined} disabled={!exists} onChange={onChange} />
+      ) : control.toggle ? (
+        // A switch: off is the low end, on the high end (a boolean control, a number underneath).
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Toggle
+            checked={typeof shown === 'number' && shown >= (control.min + control.max) / 2}
+            disabled={!exists || driven}
+            onChange={on => onChange(on ? control.max : control.min)}
+            label={typeof shown === 'number' && shown >= (control.min + control.max) / 2 ? 'On' : 'Off'}
+          />
+        </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -1803,6 +1826,8 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
     if (!allSources && sourceTypeNeedsPro(v)) { openProSheet('play.sources'); return; }
     if (v.startsWith(SIGNAL_SOURCE)) { onUpdate({ source: signalSource(v.slice(SIGNAL_SOURCE.length)) }); return; }
     if (v === OPEN_READERS) { useReadersPanel.getState().show({ mappingId: m.id, focus: m.source.kind === 'reader' ? m.source.readerId : '' }); return; }
+    // Set: the first signal that captures a number, and no glide (it jumps).
+    if (v === 'captured' && m.source.kind !== 'captured') { onUpdate({ source: { kind: 'captured', signal: (signals ?? []).find(s => s.capture && !s.capture.what.startsWith(CAPTURE_POS))?.id ?? signals?.[0]?.id ?? '', release: 'stay' }, smoothMs: 0 }); return; }
     onUpdate({ source: sourceFromType(v as SourceType, m.source, otherControls[0]?.id ?? '', nullLayers[0]?.id ?? '', firstSensor(layerRefs), firstDataset()) });
   };
   const numStyle = { width: 58, height: 26, borderRadius: 6, border: 0, background: tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' as const };
@@ -1923,6 +1948,18 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
                 <Segmented size="sm" ariaLabel="Null axis" value={m.source.axis} options={[{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }]} onChange={v => onUpdate({ source: { kind: 'null', layerId: m.source.kind === 'null' ? m.source.layerId : '', axis: v } })} />
               </>
         )}
+        {m.source.kind === 'captured' && (() => {
+          const src = m.source;
+          return <>
+            <Select ariaLabel="Signal it takes the value from" value={src.signal} options={[...(signals ?? []).some(s => s.id === src.signal) ? [] : [{ value: src.signal, label: 'Pick a signal' }], ...(signals ?? []).map(s => ({ value: s.id, label: s.capture ? s.name : `${s.name} (captures nothing yet)` }))]} onChange={v => onUpdate({ source: { ...src, signal: v } })} height={26} style={{ flex: 1, minWidth: 0 }} />
+            <Segmented size="sm" ariaLabel="When the signal lets go" value={src.release} options={[
+              { value: 'stay', label: 'Stay', title: 'Keeps the value it was set to until the next capture' },
+              { value: 'back', label: 'Go back', title: 'The control goes back to its own slider when the signal is false' },
+              { value: 'value', label: 'Go to', title: 'Goes to a resting value when the signal is false' },
+            ]} onChange={release => onUpdate({ source: release === 'value' ? { ...src, release, rest: src.rest ?? 0 } : { kind: 'captured', signal: src.signal, release } })} />
+            {src.release === 'value' && <NumberInput value={src.rest ?? 0} step={0.01} title="Where it rests while the signal is false" onCommit={n => onUpdate({ source: { ...src, rest: n } })} style={{ ...numStyle, width: 52 }} />}
+          </>;
+        })()}
         {m.source.kind === 'control' && (
           otherControls.length === 0
             ? <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Add a second control</span>
@@ -1976,6 +2013,11 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
         <span style={labelStyle}>Smooth</span>
         <NumberInput value={m.smoothMs} min={0} max={5000} step={10} title="Smoothing time in milliseconds" onCommit={n => onUpdate({ smoothMs: Math.max(0, n) })} style={numStyle} />
         <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+        {!m.increment && <>
+          <span style={{ ...labelStyle, width: 'auto', marginLeft: 6 }} title="The value arrives this much later (before the smoothing): several mappings from one source with growing delays follow one another">Delay</span>
+          <NumberInput value={m.delayMs ?? 0} min={0} max={10000} step={10} title="Delay in milliseconds (0 = none, at most 10 s)" onCommit={n => onUpdate({ delayMs: n > 0 ? Math.min(10000, n) : undefined })} style={numStyle} />
+          <span style={{ color: tk.text.faint, font: `500 11px ${fontFamily.ui}` }}>ms</span>
+        </>}
         <span style={{ flex: 1 }} />
         {kindPicker}
         <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} label={m.enabled ? 'On' : 'Off'} />

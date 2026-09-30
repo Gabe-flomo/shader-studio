@@ -24,9 +24,12 @@ describe('split prefs', () => {
     expect(parseSplitPrefs(JSON.stringify({ v: 2, on: true, side: 'bottom', ratio: 0.35, tab: 'layers', sidebar: 'rail', sidebarBefore: 'hidden', railPage: 'finish-sound', railRatio: 0.6 })))
       .toEqual({ on: true, side: 'bottom', ratio: 0.35, tab: 'layers', sidebar: 'rail', sidebarBefore: 'hidden', railPage: 'finish-sound', railRatio: 0.6, railPageMemory: {} });
     // Only entries naming a real page under the category they claim survive.
-    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPageMemory: { layers: 'signals', finish: 'layers', mappings: 'nope' } })).railPageMemory).toEqual({ layers: 'signals' });
+    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPageMemory: { layers: 'background', finish: 'layers', mappings: 'nope' } })).railPageMemory).toEqual({ layers: 'background' });
+    // Signals left Layers for a category of its own (2026-09-30), taking the old Actions page with it.
+    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPageMemory: { layers: 'signals' } })).railPageMemory).toEqual({ signals: 'signals' });
+    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPage: 'actions' })).railPage).toBe('signals');
     // A save from before Controls and Mappings merged (2026-09-28) still has a `mappings` key: its pages now live under `controls`.
-    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPageMemory: { mappings: 'midi-file', layers: 'actions' } })).railPageMemory).toEqual({ controls: 'midi-file', layers: 'actions' });
+    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPageMemory: { mappings: 'midi-file', layers: 'actions' } })).railPageMemory).toEqual({ controls: 'midi-file', signals: 'signals' });
     // A current save keeps a hidden sidebar (and the pre-rail `sidebarHidden` spelling).
     expect(parseSplitPrefs(JSON.stringify({ v: 2, on: true, sidebarHidden: true })).sidebar).toBe('hidden');
     expect(parseSplitPrefs(JSON.stringify({ v: 2, on: false, sidebar: 'full' })).on).toBe(false);

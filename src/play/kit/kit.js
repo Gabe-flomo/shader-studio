@@ -66,6 +66,29 @@ import { bqState, bqAct, bqPlan, bqCompose } from './queue.js';
 import { kdState, kdAct, kdPlan, kdTextItems, kdFrame, kdDrawTable, kdColumn, kdText, kdChunkText, kdWrapText, kdScriptView } from './data.js';
 
 const KIT_COARSE_W = 64, KIT_COARSE_H = 36, KIT_FINE_W = 128, KIT_FINE_H = 72;
+
+/**
+ * How bright an RGBA grid (`W` × `H`, row 0 at the top) is, 0..1: `ch` 'lum'
+ * (Rec. 709 weights: 0.2126 R + 0.7152 G + 0.0722 B), 'r', 'g' or 'b'. Around
+ * (x, y) (0..1, y up) within `r` picture heights (at least the cell it is in),
+ * or the whole grid when x is null. Null when no cell is inside.
+ */
+export function klPictureAt(grid, W, H, x, y, r, ch) {
+  const val = i => (ch === 'r' ? grid[i] : ch === 'g' ? grid[i + 1] : ch === 'b' ? grid[i + 2] : grid[i] * 0.2126 + grid[i + 1] * 0.7152 + grid[i + 2] * 0.0722) / 255;
+  let sum = 0, n = 0;
+  if (x === null || x === undefined) {
+    for (let i = 0; i < W * H * 4; i += 4) { sum += val(i); n++; }
+    return n ? sum / n : null;
+  }
+  // The grid keeps the picture's aspect, so a picture height is H cells both ways.
+  const cr = Math.max(0.5, (r || 0) * H), cx = x * W, cy = (1 - y) * H;
+  const x0 = Math.max(0, Math.floor(cx - cr)), x1 = Math.min(W - 1, Math.floor(cx + cr)), y0 = Math.max(0, Math.floor(cy - cr)), y1 = Math.min(H - 1, Math.floor(cy + cr));
+  for (let py = y0; py <= y1; py++) for (let px = x0; px <= x1; px++) {
+    if (Math.hypot(px + 0.5 - cx, py + 0.5 - cy) > cr + 0.5) continue;
+    sum += val((py * W + px) * 4); n++;
+  }
+  return n ? sum / n : null;
+}
 const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1, agents: 1 };
 
 export function createLayerKit() {
@@ -991,7 +1014,7 @@ export function createLayerKit() {
     }
     // Text, images and the camera with a Reveal or Luma picture matte already chose how they meet the picture.
     const blendOf = l => ((l.kind === 'text' || l.kind === 'image' || l.kind === 'camera' || l.kind === 'video') && l.matte !== 'over') ? 'source-over' : KL_BLEND[l.blend] || 'source-over';
-    const drawLayer = (c, l) => {
+    const drawLayerNow = (c, l) => {
       if (!ownCanvas(l)) { drawOne(c, l, true); return; }
       const off = renderLayer(l);
       if (!off) return;
@@ -999,6 +1022,9 @@ export function createLayerKit() {
       c.drawImage(off, 0, 0);
       c.globalCompositeOperation = 'source-over';
     };
+    // env.layerTime(id, ms): the host's Performance panel is open and wants each layer's cost.
+    const layerTime = env.layerTime;
+    const drawLayer = layerTime ? (c, l) => { const t0 = performance.now(); drawLayerNow(c, l); layerTime(l.id, performance.now() - t0); } : drawLayerNow;
     const drawn = l => isVisible(l);
     const tap = env.shaderTap;
     if (tap) {
@@ -1056,6 +1082,10 @@ export function createLayerKit() {
         // edge-detection) and the this-step delta (the born/died readings, a mapping source).
         report(env, l.id + '::bornCount', sim.evBorn);
         report(env, l.id + '::diedCount', sim.evDied);
+        // Where the latest birth, death and annihilation happened (the anchors ev:<layer>:born|died|annihilate).
+        report(env, l.id + '::bornX', sim.bornX); report(env, l.id + '::bornY', sim.bornY);
+        report(env, l.id + '::diedX', sim.diedX); report(env, l.id + '::diedY', sim.diedY);
+        report(env, l.id + '::annihilateX', sim.annX); report(env, l.id + '::annihilateY', sim.annY);
         { const bd = bornDiedDelta(l.id, sim.evBorn, sim.evDied); report(env, l.id + '::born', bd.born); report(env, l.id + '::died', bd.died); }
         if (l.emit === 'multiply' && sim.mx) {
           report(env, l.id + '::split', sim.mx.splits);
@@ -1211,6 +1241,15 @@ export function createLayerKit() {
 
   return {
     frame,
+    /**
+     * How bright the last frame's picture is (its coarse grid, 64 × 36, sampled when a layer or the
+     * host asks: env.needCoarse), 0..1: `ch` 'lum' (Rec. 709 weights), 'r', 'g' or 'b'. Around
+     * (x, y) (0..1, y up) within `r` picture heights, or the whole picture when x is null. Null
+     * before the grid has been sampled.
+     */
+    pictureAt(x, y, r, ch) {
+      return coarse ? klPictureAt(coarse, KIT_COARSE_W, KIT_COARSE_H, x, y, r, ch) : null;
+    },
     /** Queue an action ({ do, layerId, amount }); it happens on the next frame. */
     act(a) { queue.push(a); },
     /** Topmost visible shape under (x, y) (0..1, y up), for clicks and dragging. */

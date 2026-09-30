@@ -1,7 +1,9 @@
 /**
  * railPages.ts — what the split view's icon rail offers (docs/split-view.md,
- * "Rail and full-width pages"): the Play page's categories (Controls —
- * Mappings included, Layers, Finish, Engine), each with its pages. A page is
+ * "Rail and full-width pages"): the Play page's categories, named for Play's
+ * three nouns (Mappings: the controls and the values flowing in; Layers;
+ * Signals: conditions and what they set off) plus Finish and the Engine,
+ * each with its pages. A page is
  * what the big panel shows full width once the sidebar is collapsed into the
  * rail; the phone's bottom row offers the same pages in a sheet.
  *
@@ -19,11 +21,11 @@ import { tabForPage, type PlayTab } from './playUi';
  * into one rail category (the owner's call, 2026-09-28) while the tab-strip
  * elsewhere still keeps them apart, so the two unions parted ways here.
  */
-export type RailCategory = 'controls' | 'layers' | 'finish' | 'engine';
+export type RailCategory = 'controls' | 'layers' | 'signals' | 'finish' | 'engine';
 
 export type RailPage =
   | 'controls'
-  | 'layers' | 'actions' | 'signals' | 'background'
+  | 'layers' | 'signals' | 'background'
   | 'finish-picture' | 'finish-sound'
   | 'engine-performance'
   | 'mappings' | 'midi-file' | 'pad-grid';
@@ -48,8 +50,7 @@ export interface RailCategoryDef {
 export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
   controls: { id: 'controls', category: 'controls', label: 'Controls', description: 'The sliders, colours and buttons people play' },
   layers: { id: 'layers', category: 'layers', label: 'Layers', description: 'What sits on the picture, with the selected layer’s editor' },
-  actions: { id: 'actions', category: 'layers', label: 'Actions', description: 'When something happens, do something to a layer' },
-  signals: { id: 'signals', category: 'layers', label: 'Signals', description: 'Named events that actions send and others listen for' },
+  signals: { id: 'signals', category: 'signals', label: 'Signals', description: 'When something happens, and what it does next' },
   background: { id: 'background', category: 'layers', label: 'Background', description: 'What the picture is under the layers' },
   'finish-picture': { id: 'finish-picture', category: 'finish', label: 'Picture', description: 'Grade, lens, film and time effects over the whole picture' },
   'finish-sound': { id: 'finish-sound', category: 'finish', label: 'Sound', description: 'Reverb, echo, filter and more on each sound and the master' },
@@ -60,8 +61,9 @@ export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
 };
 
 export const RAIL_CATEGORIES: readonly RailCategoryDef[] = [
-  { id: 'controls', label: 'Controls', icon: 'sliders', description: 'The panel people play, and what maps onto it', pages: ['controls', 'mappings', 'midi-file', 'pad-grid'] },
-  { id: 'layers', label: 'Layers', icon: 'layers', description: 'Layers, actions, signals and the background', pages: ['layers', 'actions', 'signals', 'background'] },
+  { id: 'controls', label: 'Mappings', icon: 'sliders', description: 'The controls people play, and the values mapped onto them', pages: ['controls', 'mappings', 'midi-file', 'pad-grid'] },
+  { id: 'layers', label: 'Layers', icon: 'layers', description: 'What acts on the picture, and the background', pages: ['layers', 'background'] },
+  { id: 'signals', label: 'Signals', icon: 'bolt', description: 'Conditions that report what is happening, and what they set off', pages: ['signals'] },
   { id: 'finish', label: 'Finish', icon: 'curve', description: 'Effects over the picture and the sound', pages: ['finish-picture', 'finish-sound'] },
   { id: 'engine', label: 'Engine', icon: 'piano', description: 'The Audio engine', pages: ['engine-performance'] },
 ];
@@ -73,13 +75,18 @@ export const RAIL_CATEGORIES: readonly RailCategoryDef[] = [
  * tabs before the page ever sees the keydown).
  */
 export const RAIL_CATEGORY_SHORTCUT: Readonly<Record<RailCategory, string>> = {
-  controls: 'cmd+1', layers: 'cmd+2', finish: 'cmd+3', engine: 'cmd+4',
+  controls: 'cmd+1', layers: 'cmd+2', finish: 'cmd+3', engine: 'cmd+4', signals: 'cmd+5',
 };
 
 export const RAIL_PAGE_IDS = Object.keys(RAIL_PAGES) as RailPage[];
 
 export function isRailPage(v: unknown): v is RailPage {
   return typeof v === 'string' && Object.prototype.hasOwnProperty.call(RAIL_PAGES, v);
+}
+
+/** A saved page id from before a page was folded into another (Actions into Signals, 2026-09-30), as today's. */
+export function currentRailPage(v: unknown): unknown {
+  return v === 'actions' ? 'signals' : v;
 }
 
 export function categoryOf(page: RailPage): RailCategory {
@@ -116,8 +123,7 @@ export function pageCount(page: RailPage, play: PlayRecord): number | undefined 
   switch (page) {
     case 'controls': return play.controls.length;
     case 'layers': return play.layers.length;
-    case 'actions': return play.actions?.length ?? 0;
-    case 'signals': return play.signals?.length ?? 0;
+    case 'signals': return (play.signals?.length ?? 0) + (play.actions?.length ?? 0);
     case 'finish-picture': return play.finish?.effects.length ?? 0;
     case 'finish-sound': return Object.values(play.audioFx?.chains ?? {}).reduce((n, c) => n + c.effects.length, 0);
     case 'engine-performance': return play.audioEngine?.racks.length ?? 0;

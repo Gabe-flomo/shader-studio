@@ -124,6 +124,9 @@ interface PlayUi {
   setMask: (id: string) => void;
   /** Open the Layers tab at this layer: selected, expanded and scrolled into view. */
   reveal: (id: string) => void;
+  /** What the Signals page should show selected next (a signal or an action, by id), bumped each time something asks. */
+  signalFocus: { id: string; tick: number };
+  focusSignal: (id: string) => void;
   /**
    * Folded editor sections, keyed `<kind>:<section>`. An explicit override
    * (from a click, or Expand/Collapse all); a section with no entry here
@@ -207,7 +210,7 @@ const NONE: ReadonlySet<string> = new Set();
  * nothing from railPages.ts at run time beyond the RailPage type).
  */
 const PAGE_TABS: Record<RailPage, PlayTab> = {
-  controls: 'controls', layers: 'layers', actions: 'layers', signals: 'layers', background: 'layers',
+  controls: 'controls', layers: 'layers', signals: 'layers', background: 'layers',
   'finish-picture': 'finish', 'finish-sound': 'finish', 'engine-performance': 'engine',
   mappings: 'mappings', 'midi-file': 'mappings', 'pad-grid': 'mappings',
 };
@@ -234,6 +237,8 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   }),
   selected: '',
   revealTick: 0,
+  signalFocus: { id: '', tick: 0 },
+  focusSignal: id => set({ signalFocus: { id, tick: get().signalFocus.tick + 1 } }),
   select: id => set(get().selected === id ? { selected: id } : { selected: id, mask: '' }),
   reveal: id => set({ tab: 'layers', phonePage: '', selected: id, revealTick: get().revealTick + 1, ...(get().selected === id ? {} : { mask: '' }) }),
   finishFocus: '',

@@ -121,6 +121,74 @@ export function getPerfSnapshot(): PerfSnapshot {
   };
 }
 
+// ── Play's share of the frame ────────────────────────────────────────────────
+// The Play engine (lib/playEngine.ts) and the overlay (play/overlay.ts) time
+// their stages and each layer, only while someone is watching (the panel is
+// open: playPerfOn()). Two performance.now() calls per stage.
+
+export type PlayStage = 'inputs' | 'conditions' | 'actions' | 'mappings' | 'overlay';
+export const PLAY_STAGES: readonly PlayStage[] = ['inputs', 'conditions', 'actions', 'mappings', 'overlay'];
+const playStages = new Map<PlayStage, Ring>(PLAY_STAGES.map(s => [s, new Ring(HISTORY)]));
+const playLayers = new Map<string, { ring: Ring; seen: number }>();
+const playConditions = new Ring(HISTORY);
+const playSignals = new Ring(HISTORY);
+const playDepth = new Ring(HISTORY);
+let playGuardTrips = 0;
+let playFrameNo = 0;
+
+/** Is anyone watching? The engine and the overlay skip their timers when not. */
+export function playPerfOn(): boolean { return listeners.size > 0; }
+
+export function recordPlayStage(stage: PlayStage, ms: number): void { playStages.get(stage)!.push(ms); }
+
+/** One layer's step and draw this frame (the kit's drawLayer). Layers not seen for a while drop off. */
+export function recordPlayLayer(id: string, ms: number): void {
+  let e = playLayers.get(id);
+  if (!e) { e = { ring: new Ring(60), seen: 0 }; playLayers.set(id, e); }
+  e.ring.push(ms);
+  e.seen = playFrameNo;
+}
+
+/** The engine's counts for one frame: conditions evaluated, signals fired, how deep a chain went and whether the depth guard stopped one. */
+export function recordPlayCounts(c: { conditions: number; signals: number; depth: number; guardTripped: boolean }): void {
+  playFrameNo++;
+  playConditions.push(c.conditions);
+  playSignals.push(c.signals);
+  playDepth.push(c.depth);
+  if (c.guardTripped) playGuardTrips++;
+  for (const [id, e] of playLayers) if (playFrameNo - e.seen > 120) playLayers.delete(id);
+  notify();
+}
+
+export function resetPlayStats(): void {
+  for (const r of playStages.values()) r.clear();
+  playLayers.clear(); playConditions.clear(); playSignals.clear(); playDepth.clear();
+  playGuardTrips = 0;
+}
+
+export interface PlayPerfSnapshot {
+  /** Average ms per stage (null before the first timed frame). */
+  stages: { stage: PlayStage; avg: number | null }[];
+  /** Average ms per layer, slowest first. */
+  layers: { id: string; avg: number }[];
+  conditions: number | null;
+  signals: number | null;
+  /** Deepest chain in the last 120 frames. */
+  maxDepth: number;
+  guardTrips: number;
+}
+
+export function getPlayPerfSnapshot(): PlayPerfSnapshot {
+  return {
+    stages: PLAY_STAGES.map(stage => ({ stage, avg: playStages.get(stage)!.avg })),
+    layers: [...playLayers.entries()].filter(([, e]) => e.ring.avg !== null).map(([id, e]) => ({ id, avg: e.ring.avg! })).sort((a, b) => b.avg - a.avg),
+    conditions: playConditions.avg,
+    signals: playSignals.avg,
+    maxDepth: playDepth.values.reduce((m, v) => Math.max(m, v), 0),
+    guardTrips: playGuardTrips,
+  };
+}
+
 // ── Node cost measurement hook ───────────────────────────────────────────────
 // ShaderCanvas registers a function that compiles a shader off to the side,
 // draws it a few times into an offscreen target and returns the median GPU

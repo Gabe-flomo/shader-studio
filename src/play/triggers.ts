@@ -73,10 +73,15 @@ export interface FireState {
   held: boolean;
   /** Every: frames or seconds since the last fire. */
   since: number;
+  /** Nth: presses counted since the last fire. */
+  count: number;
+  /** Within: seconds on this trigger's own clock, and when the recent presses came (at most N kept). */
+  t: number;
+  times: number[];
 }
 
 export function newFireState(presses = 0, gate = false): FireState {
-  return { seen: presses, held: gate, since: 0 };
+  return { seen: presses, held: gate, since: 0, count: 0, t: 0, times: [] };
 }
 
 /**
@@ -86,9 +91,12 @@ export function newFireState(presses = 0, gate = false): FireState {
  *   held     1 every frame while held, and once for a tap that came and went between frames
  *   every    1 on the press, then 1 each time `every` frames or seconds have passed while held
  *   release  each let-go: the gate closing, or a tap that came and went between frames
+ *   nth      every `every`th press (4: the 4th, the 8th…)
+ *   within   when `every` presses land within `window` seconds; then it needs that many fresh ones
+ * N within T times the presses by `now` (the setup's clock) when given, so takes and renders count the same.
  * Callers cap the count (a stalled tab mustn't fire a hundred bursts at once).
  */
-export function stepFire(st: FireState, fire: FireSpec | undefined, presses: number, gate: boolean, dt: number): number {
+export function stepFire(st: FireState, fire: FireSpec | undefined, presses: number, gate: boolean, dt: number, now?: number): number {
   const fresh = Math.max(0, presses - st.seen);
   st.seen = presses;
   const was = st.held;
@@ -101,6 +109,27 @@ export function stepFire(st: FireState, fire: FireSpec | undefined, presses: num
       return Math.max(0, (was ? 1 : 0) + fresh - (gate ? 1 : 0));
     case 'held':
       return gate || fresh > 0 ? 1 : 0;
+    case 'nth': {
+      const n = Math.max(2, Math.round((fire as FireSpec).every));
+      st.count += fresh;
+      const fires = Math.floor(st.count / n);
+      st.count -= fires * n;
+      return fires;
+    }
+    case 'within': {
+      const f = fire as FireSpec;
+      const n = Math.max(2, Math.round(f.every)), win = Math.max(0.05, f.window ?? 1);
+      // The setup's clock when given (takes and renders replay it), else this trigger's own, from the frame steps.
+      st.t = now !== undefined ? now : st.t + (dt > 0 ? dt : 0);
+      if (st.times.length && st.t < st.times[st.times.length - 1]) st.times.length = 0; // the clock went back
+      let fires = 0;
+      for (let i = 0; i < fresh; i++) {
+        st.times.push(st.t);
+        if (st.times.length > n) st.times.shift();
+        if (st.times.length === n && st.t - st.times[0] <= win + 1e-6) { fires++; st.times.length = 0; }
+      }
+      return fires;
+    }
     case 'every': {
       const f = fire as FireSpec;
       if (fresh > 0) { st.since = 0; return 1; }
@@ -140,6 +169,17 @@ export function anchorDistance(a: { x: number; y: number }, b: { x: number; y: n
 }
 
 /** A beat trigger's press count and gate at `time` seconds: one press per `beats` beats, gate open for the first quarter (≤ 120 ms). */
+/** A beat trigger's rate in pulses a second. */
+export function pulseHz(t: { bpm: number; beats: number }): number {
+  return t.bpm / 60 / Math.max(0.0625, t.beats);
+}
+
+/** The tempo and beat count that pulse `hz` times a second (a tempo of at least 1 bpm; slower rates wait more beats). */
+export function pulseForHz(hz: number): { bpm: number; beats: number } {
+  const perMin = Math.max(0.01, Math.min(60, hz)) * 60;
+  return perMin >= 1 ? { bpm: perMin, beats: 1 } : { bpm: 1, beats: 1 / perMin };
+}
+
 export function beatAt(bpm: number, beats: number, time: number): { count: number; gate: boolean } {
   const period = (60 / Math.max(1, bpm)) * Math.max(0.0625, beats);
   const count = Math.floor(time / period) + 1;

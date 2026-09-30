@@ -123,7 +123,7 @@ describe('the rail’s full-width pages', () => {
     roots.push({ root, el });
     act(() => root.render(<PlayRail />));
     const cats = el.querySelectorAll('[data-rail-category]');
-    expect(Array.from(cats).map(c => c.getAttribute('data-rail-category'))).toEqual(['controls', 'layers', 'finish', 'engine']);
+    expect(Array.from(cats).map(c => c.getAttribute('data-rail-category'))).toEqual(['controls', 'layers', 'signals', 'finish', 'engine']);
     act(() => (el.querySelector('[data-rail-category="layers"]') as HTMLButtonElement).click());
     expect(usePlaySplit.getState().railPage).toBe('layers');
     expect(el.querySelector('[data-popover]')).toBeNull();
@@ -143,14 +143,14 @@ describe('the rail’s full-width pages', () => {
     const render = () => root.render(<RailPageTabs def={layers} current={usePlaySplit.getState().railPage} play={setup()} onPick={p => usePlaySplit.getState().setRailPage(p)} />);
     act(render);
     const tabs = el.querySelectorAll('[data-rail-tab]');
-    expect(Array.from(tabs).map(t => t.getAttribute('data-rail-tab'))).toEqual(['layers', 'actions', 'signals', 'background']);
-    act(() => { (el.querySelector('[data-rail-tab="signals"]') as HTMLButtonElement).click(); render(); });
-    expect(usePlaySplit.getState().railPage).toBe('signals');
-    expect(el.querySelector('[data-rail-tab="signals"]')?.getAttribute('aria-selected')).toBe('true');
-    // Leaving Layers and coming back returns to Signals, not the category's first page.
+    expect(Array.from(tabs).map(t => t.getAttribute('data-rail-tab'))).toEqual(['layers', 'background']);
+    act(() => { (el.querySelector('[data-rail-tab="background"]') as HTMLButtonElement).click(); render(); });
+    expect(usePlaySplit.getState().railPage).toBe('background');
+    expect(el.querySelector('[data-rail-tab="background"]')?.getAttribute('aria-selected')).toBe('true');
+    // Leaving Layers and coming back returns to Background, not the category's first page.
     usePlaySplit.getState().openRailCategory('controls');
     usePlaySplit.getState().openRailCategory('layers');
-    expect(usePlaySplit.getState().railPage).toBe('signals');
+    expect(usePlaySplit.getState().railPage).toBe('background');
   });
 });
 
@@ -163,7 +163,7 @@ describe('the phone’s pages', () => {
     roots.push({ root, el });
     act(() => root.render(<PlayPage compact />));
     expect(el.querySelector('[data-play-railbar]')).not.toBeNull();
-    expect(el.querySelectorAll('[data-rail-category]').length).toBe(4);
+    expect(el.querySelectorAll('[data-rail-category]').length).toBe(5);
     act(() => usePlayUi.getState().showPage('signals'));
     expect(el.querySelector('[data-phone-page="signals"]')).not.toBeNull();
     act(() => usePlayUi.getState().showPage('layers'));

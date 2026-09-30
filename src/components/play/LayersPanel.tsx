@@ -31,7 +31,7 @@ import { p5LayerRecord } from './layers/p5Layer';
 import { BUILTIN_LAYER, type BuiltinVariant } from './layers/addLayerCatalog';
 import { script3dDefaults } from '../../types/playLayers';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { backgroundLayerOf, layerNumericProps, SENSOR_READS_FOR, defaultLayer, layerTarget, parseActionTarget, parseLayerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
+import { backgroundLayerOf, layerNumericProps, defaultLayer, layerTarget, parseActionTarget, parseLayerTarget, pictureHidden as isPictureHidden, type PlayControl, type PlayLayer, type PlayLayerKind, type PlayRecord } from '../../types/play';
 import { buildTree, childrenOf, containerOf, groupLayerIds, groupOfLayer, groupPath, newLayerHome, type ItemRef, type LayerGroup, type TreeNode } from '../../types/layerGroups';
 import { playId } from '../../play/playControls';
 import { handFeed } from '../../lib/handFeed';
@@ -44,7 +44,7 @@ import { addBackground, thisGraphSource } from '../../play/backgroundQueue';
 import { toast } from '../ui/toastStore';
 import { askConfirm } from '../ui/dialogStore';
 import { SoloButton, SoloStrip } from './Solo';
-import { LayerReadings } from './MapToMenu';
+import { LayerPortsView } from './LayerPortsView';
 import { Section } from './layers/Section';
 import { BigEditorScaffold } from './layers/BigEditorScaffold';
 import { clampLayersSplitRatio, LAYERS_SPLIT_DEFAULT_RATIO, usePlayUi } from './playUi';
@@ -978,11 +978,11 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
           {/* The editor's Sections as tabs (or stacked, with Show all): docs/editor-layout.md. */}
           <BigEditorScaffold scope={`layer:${l.id}`} compact={!big}>
             {body}
-            {SENSOR_READS_FOR[l.kind] && l.kind !== 'null' && (
-              <Section kind={l.kind} title={l.kind === 'audio' ? 'Bands' : 'Readings'} hint={l.kind === 'audio'
-                ? 'How loud each part of the sound is right now. Map… sends one to a control: bass to size, treble to sparkle.'
-                : 'What this layer measures right now. Map… sends it to a control.'}>
-                <LayerReadings layer={l} />
+            {!isBackground && (
+              <Section kind={l.kind} title="Accepts and emits" hint={l.kind === 'audio'
+                ? 'What drives it, and what it gives out: how loud each part of the sound is right now (Map… sends one to a control: bass to size, treble to sparkle), and the signals it can send.'
+                : 'What drives it (its numbers, its buttons) and what it gives out: what it measures right now (Map… sends it to a control, Signal watches it), the signals it can send, its position.'}>
+                <LayerPortsView layer={l} />
               </Section>
             )}
           </BigEditorScaffold>

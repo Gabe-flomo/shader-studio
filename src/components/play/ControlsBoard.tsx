@@ -22,7 +22,9 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { playEngine } from '../../lib/playEngine';
 import { readControlValue } from '../../play/playControls';
 import { pairOf } from '../../play/pairs';
-import { parseReaderTarget, type PlayControl, type PlayRecord } from '../../types/play';
+import { layerNumericProps, layerTarget, parseReaderTarget, type PlayControl, type PlayRecord } from '../../types/play';
+import { Menu, type MenuItem } from '../ui/Menu';
+import { addLayerPropControl } from './layerOps';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Field } from '../ui/Field';
@@ -209,7 +211,8 @@ export function ControlsBoard({ play, renderCard, drivenBy, flatView }: {
       )}
       {groups.length === 0 && <div style={{ padding: '14px 4px', color: tk.text.faint }}>No control matches.</div>}
       {groups.map(g => (
-        <BoardGroupView key={g.origin.id} id={g.origin.id} label={g.origin.label} icon={ORIGIN_ICONS[g.origin.kind]} count={g.items.length}>
+        <BoardGroupView key={g.origin.id} id={g.origin.id} label={g.origin.label} icon={ORIGIN_ICONS[g.origin.kind]} count={g.items.length}
+          card={g.origin.kind === 'layer'} extra={g.origin.kind === 'layer' ? <AddLayerParam play={play} layerId={g.origin.id.slice('layer:'.length)} /> : undefined}>
           {g.items.map(({ control, index }) => {
             const t = traceKeyOf(control, play);
             const pair = pairOf(play, control.id);
@@ -223,23 +226,51 @@ export function ControlsBoard({ play, renderCard, drivenBy, flatView }: {
   );
 }
 
-function BoardGroupView({ id, label, icon, count, children }: { id: string; label: string; icon: IconName; count: number; children: ReactNode }) {
+/**
+ * A group of the board. `card`: a layer's controls sit in a small card of
+ * their own (the layer's mini card), with `extra` (its Add parameter) in the
+ * header, so adding a layer's property to the panel lands it with the others.
+ */
+function BoardGroupView({ id, label, icon, count, card = false, extra, children }: { id: string; label: string; icon: IconName; count: number; card?: boolean; extra?: ReactNode; children: ReactNode }) {
   const tk = useTokens();
   const key = `board:${id}`;
   const folded = usePlayUi(s => !!s.folded[key]);
   const toggleFold = usePlayUi(s => s.toggleFold);
   return (
-    <section data-board-group={id} style={{ marginTop: 6 }}>
-      <button type="button" onClick={() => toggleFold(key, !folded)} aria-expanded={!folded}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', border: 0, background: 'none', padding: '6px 2px 2px', cursor: 'pointer', color: tk.text.secondary, font: `600 11.5px ${fontFamily.ui}`, textAlign: 'left' }}>
-        <Icon name={folded ? 'chevR' : 'chevD'} size={12} style={{ color: tk.text.faint }} />
-        <Icon name={icon} size={13} style={{ color: tk.text.faint }} />
-        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-        <span style={{ color: tk.text.faint, font: `500 10.5px ${fontFamily.mono}` }}>{count}</span>
-        <span aria-hidden style={{ flex: 1, height: 1, marginLeft: 6, background: tk.border.subtle }} />
-      </button>
+    <section data-board-group={id} data-layer-card={card ? '' : undefined}
+      style={card ? { marginTop: 10, padding: '2px 10px 8px', borderRadius: radius.card, background: alpha(tk.text.faint, 0.04), boxShadow: `inset 0 0 0 1px ${tk.border.default}` } : { marginTop: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button type="button" onClick={() => toggleFold(key, !folded)} aria-expanded={!folded}
+          style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: '6px 2px 2px', cursor: 'pointer', color: card ? tk.text.primary : tk.text.secondary, font: `${card ? 650 : 600} ${card ? 12 : 11.5}px ${fontFamily.ui}`, textAlign: 'left' }}>
+          <Icon name={folded ? 'chevR' : 'chevD'} size={12} style={{ color: tk.text.faint }} />
+          <Icon name={icon} size={13} style={{ color: tk.text.faint }} />
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+          <span style={{ color: tk.text.faint, font: `500 10.5px ${fontFamily.mono}` }}>{count}</span>
+          {!card && <span aria-hidden style={{ flex: 1, height: 1, marginLeft: 6, background: tk.border.subtle }} />}
+        </button>
+        {extra}
+      </div>
       {!folded && <TraceArea id={id} style={GRID}>{children}</TraceArea>}
     </section>
+  );
+}
+
+/** A layer card's "+ Parameter": the layer's numbers that aren't on the panel yet; picking one adds it to the card. */
+function AddLayerParam({ play, layerId }: { play: PlayRecord; layerId: string }) {
+  const setPlay = useNodeGraphStore(s => s.setPlay);
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const layer = play.layers.find(l => l.id === layerId);
+  if (!layer) return null;
+  const taken = new Set(play.controls.map(c => c.target));
+  const free = layerNumericProps(layer).filter(d => !taken.has(layerTarget(layer.id, d.key)));
+  if (!free.length) return null;
+  const items: MenuItem[] = [{ heading: `Add from ${layer.label}` }, ...free.map(d => ({ label: d.label, icon: 'sliders' as const, onSelect: () => setPlay(p => addLayerPropControl(p, layer.id, d.key)) }))];
+  return (
+    <>
+      <Button size="sm" variant="ghost" icon="plus" title={`Add another of ${layer.label}’s properties to this card`}
+        onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setAt({ x: r.left, y: r.bottom + 4 }); }}>Parameter</Button>
+      {at && <Menu x={at.x} y={at.y} items={items} onClose={() => setAt(null)} title={`Add from ${layer.label}`} />}
+    </>
   );
 }
 
