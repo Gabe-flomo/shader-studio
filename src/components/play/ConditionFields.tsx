@@ -17,7 +17,7 @@ import { playEngine } from '../../lib/playEngine';
 import { sgParseValueRef, sgScreenPoint } from '../../play/kit/signals.js';
 import { COND_LABELS, SENSOR_HINTS, SENSOR_LABELS, anchorLayers, anchorOptions, valueRefLabel, type LabelContext } from '../../play/playSources';
 import { layerPorts } from '../../play/layerPorts';
-import { addSignal, deleteSignal, renameSignal, signalUses } from '../../play/pairs';
+import { addSignal } from '../../play/pairs';
 import { conditionBands, withUnit } from './conditionModel';
 import { HAND_PINCH_POINT, PAD_ANCHOR, isBandCmp, isDirectionCmp, usesHands, layerNumericProps, parseHandAnchor, type CondCmp, type PlayRecord, type ValueCondition } from '../../types/play';
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf } from '../../types/playFinish';
@@ -30,8 +30,6 @@ import { Segmented } from '../ui/Choice';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
-import { Button, IconButton } from '../ui/Button';
-import { Field } from '../ui/Field';
 
 // ── Values ───────────────────────────────────────────────────────────────────
 
@@ -339,56 +337,3 @@ export function SignalPicker({ value, onChange, none, ariaLabel = 'Signal' }: { 
 }
 const NO_SIGNALS: NonNullable<PlayRecord['signals']> = [];
 
-/** A setup's signals: add, rename, fire by hand (to try what listens), delete. Each flashes as it fires. */
-export function SignalsList({ play, onChange, bare = false }: {
-  play: PlayRecord;
-  onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
-  /** No heading or explainer: the full-width Signals page has its own. */
-  bare?: boolean;
-}) {
-  const tk = useTokens();
-  const signals = play.signals ?? NO_SIGNALS;
-  const [lit, setLit] = useState<Record<string, number>>({});
-  useEffect(() => playEngine.onSignal(id => setLit(l => ({ ...l, [id]: (l[id] ?? 0) + 1 }))), []);
-  return (
-    <div style={{ marginTop: bare ? 0 : 14 }}>
-      {!bare && <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 4px' }}>
-        <span style={{ font: `650 12.5px ${fontFamily.ui}` }}>Signals</span>
-        {signals.length > 0 && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}` }}>{signals.length}</span>}
-        <span style={{ flex: 1 }} />
-        <Button size="sm" icon="plus" onClick={() => onChange(p => addSignal(p).play)}>Add signal</Button>
-      </div>}
-      {signals.length === 0 && !bare && (
-        <div style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}`, padding: '2px 2px 6px' }}>
-          A signal is a named event: an action sends it (Do: Send a signal), and other actions and mappings fire on it (When: a signal fires). Chain them: the dot reaches the box, that sends Hit, Hit bursts the sparks and steps the text.
-        </div>
-      )}
-      {signals.map(s => <SignalRow key={s.id} name={s.name} uses={signalUses(play, s.id)} flash={lit[s.id] ?? 0}
-        onRename={name => onChange(p => renameSignal(p, s.id, name))}
-        onFire={() => playEngine.fireSignal(s.id)}
-        onRemove={() => onChange(p => deleteSignal(p, s.id))} />)}
-    </div>
-  );
-}
-
-export function SignalRow({ name, uses, flash, onRename, onFire, onRemove }: { name: string; uses: number; flash: number; onRename: (n: string) => void; onFire: () => void; onRemove: () => void }) {
-  const tk = useTokens();
-  const [draft, setDraft] = useState(name);
-  useEffect(() => setDraft(name), [name]);
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    if (!flash) return;
-    setOn(true);
-    const t = window.setTimeout(() => setOn(false), 180);
-    return () => window.clearTimeout(t);
-  }, [flash]);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, padding: '6px 8px 6px 10px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${on ? tk.accent.base : tk.border.default}`, transition: 'box-shadow 0.15s' }}>
-      <span aria-hidden style={{ width: 8, height: 8, borderRadius: 4, flexShrink: 0, background: on ? tk.accent.base : tk.text.disabled, transition: 'background 0.15s' }} />
-      <Field value={draft} aria-label="Signal name" onChange={e => setDraft(e.target.value)} onBlur={() => { if (draft.trim() && draft !== name) onRename(draft); else setDraft(name); }} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} height={26} style={{ flex: 1, minWidth: 0 }} />
-      <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}`, whiteSpace: 'nowrap' }} title="Actions, mappings and swaps that send or listen for it">{uses === 0 ? 'unused' : `${uses} use${uses === 1 ? '' : 's'}`}</span>
-      <IconButton icon="play" label="Fire it now: what listens for it runs" size="sm" onClick={onFire} />
-      <IconButton icon="trash" label={uses ? 'Delete signal (what uses it stays, marked missing)' : 'Delete signal'} size="sm" tone="danger" onClick={onRemove} />
-    </div>
-  );
-}

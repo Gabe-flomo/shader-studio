@@ -31,8 +31,8 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { Popover } from '../ui/Popover';
 import { Sheet } from '../ui/Sheet';
 import { usePlayUi } from './playUi';
-import { CREATE_SIGNAL, MIDI_LEARN, miniMapperSections, wireCreateSignal, wireMiniMapperPick, wireSource, type MiniMapperTarget } from './miniMapperCore';
-import { goToSignal } from './playSplit';
+import { CREATE_SIGNAL, MIDI_LEARN, miniMapperSections, wireMiniMapperPick, wireRuleWhen, wireSource, type MiniMapperTarget } from './miniMapperCore';
+import { startRule } from './playSplit';
 import { toast } from '../ui/toastStore';
 import { audioReaderBank } from '../../lib/audioReaderBank';
 
@@ -79,11 +79,11 @@ export function MiniMapper({ anchorRef, target, label, onClose }: {
   const pick = (value: string) => {
     if (value === MIDI_LEARN) { setLearning(true); return; }
     if (value === CREATE_SIGNAL) {
-      const r = wireCreateSignal(play, target);
-      if (!r) { toast.info('Nothing to watch here', { message: 'A colour can’t be watched yet, or the setup has as many signals as it can hold.' }); return; }
+      const r = wireRuleWhen(play, target);
+      if (!r) { toast.info('Nothing to watch here', { message: 'A colour can’t be watched yet.' }); return; }
       setPlay(() => r.play);
       onClose();
-      goToSignal(r.signalId);
+      startRule({ when: r.when });
       return;
     }
     finishPick(wireMiniMapperPick(play, value, target));

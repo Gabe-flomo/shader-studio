@@ -21,6 +21,7 @@
 import { create } from 'zustand';
 import { tabForPage, usePlayUi, type PlayTab } from './playUi';
 import { categoryOf, currentRailPage, firstPageOf, isRailPage, pageForTab, type RailCategory, type RailPage } from './railPages';
+import type { TriggerSpec } from '../../types/play';
 
 export type SplitSide = 'left' | 'right' | 'top' | 'bottom';
 /** The sidebar beside the big panel: all of it, a rail of icons, or nothing. */
@@ -297,10 +298,19 @@ export function goToMappings(): boolean {
 }
 
 /**
- * Show the Signals page with one signal or reaction selected (a signal just
+ * Show the Rules page with one signal or reaction selected (a signal just
  * made from a slider's +, say): in the split view when there is one, else as
  * the phone's page.
  */
+/** Open the Rules page on Quick rule, with its When (or its Do's layer) filled in. */
+export function startRule(pre: { when?: TriggerSpec; layerId?: string } = {}): void {
+  usePlayUi.getState().askQuickRule(pre);
+  const split = usePlaySplit.getState();
+  if (!split.available) { usePlayUi.getState().showPage('signals'); return; }
+  if (!split.on) split.setOn(true);
+  showPageInSplit('signals');
+}
+
 export function goToSignal(id: string): void {
   usePlayUi.getState().focusSignal(id);
   const split = usePlaySplit.getState();

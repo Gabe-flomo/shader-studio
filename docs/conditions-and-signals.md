@@ -107,6 +107,30 @@ The older shape still loads and plays. `normalizeRules` (`src/play/rules.ts`) re
 
 The golden outputs check that every example and fixture plays identically in both shapes.
 
+## The Rules page and Quick rule (guide phase 3)
+
+The rail's Signals page is now **Rules** (the page id stays `signals`). Each rule is one sentence with a lamp; the selected rule's card is beside the list.
+
+- **When:** a sentence per input, e.g. "When [Space] [is pressed]".
+  - The subject opens the full trigger editor. Verbs come from `src/play/signalVerbs.ts`.
+  - A verb sets the trigger and how every reaction fires: rise, release or held.
+  - Several inputs combine as Any / All / None / One.
+- **Options:** timing, chance and capture, folded.
+- **Do:** each reaction, with its firing mode under its own fold. **+ Do** adds one.
+
+**Quick rule** (+ Rule) works in three steps:
+1. Listens with `playEngine.learnAny`: a key, a note, a click, OSC, a signal, a sound, a hand gesture, or the pointer moving 30% across the picture (as `ax:x|y:pointer`).
+2. Shows the verbs for what it heard.
+3. Shows Do chips, with the likely layer first. One click makes the rule.
+
+Other ways to start a rule:
+- **Rule from this:** on a control's menu, the mini-mapper, a layer reading, or a rule's card. It fills in the When.
+- **Rule for this layer…:** in a layer's menu. It puts that layer's actions first.
+
+The page shows older wiring as the rules it plays as (`asRules`). The first edit rewrites the record that way. An action added later with the same trigger joins its `rule_…` rule.
+
+`src/play/connectDefaults.ts` holds the default connection for each pair of types (guide 6.4), tested as a table. The Inputs board (phase 4) will use it.
+
 ## Captured values and Set
 
 A signal can **take** a value with it (sample and hold, on its card): **a number** (anything a condition can watch: a slider, a layer's number, a reading, a mapping's source) or **a position** (a layer's centre, a hand point, **the pinch point** halfway between the thumb and index tips, the **pointer on the picture**, a point), read **as it starts** (its rise), **as it ends** (its fall: "the radius it had when it dropped back") or **while true** (every frame: follows it). The card shows what it took last. A signal that is only sent takes its value when it is sent. Nothing to read (a hand out of view) keeps the last capture.

@@ -13,9 +13,9 @@
 import type { IconName } from '../ui/iconPaths';
 import type { PickerItem, PickerSection } from '../ui/groupedPickerModel';
 import { SENSOR_LABELS, sourceFromType, type SourceType } from '../../play/playSources';
-import { defaultIncrement, layerNumericProps, layerTarget, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type SensorRead } from '../../types/play';
+import { defaultIncrement, layerNumericProps, layerTarget, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type SensorRead, type TriggerSpec } from '../../types/play';
 import { mapSourceTo, resolveTargetControl, type MapTarget } from './layerOps';
-import { createSignalFrom, type SignalSource } from '../../play/createSignal';
+import { ruleWhenFrom, type SignalSource } from '../../play/createSignal';
 import { layerPorts } from '../../play/layerPorts';
 
 export type MiniMapperTarget = MapTarget;
@@ -43,7 +43,7 @@ export const CONTROL_ONLY = 'controlOnly';
 export const INCREMENT = 'increment';
 /** The picker's value for Learn: MiniMapper.tsx drives this one itself (it waits for an input). */
 export const MIDI_LEARN = 'midi:learn';
-/** The picker's value for Create signal: a signal that watches the target (signalFlow.ts createSignalFrom). */
+/** The picker's value for Rule from this: Quick rule with the target above its middle as the When (createSignal.ts). */
 export const CREATE_SIGNAL = 'signal:create';
 
 const HAND_ENTRIES: { value: SourceType; label: string; icon: IconName; description: string }[] = [
@@ -77,7 +77,7 @@ export function miniMapperSections(ctx: MiniMapperContext): PickerSection[] {
     { value: CONTROL_ONLY, label: 'Add as a control', icon: 'plus', description: 'No source — map anything onto it from Mappings later' },
   ] });
   sections.push({ heading: 'Signal', items: [
-    { value: CREATE_SIGNAL, label: 'Create a signal from it', icon: 'bolt', description: 'Watch it: a signal when it crosses the middle of its range, tuned on the Signals page' },
+    { value: CREATE_SIGNAL, label: 'Rule from this', icon: 'bolt', description: 'When it goes above the middle of its range: pick what happens' },
   ] });
   if (midiDevices.length) {
     sections.push({ heading: 'MIDI', items: [
@@ -173,10 +173,8 @@ export function signalSourceFor(p: PlayRecord, target: MiniMapperTarget): { play
   return { play, src: { value: `ctl:${control.id}`, label: control.label, min: control.kind === 'action' ? 0 : control.min, max: control.kind === 'action' ? 1 : control.max } };
 }
 
-/** Create signal: a signal watching the target and the action that sends it. Null when nothing can be watched (a colour) or the setup is full of signals. */
-export function wireCreateSignal(p: PlayRecord, target: MiniMapperTarget): { play: PlayRecord; signalId: string } | null {
+/** Rule from this: the When of a rule watching the target (a graph slider gets its control first). Null when nothing can be watched (a colour). */
+export function wireRuleWhen(p: PlayRecord, target: MiniMapperTarget): { play: PlayRecord; when: TriggerSpec } | null {
   const { play, src } = signalSourceFor(p, target);
-  if (!src) return null;
-  const r = createSignalFrom(play, src);
-  return r.signalId ? { play: r.play, signalId: r.signalId } : null;
+  return src ? { play, when: ruleWhenFrom(src) } : null;
 }

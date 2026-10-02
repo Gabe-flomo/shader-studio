@@ -319,8 +319,24 @@ class PlayEngine implements InputSource {
     const h = window.innerHeight || 1;
     this.mouseX = Math.max(0, Math.min(1, e.clientX / w));
     this.mouseY = Math.max(0, Math.min(1, 1 - e.clientY / h));
+    if (this.learnMove && this.learnTriggerCb) this.learnPointer(e);
     if (this.mouseIsBound) inputBus.wake();
   };
+  /** Learn anything: where the pointer was first seen over the picture since it began (null until then). */
+  private learnMove: { from: { x: number; y: number } | null } | null = null;
+  /** Learn anything: the pointer moving well across the picture becomes "the pointer moves to the left (right, top, bottom) half". */
+  private learnPointer(e: PointerEvent): void {
+    const st = this.learnMove!;
+    const el = e.target as Element | null;
+    if (el?.tagName !== 'CANVAS') return;
+    const r = el.getBoundingClientRect();
+    if (!st.from) { st.from = { x: e.clientX, y: e.clientY }; return; }
+    // As a share of the picture (y up), whatever its size in the window.
+    const dx = (e.clientX - st.from.x) / (r.width || 1), dy = (st.from.y - e.clientY) / (r.height || 1);
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < LEARN_POINTER_MOVE) return;
+    const x = Math.abs(dx) >= Math.abs(dy);
+    this.finishLearnTrigger({ on: 'value', value: x ? 'ax:x:pointer' : 'ax:y:pointer', cmp: (x ? dx : dy) > 0 ? 'above' : 'below', threshold: 0.5, unit: 'pct', hysteresis: 0.05, tolerance: 0.01 });
+  }
   private onPointerDown = (e: PointerEvent) => {
     // Where it went down (a tap on a touch screen has no move first): a capture on the press reads here.
     this.onPointerMove(e);
@@ -853,7 +869,7 @@ class PlayEngine implements InputSource {
     return this.signalWorked.has(id) ? this.sigLevels.get(id) ?? false : this.sigSent.has(id);
   }
 
-  /** The loops the links make (members, period, settings), for the Signals page. */
+  /** The loops the links make (members, period, settings), for the Rules page. */
   loops(): readonly SgLoop[] {
     this.index();
     return this.linkPlan.loops;
@@ -1879,6 +1895,16 @@ class PlayEngine implements InputSource {
       if (m.increment?.on === 'trigger' && m.increment.trigger.on === 'key' && m.increment.trigger.code === code) return true;
     }
     for (const a of this.record.actions ?? []) if (a.enabled && a.trigger.on === 'key' && a.trigger.code === code) return true;
+    // A rule's or a level signal's own key, a record source's key.
+    for (const s of this.record.signals ?? []) {
+      if (s.when?.kind === 'trigger' && s.when.trigger.on === 'key' && s.when.trigger.code === code) return true;
+      if (s.inputs?.some(x => x.kind === 'trigger' && x.trigger.on === 'key' && x.trigger.code === code)) return true;
+    }
+    for (const x of this.record.sources ?? []) {
+      if (!x.enabled) continue;
+      if (x.source.kind === 'key' && x.source.code === code) return true;
+      if (x.source.kind === 'trigger' && x.source.trigger.on === 'key' && x.source.trigger.code === code) return true;
+    }
     for (const m of this.record.pairMappings ?? []) {
       const s = m.enabled && m.source.kind === 'value' ? m.source.source : null;
       if (s && ((s.kind === 'key' && s.code === code) || (s.kind === 'trigger' && s.trigger.on === 'key' && s.trigger.code === code))) return true;
@@ -1939,6 +1965,18 @@ class PlayEngine implements InputSource {
     return () => this.cancelLearn();
   }
 
+  /**
+   * Learn anything (Quick rule, implementation guide 6.2): what startLearnTrigger
+   * hears (a key, a note, a click on the picture, OSC, a signal, a sound, a
+   * hand gesture), or the pointer moving well across the picture, as a value
+   * condition on that axis.
+   */
+  learnAny(cb: (trigger: TriggerSpec) => void): () => void {
+    const cancel = this.startLearnTrigger(cb);
+    this.learnMove = { from: null };
+    return cancel;
+  }
+
   private finishLearnTrigger(t: TriggerSpec): void {
     const cb = this.learnTriggerCb;
     this.cancelLearn();
@@ -1972,6 +2010,7 @@ class PlayEngine implements InputSource {
     this.learnOffOsc = null;
     this.learnCb = null;
     this.learnTriggerCb = null;
+    this.learnMove = null;
     this.handLearnFrom = null;
     this.handLearnHeld = null;
     this.audioLearn = null;
@@ -2034,6 +2073,8 @@ class PlayEngine implements InputSource {
 }
 
 const ZERO3 = [0, 0, 0];
+/** Learn anything: how far (a share of the picture) the pointer must travel across it to count. */
+const LEARN_POINTER_MOVE = 0.3;
 
 export const playEngine = new PlayEngine();
 inputBus.addSource(playEngine);

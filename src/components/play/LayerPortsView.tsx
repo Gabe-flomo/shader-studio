@@ -54,7 +54,7 @@ export function LayerPortsView({ layer: l }: { layer: PlayLayer }) {
               <Button size="sm" variant="ghost" onClick={() => setPlay(p => {
                 const r = addSignal(p, `${l.label} ${e.label.toLowerCase()}`);
                 if (!r.id) return p;
-                // A particle event's new signal takes where it happened, ready for Move a layer here… on the Signals page.
+                // A particle event's new signal takes where it happened, ready for Move a layer here… on the Rules page.
                 const where = l.kind === 'particles' && (e.key === 'born' || e.key === 'died' || e.key === 'annihilate') ? `${CAPTURE_POS}${EVENT_ANCHOR}${l.id}:${e.key}` : '';
                 const signals = where ? (r.play.signals ?? []).map(s => (s.id === r.id ? { ...s, capture: { what: where, at: 'rise' as const } } : s)) : r.play.signals;
                 return { ...r.play, signals, layers: r.play.layers.map(x => (x.id === l.id ? { ...x, [e.field]: r.id } : x)) };

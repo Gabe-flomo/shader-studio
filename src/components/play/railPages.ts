@@ -13,6 +13,7 @@
 import type { PlayRecord } from '../../types/play';
 import type { IconName } from '../ui/iconPaths';
 import { tabForPage, type PlayTab } from './playUi';
+import { asRules } from '../../play/rules';
 
 /**
  * The rail's own grouping of pages, which sections its icons (RAIL_CATEGORIES
@@ -50,7 +51,7 @@ export interface RailCategoryDef {
 export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
   controls: { id: 'controls', category: 'controls', label: 'Controls', description: 'The sliders, colours and buttons people play' },
   layers: { id: 'layers', category: 'layers', label: 'Layers', description: 'What sits on the picture, with the selected layer’s editor' },
-  signals: { id: 'signals', category: 'signals', label: 'Signals', description: 'When something happens, and what it does next' },
+  signals: { id: 'signals', category: 'signals', label: 'Rules', description: 'When something happens, what to do: a pinch bursts the sparks' },
   background: { id: 'background', category: 'layers', label: 'Background', description: 'What the picture is under the layers' },
   'finish-picture': { id: 'finish-picture', category: 'finish', label: 'Picture', description: 'Grade, lens, film and time effects over the whole picture' },
   'finish-sound': { id: 'finish-sound', category: 'finish', label: 'Sound', description: 'Reverb, echo, filter and more on each sound and the master' },
@@ -63,7 +64,7 @@ export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
 export const RAIL_CATEGORIES: readonly RailCategoryDef[] = [
   { id: 'controls', label: 'Mappings', icon: 'sliders', description: 'The controls people play, and the values mapped onto them', pages: ['controls', 'mappings', 'midi-file', 'pad-grid'] },
   { id: 'layers', label: 'Layers', icon: 'layers', description: 'What acts on the picture, and the background', pages: ['layers', 'background'] },
-  { id: 'signals', label: 'Signals', icon: 'bolt', description: 'Conditions that report what is happening, and what they set off', pages: ['signals'] },
+  { id: 'signals', label: 'Rules', icon: 'bolt', description: 'When something happens, what to do', pages: ['signals'] },
   { id: 'finish', label: 'Finish', icon: 'curve', description: 'Effects over the picture and the sound', pages: ['finish-picture', 'finish-sound'] },
   { id: 'engine', label: 'Engine', icon: 'piano', description: 'The Audio engine', pages: ['engine-performance'] },
 ];
@@ -123,7 +124,7 @@ export function pageCount(page: RailPage, play: PlayRecord): number | undefined 
   switch (page) {
     case 'controls': return play.controls.length;
     case 'layers': return play.layers.length;
-    case 'signals': return (play.signals?.length ?? 0) + (play.actions?.length ?? 0);
+    case 'signals': return asRules(play).signals?.length ?? 0;
     case 'finish-picture': return play.finish?.effects.length ?? 0;
     case 'finish-sound': return Object.values(play.audioFx?.chains ?? {}).reduce((n, c) => n + c.effects.length, 0);
     case 'engine-performance': return play.audioEngine?.racks.length ?? 0;

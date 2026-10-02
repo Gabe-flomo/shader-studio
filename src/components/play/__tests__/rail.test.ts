@@ -28,7 +28,7 @@ describe('categories and pages', () => {
     expect(listed.map(([, p]) => p).sort()).toEqual([...RAIL_PAGE_IDS].sort());
     for (const [cat, page] of listed) expect(categoryOf(page)).toBe(cat);
     // Controls and Mappings are one rail category (the owner's call, 2026-09-28): they're so closely related.
-    // Signals is a category of its own, one of Play's three nouns (simplification plan, 2026-09-30).
+    // Rules is a category of its own (Signals until the implementation guide's phase 3; the id stays).
     expect(RAIL_CATEGORIES.map(c => c.id)).toEqual(['controls', 'layers', 'signals', 'finish', 'engine']);
   });
 
@@ -37,7 +37,7 @@ describe('categories and pages', () => {
     expect(pages).toEqual({
       controls: ['Controls', 'Mappings', 'MIDI file', 'Pad grid'],
       layers: ['Layers', 'Background'],
-      signals: ['Signals'],
+      signals: ['Rules'],
       finish: ['Picture', 'Sound'],
       engine: ['Arrangement'],
     });
@@ -60,7 +60,7 @@ describe('categories and pages', () => {
 
   it('counts what a page holds, and badges only layers and controls (the controls count, not mappings’)', () => {
     const play: PlayRecord = { ...emptyPlayRecord(), actions: [{ id: 'a', trigger: { on: 'key', code: 'Space' }, do: 'show', layerId: 'l', amount: 1, enabled: true }], signals: [{ id: 's', name: 'Hit' }, { id: 't', name: 'Go' }] };
-    // Signals holds the named signals and the reactions (the Actions page folded into it).
+    // Rules: each signal is one, and actions read as rules (actions sharing a trigger share one).
     expect(pageCount('signals', play)).toBe(3);
     expect(pageCount('midi-file', play)).toBeUndefined();
     expect(categoryBadge('layers', play)).toBeUndefined();

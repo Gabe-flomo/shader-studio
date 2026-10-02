@@ -60,10 +60,11 @@ import { applyControlLink, LinkableControl, useControlLinkEscape } from './Contr
 import { setLayerDropHandler } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
-import { goToSignal, sidebarView, useBigPage, useBigTab, usePlaySplit } from './playSplit';
+import { sidebarView, startRule, useBigPage, useBigTab, usePlaySplit } from './playSplit';
 import { PlayRailBar } from './PlayRail';
 import { phonePageShown, type RailPage } from './railPages';
-import { BackgroundPage, CardPage, SignalsPage } from './FullPages';
+import { BackgroundPage, CardPage } from './FullPages';
+import { RulesPage } from './rules/RulesPage';
 import { groupCounts, groupMappings, type MappingGroupId } from './mappingGroups';
 import { ControlsBoard, type BoardSlot } from './ControlsBoard';
 import { AudioEnginePanel } from './engine/AudioEnginePanel';
@@ -72,7 +73,7 @@ import { setMacroValue } from '../../play/rackMacros';
 import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
 import { MiniMapper } from './MiniMapper';
-import { wireCreateSignal, type MiniMapperTarget } from './miniMapperCore';
+import { wireRuleWhen, type MiniMapperTarget } from './miniMapperCore';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
 import { rackKeyboard } from '../../lib/rackKeyboard';
 import { keyboardClaimed } from '../../lib/keyboardClaim';
@@ -551,14 +552,14 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     items.push({ label: 'New Spread with this', icon: 'plus', hint: 'A group of sliders offset together along a curve', onSelect: () => { update(p => makeSpread(p, [id]).play); toast.info('Spread made: its card is at the top of Controls'); } });
     return items;
   };
-  /** Create signal: watch this control (signalFlow.ts), then show the signal on the Signals page. */
+  /** Rule from this: Quick rule, with this control going above its middle as the When. */
   const signalItems = (c: PlayControl | undefined): MenuItem[] => (c && c.kind !== 'color' ? [{
-    label: 'Create a signal from it', icon: 'bolt', hint: 'A signal when it crosses the middle of its range; tune it on the Signals page',
+    label: 'Rule from this', icon: 'bolt', hint: 'When it goes above the middle of its range: pick what happens',
     onSelect: () => {
-      const r = wireCreateSignal(play, { control: c.id });
-      if (!r) { toast.info('The setup has as many signals as it can hold'); return; }
+      const r = wireRuleWhen(play, { control: c.id });
+      if (!r) return;
       update(() => r.play);
-      goToSignal(r.signalId);
+      startRule({ when: r.when });
     },
   }, 'separator'] : []);
   const controlMenu = (id: string): MenuItem[] => {
@@ -783,7 +784,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       case 'layers': return layersOk
         ? <LayersPanel play={play} touch={touch} split={wide} big extras={false} exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={exposeControl} />
         : <LockedLayers play={play} />;
-      case 'signals': return layersOk ? <SignalsPage play={play} onChange={update} wide={wide} /> : <LockedLayers play={play} />;
+      case 'signals': return layersOk ? <RulesPage play={play} onChange={update} wide={wide} /> : <LockedLayers play={play} />;
       case 'background': return <BackgroundPage play={play} onChange={update} locked={!backgroundsOk} />;
       case 'finish-picture':
       case 'finish-sound': return finishOk ? <FinishPanel play={play} onChange={update} touch={touch} wide={wide} only={page === 'finish-sound' ? 'sound' : 'picture'} /> : <LockedFinish play={play} />;

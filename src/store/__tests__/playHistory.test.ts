@@ -92,7 +92,7 @@ describe('Play edits as undo steps', () => {
     expect(top().label).toBe('Added action Next line on Title');
 
     setPlay(p => ({ ...p, signals: [{ id: 's1', name: 'Drop' }] }));
-    expect(top().label).toBe('Added signal Drop');
+    expect(top().label).toBe('Added rule Drop');
 
     setPlay(p => ({ ...p, pairs: [{ id: 'p1', label: 'XY', a: 'c1', b: 'c1', position: true }] }));
     expect(top().label).toBe('Added pair XY');

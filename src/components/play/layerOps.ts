@@ -162,8 +162,9 @@ export function handPathNulls(p: PlayRecord): { play: PlayRecord; ids: string[] 
 }
 
 /** The same three things the picture's right-click menu offers. */
-export function layerMenuItems({ onDuplicate, onReset, onRemove }: { onDuplicate: () => void; onReset: () => void; onRemove: () => void }) {
+export function layerMenuItems({ onDuplicate, onReset, onRemove, onRule }: { onDuplicate: () => void; onReset: () => void; onRemove: () => void; onRule?: () => void }) {
   return [
+    ...(onRule ? [{ label: 'Rule for this layer…', hint: 'When something happens, do something to it', onSelect: onRule }] : []),
     { label: 'Duplicate', hint: 'A copy on top, slightly offset', onSelect: onDuplicate },
     { label: 'Reset to defaults', hint: 'Every setting back to new; the name, controls and mappings stay', onSelect: onReset },
     { label: 'Delete', hint: 'With the controls and mappings that use it', onSelect: onRemove, danger: true },
