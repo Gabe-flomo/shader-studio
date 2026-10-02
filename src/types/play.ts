@@ -260,6 +260,8 @@ export interface PlayReaction {
   enabled: boolean;
   /** Send a signal: which one. */
   signal?: string;
+  /** Play notes: what and how. */
+  notes?: NotesSpec;
   /** once (when it turns on), held (while it is on), every (every N while on), release (when it turns off)… */
   fire?: FireSpec;
 }
@@ -846,9 +848,36 @@ export type { LayerGroup } from './layerGroups';
  */
 export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto' | 'pad' | 'multiply' | 'cull';
 /** A built-in action, or a button a Script layer declares (`script:<key>`). */
-export type ActionKind = BuiltinActionKind | 'signal' | `script:${string}`;
+export type ActionKind = BuiltinActionKind | 'signal' | 'notes' | `script:${string}`;
 /** The action that sends a signal (its `signal`) instead of doing something to a layer. */
 export const SIGNAL_ACTION = 'signal' as const;
+/** The reaction that plays notes on a rack of the Audio engine (its `notes`) instead of doing something to a layer. */
+export const NOTES_ACTION = 'notes' as const;
+
+/** How Play notes plays (play/notes.ts): all at once, strummed, one at a time in turn, or one picked at random. */
+export type NotesPlay = 'chord' | 'strum' | 'arp' | 'random';
+export const NOTES_SCALES = ['chromatic', 'major', 'minor', 'pentatonic', 'blues'] as const;
+export type NotesScale = (typeof NOTES_SCALES)[number];
+export interface NotesSpec {
+  rackId: string;
+  /** MIDI note numbers (at most NOTES_MAX). */
+  notes: number[];
+  play: NotesPlay;
+  /** Strum: between each note; ms. */
+  gapMs: number;
+  /** 1..127, and how far each note may stray from it (0..1). */
+  velocity: number;
+  velRandom: number;
+  /** How long each note sounds, ms (the note-off is sent then, or when Play stops). */
+  lengthMs: number;
+  /** Snap every note to this scale (chromatic: as written). */
+  scale: NotesScale;
+  root: number;
+}
+export const NOTES_MAX = 12;
+export function defaultNotes(rackId: string): NotesSpec {
+  return { rackId, notes: [60, 64, 67], play: 'chord', gapMs: 40, velocity: 100, velRandom: 0, lengthMs: 400, scale: 'chromatic', root: 0 };
+}
 
 /** The param key behind a script action kind, or null for a built-in one. */
 export function scriptActionKey(kind: string): string | null {
@@ -866,6 +895,8 @@ export interface PlayAction {
   enabled: boolean;
   /** Send a signal: which one (a PlaySignal id). */
   signal?: string;
+  /** Play notes (a rule's reaction): what and how. */
+  notes?: NotesSpec;
 }
 
 // ── Sources and routes (implementation guide, phase 1: play/kit/routes.js) ─
@@ -1638,14 +1669,37 @@ function parseReaction(raw: unknown): PlayReaction | null {
   const a = raw as Record<string, unknown> | null;
   const id = a && str(a.id);
   if (!a || !id) return null;
-  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION) ? (a.do as ActionKind) : null;
+  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION || a.do === NOTES_ACTION) ? (a.do as ActionKind) : null;
   if (!kind) return null;
+  if (kind === NOTES_ACTION) {
+    const notes = parseNotes(a.notes);
+    if (!notes) return null;
+    const r: PlayReaction = { id, do: kind, layerId: '', amount: 1, enabled: a.enabled !== false, notes };
+    const f = parseFire(a.fire);
+    if (f) r.fire = f;
+    return r;
+  }
   const out: PlayReaction = kind === SIGNAL_ACTION
     ? { id, do: kind, layerId: '', amount: 1, enabled: a.enabled !== false, signal: (str(a.signal) ?? '').slice(0, 80) }
     : { id, do: kind, layerId: str(a.layerId) ?? '', amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
   const fire = parseFire(a.fire);
   if (fire) out.fire = fire;
   return out;
+}
+
+/** Play notes' settings, each kept in range; null without a rack. */
+function parseNotes(raw: unknown): NotesSpec | null {
+  const o = raw as Record<string, unknown> | null;
+  const rackId = o && str(o.rackId);
+  if (!o || !rackId) return null;
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  const notes = (Array.isArray(o.notes) ? o.notes : []).filter((n): n is number => Number.isFinite(n)).map(n => clamp(Math.round(n), 0, 127)).slice(0, NOTES_MAX);
+  const play: NotesPlay = o.play === 'strum' || o.play === 'arp' || o.play === 'random' ? o.play : 'chord';
+  const scale = (NOTES_SCALES as readonly string[]).includes(o.scale as string) ? (o.scale as NotesScale) : 'chromatic';
+  return {
+    rackId: rackId.slice(0, 80), notes, play, scale, root: clamp(Math.round(num(o.root, 0)), 0, 11),
+    gapMs: clamp(num(o.gapMs, 40), 0, 2000), velocity: clamp(Math.round(num(o.velocity, 100)), 1, 127), velRandom: clamp(num(o.velRandom, 0), 0, 1), lengthMs: clamp(num(o.lengthMs, 400), 20, 8000),
+  };
 }
 
 /** A signal's input: a trigger, or another signal mirrored or taken as a pulse (after a delay). */
@@ -2012,7 +2066,7 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
   const signals = parseSignals(r.signals);
   // A reaction on a missing layer goes, as an action would; a trigger input on something missing goes too.
   for (const s of signals) {
-    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || layerIds.has(x.layerId)); if (d.length) s.do = d; else delete s.do; }
+    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || x.do === NOTES_ACTION || layerIds.has(x.layerId)); if (d.length) s.do = d; else delete s.do; }
     if (s.inputs) { const k = s.inputs.filter(x => x.kind !== 'trigger' || triggerOk(x.trigger)); if (k.length) s.inputs = k; else delete s.inputs; }
   }
   if (signals.length) out.signals = signals;

@@ -7,7 +7,8 @@
 import { useState } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { fontFamily } from '../../../theme/tokens';
-import { SIGNAL_ACTION, type PlayReaction, type PlayRecord, type TriggerSpec } from '../../../types/play';
+import { NOTES_ACTION, SIGNAL_ACTION, defaultNotes, type PlayReaction, type PlayRecord, type TriggerSpec } from '../../../types/play';
+import { NotesEditor } from './NotesEditor';
 import { padName } from '../../../types/playLayers';
 import { IconButton } from '../../ui/Button';
 import { Toggle } from '../../ui/Choice';
@@ -42,7 +43,8 @@ export function ReactionEditor({ ruleId, r, play, onPatch, onRemove }: {
           const c = choices.find(x => x.value === v);
           if (!c) return;
           const l = play.layers.find(x => x.id === c.layerId);
-          onPatch({ do: c.do, layerId: c.layerId, amount: c.do === r.do ? r.amount : defaultAmount(c.do, l), ...(c.do === SIGNAL_ACTION ? { signal: r.signal ?? play.signals?.find(s => s.id !== ruleId)?.id ?? '' } : {}) });
+          onPatch({ do: c.do, layerId: c.layerId, amount: c.do === r.do ? r.amount : defaultAmount(c.do, l), ...(c.do === SIGNAL_ACTION ? { signal: r.signal ?? play.signals?.find(s => s.id !== ruleId)?.id ?? '' } : {}),
+            ...(c.do === NOTES_ACTION && c.rackId ? { notes: r.notes ? { ...r.notes, rackId: c.rackId } : defaultNotes(c.rackId) } : {}) });
         }} />
         {r.do === SIGNAL_ACTION && <SignalPicker value={r.signal ?? ''} onChange={signal => onPatch({ signal })} />}
         {(r.do === 'burst' || r.do === 'scatter' || r.do === 'multiply' || r.do === 'cull') && (
@@ -70,6 +72,7 @@ export function ReactionEditor({ ruleId, r, play, onPatch, onRemove }: {
         <Toggle checked={r.enabled} onChange={enabled => onPatch({ enabled })} />
         <IconButton icon="trash" label="Remove" size="sm" tone="danger" onClick={onRemove} />
       </div>
+      {r.do === NOTES_ACTION && r.notes && <NotesEditor spec={r.notes} onChange={notes => onPatch({ notes })} />}
       {more && (
         <div style={{ marginTop: 6 }}>
           <FirePicker trigger={asTrigger} what={r.do} numStyle={numStyle} onChange={t => onPatch({ fire: t.fire })} />

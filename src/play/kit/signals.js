@@ -391,6 +391,7 @@ export function sgReactions(signals) {
     if (r.fire) trigger.fire = r.fire;
     const a = { id: r.id, trigger, do: r.do, layerId: r.layerId || '', amount: r.amount, enabled: r.enabled !== false };
     if (r.signal !== undefined) a.signal = r.signal;
+    if (r.notes) a.notes = r.notes;
     out.push(a);
   }
   return out;

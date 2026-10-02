@@ -3,12 +3,13 @@
  * then Send a signal. Quick rule offers them as chips, the reaction editor as
  * one picker. Pure.
  */
-import { actionsForLayer, SIGNAL_ACTION, type ActionKind, type PlayLayer, type PlayReaction, type PlayRecord } from '../../../types/play';
+import { actionsForLayer, NOTES_ACTION, SIGNAL_ACTION, type ActionKind, type PlayLayer, type PlayReaction, type PlayRecord } from '../../../types/play';
+import { notesSummary } from '../../../play/notes';
 import { actionLabel } from '../layers/help';
 
-export interface DoChoice { value: string; label: string; layerId: string; do: ActionKind | typeof SIGNAL_ACTION }
+export interface DoChoice { value: string; label: string; layerId: string; do: ActionKind | typeof SIGNAL_ACTION; rackId?: string }
 
-export const doValue = (r: Pick<PlayReaction, 'do' | 'layerId'>) => (r.do === SIGNAL_ACTION ? SIGNAL_ACTION : `${r.layerId}|${r.do}`);
+export const doValue = (r: Pick<PlayReaction, 'do' | 'layerId' | 'notes'>) => (r.do === SIGNAL_ACTION ? SIGNAL_ACTION : r.do === NOTES_ACTION ? `notes|${r.notes?.rackId ?? ''}` : `${r.layerId}|${r.do}`);
 
 /** Every layer's actions, the preferred layer first, then Send a signal. */
 export function doChoices(play: PlayRecord, preferLayer?: string): DoChoice[] {
@@ -17,6 +18,8 @@ export function doChoices(play: PlayRecord, preferLayer?: string): DoChoice[] {
   if (first > 0) layers.unshift(...layers.splice(first, 1));
   const out: DoChoice[] = [];
   for (const l of layers) for (const k of actionsForLayer(l)) out.push({ value: `${l.id}|${k}`, label: `${actionLabel(k, l)} · ${l.label}`, layerId: l.id, do: k });
+  // Play notes on each rack of the Audio engine.
+  for (const r of play.audioEngine?.racks ?? []) out.push({ value: `notes|${r.id}`, label: `Play notes · ${r.name}`, layerId: '', do: NOTES_ACTION, rackId: r.id });
   out.push({ value: SIGNAL_ACTION, label: 'Send a signal', layerId: '', do: SIGNAL_ACTION });
   return out;
 }
@@ -31,6 +34,7 @@ export function defaultAmount(kind: string, l: PlayLayer | undefined): number {
 /** "Burst 60 · Sparks", "Send Hit": a reaction in words. */
 export function reactionText(r: PlayReaction, play: PlayRecord): string {
   if (r.do === SIGNAL_ACTION) return `Send ${play.signals?.find(s => s.id === r.signal)?.name ?? 'a signal'}`;
+  if (r.do === NOTES_ACTION && r.notes) return `Play ${notesSummary(r.notes)} · ${play.audioEngine?.racks.find(x => x.id === r.notes!.rackId)?.name ?? 'a missing rack'}`;
   const l = play.layers.find(x => x.id === r.layerId);
   const amount = r.do === 'burst' || r.do === 'multiply' || r.do === 'cull' ? ` ${r.amount}` : '';
   return `${actionLabel(r.do, l)}${amount} · ${l?.label ?? 'a deleted layer'}`;

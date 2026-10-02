@@ -203,3 +203,24 @@ The runtime runs conditions, signals, pair mappings and axis swaps through the i
 ## Not yet
 
 - Nothing listed.
+
+## Play notes (guide phase 8)
+
+A rule's Do can be **Play notes · <rack>** (`do: 'notes'`, with `notes: NotesSpec`). Its settings:
+- the notes, picked on a two-octave piano that moves an octave at a time (at most 12);
+- **Chord** (all at once), **Strum** (low to high, a gap apart), **Arp** (the next note each time it fires) or **Random** (one of them);
+- velocity, with a ± spread;
+- length;
+- snap to a scale (major, minor, pentatonic, blues) on a root.
+
+`play/notes.ts` (pure) turns one firing into note-on and note-off events. `lib/playNotes.ts` sends them through `audioEngineHost.input`, so racks hear them and takes record them.
+
+Stuck-note safety:
+- every note-off is scheduled with its note-on;
+- a note played again while it sounds is let go first;
+- at most 64 notes are held;
+- leaving Play lets every held note go.
+
+Play notes is app-only: a website export has no Audio engine racks, so the reaction does nothing there.
+
+Already in from the simplification work: capture and Set, positions and the pinch-point anchor, particle event positions.

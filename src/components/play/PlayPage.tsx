@@ -27,6 +27,7 @@ import { useMapMode } from './inputs/mapMode';
 import { MapModeBar, MapTarget } from './inputs/MapTarget';
 import { InputsBoard } from './inputs/InputsBoard';
 import { DetailWindow } from './detail/DetailWindow';
+import { startPlayNotes } from '../../lib/playNotes';
 import { openDetail } from './detail/detailStore';
 import { CHANNELS, COLOUR_CHANNELS, CURVES, HAND_GESTURE_OPTIONS, HAND_READ_HINTS, HAND_SIDES, LFO_SHAPES, LIVE_BAND_OPTIONS, NOISE_TYPES, PINCH_FINGERS, SENSOR_HINTS, SENSOR_LABELS, OPEN_READERS, TILT_AXES, TRIGGER_MODES, keyName, sourceFromType, withFire, sourceLabel, sourceType, type SourceType } from '../../play/playSources';
 import { CAPTURE_POS, PER_GRAIN_READS, sensorReadsFor, type SensorRead } from '../../types/play';
@@ -187,9 +188,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   // Mouse and keyboard sources listen only while this page shows. Solo is for this page only.
   useEffect(() => {
     playEngine.setPerforming(true);
+    // Play notes reactions sound on their racks while Play is open; leaving lets every note go.
+    const stopNotes = startPlayNotes();
     usePlayUi.getState().setPerforming(true);
     rackKeyboard.setPage(true);
-    return () => { rackKeyboard.setPage(false); playEngine.setPerforming(false); usePlayUi.getState().setPerforming(false); usePlayUi.getState().clearSolo(); };
+    return () => { stopNotes(); rackKeyboard.setPage(false); playEngine.setPerforming(false); usePlayUi.getState().setPerforming(false); usePlayUi.getState().clearSolo(); };
   }, []);
   // An image, video or colour background replaces the shader while this page shows (the Studio keeps the graph).
   useEffect(() => playBackground.claim(), []);
