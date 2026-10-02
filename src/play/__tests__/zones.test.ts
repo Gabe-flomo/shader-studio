@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { geoCompile, geoFieldAt, geoFieldFromMask, sdfBox, sdfCapsule, sdfEllipse, sdfPolygon } from '../kit/geometry.js';
 import { burstParticles, createParticles, resizeParticles, stepParticles, type ParticleEnv, type ParticleParams } from '../particle-sim.js';
-import { LAYER_KINDS, defaultLayer, parseLayer, parsePlayRecord, type ParticlesLayer, type PlayAction } from '../../types/play';
+import { LAYER_KINDS, defaultLayer, parseLayer, parsePlayRecordAsSaved, type ParticlesLayer, type PlayAction } from '../../types/play';
 import { playEngine } from '../../lib/playEngine';
 import { inputBus } from '../../lib/inputBus';
 import { midiEngine } from '../../lib/midiEngine';
@@ -207,7 +207,7 @@ describe('layers in files', () => {
   });
 
   it('keeps actions, sensor sources and shape triggers, and drops them when their layer is gone', () => {
-    const rec = parsePlayRecord({
+    const rec = parsePlayRecordAsSaved({
       version: 1,
       layers: [{ id: 'sh', kind: 'shape', label: 'Box' }, { id: 'pa', kind: 'particles', label: 'P' }],
       controls: [{ id: 'c', target: 'n::k', kind: 'float', label: 'K', min: 0, max: 1 }],

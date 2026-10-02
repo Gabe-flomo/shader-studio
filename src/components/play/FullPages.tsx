@@ -1,9 +1,7 @@
 /**
  * FullPages — the rail's full-width pages that aren't a whole sidebar
- * section already (docs/split-view.md, "Rail and full-width pages"):
- * Signals (named signals with what sends them and what they set off, and the
- * reactions beside them: signalFlow.ts),
- * the Background, and the frame the single-card pages (MIDI file, Pad grid)
+ * section already (docs/split-view.md, "Rail and full-width pages"): the
+ * frame they share (the Rules page is rules/RulesPage.tsx), the Background, and the frame the single-card pages (MIDI file, Pad grid)
  * sit in. Controls, Layers, Finish, the Engine and Mappings reuse their
  * sections, laid out wide (PlayPage renders them).
  *
@@ -11,7 +9,7 @@
  * the right) and at most two columns: a list, and what the selected item
  * does beside it. Below WIDE_PANEL_PX the columns stack.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
@@ -23,13 +21,8 @@ import { RulerSlider } from '../ui/RulerSlider';
 import { ProBadge } from '../account/ProSheet';
 import { openProSheet } from '../../lib/plan';
 import { triggerLabel } from '../../play/playSources';
-import { addSignal, deleteSignal, layerSignalListeners, layerSignalSenders, renameSignal, signalUses } from '../../play/pairs';
-import { playEngine } from '../../lib/playEngine';
-import { addThen, addWhen, signalFlow, signalStructure } from './signalFlow';
+import { layerSignalListeners, layerSignalSenders } from '../../play/pairs';
 import { backgroundLayerOf, SIGNAL_ACTION, type PlayAction, type PlayRecord, type SignalDef, type SignalLogic } from '../../types/play';
-import { ActionsSection, addAction } from './layers/ActionsSection';
-import { SignalRow } from './ConditionFields';
-import { LoopsPanel, SignalCaptureEditor, SignalDefEditor, SignalLinksEditor, SignalTimingEditor } from './SignalDefEditor';
 import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
 import { usePlayUi } from './playUi';
@@ -80,21 +73,6 @@ export function CardPage({ title, count, extra, intro, children }: { title: stri
   );
 }
 
-function Empty({ title, body }: { title: string; body: string }) {
-  const tk = useTokens();
-  return (
-    <div style={{ padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
-      <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>{title}</div>
-      {body}
-    </div>
-  );
-}
-
-function SubHeading({ children }: { children: ReactNode }) {
-  const tk = useTokens();
-  return <div style={{ margin: '2px 2px 6px', color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{children}</div>;
-}
-
 // ── Actions ──────────────────────────────────────────────────────────────────
 
 /** "Key Space → Burst · Sparks", in the words the editor uses. */
@@ -129,6 +107,10 @@ export function signalLinks(play: PlayRecord, id: string): SignalLinks {
     if (m.swap?.signal === id) heardBy.push(`Swap on ${pair}`);
     if (m.swap?.backSignal === id) heardBy.push(`Swap back on ${pair}`);
   }
+  for (const s of play.signals ?? []) {
+    for (const x of s.inputs ?? []) if (x.kind === 'signal' && x.signal === id && s.id !== id) heardBy.push(`Rule: ${s.name}`);
+    for (const r of s.do ?? []) if (r.do === SIGNAL_ACTION && r.signal === id) sentBy.push(`Rule: ${s.name}`);
+  }
   for (const s of layerSignalSenders(play)) if (s.id === id) sentBy.push(s.label);
   // Its own definition: a trigger it follows, or the signals it combines.
   const self = play.signals?.find(s => s.id === id);
@@ -144,154 +126,6 @@ export function signalDefLabel(w: SignalDef, play: PlayRecord): string {
   if (w.kind === 'trigger') return `Its own: ${triggerLabel(w.trigger, play.layers, { layers: play.layers, controls: play.controls, signals: play.signals })}`;
   const names = w.inputs.map(i => play.signals?.find(s => s.id === i)?.name ?? 'Missing signal');
   return `${LOGIC_WORDS[w.op]}: ${names.length ? names.join(', ') : 'nothing yet'}`;
-}
-
-/** One action as a row: "Key Space" over "→ Burst · Sparks". */
-function ActionRow({ a, play, on, onPick, onChange, indent = false }: { a: PlayAction; play: PlayRecord; on: boolean; onPick: () => void; onChange: Change; indent?: boolean }) {
-  const tk = useTokens();
-  const s = actionSummary(a, play);
-  return (
-    <div
-      role="option"
-      aria-selected={on}
-      tabIndex={0}
-      data-action-row={a.id}
-      onClick={onPick}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(); } }}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8, minHeight: 38, padding: `4px 8px 4px ${indent ? 12 : 10}px`, borderRadius: radius.md, cursor: 'pointer',
-        background: on ? tk.bg.selected : 'transparent', boxShadow: on ? `inset 2px 0 0 ${tk.accent.base}` : undefined, opacity: a.enabled ? 1 : 0.55,
-      }}
-    >
-      <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <span style={{ font: `600 12px ${fontFamily.ui}`, color: on ? tk.accent.text : tk.text.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.when}</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4, font: `11.5px ${fontFamily.ui}`, color: tk.text.muted, minWidth: 0 }}>
-          <Icon name="chevR" size={11} style={{ flexShrink: 0, color: tk.text.faint }} />
-          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.does}</span>
-        </span>
-      </span>
-      <span onClick={e => e.stopPropagation()}><Toggle checked={a.enabled} onChange={enabled => onChange(p => ({ ...p, actions: (p.actions ?? []).map(x => (x.id === a.id ? { ...x, enabled } : x)) }))} /></span>
-    </div>
-  );
-}
-
-/**
- * Signals: the conditions that report what is happening and what they set
- * off, as one flow (signalFlow.ts). Each named signal is a card with what
- * sends it (When) and what it sets off (Then); reactions with no signal
- * between (a key bursts particles) sit below. The selected reaction's editor
- * is beside the list; a selected signal shows everything it reaches.
- */
-export function SignalsPage({ play, onChange, wide }: { play: PlayRecord; onChange: Change; wide: boolean }) {
-  const tk = useTokens();
-  const flow = signalFlow(play);
-  const shapes = signalStructure(play);
-  const actions = play.actions ?? [];
-  const signals = play.signals ?? [];
-  // What's selected: a pick made here, or what something else asked to show since (a signal just made from a slider's +).
-  const focus = usePlayUi(s => s.signalFocus);
-  const [local, setLocal] = useState({ id: '', at: 0 });
-  const picked = focus.tick > local.at ? focus.id : local.id;
-  const setPicked = (id: string) => setLocal({ id, at: focus.tick });
-  const [lit, setLit] = useState<Record<string, number>>({});
-  useEffect(() => playEngine.onSignal(id => setLit(l => ({ ...l, [id]: (l[id] ?? 0) + 1 }))), []);
-  const pickedAction = actions.find(a => a.id === picked);
-  const pickedSignal = pickedAction ? undefined : signals.find(x => x.id === picked);
-  const selectedAction = pickedAction ?? (pickedSignal ? undefined : actions[0]);
-  const addAndPick = (fn: (p: PlayRecord) => { play: PlayRecord; id: string }) => { let id = ''; onChange(p => { const r = fn(p); id = r.id; return r.play; }); if (id) setPicked(id); };
-  const row = (a: PlayAction, indent = false) => <ActionRow key={a.id} a={a} play={play} on={a.id === selectedAction?.id} onPick={() => setPicked(a.id)} onChange={onChange} indent={indent} />;
-  // `also`: what sends or hears it besides actions (a layer's Born, a mapping's trigger), shown as plain lines.
-  const part = (label: string, items: PlayAction[], also: string[], none: string, add: () => void, addLabel: string) => (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 2px' }}>
-        <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</span>
-        <span style={{ flex: 1 }} />
-        <Button size="sm" variant="ghost" icon="plus" onClick={add}>{addLabel}</Button>
-      </div>
-      {items.map(a => row(a, true))}
-      {also.map(t => <div key={t} style={{ padding: '2px 12px 4px', color: tk.text.secondary, font: `11.5px/1.45 ${fontFamily.ui}` }}>{t}</div>)}
-      {!items.length && !also.length && <div style={{ padding: '2px 12px 4px', color: tk.text.faint, font: `11.5px/1.45 ${fontFamily.ui}` }}>{none}</div>}
-    </div>
-  );
-  const empty = signals.length === 0 && actions.length === 0;
-  const list = empty
-    ? <Empty title="Nothing happens yet" body="A signal reports that something happened: a key, a value crossing a line, a hand closing, particles colliding. Give it a When (what sends it) and a Then (what it sets off: burst the sparks, step the text). Or add a reaction straight away: When a key is pressed, do something to a layer. The + beside any slider can create a signal from it." />
-    : (
-      <div role="listbox" aria-label="Signals" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <LoopsPanel play={play} onChange={onChange} />
-        {flow.groups.map(g => {
-          const on = pickedSignal?.id === g.signal.id;
-          return (
-            <div key={g.signal.id} data-signal-card={g.signal.id} style={{ borderRadius: radius.card, padding: '0 4px 6px', background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${on ? tk.accent.base : tk.border.default}` }}>
-              <div onClick={() => setPicked(g.signal.id)} style={{ cursor: 'pointer' }}>
-                <SignalRow
-                  name={g.signal.name} uses={signalUses(play, g.signal.id)} flash={lit[g.signal.id] ?? 0}
-                  onRename={name => onChange(p => renameSignal(p, g.signal.id, name))}
-                  onFire={() => playEngine.fireSignal(g.signal.id)}
-                  onRemove={() => onChange(p => deleteSignal(p, g.signal.id))}
-                />
-              </div>
-              <SignalDefEditor signal={g.signal} play={play} onChange={onChange} shape={shapes.get(g.signal.id)} />
-              <SignalCaptureEditor signal={g.signal} play={play} onChange={onChange} />
-              <SignalTimingEditor signal={g.signal} onChange={onChange} />
-              <SignalLinksEditor signal={g.signal} play={play} onChange={onChange} />
-              {(() => {
-                const links = signalLinks(play, g.signal.id);
-                // Actions are rows; its own definition is edited just above.
-                const def = g.signal.when ? signalDefLabel(g.signal.when, play) : '';
-                const notActions = (xs: string[]) => xs.filter(x => !x.startsWith('Action:') && x !== def);
-                return <>
-                  {part('When', g.when, notActions(links.sentBy), g.signal.when ? 'Only what it is true from, above. Actions can send it too.' : 'Nothing sends it yet.', () => addAndPick(p => addWhen(p, g.signal.id)), 'When')}
-                  {part('Then', g.then, notActions(links.heardBy), 'It sets nothing off yet.', () => addAndPick(p => addThen(p, g.signal.id)), 'Then')}
-                </>;
-              })()}
-            </div>
-          );
-        })}
-        {flow.others.length > 0 && (
-          <div>
-            <SubHeading>Reactions without a signal</SubHeading>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{flow.others.map(a => row(a))}</div>
-          </div>
-        )}
-      </div>
-    );
-  const side = selectedAction
-    ? <><SubHeading>Edit</SubHeading><ActionsSection play={play} onChange={onChange} only={selectedAction.id} bare /></>
-    : pickedSignal ? (() => {
-      const links = signalLinks(play, pickedSignal.id);
-      return (
-        <>
-          <SubHeading>{pickedSignal.name}</SubHeading>
-          <div data-signal-links={pickedSignal.id} style={{ padding: '10px 12px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
-            <LinkRow label="Sent by" items={links.sentBy} none="Nothing sends it yet: add a When" />
-            <LinkRow label="Heard by" items={links.heardBy} none="Nothing listens yet: add a Then, or pick it as a mapping's trigger" />
-          </div>
-        </>
-      );
-    })()
-    : empty ? null : <div style={{ color: tk.text.faint, font: `12px/1.5 ${fontFamily.ui}`, padding: '4px 2px' }}>Pick a reaction to edit it.</div>;
-  return (
-    <>
-      <PageHeader title="Signals" count={signals.length + actions.length} extra={<>
-        <Button size="sm" icon="plus" onClick={() => addAndPick(p => addSignal(p))}>Add signal</Button>
-        <Button size="sm" icon="plus" variant="ghost" onClick={() => addAndPick(addAction)}>Add reaction</Button>
-      </>} />
-      <TwoPane wide={wide} list={list} side={side} />
-    </>
-  );
-}
-
-function LinkRow({ label, items, none }: { label: string; items: string[]; none: string }) {
-  const tk = useTokens();
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr', gap: 8, padding: '3px 0', font: `12px/1.45 ${fontFamily.ui}` }}>
-      <span style={{ color: tk.text.faint, font: `600 10px/1.9 ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</span>
-      {items.length === 0
-        ? <span style={{ color: tk.text.faint }}>{none}</span>
-        : <span style={{ display: 'flex', flexDirection: 'column', color: tk.text.secondary }}>{items.map((t, i) => <span key={i}>{t}</span>)}</span>}
-    </div>
-  );
 }
 
 // ── Background ──────────────────────────────────────────────────────────────

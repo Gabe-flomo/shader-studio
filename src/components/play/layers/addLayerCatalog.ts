@@ -42,7 +42,7 @@ export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
   { kind: 'text', group: 'textImages', label: 'Text', hint: 'Words over the picture or the picture inside them. Can step through lines.', icon: 'edit' },
   { kind: 'image', group: 'textImages', label: 'Image', hint: 'A picture of your own, blended or matted.', icon: 'overlay' },
   { kind: 'video', group: 'textImages', label: 'Video', hint: 'A video file of your own over the picture, placed like an image. Its sound can feed audio readers: map its bass, voice or hi-hats to controls.', icon: 'play' },
-  { kind: 'data', group: 'textImages', label: 'Data', hint: 'A dataset on the picture: a table as points, a path, bars, a pie or lines; text a word or a line at a time. Step through the rows with keys, beats or an Offset.', icon: 'grid' },
+  // The Data layer is hidden for now (implementation guide, small tasks): its types, parsing and kit stay, so saved setups still open.
   { kind: 'particles', group: 'particles', label: 'Particles', hint: 'Flow along the picture, flock, swarm nulls and shapes, burst on the beat.', icon: 'spark' },
   { kind: 'bodies', group: 'particles', label: 'Bodies', hint: 'Letters, circles or boxes that fall, bounce and pile up.', icon: 'dice' },
   { kind: 'relationship', group: 'particles', label: 'Relationship', hint: 'Forces between layers: a null chases a shape that flees (a catch sends a signal), members push apart, or pull together and orbit. Members can also climb the picture\'s bright parts. Its gap, closing speed and catches are sources.', icon: 'target' },

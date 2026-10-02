@@ -10,6 +10,7 @@ import { Menu } from '../ui/Menu';
 import { duplicateLayer, layerMenuItems, removeLayer, resetLayer } from './layerOps';
 import { canMove, moveItem } from './groupOps';
 import { usePlayUi } from './playUi';
+import { startRule } from './playSplit';
 
 export function LayerContextMenu({ play, onChange }: { play: PlayRecord; onChange: (fn: (p: PlayRecord) => PlayRecord) => void }) {
   const [at, setAt] = useState<{ layerId: string; x: number; y: number } | null>(null);
@@ -41,6 +42,7 @@ export function LayerContextMenu({ play, onChange }: { play: PlayRecord; onChang
           onDuplicate: () => { let made = ''; onChange(p => { const r = duplicateLayer(p, id); made = r.id; return r.play; }); if (made) reveal(made); },
           onReset: () => onChange(p => resetLayer(p, id)),
           onRemove: () => onChange(p => removeLayer(p, id)),
+          onRule: () => startRule({ layerId: id }),
         }),
       ]}
     />

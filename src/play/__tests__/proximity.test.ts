@@ -21,7 +21,7 @@ import { playOverlay } from '../overlay';
 import { takeApplier, useTakes } from '../../lib/takes';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import {
-  defaultLayer, emptyPlayRecord, handAnchor, parseHandAnchor, parsePlayRecord, usesHands,
+  defaultLayer, emptyPlayRecord, handAnchor, parseHandAnchor, parsePlayRecordAsSaved, usesHands,
   type FireSpec, type PlayAction, type PlayLayer, type PlayRecord, type TriggerSpec,
 } from '../../types/play';
 
@@ -192,7 +192,7 @@ describe('the play file', () => {
         { id: 'b', trigger: { on: 'beat', bpm: 120, beats: 1 }, do: 'burst', layerId: 'p', amount: 5, enabled: true },
       ],
     };
-    const back = parsePlayRecord(JSON.parse(JSON.stringify(old)));
+    const back = parsePlayRecordAsSaved(JSON.parse(JSON.stringify(old)));
     expect(back.actions).toEqual(old.actions);
     expect(back.actions!.every(a => !('fire' in a.trigger))).toBe(true);
   });
@@ -207,14 +207,14 @@ describe('the play file', () => {
         action('hand', { on: 'proximity', a: handAnchor('right', 8), b: 'b', when: 'farther', distance: 0.4, margin: 0.02, fire: { mode: 'release', every: 3, unit: 'frames' } }),
       ],
     };
-    const back = parsePlayRecord(JSON.parse(JSON.stringify(rec)));
+    const back = parsePlayRecordAsSaved(JSON.parse(JSON.stringify(rec)));
     expect(back).toEqual(rec);
     expect(usesHands(back)).toBe(true);
     expect(usesHands({ ...back, actions: back.actions!.slice(0, 3) })).toBe(false);
   });
 
   it('drops a proximity trigger whose layer is gone, and cleans up bad modes', () => {
-    const back = parsePlayRecord({
+    const back = parsePlayRecordAsSaved({
       version: 1, controls: [], mappings: [], layers: [nul('a', 0.2), burstLayer()],
       actions: [
         action('gone', near()),
@@ -228,7 +228,7 @@ describe('the play file', () => {
   });
 
   it('distance sensors reach any positioned layer and hand points', () => {
-    const rec = parsePlayRecord({
+    const rec = parsePlayRecordAsSaved({
       version: 1, layers: [defaultLayer('text', 't', 'Word'), nul('b', 0.5)],
       controls: [{ id: 'c', target: 'n::amount', kind: 'float', label: 'Amount', min: 0, max: 1 }],
       mappings: [

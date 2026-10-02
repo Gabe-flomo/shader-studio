@@ -1,56 +1,12 @@
 /**
- * signalFlow.ts — the Signals page's view of a setup as one flow (the
- * simplification plan's Signals noun): each named signal with what sends it
- * (its When: actions whose Do is Send this signal) and what it sets off (its
- * Then: actions that fire on it), and the reactions that stand alone (a key
- * that bursts particles, with no signal between). Pure: FullPages.tsx draws it.
- * (Create signal, from a slider's +, is play/createSignal.ts.)
+ * signalFlow.ts — signals as a graph, for the Rules page: each one's place
+ * among the others (chain, branch, merge, loop), links and loop settings, and
+ * Set / Move a layer from what a signal captured. Pure.
  */
-import { SIGNAL_ACTION, SIGNAL_ANCHOR, SIGNAL_LINKS_MAX, type PlayAction, type PlayLoop, type PlayRecord, type PlaySignal, type SignalLink, type TriggerSpec } from '../../types/play';
+import { SIGNAL_ACTION, SIGNAL_ANCHOR, SIGNAL_LINKS_MAX, type PlayLoop, type PlayRecord, type SignalLink } from '../../types/play';
 import { sgLinkPlan } from '../../play/kit/signals.js';
 import { layerPositionPair, newPairMapping } from '../../play/pairs';
 import { mapSourceTo, type MapTarget } from './layerOps';
-import { addAction } from './layers/ActionsSection';
-
-export interface SignalGroup {
-  signal: PlaySignal;
-  /** Actions that send it. */
-  when: PlayAction[];
-  /** Actions that fire on it. */
-  then: PlayAction[];
-}
-
-export interface SignalFlow { groups: SignalGroup[]; others: PlayAction[] }
-
-export const sendsSignal = (a: PlayAction, id: string) => a.do === SIGNAL_ACTION && a.signal === id;
-export const firesOnSignal = (a: PlayAction, id: string) => a.trigger.on === 'signal' && a.trigger.signal === id;
-
-/** Every signal with its When and Then; an action linking two signals shows under both. */
-export function signalFlow(play: PlayRecord): SignalFlow {
-  const actions = play.actions ?? [];
-  const linked = new Set<string>();
-  const groups = (play.signals ?? []).map(signal => {
-    const when = actions.filter(a => sendsSignal(a, signal.id));
-    const then = actions.filter(a => firesOnSignal(a, signal.id));
-    for (const a of [...when, ...then]) linked.add(a.id);
-    return { signal, when, then };
-  });
-  return { groups, others: actions.filter(a => !linked.has(a.id)) };
-}
-
-/** A new action that sends `signalId` (fired by Space until it is changed). */
-export function addWhen(p: PlayRecord, signalId: string): { play: PlayRecord; id: string } {
-  const r = addAction(p);
-  const play = { ...r.play, actions: (r.play.actions ?? []).map(a => (a.id === r.id ? { ...a, do: SIGNAL_ACTION, layerId: '', amount: 1, signal: signalId } : a)) };
-  return { play, id: r.id };
-}
-
-/** A new action that fires on `signalId` (it does the last layer's first button until it is changed). */
-export function addThen(p: PlayRecord, signalId: string): { play: PlayRecord; id: string } {
-  const r = addAction(p);
-  const play = { ...r.play, actions: (r.play.actions ?? []).map(a => (a.id === r.id ? { ...a, trigger: { on: 'signal', signal: signalId } as TriggerSpec } : a)) };
-  return { play, id: r.id };
-}
 
 /** Set: `target` (a control, made first if needed) takes what the signal captured, jumping (no glide) and staying. */
 export function setFromSignal(p: PlayRecord, signalId: string, target: MapTarget): { play: PlayRecord; controlLabel?: string } {
@@ -84,6 +40,9 @@ export function signalEdges(play: PlayRecord): Array<{ from: string; to: string 
   for (const s of play.signals ?? []) {
     for (const l of s.links ?? []) out.push({ from: s.id, to: l.to });
     if (s.when?.kind === 'logic') for (const i of s.when.inputs) out.push({ from: i, to: s.id });
+    // A rule's signal inputs feed it; a reaction sending a signal relays it on.
+    for (const x of s.inputs ?? []) if (x.kind === 'signal') out.push({ from: x.signal, to: s.id });
+    for (const r of s.do ?? []) if (r.enabled && r.do === SIGNAL_ACTION && r.signal) out.push({ from: s.id, to: r.signal });
   }
   for (const a of play.actions ?? []) if (a.enabled && a.trigger.on === 'signal' && a.trigger.signal && a.do === SIGNAL_ACTION && a.signal) out.push({ from: a.trigger.signal, to: a.signal });
   return out;

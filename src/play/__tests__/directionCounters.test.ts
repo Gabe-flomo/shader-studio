@@ -18,7 +18,7 @@ import { playEngine } from '../../lib/playEngine';
 import { inputBus } from '../../lib/inputBus';
 import { kitScript } from '../exportHtml';
 import runtimeSource from '../runtime/play-runtime.js?raw';
-import { defaultLayer, emptyPlayRecord, parsePlayRecord, type CondCmp, type FireSpec, type PlayAction, type PlayControl, type PlayLayer, type PlayRecord, type TriggerSpec, type ValueCondition } from '../../types/play';
+import { defaultLayer, emptyPlayRecord, parsePlayRecordAsSaved, type CondCmp, type FireSpec, type PlayAction, type PlayControl, type PlayLayer, type PlayRecord, type TriggerSpec, type ValueCondition } from '../../types/play';
 
 afterEach(() => { playEngine.setRecord(emptyPlayRecord()); playEngine.setBaseValues(new Map()); });
 
@@ -82,7 +82,7 @@ describe('direction', () => {
 
   it('reads and saves its window and noise, and says what it means', () => {
     const t = { on: 'value', ...dir('rising', { window: 2, noise: 1.5 }) };
-    const rec = parsePlayRecord({ version: 1, layers: [defaultLayer('particles', 'p', 'P')], controls: [], mappings: [], actions: [{ id: 'a', trigger: t, do: 'burst', layerId: 'p', amount: 1, enabled: true }] });
+    const rec = parsePlayRecordAsSaved({ version: 1, layers: [defaultLayer('particles', 'p', 'P')], controls: [], mappings: [], actions: [{ id: 'a', trigger: t, do: 'burst', layerId: 'p', amount: 1, enabled: true }] });
     expect(rec?.actions?.[0].trigger).toMatchObject({ cmp: 'rising', window: 2, noise: 1 });
     expect(conditionLabel(dir('falling'), { controls: [{ id: 'src', label: 'Radius' }] })).toBe('Radius is falling');
   });
@@ -115,7 +115,7 @@ describe('counters', () => {
   });
 
   it('are kept in the file with their defaults clamped', () => {
-    const rec = parsePlayRecord({ version: 1, layers: [defaultLayer('particles', 'p', 'P')], controls: [], mappings: [], actions: [
+    const rec = parsePlayRecordAsSaved({ version: 1, layers: [defaultLayer('particles', 'p', 'P')], controls: [], mappings: [], actions: [
       { id: 'a', trigger: { on: 'key', code: 'Space', fire: { mode: 'nth', every: 1 } }, do: 'burst', layerId: 'p', amount: 1, enabled: true },
       { id: 'b', trigger: { on: 'key', code: 'Space', fire: { mode: 'within', every: 3, window: 500 } }, do: 'burst', layerId: 'p', amount: 1, enabled: true },
     ] });

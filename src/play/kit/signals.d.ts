@@ -25,6 +25,13 @@ export function sgShapeStep(st: SgShapeState, raw: boolean, t: number, o: SgShap
 export interface SgLagState { t: number[]; v: number[] }
 export function sgLagNew(): SgLagState;
 export function sgLagStep(st: SgLagState, t: number, v: number, delay: number): number | null;
+export interface SgPlanInput { kind: 'trigger'; trigger: import('../../types/play').TriggerSpec }
+export type SgLevelInput = SgPlanInput | { kind: 'signal'; signal: string };
+export interface SgSignalPlanEntry { id: string; level: SgLevelInput[]; op: 'or' | 'and' | 'not' | 'xor' }
+export function sgSignalPlan(signals: readonly import('../../types/play').PlaySignal[]): SgSignalPlanEntry[];
+export function sgLevelDeps(plan: readonly SgSignalPlanEntry[]): Array<{ id: string; when: { kind: 'logic'; inputs: string[] } }>;
+export function sgPulseLinks<S extends import('../../types/play').PlaySignal>(signals: readonly S[]): S[];
+export function sgReactions(signals: readonly import('../../types/play').PlaySignal[]): import('../../types/play').PlayAction[];
 export const SG_LOOP_PULSES: number;
 export interface SgLinkEdge { from: string; to: string; delay: number; on: 'rise' | 'fall' }
 export interface SgLoop { key: string; members: string[]; entry: string; period: number; speed: number; laps: number; running: boolean; policy: 'ignore' | 'add' | 'restart'; branches: boolean }
@@ -41,6 +48,7 @@ export function sgSwapStep(st: SgSwapState, va: number | null | undefined, vb: n
 export type SgValueRef =
   | { kind: 'control'; id: string }
   | { kind: 'mapping'; id: string }
+  | { kind: 'source'; id: string }
   | { kind: 'mouse'; axis: 'x' | 'y' }
   | { kind: 'distance'; a: string; b: string }
   | { kind: 'prop'; layerId: string; key: string }

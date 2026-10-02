@@ -328,6 +328,75 @@ export function sgLagStep(st, t, v, delay) {
   return st.v[0] + (st.v[1] - st.v[0]) * k;
 }
 
+// ── Signals as rules: inputs, combine, reactions (implementation guide, phase 2) ─
+
+const SG_COMBINE_OP = { any: 'or', all: 'and', none: 'not', one: 'xor' };
+
+/**
+ * Each signal's level inputs and how they combine, from its `inputs` (a
+ * trigger: true while held or met; a signal mirrored: its level) and the older
+ * `when` (a trigger, or a combination of signals). Rise and fall inputs are
+ * pulses, not levels (sgPulseLinks). [{ id, level: [{ kind: 'trigger',
+ * trigger } | { kind: 'signal', signal }], op: 'or' | 'and' | 'not' | 'xor' }]
+ */
+export function sgSignalPlan(signals) {
+  const out = [];
+  for (const s of signals) {
+    const level = [];
+    let op = SG_COMBINE_OP[s.combine || 'any'] || 'or';
+    const w = s.when;
+    if (w && w.kind === 'trigger') level.push({ kind: 'trigger', trigger: w.trigger });
+    if (w && w.kind === 'logic') {
+      for (const i of w.inputs) level.push({ kind: 'signal', signal: i });
+      if (!s.inputs || !s.inputs.length) op = w.op;
+    }
+    for (const x of s.inputs || []) {
+      if (x.kind === 'trigger') level.push({ kind: 'trigger', trigger: x.trigger });
+      else if (x.kind === 'signal' && x.as === 'mirror') level.push({ kind: 'signal', signal: x.signal });
+    }
+    out.push({ id: s.id, level, op });
+  }
+  return out;
+}
+
+/** What a signal's level reads, as the ordering wants it (sgSignalOrder): the signals it mirrors. */
+export function sgLevelDeps(plan) {
+  return plan.map(p => ({ id: p.id, when: { kind: 'logic', inputs: p.level.filter(x => x.kind === 'signal').map(x => x.signal) } }));
+}
+
+/**
+ * Signals with the links their rise and fall inputs make: B listening to A's
+ * rise, 0.5 s late, is A linking to B after 0.5 s (sgLinkPlan finds the loops).
+ * The older `links` are kept as they are.
+ */
+export function sgPulseLinks(signals) {
+  const extra = new Map();
+  for (const s of signals) for (const x of s.inputs || []) {
+    if (x.kind !== 'signal' || x.as === 'mirror') continue;
+    if (!extra.has(x.signal)) extra.set(x.signal, []);
+    extra.get(x.signal).push({ to: s.id, delay: x.delay || 0, on: x.as });
+  }
+  if (!extra.size) return signals;
+  return signals.map(s => (extra.has(s.id) ? Object.assign({}, s, { links: (s.links || []).concat(extra.get(s.id)) }) : s));
+}
+
+/**
+ * A signal's reactions as actions on it (the action runner, sgRunActions, runs
+ * them): each fires by its own mode on the signal's rise, level or fall.
+ */
+export function sgReactions(signals) {
+  const out = [];
+  for (const s of signals) for (const r of s.do || []) {
+    const trigger = { on: 'signal', signal: s.id };
+    if (r.fire) trigger.fire = r.fire;
+    const a = { id: r.id, trigger, do: r.do, layerId: r.layerId || '', amount: r.amount, enabled: r.enabled !== false };
+    if (r.signal !== undefined) a.signal = r.signal;
+    if (r.notes) a.notes = r.notes;
+    out.push(a);
+  }
+  return out;
+}
+
 // ── Links and loops ──────────────────────────────────────────────────────────
 
 /** Pulses a loop may have on their way at once (a branch inside a loop would double them every lap). */
@@ -506,6 +575,8 @@ export function sgParseValueRef(ref) {
   if (typeof ref !== 'string' || !ref) return null;
   if (ref.startsWith('ctl:')) return ref.length > 4 ? { kind: 'control', id: ref.slice(4) } : null;
   if (ref.startsWith('map:')) return ref.length > 4 ? { kind: 'mapping', id: ref.slice(4) } : null;
+  // A source's reading this frame, 0 to 1 (a source of the record, or an old mapping by its id).
+  if (ref.startsWith('src:')) return ref.length > 4 ? { kind: 'source', id: ref.slice(4) } : null;
   if (ref === 'mouse:x' || ref === 'mouse:y') return { kind: 'mouse', axis: ref.slice(6) };
   if (ref.startsWith('dist:')) {
     const i = ref.indexOf('|');

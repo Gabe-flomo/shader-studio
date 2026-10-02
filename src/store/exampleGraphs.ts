@@ -3,6 +3,8 @@ import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 
 import type { ExampleGraph } from './exampleIndex';
 import { PLAY_EXAMPLE_GRAPHS } from './playExamples';
+import { normalizeRules } from '../play/rules';
+import type { PlayRecord } from '../types/play';
 import { buildLearnExamples } from './learnExamples';
 import { buildLearn3dExamples } from './learn3dExamples';
 import { buildComboExamples } from './comboExamples';
@@ -11867,3 +11869,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
 Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples());
+
+// Every example's Play setup is in the rules shape (implementation guide, phase 9): authored with actions,
+// a signal's When and links where that reads easiest, opened as the rules they play as.
+for (const g of Object.values(EXAMPLE_GRAPHS)) if (g.play) g.play = normalizeRules(g.play as PlayRecord) as typeof g.play;

@@ -46,7 +46,7 @@ const SECTIONS: Record<string, { name: string; noun?: string; kind?: PlayChangeK
   controls: { name: 'Controls', noun: 'control' },
   mappings: { name: 'Mappings', noun: 'mapping' },
   actions: { name: 'Actions', noun: 'action' },
-  signals: { name: 'Signals', noun: 'signal' },
+  signals: { name: 'Rules', noun: 'rule' },
   pairs: { name: 'Pairs', noun: 'pair' },
   pairMappings: { name: 'Pair mappings', noun: 'pair mapping' },
   takes: { name: 'Takes', noun: 'take' },

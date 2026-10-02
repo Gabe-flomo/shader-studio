@@ -74,10 +74,10 @@ describe('keys', () => {
 
 describe('the Play pickers', () => {
   const readers = [{ id: 'k', name: 'Kick' }, { id: 'h', name: 'Hi-hat' }];
-  it('lists every source type once, and the readers and the panel entry under Live audio', () => {
+  it('lists every source type once (the hidden Data apart), and the readers and the panel entry under Live audio', () => {
     const values = navigableValues(sourcePickerSections(readers, false));
     expect(new Set(values).size).toBe(values.length);
-    expect([...values].filter(v => !v.startsWith('reader')).sort()).toEqual(SOURCE_TYPES.map(t => t.value).sort());
+    expect([...values].filter(v => !v.startsWith('reader')).sort()).toEqual(SOURCE_TYPES.map(t => t.value).filter(v => v !== 'data').sort());
     const live = sourcePickerSections(readers, false).find(s => s.heading === 'Live audio')!;
     expect(live.items.map(i => i.label)).toEqual(['Audio band', 'Reader · Kick', 'Reader · Hi-hat', 'Spectrum readers…', 'Audio Input node band']);
     expect(live.items.some(i => i.value === OPEN_READERS)).toBe(true);

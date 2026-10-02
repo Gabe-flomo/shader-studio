@@ -32,6 +32,8 @@ import { BigEditorScaffold } from './BigEditorScaffold';
 import { AudioSourceRows, FontRow } from './rows';
 import { extractScriptParams } from './scriptExamples';
 import { Segmented } from '../../ui/Choice';
+import { GroupedPicker } from '../../ui/GroupedPicker';
+import { valueSections } from '../ConditionFields';
 import { layerFiles, sameFiles, scriptPatch, type ApplyOptions } from './scriptApply';
 import { DrawGlimpse, FileChips, ScriptStatusLine } from './ScriptCard';
 import { P5ImportDialog, type P5ImportResult } from './P5Import';
@@ -159,6 +161,7 @@ export function NullEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
 export function TextEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: EditorContext; pictureHidden: boolean }) {
   const seq = f.get<boolean>('sequence');
   const text = f.get<string>('text');
+  const reads = f.get<string>('reads') ?? '';
   return (
     <>
       <Section kind="text" title="Text" primary summary={text ? (text.length > 40 ? `${text.slice(0, 40)}…` : text) : 'Empty'}>
@@ -174,6 +177,13 @@ export function TextEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Editor
       <Section kind="text" title="Look">
         {f.prop('opacity')}
         {matteRows(f, pictureHidden)}
+      </Section>
+      <Section kind="text" title="Reads a value" hint="Show a live number instead of the text: a slider, a source, a layer's speed, a distance…" on={!!reads} onToggle={v => f.set({ reads: v ? (ctx.play.controls[0] ? `ctl:${ctx.play.controls[0].id}` : 'mouse:x') : '' })}>
+        {f.row('Value', <GroupedPicker ariaLabel="Value it shows" value={reads} placeholder="Pick a value" sections={valueSections(ctx.play)} height={26} style={{ flex: 1, minWidth: 0 }} width={300} searchPlaceholder="Search values" onChange={v => f.set({ reads: v })} />)}
+        {f.seg('As', 'readFormat', [
+          { value: 'number', label: '1.25' }, { value: 'percent', label: '%', title: 'A 0 to 1 value as a percent' }, { value: 'onoff', label: 'On/Off', title: 'ON above a half, else OFF' }, { value: 'template', label: 'Text', title: 'The text above, with {v} replaced by the value' },
+        ], f.get<string>('readFormat') === 'template' ? 'Write {v} in the text where the value goes, e.g. "Speed: {v}".' : undefined)}
+        {f.row('Decimals', <NumberInput value={f.get<number>('readDecimals')} min={0} max={6} step={1} title="Places after the point" onCommit={n => f.set({ readDecimals: Math.max(0, Math.min(6, Math.round(n))) })} style={{ width: 52, height: 26, borderRadius: 6, border: 0, background: f.tk.bg.field, color: f.tk.text.primary, font: `500 11.5px ${fontFamily.mono}`, textAlign: 'center' }} />)}
       </Section>
       <Section kind="text" title="Sequence" hint="Each line of the text is a step. A Next action (on a key, a beat, a note…) moves on; Every sets a steady pace." on={seq} onToggle={v => f.set({ sequence: v })}>
         {f.seg('Change', 'transition', [

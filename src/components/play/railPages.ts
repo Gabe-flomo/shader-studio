@@ -13,6 +13,7 @@
 import type { PlayRecord } from '../../types/play';
 import type { IconName } from '../ui/iconPaths';
 import { tabForPage, type PlayTab } from './playUi';
+import { asRules } from '../../play/rules';
 
 /**
  * The rail's own grouping of pages, which sections its icons (RAIL_CATEGORIES
@@ -28,7 +29,7 @@ export type RailPage =
   | 'layers' | 'signals' | 'background'
   | 'finish-picture' | 'finish-sound'
   | 'engine-performance'
-  | 'mappings' | 'midi-file' | 'pad-grid';
+  | 'midi-file' | 'pad-grid';
 
 export interface RailPageDef {
   id: RailPage;
@@ -48,24 +49,23 @@ export interface RailCategoryDef {
 }
 
 export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
-  controls: { id: 'controls', category: 'controls', label: 'Controls', description: 'The sliders, colours and buttons people play' },
+  controls: { id: 'controls', category: 'controls', label: 'Inputs', description: 'The controls people play beside the sources that drive them' },
   layers: { id: 'layers', category: 'layers', label: 'Layers', description: 'What sits on the picture, with the selected layer’s editor' },
-  signals: { id: 'signals', category: 'signals', label: 'Signals', description: 'When something happens, and what it does next' },
+  signals: { id: 'signals', category: 'signals', label: 'Rules', description: 'When something happens, what to do: a pinch bursts the sparks' },
   background: { id: 'background', category: 'layers', label: 'Background', description: 'What the picture is under the layers' },
   'finish-picture': { id: 'finish-picture', category: 'finish', label: 'Picture', description: 'Grade, lens, film and time effects over the whole picture' },
-  'finish-sound': { id: 'finish-sound', category: 'finish', label: 'Sound', description: 'Reverb, echo, filter and more on each sound and the master' },
+  'finish-sound': { id: 'finish-sound', category: 'engine', label: 'Sound', description: 'Reverb, echo, filter and more on each sound and the master' },
   'engine-performance': { id: 'engine-performance', category: 'engine', label: 'Arrangement', description: 'Racks of synths and effects, played live' },
-  mappings: { id: 'mappings', category: 'controls', label: 'Mappings', description: 'Inputs onto controls: source, range, curve, smoothing' },
   'midi-file': { id: 'midi-file', category: 'controls', label: 'MIDI file', description: 'A MIDI file played as if from a controller' },
   'pad-grid': { id: 'pad-grid', category: 'controls', label: 'Pad grid', description: 'A grid of pads from a controller, read as sources' },
 };
 
 export const RAIL_CATEGORIES: readonly RailCategoryDef[] = [
-  { id: 'controls', label: 'Mappings', icon: 'sliders', description: 'The controls people play, and the values mapped onto them', pages: ['controls', 'mappings', 'midi-file', 'pad-grid'] },
+  { id: 'controls', label: 'Inputs', icon: 'sliders', description: 'The controls people play, and the sources that drive them', pages: ['controls', 'midi-file', 'pad-grid'] },
+  { id: 'signals', label: 'Rules', icon: 'bolt', description: 'When something happens, what to do', pages: ['signals'] },
   { id: 'layers', label: 'Layers', icon: 'layers', description: 'What acts on the picture, and the background', pages: ['layers', 'background'] },
-  { id: 'signals', label: 'Signals', icon: 'bolt', description: 'Conditions that report what is happening, and what they set off', pages: ['signals'] },
-  { id: 'finish', label: 'Finish', icon: 'curve', description: 'Effects over the picture and the sound', pages: ['finish-picture', 'finish-sound'] },
-  { id: 'engine', label: 'Engine', icon: 'piano', description: 'The Audio engine', pages: ['engine-performance'] },
+  { id: 'finish', label: 'Look', icon: 'curve', description: 'Grade, lens, film and time effects over the whole picture', pages: ['finish-picture'] },
+  { id: 'engine', label: 'Sound', icon: 'piano', description: 'The Audio engine, and effects on the sound', pages: ['engine-performance', 'finish-sound'] },
 ];
 
 /**
@@ -86,7 +86,7 @@ export function isRailPage(v: unknown): v is RailPage {
 
 /** A saved page id from before a page was folded into another (Actions into Signals, 2026-09-30), as today's. */
 export function currentRailPage(v: unknown): unknown {
-  return v === 'actions' ? 'signals' : v;
+  return v === 'actions' ? 'signals' : v === 'mappings' ? 'controls' : v;
 }
 
 export function categoryOf(page: RailPage): RailCategory {
@@ -111,7 +111,6 @@ export function firstPageOf(cat: RailCategory): RailPage {
 export function pageForTab(tab: PlayTab, finishView: 'picture' | 'sound' = 'picture'): RailPage {
   switch (tab) {
     case 'finish': return finishView === 'sound' ? 'finish-sound' : 'finish-picture';
-    case 'mappings': return 'mappings';
     case 'engine': return 'engine-performance';
     case 'layers': return 'layers';
     default: return 'controls';
@@ -123,11 +122,10 @@ export function pageCount(page: RailPage, play: PlayRecord): number | undefined 
   switch (page) {
     case 'controls': return play.controls.length;
     case 'layers': return play.layers.length;
-    case 'signals': return (play.signals?.length ?? 0) + (play.actions?.length ?? 0);
+    case 'signals': return asRules(play).signals?.length ?? 0;
     case 'finish-picture': return play.finish?.effects.length ?? 0;
     case 'finish-sound': return Object.values(play.audioFx?.chains ?? {}).reduce((n, c) => n + c.effects.length, 0);
     case 'engine-performance': return play.audioEngine?.racks.length ?? 0;
-    case 'mappings': return play.mappings.length + (play.pairMappings?.length ?? 0);
     default: return undefined;
   }
 }

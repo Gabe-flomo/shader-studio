@@ -204,6 +204,19 @@ export type SignalDef =
 export interface PlaySignal {
   id: string;
   name: string;
+  /**
+   * What makes it true (implementation guide, phase 2): its inputs, combined.
+   * A trigger input is true while held or met (a tap for its frame); a signal
+   * input either mirrors the other's level or takes its rise or fall as a
+   * pulse after a delay. With no inputs it is true only when something sends
+   * it (an action, a layer event, an increment). `when` is the older shape of
+   * the same thing and is read the same way (play/rules.ts normalizeRules).
+   */
+  inputs?: SignalInput[];
+  /** How the inputs combine: any (or), all (and), none (not), one (xor). Default any. */
+  combine?: SignalCombine;
+  /** Its reactions: what it does (burst, next image, send another signal…), each with its own firing mode. */
+  do?: PlayReaction[];
   when?: SignalDef;
   capture?: SignalCapture;
   /** Seconds its rise and fall arrive late (play/kit/signals.js sgShapeStep). */
@@ -224,6 +237,35 @@ export interface PlaySignal {
   seed?: number;
 }
 export interface SignalLink { to: string; delay: number; on?: 'rise' | 'fall' }
+
+export type SignalCombine = 'any' | 'all' | 'none' | 'one';
+export const SIGNAL_COMBINES: readonly SignalCombine[] = ['any', 'all', 'none', 'one'];
+
+/**
+ * One input of a signal. `as` on a signal input: mirror follows its level
+ * (true while it is true, read in dependency order), rise and fall take that
+ * moment as a pulse, `delay` seconds later (a chain; a loop when it comes
+ * back round).
+ */
+export type SignalInput =
+  | { kind: 'trigger'; trigger: TriggerSpec }
+  | { kind: 'signal'; signal: string; as: 'mirror' | 'rise' | 'fall'; delay?: number };
+
+/** One Do of a signal: an action (or Send a signal) with its own firing mode. */
+export interface PlayReaction {
+  id: string;
+  do: ActionKind;
+  layerId: string;
+  amount: number;
+  enabled: boolean;
+  /** Send a signal: which one. */
+  signal?: string;
+  /** Play notes: what and how. */
+  notes?: NotesSpec;
+  /** once (when it turns on), held (while it is on), every (every N while on), release (when it turns off)… */
+  fire?: FireSpec;
+}
+export const REACTIONS_PER_SIGNAL_MAX = 16;
 export const SIGNAL_LINKS_MAX = 8;
 
 /**
@@ -451,9 +493,10 @@ export const DEFAULT_HAND_RESPONSIVENESS = 0.5;
 export const DEFAULT_HAND_STRICTNESS = 0.5;
 
 /** Does a setup read hands anywhere: a hand source, a gesture trigger (mapping or action), or a null following a hand? */
-export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings' | 'signals'>>): boolean {
+export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings' | 'signals' | 'sources'>>): boolean {
   return (play.pairMappings ?? []).some(pairMappingUsesHands)
-    || (play.signals ?? []).some(s => s.when?.kind === 'trigger' && triggerUsesHands(s.when.trigger)) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
+    || (play.sources ?? []).some(s => s.enabled && (s.source.kind === 'hand' || (s.source.kind === 'trigger' && triggerUsesHands(s.source.trigger)) || s.outputs.some(o => o.kind === 'step' && o.step.on === 'trigger' && triggerUsesHands(o.step.trigger))))
+    || (play.signals ?? []).some(s => (s.when?.kind === 'trigger' && triggerUsesHands(s.when.trigger)) || !!s.inputs?.some(x => x.kind === 'trigger' && triggerUsesHands(x.trigger))) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
     || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId))
     || (!!m.increment && ((m.increment.on === 'trigger' && triggerUsesHands(m.increment.trigger)) || (m.increment.on === 'repeat' && conditionUsesHands(m.increment.when)))))
     || (play.actions ?? []).some(a => triggerUsesHands(a.trigger))
@@ -519,7 +562,8 @@ export type TriggerMode = 'envelope' | 'toggle' | 'step' | 'random';
  *   random   a new random value every frame (jitter)
  *   stepped  a random value held for 1/`rate` s, snapped to `steps` levels (posterised time)
  */
-export type NoiseType = 'smooth' | 'drift' | 'random' | 'stepped';
+/** bell: clusters round the middle, rarely at the ends; biased: leans low or high (`bias`). */
+export type NoiseType = 'smooth' | 'drift' | 'random' | 'stepped' | 'bell' | 'biased';
 export type LfoShape = 'sine' | 'triangle' | 'saw' | 'square' | 'random';
 
 export type PlaySource =
@@ -567,7 +611,8 @@ export type PlaySource =
   /** An audio reader's level, 0..1 (see AudioReader). */
   | { kind: 'reader'; readerId: string }
   /** Random motion on the graph clock. `seed` makes two noise rows differ. `steps` (stepped only) posterises the value, 0 = no snapping. */
-  | { kind: 'noise'; type: NoiseType; rate: number; seed: number; steps: number }
+  /** `bias` (biased): 0 leans low, 0.5 even, 1 leans high. `reseed`: a new path each time Play starts (else the seed is kept, so takes replay the same). */
+  | { kind: 'noise'; type: NoiseType; rate: number; seed: number; steps: number; bias?: number; reseed?: boolean }
   /** A trigger (key, note, click, OSC message, beat) driving an envelope, toggle, step or random value. */
   | { kind: 'trigger'; trigger: TriggerSpec; mode: TriggerMode; attack: number; decay: number; sustain: number; release: number; steps: number; velocity: boolean }
   /**
@@ -803,9 +848,36 @@ export type { LayerGroup } from './layerGroups';
  */
 export type BuiltinActionKind = 'burst' | 'scatter' | 'reset' | 'freeze' | 'next' | 'prev' | 'shuffle' | 'toggle' | 'show' | 'hide' | 'drop' | 'clear' | 'goto' | 'pad' | 'multiply' | 'cull';
 /** A built-in action, or a button a Script layer declares (`script:<key>`). */
-export type ActionKind = BuiltinActionKind | 'signal' | `script:${string}`;
+export type ActionKind = BuiltinActionKind | 'signal' | 'notes' | `script:${string}`;
 /** The action that sends a signal (its `signal`) instead of doing something to a layer. */
 export const SIGNAL_ACTION = 'signal' as const;
+/** The reaction that plays notes on a rack of the Audio engine (its `notes`) instead of doing something to a layer. */
+export const NOTES_ACTION = 'notes' as const;
+
+/** How Play notes plays (play/notes.ts): all at once, strummed, one at a time in turn, or one picked at random. */
+export type NotesPlay = 'chord' | 'strum' | 'arp' | 'random';
+export const NOTES_SCALES = ['chromatic', 'major', 'minor', 'pentatonic', 'blues'] as const;
+export type NotesScale = (typeof NOTES_SCALES)[number];
+export interface NotesSpec {
+  rackId: string;
+  /** MIDI note numbers (at most NOTES_MAX). */
+  notes: number[];
+  play: NotesPlay;
+  /** Strum: between each note; ms. */
+  gapMs: number;
+  /** 1..127, and how far each note may stray from it (0..1). */
+  velocity: number;
+  velRandom: number;
+  /** How long each note sounds, ms (the note-off is sent then, or when Play stops). */
+  lengthMs: number;
+  /** Snap every note to this scale (chromatic: as written). */
+  scale: NotesScale;
+  root: number;
+}
+export const NOTES_MAX = 12;
+export function defaultNotes(rackId: string): NotesSpec {
+  return { rackId, notes: [60, 64, 67], play: 'chord', gapMs: 40, velocity: 100, velRandom: 0, lengthMs: 400, scale: 'chromatic', root: 0 };
+}
 
 /** The param key behind a script action kind, or null for a built-in one. */
 export function scriptActionKey(kind: string): string | null {
@@ -823,7 +895,54 @@ export interface PlayAction {
   enabled: boolean;
   /** Send a signal: which one (a PlaySignal id). */
   signal?: string;
+  /** Play notes (a rule's reaction): what and how. */
+  notes?: NotesSpec;
 }
+
+// ── Sources and routes (implementation guide, phase 1: play/kit/routes.js) ─
+
+/**
+ * A Route: a source's link to one control. Replace sets the control (outMin
+ * at the source's 0, outMax at its 1, through the curve); Add moves it from
+ * where it is (outMin and outMax are the swing: by default half the control's
+ * range either way), summed with other Adds and kept in range. Smoothing and
+ * delay are per route, so an old mapping's behaviour carries over exactly.
+ */
+export interface PlayRoute {
+  id: string;
+  /** A control id. */
+  to: string;
+  mode: 'replace' | 'add';
+  outMin: number;
+  outMax: number;
+  curve: PlayCurve;
+  curveY?: number[];
+  /** Colour controls: the channel it writes (brightness when unset). */
+  channel?: 0 | 1 | 2;
+  smoothMs?: number;
+  delayMs?: number;
+  enabled: boolean;
+}
+
+/** What a source gives out: its value, or a Step (an increment counting through its own range lo..hi). */
+export type SourceOutput =
+  | { kind: 'value'; routes: PlayRoute[] }
+  | { kind: 'step'; step: PlayIncrement; lo: number; hi: number; routes: PlayRoute[] };
+
+/**
+ * A Source: something read once a frame (any PlaySource kind) with its
+ * outputs, each with any number of routes. A source can have none (it is
+ * still read, and conditions can watch it as `src:<id>`). Old mappings are
+ * read as sources too (play/kit/routes.js rtSourcesOf), one each.
+ */
+export interface PlaySourceDef {
+  id: string;
+  label?: string;
+  enabled: boolean;
+  source: PlaySource;
+  outputs: SourceOutput[];
+}
+export const ROUTES_PER_SOURCE_MAX = 32;
 
 export const ACTION_KINDS: readonly BuiltinActionKind[] = ['burst', 'scatter', 'reset', 'freeze', 'next', 'prev', 'shuffle', 'toggle', 'show', 'hide', 'drop', 'clear', 'goto', 'pad', 'multiply', 'cull'];
 
@@ -1119,6 +1238,8 @@ export interface PlayRecord {
   pairs?: PlayPair[];
   /** Settings of loops of linked signals (speed, laps, running), by their members. Absent = defaults. */
   loops?: PlayLoop[];
+  /** Sources with their outputs and routes (the newer shape of a mapping). Absent = none; old `mappings` still read. */
+  sources?: PlaySourceDef[];
   /** Mappings onto pairs (both axes at once, A or B, with axis swap). Absent = none. */
   pairMappings?: PlayPairMapping[];
   /** Spreads: controls offset together along a curve (docs/spread-control.md). Absent = none. */
@@ -1543,6 +1664,59 @@ function parseAction(raw: unknown): PlayAction | null {
   return { id, trigger, do: kind, layerId, amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
 }
 
+/** One Do of a signal: an action kind (a Send a signal needs its signal), with its firing mode. */
+function parseReaction(raw: unknown): PlayReaction | null {
+  const a = raw as Record<string, unknown> | null;
+  const id = a && str(a.id);
+  if (!a || !id) return null;
+  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION || a.do === NOTES_ACTION) ? (a.do as ActionKind) : null;
+  if (!kind) return null;
+  if (kind === NOTES_ACTION) {
+    const notes = parseNotes(a.notes);
+    if (!notes) return null;
+    const r: PlayReaction = { id, do: kind, layerId: '', amount: 1, enabled: a.enabled !== false, notes };
+    const f = parseFire(a.fire);
+    if (f) r.fire = f;
+    return r;
+  }
+  const out: PlayReaction = kind === SIGNAL_ACTION
+    ? { id, do: kind, layerId: '', amount: 1, enabled: a.enabled !== false, signal: (str(a.signal) ?? '').slice(0, 80) }
+    : { id, do: kind, layerId: str(a.layerId) ?? '', amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
+  const fire = parseFire(a.fire);
+  if (fire) out.fire = fire;
+  return out;
+}
+
+/** Play notes' settings, each kept in range; null without a rack. */
+function parseNotes(raw: unknown): NotesSpec | null {
+  const o = raw as Record<string, unknown> | null;
+  const rackId = o && str(o.rackId);
+  if (!o || !rackId) return null;
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  const notes = (Array.isArray(o.notes) ? o.notes : []).filter((n): n is number => Number.isFinite(n)).map(n => clamp(Math.round(n), 0, 127)).slice(0, NOTES_MAX);
+  const play: NotesPlay = o.play === 'strum' || o.play === 'arp' || o.play === 'random' ? o.play : 'chord';
+  const scale = (NOTES_SCALES as readonly string[]).includes(o.scale as string) ? (o.scale as NotesScale) : 'chromatic';
+  return {
+    rackId: rackId.slice(0, 80), notes, play, scale, root: clamp(Math.round(num(o.root, 0)), 0, 11),
+    gapMs: clamp(num(o.gapMs, 40), 0, 2000), velocity: clamp(Math.round(num(o.velocity, 100)), 1, 127), velRandom: clamp(num(o.velRandom, 0), 0, 1), lengthMs: clamp(num(o.lengthMs, 400), 20, 8000),
+  };
+}
+
+/** A signal's input: a trigger, or another signal mirrored or taken as a pulse (after a delay). */
+function parseSignalInput(raw: unknown): SignalInput | null {
+  const x = raw as Record<string, unknown> | null;
+  if (!x) return null;
+  if (x.kind === 'trigger') { const trigger = parseTrigger(x.trigger); return trigger ? { kind: 'trigger', trigger } : null; }
+  if (x.kind === 'signal' && typeof x.signal === 'string' && x.signal) {
+    const as = x.as === 'rise' || x.as === 'fall' ? x.as : 'mirror';
+    const out: SignalInput = { kind: 'signal', signal: x.signal.slice(0, 80), as };
+    const d = num(x.delay, 0);
+    if (as !== 'mirror' && d > 0) out.delay = Math.min(SIGNAL_TIME_MAX, d);
+    return out;
+  }
+  return null;
+}
+
 function parseSource(raw: unknown): PlaySource | null {
   if (!raw || typeof raw !== 'object') return null;
   const s = raw as Record<string, unknown>;
@@ -1624,8 +1798,11 @@ function parseSource(raw: unknown): PlaySource | null {
       return readerId ? { kind: 'reader', readerId } : null;
     }
     case 'noise': {
-      const type = s.type === 'drift' || s.type === 'random' || s.type === 'stepped' ? s.type : 'smooth';
-      return { kind: 'noise', type, rate: Math.max(0.01, num(s.rate, 1)), seed: Math.round(num(s.seed, 1)), steps: Math.max(0, Math.min(64, Math.round(num(s.steps, 0)))) };
+      const type = s.type === 'drift' || s.type === 'random' || s.type === 'stepped' || s.type === 'bell' || s.type === 'biased' ? s.type : 'smooth';
+      const out: PlaySource = { kind: 'noise', type, rate: Math.max(0.01, num(s.rate, 1)), seed: Math.round(num(s.seed, 1)), steps: Math.max(0, Math.min(64, Math.round(num(s.steps, 0)))) };
+      if (type === 'biased') out.bias = Math.max(0, Math.min(1, num(s.bias, 0.5)));
+      if (s.reseed === true) out.reseed = true;
+      return out;
     }
     case 'sensor': {
       const layerId = str(s.layerId);
@@ -1717,6 +1894,46 @@ function parseMapping(raw: unknown, controlIds: Set<string>): PlayMapping | null
 const pick = <T extends string>(v: unknown, all: readonly T[], d: T): T => (typeof v === 'string' && (all as readonly string[]).includes(v) ? (v as T) : d);
 
 /** An Increment from a file, or null when there is none. Numbers out of reason are brought back in. */
+/** Sources whose source is readable; routes only to controls of the record (a source left with none is kept: it can be watched). */
+function parseSourceDefs(raw: unknown, controlIds: ReadonlySet<string>, sourceOk: (s: PlaySource) => boolean): PlaySourceDef[] {
+  const out: PlaySourceDef[] = [];
+  const seen = new Set<string>();
+  for (const x of Array.isArray(raw) ? raw : []) {
+    const o = x as Record<string, unknown> | null;
+    const id = o && str(o.id);
+    const source = o ? parseSource(o.source) : null;
+    if (!o || !id || seen.has(id) || !source || !sourceOk(source)) continue;
+    seen.add(id);
+    const outputs: SourceOutput[] = [];
+    for (const y of Array.isArray(o.outputs) ? o.outputs : []) {
+      const p = y as Record<string, unknown> | null;
+      if (!p) continue;
+      const routes = (Array.isArray(p.routes) ? p.routes : []).map(parseRoute).filter((r): r is PlayRoute => !!r && controlIds.has(r.to)).slice(0, ROUTES_PER_SOURCE_MAX);
+      if (p.kind === 'step') {
+        const step = parseIncrement(p.step);
+        if (step) outputs.push({ kind: 'step', step, lo: num(p.lo, 0), hi: num(p.hi, 1), routes });
+      } else outputs.push({ kind: 'value', routes });
+    }
+    const def: PlaySourceDef = { id: id.slice(0, 80), enabled: o.enabled !== false, source, outputs: outputs.length ? outputs : [{ kind: 'value', routes: [] }] };
+    if (typeof o.label === 'string' && o.label.trim()) def.label = o.label.trim().slice(0, 60);
+    out.push(def);
+  }
+  return out;
+}
+
+function parseRoute(raw: unknown): PlayRoute | null {
+  const r = raw as Record<string, unknown> | null;
+  const id = r && str(r.id), to = r && str(r.to);
+  if (!r || !id || !to) return null;
+  const curve = typeof r.curve === 'string' && CURVES.has(r.curve) ? r.curve as PlayCurve : 'linear';
+  const out: PlayRoute = { id, to, mode: r.mode === 'add' ? 'add' : 'replace', outMin: num(r.outMin, 0), outMax: num(r.outMax, 1), curve, enabled: r.enabled !== false };
+  if (curve === 'custom') { const ys = curveY(r.curveY); if (ys) out.curveY = ys; else out.curve = 'linear'; }
+  if (r.channel === 0 || r.channel === 1 || r.channel === 2) out.channel = r.channel;
+  if (typeof r.smoothMs === 'number' && r.smoothMs > 0) out.smoothMs = Math.min(5000, r.smoothMs);
+  if (typeof r.delayMs === 'number' && r.delayMs > 0) out.delayMs = Math.min(10000, r.delayMs);
+  return out;
+}
+
 export function parseIncrement(raw: unknown): PlayIncrement | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
@@ -1755,7 +1972,27 @@ export function parseIncrement(raw: unknown): PlayIncrement | null {
  * malformed is dropped (a control without a target, a mapping whose control is
  * gone) rather than failing the whole load; a missing key is an empty record.
  */
+/**
+ * Turns the older wiring into rules (play/rules.ts normalizeRules). It
+ * registers itself when it loads (the app loads it first, src/main.tsx):
+ * importing it here would close an import loop through the labels it names
+ * rules with, which read this file's constants while it is still loading.
+ */
+let rulesNormaliser: ((p: PlayRecord) => PlayRecord) | null = null;
+export function setRulesNormaliser(fn: (p: PlayRecord) => PlayRecord): void { rulesNormaliser = fn; }
+
+/**
+ * Open a record: validated (parsePlayRecordAsSaved), then the older wiring
+ * (actions, a signal's When, links) turned into the rules it plays as
+ * (implementation guide, phase 9). Every record the app holds is in the rules shape.
+ */
 export function parsePlayRecord(raw: unknown): PlayRecord {
+  const p = parsePlayRecordAsSaved(raw);
+  return rulesNormaliser ? rulesNormaliser(p) : p;
+}
+
+/** A record validated as it was saved, older wiring and all (what normalizeRules reads; tests of the file's own shape). */
+export function parsePlayRecordAsSaved(raw: unknown): PlayRecord {
   const empty = emptyPlayRecord();
   if (!raw || typeof raw !== 'object') return empty;
   const r = raw as Record<string, unknown>;
@@ -1847,6 +2084,11 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     if (actions.length) out.actions = actions;
   }
   const signals = parseSignals(r.signals);
+  // A reaction on a missing layer goes, as an action would; a trigger input on something missing goes too.
+  for (const s of signals) {
+    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || x.do === NOTES_ACTION || layerIds.has(x.layerId)); if (d.length) s.do = d; else delete s.do; }
+    if (s.inputs) { const k = s.inputs.filter(x => x.kind !== 'trigger' || triggerOk(x.trigger)); if (k.length) s.inputs = k; else delete s.inputs; }
+  }
   if (signals.length) out.signals = signals;
   const loops = (Array.isArray(r.loops) ? r.loops : []).flatMap((x: unknown) => {
     const o = x as Record<string, unknown> | null;
@@ -1881,6 +2123,8 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     const ctl = new Set(out.controls.map(c => c.id));
     out.mappings = out.mappings.filter(m => ctl.has(m.controlId) && (m.source.kind !== 'control' || ctl.has(m.source.controlId)));
   }
+  const sources = parseSourceDefs(r.sources, new Set(out.controls.map(c => c.id)), x => layerOk(x) && (x.kind !== 'trigger' || triggerOk(x.trigger)));
+  if (sources.length) out.sources = sources;
   if (typeof r.notes === 'string' && r.notes.trim()) out.notes = r.notes.slice(0, 8000);
   const credit = parseSourceCredit(r.source);
   if (credit) out.source = credit;
@@ -1954,6 +2198,11 @@ function parseSignals(raw: unknown): PlaySignal[] {
     const sig: PlaySignal = { id: id.slice(0, 80), name: (typeof o.name === 'string' && o.name.trim() ? o.name : 'Signal').slice(0, 60) };
     const when = parseSignalDef(o.when);
     if (when) sig.when = when;
+    const inputs = (Array.isArray(o.inputs) ? o.inputs : []).map(parseSignalInput).filter((x): x is SignalInput => !!x).slice(0, SIGNAL_INPUTS_MAX);
+    if (inputs.length) sig.inputs = inputs;
+    if (typeof o.combine === 'string' && (SIGNAL_COMBINES as readonly string[]).includes(o.combine) && o.combine !== 'any') sig.combine = o.combine as SignalCombine;
+    const reactions = (Array.isArray(o.do) ? o.do : []).map(parseReaction).filter((x): x is PlayReaction => !!x).slice(0, REACTIONS_PER_SIGNAL_MAX);
+    if (reactions.length) sig.do = reactions;
     for (const k of ['delay', 'hold', 'linger'] as const) { const v = o[k]; if (typeof v === 'number' && v > 0) sig[k] = Math.min(SIGNAL_TIME_MAX, v); }
     if (typeof o.chance === 'number' && o.chance < 1) sig.chance = Math.max(SIGNAL_CHANCE_MIN, o.chance);
     if (typeof o.seed === 'number' && Number.isFinite(o.seed)) sig.seed = Math.round(o.seed);
@@ -1971,6 +2220,8 @@ function parseSignals(raw: unknown): PlaySignal[] {
   // A combination keeps only inputs that are signals of this setup (and not itself).
   const ids = new Set(out.map(s => s.id));
   for (const s of out) if (s.when?.kind === 'logic') s.when = { ...s.when, inputs: s.when.inputs.filter(i => ids.has(i) && i !== s.id) };
+  // Signal inputs only from signals of this setup (one listening to itself is a loop, and allowed).
+  for (const s of out) if (s.inputs) { const k = s.inputs.filter(x => x.kind !== 'signal' || ids.has(x.signal)); if (k.length) s.inputs = k; else delete s.inputs; }
   // Links only to signals of this setup (a link to itself is a one-signal loop, and allowed).
   for (const s of out) if (s.links) { const l = s.links.filter(x => ids.has(x.to)); if (l.length) s.links = l; else delete s.links; }
   return out;

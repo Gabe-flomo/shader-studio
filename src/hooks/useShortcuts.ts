@@ -48,7 +48,7 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'railLayers',        label: 'Go to Layers',          group: 'View',       defaultCombo: 'cmd+2',       description: 'On the Play page: open the split (if it’s closed) and show Layers, on the page it was last on. Also ⌃2' },
   { id: 'railFinish',        label: 'Go to Finish',          group: 'View',       defaultCombo: 'cmd+3',       description: 'On the Play page: open the split (if it’s closed) and show Finish, on the page it was last on. Also ⌃3' },
   { id: 'railEngine',        label: 'Go to Engine',          group: 'View',       defaultCombo: 'cmd+4',       description: 'On the Play page: open the split (if it’s closed) and show the Audio engine. Also ⌃4' },
-  { id: 'railSignals',       label: 'Go to Signals',         group: 'View',       defaultCombo: 'cmd+5',       description: 'On the Play page: open the split (if it’s closed) and show Signals: conditions and what they set off. Also ⌃5' },
+  { id: 'railSignals',       label: 'Go to Rules',           group: 'View',       defaultCombo: 'cmd+5',       description: 'On the Play page: open the split (if it’s closed) and show Rules: when something happens, what to do. Also ⌃5' },
   // Node graph — add nodes
   { id: 'addNode',           label: 'Open node palette',     group: 'Add Nodes',  defaultCombo: 'a',           description: 'Open the add-node palette' },
   { id: 'addUV',             label: 'Add UV node',           group: 'Add Nodes',  defaultCombo: 'u',           description: 'Instantly add a UV node' },

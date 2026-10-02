@@ -91,6 +91,20 @@ export function klPictureAt(grid, W, H, x, y, r, ch) {
 }
 const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1, agents: 1 };
 
+/**
+ * A value as words for a Text layer that reads one (implementation guide 8):
+ * a number to `decimals` places, a percent of 0..1, On/Off (above a half), or
+ * the layer's own text with {v} put in. '—' while the value has none.
+ */
+export function klReadText(v, format, decimals, template) {
+  const d = Math.max(0, Math.min(6, decimals | 0));
+  const word = v === null || v === undefined || !isFinite(v) ? '—'
+    : format === 'percent' ? (v * 100).toFixed(Math.max(0, d - 2)) + '%'
+    : format === 'onoff' ? (v > 0.5 ? 'ON' : 'OFF')
+    : v.toFixed(d);
+  return format === 'template' ? String(template || '{v}').split('{v}').join(word) : word;
+}
+
 export function createLayerKit() {
   const pool = {};
   const parts = new Map(), bodies = new Map(), brushes = new Map(), springs = new Map(), texts = new Map(), audios = new Map(), masks = new Map(), scripts = new Map();
@@ -895,7 +909,9 @@ export function createLayerKit() {
             const src = l.kind === 'image' ? env.image(l.src) : l.kind === 'camera' ? cam : l.kind === 'video' ? videoOf(env, l) : null;
             if (l.kind !== 'text' && !src) break;
             let text = l.text, anim = null;
-            if (l.kind === 'text' && l.sequence) {
+            // A Text layer that reads a value shows it (formatted), not its own text.
+            if (l.kind === 'text' && l.reads && env.readValue) text = klReadText(env.readValue(l.reads), l.readFormat, l.readDecimals, l.text);
+            else if (l.kind === 'text' && l.sequence) {
               const t = textState(l, time), lines = String(l.text).split('\n');
               text = lines[t.index] ?? '';
               const age = time - t.changedAt, e = Math.min(1, Math.max(0, age / 0.35));
@@ -1333,7 +1349,7 @@ export function createLayerKit() {
       // A crossfade under way, or a sketch showing in the background.
       if (bqLast && record.layers[0] && record.layers[0].id === bqLast.layerId && (bqLast.fading || bqLast.items.some(i => i.item.kind === 'script'))) return true;
       const mattes = kmMatteSources(record.layers, l => (shown.has(l.id) ? shown.get(l.id) : l.visible));
-      return record.layers.some(l => ((shown.has(l.id) ? shown.get(l.id) : l.visible) || mattes.has(l.id)) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && l.sequence) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera') || (l.kind === 'data' && dStates.has(l.id) && dStates.get(l.id).from >= 0)));
+      return record.layers.some(l => ((shown.has(l.id) ? shown.get(l.id) : l.visible) || mattes.has(l.id)) && (KIT_ANIMATED[l.kind] || (l.kind === 'null' && l.follow !== 'none') || (l.kind === 'text' && (l.sequence || !!l.reads)) || (l.kind === 'contours' && l.flow !== 0) || (l.kind === 'glyphs' && l.readFrom === 'camera') || (l.kind === 'data' && dStates.has(l.id) && dStates.get(l.id).from >= 0)));
     },
     /**
      * Forget all state (a new recording starts from scratch). `seed` (a take's)

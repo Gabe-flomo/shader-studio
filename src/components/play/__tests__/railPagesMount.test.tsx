@@ -91,14 +91,19 @@ describe('the rail’s full-width pages', () => {
     }
   }
 
-  it('Mappings full width is the grouped workspace, with the first mapping’s editor', () => {
-    const host = mountPage('mappings', true);
-    expect(host.querySelector('[data-mappings-workspace]')).not.toBeNull();
-    expect(host.querySelector('[data-mapping-group="keys"]')).not.toBeNull();
-    expect(host.querySelectorAll('[data-mapping-row]').length).toBe(2);
-    expect(host.querySelector('[data-mapping-editor="m1"]')).not.toBeNull();
+  it('Inputs full width is the board: the controls beside the sources', () => {
+    const host = mountPage('controls', true);
+    expect(host.querySelector('[data-inputs-board="columns"]')).not.toBeNull();
+    expect(host.querySelector('[data-column="controls"] [data-controls-board=""]')).not.toBeNull();
+    expect(host.querySelector('[data-column="sources"] [data-mappings="tab"]')).not.toBeNull();
     // The MIDI file and the pad grid have pages of their own.
     expect(host.textContent).not.toContain('Set up a pad grid');
+  });
+
+  it('Inputs narrow is two tabs, Controls first', () => {
+    const host = mountPage('controls', false);
+    expect(host.querySelector('[data-inputs-board="tabs"]')).not.toBeNull();
+    expect(host.querySelector('[data-controls-board=""]')).not.toBeNull();
   });
 
   it('Controls full width is the board: grouped cards with a trace slot each', () => {
@@ -123,7 +128,7 @@ describe('the rail’s full-width pages', () => {
     roots.push({ root, el });
     act(() => root.render(<PlayRail />));
     const cats = el.querySelectorAll('[data-rail-category]');
-    expect(Array.from(cats).map(c => c.getAttribute('data-rail-category'))).toEqual(['controls', 'layers', 'signals', 'finish', 'engine']);
+    expect(Array.from(cats).map(c => c.getAttribute('data-rail-category'))).toEqual(['controls', 'signals', 'layers', 'finish', 'engine']);
     act(() => (el.querySelector('[data-rail-category="layers"]') as HTMLButtonElement).click());
     expect(usePlaySplit.getState().railPage).toBe('layers');
     expect(el.querySelector('[data-popover]')).toBeNull();
@@ -134,8 +139,8 @@ describe('the rail’s full-width pages', () => {
     usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'layers' });
     const layers = categoryDef('layers');
     expect(layers.pages.length).toBeGreaterThan(1);
-    expect(categoryDef('controls').pages.length).toBe(4); // Controls & Mappings merged: a strip, not a plain page.
-    expect(categoryDef('engine').pages.length).toBe(1); // Engine stays a plain page, not a strip.
+    expect(categoryDef('controls').pages.length).toBe(3); // Inputs, the MIDI file and the pad grid: a strip.
+    expect(categoryDef('signals').pages.length).toBe(1); // Rules stays a plain page, not a strip.
     const el = document.createElement('div');
     document.body.appendChild(el);
     const root = createRoot(el);

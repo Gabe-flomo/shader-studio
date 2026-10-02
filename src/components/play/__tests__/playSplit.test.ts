@@ -34,7 +34,7 @@ describe('split prefs', () => {
     expect(parseSplitPrefs(JSON.stringify({ v: 2, on: true, sidebarHidden: true })).sidebar).toBe('hidden');
     expect(parseSplitPrefs(JSON.stringify({ v: 2, on: false, sidebar: 'full' })).on).toBe(false);
     // Saved before the rail became the default: opens split with the rail, keeps the rest.
-    expect(parseSplitPrefs(JSON.stringify({ on: false, side: 'bottom', sidebar: 'hidden', railPage: 'mappings' }))).toMatchObject({ on: true, sidebar: 'rail', side: 'bottom', railPage: 'mappings' });
+    expect(parseSplitPrefs(JSON.stringify({ on: false, side: 'bottom', sidebar: 'hidden', railPage: 'mappings' }))).toMatchObject({ on: true, sidebar: 'rail', side: 'bottom', railPage: 'controls' }); // Mappings is on the Inputs board now.
     expect(parseSplitPrefs(JSON.stringify({ v: 2, sidebar: 'drawer', railPage: 'nope', railRatio: 'x' }))).toMatchObject({ sidebar: 'rail', railPage: 'controls', railRatio: null });
     expect(parseSplitPrefs(JSON.stringify({ ratio: 0.99 })).ratio).toBe(RATIO_MAX);
     expect(parseSplitPrefs(JSON.stringify({ ratio: -3 })).ratio).toBe(RATIO_MIN);

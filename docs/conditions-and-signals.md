@@ -90,6 +90,47 @@ In the file a signal may carry `"when": { "kind": "trigger", "trigger": {…} }`
 
 Deleting a signal leaves what sent or listened for it in place, marked **Missing signal**. Signals themselves aren't recorded in takes: what they did is (the actions they fired, the controls they moved).
 
+## Signals as rules (guide phase 2)
+
+A signal is a rule: **When** its inputs, combined, **Do** its reactions.
+
+- `inputs`: a list. `{kind:'trigger', trigger}` follows a trigger's level. `{kind:'signal', signal, as}` uses another signal: `mirror` follows its level; `rise` or `fall` takes its edge after `delay` seconds.
+- `combine`: `any` (the default), `all`, `none` or `one`. These are the old or, and, not and xor. Mirrored inputs and trigger inputs are combined. Rise and fall inputs press the signal (as links did).
+- `do`: reactions, `{id, do, layerId, amount, enabled, signal?, fire?}`. Each is an action fired by this signal, with its own firing mode (rise, held, release, …).
+
+The older shape still loads and plays. `normalizeRules` (`src/play/rules.ts`) rewrites it:
+
+- `when` becomes inputs.
+- Links become rise/fall inputs on their targets.
+- Actions on a signal become its reactions.
+- Every other action joins one rule per trigger, named "When …".
+
+The golden outputs check that every example and fixture plays identically in both shapes.
+
+## The Rules page and Quick rule (guide phase 3)
+
+The rail's Signals page is now **Rules** (the page id stays `signals`). Each rule is one sentence with a lamp; the selected rule's card is beside the list.
+
+- **When:** a sentence per input, e.g. "When [Space] [is pressed]".
+  - The subject opens the full trigger editor. Verbs come from `src/play/signalVerbs.ts`.
+  - A verb sets the trigger and how every reaction fires: rise, release or held.
+  - Several inputs combine as Any / All / None / One.
+- **Options:** timing, chance and capture, folded.
+- **Do:** each reaction, with its firing mode under its own fold. **+ Do** adds one.
+
+**Quick rule** (+ Rule) works in three steps:
+1. Listens with `playEngine.learnAny`: a key, a note, a click, OSC, a signal, a sound, a hand gesture, or the pointer moving 30% across the picture (as `ax:x|y:pointer`).
+2. Shows the verbs for what it heard.
+3. Shows Do chips, with the likely layer first. One click makes the rule.
+
+Other ways to start a rule:
+- **Rule from this:** on a control's menu, the mini-mapper, a layer reading, or a rule's card. It fills in the When.
+- **Rule for this layer…:** in a layer's menu. It puts that layer's actions first.
+
+The page shows older wiring as the rules it plays as (`asRules`). The first edit rewrites the record that way. An action added later with the same trigger joins its `rule_…` rule.
+
+`src/play/connectDefaults.ts` holds the default connection for each pair of types (guide 6.4), tested as a table. The Inputs board (phase 4) will use it.
+
 ## Captured values and Set
 
 A signal can **take** a value with it (sample and hold, on its card): **a number** (anything a condition can watch: a slider, a layer's number, a reading, a mapping's source) or **a position** (a layer's centre, a hand point, **the pinch point** halfway between the thumb and index tips, the **pointer on the picture**, a point), read **as it starts** (its rise), **as it ends** (its fall: "the radius it had when it dropped back") or **while true** (every frame: follows it). The card shows what it took last. A signal that is only sent takes its value when it is sent. Nothing to read (a hand out of view) keeps the last capture.
@@ -162,3 +203,49 @@ The runtime runs conditions, signals, pair mappings and axis swaps through the i
 ## Not yet
 
 - Nothing listed.
+
+## Play notes (guide phase 8)
+
+A rule's Do can be **Play notes · <rack>** (`do: 'notes'`, with `notes: NotesSpec`). Its settings:
+- the notes, picked on a two-octave piano that moves an octave at a time (at most 12);
+- **Chord** (all at once), **Strum** (low to high, a gap apart), **Arp** (the next note each time it fires) or **Random** (one of them);
+- velocity, with a ± spread;
+- length;
+- snap to a scale (major, minor, pentatonic, blues) on a root.
+
+`play/notes.ts` (pure) turns one firing into note-on and note-off events. `lib/playNotes.ts` sends them through `audioEngineHost.input`, so racks hear them and takes record them.
+
+Stuck-note safety:
+- every note-off is scheduled with its note-on;
+- a note played again while it sounds is let go first;
+- at most 64 notes are held;
+- leaving Play lets every held note go.
+
+Play notes is app-only: a website export has no Audio engine racks, so the reaction does nothing there.
+
+Already in from the simplification work: capture and Set, positions and the pinch-point anchor, particle event positions.
+
+## Behaviours, and every record as rules (guide phase 9)
+
+**Behaviours** (`src/play/behaviours.ts`) are recipes with slots:
+- The starter set: Pinch to burst, Pulse to the beat, Bass shakes it, Mouse moves it, Wander, Space shows and hides, Kick steps the text, Every bar.
+- **Behaviours** on the Rules page opens the library. Each recipe shows what it needs (hands, sound, MIDI). Pick one, choose its layer or slider, then Add.
+- What lands is ordinary rules and sources with fresh ids.
+- **Save as behaviour** (the star on a rule card) keeps a rule in the library (`shader-studio:behaviours`, beside layer sets). Its layers and sliders become slots; inputs from other rules are left out.
+
+**Every record opens as rules:**
+- `parsePlayRecord` validates the file (`parsePlayRecordAsSaved`), then turns actions, a signal's When and links into rules (`normalizeRules`, which registers itself; `src/main.tsx` loads it first, which avoids an import loop).
+- The bundled examples are converted the same way when they're assembled.
+- Layer sets carry rules that act on their layers. When a set loads, a rule is always new; a signal that is only sent still merges with the setup's same-named signal, along with what it does.
+- Duplicating a layer group copies its rules.
+- Removing a layer or a reader takes the reactions and inputs that used it.
+
+**What still reads the old shape:**
+- The old shape is read only by the normaliser, and by the engine and website runtime, which still accept it. Keeping those readers means:
+  - pages exported before this change keep working;
+  - the golden tests can keep proving that a setup and its rules play the same.
+- No app path writes the old shape anymore.
+
+**Small tasks:**
+- The Data layer is hidden from the add menus and the source picker (saved setups still open).
+- A group's **Iterations** goes up to 128. As a Play control it compiles the loop to that cap with a break at a uniform, so turning it doesn't recompile. Off the panel it's a literal count again.

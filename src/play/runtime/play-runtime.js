@@ -137,9 +137,11 @@
   function hash01(n) { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); }
   function hashNoise(i, seed) { const x = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return x - Math.floor(x); }
   function smoothAt(t, seed) { const i = Math.floor(t), f = t - i, u = f * f * (3 - 2 * f); return hashNoise(i, seed) + (hashNoise(i + 1, seed) - hashNoise(i, seed)) * u; }
-  function noiseAt(type, time, rate, seed, steps, frame) {
+  function noiseAt(type, time, rate, seed, steps, frame, bias) {
     const t = time * Math.max(0.01, rate);
     if (type === 'smooth') return smoothAt(t, seed);
+    if (type === 'bell') return (smoothAt(t, seed + 5) + smoothAt(t, seed + 29) + smoothAt(t, seed + 53)) / 3;
+    if (type === 'biased') { const b = bias === undefined ? 0.5 : Math.max(0, Math.min(1, bias)); return Math.pow(smoothAt(t, seed), Math.pow(4, 1 - 2 * b)); }
     if (type === 'drift') return Math.max(0, Math.min(1, smoothAt(t, seed) * 0.57 + smoothAt(t * 2.03, seed + 17) * 0.29 + smoothAt(t * 4.11, seed + 41) * 0.14));
     if (type === 'random') return hashNoise(frame, seed + 7);
     const v = hashNoise(Math.floor(t), seed + 3);
@@ -150,13 +152,9 @@
     switch (shape) { case 'sine': return 0.5 - 0.5 * Math.cos(p * Math.PI * 2); case 'triangle': return 1 - Math.abs(2 * p - 1); case 'saw': return p; case 'square': return p < 0.5 ? 1 : 0; case 'random': return hash01(c); }
     return p;
   }
-  function curve(u, m) {
-    const x = u < 0 ? 0 : u > 1 ? 1 : u;
-    if (m.curve === 'exp') return x * x;
-    if (m.curve === 'log') return Math.sqrt(x);
-    if (m.curve === 'custom' && m.curveY && m.curveY.length > 1) { const pos = x * (m.curveY.length - 1); const i = Math.min(m.curveY.length - 2, Math.floor(pos)); return m.curveY[i] + (m.curveY[i + 1] - m.curveY[i]) * (pos - i); }
-    return x;
-  }
+  // A unit reading through a curve: the kit's (routes.js rtCurve), the same as the app's.
+  // (Without the kit, as some tests run the page, a plain linear shape.)
+  function curve(u, m) { return typeof SSKit !== 'undefined' && SSKit.routes ? SSKit.routes.curve(u, m.curve, m.curveY) : Math.max(0, Math.min(1, u)); }
   function triggerKey(t) {
     switch (t.on) { case 'key': return 'key:' + t.code; case 'note': return 'note:' + t.channel + ':' + (t.note < 0 ? '*' : t.note); case 'mouse': return 'mouse'; case 'osc': return 'osc:' + t.address; case 'beat': return 'beat:' + t.bpm + ':' + t.beats; case 'audio': return 'audio:' + t.band + ':' + t.threshold; case 'zone': return t.event === 'fill' ? 'zone:' + t.layerId + ':fill:' + t.threshold : 'zone:' + t.layerId + ':' + t.event; case 'hand': return 'hand:' + t.side + ':' + t.gesture; case 'face': return 'face:' + t.gesture; case 'pose': return 'pose:' + t.gesture; case 'proximity': return 'prox:' + t.a + ':' + t.b + ':' + t.when + ':' + t.distance + ':' + t.margin; case 'reader': return 'reader:' + t.readerId + ':' + t.threshold + ':' + t.hysteresis; case 'value': return typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals.valueKey(t) : 'val:' + t.value + ':' + t.cmp + ':' + t.threshold + ':' + t.hysteresis + ':' + t.tolerance; case 'signal': return 'sig:' + t.signal; }
     return '';
@@ -1317,9 +1315,11 @@ void main() {
       afxSlots.push(sl);
       afxUpdate(sl);
     }
-    const base = new Map(), live = new Map(), layerLive = new Map(), smooth = new Map(), trig = new Map(), actLevel = new Map();
+    const base = new Map(), live = new Map(), layerLive = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0, playing = !opts.paused, lastNow = 0, frame = 0;
+    // A noise source with New each play takes a fresh path each time the page opens.
+    const playSeed = Math.floor(Math.random() * 100000);
     const bindings = B.paramBindings || {};
     const uniformFor = c => bindings[bindingKey(c.target)];
     for (const c of play.controls) {
@@ -1468,7 +1468,11 @@ void main() {
     // Play pad actions go to the drums; every other action to the layer kit.
     if (K && drumLayers.length) { const kitAct = K.act; K.act = a => (a.do === 'pad' ? drumAct(a) : kitAct(a)); }
     if (K && grains.racks.size) { const kitAct = K.act; K.act = a => (a.do === 'pad' && typeof a.layerId === 'string' && a.layerId.indexOf('ae:') === 0 ? grainNote(a.layerId.slice(3), Math.round(a.amount) - 1, a.vel == null ? 1 : a.vel) : kitAct(a)); }
-    const actions = (play.actions || []).filter(a => a.enabled);
+    // Signals as rules (the kit's sgSignalPlan): level inputs and how they combine; their reactions run as actions on them.
+    const KSG = typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals : null;
+    const sigPlan = new Map(KSG && KSG.signalPlan ? KSG.signalPlan(play.signals || []).map(p => [p.id, p]) : []);
+    const hasLevel = id => { const p = sigPlan.get(id); return !!p && p.level.length > 0; };
+    const actions = (play.actions || []).filter(a => a.enabled).concat(KSG && KSG.reactions ? KSG.reactions(play.signals || []).filter(a => a.enabled) : []);
     // Conditions, signals and axis swaps: the kit's signals.js, the same code the app runs.
     const SG = typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals : null;
     const pairs = new Map((play.pairs || []).map(p => [p.id, p]));
@@ -1482,8 +1486,10 @@ void main() {
       .concat(incMappings.filter(m => m.increment.on === 'trigger').map(m => m.increment.trigger))
       .concat(incMappings.filter(m => m.increment.resetOn).map(m => ({ on: 'signal', signal: m.increment.resetOn })))
       .concat(pairMappings.filter(m => m.source.kind === 'value' && m.source.source.kind === 'trigger').map(m => m.source.source.trigger))
+      // A record's own sources' triggers (the kit's routes.js), like mappings'.
+      .concat(typeof SSKit !== 'undefined' && SSKit.routes ? SSKit.routes.triggersOf(play.sources || []) : [])
       // A signal defined by a trigger listens to it like any other (the app's playEngine does the same).
-      .concat((play.signals || []).filter(s => s.when && s.when.kind === 'trigger').map(s => s.when.trigger));
+      .concat([...sigPlan.values()].flatMap(p => p.level.filter(x => x.kind === 'trigger').map(x => x.trigger)));
     const gamepad = i => (navigator.getGamepads ? navigator.getGamepads()[i] : null);
     const padQueue = [];
     function tickPads() { if (!padG) return; for (const m of padQueue.splice(0)) KM.gridMessage(padG, padCfg, m[0], m[1], m[2], m[3], time); }
@@ -1494,7 +1500,8 @@ void main() {
       if (m.source.kind === 'trigger' && m.source.trigger.on === 'key') keysUsed.add(m.source.trigger.code);
     }
     for (const a of actions) if (a.trigger.on === 'key') keysUsed.add(a.trigger.code);
-    for (const s of play.signals || []) if (s.when && s.when.kind === 'trigger' && s.when.trigger.on === 'key') keysUsed.add(s.when.trigger.code);
+    for (const p of sigPlan.values()) for (const x of p.level) if (x.kind === 'trigger' && x.trigger.on === 'key') keysUsed.add(x.trigger.code);
+    for (const s of play.sources || []) { if (s.enabled === false) continue; if (s.source.kind === 'key') keysUsed.add(s.source.code); if (s.source.kind === 'trigger' && s.source.trigger.on === 'key') keysUsed.add(s.source.trigger.code); }
     for (const m of incMappings) if (m.increment.on === 'trigger' && m.increment.trigger.on === 'key') keysUsed.add(m.increment.trigger.code);
     for (const m of pairMappings) { const s = m.source.kind === 'value' ? m.source.source : null; if (s && s.kind === 'key') keysUsed.add(s.code); if (s && s.kind === 'trigger' && s.trigger.on === 'key') keysUsed.add(s.trigger.code); }
     function readSource(s) {
@@ -1502,7 +1509,7 @@ void main() {
         case 'mouse': return s.axis === 'x' ? mouse.x : s.axis === 'y' ? mouse.y : mouse.down;
         case 'key': return shared.keysHeld.has(s.code) ? 1 : 0;
         case 'lfo': return lfo(s.shape, time * s.rate + s.phase);
-        case 'noise': return noiseAt(s.type, time, s.rate, s.seed, s.steps, frame);
+        case 'noise': return noiseAt(s.type, time, s.rate, s.seed + (s.reseed ? playSeed : 0), s.steps, frame, s.bias);
         case 'clock': return lfo(s.shape, time * (s.bpm / 60 / Math.max(0.0625, s.beats)));
         case 'fn': { const FNK = typeof SSKit !== 'undefined' && SSKit.fn ? SSKit.fn : null; const v = FNK ? FNK.eval(s.expr, { t: time, b: time * 2 }).value : 0; return Math.max(0, Math.min(1, (v - s.min) / (s.max - s.min))); }
         case 'tilt': { const t = shared.tilt; if (!t.got) return null; if (s.axis === 'alpha') return ((t.alpha % 360) + 360) % 360 / 360; const v = Math.max(-90, Math.min(90, s.axis === 'beta' ? t.beta : t.gamma)); return (v + 90) / 180; }
@@ -1594,6 +1601,7 @@ void main() {
       if (r.kind === 'mouse') return r.axis === 'x' ? mouse.x : mouse.y;
       if (r.kind === 'distance') return anchorGap(r.a, r.b);
       if (r.kind === 'reading') return readSource({ kind: 'sensor', layerId: r.layerId, read: r.read, otherId: '' });
+      if (r.kind === 'source') { const v = rtState ? rtState.values.get(r.id) : undefined; return v === undefined ? null : v; }
       if (r.kind === 'axis') { const p = anchorAt(r.anchor); return p ? (r.axis === 'x' ? p.x : p.y) : null; }
       // The picture's brightness, from the layer kit's grid of the last frame (the app's PICTURE_PATCH around a position).
       if (r.kind === 'picture') {
@@ -1699,7 +1707,7 @@ void main() {
     }
     // A signal: its "When signal fires" triggers see a press and its release at once.
     // Signals sent this frame (by an action or a layer): true for the frame, for combinations to read.
-    const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map(), sigPayload = new Map(), mappingLag = new Map();
+    const sigSent = new Set(), sigLevels = new Map(), sigSeen = new Map(), sigPayload = new Map();
     const sigById = new Map((play.signals || []).map(s => [s.id, s]));
     function sigLevel(id) { return sigWorked.has(id) ? sigLevels.get(id) || false : sigSent.has(id); }
     // What a signal captures (sample and hold): a number from a value path, or a position from pos:<anchor>.
@@ -1712,7 +1720,8 @@ void main() {
       if (v !== null && v !== undefined) sigPayload.set(s.id, v);
     }
     // Links between signals and the loops they make (the app's playEngine: the kit's sgLink*).
-    const linkPlan = SG && SG.linkPlan ? SG.linkPlan(play.signals || [], play.loops || []) : null;
+    // Rise and fall inputs are links read the other way (the kit's sgPulseLinks).
+    const linkPlan = SG && SG.linkPlan ? SG.linkPlan(SG.pulseLinks ? SG.pulseLinks(play.signals || []) : play.signals || [], play.loops || []) : null;
     const links = SG && SG.linkNew ? SG.linkNew() : null;
     let linkArriving = false;
     const linkSent = new Set();
@@ -1721,8 +1730,8 @@ void main() {
       sigSent.add(id);
       const s = sigById.get(id);
       // With timing or chance it goes out when the next frame works it out.
-      if (s && !s.when && SG && SG.shaped && SG.shaped(s)) { if (linkArriving) linkSent.add(id); return; }
-      if (s && s.capture && !s.when) capture(s);
+      if (s && !hasLevel(id) && SG && SG.shaped && SG.shaped(s)) { if (linkArriving) linkSent.add(id); return; }
+      if (s && s.capture && !hasLevel(id)) capture(s);
       const k = 'sig:' + id; press(k); release(k);
       linkFire(id, 'rise', !linkArriving);
     }
@@ -1733,7 +1742,8 @@ void main() {
       if (!SG || !SG.order) return [];
       const byId = new Map(list.map(s => [s.id, s]));
       // Worked out each frame: a definition, or timing and chance on a sent one (the app's playEngine).
-      return SG.order(list).order.map(id => byId.get(id)).filter(s => s && (s.when || (SG.shaped && SG.shaped(s))));
+      // In the order their levels are worked out: one that mirrors another after it.
+      return SG.order(SG.levelDeps([...sigPlan.values()])).order.map(id => byId.get(id)).filter(s => s && (hasLevel(s.id) || (SG.shaped && SG.shaped(s))));
     })();
     const sigWorked = new Set(sigDefs.map(s => s.id)), sigShape = new Map();
     // The app's seedOf: a signal's default seed from its id.
@@ -1743,15 +1753,21 @@ void main() {
       if (links) for (const id of SG.linkDue(links, time)) { linkArriving = true; try { emitSignal(id); } finally { linkArriving = false; } }
       const lvl = i => (sigWorked.has(i) ? sigLevels.get(i) || false : sigSent.has(i));
       for (const s of sigDefs) {
-        const w = s.when;
+        const p = sigPlan.get(s.id);
         let level;
-        if (w && w.kind === 'trigger') {
-          const inp = triggerInput(w.trigger);
-          const seen = sigSeen.has(s.id) ? sigSeen.get(s.id) : inp.presses;
-          sigSeen.set(s.id, inp.presses);
-          level = inp.gate || inp.presses > seen;
-        } else if (w && w.kind === 'logic') level = SG.logic(w.op, w.inputs.map(lvl));
-        else level = sigSent.has(s.id);
+        if (p && p.level.length) {
+          const levels = [];
+          for (let i = 0; i < p.level.length; i++) {
+            const x = p.level[i];
+            if (x.kind === 'signal') { levels.push(lvl(x.signal)); continue; }
+            const inp = triggerInput(x.trigger);
+            const k = i ? s.id + '#' + i : s.id;
+            const seen = sigSeen.has(k) ? sigSeen.get(k) : inp.presses;
+            sigSeen.set(k, inp.presses);
+            levels.push(inp.gate || inp.presses > seen);
+          }
+          level = SG.logic(p.op, levels);
+        } else level = sigSent.has(s.id);
         // Hold for, Linger, Chance and Delay, on the setup's clock.
         if (SG.shaped(s)) {
           let st = sigShape.get(s.id);
@@ -1762,7 +1778,7 @@ void main() {
         sigLevels.set(s.id, level);
         const at = s.capture && s.capture.at;
         if ((at === 'rise' && level && !was) || (at === 'fall' && !level && was) || (at === 'held' && level)) capture(s);
-        if (level && !was) { press('sig:' + s.id); linkFire(s.id, 'rise', !(!s.when && linkSent.has(s.id))); }
+        if (level && !was) { press('sig:' + s.id); linkFire(s.id, 'rise', !(!hasLevel(s.id) && linkSent.has(s.id))); }
         else if (!level && was) { release('sig:' + s.id); linkFire(s.id, 'fall', true); }
       }
       sigSent.clear();
@@ -1909,9 +1925,11 @@ void main() {
       const fires = a => {
         const inp = triggerInput(a.trigger);
         const f = fireSlot(actionFire, a.id, a.trigger, inp.presses, inp.gate);
-        const d = stepped.has(a.id) ? 0 : dt;
+        // Looked at again in the same frame (a chain's later pass): only new presses count (the app does the same).
+        const again = stepped.has(a.id);
         stepped.add(a.id);
-        return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, d, time));
+        if (again && inp.presses <= f.slot.st.seen) return 0;
+        return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, again ? 0 : dt, time));
       };
       if (SG) { SG.runActions(actions, fires, a => { if (K) K.act(a); }, emitSignal); return; }
       for (const a of actions) { const n = fires(a); if (a.do !== 'signal' && K) for (let i = 0; i < n; i++) K.act(a); }
@@ -2014,6 +2032,57 @@ void main() {
       if (count > 0) for (const ev of INC.advance(st, inc, rg[0], rg[1], count)) { const sig = ev === 'step' ? inc.stepSignal : inc.resetSignal; if (sig) emitSignal(sig); }
       return INC.glide(st, inc, rg[0], rg[1], dt);
     }
+    // ── Sources and routes: the page's side of the kit's routes.js ──
+    const RT = typeof SSKit !== 'undefined' && SSKit.routes ? SSKit.routes : null;
+    const rtState = RT ? RT.state() : null;
+    const rtSources = RT ? RT.sourcesOf(play) : [];
+    let rtDriven = new Set(), rtMoved = false;
+    const lastOut = new Map(), stepShapes = new WeakMap();
+    // A Step output of a record's own source, in a mapping's shape (its first route is where it starts from).
+    function stepShape(s, o) {
+      if (s.fromMapping) return s.fromMapping;
+      let m = stepShapes.get(o);
+      if (!m) { const r = o.routes[0]; m = { id: s.id, controlId: r ? r.to : '', source: s.source, outMin: o.lo, outMax: o.hi, curve: 'linear', smoothMs: 0, enabled: true, increment: o.step, channel: r ? r.channel : undefined }; stepShapes.set(o, m); }
+      return m;
+    }
+    const rtRead = {
+      has: id => controls.has(id),
+      read: (s, dt) => (s.source.kind === 'trigger' ? readTrigger(s.fromMapping || { id: s.id, source: s.source }, dt) : readSource(s.source)),
+      step: (s, o, dt) => (INC ? tickIncrement(stepShape(s, o), dt) : null),
+    };
+    const rtApply = {
+      kind: id => { const c = controls.get(id); return !c ? 'float' : actTarget(c.target) ? 'action' : c.kind === 'color' ? 'color' : 'float'; },
+      base: id => base.get(id),
+      range: id => { const c = controls.get(id); return c ? [c.min, c.max] : [0, 1]; },
+      write: (id, route, v) => {
+        const c = controls.get(id), driven = rtDriven;
+        if (!c) return;
+        const key = route ? route.id : id;
+        if (lastOut.get(key) !== v) rtMoved = true;
+        lastOut.set(key, v);
+        const at = actTarget(c.target);
+        if (at) {
+          // Fires once each time what drives it rises through the middle (a key down, a click, a beat).
+          const was = actLevel.get(c.id) || 0;
+          actLevel.set(c.id, v);
+          if (v >= 0.5 && was < 0.5 && K) { K.act({ do: at.do, layerId: at.layerId, amount: c.amount || 1 }); needsDraw = true; }
+          live.set(c.id, v); driven.add(c.id); return;
+        }
+        const lt = layerTarget(c.target);
+        if (lt) { layerLive.set(lt.layerId + '::' + lt.key, v); live.set(c.id, v); driven.add(c.id); return; }
+        if (readerTarget(c.target) || grainsTarget(c.target)) { live.set(c.id, v); driven.add(c.id); return; }
+        const un = uniformFor(c); if (!un) return;
+        if (c.kind === 'color') {
+          const b = base.get(c.id) || [0, 0, 0];
+          let buf = colourBuf.get(c.id);
+          if (!buf || !driven.has(c.id)) { buf = [b[0], b[1], b[2]]; colourBuf.set(c.id, buf); }
+          const ch = route ? route.channel : undefined;
+          if (ch === undefined || ch === null) { buf[0] = b[0] * v; buf[1] = b[1] * v; buf[2] = b[2] * v; } else buf[ch] = v;
+          uniformValues[un] = buf; live.set(c.id, buf);
+        } else { uniformValues[un] = v; live.set(c.id, v); }
+        driven.add(c.id);
+      },
+    };
     function tickMappings(dt) {
       tickPads();
       if (grains.wired) tickGrains();
@@ -2035,7 +2104,7 @@ void main() {
         sigPayload.clear();
         if (links) SG.linkClear(links);
         for (const st of sigShape.values()) SG.shapeRewind(st);
-        for (const st of mappingLag.values()) { st.t.length = 0; st.v.length = 0; }
+        if (rtState) RT.rewind(rtState);
       }
       lastTime = time;
       tickConditionTriggers(dt);
@@ -2046,52 +2115,10 @@ void main() {
       tickActions(dt);
       const driven = new Set();
       let moved = false;
-      for (const m of play.mappings) {
-        if (!m.enabled) continue;
-        const c = controls.get(m.controlId); if (!c) continue;
-        let v;
-        if (m.increment) { if (!INC) continue; v = tickIncrement(m, dt); }
-        else {
-          const u = m.source.kind === 'trigger' ? readTrigger(m, dt) : readSource(m.source);
-          if (u === null) continue;
-          // Set writes the captured number itself; every other source goes through the range and curve.
-          let target = m.source.kind === 'captured' ? u : m.outMin + (m.outMax - m.outMin) * curve(u, m);
-          // Delay: the value arrives late, before the smoothing (the app's sgLagStep).
-          if (m.delayMs > 0 && SG && SG.lagStep) {
-            let lag = mappingLag.get(m.id);
-            if (!lag) { lag = SG.lagNew(); mappingLag.set(m.id, lag); }
-            const late = SG.lagStep(lag, time, target, m.delayMs / 1000);
-            if (late === null) continue;
-            target = late;
-          }
-          v = smooth.get(m.id);
-          if (m.smoothMs <= 0 || v === undefined) v = target;
-          else { const a = 1 - Math.exp(-(dt * 1000) / m.smoothMs); v = v + (target - v) * a; if (Math.abs(v - target) < 1e-4 * Math.max(1, Math.abs(m.outMax - m.outMin))) v = target; }
-        }
-        if (smooth.get(m.id) !== v) moved = true;
-        smooth.set(m.id, v);
-        const at = actTarget(c.target);
-        if (at) {
-          // Fires once each time its mapping rises through the middle (a key down, a click, a beat).
-          const was = actLevel.get(c.id) || 0;
-          actLevel.set(c.id, v);
-          if (v >= 0.5 && was < 0.5 && K) { K.act({ do: at.do, layerId: at.layerId, amount: c.amount || 1 }); needsDraw = true; }
-          live.set(c.id, v); driven.add(c.id); continue;
-        }
-        const lt = layerTarget(c.target);
-        if (lt) { layerLive.set(lt.layerId + '::' + lt.key, v); live.set(c.id, v); driven.add(c.id); continue; }
-        if (readerTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }
-        if (grainsTarget(c.target)) { live.set(c.id, v); driven.add(c.id); continue; }
-        const un = uniformFor(c); if (!un) continue;
-        if (c.kind === 'color') {
-          const b = base.get(c.id) || [0, 0, 0];
-          let buf = colourBuf.get(c.id);
-          if (!buf || !driven.has(c.id)) { buf = [b[0], b[1], b[2]]; colourBuf.set(c.id, buf); }
-          if (m.channel === undefined || m.channel === null) { buf[0] = b[0] * v; buf[1] = b[1] * v; buf[2] = b[2] * v; } else buf[m.channel] = v;
-          uniformValues[un] = buf; live.set(c.id, buf);
-        } else { uniformValues[un] = v; live.set(c.id, v); }
-        driven.add(c.id);
-      }
+      // Sources and routes (the kit's routes.js, the same frame as the app's): each source read once, its routes written in record order.
+      rtDriven = driven; rtMoved = false;
+      if (RT) RT.frame(rtState, rtSources, rtRead, rtApply, dt, time);
+      if (rtMoved) moved = true;
       tickPairs(dt, driven);
       if (tickSpreads(driven)) moved = true;
       for (const id of [...live.keys()]) if (!driven.has(id)) {
@@ -2448,6 +2475,7 @@ void main() {
         tracks: markers ? Object.keys(subjects).filter(k => subjects[k].settings.overlay && subjects[k].st.live).map(k => ({ kind: k, state: subjects[k].st, colour: subjects[k].settings.colour })) : null,
         // three.js for 3D Script layers: the page carries it (SSThree) only when it has one.
         three: typeof SSThree !== 'undefined' ? SSThree : (window.SSThree || null),
+        readValue,
         scriptStatus: (id, err) => { const e = err || null; if (scriptErrors.get(id) === e) return; scriptErrors.set(id, e); if (onScript) { try { onScript(id, e); } catch (x) { /* the host's problem */ } } },
         sensor: (k, v) => sensors.set(k, v),
         override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },
@@ -2559,7 +2587,7 @@ void main() {
       const steps = Array.isArray(o.steps) ? o.steps : [];
       if (K) K.reset(o.seed > 0 ? o.seed : 1);
       if (finishR) finishR.reset();
-      dropTargets(); frame = 0; smooth.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); incState.clear(); incFire.clear(); incCond.clear(); lastTime = -Infinity;
+      dropTargets(); frame = 0; if (rtState) { rtState.smooth.clear(); rtState.lag.clear(); rtState.values.clear(); } lastOut.clear(); trig.clear(); actLevel.clear(); overrides.clear(); pairState.clear(); condStates.clear(); incState.clear(); incFire.clear(); incCond.clear(); lastTime = -Infinity;
       return { gen, fdt, steps };
     };
     /** One deterministic frame at clock time `at`. */

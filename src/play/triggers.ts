@@ -260,7 +260,7 @@ function smoothAt(t: number, seed: number): number {
  * Noise value at `time` seconds, 0..1. `frame` feeds the per-frame random
  * type so it changes every frame without depending on the clock.
  */
-export function noiseAt(type: NoiseType, time: number, rate: number, seed: number, steps: number, frame: number): number {
+export function noiseAt(type: NoiseType, time: number, rate: number, seed: number, steps: number, frame: number, bias = 0.5): number {
   const t = time * Math.max(0.01, rate);
   switch (type) {
     case 'smooth':
@@ -277,5 +277,11 @@ export function noiseAt(type: NoiseType, time: number, rate: number, seed: numbe
       if (steps < 2) return v;
       return Math.round(v * (steps - 1)) / (steps - 1);
     }
+    // The mean of three: mostly near the middle, seldom at the ends.
+    case 'bell':
+      return (smoothAt(t, seed + 5) + smoothAt(t, seed + 29) + smoothAt(t, seed + 53)) / 3;
+    // Bent towards one end: 0 leans low, 1 leans high.
+    case 'biased':
+      return Math.pow(smoothAt(t, seed), Math.pow(4, 1 - 2 * Math.max(0, Math.min(1, bias))));
   }
 }

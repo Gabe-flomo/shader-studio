@@ -362,6 +362,7 @@ export function valueRefLabel(ref: string, ctx: LabelContext = {}): string {
   switch (r.kind) {
     case 'control': return ctx.controls?.find(c => c.id === r.id)?.label ?? 'Missing control';
     case 'mapping': { const m = ctx.mappings?.find(x => x.id === r.id); return m ? `${sourceLabel(m.source, ctx.controls, ctx.layers)} (source)` : 'Missing mapping'; }
+    case 'source': { const m = ctx.mappings?.find(x => x.id === r.id); return m ? `${sourceLabel(m.source, ctx.controls, ctx.layers)} (source)` : 'A source'; }
     case 'mouse': return `Mouse ${r.axis.toUpperCase()}`;
     case 'distance': return `${anchorLabel(r.a, ctx.layers)} ↔ ${anchorLabel(r.b, ctx.layers)}`;
     case 'reading': return `${ctx.layers?.find(l => l.id === r.layerId)?.label ?? 'Missing layer'} · ${SENSOR_LABELS[r.read as SensorRead] ?? r.read}`;
@@ -636,4 +637,6 @@ export const NOISE_TYPES: { value: NoiseType; label: string; title: string }[] =
   { value: 'drift', label: 'Drift', title: 'Slow wandering with finer wobble on top' },
   { value: 'random', label: 'Random', title: 'A new random value every frame' },
   { value: 'stepped', label: 'Stepped', title: 'Holds a random value, then jumps: posterised time' },
+  { value: 'bell', label: 'Bell', title: 'Wanders, mostly near the middle and seldom at the ends' },
+  { value: 'biased', label: 'Biased', title: 'Wanders, leaning towards the low or the high end' },
 ];

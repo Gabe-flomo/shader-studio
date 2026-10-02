@@ -8,7 +8,7 @@
  * All pure: they take a record and give one back (tidyGroups keeps members
  * together afterwards).
  */
-import { layerNumericProps, layerTarget, parseActionTarget, parseLayerTarget, actionTarget, type PlayAction, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySource, type TriggerSpec } from '../../types/play';
+import { layerNumericProps, layerTarget, parseActionTarget, parseLayerTarget, actionTarget, type PlayAction, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord, type PlaySignal, type PlaySource, type TriggerSpec } from '../../types/play';
 import {
   buildTree, childrenOf, containerOf, groupLayerIds, groupOfLayer, groupPath, newLayerHome, subgroupIds, tidyGroups, flattenTree,
   type GroupColour, type ItemRef, type LayerGroup, type TreeNode,
@@ -304,8 +304,15 @@ export function duplicateGroup(p: PlayRecord, id: string, withControls: boolean)
     const actions: PlayAction[] = (p.actions ?? []).filter(a => ids.has(a.layerId) || triggerReads(a.trigger, ids)).map(a => ({
       ...structuredClone(a), id: playId('act'), layerId: mapId(a.layerId, ids), trigger: retargetTrigger(structuredClone(a.trigger), ids),
     }));
+    // Rules acting on the group's layers, or watching them, copied onto the copies (fresh ids, reactions included).
+    const rules: PlaySignal[] = (p.signals ?? []).filter(s => (s.do ?? []).some(r => ids.has(r.layerId)) || (s.inputs ?? []).some(x => x.kind === 'trigger' && triggerReads(x.trigger, ids))).map(s => ({
+      ...structuredClone(s), id: playId('sig'), name: `${s.name} (copy)`,
+      ...(s.inputs ? { inputs: s.inputs.map(x => (x.kind === 'trigger' ? { kind: 'trigger' as const, trigger: retargetTrigger(structuredClone(x.trigger), ids) } : { ...x })) } : {}),
+      ...(s.do ? { do: s.do.map(r => ({ ...structuredClone(r), id: playId('act'), layerId: mapId(r.layerId, ids) })) } : {}),
+    }));
     out = { ...out, controls: [...p.controls, ...controls], mappings: [...p.mappings, ...mappings] };
     if (actions.length) out.actions = [...(p.actions ?? []), ...actions];
+    if (rules.length) out.signals = [...(p.signals ?? []), ...rules];
   }
   return { play: tidyGroups(out), id: gids.get(id)! };
 }

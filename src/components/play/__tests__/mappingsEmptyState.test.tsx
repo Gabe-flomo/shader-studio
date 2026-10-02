@@ -49,13 +49,14 @@ function mountMappingsPage(play: PlayRecord): HTMLElement {
   useNodeGraphStore.getState().setPlay(() => play);
   const host = document.createElement('div');
   document.body.appendChild(host);
-  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'mappings', host, wide: true });
+  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'controls', host, wide: true });
   const el = document.createElement('div');
   document.body.appendChild(el);
   const root = createRoot(el);
   act(() => root.render(<PlayPage />));
   roots.push({ root, el }, { root: createRoot(document.createElement('div')), el: host });
-  return host;
+  // The sources column of the Inputs board.
+  return host.querySelector('[data-column="sources"]') as HTMLElement;
 }
 
 const byText = (root: ParentNode, text: string) => Array.from(root.querySelectorAll('button')).find(b => b.textContent?.trim() === text);

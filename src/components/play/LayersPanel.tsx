@@ -62,8 +62,8 @@ import {
   AudioEditor, BodiesEditor, BrushEditor, CameraEditor, ContoursEditor, GlyphsEditor, ImageEditor, LensEditor, NullEditor, ParticlesEditor, ShapeEditor, TextEditor,
   type EditorContext, ClonerEditor, RelationshipEditor, ScriptEditor } from './layers/editors';
 import { AgentsEditor } from './layers/AgentsEditor';
-import { ActionsSection } from './layers/ActionsSection';
-import { SignalsList } from './ConditionFields';
+import { RulesSummary } from './rules/RulesSummary';
+import { startRule } from './playSplit';
 import { layerPositionPair } from '../../play/pairs';
 import { DataLayerEditor } from './layers/DataLayerEditor';
 import { MatteMaskBar } from './layers/MatteMask';
@@ -648,8 +648,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             </Fragment>
           );
         })}
-        {!entered && extras && <ActionsSection play={play} onChange={onChange} />}
-        {!entered && extras && <SignalsList play={play} onChange={onChange} />}
+        {!entered && extras && <RulesSummary play={play} />}
       </div>)}
       {duplicating && <DuplicateGroupDialog group={duplicating} play={play} onPick={w => duplicateGroupAs(duplicating, w)} onClose={() => setDuplicating(null)} />}
     </>
@@ -937,7 +936,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
         <span ref={moreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More: duplicate, reset, delete" size="sm" tooltip={false} onClick={() => { const r = moreRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 220, y: r.bottom + 4 } : null); }} />
         </span>
-        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={isBackground ? backgroundMenuItems({ onReset, onRemove }) : [...groupItems, 'separator', ...layerMenuItems({ onDuplicate, onReset, onRemove })]} />}
+        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={isBackground ? backgroundMenuItems({ onReset, onRemove }) : [...groupItems, 'separator', ...layerMenuItems({ onDuplicate, onReset, onRemove, onRule: () => startRule({ layerId: l.id }) })]} />}
       </div>
       {relMembers && (
         <button

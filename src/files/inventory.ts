@@ -402,6 +402,9 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
         if (arr(pl?.controls).length) parts.push(plural(arr(pl?.controls).length, 'control'));
         if (arr(pl?.mappings).length) parts.push(plural(arr(pl?.mappings).length, 'mapping'));
         if (arr(pl?.actions).length) parts.push(plural(arr(pl?.actions).length, 'action'));
+        // Rules: signals with inputs or reactions (what a set holds since the guide's phase 9).
+        const rules = arr(pl?.signals).map(obj).filter(x => arr(x?.do).length || arr(x?.inputs).length || x?.when).length;
+        if (rules) parts.push(plural(rules, 'rule'));
         return parts.join(' · ');
       });
       // The picture it was saved with.

@@ -1,7 +1,8 @@
 import type { NodeDefinition } from '../../types/nodeGraph';
 
 /** Most passes an iterated group makes (64: enough to visit every row of a small dataset). */
-export const MAX_GROUP_ITERATIONS = 64;
+/** Iterations' ceiling (a Play control on it compiles the loop this far; implementation guide, small tasks). */
+export const MAX_GROUP_ITERATIONS = 128;
 
 /**
  * Group node — a collapsed subgraph.

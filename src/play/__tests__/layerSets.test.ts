@@ -186,14 +186,16 @@ describe('layer sets: load', () => {
     const m2 = p.mappings.find(m => m.source.kind === 'control')!;
     expect(m2.source).toMatchObject({ controlId: ctl('Scale (2)').id });
     expect(m2.controlId).toBe(ctl('Ring (2) · Size').id);
-    // Actions and signals: "Pop" is the setup's own signal; "Caught" is new; the relationship sends the new one.
+    // Rules and signals (the set opens as rules): "Pop" is the setup's own signal, and the set's reset on it joins it;
+    // "Caught" is new and sends Pop; the relationship sends the new one; the click on the ring is a rule of its own.
     const caught = p.signals!.find(s => s.name === 'Caught')!;
-    expect(p.signals!.filter(s => s.name === 'Pop')).toEqual([{ id: 'mine', name: 'Pop' }]);
+    expect(p.signals!.filter(s => s.name === 'Pop')).toEqual([{ id: 'mine', name: 'Pop', do: [expect.objectContaining({ do: 'reset', layerId: B.id })] }]);
     expect((R as unknown as Record<string, unknown>).catchSignal).toBe(caught.id);
-    const acts = p.actions!;
-    expect(acts.find(a => a.do === 'burst')).toMatchObject({ layerId: B.id, trigger: { on: 'zone', layerId: A.id } });
-    expect(acts.find(a => a.do === 'signal')).toMatchObject({ signal: 'mine', trigger: { on: 'signal', signal: caught.id } });
-    expect(acts.find(a => a.do === 'reset')).toMatchObject({ layerId: B.id, trigger: { on: 'signal', signal: 'mine' } });
+    expect(caught.do).toEqual([expect.objectContaining({ do: 'signal', signal: 'mine' })]);
+    const zoneRule = p.signals!.find(s => s.inputs?.[0]?.kind === 'trigger' && s.inputs[0].trigger.on === 'zone')!;
+    expect(zoneRule.inputs![0]).toMatchObject({ trigger: { on: 'zone', layerId: A.id } });
+    expect(zoneRule.do![0]).toMatchObject({ do: 'burst', layerId: B.id });
+    expect(p.actions).toBeUndefined();
     // Pair, readers, Background matte.
     expect(p.pairs![0]).toMatchObject({ a: ctl('Ring (2) · Size').id, b: ctl('Sparks · Opacity').id });
     expect(p.audioReaders?.input).toBe(`video:${V.id}`);
@@ -257,7 +259,7 @@ describe('layer sets: storage, the Files page and the .playfile', () => {
     const inv = await buildInventory(kv);
     expect(inv.byId.get('section:presets/layer-sets')?.label).toBe('Layer sets');
     const node = inv.byId.get(`lset:${set!.id}`)!;
-    expect(node.detail).toBe('4 layers · 5 controls · 4 mappings · 3 actions');
+    expect(node.detail).toBe('4 layers · 5 controls · 4 mappings · 3 rules');
     expect(node.thumb).toBe('data:image/jpeg;base64,AAAA');
     expect(inv.sections.find(s => s.section === 'graphs')?.children).toEqual([]);
     const bundle = await buildBundle(kv, inv, [node.id], { dependencies: false });

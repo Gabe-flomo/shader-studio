@@ -39,6 +39,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.1',
+    date: '2026-10-02',
+    title: 'Rules and the Inputs board',
+    highlights: [
+      { area: 'Play', text: 'Signals and actions are Rules: When something happens, Do this. Quick rule: press + Rule, do the thing (a key, a pinch, a note, a sound), pick what happens.', link: { kind: 'doc', path: 'docs/conditions-and-signals.md' } },
+      { area: 'Play', text: 'Inputs puts the controls beside the sources that drive them. Map a source onto any number of sliders: Set, or Add around where the slider is.', link: { kind: 'doc', path: 'docs/sources-and-routes.md' } },
+      { area: 'Play', text: 'A detail window for any control, source or rule: what drives it, what it drives, the rules on it, with back and forward.', link: { kind: 'doc', path: 'docs/detail-windows.md' } },
+      { area: 'Play', text: 'Behaviours: ready-made rules (Pinch to burst, Pulse to the beat, Bass shakes it…), and Save as behaviour for your own.' },
+      { area: 'Play', text: 'Play notes: a rule plays a chord, a strum, an arpeggio or a random note on a rack, snapped to a scale.' },
+      { area: 'Play', text: 'A Text layer can show a live value; new Bell and Biased random sources; rules show where they sit in a chain or loop.' },
+      { area: 'Studio', text: 'A group’s Iterations goes to 128, and on the Play panel it turns without recompiling.' },
+    ],
+  },
+  {
     id: '2026.9.22',
     date: '2026-09-30',
     title: 'Signals, simplified',

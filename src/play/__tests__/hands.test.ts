@@ -21,7 +21,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { handSourceLabel, sourceFromType, sourceLabel, sourceType, triggerLabel } from '../playSources';
 import { triggerKey } from '../triggers';
 import { leftBehind, mediaCarried, playBundle } from '../exportHtml';
-import { DEFAULT_HANDS, defaultLayer, emptyPlayRecord, oneHandUsed, parsePlayRecord, usesHands, type PlayLayer, type PlayRecord, type PlaySource } from '../../types/play';
+import { DEFAULT_HANDS, defaultLayer, emptyPlayRecord, oneHandUsed, parsePlayRecordAsSaved, usesHands, type PlayLayer, type PlayRecord, type PlaySource } from '../../types/play';
 
 // ── Synthetic hands ──────────────────────────────────────────────────────────
 
@@ -587,22 +587,22 @@ describe('hands in a play file', () => {
   };
 
   it('round-trips hand sources, gesture triggers, hand-following nulls and the settings', () => {
-    expect(parsePlayRecord(JSON.parse(JSON.stringify(record)))).toEqual(record);
+    expect(parsePlayRecordAsSaved(JSON.parse(JSON.stringify(record)))).toEqual(record);
     expect(usesHands(record)).toBe(true);
   });
 
   it('mends what it can: an unknown read, gesture or side falls back, the point is clamped', () => {
-    const r = parsePlayRecord({ ...record, mappings: [{ ...record.mappings[0], source: { kind: 'hand', side: 'middle', read: 'wave', point: 99, axis: 'w', gesture: 'wave' } }], hands: { smoothing: 4 } });
+    const r = parsePlayRecordAsSaved({ ...record, mappings: [{ ...record.mappings[0], source: { kind: 'hand', side: 'middle', read: 'wave', point: 99, axis: 'w', gesture: 'wave' } }], hands: { smoothing: 4 } });
     expect(r.mappings[0].source).toEqual({ kind: 'hand', side: 'right', read: 'point', point: 20, axis: 'x', gesture: 'pinch' });
     expect(r.hands).toEqual({ smoothing: 1, overlay: true, colour: [0.35, 1, 0.75], mirror: true });
   });
 
   it('round-trips the newer settings, and reads an older file’s settings back as they were', () => {
     const newer: PlayRecord = { ...record, hands: { ...record.hands!, responsiveness: 0.7, swap: true, maxHands: 1, strictness: 0.8, confidence: { detection: 0.7, presence: 0.6, tracking: 0.5 } } };
-    expect(parsePlayRecord(JSON.parse(JSON.stringify(newer)))).toEqual(newer);
-    const old = parsePlayRecord(JSON.parse(JSON.stringify(record)));
+    expect(parsePlayRecordAsSaved(JSON.parse(JSON.stringify(newer)))).toEqual(newer);
+    const old = parsePlayRecordAsSaved(JSON.parse(JSON.stringify(record)));
     expect(Object.keys(old.hands!).sort()).toEqual(['colour', 'mirror', 'overlay', 'smoothing']);
-    const mended = parsePlayRecord({ ...record, hands: { ...record.hands, maxHands: 3, strictness: 7, swap: 'yes', confidence: { detection: 2 } } });
+    const mended = parsePlayRecordAsSaved({ ...record, hands: { ...record.hands, maxHands: 3, strictness: 7, swap: 'yes', confidence: { detection: 2 } } });
     expect(mended.hands).toEqual({ ...record.hands, strictness: 1, confidence: { detection: 0.95, presence: 0.6, tracking: 0.6 } });
   });
 
