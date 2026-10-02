@@ -152,7 +152,7 @@ export function ruleName(play: PlayRecord, inputs: readonly SignalInput[], fire?
   const one = (x: SignalInput) => (x.kind === 'trigger' ? x.trigger : ({ on: 'signal', signal: x.signal } as TriggerSpec));
   if (inputs.length === 1) {
     const x = inputs[0];
-    if (x.kind === 'signal' && x.as !== 'mirror') return `When ${play.signals?.find(s => s.id === x.signal)?.name ?? 'a signal'} ${x.as === 'rise' ? 'starts' : 'stops'}`;
+    if (x.kind === 'signal') return `When ${play.signals?.find(s => s.id === x.signal)?.name ?? 'a signal'} ${x.as === 'rise' ? 'starts' : x.as === 'fall' ? 'stops' : 'is on'}`;
     return verbSentence(one(x), fire, ctx);
   }
   const words = { any: 'any of', all: 'all of', none: 'none of', one: 'one of' }[combine];

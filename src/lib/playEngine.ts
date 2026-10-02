@@ -744,6 +744,10 @@ class PlayEngine implements InputSource {
     this.linkPlan = sgLinkPlan(sgPulseLinks(sigs), r.loops);
     // A stopped loop cuts what it had going round.
     for (const l of this.linkPlan.loops) if (!l.running) sgLinkClear(this.links, l.key);
+    // Pulses on their way to a signal or round a loop the record no longer has (another setup opened) are dropped.
+    const loopKeys = new Set(this.linkPlan.loops.map(l => l.key));
+    for (const k of [...this.links.inFlight.keys()]) if (!loopKeys.has(k)) sgLinkClear(this.links, k);
+    this.links.q = this.links.q.filter(p => byId.has(p.to) && (!p.loop || loopKeys.has(p.loop)));
     this.signalCycles = cyclic;
     this.signalById = byId;
     const unique = (want: (t: TriggerSpec) => boolean) => {

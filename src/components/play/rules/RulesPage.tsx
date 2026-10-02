@@ -21,6 +21,8 @@ import { usePlayUi } from '../playUi';
 import { QuickRule } from './QuickRule';
 import { RuleCard } from './RuleCard';
 import { reactionText } from './reactionChoices';
+import { signalStructure, type SignalShape } from '../signalFlow';
+import { ShapeBadge } from './ShapeBadge';
 import { useLamps } from './useLamps';
 import { Lamp } from './Lamp';
 
@@ -32,6 +34,7 @@ export function RulesPage({ play: raw, onChange: rawChange, wide }: { play: Play
   const onChange: Change = fn => rawChange(p => fn(asRules(p)));
   const rules = play.signals ?? [];
   const { on, flash } = useLamps(rules.map(r => r.id));
+  const shapes = useMemo(() => signalStructure(play), [play]);
   // What's selected: a pick here, or what something else asked to show since.
   const focus = usePlayUi(s => s.signalFocus);
   const [local, setLocal] = useState({ id: '', at: 0 });
@@ -58,7 +61,7 @@ export function RulesPage({ play: raw, onChange: rawChange, wide }: { play: Play
         </div>
       )}
       <div role="listbox" aria-label="Rules" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {rules.map(r => <RuleRow key={r.id} rule={r} play={play} on={!!on[r.id]} flash={flash[r.id] ?? 0} selected={r.id === selected?.id} onPick={() => pick(r.id)} />)}
+        {rules.map(r => <RuleRow key={r.id} rule={r} play={play} shape={shapes.get(r.id)} on={!!on[r.id]} flash={flash[r.id] ?? 0} selected={r.id === selected?.id} onPick={() => pick(r.id)} />)}
       </div>
     </div>
   );
@@ -81,7 +84,7 @@ export function RulesPage({ play: raw, onChange: rawChange, wide }: { play: Play
 }
 
 /** One rule in the list: lamp, its sentence, and what it does. */
-function RuleRow({ rule: r, play, on, flash, selected, onPick }: { rule: PlaySignal; play: PlayRecord; on: boolean; flash: number; selected: boolean; onPick: () => void }) {
+function RuleRow({ rule: r, play, shape, on, flash, selected, onPick }: { rule: PlaySignal; play: PlayRecord; shape?: SignalShape; on: boolean; flash: number; selected: boolean; onPick: () => void }) {
   const tk = useTokens();
   const does = (r.do ?? []).filter(x => x.enabled);
   const auto = ruleName(play, r.inputs ?? [], sharedFire(r) ?? undefined, r.combine);
@@ -91,7 +94,10 @@ function RuleRow({ rule: r, play, on, flash, selected, onPick }: { rule: PlaySig
       style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 42, padding: '5px 10px', borderRadius: radius.md, cursor: 'pointer', background: selected ? tk.bg.selected : 'transparent', boxShadow: selected ? `inset 2px 0 0 ${tk.accent.base}` : undefined }}>
       <Lamp on={on} flash={flash} />
       <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <span style={{ font: `600 12px ${fontFamily.ui}`, color: selected ? tk.accent.text : tk.text.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span style={{ font: `600 12px ${fontFamily.ui}`, color: selected ? tk.accent.text : tk.text.primary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+          {shape && shape !== 'isolated' && <ShapeBadge shape={shape} />}
+        </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4, font: `11.5px ${fontFamily.ui}`, color: tk.text.muted, minWidth: 0 }}>
           {r.name !== auto && (r.inputs?.length ?? 0) > 0 && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '45%' }}>{auto.replace(/^When /, '')}</span>}
           <Icon name="chevR" size={11} style={{ flexShrink: 0, color: tk.text.faint }} />

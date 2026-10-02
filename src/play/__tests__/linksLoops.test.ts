@@ -12,6 +12,7 @@ vi.hoisted(() => {
 });
 import { SG_LOOP_PULSES, sgLinkDue, sgLinkFire, sgLinkNew, sgLinkPlan } from '../kit/signals.js';
 import { mapSignal } from '../playRefs';
+import { normalizeRules } from '../rules';
 import { addLink, removeLink, setLoop, signalStructure } from '../../components/play/signalFlow';
 import { playEngine } from '../../lib/playEngine';
 import { inputBus } from '../../lib/inputBus';
@@ -127,6 +128,24 @@ describe('in the engine', () => {
     playEngine.setRecord({ ...emptyPlayRecord(), controls: [control('src')], layers: [sparks()], ...ring(0.2, { speed: 2 }) });
     const heard = drive([0, 1, 1, 1, 1, 1, 1, 1], 0.2).map(h => h.join(''));
     expect(heard.slice(0, 6)).toEqual(['', 'a', 'b', 'c', 'a', 'b']);
+  });
+});
+
+describe('a loop of rules (implementation guide, phase 6)', () => {
+  // The same ring with its links as rule inputs ("B listens to A starting, after 0.2 s").
+  const asRules = (loop?: Partial<PlayLoop>): PlayRecord => normalizeRules({ ...emptyPlayRecord(), controls: [control('src')], layers: [sparks()], ...ring(0.2, loop) });
+
+  it('is found from the inputs, labelled, and runs, stops, counts laps and speeds up like the links did', () => {
+    const p = asRules({ laps: 1 });
+    expect(p.signals!.some(s => s.links?.length)).toBe(false);
+    expect(new Set(signalStructure(p).values())).toEqual(new Set(['loop']));
+    playEngine.setRecord(p);
+    expect(playEngine.loops().map(l => l.key)).toEqual(['a|b|c']);
+    expect(drive([0, 1, 1, 1, 1, 1, 1, 1, 1, 1]).map(h => h.join(''))).toEqual(['', 'a', '', 'b', '', 'c', '', '', '', '']);
+    playEngine.setRecord(asRules({ running: false }));
+    expect(drive([0, 1, 1, 1, 1]).flat()).toEqual(['a']);
+    playEngine.setRecord(asRules({ speed: 2 }));
+    expect(drive([0, 1, 1, 1, 1, 1, 1, 1], 0.2).map(h => h.join('')).slice(0, 6)).toEqual(['', 'a', 'b', 'c', 'a', 'b']);
   });
 });
 

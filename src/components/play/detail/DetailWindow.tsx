@@ -25,6 +25,8 @@ import { Modal } from '../../ui/Modal';
 import { Button, IconButton } from '../../ui/Button';
 import { RuleCard } from '../rules/RuleCard';
 import { useLamps } from '../rules/useLamps';
+import { ShapeBadge } from '../rules/ShapeBadge';
+import { signalStructure } from '../signalFlow';
 import { usePlayUi } from '../playUi';
 import { startRule } from '../playSplit';
 import { wireRuleWhen } from '../miniMapperCore';
@@ -148,8 +150,10 @@ function SignalBody({ id, play, onChange }: { id: string; play: PlayRecord; onCh
   const s = play.signals!.find(x => x.id === id)!;
   const { on, flash } = useLamps([id]);
   const loop = playEngine.signalInLoop(id);
+  const shape = signalStructure(play).get(id);
   return (
     <>
+      {shape && shape !== 'isolated' && !loop && <div style={{ marginBottom: 8 }}><ShapeBadge shape={shape} /></div>}
       {loop && <div data-loop-badge="" style={{ marginBottom: 8, padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field, color: tk.accent.text, font: `600 11.5px ${fontFamily.ui}` }}>In a loop: Run, Stop and Speed are on the Rules page.</div>}
       <RuleCard rule={s} play={play} onChange={fn => onChange(p => fn(asRules(p)))} on={!!on[id]} flash={flash[id] ?? 0} />
       <Section title="Listens to" links={listensTo(play, id)} none="Only triggers (keys, notes, gestures…): their settings are in its When." />
