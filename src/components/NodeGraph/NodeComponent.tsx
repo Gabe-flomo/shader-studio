@@ -34,6 +34,8 @@ import type { ExprModal as ExprModalT } from './ExprModal';
 import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
 import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
 import { toggleLineOff } from '../../lib/exprLines';
+import { inputHintOf, inputLabelOf, inputTexts } from '../../lib/inputNames';
+import { InputNamesModal } from './InputNamesModal';
 import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
 import { constantsItems } from '../../nodes/definitions/constants';
 import { canHaveInputExpr, getInputExpr, getInputKnobs, isKnobParamKey, knobParamKey, type InputKnob } from '../../glsl/inputExpr';
@@ -578,6 +580,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   );
 
   const def = getNodeDefinitionFor(node);
+  // The inputs the card shows (Input names… names these).
+  const inputNameKeys = Object.keys(node.inputs).filter(k => !def || Object.keys(def.inputs).length === 0 || k in def.inputs);
   const isBypassed = !!node.bypassed;
   const assignOp = node.assignOp ?? '=';
   const assignable = isAssignable(node);
@@ -597,7 +601,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     }
   }, [pendingPublishGroupId, node.id, node.type, setPendingPublishGroupId]);
   // Custom Fn card → Publish as node (code source), or a user node's "open source" for code-backed types
-  const [publishCode, setPublishCode] = useState<{ code: string; entry?: string; label: string; existingId?: string } | null>(null);
+  const [showInputNames, setShowInputNames] = useState(false);
+  const [publishCode, setPublishCode] = useState<{ code: string; entry?: string; label: string; existingId?: string; inputText?: Record<string, { label?: string; hint?: string }> } | null>(null);
   // Expression Block card → Publish as node: the block alone, its inputs as sockets
   const [showPublishNode, setShowPublishNode] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -2971,9 +2976,12 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     const lines: React.ReactNode[] = [];
     lines.push(
       <span style={{ fontWeight: 700 }}>
-        <span style={{ color: typeColor }}>▶</span> {input.label} <span style={{ color: tc.surface2 }}>({input.type})</span>
+        <span style={{ color: typeColor }}>▶</span> {inputLabelOf(node, inputKey, input.label)} <span style={{ color: tc.surface2 }}>({input.type})</span>
       </span>
     );
+    // What it is, in the words chosen for it (Input names…).
+    const chosenHint = inputHintOf(node, inputKey);
+    if (chosenHint) lines.push(<span style={{ whiteSpace: 'normal' }}>{chosenHint}</span>);
     const inputError = errors?.find(e => e.socket === inputKey);
     if (inputError) lines.push(<span style={{ color: tk.status.danger, fontWeight: 600, whiteSpace: 'normal' }}>{inputError.message}</span>);
     if (def.inputs[inputKey]?.field) lines.push(<span style={{ color: tk.kind.expr, whiteSpace: 'normal' }}>ƒ {FIELD_SOCKET_TIP}</span>);
@@ -3220,8 +3228,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               const fnName = fnLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^[^a-z_]+/, '') || 'custom_fn';
               const bodyCode = /\breturn\b/.test(body) ? body : `return ${body};`;
               const code = `${helpers ? helpers + '\n\n' : ''}${outType} ${fnName}(${cfInputs.map(i => `${i.type} ${i.name}`).join(', ')}) {\n    ${bodyCode.replace(/\n/g, '\n    ')}\n}`;
-              setPublishCode({ code, entry: fnName, label: fnLabel });
+              setPublishCode({ code, entry: fnName, label: fnLabel, inputText: inputTexts(node) });
             }} />
+          )}
+          {inputNameKeys.length > 0 && !['output', 'vec4Output'].includes(node.type) && (
+            <CardButton icon="edit" on={showInputNames} label="Input names: call its inputs what they are, and say what each is for (the code is unchanged)" onClick={() => setShowInputNames(v => !v)} />
           )}
           {!['output', 'vec4Output', 'loopIndex', 'loopCarry', 'group'].includes(node.type) && <CardDivider />}
           {/* Carry mode — only inside a group with iterations > 1 */}
@@ -3440,7 +3451,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             if (cfInp?.slider != null && !isConnected) return null;
           }
 
-          const slotName = input.label;
+          const slotName = inputLabelOf(node, key, input.label);
 
           // Drag-highlight: compatible = glow, incompatible = dim
           let socketOpacity = 1;
@@ -4425,8 +4436,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {showCustomFnModal && node.type === 'customFn' && (
         <CustomFnModal node={node} onClose={() => setShowCustomFnModal(false)} />
       )}
+      {showInputNames && <InputNamesModal node={node} keys={inputNameKeys} onClose={() => setShowInputNames(false)} />}
       {publishCode && (
-        <PublishNodeModal source={{ kind: 'code', code: publishCode.code, entry: publishCode.entry, label: publishCode.label }}
+        <PublishNodeModal source={{ kind: 'code', code: publishCode.code, entry: publishCode.entry, label: publishCode.label, ...(publishCode.inputText ? { inputText: publishCode.inputText } : {}) }}
           existingId={publishCode.existingId} onClose={() => setPublishCode(null)} />
       )}
       {showPublishNode && node.type === 'exprNode' && (
