@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.2',
+    date: '2026-10-02',
+    title: 'Sharp zoom',
+    highlights: [
+      { area: 'Desktop', text: 'Zoomed-in nodes are sharp in the desktop app: cards, text and wires redraw at full resolution once the zoom settles.' },
+      { area: 'Studio', text: 'Switch an Expression Block line off without deleting it: the // button, or ⌘/ in the line. It stays, dimmed, as a comment.' },
+      { area: 'Studio', text: 'Swipe sideways with two fingers over a long expression to read it; the canvas stays put.' },
+    ],
+  },
+  {
     id: '2026.10.1',
     date: '2026-10-02',
     title: 'Rules and the Inputs board',

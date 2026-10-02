@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions';
@@ -55,6 +55,28 @@ function groupLabel(gn: import('../../types/nodeGraph').GraphNode): string {
 // NodeGraph reads everything it needs from the store with selectors.
 /** The last focus request handled (see focusNodeRequest), across remounts. */
 let handledFocus = 0;
+
+/**
+ * Does something under the pointer scroll sideways (inside the canvas `root`):
+ * a box with overflow-x auto or scroll, or a text field (an input, a textarea,
+ * an editable line) whose text is wider than it. Text fields scroll without a
+ * bar, so a two-finger swipe is how a long expression is read.
+ */
+export function scrollsSideways(target: EventTarget | null, root: Element): boolean {
+  for (let n = target as HTMLElement | null; n && n !== root; n = n.parentElement) {
+    if (n.scrollWidth <= n.clientWidth + 1) continue;
+    if (n.tagName === 'INPUT' || n.tagName === 'TEXTAREA' || n.isContentEditable) return true;
+    if (/auto|scroll/.test(getComputedStyle(n).overflowX)) return true;
+  }
+  return false;
+}
+
+/** Layout zoom once the zoom settles (WebKit; `?crispZoom` or localStorage 'shader-studio:crisp-zoom' = '1' forces it anywhere). */
+const CRISP_ZOOM = typeof navigator !== 'undefined' && (
+  (/AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium|Edg\//.test(navigator.userAgent))
+  || (() => { try { return localStorage.getItem('shader-studio:crisp-zoom') === '1' || /[?&]crispZoom\b/.test(location.search); } catch { return false; } })()
+);
+const CRISP_ZOOM_SETTLE_MS = 250;
 
 export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false, locked = false }: {
   transparent?: boolean;
@@ -352,6 +374,31 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const zoomRef = useRef(zoom);
   const panRef  = useRef(pan);
   const worldRef = useRef<HTMLDivElement>(null);
+  const zoomLayerRef = useRef<HTMLDivElement>(null);
+  // WebKit (the desktop app, Safari) draws a scaled layer from its unscaled pixels: zoomed in, cards
+  // look like an enlarged picture. Once the zoom stops changing it becomes layout zoom, which WebKit
+  // lays out and draws at full sharpness; while it changes it stays a cheap scale. Chromium re-sharpens a
+  // scale by itself, so it keeps the scale.
+  const crispTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const applyZoomLayer = useCallback((z: number) => {
+    const el = zoomLayerRef.current;
+    if (!el) return;
+    if (!CRISP_ZOOM) { el.style.transform = `scale(${z})`; return; }
+    if (el.dataset.z === String(z)) return;
+    el.dataset.z = String(z);
+    el.style.zoom = '';
+    el.style.transform = `scale(${z})`;
+    if (crispTimer.current) clearTimeout(crispTimer.current);
+    crispTimer.current = setTimeout(() => {
+      crispTimer.current = null;
+      const now = zoomLayerRef.current;
+      if (!now || now.dataset.z !== String(z)) return;
+      now.style.transform = '';
+      now.style.zoom = String(z);
+    }, CRISP_ZOOM_SETTLE_MS);
+  }, []);
+  useLayoutEffect(() => { applyZoomLayer(zoomRef.current); }, [applyZoomLayer]);
+  useEffect(() => () => { if (crispTimer.current) clearTimeout(crispTimer.current); }, []);
   const viewCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitView = useCallback(() => {
     if (viewCommitTimer.current) { clearTimeout(viewCommitTimer.current); viewCommitTimer.current = null; }
@@ -362,7 +409,8 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const applyView = useCallback((p: Pt, z: number, commit: 'now' | 'throttle') => {
     panRef.current = p;
     zoomRef.current = z;
-    if (worldRef.current) worldRef.current.style.transform = `translate(${p.x}px, ${p.y}px) scale(${z})`;
+    if (worldRef.current) worldRef.current.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    applyZoomLayer(z);
     const c = canvasRef.current;
     if (c && !transparent) {
       const g = 24 * z;
@@ -454,15 +502,9 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
-    const scrollsSideways = (target: EventTarget | null) => {
-      for (let n = target as HTMLElement | null; n && n !== el; n = n.parentElement) {
-        if (n.scrollWidth > n.clientWidth && /auto|scroll/.test(getComputedStyle(n).overflowX)) return true;
-      }
-      return false;
-    };
     const prevent = (e: WheelEvent) => {
       if (e.ctrlKey) { e.preventDefault(); return; }
-      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && !scrollsSideways(e.target)) e.preventDefault();
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && !scrollsSideways(e.target, el)) e.preventDefault();
     };
     el.addEventListener('wheel', prevent, { passive: false });
     return () => el.removeEventListener('wheel', prevent);
@@ -505,6 +547,8 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     // A pop-up opened from a card is portalled out of the canvas, but React still
     // bubbles its events here: only wheel over the canvas itself pans or zooms.
     if (!canvas.contains(e.target as Node)) return;
+    // A sideways swipe over something that scrolls sideways (a long expression in its field) scrolls it, not the canvas.
+    if (!e.ctrlKey && Math.abs(e.deltaX) > Math.abs(e.deltaY) && scrollsSideways(e.target, canvas)) return;
 
     if (e.ctrlKey) {
       // Pinch-to-zoom (trackpad) or ctrl+scroll (mouse wheel)
@@ -1669,11 +1713,12 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           left: 0,
           width: 0,
           height: 0,
-          transformOrigin: '0 0',
-          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transform: `translate(${pan.x}px, ${pan.y}px)`,
           pointerEvents: locked ? 'none' : undefined,
         }}
       >
+        {/* The zoom: a scale while it changes, then (WebKit) layout zoom once it settles, so text is redrawn sharp. Set by applyView only. */}
+        <div ref={zoomLayerRef} data-zoom-layer="" style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, transformOrigin: '0 0' }}>
         {/* Wires — data-derived from node positions + measured socket offsets */}
         <WireLayer
           displayNodes={displayNodes}
@@ -1875,6 +1920,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Feature 3: Box/marquee select rect */}

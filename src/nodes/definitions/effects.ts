@@ -718,15 +718,16 @@ export const ExprBlockNode: NodeDefinition = {
     const stmts: string[] = [];
 
     // ── Per-line format (lines + result) ─────────────────────────────────────
-    const lines = node.params.lines as Array<{ lhs: string; op: string; rhs: string }> | undefined;
+    const lines = node.params.lines as Array<{ lhs: string; op: string; rhs: string; off?: boolean }> | undefined;
     const resultExpr = (node.params.result as string | undefined)?.trim() || '';
 
     if (Array.isArray(lines)) {
       // New format: lines array is present (may be empty — just a result expression)
       for (const line of lines) {
-        if (line.lhs && line.rhs) {
-          stmts.push(`        ${line.lhs} ${line.op || '='} ${line.rhs};\n`);
-        }
+        if (!line.lhs || !line.rhs) continue;
+        // A line switched off is kept as a comment: skipped, and still readable in the shader.
+        if (line.off) stmts.push(`        // off: ${`${line.lhs} ${line.op || '='} ${line.rhs}`.replace(/\n/g, ' ')}\n`);
+        else stmts.push(`        ${line.lhs} ${line.op || '='} ${line.rhs};\n`);
       }
       stmts.push(`        ${outVar} = ${resultExpr || outDefault};\n`);
     } else {
