@@ -33,6 +33,7 @@ import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { ExprModal as ExprModalT } from './ExprModal';
 import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
 import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
+import { toggleLineOff } from '../../lib/exprLines';
 import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
 import { constantsItems } from '../../nodes/definitions/constants';
 import { canHaveInputExpr, getInputExpr, getInputKnobs, isKnobParamKey, knobParamKey, type InputKnob } from '../../glsl/inputExpr';
@@ -3722,7 +3723,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
         {/* ── ExprBlock per-line warp editor (exprNode only) ── */}
         {!collapsed && node.type === 'exprNode' && (() => {
-          const lines = (node.params.lines as Array<{ lhs: string; op: string; rhs: string }> | undefined) ?? [];
+          const lines = (node.params.lines as Array<{ lhs: string; op: string; rhs: string; off?: boolean }> | undefined) ?? [];
           const result = (node.params.result as string | undefined) ?? 'p';
           const OPS = ['=', '+=', '-=', '*=', '/='];
           const inputBg = tc.crust;
@@ -3740,7 +3741,17 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               <span style={{ fontSize: '10px', color: tc.overlay0, marginBottom: '1px' }}>Warp Lines</span>
 
               {lines.map((line, i) => (
-                <div key={i} style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                <div key={i} data-line-off={line.off ? '' : undefined}
+                  onKeyDownCapture={e => { if ((e.metaKey || e.ctrlKey) && e.key === '/') { e.preventDefault(); e.stopPropagation(); updateNodeParams(node.id, { lines: toggleLineOff(lines, i) }); } }}
+                  style={{ display: 'flex', gap: '3px', alignItems: 'center', opacity: line.off ? 0.45 : 1 }}>
+                  {/* On / off: an off line is kept but skipped (a comment in the shader) */}
+                  <button
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => updateNodeParams(node.id, { lines: toggleLineOff(lines, i) })}
+                    aria-pressed={!!line.off}
+                    title={line.off ? 'Off: skipped. Click (or ⌘/ in the line) to switch it back on' : 'Switch this line off without deleting it (⌘/ in the line)'}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '9px', fontFamily: 'monospace', lineHeight: 1, flexShrink: 0, width: 12, color: line.off ? tc.yellow : tc.surface2, fontWeight: 700 }}
+                  >//</button>
                   {/* Reorder */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0 }}>
                     <button

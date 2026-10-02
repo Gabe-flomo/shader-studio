@@ -9,6 +9,7 @@
  * in the graph — never by dragging, always by picking from a list.
  */
 
+import { toggleLineOff } from '../../lib/exprLines';
 import { errorMessage } from '../../utils/fileIO';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { toRgb } from '../../lib/colorMath';
@@ -1157,7 +1158,7 @@ const exprCardStyle = (tc: CtpPalette, focused: boolean): React.CSSProperties =>
   display: 'flex', flexDirection: 'column', gap: '6px',
 });
 type ExprInputDef = { name: string; type: DataType; slider: { min: number; max: number } | null; carry?: boolean };
-type ExprLine = { lhs: string; op: string; rhs: string };
+type ExprLine = { lhs: string; op: string; rhs: string; off?: boolean };
 
 // The identifier-ish token immediately before `cursor` in `str` — e.g. for
 // "sin(a) + cl|" with the cursor at "|", returns { start: 10, word: "cl" }.
@@ -1339,6 +1340,7 @@ function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables
             style={{
               ...exprCardStyle(tc, focusedIdx === i),
               position: 'relative',
+              opacity: line.off ? 0.5 : 1,
               transform: isDragging ? `translateY(${drag!.currentY - drag!.startY}px)` : undefined,
               zIndex: isDragging ? 10 : undefined,
               boxShadow: isDragging ? '0 6px 16px rgba(20,20,30,0.18)' : undefined,
@@ -1353,7 +1355,12 @@ function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables
                 style={{ background: 'none', border: 'none', color: tc.overlay0, fontSize: '16px', lineHeight: 1, cursor: 'grab', padding: '4px', touchAction: 'none' }}
                 title="Drag to reorder"
               >☰</button>
-              <span style={{ fontSize: '10px', color: tc.surface2, flex: 1 }}>Line {i + 1}</span>
+              <button
+                onClick={() => onReorder(toggleLineOff(lines, i))}
+                aria-pressed={!!line.off}
+                title={line.off ? 'Off: skipped. Tap to switch it back on' : 'Tap to switch this line off without deleting it'}
+                style={{ background: 'none', border: 'none', padding: '4px 0', flex: 1, textAlign: 'left', cursor: 'pointer', fontSize: '10px', color: line.off ? tc.yellow : tc.surface2, touchAction: 'manipulation' }}
+              >Line {i + 1}{line.off ? ' · off (tap to switch on)' : ''}</button>
               <button
                 onClick={() => onRemoveLine(i)}
                 style={{ background: 'none', border: 'none', color: tc.red, fontSize: '16px', cursor: 'pointer', padding: '4px', touchAction: 'manipulation' }}

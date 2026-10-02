@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { toggleLineOff } from '../../lib/exprLines';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { setInputSlider } from '../../nodes/sliderFreeze';
 import { nowParamValue } from '../../lib/nowValue';
@@ -32,7 +33,7 @@ function linesToFnDefs(
 ): Array<Omit<FnDef, 'id'>> {
   let fnIndex = 0;
   return lines
-    .filter(l => l.rhs && l.rhs.trim())
+    .filter(l => l.rhs && l.rhs.trim() && !l.off)
     .map(line => {
       fnIndex++;
       const lhs = line.lhs.trim();
@@ -57,7 +58,10 @@ interface WarpLine {
   lhs: string;
   op: string;
   rhs: string;
+  /** Switched off: kept, but compiled as a comment (⌘/ or the // button). */
+  off?: boolean;
 }
+
 
 const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 const OPS = ['=', '+=', '-=', '*=', '/='];
@@ -379,8 +383,12 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <SectionLabel meta="run top to bottom">Lines</SectionLabel>
             {lines.map((line, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '22px 110px 64px minmax(0, 1fr) auto', gap: 6, alignItems: 'center' }}>
-                <span style={{ textAlign: 'right', font: `500 11px ${fontFamily.mono}`, color: tk.text.disabled }}>{i + 1}</span>
+              <div key={i} data-line-off={line.off ? '' : undefined}
+                onKeyDownCapture={e => { if ((e.metaKey || e.ctrlKey) && e.key === '/') { e.preventDefault(); e.stopPropagation(); updateNodeParams(node.id, { lines: toggleLineOff(lines, i) }); } }}
+                style={{ display: 'grid', gridTemplateColumns: '22px 110px 64px minmax(0, 1fr) auto', gap: 6, alignItems: 'center', opacity: line.off ? 0.45 : 1 }}>
+                <button type="button" aria-pressed={!!line.off} title={line.off ? 'Off: skipped (kept as a comment). Click or ⌘/ to switch it back on' : `Line ${i + 1}: click or ⌘/ to switch it off without deleting it`}
+                  onClick={() => updateNodeParams(node.id, { lines: toggleLineOff(lines, i) })}
+                  style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'right', font: `600 11px ${fontFamily.mono}`, color: line.off ? tk.status.warningText : tk.text.disabled, textDecoration: line.off ? 'line-through' : 'none' }}>{line.off ? '//' : i + 1}</button>
                 <CodeInput
                   ariaLabel={`Line ${i + 1} target`}
                   placeholder="p.xy"
