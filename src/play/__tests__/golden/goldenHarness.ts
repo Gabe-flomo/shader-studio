@@ -25,7 +25,7 @@ import type { PlayRecord, TriggerSpec } from '../../../types/play';
 export const GOLDEN_FRAMES = 120;
 const DT = 1 / 30;
 
-type EngineInternals = { press(key: string): void; release(key: string): void; mouseX: number; mouseY: number; mouseDown: number };
+type EngineInternals = { press(key: string): void; release(key: string): void; mouseX: number; mouseY: number; mouseDown: number; frame: number };
 
 /** Keys a record listens for anywhere (trigger keys, key sources, signal definitions). */
 function keysOf(play: PlayRecord): string[] {
@@ -37,14 +37,17 @@ function keysOf(play: PlayRecord): string[] {
     if (m.increment?.on === 'trigger') trig(m.increment.trigger);
   }
   for (const a of play.actions ?? []) trig(a.trigger);
-  for (const s of play.signals ?? []) if (s.when?.kind === 'trigger') trig(s.when.trigger);
+  for (const s of play.signals ?? []) {
+    if (s.when?.kind === 'trigger') trig(s.when.trigger);
+    for (const x of s.inputs ?? []) if (x.kind === 'trigger') trig(x.trigger);
+  }
   return [...out].sort();
 }
 
 function notesOf(play: PlayRecord): number[] {
   const out = new Set<number>([60]);
   const scan = (x: unknown) => { if (x && typeof x === 'object') for (const [k, v] of Object.entries(x)) { if (k === 'note' && typeof v === 'number' && v >= 0) out.add(v); else scan(v); } };
-  scan(play.mappings); scan(play.actions);
+  scan(play.mappings); scan(play.actions); scan(play.signals);
   return [...out].sort((a, b) => a - b);
 }
 
@@ -60,6 +63,8 @@ export function goldenRun(play: PlayRecord, nodes: GraphNode[] = []): Record<str
   Math.random = seeded(12345);
   const rows: Record<string, string[]> = Object.fromEntries(play.controls.map(c => [c.id, []]));
   try {
+    // The engine's frame count drives the Random noise kind: start every run from the same frame.
+    eng.frame = 0;
     // As in the app, where every control is bound to a uniform: the bus ticks the engine every frame.
     inputBus.setParamBindings(Object.fromEntries(play.controls.map(c => [c.target, `u_${c.id}`])));
     playEngine.setRecord(play);

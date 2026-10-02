@@ -204,6 +204,19 @@ export type SignalDef =
 export interface PlaySignal {
   id: string;
   name: string;
+  /**
+   * What makes it true (implementation guide, phase 2): its inputs, combined.
+   * A trigger input is true while held or met (a tap for its frame); a signal
+   * input either mirrors the other's level or takes its rise or fall as a
+   * pulse after a delay. With no inputs it is true only when something sends
+   * it (an action, a layer event, an increment). `when` is the older shape of
+   * the same thing and is read the same way (play/rules.ts normalizeRules).
+   */
+  inputs?: SignalInput[];
+  /** How the inputs combine: any (or), all (and), none (not), one (xor). Default any. */
+  combine?: SignalCombine;
+  /** Its reactions: what it does (burst, next image, send another signal…), each with its own firing mode. */
+  do?: PlayReaction[];
   when?: SignalDef;
   capture?: SignalCapture;
   /** Seconds its rise and fall arrive late (play/kit/signals.js sgShapeStep). */
@@ -224,6 +237,33 @@ export interface PlaySignal {
   seed?: number;
 }
 export interface SignalLink { to: string; delay: number; on?: 'rise' | 'fall' }
+
+export type SignalCombine = 'any' | 'all' | 'none' | 'one';
+export const SIGNAL_COMBINES: readonly SignalCombine[] = ['any', 'all', 'none', 'one'];
+
+/**
+ * One input of a signal. `as` on a signal input: mirror follows its level
+ * (true while it is true, read in dependency order), rise and fall take that
+ * moment as a pulse, `delay` seconds later (a chain; a loop when it comes
+ * back round).
+ */
+export type SignalInput =
+  | { kind: 'trigger'; trigger: TriggerSpec }
+  | { kind: 'signal'; signal: string; as: 'mirror' | 'rise' | 'fall'; delay?: number };
+
+/** One Do of a signal: an action (or Send a signal) with its own firing mode. */
+export interface PlayReaction {
+  id: string;
+  do: ActionKind;
+  layerId: string;
+  amount: number;
+  enabled: boolean;
+  /** Send a signal: which one. */
+  signal?: string;
+  /** once (when it turns on), held (while it is on), every (every N while on), release (when it turns off)… */
+  fire?: FireSpec;
+}
+export const REACTIONS_PER_SIGNAL_MAX = 16;
 export const SIGNAL_LINKS_MAX = 8;
 
 /**
@@ -454,7 +494,7 @@ export const DEFAULT_HAND_STRICTNESS = 0.5;
 export function usesHands(play: Pick<PlayRecord, 'mappings' | 'actions' | 'layers'> & Partial<Pick<PlayRecord, 'pairMappings' | 'signals' | 'sources'>>): boolean {
   return (play.pairMappings ?? []).some(pairMappingUsesHands)
     || (play.sources ?? []).some(s => s.enabled && (s.source.kind === 'hand' || (s.source.kind === 'trigger' && triggerUsesHands(s.source.trigger)) || s.outputs.some(o => o.kind === 'step' && o.step.on === 'trigger' && triggerUsesHands(o.step.trigger))))
-    || (play.signals ?? []).some(s => s.when?.kind === 'trigger' && triggerUsesHands(s.when.trigger)) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
+    || (play.signals ?? []).some(s => (s.when?.kind === 'trigger' && triggerUsesHands(s.when.trigger)) || !!s.inputs?.some(x => x.kind === 'trigger' && triggerUsesHands(x.trigger))) || play.mappings.some(m => m.source.kind === 'hand' || (m.source.kind === 'trigger' && triggerUsesHands(m.source.trigger))
     || (m.source.kind === 'sensor' && m.source.read === 'distance' && !!parseHandAnchor(m.source.otherId))
     || (!!m.increment && ((m.increment.on === 'trigger' && triggerUsesHands(m.increment.trigger)) || (m.increment.on === 'repeat' && conditionUsesHands(m.increment.when)))))
     || (play.actions ?? []).some(a => triggerUsesHands(a.trigger))
@@ -1591,6 +1631,36 @@ function parseAction(raw: unknown): PlayAction | null {
   return { id, trigger, do: kind, layerId, amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
 }
 
+/** One Do of a signal: an action kind (a Send a signal needs its signal), with its firing mode. */
+function parseReaction(raw: unknown): PlayReaction | null {
+  const a = raw as Record<string, unknown> | null;
+  const id = a && str(a.id);
+  if (!a || !id) return null;
+  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION) ? (a.do as ActionKind) : null;
+  if (!kind) return null;
+  const out: PlayReaction = kind === SIGNAL_ACTION
+    ? { id, do: kind, layerId: '', amount: 1, enabled: a.enabled !== false, signal: (str(a.signal) ?? '').slice(0, 80) }
+    : { id, do: kind, layerId: str(a.layerId) ?? '', amount: Math.max(0, num(a.amount, kind === 'burst' ? 60 : 1)), enabled: a.enabled !== false };
+  const fire = parseFire(a.fire);
+  if (fire) out.fire = fire;
+  return out;
+}
+
+/** A signal's input: a trigger, or another signal mirrored or taken as a pulse (after a delay). */
+function parseSignalInput(raw: unknown): SignalInput | null {
+  const x = raw as Record<string, unknown> | null;
+  if (!x) return null;
+  if (x.kind === 'trigger') { const trigger = parseTrigger(x.trigger); return trigger ? { kind: 'trigger', trigger } : null; }
+  if (x.kind === 'signal' && typeof x.signal === 'string' && x.signal) {
+    const as = x.as === 'rise' || x.as === 'fall' ? x.as : 'mirror';
+    const out: SignalInput = { kind: 'signal', signal: x.signal.slice(0, 80), as };
+    const d = num(x.delay, 0);
+    if (as !== 'mirror' && d > 0) out.delay = Math.min(SIGNAL_TIME_MAX, d);
+    return out;
+  }
+  return null;
+}
+
 function parseSource(raw: unknown): PlaySource | null {
   if (!raw || typeof raw !== 'object') return null;
   const s = raw as Record<string, unknown>;
@@ -1935,6 +2005,11 @@ export function parsePlayRecord(raw: unknown): PlayRecord {
     if (actions.length) out.actions = actions;
   }
   const signals = parseSignals(r.signals);
+  // A reaction on a missing layer goes, as an action would; a trigger input on something missing goes too.
+  for (const s of signals) {
+    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || layerIds.has(x.layerId)); if (d.length) s.do = d; else delete s.do; }
+    if (s.inputs) { const k = s.inputs.filter(x => x.kind !== 'trigger' || triggerOk(x.trigger)); if (k.length) s.inputs = k; else delete s.inputs; }
+  }
   if (signals.length) out.signals = signals;
   const loops = (Array.isArray(r.loops) ? r.loops : []).flatMap((x: unknown) => {
     const o = x as Record<string, unknown> | null;
@@ -2044,6 +2119,11 @@ function parseSignals(raw: unknown): PlaySignal[] {
     const sig: PlaySignal = { id: id.slice(0, 80), name: (typeof o.name === 'string' && o.name.trim() ? o.name : 'Signal').slice(0, 60) };
     const when = parseSignalDef(o.when);
     if (when) sig.when = when;
+    const inputs = (Array.isArray(o.inputs) ? o.inputs : []).map(parseSignalInput).filter((x): x is SignalInput => !!x).slice(0, SIGNAL_INPUTS_MAX);
+    if (inputs.length) sig.inputs = inputs;
+    if (typeof o.combine === 'string' && (SIGNAL_COMBINES as readonly string[]).includes(o.combine) && o.combine !== 'any') sig.combine = o.combine as SignalCombine;
+    const reactions = (Array.isArray(o.do) ? o.do : []).map(parseReaction).filter((x): x is PlayReaction => !!x).slice(0, REACTIONS_PER_SIGNAL_MAX);
+    if (reactions.length) sig.do = reactions;
     for (const k of ['delay', 'hold', 'linger'] as const) { const v = o[k]; if (typeof v === 'number' && v > 0) sig[k] = Math.min(SIGNAL_TIME_MAX, v); }
     if (typeof o.chance === 'number' && o.chance < 1) sig.chance = Math.max(SIGNAL_CHANCE_MIN, o.chance);
     if (typeof o.seed === 'number' && Number.isFinite(o.seed)) sig.seed = Math.round(o.seed);
@@ -2061,6 +2141,8 @@ function parseSignals(raw: unknown): PlaySignal[] {
   // A combination keeps only inputs that are signals of this setup (and not itself).
   const ids = new Set(out.map(s => s.id));
   for (const s of out) if (s.when?.kind === 'logic') s.when = { ...s.when, inputs: s.when.inputs.filter(i => ids.has(i) && i !== s.id) };
+  // Signal inputs only from signals of this setup (one listening to itself is a loop, and allowed).
+  for (const s of out) if (s.inputs) { const k = s.inputs.filter(x => x.kind !== 'signal' || ids.has(x.signal)); if (k.length) s.inputs = k; else delete s.inputs; }
   // Links only to signals of this setup (a link to itself is a one-signal loop, and allowed).
   for (const s of out) if (s.links) { const l = s.links.filter(x => ids.has(x.to)); if (l.length) s.links = l; else delete s.links; }
   return out;

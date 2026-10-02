@@ -1464,7 +1464,11 @@ void main() {
     // Play pad actions go to the drums; every other action to the layer kit.
     if (K && drumLayers.length) { const kitAct = K.act; K.act = a => (a.do === 'pad' ? drumAct(a) : kitAct(a)); }
     if (K && grains.racks.size) { const kitAct = K.act; K.act = a => (a.do === 'pad' && typeof a.layerId === 'string' && a.layerId.indexOf('ae:') === 0 ? grainNote(a.layerId.slice(3), Math.round(a.amount) - 1, a.vel == null ? 1 : a.vel) : kitAct(a)); }
-    const actions = (play.actions || []).filter(a => a.enabled);
+    // Signals as rules (the kit's sgSignalPlan): level inputs and how they combine; their reactions run as actions on them.
+    const KSG = typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals : null;
+    const sigPlan = new Map(KSG && KSG.signalPlan ? KSG.signalPlan(play.signals || []).map(p => [p.id, p]) : []);
+    const hasLevel = id => { const p = sigPlan.get(id); return !!p && p.level.length > 0; };
+    const actions = (play.actions || []).filter(a => a.enabled).concat(KSG && KSG.reactions ? KSG.reactions(play.signals || []).filter(a => a.enabled) : []);
     // Conditions, signals and axis swaps: the kit's signals.js, the same code the app runs.
     const SG = typeof SSKit !== 'undefined' && SSKit.signals ? SSKit.signals : null;
     const pairs = new Map((play.pairs || []).map(p => [p.id, p]));
@@ -1481,7 +1485,7 @@ void main() {
       // A record's own sources' triggers (the kit's routes.js), like mappings'.
       .concat(typeof SSKit !== 'undefined' && SSKit.routes ? SSKit.routes.triggersOf(play.sources || []) : [])
       // A signal defined by a trigger listens to it like any other (the app's playEngine does the same).
-      .concat((play.signals || []).filter(s => s.when && s.when.kind === 'trigger').map(s => s.when.trigger));
+      .concat([...sigPlan.values()].flatMap(p => p.level.filter(x => x.kind === 'trigger').map(x => x.trigger)));
     const gamepad = i => (navigator.getGamepads ? navigator.getGamepads()[i] : null);
     const padQueue = [];
     function tickPads() { if (!padG) return; for (const m of padQueue.splice(0)) KM.gridMessage(padG, padCfg, m[0], m[1], m[2], m[3], time); }
@@ -1492,7 +1496,7 @@ void main() {
       if (m.source.kind === 'trigger' && m.source.trigger.on === 'key') keysUsed.add(m.source.trigger.code);
     }
     for (const a of actions) if (a.trigger.on === 'key') keysUsed.add(a.trigger.code);
-    for (const s of play.signals || []) if (s.when && s.when.kind === 'trigger' && s.when.trigger.on === 'key') keysUsed.add(s.when.trigger.code);
+    for (const p of sigPlan.values()) for (const x of p.level) if (x.kind === 'trigger' && x.trigger.on === 'key') keysUsed.add(x.trigger.code);
     for (const s of play.sources || []) { if (s.enabled === false) continue; if (s.source.kind === 'key') keysUsed.add(s.source.code); if (s.source.kind === 'trigger' && s.source.trigger.on === 'key') keysUsed.add(s.source.trigger.code); }
     for (const m of incMappings) if (m.increment.on === 'trigger' && m.increment.trigger.on === 'key') keysUsed.add(m.increment.trigger.code);
     for (const m of pairMappings) { const s = m.source.kind === 'value' ? m.source.source : null; if (s && s.kind === 'key') keysUsed.add(s.code); if (s && s.kind === 'trigger' && s.trigger.on === 'key') keysUsed.add(s.trigger.code); }
@@ -1712,7 +1716,8 @@ void main() {
       if (v !== null && v !== undefined) sigPayload.set(s.id, v);
     }
     // Links between signals and the loops they make (the app's playEngine: the kit's sgLink*).
-    const linkPlan = SG && SG.linkPlan ? SG.linkPlan(play.signals || [], play.loops || []) : null;
+    // Rise and fall inputs are links read the other way (the kit's sgPulseLinks).
+    const linkPlan = SG && SG.linkPlan ? SG.linkPlan(SG.pulseLinks ? SG.pulseLinks(play.signals || []) : play.signals || [], play.loops || []) : null;
     const links = SG && SG.linkNew ? SG.linkNew() : null;
     let linkArriving = false;
     const linkSent = new Set();
@@ -1721,8 +1726,8 @@ void main() {
       sigSent.add(id);
       const s = sigById.get(id);
       // With timing or chance it goes out when the next frame works it out.
-      if (s && !s.when && SG && SG.shaped && SG.shaped(s)) { if (linkArriving) linkSent.add(id); return; }
-      if (s && s.capture && !s.when) capture(s);
+      if (s && !hasLevel(id) && SG && SG.shaped && SG.shaped(s)) { if (linkArriving) linkSent.add(id); return; }
+      if (s && s.capture && !hasLevel(id)) capture(s);
       const k = 'sig:' + id; press(k); release(k);
       linkFire(id, 'rise', !linkArriving);
     }
@@ -1733,7 +1738,8 @@ void main() {
       if (!SG || !SG.order) return [];
       const byId = new Map(list.map(s => [s.id, s]));
       // Worked out each frame: a definition, or timing and chance on a sent one (the app's playEngine).
-      return SG.order(list).order.map(id => byId.get(id)).filter(s => s && (s.when || (SG.shaped && SG.shaped(s))));
+      // In the order their levels are worked out: one that mirrors another after it.
+      return SG.order(SG.levelDeps([...sigPlan.values()])).order.map(id => byId.get(id)).filter(s => s && (hasLevel(s.id) || (SG.shaped && SG.shaped(s))));
     })();
     const sigWorked = new Set(sigDefs.map(s => s.id)), sigShape = new Map();
     // The app's seedOf: a signal's default seed from its id.
@@ -1743,15 +1749,21 @@ void main() {
       if (links) for (const id of SG.linkDue(links, time)) { linkArriving = true; try { emitSignal(id); } finally { linkArriving = false; } }
       const lvl = i => (sigWorked.has(i) ? sigLevels.get(i) || false : sigSent.has(i));
       for (const s of sigDefs) {
-        const w = s.when;
+        const p = sigPlan.get(s.id);
         let level;
-        if (w && w.kind === 'trigger') {
-          const inp = triggerInput(w.trigger);
-          const seen = sigSeen.has(s.id) ? sigSeen.get(s.id) : inp.presses;
-          sigSeen.set(s.id, inp.presses);
-          level = inp.gate || inp.presses > seen;
-        } else if (w && w.kind === 'logic') level = SG.logic(w.op, w.inputs.map(lvl));
-        else level = sigSent.has(s.id);
+        if (p && p.level.length) {
+          const levels = [];
+          for (let i = 0; i < p.level.length; i++) {
+            const x = p.level[i];
+            if (x.kind === 'signal') { levels.push(lvl(x.signal)); continue; }
+            const inp = triggerInput(x.trigger);
+            const k = i ? s.id + '#' + i : s.id;
+            const seen = sigSeen.has(k) ? sigSeen.get(k) : inp.presses;
+            sigSeen.set(k, inp.presses);
+            levels.push(inp.gate || inp.presses > seen);
+          }
+          level = SG.logic(p.op, levels);
+        } else level = sigSent.has(s.id);
         // Hold for, Linger, Chance and Delay, on the setup's clock.
         if (SG.shaped(s)) {
           let st = sigShape.get(s.id);
@@ -1762,7 +1774,7 @@ void main() {
         sigLevels.set(s.id, level);
         const at = s.capture && s.capture.at;
         if ((at === 'rise' && level && !was) || (at === 'fall' && !level && was) || (at === 'held' && level)) capture(s);
-        if (level && !was) { press('sig:' + s.id); linkFire(s.id, 'rise', !(!s.when && linkSent.has(s.id))); }
+        if (level && !was) { press('sig:' + s.id); linkFire(s.id, 'rise', !(!hasLevel(s.id) && linkSent.has(s.id))); }
         else if (!level && was) { release('sig:' + s.id); linkFire(s.id, 'fall', true); }
       }
       sigSent.clear();
@@ -1909,9 +1921,11 @@ void main() {
       const fires = a => {
         const inp = triggerInput(a.trigger);
         const f = fireSlot(actionFire, a.id, a.trigger, inp.presses, inp.gate);
-        const d = stepped.has(a.id) ? 0 : dt;
+        // Looked at again in the same frame (a chain's later pass): only new presses count (the app does the same).
+        const again = stepped.has(a.id);
         stepped.add(a.id);
-        return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, d, time));
+        if (again && inp.presses <= f.slot.st.seen) return 0;
+        return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, again ? 0 : dt, time));
       };
       if (SG) { SG.runActions(actions, fires, a => { if (K) K.act(a); }, emitSignal); return; }
       for (const a of actions) { const n = fires(a); if (a.do !== 'signal' && K) for (let i = 0; i < n; i++) K.act(a); }

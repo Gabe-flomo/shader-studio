@@ -116,7 +116,7 @@ function pairUses(kind: 'face' | 'pose', m: PlayPairMapping): boolean {
 export function usesTracker(play: Uses, kind: 'face' | 'pose'): boolean {
   return play.mappings.some(m => sourceUses(kind, m.source) || (!!m.increment && ((m.increment.on === 'trigger' && triggerUses(kind, m.increment.trigger)) || (m.increment.on === 'repeat' && condUses(kind, m.increment.when)))))
     || (play.actions ?? []).some(a => triggerUses(kind, a.trigger))
-    || (play.signals ?? []).some(s => s.when?.kind === 'trigger' && triggerUses(kind, s.when.trigger))
+    || (play.signals ?? []).some(s => (s.when?.kind === 'trigger' && triggerUses(kind, s.when.trigger)) || !!s.inputs?.some(x => x.kind === 'trigger' && triggerUses(kind, x.trigger)))
     || (play.sources ?? []).some(s => s.enabled && (sourceUses(kind, s.source) || s.outputs.some(o => o.kind === 'step' && o.step.on === 'trigger' && triggerUses(kind, o.step.trigger))))
     || (play.pairMappings ?? []).some(m => pairUses(kind, m))
     || play.layers.some(l => l.kind === 'null' && l.follow === kind);

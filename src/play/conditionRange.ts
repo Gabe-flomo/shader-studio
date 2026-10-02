@@ -59,7 +59,10 @@ export function recordConditions(play: PlayRecord): ValueCondition[] {
   }
   for (const a of play.actions ?? []) trig(a.trigger);
   // A signal's own definition (a level signal).
-  for (const s of play.signals ?? []) if (s.when?.kind === 'trigger') trig(s.when.trigger);
+  for (const s of play.signals ?? []) {
+    if (s.when?.kind === 'trigger') trig(s.when.trigger);
+    for (const x of s.inputs ?? []) if (x.kind === 'trigger') trig(x.trigger);
+  }
   for (const m of play.pairMappings ?? []) {
     if (m.source.kind === 'value' && m.source.source.kind === 'trigger') trig(m.source.source.trigger);
     if (m.a.when) out.push(m.a.when);

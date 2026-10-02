@@ -90,6 +90,23 @@ In the file a signal may carry `"when": { "kind": "trigger", "trigger": {…} }`
 
 Deleting a signal leaves what sent or listened for it in place, marked **Missing signal**. Signals themselves aren't recorded in takes: what they did is (the actions they fired, the controls they moved).
 
+## Signals as rules (guide phase 2)
+
+A signal is a rule: **When** its inputs, combined, **Do** its reactions.
+
+- `inputs`: a list. `{kind:'trigger', trigger}` follows a trigger's level. `{kind:'signal', signal, as}` uses another signal: `mirror` follows its level; `rise` or `fall` takes its edge after `delay` seconds.
+- `combine`: `any` (the default), `all`, `none` or `one`. These are the old or, and, not and xor. Mirrored inputs and trigger inputs are combined. Rise and fall inputs press the signal (as links did).
+- `do`: reactions, `{id, do, layerId, amount, enabled, signal?, fire?}`. Each is an action fired by this signal, with its own firing mode (rise, held, release, …).
+
+The older shape still loads and plays. `normalizeRules` (`src/play/rules.ts`) rewrites it:
+
+- `when` becomes inputs.
+- Links become rise/fall inputs on their targets.
+- Actions on a signal become its reactions.
+- Every other action joins one rule per trigger, named "When …".
+
+The golden outputs check that every example and fixture plays identically in both shapes.
+
 ## Captured values and Set
 
 A signal can **take** a value with it (sample and hold, on its card): **a number** (anything a condition can watch: a slider, a layer's number, a reading, a mapping's source) or **a position** (a layer's centre, a hand point, **the pinch point** halfway between the thumb and index tips, the **pointer on the picture**, a point), read **as it starts** (its rise), **as it ends** (its fall: "the radius it had when it dropped back") or **while true** (every frame: follows it). The card shows what it took last. A signal that is only sent takes its value when it is sent. Nothing to read (a hand out of view) keeps the last capture.
