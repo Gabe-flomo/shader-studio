@@ -4,6 +4,7 @@
  * (the canvas and web pages), moving rows, duplicating a group both ways
  * with every id pointed at the copies, and the saved form.
  */
+import { normalizeRules } from '../rules';
 import { describe, expect, it } from 'vitest';
 import { defaultLayer, emptyPlayRecord, parsePlayRecord, type PlayAction, type PlayControl, type PlayLayer, type PlayMapping, type PlayRecord } from '../../types/play';
 import { applyGroupVisibility, buildTree, childrenOf, groupLayerIds, tidyGroups, type LayerGroup } from '../../types/layerGroups';
@@ -198,7 +199,8 @@ describe('duplicating a group', () => {
   });
 
   it('with controls and mappings: those are copied and every layer id in them retargeted', () => {
-    const p = hooked();
+    // As the app holds it: the action on the group's layer is a rule.
+    const p = normalizeRules(hooked());
     const { play } = duplicateGroup(p, 'g', true);
     const id = (label: string) => play.layers.find(l => l.label === label)!.id;
     const n2 = id('N (2)'), p2 = id('P (2)'), s2 = id('S (2)');
@@ -210,10 +212,11 @@ describe('duplicating a group', () => {
     expect(newMaps[1].source).toMatchObject({ kind: 'trigger', trigger: { on: 'proximity', a: n2, b: s2 } });
     // A control outside the group keeps its one mapping.
     expect(play.mappings.filter(m => m.controlId === 'c3')).toHaveLength(1);
-    const newActs = play.actions!.slice(p.actions!.length);
-    expect(newActs).toHaveLength(1);
-    expect(newActs[0]).toMatchObject({ layerId: p2, trigger: { on: 'zone', layerId: s2 } });
-    expect(newActs[0].id).not.toBe('a1');
+    const newRules = play.signals!.slice(p.signals!.length);
+    expect(newRules).toHaveLength(1);
+    expect(newRules[0].inputs![0]).toMatchObject({ kind: 'trigger', trigger: { on: 'zone', layerId: s2 } });
+    expect(newRules[0].do![0]).toMatchObject({ layerId: p2 });
+    expect(newRules[0].do![0].id).not.toBe('a1');
     // The originals are untouched, and the copy round-trips.
     expect(play.controls.slice(0, 3)).toEqual(p.controls);
     expect(parsePlayRecord(JSON.parse(JSON.stringify(play)))).toEqual(play);

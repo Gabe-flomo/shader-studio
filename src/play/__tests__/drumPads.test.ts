@@ -23,7 +23,7 @@ import { OfflineAudioContext as NodeOffline } from 'node-web-audio-api';
 import {
   DP_KEYS, DP_PADS, DP_PARAMS, dpCreateSampler, dpEnvAt, dpEnvPoints, dpKey, dpKeyParts, dpPadOfCell, dpPadOfKey, dpPadOfNote, dpRate, dpRegion, dpSynthData, dpVelGain,
 } from '../kit/drumPads.js';
-import { actionsForLayer, defaultLayer, parseActionTarget, parseLayer, parsePlayRecord, type PlayRecord } from '../../types/play';
+import { actionsForLayer, defaultLayer, parseActionTarget, parseLayer, parsePlayRecordAsSaved, type PlayRecord } from '../../types/play';
 import { layerNumericProps, padsLayerOfInput, padsReaderInput, type DrumPadLayer } from '../../types/playLayers';
 import { mixBuffers, padHitsOf, padTrackOf, type PadTrack } from '../../lib/recordingAudio';
 import { takeValueAt } from '../../lib/audioFxOffline';
@@ -327,7 +327,7 @@ describe('the record', () => {
     expect(bare.pad16_end).toBe(1);
   });
   it('Play pad actions and pad hits in takes survive a save', () => {
-    const rec = parsePlayRecord({
+    const rec = parsePlayRecordAsSaved({
       version: 1, controls: [], mappings: [], layers: [drums()],
       actions: [{ id: 'a', trigger: { on: 'key', code: 'Space' }, do: 'pad', layerId: 'drums', amount: 3, enabled: true }],
       takes: [{ id: 't', name: 'T', from: 0, length: 2, tracks: [], events: [{ t: 0.5, do: 'pad', layerId: 'drums', amount: 2, vel: 0.4 }, { t: 0.6, do: 'pad', layerId: 'drums', amount: 2, vel: 7 }] }],

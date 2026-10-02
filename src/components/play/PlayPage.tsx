@@ -178,6 +178,16 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const play = useNodeGraphStore(s => s.play);
   const setPlay = useNodeGraphStore(s => s.setPlay);
   const nodes = useNodeGraphStore(s => s.nodes);
+  // A group's Iterations on the panel is live (a uniform, compiled to the cap); off the panel it's a literal again.
+  const playControls = useNodeGraphStore(s => s.play.controls);
+  useEffect(() => {
+    const driven = new Set(playControls.filter(c => c.target.endsWith('::iterations')).map(c => c.target.slice(0, -'::iterations'.length)));
+    for (const n of nodes) {
+      if (n.type !== 'group') continue;
+      const want = driven.has(n.id);
+      if (want !== (n.params.liveIterations === true)) useNodeGraphStore.getState().updateNodeParams(n.id, { liveIterations: want || undefined });
+    }
+  }, [nodes, playControls]);
   const paramBindings = useNodeGraphStore(s => s.paramBindings);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const [embedOpen, setEmbedOpen] = useState(false);

@@ -24,7 +24,7 @@ import { playEngine } from '../../lib/playEngine';
 import { inputBus } from '../../lib/inputBus';
 import { TakeCapture } from '../../lib/takes';
 import { trackAt } from '../../lib/takePlayback';
-import { defaultLayer, emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, parseTake, type AudioReader, type PlayAction, type PlayRecord } from '../../types/play';
+import { defaultLayer, emptyPlayRecord, isPlayRecordEmpty, parsePlayRecordAsSaved, parseTake, type AudioReader, type PlayAction, type PlayRecord } from '../../types/play';
 import { removeReader } from '../../components/play/readersPanelUi';
 
 const SR = 48000;
@@ -178,7 +178,7 @@ describe('reader triggers: threshold and hysteresis', () => {
       audioReaders: { input: '', readers },
       actions: [action('once'), action('release', { mode: 'release', every: 3, unit: 'frames' }), action('every', { mode: 'every', every: 2, unit: 'frames' })],
     };
-    playEngine.setRecord(parsePlayRecord(rec));
+    playEngine.setRecord(parsePlayRecordAsSaved(rec));
     const fired: string[] = [];
     const off = playEngine.onAction(a => fired.push(a.id));
     // A kick that rings: up past 0.6, wobbles above 0.4, falls, then a second hit.
@@ -208,7 +208,7 @@ describe('as sources', () => {
   });
 
   it('reads a reader through the engine, null while its input is off', () => {
-    playEngine.setRecord(parsePlayRecord({ ...emptyPlayRecord(), audioReaders: { input: '', readers: [rd('k', 60)] } }));
+    playEngine.setRecord(parsePlayRecordAsSaved({ ...emptyPlayRecord(), audioReaders: { input: '', readers: [rd('k', 60)] } }));
     expect(playEngine.readSource({ kind: 'reader', readerId: 'k' })).toBeNull();
     audioReaderBank.setPlayback('k', 0.4);
     expect(playEngine.readSource({ kind: 'reader', readerId: 'k' })).toBe(0.4);
@@ -267,7 +267,7 @@ describe('Learn', () => {
   });
 
   it('learns the reader a sound moved, as a source and as a trigger', () => {
-    playEngine.setRecord(parsePlayRecord({ ...emptyPlayRecord(), audioReaders: { input: '', readers: [rd('k', 60), rd('h', 8000)] } }));
+    playEngine.setRecord(parsePlayRecordAsSaved({ ...emptyPlayRecord(), audioReaders: { input: '', readers: [rd('k', 60), rd('h', 8000)] } }));
     let got: unknown = null;
     playEngine.startLearn(s => { got = s; });
     let t = 1;
@@ -307,20 +307,20 @@ describe('saved in the Play setup', () => {
   };
 
   it('round-trips through a file unchanged', () => {
-    const once = parsePlayRecord(JSON.parse(JSON.stringify(rec)));
+    const once = parsePlayRecordAsSaved(JSON.parse(JSON.stringify(rec)));
     expect(once).toEqual(rec);
-    expect(parsePlayRecord(JSON.parse(JSON.stringify(once)))).toEqual(once);
+    expect(parsePlayRecordAsSaved(JSON.parse(JSON.stringify(once)))).toEqual(once);
     expect(isPlayRecordEmpty({ ...emptyPlayRecord(), audioReaders: { input: '', readers } })).toBe(false);
   });
 
   it('leaves old files as they were', () => {
-    const old = parsePlayRecord({ version: 1, controls: [], mappings: [], layers: [] });
+    const old = parsePlayRecordAsSaved({ version: 1, controls: [], mappings: [], layers: [] });
     expect('audioReaders' in old).toBe(false);
-    expect(parsePlayRecord({ ...emptyPlayRecord(), audioReaders: { input: '', readers: [] } }).audioReaders).toBeUndefined();
+    expect(parsePlayRecordAsSaved({ ...emptyPlayRecord(), audioReaders: { input: '', readers: [] } }).audioReaders).toBeUndefined();
   });
 
   it('drops what reads a reader the file lacks, and clamps the rest', () => {
-    const bad = parsePlayRecord({
+    const bad = parsePlayRecordAsSaved({
       ...rec,
       audioReaders: { input: 7, readers: [{ id: 'kick', hz: 5, width: 9, gain: 500, attack: -3, colour: 'red' }, { id: 'kick', hz: 100 }, { hz: 50 }] },
     });
@@ -333,7 +333,7 @@ describe('saved in the Play setup', () => {
 
   it('keeps at most 16 readers', () => {
     const many = Array.from({ length: 20 }, (_, i) => rd(`r${i}`, 100 + i));
-    expect(parsePlayRecord({ ...emptyPlayRecord(), audioReaders: { input: '', readers: many } }).audioReaders!.readers).toHaveLength(16);
+    expect(parsePlayRecordAsSaved({ ...emptyPlayRecord(), audioReaders: { input: '', readers: many } }).audioReaders!.readers).toHaveLength(16);
   });
 
   it('deleting a reader takes its mappings and actions with it', () => {
@@ -355,7 +355,7 @@ describe('saved in the Play setup', () => {
 
 describe('takes', () => {
   it('record each reader’s level per frame, and keep it through a save', () => {
-    const play = parsePlayRecord({ ...emptyPlayRecord(), audioReaders: { input: '', readers: [rd('kick', 60, { name: 'Kick' })] } });
+    const play = parsePlayRecordAsSaved({ ...emptyPlayRecord(), audioReaders: { input: '', readers: [rd('kick', 60, { name: 'Kick' })] } });
     const cap = new TakeCapture(play);
     const vals = [0, 0.2, 0.9, 0.4, 0.1];
     vals.forEach((v, i) => { audioReaderBank.setPlayback('kick', v); cap.sample(1 + i * 0.1); });

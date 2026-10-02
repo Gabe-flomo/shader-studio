@@ -24,7 +24,7 @@ import { playableForPlan } from '../planGates';
 import { signalUses } from '../pairs';
 import { signalLinks } from '../../components/play/FullPages';
 import {
-  defaultLayer, emptyPlayRecord, parsePlayRecord, usesHands,
+  defaultLayer, emptyPlayRecord, parsePlayRecordAsSaved, usesHands,
   type CondCmp, type PlayAction, type PlayControl, type PlayLayer, type PlayPairMapping, type PlayRecord, type TriggerSpec, type ValueCondition,
 } from '../../types/play';
 
@@ -361,13 +361,13 @@ describe('the play file', () => {
         act('burst', { on: 'signal', signal: 'sw' }),
       ],
     };
-    const back = parsePlayRecord(JSON.parse(JSON.stringify(rec)));
+    const back = parsePlayRecordAsSaved(JSON.parse(JSON.stringify(rec)));
     expect(back).toEqual(rec);
   });
 
   it('drops pairs of missing or repeated controls and their mappings; fixes bad conditions', () => {
     const rec = pairRecord({});
-    const back = parsePlayRecord({
+    const back = parsePlayRecordAsSaved({
       ...rec,
       pairs: [...rec.pairs!, { id: 'q', label: 'Again', a: 'ax', b: 'src', position: false }, { id: 'r', label: 'Gone', a: 'nope', b: 'src', position: false }],
       pairMappings: [...rec.pairMappings!, { ...rec.pairMappings![0], id: 'pm2', pairId: 'r' }],

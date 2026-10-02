@@ -224,3 +224,28 @@ Stuck-note safety:
 Play notes is app-only: a website export has no Audio engine racks, so the reaction does nothing there.
 
 Already in from the simplification work: capture and Set, positions and the pinch-point anchor, particle event positions.
+
+## Behaviours, and every record as rules (guide phase 9)
+
+**Behaviours** (`src/play/behaviours.ts`) are recipes with slots:
+- The starter set: Pinch to burst, Pulse to the beat, Bass shakes it, Mouse moves it, Wander, Space shows and hides, Kick steps the text, Every bar.
+- **Behaviours** on the Rules page opens the library. Each recipe shows what it needs (hands, sound, MIDI). Pick one, choose its layer or slider, then Add.
+- What lands is ordinary rules and sources with fresh ids.
+- **Save as behaviour** (the star on a rule card) keeps a rule in the library (`shader-studio:behaviours`, beside layer sets). Its layers and sliders become slots; inputs from other rules are left out.
+
+**Every record opens as rules:**
+- `parsePlayRecord` validates the file (`parsePlayRecordAsSaved`), then turns actions, a signal's When and links into rules (`normalizeRules`, which registers itself; `src/main.tsx` loads it first, which avoids an import loop).
+- The bundled examples are converted the same way when they're assembled.
+- Layer sets carry rules that act on their layers. When a set loads, a rule is always new; a signal that is only sent still merges with the setup's same-named signal, along with what it does.
+- Duplicating a layer group copies its rules.
+- Removing a layer or a reader takes the reactions and inputs that used it.
+
+**What still reads the old shape:**
+- The old shape is read only by the normaliser, and by the engine and website runtime, which still accept it. Keeping those readers means:
+  - pages exported before this change keep working;
+  - the golden tests can keep proving that a setup and its rules play the same.
+- No app path writes the old shape anymore.
+
+**Small tasks:**
+- The Data layer is hidden from the add menus and the source picker (saved setups still open).
+- A group's **Iterations** goes up to 128. As a Play control it compiles the loop to that cap with a break at a uniform, so turning it doesn't recompile. Off the panel it's a literal count again.

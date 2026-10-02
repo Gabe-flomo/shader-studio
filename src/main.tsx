@@ -1,4 +1,6 @@
 import { createRoot } from 'react-dom/client'
+// First: every Play record the app opens is turned into rules (types/play.ts parsePlayRecord).
+import './play/rules'
 import './index.css'
 import App from './App.tsx'
 import { Toaster } from './components/ui/Toaster'

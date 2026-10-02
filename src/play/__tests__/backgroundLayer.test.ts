@@ -11,7 +11,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 vi.hoisted(() => {
   (globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} };
 });
-import { ACTION_KINDS, actionsForLayer, backgroundLayerOf, defaultLayer, emptyPlayRecord, parsePlayRecord, parseTake, queueSlot, type BackgroundItem, type BackgroundLayer, type PlayRecord } from '../../types/play';
+import { ACTION_KINDS, actionsForLayer, backgroundLayerOf, defaultLayer, emptyPlayRecord, parsePlayRecordAsSaved, parseTake, queueSlot, type BackgroundItem, type BackgroundLayer, type PlayRecord } from '../../types/play';
 import { BACKGROUND_QUEUE_MAX } from '../../types/playLayers';
 import { bqAct, bqPlan, bqSlot, bqState } from '../kit/queue.js';
 import { createLayerKit } from '../kit/kit.js';
@@ -246,13 +246,13 @@ describe('files', () => {
       ],
     });
     const rec: PlayRecord = { ...emptyPlayRecord(), layers: [l], actions: [{ id: 'a1', trigger: { on: 'key', code: 'Digit2' }, do: 'goto', layerId: 'bg', amount: 2, enabled: true }] };
-    const back = parsePlayRecord(JSON.parse(JSON.stringify(rec)));
+    const back = parsePlayRecordAsSaved(JSON.parse(JSON.stringify(rec)));
     expect(back.layers[0]).toEqual(l);
     expect(back.actions).toEqual(rec.actions);
   });
 
   it('keeps one Background layer, first; drops sources that aren’t valid', () => {
-    const rec = parsePlayRecord({
+    const rec = parsePlayRecordAsSaved({
       version: 1, controls: [], mappings: [],
       layers: [
         defaultLayer('text', 't', 'Words'),

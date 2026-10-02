@@ -18,7 +18,7 @@ import { playEngine } from '../../lib/playEngine';
 import { inputBus } from '../../lib/inputBus';
 import { kitScript, playBundle } from '../exportHtml';
 import runtimeSource from '../runtime/play-runtime.js?raw';
-import { defaultLayer, emptyPlayRecord, parsePlayRecord, type CondCmp, type PlayAction, type PlayControl, type PlayLayer, type PlayRecord, type TriggerSpec, type ValueCondition } from '../../types/play';
+import { defaultLayer, emptyPlayRecord, parsePlayRecordAsSaved, type CondCmp, type PlayAction, type PlayControl, type PlayLayer, type PlayRecord, type TriggerSpec, type ValueCondition } from '../../types/play';
 
 afterEach(() => { playEngine.setRecord(emptyPlayRecord()); playEngine.setBaseValues(new Map()); });
 
@@ -101,7 +101,7 @@ describe('percent of range', () => {
 describe('the file and the words', () => {
   it('keeps a band’s edge and the unit, and only when set (older keys unchanged)', () => {
     const t = { on: 'value', ...cond('between', 0.2, { hi: 0.7, unit: 'pct' }) };
-    const rec = parsePlayRecord({ version: 1, layers: [sparks()], controls: [], mappings: [], actions: [{ id: 'a', trigger: t, do: 'burst', layerId: 'p', amount: 1, enabled: true }] });
+    const rec = parsePlayRecordAsSaved({ version: 1, layers: [sparks()], controls: [], mappings: [], actions: [{ id: 'a', trigger: t, do: 'burst', layerId: 'p', amount: 1, enabled: true }] });
     expect(rec?.actions?.[0].trigger).toMatchObject({ cmp: 'between', hi: 0.7, unit: 'pct' });
     expect(sgValueKey(cond('above', 0.5))).toBe('val:ctl:src:above:0.5:0:0.01');
     expect(sgValueKey(cond('between', 0.2, { hi: 0.7, unit: 'pct' }))).toBe('val:ctl:src:between:0.2:0:0.01:0.7:pct');
@@ -122,7 +122,7 @@ describe('the file and the words', () => {
 
 describe('a switch (boolean control)', () => {
   it('is a slider shown as on/off: kept for sliders only', () => {
-    const rec = parsePlayRecord({ version: 1, layers: [], mappings: [], controls: [
+    const rec = parsePlayRecordAsSaved({ version: 1, layers: [], mappings: [], controls: [
       { id: 'a', target: 'n::a', kind: 'float', label: 'A', min: 0, max: 1, toggle: true },
       { id: 'b', target: 'n::b', kind: 'color', label: 'B', min: 0, max: 1, toggle: true },
     ] });

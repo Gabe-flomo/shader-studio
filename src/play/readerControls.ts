@@ -185,6 +185,16 @@ export function removeReader(p: PlayRecord, id: string): PlayRecord {
     const actions = p.actions.filter(a => !usesReader(a.trigger, id));
     if (actions.length) out.actions = actions; else delete out.actions;
   }
+  // Rules lose the inputs that listened to it.
+  if (p.signals?.some(s => s.inputs?.some(x => x.kind === 'trigger' && usesReader(x.trigger, id)))) {
+    out.signals = p.signals.map(s => {
+      if (!s.inputs) return s;
+      const n = { ...s };
+      const k = s.inputs.filter(x => !(x.kind === 'trigger' && usesReader(x.trigger, id)));
+      if (k.length) n.inputs = k; else delete n.inputs;
+      return n;
+    });
+  }
   return out;
 }
 

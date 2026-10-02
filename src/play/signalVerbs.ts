@@ -8,7 +8,7 @@
  * default), while it lasts, or when it stops. The sentence builder renders
  * from this table; Quick rule picks the first verb of what was learned.
  */
-import { DEFAULT_FIRE, type FireSpec, type TriggerSpec } from '../types/play';
+import type { FireSpec, TriggerSpec } from '../types/play';
 import { HAND_GESTURE_LABELS, keyName, triggerLabel, valueRefLabel, type LabelContext } from './playSources';
 
 export interface Verb {
@@ -21,8 +21,9 @@ export interface Verb {
   fire?: FireSpec;
 }
 
-const HELD: FireSpec = { ...DEFAULT_FIRE, mode: 'held' };
-const RELEASE: FireSpec = { ...DEFAULT_FIRE, mode: 'release' };
+// Literals, not built from DEFAULT_FIRE at load: nothing here reads another module's constants while modules load.
+const HELD: FireSpec = { mode: 'held', every: 3, unit: 'frames' };
+const RELEASE: FireSpec = { mode: 'release', every: 3, unit: 'frames' };
 
 /** A trigger without its firing mode. */
 export function bareTrigger(t: TriggerSpec): TriggerSpec {

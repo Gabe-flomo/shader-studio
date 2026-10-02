@@ -19,7 +19,7 @@
 import { triggerKey } from './triggers';
 import { triggerLabel } from './playSources';
 import { verbSentence } from './signalVerbs';
-import { actionsForLayer, REACTIONS_PER_SIGNAL_MAX, SIGNAL_ACTION, SIGNALS_MAX, SIGNAL_INPUTS_MAX, type FireSpec, type PlayAction, type PlayReaction, type PlayRecord, type PlaySignal, type SignalCombine, type SignalInput, type SignalLogic, type TriggerSpec } from '../types/play';
+import { actionsForLayer, REACTIONS_PER_SIGNAL_MAX, SIGNAL_ACTION, SIGNALS_MAX, SIGNAL_INPUTS_MAX, setRulesNormaliser, type FireSpec, type PlayAction, type PlayReaction, type PlayRecord, type PlaySignal, type SignalCombine, type SignalInput, type SignalLogic, type TriggerSpec } from '../types/play';
 
 const COMBINE_OF: Record<SignalLogic, SignalCombine> = { and: 'all', or: 'any', not: 'none', xor: 'one' };
 
@@ -212,3 +212,6 @@ export function sharedFire(s: PlaySignal): FireSpec | undefined | null {
   const k = (f?: FireSpec) => JSON.stringify(f ?? null);
   return list.every(r => k(r.fire) === k(list[0].fire)) ? list[0].fire : null;
 }
+
+// Every record parsed from here on opens as rules (types/play.ts parsePlayRecord).
+setRulesNormaliser(normalizeRules);

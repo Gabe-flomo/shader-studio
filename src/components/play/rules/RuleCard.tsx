@@ -20,6 +20,8 @@ import { ReactionEditor } from './ReactionEditor';
 import { Lamp } from './Lamp';
 import { usePlayUi } from '../playUi';
 import { openDetail } from '../detail/detailStore';
+import { behaviourFromRule, saveBehaviour } from '../../../play/behaviours';
+import { toast } from '../../ui/toastStore';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
@@ -39,6 +41,13 @@ export function RuleCard({ rule: s, play, onChange, on, flash }: { rule: PlaySig
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} height={28} style={{ flex: 1, minWidth: 0, font: `600 12.5px ${fontFamily.ui}` }} />
         <Button size="sm" icon="play" onClick={() => playEngine.fireSignal(s.id)} title="Fire it now: its reactions run">Test</Button>
         <IconButton icon="bolt" label="Rule from this: a new rule for when this one starts" size="sm" onClick={() => usePlayUi.getState().askQuickRule({ when: { on: 'signal', signal: s.id } })} />
+        <IconButton icon="star" label="Save as behaviour: use it again in other setups" size="sm" onClick={() => {
+          const { behaviour, left } = behaviourFromRule(play, s.id, s.name);
+          if (!behaviour) return;
+          const r = saveBehaviour(behaviour);
+          if (!r.ok) { toast.error('Couldn’t save it', { message: r.error }); return; }
+          toast.success(`Saved “${behaviour.name}” as a behaviour`, { message: left.length ? `Left out: ${left.join(', ')}.` : 'It’s in Behaviours on the Rules page.' });
+        }} />
         <IconButton icon="popout" label="Open its details: what it listens to and who listens to it" size="sm" onClick={() => openDetail('signal', s.id)} />
         <IconButton icon="trash" label="Delete rule" size="sm" tone="danger" onClick={() => onChange(p => deleteSignal(p, s.id))} />
       </div>

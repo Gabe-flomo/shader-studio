@@ -19,6 +19,7 @@ import { PageHeader, TwoPane } from '../FullPages';
 import { LoopsPanel } from '../SignalDefEditor';
 import { usePlayUi } from '../playUi';
 import { QuickRule } from './QuickRule';
+import { BehavioursDialog } from './BehavioursDialog';
 import { RuleCard } from './RuleCard';
 import { reactionText } from './reactionChoices';
 import { signalStructure, type SignalShape } from '../signalFlow';
@@ -50,6 +51,7 @@ export function RulesPage({ play: raw, onChange: rawChange, wide }: { play: Play
     setQuick({ key: Date.now(), when: ask.when, layerId: ask.layerId });
   }, [ask]);
   const startQuick = () => setQuick({ key: Date.now() });
+  const [library, setLibrary] = useState(false);
   const list = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <LoopsPanel play={play} onChange={onChange} />
@@ -68,7 +70,11 @@ export function RulesPage({ play: raw, onChange: rawChange, wide }: { play: Play
   const side = selected ? <RuleCard key={selected.id} rule={selected} play={play} onChange={onChange} on={!!on[selected.id]} flash={flash[selected.id] ?? 0} /> : null;
   return (
     <>
-      <PageHeader title="Rules" count={rules.length} extra={<Button size="sm" variant="primary" icon="plus" onClick={startQuick}>Rule</Button>} />
+      <PageHeader title="Rules" count={rules.length} extra={<>
+        <Button size="sm" variant="ghost" icon="star" onClick={() => setLibrary(true)}>Behaviours</Button>
+        <Button size="sm" variant="primary" icon="plus" onClick={startQuick}>Rule</Button>
+      </>} />
+      {library && <BehavioursDialog play={play} onChange={onChange} onAdded={id => { if (id) pick(id); }} onClose={() => setLibrary(false)} />}
       {quick && <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
         <QuickRule key={quick.key} play={play} when={quick.when} layerId={quick.layerId} onCancel={() => setQuick(null)}
           onMake={(trigger, reaction) => {

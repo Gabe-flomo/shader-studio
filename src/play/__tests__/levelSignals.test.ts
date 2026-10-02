@@ -19,7 +19,7 @@ import { inputBus } from '../../lib/inputBus';
 import { conditionRanges } from '../conditionRange';
 import { kitScript } from '../exportHtml';
 import runtimeSource from '../runtime/play-runtime.js?raw';
-import { defaultLayer, emptyPlayRecord, parsePlayRecord, usesHands, type PlayAction, type PlayControl, type PlayLayer, type PlayRecord, type PlaySignal, type TriggerSpec } from '../../types/play';
+import { defaultLayer, emptyPlayRecord, parsePlayRecordAsSaved, usesHands, type PlayAction, type PlayControl, type PlayLayer, type PlayRecord, type PlaySignal, type TriggerSpec } from '../../types/play';
 
 afterEach(() => { playEngine.setRecord(emptyPlayRecord()); playEngine.setBaseValues(new Map()); });
 
@@ -45,7 +45,7 @@ describe('the kit', () => {
 
 describe('the file', () => {
   it('keeps a definition, drops inputs that aren’t signals, and renames through the reference walker', () => {
-    const rec = parsePlayRecord({ version: 1, layers: [], controls: [], mappings: [], signals: [
+    const rec = parsePlayRecordAsSaved({ version: 1, layers: [], controls: [], mappings: [], signals: [
       { id: 'a', name: 'A', when: { kind: 'trigger', trigger: { on: 'key', code: 'KeyA' } } },
       { id: 'b', name: 'B', when: { kind: 'logic', op: 'or', inputs: ['a', 'gone', 'b', 'a'] } },
       { id: 'c', name: 'C', when: { kind: 'nonsense' } },

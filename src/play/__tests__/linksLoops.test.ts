@@ -19,7 +19,7 @@ import { inputBus } from '../../lib/inputBus';
 import { conditionRanges } from '../conditionRange';
 import { kitScript } from '../exportHtml';
 import runtimeSource from '../runtime/play-runtime.js?raw';
-import { defaultLayer, emptyPlayRecord, parsePlayRecord, type PlayControl, type PlayLayer, type PlayLoop, type PlayRecord, type PlaySignal, type TriggerSpec } from '../../types/play';
+import { defaultLayer, emptyPlayRecord, parsePlayRecordAsSaved, type PlayControl, type PlayLayer, type PlayLoop, type PlayRecord, type PlaySignal, type TriggerSpec } from '../../types/play';
 
 afterEach(() => { playEngine.setRecord(emptyPlayRecord()); playEngine.setBaseValues(new Map()); });
 
@@ -60,7 +60,7 @@ describe('the kit', () => {
 
 describe('the file and the helpers', () => {
   it('keeps links to signals of the setup and loop settings; renames links', () => {
-    const rec = parsePlayRecord({ version: 1, layers: [], controls: [], mappings: [], signals: [
+    const rec = parsePlayRecordAsSaved({ version: 1, layers: [], controls: [], mappings: [], signals: [
       { id: 'a', name: 'A', links: [{ to: 'b', delay: 0.5 }, { to: 'gone', delay: 1 }, { to: 'a', delay: 99, on: 'fall' }] }, { id: 'b', name: 'B' },
     ], loops: [{ key: 'a', speed: 50, laps: 3.4, running: false, policy: 'add', name: '  Ring ' }] });
     expect(rec?.signals?.[0].links).toEqual([{ to: 'b', delay: 0.5 }, { to: 'a', delay: 10, on: 'fall' }]);
@@ -81,7 +81,7 @@ describe('the file and the helpers', () => {
       pairMappings: ['sig:s', 'ev:p:annihilate', 'pointer', 'ev:gone:born'].map((anchor, i) => ({ id: `pm${i}`, pairId: 'pr', affect: 'both', enabled: true, source: { kind: 'position', anchor },
         a: { outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0 }, b: { outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0 } })),
     };
-    expect(parsePlayRecord(raw)?.pairMappings?.map(m => m.id)).toEqual(['pm0', 'pm1', 'pm2']);
+    expect(parsePlayRecordAsSaved(raw)?.pairMappings?.map(m => m.id)).toEqual(['pm0', 'pm1', 'pm2']);
   });
 
   it('labels where each signal sits', () => {

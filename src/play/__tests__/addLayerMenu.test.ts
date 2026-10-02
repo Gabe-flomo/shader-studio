@@ -11,9 +11,9 @@ const kind = (id: string, name: string, hint = ''): KindEntry => ({
 const folder = (id: string, label: string): FolderEntry => ({ id, label, collapsed: false, createdAt: 0 });
 
 describe('Add layer: built-in groups', () => {
-  it('offers every layer kind exactly once (variants aside)', () => {
+  it('offers every layer kind exactly once (variants aside), the hidden Data layer apart', () => {
     const offered = builtinGroups().flatMap(g => g.items.filter(i => !i.variant).map(i => i.kind));
-    expect([...offered].sort()).toEqual([...LAYER_KINDS].sort());
+    expect([...offered].sort()).toEqual([...LAYER_KINDS].filter(k => k !== 'data').sort());
     expect(new Set(offered).size).toBe(offered.length);
   });
 

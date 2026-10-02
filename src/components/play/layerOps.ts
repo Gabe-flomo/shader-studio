@@ -34,6 +34,15 @@ export function removeLayer(p: PlayRecord, id: string): PlayRecord {
   };
   const actions = (p.actions ?? []).filter(a => a.layerId !== id && !triggerReads(a.trigger, id));
   if (actions.length) out.actions = actions; else delete out.actions;
+  // Rules lose what they did to it and the inputs that watched it (the rule itself stays, to be pointed elsewhere).
+  if (p.signals?.some(s => s.do?.some(r => r.layerId === id) || s.inputs?.some(x => x.kind === 'trigger' && triggerReads(x.trigger, id)))) {
+    out.signals = p.signals.map(s => {
+      const n = { ...s };
+      if (s.do) { const d = s.do.filter(r => r.layerId !== id); if (d.length) n.do = d; else delete n.do; }
+      if (s.inputs) { const k = s.inputs.filter(x => !(x.kind === 'trigger' && triggerReads(x.trigger, id))); if (k.length) n.inputs = k; else delete n.inputs; }
+      return n;
+    });
+  }
   // The Background's matte goes back to none when its layer is removed.
   if (out.backgroundMatte?.id === id) delete out.backgroundMatte;
   return out;

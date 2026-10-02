@@ -54,6 +54,8 @@ import type { PlayAudioFx } from '../types/playAudioFx';
 import { isLinkedRef, linkedName } from '../files/linkedRefs';
 import { mapAction, mapControl, mapLayerRefs, mapMapping, mapPair, mapPairMapping, mapSignal, mapTarget, type RefFn, type RefKind } from './playRefs';
 import { playId } from './playControls';
+// A set opens in the rules shape like any record (this registers the converter where layer sets are used alone).
+import './rules';
 
 export const LAYER_SETS_KEY = 'shader-studio:layer-sets';
 /** Fired on window when the list changes. */
@@ -214,6 +216,34 @@ export function captureLayerSet(p: PlayRecord, layerIds: Iterable<string>): SetC
     out(`action ${q(a.do)}${a.layerId && byId.has(a.layerId) ? ` on ${q(lname(a.layerId))}` : ''} (${firstWhy(refs) ?? 'it names something outside the set'})`);
   }
 
+  // Rules (implementation guide, phase 9): one acting on a set layer, or listening for a signal the set sends,
+  // when everything it reads is inside; reactions on layers outside are left out (and listed).
+  const ruleIn = new Map<string, PlaySignal>();
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const r of p.signals ?? []) {
+      if (ruleIn.has(r.id) || !r.do?.length) continue;
+      const kept = r.do.filter(x => !x.layerId || S.has(x.layerId));
+      const inner: PlaySignal = { ...r, do: kept };
+      const refs = refsOf(f => mapSignal(inner, f)).filter(([k, id]) => !(k === 'signal' && id === r.id));
+      const hearsSent = (r.inputs ?? []).some(x => x.kind === 'signal' && sent.has(x.signal)) || (r.when?.kind === 'logic' && r.when.inputs.some(i => sent.has(i)));
+      if (!(kept.some(x => x.layerId && S.has(x.layerId)) || hearsSent || touches(refs)) || firstWhy(refs)) continue;
+      ruleIn.set(r.id, inner);
+      signals.add(r.id);
+      for (const x of kept) if (x.signal) sent.add(x.signal);
+      sent.add(r.id);
+      for (const [k, id] of refs) if (k === 'signal') signals.add(id); else if (k === 'control') C.add(id);
+      grew = true;
+    }
+  }
+  for (const r of p.signals ?? []) {
+    const inner = ruleIn.get(r.id);
+    if (inner) { if (inner.do!.length < r.do!.length) out(`rule ${q(r.name)}: what it does to layers outside the set`); continue; }
+    if (!r.do?.some(x => x.layerId && S.has(x.layerId))) continue;
+    const refs = refsOf(f => mapSignal(r, f)).filter(([k, id]) => !(k === 'signal' && id === r.id));
+    out(`rule ${q(r.name)} (${firstWhy(refs) ?? 'it names something outside the set'})`);
+  }
+
   // Pairs: both controls carried.
   const pairs: PlayPair[] = [];
   for (const pr of p.pairs ?? []) {
@@ -244,7 +274,14 @@ export function captureLayerSet(p: PlayRecord, layerIds: Iterable<string>): SetC
   const kinds = (p.layerKinds ?? []).filter(k => kindIds.has(k.id));
   if (kinds.length) playOut.layerKinds = clone(kinds);
   if (actions.length) playOut.actions = actions;
-  const sigs = (p.signals ?? []).filter(s => signals.has(s.id));
+  // A rule that came along whole keeps its reactions on the set; one only named (sent or listened for) comes without any.
+  const sigs = (p.signals ?? []).filter(s => signals.has(s.id)).map(s => {
+    const inner = ruleIn.get(s.id);
+    if (inner) return inner;
+    const bare = { ...s };
+    delete bare.do;
+    return bare;
+  });
   if (sigs.length) playOut.signals = clone(sigs);
   if (pairs.length) playOut.pairs = pairs;
   if (pairMappings.length) playOut.pairMappings = pairMappings;
@@ -290,12 +327,15 @@ export function setMedia(layers: readonly PlayLayer[]): SetMedia[] {
 }
 
 /** "3 layers · 2 controls · 1 mapping · 1 action" */
-export function setSummary(play: Pick<PlayRecord, 'layers' | 'controls' | 'mappings' | 'actions' | 'signals'>): string {
+export function setSummary(play: Pick<PlayRecord, 'layers' | 'controls' | 'mappings' | 'actions' | 'signals' | 'sources'>): string {
   const parts = [plural(play.layers.length, 'layer')];
   if (play.controls.length) parts.push(plural(play.controls.length, 'control'));
   if (play.mappings.length) parts.push(plural(play.mappings.length, 'mapping'));
   if (play.actions?.length) parts.push(plural(play.actions.length, 'action'));
-  if (play.signals?.length) parts.push(plural(play.signals.length, 'signal'));
+  // A signal with inputs or reactions is a rule; one that is only sent and listened for, a signal.
+  const rules = (play.signals ?? []).filter(x => x.do?.length || x.inputs?.length || x.when).length;
+  if (rules) parts.push(plural(rules, 'rule'));
+  if ((play.signals?.length ?? 0) > rules) parts.push(plural(play.signals!.length - rules, 'signal'));
   return parts.join(' · ');
 }
 
@@ -402,16 +442,27 @@ export function loadLayerSet(p: PlayRecord, set: Pick<LayerSet, 'name' | 'play' 
   for (const m of mappings) ids.mapping.set(m.id, newId('map'));
   for (const r of readerIds) ids.reader.set(r, newId('reader'));
   for (const x of pairs) ids.pair.set(x.id, newId('pair'));
-  // Signals are names: one the setup already has (by name) is the same signal.
+  // A sent signal is a name: one the setup already has (by name) is the same signal, and what it
+  // does in the set joins it. A rule (it has its own inputs) is always new, its name kept apart.
+  const isRule = (s: PlaySignal) => !!(s.inputs?.length || s.when);
   const fresh: PlaySignal[] = [];
+  const joins: Array<{ to: string; from: PlaySignal }> = [];
+  const signalNames = new Set((p.signals ?? []).map(x => x.name));
   for (const s of src.signals ?? []) {
-    const have = p.signals?.find(x => x.name === s.name);
-    if (have) ids.signal.set(s.id, have.id);
-    else { ids.signal.set(s.id, newId('sig')); fresh.push(s); }
+    const have = isRule(s) ? undefined : p.signals?.find(x => x.name === s.name && !isRule(x));
+    if (have) { ids.signal.set(s.id, have.id); if (s.do?.length) joins.push({ to: have.id, from: s }); continue; }
+    ids.signal.set(s.id, newId('sig'));
+    const name = freeName(s.name, signalNames);
+    signalNames.add(name);
+    fresh.push({ ...s, name });
   }
   const f: RefFn = (k, id) => ids[k].get(id) ?? id;
-  // New signals keep what they are defined by (a trigger, or the signals they combine), pointed at the new ids.
-  const newSignals: PlaySignal[] = fresh.map(s => mapSignal(s, f));
+  // Reactions get fresh ids too (they are keyed like actions).
+  const freshDo = (s: PlaySignal): PlaySignal => (s.do ? { ...s, do: s.do.map(r => ({ ...r, id: newId('act') })) } : s);
+  // New signals keep what they are defined by (their inputs, the signals they combine), pointed at the new ids.
+  const newSignals: PlaySignal[] = fresh.map(s => ({ ...freshDo(mapSignal(s, f)), id: ids.signal.get(s.id)! }));
+  const joined = new Map<string, PlaySignal['do']>();
+  for (const j of joins) joined.set(j.to, [...(joined.get(j.to) ?? []), ...(freshDo(mapSignal(j.from, f)).do ?? [])]);
 
   // Layers, named apart from the setup's.
   const layerNames = new Set(p.layers.map(l => l.label));
@@ -466,7 +517,7 @@ export function loadLayerSet(p: PlayRecord, set: Pick<LayerSet, 'name' | 'play' 
     groups: [...(p.groups ?? []), folder, ...groups],
   };
   if (newActions.length) out.actions = [...(p.actions ?? []), ...newActions];
-  if (newSignals.length) out.signals = [...(p.signals ?? []), ...newSignals];
+  if (newSignals.length || joined.size) out.signals = [...(p.signals ?? []).map(x => (joined.has(x.id) ? { ...x, do: [...(x.do ?? []), ...joined.get(x.id)!] } : x)), ...newSignals];
   if (newPairs.length) out.pairs = [...(p.pairs ?? []), ...newPairs];
   if (newPairMappings.length) out.pairMappings = [...(p.pairMappings ?? []), ...newPairMappings];
   const haveKinds = new Set((p.layerKinds ?? []).map(k => k.id));

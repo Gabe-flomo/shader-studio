@@ -30,7 +30,7 @@ const SOURCE_GROUPS: { heading: string; entries: Entry[] }[] = [
     { value: 'control', label: 'Another control', icon: 'sliders', description: 'Follows a slider on the panel' },
     { value: 'null', label: 'Null position', icon: 'target', description: 'Where a Null layer sits, X or Y' },
     { value: 'sensor', label: 'Layer sensor', icon: 'eye', description: 'Zone fill, speed, spread, distance…' },
-    { value: 'data', label: 'Data', icon: 'table', description: 'A column of a dataset’s current row' },
+    // Data (a column of a dataset's row) is hidden for now with its layer (implementation guide, small tasks); saved setups keep it.
     { value: 'captured', label: 'Set from a signal', icon: 'target', description: 'The value a signal captured, written as it is (sample and hold)', keywords: 'capture sample hold set jump' },
   ] },
   { heading: 'Generators', entries: [

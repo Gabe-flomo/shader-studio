@@ -895,6 +895,12 @@ export class ShaderAssembler {
           const iters = Math.max(1, Math.min(MAX_GROUP_ITERATIONS, Math.round(
             typeof node.params.iterations === 'number' ? node.params.iterations : 1,
           )));
+          // Play drives Iterations (a control on it): the loop is compiled to the cap and stops
+          // at a uniform, so turning it is a uniform write, not a recompile. Otherwise a literal.
+          const liveIters = node.params.liveIterations === true;
+          const itersUniform = liveIters ? `u_${nodeSlug}_iterations` : '';
+          if (liveIters) { this.paramUniforms[itersUniform] = iters; this.paramBindings[`${node.id}::iterations`] = itersUniform; }
+          const loopMax = liveIters ? MAX_GROUP_ITERATIONS : iters;
 
           // Build slug map for ALL subgraph nodes BEFORE building prefixedNodes.
           // Inside a field function the group is compiled again under the same slugs.
@@ -903,7 +909,7 @@ export class ShaderAssembler {
           // Field sockets: where each of the group's inputs comes from, in compiled ids.
           // In an iterated group a port carried round the loop has no wire outside it.
           const carriedIn = new Set<string>();
-          if (iters > 1) {
+          if (loopMax > 1) {
             const ins = subgraph.inputPorts ?? [], outs = subgraph.outputPorts ?? [];
             for (let i = 0; i < Math.min(ins.length, outs.length); i++) if (ins[i].type === outs[i].type) carriedIn.add(ins[i].key);
           }
@@ -998,7 +1004,7 @@ export class ShaderAssembler {
                   // … and, for a nested group, its inner nodes' params (two levels)
                   ...(subNode.type === 'group' ? Object.keys(node.inputs).filter(k => k.startsWith(`ps_${origOfSub}_`)).map(groupSource) : []),
                 ],
-                iters > 1 && !!origSub && (!!origSub.carryMode || (!!origSub.assignOp && origSub.assignOp !== '=') || exprBlockCarryVars.has(origOfSub)),
+                loopMax > 1 && !!origSub && (!!origSub.carryMode || (!!origSub.assignOp && origSub.assignOp !== '=') || exprBlockCarryVars.has(origOfSub)),
                 () => compileOne(subNode),
               );
 
@@ -1299,7 +1305,7 @@ export class ShaderAssembler {
             for (const subNode of sortedSub) if (!keep || keep.has(subNode.id)) compileOne(subNode);
           };
 
-          if (iters <= 1) {
+          if (loopMax <= 1) {
             // ── Single pass (original behavior) ──────────────────────────────────
             const prefix = `${nodeSlug}_g_`;
             const portValues = new Map<string, string>();
@@ -1544,7 +1550,8 @@ export class ShaderAssembler {
 
             // 2. Open the for loop
             const loopVar = `${nodeSlug}_i`;
-            this.mainCode.push(`    for (float ${loopVar} = 0.0; ${loopVar} < ${iters}.0; ${loopVar}++) {\n`);
+            this.mainCode.push(`    for (float ${loopVar} = 0.0; ${loopVar} < ${loopMax}.0; ${loopVar}++) {\n`);
+            if (liveIters) this.mainCode.push(`      if (${loopVar} >= ${itersUniform}) break;\n`);
 
             // Pre-inject loop index for any loopIndex nodes in the subgraph
             for (const sn of subgraph.nodes) {

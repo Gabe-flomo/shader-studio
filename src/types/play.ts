@@ -1972,7 +1972,27 @@ export function parseIncrement(raw: unknown): PlayIncrement | null {
  * malformed is dropped (a control without a target, a mapping whose control is
  * gone) rather than failing the whole load; a missing key is an empty record.
  */
+/**
+ * Turns the older wiring into rules (play/rules.ts normalizeRules). It
+ * registers itself when it loads (the app loads it first, src/main.tsx):
+ * importing it here would close an import loop through the labels it names
+ * rules with, which read this file's constants while it is still loading.
+ */
+let rulesNormaliser: ((p: PlayRecord) => PlayRecord) | null = null;
+export function setRulesNormaliser(fn: (p: PlayRecord) => PlayRecord): void { rulesNormaliser = fn; }
+
+/**
+ * Open a record: validated (parsePlayRecordAsSaved), then the older wiring
+ * (actions, a signal's When, links) turned into the rules it plays as
+ * (implementation guide, phase 9). Every record the app holds is in the rules shape.
+ */
 export function parsePlayRecord(raw: unknown): PlayRecord {
+  const p = parsePlayRecordAsSaved(raw);
+  return rulesNormaliser ? rulesNormaliser(p) : p;
+}
+
+/** A record validated as it was saved, older wiring and all (what normalizeRules reads; tests of the file's own shape). */
+export function parsePlayRecordAsSaved(raw: unknown): PlayRecord {
   const empty = emptyPlayRecord();
   if (!raw || typeof raw !== 'object') return empty;
   const r = raw as Record<string, unknown>;
