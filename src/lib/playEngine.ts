@@ -189,6 +189,8 @@ class PlayEngine implements InputSource {
 
   // Mouse + keyboard sources (Play page only)
   private performing = false;
+  /** Added to the seed of a noise source with New each play: a fresh path each time Play starts. */
+  private playSeed = 0;
   private mouseIsBound = false;
   private mouseX = 0.5;
   private mouseY = 0.5;
@@ -1300,7 +1302,7 @@ class PlayEngine implements InputSource {
         return Math.max(0, Math.min(1, (v - source.min) / (source.max - source.min)));
       }
       case 'noise':
-        return noiseAt(source.type, this.time, source.rate, source.seed, source.steps, this.frame);
+        return noiseAt(source.type, this.time, source.rate, source.seed + (source.reseed ? this.playSeed : 0), source.steps, this.frame, source.bias);
       case 'live': {
         liveAudio.update(this.frame);
         const v = liveAudio.value(source.band);
@@ -1835,6 +1837,7 @@ class PlayEngine implements InputSource {
     if (on === this.performing || typeof window === 'undefined') return;
     this.performing = on;
     if (on) {
+      this.playSeed = Math.floor(Math.random() * 100000);
       window.addEventListener('pointermove', this.onPointerMove);
       window.addEventListener('pointerdown', this.onPointerDown);
       window.addEventListener('pointerup', this.onPointerUp);

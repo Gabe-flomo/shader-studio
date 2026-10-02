@@ -137,9 +137,11 @@
   function hash01(n) { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); }
   function hashNoise(i, seed) { const x = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return x - Math.floor(x); }
   function smoothAt(t, seed) { const i = Math.floor(t), f = t - i, u = f * f * (3 - 2 * f); return hashNoise(i, seed) + (hashNoise(i + 1, seed) - hashNoise(i, seed)) * u; }
-  function noiseAt(type, time, rate, seed, steps, frame) {
+  function noiseAt(type, time, rate, seed, steps, frame, bias) {
     const t = time * Math.max(0.01, rate);
     if (type === 'smooth') return smoothAt(t, seed);
+    if (type === 'bell') return (smoothAt(t, seed + 5) + smoothAt(t, seed + 29) + smoothAt(t, seed + 53)) / 3;
+    if (type === 'biased') { const b = bias === undefined ? 0.5 : Math.max(0, Math.min(1, bias)); return Math.pow(smoothAt(t, seed), Math.pow(4, 1 - 2 * b)); }
     if (type === 'drift') return Math.max(0, Math.min(1, smoothAt(t, seed) * 0.57 + smoothAt(t * 2.03, seed + 17) * 0.29 + smoothAt(t * 4.11, seed + 41) * 0.14));
     if (type === 'random') return hashNoise(frame, seed + 7);
     const v = hashNoise(Math.floor(t), seed + 3);
@@ -1316,6 +1318,8 @@ void main() {
     const base = new Map(), live = new Map(), layerLive = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0, playing = !opts.paused, lastNow = 0, frame = 0;
+    // A noise source with New each play takes a fresh path each time the page opens.
+    const playSeed = Math.floor(Math.random() * 100000);
     const bindings = B.paramBindings || {};
     const uniformFor = c => bindings[bindingKey(c.target)];
     for (const c of play.controls) {
@@ -1505,7 +1509,7 @@ void main() {
         case 'mouse': return s.axis === 'x' ? mouse.x : s.axis === 'y' ? mouse.y : mouse.down;
         case 'key': return shared.keysHeld.has(s.code) ? 1 : 0;
         case 'lfo': return lfo(s.shape, time * s.rate + s.phase);
-        case 'noise': return noiseAt(s.type, time, s.rate, s.seed, s.steps, frame);
+        case 'noise': return noiseAt(s.type, time, s.rate, s.seed + (s.reseed ? playSeed : 0), s.steps, frame, s.bias);
         case 'clock': return lfo(s.shape, time * (s.bpm / 60 / Math.max(0.0625, s.beats)));
         case 'fn': { const FNK = typeof SSKit !== 'undefined' && SSKit.fn ? SSKit.fn : null; const v = FNK ? FNK.eval(s.expr, { t: time, b: time * 2 }).value : 0; return Math.max(0, Math.min(1, (v - s.min) / (s.max - s.min))); }
         case 'tilt': { const t = shared.tilt; if (!t.got) return null; if (s.axis === 'alpha') return ((t.alpha % 360) + 360) % 360 / 360; const v = Math.max(-90, Math.min(90, s.axis === 'beta' ? t.beta : t.gamma)); return (v + 90) / 180; }
@@ -2471,6 +2475,7 @@ void main() {
         tracks: markers ? Object.keys(subjects).filter(k => subjects[k].settings.overlay && subjects[k].st.live).map(k => ({ kind: k, state: subjects[k].st, colour: subjects[k].settings.colour })) : null,
         // three.js for 3D Script layers: the page carries it (SSThree) only when it has one.
         three: typeof SSThree !== 'undefined' ? SSThree : (window.SSThree || null),
+        readValue,
         scriptStatus: (id, err) => { const e = err || null; if (scriptErrors.get(id) === e) return; scriptErrors.set(id, e); if (onScript) { try { onScript(id, e); } catch (x) { /* the host's problem */ } } },
         sensor: (k, v) => sensors.set(k, v),
         override: (id, k, v) => { if (v === null) overrides.delete(id + '::' + k); else overrides.set(id + '::' + k, v); },

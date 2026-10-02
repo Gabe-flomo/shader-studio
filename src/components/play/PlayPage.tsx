@@ -21,7 +21,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { PlayControl, PlayLayer, PlayMapping, PlayRecord, PlayRoute, PlaySource, PlaySourceDef, SourceOutput } from '../../types/play';
-import { addFreeSource, patchRoute, patchSource, removeRoute, removeSource, routeToControl, routesInto } from '../../play/routeOps';
+import { RANDOM_SOURCES, addFreeSource, patchRoute, patchSource, removeRoute, removeSource, routeToControl, routesInto } from '../../play/routeOps';
 import { rtAddSwing } from '../../play/kit/routes.js';
 import { useMapMode } from './inputs/mapMode';
 import { MapModeBar, MapTarget } from './inputs/MapTarget';
@@ -1401,6 +1401,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   // mapping id (replace its source) or 'new' (add a mapping).
   const [learnFor, setLearnFor] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => {
     if (!learnFor) return;
     void midiEngine.connectWebMidi({ retry: true });
@@ -1563,7 +1564,17 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
               {learnFor === 'new' ? 'Listening…' : 'Learn'}
             </Button>
             <Button size="sm" icon="plus" disabled={noControls} onClick={addDefaultMapping}>Add</Button>
-            {mode !== 'drawer' && <Button size="sm" icon="plus" variant="ghost" title="A source that drives nothing yet: pick what it reads, then Map it onto controls" onClick={() => onRecord(p => addFreeSource(p, allSources ? { kind: 'midi', signal: 'cc', channel: 0 } : { kind: 'mouse', axis: 'x' }).play)}>Source</Button>}
+            {mode !== 'drawer' && <Button size="sm" icon="plus" variant="ghost" title="A source that drives nothing yet: random, or pick what it reads; then Map it onto controls" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setAddMenu({ x: r.left, y: r.bottom + 4 }); }}>Source</Button>}
+            {addMenu && <Menu x={addMenu.x} y={addMenu.y} onClose={() => setAddMenu(null)} title="Add a source" items={[
+              { heading: 'Random' },
+              ...RANDOM_SOURCES.map(r => ({ label: r.label, hint: r.hint, icon: 'dice' as const, onSelect: () => {
+                let id = '';
+                onRecord(p => { const x = addFreeSource(p, { ...r.source, seed: r.source.kind === 'noise' ? Math.floor(Math.random() * 100000) : 0 } as PlaySource); id = x.id; return x.play; });
+                if (id) useMapMode.getState().start(id, r.label);
+              } })),
+              'separator',
+              { label: 'Another input…', hint: 'A knob, a key, the mouse: pick it on the card, or press Learn', icon: 'plus' as const, onSelect: () => onRecord(p => addFreeSource(p, allSources ? { kind: 'midi', signal: 'cc', channel: 0 } : { kind: 'mouse', axis: 'x' }).play) },
+            ]} />}
           </>
         )}
       />
@@ -2292,7 +2303,12 @@ function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelStyle, on
           <NumberInput value={source.steps} min={0} max={64} step={1} title="Snap to this many levels (0 = any value)" onCommit={n => onChange({ ...source, steps: Math.max(0, Math.min(64, Math.round(n))) })} style={{ ...numStyle, width: 40 }} />
           {hint('levels')}
         </>}
+        {source.type === 'biased' && <>
+          <NumberInput value={Math.round((source.bias ?? 0.5) * 100)} min={0} max={100} step={5} title="Lean: 0 low, 50 even, 100 high" onCommit={n => onChange({ ...source, bias: Math.max(0, Math.min(100, n)) / 100 })} style={{ ...numStyle, width: 40 }} />
+          {hint('lean %')}
+        </>}
         <IconButton icon="dice" label="New seed: a different random path" size="sm" onClick={() => onChange({ ...source, seed: Math.floor(Math.random() * 100000) })} />
+        <Toggle checked={!!source.reseed} onChange={reseed => onChange(reseed ? { ...source, reseed } : (({ reseed: _r, ...rest }) => rest)(source))} label="New each play" />
       </>);
     case 'osc':
       return (

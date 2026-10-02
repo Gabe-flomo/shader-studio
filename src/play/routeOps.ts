@@ -106,6 +106,14 @@ function patchSourceOutputs(p: PlayRecord, sourceId: string, fn: (r: PlayRoute) 
   return patchSource(own.play, sourceId, { outputs: own.source.outputs.map(o => ({ ...o, routes: o.routes.map(fn).filter((r): r is PlayRoute => !!r) })) });
 }
 
+/** The add menu's Random sources (implementation guide 8): ready-made noise, to Map onto something next. */
+export const RANDOM_SOURCES: ReadonlyArray<{ label: string; hint: string; source: PlaySource }> = [
+  { label: 'Shake', hint: 'Fast and jittery: a tremble', source: { kind: 'noise', type: 'smooth', rate: 8, seed: 11, steps: 0 } },
+  { label: 'Wander', hint: 'Slow drifting, with a finer wobble', source: { kind: 'noise', type: 'drift', rate: 0.2, seed: 23, steps: 0 } },
+  { label: 'Hop', hint: 'Holds, then jumps to a new place each second', source: { kind: 'noise', type: 'stepped', rate: 1, seed: 37, steps: 0 } },
+  { label: 'Chaos', hint: 'A new value every frame', source: { kind: 'noise', type: 'random', rate: 1, seed: 41, steps: 0, reseed: true } },
+];
+
 /** A new source of the record with nothing to drive yet (Map it next). */
 export function addFreeSource(p: PlayRecord, source: PlaySource): { play: PlayRecord; id: string } {
   const id = `src_${Date.now().toString(36)}_${(++seq).toString(36)}`;

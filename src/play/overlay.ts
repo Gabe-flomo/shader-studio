@@ -702,6 +702,7 @@ class PlayOverlay {
       // The graph's Layers node can't read the layers while the graph isn't running.
       shaderTap: forExport || playBackground.active() || (playBackground.layerActive() && !planShowsThis(this.lastQueue)) ? undefined : this.shaderTap ?? undefined,
       scriptStatus: forExport ? undefined : setScriptStatus,
+      readValue: path => playEngine.readValue(path),
       // A sketch's console goes to the Sketch editor's Console (and nowhere while rendering an export).
       scriptLog: forExport ? () => {} : logScript,
       // three.js for 3D Script layers, once loaded (they wait until then).

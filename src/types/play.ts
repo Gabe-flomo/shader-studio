@@ -560,7 +560,8 @@ export type TriggerMode = 'envelope' | 'toggle' | 'step' | 'random';
  *   random   a new random value every frame (jitter)
  *   stepped  a random value held for 1/`rate` s, snapped to `steps` levels (posterised time)
  */
-export type NoiseType = 'smooth' | 'drift' | 'random' | 'stepped';
+/** bell: clusters round the middle, rarely at the ends; biased: leans low or high (`bias`). */
+export type NoiseType = 'smooth' | 'drift' | 'random' | 'stepped' | 'bell' | 'biased';
 export type LfoShape = 'sine' | 'triangle' | 'saw' | 'square' | 'random';
 
 export type PlaySource =
@@ -608,7 +609,8 @@ export type PlaySource =
   /** An audio reader's level, 0..1 (see AudioReader). */
   | { kind: 'reader'; readerId: string }
   /** Random motion on the graph clock. `seed` makes two noise rows differ. `steps` (stepped only) posterises the value, 0 = no snapping. */
-  | { kind: 'noise'; type: NoiseType; rate: number; seed: number; steps: number }
+  /** `bias` (biased): 0 leans low, 0.5 even, 1 leans high. `reseed`: a new path each time Play starts (else the seed is kept, so takes replay the same). */
+  | { kind: 'noise'; type: NoiseType; rate: number; seed: number; steps: number; bias?: number; reseed?: boolean }
   /** A trigger (key, note, click, OSC message, beat) driving an envelope, toggle, step or random value. */
   | { kind: 'trigger'; trigger: TriggerSpec; mode: TriggerMode; attack: number; decay: number; sustain: number; release: number; steps: number; velocity: boolean }
   /**
@@ -1742,8 +1744,11 @@ function parseSource(raw: unknown): PlaySource | null {
       return readerId ? { kind: 'reader', readerId } : null;
     }
     case 'noise': {
-      const type = s.type === 'drift' || s.type === 'random' || s.type === 'stepped' ? s.type : 'smooth';
-      return { kind: 'noise', type, rate: Math.max(0.01, num(s.rate, 1)), seed: Math.round(num(s.seed, 1)), steps: Math.max(0, Math.min(64, Math.round(num(s.steps, 0)))) };
+      const type = s.type === 'drift' || s.type === 'random' || s.type === 'stepped' || s.type === 'bell' || s.type === 'biased' ? s.type : 'smooth';
+      const out: PlaySource = { kind: 'noise', type, rate: Math.max(0.01, num(s.rate, 1)), seed: Math.round(num(s.seed, 1)), steps: Math.max(0, Math.min(64, Math.round(num(s.steps, 0)))) };
+      if (type === 'biased') out.bias = Math.max(0, Math.min(1, num(s.bias, 0.5)));
+      if (s.reseed === true) out.reseed = true;
+      return out;
     }
     case 'sensor': {
       const layerId = str(s.layerId);

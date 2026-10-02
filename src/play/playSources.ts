@@ -637,4 +637,6 @@ export const NOISE_TYPES: { value: NoiseType; label: string; title: string }[] =
   { value: 'drift', label: 'Drift', title: 'Slow wandering with finer wobble on top' },
   { value: 'random', label: 'Random', title: 'A new random value every frame' },
   { value: 'stepped', label: 'Stepped', title: 'Holds a random value, then jumps: posterised time' },
+  { value: 'bell', label: 'Bell', title: 'Wanders, mostly near the middle and seldom at the ends' },
+  { value: 'biased', label: 'Biased', title: 'Wanders, leaning towards the low or the high end' },
 ];

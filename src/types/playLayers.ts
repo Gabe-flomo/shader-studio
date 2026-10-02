@@ -131,6 +131,11 @@ export interface TextLayer extends LayerBase {
   /** Seconds per line in a sequence; 0 = only on actions. */
   interval: number;
   transition: 'cut' | 'fade' | 'rise' | 'type';
+  /** Show a value instead (a control, a source, a layer's number…: a condition's value path); '' = its own text. */
+  reads: string;
+  /** How: a number, a percent of 0..1, ON/OFF, or the text with {v} put in. */
+  readFormat: 'number' | 'percent' | 'onoff' | 'template';
+  readDecimals: number;
 }
 
 export interface ImageLayer extends LayerBase {
@@ -1460,7 +1465,7 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
   null: { toShader: true, x: 0.5, y: 0.5, size: 10, color: '#3a6ff7', follow: 'none', followId: '', agentIndex: 0, handSide: 'right', handPoint: 8, trackPoint: 1, spring: 0.5, wobble: 0.3, role: 'none', radius: 0.04, strength: 1, tilt: 0 },
   text: {
     toShader: true, text: 'PLAY', x: 0.5, y: 0.5, size: 0.25, rotation: 0, opacity: 1, color: [1, 1, 1], font: 'sans', fontUrl: '', weight: 700, blend: 'normal', matte: 'over',
-    sequence: false, interval: 0, transition: 'fade',
+    sequence: false, interval: 0, transition: 'fade', reads: '', readFormat: 'number', readDecimals: 2,
   },
   image: { toShader: true, src: '', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, color: [0, 0, 0], blend: 'normal', matte: 'over' },
   particles: {
@@ -1567,7 +1572,7 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
   },
   text: {
     toShader: B, text: S, x: N(), y: N(), size: N(0.005), rotation: N(), opacity: unit, color: C, font: E('sans', 'serif', 'mono'), fontUrl: S, weight: N(100, 900), blend: blendF, matte: matteF,
-    sequence: B, interval: N(0), transition: E('cut', 'fade', 'rise', 'type'),
+    sequence: B, interval: N(0), transition: E('cut', 'fade', 'rise', 'type'), reads: S, readFormat: E('number', 'percent', 'onoff', 'template'), readDecimals: N(0, 6, true),
   },
   image: { toShader: B, src: S, x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, color: C, blend: blendF, matte: matteF },
   particles: {

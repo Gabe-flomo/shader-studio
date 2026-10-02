@@ -62,3 +62,14 @@ Not done yet:
 - the shaded swing ring on sliders;
 - clickable route chips (they open the detail windows, phase 5);
 - grouping sources by kind.
+
+## Random sources and readouts (guide phase 7)
+
+- **Noise kinds:** Bell and Biased join Smooth, Drift, Random and Stepped.
+  - Bell is the mean of three smooth noises: mostly near the middle.
+  - Biased bends smooth noise towards the low or high end (Lean 0–100%).
+  - **New each play** adds a per-play seed: Play's start in the app, the page's opening on a website. Without it, the seed stays and takes replay the same.
+- **+ Source → Random:** Shake, Wander, Hop and Chaos. Each makes a noise source and goes straight into Map mode.
+- **Reads a value:** a Text layer can show a value path (a control, a source, a layer's number, a distance…) instead of its text: as a number to N decimals, a percent, ON/OFF, or its text with `{v}` replaced (`klReadText` in the kit, so app and website match). A layer that reads a value redraws every frame.
+
+Already in from the simplification work: percent of range; between, outside, not and never reached; rising and falling; counters (every Nth, N within T); route delay.

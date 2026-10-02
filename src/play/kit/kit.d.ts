@@ -46,6 +46,8 @@ export interface KitEnv {
   shaderTap?: (tap: ShaderTap) => void;
   /** A Script layer compiled or ran: null clears its error, a string is the message shown under its code. */
   scriptStatus?: (layerId: string, error: string | null) => void;
+  /** A value path's reading now (play/kit/signals.js sgParseValueRef), for a Text layer that reads one. */
+  readValue?: (path: string) => number | null;
   /** A Script layer's console output (see kit.js); without it the sketch logs to the page's console. */
   scriptLog?: (layerId: string, level: string, args: unknown[]) => void;
   /** Hand tracking: a landmark on the picture for a null following a hand (null while that hand is out of view). */
@@ -114,3 +116,5 @@ export function createLayerKit(): LayerKit;
 export interface GrainThing { id: number; x: number; y: number; vx: number; vy: number; age: number; size: number; bright: number; born: boolean }
 
 export function klPictureAt(grid: ArrayLike<number>, W: number, H: number, x: number | null, y: number | null, r: number, ch: 'lum' | 'r' | 'g' | 'b'): number | null;
+
+export function klReadText(v: number | null | undefined, format: string, decimals: number, template?: string): string;
